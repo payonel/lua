@@ -56,7 +56,7 @@ static int luaB_warn (lua_State *L) {
 }
 
 
-#define SPACECHARS	" \f\n\r\t\v"
+#define SPACECHARS  " \f\n\r\t\v"
 
 static const char *b_str2int (const char *s, unsigned base, lua_Integer *pn) {
   lua_Unsigned n = 0;

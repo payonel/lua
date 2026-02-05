@@ -10,7 +10,6 @@
 /*
 ** Allows POSIX/XSI stuff
 */
-#if !defined(LUA_USE_C89)	/* { */
 
 #if !defined(_XOPEN_SOURCE)
 #define _XOPEN_SOURCE           600
@@ -26,18 +25,9 @@
 #define _FILE_OFFSET_BITS       64
 #endif
 
-#endif				/* } */
-
 
 /*
 ** Windows stuff
 */
-#if defined(_WIN32)	/* { */
-
-#if !defined(_CRT_SECURE_NO_WARNINGS)
-#define _CRT_SECURE_NO_WARNINGS  /* avoid warnings about ISO C functions */
-#endif
-
-#endif			/* } */
 
 

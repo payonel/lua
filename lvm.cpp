@@ -37,17 +37,13 @@
 ** and compatible compilers.
 */
 #if !defined(LUA_USE_JUMPTABLE)
-#if defined(__GNUC__)
-#define LUA_USE_JUMPTABLE	1
-#else
-#define LUA_USE_JUMPTABLE	0
-#endif
+#define LUA_USE_JUMPTABLE  1
 #endif
 
 
 
 /* limit for table tag-method chains (to avoid infinite loops) */
-#define MAXTAGLOOP	2000
+#define MAXTAGLOOP  2000
 
 
 /*
@@ -56,7 +52,7 @@
 */
 
 /* number of bits in the mantissa of a float */
-#define NBM		(l_floatatt(MANT_DIG))
+#define NBM    (l_floatatt(MANT_DIG))
 
 /*
 ** Check whether some integers may not fit in a float, testing whether
@@ -65,18 +61,17 @@
 ** of an integer. In a worst case, NBM == 113 for long double and
 ** sizeof(long) == 32.)
 */
-#if ((((LUA_MAXINTEGER >> (NBM / 4)) >> (NBM / 4)) >> (NBM / 4)) \
-	>> (NBM - (3 * (NBM / 4))))  >  0
+#if ((((LUA_MAXINTEGER >> (NBM / 4)) >> (NBM / 4)) >> (NBM / 4))  >> (NBM - (3 * (NBM / 4))))  >  0
 
 /* limit for integers that fit in a float */
-#define MAXINTFITSF	((lua_Unsigned)1 << NBM)
+#define MAXINTFITSF  ((lua_Unsigned)1 << NBM)
 
 /* check whether 'i' is in the interval [-MAXINTFITSF, MAXINTFITSF] */
-#define l_intfitsf(i)	((MAXINTFITSF + l_castS2U(i)) <= (2 * MAXINTFITSF))
+#define l_intfitsf(i)  ((MAXINTFITSF + l_castS2U(i)) <= (2 * MAXINTFITSF))
 
 #else  /* all integers fit in a float precisely */
 
-#define l_intfitsf(i)	1
+#define l_intfitsf(i)  1
 
 #endif
 
@@ -376,7 +371,7 @@ void luaV_finishset (lua_State *L, const TValue *t, TValue *key,
 ** Function to be used for 0-terminated string order comparison
 */
 #if !defined(l_strcoll)
-#define l_strcoll	strcoll
+#define l_strcoll  strcoll
 #endif
 
 
@@ -654,15 +649,14 @@ int luaV_equalobj (lua_State *L, const TValue *t1, const TValue *t2) {
 
 
 /* macro used by 'luaV_concat' to ensure that element at 'o' is a string */
-#define tostring(L,o)  \
-	(ttisstring(o) || (cvt2str(o) && (luaO_tostring(L, o), 1)))
+#define tostring(L,o)   (ttisstring(o) || (cvt2str(o) && (luaO_tostring(L, o), 1)))
 
 /*
 ** Check whether object is a short empty string to optimize concatenation.
 ** (External strings can be empty too; they will be concatenated like
 ** non-empty ones.)
 */
-#define isemptystr(o)	(ttisshrstring(o) && tsvalue(o)->shrlen == 0)
+#define isemptystr(o)  (ttisshrstring(o) && tsvalue(o)->shrlen == 0)
 
 /* copy strings in stack from top - n up to top - 1 to buffer */
 static void copy2buff (StkId top, int n, char *buff) {
@@ -809,7 +803,7 @@ lua_Number luaV_modf (lua_State *L, lua_Number m, lua_Number n) {
 
 
 /* number of bits in an integer */
-#define NBITS	l_numbits(lua_Integer)
+#define NBITS  l_numbits(lua_Integer)
 
 
 /*
@@ -924,123 +918,73 @@ void luaV_finishOp (lua_State *L) {
 ** ===================================================================
 */
 
-#define l_addi(L,a,b)	intop(+, a, b)
-#define l_subi(L,a,b)	intop(-, a, b)
-#define l_muli(L,a,b)	intop(*, a, b)
-#define l_band(a,b)	intop(&, a, b)
-#define l_bor(a,b)	intop(|, a, b)
-#define l_bxor(a,b)	intop(^, a, b)
+#define l_addi(L,a,b)  intop(+, a, b)
+#define l_subi(L,a,b)  intop(-, a, b)
+#define l_muli(L,a,b)  intop(*, a, b)
+#define l_band(a,b)  intop(&, a, b)
+#define l_bor(a,b)  intop(|, a, b)
+#define l_bxor(a,b)  intop(^, a, b)
 
-#define l_lti(a,b)	(a < b)
-#define l_lei(a,b)	(a <= b)
-#define l_gti(a,b)	(a > b)
-#define l_gei(a,b)	(a >= b)
+#define l_lti(a,b)  (a < b)
+#define l_lei(a,b)  (a <= b)
+#define l_gti(a,b)  (a > b)
+#define l_gei(a,b)  (a >= b)
 
 
 /*
 ** Arithmetic operations with immediate operands. 'iop' is the integer
 ** operation, 'fop' is the float operation.
 */
-#define op_arithI(L,iop,fop) {  \
-  TValue *ra = vRA(i); \
-  TValue *v1 = vRB(i);  \
-  int imm = GETARG_sC(i);  \
-  if (ttisinteger(v1)) {  \
-    lua_Integer iv1 = ivalue(v1);  \
-    pc++; setivalue(ra, iop(L, iv1, imm));  \
-  }  \
-  else if (ttisfloat(v1)) {  \
-    lua_Number nb = fltvalue(v1);  \
-    lua_Number fimm = cast_num(imm);  \
-    pc++; setfltvalue(ra, fop(L, nb, fimm)); \
-  }}
+#define op_arithI(L,iop,fop) {   TValue *ra = vRA(i);  TValue *v1 = vRB(i);   int imm = GETARG_sC(i);   if (ttisinteger(v1)) {   lua_Integer iv1 = ivalue(v1);   pc++; setivalue(ra, iop(L, iv1, imm));   }   else if (ttisfloat(v1)) {   lua_Number nb = fltvalue(v1);   lua_Number fimm = cast_num(imm);   pc++; setfltvalue(ra, fop(L, nb, fimm));  }}
 
 
 /*
 ** Auxiliary function for arithmetic operations over floats and others
 ** with two operands.
 */
-#define op_arithf_aux(L,v1,v2,fop) {  \
-  lua_Number n1; lua_Number n2;  \
-  if (tonumberns(v1, n1) && tonumberns(v2, n2)) {  \
-    StkId ra = RA(i);  \
-    pc++; setfltvalue(s2v(ra), fop(L, n1, n2));  \
-  }}
+#define op_arithf_aux(L,v1,v2,fop) {   lua_Number n1; lua_Number n2;   if (tonumberns(v1, n1) && tonumberns(v2, n2)) {   StkId ra = RA(i);   pc++; setfltvalue(s2v(ra), fop(L, n1, n2));   }}
 
 
 /*
 ** Arithmetic operations over floats and others with register operands.
 */
-#define op_arithf(L,fop) {  \
-  TValue *v1 = vRB(i);  \
-  TValue *v2 = vRC(i);  \
-  op_arithf_aux(L, v1, v2, fop); }
+#define op_arithf(L,fop) {   TValue *v1 = vRB(i);   TValue *v2 = vRC(i);   op_arithf_aux(L, v1, v2, fop); }
 
 
 /*
 ** Arithmetic operations with K operands for floats.
 */
-#define op_arithfK(L,fop) {  \
-  TValue *v1 = vRB(i);  \
-  TValue *v2 = KC(i); lua_assert(ttisnumber(v2));  \
-  op_arithf_aux(L, v1, v2, fop); }
+#define op_arithfK(L,fop) {   TValue *v1 = vRB(i);   TValue *v2 = KC(i); lua_assert(ttisnumber(v2));   op_arithf_aux(L, v1, v2, fop); }
 
 
 /*
 ** Arithmetic operations over integers and floats.
 */
-#define op_arith_aux(L,v1,v2,iop,fop) {  \
-  if (ttisinteger(v1) && ttisinteger(v2)) {  \
-    StkId ra = RA(i); \
-    lua_Integer i1 = ivalue(v1); lua_Integer i2 = ivalue(v2);  \
-    pc++; setivalue(s2v(ra), iop(L, i1, i2));  \
-  }  \
-  else op_arithf_aux(L, v1, v2, fop); }
+#define op_arith_aux(L,v1,v2,iop,fop) {   if (ttisinteger(v1) && ttisinteger(v2)) {   StkId ra = RA(i);  lua_Integer i1 = ivalue(v1); lua_Integer i2 = ivalue(v2);   pc++; setivalue(s2v(ra), iop(L, i1, i2));   }   else op_arithf_aux(L, v1, v2, fop); }
 
 
 /*
 ** Arithmetic operations with register operands.
 */
-#define op_arith(L,iop,fop) {  \
-  TValue *v1 = vRB(i);  \
-  TValue *v2 = vRC(i);  \
-  op_arith_aux(L, v1, v2, iop, fop); }
+#define op_arith(L,iop,fop) {   TValue *v1 = vRB(i);   TValue *v2 = vRC(i);   op_arith_aux(L, v1, v2, iop, fop); }
 
 
 /*
 ** Arithmetic operations with K operands.
 */
-#define op_arithK(L,iop,fop) {  \
-  TValue *v1 = vRB(i);  \
-  TValue *v2 = KC(i); lua_assert(ttisnumber(v2));  \
-  op_arith_aux(L, v1, v2, iop, fop); }
+#define op_arithK(L,iop,fop) {   TValue *v1 = vRB(i);   TValue *v2 = KC(i); lua_assert(ttisnumber(v2));   op_arith_aux(L, v1, v2, iop, fop); }
 
 
 /*
 ** Bitwise operations with constant operand.
 */
-#define op_bitwiseK(L,op) {  \
-  TValue *v1 = vRB(i);  \
-  TValue *v2 = KC(i);  \
-  lua_Integer i1;  \
-  lua_Integer i2 = ivalue(v2);  \
-  if (tointegerns(v1, &i1)) {  \
-    StkId ra = RA(i); \
-    pc++; setivalue(s2v(ra), op(i1, i2));  \
-  }}
+#define op_bitwiseK(L,op) {   TValue *v1 = vRB(i);   TValue *v2 = KC(i);   lua_Integer i1;   lua_Integer i2 = ivalue(v2);   if (tointegerns(v1, &i1)) {   StkId ra = RA(i);  pc++; setivalue(s2v(ra), op(i1, i2));   }}
 
 
 /*
 ** Bitwise operations with register operands.
 */
-#define op_bitwise(L,op) {  \
-  TValue *v1 = vRB(i);  \
-  TValue *v2 = vRC(i);  \
-  lua_Integer i1; lua_Integer i2;  \
-  if (tointegerns(v1, &i1) && tointegerns(v2, &i2)) {  \
-    StkId ra = RA(i); \
-    pc++; setivalue(s2v(ra), op(i1, i2));  \
-  }}
+#define op_bitwise(L,op) {   TValue *v1 = vRB(i);   TValue *v2 = vRC(i);   lua_Integer i1; lua_Integer i2;   if (tointegerns(v1, &i1) && tointegerns(v2, &i2)) {   StkId ra = RA(i);  pc++; setivalue(s2v(ra), op(i1, i2));   }}
 
 
 /*
@@ -1048,42 +992,14 @@ void luaV_finishOp (lua_State *L) {
 ** for all numbers, but the fast track improves performance for
 ** integers.
 */
-#define op_order(L,opi,opn,other) {  \
-  TValue *ra = vRA(i); \
-  int cond;  \
-  TValue *rb = vRB(i);  \
-  if (ttisinteger(ra) && ttisinteger(rb)) {  \
-    lua_Integer ia = ivalue(ra);  \
-    lua_Integer ib = ivalue(rb);  \
-    cond = opi(ia, ib);  \
-  }  \
-  else if (ttisnumber(ra) && ttisnumber(rb))  \
-    cond = opn(ra, rb);  \
-  else  \
-    Protect(cond = other(L, ra, rb));  \
-  docondjump(); }
+#define op_order(L,opi,opn,other) {   TValue *ra = vRA(i);  int cond;   TValue *rb = vRB(i);   if (ttisinteger(ra) && ttisinteger(rb)) {   lua_Integer ia = ivalue(ra);   lua_Integer ib = ivalue(rb);   cond = opi(ia, ib);   }   else if (ttisnumber(ra) && ttisnumber(rb))   cond = opn(ra, rb);   else   Protect(cond = other(L, ra, rb));   docondjump(); }
 
 
 /*
 ** Order operations with immediate operand. (Immediate operand is
 ** always small enough to have an exact representation as a float.)
 */
-#define op_orderI(L,opi,opf,inv,tm) {  \
-  TValue *ra = vRA(i); \
-  int cond;  \
-  int im = GETARG_sB(i);  \
-  if (ttisinteger(ra))  \
-    cond = opi(ivalue(ra), im);  \
-  else if (ttisfloat(ra)) {  \
-    lua_Number fa = fltvalue(ra);  \
-    lua_Number fim = cast_num(im);  \
-    cond = opf(fa, fim);  \
-  }  \
-  else {  \
-    int isf = GETARG_C(i);  \
-    Protect(cond = luaT_callorderiTM(L, ra, im, inv, isf, tm));  \
-  }  \
-  docondjump(); }
+#define op_orderI(L,opi,opf,inv,tm) {   TValue *ra = vRA(i);  int cond;   int im = GETARG_sB(i);   if (ttisinteger(ra))   cond = opi(ivalue(ra), im);   else if (ttisfloat(ra)) {   lua_Number fa = fltvalue(ra);   lua_Number fim = cast_num(im);   cond = opf(fa, fim);   }   else {   int isf = GETARG_C(i);   Protect(cond = luaT_callorderiTM(L, ra, im, inv, isf, tm));   }   docondjump(); }
 
 /* }================================================================== */
 
@@ -1099,56 +1015,55 @@ void luaV_finishOp (lua_State *L) {
 */
 
 
-#define RA(i)	(base+GETARG_A(i))
-#define vRA(i)	s2v(RA(i))
-#define RB(i)	(base+GETARG_B(i))
-#define vRB(i)	s2v(RB(i))
-#define KB(i)	(k+GETARG_B(i))
-#define RC(i)	(base+GETARG_C(i))
-#define vRC(i)	s2v(RC(i))
-#define KC(i)	(k+GETARG_C(i))
-#define RKC(i)	((TESTARG_k(i)) ? k + GETARG_C(i) : s2v(base + GETARG_C(i)))
+#define RA(i)  (base+GETARG_A(i))
+#define vRA(i)  s2v(RA(i))
+#define RB(i)  (base+GETARG_B(i))
+#define vRB(i)  s2v(RB(i))
+#define KB(i)  (k+GETARG_B(i))
+#define RC(i)  (base+GETARG_C(i))
+#define vRC(i)  s2v(RC(i))
+#define KC(i)  (k+GETARG_C(i))
+#define RKC(i)  ((TESTARG_k(i)) ? k + GETARG_C(i) : s2v(base + GETARG_C(i)))
 
 
 
 #define updatetrap(ci)  (trap = ci->u.l.trap)
 
-#define updatebase(ci)	(base = ci->func.p + 1)
+#define updatebase(ci)  (base = ci->func.p + 1)
 
 
-#define updatestack(ci)  \
-	{ if (l_unlikely(trap)) { updatebase(ci); ra = RA(i); } }
+#define updatestack(ci)   { if (l_unlikely(trap)) { updatebase(ci); ra = RA(i); } }
 
 
 /*
 ** Execute a jump instruction. The 'updatetrap' allows signals to stop
 ** tight loops. (Without it, the local copy of 'trap' could never change.)
 */
-#define dojump(ci,i,e)	{ pc += GETARG_sJ(i) + e; updatetrap(ci); }
+#define dojump(ci,i,e)  { pc += GETARG_sJ(i) + e; updatetrap(ci); }
 
 
 /* for test instructions, execute the jump instruction that follows it */
-#define donextjump(ci)	{ Instruction ni = *pc; dojump(ci, ni, 1); }
+#define donextjump(ci)  { Instruction ni = *pc; dojump(ci, ni, 1); }
 
 /*
 ** do a conditional jump: skip next instruction if 'cond' is not what
 ** was expected (parameter 'k'), else do next instruction, which must
 ** be a jump.
 */
-#define docondjump()	if (cond != GETARG_k(i)) pc++; else donextjump(ci);
+#define docondjump()  if (cond != GETARG_k(i)) pc++; else donextjump(ci);
 
 
 /*
 ** Correct global 'pc'.
 */
-#define savepc(ci)	(ci->u.l.savedpc = pc)
+#define savepc(ci)  (ci->u.l.savedpc = pc)
 
 
 /*
 ** Whenever code can raise errors, the global 'pc' and the global
 ** 'top' must be correct to report occasional errors.
 */
-#define savestate(L,ci)		(savepc(ci), L->top.p = ci->top.p)
+#define savestate(L,ci)    (savepc(ci), L->top.p = ci->top.p)
 
 
 /*
@@ -1171,28 +1086,19 @@ void luaV_finishOp (lua_State *L) {
 ** function can yield.
 */
 #if !defined(luai_threadyield)
-#define luai_threadyield(L)	{lua_unlock(L); lua_lock(L);}
+#define luai_threadyield(L)  {lua_unlock(L); lua_lock(L);}
 #endif
 
 /* 'c' is the limit of live values in the stack */
-#define checkGC(L,c)  \
-	{ luaC_condGC(L, (savepc(ci), L->top.p = (c)), \
-                         updatetrap(ci)); \
-           luai_threadyield(L); }
+#define checkGC(L,c)   { luaC_condGC(L, (savepc(ci), L->top.p = (c)),  updatetrap(ci));  luai_threadyield(L); }
 
 
 /* fetch an instruction and prepare its execution */
-#define vmfetch()	{ \
-  if (l_unlikely(trap)) {  /* stack reallocation or hooks? */ \
-    trap = luaG_traceexec(L, pc);  /* handle hooks */ \
-    updatebase(ci);  /* correct stack */ \
-  } \
-  i = *(pc++); \
-}
+#define vmfetch()  {  if (l_unlikely(trap)) {  /* stack reallocation or hooks? */  trap = luaG_traceexec(L, pc);  /* handle hooks */  updatebase(ci);  /* correct stack */  }  i = *(pc++);  }
 
-#define vmdispatch(o)	switch(o)
-#define vmcase(l)	case l:
-#define vmbreak		break
+#define vmdispatch(o)  switch(o)
+#define vmcase(l)  case l:
+#define vmbreak    break
 
 
 void luaV_execute (lua_State *L, CallInfo *ci) {
@@ -1217,14 +1123,6 @@ void luaV_execute (lua_State *L, CallInfo *ci) {
   for (;;) {
     Instruction i;  /* instruction being executed */
     vmfetch();
-    #if 0
-    { /* low-level line tracing for debugging Lua */
-      #include "lopnames.h"
-      int pcrel = pcRel(pc, cl->p);
-      printf("line: %d; %s (%d)\n", luaG_getfuncline(cl->p, pcrel),
-             opnames[GET_OPCODE(i)], pcrel);
-    }
-    #endif
     lua_assert(base == ci->func.p + 1);
     lua_assert(base <= L->top.p && L->top.p <= L->stack_last.p);
     /* for tests, invalidate top for instructions not expecting it */

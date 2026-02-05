@@ -1,0 +1,45 @@
+#define LUA_USE_POSIX
+#define LUA_USE_DLOPEN
+#define LUA_USE_LINUX
+#define __GNUC__ 12
+#define __GNUC_MINOR__ 3
+#define __ELF__ 1
+#define __cplusplus
+#define LUAI_IS32INT 1
+
+#define __GNUC__ 12
+#define __GNUC_MINOR__ 3
+#define __ELF__ 1
+
+#undef LUA_USE_READLINE
+#undef LUA_USE_WINDOWS
+#undef LUA_USE_MACOSX
+#undef LUA_USE_IOS
+#undef LUA_USE_C89
+#undef _WIN32
+#undef LUA_BUILD_AS_DLL
+#undef LUA_COMPAT_5_3
+#undef HUGE_VAL
+#undef HUGE_VALF
+#undef INTPTR_MAX
+#undef LUA_USE_APICHECK
+#undef LUA_NOBUILTIN
+#undef LUA_COMPAT_APIINTCASTS
+#undef LUA_UCID
+#undef LUA_USE_LONGJMP
+#undef LUAI_MEM
+#undef LUA_USE_C89
+#undef __STDC_VERSION__
+#undef LUA_NOCVTS2N
+#undef LUA_COMPAT_MATHLIB
+#undef LUA_COMPAT_LT_LE
+#undef EXTERNMEMCHECK
+#undef EMERGENCYGCTESTS
+#define LUA_USE_POSIX
+#undef l_popen
+#undef l_fseek
+#undef _CRTIMP_TYPEINFO
+#undef _MSC_VER
+
+#define __LONG_LONG_MAX__ std::numeric_limits<int64_t>::max()
+#define LLONG_MAX __LONG_LONG_MAX__

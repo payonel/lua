@@ -55,26 +55,12 @@
 ** 'gcstopem' is true, because then the interpreter is in the middle of
 ** a collection step.
 */
-#define cantryagain(g)	(completestate(g) && !g->gcstopem)
+#define cantryagain(g)  (completestate(g) && !g->gcstopem)
 
 
 
 
-#if defined(EMERGENCYGCTESTS)
-/*
-** First allocation will fail except when freeing a block (frees never
-** fail) and when it cannot try again; this fail will trigger 'tryagain'
-** and a full GC cycle at every allocation.
-*/
-static void *firsttry (global_State *g, void *block, size_t os, size_t ns) {
-  if (ns > 0 && cantryagain(g))
-    return NULL;  /* fail */
-  else  /* normal allocation */
-    return callfrealloc(g, block, os, ns);
-}
-#else
 #define firsttry(g,block,os,ns)    callfrealloc(g, block, os, ns)
-#endif
 
 
 
@@ -91,7 +77,7 @@ static void *firsttry (global_State *g, void *block, size_t os, size_t ns) {
 ** reallocating to size 1, then 2, and then 4. All these arrays
 ** will be reallocated to exact sizes or erased when parsing ends.
 */
-#define MINSIZEARRAY	4
+#define MINSIZEARRAY  4
 
 
 void *luaM_growaux_ (lua_State *L, void *block, int nelems, int *psize,

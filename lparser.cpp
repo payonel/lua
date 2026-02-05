@@ -32,15 +32,15 @@
 
 /* maximum number of variable declarations per function (must be
    smaller than 250, due to the bytecode format) */
-#define MAXVARS		200
+#define MAXVARS    200
 
 
-#define hasmultret(k)		((k) == VCALL || (k) == VVARARG)
+#define hasmultret(k)    ((k) == VCALL || (k) == VVARARG)
 
 
 /* because all strings are unified by the scanner, the parser
    can use pointer equality for string equality */
-#define eqstr(a,b)	((a) == (b))
+#define eqstr(a,b)  ((a) == (b))
 
 
 /*
@@ -119,7 +119,7 @@ static void checknext (LexState *ls, int c) {
 }
 
 
-#define check_condition(ls,c,msg)	{ if (!(c)) luaX_syntaxerror(ls, msg); }
+#define check_condition(ls,c,msg)  { if (!(c)) luaX_syntaxerror(ls, msg); }
 
 
 /*
@@ -212,9 +212,7 @@ static int new_localvar (LexState *ls, TString *name) {
   return new_varkind(ls, name, VDKREG);
 }
 
-#define new_localvarliteral(ls,v) \
-    new_localvar(ls,  \
-      luaX_newstring(ls, "" v, (sizeof(v)/sizeof(char)) - 1));
+#define new_localvarliteral(ls,v)  new_localvar(ls,   luaX_newstring(ls, "" v, (sizeof(v)/sizeof(char)) - 1));
 
 
 
@@ -567,7 +565,7 @@ static void adjust_assign (LexState *ls, int nvars, int nexps, expdesc *e) {
 }
 
 
-#define enterlevel(ls)	luaE_incCstack(ls->L)
+#define enterlevel(ls)  luaE_incCstack(ls->L)
 
 
 #define leavelevel(ls) ((ls)->L->nCcalls--)
@@ -928,10 +926,10 @@ typedef struct ConsControl {
 ** * overflows in 'extra' for OP_NEWTABLE and OP_SETLIST;
 ** * overflows when adding multiple returns in OP_SETLIST.
 */
-#define MAX_CNST	(INT_MAX/2)
+#define MAX_CNST  (INT_MAX/2)
 #if MAX_CNST/(MAXARG_vC + 1) > MAXARG_Ax
 #undef MAX_CNST
-#define MAX_CNST	(MAXARG_Ax * (MAXARG_vC + 1))
+#define MAX_CNST  (MAXARG_Ax * (MAXARG_vC + 1))
 #endif
 
 
@@ -1367,7 +1365,7 @@ static const struct {
    {2, 2}, {1, 1}            /* and, or */
 };
 
-#define UNARY_PRIORITY	12  /* priority for unary operators */
+#define UNARY_PRIORITY  12  /* priority for unary operators */
 
 
 /*
@@ -1689,9 +1687,9 @@ static void forbody (LexState *ls, int base, int line, int nvars, int isgen) {
 ** Control whether for-loop control variables are read-only
 */
 #if LUA_COMPAT_LOOPVAR
-#define LOOPVARKIND	VDKREG
+#define LOOPVARKIND  VDKREG
 #else  /* by default, these variables are read only */
-#define LOOPVARKIND	RDKCONST
+#define LOOPVARKIND  RDKCONST
 #endif
 
 static void fornum (LexState *ls, TString *varname, int line) {

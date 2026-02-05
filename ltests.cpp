@@ -44,7 +44,7 @@
 void *l_Trick = 0;
 
 
-#define obj_at(L,k)	s2v(L->ci->func.p + (k))
+#define obj_at(L,k)  s2v(L->ci->func.p + (k))
 
 
 static int runC (lua_State *L, lua_State *L1, const char *pc);
@@ -162,7 +162,7 @@ static void warnf (void *ud, const char *msg, int tocont) {
 ** =======================================================================
 */
 
-#define MARK		0x55  /* 01010101 (a nice pattern) */
+#define MARK    0x55  /* 01010101 (a nice pattern) */
 
 typedef union memHeader {
   LUAI_MAXALIGN;
@@ -173,19 +173,9 @@ typedef union memHeader {
 } memHeader;
 
 
-#if !defined(EXTERNMEMCHECK)
-
 /* full memory check */
-#define MARKSIZE	16  /* size of marks after each block */
-#define fillmem(mem,size)	memset(mem, -MARK, size)
-
-#else
-
-/* external memory check: don't do it twice */
-#define MARKSIZE	0
-#define fillmem(mem,size)	/* empty */
-
-#endif
+#define MARKSIZE  16  /* size of marks after each block */
+#define fillmem(mem,size)  memset(mem, -MARK, size)
 
 
 Memcontrol l_memcontrol =
@@ -389,7 +379,7 @@ static void checkobjref (global_State *g, GCObject *f, GCObject *t) {
 ** definition must be a macro.)  Most checks need this version, because
 ** the check may run while an object is still being created.
 */
-#define checkobjrefN(g,f,t)	{ if (t) checkobjref(g,f,obj2gco(t)); }
+#define checkobjrefN(g,f,t)  { if (t) checkobjref(g,f,obj2gco(t)); }
 
 
 static void checkvalref (global_State *g, GCObject *f, const TValue *t) {
@@ -757,24 +747,6 @@ static char *buildop (Proto *p, int pc, char *buff) {
   }
   return obuff;
 }
-
-
-#if 0
-void luaI_printcode (Proto *pt, int size) {
-  int pc;
-  for (pc=0; pc<size; pc++) {
-    char buff[100];
-    printf("%s\n", buildop(pt, pc, buff));
-  }
-  printf("-------\n");
-}
-
-
-void luaI_printinst (Proto *pt, int pc) {
-  char buff[100];
-  printf("%s\n", buildop(pt, pc, buff));
-}
-#endif
 
 
 static int listcode (lua_State *L) {
@@ -1594,11 +1566,11 @@ static void regcodes (lua_State *L) {
 }
 
 
-#define EQ(s1)	(strcmp(s1, inst) == 0)
+#define EQ(s1)  (strcmp(s1, inst) == 0)
 
-#define getnum		(getnum_aux(L, L1, &pc))
-#define getstring	(getstring_aux(L, buff, &pc))
-#define getindex	(getindex_aux(L, L1, &pc))
+#define getnum    (getnum_aux(L, L1, &pc))
+#define getstring  (getstring_aux(L, buff, &pc))
+#define getindex  (getindex_aux(L, L1, &pc))
 
 
 static int testC (lua_State *L);
@@ -1606,8 +1578,7 @@ static int Cfunck (lua_State *L, int status, lua_KContext ctx);
 
 /*
 ** arithmetic operation encoding for 'arith' instruction
-** LUA_OPIDIV  -> \
-** LUA_OPSHL   -> <
+** LUA_OPIDIV  ->  ** LUA_OPSHL   -> <
 ** LUA_OPSHR   -> >
 ** LUA_OPUNM   -> _
 ** LUA_OPBNOT  -> !
@@ -1946,12 +1917,8 @@ static int runC (lua_State *L, lua_State *L1, const char *pc) {
       abort();
     }
     else if EQ("throw") {
-#if defined(__cplusplus)
 static struct X { int x; } x;
       throw x;
-#else
-      luaL_error(L1, "C++");
-#endif
       break;
     }
     else if EQ("tobool") {
@@ -2142,12 +2109,6 @@ static int coresume (lua_State *L) {
   }
 }
 
-#if !defined(LUA_USE_POSIX)
-
-#define nonblock	NULL
-
-#else
-
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -2159,7 +2120,6 @@ static int nonblock (lua_State *L) {
   fcntl(fd, F_SETFL, flags);
   return 0;
 }
-#endif
 
 /* }====================================================== */
 

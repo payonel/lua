@@ -24,32 +24,25 @@
 */
 
 #if !defined(HARDSTACKTESTS)
-#define condmovestack(L,pre,pos)	((void)0)
+#define condmovestack(L,pre,pos)  ((void)0)
 #else
 /* realloc stack keeping its size */
-#define condmovestack(L,pre,pos)  \
-  { int sz_ = stacksize(L); pre; luaD_reallocstack((L), sz_, 0); pos; }
+#define condmovestack(L,pre,pos)   { int sz_ = stacksize(L); pre; luaD_reallocstack((L), sz_, 0); pos; }
 #endif
 
-#define luaD_checkstackaux(L,n,pre,pos)  \
-	if (l_unlikely(L->stack_last.p - L->top.p <= (n))) \
-	  { pre; luaD_growstack(L, n, 1); pos; } \
-	else { condmovestack(L,pre,pos); }
+#define luaD_checkstackaux(L,n,pre,pos)   if (l_unlikely(L->stack_last.p - L->top.p <= (n)))  { pre; luaD_growstack(L, n, 1); pos; }  else { condmovestack(L,pre,pos); }
 
 /* In general, 'pre'/'pos' are empty (nothing to save) */
-#define luaD_checkstack(L,n)	luaD_checkstackaux(L,n,(void)0,(void)0)
+#define luaD_checkstack(L,n)  luaD_checkstackaux(L,n,(void)0,(void)0)
 
 
 
-#define savestack(L,pt)		(cast_charp(pt) - cast_charp(L->stack.p))
-#define restorestack(L,n)	cast(StkId, cast_charp(L->stack.p) + (n))
+#define savestack(L,pt)    (cast_charp(pt) - cast_charp(L->stack.p))
+#define restorestack(L,n)  cast(StkId, cast_charp(L->stack.p) + (n))
 
 
 /* macro to check stack size, preserving 'p' */
-#define checkstackp(L,n,p)  \
-  luaD_checkstackaux(L, n, \
-    ptrdiff_t t__ = savestack(L, p),  /* save 'p' */ \
-    p = restorestack(L, t__))  /* 'pos' part: restore 'p' */
+#define checkstackp(L,n,p)   luaD_checkstackaux(L, n,  ptrdiff_t t__ = savestack(L, p),  /* save 'p' */  p = restorestack(L, t__))  /* 'pos' part: restore 'p' */
 
 
 /*
@@ -59,7 +52,7 @@
 ** the size of the C stack.)
 */
 #if !defined(LUAI_MAXCCALLS)
-#define LUAI_MAXCCALLS		200
+#define LUAI_MAXCCALLS    200
 #endif
 
 

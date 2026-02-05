@@ -13,7 +13,7 @@
 /* test Lua with compatibility code */
 #define LUA_COMPAT_MATHLIB
 #undef LUA_COMPAT_GLOBAL
-#define LUA_COMPAT_GLOBAL	0
+#define LUA_COMPAT_GLOBAL  0
 
 
 #define LUA_DEBUG
@@ -29,15 +29,11 @@
 
 /* test for sizes in 'l_sprintf' (make sure whole buffer is available) */
 #undef l_sprintf
-#if !defined(LUA_USE_C89)
-#define l_sprintf(s,sz,f,i)	(memset(s,0xAB,sz), snprintf(s,sz,f,i))
-#else
-#define l_sprintf(s,sz,f,i)	(memset(s,0xAB,sz), sprintf(s,f,i))
-#endif
+#define l_sprintf(s,sz,f,i)  (memset(s,0xAB,sz), snprintf(s,sz,f,i))
 
 
 /* get a chance to test code without jump tables */
-#define LUA_USE_JUMPTABLE	0
+#define LUA_USE_JUMPTABLE  0
 
 
 /* use 32-bit integers in random generator */
@@ -45,7 +41,7 @@
 
 
 /* test stack reallocation without strict address use */
-#define LUAI_STRICT_ADDRESS	0
+#define LUAI_STRICT_ADDRESS  0
 
 
 /* memory-allocator control variables */
@@ -62,7 +58,7 @@ typedef struct Memcontrol {
 LUA_API Memcontrol l_memcontrol;
 
 
-#define luai_tracegc(L,f)		luai_tracegctest(L, f)
+#define luai_tracegc(L,f)    luai_tracegctest(L, f)
 extern void luai_tracegctest (lua_State *L, int first);
 
 
@@ -101,16 +97,12 @@ extern int lua_printallstack (lua_State *L);
 
 struct L_EXTRA { int lock; int *plock; };
 #undef LUA_EXTRASPACE
-#define LUA_EXTRASPACE	sizeof(struct L_EXTRA)
-#define getlock(l)	cast(struct L_EXTRA*, lua_getextraspace(l))
-#define luai_userstateopen(l)  \
-	(getlock(l)->lock = 0, getlock(l)->plock = &(getlock(l)->lock))
-#define luai_userstateclose(l)  \
-  lua_assert(getlock(l)->lock == 1 && getlock(l)->plock == &(getlock(l)->lock))
-#define luai_userstatethread(l,l1) \
-  lua_assert(getlock(l1)->plock == getlock(l)->plock)
-#define luai_userstatefree(l,l1) \
-  lua_assert(getlock(l)->plock == getlock(l1)->plock)
+#define LUA_EXTRASPACE  sizeof(struct L_EXTRA)
+#define getlock(l)  cast(struct L_EXTRA*, lua_getextraspace(l))
+#define luai_userstateopen(l)   (getlock(l)->lock = 0, getlock(l)->plock = &(getlock(l)->lock))
+#define luai_userstateclose(l)   lua_assert(getlock(l)->lock == 1 && getlock(l)->plock == &(getlock(l)->lock))
+#define luai_userstatethread(l,l1)  lua_assert(getlock(l1)->plock == getlock(l)->plock)
+#define luai_userstatefree(l,l1)  lua_assert(getlock(l)->plock == getlock(l1)->plock)
 #define lua_lock(l)     lua_assert((*getlock(l)->plock)++ == 0)
 #define lua_unlock(l)   lua_assert(--(*getlock(l)->plock) == 0)
 
@@ -122,12 +114,8 @@ LUA_API void *debug_realloc (void *ud, void *block,
                              size_t osize, size_t nsize);
 
 
-#define luaL_newstate()  \
-	lua_newstate(debug_realloc, &l_memcontrol, luaL_makeseed(NULL))
-#define luai_openlibs(L)  \
-  {  luaL_openlibs(L); \
-     luaL_requiref(L, "T", luaB_opentests, 1); \
-     lua_pop(L, 1); }
+#define luaL_newstate()   lua_newstate(debug_realloc, &l_memcontrol, luaL_makeseed(NULL))
+#define luai_openlibs(L)   {  luaL_openlibs(L);  luaL_requiref(L, "T", luaB_opentests, 1);  lua_pop(L, 1); }
 
 
 
@@ -135,14 +123,14 @@ LUA_API void *debug_realloc (void *ud, void *block,
 /* change some sizes to give some bugs a chance */
 
 #undef LUAL_BUFFERSIZE
-#define LUAL_BUFFERSIZE		23
-#define MINSTRTABSIZE		2
-#define MAXIWTHABS		3
+#define LUAL_BUFFERSIZE    23
+#define MINSTRTABSIZE    2
+#define MAXIWTHABS    3
 
-#define STRCACHE_N	23
-#define STRCACHE_M	5
+#define STRCACHE_N  23
+#define STRCACHE_M  5
 
-#define MAXINDEXRK	1
+#define MAXINDEXRK  1
 
 
 /*
@@ -154,7 +142,7 @@ LUA_API void *debug_realloc (void *ud, void *block,
 
 /* test mode uses more stack space */
 #undef LUAI_MAXCCALLS
-#define LUAI_MAXCCALLS	180
+#define LUAI_MAXCCALLS  180
 
 
 /* force Lua to use its own implementations */

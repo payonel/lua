@@ -32,19 +32,19 @@
 ** when searching for a Lua loader.
 */
 #if !defined(LUA_CSUBSEP)
-#define LUA_CSUBSEP		LUA_DIRSEP
+#define LUA_CSUBSEP    LUA_DIRSEP
 #endif
 
 #if !defined(LUA_LSUBSEP)
-#define LUA_LSUBSEP		LUA_DIRSEP
+#define LUA_LSUBSEP    LUA_DIRSEP
 #endif
 
 
 /* prefix for open functions in C libraries */
-#define LUA_POF		"luaopen_"
+#define LUA_POF    "luaopen_"
 
 /* separator for open functions in C libraries */
-#define LUA_OFSEP	"_"
+#define LUA_OFSEP  "_"
 
 
 /*
@@ -53,14 +53,14 @@
 */
 static const char *const CLIBS = "_CLIBS";
 
-#define LIB_FAIL	"open"
+#define LIB_FAIL  "open"
 
 
 #define setprogdir(L)           ((void)0)
 
 
 /* cast void* to a Lua function */
-#define cast_Lfunc(p)	cast(lua_CFunction, cast_func(p))
+#define cast_Lfunc(p)  cast(lua_CFunction, cast_func(p))
 
 
 /*
@@ -90,7 +90,6 @@ static lua_CFunction lsys_sym (lua_State *L, void *lib, const char *sym);
 
 
 
-#if defined(LUA_USE_DLOPEN)	/* { */
 /*
 ** {========================================================================
 ** This is an implementation of loadlib based on the dlfcn interface,
@@ -123,116 +122,6 @@ static lua_CFunction lsys_sym (lua_State *L, void *lib, const char *sym) {
 
 /* }====================================================== */
 
-
-
-#elif defined(LUA_DL_DLL)	/* }{ */
-/*
-** {======================================================================
-** This is an implementation of loadlib for Windows using native functions.
-** =======================================================================
-*/
-
-#include <windows.h>
-
-
-/*
-** optional flags for LoadLibraryEx
-*/
-#if !defined(LUA_LLE_FLAGS)
-#define LUA_LLE_FLAGS	0
-#endif
-
-
-#undef setprogdir
-
-
-/*
-** Replace in the path (on the top of the stack) any occurrence
-** of LUA_EXEC_DIR with the executable's path.
-*/
-static void setprogdir (lua_State *L) {
-  char buff[MAX_PATH + 1];
-  char *lb;
-  DWORD nsize = sizeof(buff)/sizeof(char);
-  DWORD n = GetModuleFileNameA(NULL, buff, nsize);  /* get exec. name */
-  if (n == 0 || n == nsize || (lb = strrchr(buff, '\\')) == NULL)
-    luaL_error(L, "unable to get ModuleFileName");
-  else {
-    *lb = '\0';  /* cut name on the last '\\' to get the path */
-    luaL_gsub(L, lua_tostring(L, -1), LUA_EXEC_DIR, buff);
-    lua_remove(L, -2);  /* remove original string */
-  }
-}
-
-
-
-
-static void pusherror (lua_State *L) {
-  int error = GetLastError();
-  char buffer[128];
-  if (FormatMessageA(FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_FROM_SYSTEM,
-      NULL, error, 0, buffer, sizeof(buffer)/sizeof(char), NULL))
-    lua_pushstring(L, buffer);
-  else
-    lua_pushfstring(L, "system error %d\n", error);
-}
-
-static void lsys_unloadlib (void *lib) {
-  FreeLibrary((HMODULE)lib);
-}
-
-
-static void *lsys_load (lua_State *L, const char *path, int seeglb) {
-  HMODULE lib = LoadLibraryExA(path, NULL, LUA_LLE_FLAGS);
-  (void)(seeglb);  /* not used: symbols are 'global' by default */
-  if (lib == NULL) pusherror(L);
-  return lib;
-}
-
-
-static lua_CFunction lsys_sym (lua_State *L, void *lib, const char *sym) {
-  lua_CFunction f = cast_Lfunc(GetProcAddress((HMODULE)lib, sym));
-  if (f == NULL) pusherror(L);
-  return f;
-}
-
-/* }====================================================== */
-
-
-#else				/* }{ */
-/*
-** {======================================================
-** Fallback for other systems
-** =======================================================
-*/
-
-#undef LIB_FAIL
-#define LIB_FAIL	"absent"
-
-
-#define DLMSG	"dynamic libraries not enabled; check your Lua installation"
-
-
-static void lsys_unloadlib (void *lib) {
-  (void)(lib);  /* not used */
-}
-
-
-static void *lsys_load (lua_State *L, const char *path, int seeglb) {
-  (void)(path); (void)(seeglb);  /* not used */
-  lua_pushliteral(L, DLMSG);
-  return NULL;
-}
-
-
-static lua_CFunction lsys_sym (lua_State *L, void *lib, const char *sym) {
-  (void)(lib); (void)(sym);  /* not used */
-  lua_pushliteral(L, DLMSG);
-  return NULL;
-}
-
-/* }====================================================== */
-#endif				/* } */
 
 
 /*
@@ -367,8 +256,8 @@ static void addtoclib (lua_State *L, const char *path, void *plib) {
 
 
 /* error codes for 'lookforfunc' */
-#define ERRLIB		1
-#define ERRFUNC		2
+#define ERRLIB    1
+#define ERRFUNC    2
 
 /*
 ** Look for a C function named 'sym' in a dynamically loaded library
@@ -460,7 +349,7 @@ static const char *getnextfilename (char **path, char *end) {
 ** Given a path such as ";blabla.so;blublu.so", pushes the string
 **
 ** no file 'blabla.so'
-**	no file 'blublu.so'
+**  no file 'blublu.so'
 */
 static void pusherrornotfound (lua_State *L, const char *path) {
   luaL_Buffer b;
