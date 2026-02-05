@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lapi_h
-#define lapi_h
+#pragma once
 
 
 #include "llimits.h"
@@ -62,4 +61,3 @@
                      L->tbclist.p < L->top.p - (n), \
 			  "not enough free elements in the stack")
 
-#endif

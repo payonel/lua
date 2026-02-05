@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lparser_h
-#define lparser_h
+#pragma once
 
 #include "llimits.h"
 #include "lobject.h"
@@ -194,4 +193,3 @@ LUAI_FUNC LClosure *luaY_parser (lua_State *L, ZIO *z, Table *anchor,
                                  const char *name, int firstchar);
 
 
-#endif

@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef ltm_h
-#define ltm_h
+#pragma once
 
 
 #include "lobject.h"
@@ -102,4 +101,3 @@ LUAI_FUNC void luaT_getvarargs (lua_State *L, struct CallInfo *ci, StkId where,
                                               int wanted, int vatab);
 
 
-#endif

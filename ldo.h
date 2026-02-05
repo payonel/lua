@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef ldo_h
-#define ldo_h
+#pragma once
 
 
 #include "llimits.h"
@@ -96,5 +95,4 @@ LUAI_FUNC l_noret luaD_throw (lua_State *L, TStatus errcode);
 LUAI_FUNC l_noret luaD_throwbaselevel (lua_State *L, TStatus errcode);
 LUAI_FUNC TStatus luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud);
 
-#endif
 

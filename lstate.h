@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lstate_h
-#define lstate_h
+#pragma once
 
 #include "lua.h"
 
@@ -447,5 +446,4 @@ LUAI_FUNC void luaE_warnerror (lua_State *L, const char *where);
 LUAI_FUNC TStatus luaE_resetthread (lua_State *L, TStatus status);
 
 
-#endif
 

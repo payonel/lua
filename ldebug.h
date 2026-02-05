@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef ldebug_h
-#define ldebug_h
+#pragma once
 
 
 #include "lstate.h"
@@ -62,4 +61,3 @@ LUAI_FUNC int luaG_traceexec (lua_State *L, const Instruction *pc);
 LUAI_FUNC int luaG_tracecall (lua_State *L);
 
 
-#endif

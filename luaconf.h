@@ -5,8 +5,7 @@
 */
 
 
-#ifndef luaconf_h
-#define luaconf_h
+#pragma once
 
 #include <limits.h>
 #include <stddef.h>
@@ -763,5 +762,4 @@
 
 
 
-#endif
 

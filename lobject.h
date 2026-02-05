@@ -5,8 +5,7 @@
 */
 
 
-#ifndef lobject_h
-#define lobject_h
+#pragma once
 
 
 #include <stdarg.h>
@@ -861,5 +860,4 @@ LUAI_FUNC const char *luaO_pushfstring (lua_State *L, const char *fmt, ...);
 LUAI_FUNC void luaO_chunkid (char *out, const char *source, size_t srclen);
 
 
-#endif
 

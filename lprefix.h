@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lprefix_h
-#define lprefix_h
+#pragma once
 
 
 /*
@@ -41,5 +40,4 @@
 
 #endif			/* } */
 
-#endif
 

@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lctype_h
-#define lctype_h
+#pragma once
 
 #include "lua.h"
 
@@ -97,5 +96,4 @@ LUAI_DDEC(const lu_byte luai_ctype_[UCHAR_MAX + 2];)
 
 #endif			/* } */
 
-#endif
 

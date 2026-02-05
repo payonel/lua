@@ -6,8 +6,7 @@
 */
 
 
-#ifndef lua_h
-#define lua_h
+#pragma once
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -544,4 +543,3 @@ struct lua_Debug {
 ******************************************************************************/
 
 
-#endif

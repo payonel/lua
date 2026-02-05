@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lfunc_h
-#define lfunc_h
+#pragma once
 
 
 #include "lobject.h"
@@ -62,4 +61,3 @@ LUAI_FUNC const char *luaF_getlocalname (const Proto *func, int local_number,
                                          int pc);
 
 
-#endif

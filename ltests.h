@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef ltests_h
-#define ltests_h
+#pragma once
 
 
 #include <stdio.h>
@@ -163,5 +162,4 @@ LUA_API void *debug_realloc (void *ud, void *block,
 #undef lua_number2strx
 
 
-#endif
 

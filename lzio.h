@@ -5,8 +5,7 @@
 */
 
 
-#ifndef lzio_h
-#define lzio_h
+#pragma once
 
 #include "lua.h"
 
@@ -64,4 +63,3 @@ struct Zio {
 
 LUAI_FUNC int luaZ_fill (ZIO *z);
 
-#endif

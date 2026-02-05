@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lgc_h
-#define lgc_h
+#pragma once
 
 
 #include <stddef.h>
@@ -265,4 +264,3 @@ LUAI_FUNC void luaC_checkfinalizer (lua_State *L, GCObject *o, Table *mt);
 LUAI_FUNC void luaC_changemode (lua_State *L, int newmode);
 
 
-#endif

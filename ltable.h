@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef ltable_h
-#define ltable_h
+#pragma once
 
 #include "lobject.h"
 
@@ -181,4 +180,3 @@ LUAI_FUNC Node *luaH_mainposition (const Table *t, const TValue *key);
 #endif
 
 
-#endif

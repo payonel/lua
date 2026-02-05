@@ -5,8 +5,7 @@
 */
 
 
-#ifndef lauxlib_h
-#define lauxlib_h
+#pragma once
 
 
 #include <stddef.h>
@@ -266,6 +265,5 @@ typedef struct luaL_Stream {
 
 
 
-#endif
 
 

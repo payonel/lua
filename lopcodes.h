@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lopcodes_h
-#define lopcodes_h
+#pragma once
 
 #include "llimits.h"
 #include "lobject.h"
@@ -436,4 +435,3 @@ LUAI_FUNC int luaP_isOT (Instruction i);
 LUAI_FUNC int luaP_isIT (Instruction i);
 
 
-#endif

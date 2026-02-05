@@ -5,8 +5,7 @@
 */
 
 
-#ifndef lualib_h
-#define lualib_h
+#pragma once
 
 #include "lua.h"
 
@@ -62,4 +61,3 @@ LUALIB_API void (luaL_openselectedlibs) (lua_State *L, int load, int preload);
 #define luaL_openlibs(L)	luaL_openselectedlibs(L, ~0, 0)
 
 
-#endif

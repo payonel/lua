@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#if !defined(lopnames_h)
-#define lopnames_h
+#pragma once
 
 #include <stddef.h>
 
@@ -101,5 +100,4 @@ static const char *const opnames[] = {
   NULL
 };
 
-#endif
 

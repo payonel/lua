@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef lcode_h
-#define lcode_h
+#pragma once
 
 #include "llex.h"
 #include "lobject.h"
@@ -102,4 +101,3 @@ LUAI_FUNC void luaK_finish (FuncState *fs);
 LUAI_FUNC l_noret luaK_semerror (LexState *ls, const char *fmt, ...);
 
 
-#endif

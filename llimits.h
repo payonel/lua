@@ -4,8 +4,7 @@
 ** See Copyright Notice in lua.h
 */
 
-#ifndef llimits_h
-#define llimits_h
+#pragma once
 
 
 #include <limits.h>
@@ -353,5 +352,4 @@ typedef unsigned long l_uint32;
 
 /* }================================================================== */
 
-#endif
 
