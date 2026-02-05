@@ -81,7 +81,8 @@ if not _port then --[
 local dirsep = string.match(package.config, "^([^\n]+)\n")
 
 -- auxiliary directory with C modules and temporary files
-local DIR = "libs" .. dirsep
+local tmp_prefix = rawget(_G, "_TMP")
+local DIR = table.concat({"libs", tmp_prefix}, dirsep) .. dirsep
 
 -- prepend DIR to a name and correct directory separators
 local function D (x)
@@ -92,7 +93,7 @@ end
 -- prepend DIR and pospend proper C lib. extension to a name
 local function DC (x)
   local ext = (dirsep == '\\') and ".dll" or ".so"
-  return D(x .. ext)
+  return "libs" .. dirsep .. x .. ext
 end
 
 
@@ -166,27 +167,27 @@ assert(package.searchpath("C", package.path) == D"C.lua")
 assert(require"C" == 25)
 assert(require"C" == 25)
 AA = nil
-try('B', 'B.lua', true, "libs/B.lua")
+try('B', 'B.lua', true, D"B.lua")
 assert(package.loaded.B)
 assert(require"B" == true)
 assert(package.loaded.A)
 assert(require"C" == 25)
 package.loaded.A = nil
 try('B', nil, true, nil)   -- should not reload package
-try('A', 'A.lua', true, "libs/A.lua")
+try('A', 'A.lua', true, D"A.lua")
 package.loaded.A = nil
 os.remove(D'A.lua')
 AA = {}
-try('A', 'A.lc', AA, "libs/A.lc")  -- now must find second option
+try('A', 'A.lc', AA, D"A.lc")  -- now must find second option
 assert(package.searchpath("A", package.path) == D"A.lc")
 assert(require("A") == AA)
 AA = false
-try('K', 'L', false, "libs/L")     -- default option
-try('K', 'L', false, "libs/L")     -- default option (should reload it)
+try('K', 'L', false, D"L")     -- default option
+try('K', 'L', false, D"L")     -- default option (should reload it)
 assert(rawget(_G, "_REQUIREDNAME") == nil)
 
 AA = "x"
-try("X", "XXxX", AA, "libs/XXxX")
+try("X", "XXxX", AA, D"XXxX")
 
 
 removefiles(files)
@@ -208,7 +209,7 @@ createfiles(files, "_ENV = {}\n", "\nreturn _ENV\n")
 AA = 0
 
 local m, ext = assert(require"P1")
-assert(ext == "libs/P1/init.lua")
+assert(ext == D"P1/init.lua")
 assert(AA == 0 and m.AA == 10)
 assert(require"P1" == m)
 assert(require"P1" == m)
@@ -216,7 +217,7 @@ assert(require"P1" == m)
 assert(package.searchpath("P1.xuxu", package.path) == D"P1/xuxu.lua")
 m.xuxu, ext = assert(require"P1.xuxu")
 assert(AA == 0 and m.xuxu.AA == 20)
-assert(ext == "libs/P1/xuxu.lua")
+assert(ext == D"P1/xuxu.lua")
 assert(require"P1.xuxu" == m.xuxu)
 assert(require"P1.xuxu" == m.xuxu)
 assert(require"P1" == m and m.AA == 10)
@@ -263,22 +264,22 @@ assert(not pcall(module, 'XUXU'))
 -- testing require of C libraries
 
 
-local p = ""   -- On Mac OS X, redefine this to "_"
+local p = tmp_prefix and (tmp_prefix .. dirsep) or ""   -- On Mac OS X, redefine this to "_"
 
 -- check whether loadlib works in this system
 local st, err, when = package.loadlib(DC"lib1", "*")
 if not st then
   local f, err, when = package.loadlib("donotexist", p.."xuxu")
-  assert(not f and type(err) == "string" and when == "absent")
+  assert(not f and type(err) == "string" and when == "absent", err)
   ;(Message or print)('\n >>> cannot load dynamic library <<<\n')
   print(err, when)
 else
   -- tests for loadlib
-  local f = assert(package.loadlib(DC"lib1", p.."onefunction"))
+  local f = assert(package.loadlib(DC"lib1", "onefunction"))
   local a, b = f(15, 25)
   assert(a == 25 and b == 15)
 
-  f = assert(package.loadlib(DC"lib1", p.."anotherfunc"))
+  f = assert(package.loadlib(DC"lib1", "anotherfunc"))
   assert(f(10, 20) == "10%20\n")
 
   -- check error messages
@@ -288,7 +289,7 @@ else
   assert(not f and type(err) == "string" and when == "open")
 
   -- symbols from 'lib1' must be visible to other libraries
-  f = assert(package.loadlib(DC"lib11", p.."luaopen_lib11"))
+  f = assert(package.loadlib(DC"lib11", "luaopen_lib11"))
   assert(f() == "exported")
 
   -- test C modules with prefixes in names

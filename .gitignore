@@ -1,15 +1,8 @@
-.gitattributes
+tests/time.txt
+tests/time-debug.txt
+obj/*
 
-*.so
-*.o
-*.a
-
-manual/manual.html
-
-testes/time.txt
-testes/time-debug.txt
-
-testes/libs/all
-
-temp
 lua
+
+.vscode/browse*
+

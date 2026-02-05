@@ -5,6 +5,8 @@
 #include "lua.h"
 #include "lauxlib.h"
 
+#include "lib_decls.h"
+
 static int id (lua_State *L) {
   lua_pushboolean(L, 1);
   lua_insert(L, 1);
@@ -19,6 +21,8 @@ struct STR {
 
 
 static void *t_freestr (void *ud, void *ptr, size_t osize, size_t nsize) {
+  (void)ud;
+  (void)nsize;
   struct STR *blk = (struct STR*)ptr - 1;
   blk->allocf(blk->ud, blk, sizeof(struct STR) + osize, 0);
   return NULL;
@@ -63,7 +67,6 @@ static const struct luaL_Reg funcs[] = {
   {NULL, NULL}
 };
 
-
 LUAMOD_API int luaopen_lib2 (lua_State *L) {
   lua_settop(L, 2);
   lua_setglobal(L, "y");  /* y gets 2nd parameter */
@@ -72,5 +75,3 @@ LUAMOD_API int luaopen_lib2 (lua_State *L) {
   luaL_newlib(L, funcs);
   return 1;
 }
-
-

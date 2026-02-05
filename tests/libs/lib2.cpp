@@ -1,16 +1,16 @@
 #include "lua.h"
 #include "lauxlib.h"
 
+#include "lib_decls.h"
+
 static int id (lua_State *L) {
   return lua_gettop(L);
 }
-
 
 static const struct luaL_Reg funcs[] = {
   {"id", id},
   {NULL, NULL}
 };
-
 
 LUAMOD_API int luaopen_lib2 (lua_State *L) {
   lua_settop(L, 2);
@@ -19,5 +19,3 @@ LUAMOD_API int luaopen_lib2 (lua_State *L) {
   luaL_newlib(L, funcs);
   return 1;
 }
-
-

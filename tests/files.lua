@@ -725,9 +725,17 @@ if T and T.nonblock and not _port then
   assert(err > 0 and count == 0)
   assert(f:close())
 
+  local progname
+  do  -- get name of running executable
+    local arg = arg or ARG
+    local i = 0
+    while arg[i] do i = i - 1 end
+    progname = '"' .. arg[i + 1] .. '"'
+  end
+
   -- receiver will read a "few" bytes (enough to empty a large buffer)
-  local receiver = [[
-    lua -e 'assert(io.stdin:setvbuf("no")); assert(#io.read(1e4) == 1e4)' ]]
+  local receiver = progname .. [[
+    -e 'assert(io.stdin:setvbuf("no")); assert(#io.read(1e4) == 1e4)' ]]
 
   local f = io.popen(receiver, "w")
   assert(f:setvbuf("no"))
@@ -798,7 +806,7 @@ if not _port then
     {"exit 129", "exit", 129},
     {"kill -s HUP $$", "signal", 1},
     {"kill -s KILL $$", "signal", 9},
-    {"sh -c 'kill -s HUP $$'", "exit"},
+    {"sh -c 'kill -s HUP $$'; exit $?", "exit", 129},
     {progname .. ' -e " "', "ok"},
     {progname .. ' -e "os.exit(0, true)"', "ok"},
     {progname .. ' -e "os.exit(20, true)"', "exit", 20},
