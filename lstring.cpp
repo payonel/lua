@@ -20,6 +20,8 @@
 #include "lstate.h"
 #include "lstring.h"
 
+#include "util_cast.h"
+
 /*
 ** Maximum size for string table.
 */
@@ -339,7 +341,7 @@ TString* luaS_newextlstr(lua_State* L,
     ne.kind = LSTRMEM;
     if (luaD_rawrunprotected(L, f_newext, &ne) != LUA_OK)
     {                                           /* mem. error? */
-      (*falloc)(ud, cast_voidp(s), len + 1, 0); /* free external string */
+      (*falloc)(ud, util::mem_cast(s), len + 1, 0); /* free external string */
       luaM_error(L);                            /* re-raise memory error */
     }
     ne.ts->falloc = falloc;

@@ -103,7 +103,6 @@ typedef LUAI_UACINT l_uacInt;
 #define cast(t, exp) ((t) (exp))
 
 #define cast_void(i)    cast(void, (i))
-#define cast_voidp(i)   cast(void*, (i))
 #define cast_num(i)     cast(lua_Number, (i))
 #define cast_int(i)     cast(int, (i))
 #define cast_short(i)   cast(short, (i))

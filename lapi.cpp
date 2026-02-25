@@ -29,6 +29,8 @@
 #include "lundump.h"
 #include "lvm.h"
 
+#include "util_cast.h"
+
 const char lua_ident[] =
     "$LuaVersion: " LUA_COPYRIGHT " $"
     "$LuaAuthors: " LUA_AUTHORS " $";
@@ -524,7 +526,7 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
   switch (ttypetag(o))
   {
   case LUA_VLCF:
-    return cast_voidp(cast_sizet(fvalue(o)));
+    return util::address_of(fvalue(o));
   case LUA_VUSERDATA:
   case LUA_VLIGHTUSERDATA:
     return touserdata(o);
@@ -820,7 +822,7 @@ LUA_API int lua_rawgetp(lua_State* L, int idx, const void* p)
   TValue k;
   lua_lock(L);
   t = gettable(L, idx);
-  setpvalue(&k, cast_voidp(p));
+  setpvalue(&k, util::remove_const_cast(p));
   return finishrawget(L, luaH_get(t, &k, s2v(L->top.p)));
 }
 
@@ -987,7 +989,7 @@ LUA_API void lua_rawset(lua_State* L, int idx)
 LUA_API void lua_rawsetp(lua_State* L, int idx, const void* p)
 {
   TValue k;
-  setpvalue(&k, cast_voidp(p));
+  setpvalue(&k, util::remove_const_cast(p));
   aux_rawset(L, idx, &k, 1);
 }
 

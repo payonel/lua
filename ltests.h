@@ -9,12 +9,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "lua.h"
+
 /* test Lua with compatibility code */
 #define LUA_COMPAT_MATHLIB
 #undef LUA_COMPAT_GLOBAL
 #define LUA_COMPAT_GLOBAL 0
-
-#define LUA_DEBUG
 
 /* turn on assertions */
 #define LUAI_ASSERT

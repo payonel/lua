@@ -124,8 +124,8 @@ typedef void (*lua_Hook)(lua_State* L, lua_Debug* ar);
 /*
 ** generic extra include file
 */
-#if defined(LUA_USER_H)
-#include LUA_USER_H
+#if defined(LUA_DEBUG)
+#include "ltests.h"
 #endif
 
 /*

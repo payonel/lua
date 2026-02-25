@@ -15,8 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "lua.h"
-
 #include "lapi.h"
 #include "lauxlib.h"
 #include "lcode.h"
@@ -31,6 +29,8 @@
 #include "lstring.h"
 #include "ltable.h"
 #include "lualib.h"
+
+#include "util_cast.h"
 
 /*
 ** The whole module only makes sense with LUA_DEBUG on
@@ -1371,7 +1371,7 @@ static int newuserdata(lua_State* L)
 static int pushuserdata(lua_State* L)
 {
   lua_Integer u = luaL_checkinteger(L, 1);
-  lua_pushlightuserdata(L, cast_voidp(cast_sizet(u)));
+  lua_pushlightuserdata(L, util::as_userdata(u));
   return 1;
 }
 
@@ -2036,7 +2036,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     else if EQ ("rawgetp")
     {
       int t = getindex;
-      lua_rawgetp(L1, t, cast_voidp(cast_sizet(getnum)));
+      lua_rawgetp(L1, t, util::as_userdata(getnum));
     }
     else if EQ ("rawset")
     {
@@ -2051,7 +2051,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     else if EQ ("rawsetp")
     {
       int t = getindex;
-      lua_rawsetp(L1, t, cast_voidp(cast_sizet(getnum)));
+      lua_rawsetp(L1, t, util::as_userdata(getnum));
     }
     else if EQ ("remove")
     {
@@ -2184,7 +2184,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if EQ ("topointer")
     {
-      lua_pushlightuserdata(L1, cast_voidp(lua_topointer(L1, getindex)));
+      lua_pushlightuserdata(L1, util::remove_const_cast(lua_topointer(L1, getindex)));
     }
     else if EQ ("touserdata")
     {
@@ -2469,7 +2469,7 @@ int luaB_opentests(lua_State* L)
   lua_setglobal(L, "_WARN"); /* _WARN = false */
   regcodes(L);
   atexit(checkfinalmem);
-  lua_assert(f == debug_realloc && ud == cast_voidp(&l_memcontrol));
+  lua_assert(f == debug_realloc && ud == &l_memcontrol);
   lua_setallocf(L, f, ud); /* exercise this function */
   luaL_newlib(L, tests_funcs);
   return 1;

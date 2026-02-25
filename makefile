@@ -12,6 +12,7 @@ OBJ_DIR       = $(OBJ_DIR_BASE)/$(VARIANT)
 OBJ_NAMES     = lapi.o lauxlib.o lbaselib.o lcode.o lcorolib.o lctype.o ldblib.o ldebug.o ldo.o ldump.o lfunc.o lgc.o
 OBJ_NAMES    += linit.o liolib.o llex.o lmathlib.o lmem.o loadlib.o lobject.o lopcodes.o loslib.o lparser.o lstate.o
 OBJ_NAMES    += lstring.o lstrlib.o ltable.o ltablib.o ltests.o ltm.o lundump.o lutf8lib.o lvm.o lzio.o
+OBJ_NAMES    += util_cast.o
 OBJ_FILES     = $(addprefix $(OBJ_DIR)/, $(OBJ_NAMES))
 
 DEP_FILES     = $(OBJ_FILES:.o=.d)
@@ -44,10 +45,11 @@ CXXFLAGS.release =-O2 -DNDEBUG
 CXXFLAGS.debug   =-Og -g3 -ggdb
 
 CXXFLAGS      =-Wall $(CXXFLAGS.$(VARIANT)) $(TESTS) $(CWARNSCPP) $(CWARNGCC) -std=c++23 -DLUA_USE_LINUX -fno-stack-protector -fno-common -march=native -MMD
-LDFLAGS       =-Wl,-E -lm -ldl
+LDFLAGS       =-Wl,-E -lm -ldl -fuse-ld=lld
 AR            =ar rc
 RANLIB        =ranlib
 RM            =rm -f
+CXX           = g++-14
 
 LUA_O         =$(OBJ_DIR)/lua.o
 CORE_T        =$(OBJ_DIR)/liblua.a
@@ -60,7 +62,7 @@ export TOP_DIR OBJ_DIR
 include tests/libs/build.mk
 
 debug: VARIANT=debug
-debug: TESTS= -DLUA_USER_H='"ltests.h"'
+debug: TESTS=-DLUA_DEBUG
 debug: $(LUA_T)
 
 -include $(DEP_FILES)
@@ -88,6 +90,19 @@ test:
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
 		ulimit -S -s 1100; \
 		cd tests; \
-		../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
+		perf stat -- ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
+
+full:
+	make clean
+	make -j
+	make test > /tmp/lua-test-release.log 2>&1 && cat /tmp/lua-test-release.log
+	make clean
+	make debug -j
+	make test > /tmp/lua-test-debug.log 2>&1 && cat /tmp/lua-test-debug.log
+	@echo ""; echo "total times:"; \
+	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
+	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
+
+.PHONY: full
 
 .PHONY: $(LUA_T)
