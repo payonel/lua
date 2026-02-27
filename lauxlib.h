@@ -12,6 +12,8 @@
 #include "lua.h"
 #include "luaconf.h"
 
+#include "lhack.h"
+
 /* global table */
 #define LUA_GNAME "_G"
 

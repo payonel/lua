@@ -4,8 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define lua_c
-
 #include "lprefix.h"
 
 #include <stdio.h>
@@ -697,10 +695,6 @@ static void doREPL(lua_State* L)
 }
 
 /* }================================================================== */
-
-#if !defined(luai_openlibs)
-#define luai_openlibs(L) luaL_openselectedlibs(L, ~0, 0)
-#endif
 
 /*
 ** Main body of stand-alone interpreter (to be called in protected mode).

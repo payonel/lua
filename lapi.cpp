@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define lapi_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <limits.h>

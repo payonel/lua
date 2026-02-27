@@ -5,7 +5,10 @@
       "label": "build",
       "type": "shell",
       "command": "make",
-      "args": ["debug"],
+      "args": [
+        "debug",
+        "-j"
+      ],
       "group": {
         "kind": "build",
         "isDefault": true

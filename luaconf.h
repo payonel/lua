@@ -233,27 +233,12 @@
 */
 
 /*
-@@ LUA_COMPAT_GLOBAL avoids 'global' being a reserved word
-*/
-#if !defined(LUA_COMPAT_GLOBAL)
-#define LUA_COMPAT_GLOBAL 1
-#endif
-
-/*
 @@ LUA_COMPAT_LOOPVAR makes for-loop control variables not read-only,
 ** as they were in previous versions.
 */
 #if !defined(LUA_COMPAT_LOOPVAR)
 #define LUA_COMPAT_LOOPVAR 0
 #endif
-
-/*
-@@ LUA_COMPAT_MATHLIB controls the presence of several deprecated
-** functions in the mathematical library.
-** (These functions were already officially removed in 5.3;
-** nevertheless they are still available here.)
-*/
-/* #define LUA_COMPAT_MATHLIB */
 
 /*
 @@ The following macros supply trivial compatibility for some
@@ -433,32 +418,10 @@
 */
 
 /*
-@@ l_sprintf is equivalent to 'snprintf' or 'sprintf' in C89.
-** (All uses in Lua have only one format item.)
-*/
-#define l_sprintf(s, sz, f, i) snprintf(s, sz, f, i)
-
-/*
-@@ lua_strx2number converts a hexadecimal numeral to a number.
-** In C99, 'strtod' does that conversion. Otherwise, you can
-** leave 'lua_strx2number' undefined and Lua will provide its own
-** implementation.
-*/
-#define lua_strx2number(s, p) lua_str2number(s, p)
-
-/*
 @@ lua_pointer2str converts a pointer to a readable string in a
 ** non-specified way.
 */
 #define lua_pointer2str(buff, sz, p) l_sprintf(buff, sz, "%p", p)
-
-/*
-@@ lua_number2strx converts a float to a hexadecimal numeral.
-** In C99, 'sprintf' (with format specifiers '%a'/'%A') does that.
-** Otherwise, you can leave 'lua_number2strx' undefined and Lua will
-** provide its own implementation.
-*/
-#define lua_number2strx(L, b, sz, f, n) ((void) L, l_sprintf(b, sz, f, (LUAI_UACNUMBER) (n)))
 
 /*
 ** 'strtof' and 'opf' variants for math functions are not valid in
@@ -535,13 +498,6 @@
 */
 
 /*
-@@ LUA_EXTRASPACE defines the size of a raw memory area associated with
-** a Lua state with very fast access.
-** CHANGE it if you need a different size.
-*/
-#define LUA_EXTRASPACE (sizeof(void*))
-
-/*
 @@ LUA_IDSIZE gives the maximum size for the description of the source
 ** of a function in debug information.
 ** CHANGE it if you want a different size.
@@ -549,15 +505,8 @@
 #define LUA_IDSIZE 60
 
 /*
-@@ LUAL_BUFFERSIZE is the initial buffer size used by the lauxlib
-** buffer system.
-*/
-#define LUAL_BUFFERSIZE ((int) (16 * sizeof(void*) * sizeof(lua_Number)))
-
-/*
-@@ LUAI_MAXALIGN defines fields that ensure proper alignment for
-** memory areas offered by Lua (e.g., userdata memory).
-** Add fields to it if you need alignment for non-ISO objects.
+@@ LUAI_MAXALIGN defines fields that, when used in a union, ensure
+** maximum alignment for the other items in that union.
 */
 /* use ISO C99 stuff */
 #define LUAI_MAXALIGN \

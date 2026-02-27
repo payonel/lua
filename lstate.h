@@ -15,6 +15,8 @@ typedef struct CallInfo CallInfo;
 #include "ltm.h"
 #include "lzio.h"
 
+#include "lhack.h"
+
 /*
 ** Some notes about garbage-collected objects: All objects in Lua must
 ** be kept somehow accessible until being freed, so all objects always
@@ -127,16 +129,6 @@ struct lua_longjmp; /* defined in ldo.c */
 ** never use this extra space, so it does not need to be kept clean.
 */
 #define EXTRA_STACK 5
-
-/*
-** Size of cache for strings in the API. 'N' is the number of
-** sets (better be a prime) and "M" is the size of each set.
-** (M == 1 makes a direct cache.)
-*/
-#if !defined(STRCACHE_N)
-#define STRCACHE_N 53
-#define STRCACHE_M 2
-#endif
 
 #define BASIC_STACK_SIZE (2 * LUA_MINSTACK)
 
@@ -295,8 +287,8 @@ struct lua_State
 */
 typedef struct LX
 {
-  lu_byte extra_[LUA_EXTRASPACE];
   lua_State l;
+  void* extra;
 } LX;
 
 /*

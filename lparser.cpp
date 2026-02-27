@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define lparser_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <limits.h>
@@ -26,6 +23,8 @@
 #include "lstate.h"
 #include "lstring.h"
 #include "ltable.h"
+
+#include "lhack.h"
 
 /* maximum number of variable declarations per function (must be
    smaller than 250, due to the bytecode format) */

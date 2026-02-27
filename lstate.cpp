@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define lstate_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <stddef.h>
@@ -26,27 +23,7 @@
 #include "ltable.h"
 #include "ltm.h"
 
-#define fromstate(L) (cast(LX*, cast(lu_byte*, (L)) - offsetof(LX, l)))
-
-/*
-** these macros allow user-specific actions when a thread is
-** created/deleted
-*/
-#if !defined(luai_userstateopen)
-#define luai_userstateopen(L) ((void) L)
-#endif
-
-#if !defined(luai_userstateclose)
-#define luai_userstateclose(L) ((void) L)
-#endif
-
-#if !defined(luai_userstatethread)
-#define luai_userstatethread(L, L1) ((void) L)
-#endif
-
-#if !defined(luai_userstatefree)
-#define luai_userstatefree(L, L1) ((void) L)
-#endif
+#define fromstate(L) (cast(LX*, (L)))
 
 /*
 ** set GCdebt to a new value keeping the real number of allocated
@@ -282,7 +259,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   lua_lock(L);
   luaC_checkGC(L);
   /* create new thread */
-  o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX), offsetof(LX, l));
+  o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX), 0);
   L1 = gco2th(o);
   /* anchor it on L stack */
   setthvalue2s(L, L->top.p, L1);
@@ -293,8 +270,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   L1->hook = L->hook;
   resethookcount(L1);
   /* initialize L1 extra space */
-  memcpy(lua_getextraspace(L1), lua_getextraspace(mainthread(g)),
-         LUA_EXTRASPACE);
+  *cast(void**, lua_getextraspace(L1)) = lua_getextraspace(mainthread(g));
   luai_userstatethread(L, L1);
   stack_init(L1, L); /* init stack */
   lua_unlock(L);
@@ -346,6 +322,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   if (g == NULL)
     return NULL;
   L = &g->mainth.l;
+  g->mainth.extra = NULL;  /* initialize to 0 */
   L->tt = LUA_VTHREAD;
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);

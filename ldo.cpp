@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define ldo_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <setjmp.h>
@@ -31,6 +28,8 @@
 #include "lundump.h"
 #include "lvm.h"
 #include "lzio.h"
+
+#include "lhack.h"
 
 #define errorstatus(s) ((s) > LUA_YIELD)
 
@@ -170,19 +169,6 @@ TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
 /* some stack space for error handling */
 #define STACKERRSPACE 200
 
-/*
-** LUAI_MAXSTACK limits the size of the Lua stack.
-** It must fit into INT_MAX/2.
-*/
-
-#if !defined(LUAI_MAXSTACK)
-#if 1000000 < (INT_MAX / 2)
-#define LUAI_MAXSTACK 1000000
-#else
-#define LUAI_MAXSTACK (INT_MAX / 2u)
-#endif
-#endif
-
 /* maximum stack size that respects size_t */
 #define MAXSTACK_BYSIZET ((MAX_SIZET / sizeof(StackValue)) - STACKERRSPACE)
 
@@ -222,20 +208,6 @@ int luaD_checkminstack(lua_State* L)
   else        /* try to grow stack to a size with enough free slots */
     return luaD_growstack(L, BASIC_STACK_SIZE, 0);
 }
-
-/*
-** In ISO C, any pointer use after the pointer has been deallocated is
-** undefined behavior. So, before a stack reallocation, all pointers
-** should be changed to offsets, and after the reallocation they should
-** be changed back to pointers. As during the reallocation the pointers
-** are invalid, the reallocation cannot run emergency collections.
-** Alternatively, we can use the old address after the deallocation.
-** That is not strict ISO C, but seems to work fine everywhere.
-** The following macro chooses how strict is the code.
-*/
-#if !defined(LUAI_STRICT_ADDRESS)
-#define LUAI_STRICT_ADDRESS 1
-#endif
 
 #if LUAI_STRICT_ADDRESS
 /*

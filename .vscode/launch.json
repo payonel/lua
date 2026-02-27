@@ -1,0 +1,21 @@
+ {
+   "version": "0.2.0",
+   "configurations": [
+     {
+       "name": "lua",
+       "type": "cppdbg",
+       "request": "launch",
+       "program": "${workspaceFolder}/lua",
+       "args": [
+          // "-s", "ltests.so",
+          "-W", "-i"
+        ],
+       "cwd": "${workspaceFolder}",
+       "MIMode": "gdb",
+
+       "environment": [
+        {"name": "LUA_INIT", "value": "warn('@allow')"}
+       ]
+     }
+   ]
+ }

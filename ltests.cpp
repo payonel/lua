@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define ltests_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <limits.h>
@@ -14,6 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "ltests.h"
 
 #include "lapi.h"
 #include "lauxlib.h"
@@ -37,7 +36,8 @@
 */
 #if defined(LUA_DEBUG)
 
-void* l_Trick = 0;
+
+static void* l_Trick = 0;
 
 #define obj_at(L, k) s2v(L->ci->func.p + (k))
 
@@ -197,7 +197,7 @@ static void freeblock(Memcontrol* mc, memHeader* block)
   }
 }
 
-void* debug_realloc(void* ud, void* b, size_t oldsize, size_t size)
+static void* debug_realloc(void* ud, void* b, size_t oldsize, size_t size)
 {
   Memcontrol* mc = cast(Memcontrol*, ud);
   memHeader* block = cast(memHeader*, b);
@@ -321,12 +321,7 @@ static void printobj(global_State* g, GCObject* o)
     printf(" '%s'", getstr(gco2ts(o)));
 }
 
-void lua_printobj(lua_State* L, struct GCObject* o)
-{
-  printobj(G(L), o);
-}
-
-void lua_printvalue(TValue* v)
+static void lua_printvalue(TValue* v)
 {
   switch (ttypetag(v))
   {
@@ -730,7 +725,7 @@ static l_mem checklist(global_State* g, int maybedead, int tof,
   return total;
 }
 
-int lua_checkmemory(lua_State* L)
+static int lua_checkmemory(lua_State* L)
 {
   global_State* g = G(L);
   GCObject* o;
@@ -911,7 +906,7 @@ static int listlocals(lua_State* L)
 
 /* }====================================================== */
 
-void lua_printstack(lua_State* L)
+static void lua_printstack(lua_State* L)
 {
   int i;
   int n = lua_gettop(L);
@@ -925,7 +920,7 @@ void lua_printstack(lua_State* L)
   printf("<<\n");
 }
 
-int lua_printallstack(lua_State* L)
+static int lua_printallstack(lua_State* L)
 {
   StkId p;
   int i = 1;
@@ -2473,6 +2468,18 @@ int luaB_opentests(lua_State* L)
   lua_setallocf(L, f, ud); /* exercise this function */
   luaL_newlib(L, tests_funcs);
   return 1;
+}
+
+lua_State* luai_newstate()
+{
+  return lua_newstate(debug_realloc, &l_memcontrol, luaL_makeseed(NULL));
+}
+
+void luai_openlibstest(lua_State* L)
+{
+  luaL_openlibs(L);
+  luaL_requiref(L, "T", luaB_opentests, 1);
+  lua_pop(L, 1);
 }
 
 #endif

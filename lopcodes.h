@@ -172,10 +172,6 @@ enum OpMode
 
 #define CREATE_sJ(o, j, k) ((cast_Inst(o) << POS_OP) | (cast_Inst(j) << POS_sJ) | (cast_Inst(k) << POS_k))
 
-#if !defined(MAXINDEXRK) /* (for debugging only) */
-#define MAXINDEXRK MAXARG_B
-#endif
-
 /*
 ** Maximum size for the stack of a Lua function. It must fit in 8 bits.
 ** The highest valid register is one less than this value.

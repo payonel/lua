@@ -15,15 +15,6 @@
 #define api_incr_top(L) (L->top.p++, api_check(L, L->top.p <= L->ci->top.p, "stack overflow"))
 
 /*
-** macros that are executed whenever program enters the Lua core
-** ('lua_lock') and leaves the core ('lua_unlock')
-*/
-#if !defined(lua_lock)
-#define lua_lock(L)   ((void) 0)
-#define lua_unlock(L) ((void) 0)
-#endif
-
-/*
 ** If a call returns too many multiple returns, the callee may not have
 ** stack space to accommodate all results. In this case, this macro
 ** increases its stack space ('L->ci->top.p').

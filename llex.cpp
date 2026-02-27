@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define llex_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <locale.h>
@@ -25,6 +22,8 @@
 #include "lstring.h"
 #include "ltable.h"
 #include "lzio.h"
+
+#include "lhack.h"
 
 #define next(ls) (ls->current = zgetc(ls->z))
 

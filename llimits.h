@@ -94,11 +94,6 @@ typedef LUAI_UACINT l_uacInt;
 /* to avoid problems with conditions too long */
 #define lua_longassert(c) assert_code((c) ? (void) 0 : lua_assert(0))
 
-/* macro to avoid warnings about unused variables */
-#if !defined(UNUSED)
-#define UNUSED(x) ((void) (x))
-#endif
-
 /* type casts (a macro highlights casts in the code) */
 #define cast(t, exp) ((t) (exp))
 

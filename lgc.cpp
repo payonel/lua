@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define lgc_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <string.h>
@@ -1860,10 +1857,6 @@ static void incstep(lua_State* L, global_State* g)
   else
     luaE_setdebt(g, stepsize);
 }
-
-#if !defined(luai_tracegc)
-#define luai_tracegc(L, f) ((void) 0)
-#endif
 
 /*
 ** Performs a basic GC step if collector is running. (If collector was

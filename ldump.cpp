@@ -4,8 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define ldump_c
-#define LUA_CORE
 
 #include "lprefix.h"
 

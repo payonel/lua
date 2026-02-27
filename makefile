@@ -103,6 +103,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: full
-
-.PHONY: $(LUA_T)
+.PHONY: all debug clean test full

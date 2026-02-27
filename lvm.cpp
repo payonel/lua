@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define lvm_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <float.h>
@@ -30,14 +27,6 @@
 #include "ltable.h"
 #include "ltm.h"
 #include "lvm.h"
-
-/*
-** By default, use jump tables in the main interpreter loop on gcc
-** and compatible compilers.
-*/
-#if !defined(LUA_USE_JUMPTABLE)
-#define LUA_USE_JUMPTABLE 1
-#endif
 
 /* limit for table tag-method chains (to avoid infinite loops) */
 #define MAXTAGLOOP 2000

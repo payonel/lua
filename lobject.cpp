@@ -4,9 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define lobject_c
-#define LUA_CORE
-
 #include "lprefix.h"
 
 #include <float.h>
