@@ -1671,6 +1671,7 @@ static KOption getoption(Header* h, const char** fmt, size_t* size)
       LUAI_MAXALIGN;
     } u;
   };
+  const size_t maxalign = sizeof(struct cD) - sizeof(((struct cD*)0)->u);
   int opt = *((*fmt)++);
   *size = 0; /* default */
   switch (opt)
@@ -1745,7 +1746,6 @@ static KOption getoption(Header* h, const char** fmt, size_t* size)
     break;
   case '!':
   {
-    const size_t maxalign = offsetof(struct cD, u);
     h->maxalign = getnumlimit(h, fmt, maxalign);
     break;
   }

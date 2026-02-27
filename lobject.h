@@ -414,6 +414,8 @@ typedef struct TString
   void* ud;         /* user data for external strings */
 } TString;
 
+#define TSTRING_OFFSET_FALLOC (sizeof(TString) - sizeof(lua_Alloc) - sizeof(void*))
+
 #define strisshr(ts) ((ts)->shrlen >= 0)
 #define isextstr(ts) (ttislngstring(ts) && tsvalue(ts)->shrlen != LSTRREG)
 
@@ -516,7 +518,7 @@ typedef struct Udata0
 } Udata0;
 
 /* compute the offset of the memory area of a userdata */
-#define udatamemoffset(nuv) ((nuv) == 0 ? offsetof(Udata0, bindata) : offsetof(Udata, uv) + (sizeof(UValue) * (nuv)))
+#define udatamemoffset(nuv) ((nuv) == 0 ? sizeof(Udata0) - sizeof(((Udata0*)0)->bindata) : sizeof(Udata) - sizeof(UValue) + (sizeof(UValue) * (nuv)))
 
 /* get the address of the memory block inside 'Udata' */
 #define getudatamem(u) (cast_charp(u) + udatamemoffset((u)->nuvalue))
@@ -710,12 +712,16 @@ typedef struct CClosure
   TValue upvalue[1]; /* list of upvalues */
 } CClosure;
 
+#define sizeCclosure(n) (sizeof(CClosure) - sizeof(TValue) + sizeof(TValue) * cast_uint(n))
+
 typedef struct LClosure
 {
   ClosureHeader;
   struct Proto* p;
   UpVal* upvals[1]; /* list of upvalues */
 } LClosure;
+
+#define sizeLclosure(n) (sizeof(LClosure) - sizeof(UpVal*) + sizeof(UpVal*) * cast_uint(n))
 
 typedef union Closure
 {

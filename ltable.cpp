@@ -56,7 +56,7 @@ typedef struct
 typedef union
 {
   Node* lastfree;
-  char padding[offsetof(Limbox_aux, follows_pNode)];
+  char padding[sizeof(Node*)];
 } Limbox;
 
 #define haslastfree(t) ((t)->lsizenode >= LIMFORLAST)
