@@ -304,11 +304,8 @@ static int luaB_next(lua_State* L)
   }
 }
 
-static int pairscont(lua_State* L, int status, lua_KContext k)
+static int pairscont(lua_State*, int, lua_KContext)
 {
-  (void) L;
-  (void) status;
-  (void) k; /* unused */
   return 4; /* __pairs did all the work, just return its results */
 }
 

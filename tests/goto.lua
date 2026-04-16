@@ -325,13 +325,8 @@ do
     global none
     local function foo () XXX = 1 end   --< ERROR]], "variable 'XXX'")
 
-  if not T then  -- when not in "test mode", "global" isn't reserved
-    assert(load("global = 1; return global")() == 1)
-    print "  ('global' is not a reserved word)"
-  else
-    -- "global" reserved, cannot be used as a variable
-    assert(not load("global = 1; return global"))
-  end
+  -- "global" reserved, cannot be used as a variable
+  assert(not load("global = 1; return global"))
 
   local foo = 20
   do

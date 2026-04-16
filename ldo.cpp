@@ -231,11 +231,10 @@ static void relstack(lua_State* L)
 /*
 ** Change back all offsets into pointers.
 */
-static void correctstack(lua_State* L, StkId oldstack)
+static void correctstack(lua_State* L, StkId)
 {
   CallInfo* ci;
   UpVal* up;
-  UNUSED(oldstack);
   L->top.p = restorestack(L, L->top.offset);
   L->tbclist.p = restorestack(L, L->tbclist.offset);
   for (up = L->openupval; up != NULL; up = up->u.open.next)
@@ -255,9 +254,8 @@ static void correctstack(lua_State* L, StkId oldstack)
 ** as long as we do not dereference it.
 */
 
-static void relstack(lua_State* L)
+static void relstack(lua_State*)
 {
-  UNUSED(L);
 } /* do nothing */
 
 /*
@@ -858,10 +856,9 @@ static void finishCcall(lua_State* L, CallInfo* ci)
 ** previously interrupted coroutine until the stack is empty (or another
 ** interruption long-jumps out of the loop).
 */
-static void unroll(lua_State* L, void* ud)
+static void unroll(lua_State* L, void*)
 {
   CallInfo* ci;
-  UNUSED(ud);
   while ((ci = L->ci) != &L->base_ci)
   {                       /* something in the stack */
     if (!isLua(ci))       /* C function? */

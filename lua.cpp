@@ -52,9 +52,8 @@ static void setsignal(int sig, void (*handler)(int))
 /*
 ** Hook set by signal function to stop the interpreter.
 */
-static void lstop(lua_State* L, lua_Debug* ar)
+static void lstop(lua_State* L, lua_Debug*)
 {
-  (void) ar;                  /* unused arg. */
   lua_sethook(L, NULL, 0, 0); /* reset hook */
   luaL_error(L, "interrupted!");
 }
@@ -386,9 +385,8 @@ static int runargs(lua_State* L, char** argv, int n)
 static char* (*l_getenv)(const char* name);
 
 /* Function to ignore environment variables, used by option -E */
-static char* no_getenv(const char* name)
+static char* no_getenv(const char*)
 {
-  UNUSED(name);
   return NULL;
 }
 

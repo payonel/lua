@@ -5,14 +5,8 @@
 #include "lua.h"
 #include <stdint.h>
 
-/* test Lua with compatibility code */
-#define LUA_COMPAT_GLOBAL 0
-
 /* turn on assertions */
 #define LUAI_ASSERT
-
-/* to avoid warnings, and to make sure value is really unused */
-#define UNUSED(x) (x = 0, (void) (x))
 
 /* test for sizes in 'l_sprintf' (make sure whole buffer is available) */
 #define l_sprintf(s, sz, f, i) (memset(s, 0xAB, sz), snprintf(s, sz, f, i))
@@ -77,16 +71,6 @@ LUA_API Memcontrol l_memcontrol;
 #define luai_openlibs(L) luai_openlibstest(L)
 
 #else
-
-/*
-@@ LUA_COMPAT_GLOBAL avoids 'global' being a reserved word
-*/
-#if !defined(LUA_COMPAT_GLOBAL)
-#define LUA_COMPAT_GLOBAL 1
-#endif
-
-/* macro to avoid warnings about unused variables */
-#define UNUSED(x) ((void) (x))
 
 /*
 @@ l_sprintf is equivalent to 'snprintf' or 'sprintf' in C89.

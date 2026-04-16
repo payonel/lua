@@ -185,10 +185,9 @@ static void init_registry(lua_State* L, global_State* g)
 /*
 ** open parts of the state that may cause memory-allocation errors.
 */
-static void f_luaopen(lua_State* L, void* ud)
+static void f_luaopen(lua_State* L, void*)
 {
   global_State* g = G(L);
-  UNUSED(ud);
   stack_init(L, L); /* init stack */
   init_registry(L, g);
   luaS_init(L);

@@ -769,10 +769,9 @@ typedef struct LoadF
   char buff[BUFSIZ]; /* area for reading file */
 } LoadF;
 
-static const char* getF(lua_State* L, void* ud, size_t* size)
+static const char* getF(lua_State*, void* ud, size_t* size)
 {
   LoadF* lf = (LoadF*) ud;
-  UNUSED(L);
   if (lf->n > 0)
   {                /* are there pre-read characters to be read? */
     *size = lf->n; /* return them (chars already in buffer) */
@@ -897,10 +896,9 @@ typedef struct LoadS
   size_t size;
 } LoadS;
 
-static const char* getS(lua_State* L, void* ud, size_t* size)
+static const char* getS(lua_State*, void* ud, size_t* size)
 {
   LoadS* ls = (LoadS*) ud;
-  UNUSED(L);
   if (ls->size == 0)
     return NULL;
   *size = ls->size;
@@ -1100,10 +1098,8 @@ LUALIB_API const char* luaL_gsub(lua_State* L, const char* s,
   return lua_tostring(L, -1);
 }
 
-void* luaL_alloc(void* ud, void* ptr, size_t osize, size_t nsize)
+void* luaL_alloc(void*, void* ptr, size_t, size_t nsize)
 {
-  UNUSED(ud);
-  UNUSED(osize);
   if (nsize == 0)
   {
     free(ptr);
@@ -1225,9 +1221,8 @@ static unsigned int luai_makeseed(void)
 
 #endif
 
-LUALIB_API unsigned int luaL_makeseed(lua_State* L)
+LUALIB_API unsigned int luaL_makeseed(lua_State*)
 {
-  UNUSED(L);
   return luai_makeseed();
 }
 

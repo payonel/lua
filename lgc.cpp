@@ -1035,9 +1035,8 @@ static GCObject* udata2finalize(global_State* g)
   return o;
 }
 
-static void dothecall(lua_State* L, void* ud)
+static void dothecall(lua_State* L, void*)
 {
-  UNUSED(ud);
   luaD_callnoyield(L, L->top.p - 2, 0);
 }
 

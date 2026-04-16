@@ -151,9 +151,8 @@ LUA_API lua_CFunction lua_atpanic(lua_State* L, lua_CFunction panicf)
   return old;
 }
 
-LUA_API lua_Number lua_version(lua_State* L)
+LUA_API lua_Number lua_version(lua_State*)
 {
-  UNUSED(L);
   return LUA_VERSION_NUM;
 }
 
@@ -289,7 +288,6 @@ LUA_API int lua_type(lua_State* L, int idx)
 
 LUA_API const char* lua_typename(lua_State* L, int t)
 {
-  UNUSED(L);
   api_check(L, LUA_TNONE <= t && t < LUA_NUMTYPES, "invalid type");
   return ttypename(t);
 }

@@ -2308,24 +2308,6 @@ static void statement(LexState* ls)
     gotostat(ls, line);
     break;
   }
-#if LUA_COMPAT_GLOBAL
-  case TK_NAME:
-  {
-    /* compatibility code to parse global keyword when "global"
-       is not reserved */
-    if (ls->t.seminfo.ts == ls->glbn)
-    { /* current = "global"? */
-      int lk = luaX_lookahead(ls);
-      if (lk == '<' || lk == TK_NAME || lk == '*' || lk == TK_FUNCTION)
-      {
-        /* 'global <attrib>' or 'global name' or 'global *' or
-           'global function' */
-        globalstatfunc(ls, line);
-        break;
-      }
-    } /* else... */
-  }
-#endif
   /* FALLTHROUGH */
   default:
   { /* stat -> func | assignment */

@@ -1008,9 +1008,8 @@ static int alloc_count(lua_State* L)
   return 0;
 }
 
-static int alloc_failnext(lua_State* L)
+static int alloc_failnext(lua_State*)
 {
-  UNUSED(L);
   l_memcontrol.failnext = 1;
   return 0;
 }
