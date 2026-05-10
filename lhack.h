@@ -14,9 +14,6 @@
 /* get a chance to test code without jump tables */
 #define LUA_USE_JUMPTABLE 0
 
-/* use 32-bit integers in random generator */
-#define LUA_RAND32
-
 /* test stack reallocation without strict address use */
 #define LUAI_STRICT_ADDRESS 0
 
