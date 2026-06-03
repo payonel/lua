@@ -346,7 +346,7 @@ TString* luaS_newextlstr(lua_State* L,
   }
   ne.ts->shrlen = ne.kind;
   ne.ts->u.lnglen = len;
-  ne.ts->contents = cast_charp(s);
+  ne.ts->contents = util::remove_const_cast(s);
   return ne.ts;
 }
 

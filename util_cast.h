@@ -35,6 +35,7 @@ namespace util
   template <typename T> T* remove_const_cast(const T*) = delete;
 
   inline constexpr void* remove_const_cast(const void* val) { return const_cast<void*>(val); }
+  inline constexpr char* remove_const_cast(const char* val) { return const_cast<char*>(val); }
 
   // type casts to memory address needed for c memcpy, memmove, free, realloc, etc
   template <typename T> T* mem_cast(T*) = delete;

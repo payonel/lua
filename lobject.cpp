@@ -22,6 +22,7 @@
 #include "lmem.h"
 #include "lobject.h"
 #include "lstate.h"
+#include "util_cast.h"
 #include "lstring.h"
 #include "lvm.h"
 
@@ -290,7 +291,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
   int e = 0;                    /* exponent correction */
   int neg;                      /* 1 if number is negative */
   int hasdot = 0;               /* true after seen a dot */
-  *endptr = cast_charp(s);      /* nothing is valid yet */
+  *endptr = util::remove_const_cast(s);      /* nothing is valid yet */
   while (lisspace(cast_uchar(*s)))
     s++;                                                    /* skip initial spaces */
   neg = isneg(&s);                                          /* check sign */
@@ -321,7 +322,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
   }
   if (nosigdig + sigdig == 0) /* no digits? */
     return l_mathop(0.0);     /* invalid format */
-  *endptr = cast_charp(s);    /* valid up to here */
+  *endptr = util::remove_const_cast(s);    /* valid up to here */
   e *= 4;                     /* each digit multiplies/divides value by 2^4 */
   if (*s == 'p' || *s == 'P')
   {                   /* exponent part? */
@@ -336,7 +337,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
     if (neg1)
       exp1 = -exp1;
     e += exp1;
-    *endptr = cast_charp(s); /* valid up to here */
+    *endptr = util::remove_const_cast(s); /* valid up to here */
   }
   if (neg)
     r = -r;
