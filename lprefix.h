@@ -6,28 +6,24 @@
 
 #pragma once
 
-
 /*
 ** Allows POSIX/XSI stuff
 */
 
 #if !defined(_XOPEN_SOURCE)
-#define _XOPEN_SOURCE           600
+#define _XOPEN_SOURCE 600
 #elif _XOPEN_SOURCE == 0
-#undef _XOPEN_SOURCE  /* use -D_XOPEN_SOURCE=0 to undefine it */
+#undef _XOPEN_SOURCE /* use -D_XOPEN_SOURCE=0 to undefine it */
 #endif
 
 /*
 ** Allows manipulation of large files in gcc and some other compilers
 */
 #if !defined(LUA_32BITS) && !defined(_FILE_OFFSET_BITS)
-#define _LARGEFILE_SOURCE       1
-#define _FILE_OFFSET_BITS       64
+#define _LARGEFILE_SOURCE 1
+#define _FILE_OFFSET_BITS 64
 #endif
-
 
 /*
 ** Windows stuff
 */
-
-
