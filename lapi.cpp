@@ -521,7 +521,7 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
   switch (ttypetag(o))
   {
   case LUA_VLCF:
-    return util::address_of(fvalue(o));
+    return util::func_to_voidp(fvalue(o));
   case LUA_VUSERDATA:
   case LUA_VLIGHTUSERDATA:
     return touserdata(o);

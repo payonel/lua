@@ -1,7 +1,10 @@
 #pragma once
 
 #include <stddef.h>
+#include <cstdint>
 #include <type_traits>
+
+struct lua_State;
 
 namespace util
 {
@@ -15,19 +18,19 @@ namespace util
   template <typename T, typename V> T type_cast(V) = delete;
 
   // to_address is used to take the address of objects or functions
-  static constexpr void* address_of(int (*pf)(lua_State*)) { return reinterpret_cast<void*>(pf); } 
+  inline constexpr void* func_to_voidp(int (*pf)(lua_State*)) { return reinterpret_cast<void*>(pf); } 
   
   // userdata is user defined. it could be a real address but lua side does not know
-  static constexpr void* as_userdata(lua_Integer val) { return reinterpret_cast<void*>(val); } 
-  static constexpr void* as_userdata(int val) { return reinterpret_cast<void*>(val); } 
+  inline constexpr void* as_userdata(long long val) { return reinterpret_cast<void*>(static_cast<uintptr_t>(val)); } 
+  inline constexpr void* as_userdata(int val) { return reinterpret_cast<void*>(static_cast<uintptr_t>(val)); } 
 
   // remove const cast justification may be due to poor arg type
   template <typename T> T* remove_const_cast(const T*) = delete;
 
-  static constexpr void* remove_const_cast(const void* val) { return const_cast<void*>(val); }
+  inline constexpr void* remove_const_cast(const void* val) { return const_cast<void*>(val); }
 
   // type casts to memory address needed for c memcpy, memmove, free, realloc, etc
   template <typename T> T* mem_cast(T*) = delete;
 
-  static constexpr void* mem_cast(const char* val) { return static_cast<void*>(const_cast<char*>(val)); }
+  inline constexpr void* mem_cast(const char* val) { return static_cast<void*>(const_cast<char*>(val)); }
 };
