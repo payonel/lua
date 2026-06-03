@@ -24,6 +24,7 @@
 
 #include "lauxlib.h"
 #include "llimits.h"
+#include "util_cast.h"
 
 /*
 ** {======================================================
@@ -993,7 +994,16 @@ LUALIB_API const char* luaL_tolstring(lua_State* L, int idx, size_t* len)
     {
       int tt = luaL_getmetafield(L, idx, "__name"); /* try name */
       const char* kind = (tt == LUA_TSTRING) ? lua_tostring(L, -1) : luaL_typename(L, idx);
-      lua_pushfstring(L, "%s: %p", kind, lua_topointer(L, idx));
+      if (lua_islightcfunction(L, idx))
+      {
+        /* light C function — no GC object, use string representation */
+        auto fa = lua_funcaddress(L, idx);
+        lua_pushfstring(L, "%s: %s", kind, fa.c_str());
+      }
+      else
+      {
+        lua_pushfstring(L, "%s: %p", kind, lua_topointer(L, idx));
+      }
       if (tt != LUA_TNIL)
         lua_remove(L, -2); /* remove '__name' */
       break;

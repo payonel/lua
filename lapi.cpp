@@ -298,6 +298,12 @@ LUA_API int lua_iscfunction(lua_State* L, int idx)
   return (ttislcf(o) || (ttisCclosure(o)));
 }
 
+LUA_API int lua_islightcfunction(lua_State* L, int idx)
+{
+  const TValue* o = index2value(L, idx);
+  return ttislcf(o);
+}
+
 LUA_API int lua_isinteger(lua_State* L, int idx)
 {
   const TValue* o = index2value(L, idx);
@@ -521,7 +527,7 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
   switch (ttypetag(o))
   {
   case LUA_VLCF:
-    return util::func_to_voidp(fvalue(o));
+    return NULL;  /* use lua_funcaddress for light C functions */
   case LUA_VUSERDATA:
   case LUA_VLIGHTUSERDATA:
     return touserdata(o);
@@ -533,6 +539,13 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
       return NULL;
   }
   }
+}
+
+std::string lua_funcaddress(lua_State* L, int idx)
+{
+  const TValue* o = index2value(L, idx);
+  lua_assert(ttislcf(o));
+  return util::func_to_string(fvalue(o));
 }
 
 /*

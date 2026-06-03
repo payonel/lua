@@ -24,6 +24,7 @@
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
+#include "util_cast.h"
 
 /*
 ** maximum number of captures that a pattern can do during
@@ -1497,14 +1498,24 @@ static int str_format(lua_State* L)
       }
       case 'p':
       {
-        const void* p = lua_topointer(L, arg);
         checkformat(L, form, L_FMTFLAGSC, 0);
-        if (p == NULL)
-        {                               /* avoid calling 'printf' with argument NULL */
-          p = "(null)";                 /* result */
-          form[strlen(form) - 1] = 's'; /* format it as a string */
+        if (lua_islightcfunction(L, arg))
+        {
+          /* light C function — format from FuncAddress string */
+          auto fa = lua_funcaddress(L, arg);
+          form[strlen(form) - 1] = 's';
+          nb = l_sprintf(buff, maxitem, form, fa.c_str());
         }
-        nb = l_sprintf(buff, maxitem, form, p);
+        else
+        {
+          const void* p = lua_topointer(L, arg);
+          if (p == NULL)
+          {
+            p = "(null)";
+            form[strlen(form) - 1] = 's';
+          }
+          nb = l_sprintf(buff, maxitem, form, p);
+        }
         break;
       }
       case 'q':

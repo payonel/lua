@@ -1,13 +1,15 @@
 #pragma once
 
-#include <stddef.h>
 #include <cstdint>
-#include <type_traits>
+#include <cstdio>
+#include <string>
 
 struct lua_State;
 
 namespace util
 {
+  using lua_CFunction_t = int (*)(lua_State*);
+
   // safe casts lose no data and is functionally equal. e.g. float->double, in32_t->int64_T
   template <typename T, typename V> T safe_cast(V) = delete;
 
@@ -17,8 +19,13 @@ namespace util
   // type casts lose no data but loses type. e.g. float -> int32_t
   template <typename T, typename V> T type_cast(V) = delete;
 
-  // to_address is used to take the address of objects or functions
-  inline constexpr void* func_to_voidp(int (*pf)(lua_State*)) { return reinterpret_cast<void*>(pf); } 
+  // formats a light C function pointer as a string for display/identity
+  inline std::string func_to_string(lua_CFunction_t pf)
+  {
+    char buf[20];
+    std::snprintf(buf, sizeof(buf), "%p", reinterpret_cast<void*>(pf));
+    return buf;
+  }
   
   // userdata is user defined. it could be a real address but lua side does not know
   inline constexpr void* as_userdata(long long val) { return reinterpret_cast<void*>(static_cast<uintptr_t>(val)); } 

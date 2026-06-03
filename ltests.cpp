@@ -2015,7 +2015,15 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if EQ ("pushfstringP")
     {
-      lua_pushfstring(L1, lua_tostring(L, -2), lua_topointer(L, -1));
+      if (lua_islightcfunction(L, -1))
+      {
+        auto fa = lua_funcaddress(L, -1);
+        lua_pushfstring(L1, lua_tostring(L, -2), fa.c_str());
+      }
+      else
+      {
+        lua_pushfstring(L1, lua_tostring(L, -2), lua_topointer(L, -1));
+      }
     }
     else if EQ ("rawget")
     {
@@ -2178,7 +2186,18 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if EQ ("topointer")
     {
-      lua_pushlightuserdata(L1, util::remove_const_cast(lua_topointer(L1, getindex)));
+      int idx = getindex;
+      if (lua_islightcfunction(L1, idx))
+      {
+        /* light C function — push string identity */
+        auto fa = lua_funcaddress(L1, idx);
+        lua_pushstring(L1, fa.c_str());
+      }
+      else
+      {
+        const void* p = lua_topointer(L1, idx);
+        lua_pushlightuserdata(L1, util::remove_const_cast(p));
+      }
     }
     else if EQ ("touserdata")
     {

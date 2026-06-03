@@ -9,6 +9,7 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include <string>
 
 #define LUA_COPYRIGHT LUA_RELEASE "  Copyright (C) 1994-2026 Lua.org, PUC-Rio"
 #define LUA_AUTHORS   "R. Ierusalimschy, L. H. de Figueiredo, W. Celes"
@@ -165,6 +166,7 @@ LUA_API void(lua_xmove)(lua_State* from, lua_State* to, int n);
 LUA_API int(lua_isnumber)(lua_State* L, int idx);
 LUA_API int(lua_isstring)(lua_State* L, int idx);
 LUA_API int(lua_iscfunction)(lua_State* L, int idx);
+LUA_API int(lua_islightcfunction)(lua_State* L, int idx);
 LUA_API int(lua_isinteger)(lua_State* L, int idx);
 LUA_API int(lua_isuserdata)(lua_State* L, int idx);
 LUA_API int(lua_type)(lua_State* L, int idx);
@@ -179,6 +181,8 @@ LUA_API lua_CFunction(lua_tocfunction)(lua_State* L, int idx);
 LUA_API void*(lua_touserdata) (lua_State* L, int idx);
 LUA_API lua_State*(lua_tothread) (lua_State* L, int idx);
 LUA_API const void*(lua_topointer) (lua_State* L, int idx);
+
+std::string lua_funcaddress(lua_State* L, int idx);
 
 /*
 ** Comparison and arithmetic functions
