@@ -43,24 +43,8 @@
 */
 #define LIMFORLAST 3 /* log2 of real limit (8) */
 
-/*
-** The union 'Limbox' stores 'lastfree' and ensures that what follows it
-** is properly aligned to store a Node.
-*/
-typedef struct
-{
-  Node* dummy;
-  Node follows_pNode;
-} Limbox_aux;
-
-typedef union
-{
-  Node* lastfree;
-  char padding[sizeof(Node*)];
-} Limbox;
-
 #define haslastfree(t) ((t)->lsizenode >= LIMFORLAST)
-#define getlastfree(t) ((cast(Limbox*, (t)->node) - 1)->lastfree)
+#define getlastfree(t) ((t)->lastfree)
 
 /*
 ** MAXABITS is the largest integer such that 2^MAXABITS fits in an
@@ -395,22 +379,17 @@ int luaH_next(lua_State* L, Table* t, StkId key)
   return 0; /* no more elements */
 }
 
-/* Extra space in Node array if it has a lastfree entry */
-#define extraLastfree(t) (haslastfree(t) ? sizeof(Limbox) : 0)
-
 /* 'node' size in bytes */
 static size_t sizehash(Table* t)
 {
-  return cast_sizet(sizenode(t)) * sizeof(Node) + extraLastfree(t);
+  return cast_sizet(sizenode(t)) * sizeof(Node);
 }
 
 static void freehash(lua_State* L, Table* t)
 {
   if (!isdummy(t))
   {
-    /* get pointer to the beginning of Node array */
-    char* arr = cast_charp(t->node) - extraLastfree(t);
-    luaM_freearray(L, arr, sizehash(t));
+    luaM_freemem(L, t->node, sizehash(t));
   }
 }
 
@@ -630,6 +609,7 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
   if (size == 0)
   {                                   /* no elements to hash part? */
     t->node = cast(Node*, dummynode); /* use common 'dummynode' */
+    t->lastfree = NULL;
     t->lsizenode = 0;
     setdummy(t); /* signal that it is using dummy node */
   }
@@ -640,16 +620,13 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
     if (lsize > MAXHBITS || (1 << lsize) > MAXHSIZE)
       luaG_runerror(L, "table overflow");
     size = twoto(lsize);
-    if (lsize < LIMFORLAST) /* no 'lastfree' field? */
-      t->node = luaM_newvector(L, size, Node);
-    else
+    t->node = luaM_newvector(L, size, Node);
+    t->lastfree = NULL;
+    t->lsizenode = cast_byte(lsize);
+    if (lsize >= LIMFORLAST)
     {
-      size_t bsize = size * sizeof(Node) + sizeof(Limbox);
-      char* node = luaM_newblock(L, bsize);
-      t->node = cast(Node*, node + sizeof(Limbox));
       getlastfree(t) = gnode(t, size); /* all positions are free */
     }
-    t->lsizenode = cast_byte(lsize);
     setnodummy(t);
     for (i = 0; i < cast_int(size); i++)
     {
@@ -691,12 +668,15 @@ static void exchangehashpart(Table* t1, Table* t2)
 {
   lu_byte lsizenode = t1->lsizenode;
   Node* node = t1->node;
+  Node* lastfree = t1->lastfree;
   int bitdummy1 = t1->flags & BITDUMMY;
   t1->lsizenode = t2->lsizenode;
   t1->node = t2->node;
+  t1->lastfree = t2->lastfree;
   t1->flags = cast_byte((t1->flags & NOTBITDUMMY) | (t2->flags & BITDUMMY));
   t2->lsizenode = lsizenode;
   t2->node = node;
+  t2->lastfree = lastfree;
   t2->flags = cast_byte((t2->flags & NOTBITDUMMY) | bitdummy1);
 }
 
