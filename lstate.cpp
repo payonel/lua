@@ -258,7 +258,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   lua_lock(L);
   luaC_checkGC(L);
   /* create new thread */
-  o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX), 0);
+  o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX));
   L1 = gco2th(o);
   /* anchor it on L stack */
   setthvalue2s(L, L->top.p, L1);

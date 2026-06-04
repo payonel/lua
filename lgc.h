@@ -244,8 +244,7 @@ LUAI_FUNC void luaC_step(lua_State* L);
 LUAI_FUNC void luaC_runtilstate(lua_State* L, int state, int fast);
 LUAI_FUNC void luaC_fullgc(lua_State* L, int isemergency);
 LUAI_FUNC GCObject* luaC_newobj(lua_State* L, lu_byte tt, size_t sz);
-LUAI_FUNC GCObject* luaC_newobjdt(lua_State* L, lu_byte tt, size_t sz,
-                                  size_t offset);
+LUAI_FUNC GCObject* luaC_newobjdt(lua_State* L, lu_byte tt, size_t sz);
 LUAI_FUNC void luaC_barrier_(lua_State* L, GCObject* o, GCObject* v);
 LUAI_FUNC void luaC_barrierback_(lua_State* L, GCObject* o);
 LUAI_FUNC void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt);
