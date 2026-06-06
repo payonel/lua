@@ -101,12 +101,12 @@ const char* luaT_objtypename(lua_State* L, const TValue* o)
 void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
                  const TValue* p2, const TValue* p3)
 {
-  StkId func = L->top.p;
+  StkId func = L->top;
   setobj2s(L, func, f);      /* push function (assume EXTRA_STACK) */
   setobj2s(L, func + 1, p1); /* 1st argument */
   setobj2s(L, func + 2, p2); /* 2nd argument */
   setobj2s(L, func + 3, p3); /* 3rd argument */
-  L->top.p = func + 4;
+  L->top = func + 4;
   /* metamethod may yield only when called from Lua code */
   if (isLuacode(L->ci))
     luaD_call(L, func, 0);
@@ -118,19 +118,19 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
                        const TValue* p2, StkId res)
 {
   ptrdiff_t result = savestack(L, res);
-  StkId func = L->top.p;
+  StkId func = L->top;
   setobj2s(L, func, f);      /* push function (assume EXTRA_STACK) */
   setobj2s(L, func + 1, p1); /* 1st argument */
   setobj2s(L, func + 2, p2); /* 2nd argument */
-  L->top.p += 3;
+  L->top += 3;
   /* metamethod may yield only when called from Lua code */
   if (isLuacode(L->ci))
     luaD_call(L, func, 1);
   else
     luaD_callnoyield(L, func, 1);
   res = restorestack(L, result);
-  setobjs2s(L, res, --L->top.p); /* move result to its place */
-  return ttypetag(s2v(res));     /* return tag of the result */
+  setobjs2s(L, res, --L->top); /* move result to its place */
+  return ttypetag(s2v(L, res));     /* return tag of the result */
 }
 
 static int callbinTM(lua_State* L, const TValue* p1, const TValue* p2,
@@ -177,9 +177,9 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
 */
 void luaT_tryconcatTM(lua_State* L)
 {
-  StkId p1 = L->top.p - 2; /* first argument */
-  if (l_unlikely(callbinTM(L, s2v(p1), s2v(p1 + 1), p1, TM_CONCAT) < 0))
-    luaG_concaterror(L, s2v(p1), s2v(p1 + 1));
+  StkId p1 = L->top - 2; /* first argument */
+  if (l_unlikely(callbinTM(L, s2v(L, p1), s2v(L, p1 + 1), p1, TM_CONCAT) < 0))
+    luaG_concaterror(L, s2v(L, p1), s2v(L, p1 + 1));
 }
 
 void luaT_trybinassocTM(lua_State* L, const TValue* p1, const TValue* p2,
@@ -205,7 +205,7 @@ void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
 int luaT_callorderTM(lua_State* L, const TValue* p1, const TValue* p2,
                      TMS event)
 {
-  int tag = callbinTM(L, p1, p2, L->top.p, event); /* try original event */
+  int tag = callbinTM(L, p1, p2, L->top, event); /* try original event */
   if (tag >= 0)                                    /* found tag method? */
     return !tagisfalse(tag);
   luaG_ordererror(L, p1, p2); /* no metamethod found */
@@ -242,8 +242,8 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   int i;
   TValue key, value;
   Table* t = luaH_new(L);
-  sethvalue(L, s2v(L->top.p), t);
-  L->top.p++;
+  sethvalue(L, s2v(L, L->top), t);
+  L->top++;
   luaH_resize(L, t, cast_uint(n), 1);
   setsvalue(L, &key, luaS_new(L, "n")); /* key is "n" */
   setivalue(&value, n);                 /* value is n */
@@ -251,7 +251,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
      cannot trigger a garbage collection */
   luaH_set(L, t, &key, &value); /* t.n = n */
   for (i = 0; i < n; i++)
-    luaH_setint(L, t, i + 1, s2v(f + i));
+    luaH_setint(L, t, i + 1, s2v(L, f + i));
   luaC_checkGC(L);
 }
 
@@ -268,40 +268,40 @@ static void buildhiddenargs(lua_State* L, CallInfo* ci, const Proto* p,
   ci->u.l.nextraargs = nextra;
   luaD_checkstack(L, p->maxstacksize + 1);
   /* copy function to the top of the stack, after extra arguments */
-  setobjs2s(L, L->top.p++, ci->func.p);
+  setobjs2s(L, L->top++, ci->func);
   /* move fixed parameters to after the copied function */
   for (i = 1; i <= nfixparams; i++)
   {
-    setobjs2s(L, L->top.p++, ci->func.p + i);
-    setnilvalue2s(ci->func.p + i); /* erase original parameter (for GC) */
+    setobjs2s(L, L->top++, ci->func + i);
+    setnilvalue2s(L, ci->func + i); /* erase original parameter (for GC) */
   }
-  ci->func.p += totalargs + 1; /* 'func' now lives after hidden arguments */
-  ci->top.p += totalargs + 1;
+  ci->func += totalargs + 1; /* 'func' now lives after hidden arguments */
+  ci->top += totalargs + 1;
 }
 
 void luaT_adjustvarargs(lua_State* L, CallInfo* ci, const Proto* p)
 {
-  int totalargs = cast_int(L->top.p - ci->func.p) - 1;
+  int totalargs = cast_int(L->top - ci->func) - 1;
   int nfixparams = p->numparams;
   int nextra = totalargs - nfixparams; /* number of extra arguments */
   if (p->flag & PF_VATAB)
   { /* does it need a vararg table? */
     lua_assert(!(p->flag & PF_VAHID));
-    createvarargtab(L, ci->func.p + nfixparams + 1, nextra);
+    createvarargtab(L, ci->func + nfixparams + 1, nextra);
     /* move table to proper place (last parameter) */
-    setobjs2s(L, ci->func.p + nfixparams + 1, L->top.p - 1);
+    setobjs2s(L, ci->func + nfixparams + 1, L->top - 1);
   }
   else
   { /* no table */
     lua_assert(p->flag & PF_VAHID);
     buildhiddenargs(L, ci, p, totalargs, nfixparams, nextra);
     /* set vararg parameter to nil */
-    setnilvalue2s(ci->func.p + nfixparams + 1);
-    lua_assert(L->top.p <= ci->top.p && ci->top.p <= L->stack_last.p);
+    setnilvalue2s(L, ci->func + nfixparams + 1);
+    lua_assert(L->top <= ci->top && ci->top <= L->stack_last);
   }
 }
 
-void luaT_getvararg(CallInfo* ci, StkId ra, TValue* rc)
+void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
 {
   int nextra = ci->u.l.nextraargs;
   lua_Integer n;
@@ -309,8 +309,8 @@ void luaT_getvararg(CallInfo* ci, StkId ra, TValue* rc)
   { /* integral value? */
     if (l_castS2U(n) - 1 < cast_uint(nextra))
     {
-      StkId slot = ci->func.p - nextra + cast_int(n) - 1;
-      setobjs2s(((lua_State*) NULL), ra, slot);
+      StkId slot = ci->func - nextra + cast_int(n) - 1;
+      setobjs2s(L, ra, slot);
       return;
     }
   }
@@ -320,11 +320,11 @@ void luaT_getvararg(CallInfo* ci, StkId ra, TValue* rc)
     const char* s = getlstr(tsvalue(rc), len);
     if (len == 1 && s[0] == 'n')
     { /* key is "n"? */
-      setivalue(s2v(ra), nextra);
+      setivalue(s2v(L, ra), nextra);
       return;
     }
   }
-  setnilvalue2s(ra); /* else produce nil */
+  setnilvalue2s(L, ra); /* else produce nil */
 }
 
 /*
@@ -355,31 +355,31 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
 void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
                      int vatab)
 {
-  Table* h = (vatab < 0) ? NULL : hvalue(s2v(ci->func.p + vatab + 1));
+  Table* h = (vatab < 0) ? NULL : hvalue(s2v(L, ci->func + vatab + 1));
   int nargs = getnumargs(L, ci, h); /* number of available vararg args. */
   int i, touse;                     /* 'touse' is minimum between 'wanted' and 'nargs' */
   if (wanted < 0)
   {
     touse = wanted = nargs;       /* get all extra arguments available */
     checkstackp(L, nargs, where); /* ensure stack space */
-    L->top.p = where + nargs;     /* next instruction will need top */
+    L->top = where + nargs;     /* next instruction will need top */
   }
   else
     touse = (nargs > wanted) ? wanted : nargs;
   if (h == NULL)
   {                             /* no vararg table? */
     for (i = 0; i < touse; i++) /* get vararg values from the stack */
-      setobjs2s(L, where + i, ci->func.p - nargs + i);
+      setobjs2s(L, where + i, ci->func - nargs + i);
   }
   else
   { /* get vararg values from vararg table */
     for (i = 0; i < touse; i++)
     {
-      lu_byte tag = luaH_getint(h, i + 1, s2v(where + i));
+      lu_byte tag = luaH_getint(h, i + 1, s2v(L, where + i));
       if (tagisempty(tag))
-        setnilvalue2s(where + i);
+        setnilvalue2s(L, where + i);
     }
   }
   for (; i < wanted; i++) /* complete required results with nil */
-    setnilvalue2s(where + i);
+    setnilvalue2s(L, where + i);
 }

@@ -117,9 +117,9 @@ typedef struct TValue
 */
 
 /* from stack to stack */
-#define setobjs2s(L, o1, o2) setobj(L, s2v(o1), s2v(o2))
+#define setobjs2s(L, o1, o2) setobj(L, s2v(L, o1), s2v(L, o2))
 /* to stack (not from same stack) */
-#define setobj2s(L, o1, o2) setobj(L, s2v(o1), o2)
+#define setobj2s(L, o1, o2) setobj(L, s2v(L, o1), o2)
 /* from table to same table */
 #define setobjt2t setobj
 /* to new object */
@@ -145,21 +145,14 @@ typedef union StackValue
   } tbclist;
 } StackValue;
 
-/* index to stack elements */
-typedef StackValue* StkId;
+/* index to stack elements (integer offset from stack base) */
+typedef size_t StkId;
 
-/*
-** When reallocating the stack, change all pointers to the stack into
-** proper offsets.
-*/
-typedef union
-{
-  StkId p;          /* actual pointer */
-  ptrdiff_t offset; /* used while the stack is being reallocated */
-} StkIdRel;
+/* convert a stack index to a 'TValue' pointer */
+#define s2v(L, i) (&(L)->stack.p[i].val)
 
-/* convert a 'StackValue' to a 'TValue' */
-#define s2v(o) (&(o)->val)
+/* get a StackValue pointer from a stack index */
+#define stkval(L, i) (&(L)->stack.p[i])
 
 /*
 ** {==================================================================
@@ -194,7 +187,7 @@ typedef union
 #define ttisstrictnil(o) checktag((o), LUA_VNIL)
 
 #define setnilvalue(obj)   settt_(obj, LUA_VNIL)
-#define setnilvalue2s(stk) setnilvalue(s2v(stk))
+#define setnilvalue2s(L, stk) setnilvalue(s2v(L, stk))
 
 #define isabstkey(v) checktag((v), LUA_VABSTKEY)
 
@@ -260,7 +253,7 @@ typedef union
     checkliveness(L, io);         \
   }
 
-#define setthvalue2s(L, o, t) setthvalue(L, s2v(o), t)
+#define setthvalue2s(L, o, t) setthvalue(L, s2v(L, o), t)
 
 /* }================================================================== */
 
@@ -388,7 +381,7 @@ typedef struct GCObject
   }
 
 /* set a string to the stack */
-#define setsvalue2s(L, o, s) setsvalue(L, s2v(o), s)
+#define setsvalue2s(L, o, s) setsvalue(L, s2v(L, o), s)
 
 /* set a string to a new object */
 #define setsvalue2n setsvalue
@@ -633,7 +626,7 @@ typedef struct Proto
     checkliveness(L, io);      \
   }
 
-#define setclLvalue2s(L, o, cl) setclLvalue(L, s2v(o), cl)
+#define setclLvalue2s(L, o, cl) setclLvalue(L, s2v(L, o), cl)
 
 #define setfvalue(obj, x) \
   {                       \
@@ -727,7 +720,7 @@ typedef union Closure
     checkliveness(L, io);        \
   }
 
-#define sethvalue2s(L, o, h) sethvalue(L, s2v(o), h)
+#define sethvalue2s(L, o, h) sethvalue(L, s2v(L, o), h)
 
 /*
 ** Nodes for Hash tables: A pack of two TValue's (key-value pairs)

@@ -39,7 +39,7 @@
 
 static void* l_Trick = 0;
 
-#define obj_at(L, k) s2v(L->ci->func.p + (k))
+#define obj_at(L, k) s2v(L, L->ci->func + (k))
 
 static int runC(lua_State* L, lua_State* L1, const char* pc);
 
@@ -51,7 +51,7 @@ static void setnameval(lua_State* L, const char* name, int val)
 
 static void pushobject(lua_State* L, const TValue* o)
 {
-  setobj2s(L, L->top.p, o);
+  setobj2s(L, L->top, o);
   api_incr_top(L);
 }
 
@@ -509,14 +509,14 @@ static void checkLclosure(global_State* g, LClosure* cl)
   }
 }
 
-static int lua_checkpc(CallInfo* ci)
+static int lua_checkpc(lua_State* L, CallInfo* ci)
 {
   if (!isLua(ci))
     return 1;
   else
   {
-    StkId f = ci->func.p;
-    Proto* p = clLvalue(s2v(f))->p;
+    StkId f = ci->func;
+    Proto* p = clLvalue(s2v(L, f))->p;
     return p->code <= ci->u.l.savedpc &&
            ci->u.l.savedpc <= p->code + p->sizecode;
   }
@@ -535,15 +535,15 @@ static void check_stack(global_State* g, lua_State* L1)
   }
   for (uv = L1->openupval; uv != NULL; uv = uv->u.open.next)
     assert(upisopen(uv)); /* must be open */
-  assert(L1->top.p <= L1->stack_last.p);
-  assert(L1->tbclist.p <= L1->top.p);
+  assert(L1->top <= L1->stack_last);
+  assert(L1->tbclist <= L1->top);
   for (ci = L1->ci; ci != NULL; ci = ci->previous)
   {
-    assert(ci->top.p <= L1->stack_last.p);
-    assert(lua_checkpc(ci));
+    assert(ci->top <= L1->stack_last);
+    assert(lua_checkpc(L1, ci));
   }
-  for (o = L1->stack.p; o < L1->stack_last.p; o++)
-    checkliveness(L1, s2v(o)); /* entire stack must have valid values */
+  for (o = 0; o < L1->stack_last; o++)
+    checkliveness(L1, s2v(L1, o)); /* entire stack must have valid values */
 }
 
 static void checkrefs(global_State* g, GCObject* o)
@@ -933,7 +933,7 @@ static void lua_printstack(lua_State* L)
   for (i = 1; i <= n; i++)
   {
     printf("%3d: ", i);
-    lua_printvalue(s2v(L->ci->func.p + i));
+    lua_printvalue(s2v(L, L->ci->func + i));
     printf("\n");
   }
   printf("<<\n");
@@ -945,9 +945,9 @@ static int lua_printallstack(lua_State* L)
   int i = 1;
   CallInfo* ci = &L->base_ci;
   printf("stack: >>\n");
-  for (p = L->stack.p; p < L->top.p; p++)
+  for (p = 0; p < L->top; p++)
   {
-    if (ci != NULL && p == ci->func.p)
+    if (ci != NULL && p == ci->func)
     {
       printf("  ---\n");
       if (ci == L->ci)
@@ -956,7 +956,7 @@ static int lua_printallstack(lua_State* L)
         ci = ci->next;
     }
     printf("%3d: ", i++);
-    lua_printvalue(s2v(p));
+    lua_printvalue(s2v(L, p));
     printf("\n");
   }
   printf("<<\n");
@@ -1178,7 +1178,7 @@ static int hash_query(lua_State* L)
 static int stacklevel(lua_State* L)
 {
   int a = 0;
-  lua_pushinteger(L, cast_Integer(L->top.p - L->stack.p));
+  lua_pushinteger(L, cast_Integer(L->top));
   lua_pushinteger(L, stacksize(L));
   lua_pushinteger(L, cast_Integer(L->nCcalls));
   lua_pushinteger(L, L->nci);
@@ -1203,7 +1203,7 @@ static int reallocstack(lua_State* L)
 {
   int n = cast_int(luaL_checkinteger(L, 1));
   lua_lock(L);
-  luaD_reallocstack(L, cast_int(L->top.p - L->stack.p) + n, 1);
+  luaD_reallocstack(L, cast_int(L->top) + n, 1);
   lua_unlock(L);
   return 0;
 }
@@ -1227,9 +1227,9 @@ static int table_query(lua_State* L)
   {
     lua_pushinteger(L, i);
     if (!tagisempty(*getArrTag(t, i)))
-      arr2obj(t, cast_uint(i), s2v(L->top.p));
+      arr2obj(t, cast_uint(i), s2v(L, L->top));
     else
-      setnilvalue2s(L->top.p);
+      setnilvalue2s(L, L->top);
     api_incr_top(L);
     lua_pushnil(L);
   }
@@ -1298,7 +1298,7 @@ static int string_query(lua_State* L)
     int n = 0;
     for (auto it = strt.begin(cast_sizet(s)); it != strt.end(cast_sizet(s)); ++it)
     {
-      setsvalue2s(L, L->top.p, it->second);
+      setsvalue2s(L, L->top, it->second);
       api_incr_top(L);
       n++;
     }
@@ -1953,7 +1953,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       int n = getnum;
       if (n != 0)
       {
-        lua_printvalue(s2v(L->ci->func.p + n));
+        lua_printvalue(s2v(L, L->ci->func + n));
         printf("\n");
       }
       else

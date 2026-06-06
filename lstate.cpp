@@ -128,9 +128,9 @@ LUAI_FUNC void luaE_incCstack(lua_State* L)
 static void resetCI(lua_State* L)
 {
   CallInfo* ci = L->ci = &L->base_ci;
-  ci->func.p = L->stack.p;
-  setnilvalue2s(ci->func.p);                 /* 'function' entry for basic 'ci' */
-  ci->top.p = ci->func.p + 1 + LUA_MINSTACK; /* +1 for 'function' entry */
+  ci->func = 0;
+  setnilvalue2s(L, ci->func);                 /* 'function' entry for basic 'ci' */
+  ci->top = ci->func + 1 + LUA_MINSTACK; /* +1 for 'function' entry */
   ci->u.c.k = NULL;
   ci->callstatus = CIST_C;
   L->status = LUA_OK;
@@ -142,13 +142,13 @@ static void stack_init(lua_State* L1, lua_State* L)
   int i;
   /* initialize stack array */
   L1->stack.p = luaM_newvector(L, BASIC_STACK_SIZE + EXTRA_STACK, StackValue);
-  L1->tbclist.p = L1->stack.p;
+  L1->tbclist = 0;
   for (i = 0; i < BASIC_STACK_SIZE + EXTRA_STACK; i++)
-    setnilvalue2s(L1->stack.p + i); /* erase new stack */
-  L1->stack_last.p = L1->stack.p + BASIC_STACK_SIZE;
+    setnilvalue2s(L1, i); /* erase new stack */
+  L1->stack_last = BASIC_STACK_SIZE;
   /* initialize first ci */
   resetCI(L1);
-  L1->top.p = L1->stack.p + 1; /* +1 for 'function' entry */
+  L1->top = 1; /* +1 for 'function' entry */
 }
 
 static void freestack(lua_State* L)
@@ -241,7 +241,7 @@ static void close_state(lua_State* L)
   { /* closing a fully built state */
     resetCI(L);
     luaD_closeprotected(L, 1, LUA_OK); /* close all upvalues */
-    L->top.p = L->stack.p + 1;         /* empty the stack to run finalizers */
+    L->top = 1;         /* empty the stack to run finalizers */
     luaC_freeallobjects(L);            /* collect all objects */
     luai_userstateclose(L);
   }
@@ -262,7 +262,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX));
   L1 = gco2th(o);
   /* anchor it on L stack */
-  setthvalue2s(L, L->top.p, L1);
+  setthvalue2s(L, L->top, L1);
   api_incr_top(L);
   preinit_thread(L1, g);
   L1->hookmask = L->hookmask;
@@ -280,7 +280,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
 void luaE_freethread(lua_State* L, lua_State* L1)
 {
   LX* l = fromstate(L1);
-  luaF_closeupval(L1, L1->stack.p); /* close all upvalues */
+  luaF_closeupval(L1, 0); /* close all upvalues */
   lua_assert(L1->openupval == NULL);
   luai_userstatefree(L, L1);
   freestack(L1);
@@ -294,10 +294,10 @@ TStatus luaE_resetthread(lua_State* L, TStatus status)
     status = LUA_OK;
   status = luaD_closeprotected(L, 1, status);
   if (status != LUA_OK) /* errors? */
-    luaD_seterrorobj(L, status, L->stack.p + 1);
+    luaD_seterrorobj(L, status, 1);
   else
-    L->top.p = L->stack.p + 1;
-  luaD_reallocstack(L, cast_int(L->ci->top.p - L->stack.p), 0);
+    L->top = 1;
+  luaD_reallocstack(L, cast_int(L->ci->top), 0);
   return status;
 }
 
@@ -391,7 +391,7 @@ void luaE_warning(lua_State* L, const char* msg, int tocont)
 */
 void luaE_warnerror(lua_State* L, const char* where)
 {
-  TValue* errobj = s2v(L->top.p - 1); /* error object */
+  TValue* errobj = s2v(L, L->top - 1); /* error object */
   const char* msg = (ttisstring(errobj))
                         ? getstr(tsvalue(errobj))
                         : "error object is not a string";

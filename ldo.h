@@ -34,26 +34,27 @@
   }
 #endif
 
-#define luaD_checkstackaux(L, n, pre, pos)           \
-  if (l_unlikely(L->stack_last.p - L->top.p <= (n))) \
-  {                                                  \
-    pre;                                             \
-    luaD_growstack(L, n, 1);                         \
-    pos;                                             \
-  }                                                  \
-  else                                               \
-  {                                                  \
-    condmovestack(L, pre, pos);                      \
+#define luaD_checkstackaux(L, n, pre, pos)              \
+  if (l_unlikely(L->stack_last - L->top <= cast(StkId, n))) \
+  {                                                    \
+    pre;                                               \
+    luaD_growstack(L, n, 1);                           \
+    pos;                                               \
+  }                                                    \
+  else                                                 \
+  {                                                    \
+    condmovestack(L, pre, pos);                        \
   }
 
 /* In general, 'pre'/'pos' are empty (nothing to save) */
 #define luaD_checkstack(L, n) luaD_checkstackaux(L, n, (void) 0, (void) 0)
 
-#define savestack(L, pt)   (cast_charp(pt) - cast_charp(L->stack.p))
-#define restorestack(L, n) cast(StkId, cast_charp(L->stack.p) + (n))
+/* savestack/restorestack are now identity — StkId is already an index */
+#define savestack(L, i)    (i)
+#define restorestack(L, n) (static_cast<StkId>(n))
 
-/* macro to check stack size, preserving 'p' */
-#define checkstackp(L, n, p) luaD_checkstackaux(L, n, ptrdiff_t t__ = savestack(L, p), /* save 'p' */ p = restorestack(L, t__)) /* 'pos' part: restore 'p' */
+/* macro to check stack size, preserving 'p' (no-op since indices survive realloc) */
+#define checkstackp(L, n, p) luaD_checkstackaux(L, n, (void) 0, (void) 0)
 
 /* type of protected functions, to be ran by 'runprotected' */
 typedef void (*Pfunc)(lua_State* L, void* ud);

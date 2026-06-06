@@ -733,23 +733,23 @@ static l_mem traverseLclosure(global_State* g, LClosure* cl)
 static l_mem traversethread(global_State* g, lua_State* th)
 {
   UpVal* uv;
-  StkId o = th->stack.p;
+  StkId o = 0;
   if (isold(th) || g->gcstate == GCSpropagate)
     linkgclist(th, g->grayagain); /* insert into 'grayagain' list */
-  if (o == NULL)
+  if (th->stack.p == NULL)
     return 0; /* stack not completely built yet */
   lua_assert(g->gcstate == GCSatomic ||
              th->openupval == NULL || isintwups(th));
-  for (; o < th->top.p; o++) /* mark live elements in the stack */
-    markvalue(g, s2v(o));
+  for (; o < th->top; o++) /* mark live elements in the stack */
+    markvalue(g, s2v(th, o));
   for (uv = th->openupval; uv != NULL; uv = uv->u.open.next)
     markobject(g, uv); /* open upvalues cannot be collected */
   if (g->gcstate == GCSatomic)
   { /* final traversal? */
     if (!g->gcemergency)
       luaD_shrinkstack(th); /* do not change stack in emergency cycle */
-    for (o = th->top.p; o < th->stack_last.p + EXTRA_STACK; o++)
-      setnilvalue2s(o); /* clear dead stack slice */
+    for (o = th->top; o < th->stack_last + EXTRA_STACK; o++)
+      setnilvalue2s(th, o); /* clear dead stack slice */
     /* 'remarkupvals' may have removed thread from 'twups' list */
     if (!isintwups(th) && th->openupval != NULL)
     {
@@ -757,7 +757,7 @@ static l_mem traversethread(global_State* g, lua_State* th)
       g->twups = th;
     }
   }
-  return 1 + (th->top.p - th->stack.p);
+  return 1 + cast(l_mem, th->top);
 }
 
 /*
@@ -1020,7 +1020,7 @@ static GCObject* udata2finalize(global_State* g)
 
 static void dothecall(lua_State* L, void*)
 {
-  luaD_callnoyield(L, L->top.p - 2, 0);
+  luaD_callnoyield(L, L->top - 2, 0);
 }
 
 static void GCTM(lua_State* L)
@@ -1038,17 +1038,17 @@ static void GCTM(lua_State* L)
     lu_byte oldgcstp = g->gcstp;
     g->gcstp |= GCSTPGC;           /* avoid GC steps */
     L->allowhook = 0;              /* stop debug hooks during GC metamethod */
-    setobj2s(L, L->top.p++, tm);   /* push finalizer... */
-    setobj2s(L, L->top.p++, &v);   /* ... and its argument */
+    setobj2s(L, L->top++, tm);   /* push finalizer... */
+    setobj2s(L, L->top++, &v);   /* ... and its argument */
     L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
-    status = luaD_pcall(L, dothecall, NULL, savestack(L, L->top.p - 2), 0);
+    status = luaD_pcall(L, dothecall, NULL, savestack(L, L->top - 2), 0);
     L->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */
     L->allowhook = oldah;           /* restore hooks */
     g->gcstp = oldgcstp;            /* restore state */
     if (l_unlikely(status != LUA_OK))
     { /* error while running __gc? */
       luaE_warnerror(L, "__gc");
-      L->top.p--; /* pops error object */
+      L->top--; /* pops error object */
     }
   }
 }
