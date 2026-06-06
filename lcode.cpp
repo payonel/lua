@@ -776,7 +776,6 @@ static void const2exp(TValue* v, expdesc* e)
     e->k = VNIL;
     break;
   case LUA_VSHRSTR:
-  case LUA_VLNGSTR:
     e->k = VKSTR;
     e->u.strval = tsvalue(v);
     break;
@@ -1458,8 +1457,8 @@ void luaK_self(FuncState* fs, expdesc* e, expdesc* key)
   e->k = VNONRELOC;               /* self expression has a fixed register */
   luaK_reserveregs(fs, 2);        /* method and 'self' produced by op_self */
   lua_assert(key->k == VKSTR);
-  /* is method name a short string in a valid K index? */
-  if (strisshr(key->u.strval) && luaK_exp2K(fs, key))
+  /* is method name in a valid K index? */
+  if (luaK_exp2K(fs, key))
   {
     /* can use 'self' opcode */
     luaK_codeABCk(fs, OP_SELF, base, ereg, key->u.info, 0);

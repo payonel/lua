@@ -460,9 +460,7 @@ LUA_API lua_Unsigned lua_rawlen(lua_State* L, int idx)
   switch (ttypetag(o))
   {
   case LUA_VSHRSTR:
-    return cast(lua_Unsigned, tsvalue(o)->shrlen);
-  case LUA_VLNGSTR:
-    return cast(lua_Unsigned, tsvalue(o)->u.lnglen);
+    return cast(lua_Unsigned, tsslen(tsvalue(o)));
   case LUA_VUSERDATA:
     return cast(lua_Unsigned, uvalue(o)->len);
   case LUA_VTABLE:
@@ -586,21 +584,6 @@ LUA_API const char* lua_pushlstring(lua_State* L, const char* s, size_t len)
   TString* ts;
   lua_lock(L);
   ts = (len == 0) ? luaS_new(L, "") : luaS_newlstr(L, s, len);
-  setsvalue2s(L, L->top.p, ts);
-  api_incr_top(L);
-  luaC_checkGC(L);
-  lua_unlock(L);
-  return getstr(ts);
-}
-
-LUA_API const char* lua_pushexternalstring(lua_State* L,
-                                           const char* s, size_t len, lua_Alloc falloc, void* ud)
-{
-  TString* ts;
-  lua_lock(L);
-  api_check(L, len <= MAX_SIZE, "string too large");
-  api_check(L, s[len] == '\0', "string not ending with zero");
-  ts = luaS_newextlstr(L, s, len, falloc, ud);
   setsvalue2s(L, L->top.p, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -1409,6 +1392,16 @@ LUA_API void lua_setallocf(lua_State* L, lua_Alloc f, void* ud)
   G(L)->ud = ud;
   G(L)->frealloc = f;
   lua_unlock(L);
+}
+
+LUA_API void lua_setmemlimit(lua_State* L, size_t limit)
+{
+  G(L)->memlimit = limit;
+}
+
+LUA_API size_t lua_getmemlimit(lua_State* L)
+{
+  return G(L)->memlimit;
 }
 
 void lua_setwarnf(lua_State* L, lua_WarnFunction f, void* ud)

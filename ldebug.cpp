@@ -747,7 +747,7 @@ static const char* funcnamefromcode(lua_State* L, const Proto* p,
   default:
     return NULL; /* cannot find a reasonable name */
   }
-  *name = getshrstr(G(L)->tmname[tm]) + 2;
+  *name = getstr(G(L)->tmname[tm]) + 2;
   return "metamethod";
 }
 

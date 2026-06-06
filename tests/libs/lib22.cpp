@@ -14,44 +14,23 @@ static int id (lua_State *L) {
 }
 
 
-struct STR {
-  void *ud;
-  lua_Alloc allocf;
-};
-
-
-static void *t_freestr (void *ud, void *ptr, size_t osize, size_t nsize) {
-  (void)ud;
-  (void)nsize;
-  struct STR *blk = (struct STR*)ptr - 1;
-  blk->allocf(blk->ud, blk, sizeof(struct STR) + osize, 0);
-  return NULL;
-}
-
-
 static int newstr (lua_State *L) {
   size_t len;
   const char *str = luaL_checklstring(L, 1, &len);
   void *ud;
   lua_Alloc allocf = lua_getallocf(L, &ud);
-  struct STR *blk = (struct STR*)allocf(ud, NULL, 0,
-                                        len + 1 + sizeof(struct STR));
-  if (blk == NULL) {  /* allocation error? */
+  char *buf = (char*)allocf(ud, NULL, 0, len + 1);
+  if (buf == NULL) {
     lua_pushliteral(L, "not enough memory");
-    lua_error(L);  /* raise a memory error */
+    lua_error(L);
   }
-  blk->ud = ud;  blk->allocf = allocf;
-  memcpy(blk + 1, str, len + 1);
-  lua_pushexternalstring(L, (char *)(blk + 1), len, t_freestr, L);
+  memcpy(buf, str, len + 1);
+  lua_pushlstring(L, buf, len);
+  allocf(ud, buf, len + 1, 0);  /* free buffer after copy */
   return 1;
 }
 
 
-/*
-** Create an external string and keep it in the registry, so that it
-** will test that the library code is still available (to deallocate
-** this string) when closing the state.
-*/
 static void initstr (lua_State *L) {
   lua_pushcfunction(L, newstr);
   lua_pushstring(L,

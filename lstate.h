@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <unordered_map>
+#include <string_view>
+
 #include "lua.h"
 
 /* Some header files included here need this definition */
@@ -139,12 +142,6 @@ struct lua_longjmp; /* defined in ldo.c */
 #define KGC_GENMINOR 1 /* generational gc in minor (regular) mode */
 #define KGC_GENMAJOR 2 /* generational in major mode */
 
-typedef struct stringtable
-{
-  TString** hash; /* array of buckets (linked lists of strings) */
-  int nuse;       /* number of elements */
-  int size;       /* number of buckets */
-} stringtable;
 
 /*
 ** Information about a call.
@@ -300,9 +297,24 @@ typedef struct global_State
   void* ud;           /* auxiliary data to 'frealloc' */
   l_mem GCtotalbytes; /* number of bytes currently allocated + debt */
   l_mem GCdebt;       /* bytes counted but not yet allocated */
+  size_t memlimit;    /* hard memory limit (0 = unlimited) */
   l_mem GCmarked;     /* number of objects marked in a GC cycle */
   l_mem GCmajorminor; /* auxiliary counter to control major-minor shifts */
-  stringtable strt;   /* hash table for strings */
+  struct InternKey
+  {
+    std::string_view sv;
+    size_t h;
+  };
+  struct InternHash
+  {
+    size_t operator()(const InternKey& k) const { return k.h; }
+  };
+  struct InternEq
+  {
+    bool operator()(const InternKey& a, const InternKey& b) const
+    { return a.sv == b.sv; }
+  };
+  std::unordered_map<InternKey, TString*, InternHash, InternEq> strt;
   TValue l_registry;
   TValue nilvalue;   /* a nil value */
   unsigned int seed; /* randomized seed for hashes */

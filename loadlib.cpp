@@ -61,11 +61,6 @@ static const char* const CLIBS = "_CLIBS";
 */
 
 /*
-** unload library 'lib'
-*/
-static void lsys_unloadlib(void* lib);
-
-/*
 ** load C library in file 'path'. If 'seeglb', load with all names in
 ** the library global.
 ** Returns the library; in case of error, returns NULL plus an
@@ -89,10 +84,6 @@ static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym);
 
 #include <dlfcn.h>
 
-static void lsys_unloadlib(void* lib)
-{
-  dlclose(lib);
-}
 
 static void* lsys_load(lua_State* L, const char* path, int seeglb)
 {
@@ -155,8 +146,8 @@ static void setpath(lua_State* L, const char* fieldname,
   const char* path = getenv(nver);                           /* try versioned name */
   if (path == NULL)                                          /* no versioned environment variable? */
     path = getenv(envname);                                  /* try unversioned name */
-  if (path == NULL || noenv(L))                              /* no environment variable? */
-    lua_pushexternalstring(L, dft, strlen(dft), NULL, NULL); /* use default */
+  if (path == NULL || noenv(L))   /* no environment variable? */
+    lua_pushstring(L, dft);      /* use default */
   else if ((dftmark = strstr(path, LUA_PATH_SEP LUA_PATH_SEP)) == NULL)
     lua_pushstring(L, path); /* nothing to change */
   else
@@ -206,28 +197,34 @@ static void* checkclib(lua_State* L, const char* path)
   return plib;
 }
 
+
 /*
-** Deallocate function for library strings.
-** Unload the DLL associated with the string being deallocated.
+** __gc for library userdata — unloads the DLL.
 */
-static void* freelib(void* ud, void* ptr, size_t osize, size_t nsize)
+static int lib_gc(lua_State* L)
 {
-  /* string itself is irrelevant and static */
-  (void) ptr;
-  (void) osize;
-  (void) nsize;
-  lsys_unloadlib(ud); /* unload library represented by the string */
-  return NULL;
+  void** p = (void**) lua_touserdata(L, 1);
+  if (*p)
+  {
+    dlclose(*p);
+    *p = NULL;
+  }
+  return 0;
 }
 
 /*
-** Create a library string that, when deallocated, will unload 'plib'
+** Create a userdata that, when collected, will unload 'plib'
 */
 static void createlibstr(lua_State* L, void* plib)
 {
-  /* common content for all library strings */
-  static const char dummy[] = "01234567890";
-  lua_pushexternalstring(L, dummy, sizeof(dummy) - 1, freelib, plib);
+  void** p = (void**) lua_newuserdatauv(L, sizeof(void*), 0);
+  *p = plib;
+  if (luaL_newmetatable(L, "_LOADLIB"))
+  {
+    lua_pushcfunction(L, lib_gc);
+    lua_setfield(L, -2, "__gc");
+  }
+  lua_setmetatable(L, -2);
 }
 
 /*

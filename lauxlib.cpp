@@ -337,7 +337,7 @@ LUALIB_API int luaL_newmetatable(lua_State* L, const char* tname)
   if (luaL_getmetatable(L, tname) != LUA_TNIL) /* name already in use? */
     return 0;                                  /* leave previous value on top, but return 0 */
   lua_pop(L, 1);
-  lua_createtable(L, 0, 2); /* create metatable */
+  lua_createtable(L, 0, 4); /* create metatable (room for __name + methods) */
   lua_pushstring(L, tname);
   lua_setfield(L, -2, "__name"); /* metatable.__name = tname */
   lua_pushvalue(L, -1);
@@ -640,19 +640,14 @@ LUALIB_API void luaL_pushresult(luaL_Buffer* B)
     lua_pushlstring(L, B->b, B->n); /* save result as regular string */
   else
   { /* reuse buffer already allocated */
-    UBox* box = (UBox*) lua_touserdata(L, -1);
-    void* ud;
-    lua_Alloc allocf = lua_getallocf(L, &ud); /* function to free buffer */
     size_t len = B->n;                        /* final string length */
-    char* s;
     resizebox(L, -1, len + 1); /* adjust box size to content size */
-    s = (char*) box->box;      /* final buffer address */
+    UBox* box = (UBox*) lua_touserdata(L, -1);
+    char* s = (char*) box->box;      /* final buffer address */
     s[len] = '\0';             /* add ending zero */
-    /* clear box, as Lua will take control of the buffer */
-    box->bsize = 0;
-    box->box = NULL;
-    lua_pushexternalstring(L, s, len, allocf, ud);
-    lua_closeslot(L, -2); /* close the box */
+    /* push the string first (may throw OOM); box still owns buffer */
+    lua_pushlstring(L, s, len);
+    lua_closeslot(L, -2); /* close the box (boxgc frees buffer) */
     lua_gc(L, LUA_GCSTEP, len);
   }
   lua_remove(L, -2); /* remove box or placeholder from the stack */

@@ -181,11 +181,6 @@ static Node* mainpositionTV(const Table* t, const TValue* key)
     TString* ts = tsvalue(key);
     return hashstr(t, ts);
   }
-  case LUA_VLNGSTR:
-  {
-    TString* ts = tsvalue(key);
-    return hashpow2(t, luaS_hashlongstr(ts));
-  }
   case LUA_VFALSE:
     return hashboolean(t, 0);
   case LUA_VTRUE:
@@ -1010,10 +1005,9 @@ lu_byte luaH_getint(Table* t, lua_Integer key, TValue* res)
 const TValue* luaH_Hgetshortstr(Table* t, TString* key)
 {
   Node* n = hashstr(t, key);
-  lua_assert(strisshr(key));
   for (;;)
   { /* check whether 'key' is somewhere in the chain */
-    if (keyisshrstr(n) && eqshrstr(keystrval(n), key))
+    if (keyisshrstr(n) && luaS_eqstr(keystrval(n), key))
       return gval(n); /* that's it */
     else
     {
@@ -1030,20 +1024,9 @@ lu_byte luaH_getshortstr(Table* t, TString* key, TValue* res)
   return finishnodeget(luaH_Hgetshortstr(t, key), res);
 }
 
-static const TValue* Hgetlongstr(Table* t, TString* key)
-{
-  TValue ko;
-  lua_assert(!strisshr(key));
-  setsvalue(cast(lua_State*, NULL), &ko, key);
-  return getgeneric(t, &ko, 0); /* for long strings, use generic case */
-}
-
 static const TValue* Hgetstr(Table* t, TString* key)
 {
-  if (strisshr(key))
-    return luaH_Hgetshortstr(t, key);
-  else
-    return Hgetlongstr(t, key);
+  return luaH_Hgetshortstr(t, key);
 }
 
 lu_byte luaH_getstr(Table* t, TString* key, TValue* res)
@@ -1168,10 +1151,7 @@ int luaH_psetshortstr(Table* t, TString* key, TValue* val)
 
 int luaH_psetstr(Table* t, TString* key, TValue* val)
 {
-  if (strisshr(key))
-    return luaH_psetshortstr(t, key, val);
-  else
-    return finishnodeset(t, Hgetlongstr(t, key), val);
+  return luaH_psetshortstr(t, key, val);
 }
 
 int luaH_pset(Table* t, const TValue* key, TValue* val)
@@ -1223,15 +1203,6 @@ void luaH_finishset(lua_State* L, Table* t, const TValue* key,
       }
       else if (l_unlikely(luai_numisnan(f)))
         luaG_runerror(L, "table index is NaN");
-    }
-    else if (isextstr(key))
-    { /* external string? */
-      /* If string is short, must internalize it to be used as table key */
-      TString* ts = luaS_normstr(L, tsvalue(key));
-      setsvalue2s(L, L->top.p++, ts); /* anchor 'ts' (EXTRA_STACK) */
-      luaH_newkey(L, t, s2v(L->top.p - 1), value);
-      L->top.p--;
-      return;
     }
     luaH_newkey(L, t, actk, value);
   }

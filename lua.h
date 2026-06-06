@@ -219,8 +219,6 @@ LUA_API void(lua_pushnil)(lua_State* L);
 LUA_API void(lua_pushnumber)(lua_State* L, lua_Number n);
 LUA_API void(lua_pushinteger)(lua_State* L, lua_Integer n);
 LUA_API const char*(lua_pushlstring) (lua_State* L, const char* s, size_t len);
-LUA_API const char*(lua_pushexternalstring) (lua_State* L,
-                                             const char* s, size_t len, lua_Alloc falloc, void* ud);
 LUA_API const char*(lua_pushstring) (lua_State* L, const char* s);
 LUA_API const char*(lua_pushvfstring) (lua_State* L, const char* fmt,
                                        va_list argp);
@@ -343,6 +341,9 @@ LUA_API size_t(lua_stringtonumber)(lua_State* L, const char* s);
 
 LUA_API lua_Alloc(lua_getallocf)(lua_State* L, void** ud);
 LUA_API void(lua_setallocf)(lua_State* L, lua_Alloc f, void* ud);
+
+LUA_API void(lua_setmemlimit)(lua_State* L, size_t limit);
+LUA_API size_t(lua_getmemlimit)(lua_State* L);
 
 LUA_API void(lua_toclose)(lua_State* L, int idx);
 LUA_API void(lua_closeslot)(lua_State* L, int idx);

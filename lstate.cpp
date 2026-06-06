@@ -6,6 +6,7 @@
 
 #include "lprefix.h"
 
+#include <new>
 #include <stddef.h>
 #include <string.h>
 
@@ -244,7 +245,7 @@ static void close_state(lua_State* L)
     luaC_freeallobjects(L);            /* collect all objects */
     luai_userstateclose(L);
   }
-  luaM_freearray(L, G(L)->strt.hash, cast_sizet(G(L)->strt.size));
+  G(L)->strt.~unordered_map();
   freestack(L);
   lua_assert(gettotalbytes(g) == sizeof(global_State));
   (*g->frealloc)(g->ud, g, sizeof(global_State), 0); /* free main block */
@@ -335,8 +336,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->ud_warn = NULL;
   g->seed = seed;
   g->gcstp = GCSTPGC; /* no GC while building state */
-  g->strt.size = g->strt.nuse = 0;
-  g->strt.hash = NULL;
+  new (&g->strt) decltype(g->strt)();
   setnilvalue(&g->l_registry);
   g->panic = NULL;
   g->gcstate = GCSpause;
@@ -353,6 +353,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->GCtotalbytes = sizeof(global_State);
   g->GCmarked = 0;
   g->GCdebt = 0;
+  g->memlimit = 0;
   setivalue(&g->nilvalue, 0); /* to signal that state is not yet built */
   setgcparam(g, PAUSE, LUAI_GCPAUSE);
   setgcparam(g, STEPMUL, LUAI_GCMUL);

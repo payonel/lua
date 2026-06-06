@@ -220,13 +220,24 @@ static int luaB_collectgarbage(lua_State* L)
 {
   static const char* const opts[] = {"stop", "restart", "collect",
                                      "count", "step", "isrunning", "generational", "incremental",
-                                     "param", NULL};
+                                     "param", "setlimit", "getlimit", NULL};
   static const char optsnum[] = {LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
                                  LUA_GCCOUNT, LUA_GCSTEP, LUA_GCISRUNNING, LUA_GCGEN, LUA_GCINC,
-                                 LUA_GCPARAM};
+                                 LUA_GCPARAM, 100, 101};
   int o = optsnum[luaL_checkoption(L, 1, "collect", opts)];
   switch (o)
   {
+  case 100: /* setlimit */
+  {
+    lua_Integer limit = luaL_checkinteger(L, 2);
+    lua_setmemlimit(L, (size_t)(limit <= 0 ? 0 : limit));
+    return 0;
+  }
+  case 101: /* getlimit */
+  {
+    lua_pushinteger(L, cast_Integer(lua_getmemlimit(L)));
+    return 1;
+  }
   case LUA_GCCOUNT:
   {
     int k = lua_gc(L, o);

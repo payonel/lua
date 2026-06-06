@@ -147,13 +147,7 @@ static l_mem objsize(GCObject* o)
   case LUA_VSHRSTR:
   {
     TString* ts = gco2ts(o);
-    res = sizestrshr(cast_uint(ts->shrlen));
-    break;
-  }
-  case LUA_VLNGSTR:
-  {
-    TString* ts = gco2ts(o);
-    res = luaS_sizelngstr(ts->u.lnglen, ts->shrlen);
+    res = sizeof(TString) + ts->content.capacity();
     break;
   }
   case LUA_VUPVAL:
@@ -359,7 +353,6 @@ static void reallymarkobject(global_State* g, GCObject* o)
   switch (o->tt)
   {
   case LUA_VSHRSTR:
-  case LUA_VLNGSTR:
   {
     set2black(o); /* nothing to visit */
     break;
@@ -934,16 +927,10 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VSHRSTR:
   {
     TString* ts = gco2ts(o);
-    luaS_remove(L, ts); /* remove it from hash table */
-    luaM_freemem(L, ts, sizestrshr(cast_uint(ts->shrlen)));
-    break;
-  }
-  case LUA_VLNGSTR:
-  {
-    TString* ts = gco2ts(o);
-    if (ts->shrlen == LSTRMEM) /* must free external string? */
-      (*ts->falloc)(ts->ud, ts->contents, ts->u.lnglen + 1, 0);
-    luaM_freemem(L, ts, luaS_sizelngstr(ts->u.lnglen, ts->shrlen));
+    luaS_remove(L, ts);
+    luaM_release(L, ts->content.capacity());
+    ts->content.~basic_string();
+    luaM_freemem(L, ts, sizeof(TString));
     break;
   }
   default:
@@ -1008,11 +995,8 @@ static GCObject** sweeptolive(lua_State* L, GCObject** p)
 */
 static void checkSizes(lua_State* L, global_State* g)
 {
-  if (!g->gcemergency)
-  {
-    if (g->strt.nuse < g->strt.size / 4) /* string table too big? */
-      luaS_resize(L, g->strt.size / 2);
-  }
+  cast_void(L);
+  cast_void(g);
 }
 
 /*
@@ -1649,7 +1633,6 @@ void luaC_freeallobjects(lua_State* L)
   deletelist(L, g->allgc, obj2gco(mainthread(g)));
   lua_assert(g->finobj == NULL);   /* no new finalizers */
   deletelist(L, g->fixedgc, NULL); /* collect fixed objects */
-  lua_assert(g->strt.nuse == 0);
 }
 
 static void atomic(lua_State* L)

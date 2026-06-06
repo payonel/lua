@@ -7,6 +7,7 @@
 #pragma once
 
 #include <stdarg.h>
+#include <string>
 
 #include "llimits.h"
 #include "lua.h"
@@ -364,12 +365,14 @@ typedef struct GCObject
 */
 
 /* Variant tags for strings */
-#define LUA_VSHRSTR makevariant(LUA_TSTRING, 0) /* short strings */
-#define LUA_VLNGSTR makevariant(LUA_TSTRING, 1) /* long strings */
+#define LUA_VSTRING makevariant(LUA_TSTRING, 0)
+/* Keep old names for now during transition */
+#define LUA_VSHRSTR LUA_VSTRING
+#define LUA_VLNGSTR LUA_VSTRING
 
 #define ttisstring(o)    checktype((o), LUA_TSTRING)
-#define ttisshrstring(o) checktag((o), ctb(LUA_VSHRSTR))
-#define ttislngstring(o) checktag((o), ctb(LUA_VLNGSTR))
+#define ttisshrstring(o) ttisstring(o)
+#define ttislngstring(o) ttisstring(o)
 
 #define tsvalueraw(v) (gco2ts((v).gc))
 
@@ -390,50 +393,20 @@ typedef struct GCObject
 /* set a string to a new object */
 #define setsvalue2n setsvalue
 
-/* Kinds of long strings (stored in 'shrlen') */
-#define LSTRREG -1 /* regular long string */
-#define LSTRFIX -2 /* fixed external long string */
-#define LSTRMEM -3 /* external long string with deallocation */
-
 /*
 ** Header for a string value.
 */
 typedef struct TString
 {
   CommonHeader;
-  lu_byte extra;  /* reserved words for short strings; "has hash" for longs */
-  ls_byte shrlen; /* length for short strings, negative for long strings */
-  unsigned int hash;
-  union
-  {
-    size_t lnglen;         /* length for long strings */
-    struct TString* hnext; /* linked list for hash table */
-  } u;
-  char* contents;   /* pointer to content in long strings */
-  lua_Alloc falloc; /* deallocation function for external strings */
-  void* ud;         /* user data for external strings */
+  lu_byte extra;       /* reserved words for short strings; "has hash" for longs */
+  unsigned int hash;   /* cached hash value */
+  std::string content; /* string data */
 } TString;
 
-#define TSTRING_OFFSET_FALLOC (sizeof(TString) - sizeof(lua_Alloc) - sizeof(void*))
-
-#define strisshr(ts) ((ts)->shrlen >= 0)
-#define isextstr(ts) (ttislngstring(ts) && tsvalue(ts)->shrlen != LSTRREG)
-
-/*
-** Get the actual string (array of bytes) from a 'TString'. (Generic
-** version and specialized versions for long and short strings.)
-*/
-#define rawgetshrstr(ts) (cast_charp(&(ts)->contents))
-#define getshrstr(ts)    check_exp(strisshr(ts), rawgetshrstr(ts))
-#define getlngstr(ts)    check_exp(!strisshr(ts), (ts)->contents)
-#define getstr(ts)       (strisshr(ts) ? rawgetshrstr(ts) : (ts)->contents)
-
-/* get string length from 'TString *ts' */
-#define tsslen(ts) (strisshr(ts) ? cast_sizet((ts)->shrlen) : (ts)->u.lnglen)
-
-/*
-** Get string and length */
-#define getlstr(ts, len) (strisshr(ts) ? (cast_void((len) = cast_sizet((ts)->shrlen)), rawgetshrstr(ts)) : (cast_void((len) = (ts)->u.lnglen), (ts)->contents))
+#define getstr(ts)  ((ts)->content.c_str())
+#define tsslen(ts)  ((ts)->content.size())
+#define getlstr(ts, len) (cast_void((len) = (ts)->content.size()), (ts)->content.c_str())
 
 /* }================================================================== */
 

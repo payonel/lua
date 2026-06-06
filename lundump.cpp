@@ -8,6 +8,7 @@
 
 #include <limits.h>
 #include <string.h>
+#include <string>
 
 #include "lua.h"
 
@@ -157,24 +158,20 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     luaC_objbarrier(L, p, ts);
     return; /* do not save it again */
   }
-  else if ((size -= 1) <= LUAI_MAXSHORTLEN)
-  {                                         /* short string? */
-    char buff[LUAI_MAXSHORTLEN + 1];        /* extra space for '\0' */
+  else if ((size -= 1) <= 40)
+  {                                         /* small string? use stack buffer */
+    char buff[41];
     loadVector(S, buff, size + 1);          /* load string into buffer */
     *sl = ts = luaS_newlstr(L, buff, size); /* create string */
     luaC_objbarrier(L, p, ts);
   }
-  else if (S->fixed)
-  {                                             /* for a fixed buffer, use a fixed string */
-    const char* s = getaddr(S, size + 1, char); /* get content address */
-    *sl = ts = luaS_newextlstr(L, s, size, NULL, NULL);
-    luaC_objbarrier(L, p, ts);
-  }
   else
-  {                                           /* create internal copy */
-    *sl = ts = luaS_createlngstrobj(L, size); /* create string */
+  {                                           /* large string */
+    std::string tmp;
+    tmp.resize(size + 1);
+    loadVector(S, tmp.data(), size + 1);
+    *sl = ts = luaS_newlstr(L, tmp.data(), size);
     luaC_objbarrier(L, p, ts);
-    loadVector(S, getlngstr(ts), size + 1); /* load directly in final place */
   }
   /* add string to list of saved strings */
   S->nstr++;
@@ -232,7 +229,6 @@ static void loadConstants(LoadState* S, Proto* f)
       setivalue(o, loadInteger(S));
       break;
     case LUA_VSHRSTR:
-    case LUA_VLNGSTR:
     {
       lua_assert(f->source == NULL);
       loadString(S, f, &f->source); /* use 'source' to anchor string */

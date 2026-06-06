@@ -628,11 +628,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
               i1 == ivalue(t2));
     }
     case LUA_VSHRSTR:
-    case LUA_VLNGSTR:
     {
-      /* compare two strings with different variants: they can be
-         equal when one string is a short string and the other is
-         an external string  */
       return luaS_eqstr(tsvalue(t1), tsvalue(t2));
     }
     default:
@@ -656,8 +652,6 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
     case LUA_VLIGHTUSERDATA:
       return pvalue(t1) == pvalue(t2);
     case LUA_VSHRSTR:
-      return eqshrstr(tsvalue(t1), tsvalue(t2));
-    case LUA_VLNGSTR:
       return luaS_eqstr(tsvalue(t1), tsvalue(t2));
     case LUA_VUSERDATA:
     {
@@ -704,7 +698,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
 ** (External strings can be empty too; they will be concatenated like
 ** non-empty ones.)
 */
-#define isemptystr(o) (ttisshrstring(o) && tsvalue(o)->shrlen == 0)
+#define isemptystr(o) (ttisstring(o) && tsslen(tsvalue(o)) == 0)
 
 /* copy strings in stack from top - n up to top - 1 to buffer */
 static void copy2buff(StkId top, int n, char* buff)
@@ -757,16 +751,18 @@ void luaV_concat(lua_State* L, int total)
         }
         tl += l;
       }
-      if (tl <= LUAI_MAXSHORTLEN)
-      { /* is result a short string? */
-        char buff[LUAI_MAXSHORTLEN];
-        copy2buff(top, n, buff); /* copy strings to buffer */
+      if (tl <= 40)
+      { /* small result? use stack buffer */
+        char buff[40];
+        copy2buff(top, n, buff);
         ts = luaS_newlstr(L, buff, tl);
       }
       else
-      { /* long string; copy strings directly to final result */
-        ts = luaS_createlngstrobj(L, tl);
-        copy2buff(top, n, getlngstr(ts));
+      { /* large result; heap buffer */
+        char* buff = luaM_newvector(L, tl, char);
+        copy2buff(top, n, buff);
+        ts = luaS_newlstr(L, buff, tl);
+        luaM_freearray(L, buff, tl);
       }
       setsvalue2s(L, top - n, ts); /* create result */
     }
@@ -794,12 +790,7 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb)
   }
   case LUA_VSHRSTR:
   {
-    setivalue(s2v(ra), tsvalue(rb)->shrlen);
-    return;
-  }
-  case LUA_VLNGSTR:
-  {
-    setivalue(s2v(ra), cast_st2S(tsvalue(rb)->u.lnglen));
+    setivalue(s2v(ra), cast_st2S(tsslen(tsvalue(rb))));
     return;
   }
   default:

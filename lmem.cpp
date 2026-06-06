@@ -7,6 +7,7 @@
 #include "lprefix.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "lua.h"
 
@@ -190,4 +191,22 @@ void* luaM_malloc_(lua_State* L, size_t size, int tag)
     g->GCdebt -= cast(l_mem, size);
     return newblock;
   }
+}
+
+int luaM_reserve(lua_State* L, size_t size)
+{
+  global_State* g = G(L);
+  if (g->memlimit > 0 &&
+      cast(size_t, gettotalbytes(g)) + size > g->memlimit)
+  {
+    return 0;
+  }
+  g->GCdebt -= cast(l_mem, size);
+  return 1;
+}
+
+void luaM_release(lua_State* L, size_t size)
+{
+  global_State* g = G(L);
+  g->GCdebt += cast(l_mem, size);
 }

@@ -6,6 +6,7 @@
 
 #include "lprefix.h"
 
+#include <new>
 #include <string.h>
 
 #include "lua.h"
@@ -17,101 +18,35 @@
 #include "lstate.h"
 #include "lstring.h"
 
-#include "util_cast.h"
-
-/*
-** Maximum size for string table.
-*/
-#define MAXSTRTB cast_int(luaM_limitN(INT_MAX, TString*))
-
-/*
-** Initial size for the string table (must be power of 2).
-** The Lua core alone registers ~50 strings (reserved words +
-** metaevent keys + a few others). Libraries would typically add
-** a few dozens more.
-*/
-#if !defined(MINSTRTABSIZE)
-#define MINSTRTABSIZE 128
-#endif
-
 /*
 ** generic equality for strings
 */
 int luaS_eqstr(TString* a, TString* b)
 {
-  size_t len1, len2;
-  const char* s1 = getlstr(a, len1);
-  const char* s2 = getlstr(b, len2);
-  return ((len1 == len2) &&             /* equal length and ... */
-          (memcmp(s1, s2, len1) == 0)); /* equal contents */
+  return (a == b) || (a->content == b->content);
 }
 
-static unsigned luaS_hash(const char* str, size_t l, unsigned seed)
+static size_t luaS_hash(const char* str, size_t l)
 {
-  unsigned int h = seed ^ cast_uint(l);
+  unsigned int h = 0x5bd1e995 ^ cast_uint(l);
   for (; l > 0; l--)
     h ^= ((h << 5) + (h >> 2) + cast_byte(str[l - 1]));
   return h;
 }
 
-unsigned luaS_hashlongstr(TString* ts)
-{
-  lua_assert(ts->tt == LUA_VLNGSTR);
-  if (ts->extra == 0)
-  { /* no hash? */
-    size_t len = ts->u.lnglen;
-    ts->hash = luaS_hash(getlngstr(ts), len, ts->hash);
-    ts->extra = 1; /* now it has its hash */
-  }
-  return ts->hash;
-}
-
-static void tablerehash(TString** vect, int osize, int nsize)
-{
-  int i;
-  for (i = osize; i < nsize; i++) /* clear new elements */
-    vect[i] = NULL;
-  for (i = 0; i < osize; i++)
-  { /* rehash old part of the array */
-    TString* p = vect[i];
-    vect[i] = NULL;
-    while (p)
-    {                                        /* for each string in the list */
-      TString* hnext = p->u.hnext;           /* save next */
-      unsigned int h = lmod(p->hash, nsize); /* new position */
-      p->u.hnext = vect[h];                  /* chain it into array */
-      vect[h] = p;
-      p = hnext;
-    }
-  }
-}
-
 /*
-** Resize the string table. If allocation fails, keep the current size.
-** (This can degrade performance, but any non-zero size should work
-** correctly.)
+** Create a new TString with placement-new for std::string
 */
-void luaS_resize(lua_State* L, int nsize)
+static TString* createstrobj(lua_State* L, const char* str, size_t l,
+                             size_t h)
 {
-  stringtable* tb = &G(L)->strt;
-  int osize = tb->size;
-  TString** newvect;
-  if (nsize < osize)                     /* shrinking table? */
-    tablerehash(tb->hash, osize, nsize); /* depopulate shrinking part */
-  newvect = luaM_reallocvector(L, tb->hash, osize, nsize, TString*);
-  if (l_unlikely(newvect == NULL))
-  {                                        /* reallocation failed? */
-    if (nsize < osize)                     /* was it shrinking table? */
-      tablerehash(tb->hash, nsize, osize); /* restore to original size */
-    /* leave table as it was */
-  }
-  else
-  { /* allocation succeeded */
-    tb->hash = newvect;
-    tb->size = nsize;
-    if (nsize > osize)
-      tablerehash(newvect, osize, nsize); /* rehash for new size */
-  }
+  GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
+  TString* ts = gco2ts(o);
+  ts->hash = cast_uint(h);
+  ts->extra = 0;
+  new (&ts->content) std::string(str, l);
+  luaM_reserve(L, ts->content.capacity());
+  return ts;
 }
 
 /*
@@ -136,10 +71,6 @@ void luaS_init(lua_State* L)
 {
   global_State* g = G(L);
   int i, j;
-  stringtable* tb = &G(L)->strt;
-  tb->hash = luaM_newvector(L, MINSTRTABSIZE, TString*);
-  tablerehash(tb->hash, 0, MINSTRTABSIZE); /* clear array */
-  tb->size = MINSTRTABSIZE;
   /* pre-create memory-error message */
   g->memerrmsg = luaS_newliteral(L, MEMERRMSG);
   luaC_fix(L, obj2gco(g->memerrmsg)); /* it should never be collected */
@@ -148,106 +79,53 @@ void luaS_init(lua_State* L)
       g->strcache[i][j] = g->memerrmsg;
 }
 
-size_t luaS_sizelngstr(size_t len, int kind)
-{
-  switch (kind)
-  {
-  case LSTRREG: /* regular long string */
-    /* don't need 'falloc'/'ud', but need space for content */
-    return TSTRING_OFFSET_FALLOC + (len + 1) * sizeof(char);
-  case LSTRFIX: /* fixed external long string */
-    /* don't need 'falloc'/'ud' */
-    return TSTRING_OFFSET_FALLOC;
-  default: /* external long string with deallocation */
-    lua_assert(kind == LSTRMEM);
-    return sizeof(TString);
-  }
-}
+/*
+** Maximum length for strings that are internalized.
+*/
+#if !defined(LUAI_MAXSHORTLEN)
+#define LUAI_MAXSHORTLEN 40
+#endif
 
 /*
-** creates a new string object
+** Create a new string, interning short strings in the global table.
 */
-static TString* createstrobj(lua_State* L, size_t totalsize, lu_byte tag,
-                             unsigned h)
+TString* luaS_createstr(lua_State* L, const char* str, size_t l)
 {
-  TString* ts;
-  GCObject* o;
-  o = luaC_newobj(L, tag, totalsize);
-  ts = gco2ts(o);
-  ts->hash = h;
-  ts->extra = 0;
-  return ts;
-}
-
-TString* luaS_createlngstrobj(lua_State* L, size_t l)
-{
-  size_t totalsize = luaS_sizelngstr(l, LSTRREG);
-  TString* ts = createstrobj(L, totalsize, LUA_VLNGSTR, G(L)->seed);
-  ts->u.lnglen = l;
-  ts->shrlen = LSTRREG; /* signals that it is a regular long string */
-  ts->contents = cast_charp(ts) + TSTRING_OFFSET_FALLOC;
-  ts->contents[l] = '\0'; /* ending 0 */
-  return ts;
-}
-
-void luaS_remove(lua_State* L, TString* ts)
-{
-  stringtable* tb = &G(L)->strt;
-  TString** p = &tb->hash[lmod(ts->hash, tb->size)];
-  while (*p != ts) /* find previous element */
-    p = &(*p)->u.hnext;
-  *p = (*p)->u.hnext; /* remove element from its list */
-  tb->nuse--;
-}
-
-static void growstrtab(lua_State* L, stringtable* tb)
-{
-  if (l_unlikely(tb->nuse == INT_MAX))
-  {                          /* too many strings? */
-    luaC_fullgc(L, 1);       /* try to free some... */
-    if (tb->nuse == INT_MAX) /* still too many? */
-      luaM_error(L);         /* cannot even create a message... */
-  }
-  if (tb->size <= MAXSTRTB / 2) /* can grow string table? */
-    luaS_resize(L, tb->size * 2);
-}
-
-/*
-** Checks whether short string exists and reuses it or creates a new one.
-*/
-static TString* internshrstr(lua_State* L, const char* str, size_t l)
-{
-  TString* ts;
   global_State* g = G(L);
-  stringtable* tb = &g->strt;
-  unsigned int h = luaS_hash(str, l, g->seed);
-  TString** list = &tb->hash[lmod(h, tb->size)];
-  lua_assert(str != NULL); /* otherwise 'memcmp'/'memcpy' are undefined */
-  for (ts = *list; ts != NULL; ts = ts->u.hnext)
+  size_t h = luaS_hash(str, l);
+  if (l <= LUAI_MAXSHORTLEN)
   {
-    if (l == cast_uint(ts->shrlen) &&
-        (memcmp(str, getshrstr(ts), l * sizeof(char)) == 0))
+    std::string_view sv(str, l);
+    global_State::InternKey key{sv, h};
+    auto it = g->strt.find(key);
+    if (it != g->strt.end())
     {
-      /* found! */
-      if (isdead(g, ts)) /* dead (but not collected yet)? */
+      TString* ts = it->second;
+      if (isdead(g, ts))
         changewhite(ts); /* resurrect it */
       return ts;
     }
+    /* create new short string and intern it */
+    TString* ts = createstrobj(L, str, l, h);
+    g->strt.emplace(global_State::InternKey{std::string_view(ts->content), h}, ts);
+    return ts;
   }
-  /* else must create a new string */
-  if (tb->nuse >= tb->size)
-  { /* need to grow string table? */
-    growstrtab(L, tb);
-    list = &tb->hash[lmod(h, tb->size)]; /* rehash with new size */
+  /* long string: no interning */
+  return createstrobj(L, str, l, h);
+}
+
+/*
+** Remove a string from the interning table (called during GC sweep)
+*/
+void luaS_remove(lua_State* L, TString* ts)
+{
+  if (ts->content.size() <= LUAI_MAXSHORTLEN)
+  {
+    global_State* g = G(L);
+    std::string_view sv(ts->content);
+    size_t h = ts->hash;
+    g->strt.erase(global_State::InternKey{sv, h});
   }
-  ts = createstrobj(L, sizestrshr(l), LUA_VSHRSTR, h);
-  ts->shrlen = cast(ls_byte, l);
-  getshrstr(ts)[l] = '\0'; /* ending 0 */
-  memcpy(getshrstr(ts), str, l * sizeof(char));
-  ts->u.hnext = *list;
-  *list = ts;
-  tb->nuse++;
-  return ts;
 }
 
 /*
@@ -255,17 +133,7 @@ static TString* internshrstr(lua_State* L, const char* str, size_t l)
 */
 TString* luaS_newlstr(lua_State* L, const char* str, size_t l)
 {
-  if (l <= LUAI_MAXSHORTLEN) /* short string? */
-    return internshrstr(L, str, l);
-  else
-  {
-    TString* ts;
-    if (l_unlikely(l * sizeof(char) >= (MAX_SIZE - sizeof(TString))))
-      luaM_toobig(L);
-    ts = luaS_createlngstrobj(L, l);
-    memcpy(getlngstr(ts), str, l * sizeof(char));
-    return ts;
-  }
+  return luaS_createstr(L, str, l);
 }
 
 /*
@@ -307,60 +175,4 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   for (i = 0; i < nuvalue; i++)
     setnilvalue(&u->uv[i].uv);
   return u;
-}
-
-struct NewExt
-{
-  ls_byte kind;
-  const char* s;
-  size_t len;
-  TString* ts; /* output */
-};
-
-static void f_newext(lua_State* L, void* ud)
-{
-  struct NewExt* ne = cast(struct NewExt*, ud);
-  size_t size = luaS_sizelngstr(0, ne->kind);
-  ne->ts = createstrobj(L, size, LUA_VLNGSTR, G(L)->seed);
-}
-
-TString* luaS_newextlstr(lua_State* L,
-                         const char* s, size_t len, lua_Alloc falloc, void* ud)
-{
-  struct NewExt ne;
-  if (!falloc)
-  {
-    ne.kind = LSTRFIX;
-    f_newext(L, &ne); /* just create header */
-  }
-  else
-  {
-    ne.kind = LSTRMEM;
-    if (luaD_rawrunprotected(L, f_newext, &ne) != LUA_OK)
-    {                                           /* mem. error? */
-      (*falloc)(ud, util::mem_cast(s), len + 1, 0); /* free external string */
-      luaM_error(L);                            /* re-raise memory error */
-    }
-    ne.ts->falloc = falloc;
-    ne.ts->ud = ud;
-  }
-  ne.ts->shrlen = ne.kind;
-  ne.ts->u.lnglen = len;
-  ne.ts->contents = util::remove_const_cast(s);
-  return ne.ts;
-}
-
-/*
-** Normalize an external string: If it is short, internalize it.
-*/
-TString* luaS_normstr(lua_State* L, TString* ts)
-{
-  size_t len = ts->u.lnglen;
-  if (len > LUAI_MAXSHORTLEN)
-    return ts; /* long string; keep the original */
-  else
-  {
-    const char* str = getlngstr(ts);
-    return internshrstr(L, str, len);
-  }
 }

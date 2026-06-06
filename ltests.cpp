@@ -164,15 +164,34 @@ static void warnf(void* ud, const char* msg, int tocont)
 
 #define MARK 0x55 /* 01010101 (a nice pattern) */
 
-typedef union memHeader
+typedef union memHeader memHeader;
+union memHeader
 {
   LUAI_MAXALIGN;
   struct
   {
     size_t size;
     int type;
+    memHeader* next;
+    memHeader* prev;
   } d;
-} memHeader;
+};
+
+static memHeader dbg_list_head = {};  /* sentinel for doubly-linked list */
+
+static void dbg_link(memHeader* block)
+{
+  block->d.next = dbg_list_head.d.next;
+  block->d.prev = &dbg_list_head;
+  if (dbg_list_head.d.next) dbg_list_head.d.next->d.prev = block;
+  dbg_list_head.d.next = block;
+}
+
+static void dbg_unlink(memHeader* block)
+{
+  if (block->d.prev) block->d.prev->d.next = block->d.next;
+  if (block->d.next) block->d.next->d.prev = block->d.prev;
+}
 
 /* full memory check */
 #define MARKSIZE           16 /* size of marks after each block */
@@ -190,6 +209,7 @@ static void freeblock(Memcontrol* mc, memHeader* block)
     for (i = 0; i < MARKSIZE; i++) /* check marks after block */
       lua_assert(*(cast_charp(block + 1) + size + i) == MARK);
     mc->objcount[block->d.type]--;
+    dbg_unlink(block);
     fillmem(block, sizeof(memHeader) + size + MARKSIZE); /* erase block */
     free(block);                                         /* actually free block */
     mc->numblocks--;                                     /* update counts */
@@ -259,6 +279,9 @@ static void* debug_realloc(void* ud, void* b, size_t oldsize, size_t size)
       *(cast_charp(newblock + 1) + size + i) = MARK;
     newblock->d.size = size;
     newblock->d.type = type;
+    newblock->d.next = NULL;
+    newblock->d.prev = NULL;
+    dbg_link(newblock);
     mc->total += size;
     if (mc->total > mc->maxmem)
       mc->maxmem = mc->total;
@@ -317,7 +340,7 @@ static void printobj(global_State* g, GCObject* o)
                           : iswhite(o)   ? 'w'
                                          : 'g',
          "ns01oTt"[getage(o)], o -> marked);
-  if (o->tt == LUA_VSHRSTR || o->tt == LUA_VLNGSTR)
+  if (o->tt == LUA_VSTRING)
     printf(" '%s'", getstr(gco2ts(o)));
 }
 
@@ -336,9 +359,6 @@ static void lua_printvalue(TValue* v)
   }
   case LUA_VSHRSTR:
     printf("'%s'", getstr(tsvalue(v)));
-    break;
-  case LUA_VLNGSTR:
-    printf("'%.30s...'", getstr(tsvalue(v)));
     break;
   case LUA_VFALSE:
     printf("%s", "false");
@@ -566,7 +586,6 @@ static void checkrefs(global_State* g, GCObject* o)
     break;
   }
   case LUA_VSHRSTR:
-  case LUA_VLNGSTR:
   {
     assert(!isgray(o)); /* strings are never gray */
     break;
@@ -1143,8 +1162,6 @@ static int hash_query(lua_State* L)
     TString* ts;
     luaL_argcheck(L, lua_type(L, 1) == LUA_TSTRING, 1, "string expected");
     ts = tsvalue(obj_at(L, 1));
-    if (ts->tt == LUA_VLNGSTR)
-      luaS_hashlongstr(ts); /* make sure long string has a hash */
     lua_pushinteger(L, cast_int(ts->hash));
   }
   else
@@ -1268,21 +1285,20 @@ static int test_applyparam(lua_State* L)
 
 static int string_query(lua_State* L)
 {
-  stringtable* tb = &G(L)->strt;
+  auto& strt = G(L)->strt;
   int s = cast_int(luaL_optinteger(L, 1, 0)) - 1;
   if (s == -1)
   {
-    lua_pushinteger(L, tb->size);
-    lua_pushinteger(L, tb->nuse);
+    lua_pushinteger(L, cast_int(strt.bucket_count()));
+    lua_pushinteger(L, cast_int(strt.size()));
     return 2;
   }
-  else if (s < tb->size)
+  else if (s < cast_int(strt.bucket_count()))
   {
-    TString* ts;
     int n = 0;
-    for (ts = tb->hash[s]; ts != NULL; ts = ts->u.hnext)
+    for (auto it = strt.begin(cast_sizet(s)); it != strt.end(cast_sizet(s)); ++it)
     {
-      setsvalue2s(L, L->top.p, ts);
+      setsvalue2s(L, L->top.p, it->second);
       api_incr_top(L);
       n++;
     }
@@ -1548,7 +1564,7 @@ static int externKstr(lua_State* L)
 {
   size_t len;
   const char* s = luaL_checklstring(L, 1, &len);
-  lua_pushexternalstring(L, s, len, NULL, NULL);
+  lua_pushlstring(L, s, len);
   return 1;
 }
 
@@ -1561,19 +1577,8 @@ static int externstr(lua_State* L)
 {
   size_t len;
   const char* s = luaL_checklstring(L, 1, &len);
-  void* ud;
-  lua_Alloc allocf = lua_getallocf(L, &ud); /* get allocation function */
-  /* create the buffer */
-  char* buff = cast_charp((*allocf)(ud, NULL, 0, len + 1));
-  if (buff == NULL)
-  { /* memory error? */
-    lua_pushliteral(L, "not enough memory");
-    lua_error(L); /* raise a memory error */
-  }
-  /* copy string content to buffer, including ending 0 */
-  memcpy(buff, s, (len + 1) * sizeof(char));
-  /* create external string */
-  lua_pushexternalstring(L, buff, len, allocf, ud);
+  /* push string directly (copies content internally) */
+  lua_pushlstring(L, s, len);
   return 1;
 }
 
@@ -2468,6 +2473,13 @@ static const struct luaL_Reg tests_funcs[] = {
 
 static void checkfinalmem(void)
 {
+  if (l_memcontrol.numblocks != 0) {
+    fprintf(stderr, "[checkfinalmem] numblocks=%lu total=%lu\n",
+            l_memcontrol.numblocks, l_memcontrol.total);
+    for (memHeader* h = dbg_list_head.d.next; h != NULL; h = h->d.next)
+      fprintf(stderr, "  LEAKED: ptr=%p size=%zu type=%d\n",
+              (void*)(h + 1), h->d.size, h->d.type);
+  }
   lua_assert(l_memcontrol.numblocks == 0);
   lua_assert(l_memcontrol.total == 0);
 }

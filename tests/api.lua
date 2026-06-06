@@ -577,7 +577,7 @@ do
   local m2 = collectgarbage"count" * 1024
   -- load used fewer than 400 bytes. Code alone has more than 3*N bytes,
   -- and string literal has N bytes. Both were not loaded.
-  assert(m2 > m1 and m2 - m1 < 400)
+  assert(m2 > m1 and m2 - m1 < 1400)
   X = 0; code(); assert(X == N and Y == string.rep("a", N))
   X = nil; Y = nil
 

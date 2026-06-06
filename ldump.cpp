@@ -197,7 +197,6 @@ static void dumpConstants(DumpState* D, const Proto* f)
       dumpInteger(D, ivalue(o));
       break;
     case LUA_VSHRSTR:
-    case LUA_VLNGSTR:
       dumpString(D, tsvalue(o));
       break;
     default:
