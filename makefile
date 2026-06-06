@@ -90,7 +90,7 @@ test:
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
 		ulimit -S -s 1100; \
 		cd tests; \
-		perf stat -- ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
+		cat /dev/null | perf stat -- ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 
 full:
 	make clean
