@@ -209,53 +209,17 @@ int luaD_checkminstack(lua_State* L)
     return luaD_growstack(L, BASIC_STACK_SIZE, 0);
 }
 
-#if LUAI_STRICT_ADDRESS
-/*
-** With index-based StkId, only UpVal.v.p (a TValue*) needs updating
-** after stack reallocation.
-*/
-static void relstack(lua_State* L)
+static void correctstack(lua_State* L)
 {
   UpVal* up;
-  for (up = L->openupval; up != NULL; up = up->u.open.next)
-    up->v.offset = static_cast<ptrdiff_t>(reinterpret_cast<StackValue*>(up->v.p) - L->stack.p);
-}
-
-static void correctstack(lua_State* L, StackValue*)
-{
-  UpVal* up;
-  for (up = L->openupval; up != NULL; up = up->u.open.next)
-    up->v.p = &L->stack.p[up->v.offset].val;
+  for (up = L->openupval; up != NULL; up = up->opennext)
+    up->p = s2v(L, up->stkid);
   for (CallInfo* ci = L->ci; ci != NULL; ci = ci->previous)
   {
     if (isLua(ci))
       ci->u.l.trap = 1; /* signal to update 'trap' in 'luaV_execute' */
   }
 }
-
-#else
-
-static void relstack(lua_State*)
-{
-} /* do nothing */
-
-static void correctstack(lua_State* L, StackValue* oldstack)
-{
-  UpVal* up;
-  if (oldstack == L->stack.p)
-    return;
-  for (up = L->openupval; up != NULL; up = up->u.open.next)
-  {
-    StackValue* oldsv = reinterpret_cast<StackValue*>(up->v.p);
-    up->v.p = &L->stack.p[oldsv - oldstack].val;
-  }
-  for (CallInfo* ci = L->ci; ci != NULL; ci = ci->previous)
-  {
-    if (isLua(ci))
-      ci->u.l.trap = 1; /* signal to update 'trap' in 'luaV_execute' */
-  }
-}
-#endif
 
 /*
 ** Reallocate the stack to a new size, correcting all pointers into it.
@@ -270,21 +234,20 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   StackValue* oldstack = L->stack.p;
   lu_byte oldgcstop = G(L)->gcstopem;
   lua_assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
-  relstack(L);        /* save upvalue offsets */
   G(L)->gcstopem = 1; /* stop emergency collection */
   newstack = luaM_reallocvector(L, oldstack, oldsize + EXTRA_STACK,
                                 newsize + EXTRA_STACK, StackValue);
   G(L)->gcstopem = oldgcstop; /* restore emergency collection */
   if (l_unlikely(newstack == NULL))
   {                            /* reallocation failed? */
-    correctstack(L, oldstack); /* restore upvalue pointers */
+    correctstack(L); /* restore upvalue pointers */
     if (raiseerror)
       luaM_error(L);
     else
       return 0; /* do not raise an error */
   }
   L->stack.p = newstack;
-  correctstack(L, oldstack); /* fix upvalue pointers */
+  correctstack(L); /* fix upvalue pointers */
   L->stack_last = newsize;
   for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
     setnilvalue(&newstack[i].val); /* erase new segment */

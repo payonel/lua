@@ -650,20 +650,11 @@ typedef struct Proto
 typedef struct UpVal
 {
   CommonHeader;
-  union
-  {
-    TValue* p;        /* points to stack or to its own value */
-    ptrdiff_t offset; /* used while the stack is being reallocated */
-  } v;
-  union
-  {
-    struct
-    {                     /* (when open) */
-      struct UpVal* next; /* linked list */
-      struct UpVal** previous;
-    } open;
-    TValue value; /* the value (when closed) */
-  } u;
+  struct UpVal* opennext;    /* next in open list (NULL when closed) */
+  struct UpVal** previous;   /* back-pointer in open list (NULL when closed) */
+  TValue* p;              /* points to stack slot (open) or &value (closed) */
+  StkId stkid;              /* stack index when open (for correctstack) */
+  TValue value;             /* embedded storage for closed-over value */
 } UpVal;
 
 #define ClosureHeader \

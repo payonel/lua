@@ -363,8 +363,8 @@ static void reallymarkobject(global_State* g, GCObject* o)
     if (upisopen(uv))
       set2gray(uv); /* open upvalues are kept gray */
     else
-      set2black(uv);       /* closed upvalues are visited here */
-    markvalue(g, uv->v.p); /* mark its content */
+      set2black(uv);        /* closed upvalues are visited here */
+    markvalue(g, uv->p); /* mark its content */
     break;
   }
   case LUA_VUSERDATA:
@@ -438,13 +438,13 @@ static void remarkupvals(global_State* g)
       lua_assert(!isold(thread) || thread->openupval == NULL);
       *p = thread->twups;     /* remove thread from the list */
       thread->twups = thread; /* mark that it is out of list */
-      for (uv = thread->openupval; uv != NULL; uv = uv->u.open.next)
+      for (uv = thread->openupval; uv != NULL; uv = uv->opennext)
       {
         lua_assert(getage(uv) <= getage(thread));
         if (!iswhite(uv))
         { /* upvalue already visited? */
           lua_assert(upisopen(uv) && isgray(uv));
-          markvalue(g, uv->v.p); /* mark its value */
+          markvalue(g, uv->p); /* mark its value */
         }
       }
     }
@@ -742,7 +742,7 @@ static l_mem traversethread(global_State* g, lua_State* th)
              th->openupval == NULL || isintwups(th));
   for (; o < th->top; o++) /* mark live elements in the stack */
     markvalue(g, s2v(th, o));
-  for (uv = th->openupval; uv != NULL; uv = uv->u.open.next)
+  for (uv = th->openupval; uv != NULL; uv = uv->opennext)
     markobject(g, uv); /* open upvalues cannot be collected */
   if (g->gcstate == GCSatomic)
   { /* final traversal? */

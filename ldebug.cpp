@@ -805,7 +805,7 @@ static const char* getupvalname(lua_State* L, CallInfo* ci, const TValue* o,
   int i;
   for (i = 0; i < c->nupvalues; i++)
   {
-    if (c->upvals[i]->v.p == o)
+    if (c->upvals[i]->p == o)
     {
       *name = upvalname(c->p, i);
       return strupval;

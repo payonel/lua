@@ -17,10 +17,10 @@
 */
 #define MAXUPVAL 255
 
-#define upisopen(up) ((up)->v.p != &(up)->u.value)
+#define upisopen(up) ((up)->previous != NULL)
 
-/* Get the stack index for an open upvalue (requires L) */
-#define uplevel(L, up) check_exp(upisopen(up), cast(StkId, reinterpret_cast<StackValue*>((up)->v.p) - (L)->stack.p))
+/* Get the stack index for an open upvalue */
+#define uplevel(up) check_exp(upisopen(up), (up)->stkid)
 
 /*
 ** maximum number of misses before giving up the cache of closures

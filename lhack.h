@@ -14,9 +14,6 @@
 /* get a chance to test code without jump tables */
 #define LUA_USE_JUMPTABLE 0
 
-/* test stack reallocation without strict address use */
-#define LUAI_STRICT_ADDRESS 0
-
 /* memory-allocator control variables */
 typedef struct Memcontrol
 {
@@ -80,20 +77,6 @@ LUA_API Memcontrol l_memcontrol;
 ** and compatible compilers.
 */
 #define LUA_USE_JUMPTABLE 1
-
-/*
-** In ISO C, any pointer use after the pointer has been deallocated is
-** undefined behavior. So, before a stack reallocation, all pointers
-** should be changed to offsets, and after the reallocation they should
-** be changed back to pointers. As during the reallocation the pointers
-** are invalid, the reallocation cannot run emergency collections.
-** Alternatively, we can use the old address after the deallocation.
-** That is not strict ISO C, but seems to work fine everywhere.
-** The following macro chooses how strict is the code.
-*/
-#if !defined(LUAI_STRICT_ADDRESS)
-#define LUAI_STRICT_ADDRESS 1
-#endif
 
 /*
 ** these macros allow user-specific actions when a thread is
