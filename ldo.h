@@ -72,10 +72,10 @@ LUAI_FUNC int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
 LUAI_FUNC CallInfo* luaD_precall(lua_State* L, StkId func, int nResults);
 LUAI_FUNC void luaD_call(lua_State* L, StkId func, int nResults);
 LUAI_FUNC void luaD_callnoyield(lua_State* L, StkId func, int nResults);
-LUAI_FUNC TStatus luaD_closeprotected(lua_State* L, ptrdiff_t level,
+LUAI_FUNC TStatus luaD_closeprotected(lua_State* L, StkId level,
                                       TStatus status);
 LUAI_FUNC TStatus luaD_pcall(lua_State* L, Pfunc func, void* u,
-                             ptrdiff_t oldtop, ptrdiff_t ef);
+                             StkId oldtop, StkId ef);
 LUAI_FUNC void luaD_poscall(lua_State* L, CallInfo* ci, int nres);
 LUAI_FUNC int luaD_reallocstack(lua_State* L, int newsize, int raiseerror);
 LUAI_FUNC int luaD_growstack(lua_State* L, int n, int raiseerror);

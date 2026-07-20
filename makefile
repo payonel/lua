@@ -49,7 +49,7 @@ LDFLAGS       =-Wl,-E -lm -ldl -fuse-ld=lld
 AR            =ar rc
 RANLIB        =ranlib
 RM            =rm -f
-CXX           = g++-14
+CXX           = g++
 
 LUA_O         =$(OBJ_DIR)/lua.o
 CORE_T        =$(OBJ_DIR)/liblua.a

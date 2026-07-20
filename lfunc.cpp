@@ -239,7 +239,7 @@ static void poptbclist(lua_State* L)
 */
 StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy)
 {
-  ptrdiff_t levelrel = savestack(L, level);
+  StkId levelrel = savestack(L, level);
   luaF_closeupval(L, level); /* first, close the upvalues */
   while (L->tbclist >= level)
   {                                       /* traverse tbc's down to that level */

@@ -999,7 +999,7 @@ static void closepaux(lua_State* L, void* ud)
 ** Calls 'luaF_close' in protected mode. Return the original status
 ** or, in case of errors, the new status.
 */
-TStatus luaD_closeprotected(lua_State* L, ptrdiff_t level, TStatus status)
+TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status)
 {
   CallInfo* old_ci = L->ci;
   lu_byte old_allowhooks = L->allowhook;
@@ -1024,13 +1024,13 @@ TStatus luaD_closeprotected(lua_State* L, ptrdiff_t level, TStatus status)
 ** thread information ('allowhook', etc.) and in particular
 ** its stack level in case of errors.
 */
-TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, ptrdiff_t old_top,
-                   ptrdiff_t ef)
+TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId old_top,
+                   StkId ef)
 {
   TStatus status;
   CallInfo* old_ci = L->ci;
   lu_byte old_allowhooks = L->allowhook;
-  ptrdiff_t old_errfunc = L->errfunc;
+  StkId old_errfunc = L->errfunc;
   L->errfunc = ef;
   status = luaD_rawrunprotected(L, func, u);
   if (l_unlikely(status != LUA_OK))
@@ -1078,7 +1078,7 @@ static void f_parser(lua_State* L, void* ud)
   const char* mode = p->mode ? p->mode : "bt";
   int c;
   Table* anchor;
-  ptrdiff_t otop = savestack(L, L->top); /* original top */
+  StkId otop = savestack(L, L->top); /* original top */
   luaD_checkstack(L, 2);
   anchor = luaH_new(L);               /* create the anchor table */
   sethvalue2s(L, L->top++, anchor); /* anchor the anchor table */

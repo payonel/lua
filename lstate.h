@@ -172,7 +172,7 @@ struct CallInfo
     struct
     {                  /* only for C functions */
       lua_KFunction k; /* continuation in case of yields */
-      ptrdiff_t old_errfunc;
+      StkId old_errfunc;
       lua_KContext ctx; /* context info. in case of yields */
     } c;
   } u;
@@ -265,7 +265,7 @@ struct lua_State
   struct lua_longjmp* errorJmp; /* current error recover point */
   CallInfo base_ci;             /* CallInfo for first level (C host) */
   volatile lua_Hook hook;
-  ptrdiff_t errfunc; /* current error handling function (stack index) */
+  StkId errfunc; /* current error handling function (stack index) */
   l_uint32 nCcalls;  /* number of nested non-yieldable or C calls */
   int oldpc;         /* last pc traced */
   int nci;           /* number of items in 'ci' list */

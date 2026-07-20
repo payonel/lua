@@ -179,14 +179,14 @@ LUA_API void lua_settop(lua_State* L, int idx)
 {
   CallInfo* ci;
   StkId func, newtop;
-  ptrdiff_t diff; /* difference for new top */
+  int diff; /* difference for new top */
   lua_lock(L);
   ci = L->ci;
   func = ci->func;
   if (idx >= 0)
   {
     api_check(L, cast(StkId, idx) <= ci->top - (func + 1), "new top too large");
-    diff = ((func + 1) + idx) - L->top;
+    diff = cast_int(((func + 1) + idx) - L->top);
     for (; diff > 0; diff--)
       setnilvalue2s(L, L->top++); /* clear new slots */
   }
@@ -1113,7 +1113,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
 {
   struct CallS c;
   TStatus status;
-  ptrdiff_t func;
+  StkId func;
   lua_lock(L);
   api_check(L, k == NULL || !isLua(L->ci),
             "cannot use continuations inside hooks");
@@ -1190,7 +1190,7 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
 LUA_API int lua_dump(lua_State* L, lua_Writer writer, void* data, int strip)
 {
   int status;
-  ptrdiff_t otop = savestack(L, L->top); /* original top */
+  StkId otop = savestack(L, L->top); /* original top */
   TValue* f = s2v(L, L->top - 1);           /* function to be dumped */
   lua_lock(L);
   api_checkpop(L, 1);
