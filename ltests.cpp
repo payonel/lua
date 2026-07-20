@@ -504,7 +504,7 @@ static void checkLclosure(global_State* g, LClosure* cl)
     {
       checkobjrefN(g, clgc, uv);
       if (!upisopen(uv))
-        checkvalref(g, obj2gco(uv), uv->p);
+        checkvalref(g, obj2gco(uv), upvalval(uv));
     }
   }
 }
@@ -557,7 +557,7 @@ static void checkrefs(global_State* g, GCObject* o)
   }
   case LUA_VUPVAL:
   {
-    checkvalref(g, o, gco2upv(o)->p);
+    checkvalref(g, o, upvalval(gco2upv(o)));
     break;
   }
   case LUA_VTABLE:

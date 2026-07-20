@@ -364,7 +364,7 @@ static void reallymarkobject(global_State* g, GCObject* o)
       set2gray(uv); /* open upvalues are kept gray */
     else
       set2black(uv);        /* closed upvalues are visited here */
-    markvalue(g, uv->p); /* mark its content */
+    markvalue(g, upvalval(uv)); /* mark its content */
     break;
   }
   case LUA_VUSERDATA:
@@ -444,7 +444,7 @@ static void remarkupvals(global_State* g)
         if (!iswhite(uv))
         { /* upvalue already visited? */
           lua_assert(upisopen(uv) && isgray(uv));
-          markvalue(g, uv->p); /* mark its value */
+          markvalue(g, upvalval(uv)); /* mark its value */
         }
       }
     }

@@ -211,9 +211,7 @@ int luaD_checkminstack(lua_State* L)
 
 static void correctstack(lua_State* L)
 {
-  UpVal* up;
-  for (up = L->openupval; up != NULL; up = up->opennext)
-    up->p = s2v(L, up->stkid);
+  /* upvalues hold stack indices, not pointers: nothing to correct there */
   for (CallInfo* ci = L->ci; ci != NULL; ci = ci->previous)
   {
     if (isLua(ci))

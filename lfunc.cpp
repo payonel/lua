@@ -48,11 +48,11 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
   {
     GCObject* o = luaC_newobj(L, LUA_VUPVAL, sizeof(UpVal));
     UpVal* uv = gco2upv(o);
-    uv->p = &uv->value;   /* point to own storage (closed) */
     uv->opennext = NULL;
     uv->previous = NULL;     /* NULL = closed */
+    uv->owner = NULL;
     uv->stkid = 0;
-    setnilvalue(uv->p);
+    setnilvalue(&uv->value); /* closed: value lives in own storage */
     cl->upvals[i] = uv;
     luaC_objbarrier(L, cl, uv);
   }
@@ -67,7 +67,7 @@ static UpVal* newupval(lua_State* L, StkId level, UpVal** prev)
   GCObject* o = luaC_newobj(L, LUA_VUPVAL, sizeof(UpVal));
   UpVal* uv = gco2upv(o);
   UpVal* next = *prev;
-  uv->p = s2v(L, level);   /* current value lives in the stack */
+  uv->owner = L;           /* current value lives in this thread's stack */
   uv->stkid = level;
   uv->opennext = next;        /* link it to list of open upvalues */
   uv->previous = prev;
@@ -208,10 +208,10 @@ void luaF_closeupval(lua_State* L, StkId level)
     TValue* slot = &uv->value; /* new position for value */
     lua_assert(uplevel(uv) < L->top);
     luaF_unlinkupval(uv);       /* remove upvalue from 'openupval' list */
-    setobj(L, slot, uv->p);  /* move value to upvalue slot */
-    uv->p = slot;            /* now current value lives here */
+    setobj(L, slot, s2v(L, uv->stkid)); /* move value to upvalue slot */
     uv->previous = NULL;        /* mark as closed */
     uv->opennext = NULL;
+    uv->owner = NULL;
     if (!iswhite(uv))
     {               /* neither white nor dead? */
       nw2black(uv); /* closed upvalues cannot be gray */

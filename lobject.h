@@ -652,8 +652,8 @@ typedef struct UpVal
   CommonHeader;
   struct UpVal* opennext;    /* next in open list (NULL when closed) */
   struct UpVal** previous;   /* back-pointer in open list (NULL when closed) */
-  TValue* p;              /* points to stack slot (open) or &value (closed) */
-  StkId stkid;              /* stack index when open (for correctstack) */
+  struct lua_State* owner;   /* thread whose stack holds the value (when open) */
+  StkId stkid;              /* stack index in 'owner' when open */
   TValue value;             /* embedded storage for closed-over value */
 } UpVal;
 

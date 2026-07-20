@@ -1412,21 +1412,21 @@ returning: /* trap already set */
       {
         StkId ra = RA(i);
         int b = GETARG_B(i);
-        setobj2s(L, ra, cl->upvals[b]->p);
+        setobj2s(L, ra, upvalval(cl->upvals[b]));
         vmbreak;
       }
       vmcase(OP_SETUPVAL)
       {
         StkId ra = RA(i);
         UpVal* uv = cl->upvals[GETARG_B(i)];
-        setobj(L, uv->p, s2v(L, ra));
+        setobj(L, upvalval(uv), s2v(L, ra));
         luaC_barrier(L, uv, s2v(L, ra));
         vmbreak;
       }
       vmcase(OP_GETTABUP)
       {
         StkId ra = RA(i);
-        TValue* upval = cl->upvals[GETARG_B(i)]->p;
+        TValue* upval = upvalval(cl->upvals[GETARG_B(i)]);
         TValue* rc = KC(i);
         TString* key = tsvalue(rc); /* key must be a short string */
         lu_byte tag;
@@ -1481,7 +1481,7 @@ returning: /* trap already set */
       vmcase(OP_SETTABUP)
       {
         int hres;
-        TValue* upval = cl->upvals[GETARG_A(i)]->p;
+        TValue* upval = upvalval(cl->upvals[GETARG_A(i)]);
         TValue* rb = KB(i);
         TValue* rc = RKC(i);
         TString* key = tsvalue(rb); /* key must be a short string */

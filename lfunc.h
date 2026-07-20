@@ -23,6 +23,12 @@
 #define uplevel(up) check_exp(upisopen(up), (up)->stkid)
 
 /*
+** Current location of an upvalue's value: a slot in the owner
+** thread's stack while open, its own embedded storage when closed.
+*/
+#define upvalval(uv) (upisopen(uv) ? s2v((uv)->owner, (uv)->stkid) : &(uv)->value)
+
+/*
 ** maximum number of misses before giving up the cache of closures
 ** in prototypes
 */
