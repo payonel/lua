@@ -233,7 +233,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
 {
   if ((k1)->tt_ != keytt(n2))
   { /* not the same variants? */
-    if (keyisshrstr(n2) && ttislngstring(k1))
+    if (keyisshrstr(n2) && (((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
     {
       /* an external string can be equal to a short-string key */
       return luaS_eqstr(tsvalue(k1), keystrval(n2));
@@ -319,7 +319,7 @@ static unsigned checkrange(lua_Integer k, unsigned limit)
 */
 static unsigned keyinarray(Table* t, const TValue* key)
 {
-  return (ttisinteger(key)) ? ikeyinarray(t, ivalue(key)) : 0;
+  return (((key)->tt_ == LUA_VNUMINT)) ? ikeyinarray(t, ivalue(key)) : 0;
 }
 
 /*
@@ -331,7 +331,7 @@ static unsigned findindex(lua_State* L, Table* t, TValue* key,
                           unsigned asize)
 {
   unsigned int i;
-  if (ttisnil(key))
+  if ((((key)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
     return 0; /* first iteration */
   i = keyinarray(t, key);
   if (i != 0) /* is 'key' inside array part? */
@@ -781,7 +781,7 @@ static void rehash(lua_State* L, Table* t, const TValue* ek)
   ct.na = 0;
   ct.deleted = 0;
   ct.total = 1; /* count extra key */
-  if (ttisinteger(ek))
+  if (((ek)->tt_ == LUA_VNUMINT))
     countint(ivalue(ek), &ct); /* extra key may go to array */
   numusehash(t, &ct);          /* count keys in hash part */
   if (ct.na == 0)
@@ -937,7 +937,7 @@ static void newcheckedkey(Table* t, const TValue* key, TValue* value)
 static void luaH_newkey(lua_State* L, Table* t, const TValue* key,
                         TValue* value)
 {
-  if (!ttisnil(value))
+  if (!(((value)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   { /* do not insert nil values */
     int done = insertkey(t, key, value);
     if (!done)
@@ -978,7 +978,7 @@ static int hashkeyisempty(Table* t, lua_Unsigned key)
 
 static lu_byte finishnodeget(const TValue* val, TValue* res)
 {
-  if (!ttisnil(val))
+  if (!(((val)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {
     setobj(((lua_State*) NULL), res, val);
   }
@@ -1078,7 +1078,7 @@ static int retpsetcode(Table* t, const TValue* slot)
 
 static int finishnodeset(Table* t, const TValue* slot, TValue* val)
 {
-  if (!ttisnil(slot))
+  if (!(((slot)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {
     setobj(((lua_State*) NULL), cast(TValue*, slot), val);
     return HOK; /* success */
@@ -1122,14 +1122,14 @@ static int psetint(Table* t, lua_Integer key, TValue* val)
 int luaH_psetshortstr(Table* t, TString* key, TValue* val)
 {
   const TValue* slot = luaH_Hgetshortstr(t, key);
-  if (!ttisnil(slot))
+  if (!(((slot)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                                        /* key already has a value? (all too common) */
     setobj(((lua_State*) NULL), cast(TValue*, slot), val); /* update it */
     return HOK;                                            /* done */
   }
   else if (checknoTM(t->metatable, TM_NEWINDEX))
   {                        /* no metamethod? */
-    if (ttisnil(val))      /* new value is nil? */
+    if ((((val)->tt_ & NOVARIANT_MASK) == LUA_TNIL))      /* new value is nil? */
       return HOK;          /* done (value is already nil/absent) */
     if (isabstkey(slot) && /* key is absent? */
         !(isblack(t) && iswhite(key)))
@@ -1190,9 +1190,9 @@ void luaH_finishset(lua_State* L, Table* t, const TValue* key,
   {
     TValue aux;
     const TValue* actk = key; /* actual key to insert */
-    if (l_unlikely(ttisnil(key)))
+    if (l_unlikely((((key)->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
       luaG_runerror(L, "table index is nil");
-    else if (ttisfloat(key))
+    else if (((key)->tt_ == LUA_VNUMFLT))
     {
       lua_Number f = fltvalue(key);
       lua_Integer k;

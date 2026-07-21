@@ -259,14 +259,14 @@ static int read_numeral(LexState* ls, SemInfo* seminfo)
   save(ls, '\0');
   if (luaO_str2num(luaZ_buffer(ls->buff), &obj) == 0) /* format error? */
     lexerror(ls, "malformed number", TK_FLT);
-  if (ttisinteger(&obj))
+  if (((&obj)->tt_ == LUA_VNUMINT))
   {
     seminfo->i = ivalue(&obj);
     return TK_INT;
   }
   else
   {
-    lua_assert(ttisfloat(&obj));
+    lua_assert(((&obj)->tt_ == LUA_VNUMFLT));
     seminfo->r = fltvalue(&obj);
     return TK_FLT;
   }

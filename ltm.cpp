@@ -88,11 +88,11 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
 const char* luaT_objtypename(lua_State* L, const TValue* o)
 {
   Table* mt;
-  if ((ttistable(o) && (mt = hvalue(o)->metatable) != NULL) ||
-      (ttisfulluserdata(o) && (mt = uvalue(o)->metatable) != NULL))
+  if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != NULL) ||
+      (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = uvalue(o)->metatable) != NULL))
   {
     const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, "__name"));
-    if (ttisstring(name))           /* is '__name' a string? */
+    if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
       return getstr(tsvalue(name)); /* use it as type name */
   }
   return ttypename((o->tt_ & NOVARIANT_MASK)); /* else use standard type name */
@@ -159,7 +159,7 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
     case TM_SHR:
     case TM_BNOT:
     {
-      if (ttisnumber(p1) && ttisnumber(p2))
+      if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((p2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
         luaG_tointerror(L, p1, p2);
       else
         luaG_opinterror(L, p1, p2, "perform bitwise operation on");
@@ -314,7 +314,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
       return;
     }
   }
-  else if (ttisstring(rc))
+  else if ((((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   { /* string value? */
     size_t len;
     const char* s = getlstr(tsvalue(rc), len);

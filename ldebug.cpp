@@ -234,7 +234,7 @@ LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
   lua_lock(L);
   if (ar == NULL)
   {                                      /* information about non-active function? */
-    if (!isLfunction(s2v(L, L->top - 1))) /* not a Lua function? */
+    if (!((s2v(L, L->top - 1))->tt_ == ctb(LUA_VLCL))) /* not a Lua function? */
       name = NULL;
     else /* consider live variables at function start (parameters) */
       name = luaF_getlocalname(clLvalue(s2v(L, L->top - 1))->p, n, 0);
@@ -441,7 +441,7 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   {
     ci = NULL;
     func = s2v(L, L->top - 1);
-    api_check(L, ttisfunction(func), "function expected");
+    api_check(L, (((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION), "function expected");
     what++;     /* skip the '>' */
     L->top--; /* pop function */
   }
@@ -449,9 +449,9 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   {
     ci = ar->i_ci;
     func = s2v(L, ci->func);
-    lua_assert(ttisfunction(func));
+    lua_assert((((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
   }
-  cl = ttisclosure(func) ? clvalue(func) : NULL;
+  cl = ((func)->tt_ == ctb(LUA_VLCL) || (func)->tt_ == ctb(LUA_VCCL)) ? clvalue(func) : NULL;
   status = auxgetinfo(L, what, ar, cl, ci);
   if (strchr(what, 'f'))
   {
@@ -539,7 +539,7 @@ static int findsetreg(const Proto* p, int lastpc, int reg)
 static const char* kname(const Proto* p, int index, const char** name)
 {
   TValue* kvalue = &p->k[index];
-  if (ttisstring(kvalue))
+  if ((((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   {
     *name = getstr(tsvalue(kvalue));
     return "constant";
@@ -886,7 +886,7 @@ l_noret luaG_forerror(lua_State* L, const TValue* o, const char* what)
 
 l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2)
 {
-  if (ttisstring(p1) || cvt2str(p1))
+  if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(p1))
     p1 = p2;
   luaG_typeerror(L, p1, "concatenate");
 }
@@ -894,7 +894,7 @@ l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2)
 l_noret luaG_opinterror(lua_State* L, const TValue* p1,
                         const TValue* p2, const char* msg)
 {
-  if (!ttisnumber(p1)) /* first operand is wrong? */
+  if (!(((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) /* first operand is wrong? */
     p2 = p1;           /* now second is wrong */
   luaG_typeerror(L, p2, msg);
 }
@@ -949,13 +949,13 @@ l_noret luaG_errormsg(lua_State* L)
   if (L->errfunc != 0)
   { /* is there an error handling function? */
     StkId errfunc = restorestack(L, L->errfunc);
-    lua_assert(ttisfunction(s2v(L, errfunc)));
+    lua_assert((((s2v(L, errfunc))->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
     setobjs2s(L, L->top, L->top - 1); /* move argument */
     setobjs2s(L, L->top - 1, errfunc);  /* push function */
     L->top++;                           /* assume EXTRA_STACK */
     luaD_callnoyield(L, L->top - 2, 1); /* call it */
   }
-  if (ttisnil(s2v(L, L->top - 1)))
+  if ((((s2v(L, L->top - 1))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   { /* error object is nil? */
     /* change it to a proper message */
     setsvalue2s(L, L->top - 1, luaS_newliteral(L, "<no error object>"));

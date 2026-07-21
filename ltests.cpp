@@ -1035,7 +1035,7 @@ static int alloc_failnext(lua_State*)
 
 static int settrick(lua_State* L)
 {
-  if (ttisnil(obj_at(L, 1)))
+  if ((((obj_at(L, 1))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
     l_Trick = NULL;
   else
     l_Trick = gcvalue(obj_at(L, 1));
@@ -1238,8 +1238,8 @@ static int table_query(lua_State* L)
     TValue k;
     getnodekey(L, &k, gnode(t, i));
     if (!isempty(gval(gnode(t, i))) ||
-        ttisnil(&k) ||
-        ttisnumber(&k))
+        (((&k)->tt_ & NOVARIANT_MASK) == LUA_TNIL) ||
+        (((&k)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
     {
       pushobject(L, &k);
     }

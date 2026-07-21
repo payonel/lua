@@ -88,7 +88,7 @@ static int l_strton(const TValue* obj, TValue* result)
 int luaV_tonumber_(const TValue* obj, lua_Number* n)
 {
   TValue v;
-  if (ttisinteger(obj))
+  if (((obj)->tt_ == LUA_VNUMINT))
   {
     *n = cast_num(ivalue(obj));
     return 1;
@@ -125,9 +125,9 @@ int luaV_flttointeger(lua_Number n, lua_Integer* p, F2Imod mode)
 */
 int luaV_tointegerns(const TValue* obj, lua_Integer* p, F2Imod mode)
 {
-  if (ttisfloat(obj))
+  if (((obj)->tt_ == LUA_VNUMFLT))
     return luaV_flttointeger(fltvalue(obj), p, mode);
-  else if (ttisinteger(obj))
+  else if (((obj)->tt_ == LUA_VNUMINT))
   {
     *p = ivalue(obj);
     return 1;
@@ -206,7 +206,7 @@ static int forprep(lua_State* L, StkId ra)
   TValue* pinit = s2v(L, ra);
   TValue* plimit = s2v(L, ra + 1);
   TValue* pstep = s2v(L, ra + 2);
-  if (ttisinteger(pinit) && ttisinteger(pstep))
+  if (((pinit)->tt_ == LUA_VNUMINT) && ((pstep)->tt_ == LUA_VNUMINT))
   { /* integer loop? */
     lua_Integer init = ivalue(pinit);
     lua_Integer step = ivalue(pstep);
@@ -296,7 +296,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
   {
     if (tag == LUA_VNOTABLE)
     { /* 't' is not a table? */
-      lua_assert(!ttistable(t));
+      lua_assert(!((t)->tt_ == ctb(LUA_VTABLE)));
       tm = luaT_gettmbyobj(L, t, TM_INDEX);
       if (l_unlikely(notm(tm)))
         luaG_typeerror(L, t, "index"); /* no metamethod */
@@ -312,7 +312,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
       }
       /* else will try the metamethod */
     }
-    if (ttisfunction(tm))
+    if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION))
     {                                           /* is metamethod a function? */
       tag = luaT_callTMres(L, tm, t, key, val); /* call it */
       return tag;                               /* return tag of the result */
@@ -365,7 +365,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
         luaG_typeerror(L, t, "index");
     }
     /* try the metamethod */
-    if (ttisfunction(tm))
+    if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION))
     {
       luaT_callTM(L, tm, t, key, val);
       return;
@@ -511,11 +511,11 @@ l_sinline int LEfloatint(lua_Number f, lua_Integer i)
 */
 l_sinline int LTnum(const TValue* l, const TValue* r)
 {
-  lua_assert(ttisnumber(l) && ttisnumber(r));
-  if (ttisinteger(l))
+  lua_assert((((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  if (((l)->tt_ == LUA_VNUMINT))
   {
     lua_Integer li = ivalue(l);
-    if (ttisinteger(r))
+    if (((r)->tt_ == LUA_VNUMINT))
       return li < ivalue(r);              /* both are integers */
     else                                  /* 'l' is int and 'r' is float */
       return LTintfloat(li, fltvalue(r)); /* l < r ? */
@@ -523,7 +523,7 @@ l_sinline int LTnum(const TValue* l, const TValue* r)
   else
   {
     lua_Number lf = fltvalue(l); /* 'l' must be float */
-    if (ttisfloat(r))
+    if (((r)->tt_ == LUA_VNUMFLT))
       return luai_numlt(lf, fltvalue(r)); /* both are float */
     else                                  /* 'l' is float and 'r' is int */
       return LTfloatint(lf, ivalue(r));
@@ -535,11 +535,11 @@ l_sinline int LTnum(const TValue* l, const TValue* r)
 */
 l_sinline int LEnum(const TValue* l, const TValue* r)
 {
-  lua_assert(ttisnumber(l) && ttisnumber(r));
-  if (ttisinteger(l))
+  lua_assert((((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  if (((l)->tt_ == LUA_VNUMINT))
   {
     lua_Integer li = ivalue(l);
-    if (ttisinteger(r))
+    if (((r)->tt_ == LUA_VNUMINT))
       return li <= ivalue(r);             /* both are integers */
     else                                  /* 'l' is int and 'r' is float */
       return LEintfloat(li, fltvalue(r)); /* l <= r ? */
@@ -547,7 +547,7 @@ l_sinline int LEnum(const TValue* l, const TValue* r)
   else
   {
     lua_Number lf = fltvalue(l); /* 'l' must be float */
-    if (ttisfloat(r))
+    if (((r)->tt_ == LUA_VNUMFLT))
       return luai_numle(lf, fltvalue(r)); /* both are float */
     else                                  /* 'l' is float and 'r' is int */
       return LEfloatint(lf, ivalue(r));
@@ -559,8 +559,8 @@ l_sinline int LEnum(const TValue* l, const TValue* r)
 */
 static int lessthanothers(lua_State* L, const TValue* l, const TValue* r)
 {
-  lua_assert(!ttisnumber(l) || !ttisnumber(r));
-  if (ttisstring(l) && ttisstring(r)) /* both are strings? */
+  lua_assert(!(((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) || !(((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  if ((((l)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TSTRING)) /* both are strings? */
     return l_strcmp(tsvalue(l), tsvalue(r)) < 0;
   else
     return luaT_callorderTM(L, l, r, TM_LT);
@@ -571,7 +571,7 @@ static int lessthanothers(lua_State* L, const TValue* l, const TValue* r)
 */
 int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r)
 {
-  if (ttisnumber(l) && ttisnumber(r)) /* both operands are numbers? */
+  if ((((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) /* both operands are numbers? */
     return LTnum(l, r);
   else
     return lessthanothers(L, l, r);
@@ -582,8 +582,8 @@ int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r)
 */
 static int lessequalothers(lua_State* L, const TValue* l, const TValue* r)
 {
-  lua_assert(!ttisnumber(l) || !ttisnumber(r));
-  if (ttisstring(l) && ttisstring(r)) /* both are strings? */
+  lua_assert(!(((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) || !(((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  if ((((l)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TSTRING)) /* both are strings? */
     return l_strcmp(tsvalue(l), tsvalue(r)) <= 0;
   else
     return luaT_callorderTM(L, l, r, TM_LE);
@@ -594,7 +594,7 @@ static int lessequalothers(lua_State* L, const TValue* l, const TValue* r)
 */
 int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r)
 {
-  if (ttisnumber(l) && ttisnumber(r)) /* both operands are numbers? */
+  if ((((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) /* both operands are numbers? */
     return LEnum(l, r);
   else
     return lessequalothers(L, l, r);
@@ -691,14 +691,14 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
 }
 
 /* macro used by 'luaV_concat' to ensure that element at 'o' is a string */
-#define tostring(L, o) (ttisstring(o) || (cvt2str(o) && (luaO_tostring(L, o), 1)))
+#define tostring(L, o) ((((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) || (cvt2str(o) && (luaO_tostring(L, o), 1)))
 
 /*
 ** Check whether object is a short empty string to optimize concatenation.
 ** (External strings can be empty too; they will be concatenated like
 ** non-empty ones.)
 */
-#define isemptystr(o) (ttisstring(o) && tsslen(tsvalue(o)) == 0)
+#define isemptystr(o) ((((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) && tsslen(tsvalue(o)) == 0)
 
 /* copy strings in stack from top - n up to top - 1 to buffer */
 static void copy2buff(lua_State* L, StkId top, int n, char* buff)
@@ -726,7 +726,7 @@ void luaV_concat(lua_State* L, int total)
   {
     StkId top = L->top;
     int n = 2; /* number of elements handled in this pass (at least 2) */
-    if (!(ttisstring(s2v(L, top - 2)) || cvt2str(s2v(L, top - 2))) ||
+    if (!((((s2v(L, top - 2))->tt_ & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(s2v(L, top - 2))) ||
         !tostring(L, s2v(L, top - 1)))
       luaT_tryconcatTM(L);                  /* may invalidate 'top' */
     else if (isemptystr(s2v(L, top - 1)))      /* second operand is empty? */
@@ -1018,13 +1018,13 @@ void luaV_finishOp(lua_State* L)
     TValue* ra = vRA(i);                 \
     TValue* v1 = vRB(i);                 \
     int imm = GETARG_sC(i);              \
-    if (ttisinteger(v1))                 \
+    if (((v1)->tt_ == LUA_VNUMINT))                 \
     {                                    \
       lua_Integer iv1 = ivalue(v1);      \
       pc++;                              \
       setivalue(ra, iop(L, iv1, imm));   \
     }                                    \
-    else if (ttisfloat(v1))              \
+    else if (((v1)->tt_ == LUA_VNUMFLT))              \
     {                                    \
       lua_Number nb = fltvalue(v1);      \
       lua_Number fimm = cast_num(imm);   \
@@ -1066,7 +1066,7 @@ void luaV_finishOp(lua_State* L)
   {                                \
     TValue* v1 = vRB(i);           \
     TValue* v2 = KC(i);            \
-    lua_assert(ttisnumber(v2));    \
+    lua_assert((((v2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));    \
     op_arithf_aux(L, v1, v2, fop); \
   }
 
@@ -1075,7 +1075,7 @@ void luaV_finishOp(lua_State* L)
 */
 #define op_arith_aux(L, v1, v2, iop, fop)   \
   {                                         \
-    if (ttisinteger(v1) && ttisinteger(v2)) \
+    if (((v1)->tt_ == LUA_VNUMINT) && ((v2)->tt_ == LUA_VNUMINT)) \
     {                                       \
       StkId ra = RA(i);                     \
       lua_Integer i1 = ivalue(v1);          \
@@ -1104,7 +1104,7 @@ void luaV_finishOp(lua_State* L)
   {                                    \
     TValue* v1 = vRB(i);               \
     TValue* v2 = KC(i);                \
-    lua_assert(ttisnumber(v2));        \
+    lua_assert((((v2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));        \
     op_arith_aux(L, v1, v2, iop, fop); \
   }
 
@@ -1152,13 +1152,13 @@ void luaV_finishOp(lua_State* L)
     TValue* ra = vRA(i);                       \
     int cond;                                  \
     TValue* rb = vRB(i);                       \
-    if (ttisinteger(ra) && ttisinteger(rb))    \
+    if (((ra)->tt_ == LUA_VNUMINT) && ((rb)->tt_ == LUA_VNUMINT))    \
     {                                          \
       lua_Integer ia = ivalue(ra);             \
       lua_Integer ib = ivalue(rb);             \
       cond = opi(ia, ib);                      \
     }                                          \
-    else if (ttisnumber(ra) && ttisnumber(rb)) \
+    else if ((((ra)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((rb)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) \
       cond = opn(ra, rb);                      \
     else                                       \
       Protect(cond = other(L, ra, rb));        \
@@ -1174,9 +1174,9 @@ void luaV_finishOp(lua_State* L)
     TValue* ra = vRA(i);                                          \
     int cond;                                                     \
     int im = GETARG_sB(i);                                        \
-    if (ttisinteger(ra))                                          \
+    if (((ra)->tt_ == LUA_VNUMINT))                                          \
       cond = opi(ivalue(ra), im);                                 \
-    else if (ttisfloat(ra))                                       \
+    else if (((ra)->tt_ == LUA_VNUMFLT))                                       \
     {                                                             \
       lua_Number fa = fltvalue(ra);                               \
       lua_Number fim = cast_num(im);                              \
@@ -1441,7 +1441,7 @@ returning: /* trap already set */
         TValue* rb = vRB(i);
         TValue* rc = vRC(i);
         lu_byte tag;
-        if (ttisinteger(rc))
+        if (((rc)->tt_ == LUA_VNUMINT))
         { /* fast track for integers? */
           luaV_fastgeti(rb, ivalue(rc), s2v(L, ra), tag);
         }
@@ -1498,7 +1498,7 @@ returning: /* trap already set */
         int hres;
         TValue* rb = vRB(i); /* key (table is in 'ra') */
         TValue* rc = RKC(i); /* value */
-        if (ttisinteger(rb))
+        if (((rb)->tt_ == LUA_VNUMINT))
         { /* fast track for integers? */
           luaV_fastseti(s2v(L, ra), ivalue(rb), rc, hres);
         }
@@ -1762,7 +1762,7 @@ returning: /* trap already set */
         StkId ra = RA(i);
         TValue* rb = vRB(i);
         lua_Number nb;
-        if (ttisinteger(rb))
+        if (((rb)->tt_ == LUA_VNUMINT))
         {
           lua_Integer ib = ivalue(rb);
           setivalue(s2v(L, ra), intop(-, 0, ib));
@@ -1865,9 +1865,9 @@ returning: /* trap already set */
         StkId ra = RA(i);
         int cond;
         int im = GETARG_sB(i);
-        if (ttisinteger(s2v(L, ra)))
+        if (((s2v(L, ra))->tt_ == LUA_VNUMINT))
           cond = (ivalue(s2v(L, ra)) == im);
-        else if (ttisfloat(s2v(L, ra)))
+        else if (((s2v(L, ra))->tt_ == LUA_VNUMFLT))
           cond = luai_numeq(fltvalue(s2v(L, ra)), cast_num(im));
         else
           cond = 0; /* other types cannot be equal to a number */
@@ -2043,7 +2043,7 @@ returning: /* trap already set */
       vmcase(OP_FORLOOP)
       {
         StkId ra = RA(i);
-        if (ttisinteger(s2v(L, ra + 1)))
+        if (((s2v(L, ra + 1))->tt_ == LUA_VNUMINT))
         { /* integer loop? */
           lua_Unsigned count = l_castS2U(ivalue(s2v(L, ra)));
           if (count > 0)
@@ -2116,7 +2116,7 @@ returning: /* trap already set */
       l_tforloop:
       {
         StkId ra = RA(i);
-        if (!ttisnil(s2v(L, ra + 3))) /* continue loop? */
+        if (!(((s2v(L, ra + 3))->tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* continue loop? */
           pc -= GETARG_Bx(i);      /* jump back */
         vmbreak;
       }
@@ -2179,7 +2179,7 @@ returning: /* trap already set */
       vmcase(OP_ERRNNIL)
       {
         TValue* ra = vRA(i);
-        if (!ttisnil(ra))
+        if (!(((ra)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
           halfProtect(luaG_errnnil(L, cl, GETARG_Bx(i)));
         vmbreak;
       }

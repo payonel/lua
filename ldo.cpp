@@ -98,7 +98,7 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
   else
   {
     lua_assert(errorstatus(errcode));        /* must be a real error */
-    lua_assert(!ttisnil(s2v(L, L->top - 1))); /* with a non-nil object */
+    lua_assert(!(((s2v(L, L->top - 1))->tt_ & NOVARIANT_MASK) == LUA_TNIL)); /* with a non-nil object */
     setobjs2s(L, oldtop, L->top - 1);      /* move it to 'oldtop' */
   }
   L->top = oldtop + 1; /* top goes back to old top plus error object */
@@ -440,7 +440,7 @@ static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
   const TValue* tm;
   StkId p;
   tm = luaT_gettmbyobj(L, s2v(L, func), TM_CALL);
-  if (l_unlikely(ttisnil(tm))) /* no metamethod? */
+  if (l_unlikely((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))) /* no metamethod? */
     luaG_callerror(L, s2v(L, func));
   for (p = L->top; p > func; p--) /* open space for metamethod */
     setobjs2s(L, p, p - 1);

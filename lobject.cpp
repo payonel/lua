@@ -219,7 +219,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   { /* other operations */
     lua_Number n1;
     lua_Number n2;
-    if (ttisinteger(p1) && ttisinteger(p2))
+    if (((p1)->tt_ == LUA_VNUMINT) && ((p2)->tt_ == LUA_VNUMINT))
     {
       setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
       return 1;
@@ -535,8 +535,8 @@ static int tostringbuffFloat(lua_Number n, char* buff)
 unsigned luaO_tostringbuff(const TValue* obj, char* buff)
 {
   int len;
-  lua_assert(ttisnumber(obj));
-  if (ttisinteger(obj))
+  lua_assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  if (((obj)->tt_ == LUA_VNUMINT))
     len = lua_integer2str(buff, LUA_N2SBUFFSZ, ivalue(obj));
   else
     len = tostringbuffFloat(fltvalue(obj), buff);

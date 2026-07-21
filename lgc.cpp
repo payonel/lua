@@ -629,7 +629,7 @@ static void traversestrongtable(global_State* g, Table* h)
 static int getmode(global_State* g, Table* h)
 {
   const TValue* mode = gfasttm(g, h->metatable, TM_MODE);
-  if (mode == NULL || !ttisstring(mode))
+  if (mode == NULL || !(((mode)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
     return 0; /* ignore non-string modes */
   else
   {

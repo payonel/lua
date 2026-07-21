@@ -11,12 +11,12 @@
 #include "ltm.h"
 
 #if !defined(LUA_NOCVTN2S)
-#define cvt2str(o) ttisnumber(o)
+#define cvt2str(o) (((o)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)
 #else
 #define cvt2str(o) 0 /* no conversion from numbers to strings */
 #endif
 
-#define cvt2num(o) ttisstring(o)
+#define cvt2num(o) (((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING)
 
 /*
 ** You can define LUA_FLOORN2I if you want to convert floats to integers
@@ -38,16 +38,16 @@ typedef enum
 } F2Imod;
 
 /* convert an object to a float (including string coercion) */
-#define tonumber(o, n) (ttisfloat(o) ? (*(n) = fltvalue(o), 1) : luaV_tonumber_(o, n))
+#define tonumber(o, n) (((o)->tt_ == LUA_VNUMFLT) ? (*(n) = fltvalue(o), 1) : luaV_tonumber_(o, n))
 
 /* convert an object to a float (without string coercion) */
-#define tonumberns(o, n) (ttisfloat(o) ? ((n) = fltvalue(o), 1) : (ttisinteger(o) ? ((n) = cast_num(ivalue(o)), 1) : 0))
+#define tonumberns(o, n) (((o)->tt_ == LUA_VNUMFLT) ? ((n) = fltvalue(o), 1) : (((o)->tt_ == LUA_VNUMINT) ? ((n) = cast_num(ivalue(o)), 1) : 0))
 
 /* convert an object to an integer (including string coercion) */
-#define tointeger(o, i) (l_likely(ttisinteger(o)) ? (*(i) = ivalue(o), 1) : luaV_tointeger(o, i, LUA_FLOORN2I))
+#define tointeger(o, i) (l_likely(((o)->tt_ == LUA_VNUMINT)) ? (*(i) = ivalue(o), 1) : luaV_tointeger(o, i, LUA_FLOORN2I))
 
 /* convert an object to an integer (without string coercion) */
-#define tointegerns(o, i) (l_likely(ttisinteger(o)) ? (*(i) = ivalue(o), 1) : luaV_tointegerns(o, i, LUA_FLOORN2I))
+#define tointegerns(o, i) (l_likely(((o)->tt_ == LUA_VNUMINT)) ? (*(i) = ivalue(o), 1) : luaV_tointegerns(o, i, LUA_FLOORN2I))
 
 #define intop(op, v1, v2) l_castU2S(l_castS2U(v1) op l_castS2U(v2))
 
@@ -56,24 +56,24 @@ typedef enum
 /*
 ** fast track for 'gettable'
 */
-#define luaV_fastget(t, k, res, f, tag) (tag = (!ttistable(t) ? LUA_VNOTABLE : f(hvalue(t), k, res)))
+#define luaV_fastget(t, k, res, f, tag) (tag = (!((t)->tt_ == ctb(LUA_VTABLE)) ? LUA_VNOTABLE : f(hvalue(t), k, res)))
 
 /*
 ** Special case of 'luaV_fastget' for integers, inlining the fast case
 ** of 'luaH_getint'.
 */
 #define luaV_fastgeti(t, k, res, tag)      \
-  if (!ttistable(t))                       \
+  if (!((t)->tt_ == ctb(LUA_VTABLE)))                       \
     tag = LUA_VNOTABLE;                    \
   else                                     \
   {                                        \
     luaH_fastgeti(hvalue(t), k, res, tag); \
   }
 
-#define luaV_fastset(t, k, val, hres, f) (hres = (!ttistable(t) ? HNOTATABLE : f(hvalue(t), k, val)))
+#define luaV_fastset(t, k, val, hres, f) (hres = (!((t)->tt_ == ctb(LUA_VTABLE)) ? HNOTATABLE : f(hvalue(t), k, val)))
 
 #define luaV_fastseti(t, k, val, hres)      \
-  if (!ttistable(t))                        \
+  if (!((t)->tt_ == ctb(LUA_VTABLE)))                        \
     hres = HNOTATABLE;                      \
   else                                      \
   {                                         \

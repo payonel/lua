@@ -130,7 +130,7 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
 static void checkclosemth(lua_State* L, StkId level)
 {
   const TValue* tm = luaT_gettmbyobj(L, s2v(L, level), TM_CLOSE);
-  if (ttisnil(tm))
+  if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                            /* no metamethod? */
     int idx = cast_int(level - L->ci->func); /* variable index */
     const char* vname = luaG_findlocal(L, L->ci, idx, NULL);

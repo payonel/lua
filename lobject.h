@@ -160,9 +160,6 @@ typedef size_t StkId;
 /* Special variant to signal that a fast get is accessing a non-table */
 #define LUA_VNOTABLE makevariant(LUA_TNIL, 3)
 
-/* macro to test for (any kind of) nil */
-#define ttisnil(v) (((v)->tt_ & NOVARIANT_MASK) == LUA_TNIL)
-
 /*
 ** Macro to test the result of a table access. Formally, it should
 ** distinguish between LUA_VEMPTY/LUA_VABSTKEY/LUA_VNOTABLE and
@@ -170,9 +167,6 @@ typedef size_t StkId;
 ** simpler to just test whether the value is nil.
 */
 #define tagisempty(tag) (novariant(tag) == LUA_TNIL)
-
-/* macro to test for a standard nil */
-#define ttisstrictnil(o) ((o)->tt_ == LUA_VNIL)
 
 #define setnilvalue(obj)   settt_(obj, LUA_VNIL)
 #define setnilvalue2s(L, stk) setnilvalue(s2v(L, stk))
@@ -182,14 +176,14 @@ typedef size_t StkId;
 /*
 ** macro to detect non-standard nils (used only in assertions)
 */
-#define isnonstrictnil(v) (ttisnil(v) && !ttisstrictnil(v))
+#define isnonstrictnil(v) ((((v)->tt_ & NOVARIANT_MASK) == LUA_TNIL) && !((v)->tt_ == LUA_VNIL))
 
 /*
 ** By default, entries with any kind of nil are considered empty.
 ** (In any definition, values associated with absent keys must also
 ** be accepted as empty.)
 */
-#define isempty(v) ttisnil(v)
+#define isempty(v) (((v)->tt_ & NOVARIANT_MASK) == LUA_TNIL)
 
 /* macro defining a value corresponding to an absent key */
 #define ABSTKEYCONSTANT {NULL}, LUA_VABSTKEY
@@ -208,11 +202,7 @@ typedef size_t StkId;
 #define LUA_VFALSE makevariant(LUA_TBOOLEAN, 0)
 #define LUA_VTRUE  makevariant(LUA_TBOOLEAN, 1)
 
-#define ttisboolean(o) (((o)->tt_ & NOVARIANT_MASK) == LUA_TBOOLEAN)
-#define ttisfalse(o)   ((o)->tt_ == LUA_VFALSE)
-#define ttistrue(o)    ((o)->tt_ == LUA_VTRUE)
-
-#define l_isfalse(o)  (ttisfalse(o) || ttisnil(o))
+#define l_isfalse(o)  (((o)->tt_ == LUA_VFALSE) || (((o)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
 #define tagisfalse(t) ((t) == LUA_VFALSE || novariant(t) == LUA_TNIL)
 
 #define setbfvalue(obj) settt_(obj, LUA_VFALSE)
@@ -228,9 +218,7 @@ typedef size_t StkId;
 
 #define LUA_VTHREAD makevariant(LUA_TTHREAD, 0)
 
-#define ttisthread(o) ((o)->tt_ == ctb(LUA_VTHREAD))
-
-#define thvalue(o) check_exp(ttisthread(o), gco2th(val_(o).gc))
+#define thvalue(o) check_exp(((o)->tt_ == ctb(LUA_VTHREAD)), gco2th(val_(o).gc))
 
 #define setthvalue(L, obj, x)     \
   {                               \
@@ -298,13 +286,9 @@ typedef struct GCObject
 #define LUA_VNUMINT makevariant(LUA_TNUMBER, 0) /* integer numbers */
 #define LUA_VNUMFLT makevariant(LUA_TNUMBER, 1) /* float numbers */
 
-#define ttisnumber(o)  (((o)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)
-#define ttisfloat(o)   ((o)->tt_ == LUA_VNUMFLT)
-#define ttisinteger(o) ((o)->tt_ == LUA_VNUMINT)
-
-#define nvalue(o)   check_exp(ttisnumber(o), (ttisinteger(o) ? cast_num(ivalue(o)) : fltvalue(o)))
-#define fltvalue(o) check_exp(ttisfloat(o), val_(o).n)
-#define ivalue(o)   check_exp(ttisinteger(o), val_(o).i)
+#define nvalue(o)   check_exp((((o)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER), (((o)->tt_ == LUA_VNUMINT) ? cast_num(ivalue(o)) : fltvalue(o)))
+#define fltvalue(o) check_exp(((o)->tt_ == LUA_VNUMFLT), val_(o).n)
+#define ivalue(o)   check_exp(((o)->tt_ == LUA_VNUMINT), val_(o).i)
 
 #define fltvalueraw(v) ((v).n)
 #define ivalueraw(v)   ((v).i)
@@ -319,7 +303,7 @@ typedef struct GCObject
 #define chgfltvalue(obj, x)    \
   {                            \
     TValue* io = (obj);        \
-    lua_assert(ttisfloat(io)); \
+    lua_assert(((io)->tt_ == LUA_VNUMFLT)); \
     val_(io).n = (x);          \
   }
 
@@ -333,7 +317,7 @@ typedef struct GCObject
 #define chgivalue(obj, x)        \
   {                              \
     TValue* io = (obj);          \
-    lua_assert(ttisinteger(io)); \
+    lua_assert(((io)->tt_ == LUA_VNUMINT)); \
     val_(io).i = (x);            \
   }
 
@@ -351,13 +335,9 @@ typedef struct GCObject
 #define LUA_VSHRSTR LUA_VSTRING
 #define LUA_VLNGSTR LUA_VSTRING
 
-#define ttisstring(o)    (((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING)
-#define ttisshrstring(o) ttisstring(o)
-#define ttislngstring(o) ttisstring(o)
-
 #define tsvalueraw(v) (gco2ts((v).gc))
 
-#define tsvalue(o) check_exp(ttisstring(o), gco2ts(val_(o).gc))
+#define tsvalue(o) check_exp((((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), gco2ts(val_(o).gc))
 
 #define setsvalue(L, obj, x)   \
   {                            \
@@ -404,11 +384,8 @@ typedef struct TString : GCObject
 
 #define LUA_VUSERDATA makevariant(LUA_TUSERDATA, 0)
 
-#define ttislightuserdata(o) ((o)->tt_ == LUA_VLIGHTUSERDATA)
-#define ttisfulluserdata(o)  ((o)->tt_ == ctb(LUA_VUSERDATA))
-
-#define pvalue(o) check_exp(ttislightuserdata(o), val_(o).p)
-#define uvalue(o) check_exp(ttisfulluserdata(o), gco2u(val_(o).gc))
+#define pvalue(o) check_exp(((o)->tt_ == LUA_VLIGHTUSERDATA), val_(o).p)
+#define uvalue(o) check_exp(((o)->tt_ == ctb(LUA_VUSERDATA)), gco2u(val_(o).gc))
 
 #define pvalueraw(v) ((v).p)
 
@@ -586,18 +563,10 @@ typedef struct Proto : GCObject
 #define LUA_VLCF makevariant(LUA_TFUNCTION, 1) /* light C function */
 #define LUA_VCCL makevariant(LUA_TFUNCTION, 2) /* C closure */
 
-#define ttisfunction(o) (((o)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION)
-#define ttisLclosure(o) ((o)->tt_ == ctb(LUA_VLCL))
-#define ttislcf(o)      ((o)->tt_ == LUA_VLCF)
-#define ttisCclosure(o) ((o)->tt_ == ctb(LUA_VCCL))
-#define ttisclosure(o)  (ttisLclosure(o) || ttisCclosure(o))
-
-#define isLfunction(o) ttisLclosure(o)
-
-#define clvalue(o)  check_exp(ttisclosure(o), gco2cl(val_(o).gc))
-#define clLvalue(o) check_exp(ttisLclosure(o), gco2lcl(val_(o).gc))
-#define fvalue(o)   check_exp(ttislcf(o), val_(o).f)
-#define clCvalue(o) check_exp(ttisCclosure(o), gco2ccl(val_(o).gc))
+#define clvalue(o)  check_exp(((o)->tt_ == ctb(LUA_VLCL) || (o)->tt_ == ctb(LUA_VCCL)), gco2cl(val_(o).gc))
+#define clLvalue(o) check_exp(((o)->tt_ == ctb(LUA_VLCL)), gco2lcl(val_(o).gc))
+#define fvalue(o)   check_exp(((o)->tt_ == LUA_VLCF), val_(o).f)
+#define clCvalue(o) check_exp(((o)->tt_ == ctb(LUA_VCCL)), gco2ccl(val_(o).gc))
 
 #define fvalueraw(v) ((v).f)
 
@@ -674,9 +643,7 @@ typedef struct LClosure : Closure
 
 #define LUA_VTABLE makevariant(LUA_TTABLE, 0)
 
-#define ttistable(o) ((o)->tt_ == ctb(LUA_VTABLE))
-
-#define hvalue(o) check_exp(ttistable(o), gco2t(val_(o).gc))
+#define hvalue(o) check_exp(((o)->tt_ == ctb(LUA_VTABLE)), gco2t(val_(o).gc))
 
 #define sethvalue(L, obj, x)     \
   {                              \

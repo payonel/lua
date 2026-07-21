@@ -363,7 +363,7 @@ typedef struct global_State
 ** 'g->nilvalue' being a nil value flags that the state was completely
 ** build.
 */
-#define completestate(g) ttisnil(&g->nilvalue)
+#define completestate(g) (((&g->nilvalue)->tt_ & NOVARIANT_MASK) == LUA_TNIL)
 
 /*
 ** With C++ inheritance, downcasts from GCObject* to specific types

@@ -54,7 +54,7 @@ typedef enum
 ** Test whether there is no tagmethod.
 ** (Because tagmethods use raw accesses, the result may be an "empty" nil.)
 */
-#define notm(tm) ttisnil(tm)
+#define notm(tm) (((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL)
 
 #define checknoTM(mt, e) ((mt) == NULL || (mt)->flags & (1u << (e)))
 

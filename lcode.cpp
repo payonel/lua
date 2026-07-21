@@ -594,7 +594,7 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   { /* is there an index there? */
     int k = cast_int(ivalue(&val));
     /* collisions can happen only for float keys */
-    lua_assert(ttisfloat(key) || luaV_rawequalobj(&f->k[k], v));
+    lua_assert(((key)->tt_ == LUA_VNUMFLT) || luaV_rawequalobj(&f->k[k], v));
     return k; /* reuse index */
   }
   else
@@ -1392,7 +1392,7 @@ static void codenot(FuncState* fs, expdesc* e)
 static int isKstr(FuncState* fs, expdesc* e)
 {
   return (e->k == VK && !hasjumps(e) && e->u.info <= MAXINDEXRK &&
-          ttisshrstring(&fs->f->k[e->u.info]));
+          (((&fs->f->k[e->u.info])->tt_ & NOVARIANT_MASK) == LUA_TSTRING));
 }
 
 /*
@@ -1566,7 +1566,7 @@ static int constfolding(FuncState* fs, int op, expdesc* e1,
   if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(op, &v1, &v2))
     return 0;                                   /* non-numeric operands or not safe to fold */
   luaO_rawarith(fs->ls->L, op, &v1, &v2, &res); /* does operation */
-  if (ttisinteger(&res))
+  if (((&res)->tt_ == LUA_VNUMINT))
   {
     e1->k = VKINT;
     e1->u.ival = ivalue(&res);
