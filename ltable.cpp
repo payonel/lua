@@ -75,7 +75,7 @@
 ** between 2^MAXHBITS and the maximum size such that, measured in bytes,
 ** it fits in a 'size_t'.
 */
-#define MAXHSIZE luaM_limitN(1 << MAXHBITS, Node)
+#define MAXHSIZE ((((size_t)(1 << MAXHBITS)) <= MAX_SIZET / sizeof(Node)) ? (1 << MAXHBITS) : ((int)((MAX_SIZET / sizeof(Node)))))
 
 /*
 ** When the original hash value is good, hashing by a power of 2
@@ -384,7 +384,7 @@ static void freehash(lua_State* L, Table* t)
 {
   if (!isdummy(t))
   {
-    luaM_freemem(L, t->node, sizehash(t));
+    luaM_free_(L, (t->node), (sizehash(t)));
   }
 }
 
@@ -566,13 +566,13 @@ static Value* resizearray(lua_State* L, Table* t,
   else if (newasize == 0)
   {                                              /* erasing array? */
     Value* op = t->array - oldasize;             /* original array's real address */
-    luaM_freemem(L, op, concretesize(oldasize)); /* free it */
+    luaM_free_(L, (op), (concretesize(oldasize))); /* free it */
     return NULL;
   }
   else
   {
     size_t newasizeb = concretesize(newasize);
-    Value* np = ((Value*)(luaM_reallocvector(L, NULL, 0, newasizeb, lu_byte)));
+    Value* np = ((Value*)((((lu_byte*)(luaM_realloc_(L, NULL, ((size_t)(0)) * sizeof(lu_byte), ((size_t)(newasizeb)) * sizeof(lu_byte)))))));
     if (np == NULL) /* allocation error? */
       return NULL;
     np += newasize; /* shift pointer to the end of value segment */
@@ -585,7 +585,7 @@ static Value* resizearray(lua_State* L, Table* t,
       size_t tomoveb = (oldasize < newasize) ? oldasizeb : newasizeb;
       lua_assert(tomoveb > 0);
       memcpy(np - tomove, op - tomove, tomoveb);
-      luaM_freemem(L, op - oldasize, oldasizeb); /* free old block */
+      luaM_free_(L, (op - oldasize), (oldasizeb)); /* free old block */
     }
     return np;
   }
@@ -614,7 +614,7 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
     if (lsize > MAXHBITS || (1 << lsize) > MAXHSIZE)
       luaG_runerror(L, "table overflow");
     size = twoto(lsize);
-    t->node = luaM_newvector(L, size, Node);
+    t->node = ((Node*)(luaM_malloc_(L, ((size_t)(size)) * sizeof(Node), 0)));
     t->lastfree = NULL;
     t->lsizenode = ((lu_byte)(lsize));
     if (lsize >= LIMFORLAST)
@@ -743,7 +743,7 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
   if (l_unlikely(newarray == NULL && newasize > 0))
   {                     /* allocation failed? */
     freehash(L, &newt); /* release new hash part */
-    luaM_error(L);      /* raise error (with array unchanged) */
+    luaD_throw(L, LUA_ERRMEM);      /* raise error (with array unchanged) */
   }
   /* allocation ok; initialize new part of the array */
   exchangehashpart(t, &newt); /* 't' has the new hash ('newt' has the old) */
@@ -836,7 +836,7 @@ void luaH_free(lua_State* L, Table* t)
 {
   freehash(L, t);
   resizearray(L, t, t->asize, 0);
-  luaM_free(L, t);
+  luaM_free_(L, (t), sizeof(*(t)));
 }
 
 static Node* getfreepos(Table* t)

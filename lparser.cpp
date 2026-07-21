@@ -176,8 +176,7 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
 {
   Proto* f = fs->f;
   int oldsize = f->sizelocvars;
-  luaM_growvector(ls->L, f->locvars, fs->ndebugvars, f->sizelocvars,
-                  LocVar, SHRT_MAX, "local variables");
+  ((f->locvars) = ((LocVar*)(luaM_growaux_(ls->L, f->locvars, fs->ndebugvars, &(f->sizelocvars), sizeof(LocVar), ((((size_t)(SHRT_MAX)) <= MAX_SIZET / sizeof(LocVar)) ? (SHRT_MAX) : ((int)((MAX_SIZET / sizeof(LocVar))))), "local variables"))));
   while (oldsize < f->sizelocvars)
     f->locvars[oldsize++].varname = NULL;
   f->locvars[fs->ndebugvars].varname = varname;
@@ -196,8 +195,7 @@ static int new_varkind(LexState* ls, TString* name, lu_byte kind)
   FuncState* fs = ls->fs;
   Dyndata* dyd = ls->dyd;
   Vardesc* var;
-  luaM_growvector(L, dyd->actvar.arr, dyd->actvar.n + 1,
-                  dyd->actvar.size, Vardesc, SHRT_MAX, "variable declarations");
+  ((dyd->actvar.arr) = ((Vardesc*)(luaM_growaux_(L, dyd->actvar.arr, dyd->actvar.n + 1, &(dyd->actvar.size), sizeof(Vardesc), ((((size_t)(SHRT_MAX)) <= MAX_SIZET / sizeof(Vardesc)) ? (SHRT_MAX) : ((int)((MAX_SIZET / sizeof(Vardesc))))), "variable declarations"))));
   var = &dyd->actvar.arr[dyd->actvar.n++];
   var->vd.kind = kind; /* default */
   var->vd.name = name;
@@ -383,8 +381,7 @@ static Upvaldesc* allocupvalue(FuncState* fs)
   Proto* f = fs->f;
   int oldsize = f->sizeupvalues;
   luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, "upvalues");
-  luaM_growvector(fs->ls->L, f->upvalues, fs->nups, f->sizeupvalues,
-                  Upvaldesc, MAXUPVAL, "upvalues");
+  ((f->upvalues) = ((Upvaldesc*)(luaM_growaux_(fs->ls->L, f->upvalues, fs->nups, &(f->sizeupvalues), sizeof(Upvaldesc), ((((size_t)(MAXUPVAL)) <= MAX_SIZET / sizeof(Upvaldesc)) ? (MAXUPVAL) : ((int)((MAX_SIZET / sizeof(Upvaldesc))))), "upvalues"))));
   while (oldsize < f->sizeupvalues)
     f->upvalues[oldsize++].name = NULL;
   return &f->upvalues[fs->nups++];
@@ -668,8 +665,7 @@ static int newlabelentry(LexState* ls, Labellist* l, TString* name,
                          int line, int pc)
 {
   int n = l->n;
-  luaM_growvector(ls->L, l->arr, n, l->size,
-                  Labeldesc, SHRT_MAX, "labels/gotos");
+  ((l->arr) = ((Labeldesc*)(luaM_growaux_(ls->L, l->arr, n, &(l->size), sizeof(Labeldesc), ((((size_t)(SHRT_MAX)) <= MAX_SIZET / sizeof(Labeldesc)) ? (SHRT_MAX) : ((int)((MAX_SIZET / sizeof(Labeldesc))))), "labels/gotos"))));
   l->arr[n].name = name;
   l->arr[n].line = line;
   l->arr[n].nactvar = ls->fs->nactvar;
@@ -805,7 +801,7 @@ static Proto* addprototype(LexState* ls)
   if (fs->np >= f->sizep)
   {
     int oldsize = f->sizep;
-    luaM_growvector(L, f->p, fs->np, f->sizep, Proto*, MAXARG_Bx, "functions");
+    ((f->p) = ((Proto**)(luaM_growaux_(L, f->p, fs->np, &(f->sizep), sizeof(Proto*), ((((size_t)(MAXARG_Bx)) <= MAX_SIZET / sizeof(Proto*)) ? (MAXARG_Bx) : ((int)((MAX_SIZET / sizeof(Proto*))))), "functions"))));
     while (oldsize < f->sizep)
       f->p[oldsize++] = NULL;
   }
@@ -868,14 +864,13 @@ static void close_func(LexState* ls)
   leaveblock(fs);
   lua_assert(fs->bl == NULL);
   luaK_finish(fs);
-  luaM_shrinkvector(L, f->code, f->sizecode, fs->pc, Instruction);
-  luaM_shrinkvector(L, f->lineinfo, f->sizelineinfo, fs->pc, ls_byte);
-  luaM_shrinkvector(L, f->abslineinfo, f->sizeabslineinfo,
-                    fs->nabslineinfo, AbsLineInfo);
-  luaM_shrinkvector(L, f->k, f->sizek, fs->nk, TValue);
-  luaM_shrinkvector(L, f->p, f->sizep, fs->np, Proto*);
-  luaM_shrinkvector(L, f->locvars, f->sizelocvars, fs->ndebugvars, LocVar);
-  luaM_shrinkvector(L, f->upvalues, f->sizeupvalues, fs->nups, Upvaldesc);
+  ((f->code) = ((Instruction*)(luaM_shrinkvector_(L, f->code, &(f->sizecode), fs->pc, sizeof(Instruction)))));
+  ((f->lineinfo) = ((ls_byte*)(luaM_shrinkvector_(L, f->lineinfo, &(f->sizelineinfo), fs->pc, sizeof(ls_byte)))));
+  ((f->abslineinfo) = ((AbsLineInfo*)(luaM_shrinkvector_(L, f->abslineinfo, &(f->sizeabslineinfo), fs->nabslineinfo, sizeof(AbsLineInfo)))));
+  ((f->k) = ((TValue*)(luaM_shrinkvector_(L, f->k, &(f->sizek), fs->nk, sizeof(TValue)))));
+  ((f->p) = ((Proto**)(luaM_shrinkvector_(L, f->p, &(f->sizep), fs->np, sizeof(Proto*)))));
+  ((f->locvars) = ((LocVar*)(luaM_shrinkvector_(L, f->locvars, &(f->sizelocvars), fs->ndebugvars, sizeof(LocVar)))));
+  ((f->upvalues) = ((Upvaldesc*)(luaM_shrinkvector_(L, f->upvalues, &(f->sizeupvalues), fs->nups, sizeof(Upvaldesc)))));
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */
   luaH_set(L, ls->h, &temp, &G(L)->nilvalue);
@@ -2186,7 +2181,7 @@ static void exprstat(LexState* ls)
   { /* stat -> func */
     Instruction* inst;
     check_condition(ls, v.v.k == VCALL, "syntax error");
-    inst = &getinstruction(fs, &v.v);
+    inst = &((fs)->f->code[(&v.v)->u.info]);
     ((*inst) = (((*inst) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(1)) << POS_C) & MASK1(SIZE_C, POS_C)))); /* call statement uses no results */
   }
 }
@@ -2208,8 +2203,8 @@ static void retstat(LexState* ls)
       luaK_setmultret(fs, &e);
       if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc)
       { /* tail call? */
-        ((getinstruction(fs, &e)) = (((getinstruction(fs, &e)) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_TAILCALL)) << POS_OP) & MASK1(SIZE_OP, POS_OP))));
-        lua_assert(GETARG_A(getinstruction(fs, &e)) == luaY_nvarstack(fs));
+        ((((fs)->f->code[(&e)->u.info])) = (((((fs)->f->code[(&e)->u.info])) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_TAILCALL)) << POS_OP) & MASK1(SIZE_OP, POS_OP))));
+        lua_assert(GETARG_A(((fs)->f->code[(&e)->u.info])) == luaY_nvarstack(fs));
       }
       nret = LUA_MULTRET; /* return all values */
     }

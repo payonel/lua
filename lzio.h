@@ -32,9 +32,9 @@ typedef struct Mbuffer
 #define luaZ_buffremove(buff, i) ((buff)->n -= ((size_t)(i)))
 #define luaZ_resetbuffer(buff)   ((buff)->n = 0)
 
-#define luaZ_resizebuffer(L, buff, size) ((buff)->buffer = luaM_reallocvchar(L, (buff)->buffer, (buff)->buffsize, size), (buff)->buffsize = size)
+#define luaZ_resizebuffer(L, buff, size) ((buff)->buffer = ((char*)(luaM_saferealloc_(L, ((buff)->buffer), ((buff)->buffsize) * sizeof(char), (size) * sizeof(char)))), (buff)->buffsize = size)
 
-#define luaZ_freebuffer(L, buff) luaZ_resizebuffer(L, buff, 0)
+#define luaZ_freebuffer(L, buff) ((buff)->buffer = ((char*)(luaM_saferealloc_(L, (buff)->buffer, (buff)->buffsize * sizeof(char), (0) * sizeof(char)))), (buff)->buffsize = (0))
 
 LUAI_FUNC void luaZ_init(lua_State* L, ZIO* z, lua_Reader reader,
                          void* data);

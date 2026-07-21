@@ -44,11 +44,11 @@ void luaE_setdebt(global_State* g, l_mem debt)
 CallInfo* luaE_extendCI(lua_State* L, int err)
 {
   CallInfo* ci;
-  ci = luaM_reallocvector(L, NULL, 0, 1, CallInfo);
+  ci = (((CallInfo*)(luaM_realloc_(L, NULL, ((size_t)(0)) * sizeof(CallInfo), ((size_t)(1)) * sizeof(CallInfo)))));
   if (l_unlikely(ci == NULL))
   { /* allocation failed? */
     if (err)
-      luaM_error(L); /* raise the error */
+      luaD_throw(L, LUA_ERRMEM); /* raise the error */
     return NULL;     /* else only report it */
   }
   ci->next = L->ci->next;
@@ -72,7 +72,7 @@ static void freeCI(lua_State* L)
   while ((ci = next) != NULL)
   {
     next = ci->next;
-    luaM_free(L, ci);
+    luaM_free_(L, (ci), sizeof(*(ci)));
     L->nci--;
   }
 }
@@ -92,7 +92,7 @@ void luaE_shrinkCI(lua_State* L)
     CallInfo* next2 = next->next; /* next's next */
     ci->next = next2;             /* remove next from the list */
     L->nci--;
-    luaM_free(L, next); /* free next */
+    luaM_free_(L, (next), sizeof(*(next))); /* free next */
     if (next2 == NULL)
       break; /* no more elements */
     else
@@ -141,7 +141,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 {
   int i;
   /* initialize stack array */
-  L1->stack.p = luaM_newvector(L, BASIC_STACK_SIZE + EXTRA_STACK, StackValue);
+  L1->stack.p = ((StackValue*)(luaM_malloc_(L, ((size_t)(BASIC_STACK_SIZE + EXTRA_STACK)) * sizeof(StackValue), 0)));
   L1->tbclist = 0;
   for (i = 0; i < BASIC_STACK_SIZE + EXTRA_STACK; i++)
     (((&(L1)->stack.p[i]))->tt_ = LUA_VNIL); /* erase new stack */
@@ -153,7 +153,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
-  luaM_freearray(L, L->tbc, ((size_t)(L->sizetbc))); /* free tbc list */
+  luaM_free_(L, (L->tbc), (((size_t)(L->sizetbc))) * sizeof(*(L->tbc))); /* free tbc list */
   L->tbc = NULL;
   L->ntbc = L->sizetbc = 0;
   if (L->stack.p == NULL)
@@ -162,7 +162,7 @@ static void freestack(lua_State* L)
   freeCI(L);
   lua_assert(L->nci == 0);
   /* free stack */
-  luaM_freearray(L, L->stack.p, ((size_t)(stacksize(L) + EXTRA_STACK)));
+  luaM_free_(L, (L->stack.p), (((size_t)(stacksize(L) + EXTRA_STACK))) * sizeof(*(L->stack.p)));
 }
 
 /*
@@ -208,7 +208,7 @@ static void f_luaopen(lua_State* L, void*)
 */
 static void preinit_thread(lua_State* L, global_State* g)
 {
-  G(L) = g;
+  L->l_G = g;
   L->stack.p = NULL;
   L->tbclist = 0;
   L->tbc = NULL;
@@ -292,7 +292,7 @@ void luaE_freethread(lua_State* L, lua_State* L1)
   lua_assert(L1->openupval == NULL);
   luai_userstatefree(L, L1);
   freestack(L1);
-  luaM_free(L, l);
+  luaM_free_(L, (l), sizeof(*(l)));
 }
 
 TStatus luaE_resetthread(lua_State* L, TStatus status)

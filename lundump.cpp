@@ -82,7 +82,7 @@ static const void* getaddr_(LoadState* S, size_t size)
 
 static lu_byte loadByte(LoadState* S)
 {
-  int b = zgetc(S->Z);
+  int b = (((S->Z)->n--) > 0 ? ((unsigned char)(*(S->Z)->p++)) : luaZ_fill(S->Z));
   if (b == EOZ)
     error(S, "truncated chunk");
   S->offset++;
@@ -191,7 +191,7 @@ static void loadCode(LoadState* S, Proto* f)
   }
   else
   {
-    f->code = luaM_newvectorchecked(S->L, n, Instruction);
+    f->code = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(Instruction))) ? luaM_toobig(S->L) : ((void)(0))), ((Instruction*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(Instruction), 0))));
     f->sizecode = n;
     loadVector(S, f->code, n);
   }
@@ -203,7 +203,7 @@ static void loadConstants(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->k = luaM_newvectorchecked(S->L, n, TValue);
+  f->k = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(TValue))) ? luaM_toobig(S->L) : ((void)(0))), ((TValue*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(TValue), 0))));
   f->sizek = n;
   for (i = 0; i < n; i++)
     ((&f->k[i])->tt_ = LUA_VNIL);
@@ -248,7 +248,7 @@ static void loadProtos(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->p = luaM_newvectorchecked(S->L, n, Proto*);
+  f->p = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(Proto*))) ? luaM_toobig(S->L) : ((void)(0))), ((Proto**)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(Proto*), 0))));
   f->sizep = n;
   for (i = 0; i < n; i++)
     f->p[i] = NULL;
@@ -270,7 +270,7 @@ static void loadUpvalues(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->upvalues = luaM_newvectorchecked(S->L, n, Upvaldesc);
+  f->upvalues = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(Upvaldesc))) ? luaM_toobig(S->L) : ((void)(0))), ((Upvaldesc*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(Upvaldesc), 0))));
   f->sizeupvalues = n;
   for (i = 0; i < n; i++) /* make array valid for GC */
     f->upvalues[i].name = NULL;
@@ -293,7 +293,7 @@ static void loadDebug(LoadState* S, Proto* f)
   }
   else
   {
-    f->lineinfo = luaM_newvectorchecked(S->L, n, ls_byte);
+    f->lineinfo = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(ls_byte))) ? luaM_toobig(S->L) : ((void)(0))), ((ls_byte*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(ls_byte), 0))));
     f->sizelineinfo = n;
     loadVector(S, f->lineinfo, n);
   }
@@ -308,13 +308,13 @@ static void loadDebug(LoadState* S, Proto* f)
     }
     else
     {
-      f->abslineinfo = luaM_newvectorchecked(S->L, n, AbsLineInfo);
+      f->abslineinfo = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(AbsLineInfo))) ? luaM_toobig(S->L) : ((void)(0))), ((AbsLineInfo*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(AbsLineInfo), 0))));
       f->sizeabslineinfo = n;
       loadVector(S, f->abslineinfo, n);
     }
   }
   n = loadInt(S);
-  f->locvars = luaM_newvectorchecked(S->L, n, LocVar);
+  f->locvars = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(LocVar))) ? luaM_toobig(S->L) : ((void)(0))), ((LocVar*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(LocVar), 0))));
   f->sizelocvars = n;
   for (i = 0; i < n; i++)
     f->locvars[i].varname = NULL;

@@ -647,7 +647,7 @@ static const char* clearbuff(BuffFS* buff)
   else
     res = getstr((lua_assert((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert(((((((&(L)->stack.p[L->top - 1]))->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>((((&(L)->stack.p[L->top - 1]))->value_).gc))));
   if (buff->b != buff->space)                   /* using dynamic buffer? */
-    luaM_freearray(L, buff->b, buff->buffsize); /* free it */
+    luaM_free_(L, (buff->b), (buff->buffsize) * sizeof(*(buff->b))); /* free it */
   return res;
 }
 
@@ -670,9 +670,8 @@ static void addstr2buff(BuffFS* buff, const char* str, size_t slen)
       size_t newsize = buff->buffsize + slen; /* limited to MAX_SIZE/2 */
       char* newb =
           (buff->b == buff->space) /* still using static space? */
-              ? luaM_reallocvector(buff->L, NULL, 0, newsize, char)
-              : luaM_reallocvector(buff->L, buff->b, buff->buffsize, newsize,
-                                   char);
+              ? (((char*)(luaM_realloc_(buff->L, NULL, ((size_t)(0)) * sizeof(char), ((size_t)(newsize)) * sizeof(char)))))
+              : (((char*)(luaM_realloc_(buff->L, buff->b, ((size_t)(buff->buffsize)) * sizeof(char), ((size_t)(newsize)) * sizeof(char)))));
       if (newb == NULL)
       {                /* allocation error? */
         buff->err = 1; /* signal a memory error */

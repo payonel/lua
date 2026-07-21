@@ -69,8 +69,14 @@ typedef enum
   VVARARG    /* vararg expression; info = instruction pc */
 } expkind;
 
-#define vkisvar(k)     (VLOCAL <= (k) && (k) <= VINDEXSTR)
-#define vkisindexed(k) (VINDEXED <= (k) && (k) <= VINDEXSTR)
+constexpr int vkisvar(expkind k)
+{
+  return VLOCAL <= k && k <= VINDEXSTR;
+}
+constexpr int vkisindexed(expkind k)
+{
+  return VINDEXED <= k && k <= VINDEXSTR;
+}
 
 typedef struct expdesc
 {
@@ -107,12 +113,6 @@ typedef struct expdesc
 #define GDKREG     5 /* regular global */
 #define GDKCONST   6 /* global constant */
 
-/* variables that live in registers */
-#define varinreg(v) ((v)->vd.kind <= RDKTOCLOSE)
-
-/* test for global variables */
-#define varglobal(v) ((v)->vd.kind >= GDKREG)
-
 /* description of an active variable */
 typedef union Vardesc
 {
@@ -126,6 +126,18 @@ typedef union Vardesc
   } vd;
   TValue k; /* constant value (if any) */
 } Vardesc;
+
+/* variables that live in registers */
+static inline int varinreg(const Vardesc* v)
+{
+  return v->vd.kind <= RDKTOCLOSE;
+}
+
+/* test for global variables */
+static inline int varglobal(const Vardesc* v)
+{
+  return v->vd.kind >= GDKREG;
+}
 
 /* description of pending goto statements and label statements */
 typedef struct Labeldesc

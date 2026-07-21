@@ -177,7 +177,7 @@ void luaF_newtbcupval(lua_State* L, StkId level)
   if (((((&(L)->stack.p[level]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[level]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
-  luaM_growvector(L, L->tbc, L->ntbc, L->sizetbc, StkId, INT_MAX, "to-be-closed variables");
+  ((L->tbc) = ((StkId*)(luaM_growaux_(L, L->tbc, L->ntbc, &(L->sizetbc), sizeof(StkId), ((((size_t)(INT_MAX)) <= MAX_SIZET / sizeof(StkId)) ? (INT_MAX) : ((int)((MAX_SIZET / sizeof(StkId))))), "to-be-closed variables"))));
   L->tbc[L->ntbc++] = level;
   L->tbclist = level;
 }
@@ -229,14 +229,14 @@ static void poptbclist(lua_State* L)
 */
 StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy)
 {
-  StkId levelrel = savestack(L, level);
+  StkId levelrel = (level);
   luaF_closeupval(L, level); /* first, close the upvalues */
   while (L->tbclist >= level)
   {                                       /* traverse tbc's down to that level */
     StkId tbc = L->tbclist;             /* get variable index */
     poptbclist(L);                        /* remove it from list */
     prepcallclosemth(L, tbc, status, yy); /* close variable */
-    level = restorestack(L, levelrel);
+    level = (static_cast<StkId>(levelrel));
   }
   return level;
 }
@@ -284,15 +284,15 @@ void luaF_freeproto(lua_State* L, Proto* f)
 {
   if (!(f->flag & PF_FIXED))
   {
-    luaM_freearray(L, f->code, ((size_t)(f->sizecode)));
-    luaM_freearray(L, f->lineinfo, ((size_t)(f->sizelineinfo)));
-    luaM_freearray(L, f->abslineinfo, ((size_t)(f->sizeabslineinfo)));
+    luaM_free_(L, (f->code), (((size_t)(f->sizecode))) * sizeof(*(f->code)));
+    luaM_free_(L, (f->lineinfo), (((size_t)(f->sizelineinfo))) * sizeof(*(f->lineinfo)));
+    luaM_free_(L, (f->abslineinfo), (((size_t)(f->sizeabslineinfo))) * sizeof(*(f->abslineinfo)));
   }
-  luaM_freearray(L, f->p, ((size_t)(f->sizep)));
-  luaM_freearray(L, f->k, ((size_t)(f->sizek)));
-  luaM_freearray(L, f->locvars, ((size_t)(f->sizelocvars)));
-  luaM_freearray(L, f->upvalues, ((size_t)(f->sizeupvalues)));
-  luaM_free(L, f);
+  luaM_free_(L, (f->p), (((size_t)(f->sizep))) * sizeof(*(f->p)));
+  luaM_free_(L, (f->k), (((size_t)(f->sizek))) * sizeof(*(f->k)));
+  luaM_free_(L, (f->locvars), (((size_t)(f->sizelocvars))) * sizeof(*(f->locvars)));
+  luaM_free_(L, (f->upvalues), (((size_t)(f->sizeupvalues))) * sizeof(*(f->upvalues)));
+  luaM_free_(L, (f), sizeof(*(f)));
 }
 
 /*

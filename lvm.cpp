@@ -759,10 +759,10 @@ void luaV_concat(lua_State* L, int total)
       }
       else
       { /* large result; heap buffer */
-        char* buff = luaM_newvector(L, tl, char);
+        char* buff = ((char*)(luaM_malloc_(L, ((size_t)(tl)) * sizeof(char), 0)));
         copy2buff(L, top, n, buff);
         ts = luaS_newlstr(L, buff, tl);
-        luaM_freearray(L, buff, tl);
+        luaM_free_(L, (buff), (tl) * sizeof(*(buff)));
       }
       setsvalue(L, (&(L)->stack.p[top - n]), ts); /* create result */
     }

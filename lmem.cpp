@@ -170,7 +170,7 @@ void* luaM_saferealloc_(lua_State* L, void* block, size_t osize,
 {
   void* newblock = luaM_realloc_(L, block, osize, nsize);
   if (l_unlikely(newblock == NULL && nsize > 0)) /* allocation failed? */
-    luaM_error(L);
+    luaD_throw(L, LUA_ERRMEM);
   return newblock;
 }
 
@@ -186,7 +186,7 @@ void* luaM_malloc_(lua_State* L, size_t size, int tag)
     {
       newblock = tryagain(L, NULL, ((size_t)(tag)), size);
       if (newblock == NULL)
-        luaM_error(L);
+        luaD_throw(L, LUA_ERRMEM);
     }
     g->GCdebt -= ((l_mem)(size));
     return newblock;

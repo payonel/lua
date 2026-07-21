@@ -184,7 +184,7 @@ TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
 /* raise a stack error while running the message handler */
 l_noret luaD_errerr(lua_State* L)
 {
-  TString* msg = luaS_newliteral(L, "error in error handling");
+  TString* msg = (luaS_newlstr(L, "" "error in error handling", (sizeof("error in error handling") / sizeof(char)) - 1));
   setsvalue(L, (&(L)->stack.p[L->top]), msg);
   L->top++; /* assume EXTRA_STACK */
   luaD_throw(L, LUA_ERRERR);
@@ -233,14 +233,13 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   lu_byte oldgcstop = G(L)->gcstopem;
   lua_assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
   G(L)->gcstopem = 1; /* stop emergency collection */
-  newstack = luaM_reallocvector(L, oldstack, oldsize + EXTRA_STACK,
-                                newsize + EXTRA_STACK, StackValue);
+  newstack = (((StackValue*)(luaM_realloc_(L, oldstack, ((size_t)(oldsize + EXTRA_STACK)) * sizeof(StackValue), ((size_t)(newsize + EXTRA_STACK)) * sizeof(StackValue)))));
   G(L)->gcstopem = oldgcstop; /* restore emergency collection */
   if (l_unlikely(newstack == NULL))
   {                            /* reallocation failed? */
     correctstack(L); /* restore upvalue pointers */
     if (raiseerror)
-      luaM_error(L);
+      luaD_throw(L, LUA_ERRMEM);
     else
       return 0; /* do not raise an error */
   }
@@ -734,7 +733,7 @@ static TStatus finishpcallk(lua_State* L, CallInfo* ci)
     status = LUA_YIELD;              /* was interrupted by an yield */
   else
   { /* error */
-    StkId func = restorestack(L, ci->u2.funcidx);
+    StkId func = (static_cast<StkId>(ci->u2.funcidx));
     L->allowhook = getoah(ci);             /* restore 'allowhook' */
     func = luaF_close(L, func, status, 1); /* can yield or raise an error */
     luaD_seterrorobj(L, status, func);
@@ -1004,7 +1003,7 @@ TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status)
   for (;;)
   { /* keep closing upvalues until no more errors */
     struct CloseP pcl;
-    pcl.level = restorestack(L, level);
+    pcl.level = (static_cast<StkId>(level));
     pcl.status = status;
     status = luaD_rawrunprotected(L, &closepaux, &pcl);
     if (l_likely(status == LUA_OK)) /* no more errors? */
@@ -1036,7 +1035,7 @@ TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId old_top,
     L->ci = old_ci;
     L->allowhook = old_allowhooks;
     status = luaD_closeprotected(L, old_top, status);
-    luaD_seterrorobj(L, status, restorestack(L, old_top));
+    luaD_seterrorobj(L, status, (static_cast<StkId>(old_top)));
     luaD_shrinkstack(L); /* restore stack size in case of overflow */
   }
   L->errfunc = old_errfunc;
@@ -1076,11 +1075,11 @@ static void f_parser(lua_State* L, void* ud)
   const char* mode = p->mode ? p->mode : "bt";
   int c;
   Table* anchor;
-  StkId otop = savestack(L, L->top); /* original top */
+  StkId otop = (L->top); /* original top */
   luaD_checkstack(L, 2);
   anchor = luaH_new(L);               /* create the anchor table */
   sethvalue(L, (&(L)->stack.p[L->top++]), anchor); /* anchor the anchor table */
-  c = zgetc(p->z);                    /* read first character */
+  c = (((p->z)->n--) > 0 ? ((unsigned char)(*(p->z)->p++)) : luaZ_fill(p->z));                    /* read first character */
   if (c == LUA_SIGNATURE[0])
   {
     int fixed = 0;
@@ -1095,7 +1094,7 @@ static void f_parser(lua_State* L, void* ud)
     checkmode(L, mode, "text");
     cl = luaY_parser(L, p->z, anchor, &p->buff, &p->dyd, p->name, c);
   }
-  L->top = restorestack(L, otop); /* restore stack */
+  L->top = (static_cast<StkId>(otop)); /* restore stack */
   setclLvalue(L, (&(L)->stack.p[L->top++]), cl); /* push closure */
   lua_assert(cl->nupvalues == cl->p->sizeupvalues);
   luaF_initupvals(L, cl);
@@ -1130,12 +1129,12 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, const char* name,
   p.dyd.gt.size = 0;
   p.dyd.label.arr = NULL;
   p.dyd.label.size = 0;
-  luaZ_initbuffer(L, &p.buff);
-  status = luaD_pcall(L, f_parser, &p, savestack(L, L->top), L->errfunc);
-  luaZ_freebuffer(L, &p.buff);
-  luaM_freearray(L, p.dyd.actvar.arr, ((size_t)(p.dyd.actvar.size)));
-  luaM_freearray(L, p.dyd.gt.arr, ((size_t)(p.dyd.gt.size)));
-  luaM_freearray(L, p.dyd.label.arr, ((size_t)(p.dyd.label.size)));
+  ((&p.buff)->buffer = NULL, (&p.buff)->buffsize = 0);
+  status = luaD_pcall(L, f_parser, &p, (L->top), L->errfunc);
+  ((&p.buff)->buffer = ((char*)(luaM_saferealloc_(L, (&p.buff)->buffer, (&p.buff)->buffsize * sizeof(char), (0) * sizeof(char)))), (&p.buff)->buffsize = (0));
+  luaM_free_(L, (p.dyd.actvar.arr), (((size_t)(p.dyd.actvar.size))) * sizeof(*(p.dyd.actvar.arr)));
+  luaM_free_(L, (p.dyd.gt.arr), (((size_t)(p.dyd.gt.size))) * sizeof(*(p.dyd.gt.arr)));
+  luaM_free_(L, (p.dyd.label.arr), (((size_t)(p.dyd.label.size))) * sizeof(*(p.dyd.label.arr)));
   decnny(L);
   return status;
 }

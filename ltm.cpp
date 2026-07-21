@@ -117,7 +117,7 @@ void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
 lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
                        const TValue* p2, StkId res)
 {
-  StkId result = savestack(L, res);
+  StkId result = (res);
   StkId func = L->top;
   setobj(L, (&(L)->stack.p[func]), f);      /* push function (assume EXTRA_STACK) */
   setobj(L, (&(L)->stack.p[func + 1]), p1); /* 1st argument */
@@ -128,7 +128,7 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
     luaD_call(L, func, 1);
   else
     luaD_callnoyield(L, func, 1);
-  res = restorestack(L, result);
+  res = (static_cast<StkId>(result));
   setobj(L, (&(L)->stack.p[res]), (&(L)->stack.p[--L->top])); /* move result to its place */
   return (((&(L)->stack.p[res])->tt_ & WITHVARIANT_MASK));     /* return tag of the result */
 }

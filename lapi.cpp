@@ -1126,13 +1126,13 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   {
     StkId o = index2stack(L, errfunc);
     api_check(L, ((((&(L)->stack.p[o]))->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION), "error handler must be a function");
-    func = savestack(L, o);
+    func = (o);
   }
   c.func = L->top - (nargs + 1); /* function to be called */
   if (k == NULL || !yieldable(L))
   {                        /* no continuation or no yieldable? */
     c.nresults = nresults; /* do a 'conventional' protected call */
-    status = luaD_pcall(L, f_call, &c, savestack(L, c.func), func);
+    status = luaD_pcall(L, f_call, &c, (c.func), func);
   }
   else
   { /* prepare continuation (call is already protected by 'resume') */
@@ -1140,7 +1140,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     ci->u.c.k = k;     /* save continuation */
     ci->u.c.ctx = ctx; /* save context */
     /* save information for error recovery */
-    ci->u2.funcidx = ((int)(savestack(L, c.func)));
+    ci->u2.funcidx = ((int)((c.func)));
     ci->u.c.old_errfunc = L->errfunc;
     L->errfunc = func;
     setoah(ci, L->allowhook);       /* save value of 'allowhook' */
@@ -1190,13 +1190,13 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
 LUA_API int lua_dump(lua_State* L, lua_Writer writer, void* data, int strip)
 {
   int status;
-  StkId otop = savestack(L, L->top); /* original top */
+  StkId otop = (L->top); /* original top */
   TValue* f = (&(L)->stack.p[L->top - 1]);           /* function to be dumped */
   lua_lock(L);
   api_checkpop(L, 1);
   api_check(L, ((f)->tt_ == ctb(LUA_VLCL)), "Lua function expected");
   status = luaU_dump(L, (lua_assert((f)->tt_ == ctb(LUA_VLCL)), (lua_assert((((f)->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>(((f)->value_).gc)))->p, writer, data, strip);
-  L->top = restorestack(L, otop); /* restore top */
+  L->top = (static_cast<StkId>(otop)); /* restore top */
   lua_unlock(L);
   return status;
 }
@@ -1321,7 +1321,7 @@ LUA_API int lua_error(lua_State* L)
   api_checkpop(L, 1);
   /* error object is the memory error message? */
   if ((((errobj)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) && eqshrstr((lua_assert(((errobj)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((errobj)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((errobj)->value_).gc))), G(L)->memerrmsg))
-    luaM_error(L); /* raise a memory error */
+    luaD_throw(L, LUA_ERRMEM); /* raise a memory error */
   else
     luaG_errormsg(L); /* raise a regular error */
   /* code unreachable; will unlock when control actually leaves the kernel */

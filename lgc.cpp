@@ -327,7 +327,7 @@ void luaC_fix(lua_State* L, GCObject* o)
 GCObject* luaC_newobjdt(lua_State* L, lu_byte tt, size_t sz)
 {
   global_State* g = G(L);
-  GCObject* o = ((GCObject*)(luaM_newobject(L, ((tt) & NOVARIANT_MASK), sz)));
+  GCObject* o = ((GCObject*)(luaM_malloc_(L, (sz), ((tt) & NOVARIANT_MASK))));
   o->marked = luaC_white(g);
   o->tt = tt;
   o->next = g->allgc;
@@ -902,7 +902,7 @@ static void freeupval(lua_State* L, UpVal* uv)
 {
   if (upisopen(uv))
     luaF_unlinkupval(uv);
-  luaM_free(L, uv);
+  luaM_free_(L, (uv), sizeof(*(uv)));
 }
 
 static void freeobj(lua_State* L, GCObject* o)
@@ -919,13 +919,13 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VLCL:
   {
     LClosure* cl = (lua_assert((o)->tt == LUA_VLCL), static_cast<LClosure*>(o));
-    luaM_freemem(L, cl, sizeLclosure(cl->nupvalues));
+    luaM_free_(L, (cl), (sizeLclosure(cl->nupvalues)));
     break;
   }
   case LUA_VCCL:
   {
     CClosure* cl = (lua_assert((o)->tt == LUA_VCCL), static_cast<CClosure*>(o));
-    luaM_freemem(L, cl, sizeCclosure(cl->nupvalues));
+    luaM_free_(L, (cl), (sizeCclosure(cl->nupvalues)));
     break;
   }
   case LUA_VTABLE:
@@ -937,7 +937,7 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = (lua_assert((o)->tt == LUA_VUSERDATA), static_cast<Udata*>(o));
-    luaM_freemem(L, o, sizeudata(u->nuvalue, u->len));
+    luaM_free_(L, (o), (sizeudata(u->nuvalue, u->len)));
     break;
   }
   case LUA_VSHRSTR:
@@ -946,7 +946,7 @@ static void freeobj(lua_State* L, GCObject* o)
     luaS_remove(L, ts);
     luaM_release(L, ts->content.capacity());
     ts->content.~basic_string();
-    luaM_freemem(L, ts, sizeof(TString));
+    luaM_free_(L, (ts), (sizeof(TString)));
     break;
   }
   default:
@@ -1057,7 +1057,7 @@ static void GCTM(lua_State* L)
     setobj(L, (&(L)->stack.p[L->top++]), tm);   /* push finalizer... */
     setobj(L, (&(L)->stack.p[L->top++]), &v);   /* ... and its argument */
     L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
-    status = luaD_pcall(L, dothecall, NULL, savestack(L, L->top - 2), 0);
+    status = luaD_pcall(L, dothecall, NULL, (L->top - 2), 0);
     L->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */
     L->allowhook = oldah;           /* restore hooks */
     g->gcstp = oldgcstp;            /* restore state */

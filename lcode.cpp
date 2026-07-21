@@ -349,15 +349,13 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
   int pc = fs->pc - 1; /* last instruction coded */
   if (abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS)
   {
-    luaM_growvector(fs->ls->L, f->abslineinfo, fs->nabslineinfo,
-                    f->sizeabslineinfo, AbsLineInfo, INT_MAX, "lines");
+    ((f->abslineinfo) = ((AbsLineInfo*)(luaM_growaux_(fs->ls->L, f->abslineinfo, fs->nabslineinfo, &(f->sizeabslineinfo), sizeof(AbsLineInfo), ((((size_t)(INT_MAX)) <= MAX_SIZET / sizeof(AbsLineInfo)) ? (INT_MAX) : ((int)((MAX_SIZET / sizeof(AbsLineInfo))))), "lines"))));
     f->abslineinfo[fs->nabslineinfo].pc = pc;
     f->abslineinfo[fs->nabslineinfo++].line = line;
     linedif = ABSLINEINFO; /* signal that there is absolute information */
     fs->iwthabs = 1;       /* restart counter */
   }
-  luaM_growvector(fs->ls->L, f->lineinfo, pc, f->sizelineinfo, ls_byte,
-                  INT_MAX, "opcodes");
+  ((f->lineinfo) = ((ls_byte*)(luaM_growaux_(fs->ls->L, f->lineinfo, pc, &(f->sizelineinfo), sizeof(ls_byte), ((((size_t)(INT_MAX)) <= MAX_SIZET / sizeof(ls_byte)) ? (INT_MAX) : ((int)((MAX_SIZET / sizeof(ls_byte))))), "opcodes"))));
   f->lineinfo[pc] = ((ls_byte)(linedif));
   fs->previousline = line; /* last line saved */
 }
@@ -403,8 +401,7 @@ int luaK_code(FuncState* fs, Instruction i)
 {
   Proto* f = fs->f;
   /* put new instruction in code array */
-  luaM_growvector(fs->ls->L, f->code, fs->pc, f->sizecode, Instruction,
-                  INT_MAX, "opcodes");
+  ((f->code) = ((Instruction*)(luaM_growaux_(fs->ls->L, f->code, fs->pc, &(f->sizecode), sizeof(Instruction), ((((size_t)(INT_MAX)) <= MAX_SIZET / sizeof(Instruction)) ? (INT_MAX) : ((int)((MAX_SIZET / sizeof(Instruction))))), "opcodes"))));
   f->code[fs->pc++] = i;
   savelineinfo(fs, f, fs->ls->lastline);
   return fs->pc - 1; /* index of new instruction */
@@ -570,7 +567,7 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
   lua_State* L = fs->ls->L;
   int oldsize = f->sizek;
   int k = fs->nk;
-  luaM_growvector(L, f->k, k, f->sizek, TValue, MAXARG_Ax, "constants");
+  ((f->k) = ((TValue*)(luaM_growaux_(L, f->k, k, &(f->sizek), sizeof(TValue), ((((size_t)(MAXARG_Ax)) <= MAX_SIZET / sizeof(TValue)) ? (MAXARG_Ax) : ((int)((MAX_SIZET / sizeof(TValue))))), "constants"))));
   while (oldsize < f->sizek)
     ((&f->k[oldsize++])->tt_ = LUA_VNIL);
   setobj(L, &f->k[k], v);
@@ -790,7 +787,7 @@ static void const2exp(TValue* v, expdesc* e)
 */
 void luaK_setreturns(FuncState* fs, expdesc* e, int nresults)
 {
-  Instruction* pc = &getinstruction(fs, e);
+  Instruction* pc = &((fs)->f->code[(e)->u.info]);
   luaY_checklimit(fs, nresults + 1, MAXARG_C, "multiple results");
   if (e->k == VCALL) /* expression is an open function call? */
     ((*pc) = (((*pc) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(nresults + 1)) << POS_C) & MASK1(SIZE_C, POS_C))));
@@ -829,13 +826,13 @@ void luaK_setoneret(FuncState* fs, expdesc* e)
   if (e->k == VCALL)
   { /* expression is an open function call? */
     /* already returns 1 value */
-    lua_assert(GETARG_C(getinstruction(fs, e)) == 2);
+    lua_assert(GETARG_C(((fs)->f->code[(e)->u.info])) == 2);
     e->k = VNONRELOC; /* result has fixed position */
-    e->u.info = GETARG_A(getinstruction(fs, e));
+    e->u.info = GETARG_A(((fs)->f->code[(e)->u.info]));
   }
   else if (e->k == VVARARG)
   {
-    ((getinstruction(fs, e)) = (((getinstruction(fs, e)) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(2)) << POS_C) & MASK1(SIZE_C, POS_C))));
+    ((((fs)->f->code[(e)->u.info])) = (((((fs)->f->code[(e)->u.info])) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(2)) << POS_C) & MASK1(SIZE_C, POS_C))));
     e->k = VRELOC; /* can relocate its simple result */
   }
 }
@@ -971,7 +968,7 @@ static void discharge2reg(FuncState* fs, expdesc* e, int reg)
   }
   case VRELOC:
   {
-    Instruction* pc = &getinstruction(fs, e);
+    Instruction* pc = &((fs)->f->code[(e)->u.info]);
     ((*pc) = (((*pc) & MASK0(SIZE_A, POS_A)) | ((((Instruction)(reg)) << POS_A) & MASK1(SIZE_A, POS_A)))); /* instruction will put result in 'reg' */
     break;
   }
@@ -1258,7 +1255,7 @@ static int jumponcond(FuncState* fs, expdesc* e, int cond)
 {
   if (e->k == VRELOC)
   {
-    Instruction ie = getinstruction(fs, e);
+    Instruction ie = ((fs)->f->code[(e)->u.info]);
     if (GET_OPCODE(ie) == OP_NOT)
     {
       removelastinstruction(fs); /* remove previous OP_NOT */

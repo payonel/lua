@@ -21,12 +21,18 @@
 /*
 ** test whether a string is a reserved word
 */
-#define isreserved(s) ((s)->extra > 0)
+static inline int isreserved(const TString* s)
+{
+  return s->extra > 0;
+}
 
 /*
 ** equality for strings
 */
-#define eqshrstr(a, b) ((a) == (b))
+static inline int eqshrstr(const TString* a, const TString* b)
+{
+  return a == b;
+}
 
 LUAI_FUNC int luaS_eqstr(TString* a, TString* b);
 LUAI_FUNC void luaS_clearcache(global_State* g);

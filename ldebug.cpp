@@ -948,7 +948,7 @@ l_noret luaG_errormsg(lua_State* L)
 {
   if (L->errfunc != 0)
   { /* is there an error handling function? */
-    StkId errfunc = restorestack(L, L->errfunc);
+    StkId errfunc = (static_cast<StkId>(L->errfunc));
     lua_assert(((((&(L)->stack.p[errfunc]))->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
     setobj(L, (&(L)->stack.p[L->top]), (&(L)->stack.p[L->top - 1])); /* move argument */
     setobj(L, (&(L)->stack.p[L->top - 1]), (&(L)->stack.p[errfunc]));  /* push function */
@@ -958,7 +958,7 @@ l_noret luaG_errormsg(lua_State* L)
   if (((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   { /* error object is nil? */
     /* change it to a proper message */
-    setsvalue(L, (&(L)->stack.p[L->top - 1]), luaS_newliteral(L, "<no error object>"));
+    setsvalue(L, (&(L)->stack.p[L->top - 1]), (luaS_newlstr(L, "" "<no error object>", (sizeof("<no error object>") / sizeof(char)) - 1)));
   }
   luaD_throw(L, LUA_ERRRUN);
 }

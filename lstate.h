@@ -99,16 +99,12 @@ typedef struct CallInfo CallInfo;
 */
 
 /* true if this thread does not have non-yieldable calls in the stack */
-#define yieldable(L) (((L)->nCcalls & 0xffff0000) == 0)
 
 /* real number of C calls */
-#define getCcalls(L) ((L)->nCcalls & 0xffff)
 
 /* Increment the number of non-yieldable calls */
-#define incnny(L) ((L)->nCcalls += 0x10000)
 
 /* Decrement the number of non-yieldable calls */
-#define decnny(L) ((L)->nCcalls -= 0x10000)
 
 /* Non-yieldable call increment */
 #define nyci (0x10000 | 1)
@@ -135,13 +131,10 @@ struct lua_longjmp; /* defined in ldo.c */
 
 #define BASIC_STACK_SIZE (2 * LUA_MINSTACK)
 
-#define stacksize(th) ((int)((th)->stack_last))
-
 /* kinds of Garbage Collection */
 #define KGC_INC      0 /* incremental gc */
 #define KGC_GENMINOR 1 /* generational gc in minor (regular) mode */
 #define KGC_GENMAJOR 2 /* generational in major mode */
-
 
 /*
 ** Information about a call.
@@ -225,7 +218,10 @@ struct CallInfo
 /* function "called" a finalizer */
 #define CIST_FIN (CIST_HOOKYIELD << 1)
 
-#define get_nresults(cs) (((int)((cs) & CIST_NRESULTS)) - 1)
+constexpr int get_nresults(l_uint32 cs)
+{
+  return (int)(cs & CIST_NRESULTS) - 1;
+}
 
 /*
 ** Field CIST_RECST stores the "recover status", used to keep the error
@@ -233,17 +229,36 @@ struct CallInfo
 ** Lua can correctly resume after an yield from a __close method called
 ** because of an error.  (Three bits are enough for error status.)
 */
-#define getcistrecst(ci)     (((ci)->callstatus >> CIST_RECST) & 7)
-#define setcistrecst(ci, st) check_exp(((st) & 7) == (st), /* status must fit in three bits */ ((ci)->callstatus = ((ci)->callstatus & ~(7u << CIST_RECST)) | (((l_uint32)(st)) << CIST_RECST)))
+static inline lu_byte getcistrecst(const CallInfo* ci)
+{
+  return (lu_byte)((ci->callstatus >> CIST_RECST) & 7);
+}
+static inline void setcistrecst(CallInfo* ci, int st)
+{
+  lua_assert((st & 7) == st); /* status must fit in three bits */
+  ci->callstatus = (ci->callstatus & ~(7u << CIST_RECST)) | ((l_uint32)st << CIST_RECST);
+}
 
 /* active function is a Lua function */
-#define isLua(ci) (!((ci)->callstatus & CIST_C))
+static inline int isLua(const CallInfo* ci)
+{
+  return !(ci->callstatus & CIST_C);
+}
 
 /* call is running Lua code (not a hook) */
-#define isLuacode(ci) (!((ci)->callstatus & (CIST_C | CIST_HOOKED)))
+static inline int isLuacode(const CallInfo* ci)
+{
+  return !(ci->callstatus & (CIST_C | CIST_HOOKED));
+}
 
-#define setoah(ci, v) ((ci)->callstatus = ((v) ? (ci)->callstatus | CIST_OAH : (ci)->callstatus & ~CIST_OAH))
-#define getoah(ci)    (((ci)->callstatus & CIST_OAH) ? 1 : 0)
+static inline void setoah(CallInfo* ci, int v)
+{
+  ci->callstatus = v ? (ci->callstatus | CIST_OAH) : (ci->callstatus & ~CIST_OAH);
+}
+static inline lu_byte getoah(const CallInfo* ci)
+{
+  return (ci->callstatus & CIST_OAH) ? 1 : 0;
+}
 
 /*
 ** 'per thread' state
@@ -292,6 +307,40 @@ static inline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
   obj->value_.gc = x;
   obj->tt_ = ctb(LUA_VTHREAD);
   checkliveness(L, obj);
+}
+
+static inline global_State* G(lua_State* L)
+{
+  return L->l_G;
+}
+
+/* true if this thread does not have non-yieldable calls in the stack */
+static inline int yieldable(const lua_State* L)
+{
+  return (L->nCcalls & 0xffff0000) == 0;
+}
+
+/* real number of C calls */
+static inline int getCcalls(const lua_State* L)
+{
+  return (int)(L->nCcalls & 0xffff);
+}
+
+/* increment the number of non-yieldable calls */
+static inline void incnny(lua_State* L)
+{
+  L->nCcalls += 0x10000;
+}
+
+/* decrement the number of non-yieldable calls */
+static inline void decnny(lua_State* L)
+{
+  L->nCcalls -= 0x10000;
+}
+
+static inline int stacksize(const lua_State* th)
+{
+  return (int)th->stack_last;
 }
 
 /*
@@ -369,23 +418,45 @@ typedef struct global_State
   LX mainth;                                 /* main thread of this state */
 } global_State;
 
-#define G(L)          (L->l_G)
-#define mainthread(G) (&(G)->mainth.l)
-
 /*
 ** 'g->nilvalue' being a nil value flags that the state was completely
 ** build.
 */
-#define completestate(g) (((&g->nilvalue)->tt_ & NOVARIANT_MASK) == LUA_TNIL)
 
 /* actual number of total memory allocated */
-#define gettotalbytes(g) ((g)->GCtotalbytes - (g)->GCdebt)
 
 LUAI_FUNC void luaE_setdebt(global_State* g, l_mem debt);
 LUAI_FUNC void luaE_freethread(lua_State* L, lua_State* L1);
 LUAI_FUNC lu_mem luaE_threadsize(lua_State* L);
 LUAI_FUNC CallInfo* luaE_extendCI(lua_State* L, int err);
 LUAI_FUNC void luaE_shrinkCI(lua_State* L);
+static inline lua_State* mainthread(global_State* g)
+{
+  return &g->mainth.l;
+}
+
+static inline int completestate(global_State* g)
+{
+  return (g->nilvalue.tt_ & NOVARIANT_MASK) == LUA_TNIL;
+}
+
+/* actual number of total memory allocated */
+static inline l_mem gettotalbytes(global_State* g)
+{
+  return g->GCtotalbytes - g->GCdebt;
+}
+
+/* fast access to metamethods: NULL when no metamethod present */
+static inline const TValue* gfasttm(global_State* g, Table* mt, TMS e)
+{
+  return checknoTM(mt, e) ? NULL : luaT_gettm(mt, e, g->tmname[e]);
+}
+
+static inline const TValue* fasttm(lua_State* l, Table* mt, TMS e)
+{
+  return gfasttm(G(l), mt, e);
+}
+
 LUAI_FUNC void luaE_checkcstack(lua_State* L);
 LUAI_FUNC void luaE_incCstack(lua_State* L);
 LUAI_FUNC void luaE_warning(lua_State* L, const char* msg, int tocont);

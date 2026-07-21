@@ -9,7 +9,10 @@
 #include "lobject.h"
 
 /* test whether thread is in 'twups' list */
-#define isintwups(L) (L->twups != L)
+static inline int isintwups(lua_State* L)
+{
+  return L->twups != L;
+}
 
 /*
 ** maximum number of upvalues in a closure (both C and Lua). (Value
@@ -17,16 +20,26 @@
 */
 #define MAXUPVAL 255
 
-#define upisopen(up) ((up)->previous != NULL)
+static inline int upisopen(const UpVal* up)
+{
+  return up->previous != NULL;
+}
 
 /* Get the stack index for an open upvalue */
-#define uplevel(up) check_exp(upisopen(up), (up)->stkid)
+static inline StkId uplevel(const UpVal* up)
+{
+  lua_assert(upisopen(up));
+  return up->stkid;
+}
 
 /*
 ** Current location of an upvalue's value: a slot in the owner
 ** thread's stack while open, its own embedded storage when closed.
 */
-#define upvalval(uv) (upisopen(uv) ? (&((uv)->owner)->stack.p[(uv)->stkid]) : &(uv)->value)
+static inline TValue* upvalval(UpVal* uv)
+{
+  return upisopen(uv) ? &uv->owner->stack.p[uv->stkid] : &uv->value;
+}
 
 /*
 ** maximum number of misses before giving up the cache of closures

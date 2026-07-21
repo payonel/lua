@@ -26,7 +26,7 @@
 */
 #define luaM_testsize(n, e) (sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (e))
 
-#define luaM_checksize(L, n, e) (luaM_testsize(n, e) ? luaM_toobig(L) : ((void)(0)))
+#define luaM_checksize(L, n, e) ((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (e)) ? luaM_toobig(L) : ((void)(0)))
 
 /*
 ** Computes the minimum between 'n' and 'MAX_SIZET/sizeof(t)', so that
@@ -47,13 +47,13 @@
 
 #define luaM_new(L, t)                 ((t*)(luaM_malloc_(L, sizeof(t), 0)))
 #define luaM_newvector(L, n, t)        ((t*)(luaM_malloc_(L, ((size_t)(n)) * sizeof(t), 0)))
-#define luaM_newvectorchecked(L, n, t) (luaM_checksize(L, n, sizeof(t)), luaM_newvector(L, n, t))
+#define luaM_newvectorchecked(L, n, t) (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(t))) ? luaM_toobig(L) : ((void)(0))), ((t*)(luaM_malloc_(L, ((size_t)(n)) * sizeof(t), 0))))
 
 #define luaM_newobject(L, tag, s) luaM_malloc_(L, (s), tag)
 
-#define luaM_newblock(L, size) luaM_newvector(L, size, char)
+#define luaM_newblock(L, size) ((char*)(luaM_malloc_(L, ((size_t)(size)) * sizeof(char), 0)))
 
-#define luaM_growvector(L, v, nelems, size, t, limit, e) ((v) = ((t*)(luaM_growaux_(L, v, nelems, &(size), sizeof(t), luaM_limitN(limit, t), e))))
+#define luaM_growvector(L, v, nelems, size, t, limit, e) ((v) = ((t*)(luaM_growaux_(L, v, nelems, &(size), sizeof(t), ((((size_t)(limit)) <= MAX_SIZET / sizeof(t)) ? (limit) : ((int)((MAX_SIZET / sizeof(t))))), e))))
 
 #define luaM_reallocvector(L, v, oldn, n, t) (((t*)(luaM_realloc_(L, v, ((size_t)(oldn)) * sizeof(t), ((size_t)(n)) * sizeof(t)))))
 
