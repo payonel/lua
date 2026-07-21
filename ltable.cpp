@@ -103,10 +103,10 @@
 ** (DEADKEY, NULL) that is different from any valid TValue.
 */
 static const Node dummynode_ = {
-    {{NULL}, LUA_VEMPTY, /* value's value and type */
-     LUA_TDEADKEY,
-     0,
-     {NULL}} /* key type, next, and key value */
+    {{NULL}, LUA_VEMPTY}, /* val (value and type) */
+    LUA_TDEADKEY,         /* key_tt */
+    0,                    /* next */
+    {NULL}                /* key_val */
 };
 
 static const TValue absentkey = {ABSTKEYCONSTANT};

@@ -9,8 +9,8 @@
 #include "lobject.h"
 
 #define gnode(t, i) (&(t)->node[i])
-#define gval(n)     (&(n)->i_val)
-#define gnext(n)    ((n)->u.next)
+#define gval(n)     (&(n)->val)
+#define gnext(n)    ((n)->next)
 
 /*
 ** Clear all bits of fast-access metamethods, which means that the table

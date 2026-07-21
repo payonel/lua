@@ -704,21 +704,14 @@ typedef union Closure
 
 /*
 ** Nodes for Hash tables: A pack of two TValue's (key-value pairs)
-** plus a 'next' field to link colliding entries. The distribution
-** of the key's fields ('key_tt' and 'key_val') not forming a proper
-** 'TValue' allows for a smaller size for 'Node' both in 4-byte
-** and 8-byte alignments.
+** plus a 'next' field to link colliding entries.
 */
-typedef union Node
+typedef struct Node
 {
-  struct NodeKey
-  {
-    TValuefields;   /* fields for value */
-    lu_byte key_tt; /* key type */
-    int next;       /* for chaining */
-    Value key_val;  /* key value */
-  } u;
-  TValue i_val; /* direct access to node's value as a proper 'TValue' */
+  TValue val;       /* node value */
+  lu_byte key_tt;   /* key type */
+  int next;         /* for chaining */
+  Value key_val;    /* key value */
 } Node;
 
 /* copy a value into a key */
@@ -726,8 +719,8 @@ typedef union Node
   {                              \
     Node* n_ = (node);           \
     const TValue* io_ = (obj);   \
-    n_->u.key_val = io_->value_; \
-    n_->u.key_tt = io_->tt_;     \
+    n_->key_val = io_->value_;   \
+    n_->key_tt = io_->tt_;       \
   }
 
 /* copy a value from a key */
@@ -735,8 +728,8 @@ typedef union Node
   {                              \
     TValue* io_ = (obj);         \
     const Node* n_ = (node);     \
-    io_->value_ = n_->u.key_val; \
-    io_->tt_ = n_->u.key_tt;     \
+    io_->value_ = n_->key_val;   \
+    io_->tt_ = n_->key_tt;       \
     checkliveness(L, io_);       \
   }
 
@@ -756,8 +749,8 @@ typedef struct Table
 /*
 ** Macros to manipulate keys inserted in nodes
 */
-#define keytt(node)  ((node)->u.key_tt)
-#define keyval(node) ((node)->u.key_val)
+#define keytt(node)  ((node)->key_tt)
+#define keyval(node) ((node)->key_val)
 
 #define keyisnil(node)     (keytt(node) == LUA_TNIL)
 #define keyisinteger(node) (keytt(node) == LUA_VNUMINT)
