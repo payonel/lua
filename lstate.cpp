@@ -399,7 +399,7 @@ void luaE_warning(lua_State* L, const char* msg, int tocont)
 */
 void luaE_warnerror(lua_State* L, const char* where)
 {
-  TValue* errobj = s2v(L, L->top - 1); /* error object */
+  TValue* errobj = (&(L)->stack.p[L->top - 1]); /* error object */
   const char* msg = ((((errobj)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
                         ? getstr(tsvalue(errobj))
                         : "error object is not a string";

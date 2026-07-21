@@ -130,7 +130,7 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
     luaD_callnoyield(L, func, 1);
   res = restorestack(L, result);
   setobjs2s(L, res, --L->top); /* move result to its place */
-  return ((s2v(L, res)->tt_ & WITHVARIANT_MASK));     /* return tag of the result */
+  return (((&(L)->stack.p[res])->tt_ & WITHVARIANT_MASK));     /* return tag of the result */
 }
 
 static int callbinTM(lua_State* L, const TValue* p1, const TValue* p2,
@@ -178,8 +178,8 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
 void luaT_tryconcatTM(lua_State* L)
 {
   StkId p1 = L->top - 2; /* first argument */
-  if (l_unlikely(callbinTM(L, s2v(L, p1), s2v(L, p1 + 1), p1, TM_CONCAT) < 0))
-    luaG_concaterror(L, s2v(L, p1), s2v(L, p1 + 1));
+  if (l_unlikely(callbinTM(L, (&(L)->stack.p[p1]), (&(L)->stack.p[p1 + 1]), p1, TM_CONCAT) < 0))
+    luaG_concaterror(L, (&(L)->stack.p[p1]), (&(L)->stack.p[p1 + 1]));
 }
 
 void luaT_trybinassocTM(lua_State* L, const TValue* p1, const TValue* p2,
@@ -242,7 +242,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   int i;
   TValue key, value;
   Table* t = luaH_new(L);
-  sethvalue(L, s2v(L, L->top), t);
+  sethvalue(L, (&(L)->stack.p[L->top]), t);
   L->top++;
   luaH_resize(L, t, cast_uint(n), 1);
   setsvalue(L, &key, luaS_new(L, "n")); /* key is "n" */
@@ -251,7 +251,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
      cannot trigger a garbage collection */
   luaH_set(L, t, &key, &value); /* t.n = n */
   for (i = 0; i < n; i++)
-    luaH_setint(L, t, i + 1, s2v(L, f + i));
+    luaH_setint(L, t, i + 1, (&(L)->stack.p[f + i]));
   luaC_checkGC(L);
 }
 
@@ -320,7 +320,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
     const char* s = getlstr(tsvalue(rc), len);
     if (len == 1 && s[0] == 'n')
     { /* key is "n"? */
-      setivalue(s2v(L, ra), nextra);
+      setivalue((&(L)->stack.p[ra]), nextra);
       return;
     }
   }
@@ -355,7 +355,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
 void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
                      int vatab)
 {
-  Table* h = (vatab < 0) ? NULL : hvalue(s2v(L, ci->func + vatab + 1));
+  Table* h = (vatab < 0) ? NULL : hvalue((&(L)->stack.p[ci->func + vatab + 1]));
   int nargs = getnumargs(L, ci, h); /* number of available vararg args. */
   int i, touse;                     /* 'touse' is minimum between 'wanted' and 'nargs' */
   if (wanted < 0)
@@ -375,7 +375,7 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
   { /* get vararg values from vararg table */
     for (i = 0; i < touse; i++)
     {
-      lu_byte tag = luaH_getint(h, i + 1, s2v(L, where + i));
+      lu_byte tag = luaH_getint(h, i + 1, (&(L)->stack.p[where + i]));
       if (tagisempty(tag))
         setnilvalue2s(L, where + i);
     }

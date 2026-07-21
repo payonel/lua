@@ -129,7 +129,7 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
 */
 static void checkclosemth(lua_State* L, StkId level)
 {
-  const TValue* tm = luaT_gettmbyobj(L, s2v(L, level), TM_CLOSE);
+  const TValue* tm = luaT_gettmbyobj(L, (&(L)->stack.p[level]), TM_CLOSE);
   if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                            /* no metamethod? */
     int idx = cast_int(level - L->ci->func); /* variable index */
@@ -150,7 +150,7 @@ static void checkclosemth(lua_State* L, StkId level)
 static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
                              int yy)
 {
-  TValue* uv = s2v(L, level); /* value being closed */
+  TValue* uv = (&(L)->stack.p[level]); /* value being closed */
   TValue* errobj;
   switch (status)
   {
@@ -161,7 +161,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
     errobj = NULL; /* no error object */
     break;
   default:                                  /* 'luaD_seterrorobj' will set top to level + 2 */
-    errobj = s2v(L, level + 1);                /* error object goes after 'uv' */
+    errobj = (&(L)->stack.p[level + 1]);                /* error object goes after 'uv' */
     luaD_seterrorobj(L, status, level + 1); /* set error object */
     break;
   }
@@ -174,7 +174,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
 void luaF_newtbcupval(lua_State* L, StkId level)
 {
   lua_assert(level > L->tbclist);
-  if (l_isfalse(s2v(L, level)))
+  if (l_isfalse((&(L)->stack.p[level])))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
   luaM_growvector(L, L->tbc, L->ntbc, L->sizetbc, StkId, INT_MAX, "to-be-closed variables");
@@ -201,7 +201,7 @@ void luaF_closeupval(lua_State* L, StkId level)
     TValue* slot = &uv->value; /* new position for value */
     lua_assert(uplevel(uv) < L->top);
     luaF_unlinkupval(uv);       /* remove upvalue from 'openupval' list */
-    setobj(L, slot, s2v(L, uv->stkid)); /* move value to upvalue slot */
+    setobj(L, slot, (&(L)->stack.p[uv->stkid])); /* move value to upvalue slot */
     uv->previous = NULL;        /* mark as closed */
     uv->opennext = NULL;
     uv->owner = NULL;

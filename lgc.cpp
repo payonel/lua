@@ -741,7 +741,7 @@ static l_mem traversethread(global_State* g, lua_State* th)
   lua_assert(g->gcstate == GCSatomic ||
              th->openupval == NULL || isintwups(th));
   for (; o < th->top; o++) /* mark live elements in the stack */
-    markvalue(g, s2v(th, o));
+    markvalue(g, (&(th)->stack.p[o]));
   for (uv = th->openupval; uv != NULL; uv = uv->opennext)
     markobject(g, uv); /* open upvalues cannot be collected */
   if (g->gcstate == GCSatomic)

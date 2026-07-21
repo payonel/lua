@@ -350,14 +350,14 @@ static unsigned findindex(lua_State* L, Table* t, TValue* key,
 int luaH_next(lua_State* L, Table* t, StkId key)
 {
   unsigned int asize = t->asize;
-  unsigned int i = findindex(L, t, s2v(L, key), asize); /* find original key */
+  unsigned int i = findindex(L, t, (&(L)->stack.p[key]), asize); /* find original key */
   for (; i < asize; i++)
   { /* try first array part */
     lu_byte tag = *getArrTag(t, i);
     if (!tagisempty(tag))
     { /* a non-empty entry? */
-      setivalue(s2v(L, key), cast_int(i) + 1);
-      farr2val(t, i, tag, s2v(L, key + 1));
+      setivalue((&(L)->stack.p[key]), cast_int(i) + 1);
+      farr2val(t, i, tag, (&(L)->stack.p[key + 1]));
       return 1;
     }
   }
@@ -366,7 +366,7 @@ int luaH_next(lua_State* L, Table* t, StkId key)
     if (!isempty(gval(gnode(t, i))))
     { /* a non-empty entry? */
       Node* n = gnode(t, i);
-      getnodekey(L, s2v(L, key), n);
+      getnodekey(L, (&(L)->stack.p[key]), n);
       setobj2s(L, key + 1, gval(n));
       return 1;
     }

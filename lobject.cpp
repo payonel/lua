@@ -238,7 +238,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
 void luaO_arith(lua_State* L, int op, const TValue* p1, const TValue* p2,
                 StkId res)
 {
-  if (!luaO_rawarith(L, op, p1, p2, s2v(L, res)))
+  if (!luaO_rawarith(L, op, p1, p2, (&(L)->stack.p[res])))
   {
     /* could not perform raw operation; try metamethod */
     luaT_trybinTM(L, p1, p2, res, cast(TMS, (op - LUA_OPADD) + TM_ADD));
@@ -627,7 +627,7 @@ static const char* clearbuff(BuffFS* buff)
   if (luaD_rawrunprotected(L, pushbuff, buff) != LUA_OK) /* errors? */
     res = NULL;                                          /* error message is on the top of the stack */
   else
-    res = getstr(tsvalue(s2v(L, L->top - 1)));
+    res = getstr(tsvalue((&(L)->stack.p[L->top - 1])));
   if (buff->b != buff->space)                   /* using dynamic buffer? */
     luaM_freearray(L, buff->b, buff->buffsize); /* free it */
   return res;

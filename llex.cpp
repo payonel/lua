@@ -138,7 +138,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
     return tsvalue(&oldts); /* use stored value */
   else
   {                                /* create a new entry */
-    TValue* stv = s2v(L, L->top++); /* reserve stack space for string */
+    TValue* stv = (&(L)->stack.p[L->top++]); /* reserve stack space for string */
     setsvalue(L, stv, ts);         /* push (anchor) the string on the stack */
     luaH_set(L, ls->h, stv, stv);  /* t[string] = string */
     /* table is not a metatable, so it does not need to invalidate cache */

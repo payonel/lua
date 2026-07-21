@@ -189,7 +189,7 @@ static const char* upvalname(const Proto* p, int uv)
 
 static const char* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
 {
-  if (clLvalue(s2v(L, ci->func))->p->flag & PF_VAHID)
+  if (clLvalue((&(L)->stack.p[ci->func]))->p->flag & PF_VAHID)
   {
     int nextra = ci->u.l.nextraargs;
     if (n >= -nextra)
@@ -234,10 +234,10 @@ LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
   lua_lock(L);
   if (ar == NULL)
   {                                      /* information about non-active function? */
-    if (!((s2v(L, L->top - 1))->tt_ == ctb(LUA_VLCL))) /* not a Lua function? */
+    if (!(((&(L)->stack.p[L->top - 1]))->tt_ == ctb(LUA_VLCL))) /* not a Lua function? */
       name = NULL;
     else /* consider live variables at function start (parameters) */
-      name = luaF_getlocalname(clLvalue(s2v(L, L->top - 1))->p, n, 0);
+      name = luaF_getlocalname(clLvalue((&(L)->stack.p[L->top - 1]))->p, n, 0);
   }
   else
   {                   /* active function; get information through 'ar' */
@@ -440,7 +440,7 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   if (*what == '>')
   {
     ci = NULL;
-    func = s2v(L, L->top - 1);
+    func = (&(L)->stack.p[L->top - 1]);
     api_check(L, (((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION), "function expected");
     what++;     /* skip the '>' */
     L->top--; /* pop function */
@@ -448,7 +448,7 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   else
   {
     ci = ar->i_ci;
-    func = s2v(L, ci->func);
+    func = (&(L)->stack.p[ci->func]);
     lua_assert((((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
   }
   cl = ((func)->tt_ == ctb(LUA_VLCL) || (func)->tt_ == ctb(LUA_VCCL)) ? clvalue(func) : NULL;
@@ -787,7 +787,7 @@ static int instack(lua_State* L, CallInfo* ci, const TValue* o)
   StkId base = ci->func + 1;
   for (pos = 0; base + pos < ci->top; pos++)
   {
-    if (o == s2v(L, base + pos))
+    if (o == (&(L)->stack.p[base + pos]))
       return pos;
   }
   return -1; /* not found */
@@ -949,13 +949,13 @@ l_noret luaG_errormsg(lua_State* L)
   if (L->errfunc != 0)
   { /* is there an error handling function? */
     StkId errfunc = restorestack(L, L->errfunc);
-    lua_assert((((s2v(L, errfunc))->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
+    lua_assert(((((&(L)->stack.p[errfunc]))->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
     setobjs2s(L, L->top, L->top - 1); /* move argument */
     setobjs2s(L, L->top - 1, errfunc);  /* push function */
     L->top++;                           /* assume EXTRA_STACK */
     luaD_callnoyield(L, L->top - 2, 1); /* call it */
   }
-  if ((((s2v(L, L->top - 1))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   { /* error object is nil? */
     /* change it to a proper message */
     setsvalue2s(L, L->top - 1, luaS_newliteral(L, "<no error object>"));

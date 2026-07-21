@@ -119,9 +119,9 @@ constexpr int WITHVARIANT_MASK = 0x3F;
 */
 
 /* from stack to stack */
-#define setobjs2s(L, o1, o2) setobj(L, s2v(L, o1), s2v(L, o2))
+#define setobjs2s(L, o1, o2) setobj(L, (&(L)->stack.p[o1]), (&(L)->stack.p[o2]))
 /* to stack (not from same stack) */
-#define setobj2s(L, o1, o2) setobj(L, s2v(L, o1), o2)
+#define setobj2s(L, o1, o2) setobj(L, (&(L)->stack.p[o1]), o2)
 /* from table to same table */
 #define setobjt2t setobj
 /* to new object */
@@ -138,9 +138,6 @@ typedef TValue StackValue;
 
 /* index to stack elements (integer offset from stack base) */
 typedef size_t StkId;
-
-/* convert a stack index to a 'TValue' pointer */
-#define s2v(L, i) (&(L)->stack.p[i])
 
 /*
 ** {==================================================================
@@ -169,7 +166,7 @@ typedef size_t StkId;
 #define tagisempty(tag) (novariant(tag) == LUA_TNIL)
 
 #define setnilvalue(obj)   settt_(obj, LUA_VNIL)
-#define setnilvalue2s(L, stk) setnilvalue(s2v(L, stk))
+#define setnilvalue2s(L, stk) setnilvalue((&(L)->stack.p[stk]))
 
 #define isabstkey(v) ((v)->tt_ == LUA_VABSTKEY)
 
@@ -229,7 +226,7 @@ typedef size_t StkId;
     checkliveness(L, io);         \
   }
 
-#define setthvalue2s(L, o, t) setthvalue(L, s2v(L, o), t)
+#define setthvalue2s(L, o, t) setthvalue(L, (&(L)->stack.p[o]), t)
 
 /* }================================================================== */
 
@@ -349,7 +346,7 @@ typedef struct GCObject
   }
 
 /* set a string to the stack */
-#define setsvalue2s(L, o, s) setsvalue(L, s2v(L, o), s)
+#define setsvalue2s(L, o, s) setsvalue(L, (&(L)->stack.p[o]), s)
 
 /* set a string to a new object */
 #define setsvalue2n setsvalue
@@ -579,7 +576,7 @@ typedef struct Proto : GCObject
     checkliveness(L, io);      \
   }
 
-#define setclLvalue2s(L, o, cl) setclLvalue(L, s2v(L, o), cl)
+#define setclLvalue2s(L, o, cl) setclLvalue(L, (&(L)->stack.p[o]), cl)
 
 #define setfvalue(obj, x) \
   {                       \
@@ -654,7 +651,7 @@ typedef struct LClosure : Closure
     checkliveness(L, io);        \
   }
 
-#define sethvalue2s(L, o, h) sethvalue(L, s2v(L, o), h)
+#define sethvalue2s(L, o, h) sethvalue(L, (&(L)->stack.p[o]), h)
 
 /*
 ** Nodes for Hash tables: A pack of two TValue's (key-value pairs)

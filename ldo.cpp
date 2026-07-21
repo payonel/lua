@@ -98,7 +98,7 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
   else
   {
     lua_assert(errorstatus(errcode));        /* must be a real error */
-    lua_assert(!(((s2v(L, L->top - 1))->tt_ & NOVARIANT_MASK) == LUA_TNIL)); /* with a non-nil object */
+    lua_assert(!((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)); /* with a non-nil object */
     setobjs2s(L, oldtop, L->top - 1);      /* move it to 'oldtop' */
   }
   L->top = oldtop + 1; /* top goes back to old top plus error object */
@@ -119,7 +119,7 @@ l_noret luaD_throw(lua_State* L, TStatus errcode)
     L->status = errcode;
     if (mainth->errorJmp)
     {                                              /* main thread has a handler? */
-      setobj(L, s2v(mainth, mainth->top++), s2v(L, L->top - 1)); /* copy error obj. */
+      setobj(L, (&(mainth)->stack.p[mainth->top++]), (&(L)->stack.p[L->top - 1])); /* copy error obj. */
       luaD_throw(mainth, errcode);                 /* re-throw in main thread */
     }
     else
@@ -439,9 +439,9 @@ static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
 {
   const TValue* tm;
   StkId p;
-  tm = luaT_gettmbyobj(L, s2v(L, func), TM_CALL);
+  tm = luaT_gettmbyobj(L, (&(L)->stack.p[func]), TM_CALL);
   if (l_unlikely((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))) /* no metamethod? */
-    luaG_callerror(L, s2v(L, func));
+    luaG_callerror(L, (&(L)->stack.p[func]));
   for (p = L->top; p > func; p--) /* open space for metamethod */
     setobjs2s(L, p, p - 1);
   L->top++;                          /* stack space pre-allocated by the caller */
@@ -589,15 +589,15 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
 {
   unsigned status = LUA_MULTRET + 1;
 retry:
-  switch (s2v(L, func)->tt_ & WITHVARIANT_MASK)
+  switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
   {
   case LUA_VCCL: /* C closure */
-    return precallC(L, func, status, clCvalue(s2v(L, func))->f);
+    return precallC(L, func, status, clCvalue((&(L)->stack.p[func]))->f);
   case LUA_VLCF: /* light C function */
-    return precallC(L, func, status, fvalue(s2v(L, func)));
+    return precallC(L, func, status, fvalue((&(L)->stack.p[func])));
   case LUA_VLCL:
   { /* Lua function */
-    Proto* p = clLvalue(s2v(L, func))->p;
+    Proto* p = clLvalue((&(L)->stack.p[func]))->p;
     int fsize = p->maxstacksize; /* frame size */
     int nfixparams = p->numparams;
     int i;
@@ -638,18 +638,18 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
   unsigned status = cast_uint(nresults + 1);
   lua_assert(status <= MAXRESULTS + 1);
 retry:
-  switch (s2v(L, func)->tt_ & WITHVARIANT_MASK)
+  switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
   {
   case LUA_VCCL: /* C closure */
-    precallC(L, func, status, clCvalue(s2v(L, func))->f);
+    precallC(L, func, status, clCvalue((&(L)->stack.p[func]))->f);
     return NULL;
   case LUA_VLCF: /* light C function */
-    precallC(L, func, status, fvalue(s2v(L, func)));
+    precallC(L, func, status, fvalue((&(L)->stack.p[func])));
     return NULL;
   case LUA_VLCL:
   { /* Lua function */
     CallInfo* ci;
-    Proto* p = clLvalue(s2v(L, func))->p;
+    Proto* p = clLvalue((&(L)->stack.p[func]))->p;
     int narg = cast_int(L->top - func) - 1; /* number of real arguments */
     int nfixparams = p->numparams;
     int fsize = p->maxstacksize; /* frame size */
@@ -1108,8 +1108,8 @@ static void f_parser(lua_State* L, void* ud)
 */
 void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
 {
-  setgcovalue(L, s2v(L, L->top++), obj); /* temporary anchor in the stack */
-  luaH_set(L, anchor, s2v(L, L->top - 1), s2v(L, L->top - 1));
+  setgcovalue(L, (&(L)->stack.p[L->top++]), obj); /* temporary anchor in the stack */
+  luaH_set(L, anchor, (&(L)->stack.p[L->top - 1]), (&(L)->stack.p[L->top - 1]));
   /* Because this is a new key, luaH_set will call the GC barrier, so
      we don't need to call the barrier again here */
   L->top--;

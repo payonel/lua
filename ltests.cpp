@@ -39,7 +39,7 @@
 
 static void* l_Trick = 0;
 
-#define obj_at(L, k) s2v(L, L->ci->func + (k))
+#define obj_at(L, k) (&(L)->stack.p[L->ci->func + (k)])
 
 static int runC(lua_State* L, lua_State* L1, const char* pc);
 
@@ -516,7 +516,7 @@ static int lua_checkpc(lua_State* L, CallInfo* ci)
   else
   {
     StkId f = ci->func;
-    Proto* p = clLvalue(s2v(L, f))->p;
+    Proto* p = clLvalue((&(L)->stack.p[f]))->p;
     return p->code <= ci->u.l.savedpc &&
            ci->u.l.savedpc <= p->code + p->sizecode;
   }
@@ -543,7 +543,7 @@ static void check_stack(global_State* g, lua_State* L1)
     assert(lua_checkpc(L1, ci));
   }
   for (o = 0; o < L1->stack_last; o++)
-    checkliveness(L1, s2v(L1, o)); /* entire stack must have valid values */
+    checkliveness(L1, (&(L1)->stack.p[o])); /* entire stack must have valid values */
 }
 
 static void checkrefs(global_State* g, GCObject* o)
@@ -933,7 +933,7 @@ static void lua_printstack(lua_State* L)
   for (i = 1; i <= n; i++)
   {
     printf("%3d: ", i);
-    lua_printvalue(s2v(L, L->ci->func + i));
+    lua_printvalue((&(L)->stack.p[L->ci->func + i]));
     printf("\n");
   }
   printf("<<\n");
@@ -956,7 +956,7 @@ static int lua_printallstack(lua_State* L)
         ci = ci->next;
     }
     printf("%3d: ", i++);
-    lua_printvalue(s2v(L, p));
+    lua_printvalue((&(L)->stack.p[p]));
     printf("\n");
   }
   printf("<<\n");
@@ -1227,7 +1227,7 @@ static int table_query(lua_State* L)
   {
     lua_pushinteger(L, i);
     if (!tagisempty(*getArrTag(t, i)))
-      arr2obj(t, cast_uint(i), s2v(L, L->top));
+      arr2obj(t, cast_uint(i), (&(L)->stack.p[L->top]));
     else
       setnilvalue2s(L, L->top);
     api_incr_top(L);
@@ -1953,7 +1953,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       int n = getnum;
       if (n != 0)
       {
-        lua_printvalue(s2v(L, L->ci->func + n));
+        lua_printvalue((&(L)->stack.p[L->ci->func + n]));
         printf("\n");
       }
       else
