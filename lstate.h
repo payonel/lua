@@ -248,9 +248,8 @@ struct CallInfo
 /*
 ** 'per thread' state
 */
-struct lua_State
+struct lua_State : GCObject
 {
-  CommonHeader;
   lu_byte allowhook;
   TStatus status;
   StkId top; /* first free slot in the stack */
@@ -367,48 +366,26 @@ typedef struct global_State
 #define completestate(g) ttisnil(&g->nilvalue)
 
 /*
-** Union of all collectable objects (only for conversions)
-** ISO C99, 6.5.2.3 p.5:
-** "if a union contains several structures that share a common initial
-** sequence [...], and if the union object currently contains one
-** of these structures, it is permitted to inspect the common initial
-** part of any of them anywhere that a declaration of the complete type
-** of the union is visible."
+** With C++ inheritance, downcasts from GCObject* to specific types
+** use static_cast. The check_exp assertions validate the type tag.
 */
-union GCUnion
-{
-  GCObject gc; /* common header */
-  struct TString ts;
-  struct Udata u;
-  union Closure cl;
-  struct Table h;
-  struct Proto p;
-  struct lua_State th; /* thread */
-  struct UpVal upv;
-};
+#define gco2ts(o)  check_exp(novariant((o)->tt) == LUA_TSTRING, static_cast<TString*>(o))
+#define gco2u(o)   check_exp((o)->tt == LUA_VUSERDATA, static_cast<Udata*>(o))
+#define gco2lcl(o) check_exp((o)->tt == LUA_VLCL, static_cast<LClosure*>(o))
+#define gco2ccl(o) check_exp((o)->tt == LUA_VCCL, static_cast<CClosure*>(o))
+#define gco2cl(o)  check_exp(novariant((o)->tt) == LUA_TFUNCTION, static_cast<Closure*>(o))
+#define gco2t(o)   check_exp((o)->tt == LUA_VTABLE, static_cast<Table*>(o))
+#define gco2p(o)   check_exp((o)->tt == LUA_VPROTO, static_cast<Proto*>(o))
+#define gco2th(o)  check_exp((o)->tt == LUA_VTHREAD, static_cast<lua_State*>(o))
+#define gco2upv(o) check_exp((o)->tt == LUA_VUPVAL, static_cast<UpVal*>(o))
 
 /*
-** ISO C99, 6.7.2.1 p.14:
-** "A pointer to a union object, suitably converted, points to each of
-** its members [...], and vice versa."
+** Upcast from any GC object to GCObject* (implicit in C++, but
+** check_exp validates the type tag).  The const_cast matches the
+** original C cast semantics — the GC marking pass intentionally
+** mutates objects reached through const pointers.
 */
-#define cast_u(o) cast(union GCUnion*, (o))
-
-/* macros to convert a GCObject into a specific value */
-#define gco2ts(o)  check_exp(novariant((o)->tt) == LUA_TSTRING, &((cast_u(o))->ts))
-#define gco2u(o)   check_exp((o)->tt == LUA_VUSERDATA, &((cast_u(o))->u))
-#define gco2lcl(o) check_exp((o)->tt == LUA_VLCL, &((cast_u(o))->cl.l))
-#define gco2ccl(o) check_exp((o)->tt == LUA_VCCL, &((cast_u(o))->cl.c))
-#define gco2cl(o)  check_exp(novariant((o)->tt) == LUA_TFUNCTION, &((cast_u(o))->cl))
-#define gco2t(o)   check_exp((o)->tt == LUA_VTABLE, &((cast_u(o))->h))
-#define gco2p(o)   check_exp((o)->tt == LUA_VPROTO, &((cast_u(o))->p))
-#define gco2th(o)  check_exp((o)->tt == LUA_VTHREAD, &((cast_u(o))->th))
-#define gco2upv(o) check_exp((o)->tt == LUA_VUPVAL, &((cast_u(o))->upv))
-
-/*
-** macro to convert a Lua object into a GCObject
-*/
-#define obj2gco(v) check_exp(novariant((v)->tt) >= LUA_TSTRING, &(cast_u(v)->gc))
+#define obj2gco(v) check_exp(novariant((v)->tt) >= LUA_TSTRING, const_cast<GCObject*>(static_cast<const GCObject*>(v)))
 
 /* actual number of total memory allocated */
 #define gettotalbytes(g) ((g)->GCtotalbytes - (g)->GCdebt)

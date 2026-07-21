@@ -26,7 +26,7 @@
 #include "ltm.h"
 #include "lvm.h"
 
-#define LuaClosure(f) ((f) != NULL && (f)->c.tt == LUA_VLCL)
+#define LuaClosure(f) ((f) != NULL && (f)->tt == LUA_VLCL)
 
 static const char strlocal[] = "local";
 static const char strupval[] = "upvalue";
@@ -281,7 +281,7 @@ static void funcinfo(lua_Debug* ar, Closure* cl)
   }
   else
   {
-    const Proto* p = cl->l.p;
+    const Proto* p = static_cast<LClosure*>(cl)->p;
     if (p->source)
     {
       ar->source = getlstr(p->source, ar->srclen);
@@ -315,7 +315,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
   }
   else
   {
-    const Proto* p = f->l.p;
+    const Proto* p = static_cast<LClosure*>(f)->p;
     int currentline = p->linedefined;
     Table* t = luaH_new(L);      /* new table to store active lines */
     sethvalue2s(L, L->top, t); /* push it on stack */
@@ -371,7 +371,7 @@ static int auxgetinfo(lua_State* L, const char* what, lua_Debug* ar,
     }
     case 'u':
     {
-      ar->nups = (f == NULL) ? 0 : f->c.nupvalues;
+      ar->nups = (f == NULL) ? 0 : f->nupvalues;
       if (!LuaClosure(f))
       {
         ar->isvararg = 1;
@@ -379,8 +379,8 @@ static int auxgetinfo(lua_State* L, const char* what, lua_Debug* ar,
       }
       else
       {
-        ar->isvararg = (isvararg(f->l.p)) ? 1 : 0;
-        ar->nparams = f->l.p->numparams;
+        ar->isvararg = (isvararg(static_cast<LClosure*>(f)->p)) ? 1 : 0;
+        ar->nparams = static_cast<LClosure*>(f)->p->numparams;
       }
       break;
     }

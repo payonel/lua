@@ -378,9 +378,8 @@ typedef struct GCObject
 /*
 ** Header for a string value.
 */
-typedef struct TString
+typedef struct TString : GCObject
 {
-  CommonHeader;
   lu_byte extra;       /* reserved words for short strings; "has hash" for longs */
   unsigned int hash;   /* cached hash value */
   std::string content; /* string data */
@@ -441,9 +440,8 @@ typedef union UValue
 ** Header for userdata with user values;
 ** memory area follows the end of this structure.
 */
-typedef struct Udata
+typedef struct Udata : GCObject
 {
-  CommonHeader;
   unsigned short nuvalue; /* number of user values */
   size_t len;             /* number of bytes */
   struct Table* metatable;
@@ -460,9 +458,8 @@ typedef struct Udata
 ** this representation. (The 'bindata' field in its end ensures correct
 ** alignment for binary data following this header.)
 */
-typedef struct Udata0
+typedef struct Udata0 : GCObject
 {
-  CommonHeader;
   unsigned short nuvalue; /* number of user values */
   size_t len;             /* number of bytes */
   struct Table* metatable;
@@ -550,9 +547,8 @@ typedef struct AbsLineInfo
 /*
 ** Function Prototypes
 */
-typedef struct Proto
+typedef struct Proto : GCObject
 {
-  CommonHeader;
   lu_byte numparams; /* number of fixed (named) parameters */
   lu_byte flag;
   lu_byte maxstacksize; /* number of registers needed by this function */
@@ -636,9 +632,8 @@ typedef struct Proto
 /*
 ** Upvalues for Lua closures
 */
-typedef struct UpVal
+typedef struct UpVal : GCObject
 {
-  CommonHeader;
   struct UpVal* opennext;    /* next in open list (NULL when closed) */
   struct UpVal** previous;   /* back-pointer in open list (NULL when closed) */
   struct lua_State* owner;   /* thread whose stack holds the value (when open) */
@@ -646,34 +641,27 @@ typedef struct UpVal
   TValue value;             /* embedded storage for closed-over value */
 } UpVal;
 
-#define ClosureHeader \
-  CommonHeader;       \
-  lu_byte nupvalues;  \
-  GCObject* gclist
-
-typedef struct CClosure
+typedef struct Closure : GCObject
 {
-  ClosureHeader;
+  lu_byte nupvalues;
+  GCObject* gclist;
+} Closure;
+
+typedef struct CClosure : Closure
+{
   lua_CFunction f;
   TValue upvalue[1]; /* list of upvalues */
 } CClosure;
 
 #define sizeCclosure(n) (sizeof(CClosure) - sizeof(TValue) + sizeof(TValue) * cast_uint(n))
 
-typedef struct LClosure
+typedef struct LClosure : Closure
 {
-  ClosureHeader;
   struct Proto* p;
   UpVal* upvals[1]; /* list of upvalues */
 } LClosure;
 
 #define sizeLclosure(n) (sizeof(LClosure) - sizeof(UpVal*) + sizeof(UpVal*) * cast_uint(n))
-
-typedef union Closure
-{
-  CClosure c;
-  LClosure l;
-} Closure;
 
 #define getproto(o) (clLvalue(o)->p)
 
@@ -733,9 +721,8 @@ typedef struct Node
     checkliveness(L, io_);       \
   }
 
-typedef struct Table
+typedef struct Table : GCObject
 {
-  CommonHeader;
   lu_byte flags;      /* 1<<p means tagmethod(p) is not present */
   lu_byte lsizenode;  /* log2 of number of slots of 'node' array */
   unsigned int asize; /* number of slots in 'array' array */
