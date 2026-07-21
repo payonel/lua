@@ -173,6 +173,6 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   u->nuvalue = nuvalue;
   u->metatable = NULL;
   for (i = 0; i < nuvalue; i++)
-    setnilvalue(&u->uv[i].uv);
+    ((&u->uv[i].uv)->tt_ = LUA_VNIL);
   return u;
 }

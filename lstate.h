@@ -282,6 +282,19 @@ struct lua_State : GCObject
 };
 
 /*
+** Set a thread value. Defined here rather than with the other set
+** functions in lobject.h because the GCObject upcast needs the
+** complete lua_State type.
+*/
+static inline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
+{
+  lua_assert(x->tt == LUA_VTHREAD);
+  obj->value_.gc = x;
+  obj->tt_ = ctb(LUA_VTHREAD);
+  checkliveness(L, obj);
+}
+
+/*
 ** thread state + extra space
 */
 typedef struct LX

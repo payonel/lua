@@ -102,10 +102,10 @@ void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
                  const TValue* p2, const TValue* p3)
 {
   StkId func = L->top;
-  setobj2s(L, func, f);      /* push function (assume EXTRA_STACK) */
-  setobj2s(L, func + 1, p1); /* 1st argument */
-  setobj2s(L, func + 2, p2); /* 2nd argument */
-  setobj2s(L, func + 3, p3); /* 3rd argument */
+  setobj(L, (&(L)->stack.p[func]), f);      /* push function (assume EXTRA_STACK) */
+  setobj(L, (&(L)->stack.p[func + 1]), p1); /* 1st argument */
+  setobj(L, (&(L)->stack.p[func + 2]), p2); /* 2nd argument */
+  setobj(L, (&(L)->stack.p[func + 3]), p3); /* 3rd argument */
   L->top = func + 4;
   /* metamethod may yield only when called from Lua code */
   if (isLuacode(L->ci))
@@ -119,9 +119,9 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
 {
   StkId result = savestack(L, res);
   StkId func = L->top;
-  setobj2s(L, func, f);      /* push function (assume EXTRA_STACK) */
-  setobj2s(L, func + 1, p1); /* 1st argument */
-  setobj2s(L, func + 2, p2); /* 2nd argument */
+  setobj(L, (&(L)->stack.p[func]), f);      /* push function (assume EXTRA_STACK) */
+  setobj(L, (&(L)->stack.p[func + 1]), p1); /* 1st argument */
+  setobj(L, (&(L)->stack.p[func + 2]), p2); /* 2nd argument */
   L->top += 3;
   /* metamethod may yield only when called from Lua code */
   if (isLuacode(L->ci))
@@ -129,7 +129,7 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
   else
     luaD_callnoyield(L, func, 1);
   res = restorestack(L, result);
-  setobjs2s(L, res, --L->top); /* move result to its place */
+  setobj(L, (&(L)->stack.p[res]), (&(L)->stack.p[--L->top])); /* move result to its place */
   return (((&(L)->stack.p[res])->tt_ & WITHVARIANT_MASK));     /* return tag of the result */
 }
 
@@ -268,12 +268,12 @@ static void buildhiddenargs(lua_State* L, CallInfo* ci, const Proto* p,
   ci->u.l.nextraargs = nextra;
   luaD_checkstack(L, p->maxstacksize + 1);
   /* copy function to the top of the stack, after extra arguments */
-  setobjs2s(L, L->top++, ci->func);
+  setobj(L, (&(L)->stack.p[L->top++]), (&(L)->stack.p[ci->func]));
   /* move fixed parameters to after the copied function */
   for (i = 1; i <= nfixparams; i++)
   {
-    setobjs2s(L, L->top++, ci->func + i);
-    setnilvalue2s(L, ci->func + i); /* erase original parameter (for GC) */
+    setobj(L, (&(L)->stack.p[L->top++]), (&(L)->stack.p[ci->func + i]));
+    (((&(L)->stack.p[ci->func + i]))->tt_ = LUA_VNIL); /* erase original parameter (for GC) */
   }
   ci->func += totalargs + 1; /* 'func' now lives after hidden arguments */
   ci->top += totalargs + 1;
@@ -289,14 +289,14 @@ void luaT_adjustvarargs(lua_State* L, CallInfo* ci, const Proto* p)
     lua_assert(!(p->flag & PF_VAHID));
     createvarargtab(L, ci->func + nfixparams + 1, nextra);
     /* move table to proper place (last parameter) */
-    setobjs2s(L, ci->func + nfixparams + 1, L->top - 1);
+    setobj(L, (&(L)->stack.p[ci->func + nfixparams + 1]), (&(L)->stack.p[L->top - 1]));
   }
   else
   { /* no table */
     lua_assert(p->flag & PF_VAHID);
     buildhiddenargs(L, ci, p, totalargs, nfixparams, nextra);
     /* set vararg parameter to nil */
-    setnilvalue2s(L, ci->func + nfixparams + 1);
+    (((&(L)->stack.p[ci->func + nfixparams + 1]))->tt_ = LUA_VNIL);
     lua_assert(L->top <= ci->top && ci->top <= L->stack_last);
   }
 }
@@ -310,7 +310,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
     if (l_castS2U(n) - 1 < cast_uint(nextra))
     {
       StkId slot = ci->func - nextra + cast_int(n) - 1;
-      setobjs2s(L, ra, slot);
+      setobj(L, (&(L)->stack.p[ra]), (&(L)->stack.p[slot]));
       return;
     }
   }
@@ -324,7 +324,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
       return;
     }
   }
-  setnilvalue2s(L, ra); /* else produce nil */
+  (((&(L)->stack.p[ra]))->tt_ = LUA_VNIL); /* else produce nil */
 }
 
 /*
@@ -369,7 +369,7 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
   if (h == NULL)
   {                             /* no vararg table? */
     for (i = 0; i < touse; i++) /* get vararg values from the stack */
-      setobjs2s(L, where + i, ci->func - nargs + i);
+      setobj(L, (&(L)->stack.p[where + i]), (&(L)->stack.p[ci->func - nargs + i]));
   }
   else
   { /* get vararg values from vararg table */
@@ -377,9 +377,9 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
     {
       lu_byte tag = luaH_getint(h, i + 1, (&(L)->stack.p[where + i]));
       if (tagisempty(tag))
-        setnilvalue2s(L, where + i);
+        (((&(L)->stack.p[where + i]))->tt_ = LUA_VNIL);
     }
   }
   for (; i < wanted; i++) /* complete required results with nil */
-    setnilvalue2s(L, where + i);
+    (((&(L)->stack.p[where + i]))->tt_ = LUA_VNIL);
 }

@@ -75,51 +75,10 @@ constexpr int NOVARIANT_MASK = 0x0F;
 /* selects type + variant bits (bits 0-5) of a tag — was the withvariant macro */
 constexpr int WITHVARIANT_MASK = 0x3F;
 
-
 /* Macros for internal tests */
 
 /* collectable object has the same tag as the original value */
 #define righttt(obj) (((obj)->tt_ & WITHVARIANT_MASK) == (lua_assert((obj)->tt_ & BIT_ISCOLLECTABLE), ((obj)->value_).gc)->tt)
-
-/*
-** Any value being manipulated by the program either is non
-** collectable, or the collectable object has the right tag
-** and it is not dead. The option 'L == NULL' allows other
-** macros using this one to be used where L is not available.
-*/
-#define checkliveness(L, obj) ((void) L, lua_longassert(!((obj)->tt_ & BIT_ISCOLLECTABLE) || (righttt(obj) && (L == NULL || !isdead(G(L), (lua_assert((obj)->tt_ & BIT_ISCOLLECTABLE), ((obj)->value_).gc))))))
-
-/* Macros to set values */
-
-/* set a value's tag */
-#define settt_(o, t) ((o)->tt_ = (t))
-
-/* main macro to copy values (from 'obj2' to 'obj1') */
-#define setobj(L, obj1, obj2)         \
-  {                                   \
-    TValue* io1 = (obj1);             \
-    const TValue* io2 = (obj2);       \
-    io1->value_ = io2->value_;        \
-    settt_(io1, io2->tt_);            \
-    checkliveness(L, io1);            \
-    lua_assert(!isnonstrictnil(io1)); \
-  }
-
-/*
-** Different types of assignments, according to source and destination.
-** (They are mostly equal now, but may be different in the future.)
-*/
-
-/* from stack to stack */
-#define setobjs2s(L, o1, o2) setobj(L, (&(L)->stack.p[o1]), (&(L)->stack.p[o2]))
-/* to stack (not from same stack) */
-#define setobj2s(L, o1, o2) setobj(L, (&(L)->stack.p[o1]), o2)
-/* from table to same table */
-#define setobjt2t setobj
-/* to new object */
-#define setobj2n setobj
-/* to table */
-#define setobj2t setobj
 
 /*
 ** Entries in a Lua stack: plain values. The list of to-be-closed
@@ -157,9 +116,6 @@ typedef size_t StkId;
 */
 #define tagisempty(tag) (((tag) & NOVARIANT_MASK) == LUA_TNIL)
 
-#define setnilvalue(obj)   settt_(obj, LUA_VNIL)
-#define setnilvalue2s(L, stk) setnilvalue((&(L)->stack.p[stk]))
-
 #define isabstkey(v) ((v)->tt_ == LUA_VABSTKEY)
 
 /*
@@ -177,9 +133,6 @@ typedef size_t StkId;
 /* macro defining a value corresponding to an absent key */
 #define ABSTKEYCONSTANT {NULL}, LUA_VABSTKEY
 
-/* mark an entry as empty */
-#define setempty(v) settt_(v, LUA_VEMPTY)
-
 /* }================================================================== */
 
 /*
@@ -194,9 +147,6 @@ typedef size_t StkId;
 #define l_isfalse(o)  (((o)->tt_ == LUA_VFALSE) || (((o)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
 #define tagisfalse(t) ((t) == LUA_VFALSE || ((t) & NOVARIANT_MASK) == LUA_TNIL)
 
-#define setbfvalue(obj) settt_(obj, LUA_VFALSE)
-#define setbtvalue(obj) settt_(obj, LUA_VTRUE)
-
 /* }================================================================== */
 
 /*
@@ -206,18 +156,6 @@ typedef size_t StkId;
 */
 
 #define LUA_VTHREAD makevariant(LUA_TTHREAD, 0)
-
-
-#define setthvalue(L, obj, x)     \
-  {                               \
-    TValue* io = (obj);           \
-    lua_State* x_ = (x);          \
-    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_)));    \
-    settt_(io, ctb(LUA_VTHREAD)); \
-    checkliveness(L, io);         \
-  }
-
-#define setthvalue2s(L, o, t) setthvalue(L, (&(L)->stack.p[o]), t)
 
 /* }================================================================== */
 
@@ -248,16 +186,6 @@ typedef struct GCObject
 /* mark a tag as collectable */
 #define ctb(t) ((t) | BIT_ISCOLLECTABLE)
 
-
-
-#define setgcovalue(L, obj, x) \
-  {                            \
-    TValue* io = (obj);        \
-    GCObject* i_g = (x);       \
-    ((io)->value_).gc = i_g;         \
-    settt_(io, ctb(i_g->tt));  \
-  }
-
 /* }================================================================== */
 
 /*
@@ -269,36 +197,6 @@ typedef struct GCObject
 /* Variant tags for numbers */
 #define LUA_VNUMINT makevariant(LUA_TNUMBER, 0) /* integer numbers */
 #define LUA_VNUMFLT makevariant(LUA_TNUMBER, 1) /* float numbers */
-
-
-
-#define setfltvalue(obj, x)  \
-  {                          \
-    TValue* io = (obj);      \
-    ((io)->value_).n = (x);        \
-    settt_(io, LUA_VNUMFLT); \
-  }
-
-#define chgfltvalue(obj, x)    \
-  {                            \
-    TValue* io = (obj);        \
-    lua_assert(((io)->tt_ == LUA_VNUMFLT)); \
-    ((io)->value_).n = (x);          \
-  }
-
-#define setivalue(obj, x)    \
-  {                          \
-    TValue* io = (obj);      \
-    ((io)->value_).i = (x);        \
-    settt_(io, LUA_VNUMINT); \
-  }
-
-#define chgivalue(obj, x)        \
-  {                              \
-    TValue* io = (obj);          \
-    lua_assert(((io)->tt_ == LUA_VNUMINT)); \
-    ((io)->value_).i = (x);            \
-  }
 
 /* }================================================================== */
 
@@ -313,23 +211,6 @@ typedef struct GCObject
 /* Keep old names for now during transition */
 #define LUA_VSHRSTR LUA_VSTRING
 #define LUA_VLNGSTR LUA_VSTRING
-
-
-
-#define setsvalue(L, obj, x)   \
-  {                            \
-    TValue* io = (obj);        \
-    TString* x_ = (x);         \
-    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_))); \
-    settt_(io, ctb(x_->tt));   \
-    checkliveness(L, io);      \
-  }
-
-/* set a string to the stack */
-#define setsvalue2s(L, o, s) setsvalue(L, (&(L)->stack.p[o]), s)
-
-/* set a string to a new object */
-#define setsvalue2n setsvalue
 
 /*
 ** Header for a string value.
@@ -360,24 +241,6 @@ typedef struct TString : GCObject
 #define LUA_VLIGHTUSERDATA makevariant(LUA_TLIGHTUSERDATA, 0)
 
 #define LUA_VUSERDATA makevariant(LUA_TUSERDATA, 0)
-
-
-
-#define setpvalue(obj, x)           \
-  {                                 \
-    TValue* io = (obj);             \
-    ((io)->value_).p = (x);               \
-    settt_(io, LUA_VLIGHTUSERDATA); \
-  }
-
-#define setuvalue(L, obj, x)        \
-  {                                 \
-    TValue* io = (obj);             \
-    Udata* x_ = (x);                \
-    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_)));      \
-    settt_(io, ctb(LUA_VUSERDATA)); \
-    checkliveness(L, io);           \
-  }
 
 /* Ensures that addresses after this type are always fully aligned. */
 typedef union UValue
@@ -537,35 +400,6 @@ typedef struct Proto : GCObject
 #define LUA_VLCF makevariant(LUA_TFUNCTION, 1) /* light C function */
 #define LUA_VCCL makevariant(LUA_TFUNCTION, 2) /* C closure */
 
-
-
-#define setclLvalue(L, obj, x) \
-  {                            \
-    TValue* io = (obj);        \
-    LClosure* x_ = (x);        \
-    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_))); \
-    settt_(io, ctb(LUA_VLCL)); \
-    checkliveness(L, io);      \
-  }
-
-#define setclLvalue2s(L, o, cl) setclLvalue(L, (&(L)->stack.p[o]), cl)
-
-#define setfvalue(obj, x) \
-  {                       \
-    TValue* io = (obj);   \
-    ((io)->value_).f = (x);     \
-    settt_(io, LUA_VLCF); \
-  }
-
-#define setclCvalue(L, obj, x) \
-  {                            \
-    TValue* io = (obj);        \
-    CClosure* x_ = (x);        \
-    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_))); \
-    settt_(io, ctb(LUA_VCCL)); \
-    checkliveness(L, io);      \
-  }
-
 /*
 ** Upvalues for Lua closures
 */
@@ -611,18 +445,6 @@ typedef struct LClosure : Closure
 */
 
 #define LUA_VTABLE makevariant(LUA_TTABLE, 0)
-
-
-#define sethvalue(L, obj, x)     \
-  {                              \
-    TValue* io = (obj);          \
-    Table* x_ = (x);             \
-    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_)));   \
-    settt_(io, ctb(LUA_VTABLE)); \
-    checkliveness(L, io);        \
-  }
-
-#define sethvalue2s(L, o, h) sethvalue(L, (&(L)->stack.p[o]), h)
 
 /*
 ** Nodes for Hash tables: A pack of two TValue's (key-value pairs)
@@ -704,6 +526,127 @@ typedef struct Table : GCObject
 
 #define twoto(x)    (1u << (x))
 #define sizenode(t) (twoto((t)->lsizenode))
+
+/*
+** {==================================================================
+** Set functions — assign values into TValues
+** ===================================================================
+*/
+
+/*
+** Any value being manipulated by the program either is non
+** collectable, or the collectable object has the right tag
+** and it is not dead. The option 'L == NULL' allows other
+** callers to use it where L is not available.
+** Debug builds check via luaO_checkliveness; release builds compile
+** the check away (assert_code).
+*/
+LUAI_FUNC void luaO_checkliveness(struct lua_State* L, const TValue* obj);
+
+static inline void checkliveness(struct lua_State* L, const TValue* obj)
+{
+  (void) L;
+  (void) obj;
+  assert_code(luaO_checkliveness(L, obj));
+}
+
+/* main value copy (from 'obj2' to 'obj1') */
+static inline void setobj(struct lua_State* L, TValue* obj1, const TValue* obj2)
+{
+  obj1->value_ = obj2->value_;
+  obj1->tt_ = obj2->tt_;
+  checkliveness(L, obj1);
+  lua_assert(!isnonstrictnil(obj1));
+}
+
+static inline void setfltvalue(TValue* obj, lua_Number x)
+{
+  obj->value_.n = x;
+  obj->tt_ = LUA_VNUMFLT;
+}
+
+/* change value of a float, keeping its tag */
+static inline void chgfltvalue(TValue* obj, lua_Number x)
+{
+  lua_assert(obj->tt_ == LUA_VNUMFLT);
+  obj->value_.n = x;
+}
+
+static inline void setivalue(TValue* obj, lua_Integer x)
+{
+  obj->value_.i = x;
+  obj->tt_ = LUA_VNUMINT;
+}
+
+/* change value of an integer, keeping its tag */
+static inline void chgivalue(TValue* obj, lua_Integer x)
+{
+  lua_assert(obj->tt_ == LUA_VNUMINT);
+  obj->value_.i = x;
+}
+
+static inline void setpvalue(TValue* obj, void* x)
+{
+  obj->value_.p = x;
+  obj->tt_ = LUA_VLIGHTUSERDATA;
+}
+
+static inline void setfvalue(TValue* obj, lua_CFunction x)
+{
+  obj->value_.f = x;
+  obj->tt_ = LUA_VLCF;
+}
+
+static inline void setgcovalue(struct lua_State* L, TValue* obj, GCObject* x)
+{
+  (void) L;
+  obj->value_.gc = x;
+  obj->tt_ = ctb(x->tt);
+}
+
+static inline void setsvalue(struct lua_State* L, TValue* obj, TString* x)
+{
+  lua_assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  obj->value_.gc = x;
+  obj->tt_ = ctb(x->tt);
+  checkliveness(L, obj);
+}
+
+static inline void setuvalue(struct lua_State* L, TValue* obj, Udata* x)
+{
+  lua_assert(x->tt == LUA_VUSERDATA);
+  obj->value_.gc = x;
+  obj->tt_ = ctb(LUA_VUSERDATA);
+  checkliveness(L, obj);
+}
+
+static inline void sethvalue(struct lua_State* L, TValue* obj, Table* x)
+{
+  lua_assert(x->tt == LUA_VTABLE);
+  obj->value_.gc = x;
+  obj->tt_ = ctb(LUA_VTABLE);
+  checkliveness(L, obj);
+}
+
+static inline void setclLvalue(struct lua_State* L, TValue* obj, LClosure* x)
+{
+  lua_assert(x->tt == LUA_VLCL);
+  obj->value_.gc = x;
+  obj->tt_ = ctb(LUA_VLCL);
+  checkliveness(L, obj);
+}
+
+static inline void setclCvalue(struct lua_State* L, TValue* obj, CClosure* x)
+{
+  lua_assert(x->tt == LUA_VCCL);
+  obj->value_.gc = x;
+  obj->tt_ = ctb(LUA_VCCL);
+  checkliveness(L, obj);
+}
+
+/* setthvalue lives in lstate.h — it needs the complete lua_State type */
+
+/* }================================================================== */
 
 /* size of buffer for 'luaO_utf8esc' function */
 #define UTF8BUFFSZ 8

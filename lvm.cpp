@@ -307,7 +307,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
       tm = fasttm(L, (lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc)))->metatable, TM_INDEX); /* table's metamethod */
       if (tm == NULL)
       {                     /* no metamethod? */
-        setnilvalue2s(L, val); /* result is nil */
+        (((&(L)->stack.p[val]))->tt_ = LUA_VNIL); /* result is nil */
         return LUA_VNIL;
       }
       /* else will try the metamethod */
@@ -348,7 +348,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
       tm = fasttm(L, h->metatable, TM_NEWINDEX); /* get metamethod */
       if (tm == NULL)
       {                                       /* no metamethod? */
-        sethvalue2s(L, L->top, h);          /* anchor 't' */
+        sethvalue(L, (&(L)->stack.p[L->top]), h);          /* anchor 't' */
         L->top++;                           /* assume EXTRA_STACK */
         luaH_finishset(L, h, key, val, hres); /* set new value */
         L->top--;
@@ -733,7 +733,7 @@ void luaV_concat(lua_State* L, int total)
       cast_void(tostring(L, (&(L)->stack.p[top - 2]))); /* result is first operand */
     else if (isemptystr((&(L)->stack.p[top - 2])))
     {                                 /* first operand is empty string? */
-      setobjs2s(L, top - 2, top - 1); /* result is second op. */
+      setobj(L, (&(L)->stack.p[top - 2]), (&(L)->stack.p[top - 1])); /* result is second op. */
     }
     else
     {
@@ -764,7 +764,7 @@ void luaV_concat(lua_State* L, int total)
         ts = luaS_newlstr(L, buff, tl);
         luaM_freearray(L, buff, tl);
       }
-      setsvalue2s(L, top - n, ts); /* create result */
+      setsvalue(L, (&(L)->stack.p[top - n]), ts); /* create result */
     }
     total -= n - 1;    /* got 'n' strings to create one new */
     L->top -= n - 1; /* popped 'n' strings and pushed one */
@@ -895,7 +895,7 @@ static void pushclosure(lua_State* L, Proto* p, UpVal** encup, StkId base,
   int i;
   LClosure* ncl = luaF_newLclosure(L, nup);
   ncl->p = p;
-  setclLvalue2s(L, ra, ncl); /* anchor new closure in stack */
+  setclLvalue(L, (&(L)->stack.p[ra]), ncl); /* anchor new closure in stack */
   for (i = 0; i < nup; i++)
   {                    /* fill in its upvalues */
     if (uv[i].instack) /* upvalue refers to local variable? */
@@ -921,7 +921,7 @@ void luaV_finishOp(lua_State* L)
   case OP_MMBINI:
   case OP_MMBINK:
   {
-    setobjs2s(L, base + GETARG_A(*(ci->u.l.savedpc - 2)), --L->top);
+    setobj(L, (&(L)->stack.p[base + GETARG_A(*(ci->u.l.savedpc - 2))]), (&(L)->stack.p[--L->top]));
     break;
   }
   case OP_UNM:
@@ -933,7 +933,7 @@ void luaV_finishOp(lua_State* L)
   case OP_GETFIELD:
   case OP_SELF:
   {
-    setobjs2s(L, base + GETARG_A(inst), --L->top);
+    setobj(L, (&(L)->stack.p[base + GETARG_A(inst)]), (&(L)->stack.p[--L->top]));
     break;
   }
   case OP_LT:
@@ -956,7 +956,7 @@ void luaV_finishOp(lua_State* L)
     StkId top = L->top - 1;                   /* top when 'luaT_tryconcatTM' was called */
     int a = GETARG_A(inst);                     /* first element to concatenate */
     int total = cast_int(top - 1 - (base + a)); /* yet to concatenate */
-    setobjs2s(L, top - 2, top);                 /* put TM result in proper position */
+    setobj(L, (&(L)->stack.p[top - 2]), (&(L)->stack.p[top]));                 /* put TM result in proper position */
     L->top = top - 1;                         /* top is one after last element (at top-2) */
     luaV_concat(L, total);                      /* concat them (may yield again) */
     break;
@@ -1346,7 +1346,7 @@ returning: /* trap already set */
       vmcase(OP_MOVE)
       {
         StkId ra = RA(i);
-        setobjs2s(L, ra, RB(i));
+        setobj(L, (&(L)->stack.p[ra]), (&(L)->stack.p[RB(i)]));
         vmbreak;
       }
       vmcase(OP_LOADI)
@@ -1367,7 +1367,7 @@ returning: /* trap already set */
       {
         StkId ra = RA(i);
         TValue* rb = k + GETARG_Bx(i);
-        setobj2s(L, ra, rb);
+        setobj(L, (&(L)->stack.p[ra]), rb);
         vmbreak;
       }
       vmcase(OP_LOADKX)
@@ -1376,26 +1376,26 @@ returning: /* trap already set */
         TValue* rb;
         rb = k + GETARG_Ax(*pc);
         pc++;
-        setobj2s(L, ra, rb);
+        setobj(L, (&(L)->stack.p[ra]), rb);
         vmbreak;
       }
       vmcase(OP_LOADFALSE)
       {
         StkId ra = RA(i);
-        setbfvalue((&(L)->stack.p[ra]));
+        (((&(L)->stack.p[ra]))->tt_ = LUA_VFALSE);
         vmbreak;
       }
       vmcase(OP_LFALSESKIP)
       {
         StkId ra = RA(i);
-        setbfvalue((&(L)->stack.p[ra]));
+        (((&(L)->stack.p[ra]))->tt_ = LUA_VFALSE);
         pc++; /* skip next instruction */
         vmbreak;
       }
       vmcase(OP_LOADTRUE)
       {
         StkId ra = RA(i);
-        setbtvalue((&(L)->stack.p[ra]));
+        (((&(L)->stack.p[ra]))->tt_ = LUA_VTRUE);
         vmbreak;
       }
       vmcase(OP_LOADNIL)
@@ -1404,7 +1404,7 @@ returning: /* trap already set */
         int b = GETARG_B(i);
         do
         {
-          setnilvalue((&(L)->stack.p[ra++]));
+          (((&(L)->stack.p[ra++]))->tt_ = LUA_VNIL);
         } while (b--);
         vmbreak;
       }
@@ -1412,7 +1412,7 @@ returning: /* trap already set */
       {
         StkId ra = RA(i);
         int b = GETARG_B(i);
-        setobj2s(L, ra, upvalval(cl->upvals[b]));
+        setobj(L, (&(L)->stack.p[ra]), upvalval(cl->upvals[b]));
         vmbreak;
       }
       vmcase(OP_SETUPVAL)
@@ -1560,7 +1560,7 @@ returning: /* trap already set */
         pc++;              /* skip extra argument */
         L->top = ra + 1; /* correct top in case of emergency GC */
         t = luaH_new(L);   /* memory allocation */
-        sethvalue2s(L, ra, t);
+        sethvalue(L, (&(L)->stack.p[ra]), t);
         if (b != 0 || c != 0)
           luaH_resize(L, t, c, b); /* idem */
         checkGC(L, ra + 1);
@@ -1573,7 +1573,7 @@ returning: /* trap already set */
         TValue* rb = vRB(i);
         TValue* rc = KC(i);
         TString* key = (lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))); /* key must be a short string */
-        setobj2s(L, ra + 1, rb);
+        setobj(L, (&(L)->stack.p[ra + 1]), rb);
         luaV_fastget(rb, key, (&(L)->stack.p[ra]), luaH_getshortstr, tag);
         if (tagisempty(tag))
           Protect(luaV_finishget(L, rb, rc, ra, tag));
@@ -1793,9 +1793,9 @@ returning: /* trap already set */
         StkId ra = RA(i);
         TValue* rb = vRB(i);
         if (l_isfalse(rb))
-          setbtvalue((&(L)->stack.p[ra]));
+          (((&(L)->stack.p[ra]))->tt_ = LUA_VTRUE);
         else
-          setbfvalue((&(L)->stack.p[ra]));
+          (((&(L)->stack.p[ra]))->tt_ = LUA_VFALSE);
         vmbreak;
       }
       vmcase(OP_LEN)
@@ -1909,7 +1909,7 @@ returning: /* trap already set */
           pc++;
         else
         {
-          setobj2s(L, ra, rb);
+          setobj(L, (&(L)->stack.p[ra]), rb);
           donextjump(ci);
         }
         vmbreak;
@@ -2002,7 +2002,7 @@ returning: /* trap already set */
           L->ci = ci->previous; /* back to caller */
           L->top = base - 1;
           for (; l_unlikely(nres > 0); nres--)
-            setnilvalue((&(L)->stack.p[L->top++])); /* all results are nil */
+            (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* all results are nil */
         }
         goto ret;
       }
@@ -2025,10 +2025,10 @@ returning: /* trap already set */
           else
           {
             StkId ra = RA(i);
-            setobjs2s(L, base - 1, ra); /* at least this result */
+            setobj(L, (&(L)->stack.p[base - 1]), (&(L)->stack.p[ra])); /* at least this result */
             L->top = base;
             for (; l_unlikely(nres > 1); nres--)
-              setnilvalue((&(L)->stack.p[L->top++])); /* complete missing results */
+              (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* complete missing results */
           }
         }
       ret: /* return from a Lua function */
@@ -2080,8 +2080,8 @@ returning: /* trap already set */
         StkId ra = RA(i);
         TValue temp; /* to swap control and closing variables */
         setobj(L, &temp, (&(L)->stack.p[ra + 3]));
-        setobjs2s(L, ra + 3, ra + 2);
-        setobj2s(L, ra + 2, &temp);
+        setobj(L, (&(L)->stack.p[ra + 3]), (&(L)->stack.p[ra + 2]));
+        setobj(L, (&(L)->stack.p[ra + 2]), &temp);
         /* create to-be-closed upvalue (if closing var. is not nil) */
         halfProtect(luaF_newtbcupval(L, ra + 2));
         pc += GETARG_Bx(i); /* go to end of the loop */
@@ -2100,9 +2100,9 @@ returning: /* trap already set */
            return will be the new value for the control variable.
         */
         StkId ra = RA(i);
-        setobjs2s(L, ra + 5, ra + 3); /* copy the control variable */
-        setobjs2s(L, ra + 4, ra + 1); /* copy state */
-        setobjs2s(L, ra + 3, ra);     /* copy function */
+        setobj(L, (&(L)->stack.p[ra + 5]), (&(L)->stack.p[ra + 3])); /* copy the control variable */
+        setobj(L, (&(L)->stack.p[ra + 4]), (&(L)->stack.p[ra + 1])); /* copy state */
+        setobj(L, (&(L)->stack.p[ra + 3]), (&(L)->stack.p[ra]));     /* copy function */
         L->top = ra + 3 + 3;
         ProtectNT(luaD_call(L, ra + 3, GETARG_C(i))); /* do the call */
         updatestack(ci);                              /* stack may have changed */

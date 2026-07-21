@@ -245,7 +245,7 @@ LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
     name = luaG_findlocal(L, ar->i_ci, n, &pos);
     if (name)
     {
-      setobjs2s(L, L->top, pos);
+      setobj(L, (&(L)->stack.p[L->top]), (&(L)->stack.p[pos]));
       api_incr_top(L);
     }
   }
@@ -262,7 +262,7 @@ LUA_API const char* lua_setlocal(lua_State* L, const lua_Debug* ar, int n)
   if (name)
   {
     api_checkpop(L, 1);
-    setobjs2s(L, pos, L->top - 1);
+    setobj(L, (&(L)->stack.p[pos]), (&(L)->stack.p[L->top - 1]));
     L->top--; /* pop value */
   }
   lua_unlock(L);
@@ -310,7 +310,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
 {
   if (!LuaClosure(f))
   {
-    setnilvalue2s(L, L->top);
+    (((&(L)->stack.p[L->top]))->tt_ = LUA_VNIL);
     api_incr_top(L);
   }
   else
@@ -318,13 +318,13 @@ static void collectvalidlines(lua_State* L, Closure* f)
     const Proto* p = static_cast<LClosure*>(f)->p;
     int currentline = p->linedefined;
     Table* t = luaH_new(L);      /* new table to store active lines */
-    sethvalue2s(L, L->top, t); /* push it on stack */
+    sethvalue(L, (&(L)->stack.p[L->top]), t); /* push it on stack */
     api_incr_top(L);
     if (p->lineinfo != NULL)
     { /* proto with debug information? */
       int i;
       TValue v;
-      setbtvalue(&v);     /* boolean 'true' to be the value of all indices */
+      ((&v)->tt_ = LUA_VTRUE);     /* boolean 'true' to be the value of all indices */
       if (!(isvararg(p))) /* regular function? */
         i = 0;            /* consider all instructions */
       else
@@ -455,7 +455,7 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   status = auxgetinfo(L, what, ar, cl, ci);
   if (strchr(what, 'f'))
   {
-    setobj2s(L, L->top, func);
+    setobj(L, (&(L)->stack.p[L->top]), func);
     api_incr_top(L);
   }
   if (strchr(what, 'L'))
@@ -950,15 +950,15 @@ l_noret luaG_errormsg(lua_State* L)
   { /* is there an error handling function? */
     StkId errfunc = restorestack(L, L->errfunc);
     lua_assert(((((&(L)->stack.p[errfunc]))->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
-    setobjs2s(L, L->top, L->top - 1); /* move argument */
-    setobjs2s(L, L->top - 1, errfunc);  /* push function */
+    setobj(L, (&(L)->stack.p[L->top]), (&(L)->stack.p[L->top - 1])); /* move argument */
+    setobj(L, (&(L)->stack.p[L->top - 1]), (&(L)->stack.p[errfunc]));  /* push function */
     L->top++;                           /* assume EXTRA_STACK */
     luaD_callnoyield(L, L->top - 2, 1); /* call it */
   }
   if (((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   { /* error object is nil? */
     /* change it to a proper message */
-    setsvalue2s(L, L->top - 1, luaS_newliteral(L, "<no error object>"));
+    setsvalue(L, (&(L)->stack.p[L->top - 1]), luaS_newliteral(L, "<no error object>"));
   }
   luaD_throw(L, LUA_ERRRUN);
 }
@@ -974,7 +974,7 @@ l_noret luaG_runerror(lua_State* L, const char* fmt, ...)
   { /* Lua function? */
     /* add source:line information */
     luaG_addinfo(L, msg, ci_func(L, ci)->p->source, getcurrentline(L, ci));
-    setobjs2s(L, L->top - 2, L->top - 1); /* remove 'msg' */
+    setobj(L, (&(L)->stack.p[L->top - 2]), (&(L)->stack.p[L->top - 1])); /* remove 'msg' */
     L->top--;
   }
   luaG_errormsg(L);

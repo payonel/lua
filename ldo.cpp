@@ -93,13 +93,13 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
 {
   if (errcode == LUA_ERRMEM)
   {                                          /* memory error? */
-    setsvalue2s(L, oldtop, G(L)->memerrmsg); /* reuse preregistered msg. */
+    setsvalue(L, (&(L)->stack.p[oldtop]), G(L)->memerrmsg); /* reuse preregistered msg. */
   }
   else
   {
     lua_assert(errorstatus(errcode));        /* must be a real error */
     lua_assert(!((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)); /* with a non-nil object */
-    setobjs2s(L, oldtop, L->top - 1);      /* move it to 'oldtop' */
+    setobj(L, (&(L)->stack.p[oldtop]), (&(L)->stack.p[L->top - 1]));      /* move it to 'oldtop' */
   }
   L->top = oldtop + 1; /* top goes back to old top plus error object */
 }
@@ -185,7 +185,7 @@ TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
 l_noret luaD_errerr(lua_State* L)
 {
   TString* msg = luaS_newliteral(L, "error in error handling");
-  setsvalue2s(L, L->top, msg);
+  setsvalue(L, (&(L)->stack.p[L->top]), msg);
   L->top++; /* assume EXTRA_STACK */
   luaD_throw(L, LUA_ERRERR);
 }
@@ -248,7 +248,7 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   correctstack(L); /* fix upvalue pointers */
   L->stack_last = newsize;
   for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
-    setnilvalue(&newstack[i]); /* erase new segment */
+    ((&newstack[i])->tt_ = LUA_VNIL); /* erase new segment */
   return 1;
 }
 
@@ -443,9 +443,9 @@ static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
   if (l_unlikely((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))) /* no metamethod? */
     luaG_callerror(L, (&(L)->stack.p[func]));
   for (p = L->top; p > func; p--) /* open space for metamethod */
-    setobjs2s(L, p, p - 1);
+    setobj(L, (&(L)->stack.p[p]), (&(L)->stack.p[p - 1]));
   L->top++;                          /* stack space pre-allocated by the caller */
-  setobj2s(L, func, tm);               /* metamethod is the new function to be called */
+  setobj(L, (&(L)->stack.p[func]), tm);               /* metamethod is the new function to be called */
   if ((status & MAX_CCMT) == MAX_CCMT) /* is counter full? */
     luaG_runerror(L, "'__call' chain too long");
   return status + (1u << CIST_CCMT); /* increment counter */
@@ -460,9 +460,9 @@ l_sinline void genmoveresults(lua_State* L, StkId res, int nres,
   if (nres > wanted)         /* extra results? */
     nres = wanted;           /* don't need them */
   for (i = 0; i < nres; i++) /* move all results to correct place */
-    setobjs2s(L, res + i, firstresult + i);
+    setobj(L, (&(L)->stack.p[res + i]), (&(L)->stack.p[firstresult + i]));
   for (; i < wanted; i++) /* complete wanted number of results */
-    setnilvalue2s(L, res + i);
+    (((&(L)->stack.p[res + i]))->tt_ = LUA_VNIL);
   L->top = res + wanted; /* top points after the last result */
 }
 
@@ -483,9 +483,9 @@ l_sinline void moveresults(lua_State* L, StkId res, int nres,
     return;
   case 1 + 1:                             /* one value needed */
     if (nres == 0)                        /* no results? */
-      setnilvalue2s(L, res);             /* adjust with nil */
+      (((&(L)->stack.p[res]))->tt_ = LUA_VNIL);             /* adjust with nil */
     else                                  /* at least one result */
-      setobjs2s(L, res, L->top - nres); /* move it to proper place */
+      setobj(L, (&(L)->stack.p[res]), (&(L)->stack.p[L->top - nres])); /* move it to proper place */
     L->top = res + 1;
     return;
   case LUA_MULTRET + 1:
@@ -604,10 +604,10 @@ retry:
     checkstackp(L, fsize - delta, func);
     ci->func -= delta;        /* restore 'func' (if vararg) */
     for (i = 0; i < narg1; i++) /* move down function and arguments */
-      setobjs2s(L, ci->func + i, func + i);
+      setobj(L, (&(L)->stack.p[ci->func + i]), (&(L)->stack.p[func + i]));
     func = ci->func; /* moved-down function */
     for (; narg1 <= nfixparams; narg1++)
-      setnilvalue2s(L, func + narg1); /* complete missing arguments */
+      (((&(L)->stack.p[func + narg1]))->tt_ = LUA_VNIL); /* complete missing arguments */
     ci->top = func + 1 + fsize;  /* top for new function */
     lua_assert(ci->top <= L->stack_last);
     ci->u.l.savedpc = p->code; /* starting point */
@@ -657,7 +657,7 @@ retry:
     L->ci = ci = prepCallInfo(L, func, status, func + 1 + fsize);
     ci->u.l.savedpc = p->code; /* starting point */
     for (; narg < nfixparams; narg++)
-      setnilvalue2s(L, L->top++); /* complete missing arguments */
+      (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* complete missing arguments */
     lua_assert(ci->top <= L->stack_last);
     return ci;
   }
@@ -831,7 +831,7 @@ static int resume_error(lua_State* L, const char* msg, int narg)
 {
   api_checkpop(L, narg);
   L->top -= narg;                           /* remove args from the stack */
-  setsvalue2s(L, L->top, luaS_new(L, msg)); /* push error message */
+  setsvalue(L, (&(L)->stack.p[L->top]), luaS_new(L, msg)); /* push error message */
   api_incr_top(L);
   lua_unlock(L);
   return LUA_ERRRUN;
@@ -1079,7 +1079,7 @@ static void f_parser(lua_State* L, void* ud)
   StkId otop = savestack(L, L->top); /* original top */
   luaD_checkstack(L, 2);
   anchor = luaH_new(L);               /* create the anchor table */
-  sethvalue2s(L, L->top++, anchor); /* anchor the anchor table */
+  sethvalue(L, (&(L)->stack.p[L->top++]), anchor); /* anchor the anchor table */
   c = zgetc(p->z);                    /* read first character */
   if (c == LUA_SIGNATURE[0])
   {
@@ -1096,7 +1096,7 @@ static void f_parser(lua_State* L, void* ud)
     cl = luaY_parser(L, p->z, anchor, &p->buff, &p->dyd, p->name, c);
   }
   L->top = restorestack(L, otop); /* restore stack */
-  setclLvalue2s(L, L->top++, cl); /* push closure */
+  setclLvalue(L, (&(L)->stack.p[L->top++]), cl); /* push closure */
   lua_assert(cl->nupvalues == cl->p->sizeupvalues);
   luaF_initupvals(L, cl);
 }

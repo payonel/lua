@@ -52,7 +52,7 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
     uv->previous = NULL;     /* NULL = closed */
     uv->owner = NULL;
     uv->stkid = 0;
-    setnilvalue(&uv->value); /* closed: value lives in own storage */
+    ((&uv->value)->tt_ = LUA_VNIL); /* closed: value lives in own storage */
     cl->upvals[i] = uv;
     luaC_objbarrier(L, cl, uv);
   }
@@ -112,10 +112,10 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
   StkId top = L->top;
   StkId func = top;
   const TValue* tm = luaT_gettmbyobj(L, obj, TM_CLOSE);
-  setobj2s(L, top++, tm);    /* will call metamethod... */
-  setobj2s(L, top++, obj);   /* with 'self' as the 1st argument */
+  setobj(L, (&(L)->stack.p[top++]), tm);    /* will call metamethod... */
+  setobj(L, (&(L)->stack.p[top++]), obj);   /* with 'self' as the 1st argument */
   if (err != NULL)           /* if there was an error... */
-    setobj2s(L, top++, err); /* then error object will be 2nd argument */
+    setobj(L, (&(L)->stack.p[top++]), err); /* then error object will be 2nd argument */
   L->top = top;            /* add function and arguments */
   if (yy)
     luaD_call(L, func, 0);

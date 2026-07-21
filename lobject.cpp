@@ -21,6 +21,7 @@
 #include "ldo.h"
 #include "lmem.h"
 #include "lobject.h"
+#include "lgc.h"
 #include "lstate.h"
 #include "util_cast.h"
 #include "lstring.h"
@@ -30,6 +31,23 @@
 ** Computes ceil(log2(x)), which is the smallest integer n such that
 ** x <= (1 << n).
 */
+/*
+** Debug check that a value being manipulated is alive: either it is
+** not collectable, or the collectable object has the right tag and is
+** not dead. 'L == NULL' skips the deadness check (used where no
+** lua_State is available). Called only from debug builds (the
+** checkliveness inline wrapper compiles the call away in release).
+*/
+void luaO_checkliveness(lua_State* L, const TValue* obj)
+{
+  (void) L; /* unused when asserts are disabled */
+  if (obj->tt_ & BIT_ISCOLLECTABLE)
+  {
+    lua_assert(righttt(obj));
+    lua_assert(L == NULL || !isdead(G(L), obj->value_.gc));
+  }
+}
+
 lu_byte luaO_ceillog2(unsigned int x)
 {
   static const lu_byte log_2[256] = {/* log_2[i - 1] = ceil(log2(i)) */
@@ -614,7 +632,7 @@ static void pushbuff(lua_State* L, void* ud)
   default:
   { /* no errors, but it can raise one creating the new string */
     TString* ts = luaS_newlstr(L, buff->b, buff->blen);
-    setsvalue2s(L, L->top, ts);
+    setsvalue(L, (&(L)->stack.p[L->top]), ts);
     L->top++;
   }
   }

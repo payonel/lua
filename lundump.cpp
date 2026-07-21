@@ -206,7 +206,7 @@ static void loadConstants(LoadState* S, Proto* f)
   f->k = luaM_newvectorchecked(S->L, n, TValue);
   f->sizek = n;
   for (i = 0; i < n; i++)
-    setnilvalue(&f->k[i]);
+    ((&f->k[i])->tt_ = LUA_VNIL);
   for (i = 0; i < n; i++)
   {
     TValue* o = &f->k[i];
@@ -214,13 +214,13 @@ static void loadConstants(LoadState* S, Proto* f)
     switch (t)
     {
     case LUA_VNIL:
-      setnilvalue(o);
+      ((o)->tt_ = LUA_VNIL);
       break;
     case LUA_VFALSE:
-      setbfvalue(o);
+      ((o)->tt_ = LUA_VFALSE);
       break;
     case LUA_VTRUE:
-      setbtvalue(o);
+      ((o)->tt_ = LUA_VTRUE);
       break;
     case LUA_VNUMFLT:
       setfltvalue(o, loadNumber(S));
@@ -234,7 +234,7 @@ static void loadConstants(LoadState* S, Proto* f)
       loadString(S, f, &f->source); /* use 'source' to anchor string */
       if (f->source == NULL)
         error(S, "bad format for constant string");
-      setsvalue2n(S->L, o, f->source); /* save it in the right place */
+      setsvalue(S->L, o, f->source); /* save it in the right place */
       f->source = NULL;
       break;
     }

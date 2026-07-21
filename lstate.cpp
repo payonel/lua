@@ -129,7 +129,7 @@ static void resetCI(lua_State* L)
 {
   CallInfo* ci = L->ci = &L->base_ci;
   ci->func = 0;
-  setnilvalue2s(L, ci->func);                 /* 'function' entry for basic 'ci' */
+  (((&(L)->stack.p[ci->func]))->tt_ = LUA_VNIL);                 /* 'function' entry for basic 'ci' */
   ci->top = ci->func + 1 + LUA_MINSTACK; /* +1 for 'function' entry */
   ci->u.c.k = NULL;
   ci->callstatus = CIST_C;
@@ -144,7 +144,7 @@ static void stack_init(lua_State* L1, lua_State* L)
   L1->stack.p = luaM_newvector(L, BASIC_STACK_SIZE + EXTRA_STACK, StackValue);
   L1->tbclist = 0;
   for (i = 0; i < BASIC_STACK_SIZE + EXTRA_STACK; i++)
-    setnilvalue2s(L1, i); /* erase new stack */
+    (((&(L1)->stack.p[i]))->tt_ = LUA_VNIL); /* erase new stack */
   L1->stack_last = BASIC_STACK_SIZE;
   /* initialize first ci */
   resetCI(L1);
@@ -176,7 +176,7 @@ static void init_registry(lua_State* L, global_State* g)
   sethvalue(L, &g->l_registry, registry);
   luaH_resize(L, registry, LUA_RIDX_LAST, 0);
   /* registry[1] = false */
-  setbfvalue(&aux);
+  ((&aux)->tt_ = LUA_VFALSE);
   luaH_setint(L, registry, 1, &aux);
   /* registry[LUA_RIDX_MAINTHREAD] = L */
   setthvalue(L, &aux, L);
@@ -198,7 +198,7 @@ static void f_luaopen(lua_State* L, void*)
   luaT_init(L);
   luaX_init(L);
   g->gcstp = 0;              /* allow gc */
-  setnilvalue(&g->nilvalue); /* now state is complete */
+  ((&g->nilvalue)->tt_ = LUA_VNIL); /* now state is complete */
   luai_userstateopen(L);
 }
 
@@ -270,7 +270,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX));
   L1 = (lua_assert((o)->tt == LUA_VTHREAD), static_cast<lua_State*>(o));
   /* anchor it on L stack */
-  setthvalue2s(L, L->top, L1);
+  setthvalue(L, (&(L)->stack.p[L->top]), L1);
   api_incr_top(L);
   preinit_thread(L1, g);
   L1->hookmask = L->hookmask;
@@ -345,7 +345,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->seed = seed;
   g->gcstp = GCSTPGC; /* no GC while building state */
   new (&g->strt) decltype(g->strt)();
-  setnilvalue(&g->l_registry);
+  ((&g->l_registry)->tt_ = LUA_VNIL);
   g->panic = NULL;
   g->gcstate = GCSpause;
   g->gckind = KGC_INC;

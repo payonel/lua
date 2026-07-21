@@ -86,13 +86,13 @@ int luaK_exp2const(FuncState* fs, const expdesc* e, TValue* v)
   switch (e->k)
   {
   case VFALSE:
-    setbfvalue(v);
+    ((v)->tt_ = LUA_VFALSE);
     return 1;
   case VTRUE:
-    setbtvalue(v);
+    ((v)->tt_ = LUA_VTRUE);
     return 1;
   case VNIL:
-    setnilvalue(v);
+    ((v)->tt_ = LUA_VNIL);
     return 1;
   case VKSTR:
   {
@@ -572,7 +572,7 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
   int k = fs->nk;
   luaM_growvector(L, f->k, k, f->sizek, TValue, MAXARG_Ax, "constants");
   while (oldsize < f->sizek)
-    setnilvalue(&f->k[oldsize++]);
+    ((&f->k[oldsize++])->tt_ = LUA_VNIL);
   setobj(L, &f->k[k], v);
   fs->nk++;
   luaC_barrier(L, f, v);
@@ -674,7 +674,7 @@ static int luaK_numberK(FuncState* fs, lua_Number r)
 static int boolF(FuncState* fs)
 {
   TValue o;
-  setbfvalue(&o);
+  ((&o)->tt_ = LUA_VFALSE);
   return k2proto(fs, &o, &o); /* use boolean itself as key */
 }
 
@@ -684,7 +684,7 @@ static int boolF(FuncState* fs)
 static int boolT(FuncState* fs)
 {
   TValue o;
-  setbtvalue(&o);
+  ((&o)->tt_ = LUA_VTRUE);
   return k2proto(fs, &o, &o); /* use boolean itself as key */
 }
 

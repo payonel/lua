@@ -51,7 +51,7 @@ static void setnameval(lua_State* L, const char* name, int val)
 
 static void pushobject(lua_State* L, const TValue* o)
 {
-  setobj2s(L, L->top, o);
+  setobj(L, (&(L)->stack.p[L->top]), o);
   api_incr_top(L);
 }
 
@@ -1229,7 +1229,7 @@ static int table_query(lua_State* L)
     if (!tagisempty(*getArrTag(t, i)))
       arr2obj(t, cast_uint(i), (&(L)->stack.p[L->top]));
     else
-      setnilvalue2s(L, L->top);
+      (((&(L)->stack.p[L->top]))->tt_ = LUA_VNIL);
     api_incr_top(L);
     lua_pushnil(L);
   }
@@ -1298,7 +1298,7 @@ static int string_query(lua_State* L)
     int n = 0;
     for (auto it = strt.begin(cast_sizet(s)); it != strt.end(cast_sizet(s)); ++it)
     {
-      setsvalue2s(L, L->top, it->second);
+      setsvalue(L, (&(L)->stack.p[L->top]), it->second);
       api_incr_top(L);
       n++;
     }

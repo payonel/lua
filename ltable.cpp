@@ -367,7 +367,7 @@ int luaH_next(lua_State* L, Table* t, StkId key)
     { /* a non-empty entry? */
       Node* n = gnode(t, i);
       getnodekey(L, (&(L)->stack.p[key]), n);
-      setobj2s(L, key + 1, gval(n));
+      setobj(L, (&(L)->stack.p[key + 1]), gval(n));
       return 1;
     }
   }
@@ -628,7 +628,7 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
       Node* n = gnode(t, i);
       gnext(n) = 0;
       setnilkey(n);
-      setempty(gval(n));
+      ((gval(n))->tt_ = LUA_VEMPTY);
     }
   }
 }
@@ -898,7 +898,7 @@ static int insertkey(Table* t, const TValue* key, TValue* value)
         gnext(f) += cast_int(mp - f); /* correct 'next' */
         gnext(mp) = 0;                /* now 'mp' is free */
       }
-      setempty(gval(mp));
+      ((gval(mp))->tt_ = LUA_VEMPTY);
     }
     else
     { /* colliding node is in its own main position */
@@ -913,7 +913,7 @@ static int insertkey(Table* t, const TValue* key, TValue* value)
   }
   setnodekey(mp, key);
   lua_assert(isempty(gval(mp)));
-  setobj2t(cast(lua_State*, 0), gval(mp), value);
+  setobj(cast(lua_State*, 0), gval(mp), value);
   return 1;
 }
 
@@ -1208,7 +1208,7 @@ void luaH_finishset(lua_State* L, Table* t, const TValue* key,
   }
   else if (hres > 0)
   { /* regular Node? */
-    setobj2t(L, gval(gnode(t, hres - HFIRSTNODE)), value);
+    setobj(L, gval(gnode(t, hres - HFIRSTNODE)), value);
   }
   else
   {               /* array entry */
