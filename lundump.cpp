@@ -152,7 +152,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
       lua_assert(*sl == NULL); /* must be prefilled */
       return;
     }
-    if (novariant(luaH_getint(S->h, l_castU2S(idx), &stv)) != LUA_TSTRING)
+    if ((luaH_getint(S->h, l_castU2S(idx), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
       error(S, "invalid string index");
     *sl = ts = tsvalue(&stv); /* get its value */
     luaC_objbarrier(L, p, ts);

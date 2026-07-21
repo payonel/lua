@@ -589,7 +589,7 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
 {
   unsigned status = LUA_MULTRET + 1;
 retry:
-  switch (ttypetag(s2v(L, func)))
+  switch (s2v(L, func)->tt_ & WITHVARIANT_MASK)
   {
   case LUA_VCCL: /* C closure */
     return precallC(L, func, status, clCvalue(s2v(L, func))->f);
@@ -638,7 +638,7 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
   unsigned status = cast_uint(nresults + 1);
   lua_assert(status <= MAXRESULTS + 1);
 retry:
-  switch (ttypetag(s2v(L, func)))
+  switch (s2v(L, func)->tt_ & WITHVARIANT_MASK)
   {
   case LUA_VCCL: /* C closure */
     precallC(L, func, status, clCvalue(s2v(L, func))->f);

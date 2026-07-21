@@ -62,30 +62,32 @@ typedef struct TValue
   TValuefields;
 } TValue;
 
+/*
+** Layout of a type tag byte (tt_ / tt):
+**   bits 0-3: basic type (LUA_TNIL, LUA_TNUMBER, ...)
+**   bits 4-5: variant bits (e.g. LUA_VNUMINT vs LUA_VNUMFLT)
+**   bit 6:    BIT_ISCOLLECTABLE
+*/
+
+/* selects the basic type (bits 0-3) of a tag — was the novariant macro */
+constexpr int NOVARIANT_MASK = 0x0F;
+
+/* selects type + variant bits (bits 0-5) of a tag — was the withvariant macro */
+constexpr int WITHVARIANT_MASK = 0x3F;
+
 #define val_(o)   ((o)->value_)
 #define valraw(o) (val_(o))
-
-/* raw type tag of a TValue */
-#define rawtt(o) ((o)->tt_)
 
 /* tag with no variants (bits 0-3) */
 #define novariant(t) ((t) & 0x0F)
 
-/* type tag of a TValue (bits 0-3 for tags + variant bits 4-5) */
+/* type tag with variant bits (bits 0-5) */
 #define withvariant(t) ((t) & 0x3F)
-#define ttypetag(o)    withvariant(rawtt(o))
-
-/* type of a TValue */
-#define ttype(o) (novariant(rawtt(o)))
-
-/* Macros to test type */
-#define checktag(o, t)  (rawtt(o) == (t))
-#define checktype(o, t) (ttype(o) == (t))
 
 /* Macros for internal tests */
 
 /* collectable object has the same tag as the original value */
-#define righttt(obj) (ttypetag(obj) == gcvalue(obj)->tt)
+#define righttt(obj) (((obj)->tt_ & WITHVARIANT_MASK) == gcvalue(obj)->tt)
 
 /*
 ** Any value being manipulated by the program either is non
@@ -159,7 +161,7 @@ typedef size_t StkId;
 #define LUA_VNOTABLE makevariant(LUA_TNIL, 3)
 
 /* macro to test for (any kind of) nil */
-#define ttisnil(v) checktype((v), LUA_TNIL)
+#define ttisnil(v) (((v)->tt_ & NOVARIANT_MASK) == LUA_TNIL)
 
 /*
 ** Macro to test the result of a table access. Formally, it should
@@ -170,12 +172,12 @@ typedef size_t StkId;
 #define tagisempty(tag) (novariant(tag) == LUA_TNIL)
 
 /* macro to test for a standard nil */
-#define ttisstrictnil(o) checktag((o), LUA_VNIL)
+#define ttisstrictnil(o) ((o)->tt_ == LUA_VNIL)
 
 #define setnilvalue(obj)   settt_(obj, LUA_VNIL)
 #define setnilvalue2s(L, stk) setnilvalue(s2v(L, stk))
 
-#define isabstkey(v) checktag((v), LUA_VABSTKEY)
+#define isabstkey(v) ((v)->tt_ == LUA_VABSTKEY)
 
 /*
 ** macro to detect non-standard nils (used only in assertions)
@@ -206,9 +208,9 @@ typedef size_t StkId;
 #define LUA_VFALSE makevariant(LUA_TBOOLEAN, 0)
 #define LUA_VTRUE  makevariant(LUA_TBOOLEAN, 1)
 
-#define ttisboolean(o) checktype((o), LUA_TBOOLEAN)
-#define ttisfalse(o)   checktag((o), LUA_VFALSE)
-#define ttistrue(o)    checktag((o), LUA_VTRUE)
+#define ttisboolean(o) (((o)->tt_ & NOVARIANT_MASK) == LUA_TBOOLEAN)
+#define ttisfalse(o)   ((o)->tt_ == LUA_VFALSE)
+#define ttistrue(o)    ((o)->tt_ == LUA_VTRUE)
 
 #define l_isfalse(o)  (ttisfalse(o) || ttisnil(o))
 #define tagisfalse(t) ((t) == LUA_VFALSE || novariant(t) == LUA_TNIL)
@@ -226,7 +228,7 @@ typedef size_t StkId;
 
 #define LUA_VTHREAD makevariant(LUA_TTHREAD, 0)
 
-#define ttisthread(o) checktag((o), ctb(LUA_VTHREAD))
+#define ttisthread(o) ((o)->tt_ == ctb(LUA_VTHREAD))
 
 #define thvalue(o) check_exp(ttisthread(o), gco2th(val_(o).gc))
 
@@ -267,7 +269,7 @@ typedef struct GCObject
 /* Bit mark for collectable types */
 #define BIT_ISCOLLECTABLE (1 << 6)
 
-#define iscollectable(o) (rawtt(o) & BIT_ISCOLLECTABLE)
+#define iscollectable(o) ((o)->tt_ & BIT_ISCOLLECTABLE)
 
 /* mark a tag as collectable */
 #define ctb(t) ((t) | BIT_ISCOLLECTABLE)
@@ -296,9 +298,9 @@ typedef struct GCObject
 #define LUA_VNUMINT makevariant(LUA_TNUMBER, 0) /* integer numbers */
 #define LUA_VNUMFLT makevariant(LUA_TNUMBER, 1) /* float numbers */
 
-#define ttisnumber(o)  checktype((o), LUA_TNUMBER)
-#define ttisfloat(o)   checktag((o), LUA_VNUMFLT)
-#define ttisinteger(o) checktag((o), LUA_VNUMINT)
+#define ttisnumber(o)  (((o)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)
+#define ttisfloat(o)   ((o)->tt_ == LUA_VNUMFLT)
+#define ttisinteger(o) ((o)->tt_ == LUA_VNUMINT)
 
 #define nvalue(o)   check_exp(ttisnumber(o), (ttisinteger(o) ? cast_num(ivalue(o)) : fltvalue(o)))
 #define fltvalue(o) check_exp(ttisfloat(o), val_(o).n)
@@ -349,7 +351,7 @@ typedef struct GCObject
 #define LUA_VSHRSTR LUA_VSTRING
 #define LUA_VLNGSTR LUA_VSTRING
 
-#define ttisstring(o)    checktype((o), LUA_TSTRING)
+#define ttisstring(o)    (((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING)
 #define ttisshrstring(o) ttisstring(o)
 #define ttislngstring(o) ttisstring(o)
 
@@ -402,8 +404,8 @@ typedef struct TString : GCObject
 
 #define LUA_VUSERDATA makevariant(LUA_TUSERDATA, 0)
 
-#define ttislightuserdata(o) checktag((o), LUA_VLIGHTUSERDATA)
-#define ttisfulluserdata(o)  checktag((o), ctb(LUA_VUSERDATA))
+#define ttislightuserdata(o) ((o)->tt_ == LUA_VLIGHTUSERDATA)
+#define ttisfulluserdata(o)  ((o)->tt_ == ctb(LUA_VUSERDATA))
 
 #define pvalue(o) check_exp(ttislightuserdata(o), val_(o).p)
 #define uvalue(o) check_exp(ttisfulluserdata(o), gco2u(val_(o).gc))
@@ -584,10 +586,10 @@ typedef struct Proto : GCObject
 #define LUA_VLCF makevariant(LUA_TFUNCTION, 1) /* light C function */
 #define LUA_VCCL makevariant(LUA_TFUNCTION, 2) /* C closure */
 
-#define ttisfunction(o) checktype(o, LUA_TFUNCTION)
-#define ttisLclosure(o) checktag((o), ctb(LUA_VLCL))
-#define ttislcf(o)      checktag((o), LUA_VLCF)
-#define ttisCclosure(o) checktag((o), ctb(LUA_VCCL))
+#define ttisfunction(o) (((o)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION)
+#define ttisLclosure(o) ((o)->tt_ == ctb(LUA_VLCL))
+#define ttislcf(o)      ((o)->tt_ == LUA_VLCF)
+#define ttisCclosure(o) ((o)->tt_ == ctb(LUA_VCCL))
 #define ttisclosure(o)  (ttisLclosure(o) || ttisCclosure(o))
 
 #define isLfunction(o) ttisLclosure(o)
@@ -672,7 +674,7 @@ typedef struct LClosure : Closure
 
 #define LUA_VTABLE makevariant(LUA_TTABLE, 0)
 
-#define ttistable(o) checktag((o), ctb(LUA_VTABLE))
+#define ttistable(o) ((o)->tt_ == ctb(LUA_VTABLE))
 
 #define hvalue(o) check_exp(ttistable(o), gco2t(val_(o).gc))
 

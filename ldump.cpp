@@ -186,7 +186,7 @@ static void dumpConstants(DumpState* D, const Proto* f)
   for (i = 0; i < n; i++)
   {
     const TValue* o = &f->k[i];
-    int tt = ttypetag(o);
+    int tt = ((o)->tt_ & WITHVARIANT_MASK);
     dumpByte(D, tt);
     switch (tt)
     {

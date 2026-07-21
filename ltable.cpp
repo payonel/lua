@@ -164,7 +164,7 @@ static unsigned l_hashfloat(lua_Number n)
 */
 static Node* mainpositionTV(const Table* t, const TValue* key)
 {
-  switch (ttypetag(key))
+  switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VNUMINT:
   {
@@ -231,7 +231,7 @@ l_sinline Node* mainpositionfromnode(const Table* t, Node* nd)
 */
 static int equalkey(const TValue* k1, const Node* n2, int deadok)
 {
-  if (rawtt(k1) != keytt(n2))
+  if ((k1)->tt_ != keytt(n2))
   { /* not the same variants? */
     if (keyisshrstr(n2) && ttislngstring(k1))
     {
@@ -982,7 +982,7 @@ static lu_byte finishnodeget(const TValue* val, TValue* res)
   {
     setobj(((lua_State*) NULL), res, val);
   }
-  return ttypetag(val);
+  return ((val)->tt_ & WITHVARIANT_MASK);
 }
 
 lu_byte luaH_getint(Table* t, lua_Integer key, TValue* res)
@@ -1040,7 +1040,7 @@ lu_byte luaH_getstr(Table* t, TString* key, TValue* res)
 lu_byte luaH_get(Table* t, const TValue* key, TValue* res)
 {
   const TValue* slot;
-  switch (ttypetag(key))
+  switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
     slot = luaH_Hgetshortstr(t, tsvalue(key));
@@ -1156,7 +1156,7 @@ int luaH_psetstr(Table* t, TString* key, TValue* val)
 
 int luaH_pset(Table* t, const TValue* key, TValue* val)
 {
-  switch (ttypetag(key))
+  switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
     return luaH_psetshortstr(t, tsvalue(key), val);

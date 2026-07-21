@@ -335,7 +335,7 @@ static int testobjref1(global_State* g, GCObject* f, GCObject* t)
 static void printobj(global_State* g, GCObject* o)
 {
   printf("||%s(%p)-%c%c(%02X)||",
-         ttypename(novariant(o->tt)), (void*) o,
+         ttypename(((o->tt) & NOVARIANT_MASK)), (void*) o,
          isdead(g, o) ? 'd' : isblack(o) ? 'b'
                           : iswhite(o)   ? 'w'
                                          : 'g',
@@ -346,7 +346,7 @@ static void printobj(global_State* g, GCObject* o)
 
 static void lua_printvalue(TValue* v)
 {
-  switch (ttypetag(v))
+  switch (((v)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VNUMINT:
   case LUA_VNUMFLT:

@@ -233,7 +233,7 @@ static int iscleared(global_State* g, const GCObject* o)
 {
   if (o == NULL)
     return 0; /* non-collectable value */
-  else if (novariant(o->tt) == LUA_TSTRING)
+  else if (((o->tt) & NOVARIANT_MASK) == LUA_TSTRING)
   {
     markobject(g, o); /* strings are 'values', so are never weak */
     return 0;
@@ -311,7 +311,7 @@ void luaC_fix(lua_State* L, GCObject* o)
 GCObject* luaC_newobjdt(lua_State* L, lu_byte tt, size_t sz)
 {
   global_State* g = G(L);
-  GCObject* o = cast(GCObject*, luaM_newobject(L, novariant(tt), sz));
+  GCObject* o = cast(GCObject*, luaM_newobject(L, ((tt) & NOVARIANT_MASK), sz));
   o->marked = luaC_white(g);
   o->tt = tt;
   o->next = g->allgc;

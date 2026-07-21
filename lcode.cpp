@@ -756,7 +756,7 @@ void luaK_codecheckglobal(FuncState* fs, expdesc* var, int k, int line)
 */
 static void const2exp(TValue* v, expdesc* e)
 {
-  switch (ttypetag(v))
+  switch (((v)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VNUMINT:
     e->k = VKINT;

@@ -283,7 +283,7 @@ LUA_API void lua_pushvalue(lua_State* L, int idx)
 LUA_API int lua_type(lua_State* L, int idx)
 {
   const TValue* o = index2value(L, idx);
-  return (isvalid(L, o) ? ttype(o) : LUA_TNONE);
+  return (isvalid(L, o) ? (o->tt_ & NOVARIANT_MASK) : LUA_TNONE);
 }
 
 LUA_API const char* lua_typename(lua_State* L, int t)
@@ -457,7 +457,7 @@ LUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len)
 LUA_API lua_Unsigned lua_rawlen(lua_State* L, int idx)
 {
   const TValue* o = index2value(L, idx);
-  switch (ttypetag(o))
+  switch (((o)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
     return cast(lua_Unsigned, tsslen(tsvalue(o)));
@@ -489,7 +489,7 @@ LUA_API lua_CFunction lua_tocfunction(lua_State* L, int idx)
 
 l_sinline void* touserdata(const TValue* o)
 {
-  switch (ttype(o))
+  switch ((o->tt_ & NOVARIANT_MASK))
   {
   case LUA_TUSERDATA:
     return getudatamem(uvalue(o));
@@ -522,7 +522,7 @@ LUA_API lua_State* lua_tothread(lua_State* L, int idx)
 LUA_API const void* lua_topointer(lua_State* L, int idx)
 {
   const TValue* o = index2value(L, idx);
-  switch (ttypetag(o))
+  switch (((o)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VLCF:
     return NULL;  /* use lua_funcaddress for light C functions */
@@ -707,7 +707,7 @@ static int auxgetstr(lua_State* L, const TValue* t, const char* k)
     tag = luaV_finishget(L, t, s2v(L, L->top - 1), L->top - 1, tag);
   }
   lua_unlock(L);
-  return novariant(tag);
+  return ((tag) & NOVARIANT_MASK);
 }
 
 /*
@@ -720,7 +720,7 @@ static void getGlobalTable(lua_State* L, TValue* gt)
   Table* registry = hvalue(&G(L)->l_registry);
   lu_byte tag = luaH_getint(registry, LUA_RIDX_GLOBALS, gt);
   (void) tag; /* avoid not-used warnings when checks are off */
-  api_check(L, novariant(tag) == LUA_TTABLE, "global table must exist");
+  api_check(L, ((tag) & NOVARIANT_MASK) == LUA_TTABLE, "global table must exist");
 }
 
 LUA_API int lua_getglobal(lua_State* L, const char* name)
@@ -742,7 +742,7 @@ LUA_API int lua_gettable(lua_State* L, int idx)
   if (tagisempty(tag))
     tag = luaV_finishget(L, t, s2v(L, L->top - 1), L->top - 1, tag);
   lua_unlock(L);
-  return novariant(tag);
+  return ((tag) & NOVARIANT_MASK);
 }
 
 LUA_API int lua_getfield(lua_State* L, int idx, const char* k)
@@ -766,7 +766,7 @@ LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
   }
   api_incr_top(L);
   lua_unlock(L);
-  return novariant(tag);
+  return ((tag) & NOVARIANT_MASK);
 }
 
 static int finishrawget(lua_State* L, lu_byte tag)
@@ -775,7 +775,7 @@ static int finishrawget(lua_State* L, lu_byte tag)
     setnilvalue2s(L, L->top);
   api_incr_top(L);
   lua_unlock(L);
-  return novariant(tag);
+  return ((tag) & NOVARIANT_MASK);
 }
 
 l_sinline Table* gettable(lua_State* L, int idx)
@@ -837,7 +837,7 @@ LUA_API int lua_getmetatable(lua_State* L, int objindex)
   int res = 0;
   lua_lock(L);
   obj = index2value(L, objindex);
-  switch (ttype(obj))
+  switch ((obj->tt_ & NOVARIANT_MASK))
   {
   case LUA_TTABLE:
     mt = hvalue(obj)->metatable;
@@ -846,7 +846,7 @@ LUA_API int lua_getmetatable(lua_State* L, int objindex)
     mt = uvalue(obj)->metatable;
     break;
   default:
-    mt = G(L)->mt[ttype(obj)];
+    mt = G(L)->mt[(obj->tt_ & NOVARIANT_MASK)];
     break;
   }
   if (mt != NULL)
@@ -874,7 +874,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
   else
   {
     setobj2s(L, L->top, &uvalue(o)->uv[n - 1].uv);
-    t = ttype(s2v(L, L->top));
+    t = (s2v(L, L->top)->tt_ & NOVARIANT_MASK);
   }
   api_incr_top(L);
   lua_unlock(L);
@@ -1010,7 +1010,7 @@ LUA_API int lua_setmetatable(lua_State* L, int objindex)
     api_check(L, ttistable(s2v(L, L->top - 1)), "table expected");
     mt = hvalue(s2v(L, L->top - 1));
   }
-  switch (ttype(obj))
+  switch ((obj->tt_ & NOVARIANT_MASK))
   {
   case LUA_TTABLE:
   {
@@ -1034,7 +1034,7 @@ LUA_API int lua_setmetatable(lua_State* L, int objindex)
   }
   default:
   {
-    G(L)->mt[ttype(obj)] = mt;
+    G(L)->mt[(obj->tt_ & NOVARIANT_MASK)] = mt;
     break;
   }
   }
@@ -1435,7 +1435,7 @@ LUA_API void* lua_newuserdatauv(lua_State* L, size_t size, int nuvalue)
 static const char* aux_upvalue(TValue* fi, int n, TValue** val,
                                GCObject** owner)
 {
-  switch (ttypetag(fi))
+  switch (((fi)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VCCL:
   { /* C closure */
@@ -1518,7 +1518,7 @@ static UpVal** getupvalref(lua_State* L, int fidx, int n, LClosure** pf)
 LUA_API void* lua_upvalueid(lua_State* L, int fidx, int n)
 {
   TValue* fi = index2value(L, fidx);
-  switch (ttypetag(fi))
+  switch (((fi)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VLCL:
   { /* lua closure */

@@ -67,7 +67,7 @@ const TValue* luaT_gettm(Table* events, TMS event, TString* ename)
 const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
 {
   Table* mt;
-  switch (ttype(o))
+  switch ((o->tt_ & NOVARIANT_MASK))
   {
   case LUA_TTABLE:
     mt = hvalue(o)->metatable;
@@ -76,7 +76,7 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
     mt = uvalue(o)->metatable;
     break;
   default:
-    mt = G(L)->mt[ttype(o)];
+    mt = G(L)->mt[(o->tt_ & NOVARIANT_MASK)];
   }
   return (mt ? luaH_Hgetshortstr(mt, G(L)->tmname[event]) : &G(L)->nilvalue);
 }
@@ -95,7 +95,7 @@ const char* luaT_objtypename(lua_State* L, const TValue* o)
     if (ttisstring(name))           /* is '__name' a string? */
       return getstr(tsvalue(name)); /* use it as type name */
   }
-  return ttypename(ttype(o)); /* else use standard type name */
+  return ttypename((o->tt_ & NOVARIANT_MASK)); /* else use standard type name */
 }
 
 void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
@@ -130,7 +130,7 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
     luaD_callnoyield(L, func, 1);
   res = restorestack(L, result);
   setobjs2s(L, res, --L->top); /* move result to its place */
-  return ttypetag(s2v(L, res));     /* return tag of the result */
+  return ((s2v(L, res)->tt_ & WITHVARIANT_MASK));     /* return tag of the result */
 }
 
 static int callbinTM(lua_State* L, const TValue* p1, const TValue* p2,

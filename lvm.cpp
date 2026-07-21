@@ -607,11 +607,11 @@ int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r)
 int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
 {
   const TValue* tm;
-  if (ttype(t1) != ttype(t2)) /* not the same type? */
+  if ((t1->tt_ & NOVARIANT_MASK) != (t2->tt_ & NOVARIANT_MASK)) /* not the same type? */
     return 0;
-  else if (ttypetag(t1) != ttypetag(t2))
+  else if (((t1)->tt_ & WITHVARIANT_MASK) != ((t2)->tt_ & WITHVARIANT_MASK))
   {
-    switch (ttypetag(t1))
+    switch (((t1)->tt_ & WITHVARIANT_MASK))
     {
     case LUA_VNUMINT:
     { /* integer == float? */
@@ -639,7 +639,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
   }
   else
   { /* equal variants */
-    switch (ttypetag(t1))
+    switch (((t1)->tt_ & WITHVARIANT_MASK))
     {
     case LUA_VNIL:
     case LUA_VFALSE:
@@ -777,7 +777,7 @@ void luaV_concat(lua_State* L, int total)
 void luaV_objlen(lua_State* L, StkId ra, const TValue* rb)
 {
   const TValue* tm;
-  switch (ttypetag(rb))
+  switch (((rb)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VTABLE:
   {
