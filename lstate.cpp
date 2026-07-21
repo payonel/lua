@@ -268,7 +268,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   luaC_checkGC(L);
   /* create new thread */
   o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX));
-  L1 = gco2th(o);
+  L1 = (lua_assert((o)->tt == LUA_VTHREAD), static_cast<lua_State*>(o));
   /* anchor it on L stack */
   setthvalue2s(L, L->top, L1);
   api_incr_top(L);
@@ -335,7 +335,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);
   preinit_thread(L, g);
-  g->allgc = obj2gco(L); /* by now, only object is the main thread */
+  g->allgc = (lua_assert((((L)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(L))); /* by now, only object is the main thread */
   L->next = NULL;
   incnny(L); /* main thread is always non yieldable */
   g->frealloc = f;
@@ -401,7 +401,7 @@ void luaE_warnerror(lua_State* L, const char* where)
 {
   TValue* errobj = (&(L)->stack.p[L->top - 1]); /* error object */
   const char* msg = ((((errobj)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
-                        ? getstr(tsvalue(errobj))
+                        ? getstr((lua_assert(((errobj)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((errobj)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((errobj)->value_).gc))))
                         : "error object is not a string";
   /* produce warning "error in %s (%s)" (where, msg) */
   luaE_warning(L, "error in ", 1);

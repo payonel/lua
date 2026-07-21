@@ -168,17 +168,17 @@ static Node* mainpositionTV(const Table* t, const TValue* key)
   {
   case LUA_VNUMINT:
   {
-    lua_Integer i = ivalue(key);
+    lua_Integer i = (lua_assert((key)->tt_ == LUA_VNUMINT), ((key)->value_).i);
     return hashint(t, i);
   }
   case LUA_VNUMFLT:
   {
-    lua_Number n = fltvalue(key);
+    lua_Number n = (lua_assert((key)->tt_ == LUA_VNUMFLT), ((key)->value_).n);
     return hashmod(t, l_hashfloat(n));
   }
   case LUA_VSHRSTR:
   {
-    TString* ts = tsvalue(key);
+    TString* ts = (lua_assert(((key)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((key)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((key)->value_).gc)));
     return hashstr(t, ts);
   }
   case LUA_VFALSE:
@@ -187,17 +187,17 @@ static Node* mainpositionTV(const Table* t, const TValue* key)
     return hashboolean(t, 1);
   case LUA_VLIGHTUSERDATA:
   {
-    void* p = pvalue(key);
+    void* p = (lua_assert((key)->tt_ == LUA_VLIGHTUSERDATA), ((key)->value_).p);
     return hashpointer(t, p);
   }
   case LUA_VLCF:
   {
-    lua_CFunction f = fvalue(key);
+    lua_CFunction f = (lua_assert((key)->tt_ == LUA_VLCF), ((key)->value_).f);
     return hashpointer(t, f);
   }
   default:
   {
-    GCObject* o = gcvalue(key);
+    GCObject* o = (lua_assert((key)->tt_ & BIT_ISCOLLECTABLE), ((key)->value_).gc);
     return hashpointer(t, o);
   }
   }
@@ -236,12 +236,12 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     if (keyisshrstr(n2) && (((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
     {
       /* an external string can be equal to a short-string key */
-      return luaS_eqstr(tsvalue(k1), keystrval(n2));
+      return luaS_eqstr((lua_assert(((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((k1)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((k1)->value_).gc))), keystrval(n2));
     }
     else if (deadok && keyisdead(n2) && ((k1)->tt_ & BIT_ISCOLLECTABLE))
     {
       /* a collectable value can be equal to a dead key */
-      return gcvalue(k1) == gcvalueraw(keyval(n2));
+      return (lua_assert((k1)->tt_ & BIT_ISCOLLECTABLE), ((k1)->value_).gc) == ((keyval(n2)).gc);
     }
     else
       return 0; /* otherwise, different variants cannot be equal */
@@ -255,17 +255,17 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     case LUA_VTRUE:
       return 1;
     case LUA_VNUMINT:
-      return (ivalue(k1) == keyival(n2));
+      return ((lua_assert((k1)->tt_ == LUA_VNUMINT), ((k1)->value_).i) == keyival(n2));
     case LUA_VNUMFLT:
-      return luai_numeq(fltvalue(k1), fltvalueraw(keyval(n2)));
+      return luai_numeq((lua_assert((k1)->tt_ == LUA_VNUMFLT), ((k1)->value_).n), ((keyval(n2)).n));
     case LUA_VLIGHTUSERDATA:
-      return pvalue(k1) == pvalueraw(keyval(n2));
+      return (lua_assert((k1)->tt_ == LUA_VLIGHTUSERDATA), ((k1)->value_).p) == ((keyval(n2)).p);
     case LUA_VLCF:
-      return fvalue(k1) == fvalueraw(keyval(n2));
+      return (lua_assert((k1)->tt_ == LUA_VLCF), ((k1)->value_).f) == ((keyval(n2)).f);
     case ctb(LUA_VLNGSTR):
-      return luaS_eqstr(tsvalue(k1), keystrval(n2));
+      return luaS_eqstr((lua_assert(((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((k1)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((k1)->value_).gc))), keystrval(n2));
     default:
-      return gcvalue(k1) == gcvalueraw(keyval(n2));
+      return (lua_assert((k1)->tt_ & BIT_ISCOLLECTABLE), ((k1)->value_).gc) == ((keyval(n2)).gc);
     }
   }
 }
@@ -319,7 +319,7 @@ static unsigned checkrange(lua_Integer k, unsigned limit)
 */
 static unsigned keyinarray(Table* t, const TValue* key)
 {
-  return (((key)->tt_ == LUA_VNUMINT)) ? ikeyinarray(t, ivalue(key)) : 0;
+  return (((key)->tt_ == LUA_VNUMINT)) ? ikeyinarray(t, (lua_assert((key)->tt_ == LUA_VNUMINT), ((key)->value_).i)) : 0;
 }
 
 /*
@@ -782,7 +782,7 @@ static void rehash(lua_State* L, Table* t, const TValue* ek)
   ct.deleted = 0;
   ct.total = 1; /* count extra key */
   if (((ek)->tt_ == LUA_VNUMINT))
-    countint(ivalue(ek), &ct); /* extra key may go to array */
+    countint((lua_assert((ek)->tt_ == LUA_VNUMINT), ((ek)->value_).i), &ct); /* extra key may go to array */
   numusehash(t, &ct);          /* count keys in hash part */
   if (ct.na == 0)
   {
@@ -813,7 +813,7 @@ static void rehash(lua_State* L, Table* t, const TValue* ek)
 Table* luaH_new(lua_State* L)
 {
   GCObject* o = luaC_newobj(L, LUA_VTABLE, sizeof(Table));
-  Table* t = gco2t(o);
+  Table* t = (lua_assert((o)->tt == LUA_VTABLE), static_cast<Table*>(o));
   t->metatable = NULL;
   t->flags = maskflags; /* table has no metamethod fields */
   t->array = NULL;
@@ -945,7 +945,7 @@ static void luaH_newkey(lua_State* L, Table* t, const TValue* key,
       rehash(L, t, key);            /* grow table */
       newcheckedkey(t, key, value); /* insert key in grown table */
     }
-    luaC_barrierback(L, obj2gco(t), key);
+    luaC_barrierback(L, (lua_assert((((t)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(t))), key);
     /* for debugging only: any new key may force an emergency collection */
     condchangemem(L, (void) 0, (void) 0, 1);
   }
@@ -1043,17 +1043,17 @@ lu_byte luaH_get(Table* t, const TValue* key, TValue* res)
   switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
-    slot = luaH_Hgetshortstr(t, tsvalue(key));
+    slot = luaH_Hgetshortstr(t, (lua_assert(((key)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((key)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((key)->value_).gc))));
     break;
   case LUA_VNUMINT:
-    return luaH_getint(t, ivalue(key), res);
+    return luaH_getint(t, (lua_assert((key)->tt_ == LUA_VNUMINT), ((key)->value_).i), res);
   case LUA_VNIL:
     slot = &absentkey;
     break;
   case LUA_VNUMFLT:
   {
     lua_Integer k;
-    if (luaV_flttointeger(fltvalue(key), &k, F2Ieq)) /* integral index? */
+    if (luaV_flttointeger((lua_assert((key)->tt_ == LUA_VNUMFLT), ((key)->value_).n), &k, F2Ieq)) /* integral index? */
       return luaH_getint(t, k, res);                 /* use specialized version */
     /* else... */
   } /* FALLTHROUGH */
@@ -1159,15 +1159,15 @@ int luaH_pset(Table* t, const TValue* key, TValue* val)
   switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
-    return luaH_psetshortstr(t, tsvalue(key), val);
+    return luaH_psetshortstr(t, (lua_assert(((key)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((key)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((key)->value_).gc))), val);
   case LUA_VNUMINT:
-    return psetint(t, ivalue(key), val);
+    return psetint(t, (lua_assert((key)->tt_ == LUA_VNUMINT), ((key)->value_).i), val);
   case LUA_VNIL:
     return HNOTFOUND;
   case LUA_VNUMFLT:
   {
     lua_Integer k;
-    if (luaV_flttointeger(fltvalue(key), &k, F2Ieq)) /* integral index? */
+    if (luaV_flttointeger((lua_assert((key)->tt_ == LUA_VNUMFLT), ((key)->value_).n), &k, F2Ieq)) /* integral index? */
       return psetint(t, k, val);                     /* use specialized version */
     /* else... */
   } /* FALLTHROUGH */
@@ -1194,7 +1194,7 @@ void luaH_finishset(lua_State* L, Table* t, const TValue* key,
       luaG_runerror(L, "table index is nil");
     else if (((key)->tt_ == LUA_VNUMFLT))
     {
-      lua_Number f = fltvalue(key);
+      lua_Number f = (lua_assert((key)->tt_ == LUA_VNUMFLT), ((key)->value_).n);
       lua_Integer k;
       if (luaV_flttointeger(f, &k, F2Ieq))
       { /* is key equal to an integer? */

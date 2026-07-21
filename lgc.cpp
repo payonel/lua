@@ -48,14 +48,14 @@
 /* make an object black (coming from any color) */
 #define set2black(x) (x->marked = cast_byte((x->marked & ~WHITEBITS) | bitmask(BLACKBIT)))
 
-#define valiswhite(x) (((x)->tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(x)))
+#define valiswhite(x) (((x)->tt_ & BIT_ISCOLLECTABLE) && iswhite((lua_assert((x)->tt_ & BIT_ISCOLLECTABLE), ((x)->value_).gc)))
 
 #define keyiswhite(n) (keyiscollectable(n) && iswhite(gckey(n)))
 
 /*
 ** Protected access to objects in values
 */
-#define gcvalueN(o) (((o)->tt_ & BIT_ISCOLLECTABLE) ? gcvalue(o) : NULL)
+#define gcvalueN(o) (((o)->tt_ & BIT_ISCOLLECTABLE) ? (lua_assert((o)->tt_ & BIT_ISCOLLECTABLE), ((o)->value_).gc) : NULL)
 
 /*
 ** Access to collectable objects in array part of tables
@@ -66,7 +66,7 @@
   {                                    \
     checkliveness(mainthread(g), o);   \
     if (valiswhite(o))                 \
-      reallymarkobject(g, gcvalue(o)); \
+      reallymarkobject(g, (lua_assert((o)->tt_ & BIT_ISCOLLECTABLE), ((o)->value_).gc)); \
   }
 
 #define markkey(g, n)                \
@@ -78,7 +78,7 @@
 #define markobject(g, t)               \
   {                                    \
     if (iswhite(t))                    \
-      reallymarkobject(g, obj2gco(t)); \
+      reallymarkobject(g, (lua_assert((((t)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(t)))); \
   }
 
 /*
@@ -113,40 +113,40 @@ static l_mem objsize(GCObject* o)
   {
   case LUA_VTABLE:
   {
-    res = luaH_size(gco2t(o));
+    res = luaH_size((lua_assert((o)->tt == LUA_VTABLE), static_cast<Table*>(o)));
     break;
   }
   case LUA_VLCL:
   {
-    LClosure* cl = gco2lcl(o);
+    LClosure* cl = (lua_assert((o)->tt == LUA_VLCL), static_cast<LClosure*>(o));
     res = sizeLclosure(cl->nupvalues);
     break;
   }
   case LUA_VCCL:
   {
-    CClosure* cl = gco2ccl(o);
+    CClosure* cl = (lua_assert((o)->tt == LUA_VCCL), static_cast<CClosure*>(o));
     res = sizeCclosure(cl->nupvalues);
     break;
   }
   case LUA_VUSERDATA:
   {
-    Udata* u = gco2u(o);
+    Udata* u = (lua_assert((o)->tt == LUA_VUSERDATA), static_cast<Udata*>(o));
     res = sizeudata(u->nuvalue, u->len);
     break;
   }
   case LUA_VPROTO:
   {
-    res = luaF_protosize(gco2p(o));
+    res = luaF_protosize((lua_assert((o)->tt == LUA_VPROTO), static_cast<Proto*>(o)));
     break;
   }
   case LUA_VTHREAD:
   {
-    res = luaE_threadsize(gco2th(o));
+    res = luaE_threadsize((lua_assert((o)->tt == LUA_VTHREAD), static_cast<lua_State*>(o)));
     break;
   }
   case LUA_VSHRSTR:
   {
-    TString* ts = gco2ts(o);
+    TString* ts = (lua_assert((((o)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(o));
     res = sizeof(TString) + ts->content.capacity();
     break;
   }
@@ -167,18 +167,18 @@ static GCObject** getgclist(GCObject* o)
   switch (o->tt)
   {
   case LUA_VTABLE:
-    return &gco2t(o)->gclist;
+    return &(lua_assert((o)->tt == LUA_VTABLE), static_cast<Table*>(o))->gclist;
   case LUA_VLCL:
-    return &gco2lcl(o)->gclist;
+    return &(lua_assert((o)->tt == LUA_VLCL), static_cast<LClosure*>(o))->gclist;
   case LUA_VCCL:
-    return &gco2ccl(o)->gclist;
+    return &(lua_assert((o)->tt == LUA_VCCL), static_cast<CClosure*>(o))->gclist;
   case LUA_VTHREAD:
-    return &gco2th(o)->gclist;
+    return &(lua_assert((o)->tt == LUA_VTHREAD), static_cast<lua_State*>(o))->gclist;
   case LUA_VPROTO:
-    return &gco2p(o)->gclist;
+    return &(lua_assert((o)->tt == LUA_VPROTO), static_cast<Proto*>(o))->gclist;
   case LUA_VUSERDATA:
   {
-    Udata* u = gco2u(o);
+    Udata* u = (lua_assert((o)->tt == LUA_VUSERDATA), static_cast<Udata*>(o));
     lua_assert(u->nuvalue > 0);
     return &u->gclist;
   }
@@ -192,7 +192,7 @@ static GCObject** getgclist(GCObject* o)
 ** Link a collectable object 'o' with a known type into the list 'p'.
 ** (Must be a macro to access the 'gclist' field in different types.)
 */
-#define linkgclist(o, p) linkgclist_(obj2gco(o), &(o)->gclist, &(p))
+#define linkgclist(o, p) linkgclist_((lua_assert((((o)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(o))), &(o)->gclist, &(p))
 
 static void linkgclist_(GCObject* o, GCObject** pnext, GCObject** list)
 {
@@ -205,7 +205,7 @@ static void linkgclist_(GCObject* o, GCObject** pnext, GCObject** list)
 /*
 ** Link a generic collectable object 'o' into the list 'p'.
 */
-#define linkobjgclist(o, p) linkgclist_(obj2gco(o), getgclist(o), &(p))
+#define linkobjgclist(o, p) linkgclist_((lua_assert((((o)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(o))), getgclist(o), &(p))
 
 /*
 ** Clear keys for empty entries in tables. If entry is empty, mark its
@@ -359,7 +359,7 @@ static void reallymarkobject(global_State* g, GCObject* o)
   }
   case LUA_VUPVAL:
   {
-    UpVal* uv = gco2upv(o);
+    UpVal* uv = (lua_assert((o)->tt == LUA_VUPVAL), static_cast<UpVal*>(o));
     if (upisopen(uv))
       set2gray(uv); /* open upvalues are kept gray */
     else
@@ -369,7 +369,7 @@ static void reallymarkobject(global_State* g, GCObject* o)
   }
   case LUA_VUSERDATA:
   {
-    Udata* u = gco2u(o);
+    Udata* u = (lua_assert((o)->tt == LUA_VUSERDATA), static_cast<Udata*>(o));
     if (u->nuvalue == 0)
     {                               /* no user values? */
       markobjectN(g, u->metatable); /* mark its metatable */
@@ -532,7 +532,7 @@ static void traverseweakvalue(global_State* g, Table* h)
   else if (hasclears)
     linkgclist(h, g->weak); /* has to be cleared later */
   else
-    genlink(g, obj2gco(h));
+    genlink(g, (lua_assert((((h)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(h))));
 }
 
 /*
@@ -590,7 +590,7 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
     else if (valiswhite(gval(n)))
     { /* value not marked yet? */
       marked = 1;
-      reallymarkobject(g, gcvalue(gval(n))); /* mark it now */
+      reallymarkobject(g, (lua_assert((gval(n))->tt_ & BIT_ISCOLLECTABLE), ((gval(n))->value_).gc)); /* mark it now */
     }
   }
   /* link table into proper list */
@@ -601,7 +601,7 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
   else if (hasclears)            /* table has white keys? */
     linkgclist(h, g->allweak);   /* may have to clean white keys */
   else
-    genlink(g, obj2gco(h)); /* check whether collector still needs to see it */
+    genlink(g, (lua_assert((((h)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(h)))); /* check whether collector still needs to see it */
   return marked;
 }
 
@@ -620,7 +620,7 @@ static void traversestrongtable(global_State* g, Table* h)
       markvalue(g, gval(n));
     }
   }
-  genlink(g, obj2gco(h));
+  genlink(g, (lua_assert((((h)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(h))));
 }
 
 /*
@@ -633,7 +633,7 @@ static int getmode(global_State* g, Table* h)
     return 0; /* ignore non-string modes */
   else
   {
-    const char* smode = getstr(tsvalue(mode));
+    const char* smode = getstr((lua_assert(((mode)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((mode)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((mode)->value_).gc))));
     const char* weakkey = strchr(smode, 'k');
     const char* weakvalue = strchr(smode, 'v');
     return ((weakkey != NULL) << 1) | (weakvalue != NULL);
@@ -670,7 +670,7 @@ static l_mem traverseudata(global_State* g, Udata* u)
   markobjectN(g, u->metatable); /* mark its metatable */
   for (i = 0; i < u->nuvalue; i++)
     markvalue(g, &u->uv[i].uv);
-  genlink(g, obj2gco(u));
+  genlink(g, (lua_assert((((u)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(u))));
   return 1 + u->nuvalue;
 }
 
@@ -772,17 +772,17 @@ static l_mem propagatemark(global_State* g)
   switch (o->tt)
   {
   case LUA_VTABLE:
-    return traversetable(g, gco2t(o));
+    return traversetable(g, (lua_assert((o)->tt == LUA_VTABLE), static_cast<Table*>(o)));
   case LUA_VUSERDATA:
-    return traverseudata(g, gco2u(o));
+    return traverseudata(g, (lua_assert((o)->tt == LUA_VUSERDATA), static_cast<Udata*>(o)));
   case LUA_VLCL:
-    return traverseLclosure(g, gco2lcl(o));
+    return traverseLclosure(g, (lua_assert((o)->tt == LUA_VLCL), static_cast<LClosure*>(o)));
   case LUA_VCCL:
-    return traverseCclosure(g, gco2ccl(o));
+    return traverseCclosure(g, (lua_assert((o)->tt == LUA_VCCL), static_cast<CClosure*>(o)));
   case LUA_VPROTO:
-    return traverseproto(g, gco2p(o));
+    return traverseproto(g, (lua_assert((o)->tt == LUA_VPROTO), static_cast<Proto*>(o)));
   case LUA_VTHREAD:
-    return traversethread(g, gco2th(o));
+    return traversethread(g, (lua_assert((o)->tt == LUA_VTHREAD), static_cast<lua_State*>(o)));
   default:
     lua_assert(0);
     return 0;
@@ -813,7 +813,7 @@ static void convergeephemerons(global_State* g)
     changed = 0;
     while ((w = next) != NULL)
     { /* for each ephemeron table */
-      Table* h = gco2t(w);
+      Table* h = (lua_assert((w)->tt == LUA_VTABLE), static_cast<Table*>(w));
       next = h->gclist; /* list is rebuilt during loop */
       nw2black(h);      /* out of the list (for now) */
       if (traverseephemeron(g, h, dir))
@@ -839,9 +839,9 @@ static void convergeephemerons(global_State* g)
 */
 static void clearbykeys(global_State* g, GCObject* l)
 {
-  for (; l; l = gco2t(l)->gclist)
+  for (; l; l = (lua_assert((l)->tt == LUA_VTABLE), static_cast<Table*>(l))->gclist)
   {
-    Table* h = gco2t(l);
+    Table* h = (lua_assert((l)->tt == LUA_VTABLE), static_cast<Table*>(l));
     Node* limit = gnodelast(h);
     Node* n;
     for (n = gnode(h, 0); n < limit; n++)
@@ -860,9 +860,9 @@ static void clearbykeys(global_State* g, GCObject* l)
 */
 static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
 {
-  for (; l != f; l = gco2t(l)->gclist)
+  for (; l != f; l = (lua_assert((l)->tt == LUA_VTABLE), static_cast<Table*>(l))->gclist)
   {
-    Table* h = gco2t(l);
+    Table* h = (lua_assert((l)->tt == LUA_VTABLE), static_cast<Table*>(l));
     Node *n, *limit = gnodelast(h);
     unsigned int i;
     unsigned int asize = h->asize;
@@ -895,38 +895,38 @@ static void freeobj(lua_State* L, GCObject* o)
   switch (o->tt)
   {
   case LUA_VPROTO:
-    luaF_freeproto(L, gco2p(o));
+    luaF_freeproto(L, (lua_assert((o)->tt == LUA_VPROTO), static_cast<Proto*>(o)));
     break;
   case LUA_VUPVAL:
-    freeupval(L, gco2upv(o));
+    freeupval(L, (lua_assert((o)->tt == LUA_VUPVAL), static_cast<UpVal*>(o)));
     break;
   case LUA_VLCL:
   {
-    LClosure* cl = gco2lcl(o);
+    LClosure* cl = (lua_assert((o)->tt == LUA_VLCL), static_cast<LClosure*>(o));
     luaM_freemem(L, cl, sizeLclosure(cl->nupvalues));
     break;
   }
   case LUA_VCCL:
   {
-    CClosure* cl = gco2ccl(o);
+    CClosure* cl = (lua_assert((o)->tt == LUA_VCCL), static_cast<CClosure*>(o));
     luaM_freemem(L, cl, sizeCclosure(cl->nupvalues));
     break;
   }
   case LUA_VTABLE:
-    luaH_free(L, gco2t(o));
+    luaH_free(L, (lua_assert((o)->tt == LUA_VTABLE), static_cast<Table*>(o)));
     break;
   case LUA_VTHREAD:
-    luaE_freethread(L, gco2th(o));
+    luaE_freethread(L, (lua_assert((o)->tt == LUA_VTHREAD), static_cast<lua_State*>(o)));
     break;
   case LUA_VUSERDATA:
   {
-    Udata* u = gco2u(o);
+    Udata* u = (lua_assert((o)->tt == LUA_VUSERDATA), static_cast<Udata*>(o));
     luaM_freemem(L, o, sizeudata(u->nuvalue, u->len));
     break;
   }
   case LUA_VSHRSTR:
   {
-    TString* ts = gco2ts(o);
+    TString* ts = (lua_assert((((o)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(o));
     luaS_remove(L, ts);
     luaM_release(L, ts->content.capacity());
     ts->content.~basic_string();
@@ -1216,10 +1216,10 @@ static void sweep2old(lua_State* L, GCObject** p)
       setage(curr, G_OLD);
       if (curr->tt == LUA_VTHREAD)
       { /* threads must be watched */
-        lua_State* th = gco2th(curr);
+        lua_State* th = (lua_assert((curr)->tt == LUA_VTHREAD), static_cast<lua_State*>(curr));
         linkgclist(th, g->grayagain); /* insert into 'grayagain' list */
       }
-      else if (curr->tt == LUA_VUPVAL && upisopen(gco2upv(curr)))
+      else if (curr->tt == LUA_VUPVAL && upisopen((lua_assert((curr)->tt == LUA_VUPVAL), static_cast<UpVal*>(curr))))
         set2gray(curr); /* open upvalues are always gray */
       else              /* everything else is black */
         nw2black(curr);
@@ -1630,7 +1630,7 @@ void luaC_freeallobjects(lua_State* L)
   separatetobefnz(g, 1); /* separate all objects with finalizers */
   lua_assert(g->finobj == NULL);
   callallpendingfinalizers(L);
-  deletelist(L, g->allgc, obj2gco(mainthread(g)));
+  deletelist(L, g->allgc, (lua_assert((((mainthread(g))->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(mainthread(g)))));
   lua_assert(g->finobj == NULL);   /* no new finalizers */
   deletelist(L, g->fixedgc, NULL); /* collect fixed objects */
 }

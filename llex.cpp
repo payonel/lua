@@ -67,11 +67,11 @@ void luaX_init(lua_State* L)
 {
   int i;
   TString* e = luaS_newliteral(L, LUA_ENV); /* create env name */
-  luaC_fix(L, obj2gco(e));                  /* never collect this name */
+  luaC_fix(L, (lua_assert((((e)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(e))));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
   {
     TString* ts = luaS_new(L, luaX_tokens[i]);
-    luaC_fix(L, obj2gco(ts));     /* reserved words are never collected */
+    luaC_fix(L, (lua_assert((((ts)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(ts))));     /* reserved words are never collected */
     ts->extra = cast_byte(i + 1); /* reserved word */
   }
 }
@@ -135,7 +135,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
   TValue oldts;
   int tag = luaH_getstr(ls->h, ts, &oldts);
   if (!tagisempty(tag))     /* string already present? */
-    return tsvalue(&oldts); /* use stored value */
+    return (lua_assert(((&oldts)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((&oldts)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((&oldts)->value_).gc))); /* use stored value */
   else
   {                                /* create a new entry */
     TValue* stv = (&(L)->stack.p[L->top++]); /* reserve stack space for string */
@@ -261,13 +261,13 @@ static int read_numeral(LexState* ls, SemInfo* seminfo)
     lexerror(ls, "malformed number", TK_FLT);
   if (((&obj)->tt_ == LUA_VNUMINT))
   {
-    seminfo->i = ivalue(&obj);
+    seminfo->i = (lua_assert((&obj)->tt_ == LUA_VNUMINT), ((&obj)->value_).i);
     return TK_INT;
   }
   else
   {
     lua_assert(((&obj)->tt_ == LUA_VNUMFLT));
-    seminfo->r = fltvalue(&obj);
+    seminfo->r = (lua_assert((&obj)->tt_ == LUA_VNUMFLT), ((&obj)->value_).n);
     return TK_FLT;
   }
 }

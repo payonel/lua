@@ -230,13 +230,13 @@
 /* more often than not, 'pre'/'pos' are empty */
 #define luaC_checkGC(L) luaC_condGC(L, (void) 0, (void) 0)
 
-#define luaC_objbarrier(L, p, o) ((isblack(p) && iswhite(o)) ? luaC_barrier_(L, obj2gco(p), obj2gco(o)) : cast_void(0))
+#define luaC_objbarrier(L, p, o) ((isblack(p) && iswhite(o)) ? luaC_barrier_(L, (lua_assert((((p)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(p))), (lua_assert((((o)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(o)))) : cast_void(0))
 
-#define luaC_barrier(L, p, v) (((v)->tt_ & BIT_ISCOLLECTABLE) ? luaC_objbarrier(L, p, gcvalue(v)) : cast_void(0))
+#define luaC_barrier(L, p, v) (((v)->tt_ & BIT_ISCOLLECTABLE) ? luaC_objbarrier(L, p, (lua_assert((v)->tt_ & BIT_ISCOLLECTABLE), ((v)->value_).gc)) : cast_void(0))
 
 #define luaC_objbarrierback(L, p, o) ((isblack(p) && iswhite(o)) ? luaC_barrierback_(L, p) : cast_void(0))
 
-#define luaC_barrierback(L, p, v) (((v)->tt_ & BIT_ISCOLLECTABLE) ? luaC_objbarrierback(L, p, gcvalue(v)) : cast_void(0))
+#define luaC_barrierback(L, p, v) (((v)->tt_ & BIT_ISCOLLECTABLE) ? luaC_objbarrierback(L, p, (lua_assert((v)->tt_ & BIT_ISCOLLECTABLE), ((v)->value_).gc)) : cast_void(0))
 
 LUAI_FUNC void luaC_fix(lua_State* L, GCObject* o);
 LUAI_FUNC void luaC_freeallobjects(lua_State* L);

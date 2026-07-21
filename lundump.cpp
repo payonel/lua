@@ -154,7 +154,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     }
     if ((luaH_getint(S->h, l_castU2S(idx), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
       error(S, "invalid string index");
-    *sl = ts = tsvalue(&stv); /* get its value */
+    *sl = ts = (lua_assert(((&stv)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((&stv)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((&stv)->value_).gc))); /* get its value */
     luaC_objbarrier(L, p, ts);
     return; /* do not save it again */
   }
@@ -177,7 +177,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   S->nstr++;
   setsvalue(L, &sv, ts);
   luaH_setint(L, S->h, l_castU2S(S->nstr), &sv);
-  luaC_objbarrierback(L, obj2gco(S->h), ts);
+  luaC_objbarrierback(L, (lua_assert((((S->h)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(S->h))), ts);
 }
 
 static void loadCode(LoadState* S, Proto* f)
@@ -420,7 +420,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, const char* name,
   S.h = anchor;
   S.nstr = 0;
   cl = luaF_newLclosure(L, loadByte(&S));
-  luaD_anchorobj(L, anchor, obj2gco(cl));
+  luaD_anchorobj(L, anchor, (lua_assert((((cl)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(cl))));
   cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
   loadFunction(&S, cl->p);

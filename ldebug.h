@@ -11,7 +11,7 @@
 #define pcRel(pc, p) (cast_int((pc) - (p)->code) - 1)
 
 /* Active Lua function (given call info) */
-#define ci_func(L, ci) (clLvalue((&(L)->stack.p[(ci)->func])))
+#define ci_func(L, ci) ((lua_assert(((&(L)->stack.p[(ci)->func]))->tt_ == ctb(LUA_VLCL)), (lua_assert(((((&(L)->stack.p[(ci)->func]))->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>((((&(L)->stack.p[(ci)->func]))->value_).gc))))
 
 #define resethookcount(L) (L->hookcount = L->basehookcount)
 

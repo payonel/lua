@@ -43,7 +43,7 @@ void luaT_init(lua_State* L)
   for (i = 0; i < TM_N; i++)
   {
     G(L)->tmname[i] = luaS_new(L, luaT_eventname[i]);
-    luaC_fix(L, obj2gco(G(L)->tmname[i])); /* never collect these names */
+    luaC_fix(L, (lua_assert((((G(L)->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(G(L)->tmname[i])))); /* never collect these names */
   }
 }
 
@@ -70,10 +70,10 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
   switch ((o->tt_ & NOVARIANT_MASK))
   {
   case LUA_TTABLE:
-    mt = hvalue(o)->metatable;
+    mt = (lua_assert((o)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((o)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((o)->value_).gc)))->metatable;
     break;
   case LUA_TUSERDATA:
-    mt = uvalue(o)->metatable;
+    mt = (lua_assert((o)->tt_ == ctb(LUA_VUSERDATA)), (lua_assert((((o)->value_).gc)->tt == LUA_VUSERDATA), static_cast<Udata*>(((o)->value_).gc)))->metatable;
     break;
   default:
     mt = G(L)->mt[(o->tt_ & NOVARIANT_MASK)];
@@ -88,12 +88,12 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
 const char* luaT_objtypename(lua_State* L, const TValue* o)
 {
   Table* mt;
-  if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != NULL) ||
-      (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = uvalue(o)->metatable) != NULL))
+  if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = (lua_assert((o)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((o)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((o)->value_).gc)))->metatable) != NULL) ||
+      (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = (lua_assert((o)->tt_ == ctb(LUA_VUSERDATA)), (lua_assert((((o)->value_).gc)->tt == LUA_VUSERDATA), static_cast<Udata*>(((o)->value_).gc)))->metatable) != NULL))
   {
     const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, "__name"));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
-      return getstr(tsvalue(name)); /* use it as type name */
+      return getstr((lua_assert(((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((name)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((name)->value_).gc)))); /* use it as type name */
   }
   return ttypename((o->tt_ & NOVARIANT_MASK)); /* else use standard type name */
 }
@@ -317,7 +317,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   else if ((((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   { /* string value? */
     size_t len;
-    const char* s = getlstr(tsvalue(rc), len);
+    const char* s = getlstr((lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))), len);
     if (len == 1 && s[0] == 'n')
     { /* key is "n"? */
       setivalue((&(L)->stack.p[ra]), nextra);
@@ -342,9 +342,9 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   {
     TValue res;
     if (luaH_getshortstr(h, luaS_new(L, "n"), &res) != LUA_VNUMINT ||
-        l_castS2U(ivalue(&res)) > cast_uint(INT_MAX / 2))
+        l_castS2U((lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i)) > cast_uint(INT_MAX / 2))
       luaG_runerror(L, "vararg table has no proper 'n'");
-    return cast_int(ivalue(&res));
+    return cast_int((lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i));
   }
 }
 
@@ -355,7 +355,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
 void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
                      int vatab)
 {
-  Table* h = (vatab < 0) ? NULL : hvalue((&(L)->stack.p[ci->func + vatab + 1]));
+  Table* h = (vatab < 0) ? NULL : (lua_assert(((&(L)->stack.p[ci->func + vatab + 1]))->tt_ == ctb(LUA_VTABLE)), (lua_assert(((((&(L)->stack.p[ci->func + vatab + 1]))->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>((((&(L)->stack.p[ci->func + vatab + 1]))->value_).gc)));
   int nargs = getnumargs(L, ci, h); /* number of available vararg args. */
   int i, touse;                     /* 'touse' is minimum between 'wanted' and 'nargs' */
   if (wanted < 0)

@@ -38,16 +38,16 @@ typedef enum
 } F2Imod;
 
 /* convert an object to a float (including string coercion) */
-#define tonumber(o, n) (((o)->tt_ == LUA_VNUMFLT) ? (*(n) = fltvalue(o), 1) : luaV_tonumber_(o, n))
+#define tonumber(o, nout) (((o)->tt_ == LUA_VNUMFLT) ? (*(nout) = (lua_assert((o)->tt_ == LUA_VNUMFLT), ((o)->value_).n), 1) : luaV_tonumber_(o, nout))
 
 /* convert an object to a float (without string coercion) */
-#define tonumberns(o, n) (((o)->tt_ == LUA_VNUMFLT) ? ((n) = fltvalue(o), 1) : (((o)->tt_ == LUA_VNUMINT) ? ((n) = cast_num(ivalue(o)), 1) : 0))
+#define tonumberns(o, nout) (((o)->tt_ == LUA_VNUMFLT) ? ((nout) = (lua_assert((o)->tt_ == LUA_VNUMFLT), ((o)->value_).n), 1) : (((o)->tt_ == LUA_VNUMINT) ? ((nout) = cast_num((lua_assert((o)->tt_ == LUA_VNUMINT), ((o)->value_).i)), 1) : 0))
 
 /* convert an object to an integer (including string coercion) */
-#define tointeger(o, i) (l_likely(((o)->tt_ == LUA_VNUMINT)) ? (*(i) = ivalue(o), 1) : luaV_tointeger(o, i, LUA_FLOORN2I))
+#define tointeger(o, iout) (l_likely(((o)->tt_ == LUA_VNUMINT)) ? (*(iout) = (lua_assert((o)->tt_ == LUA_VNUMINT), ((o)->value_).i), 1) : luaV_tointeger(o, iout, LUA_FLOORN2I))
 
 /* convert an object to an integer (without string coercion) */
-#define tointegerns(o, i) (l_likely(((o)->tt_ == LUA_VNUMINT)) ? (*(i) = ivalue(o), 1) : luaV_tointegerns(o, i, LUA_FLOORN2I))
+#define tointegerns(o, iout) (l_likely(((o)->tt_ == LUA_VNUMINT)) ? (*(iout) = (lua_assert((o)->tt_ == LUA_VNUMINT), ((o)->value_).i), 1) : luaV_tointegerns(o, iout, LUA_FLOORN2I))
 
 #define intop(op, v1, v2) l_castU2S(l_castS2U(v1) op l_castS2U(v2))
 
@@ -56,7 +56,7 @@ typedef enum
 /*
 ** fast track for 'gettable'
 */
-#define luaV_fastget(t, k, res, f, tag) (tag = (!((t)->tt_ == ctb(LUA_VTABLE)) ? LUA_VNOTABLE : f(hvalue(t), k, res)))
+#define luaV_fastget(t, k, res, f, tag) (tag = (!((t)->tt_ == ctb(LUA_VTABLE)) ? LUA_VNOTABLE : f((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc))), k, res)))
 
 /*
 ** Special case of 'luaV_fastget' for integers, inlining the fast case
@@ -67,23 +67,23 @@ typedef enum
     tag = LUA_VNOTABLE;                    \
   else                                     \
   {                                        \
-    luaH_fastgeti(hvalue(t), k, res, tag); \
+    luaH_fastgeti((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc))), k, res, tag); \
   }
 
-#define luaV_fastset(t, k, val, hres, f) (hres = (!((t)->tt_ == ctb(LUA_VTABLE)) ? HNOTATABLE : f(hvalue(t), k, val)))
+#define luaV_fastset(t, k, val, hres, f) (hres = (!((t)->tt_ == ctb(LUA_VTABLE)) ? HNOTATABLE : f((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc))), k, val)))
 
 #define luaV_fastseti(t, k, val, hres)      \
   if (!((t)->tt_ == ctb(LUA_VTABLE)))                        \
     hres = HNOTATABLE;                      \
   else                                      \
   {                                         \
-    luaH_fastseti(hvalue(t), k, val, hres); \
+    luaH_fastseti((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc))), k, val, hres); \
   }
 
 /*
 ** Finish a fast set operation (when fast set succeeds).
 */
-#define luaV_finishfastset(L, t, v) luaC_barrierback(L, gcvalue(t), v)
+#define luaV_finishfastset(L, t, v) luaC_barrierback(L, (lua_assert((t)->tt_ & BIT_ISCOLLECTABLE), ((t)->value_).gc), v)
 
 /*
 ** Shift right is the same as shift left with a negative 'y'

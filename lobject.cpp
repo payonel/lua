@@ -221,7 +221,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
     lua_Number n2;
     if (((p1)->tt_ == LUA_VNUMINT) && ((p2)->tt_ == LUA_VNUMINT))
     {
-      setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
+      setivalue(res, intarith(L, op, (lua_assert((p1)->tt_ == LUA_VNUMINT), ((p1)->value_).i), (lua_assert((p2)->tt_ == LUA_VNUMINT), ((p2)->value_).i)));
       return 1;
     }
     else if (tonumberns(p1, n1) && tonumberns(p2, n2))
@@ -537,9 +537,9 @@ unsigned luaO_tostringbuff(const TValue* obj, char* buff)
   int len;
   lua_assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if (((obj)->tt_ == LUA_VNUMINT))
-    len = lua_integer2str(buff, LUA_N2SBUFFSZ, ivalue(obj));
+    len = lua_integer2str(buff, LUA_N2SBUFFSZ, (lua_assert((obj)->tt_ == LUA_VNUMINT), ((obj)->value_).i));
   else
-    len = tostringbuffFloat(fltvalue(obj), buff);
+    len = tostringbuffFloat((lua_assert((obj)->tt_ == LUA_VNUMFLT), ((obj)->value_).n), buff);
   lua_assert(len < LUA_N2SBUFFSZ);
   return cast_uint(len);
 }
@@ -627,7 +627,7 @@ static const char* clearbuff(BuffFS* buff)
   if (luaD_rawrunprotected(L, pushbuff, buff) != LUA_OK) /* errors? */
     res = NULL;                                          /* error message is on the top of the stack */
   else
-    res = getstr(tsvalue((&(L)->stack.p[L->top - 1])));
+    res = getstr((lua_assert((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert(((((((&(L)->stack.p[L->top - 1]))->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>((((&(L)->stack.p[L->top - 1]))->value_).gc))));
   if (buff->b != buff->space)                   /* using dynamic buffer? */
     luaM_freearray(L, buff->b, buff->buffsize); /* free it */
   return res;

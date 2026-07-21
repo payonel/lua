@@ -592,12 +592,12 @@ retry:
   switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
   {
   case LUA_VCCL: /* C closure */
-    return precallC(L, func, status, clCvalue((&(L)->stack.p[func]))->f);
+    return precallC(L, func, status, (lua_assert(((&(L)->stack.p[func]))->tt_ == ctb(LUA_VCCL)), (lua_assert(((((&(L)->stack.p[func]))->value_).gc)->tt == LUA_VCCL), static_cast<CClosure*>((((&(L)->stack.p[func]))->value_).gc)))->f);
   case LUA_VLCF: /* light C function */
-    return precallC(L, func, status, fvalue((&(L)->stack.p[func])));
+    return precallC(L, func, status, (lua_assert(((&(L)->stack.p[func]))->tt_ == LUA_VLCF), (((&(L)->stack.p[func]))->value_).f));
   case LUA_VLCL:
   { /* Lua function */
-    Proto* p = clLvalue((&(L)->stack.p[func]))->p;
+    Proto* p = (lua_assert(((&(L)->stack.p[func]))->tt_ == ctb(LUA_VLCL)), (lua_assert(((((&(L)->stack.p[func]))->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>((((&(L)->stack.p[func]))->value_).gc)))->p;
     int fsize = p->maxstacksize; /* frame size */
     int nfixparams = p->numparams;
     int i;
@@ -641,15 +641,15 @@ retry:
   switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
   {
   case LUA_VCCL: /* C closure */
-    precallC(L, func, status, clCvalue((&(L)->stack.p[func]))->f);
+    precallC(L, func, status, (lua_assert(((&(L)->stack.p[func]))->tt_ == ctb(LUA_VCCL)), (lua_assert(((((&(L)->stack.p[func]))->value_).gc)->tt == LUA_VCCL), static_cast<CClosure*>((((&(L)->stack.p[func]))->value_).gc)))->f);
     return NULL;
   case LUA_VLCF: /* light C function */
-    precallC(L, func, status, fvalue((&(L)->stack.p[func])));
+    precallC(L, func, status, (lua_assert(((&(L)->stack.p[func]))->tt_ == LUA_VLCF), (((&(L)->stack.p[func]))->value_).f));
     return NULL;
   case LUA_VLCL:
   { /* Lua function */
     CallInfo* ci;
-    Proto* p = clLvalue((&(L)->stack.p[func]))->p;
+    Proto* p = (lua_assert(((&(L)->stack.p[func]))->tt_ == ctb(LUA_VLCL)), (lua_assert(((((&(L)->stack.p[func]))->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>((((&(L)->stack.p[func]))->value_).gc)))->p;
     int narg = cast_int(L->top - func) - 1; /* number of real arguments */
     int nfixparams = p->numparams;
     int fsize = p->maxstacksize; /* frame size */

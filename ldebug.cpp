@@ -189,7 +189,7 @@ static const char* upvalname(const Proto* p, int uv)
 
 static const char* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
 {
-  if (clLvalue((&(L)->stack.p[ci->func]))->p->flag & PF_VAHID)
+  if ((lua_assert(((&(L)->stack.p[ci->func]))->tt_ == ctb(LUA_VLCL)), (lua_assert(((((&(L)->stack.p[ci->func]))->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>((((&(L)->stack.p[ci->func]))->value_).gc)))->p->flag & PF_VAHID)
   {
     int nextra = ci->u.l.nextraargs;
     if (n >= -nextra)
@@ -237,7 +237,7 @@ LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
     if (!(((&(L)->stack.p[L->top - 1]))->tt_ == ctb(LUA_VLCL))) /* not a Lua function? */
       name = NULL;
     else /* consider live variables at function start (parameters) */
-      name = luaF_getlocalname(clLvalue((&(L)->stack.p[L->top - 1]))->p, n, 0);
+      name = luaF_getlocalname((lua_assert(((&(L)->stack.p[L->top - 1]))->tt_ == ctb(LUA_VLCL)), (lua_assert(((((&(L)->stack.p[L->top - 1]))->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>((((&(L)->stack.p[L->top - 1]))->value_).gc)))->p, n, 0);
   }
   else
   {                   /* active function; get information through 'ar' */
@@ -451,7 +451,7 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
     func = (&(L)->stack.p[ci->func]);
     lua_assert((((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
   }
-  cl = ((func)->tt_ == ctb(LUA_VLCL) || (func)->tt_ == ctb(LUA_VCCL)) ? clvalue(func) : NULL;
+  cl = ((func)->tt_ == ctb(LUA_VLCL) || (func)->tt_ == ctb(LUA_VCCL)) ? (lua_assert((func)->tt_ == ctb(LUA_VLCL) || (func)->tt_ == ctb(LUA_VCCL)), (lua_assert((((((func)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TFUNCTION), static_cast<Closure*>(((func)->value_).gc))) : NULL;
   status = auxgetinfo(L, what, ar, cl, ci);
   if (strchr(what, 'f'))
   {
@@ -541,7 +541,7 @@ static const char* kname(const Proto* p, int index, const char** name)
   TValue* kvalue = &p->k[index];
   if ((((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   {
-    *name = getstr(tsvalue(kvalue));
+    *name = getstr((lua_assert(((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((kvalue)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((kvalue)->value_).gc))));
     return "constant";
   }
   else

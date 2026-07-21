@@ -592,7 +592,7 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   int tag = luaH_get(fs->kcache, key, &val); /* query scanner table */
   if (!tagisempty(tag))
   { /* is there an index there? */
-    int k = cast_int(ivalue(&val));
+    int k = cast_int((lua_assert((&val)->tt_ == LUA_VNUMINT), ((&val)->value_).i));
     /* collisions can happen only for float keys */
     lua_assert(((key)->tt_ == LUA_VNUMFLT) || luaV_rawequalobj(&f->k[k], v));
     return k; /* reuse index */
@@ -760,11 +760,11 @@ static void const2exp(TValue* v, expdesc* e)
   {
   case LUA_VNUMINT:
     e->k = VKINT;
-    e->u.ival = ivalue(v);
+    e->u.ival = (lua_assert((v)->tt_ == LUA_VNUMINT), ((v)->value_).i);
     break;
   case LUA_VNUMFLT:
     e->k = VKFLT;
-    e->u.nval = fltvalue(v);
+    e->u.nval = (lua_assert((v)->tt_ == LUA_VNUMFLT), ((v)->value_).n);
     break;
   case LUA_VFALSE:
     e->k = VFALSE;
@@ -777,7 +777,7 @@ static void const2exp(TValue* v, expdesc* e)
     break;
   case LUA_VSHRSTR:
     e->k = VKSTR;
-    e->u.strval = tsvalue(v);
+    e->u.strval = (lua_assert(((v)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((v)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((v)->value_).gc)));
     break;
   default:
     lua_assert(0);
@@ -1549,7 +1549,7 @@ static int validop(int op, TValue* v1, TValue* v2)
   case LUA_OPDIV:
   case LUA_OPIDIV:
   case LUA_OPMOD: /* division by 0 */
-    return (nvalue(v2) != 0);
+    return ((lua_assert((((v2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)), (((v2)->tt_ == LUA_VNUMINT) ? cast_num((lua_assert((v2)->tt_ == LUA_VNUMINT), ((v2)->value_).i)) : (lua_assert((v2)->tt_ == LUA_VNUMFLT), ((v2)->value_).n))) != 0);
   default:
     return 1; /* everything else is valid */
   }
@@ -1569,11 +1569,11 @@ static int constfolding(FuncState* fs, int op, expdesc* e1,
   if (((&res)->tt_ == LUA_VNUMINT))
   {
     e1->k = VKINT;
-    e1->u.ival = ivalue(&res);
+    e1->u.ival = (lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i);
   }
   else
   { /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
-    lua_Number n = fltvalue(&res);
+    lua_Number n = (lua_assert((&res)->tt_ == LUA_VNUMFLT), ((&res)->value_).n);
     if (luai_numisnan(n) || n == 0)
       return 0;
     e1->k = VKFLT;

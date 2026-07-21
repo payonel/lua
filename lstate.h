@@ -365,28 +365,6 @@ typedef struct global_State
 */
 #define completestate(g) (((&g->nilvalue)->tt_ & NOVARIANT_MASK) == LUA_TNIL)
 
-/*
-** With C++ inheritance, downcasts from GCObject* to specific types
-** use static_cast. The check_exp assertions validate the type tag.
-*/
-#define gco2ts(o)  check_exp((((o)->tt) & NOVARIANT_MASK) == LUA_TSTRING, static_cast<TString*>(o))
-#define gco2u(o)   check_exp((o)->tt == LUA_VUSERDATA, static_cast<Udata*>(o))
-#define gco2lcl(o) check_exp((o)->tt == LUA_VLCL, static_cast<LClosure*>(o))
-#define gco2ccl(o) check_exp((o)->tt == LUA_VCCL, static_cast<CClosure*>(o))
-#define gco2cl(o)  check_exp((((o)->tt) & NOVARIANT_MASK) == LUA_TFUNCTION, static_cast<Closure*>(o))
-#define gco2t(o)   check_exp((o)->tt == LUA_VTABLE, static_cast<Table*>(o))
-#define gco2p(o)   check_exp((o)->tt == LUA_VPROTO, static_cast<Proto*>(o))
-#define gco2th(o)  check_exp((o)->tt == LUA_VTHREAD, static_cast<lua_State*>(o))
-#define gco2upv(o) check_exp((o)->tt == LUA_VUPVAL, static_cast<UpVal*>(o))
-
-/*
-** Upcast from any GC object to GCObject* (implicit in C++, but
-** check_exp validates the type tag).  The const_cast matches the
-** original C cast semantics — the GC marking pass intentionally
-** mutates objects reached through const pointers.
-*/
-#define obj2gco(v) check_exp((((v)->tt) & NOVARIANT_MASK) >= LUA_TSTRING, const_cast<GCObject*>(static_cast<const GCObject*>(v)))
-
 /* actual number of total memory allocated */
 #define gettotalbytes(g) ((g)->GCtotalbytes - (g)->GCdebt)
 

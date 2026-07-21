@@ -75,13 +75,11 @@ constexpr int NOVARIANT_MASK = 0x0F;
 /* selects type + variant bits (bits 0-5) of a tag — was the withvariant macro */
 constexpr int WITHVARIANT_MASK = 0x3F;
 
-#define val_(o)   ((o)->value_)
-#define valraw(o) (val_(o))
 
 /* Macros for internal tests */
 
 /* collectable object has the same tag as the original value */
-#define righttt(obj) (((obj)->tt_ & WITHVARIANT_MASK) == gcvalue(obj)->tt)
+#define righttt(obj) (((obj)->tt_ & WITHVARIANT_MASK) == (lua_assert((obj)->tt_ & BIT_ISCOLLECTABLE), ((obj)->value_).gc)->tt)
 
 /*
 ** Any value being manipulated by the program either is non
@@ -89,7 +87,7 @@ constexpr int WITHVARIANT_MASK = 0x3F;
 ** and it is not dead. The option 'L == NULL' allows other
 ** macros using this one to be used where L is not available.
 */
-#define checkliveness(L, obj) ((void) L, lua_longassert(!((obj)->tt_ & BIT_ISCOLLECTABLE) || (righttt(obj) && (L == NULL || !isdead(G(L), gcvalue(obj))))))
+#define checkliveness(L, obj) ((void) L, lua_longassert(!((obj)->tt_ & BIT_ISCOLLECTABLE) || (righttt(obj) && (L == NULL || !isdead(G(L), (lua_assert((obj)->tt_ & BIT_ISCOLLECTABLE), ((obj)->value_).gc))))))
 
 /* Macros to set values */
 
@@ -209,13 +207,12 @@ typedef size_t StkId;
 
 #define LUA_VTHREAD makevariant(LUA_TTHREAD, 0)
 
-#define thvalue(o) check_exp(((o)->tt_ == ctb(LUA_VTHREAD)), gco2th(val_(o).gc))
 
 #define setthvalue(L, obj, x)     \
   {                               \
     TValue* io = (obj);           \
     lua_State* x_ = (x);          \
-    val_(io).gc = obj2gco(x_);    \
+    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_)));    \
     settt_(io, ctb(LUA_VTHREAD)); \
     checkliveness(L, io);         \
   }
@@ -251,15 +248,13 @@ typedef struct GCObject
 /* mark a tag as collectable */
 #define ctb(t) ((t) | BIT_ISCOLLECTABLE)
 
-#define gcvalue(o) check_exp(((o)->tt_ & BIT_ISCOLLECTABLE), val_(o).gc)
 
-#define gcvalueraw(v) ((v).gc)
 
 #define setgcovalue(L, obj, x) \
   {                            \
     TValue* io = (obj);        \
     GCObject* i_g = (x);       \
-    val_(io).gc = i_g;         \
+    ((io)->value_).gc = i_g;         \
     settt_(io, ctb(i_g->tt));  \
   }
 
@@ -275,17 +270,12 @@ typedef struct GCObject
 #define LUA_VNUMINT makevariant(LUA_TNUMBER, 0) /* integer numbers */
 #define LUA_VNUMFLT makevariant(LUA_TNUMBER, 1) /* float numbers */
 
-#define nvalue(o)   check_exp((((o)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER), (((o)->tt_ == LUA_VNUMINT) ? cast_num(ivalue(o)) : fltvalue(o)))
-#define fltvalue(o) check_exp(((o)->tt_ == LUA_VNUMFLT), val_(o).n)
-#define ivalue(o)   check_exp(((o)->tt_ == LUA_VNUMINT), val_(o).i)
 
-#define fltvalueraw(v) ((v).n)
-#define ivalueraw(v)   ((v).i)
 
 #define setfltvalue(obj, x)  \
   {                          \
     TValue* io = (obj);      \
-    val_(io).n = (x);        \
+    ((io)->value_).n = (x);        \
     settt_(io, LUA_VNUMFLT); \
   }
 
@@ -293,13 +283,13 @@ typedef struct GCObject
   {                            \
     TValue* io = (obj);        \
     lua_assert(((io)->tt_ == LUA_VNUMFLT)); \
-    val_(io).n = (x);          \
+    ((io)->value_).n = (x);          \
   }
 
 #define setivalue(obj, x)    \
   {                          \
     TValue* io = (obj);      \
-    val_(io).i = (x);        \
+    ((io)->value_).i = (x);        \
     settt_(io, LUA_VNUMINT); \
   }
 
@@ -307,7 +297,7 @@ typedef struct GCObject
   {                              \
     TValue* io = (obj);          \
     lua_assert(((io)->tt_ == LUA_VNUMINT)); \
-    val_(io).i = (x);            \
+    ((io)->value_).i = (x);            \
   }
 
 /* }================================================================== */
@@ -324,15 +314,13 @@ typedef struct GCObject
 #define LUA_VSHRSTR LUA_VSTRING
 #define LUA_VLNGSTR LUA_VSTRING
 
-#define tsvalueraw(v) (gco2ts((v).gc))
 
-#define tsvalue(o) check_exp((((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), gco2ts(val_(o).gc))
 
 #define setsvalue(L, obj, x)   \
   {                            \
     TValue* io = (obj);        \
     TString* x_ = (x);         \
-    val_(io).gc = obj2gco(x_); \
+    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_))); \
     settt_(io, ctb(x_->tt));   \
     checkliveness(L, io);      \
   }
@@ -373,15 +361,12 @@ typedef struct TString : GCObject
 
 #define LUA_VUSERDATA makevariant(LUA_TUSERDATA, 0)
 
-#define pvalue(o) check_exp(((o)->tt_ == LUA_VLIGHTUSERDATA), val_(o).p)
-#define uvalue(o) check_exp(((o)->tt_ == ctb(LUA_VUSERDATA)), gco2u(val_(o).gc))
 
-#define pvalueraw(v) ((v).p)
 
 #define setpvalue(obj, x)           \
   {                                 \
     TValue* io = (obj);             \
-    val_(io).p = (x);               \
+    ((io)->value_).p = (x);               \
     settt_(io, LUA_VLIGHTUSERDATA); \
   }
 
@@ -389,7 +374,7 @@ typedef struct TString : GCObject
   {                                 \
     TValue* io = (obj);             \
     Udata* x_ = (x);                \
-    val_(io).gc = obj2gco(x_);      \
+    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_)));      \
     settt_(io, ctb(LUA_VUSERDATA)); \
     checkliveness(L, io);           \
   }
@@ -552,18 +537,13 @@ typedef struct Proto : GCObject
 #define LUA_VLCF makevariant(LUA_TFUNCTION, 1) /* light C function */
 #define LUA_VCCL makevariant(LUA_TFUNCTION, 2) /* C closure */
 
-#define clvalue(o)  check_exp(((o)->tt_ == ctb(LUA_VLCL) || (o)->tt_ == ctb(LUA_VCCL)), gco2cl(val_(o).gc))
-#define clLvalue(o) check_exp(((o)->tt_ == ctb(LUA_VLCL)), gco2lcl(val_(o).gc))
-#define fvalue(o)   check_exp(((o)->tt_ == LUA_VLCF), val_(o).f)
-#define clCvalue(o) check_exp(((o)->tt_ == ctb(LUA_VCCL)), gco2ccl(val_(o).gc))
 
-#define fvalueraw(v) ((v).f)
 
 #define setclLvalue(L, obj, x) \
   {                            \
     TValue* io = (obj);        \
     LClosure* x_ = (x);        \
-    val_(io).gc = obj2gco(x_); \
+    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_))); \
     settt_(io, ctb(LUA_VLCL)); \
     checkliveness(L, io);      \
   }
@@ -573,7 +553,7 @@ typedef struct Proto : GCObject
 #define setfvalue(obj, x) \
   {                       \
     TValue* io = (obj);   \
-    val_(io).f = (x);     \
+    ((io)->value_).f = (x);     \
     settt_(io, LUA_VLCF); \
   }
 
@@ -581,7 +561,7 @@ typedef struct Proto : GCObject
   {                            \
     TValue* io = (obj);        \
     CClosure* x_ = (x);        \
-    val_(io).gc = obj2gco(x_); \
+    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_))); \
     settt_(io, ctb(LUA_VCCL)); \
     checkliveness(L, io);      \
   }
@@ -620,7 +600,7 @@ typedef struct LClosure : Closure
 
 #define sizeLclosure(n) (sizeof(LClosure) - sizeof(UpVal*) + sizeof(UpVal*) * cast_uint(n))
 
-#define getproto(o) (clLvalue(o)->p)
+#define getproto(o) ((lua_assert((o)->tt_ == ctb(LUA_VLCL)), (lua_assert((((o)->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>(((o)->value_).gc)))->p)
 
 /* }================================================================== */
 
@@ -632,13 +612,12 @@ typedef struct LClosure : Closure
 
 #define LUA_VTABLE makevariant(LUA_TTABLE, 0)
 
-#define hvalue(o) check_exp(((o)->tt_ == ctb(LUA_VTABLE)), gco2t(val_(o).gc))
 
 #define sethvalue(L, obj, x)     \
   {                              \
     TValue* io = (obj);          \
     Table* x_ = (x);             \
-    val_(io).gc = obj2gco(x_);   \
+    ((io)->value_).gc = (lua_assert((((x_)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(x_)));   \
     settt_(io, ctb(LUA_VTABLE)); \
     checkliveness(L, io);        \
   }
@@ -698,7 +677,7 @@ typedef struct Table : GCObject
 #define keyisinteger(node) (keytt(node) == LUA_VNUMINT)
 #define keyival(node)      (keyval(node).i)
 #define keyisshrstr(node)  (keytt(node) == ctb(LUA_VSHRSTR))
-#define keystrval(node)    (gco2ts(keyval(node).gc))
+#define keystrval(node)    ((lua_assert((((keyval(node).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(keyval(node).gc)))
 
 #define setnilkey(node) (keytt(node) = LUA_TNIL)
 
