@@ -12,8 +12,15 @@
 
 #define vmcase(l) L_##l:
 
-#define vmbreak \
-  vmfetch();    \
+#define vmbreak                       \
+  {                                   \
+    if (l_unlikely(trap))             \
+    {                                 \
+      trap = luaG_traceexec(L, pc);   \
+      (base = (ci)->func + 1);        \
+    }                                 \
+    i = *(pc++);                      \
+  }                                   \
   vmdispatch(GET_OPCODE(i));
 
 static const void* const disptab[NUM_OPCODES] = {
