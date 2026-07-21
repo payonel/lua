@@ -259,7 +259,10 @@ struct lua_State
   StkId stack_last; /* end of stack (last element + 1) */
   struct { StackValue* p; } stack; /* stack base */
   UpVal* openupval;    /* list of open upvalues in this stack */
-  StkId tbclist;    /* list of to-be-closed variables */
+  StkId tbclist;    /* top of to-be-closed list (0 when empty) */
+  StkId* tbc;       /* array of indices of to-be-closed variables */
+  int ntbc;         /* number of elements in 'tbc' */
+  int sizetbc;      /* allocated size of 'tbc' */
   GCObject* gclist;
   struct lua_State* twups;      /* list of threads with open upvalues */
   struct lua_longjmp* errorJmp; /* current error recover point */

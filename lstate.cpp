@@ -153,6 +153,9 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
+  luaM_freearray(L, L->tbc, cast_sizet(L->sizetbc)); /* free tbc list */
+  L->tbc = NULL;
+  L->ntbc = L->sizetbc = 0;
   if (L->stack.p == NULL)
     return;            /* stack not completely built yet */
   L->ci = &L->base_ci; /* free the entire 'ci' list */
@@ -207,6 +210,10 @@ static void preinit_thread(lua_State* L, global_State* g)
 {
   G(L) = g;
   L->stack.p = NULL;
+  L->tbclist = 0;
+  L->tbc = NULL;
+  L->ntbc = 0;
+  L->sizetbc = 0;
   L->ci = NULL;
   L->nci = 0;
   L->twups = L; /* thread has no upvalues */
@@ -229,6 +236,7 @@ lu_mem luaE_threadsize(lua_State* L)
   lu_mem sz = cast(lu_mem, sizeof(LX)) + cast_uint(L->nci) * sizeof(CallInfo);
   if (L->stack.p != NULL)
     sz += cast_uint(stacksize(L) + EXTRA_STACK) * sizeof(StackValue);
+  sz += cast_uint(L->sizetbc) * sizeof(StkId);
   return sz;
 }
 

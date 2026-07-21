@@ -128,28 +128,17 @@ typedef struct TValue
 #define setobj2t setobj
 
 /*
-** Entries in a Lua stack. Field 'tbclist' forms a list of all
-** to-be-closed variables active in this stack. Dummy entries are
-** used when the distance between two tbc variables does not fit
-** in an unsigned short. They are represented by delta==0, and
-** their real delta is always the maximum value that fits in
-** that field.
+** Entries in a Lua stack: plain values. The list of to-be-closed
+** variables lives in a separate array in 'lua_State' ('tbc'), not
+** threaded through the stack.
 */
-typedef union StackValue
-{
-  TValue val;
-  struct
-  {
-    TValuefields;
-    unsigned short delta;
-  } tbclist;
-} StackValue;
+typedef TValue StackValue;
 
 /* index to stack elements (integer offset from stack base) */
 typedef size_t StkId;
 
 /* convert a stack index to a 'TValue' pointer */
-#define s2v(L, i) (&(L)->stack.p[i].val)
+#define s2v(L, i) (&(L)->stack.p[i])
 
 /* get a StackValue pointer from a stack index */
 #define stkval(L, i) (&(L)->stack.p[i])

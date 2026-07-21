@@ -168,9 +168,6 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
   callclosemethod(L, uv, errobj, yy);
 }
 
-/* Maximum value for deltas in 'tbclist' */
-#define MAXDELTA USHRT_MAX
-
 /*
 ** Insert a variable in the list of to-be-closed variables.
 */
@@ -180,12 +177,8 @@ void luaF_newtbcupval(lua_State* L, StkId level)
   if (l_isfalse(s2v(L, level)))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
-  while (cast_uint(level - L->tbclist) > MAXDELTA)
-  {
-    L->tbclist += MAXDELTA; /* create a dummy node at maximum delta */
-    L->stack.p[L->tbclist].tbclist.delta = 0;
-  }
-  L->stack.p[level].tbclist.delta = cast(unsigned short, level - L->tbclist);
+  luaM_growvector(L, L->tbc, L->ntbc, L->sizetbc, StkId, INT_MAX, "to-be-closed variables");
+  L->tbc[L->ntbc++] = level;
   L->tbclist = level;
 }
 
@@ -221,16 +214,13 @@ void luaF_closeupval(lua_State* L, StkId level)
 }
 
 /*
-** Remove first element from the tbclist plus its dummy nodes.
+** Remove first element from the tbclist.
 */
 static void poptbclist(lua_State* L)
 {
-  StkId tbc = L->tbclist;
-  lua_assert(L->stack.p[tbc].tbclist.delta > 0); /* first element cannot be dummy */
-  tbc -= L->stack.p[tbc].tbclist.delta;
-  while (tbc > 0 && L->stack.p[tbc].tbclist.delta == 0)
-    tbc -= MAXDELTA; /* remove dummy nodes */
-  L->tbclist = tbc;
+  lua_assert(L->ntbc > 0 && L->tbc[L->ntbc - 1] == L->tbclist);
+  L->ntbc--;
+  L->tbclist = (L->ntbc > 0) ? L->tbc[L->ntbc - 1] : 0;
 }
 
 /*

@@ -248,7 +248,7 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   correctstack(L); /* fix upvalue pointers */
   L->stack_last = newsize;
   for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
-    setnilvalue(&newstack[i].val); /* erase new segment */
+    setnilvalue(&newstack[i]); /* erase new segment */
   return 1;
 }
 
