@@ -1793,7 +1793,7 @@ static void fixforjump(FuncState* fs, int pc, int dest, int back)
     offset = -offset;
   if (l_unlikely(offset > MAXARG_Bx))
     luaX_syntaxerror(fs->ls, "control structure too long");
-  SETARG_Bx(*jmp, offset);
+  ((*jmp) = (((*jmp) & MASK0(SIZE_Bx, POS_Bx)) | ((((Instruction)(offset)) << POS_Bx) & MASK1(SIZE_Bx, POS_Bx))));
 }
 
 /*
@@ -2187,7 +2187,7 @@ static void exprstat(LexState* ls)
     Instruction* inst;
     check_condition(ls, v.v.k == VCALL, "syntax error");
     inst = &getinstruction(fs, &v.v);
-    SETARG_C(*inst, 1); /* call statement uses no results */
+    ((*inst) = (((*inst) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(1)) << POS_C) & MASK1(SIZE_C, POS_C)))); /* call statement uses no results */
   }
 }
 
@@ -2208,7 +2208,7 @@ static void retstat(LexState* ls)
       luaK_setmultret(fs, &e);
       if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc)
       { /* tail call? */
-        SET_OPCODE(getinstruction(fs, &e), OP_TAILCALL);
+        ((getinstruction(fs, &e)) = (((getinstruction(fs, &e)) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_TAILCALL)) << POS_OP) & MASK1(SIZE_OP, POS_OP))));
         lua_assert(GETARG_A(getinstruction(fs, &e)) == luaY_nvarstack(fs));
       }
       nret = LUA_MULTRET; /* return all values */

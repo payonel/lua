@@ -110,67 +110,30 @@ enum OpMode
 #define MAXARG_vC ((1 << SIZE_vC) - 1)
 #define OFFSET_sC (MAXARG_C >> 1)
 
-#define int2sC(i) ((i) + OFFSET_sC)
-#define sC2int(i) ((i) - OFFSET_sC)
+constexpr int int2sC(int i)
+{
+  return i + OFFSET_sC;
+}
+constexpr int sC2int(int i)
+{
+  return i - OFFSET_sC;
+}
 
 /* creates a mask with 'n' 1 bits at position 'p' */
-#define MASK1(n, p) ((~((~(Instruction) 0) << (n))) << (p))
+constexpr Instruction MASK1(int n, int p)
+{
+  return (~((~(Instruction)0) << n)) << p;
+}
 
 /* creates a mask with 'n' 0 bits at position 'p' */
-#define MASK0(n, p) (~MASK1(n, p))
+constexpr Instruction MASK0(int n, int p)
+{
+  return ~MASK1(n, p);
+}
 
 /*
 ** the following macros help to manipulate instructions
 */
-
-#define GET_OPCODE(i)    (((OpCode)(((i) >> POS_OP) & MASK1(SIZE_OP, 0))))
-#define SET_OPCODE(i, o) ((i) = (((i) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(o)) << POS_OP) & MASK1(SIZE_OP, POS_OP))))
-
-#define checkopm(i, m) (getOpMode(GET_OPCODE(i)) == m)
-
-#define getarg(i, pos, size)    (((int)(((i) >> (pos)) & MASK1(size, 0))))
-#define setarg(i, v, pos, size) ((i) = (((i) & MASK0(size, pos)) | ((((Instruction)(v)) << pos) & MASK1(size, pos))))
-
-#define GETARG_A(i)    getarg(i, POS_A, SIZE_A)
-#define SETARG_A(i, v) setarg(i, v, POS_A, SIZE_A)
-
-#define GETARG_B(i)     check_exp(checkopm(i, iABC), getarg(i, POS_B, SIZE_B))
-#define GETARG_vB(i)    check_exp(checkopm(i, ivABC), getarg(i, POS_vB, SIZE_vB))
-#define GETARG_sB(i)    sC2int(GETARG_B(i))
-#define SETARG_B(i, v)  setarg(i, v, POS_B, SIZE_B)
-#define SETARG_vB(i, v) setarg(i, v, POS_vB, SIZE_vB)
-
-#define GETARG_C(i)     check_exp(checkopm(i, iABC), getarg(i, POS_C, SIZE_C))
-#define GETARG_vC(i)    check_exp(checkopm(i, ivABC), getarg(i, POS_vC, SIZE_vC))
-#define GETARG_sC(i)    sC2int(GETARG_C(i))
-#define SETARG_C(i, v)  setarg(i, v, POS_C, SIZE_C)
-#define SETARG_vC(i, v) setarg(i, v, POS_vC, SIZE_vC)
-
-#define TESTARG_k(i)   (((int)(((i) & (1u << POS_k)))))
-#define GETARG_k(i)    getarg(i, POS_k, 1)
-#define SETARG_k(i, v) setarg(i, v, POS_k, 1)
-
-#define GETARG_Bx(i)    check_exp(checkopm(i, iABx), getarg(i, POS_Bx, SIZE_Bx))
-#define SETARG_Bx(i, v) setarg(i, v, POS_Bx, SIZE_Bx)
-
-#define GETARG_Ax(i)    check_exp(checkopm(i, iAx), getarg(i, POS_Ax, SIZE_Ax))
-#define SETARG_Ax(i, v) setarg(i, v, POS_Ax, SIZE_Ax)
-
-#define GETARG_sBx(i)    check_exp(checkopm(i, iAsBx), getarg(i, POS_Bx, SIZE_Bx) - OFFSET_sBx)
-#define SETARG_sBx(i, b) SETARG_Bx((i), ((unsigned int)((b) + OFFSET_sBx)))
-
-#define GETARG_sJ(i)    check_exp(checkopm(i, isJ), getarg(i, POS_sJ, SIZE_sJ) - OFFSET_sJ)
-#define SETARG_sJ(i, j) setarg(i, ((unsigned int)((j) + OFFSET_sJ)), POS_sJ, SIZE_sJ)
-
-#define CREATE_ABCk(o, a, b, c, k) ((((Instruction)(o)) << POS_OP) | (((Instruction)(a)) << POS_A) | (((Instruction)(b)) << POS_B) | (((Instruction)(c)) << POS_C) | (((Instruction)(k)) << POS_k))
-
-#define CREATE_vABCk(o, a, b, c, k) ((((Instruction)(o)) << POS_OP) | (((Instruction)(a)) << POS_A) | (((Instruction)(b)) << POS_vB) | (((Instruction)(c)) << POS_vC) | (((Instruction)(k)) << POS_k))
-
-#define CREATE_ABx(o, a, bc) ((((Instruction)(o)) << POS_OP) | (((Instruction)(a)) << POS_A) | (((Instruction)(bc)) << POS_Bx))
-
-#define CREATE_Ax(o, a) ((((Instruction)(o)) << POS_OP) | (((Instruction)(a)) << POS_Ax))
-
-#define CREATE_sJ(o, j, k) ((((Instruction)(o)) << POS_OP) | (((Instruction)(j)) << POS_sJ) | (((Instruction)(k)) << POS_k))
 
 /*
 ** Maximum size for the stack of a Lua function. It must fit in 8 bits.
@@ -316,6 +279,121 @@ typedef enum
 
 #define NUM_OPCODES ((int) (OP_EXTRAARG) + 1)
 
+constexpr OpCode GET_OPCODE(Instruction i)
+{
+  return (OpCode)((i >> POS_OP) & MASK1(SIZE_OP, 0));
+}
+
+LUAI_DDEC(const lu_byte luaP_opmodes[NUM_OPCODES];)
+
+static l_forceinline enum OpMode getOpMode(int m)
+{
+  return (enum OpMode)(luaP_opmodes[m] & 7);
+}
+
+static l_forceinline int checkopm(Instruction i, enum OpMode m)
+{
+  return getOpMode(GET_OPCODE(i)) == m;
+}
+
+constexpr int getarg(Instruction i, int pos, int size)
+{
+  return (int)((i >> pos) & MASK1(size, 0));
+}
+
+constexpr int GETARG_A(Instruction i)
+{
+  return getarg(i, POS_A, SIZE_A);
+}
+
+static l_forceinline int GETARG_B(Instruction i)
+{
+  lua_assert(checkopm(i, iABC));
+  return getarg(i, POS_B, SIZE_B);
+}
+static l_forceinline int GETARG_vB(Instruction i)
+{
+  lua_assert(checkopm(i, ivABC));
+  return getarg(i, POS_vB, SIZE_vB);
+}
+static l_forceinline int GETARG_sB(Instruction i)
+{
+  return sC2int(GETARG_B(i));
+}
+
+static l_forceinline int GETARG_C(Instruction i)
+{
+  lua_assert(checkopm(i, iABC));
+  return getarg(i, POS_C, SIZE_C);
+}
+static l_forceinline int GETARG_vC(Instruction i)
+{
+  lua_assert(checkopm(i, ivABC));
+  return getarg(i, POS_vC, SIZE_vC);
+}
+static l_forceinline int GETARG_sC(Instruction i)
+{
+  return sC2int(GETARG_C(i));
+}
+
+constexpr int TESTARG_k(Instruction i)
+{
+  return (int)(i & (1u << POS_k));
+}
+constexpr int GETARG_k(Instruction i)
+{
+  return getarg(i, POS_k, 1);
+}
+
+static l_forceinline int GETARG_Bx(Instruction i)
+{
+  lua_assert(checkopm(i, iABx));
+  return getarg(i, POS_Bx, SIZE_Bx);
+}
+
+static l_forceinline int GETARG_Ax(Instruction i)
+{
+  lua_assert(checkopm(i, iAx));
+  return getarg(i, POS_Ax, SIZE_Ax);
+}
+
+static l_forceinline int GETARG_sBx(Instruction i)
+{
+  lua_assert(checkopm(i, iAsBx));
+  return getarg(i, POS_Bx, SIZE_Bx) - OFFSET_sBx;
+}
+
+static l_forceinline int GETARG_sJ(Instruction i)
+{
+  lua_assert(checkopm(i, isJ));
+  return getarg(i, POS_sJ, SIZE_sJ) - OFFSET_sJ;
+}
+
+constexpr Instruction CREATE_ABCk(int o, int a, int b, int c, int k)
+{
+  return ((Instruction)o << POS_OP) | ((Instruction)a << POS_A) | ((Instruction)b << POS_B) | ((Instruction)c << POS_C) | ((Instruction)k << POS_k);
+}
+
+constexpr Instruction CREATE_vABCk(int o, int a, int b, int c, int k)
+{
+  return ((Instruction)o << POS_OP) | ((Instruction)a << POS_A) | ((Instruction)b << POS_vB) | ((Instruction)c << POS_vC) | ((Instruction)k << POS_k);
+}
+
+constexpr Instruction CREATE_ABx(int o, int a, unsigned int bc)
+{
+  return ((Instruction)o << POS_OP) | ((Instruction)a << POS_A) | ((Instruction)bc << POS_Bx);
+}
+
+constexpr Instruction CREATE_Ax(int o, unsigned int a)
+{
+  return ((Instruction)o << POS_OP) | ((Instruction)a << POS_Ax);
+}
+
+constexpr Instruction CREATE_sJ(int o, unsigned int j, int k)
+{
+  return ((Instruction)o << POS_OP) | ((Instruction)j << POS_sJ) | ((Instruction)k << POS_k);
+}
+
 /*===========================================================================
   Notes:
 
@@ -385,14 +463,26 @@ typedef enum
 ** bit 7: instruction is an MM instruction (call a metamethod)
 */
 
-LUAI_DDEC(const lu_byte luaP_opmodes[NUM_OPCODES];)
-
-#define getOpMode(m)  (((enum OpMode)(luaP_opmodes[m] & 7)))
-#define testAMode(m)  (luaP_opmodes[m] & (1 << 3))
-#define testTMode(m)  (luaP_opmodes[m] & (1 << 4))
-#define testITMode(m) (luaP_opmodes[m] & (1 << 5))
-#define testOTMode(m) (luaP_opmodes[m] & (1 << 6))
-#define testMMMode(m) (luaP_opmodes[m] & (1 << 7))
+static l_forceinline int testAMode(int m)
+{
+  return luaP_opmodes[m] & (1 << 3);
+}
+static l_forceinline int testTMode(int m)
+{
+  return luaP_opmodes[m] & (1 << 4);
+}
+static l_forceinline int testITMode(int m)
+{
+  return luaP_opmodes[m] & (1 << 5);
+}
+static l_forceinline int testOTMode(int m)
+{
+  return luaP_opmodes[m] & (1 << 6);
+}
+static l_forceinline int testMMMode(int m)
+{
+  return luaP_opmodes[m] & (1 << 7);
+}
 
 LUAI_FUNC int luaP_isOT(Instruction i);
 LUAI_FUNC int luaP_isIT(Instruction i);

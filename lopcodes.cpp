@@ -8,7 +8,10 @@
 
 #include "lopcodes.h"
 
-#define opmode(mm, ot, it, t, a, m) (((mm) << 7) | ((ot) << 6) | ((it) << 5) | ((t) << 4) | ((a) << 3) | (m))
+constexpr lu_byte opmode(int mm, int ot, int it, int t, int a, int m)
+{
+  return (lu_byte)((mm << 7) | (ot << 6) | (it << 5) | (t << 4) | (a << 3) | m);
+}
 
 /* ORDER OP */
 
