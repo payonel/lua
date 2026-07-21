@@ -40,13 +40,13 @@
 #define maskgcbits (maskcolors | AGEBITS)
 
 /* macro to erase all color bits then set only the current white bit */
-#define makewhite(g, x) (x->marked = cast_byte((x->marked & ~maskcolors) | luaC_white(g)))
+#define makewhite(g, x) (x->marked = ((lu_byte)((x->marked & ~maskcolors) | luaC_white(g))))
 
 /* make an object gray (neither white nor black) */
 #define set2gray(x) resetbits(x->marked, maskcolors)
 
 /* make an object black (coming from any color) */
-#define set2black(x) (x->marked = cast_byte((x->marked & ~WHITEBITS) | bitmask(BLACKBIT)))
+#define set2black(x) (x->marked = ((lu_byte)((x->marked & ~WHITEBITS) | bitmask(BLACKBIT))))
 
 #define keyiswhite(n) (((n)->key_tt & BIT_ISCOLLECTABLE) && iswhite((((n)->key_val).gc)))
 
@@ -102,7 +102,7 @@ static void entersweep(lua_State* L);
 /*
 ** one after last element in a hash array
 */
-#define gnodelast(h) gnode(h, cast_sizet(sizenode(h)))
+#define gnodelast(h) gnode(h, ((size_t)(sizenode(h))))
 
 static l_mem objsize(GCObject* o)
 {
@@ -157,7 +157,7 @@ static l_mem objsize(GCObject* o)
     res = 0;
     lua_assert(0);
   }
-  return cast(l_mem, res);
+  return ((l_mem)(res));
 }
 
 static GCObject** getgclist(GCObject* o)
@@ -309,7 +309,7 @@ void luaC_fix(lua_State* L, GCObject* o)
 GCObject* luaC_newobjdt(lua_State* L, lu_byte tt, size_t sz)
 {
   global_State* g = G(L);
-  GCObject* o = cast(GCObject*, luaM_newobject(L, ((tt) & NOVARIANT_MASK), sz));
+  GCObject* o = ((GCObject*)(luaM_newobject(L, ((tt) & NOVARIANT_MASK), sz)));
   o->marked = luaC_white(g);
   o->tt = tt;
   o->next = g->allgc;
@@ -659,7 +659,7 @@ static l_mem traversetable(global_State* g, Table* h)
       linkgclist(h, g->allweak); /* must clear collected entries */
     break;
   }
-  return cast(l_mem, 1 + 2 * sizenode(h) + h->asize);
+  return ((l_mem)(1 + 2 * sizenode(h) + h->asize));
 }
 
 static l_mem traverseudata(global_State* g, Udata* u)
@@ -755,7 +755,7 @@ static l_mem traversethread(global_State* g, lua_State* th)
       g->twups = th;
     }
   }
-  return 1 + cast(l_mem, th->top);
+  return 1 + ((l_mem)(th->top));
 }
 
 /*
@@ -960,7 +960,7 @@ static GCObject** sweeplist(lua_State* L, GCObject** p, l_mem countin)
     }
     else
     { /* change mark to 'white' and age to 'new' */
-      curr->marked = cast_byte((marked & ~maskgcbits) | white | G_NEW);
+      curr->marked = ((lu_byte)((marked & ~maskgcbits) | white | G_NEW));
       p = &curr->next; /* go to next element */
     }
   }
@@ -993,8 +993,8 @@ static GCObject** sweeptolive(lua_State* L, GCObject** p)
 */
 static void checkSizes(lua_State* L, global_State* g)
 {
-  cast_void(L);
-  cast_void(g);
+  ((void)(L));
+  ((void)(g));
 }
 
 /*
@@ -1267,7 +1267,7 @@ static GCObject** sweepgen(lua_State* L, global_State* g, GCObject** p,
       if (age == G_NEW)
       {                                          /* new objects go back to white */
         int marked = curr->marked & ~maskgcbits; /* erase GC bits */
-        curr->marked = cast_byte(marked | G_SURVIVAL | white);
+        curr->marked = ((lu_byte)(marked | G_SURVIVAL | white));
       }
       else
       {                            /* all other objects will be old, and so keep their color */
@@ -1671,7 +1671,7 @@ static void atomic(lua_State* L)
   clearbyvalues(g, g->weak, origweak);
   clearbyvalues(g, g->allweak, origall);
   luaS_clearcache(g);
-  g->currentwhite = cast_byte(otherwhite(g)); /* flip current white */
+  g->currentwhite = ((lu_byte)(otherwhite(g))); /* flip current white */
   lua_assert(g->gray == NULL);
 }
 
@@ -1818,7 +1818,7 @@ void luaC_runtilstate(lua_State* L, int state, int fast)
 static void incstep(lua_State* L, global_State* g)
 {
   l_mem stepsize = applygcparam(g, STEPSIZE, 100);
-  l_mem work2do = applygcparam(g, STEPMUL, stepsize / cast_int(sizeof(void*)));
+  l_mem work2do = applygcparam(g, STEPMUL, stepsize / ((int)(sizeof(void*))));
   l_mem stres;
   int fast = (work2do == 0); /* special case: do a full collection */
   do
@@ -1896,7 +1896,7 @@ void luaC_fullgc(lua_State* L, int isemergency)
 {
   global_State* g = G(L);
   lua_assert(!g->gcemergency);
-  g->gcemergency = cast_byte(isemergency); /* set flag */
+  g->gcemergency = ((lu_byte)(isemergency)); /* set flag */
   switch (g->gckind)
   {
   case KGC_GENMINOR:

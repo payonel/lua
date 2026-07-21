@@ -48,7 +48,7 @@ typedef enum
 ** corresponding metamethod field. (Bit 6 of the flag indicates that
 ** the table is using the dummy node.)
 */
-#define maskflags cast_byte(~(~0u << (TM_EQ + 1)))
+#define maskflags ((lu_byte)(~(~0u << (TM_EQ + 1))))
 
 /*
 ** Test whether there is no tagmethod.

@@ -35,7 +35,7 @@
 #endif
 
 #define luaD_checkstackaux(L, n, pre, pos)              \
-  if (l_unlikely(L->stack_last - L->top <= cast(StkId, n))) \
+  if (l_unlikely(L->stack_last - L->top <= ((StkId)(n)))) \
   {                                                    \
     pre;                                               \
     luaD_growstack(L, n, 1);                           \

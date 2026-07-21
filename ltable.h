@@ -15,7 +15,7 @@
 ** may have any of these metamethods. (First access that fails after the
 ** clearing will set the bit again.)
 */
-#define invalidateTMcache(t) ((t)->flags &= cast_byte(~maskflags))
+#define invalidateTMcache(t) ((t)->flags &= ((lu_byte)(~maskflags)))
 
 /*
 ** Bit BITDUMMY set in 'flags' means the table is using the dummy node
@@ -23,7 +23,7 @@
 */
 
 #define BITDUMMY    (1 << 6)
-#define NOTBITDUMMY cast_byte(~BITDUMMY)
+#define NOTBITDUMMY ((lu_byte)(~BITDUMMY))
 #define isdummy(t)  ((t)->flags & BITDUMMY)
 
 #define setnodummy(t) ((t)->flags &= NOTBITDUMMY)
@@ -35,7 +35,7 @@
 #define luaH_fastgeti(t, k, res, tag)   \
   {                                     \
     Table* h = t;                       \
-    lua_Unsigned u = l_castS2U(k) - 1u; \
+    lua_Unsigned u = ((lua_Unsigned)(k)) - 1u; \
     if ((u < h->asize))                 \
     {                                   \
       tag = *getArrTag(h, u);           \
@@ -53,7 +53,7 @@
 #define luaH_fastseti(t, k, val, hres)                               \
   {                                                                  \
     Table* h = t;                                                    \
-    lua_Unsigned u = l_castS2U(k) - 1u;                              \
+    lua_Unsigned u = ((lua_Unsigned)(k)) - 1u;                              \
     if ((u < h->asize))                                              \
     {                                                                \
       lu_byte* tag = getArrTag(h, u);                                \
@@ -63,7 +63,7 @@
         hres = HOK;                                                  \
       }                                                              \
       else                                                           \
-        hres = ~cast_int(u);                                         \
+        hres = ~((int)(u));                                         \
     }                                                                \
     else                                                             \
     {                                                                \
@@ -116,7 +116,7 @@
 */
 
 /* Computes the address of the tag for the abstract C-index 'k' */
-#define getArrTag(t, k) (cast(lu_byte*, (t)->array) + sizeof(unsigned) + (k))
+#define getArrTag(t, k) (((lu_byte*)((t)->array)) + sizeof(unsigned) + (k))
 
 /* Computes the address of the value for the abstract C-index 'k' */
 #define getArrVal(t, k) ((t)->array - 1 - (k))
@@ -126,7 +126,7 @@
 ** see luaH_getn. It is stored there to avoid wasting space in
 ** the structure Table for tables with no array part.
 */
-#define lenhint(t) cast(unsigned*, (t)->array)
+#define lenhint(t) ((unsigned*)((t)->array))
 
 /*
 ** Move TValues to/from arrays, using C indices

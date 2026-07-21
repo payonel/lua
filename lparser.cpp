@@ -235,7 +235,7 @@ static lu_byte reglevel(FuncState* fs, int nvar)
   {
     Vardesc* vd = getlocalvardesc(fs, nvar); /* get previous variable */
     if (varinreg(vd))                        /* is in a register? */
-      return cast_byte(vd->vd.ridx + 1);
+      return ((lu_byte)(vd->vd.ridx + 1));
   }
   return 0; /* no variables in registers */
 }
@@ -272,7 +272,7 @@ static void init_var(FuncState* fs, expdesc* e, int vidx)
 {
   e->f = e->t = NO_JUMP;
   e->k = VLOCAL;
-  e->u.var.vidx = cast_short(vidx);
+  e->u.var.vidx = ((short)(vidx));
   e->u.var.ridx = getlocalvardesc(fs, vidx)->vd.ridx;
 }
 
@@ -341,7 +341,7 @@ static void adjustlocalvars(LexState* ls, int nvars)
   {
     int vidx = fs->nactvar++;
     Vardesc* var = getlocalvardesc(fs, vidx);
-    var->vd.ridx = cast_byte(reglevel++);
+    var->vd.ridx = ((lu_byte)(reglevel++));
     var->vd.pidx = registerlocalvar(ls, fs, var->vd.name);
     luaY_checklimit(fs, reglevel, MAXVARS, "local variables");
   }
@@ -404,7 +404,7 @@ static int newupvalue(FuncState* fs, TString* name, expdesc* v)
   else
   {
     up->instack = 0;
-    up->idx = cast_byte(v->u.info);
+    up->idx = ((lu_byte)(v->u.info));
     up->kind = prev->f->upvalues[v->u.info].kind;
     lua_assert(eqstr(name, prev->f->upvalues[v->u.info].name));
   }
@@ -427,7 +427,7 @@ static int newupvalue(FuncState* fs, TString* name, expdesc* v)
 static int searchvar(FuncState* fs, TString* n, expdesc* var)
 {
   int i;
-  for (i = cast_int(fs->nactvar) - 1; i >= 0; i--)
+  for (i = ((int)(fs->nactvar)) - 1; i >= 0; i--)
   {
     Vardesc* vd = getlocalvardesc(fs, i);
     if (varglobal(vd))
@@ -458,7 +458,7 @@ static int searchvar(FuncState* fs, TString* n, expdesc* var)
         if (vd->vd.kind == RDKVAVAR) /* vararg parameter? */
           var->k = VVARGVAR;
       }
-      return cast_int(var->k);
+      return ((int)(var->k));
     }
   }
   return -1; /* not found */
@@ -591,7 +591,7 @@ static void adjust_assign(LexState* ls, int nvars, int nexps, expdesc* e)
   if (needed > 0)
     luaK_reserveregs(fs, needed);                  /* registers for extra values */
   else                                             /* adding 'needed' is actually a subtraction */
-    fs->freereg = cast_byte(fs->freereg + needed); /* remove extra values */
+    fs->freereg = ((lu_byte)(fs->freereg + needed)); /* remove extra values */
 }
 
 #define enterlevel(ls) luaE_incCstack(ls->L)
@@ -1146,7 +1146,7 @@ static void parlist(LexState* ls)
     } while (!varargk && testnext(ls, ','));
   }
   adjustlocalvars(ls, nparams);
-  f->numparams = cast_byte(fs->nactvar);
+  f->numparams = ((lu_byte)(fs->nactvar));
   if (varargk)
   {
     setvararg(fs);          /* declared vararg */
@@ -1246,7 +1246,7 @@ static void funcargs(LexState* ls, expdesc* f)
   luaK_fixline(fs, line);
   /* call removes function and arguments and leaves one result (unless
      changed later) */
-  fs->freereg = cast_byte(base + 1);
+  fs->freereg = ((lu_byte)(base + 1));
 }
 
 /*
@@ -2098,7 +2098,7 @@ static void globalnames(LexState* ls, lu_byte defkind)
   } while (testnext(ls, ','));
   if (testnext(ls, '=')) /* initialization? */
     initglobal(ls, nvars, lastidx - nvars + 1, 0, ls->linenumber);
-  fs->nactvar = cast_short(fs->nactvar + nvars); /* activate declaration */
+  fs->nactvar = ((short)(fs->nactvar + nvars)); /* activate declaration */
 }
 
 static void globalstat(LexState* ls)

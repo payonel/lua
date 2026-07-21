@@ -53,7 +53,7 @@ static TValue* index2value(lua_State* L, int idx)
   if (idx > 0)
   {
     StkId o = ci->func + idx;
-    api_check(L, cast(StkId, idx) <= ci->top - (ci->func + 1), "unacceptable index");
+    api_check(L, ((StkId)(idx)) <= ci->top - (ci->func + 1), "unacceptable index");
     if (o >= L->top)
       return &G(L)->nilvalue;
     else
@@ -61,7 +61,7 @@ static TValue* index2value(lua_State* L, int idx)
   }
   else if (!ispseudo(idx))
   { /* negative index */
-    api_check(L, idx != 0 && cast(StkId, -idx) <= L->top - (ci->func + 1),
+    api_check(L, idx != 0 && ((StkId)(-idx)) <= L->top - (ci->func + 1),
               "invalid index");
     return (&(L)->stack.p[L->top + idx]);
   }
@@ -99,7 +99,7 @@ static StkId index2stack(lua_State* L, int idx)
   }
   else
   { /* non-positive index */
-    api_check(L, idx != 0 && cast(StkId, -idx) <= L->top - (ci->func + 1),
+    api_check(L, idx != 0 && ((StkId)(-idx)) <= L->top - (ci->func + 1),
               "invalid index");
     api_check(L, !ispseudo(idx), "invalid index");
     return L->top + idx;
@@ -113,7 +113,7 @@ LUA_API int lua_checkstack(lua_State* L, int n)
   lua_lock(L);
   ci = L->ci;
   api_check(L, n >= 0, "negative 'n'");
-  if (L->stack_last - L->top > cast(StkId, n)) /* stack large enough? */
+  if (L->stack_last - L->top > ((StkId)(n))) /* stack large enough? */
     res = 1;                          /* yes; check is OK */
   else                                /* need to grow stack */
     res = luaD_growstack(L, n, 0);
@@ -131,7 +131,7 @@ LUA_API void lua_xmove(lua_State* from, lua_State* to, int n)
   lua_lock(to);
   api_checkpop(from, n);
   api_check(from, G(from) == G(to), "moving among independent states");
-  api_check(from, to->ci->top - to->top >= cast(StkId, n), "stack overflow");
+  api_check(from, to->ci->top - to->top >= ((StkId)(n)), "stack overflow");
   from->top -= n;
   for (i = 0; i < n; i++)
   {
@@ -167,12 +167,12 @@ LUA_API int lua_absindex(lua_State* L, int idx)
 {
   return (idx > 0 || ispseudo(idx))
              ? idx
-             : cast_int(L->top - L->ci->func) + idx;
+             : ((int)(L->top - L->ci->func)) + idx;
 }
 
 LUA_API int lua_gettop(lua_State* L)
 {
-  return cast_int(L->top - (L->ci->func + 1));
+  return ((int)(L->top - (L->ci->func + 1)));
 }
 
 LUA_API void lua_settop(lua_State* L, int idx)
@@ -185,14 +185,14 @@ LUA_API void lua_settop(lua_State* L, int idx)
   func = ci->func;
   if (idx >= 0)
   {
-    api_check(L, cast(StkId, idx) <= ci->top - (func + 1), "new top too large");
-    diff = cast_int(((func + 1) + idx) - L->top);
+    api_check(L, ((StkId)(idx)) <= ci->top - (func + 1), "new top too large");
+    diff = ((int)(((func + 1) + idx) - L->top));
     for (; diff > 0; diff--)
       (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* clear new slots */
   }
   else
   {
-    api_check(L, cast(StkId, -(idx + 1)) <= (L->top - (func + 1)), "invalid new top");
+    api_check(L, ((StkId)(-(idx + 1))) <= (L->top - (func + 1)), "invalid new top");
     diff = idx + 1; /* will "subtract" index (as it is negative) */
   }
   newtop = L->top + diff;
@@ -460,9 +460,9 @@ LUA_API lua_Unsigned lua_rawlen(lua_State* L, int idx)
   switch (((o)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
-    return cast(lua_Unsigned, tsslen((lua_assert(((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((o)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((o)->value_).gc)))));
+    return ((lua_Unsigned)(tsslen((lua_assert(((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((o)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((o)->value_).gc))))));
   case LUA_VUSERDATA:
-    return cast(lua_Unsigned, (lua_assert((o)->tt_ == ctb(LUA_VUSERDATA)), (lua_assert((((o)->value_).gc)->tt == LUA_VUSERDATA), static_cast<Udata*>(((o)->value_).gc)))->len);
+    return ((lua_Unsigned)((lua_assert((o)->tt_ == ctb(LUA_VUSERDATA)), (lua_assert((((o)->value_).gc)->tt == LUA_VUSERDATA), static_cast<Udata*>(((o)->value_).gc)))->len));
   case LUA_VTABLE:
   {
     lua_Unsigned res;
@@ -487,7 +487,7 @@ LUA_API lua_CFunction lua_tocfunction(lua_State* L, int idx)
     return NULL; /* not a C function */
 }
 
-l_sinline void* touserdata(const TValue* o)
+static inline void* touserdata(const TValue* o)
 {
   switch ((o->tt_ & NOVARIANT_MASK))
   {
@@ -778,7 +778,7 @@ static int finishrawget(lua_State* L, lu_byte tag)
   return ((tag) & NOVARIANT_MASK);
 }
 
-l_sinline Table* gettable(lua_State* L, int idx)
+static inline Table* gettable(lua_State* L, int idx)
 {
   TValue* t = index2value(L, idx);
   api_check(L, ((t)->tt_ == ctb(LUA_VTABLE)), "table expected");
@@ -825,7 +825,7 @@ LUA_API void lua_createtable(lua_State* L, int narray, int nrec)
   sethvalue(L, (&(L)->stack.p[L->top]), t);
   api_incr_top(L);
   if (narray > 0 || nrec > 0)
-    luaH_resize(L, t, cast_uint(narray), cast_uint(nrec));
+    luaH_resize(L, t, ((unsigned int)(narray)), ((unsigned int)(nrec)));
   luaC_checkGC(L);
   lua_unlock(L);
 }
@@ -1051,7 +1051,7 @@ LUA_API int lua_setiuservalue(lua_State* L, int idx, int n)
   api_checkpop(L, 1);
   o = index2value(L, idx);
   api_check(L, ((o)->tt_ == ctb(LUA_VUSERDATA)), "full userdata expected");
-  if (!(cast_uint(n) - 1u < cast_uint((lua_assert((o)->tt_ == ctb(LUA_VUSERDATA)), (lua_assert((((o)->value_).gc)->tt == LUA_VUSERDATA), static_cast<Udata*>(((o)->value_).gc)))->nuvalue)))
+  if (!(((unsigned int)(n)) - 1u < ((unsigned int)((lua_assert((o)->tt_ == ctb(LUA_VUSERDATA)), (lua_assert((((o)->value_).gc)->tt == LUA_VUSERDATA), static_cast<Udata*>(((o)->value_).gc)))->nuvalue))))
     res = 0; /* 'n' not in [1, o's nuvalue] */
   else
   {
@@ -1068,7 +1068,7 @@ LUA_API int lua_setiuservalue(lua_State* L, int idx, int n)
 ** 'load' and 'call' functions (run Lua code)
 */
 
-#define checkresults(L, na, nr) (api_check(L, (nr) == LUA_MULTRET || ((nr) <= (na) || L->ci->top - L->top >= cast(StkId, (nr) - (na))), "results from function overflow current stack size"), api_check(L, LUA_MULTRET <= (nr) && (nr) <= MAXRESULTS, "invalid number of results"))
+#define checkresults(L, na, nr) (api_check(L, (nr) == LUA_MULTRET || ((nr) <= (na) || L->ci->top - L->top >= ((StkId)((nr) - (na)))), "results from function overflow current stack size"), api_check(L, LUA_MULTRET <= (nr) && (nr) <= MAXRESULTS, "invalid number of results"))
 
 LUA_API void lua_callk(lua_State* L, int nargs, int nresults,
                        lua_KContext ctx, lua_KFunction k)
@@ -1104,7 +1104,7 @@ struct CallS
 
 static void f_call(lua_State* L, void* ud)
 {
-  struct CallS* c = cast(struct CallS*, ud);
+  struct CallS* c = ((struct CallS*)(ud));
   luaD_callnoyield(L, c->func, c->nresults);
 }
 
@@ -1140,7 +1140,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     ci->u.c.k = k;     /* save continuation */
     ci->u.c.ctx = ctx; /* save context */
     /* save information for error recovery */
-    ci->u2.funcidx = cast_int(savestack(L, c.func));
+    ci->u2.funcidx = ((int)(savestack(L, c.func)));
     ci->u.c.old_errfunc = L->errfunc;
     L->errfunc = func;
     setoah(ci, L->allowhook);       /* save value of 'allowhook' */
@@ -1152,7 +1152,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   }
   adjustresults(L, nresults);
   lua_unlock(L);
-  return APIstatus(status);
+  return ((int)(status));
 }
 
 LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
@@ -1180,7 +1180,7 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
     }
   }
   lua_unlock(L);
-  return APIstatus(status);
+  return ((int)(status));
 }
 
 /*
@@ -1203,7 +1203,7 @@ LUA_API int lua_dump(lua_State* L, lua_Writer writer, void* data, int strip)
 
 LUA_API int lua_status(lua_State* L)
 {
-  return APIstatus(L->status);
+  return ((int)(L->status));
 }
 
 /*
@@ -1239,18 +1239,18 @@ LUA_API int lua_gc(lua_State* L, int what, ...)
   case LUA_GCCOUNT:
   {
     /* GC values are expressed in Kbytes: #bytes/2^10 */
-    res = cast_int(gettotalbytes(g) >> 10);
+    res = ((int)(gettotalbytes(g) >> 10));
     break;
   }
   case LUA_GCCOUNTB:
   {
-    res = cast_int(gettotalbytes(g) & 0x3ff);
+    res = ((int)(gettotalbytes(g) & 0x3ff));
     break;
   }
   case LUA_GCSTEP:
   {
     lu_byte oldstp = g->gcstp;
-    l_mem n = cast(l_mem, va_arg(argp, size_t));
+    l_mem n = ((l_mem)(va_arg(argp, size_t)));
     l_mem newdebt;
     int work = 0; /* true if GC did some work */
     g->gcstp = 0; /* allow GC to run (other bits must be zero here) */
@@ -1289,9 +1289,9 @@ LUA_API int lua_gc(lua_State* L, int what, ...)
     int param = va_arg(argp, int);
     int value = va_arg(argp, int);
     api_check(L, 0 <= param && param < LUA_GCPN, "invalid parameter");
-    res = cast_int(luaO_applyparam(g->gcparams[param], 100));
+    res = ((int)(luaO_applyparam(g->gcparams[param], 100)));
     if (value >= 0)
-      g->gcparams[param] = luaO_codeparam(cast_uint(value));
+      g->gcparams[param] = luaO_codeparam(((unsigned int)(value)));
     break;
   }
   default:
@@ -1424,7 +1424,7 @@ LUA_API void* lua_newuserdatauv(lua_State* L, size_t size, int nuvalue)
   Udata* u;
   lua_lock(L);
   api_check(L, 0 <= nuvalue && nuvalue < SHRT_MAX, "invalid value");
-  u = luaS_newudata(L, size, cast(unsigned short, nuvalue));
+  u = luaS_newudata(L, size, ((unsigned short)(nuvalue)));
   setuvalue(L, (&(L)->stack.p[L->top]), u);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -1440,7 +1440,7 @@ static const char* aux_upvalue(TValue* fi, int n, TValue** val,
   case LUA_VCCL:
   { /* C closure */
     CClosure* f = (lua_assert((fi)->tt_ == ctb(LUA_VCCL)), (lua_assert((((fi)->value_).gc)->tt == LUA_VCCL), static_cast<CClosure*>(((fi)->value_).gc)));
-    if (!(cast_uint(n) - 1u < cast_uint(f->nupvalues)))
+    if (!(((unsigned int)(n)) - 1u < ((unsigned int)(f->nupvalues))))
       return NULL; /* 'n' not in [1, f->nupvalues] */
     *val = &f->upvalue[n - 1];
     if (owner)
@@ -1452,7 +1452,7 @@ static const char* aux_upvalue(TValue* fi, int n, TValue** val,
     LClosure* f = (lua_assert((fi)->tt_ == ctb(LUA_VLCL)), (lua_assert((((fi)->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>(((fi)->value_).gc)));
     TString* name;
     Proto* p = f->p;
-    if (!(cast_uint(n) - 1u < cast_uint(p->sizeupvalues)))
+    if (!(((unsigned int)(n)) - 1u < ((unsigned int)(p->sizeupvalues))))
       return NULL; /* 'n' not in [1, p->sizeupvalues] */
     *val = upvalval(f->upvals[n - 1]);
     if (owner)

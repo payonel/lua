@@ -57,7 +57,7 @@ const TValue* luaT_gettm(Table* events, TMS event, TString* ename)
   lua_assert(event <= TM_EQ);
   if (notm(tm))
   {                                          /* no tag method? */
-    events->flags |= cast_byte(1u << event); /* cache this fact */
+    events->flags |= ((lu_byte)(1u << event)); /* cache this fact */
     return NULL;
   }
   else
@@ -219,7 +219,7 @@ int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
   const TValue* p2;
   if (isfloat)
   {
-    setfltvalue(&aux, cast_num(v2));
+    setfltvalue(&aux, ((lua_Number)(v2)));
   }
   else
     setivalue(&aux, v2);
@@ -244,7 +244,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   Table* t = luaH_new(L);
   sethvalue(L, (&(L)->stack.p[L->top]), t);
   L->top++;
-  luaH_resize(L, t, cast_uint(n), 1);
+  luaH_resize(L, t, ((unsigned int)(n)), 1);
   setsvalue(L, &key, luaS_new(L, "n")); /* key is "n" */
   setivalue(&value, n);                 /* value is n */
   /* No need to anchor the key: Due to the resize, the next operation
@@ -281,7 +281,7 @@ static void buildhiddenargs(lua_State* L, CallInfo* ci, const Proto* p,
 
 void luaT_adjustvarargs(lua_State* L, CallInfo* ci, const Proto* p)
 {
-  int totalargs = cast_int(L->top - ci->func) - 1;
+  int totalargs = ((int)(L->top - ci->func)) - 1;
   int nfixparams = p->numparams;
   int nextra = totalargs - nfixparams; /* number of extra arguments */
   if (p->flag & PF_VATAB)
@@ -307,9 +307,9 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   lua_Integer n;
   if (tointegerns(rc, &n))
   { /* integral value? */
-    if (l_castS2U(n) - 1 < cast_uint(nextra))
+    if (((lua_Unsigned)(n)) - 1 < ((unsigned int)(nextra)))
     {
-      StkId slot = ci->func - nextra + cast_int(n) - 1;
+      StkId slot = ci->func - nextra + ((int)(n)) - 1;
       setobj(L, (&(L)->stack.p[ra]), (&(L)->stack.p[slot]));
       return;
     }
@@ -342,9 +342,9 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   {
     TValue res;
     if (luaH_getshortstr(h, luaS_new(L, "n"), &res) != LUA_VNUMINT ||
-        l_castS2U((lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i)) > cast_uint(INT_MAX / 2))
+        ((lua_Unsigned)((lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i))) > ((unsigned int)(INT_MAX / 2)))
       luaG_runerror(L, "vararg table has no proper 'n'");
-    return cast_int((lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i));
+    return ((int)((lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i)));
   }
 }
 

@@ -23,7 +23,7 @@ CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
   GCObject* o = luaC_newobj(L, LUA_VCCL, sizeCclosure(nupvals));
   CClosure* c = (lua_assert((o)->tt == LUA_VCCL), static_cast<CClosure*>(o));
-  c->nupvalues = cast_byte(nupvals);
+  c->nupvalues = ((lu_byte)(nupvals));
   return c;
 }
 
@@ -32,7 +32,7 @@ LClosure* luaF_newLclosure(lua_State* L, int nupvals)
   GCObject* o = luaC_newobj(L, LUA_VLCL, sizeLclosure(nupvals));
   LClosure* c = (lua_assert((o)->tt == LUA_VLCL), static_cast<LClosure*>(o));
   c->p = NULL;
-  c->nupvalues = cast_byte(nupvals);
+  c->nupvalues = ((lu_byte)(nupvals));
   while (nupvals--)
     c->upvals[nupvals] = NULL;
   return c;
@@ -132,7 +132,7 @@ static void checkclosemth(lua_State* L, StkId level)
   const TValue* tm = luaT_gettmbyobj(L, (&(L)->stack.p[level]), TM_CLOSE);
   if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                            /* no metamethod? */
-    int idx = cast_int(level - L->ci->func); /* variable index */
+    int idx = ((int)(level - L->ci->func)); /* variable index */
     const char* vname = luaG_findlocal(L, L->ci, idx, NULL);
     if (vname == NULL)
       vname = "?";
@@ -270,12 +270,12 @@ Proto* luaF_newproto(lua_State* L)
 
 lu_mem luaF_protosize(Proto* p)
 {
-  lu_mem sz = cast(lu_mem, sizeof(Proto)) + cast_uint(p->sizep) * sizeof(Proto*) + cast_uint(p->sizek) * sizeof(TValue) + cast_uint(p->sizelocvars) * sizeof(LocVar) + cast_uint(p->sizeupvalues) * sizeof(Upvaldesc);
+  lu_mem sz = ((lu_mem)(sizeof(Proto))) + ((unsigned int)(p->sizep)) * sizeof(Proto*) + ((unsigned int)(p->sizek)) * sizeof(TValue) + ((unsigned int)(p->sizelocvars)) * sizeof(LocVar) + ((unsigned int)(p->sizeupvalues)) * sizeof(Upvaldesc);
   if (!(p->flag & PF_FIXED))
   {
-    sz += cast_uint(p->sizecode) * sizeof(Instruction);
-    sz += cast_uint(p->sizelineinfo) * sizeof(lu_byte);
-    sz += cast_uint(p->sizeabslineinfo) * sizeof(AbsLineInfo);
+    sz += ((unsigned int)(p->sizecode)) * sizeof(Instruction);
+    sz += ((unsigned int)(p->sizelineinfo)) * sizeof(lu_byte);
+    sz += ((unsigned int)(p->sizeabslineinfo)) * sizeof(AbsLineInfo);
   }
   return sz;
 }
@@ -284,14 +284,14 @@ void luaF_freeproto(lua_State* L, Proto* f)
 {
   if (!(f->flag & PF_FIXED))
   {
-    luaM_freearray(L, f->code, cast_sizet(f->sizecode));
-    luaM_freearray(L, f->lineinfo, cast_sizet(f->sizelineinfo));
-    luaM_freearray(L, f->abslineinfo, cast_sizet(f->sizeabslineinfo));
+    luaM_freearray(L, f->code, ((size_t)(f->sizecode)));
+    luaM_freearray(L, f->lineinfo, ((size_t)(f->sizelineinfo)));
+    luaM_freearray(L, f->abslineinfo, ((size_t)(f->sizeabslineinfo)));
   }
-  luaM_freearray(L, f->p, cast_sizet(f->sizep));
-  luaM_freearray(L, f->k, cast_sizet(f->sizek));
-  luaM_freearray(L, f->locvars, cast_sizet(f->sizelocvars));
-  luaM_freearray(L, f->upvalues, cast_sizet(f->sizeupvalues));
+  luaM_freearray(L, f->p, ((size_t)(f->sizep)));
+  luaM_freearray(L, f->k, ((size_t)(f->sizek)));
+  luaM_freearray(L, f->locvars, ((size_t)(f->sizelocvars)));
+  luaM_freearray(L, f->upvalues, ((size_t)(f->sizeupvalues)));
   luaM_free(L, f);
 }
 

@@ -310,7 +310,7 @@ static int os_date(lua_State* L)
         char* buff = luaL_prepbuffsize(&b, SIZETIMEFMT);
         s++; /* skip '%' */
         /* copy specifier to 'cc' */
-        s = checkoption(L, s, ct_diff2sz(se - s), cc + 1);
+        s = checkoption(L, s, ((size_t)(se - s)), cc + 1);
         reslen = strftime(buff, SIZETIMEFMT, cc, stm);
         luaL_addsize(&b, reslen);
       }

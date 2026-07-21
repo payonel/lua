@@ -60,7 +60,7 @@ static void save(LexState* ls, int c)
     newsize += (newsize >> 1); /* new size is 1.5 times the old one */
     luaZ_resizebuffer(ls->L, b, newsize);
   }
-  b->buffer[luaZ_bufflen(b)++] = cast_char(c);
+  b->buffer[luaZ_bufflen(b)++] = ((char)(c));
 }
 
 void luaX_init(lua_State* L)
@@ -72,7 +72,7 @@ void luaX_init(lua_State* L)
   {
     TString* ts = luaS_new(L, luaX_tokens[i]);
     luaC_fix(L, (lua_assert((((ts)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(ts))));     /* reserved words are never collected */
-    ts->extra = cast_byte(i + 1); /* reserved word */
+    ts->extra = ((lu_byte)(i + 1)); /* reserved word */
   }
 }
 
@@ -381,8 +381,8 @@ static l_uint32 readutf8esc(LexState* ls)
   int i = 4;         /* number of chars to be removed: start with #"\u{X" */
   save_and_next(ls); /* skip 'u' */
   esccheck(ls, ls->current == '{', "missing '{'");
-  r = cast_uint(gethexa(ls)); /* must have at least one digit */
-  while (cast_void(save_and_next(ls)), lisxdigit(ls->current))
+  r = ((unsigned int)(gethexa(ls))); /* must have at least one digit */
+  while (((void)(save_and_next(ls))), lisxdigit(ls->current))
   {
     i++;
     esccheck(ls, r <= (0x7FFFFFFFu >> 4), "UTF-8 value too large");

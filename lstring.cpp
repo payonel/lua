@@ -28,9 +28,9 @@ int luaS_eqstr(TString* a, TString* b)
 
 static size_t luaS_hash(const char* str, size_t l)
 {
-  unsigned int h = 0x5bd1e995 ^ cast_uint(l);
+  unsigned int h = 0x5bd1e995 ^ ((unsigned int)(l));
   for (; l > 0; l--)
-    h ^= ((h << 5) + (h >> 2) + cast_byte(str[l - 1]));
+    h ^= ((h << 5) + (h >> 2) + ((lu_byte)(str[l - 1])));
   return h;
 }
 
@@ -42,7 +42,7 @@ static TString* createstrobj(lua_State* L, const char* str, size_t l,
 {
   GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
   TString* ts = (lua_assert((((o)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(o));
-  ts->hash = cast_uint(h);
+  ts->hash = ((unsigned int)(h));
   ts->extra = 0;
   new (&ts->content) std::string(str, l);
   luaM_reserve(L, ts->content.capacity());

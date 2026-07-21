@@ -138,7 +138,7 @@ LUA_API void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
   L->hook = func;
   L->basehookcount = count;
   resethookcount(L);
-  L->hookmask = cast_byte(mask);
+  L->hookmask = ((lu_byte)(mask));
   if (mask)
     settraps(L->ci); /* to trace inside 'luaV_execute' */
 }
@@ -215,7 +215,7 @@ const char* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* pos)
   if (name == NULL)
   { /* no 'standard' name? */
     StkId limit = (ci == L->ci) ? L->top : ci->next->func;
-    if (limit - base >= cast(StkId, n) && n > 0)
+    if (limit - base >= ((StkId)(n)) && n > 0)
     { /* is 'n' inside 'ci' stack? */
       /* generic name for any valid slot */
       name = isLua(ci) ? "(temporary)" : "(C temporary)";
@@ -274,7 +274,7 @@ static void funcinfo(lua_Debug* ar, Closure* cl)
   if (!LuaClosure(cl))
   {
     ar->source = "=[C]";
-    ar->srclen = LL("=[C]");
+    ar->srclen = (sizeof("=[C]") / sizeof(char) - 1);
     ar->linedefined = -1;
     ar->lastlinedefined = -1;
     ar->what = "C";
@@ -289,7 +289,7 @@ static void funcinfo(lua_Debug* ar, Closure* cl)
     else
     {
       ar->source = "=?";
-      ar->srclen = LL("=?");
+      ar->srclen = (sizeof("=?") / sizeof(char) - 1);
     }
     ar->linedefined = p->linedefined;
     ar->lastlinedefined = p->lastlinedefined;
@@ -390,7 +390,7 @@ static int auxgetinfo(lua_State* L, const char* what, lua_Debug* ar,
       {
         ar->istailcall = !!(ci->callstatus & CIST_TAIL);
         ar->extraargs =
-            cast_uchar((ci->callstatus & MAX_CCMT) >> CIST_CCMT);
+            ((unsigned char)((ci->callstatus & MAX_CCMT) >> CIST_CCMT));
       }
       else
       {
@@ -711,7 +711,7 @@ static const char* funcnamefromcode(lua_State* L, const Proto* p,
   case OP_MMBINI:
   case OP_MMBINK:
   {
-    tm = cast(TMS, GETARG_C(i));
+    tm = ((TMS)(GETARG_C(i)));
     break;
   }
   case OP_UNM:
@@ -1049,7 +1049,7 @@ int luaG_tracecall(lua_State* L)
 int luaG_traceexec(lua_State* L, const Instruction* pc)
 {
   CallInfo* ci = L->ci;
-  lu_byte mask = cast_byte(L->hookmask);
+  lu_byte mask = ((lu_byte)(L->hookmask));
   const Proto* p = ci_func(L, ci)->p;
   int counthook;
   if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT)))

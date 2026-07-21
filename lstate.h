@@ -135,7 +135,7 @@ struct lua_longjmp; /* defined in ldo.c */
 
 #define BASIC_STACK_SIZE (2 * LUA_MINSTACK)
 
-#define stacksize(th) cast_int((th)->stack_last)
+#define stacksize(th) ((int)((th)->stack_last))
 
 /* kinds of Garbage Collection */
 #define KGC_INC      0 /* incremental gc */
@@ -207,7 +207,7 @@ struct CallInfo
 /* call is running a C function (still in first 16 bits) */
 #define CIST_C (1u << (CIST_RECST + 3))
 /* call is on a fresh "luaV_execute" frame */
-#define CIST_FRESH (cast(l_uint32, CIST_C) << 1)
+#define CIST_FRESH (((l_uint32)(CIST_C)) << 1)
 /* function is closing tbc variables */
 #define CIST_CLSRET (CIST_FRESH << 1)
 /* function has tbc variables to close */
@@ -225,7 +225,7 @@ struct CallInfo
 /* function "called" a finalizer */
 #define CIST_FIN (CIST_HOOKYIELD << 1)
 
-#define get_nresults(cs) (cast_int((cs) & CIST_NRESULTS) - 1)
+#define get_nresults(cs) (((int)((cs) & CIST_NRESULTS)) - 1)
 
 /*
 ** Field CIST_RECST stores the "recover status", used to keep the error
@@ -234,7 +234,7 @@ struct CallInfo
 ** because of an error.  (Three bits are enough for error status.)
 */
 #define getcistrecst(ci)     (((ci)->callstatus >> CIST_RECST) & 7)
-#define setcistrecst(ci, st) check_exp(((st) & 7) == (st), /* status must fit in three bits */ ((ci)->callstatus = ((ci)->callstatus & ~(7u << CIST_RECST)) | (cast(l_uint32, st) << CIST_RECST)))
+#define setcistrecst(ci, st) check_exp(((st) & 7) == (st), /* status must fit in three bits */ ((ci)->callstatus = ((ci)->callstatus & ~(7u << CIST_RECST)) | (((l_uint32)(st)) << CIST_RECST)))
 
 /* active function is a Lua function */
 #define isLua(ci) (!((ci)->callstatus & CIST_C))

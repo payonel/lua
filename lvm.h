@@ -41,7 +41,7 @@ typedef enum
 #define tonumber(o, nout) (((o)->tt_ == LUA_VNUMFLT) ? (*(nout) = (lua_assert((o)->tt_ == LUA_VNUMFLT), ((o)->value_).n), 1) : luaV_tonumber_(o, nout))
 
 /* convert an object to a float (without string coercion) */
-#define tonumberns(o, nout) (((o)->tt_ == LUA_VNUMFLT) ? ((nout) = (lua_assert((o)->tt_ == LUA_VNUMFLT), ((o)->value_).n), 1) : (((o)->tt_ == LUA_VNUMINT) ? ((nout) = cast_num((lua_assert((o)->tt_ == LUA_VNUMINT), ((o)->value_).i)), 1) : 0))
+#define tonumberns(o, nout) (((o)->tt_ == LUA_VNUMFLT) ? ((nout) = (lua_assert((o)->tt_ == LUA_VNUMFLT), ((o)->value_).n), 1) : (((o)->tt_ == LUA_VNUMINT) ? ((nout) = ((lua_Number)((lua_assert((o)->tt_ == LUA_VNUMINT), ((o)->value_).i))), 1) : 0))
 
 /* convert an object to an integer (including string coercion) */
 #define tointeger(o, iout) (l_likely(((o)->tt_ == LUA_VNUMINT)) ? (*(iout) = (lua_assert((o)->tt_ == LUA_VNUMINT), ((o)->value_).i), 1) : luaV_tointeger(o, iout, LUA_FLOORN2I))
@@ -49,7 +49,7 @@ typedef enum
 /* convert an object to an integer (without string coercion) */
 #define tointegerns(o, iout) (l_likely(((o)->tt_ == LUA_VNUMINT)) ? (*(iout) = (lua_assert((o)->tt_ == LUA_VNUMINT), ((o)->value_).i), 1) : luaV_tointegerns(o, iout, LUA_FLOORN2I))
 
-#define intop(op, v1, v2) l_castU2S(l_castS2U(v1) op l_castS2U(v2))
+#define intop(op, v1, v2) ((lua_Integer)(((lua_Unsigned)(v1)) op ((lua_Unsigned)(v2))))
 
 #define luaV_rawequalobj(t1, t2) luaV_equalobj(NULL, t1, t2)
 

@@ -69,18 +69,18 @@ static const char* b_str2int(const char* s, unsigned base, lua_Integer* pn)
   } /* handle sign */
   else if (*s == '+')
     s++;
-  if (!isalnum(cast_uchar(*s))) /* no digit? */
+  if (!isalnum(((unsigned char)(*s)))) /* no digit? */
     return NULL;
   do
   {
-    unsigned digit = cast_uint(isdigit(cast_uchar(*s))
+    unsigned digit = ((unsigned int)(isdigit(((unsigned char)(*s)))
                                    ? *s - '0'
-                                   : (toupper(cast_uchar(*s)) - 'A') + 10);
+                                   : (toupper(((unsigned char)(*s))) - 'A') + 10));
     if (digit >= base)
       return NULL; /* invalid numeral */
     n = n * base + digit;
     s++;
-  } while (isalnum(cast_uchar(*s)));
+  } while (isalnum(((unsigned char)(*s))));
   s += strspn(s, SPACECHARS); /* skip trailing spaces */
   *pn = (lua_Integer) ((neg) ? (0u - n) : n);
   return s;
@@ -114,7 +114,7 @@ static int luaB_tonumber(lua_State* L)
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
     s = lua_tolstring(L, 1, &l);
     luaL_argcheck(L, 2 <= base && base <= 36, 2, "base out of range");
-    if (b_str2int(s, cast_uint(base), &n) == s + l)
+    if (b_str2int(s, ((unsigned int)(base)), &n) == s + l)
     {
       lua_pushinteger(L, n);
       return 1;
@@ -174,7 +174,7 @@ static int luaB_rawlen(lua_State* L)
   int t = lua_type(L, 1);
   luaL_argexpected(L, t == LUA_TTABLE || t == LUA_TSTRING, 1,
                    "table or string");
-  lua_pushinteger(L, l_castU2S(lua_rawlen(L, 1)));
+  lua_pushinteger(L, ((lua_Integer)(lua_rawlen(L, 1))));
   return 1;
 }
 
@@ -235,7 +235,7 @@ static int luaB_collectgarbage(lua_State* L)
   }
   case 101: /* getlimit */
   {
-    lua_pushinteger(L, cast_Integer(lua_getmemlimit(L)));
+    lua_pushinteger(L, ((lua_Integer)(lua_getmemlimit(L))));
     return 1;
   }
   case LUA_GCCOUNT:
@@ -249,7 +249,7 @@ static int luaB_collectgarbage(lua_State* L)
   case LUA_GCSTEP:
   {
     lua_Integer n = luaL_optinteger(L, 2, 0);
-    int res = lua_gc(L, o, cast_sizet(n));
+    int res = lua_gc(L, o, ((size_t)(n)));
     checkvalres(res);
     lua_pushboolean(L, res);
     return 1;
@@ -413,7 +413,7 @@ static int luaB_loadfile(lua_State* L)
 */
 static const char* generic_reader(lua_State* L, void* ud, size_t* size)
 {
-  int* firstcall = cast(int*, ud);
+  int* firstcall = ((int*)(ud));
   luaL_checkstack(L, 2, "too many nested functions");
   if (*firstcall)
     *firstcall = 0;

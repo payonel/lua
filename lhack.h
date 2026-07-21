@@ -29,8 +29,8 @@ typedef struct Memcontrol
 LUA_API Memcontrol l_memcontrol;
 
 #define ismainthread(l)             ((l) == mainthread(G(l)))
-#define _getlock(l)                 (*cast(uint64_t*, lua_getextraspace(l)))
-#define _getplock(l)                (ismainthread(l) ? cast(uint64_t*, lua_getextraspace(l)) : cast(uint64_t*, *cast(void**, lua_getextraspace(l))))
+#define _getlock(l)                 (*((uint64_t*)(lua_getextraspace(l))))
+#define _getplock(l)                (ismainthread(l) ? ((uint64_t*)(lua_getextraspace(l))) : ((uint64_t*)(*((void**)(lua_getextraspace(l))))))
 
 #define luai_userstateopen(l)       (_getlock(l) = 0)
 #define luai_userstateclose(l)      lua_assert(_getlock(l) == 1 && ismainthread(l))

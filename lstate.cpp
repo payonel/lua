@@ -24,7 +24,7 @@
 #include "ltable.h"
 #include "ltm.h"
 
-#define fromstate(L) (cast(LX*, (L)))
+#define fromstate(L) (((LX*)((L))))
 
 /*
 ** set GCdebt to a new value keeping the real number of allocated
@@ -153,7 +153,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
-  luaM_freearray(L, L->tbc, cast_sizet(L->sizetbc)); /* free tbc list */
+  luaM_freearray(L, L->tbc, ((size_t)(L->sizetbc))); /* free tbc list */
   L->tbc = NULL;
   L->ntbc = L->sizetbc = 0;
   if (L->stack.p == NULL)
@@ -162,7 +162,7 @@ static void freestack(lua_State* L)
   freeCI(L);
   lua_assert(L->nci == 0);
   /* free stack */
-  luaM_freearray(L, L->stack.p, cast_sizet(stacksize(L) + EXTRA_STACK));
+  luaM_freearray(L, L->stack.p, ((size_t)(stacksize(L) + EXTRA_STACK)));
 }
 
 /*
@@ -233,10 +233,10 @@ static void preinit_thread(lua_State* L, global_State* g)
 
 lu_mem luaE_threadsize(lua_State* L)
 {
-  lu_mem sz = cast(lu_mem, sizeof(LX)) + cast_uint(L->nci) * sizeof(CallInfo);
+  lu_mem sz = ((lu_mem)(sizeof(LX))) + ((unsigned int)(L->nci)) * sizeof(CallInfo);
   if (L->stack.p != NULL)
-    sz += cast_uint(stacksize(L) + EXTRA_STACK) * sizeof(StackValue);
-  sz += cast_uint(L->sizetbc) * sizeof(StkId);
+    sz += ((unsigned int)(stacksize(L) + EXTRA_STACK)) * sizeof(StackValue);
+  sz += ((unsigned int)(L->sizetbc)) * sizeof(StkId);
   return sz;
 }
 
@@ -278,7 +278,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   L1->hook = L->hook;
   resethookcount(L1);
   /* initialize L1 extra space */
-  *cast(void**, lua_getextraspace(L1)) = lua_getextraspace(mainthread(g));
+  *((void**)(lua_getextraspace(L1))) = lua_getextraspace(mainthread(g));
   luai_userstatethread(L, L1);
   stack_init(L1, L); /* init stack */
   lua_unlock(L);
@@ -305,7 +305,7 @@ TStatus luaE_resetthread(lua_State* L, TStatus status)
     luaD_seterrorobj(L, status, 1);
   else
     L->top = 1;
-  luaD_reallocstack(L, cast_int(L->ci->top), 0);
+  luaD_reallocstack(L, ((int)(L->ci->top)), 0);
   return status;
 }
 
@@ -318,15 +318,14 @@ LUA_API int lua_closethread(lua_State* L, lua_State* from)
   if (L == from) /* closing itself? */
     luaD_throwbaselevel(L, status);
   lua_unlock(L);
-  return APIstatus(status);
+  return ((int)(status));
 }
 
 LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
 {
   int i;
   lua_State* L;
-  global_State* g = cast(global_State*,
-                         (*f)(ud, NULL, LUA_TTHREAD, sizeof(global_State)));
+  global_State* g = ((global_State*)((*f)(ud, NULL, LUA_TTHREAD, sizeof(global_State))));
   if (g == NULL)
     return NULL;
   L = &g->mainth.l;

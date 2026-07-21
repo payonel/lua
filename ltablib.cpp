@@ -63,9 +63,9 @@ static int tcreate(lua_State* L)
 {
   lua_Unsigned sizeseq = (lua_Unsigned) luaL_checkinteger(L, 1);
   lua_Unsigned sizerest = (lua_Unsigned) luaL_optinteger(L, 2, 0);
-  luaL_argcheck(L, sizeseq <= cast_uint(INT_MAX), 1, "out of range");
-  luaL_argcheck(L, sizerest <= cast_uint(INT_MAX), 2, "out of range");
-  lua_createtable(L, cast_int(sizeseq), cast_int(sizerest));
+  luaL_argcheck(L, sizeseq <= ((unsigned int)(INT_MAX)), 1, "out of range");
+  luaL_argcheck(L, sizerest <= ((unsigned int)(INT_MAX)), 2, "out of range");
+  lua_createtable(L, ((int)(sizeseq)), ((int)(sizerest)));
   return 1;
 }
 
@@ -222,7 +222,7 @@ static int tunpack(lua_State* L)
   lua_Integer e = luaL_opt(L, luaL_checkinteger, 3, len);
   if (i > e)
     return 0;                      /* empty range */
-  n = l_castS2U(e) - l_castS2U(i); /* number of elements minus 1 */
+  n = ((lua_Unsigned)(e)) - ((lua_Unsigned)(i)); /* number of elements minus 1 */
   if (l_unlikely(n >= (unsigned int) INT_MAX ||
                  !lua_checkstack(L, (int) (++n))))
     return luaL_error(L, "too many results to unpack");
@@ -251,8 +251,8 @@ static int tunpack(lua_State* L)
 typedef unsigned int IdxT;
 
 /* Versions of lua_seti/lua_geti specialized for IdxT */
-#define geti(L, idt, idx) lua_geti(L, idt, l_castU2S(idx))
-#define seti(L, idt, idx) lua_seti(L, idt, l_castU2S(idx))
+#define geti(L, idt, idx) lua_geti(L, idt, ((lua_Integer)(idx)))
+#define seti(L, idt, idx) lua_seti(L, idt, ((lua_Integer)(idx)))
 
 /*
 ** Produce a "random" 'unsigned int' to randomize pivot choice. This

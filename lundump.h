@@ -17,7 +17,7 @@
 
 #define LUAC_INT  -0x5678
 #define LUAC_INST 0x12345678
-#define LUAC_NUM  cast_num(-370.5)
+#define LUAC_NUM  ((lua_Number)(-370.5))
 
 /*
 ** Encode major-minor version in one byte, one nibble for each

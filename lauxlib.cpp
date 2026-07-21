@@ -567,7 +567,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
 {
   size_t newsize = B->size;
   if (l_unlikely(sz >= MAX_SIZE - B->n))
-    return cast_sizet(luaL_error(B->L, "resulting string too large"));
+    return ((size_t)(luaL_error(B->L, "resulting string too large")));
   /* else  B->n + sz + 1 <= MAX_SIZE */
   if (newsize <= MAX_SIZE / 3 * 2) /* no overflow? */
     newsize += (newsize >> 1);     /* new size *= 1.5 */
@@ -871,7 +871,7 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
     }
   }
   if (c != EOF)
-    lf.buff[lf.n++] = cast_char(c); /* 'c' is the first character */
+    lf.buff[lf.n++] = ((char)(c)); /* 'c' is the first character */
   status = lua_load(L, getF, &lf, lua_tostring(L, -1), mode);
   readstatus = ferror(lf.f);
   errno = 0; /* no useful error number until here */
@@ -1086,7 +1086,7 @@ LUALIB_API void luaL_addgsub(luaL_Buffer* b, const char* s,
   size_t l = strlen(p);
   while ((wild = strstr(s, p)) != NULL)
   {
-    luaL_addlstring(b, s, ct_diff2sz(wild - s)); /* push prefix */
+    luaL_addlstring(b, s, ((size_t)(wild - s))); /* push prefix */
     luaL_addstring(b, r);                        /* push replacement in place of pattern */
     s = wild + l;                                /* continue after 'p' */
   }

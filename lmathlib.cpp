@@ -417,7 +417,7 @@ static int math_random(lua_State* L)
     up = luaL_checkinteger(L, 1);
     if (up == 0)
     {                                            /* single 0 as argument? */
-      lua_pushinteger(L, l_castU2S(I2UInt(rv))); /* full random integer */
+      lua_pushinteger(L, ((lua_Integer)(I2UInt(rv)))); /* full random integer */
       return 1;
     }
     break;
@@ -434,8 +434,8 @@ static int math_random(lua_State* L)
   /* random integer in the interval [low, up] */
   luaL_argcheck(L, low <= up, 1, "interval is empty");
   /* project random integer into the interval [0, up - low] */
-  p = project(I2UInt(rv), l_castS2U(up) - l_castS2U(low), state);
-  lua_pushinteger(L, l_castU2S(p + l_castS2U(low)));
+  p = project(I2UInt(rv), ((lua_Unsigned)(up)) - ((lua_Unsigned)(low)), state);
+  lua_pushinteger(L, ((lua_Integer)(p + ((lua_Unsigned)(low)))));
   return 1;
 }
 
@@ -449,8 +449,8 @@ static void setseed(lua_State* L, uint64_t* state,
   state[3] = Int2I(0);
   for (i = 0; i < 16; i++)
     nextrand(state); /* discard initial values to "spread" seed */
-  lua_pushinteger(L, l_castU2S(n1));
-  lua_pushinteger(L, l_castU2S(n2));
+  lua_pushinteger(L, ((lua_Integer)(n1)));
+  lua_pushinteger(L, ((lua_Integer)(n2)));
 }
 
 static int math_randomseed(lua_State* L)
@@ -464,8 +464,8 @@ static int math_randomseed(lua_State* L)
   }
   else
   {
-    n1 = l_castS2U(luaL_checkinteger(L, 1));
-    n2 = l_castS2U(luaL_optinteger(L, 2, 0));
+    n1 = ((lua_Unsigned)(luaL_checkinteger(L, 1)));
+    n2 = ((lua_Unsigned)(luaL_optinteger(L, 2, 0)));
   }
   setseed(L, state->s, n1, n2);
   return 2; /* return seeds */

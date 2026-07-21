@@ -383,7 +383,7 @@ static int nextc(RN* rn)
   }
   else
   {
-    rn->buff[rn->n++] = cast_char(rn->c); /* save current char */
+    rn->buff[rn->n++] = ((char)(rn->c)); /* save current char */
     rn->c = l_getc(rn->f);                /* read next one */
     return 1;
   }
@@ -478,7 +478,7 @@ static int read_line(lua_State* L, FILE* f, int chop)
     unsigned i = 0;
     l_lockfile(f); /* no memory errors can happen inside the lock */
     while (i < LUAL_BUFFERSIZE && (c = l_getc(f)) != EOF && c != '\n')
-      buff[i++] = cast_char(c); /* read up to end of line or buffer limit */
+      buff[i++] = ((char)(c)); /* read up to end of line or buffer limit */
     l_unlockfile(f);
     luaL_addsize(&b, i);
   } while (c != EOF && c != '\n'); /* repeat until end of line */
@@ -645,7 +645,7 @@ static int g_write(lua_State* L, FILE* f, int arg)
     if (numbytes < len)
     { /* write error? */
       int n = luaL_fileresult(L, 0, NULL);
-      lua_pushinteger(L, cast_st2S(totalbytes));
+      lua_pushinteger(L, ((lua_Integer)(totalbytes)));
       return n + 1; /* return fail, error msg., error code, and counter */
     }
   }

@@ -86,8 +86,8 @@ void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize,
   }
   lua_assert(nelems + 1 <= size && size <= limit);
   /* 'limit' ensures that multiplication will not overflow */
-  newblock = luaM_saferealloc_(L, block, cast_sizet(*psize) * size_elems,
-                               cast_sizet(size) * size_elems);
+  newblock = luaM_saferealloc_(L, block, ((size_t)(*psize)) * size_elems,
+                               ((size_t)(size)) * size_elems);
   *psize = size; /* update only when everything else is OK */
   return newblock;
 }
@@ -102,8 +102,8 @@ void* luaM_shrinkvector_(lua_State* L, void* block, int* size,
                          int final_n, unsigned size_elem)
 {
   void* newblock;
-  size_t oldsize = cast_sizet(*size) * size_elem;
-  size_t newsize = cast_sizet(final_n) * size_elem;
+  size_t oldsize = ((size_t)(*size)) * size_elem;
+  size_t newsize = ((size_t)(final_n)) * size_elem;
   lua_assert(newsize <= oldsize);
   newblock = luaM_saferealloc_(L, block, oldsize, newsize);
   *size = final_n;
@@ -125,7 +125,7 @@ void luaM_free_(lua_State* L, void* block, size_t osize)
   global_State* g = G(L);
   lua_assert((osize == 0) == (block == NULL));
   callfrealloc(g, block, osize, 0);
-  g->GCdebt += cast(l_mem, osize);
+  g->GCdebt += ((l_mem)(osize));
 }
 
 /*
@@ -161,7 +161,7 @@ void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
       return NULL;        /* do not update 'GCdebt' */
   }
   lua_assert((nsize == 0) == (newblock == NULL));
-  g->GCdebt -= cast(l_mem, nsize) - cast(l_mem, osize);
+  g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
   return newblock;
 }
 
@@ -181,14 +181,14 @@ void* luaM_malloc_(lua_State* L, size_t size, int tag)
   else
   {
     global_State* g = G(L);
-    void* newblock = firsttry(g, NULL, cast_sizet(tag), size);
+    void* newblock = firsttry(g, NULL, ((size_t)(tag)), size);
     if (l_unlikely(newblock == NULL))
     {
-      newblock = tryagain(L, NULL, cast_sizet(tag), size);
+      newblock = tryagain(L, NULL, ((size_t)(tag)), size);
       if (newblock == NULL)
         luaM_error(L);
     }
-    g->GCdebt -= cast(l_mem, size);
+    g->GCdebt -= ((l_mem)(size));
     return newblock;
   }
 }
@@ -197,16 +197,16 @@ int luaM_reserve(lua_State* L, size_t size)
 {
   global_State* g = G(L);
   if (g->memlimit > 0 &&
-      cast(size_t, gettotalbytes(g)) + size > g->memlimit)
+      ((size_t)(gettotalbytes(g))) + size > g->memlimit)
   {
     return 0;
   }
-  g->GCdebt -= cast(l_mem, size);
+  g->GCdebt -= ((l_mem)(size));
   return 1;
 }
 
 void luaM_release(lua_State* L, size_t size)
 {
   global_State* g = G(L);
-  g->GCdebt += cast(l_mem, size);
+  g->GCdebt += ((l_mem)(size));
 }

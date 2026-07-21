@@ -54,7 +54,7 @@ static const char* const CLIBS = "_CLIBS";
 #define setprogdir(L) ((void) 0)
 
 /* cast void* to a Lua function */
-#define cast_Lfunc(p) cast(lua_CFunction, cast_func(p))
+#define cast_Lfunc(p) ((lua_CFunction)(cast_func(p)))
 
 /*
 ** system-dependent functions
@@ -157,14 +157,14 @@ static void setpath(lua_State* L, const char* fieldname,
     luaL_buffinit(L, &b);
     if (path < dftmark)
     {                                                        /* is there a prefix before ';;'? */
-      luaL_addlstring(&b, path, ct_diff2sz(dftmark - path)); /* add it */
+      luaL_addlstring(&b, path, ((size_t)(dftmark - path))); /* add it */
       luaL_addchar(&b, *LUA_PATH_SEP);
     }
     luaL_addstring(&b, dft); /* add default */
     if (dftmark < path + len - 2)
     { /* is there a suffix after ';;'? */
       luaL_addchar(&b, *LUA_PATH_SEP);
-      luaL_addlstring(&b, dftmark + 2, ct_diff2sz((path + len - 2) - dftmark));
+      luaL_addlstring(&b, dftmark + 2, ((size_t)((path + len - 2) - dftmark)));
     }
     luaL_pushresult(&b);
   }
@@ -448,7 +448,7 @@ static int loadfunc(lua_State* L, const char* filename, const char* modname)
   if (mark)
   {
     int stat;
-    openfunc = lua_pushlstring(L, modname, ct_diff2sz(mark - modname));
+    openfunc = lua_pushlstring(L, modname, ((size_t)(mark - modname)));
     openfunc = lua_pushfstring(L, LUA_POF "%s", openfunc);
     stat = lookforfunc(L, filename, openfunc);
     if (stat != ERRFUNC)
@@ -476,7 +476,7 @@ static int searcher_Croot(lua_State* L)
   int stat;
   if (p == NULL)
     return 0; /* is root */
-  lua_pushlstring(L, name, ct_diff2sz(p - name));
+  lua_pushlstring(L, name, ((size_t)(p - name)));
   filename = findfile(L, lua_tostring(L, -1), "cpath", LUA_CSUBSEP);
   if (filename == NULL)
     return 1; /* root not found */

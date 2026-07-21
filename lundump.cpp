@@ -47,7 +47,7 @@ static l_noret error(LoadState* S, const char* why)
 ** All high-level loads go through loadVector; you can change it to
 ** adapt to the endianness of the input
 */
-#define loadVector(S, b, n) loadBlock(S, b, cast_sizet(n) * sizeof((b)[0]))
+#define loadVector(S, b, n) loadBlock(S, b, ((size_t)(n)) * sizeof((b)[0]))
 
 static void loadBlock(LoadState* S, void* b, size_t size)
 {
@@ -58,7 +58,7 @@ static void loadBlock(LoadState* S, void* b, size_t size)
 
 static void loadAlign(LoadState* S, unsigned align)
 {
-  unsigned padding = align - cast_uint(S->offset % align);
+  unsigned padding = align - ((unsigned int)(S->offset % align));
   if (padding < align)
   { /* (padding == align) means no padding */
     lua_Integer paddingContent;
@@ -67,7 +67,7 @@ static void loadAlign(LoadState* S, unsigned align)
   }
 }
 
-#define getaddr(S, n, t) cast(t*, getaddr_(S, cast_sizet(n) * sizeof(t)))
+#define getaddr(S, n, t) ((t*)(getaddr_(S, ((size_t)(n)) * sizeof(t))))
 
 static const void* getaddr_(LoadState* S, size_t size)
 {
@@ -86,7 +86,7 @@ static lu_byte loadByte(LoadState* S)
   if (b == EOZ)
     error(S, "truncated chunk");
   S->offset++;
-  return cast_byte(b);
+  return ((lu_byte)(b));
 }
 
 static lua_Unsigned loadVarint(LoadState* S, lua_Unsigned limit)
@@ -106,12 +106,12 @@ static lua_Unsigned loadVarint(LoadState* S, lua_Unsigned limit)
 
 static size_t loadSize(LoadState* S)
 {
-  return cast_sizet(loadVarint(S, MAX_SIZE));
+  return ((size_t)(loadVarint(S, MAX_SIZE)));
 }
 
 static int loadInt(LoadState* S)
 {
-  return cast_int(loadVarint(S, cast_sizet(INT_MAX)));
+  return ((int)(loadVarint(S, ((size_t)(INT_MAX)))));
 }
 
 static lua_Number loadNumber(LoadState* S)
@@ -126,9 +126,9 @@ static lua_Integer loadInteger(LoadState* S)
   lua_Unsigned cx = loadVarint(S, LUA_MAXUNSIGNED);
   /* decode unsigned to signed */
   if ((cx & 1) != 0)
-    return l_castU2S(~(cx >> 1));
+    return ((lua_Integer)(~(cx >> 1)));
   else
-    return l_castU2S(cx >> 1);
+    return ((lua_Integer)(cx >> 1));
 }
 
 /*
@@ -152,7 +152,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
       lua_assert(*sl == NULL); /* must be prefilled */
       return;
     }
-    if ((luaH_getint(S->h, l_castU2S(idx), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
+    if ((luaH_getint(S->h, ((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
       error(S, "invalid string index");
     *sl = ts = (lua_assert(((&stv)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((&stv)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((&stv)->value_).gc))); /* get its value */
     luaC_objbarrier(L, p, ts);
@@ -176,7 +176,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   /* add string to list of saved strings */
   S->nstr++;
   setsvalue(L, &sv, ts);
-  luaH_setint(L, S->h, l_castU2S(S->nstr), &sv);
+  luaH_setint(L, S->h, ((lua_Integer)(S->nstr)), &sv);
   luaC_objbarrierback(L, (lua_assert((((S->h)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(S->h))), ts);
 }
 
@@ -337,7 +337,7 @@ static void loadFunction(LoadState* S, Proto* f)
   f->lastlinedefined = loadInt(S);
   f->numparams = loadByte(S);
   /* get only the meaningful flags */
-  f->flag = cast_byte(loadByte(S) & ~PF_FIXED);
+  f->flag = ((lu_byte)(loadByte(S) & ~PF_FIXED));
   if (S->fixed)
     f->flag |= PF_FIXED; /* signal that code is fixed */
   f->maxstacksize = loadByte(S);
@@ -414,7 +414,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, const char* name,
   S.name = name;
   S.L = L;
   S.Z = Z;
-  S.fixed = cast_byte(fixed);
+  S.fixed = ((lu_byte)(fixed));
   S.offset = 1; /* fist byte was already read */
   checkHeader(&S);
   S.h = anchor;

@@ -14,7 +14,7 @@
 
 typedef struct Zio ZIO;
 
-#define zgetc(z) (((z)->n--) > 0 ? cast_uchar(*(z)->p++) : luaZ_fill(z))
+#define zgetc(z) (((z)->n--) > 0 ? ((unsigned char)(*(z)->p++)) : luaZ_fill(z))
 
 typedef struct Mbuffer
 {
@@ -29,7 +29,7 @@ typedef struct Mbuffer
 #define luaZ_sizebuffer(buff) ((buff)->buffsize)
 #define luaZ_bufflen(buff)    ((buff)->n)
 
-#define luaZ_buffremove(buff, i) ((buff)->n -= cast_sizet(i))
+#define luaZ_buffremove(buff, i) ((buff)->n -= ((size_t)(i)))
 #define luaZ_resetbuffer(buff)   ((buff)->n = 0)
 
 #define luaZ_resizebuffer(L, buff, size) ((buff)->buffer = luaM_reallocvchar(L, (buff)->buffer, (buff)->buffsize, size), (buff)->buffsize = size)

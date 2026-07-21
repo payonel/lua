@@ -123,13 +123,13 @@ enum OpMode
 ** the following macros help to manipulate instructions
 */
 
-#define GET_OPCODE(i)    (cast(OpCode, ((i) >> POS_OP) & MASK1(SIZE_OP, 0)))
-#define SET_OPCODE(i, o) ((i) = (((i) & MASK0(SIZE_OP, POS_OP)) | ((cast_Inst(o) << POS_OP) & MASK1(SIZE_OP, POS_OP))))
+#define GET_OPCODE(i)    (((OpCode)(((i) >> POS_OP) & MASK1(SIZE_OP, 0))))
+#define SET_OPCODE(i, o) ((i) = (((i) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(o)) << POS_OP) & MASK1(SIZE_OP, POS_OP))))
 
 #define checkopm(i, m) (getOpMode(GET_OPCODE(i)) == m)
 
-#define getarg(i, pos, size)    (cast_int(((i) >> (pos)) & MASK1(size, 0)))
-#define setarg(i, v, pos, size) ((i) = (((i) & MASK0(size, pos)) | ((cast_Inst(v) << pos) & MASK1(size, pos))))
+#define getarg(i, pos, size)    (((int)(((i) >> (pos)) & MASK1(size, 0))))
+#define setarg(i, v, pos, size) ((i) = (((i) & MASK0(size, pos)) | ((((Instruction)(v)) << pos) & MASK1(size, pos))))
 
 #define GETARG_A(i)    getarg(i, POS_A, SIZE_A)
 #define SETARG_A(i, v) setarg(i, v, POS_A, SIZE_A)
@@ -146,7 +146,7 @@ enum OpMode
 #define SETARG_C(i, v)  setarg(i, v, POS_C, SIZE_C)
 #define SETARG_vC(i, v) setarg(i, v, POS_vC, SIZE_vC)
 
-#define TESTARG_k(i)   (cast_int(((i) & (1u << POS_k))))
+#define TESTARG_k(i)   (((int)(((i) & (1u << POS_k)))))
 #define GETARG_k(i)    getarg(i, POS_k, 1)
 #define SETARG_k(i, v) setarg(i, v, POS_k, 1)
 
@@ -157,20 +157,20 @@ enum OpMode
 #define SETARG_Ax(i, v) setarg(i, v, POS_Ax, SIZE_Ax)
 
 #define GETARG_sBx(i)    check_exp(checkopm(i, iAsBx), getarg(i, POS_Bx, SIZE_Bx) - OFFSET_sBx)
-#define SETARG_sBx(i, b) SETARG_Bx((i), cast_uint((b) + OFFSET_sBx))
+#define SETARG_sBx(i, b) SETARG_Bx((i), ((unsigned int)((b) + OFFSET_sBx)))
 
 #define GETARG_sJ(i)    check_exp(checkopm(i, isJ), getarg(i, POS_sJ, SIZE_sJ) - OFFSET_sJ)
-#define SETARG_sJ(i, j) setarg(i, cast_uint((j) + OFFSET_sJ), POS_sJ, SIZE_sJ)
+#define SETARG_sJ(i, j) setarg(i, ((unsigned int)((j) + OFFSET_sJ)), POS_sJ, SIZE_sJ)
 
-#define CREATE_ABCk(o, a, b, c, k) ((cast_Inst(o) << POS_OP) | (cast_Inst(a) << POS_A) | (cast_Inst(b) << POS_B) | (cast_Inst(c) << POS_C) | (cast_Inst(k) << POS_k))
+#define CREATE_ABCk(o, a, b, c, k) ((((Instruction)(o)) << POS_OP) | (((Instruction)(a)) << POS_A) | (((Instruction)(b)) << POS_B) | (((Instruction)(c)) << POS_C) | (((Instruction)(k)) << POS_k))
 
-#define CREATE_vABCk(o, a, b, c, k) ((cast_Inst(o) << POS_OP) | (cast_Inst(a) << POS_A) | (cast_Inst(b) << POS_vB) | (cast_Inst(c) << POS_vC) | (cast_Inst(k) << POS_k))
+#define CREATE_vABCk(o, a, b, c, k) ((((Instruction)(o)) << POS_OP) | (((Instruction)(a)) << POS_A) | (((Instruction)(b)) << POS_vB) | (((Instruction)(c)) << POS_vC) | (((Instruction)(k)) << POS_k))
 
-#define CREATE_ABx(o, a, bc) ((cast_Inst(o) << POS_OP) | (cast_Inst(a) << POS_A) | (cast_Inst(bc) << POS_Bx))
+#define CREATE_ABx(o, a, bc) ((((Instruction)(o)) << POS_OP) | (((Instruction)(a)) << POS_A) | (((Instruction)(bc)) << POS_Bx))
 
-#define CREATE_Ax(o, a) ((cast_Inst(o) << POS_OP) | (cast_Inst(a) << POS_Ax))
+#define CREATE_Ax(o, a) ((((Instruction)(o)) << POS_OP) | (((Instruction)(a)) << POS_Ax))
 
-#define CREATE_sJ(o, j, k) ((cast_Inst(o) << POS_OP) | (cast_Inst(j) << POS_sJ) | (cast_Inst(k) << POS_k))
+#define CREATE_sJ(o, j, k) ((((Instruction)(o)) << POS_OP) | (((Instruction)(j)) << POS_sJ) | (((Instruction)(k)) << POS_k))
 
 /*
 ** Maximum size for the stack of a Lua function. It must fit in 8 bits.
@@ -387,7 +387,7 @@ typedef enum
 
 LUAI_DDEC(const lu_byte luaP_opmodes[NUM_OPCODES];)
 
-#define getOpMode(m)  (cast(enum OpMode, luaP_opmodes[m] & 7))
+#define getOpMode(m)  (((enum OpMode)(luaP_opmodes[m] & 7)))
 #define testAMode(m)  (luaP_opmodes[m] & (1 << 3))
 #define testTMode(m)  (luaP_opmodes[m] & (1 << 4))
 #define testITMode(m) (luaP_opmodes[m] & (1 << 5))

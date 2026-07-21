@@ -53,7 +53,7 @@
 /*
 ** some useful bit tricks
 */
-#define resetbits(x, m)  ((x) &= cast_byte(~(m)))
+#define resetbits(x, m)  ((x) &= ((lu_byte)(~(m))))
 #define setbits(x, m)    ((x) |= (m))
 #define testbits(x, m)   ((x) & (m))
 #define bitmask(b)       (1 << (b))
@@ -89,7 +89,7 @@
 #define changewhite(x) ((x)->marked ^= WHITEBITS)
 #define nw2black(x)    check_exp(!iswhite(x), l_setbit((x)->marked, BLACKBIT))
 
-#define luaC_white(g) cast_byte((g)->currentwhite& WHITEBITS)
+#define luaC_white(g) ((lu_byte)((g)->currentwhite& WHITEBITS))
 
 /* object age in generational mode */
 #define G_NEW      0 /* created in current cycle */
@@ -103,7 +103,7 @@
 #define AGEBITS 7 /* all age bits (111) */
 
 #define getage(o)    ((o)->marked & AGEBITS)
-#define setage(o, a) ((o)->marked = cast_byte(((o)->marked & (~AGEBITS)) | a))
+#define setage(o, a) ((o)->marked = ((lu_byte)(((o)->marked & (~AGEBITS)) | a)))
 #define isold(o)     (getage(o) > G_SURVIVAL)
 
 /*
@@ -230,13 +230,13 @@
 /* more often than not, 'pre'/'pos' are empty */
 #define luaC_checkGC(L) luaC_condGC(L, (void) 0, (void) 0)
 
-#define luaC_objbarrier(L, p, o) ((isblack(p) && iswhite(o)) ? luaC_barrier_(L, (lua_assert((((p)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(p))), (lua_assert((((o)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(o)))) : cast_void(0))
+#define luaC_objbarrier(L, p, o) ((isblack(p) && iswhite(o)) ? luaC_barrier_(L, (lua_assert((((p)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(p))), (lua_assert((((o)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(o)))) : ((void)(0)))
 
-#define luaC_barrier(L, p, v) (((v)->tt_ & BIT_ISCOLLECTABLE) ? luaC_objbarrier(L, p, (lua_assert((v)->tt_ & BIT_ISCOLLECTABLE), ((v)->value_).gc)) : cast_void(0))
+#define luaC_barrier(L, p, v) (((v)->tt_ & BIT_ISCOLLECTABLE) ? luaC_objbarrier(L, p, (lua_assert((v)->tt_ & BIT_ISCOLLECTABLE), ((v)->value_).gc)) : ((void)(0)))
 
-#define luaC_objbarrierback(L, p, o) ((isblack(p) && iswhite(o)) ? luaC_barrierback_(L, p) : cast_void(0))
+#define luaC_objbarrierback(L, p, o) ((isblack(p) && iswhite(o)) ? luaC_barrierback_(L, p) : ((void)(0)))
 
-#define luaC_barrierback(L, p, v) (((v)->tt_ & BIT_ISCOLLECTABLE) ? luaC_objbarrierback(L, p, (lua_assert((v)->tt_ & BIT_ISCOLLECTABLE), ((v)->value_).gc)) : cast_void(0))
+#define luaC_barrierback(L, p, v) (((v)->tt_ & BIT_ISCOLLECTABLE) ? luaC_objbarrierback(L, p, (lua_assert((v)->tt_ & BIT_ISCOLLECTABLE), ((v)->value_).gc)) : ((void)(0)))
 
 LUAI_FUNC void luaC_fix(lua_State* L, GCObject* o);
 LUAI_FUNC void luaC_freeallobjects(lua_State* L);

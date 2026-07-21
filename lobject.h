@@ -36,7 +36,7 @@
 ** and case labels) */
 constexpr lu_byte makevariant(int t, int v)
 {
-  return cast_byte(t | (v << 4));
+  return ((lu_byte)(t | (v << 4)));
 }
 
 /*
@@ -183,7 +183,7 @@ typedef struct GCObject
 ** labels) */
 constexpr lu_byte ctb(lu_byte t)
 {
-  return cast_byte(t | BIT_ISCOLLECTABLE);
+  return ((lu_byte)(t | BIT_ISCOLLECTABLE));
 }
 
 /* }================================================================== */
@@ -224,7 +224,7 @@ typedef struct TString : GCObject
 
 #define getstr(ts)  ((ts)->content.c_str())
 #define tsslen(ts)  ((ts)->content.size())
-#define getlstr(ts, len) (cast_void((len) = (ts)->content.size()), (ts)->content.c_str())
+#define getlstr(ts, len) (((void)((len) = (ts)->content.size())), (ts)->content.c_str())
 
 /* }================================================================== */
 
@@ -286,7 +286,7 @@ typedef struct Udata0 : GCObject
 #define udatamemoffset(nuv) ((nuv) == 0 ? sizeof(Udata0) - sizeof(((Udata0*)0)->bindata) : sizeof(Udata) - sizeof(UValue) + (sizeof(UValue) * (nuv)))
 
 /* get the address of the memory block inside 'Udata' */
-#define getudatamem(u) (cast_charp(u) + udatamemoffset((u)->nuvalue))
+#define getudatamem(u) (((char*)(u)) + udatamemoffset((u)->nuvalue))
 
 /* compute the size of a userdata */
 #define sizeudata(nuv, nb) (udatamemoffset(nuv) + (nb))
@@ -424,7 +424,7 @@ typedef struct CClosure : Closure
   TValue upvalue[1]; /* list of upvalues */
 } CClosure;
 
-#define sizeCclosure(n) (sizeof(CClosure) - sizeof(TValue) + sizeof(TValue) * cast_uint(n))
+#define sizeCclosure(n) (sizeof(CClosure) - sizeof(TValue) + sizeof(TValue) * ((unsigned int)(n)))
 
 typedef struct LClosure : Closure
 {
@@ -432,7 +432,7 @@ typedef struct LClosure : Closure
   UpVal* upvals[1]; /* list of upvalues */
 } LClosure;
 
-#define sizeLclosure(n) (sizeof(LClosure) - sizeof(UpVal*) + sizeof(UpVal*) * cast_uint(n))
+#define sizeLclosure(n) (sizeof(LClosure) - sizeof(UpVal*) + sizeof(UpVal*) * ((unsigned int)(n)))
 
 #define getproto(o) ((lua_assert((o)->tt_ == ctb(LUA_VLCL)), (lua_assert((((o)->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>(((o)->value_).gc)))->p)
 
@@ -482,7 +482,7 @@ typedef struct Table : GCObject
 /*
 ** 'module' operation for hashing (size is always a power of 2)
 */
-#define lmod(s, size) (check_exp((size & (size - 1)) == 0, (cast_uint(s) & cast_uint((size) - 1))))
+#define lmod(s, size) (check_exp((size & (size - 1)) == 0, (((unsigned int)(s)) & ((unsigned int)((size) - 1)))))
 
 #define twoto(x)    (1u << (x))
 #define sizenode(t) (twoto((t)->lsizenode))

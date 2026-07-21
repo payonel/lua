@@ -28,7 +28,7 @@ int luaZ_fill(ZIO* z)
     return EOZ;
   z->n = size - 1; /* discount char being returned */
   z->p = buff;
-  return cast_uchar(*(z->p++));
+  return ((unsigned char)(*(z->p++)));
 }
 
 void luaZ_init(lua_State* L, ZIO* z, lua_Reader reader, void* data)
