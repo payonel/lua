@@ -1261,7 +1261,14 @@ LUA_API int lua_gc(lua_State* L, int what, ...)
     else                   /* overflow */
       newdebt = -MAX_LMEM; /* set debt to miminum value */
     luaE_setdebt(g, newdebt);
-    luaC_condGC(L, (void) 0, work = 1);
+    {
+      if (G(L)->GCdebt <= 0)
+      {
+        luaC_step(L);
+        work = 1;
+      }
+      condchangemem(L, (void) 0, work = 1, 0);
+    }
     if (work && g->gcstate == GCSpause) /* end of cycle? */
       res = 1;                          /* signal it */
     g->gcstp = oldstp;                  /* restore previous state */

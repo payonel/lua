@@ -640,9 +640,9 @@ static l_mem checkgraylist(global_State* g, GCObject* o)
   while (o)
   {
     assert(!!isgray(o) ^ (getage(o) == G_TOUCHED2));
-    assert(!testbit(o->marked, TESTBIT));
+    assert(!((o->marked) & bitmask(TESTBIT)));
     if (keepinvariant(g))
-      l_setbit(o->marked, TESTBIT); /* mark that object is in a gray list */
+      ((o->marked) |= bitmask(TESTBIT)); /* mark that object is in a gray list */
     total++;
     switch (o->tt)
     {
@@ -707,8 +707,8 @@ static void incifingray(global_State* g, GCObject* o, l_mem* count)
   if (isgray(o) || getage(o) == G_TOUCHED2)
   {
     (*count)++;
-    assert(testbit(o->marked, TESTBIT));
-    resetbit(o->marked, TESTBIT); /* prepare for next cycle */
+    assert(((o->marked) & bitmask(TESTBIT)));
+    ((o->marked) &= ((lu_byte)(~bitmask(TESTBIT)))); /* prepare for next cycle */
   }
 }
 

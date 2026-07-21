@@ -362,12 +362,12 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->GCdebt = 0;
   g->memlimit = 0;
   setivalue(&g->nilvalue, 0); /* to signal that state is not yet built */
-  setgcparam(g, PAUSE, LUAI_GCPAUSE);
-  setgcparam(g, STEPMUL, LUAI_GCMUL);
-  setgcparam(g, STEPSIZE, LUAI_GCSTEPSIZE);
-  setgcparam(g, MINORMUL, LUAI_GENMINORMUL);
-  setgcparam(g, MINORMAJOR, LUAI_MINORMAJOR);
-  setgcparam(g, MAJORMINOR, LUAI_MAJORMINOR);
+  ((g)->gcparams[LUA_GCPPAUSE] = luaO_codeparam(LUAI_GCPAUSE));
+  ((g)->gcparams[LUA_GCPSTEPMUL] = luaO_codeparam(LUAI_GCMUL));
+  ((g)->gcparams[LUA_GCPSTEPSIZE] = luaO_codeparam(LUAI_GCSTEPSIZE));
+  ((g)->gcparams[LUA_GCPMINORMUL] = luaO_codeparam(LUAI_GENMINORMUL));
+  ((g)->gcparams[LUA_GCPMINORMAJOR] = luaO_codeparam(LUAI_MINORMAJOR));
+  ((g)->gcparams[LUA_GCPMAJORMINOR] = luaO_codeparam(LUAI_MAJORMINOR));
   for (i = 0; i < LUA_NUMTYPES; i++)
     g->mt[i] = NULL;
   if (luaD_rawrunprotected(L, f_luaopen, NULL) != LUA_OK)

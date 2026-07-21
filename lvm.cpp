@@ -1292,10 +1292,16 @@ void luaV_finishOp(lua_State* L)
 #endif
 
 /* 'c' is the limit of live values in the stack */
-#define checkGC(L, c)                                             \
-  {                                                               \
-    luaC_condGC(L, (savepc(ci), L->top = (c)), updatetrap(ci)); \
-    luai_threadyield(L);                                          \
+#define checkGC(L, c)                                                        \
+  {                                                                          \
+    if (G(L)->GCdebt <= 0)                                                   \
+    {                                                                        \
+      (savepc(ci), L->top = (c));                                            \
+      luaC_step(L);                                                          \
+      updatetrap(ci);                                                        \
+    }                                                                        \
+    condchangemem(L, (savepc(ci), L->top = (c)), updatetrap(ci), 0);         \
+    luai_threadyield(L);                                                     \
   }
 
 /* fetch an instruction and prepare its execution */
