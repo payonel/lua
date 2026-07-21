@@ -9,8 +9,6 @@
 #include "lobject.h"
 
 #define gnode(t, i) (&(t)->node[i])
-#define gval(n)     (&(n)->val)
-#define gnext(n)    ((n)->next)
 
 /*
 ** Clear all bits of fast-access metamethods, which means that the table
@@ -33,9 +31,6 @@
 
 /* allocated size for hash nodes */
 #define allocsizenode(t) (isdummy(t) ? 0 : sizenode(t))
-
-/* returns the Node, given the value of a table entry */
-#define nodefromval(v) cast(Node*, (v))
 
 #define luaH_fastgeti(t, k, res, tag)   \
   {                                     \

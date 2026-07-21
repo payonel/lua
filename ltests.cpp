@@ -446,13 +446,13 @@ static void checktable(global_State* g, Table* h)
   }
   for (n = gnode(h, 0); n < limit; n++)
   {
-    if (!isempty(gval(n)))
+    if (!isempty((&(n)->val)))
     {
       TValue k;
       getnodekey(mainthread(g), &k, n);
-      assert(!keyisnil(n));
+      assert(!((n)->key_tt == LUA_TNIL));
       checkvalref(g, hgc, &k);
-      checkvalref(g, hgc, gval(n));
+      checkvalref(g, hgc, (&(n)->val));
     }
   }
 }
@@ -1237,7 +1237,7 @@ static int table_query(lua_State* L)
   {
     TValue k;
     getnodekey(L, &k, gnode(t, i));
-    if (!isempty(gval(gnode(t, i))) ||
+    if (!isempty((&(gnode(t, i))->val)) ||
         (((&k)->tt_ & NOVARIANT_MASK) == LUA_TNIL) ||
         (((&k)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
     {
@@ -1245,11 +1245,11 @@ static int table_query(lua_State* L)
     }
     else
       lua_pushliteral(L, "<undef>");
-    if (!isempty(gval(gnode(t, i))))
-      pushobject(L, gval(gnode(t, i)));
+    if (!isempty((&(gnode(t, i))->val)))
+      pushobject(L, (&(gnode(t, i))->val));
     else
       lua_pushnil(L);
-    lua_pushinteger(L, gnext(&t->node[i]));
+    lua_pushinteger(L, ((&t->node[i])->next));
   }
   return 3;
 }

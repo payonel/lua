@@ -458,25 +458,6 @@ typedef struct Node
   Value key_val;    /* key value */
 } Node;
 
-/* copy a value into a key */
-#define setnodekey(node, obj)    \
-  {                              \
-    Node* n_ = (node);           \
-    const TValue* io_ = (obj);   \
-    n_->key_val = io_->value_;   \
-    n_->key_tt = io_->tt_;       \
-  }
-
-/* copy a value from a key */
-#define getnodekey(L, obj, node) \
-  {                              \
-    TValue* io_ = (obj);         \
-    const Node* n_ = (node);     \
-    io_->value_ = n_->key_val;   \
-    io_->tt_ = n_->key_tt;       \
-    checkliveness(L, io_);       \
-  }
-
 typedef struct Table : GCObject
 {
   lu_byte flags;      /* 1<<p means tagmethod(p) is not present */
@@ -490,32 +471,11 @@ typedef struct Table : GCObject
 } Table;
 
 /*
-** Macros to manipulate keys inserted in nodes
-*/
-#define keytt(node)  ((node)->key_tt)
-#define keyval(node) ((node)->key_val)
-
-#define keyisnil(node)     (keytt(node) == LUA_TNIL)
-#define keyisinteger(node) (keytt(node) == LUA_VNUMINT)
-#define keyival(node)      (keyval(node).i)
-#define keyisshrstr(node)  (keytt(node) == ctb(LUA_VSHRSTR))
-#define keystrval(node)    ((lua_assert((((keyval(node).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(keyval(node).gc)))
-
-#define setnilkey(node) (keytt(node) = LUA_TNIL)
-
-#define keyiscollectable(n) (keytt(n) & BIT_ISCOLLECTABLE)
-
-#define gckey(n)  (keyval(n).gc)
-#define gckeyN(n) (keyiscollectable(n) ? gckey(n) : NULL)
-
-/*
 ** Dead keys in tables have the tag DEADKEY but keep their original
 ** gcvalue. This distinguishes them from regular keys but allows them to
 ** be found when searched in a special way. ('next' needs that to find
 ** keys removed from a table during a traversal.)
 */
-#define setdeadkey(node) (keytt(node) = LUA_TDEADKEY)
-#define keyisdead(node)  (keytt(node) == LUA_TDEADKEY)
 
 /* }================================================================== */
 
@@ -645,6 +605,21 @@ static inline void setclCvalue(struct lua_State* L, TValue* obj, CClosure* x)
 }
 
 /* setthvalue lives in lstate.h — it needs the complete lua_State type */
+
+/* copy a value into a node key */
+static inline void setnodekey(Node* node, const TValue* obj)
+{
+  node->key_val = obj->value_;
+  node->key_tt = obj->tt_;
+}
+
+/* copy a value from a node key */
+static inline void getnodekey(struct lua_State* L, TValue* obj, const Node* node)
+{
+  obj->value_ = node->key_val;
+  obj->tt_ = node->key_tt;
+  checkliveness(L, obj);
+}
 
 /* }================================================================== */
 
