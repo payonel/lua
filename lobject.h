@@ -140,9 +140,6 @@ typedef size_t StkId;
 /* convert a stack index to a 'TValue' pointer */
 #define s2v(L, i) (&(L)->stack.p[i])
 
-/* get a StackValue pointer from a stack index */
-#define stkval(L, i) (&(L)->stack.p[i])
-
 /*
 ** {==================================================================
 ** Nil
