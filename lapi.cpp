@@ -710,7 +710,7 @@ static int auxgetstr(lua_State* L, const TValue* t, const char* k)
 {
   lu_byte tag;
   TString* str = luaS_new(L, k);
-  luaV_fastget(t, str, (&(L)->stack.p[L->top]), luaH_getstr, tag);
+  ((tag) = (!((t)->tt_ == ctb(LUA_VTABLE)) ? LUA_VNOTABLE : (luaH_getstr)((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc))), str, (&(L)->stack.p[L->top]))));
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     api_incr_top(L);
   else
@@ -751,7 +751,7 @@ LUA_API int lua_gettable(lua_State* L, int idx)
   lua_lock(L);
   api_checkpop(L, 1);
   t = index2value(L, idx);
-  luaV_fastget(t, (&(L)->stack.p[L->top - 1]), (&(L)->stack.p[L->top - 1]), luaH_get, tag);
+  ((tag) = (!((t)->tt_ == ctb(LUA_VTABLE)) ? LUA_VNOTABLE : (luaH_get)((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc))), (&(L)->stack.p[L->top - 1]), (&(L)->stack.p[L->top - 1]))));
   if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
     tag = luaV_finishget(L, t, (&(L)->stack.p[L->top - 1]), L->top - 1, tag);
   lua_unlock(L);
@@ -770,7 +770,7 @@ LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
   lu_byte tag;
   lua_lock(L);
   t = index2value(L, idx);
-  luaV_fastgeti(t, n, (&(L)->stack.p[L->top]), tag);
+  if (!((t)->tt_ == ctb(LUA_VTABLE))) (tag) = LUA_VNOTABLE; else { { Table* h_ = ((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc)))); lua_Unsigned u_ = ((lua_Unsigned)(n)) - 1u; if (u_ < h_->asize) { (tag) = *getArrTag(h_, u_); if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL)) { farr2val(h_, u_, tag, (&(L)->stack.p[L->top])); } } else { (tag) = luaH_getint(h_, (n), (&(L)->stack.p[L->top])); } }; };
   if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
   {
     TValue key;
@@ -816,7 +816,7 @@ LUA_API int lua_rawgeti(lua_State* L, int idx, lua_Integer n)
   lu_byte tag;
   lua_lock(L);
   t = gettable(L, idx);
-  luaH_fastgeti(t, n, (&(L)->stack.p[L->top]), tag);
+  { Table* h_ = (t); lua_Unsigned u_ = ((lua_Unsigned)(n)) - 1u; if (u_ < h_->asize) { (tag) = *getArrTag(h_, u_); if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL)) { farr2val(h_, u_, tag, (&(L)->stack.p[L->top])); } } else { (tag) = luaH_getint(h_, (n), (&(L)->stack.p[L->top])); } };
   return finishrawget(L, tag);
 }
 
@@ -906,7 +906,7 @@ static void auxsetstr(lua_State* L, const TValue* t, const char* k)
   int hres;
   TString* str = luaS_new(L, k);
   api_checkpop(L, 1);
-  luaV_fastset(t, str, (&(L)->stack.p[L->top - 1]), hres, luaH_psetstr);
+  ((hres) = (!((t)->tt_ == ctb(LUA_VTABLE)) ? HNOTATABLE : (luaH_psetstr)((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc))), str, (&(L)->stack.p[L->top - 1]))));
   if (hres == HOK)
   {
     luaV_finishfastset(L, t, (&(L)->stack.p[L->top - 1]));
@@ -937,7 +937,7 @@ LUA_API void lua_settable(lua_State* L, int idx)
   lua_lock(L);
   api_checkpop(L, 2);
   t = index2value(L, idx);
-  luaV_fastset(t, (&(L)->stack.p[L->top - 2]), (&(L)->stack.p[L->top - 1]), hres, luaH_pset);
+  ((hres) = (!((t)->tt_ == ctb(LUA_VTABLE)) ? HNOTATABLE : (luaH_pset)((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc))), (&(L)->stack.p[L->top - 2]), (&(L)->stack.p[L->top - 1]))));
   if (hres == HOK)
     luaV_finishfastset(L, t, (&(L)->stack.p[L->top - 1]));
   else
@@ -959,7 +959,7 @@ LUA_API void lua_seti(lua_State* L, int idx, lua_Integer n)
   lua_lock(L);
   api_checkpop(L, 1);
   t = index2value(L, idx);
-  luaV_fastseti(t, n, (&(L)->stack.p[L->top - 1]), hres);
+  if (!((t)->tt_ == ctb(LUA_VTABLE))) (hres) = HNOTATABLE; else { { Table* h_ = ((lua_assert((t)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((t)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((t)->value_).gc)))); lua_Unsigned u_ = ((lua_Unsigned)(n)) - 1u; if (u_ < h_->asize) { lu_byte* tag_ = getArrTag(h_, u_); if (checknoTM(h_->metatable, TM_NEWINDEX) || !(((*tag_) & NOVARIANT_MASK) == LUA_TNIL)) { fval2arr(h_, u_, tag_, (&(L)->stack.p[L->top - 1])); (hres) = HOK; } else (hres) = ~((int)(u_)); } else { (hres) = luaH_psetint(h_, n, (&(L)->stack.p[L->top - 1])); } }; };
   if (hres == HOK)
     luaV_finishfastset(L, t, (&(L)->stack.p[L->top - 1]));
   else

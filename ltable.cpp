@@ -1141,7 +1141,7 @@ int luaH_psetint(Table* t, lua_Integer key, TValue* val)
 static int psetint(Table* t, lua_Integer key, TValue* val)
 {
   int hres;
-  luaH_fastseti(t, key, val, hres);
+  { Table* h_ = (t); lua_Unsigned u_ = ((lua_Unsigned)(key)) - 1u; if (u_ < h_->asize) { lu_byte* tag_ = getArrTag(h_, u_); if (checknoTM(h_->metatable, TM_NEWINDEX) || !(((*tag_) & NOVARIANT_MASK) == LUA_TNIL)) { fval2arr(h_, u_, tag_, val); (hres) = HOK; } else (hres) = ~((int)(u_)); } else { (hres) = luaH_psetint(h_, key, val); } };
   return hres;
 }
 

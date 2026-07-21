@@ -50,45 +50,6 @@ static l_forceinline unsigned int allocsizenode(const Table* t)
   return isdummy(t) ? 0 : sizenode(t);
 }
 
-#define luaH_fastgeti(t, k, res, tag)   \
-  {                                     \
-    Table* h = t;                       \
-    lua_Unsigned u = ((lua_Unsigned)(k)) - 1u; \
-    if ((u < h->asize))                 \
-    {                                   \
-      tag = *getArrTag(h, u);           \
-      if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))             \
-      {                                 \
-        farr2val(h, u, tag, res);       \
-      }                                 \
-    }                                   \
-    else                                \
-    {                                   \
-      tag = luaH_getint(h, (k), res);   \
-    }                                   \
-  }
-
-#define luaH_fastseti(t, k, val, hres)                               \
-  {                                                                  \
-    Table* h = t;                                                    \
-    lua_Unsigned u = ((lua_Unsigned)(k)) - 1u;                              \
-    if ((u < h->asize))                                              \
-    {                                                                \
-      lu_byte* tag = getArrTag(h, u);                                \
-      if (checknoTM(h->metatable, TM_NEWINDEX) || !(((*tag) & NOVARIANT_MASK) == LUA_TNIL)) \
-      {                                                              \
-        fval2arr(h, u, tag, val);                                    \
-        hres = HOK;                                                  \
-      }                                                              \
-      else                                                           \
-        hres = ~((int)(u));                                         \
-    }                                                                \
-    else                                                             \
-    {                                                                \
-      hres = luaH_psetint(h, k, val);                                \
-    }                                                                \
-  }
-
 /* results from pset */
 #define HOK        0
 #define HNOTFOUND  1

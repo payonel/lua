@@ -142,29 +142,29 @@ static lua_Integer intarith(lua_State* L, int op, lua_Integer v1,
   switch (op)
   {
   case LUA_OPADD:
-    return intop(+, v1, v2);
+    return ((lua_Integer)(((lua_Unsigned)(v1)) + ((lua_Unsigned)(v2))));
   case LUA_OPSUB:
-    return intop(-, v1, v2);
+    return ((lua_Integer)(((lua_Unsigned)(v1)) - ((lua_Unsigned)(v2))));
   case LUA_OPMUL:
-    return intop(*, v1, v2);
+    return ((lua_Integer)(((lua_Unsigned)(v1)) * ((lua_Unsigned)(v2))));
   case LUA_OPMOD:
     return luaV_mod(L, v1, v2);
   case LUA_OPIDIV:
     return luaV_idiv(L, v1, v2);
   case LUA_OPBAND:
-    return intop(&, v1, v2);
+    return ((lua_Integer)(((lua_Unsigned)(v1)) & ((lua_Unsigned)(v2))));
   case LUA_OPBOR:
-    return intop(|, v1, v2);
+    return ((lua_Integer)(((lua_Unsigned)(v1)) | ((lua_Unsigned)(v2))));
   case LUA_OPBXOR:
-    return intop(^, v1, v2);
+    return ((lua_Integer)(((lua_Unsigned)(v1)) ^ ((lua_Unsigned)(v2))));
   case LUA_OPSHL:
     return luaV_shiftl(v1, v2);
   case LUA_OPSHR:
     return luaV_shiftr(v1, v2);
   case LUA_OPUNM:
-    return intop(-, 0, v1);
+    return ((lua_Integer)(((lua_Unsigned)(0)) - ((lua_Unsigned)(v1))));
   case LUA_OPBNOT:
-    return intop(^, ~((lua_Unsigned)(0)), v1);
+    return ((lua_Integer)(((lua_Unsigned)(~((lua_Unsigned)(0)))) ^ ((lua_Unsigned)(v1))));
   default:
     lua_assert(0);
     return 0;
@@ -225,7 +225,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   { /* operate only on floats */
     lua_Number n1;
     lua_Number n2;
-    if (tonumberns(p1, n1) && tonumberns(p2, n2))
+    if ((((p1)->tt_ == LUA_VNUMFLT) ? ((n1) = (p1)->value_.n, 1) : (((p1)->tt_ == LUA_VNUMINT) ? ((n1) = ((lua_Number)((p1)->value_.i)), 1) : 0)) && (((p2)->tt_ == LUA_VNUMFLT) ? ((n2) = (p2)->value_.n, 1) : (((p2)->tt_ == LUA_VNUMINT) ? ((n2) = ((lua_Number)((p2)->value_.i)), 1) : 0)))
     {
       setfltvalue(res, numarith(L, op, n1, n2));
       return 1;
@@ -242,7 +242,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
       setivalue(res, intarith(L, op, (lua_assert((p1)->tt_ == LUA_VNUMINT), ((p1)->value_).i), (lua_assert((p2)->tt_ == LUA_VNUMINT), ((p2)->value_).i)));
       return 1;
     }
-    else if (tonumberns(p1, n1) && tonumberns(p2, n2))
+    else if ((((p1)->tt_ == LUA_VNUMFLT) ? ((n1) = (p1)->value_.n, 1) : (((p1)->tt_ == LUA_VNUMINT) ? ((n1) = ((lua_Number)((p1)->value_.i)), 1) : 0)) && (((p2)->tt_ == LUA_VNUMFLT) ? ((n2) = (p2)->value_.n, 1) : (((p2)->tt_ == LUA_VNUMINT) ? ((n2) = ((lua_Number)((p2)->value_.i)), 1) : 0)))
     {
       setfltvalue(res, numarith(L, op, n1, n2));
       return 1;
