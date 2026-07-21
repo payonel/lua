@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-
 #include "lprefix.h"
 
 #include <limits.h>
@@ -35,9 +34,6 @@ typedef struct
 ** All high-level dumps go through dumpVector; you can change it to
 ** change the endianness of the result
 */
-#define dumpVector(D, v, n) dumpBlock(D, v, (n) * sizeof((v)[0]))
-
-#define dumpLiteral(D, s) dumpBlock(D, s, sizeof(s) - sizeof(char))
 
 /*
 ** Dump the block of memory pointed by 'b' with given 'size'.
@@ -71,12 +67,10 @@ static void dumpAlign(DumpState* D, unsigned align)
   lua_assert(D->offset % align == 0);
 }
 
-#define dumpVar(D, x) dumpVector(D, &x, 1)
-
 static void dumpByte(DumpState* D, int y)
 {
   lu_byte x = (lu_byte) y;
-  dumpVar(D, x);
+  dumpBlock(D, &(x), (1) * sizeof((&(x))[0]));
 }
 
 /*
@@ -95,7 +89,7 @@ static void dumpVarint(DumpState* D, lua_Unsigned x)
   buff[DIBS - 1] = x & 0x7f; /* fill least-significant byte */
   while ((x >>= 7) != 0)     /* fill other bytes in reverse order */
     buff[DIBS - (++n)] = ((lu_byte)((x & 0x7f) | 0x80));
-  dumpVector(D, buff + DIBS - n, n);
+  dumpBlock(D, buff + DIBS - n, (n) * sizeof((buff + DIBS - n)[0]));
 }
 
 static void dumpSize(DumpState* D, size_t sz)
@@ -111,7 +105,7 @@ static void dumpInt(DumpState* D, int x)
 
 static void dumpNumber(DumpState* D, lua_Number x)
 {
-  dumpVar(D, x);
+  dumpBlock(D, &(x), (1) * sizeof((&(x))[0]));
 }
 
 /*
@@ -158,7 +152,7 @@ static void dumpString(DumpState* D, TString* ts)
       size_t size;
       const char* s = ((void)((size) = (ts)->content.size()), (ts)->content.c_str());
       dumpSize(D, size + 1);
-      dumpVector(D, s, size + 1);            /* include ending '\0' */
+      dumpBlock(D, s, (size + 1) * sizeof((s)[0]));            /* include ending '\0' */
       D->nstr++;                             /* one more saved string */
       setsvalue(D->L, &key, ts);             /* the string is the key */
       setivalue(&value, ((lua_Integer)(D->nstr))); /* its index is the value */
@@ -173,7 +167,7 @@ static void dumpCode(DumpState* D, const Proto* f)
   dumpInt(D, f->sizecode);
   dumpAlign(D, sizeof(f->code[0]));
   lua_assert(f->code != NULL);
-  dumpVector(D, f->code, ((unsigned int)(f->sizecode)));
+  dumpBlock(D, f->code, (((unsigned int)(f->sizecode))) * sizeof((f->code)[0]));
 }
 
 static void dumpFunction(DumpState* D, const Proto* f);
@@ -232,14 +226,14 @@ static void dumpDebug(DumpState* D, const Proto* f)
   n = (D->strip) ? 0 : f->sizelineinfo;
   dumpInt(D, n);
   if (f->lineinfo != NULL)
-    dumpVector(D, f->lineinfo, ((unsigned int)(n)));
+    dumpBlock(D, f->lineinfo, (((unsigned int)(n))) * sizeof((f->lineinfo)[0]));
   n = (D->strip) ? 0 : f->sizeabslineinfo;
   dumpInt(D, n);
   if (n > 0)
   {
     /* 'abslineinfo' is an array of structures of int's */
     dumpAlign(D, sizeof(int));
-    dumpVector(D, f->abslineinfo, ((unsigned int)(n)));
+    dumpBlock(D, f->abslineinfo, (((unsigned int)(n))) * sizeof((f->abslineinfo)[0]));
   }
   n = (D->strip) ? 0 : f->sizelocvars;
   dumpInt(D, n);
@@ -270,23 +264,16 @@ static void dumpFunction(DumpState* D, const Proto* f)
   dumpDebug(D, f);
 }
 
-#define dumpNumInfo(D, tvar, value) \
-  {                                 \
-    tvar i = value;                 \
-    dumpByte(D, sizeof(tvar));      \
-    dumpVar(D, i);                  \
-  }
-
 static void dumpHeader(DumpState* D)
 {
-  dumpLiteral(D, LUA_SIGNATURE);
+  dumpBlock(D, LUA_SIGNATURE, sizeof(LUA_SIGNATURE) - sizeof(char));
   dumpByte(D, LUAC_VERSION);
   dumpByte(D, LUAC_FORMAT);
-  dumpLiteral(D, LUAC_DATA);
-  dumpNumInfo(D, int, LUAC_INT);
-  dumpNumInfo(D, Instruction, LUAC_INST);
-  dumpNumInfo(D, lua_Integer, LUAC_INT);
-  dumpNumInfo(D, lua_Number, LUAC_NUM);
+  dumpBlock(D, LUAC_DATA, sizeof(LUAC_DATA) - sizeof(char));
+  { int i = LUAC_INT; dumpByte(D, sizeof(int)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
+  { Instruction i = LUAC_INST; dumpByte(D, sizeof(Instruction)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
+  { lua_Integer i = LUAC_INT; dumpByte(D, sizeof(lua_Integer)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
+  { lua_Number i = LUAC_NUM; dumpByte(D, sizeof(lua_Number)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
 }
 
 /*

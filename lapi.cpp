@@ -35,13 +35,22 @@ const char lua_ident[] =
 /*
 ** Test for a valid index (one that is not the 'nilvalue').
 */
-#define isvalid(L, o) ((o) != &G(L)->nilvalue)
+static inline int isvalid(lua_State* L, const TValue* o)
+{
+  return o != &G(L)->nilvalue;
+}
 
 /* test for pseudo index */
-#define ispseudo(i) ((i) <= LUA_REGISTRYINDEX)
+constexpr int ispseudo(int i)
+{
+  return i <= LUA_REGISTRYINDEX;
+}
 
 /* test for upvalue */
-#define isupvalue(i) ((i) < LUA_REGISTRYINDEX)
+constexpr int isupvalue(int i)
+{
+  return i < LUA_REGISTRYINDEX;
+}
 
 /*
 ** Convert an acceptable index to a pointer to its respective value.
@@ -1072,7 +1081,13 @@ LUA_API int lua_setiuservalue(lua_State* L, int idx, int n)
 ** 'load' and 'call' functions (run Lua code)
 */
 
-#define checkresults(L, na, nr) (api_check(L, (nr) == LUA_MULTRET || ((nr) <= (na) || L->ci->top - L->top >= ((StkId)((nr) - (na)))), "results from function overflow current stack size"), api_check(L, LUA_MULTRET <= (nr) && (nr) <= MAXRESULTS, "invalid number of results"))
+static inline void checkresults(lua_State* L, int na, int nr)
+{
+  (void) L;
+  (void) na;
+  (void) nr;
+  api_check(L, nr == LUA_MULTRET || (nr <= na || L->ci->top - L->top >= ((StkId)(nr - na))), "results from function overflow current stack size"), api_check(L, LUA_MULTRET <= nr && nr <= MAXRESULTS, "invalid number of results");
+}
 
 LUA_API void lua_callk(lua_State* L, int nargs, int nresults,
                        lua_KContext ctx, lua_KFunction k)

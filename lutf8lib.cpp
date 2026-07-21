@@ -25,8 +25,14 @@
 
 #define MSGInvalid "invalid UTF-8 code"
 
-#define iscont(c)  (((c) & 0xC0) == 0x80)
-#define iscontp(p) iscont(*(p))
+constexpr int iscont(int c)
+{
+  return (c & 0xC0) == 0x80;
+}
+static inline int iscontp(const char* p)
+{
+  return iscont((unsigned char)*p);
+}
 
 /* from strlib */
 /* translate a relative string position: negative means back from end */

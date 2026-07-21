@@ -55,7 +55,10 @@ static int l_checkmode(const char* mode)
 
 #if !defined(l_checkmodep)
 /* By default, Lua accepts only "r" or "w" as valid modes */
-#define l_checkmodep(m) ((m[0] == 'r' || m[0] == 'w') && m[1] == '\0')
+static inline int l_checkmodep(const char* m)
+{
+  return (m[0] == 'r' || m[0] == 'w') && m[1] == '\0';
+}
 #endif
 
 /* }====================================================== */
@@ -89,9 +92,15 @@ static int l_checkmode(const char* mode)
 
 typedef luaL_Stream LStream;
 
-#define tolstream(L) ((LStream*) luaL_checkudata(L, 1, LUA_FILEHANDLE))
+static inline LStream* tolstream(lua_State* L)
+{
+  return (LStream*)luaL_checkudata(L, 1, LUA_FILEHANDLE);
+}
 
-#define isclosed(p) ((p)->closef == NULL)
+static inline int isclosed(const LStream* p)
+{
+  return p->closef == NULL;
+}
 
 static int io_type(lua_State* L)
 {

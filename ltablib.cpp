@@ -28,7 +28,6 @@
 #define TAB_L  4               /* length */
 #define TAB_RW (TAB_R | TAB_W) /* read/write */
 
-#define aux_getn(L, n, w) (checktab(L, n, (w) | TAB_L), luaL_len(L, n))
 
 static int checkfield(lua_State* L, const char* key, int n)
 {
@@ -57,6 +56,12 @@ static void checktab(lua_State* L, int arg, int what)
     else
       luaL_checktype(L, arg, LUA_TTABLE); /* force an error */
   }
+}
+
+static inline lua_Integer aux_getn(lua_State* L, int n, int w)
+{
+  checktab(L, n, w | TAB_L);
+  return luaL_len(L, n);
 }
 
 static int tcreate(lua_State* L)
@@ -251,8 +256,6 @@ static int tunpack(lua_State* L)
 typedef unsigned int IdxT;
 
 /* Versions of lua_seti/lua_geti specialized for IdxT */
-#define geti(L, idt, idx) lua_geti(L, idt, ((lua_Integer)(idx)))
-#define seti(L, idt, idx) lua_seti(L, idt, ((lua_Integer)(idx)))
 
 /*
 ** Produce a "random" 'unsigned int' to randomize pivot choice. This
@@ -261,7 +264,10 @@ typedef unsigned int IdxT;
 ** good choice.)
 */
 #if !defined(l_randomizePivot)
-#define l_randomizePivot(L) luaL_makeseed(L)
+static inline unsigned int l_randomizePivot(lua_State* L)
+{
+  return luaL_makeseed(L);
+}
 #endif /* } */
 
 /* arrays larger than 'RANLIMIT' may use randomized pivots */
@@ -269,8 +275,8 @@ typedef unsigned int IdxT;
 
 static void set2(lua_State* L, IdxT i, IdxT j)
 {
-  seti(L, 1, i);
-  seti(L, 1, j);
+  lua_seti(L, 1, ((lua_Integer)(i)));
+  lua_seti(L, 1, ((lua_Integer)(j)));
 }
 
 /*
@@ -309,7 +315,7 @@ static IdxT partition(lua_State* L, IdxT lo, IdxT up)
   for (;;)
   {
     /* next loop: repeat ++i while a[i] < P */
-    while ((void) geti(L, 1, ++i), sort_comp(L, -1, -2))
+    while ((void) lua_geti(L, 1, ((lua_Integer)(++i))), sort_comp(L, -1, -2))
     {
       if (l_unlikely(i == up - 1)) /* a[up - 1] < P == a[up - 1] */
         luaL_error(L, "invalid order function for sorting");
@@ -317,7 +323,7 @@ static IdxT partition(lua_State* L, IdxT lo, IdxT up)
     }
     /* after the loop, a[i] >= P and a[lo .. i - 1] < P  (a) */
     /* next loop: repeat --j while P < a[j] */
-    while ((void) geti(L, 1, --j), sort_comp(L, -3, -1))
+    while ((void) lua_geti(L, 1, ((lua_Integer)(--j))), sort_comp(L, -3, -1))
     {
       if (l_unlikely(j < i)) /* j <= i - 1 and a[j] > P, contradicts (a) */
         luaL_error(L, "invalid order function for sorting");
@@ -359,8 +365,8 @@ static void auxsort(lua_State* L, IdxT lo, IdxT up, unsigned rnd)
     IdxT p; /* Pivot index */
     IdxT n; /* to be used later */
     /* sort elements 'lo', 'p', and 'up' */
-    geti(L, 1, lo);
-    geti(L, 1, up);
+    lua_geti(L, 1, ((lua_Integer)(lo)));
+    lua_geti(L, 1, ((lua_Integer)(up)));
     if (sort_comp(L, -1, -2)) /* a[up] < a[lo]? */
       set2(L, lo, up);        /* swap a[lo] - a[up] */
     else
@@ -371,14 +377,14 @@ static void auxsort(lua_State* L, IdxT lo, IdxT up, unsigned rnd)
       p = (lo + up) / 2;                /* middle element is a good pivot */
     else                                /* for larger intervals, it is worth a random pivot */
       p = choosePivot(lo, up, rnd);
-    geti(L, 1, p);
-    geti(L, 1, lo);
+    lua_geti(L, 1, ((lua_Integer)(p)));
+    lua_geti(L, 1, ((lua_Integer)(lo)));
     if (sort_comp(L, -2, -1)) /* a[p] < a[lo]? */
       set2(L, p, lo);         /* swap a[p] - a[lo] */
     else
     {
       lua_pop(L, 1); /* remove a[lo] */
-      geti(L, 1, up);
+      lua_geti(L, 1, ((lua_Integer)(up)));
       if (sort_comp(L, -1, -2)) /* a[up] < a[p]? */
         set2(L, p, up);         /* swap a[up] - a[p] */
       else
@@ -386,9 +392,9 @@ static void auxsort(lua_State* L, IdxT lo, IdxT up, unsigned rnd)
     }
     if (up - lo == 2)     /* only 3 elements? */
       return;             /* already sorted */
-    geti(L, 1, p);        /* get middle element (Pivot) */
+    lua_geti(L, 1, ((lua_Integer)(p)));        /* get middle element (Pivot) */
     lua_pushvalue(L, -1); /* push Pivot */
-    geti(L, 1, up - 1);   /* push a[up - 1] */
+    lua_geti(L, 1, ((lua_Integer)(up - 1)));   /* push a[up - 1] */
     set2(L, p, up - 1);   /* swap Pivot (a[p]) with a[up - 1] */
     p = partition(L, lo, up);
     /* a[lo .. p - 1] <= a[p] == P <= a[p + 1 .. up] */

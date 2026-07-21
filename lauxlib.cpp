@@ -293,16 +293,6 @@ LUALIB_API int luaL_fileresult(lua_State* L, int stat, const char* fname)
 /*
 ** use appropriate macros to interpret 'pclose' return status
 */
-#define l_inspectstat(stat, what) \
-  if (WIFEXITED(stat))            \
-  {                               \
-    stat = WEXITSTATUS(stat);     \
-  }                               \
-  else if (WIFSIGNALED(stat))     \
-  {                               \
-    stat = WTERMSIG(stat);        \
-    what = "signal";              \
-  }
 
 #endif /* } */
 
@@ -313,7 +303,16 @@ LUALIB_API int luaL_execresult(lua_State* L, int stat)
   else
   {
     const char* what = "exit";     /* type of termination */
-    l_inspectstat(stat, what);     /* interpret result */
+    /* interpret result */
+    if (WIFEXITED(stat))
+    {
+      stat = WEXITSTATUS(stat);
+    }
+    else if (WIFSIGNALED(stat))
+    {
+      stat = WTERMSIG(stat);
+      what = "signal";
+    }
     if (*what == 'e' && stat == 0) /* successful termination? */
       lua_pushboolean(L, 1);
     else
@@ -551,13 +550,21 @@ static void newbox(lua_State* L)
 ** check whether buffer is using a userdata on the stack as a temporary
 ** buffer
 */
-#define buffonstack(B) ((B)->b != (B)->init.b)
+static inline int buffonstack(const luaL_Buffer* B)
+{
+  return B->b != B->init.b;
+}
 
 /*
 ** Whenever buffer is accessed, slot 'idx' must either be a box (which
 ** cannot be NULL) or it is a placeholder for the buffer.
 */
-#define checkbufferlevel(B, idx) lua_assert(buffonstack(B) ? lua_touserdata(B->L, idx) != NULL : lua_touserdata(B->L, idx) == (void*) B)
+static inline void checkbufferlevel(luaL_Buffer* B, int idx)
+{
+  (void) B;
+  (void) idx;
+  lua_assert(buffonstack(B) ? lua_touserdata(B->L, idx) != NULL : lua_touserdata(B->L, idx) == (void*) B);
+}
 
 /*
 ** Compute new size for buffer 'B', enough to accommodate extra 'sz'
@@ -1205,7 +1212,6 @@ static void warnfon(void* ud, const char* message, int tocont)
 ** Copy the contents of variable 'v' into the buffer pointed by 'b'.
 ** (The '&b[0]' disguises 'b' to fix an absurd warning from clang.)
 */
-#define addbuff(b, v) (memcpy(&b[0], &(v), sizeof(v)), b += sizeof(v))
 
 static unsigned int luai_makeseed(void)
 {
@@ -1214,8 +1220,8 @@ static unsigned int luai_makeseed(void)
   unsigned int i;
   time_t t = time(NULL);
   char* b = (char*) buff;
-  addbuff(b, b); /* local variable's address */
-  addbuff(b, t); /* time */
+  (memcpy(&(b)[0], &(b), sizeof(b)), (b) += sizeof(b)); /* local variable's address */
+  (memcpy(&(b)[0], &(t), sizeof(t)), (b) += sizeof(t)); /* time */
   /* fill (rare but possible) remain of the buffer with zeros */
   memset(b, 0, sizeof(buff) - BUFSEEDB);
   res = buff[0];

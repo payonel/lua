@@ -38,7 +38,10 @@
 /*
 ** Macro to call the allocation function.
 */
-#define callfrealloc(g, block, os, ns) ((*g->frealloc)(g->ud, block, os, ns))
+static inline void* callfrealloc(global_State* g, void* block, size_t os, size_t ns)
+{
+  return (*g->frealloc)(g->ud, block, os, ns);
+}
 
 /*
 ** When an allocation fails, it will try again after an emergency
@@ -48,9 +51,15 @@
 ** 'gcstopem' is true, because then the interpreter is in the middle of
 ** a collection step.
 */
-#define cantryagain(g) (completestate(g) && !g->gcstopem)
+static inline int cantryagain(global_State* g)
+{
+  return completestate(g) && !g->gcstopem;
+}
 
-#define firsttry(g, block, os, ns) callfrealloc(g, block, os, ns)
+static inline void* firsttry(global_State* g, void* block, size_t os, size_t ns)
+{
+  return callfrealloc(g, block, os, ns);
+}
 
 /*
 ** {==================================================================

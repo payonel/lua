@@ -797,8 +797,6 @@ const char* luaO_pushfstring(lua_State* L, const char* fmt, ...)
 #define PRE  "[string \""
 #define POS  "\"]"
 
-#define addstr(a, b, l) (memcpy(a, b, (l) * sizeof(char)), a += (l))
-
 void luaO_chunkid(char* out, const char* source, size_t srclen)
 {
   size_t bufflen = LUA_IDSIZE; /* free space in buffer */
@@ -808,7 +806,7 @@ void luaO_chunkid(char* out, const char* source, size_t srclen)
       memcpy(out, source + 1, srclen * sizeof(char));
     else
     { /* truncate it */
-      addstr(out, source + 1, bufflen - 1);
+      (memcpy(out, source + 1, (bufflen - 1) * sizeof(char)), (out) += (bufflen - 1));
       *out = '\0';
     }
   }
@@ -818,7 +816,7 @@ void luaO_chunkid(char* out, const char* source, size_t srclen)
       memcpy(out, source + 1, srclen * sizeof(char));
     else
     { /* add '...' before rest of name */
-      addstr(out, RETS, (sizeof(RETS) / sizeof(char) - 1));
+      (memcpy(out, RETS, ((sizeof(RETS) / sizeof(char) - 1)) * sizeof(char)), (out) += ((sizeof(RETS) / sizeof(char) - 1)));
       bufflen -= (sizeof(RETS) / sizeof(char) - 1);
       memcpy(out, source + 1 + srclen - bufflen, bufflen * sizeof(char));
     }
@@ -826,11 +824,11 @@ void luaO_chunkid(char* out, const char* source, size_t srclen)
   else
   {                                        /* string; format as [string "source"] */
     const char* nl = strchr(source, '\n'); /* find first new line (if any) */
-    addstr(out, PRE, (sizeof(PRE) / sizeof(char) - 1));             /* add prefix */
+    (memcpy(out, PRE, ((sizeof(PRE) / sizeof(char) - 1)) * sizeof(char)), (out) += ((sizeof(PRE) / sizeof(char) - 1)));             /* add prefix */
     bufflen -= (sizeof(PRE RETS POS) / sizeof(char) - 1) + 1;       /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == NULL)
     {                              /* small one-line source? */
-      addstr(out, source, srclen); /* keep it */
+      (memcpy(out, source, (srclen) * sizeof(char)), (out) += (srclen)); /* keep it */
     }
     else
     {
@@ -838,8 +836,8 @@ void luaO_chunkid(char* out, const char* source, size_t srclen)
         srclen = ((size_t)(nl - source)); /* stop at first newline */
       if (srclen > bufflen)
         srclen = bufflen;
-      addstr(out, source, srclen);
-      addstr(out, RETS, (sizeof(RETS) / sizeof(char) - 1));
+      (memcpy(out, source, (srclen) * sizeof(char)), (out) += (srclen));
+      (memcpy(out, RETS, ((sizeof(RETS) / sizeof(char) - 1)) * sizeof(char)), (out) += ((sizeof(RETS) / sizeof(char) - 1)));
     }
     memcpy(out, POS, ((sizeof(POS) / sizeof(char) - 1) + 1) * sizeof(char));
   }

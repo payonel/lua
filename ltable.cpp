@@ -43,8 +43,14 @@
 */
 #define LIMFORLAST 3 /* log2 of real limit (8) */
 
-#define haslastfree(t) ((t)->lsizenode >= LIMFORLAST)
-#define getlastfree(t) ((t)->lastfree)
+static inline int haslastfree(const Table* t)
+{
+  return t->lsizenode >= LIMFORLAST;
+}
+static inline Node*& getlastfree(Table* t)
+{
+  return t->lastfree;
+}
 
 /*
 ** MAXABITS is the largest integer such that 2^MAXABITS fits in an
@@ -81,18 +87,38 @@
 ** When the original hash value is good, hashing by a power of 2
 ** avoids the cost of '%'.
 */
-#define hashpow2(t, n) (gnode(t, lmod((n), sizenode(t))))
+static inline Node* hashpow2(const Table* t, lua_Unsigned n)
+{
+  return gnode(t, lmod(n, sizenode(t)));
+}
 
 /*
 ** for other types, it is better to avoid modulo by power of 2, as
 ** they can have many 2 factors.
 */
-#define hashmod(t, n) (gnode(t, ((n) % ((sizenode(t) - 1u) | 1u))))
+static inline Node* hashmod(const Table* t, lua_Unsigned n)
+{
+  return gnode(t, n % ((sizenode(t) - 1u) | 1u));
+}
 
-#define hashstr(t, str)   hashpow2(t, (str)->hash)
-#define hashboolean(t, p) hashpow2(t, p)
+static inline Node* hashstr(const Table* t, const TString* str)
+{
+  return hashpow2(t, str->hash);
+}
+static inline Node* hashboolean(const Table* t, int p)
+{
+  return hashpow2(t, (lua_Unsigned)p);
+}
 
-#define hashpointer(t, p) hashmod(t, point2uint(p))
+static inline Node* hashpointer(const Table* t, const void* p)
+{
+  return hashmod(t, point2uint(p));
+}
+
+static inline Node* hashpointer(const Table* t, lua_CFunction p)
+{
+  return hashmod(t, point2uint(p));
+}
 
 #define dummynode (&dummynode_)
 
@@ -305,13 +331,19 @@ static unsigned checkrange(lua_Integer k, unsigned limit)
 ** Return the index 'k' if 'k' is an appropriate key to live in the
 ** array part of a table, 0 otherwise.
 */
-#define arrayindex(k) checkrange(k, MAXASIZE)
+static inline unsigned arrayindex(lua_Integer k)
+{
+  return checkrange(k, MAXASIZE);
+}
 
 /*
 ** Check whether an integer key is in the array part of a table and
 ** return its index there, or zero.
 */
-#define ikeyinarray(t, k) checkrange(k, t->asize)
+static inline unsigned ikeyinarray(const Table* t, lua_Integer k)
+{
+  return checkrange(k, t->asize);
+}
 
 /*
 ** Check whether a key is in the array part of a table and return its
@@ -420,7 +452,10 @@ typedef struct
 ** entry: Two values plus 'next' versus one value.) Evaluate with size_t
 ** to avoid overflows.
 */
-#define arrayXhash(na, nh) (((size_t)(na)) <= ((size_t)(nh)) * 3)
+static inline int arrayXhash(size_t na, size_t nh)
+{
+  return na <= nh * 3;
+}
 
 /*
 ** Compute the optimal size for the array part of table 't'.

@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-
 #include "lprefix.h"
 
 #include <float.h>
@@ -28,7 +27,10 @@
 #include "lvm.h"
 
 /* (note that expressions VJMP also have jumps.) */
-#define hasjumps(e) ((e)->t != (e)->f)
+static inline int hasjumps(const expdesc* e)
+{
+  return e->t != e->f;
+}
 
 static int codesJ(FuncState* fs, OpCode o, int sj, int k);
 

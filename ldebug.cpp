@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-
 #include "lprefix.h"
 
 #include <stdarg.h>
@@ -26,7 +25,10 @@
 #include "ltm.h"
 #include "lvm.h"
 
-#define LuaClosure(f) ((f) != NULL && (f)->tt == LUA_VLCL)
+static inline int LuaClosure(const Closure* f)
+{
+  return f != NULL && f->tt == LUA_VLCL;
+}
 
 static const char strlocal[] = "local";
 static const char strupval[] = "upvalue";

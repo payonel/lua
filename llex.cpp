@@ -25,14 +25,20 @@
 
 #include "lhack.h"
 
-#define next(ls) (ls->current = (((ls->z)->n--) > 0 ? ((unsigned char)(*(ls->z)->p++)) : luaZ_fill(ls->z)))
+static l_forceinline void next(LexState* ls)
+{
+  ls->current = (ls->z->n-- > 0) ? (unsigned char)(*ls->z->p++) : luaZ_fill(ls->z);
+}
 
 /* minimum size for string buffer */
 #if !defined(LUA_MINBUFFER)
 #define LUA_MINBUFFER 32
 #endif
 
-#define currIsNewline(ls) (ls->current == '\n' || ls->current == '\r')
+static inline int currIsNewline(const LexState* ls)
+{
+  return ls->current == '\n' || ls->current == '\r';
+}
 
 /* ORDER RESERVED */
 static const char* const luaX_tokens[] = {
@@ -44,7 +50,6 @@ static const char* const luaX_tokens[] = {
     "<<", ">>", "::", "<eof>",
     "<number>", "<integer>", "<name>", "<string>"};
 
-#define save_and_next(ls) (save(ls, ls->current), next(ls))
 
 static l_noret lexerror(LexState* ls, const char* msg, int token);
 
@@ -61,6 +66,12 @@ static void save(LexState* ls, int c)
     ((b)->buffer = ((char*)(luaM_saferealloc_(ls->L, (b)->buffer, (b)->buffsize * sizeof(char), (newsize) * sizeof(char)))), (b)->buffsize = (newsize));
   }
   b->buffer[((b)->n)++] = ((char)(c));
+}
+
+static inline void save_and_next(LexState* ls)
+{
+  save(ls, ls->current);
+  next(ls);
 }
 
 void luaX_init(lua_State* L)

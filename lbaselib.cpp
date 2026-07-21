@@ -210,11 +210,6 @@ static int pushmode(lua_State* L, int oldmode)
 /*
 ** check whether call to 'lua_gc' was valid (not inside a finalizer)
 */
-#define checkvalres(res) \
-  {                      \
-    if (res == -1)       \
-      break;             \
-  }
 
 static int luaB_collectgarbage(lua_State* L)
 {
@@ -242,7 +237,7 @@ static int luaB_collectgarbage(lua_State* L)
   {
     int k = lua_gc(L, o);
     int b = lua_gc(L, LUA_GCCOUNTB);
-    checkvalres(k);
+    { if ((k) == -1) break; };
     lua_pushnumber(L, (lua_Number) k + ((lua_Number) b / 1024));
     return 1;
   }
@@ -250,14 +245,14 @@ static int luaB_collectgarbage(lua_State* L)
   {
     lua_Integer n = luaL_optinteger(L, 2, 0);
     int res = lua_gc(L, o, ((size_t)(n)));
-    checkvalres(res);
+    { if ((res) == -1) break; };
     lua_pushboolean(L, res);
     return 1;
   }
   case LUA_GCISRUNNING:
   {
     int res = lua_gc(L, o);
-    checkvalres(res);
+    { if ((res) == -1) break; };
     lua_pushboolean(L, res);
     return 1;
   }
@@ -285,7 +280,7 @@ static int luaB_collectgarbage(lua_State* L)
   default:
   {
     int res = lua_gc(L, o);
-    checkvalres(res);
+    { if ((res) == -1) break; };
     lua_pushinteger(L, res);
     return 1;
   }

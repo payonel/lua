@@ -31,7 +31,10 @@
 
 #include "lhack.h"
 
-#define errorstatus(s) ((s) > LUA_YIELD)
+constexpr int errorstatus(TStatus s)
+{
+  return s > LUA_YIELD;
+}
 
 /*
 ** these macros allow user-specific actions when a thread is
@@ -533,7 +536,10 @@ void luaD_poscall(lua_State* L, CallInfo* ci, int nres)
   L->ci = ci->previous; /* back to caller (after closing variables) */
 }
 
-#define next_ci(L) (L->ci->next ? L->ci->next : luaE_extendCI(L, 1))
+static inline CallInfo* next_ci(lua_State* L)
+{
+  return L->ci->next ? L->ci->next : luaE_extendCI(L, 1);
+}
 
 /*
 ** Allocate and initialize CallInfo structure. At this point, the

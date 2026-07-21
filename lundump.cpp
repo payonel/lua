@@ -47,7 +47,6 @@ static l_noret error(LoadState* S, const char* why)
 ** All high-level loads go through loadVector; you can change it to
 ** adapt to the endianness of the input
 */
-#define loadVector(S, b, n) loadBlock(S, b, ((size_t)(n)) * sizeof((b)[0]))
 
 static void loadBlock(LoadState* S, void* b, size_t size)
 {
@@ -67,8 +66,6 @@ static void loadAlign(LoadState* S, unsigned align)
   }
 }
 
-#define getaddr(S, n, t) ((t*)(getaddr_(S, ((size_t)(n)) * sizeof(t))))
-
 static const void* getaddr_(LoadState* S, size_t size)
 {
   const void* block = luaZ_getaddr(S->Z, size);
@@ -77,8 +74,6 @@ static const void* getaddr_(LoadState* S, size_t size)
     error(S, "truncated fixed buffer");
   return block;
 }
-
-#define loadVar(S, x) loadVector(S, &x, 1)
 
 static lu_byte loadByte(LoadState* S)
 {
@@ -117,7 +112,7 @@ static int loadInt(LoadState* S)
 static lua_Number loadNumber(LoadState* S)
 {
   lua_Number x;
-  loadVar(S, x);
+  loadBlock(S, &(x), ((size_t)(1)) * sizeof((&(x))[0]));
   return x;
 }
 
@@ -161,7 +156,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   else if ((size -= 1) <= 40)
   {                                         /* small string? use stack buffer */
     char buff[41];
-    loadVector(S, buff, size + 1);          /* load string into buffer */
+    loadBlock(S, buff, ((size_t)(size + 1)) * sizeof((buff)[0]));          /* load string into buffer */
     *sl = ts = luaS_newlstr(L, buff, size); /* create string */
     luaC_objbarrier(L, p, ts);
   }
@@ -169,7 +164,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   {                                           /* large string */
     std::string tmp;
     tmp.resize(size + 1);
-    loadVector(S, tmp.data(), size + 1);
+    loadBlock(S, tmp.data(), ((size_t)(size + 1)) * sizeof((tmp.data())[0]));
     *sl = ts = luaS_newlstr(L, tmp.data(), size);
     luaC_objbarrier(L, p, ts);
   }
@@ -186,14 +181,14 @@ static void loadCode(LoadState* S, Proto* f)
   loadAlign(S, sizeof(f->code[0]));
   if (S->fixed)
   {
-    f->code = getaddr(S, n, Instruction);
+    f->code = ((Instruction*)(getaddr_(S, ((size_t)(n)) * sizeof(Instruction))));
     f->sizecode = n;
   }
   else
   {
     f->code = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(Instruction))) ? luaM_toobig(S->L) : ((void)(0))), ((Instruction*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(Instruction), 0))));
     f->sizecode = n;
-    loadVector(S, f->code, n);
+    loadBlock(S, f->code, ((size_t)(n)) * sizeof((f->code)[0]));
   }
 }
 
@@ -288,14 +283,14 @@ static void loadDebug(LoadState* S, Proto* f)
   int n = loadInt(S);
   if (S->fixed)
   {
-    f->lineinfo = getaddr(S, n, ls_byte);
+    f->lineinfo = ((ls_byte*)(getaddr_(S, ((size_t)(n)) * sizeof(ls_byte))));
     f->sizelineinfo = n;
   }
   else
   {
     f->lineinfo = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(ls_byte))) ? luaM_toobig(S->L) : ((void)(0))), ((ls_byte*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(ls_byte), 0))));
     f->sizelineinfo = n;
-    loadVector(S, f->lineinfo, n);
+    loadBlock(S, f->lineinfo, ((size_t)(n)) * sizeof((f->lineinfo)[0]));
   }
   n = loadInt(S);
   if (n > 0)
@@ -303,14 +298,14 @@ static void loadDebug(LoadState* S, Proto* f)
     loadAlign(S, sizeof(int));
     if (S->fixed)
     {
-      f->abslineinfo = getaddr(S, n, AbsLineInfo);
+      f->abslineinfo = ((AbsLineInfo*)(getaddr_(S, ((size_t)(n)) * sizeof(AbsLineInfo))));
       f->sizeabslineinfo = n;
     }
     else
     {
       f->abslineinfo = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(AbsLineInfo))) ? luaM_toobig(S->L) : ((void)(0))), ((AbsLineInfo*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(AbsLineInfo), 0))));
       f->sizeabslineinfo = n;
-      loadVector(S, f->abslineinfo, n);
+      loadBlock(S, f->abslineinfo, ((size_t)(n)) * sizeof((f->abslineinfo)[0]));
     }
   }
   n = loadInt(S);
@@ -353,7 +348,7 @@ static void checkliteral(LoadState* S, const char* s, const char* msg)
 {
   char buff[sizeof(LUA_SIGNATURE) + sizeof(LUAC_DATA)]; /* larger than both */
   size_t len = strlen(s);
-  loadVector(S, buff, len);
+  loadBlock(S, buff, ((size_t)(len)) * sizeof((buff)[0]));
   if (memcmp(s, buff, len) != 0)
     error(S, msg);
 }
@@ -376,14 +371,6 @@ static void checknumformat(LoadState* S, int eq, const char* tname)
     numerror(S, "format", tname);
 }
 
-#define checknum(S, tvar, value, tname)   \
-  {                                       \
-    tvar i;                               \
-    checknumsize(S, sizeof(i), tname);    \
-    loadVar(S, i);                        \
-    checknumformat(S, i == value, tname); \
-  }
-
 static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
@@ -393,10 +380,10 @@ static void checkHeader(LoadState* S)
   if (loadByte(S) != LUAC_FORMAT)
     error(S, "format mismatch");
   checkliteral(S, LUAC_DATA, "corrupted chunk");
-  checknum(S, int, LUAC_INT, "int");
-  checknum(S, Instruction, LUAC_INST, "instruction");
-  checknum(S, lua_Integer, LUAC_INT, "Lua integer");
-  checknum(S, lua_Number, LUAC_NUM, "Lua number");
+  { int i; checknumsize(S, sizeof(i), "int"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), "int"); };
+  { Instruction i; checknumsize(S, sizeof(i), "instruction"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INST), "instruction"); };
+  { lua_Integer i; checknumsize(S, sizeof(i), "Lua integer"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), "Lua integer"); };
+  { lua_Number i; checknumsize(S, sizeof(i), "Lua number"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_NUM), "Lua number"); };
 }
 
 /*

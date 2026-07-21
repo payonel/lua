@@ -54,7 +54,6 @@ static const char* const CLIBS = "_CLIBS";
 #define setprogdir(L) ((void) 0)
 
 /* cast void* to a Lua function */
-#define cast_Lfunc(p) ((lua_CFunction)(cast_func(p)))
 
 /*
 ** system-dependent functions
@@ -84,7 +83,6 @@ static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym);
 
 #include <dlfcn.h>
 
-
 static void* lsys_load(lua_State* L, const char* path, int seeglb)
 {
   void* lib = dlopen(path, RTLD_NOW | (seeglb ? RTLD_GLOBAL : RTLD_LOCAL));
@@ -95,7 +93,7 @@ static void* lsys_load(lua_State* L, const char* path, int seeglb)
 
 static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym)
 {
-  lua_CFunction f = cast_Lfunc(dlsym(lib, sym));
+  lua_CFunction f = ((lua_CFunction)(cast_func(dlsym(lib, sym))));
   if (l_unlikely(f == NULL))
     lua_pushstring(L, dlerror());
   return f;
@@ -196,7 +194,6 @@ static void* checkclib(lua_State* L, const char* path)
   lua_pop(L, 2);                /* pop CLIBS table and 'plib' */
   return plib;
 }
-
 
 /*
 ** __gc for library userdata — unloads the DLL.

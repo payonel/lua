@@ -312,7 +312,10 @@ static int math_type(lua_State* L)
 */
 
 /* avoid using extra bits when needed */
-#define trim64(x) ((x) & 0xffffffffffffffffu)
+constexpr lua_Unsigned trim64(lua_Unsigned x)
+{
+  return x & 0xffffffffffffffffu;
+}
 
 /* rotate left 'x' by 'n' bits */
 static uint64_t rotl(uint64_t x, int n)
@@ -362,10 +365,16 @@ static lua_Number I2d(uint64_t x)
 }
 
 /* convert a 'uint64_t' to a 'lua_Unsigned' */
-#define I2UInt(x) ((lua_Unsigned) trim64(x))
+constexpr lua_Unsigned I2UInt(lua_Integer x)
+{
+  return trim64((lua_Unsigned)x);
+}
 
 /* convert a 'lua_Unsigned' to a 'uint64_t' */
-#define Int2I(x) ((uint64_t) (x))
+constexpr uint64_t Int2I(lua_Integer x)
+{
+  return (uint64_t)x;
+}
 
 /*
 ** A state uses four 'uint64_t' values.

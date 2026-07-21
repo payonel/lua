@@ -24,7 +24,10 @@
 #include "ltable.h"
 #include "ltm.h"
 
-#define fromstate(L) (((LX*)((L))))
+static inline LX* fromstate(lua_State* L)
+{
+  return (LX*)L;
+}
 
 /*
 ** set GCdebt to a new value keeping the real number of allocated
