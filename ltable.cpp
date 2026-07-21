@@ -238,7 +238,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
       /* an external string can be equal to a short-string key */
       return luaS_eqstr(tsvalue(k1), keystrval(n2));
     }
-    else if (deadok && keyisdead(n2) && iscollectable(k1))
+    else if (deadok && keyisdead(n2) && ((k1)->tt_ & BIT_ISCOLLECTABLE))
     {
       /* a collectable value can be equal to a dead key */
       return gcvalue(k1) == gcvalueraw(keyval(n2));

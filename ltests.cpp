@@ -428,7 +428,7 @@ static void checkobjref(global_State* g, GCObject* f, GCObject* t)
 
 static void checkvalref(global_State* g, GCObject* f, const TValue* t)
 {
-  assert(!iscollectable(t) || (righttt(t) && testobjref(g, f, gcvalue(t))));
+  assert(!((t)->tt_ & BIT_ISCOLLECTABLE) || (righttt(t) && testobjref(g, f, gcvalue(t))));
 }
 
 static void checktable(global_State* g, Table* h)
@@ -473,7 +473,7 @@ static void checkproto(global_State* g, Proto* f)
   checkobjrefN(g, fgc, f->source);
   for (i = 0; i < f->sizek; i++)
   {
-    if (iscollectable(f->k + i))
+    if (((f->k + i)->tt_ & BIT_ISCOLLECTABLE))
       checkobjref(g, fgc, gcvalue(f->k + i));
   }
   for (i = 0; i < f->sizeupvalues; i++)
@@ -1047,7 +1047,7 @@ static int gc_color(lua_State* L)
   TValue* o;
   luaL_checkany(L, 1);
   o = obj_at(L, 1);
-  if (!iscollectable(o))
+  if (!((o)->tt_ & BIT_ISCOLLECTABLE))
     lua_pushstring(L, "no collectable");
   else
   {
@@ -1064,7 +1064,7 @@ static int gc_age(lua_State* L)
   TValue* o;
   luaL_checkany(L, 1);
   o = obj_at(L, 1);
-  if (!iscollectable(o))
+  if (!((o)->tt_ & BIT_ISCOLLECTABLE))
     lua_pushstring(L, "no collectable");
   else
   {
@@ -1081,7 +1081,7 @@ static int gc_printobj(lua_State* L)
   TValue* o;
   luaL_checkany(L, 1);
   o = obj_at(L, 1);
-  if (!iscollectable(o))
+  if (!((o)->tt_ & BIT_ISCOLLECTABLE))
     printf("no collectable\n");
   else
   {

@@ -78,12 +78,6 @@ constexpr int WITHVARIANT_MASK = 0x3F;
 #define val_(o)   ((o)->value_)
 #define valraw(o) (val_(o))
 
-/* tag with no variants (bits 0-3) */
-#define novariant(t) ((t) & 0x0F)
-
-/* type tag with variant bits (bits 0-5) */
-#define withvariant(t) ((t) & 0x3F)
-
 /* Macros for internal tests */
 
 /* collectable object has the same tag as the original value */
@@ -95,7 +89,7 @@ constexpr int WITHVARIANT_MASK = 0x3F;
 ** and it is not dead. The option 'L == NULL' allows other
 ** macros using this one to be used where L is not available.
 */
-#define checkliveness(L, obj) ((void) L, lua_longassert(!iscollectable(obj) || (righttt(obj) && (L == NULL || !isdead(G(L), gcvalue(obj))))))
+#define checkliveness(L, obj) ((void) L, lua_longassert(!((obj)->tt_ & BIT_ISCOLLECTABLE) || (righttt(obj) && (L == NULL || !isdead(G(L), gcvalue(obj))))))
 
 /* Macros to set values */
 
@@ -163,7 +157,7 @@ typedef size_t StkId;
 ** other tags. As currently nil is equivalent to LUA_VEMPTY, it is
 ** simpler to just test whether the value is nil.
 */
-#define tagisempty(tag) (novariant(tag) == LUA_TNIL)
+#define tagisempty(tag) (((tag) & NOVARIANT_MASK) == LUA_TNIL)
 
 #define setnilvalue(obj)   settt_(obj, LUA_VNIL)
 #define setnilvalue2s(L, stk) setnilvalue((&(L)->stack.p[stk]))
@@ -200,7 +194,7 @@ typedef size_t StkId;
 #define LUA_VTRUE  makevariant(LUA_TBOOLEAN, 1)
 
 #define l_isfalse(o)  (((o)->tt_ == LUA_VFALSE) || (((o)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
-#define tagisfalse(t) ((t) == LUA_VFALSE || novariant(t) == LUA_TNIL)
+#define tagisfalse(t) ((t) == LUA_VFALSE || ((t) & NOVARIANT_MASK) == LUA_TNIL)
 
 #define setbfvalue(obj) settt_(obj, LUA_VFALSE)
 #define setbtvalue(obj) settt_(obj, LUA_VTRUE)
@@ -254,12 +248,10 @@ typedef struct GCObject
 /* Bit mark for collectable types */
 #define BIT_ISCOLLECTABLE (1 << 6)
 
-#define iscollectable(o) ((o)->tt_ & BIT_ISCOLLECTABLE)
-
 /* mark a tag as collectable */
 #define ctb(t) ((t) | BIT_ISCOLLECTABLE)
 
-#define gcvalue(o) check_exp(iscollectable(o), val_(o).gc)
+#define gcvalue(o) check_exp(((o)->tt_ & BIT_ISCOLLECTABLE), val_(o).gc)
 
 #define gcvalueraw(v) ((v).gc)
 

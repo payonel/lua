@@ -48,14 +48,14 @@
 /* make an object black (coming from any color) */
 #define set2black(x) (x->marked = cast_byte((x->marked & ~WHITEBITS) | bitmask(BLACKBIT)))
 
-#define valiswhite(x) (iscollectable(x) && iswhite(gcvalue(x)))
+#define valiswhite(x) (((x)->tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(x)))
 
 #define keyiswhite(n) (keyiscollectable(n) && iswhite(gckey(n)))
 
 /*
 ** Protected access to objects in values
 */
-#define gcvalueN(o) (iscollectable(o) ? gcvalue(o) : NULL)
+#define gcvalueN(o) (((o)->tt_ & BIT_ISCOLLECTABLE) ? gcvalue(o) : NULL)
 
 /*
 ** Access to collectable objects in array part of tables

@@ -531,7 +531,7 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
     return touserdata(o);
   default:
   {
-    if (iscollectable(o))
+    if (((o)->tt_ & BIT_ISCOLLECTABLE))
       return gcvalue(o);
     else
       return NULL;
