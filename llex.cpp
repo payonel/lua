@@ -134,7 +134,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
   lua_State* L = ls->L;
   TValue oldts;
   int tag = luaH_getstr(ls->h, ts, &oldts);
-  if (!tagisempty(tag))     /* string already present? */
+  if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))     /* string already present? */
     return (lua_assert(((&oldts)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((&oldts)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((&oldts)->value_).gc))); /* use stored value */
   else
   {                                /* create a new entry */

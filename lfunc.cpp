@@ -174,7 +174,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
 void luaF_newtbcupval(lua_State* L, StkId level)
 {
   lua_assert(level > L->tbclist);
-  if (l_isfalse((&(L)->stack.p[level])))
+  if (((((&(L)->stack.p[level]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[level]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
   luaM_growvector(L, L->tbc, L->ntbc, L->sizetbc, StkId, INT_MAX, "to-be-closed variables");

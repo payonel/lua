@@ -426,7 +426,7 @@ LUA_API lua_Integer lua_tointegerx(lua_State* L, int idx, int* pisnum)
 LUA_API int lua_toboolean(lua_State* L, int idx)
 {
   const TValue* o = index2value(L, idx);
-  return !l_isfalse(o);
+  return !(((o)->tt_ == LUA_VFALSE) || (((o)->tt_ & NOVARIANT_MASK) == LUA_TNIL));
 }
 
 LUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len)
@@ -698,7 +698,7 @@ static int auxgetstr(lua_State* L, const TValue* t, const char* k)
   lu_byte tag;
   TString* str = luaS_new(L, k);
   luaV_fastget(t, str, (&(L)->stack.p[L->top]), luaH_getstr, tag);
-  if (!tagisempty(tag))
+  if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     api_incr_top(L);
   else
   {
@@ -739,7 +739,7 @@ LUA_API int lua_gettable(lua_State* L, int idx)
   api_checkpop(L, 1);
   t = index2value(L, idx);
   luaV_fastget(t, (&(L)->stack.p[L->top - 1]), (&(L)->stack.p[L->top - 1]), luaH_get, tag);
-  if (tagisempty(tag))
+  if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
     tag = luaV_finishget(L, t, (&(L)->stack.p[L->top - 1]), L->top - 1, tag);
   lua_unlock(L);
   return ((tag) & NOVARIANT_MASK);
@@ -758,7 +758,7 @@ LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
   lua_lock(L);
   t = index2value(L, idx);
   luaV_fastgeti(t, n, (&(L)->stack.p[L->top]), tag);
-  if (tagisempty(tag))
+  if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
   {
     TValue key;
     setivalue(&key, n);
@@ -771,7 +771,7 @@ LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
 
 static int finishrawget(lua_State* L, lu_byte tag)
 {
-  if (tagisempty(tag)) /* avoid copying empty items to the stack */
+  if ((((tag) & NOVARIANT_MASK) == LUA_TNIL)) /* avoid copying empty items to the stack */
     (((&(L)->stack.p[L->top]))->tt_ = LUA_VNIL);
   api_incr_top(L);
   lua_unlock(L);

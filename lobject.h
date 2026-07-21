@@ -32,7 +32,12 @@
 */
 
 /* add variant bits to a type */
-#define makevariant(t, v) ((t) | ((v) << 4))
+/* add variant bits to a basic type tag (usable in constant expressions
+** and case labels) */
+constexpr lu_byte makevariant(int t, int v)
+{
+  return cast_byte(t | (v << 4));
+}
 
 /*
 ** Union of all Lua values
@@ -78,7 +83,6 @@ constexpr int WITHVARIANT_MASK = 0x3F;
 /* Macros for internal tests */
 
 /* collectable object has the same tag as the original value */
-#define righttt(obj) (((obj)->tt_ & WITHVARIANT_MASK) == (lua_assert((obj)->tt_ & BIT_ISCOLLECTABLE), ((obj)->value_).gc)->tt)
 
 /*
 ** Entries in a Lua stack: plain values. The list of to-be-closed
@@ -114,23 +118,18 @@ typedef size_t StkId;
 ** other tags. As currently nil is equivalent to LUA_VEMPTY, it is
 ** simpler to just test whether the value is nil.
 */
-#define tagisempty(tag) (((tag) & NOVARIANT_MASK) == LUA_TNIL)
-
-#define isabstkey(v) ((v)->tt_ == LUA_VABSTKEY)
 
 /*
 ** macro to detect non-standard nils (used only in assertions)
 */
-#define isnonstrictnil(v) ((((v)->tt_ & NOVARIANT_MASK) == LUA_TNIL) && !((v)->tt_ == LUA_VNIL))
 
 /*
 ** By default, entries with any kind of nil are considered empty.
 ** (In any definition, values associated with absent keys must also
 ** be accepted as empty.)
 */
-#define isempty(v) (((v)->tt_ & NOVARIANT_MASK) == LUA_TNIL)
 
-/* macro defining a value corresponding to an absent key */
+/* initializer for a value corresponding to an absent key */
 #define ABSTKEYCONSTANT {NULL}, LUA_VABSTKEY
 
 /* }================================================================== */
@@ -143,9 +142,6 @@ typedef size_t StkId;
 
 #define LUA_VFALSE makevariant(LUA_TBOOLEAN, 0)
 #define LUA_VTRUE  makevariant(LUA_TBOOLEAN, 1)
-
-#define l_isfalse(o)  (((o)->tt_ == LUA_VFALSE) || (((o)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
-#define tagisfalse(t) ((t) == LUA_VFALSE || ((t) & NOVARIANT_MASK) == LUA_TNIL)
 
 /* }================================================================== */
 
@@ -183,8 +179,12 @@ typedef struct GCObject
 /* Bit mark for collectable types */
 #define BIT_ISCOLLECTABLE (1 << 6)
 
-/* mark a tag as collectable */
-#define ctb(t) ((t) | BIT_ISCOLLECTABLE)
+/* mark a tag as collectable (usable in constant expressions and case
+** labels) */
+constexpr lu_byte ctb(lu_byte t)
+{
+  return cast_byte(t | BIT_ISCOLLECTABLE);
+}
 
 /* }================================================================== */
 
@@ -516,7 +516,7 @@ static inline void setobj(struct lua_State* L, TValue* obj1, const TValue* obj2)
   obj1->value_ = obj2->value_;
   obj1->tt_ = obj2->tt_;
   checkliveness(L, obj1);
-  lua_assert(!isnonstrictnil(obj1));
+  lua_assert(!((((obj1)->tt_ & NOVARIANT_MASK) == LUA_TNIL) && !((obj1)->tt_ == LUA_VNIL)));
 }
 
 static inline void setfltvalue(TValue* obj, lua_Number x)

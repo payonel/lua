@@ -147,7 +147,7 @@ static void dumpString(DumpState* D, TString* ts)
   {
     TValue idx;
     int tag = luaH_getstr(D->h, ts, &idx);
-    if (!tagisempty(tag))
+    if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     {                                         /* string already saved? */
       dumpVarint(D, 0);                       /* reuse a saved string */
       dumpVarint(D, l_castS2U((lua_assert((&idx)->tt_ == LUA_VNUMINT), ((&idx)->value_).i))); /* index of saved string */

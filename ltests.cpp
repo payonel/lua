@@ -428,7 +428,7 @@ static void checkobjref(global_State* g, GCObject* f, GCObject* t)
 
 static void checkvalref(global_State* g, GCObject* f, const TValue* t)
 {
-  assert(!((t)->tt_ & BIT_ISCOLLECTABLE) || (righttt(t) && testobjref(g, f, (lua_assert((t)->tt_ & BIT_ISCOLLECTABLE), ((t)->value_).gc))));
+  assert(!((t)->tt_ & BIT_ISCOLLECTABLE) || ((((t)->tt_ & WITHVARIANT_MASK) == ((t)->value_).gc->tt) && testobjref(g, f, (lua_assert((t)->tt_ & BIT_ISCOLLECTABLE), ((t)->value_).gc))));
 }
 
 static void checktable(global_State* g, Table* h)
@@ -446,7 +446,7 @@ static void checktable(global_State* g, Table* h)
   }
   for (n = gnode(h, 0); n < limit; n++)
   {
-    if (!isempty((&(n)->val)))
+    if (!((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
     {
       TValue k;
       getnodekey(mainthread(g), &k, n);
@@ -1226,7 +1226,7 @@ static int table_query(lua_State* L)
   else if (cast_uint(i) < asize)
   {
     lua_pushinteger(L, i);
-    if (!tagisempty(*getArrTag(t, i)))
+    if (!(((*getArrTag(t, i)) & NOVARIANT_MASK) == LUA_TNIL))
       arr2obj(t, cast_uint(i), (&(L)->stack.p[L->top]));
     else
       (((&(L)->stack.p[L->top]))->tt_ = LUA_VNIL);
@@ -1237,7 +1237,7 @@ static int table_query(lua_State* L)
   {
     TValue k;
     getnodekey(L, &k, gnode(t, i));
-    if (!isempty((&(gnode(t, i))->val)) ||
+    if (!((((&(gnode(t, i))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL) ||
         (((&k)->tt_ & NOVARIANT_MASK) == LUA_TNIL) ||
         (((&k)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
     {
@@ -1245,7 +1245,7 @@ static int table_query(lua_State* L)
     }
     else
       lua_pushliteral(L, "<undef>");
-    if (!isempty((&(gnode(t, i))->val)))
+    if (!((((&(gnode(t, i))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
       pushobject(L, (&(gnode(t, i))->val));
     else
       lua_pushnil(L);

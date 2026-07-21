@@ -590,7 +590,7 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   TValue val;
   Proto* f = fs->f;
   int tag = luaH_get(fs->kcache, key, &val); /* query scanner table */
-  if (!tagisempty(tag))
+  if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
   { /* is there an index there? */
     int k = cast_int((lua_assert((&val)->tt_ == LUA_VNUMINT), ((&val)->value_).i));
     /* collisions can happen only for float keys */

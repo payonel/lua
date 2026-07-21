@@ -39,7 +39,7 @@
     if ((u < h->asize))                 \
     {                                   \
       tag = *getArrTag(h, u);           \
-      if (!tagisempty(tag))             \
+      if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))             \
       {                                 \
         farr2val(h, u, tag, res);       \
       }                                 \
@@ -57,7 +57,7 @@
     if ((u < h->asize))                                              \
     {                                                                \
       lu_byte* tag = getArrTag(h, u);                                \
-      if (checknoTM(h->metatable, TM_NEWINDEX) || !tagisempty(*tag)) \
+      if (checknoTM(h->metatable, TM_NEWINDEX) || !(((*tag) & NOVARIANT_MASK) == LUA_TNIL)) \
       {                                                              \
         fval2arr(h, u, tag, val);                                    \
         hres = HOK;                                                  \

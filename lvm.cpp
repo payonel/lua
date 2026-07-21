@@ -319,7 +319,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
     }
     t = tm; /* else try to access 'tm[key]' */
     luaV_fastget(t, key, (&(L)->stack.p[val]), luaH_get, tag);
-    if (!tagisempty(tag))
+    if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
       return tag; /* done */
     /* else repeat (tail call 'luaV_finishget') */
   }
@@ -685,7 +685,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
     else
     {
       int tag = luaT_callTMres(L, tm, t1, t2, L->top); /* call TM */
-      return !tagisfalse(tag);
+      return !((tag) == LUA_VFALSE || ((tag) & NOVARIANT_MASK) == LUA_TNIL);
     }
   }
 }
@@ -944,7 +944,7 @@ void luaV_finishOp(lua_State* L)
   case OP_GEI:
   case OP_EQ:
   { /* note that 'OP_EQI'/'OP_EQK' cannot yield */
-    int res = !l_isfalse((&(L)->stack.p[L->top - 1]));
+    int res = !((((&(L)->stack.p[L->top - 1]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
     L->top--;
     lua_assert(GET_OPCODE(*ci->u.l.savedpc) == OP_JMP);
     if (res != GETARG_k(inst)) /* condition failed? */
@@ -1431,7 +1431,7 @@ returning: /* trap already set */
         TString* key = (lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))); /* key must be a short string */
         lu_byte tag;
         luaV_fastget(upval, key, (&(L)->stack.p[ra]), luaH_getshortstr, tag);
-        if (tagisempty(tag))
+        if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
           Protect(luaV_finishget(L, upval, rc, ra, tag));
         vmbreak;
       }
@@ -1447,7 +1447,7 @@ returning: /* trap already set */
         }
         else
           luaV_fastget(rb, rc, (&(L)->stack.p[ra]), luaH_get, tag);
-        if (tagisempty(tag))
+        if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
           Protect(luaV_finishget(L, rb, rc, ra, tag));
         vmbreak;
       }
@@ -1458,7 +1458,7 @@ returning: /* trap already set */
         int c = GETARG_C(i);
         lu_byte tag;
         luaV_fastgeti(rb, c, (&(L)->stack.p[ra]), tag);
-        if (tagisempty(tag))
+        if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
           TValue key;
           setivalue(&key, c);
@@ -1474,7 +1474,7 @@ returning: /* trap already set */
         TString* key = (lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))); /* key must be a short string */
         lu_byte tag;
         luaV_fastget(rb, key, (&(L)->stack.p[ra]), luaH_getshortstr, tag);
-        if (tagisempty(tag))
+        if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
           Protect(luaV_finishget(L, rb, rc, ra, tag));
         vmbreak;
       }
@@ -1575,7 +1575,7 @@ returning: /* trap already set */
         TString* key = (lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))); /* key must be a short string */
         setobj(L, (&(L)->stack.p[ra + 1]), rb);
         luaV_fastget(rb, key, (&(L)->stack.p[ra]), luaH_getshortstr, tag);
-        if (tagisempty(tag))
+        if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
           Protect(luaV_finishget(L, rb, rc, ra, tag));
         vmbreak;
       }
@@ -1792,7 +1792,7 @@ returning: /* trap already set */
       {
         StkId ra = RA(i);
         TValue* rb = vRB(i);
-        if (l_isfalse(rb))
+        if ((((rb)->tt_ == LUA_VFALSE) || (((rb)->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
           (((&(L)->stack.p[ra]))->tt_ = LUA_VTRUE);
         else
           (((&(L)->stack.p[ra]))->tt_ = LUA_VFALSE);
@@ -1897,7 +1897,7 @@ returning: /* trap already set */
       vmcase(OP_TEST)
       {
         StkId ra = RA(i);
-        int cond = !l_isfalse((&(L)->stack.p[ra]));
+        int cond = !((((&(L)->stack.p[ra]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[ra]))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
         docondjump();
         vmbreak;
       }
@@ -1905,7 +1905,7 @@ returning: /* trap already set */
       {
         StkId ra = RA(i);
         TValue* rb = vRB(i);
-        if (l_isfalse(rb) == GETARG_k(i))
+        if ((((rb)->tt_ == LUA_VFALSE) || (((rb)->tt_ & NOVARIANT_MASK) == LUA_TNIL)) == GETARG_k(i))
           pc++;
         else
         {

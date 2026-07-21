@@ -207,7 +207,7 @@ int luaT_callorderTM(lua_State* L, const TValue* p1, const TValue* p2,
 {
   int tag = callbinTM(L, p1, p2, L->top, event); /* try original event */
   if (tag >= 0)                                    /* found tag method? */
-    return !tagisfalse(tag);
+    return !((tag) == LUA_VFALSE || ((tag) & NOVARIANT_MASK) == LUA_TNIL);
   luaG_ordererror(L, p1, p2); /* no metamethod found */
   return 0;                   /* to avoid warnings */
 }
@@ -376,7 +376,7 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
     for (i = 0; i < touse; i++)
     {
       lu_byte tag = luaH_getint(h, i + 1, (&(L)->stack.p[where + i]));
-      if (tagisempty(tag))
+      if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         (((&(L)->stack.p[where + i]))->tt_ = LUA_VNIL);
     }
   }
