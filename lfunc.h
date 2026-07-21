@@ -9,7 +9,7 @@
 #include "lobject.h"
 
 /* test whether thread is in 'twups' list */
-static inline int isintwups(lua_State* L)
+static l_forceinline int isintwups(lua_State* L)
 {
   return L->twups != L;
 }
@@ -20,13 +20,13 @@ static inline int isintwups(lua_State* L)
 */
 #define MAXUPVAL 255
 
-static inline int upisopen(const UpVal* up)
+static l_forceinline int upisopen(const UpVal* up)
 {
   return up->previous != NULL;
 }
 
 /* Get the stack index for an open upvalue */
-static inline StkId uplevel(const UpVal* up)
+static l_forceinline StkId uplevel(const UpVal* up)
 {
   lua_assert(upisopen(up));
   return up->stkid;
@@ -36,7 +36,7 @@ static inline StkId uplevel(const UpVal* up)
 ** Current location of an upvalue's value: a slot in the owner
 ** thread's stack while open, its own embedded storage when closed.
 */
-static inline TValue* upvalval(UpVal* uv)
+static l_forceinline TValue* upvalval(UpVal* uv)
 {
   return upisopen(uv) ? &uv->owner->stack.p[uv->stkid] : &uv->value;
 }

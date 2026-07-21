@@ -317,7 +317,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   else if ((((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   { /* string value? */
     size_t len;
-    const char* s = getlstr((lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))), len);
+    const char* s = ((void)((len) = ((lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))))->content.size()), ((lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))))->content.c_str());
     if (len == 1 && s[0] == 'n')
     { /* key is "n"? */
       setivalue((&(L)->stack.p[ra]), nextra);

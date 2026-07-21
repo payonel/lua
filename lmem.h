@@ -11,8 +11,6 @@
 #include "llimits.h"
 #include "lua.h"
 
-#define luaM_error(L) luaD_throw(L, LUA_ERRMEM)
-
 /*
 ** This macro tests whether it is safe to multiply 'n' by the size of
 ** type 't' without overflows. Because 'e' is always constant, it avoids
@@ -24,9 +22,6 @@
 ** false due to limited range of data type"; the +1 tricks the compiler,
 ** avoiding this warning but also this optimization.)
 */
-#define luaM_testsize(n, e) (sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (e))
-
-#define luaM_checksize(L, n, e) ((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (e)) ? luaM_toobig(L) : ((void)(0)))
 
 /*
 ** Computes the minimum between 'n' and 'MAX_SIZET/sizeof(t)', so that
@@ -34,30 +29,10 @@
 ** when multiplied by the size of type 't'. (Assumes that 'n' is an
 ** 'int' and that 'int' is not larger than 'size_t'.)
 */
-#define luaM_limitN(n, t) ((((size_t)(n)) <= MAX_SIZET / sizeof(t)) ? (n) : ((int)((MAX_SIZET / sizeof(t)))))
 
 /*
 ** Arrays of chars do not need any test
 */
-#define luaM_reallocvchar(L, b, on, n) ((char*)(luaM_saferealloc_(L, (b), (on) * sizeof(char), (n) * sizeof(char))))
-
-#define luaM_freemem(L, b, s)   luaM_free_(L, (b), (s))
-#define luaM_free(L, b)         luaM_free_(L, (b), sizeof(*(b)))
-#define luaM_freearray(L, b, n) luaM_free_(L, (b), (n) * sizeof(*(b)))
-
-#define luaM_new(L, t)                 ((t*)(luaM_malloc_(L, sizeof(t), 0)))
-#define luaM_newvector(L, n, t)        ((t*)(luaM_malloc_(L, ((size_t)(n)) * sizeof(t), 0)))
-#define luaM_newvectorchecked(L, n, t) (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(t))) ? luaM_toobig(L) : ((void)(0))), ((t*)(luaM_malloc_(L, ((size_t)(n)) * sizeof(t), 0))))
-
-#define luaM_newobject(L, tag, s) luaM_malloc_(L, (s), tag)
-
-#define luaM_newblock(L, size) ((char*)(luaM_malloc_(L, ((size_t)(size)) * sizeof(char), 0)))
-
-#define luaM_growvector(L, v, nelems, size, t, limit, e) ((v) = ((t*)(luaM_growaux_(L, v, nelems, &(size), sizeof(t), ((((size_t)(limit)) <= MAX_SIZET / sizeof(t)) ? (limit) : ((int)((MAX_SIZET / sizeof(t))))), e))))
-
-#define luaM_reallocvector(L, v, oldn, n, t) (((t*)(luaM_realloc_(L, v, ((size_t)(oldn)) * sizeof(t), ((size_t)(n)) * sizeof(t)))))
-
-#define luaM_shrinkvector(L, v, size, fs, t) ((v) = ((t*)(luaM_shrinkvector_(L, v, &(size), fs, sizeof(t)))))
 
 LUAI_FUNC l_noret luaM_toobig(lua_State* L);
 

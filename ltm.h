@@ -54,12 +54,12 @@ typedef enum
 ** Test whether there is no tagmethod.
 ** (Because tagmethods use raw accesses, the result may be an "empty" nil.)
 */
-static inline int notm(const TValue* tm)
+static l_forceinline int notm(const TValue* tm)
 {
   return (tm->tt_ & NOVARIANT_MASK) == LUA_TNIL;
 }
 
-static inline int checknoTM(const Table* mt, TMS e)
+static l_forceinline int checknoTM(const Table* mt, TMS e)
 {
   return mt == NULL || (mt->flags & (1u << e));
 }
@@ -67,7 +67,7 @@ static inline int checknoTM(const Table* mt, TMS e)
 
 LUAI_DDEC(const char* const luaT_typenames_[LUA_TOTALTYPES];)
 
-static inline const char* ttypename(int x)
+static l_forceinline const char* ttypename(int x)
 {
   return luaT_typenames_[x + 1];
 }

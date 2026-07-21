@@ -16,12 +16,10 @@
 */
 #define MEMERRMSG "not enough memory"
 
-#define luaS_newliteral(L, s) (luaS_newlstr(L, "" s, (sizeof(s) / sizeof(char)) - 1))
-
 /*
 ** test whether a string is a reserved word
 */
-static inline int isreserved(const TString* s)
+static l_forceinline int isreserved(const TString* s)
 {
   return s->extra > 0;
 }
@@ -29,7 +27,7 @@ static inline int isreserved(const TString* s)
 /*
 ** equality for strings
 */
-static inline int eqshrstr(const TString* a, const TString* b)
+static l_forceinline int eqshrstr(const TString* a, const TString* b)
 {
   return a == b;
 }

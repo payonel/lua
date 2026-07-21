@@ -284,7 +284,7 @@ static void funcinfo(lua_Debug* ar, Closure* cl)
     const Proto* p = static_cast<LClosure*>(cl)->p;
     if (p->source)
     {
-      ar->source = getlstr(p->source, ar->srclen);
+      ar->source = ((void)((ar->srclen) = (p->source)->content.size()), (p->source)->content.c_str());
     }
     else
     {
@@ -938,7 +938,7 @@ const char* luaG_addinfo(lua_State* L, const char* msg, TString* src,
   {
     char buff[LUA_IDSIZE];
     size_t idlen;
-    const char* id = getlstr(src, idlen);
+    const char* id = ((void)((idlen) = (src)->content.size()), (src)->content.c_str());
     luaO_chunkid(buff, id, idlen);
     return luaO_pushfstring(L, "%s:%d: %s", buff, line, msg);
   }
@@ -969,7 +969,11 @@ l_noret luaG_runerror(lua_State* L, const char* fmt, ...)
   const char* msg;
   va_list argp;
   luaC_checkGC(L); /* error message uses memory */
-  pushvfstring(L, argp, fmt, msg);
+  va_start(argp, fmt);
+  msg = luaO_pushvfstring(L, fmt, argp);
+  va_end(argp);
+  if (msg == NULL)
+    luaD_throw(L, LUA_ERRMEM); /* only after 'va_end' */
   if (isLua(ci))
   { /* Lua function? */
     /* add source:line information */

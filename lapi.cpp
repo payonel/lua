@@ -449,7 +449,7 @@ LUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len)
   }
   lua_unlock(L);
   if (len != NULL)
-    return getlstr((lua_assert(((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((o)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((o)->value_).gc))), *len);
+    return ((void)((*len) = ((lua_assert(((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((o)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((o)->value_).gc))))->content.size()), ((lua_assert(((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((o)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((o)->value_).gc))))->content.c_str());
   else
     return getstr((lua_assert(((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((o)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((o)->value_).gc))));
 }
@@ -625,7 +625,11 @@ LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt, ...)
   const char* ret;
   va_list argp;
   lua_lock(L);
-  pushvfstring(L, argp, fmt, ret);
+  va_start(argp, fmt);
+  ret = luaO_pushvfstring(L, fmt, argp);
+  va_end(argp);
+  if (ret == NULL)
+    luaD_throw(L, LUA_ERRMEM); /* only after 'va_end' */
   luaC_checkGC(L);
   lua_unlock(L);
   return ret;

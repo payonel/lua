@@ -8,14 +8,20 @@
 
 #include "lobject.h"
 
-#define gnode(t, i) (&(t)->node[i])
+static l_forceinline Node* gnode(const Table* t, size_t i)
+{
+  return &t->node[i];
+}
 
 /*
 ** Clear all bits of fast-access metamethods, which means that the table
 ** may have any of these metamethods. (First access that fails after the
 ** clearing will set the bit again.)
 */
-#define invalidateTMcache(t) ((t)->flags &= ((lu_byte)(~maskflags)))
+static l_forceinline void invalidateTMcache(Table* t)
+{
+  t->flags = (lu_byte)(t->flags & ~maskflags);
+}
 
 /*
 ** Bit BITDUMMY set in 'flags' means the table is using the dummy node
@@ -24,13 +30,25 @@
 
 #define BITDUMMY    (1 << 6)
 #define NOTBITDUMMY ((lu_byte)(~BITDUMMY))
-#define isdummy(t)  ((t)->flags & BITDUMMY)
+static l_forceinline int isdummy(const Table* t)
+{
+  return t->flags & BITDUMMY;
+}
 
-#define setnodummy(t) ((t)->flags &= NOTBITDUMMY)
-#define setdummy(t)   ((t)->flags |= BITDUMMY)
+static l_forceinline void setnodummy(Table* t)
+{
+  t->flags = (lu_byte)(t->flags & NOTBITDUMMY);
+}
+static l_forceinline void setdummy(Table* t)
+{
+  t->flags = (lu_byte)(t->flags | BITDUMMY);
+}
 
 /* allocated size for hash nodes */
-#define allocsizenode(t) (isdummy(t) ? 0 : sizenode(t))
+static l_forceinline unsigned int allocsizenode(const Table* t)
+{
+  return isdummy(t) ? 0 : sizenode(t);
+}
 
 #define luaH_fastgeti(t, k, res, tag)   \
   {                                     \
@@ -116,33 +134,58 @@
 */
 
 /* Computes the address of the tag for the abstract C-index 'k' */
-#define getArrTag(t, k) (((lu_byte*)((t)->array)) + sizeof(unsigned) + (k))
+static l_forceinline lu_byte* getArrTag(const Table* t, lua_Unsigned k)
+{
+  return (lu_byte*)t->array + sizeof(unsigned) + k;
+}
 
 /* Computes the address of the value for the abstract C-index 'k' */
-#define getArrVal(t, k) ((t)->array - 1 - (k))
+static l_forceinline Value* getArrVal(const Table* t, lua_Unsigned k)
+{
+  return t->array - 1 - k;
+}
 
 /*
 ** The unsigned between the two arrays is used as a hint for #t;
 ** see luaH_getn. It is stored there to avoid wasting space in
 ** the structure Table for tables with no array part.
 */
-#define lenhint(t) ((unsigned*)((t)->array))
+static l_forceinline unsigned* lenhint(const Table* t)
+{
+  return (unsigned*)t->array;
+}
 
 /*
 ** Move TValues to/from arrays, using C indices
 */
-#define arr2obj(h, k, val) ((val)->tt_ = *getArrTag(h, (k)), (val)->value_ = *getArrVal(h, (k)))
+static l_forceinline void arr2obj(const Table* h, lua_Unsigned k, TValue* val)
+{
+  val->tt_ = *getArrTag(h, k);
+  val->value_ = *getArrVal(h, k);
+}
 
-#define obj2arr(h, k, val) (*getArrTag(h, (k)) = (val)->tt_, *getArrVal(h, (k)) = (val)->value_)
+static l_forceinline void obj2arr(const Table* h, lua_Unsigned k, const TValue* val)
+{
+  *getArrTag(h, k) = val->tt_;
+  *getArrVal(h, k) = val->value_;
+}
 
 /*
 ** Often, we need to check the tag of a value before moving it. The
 ** following macros also move TValues to/from arrays, but receive the
 ** precomputed tag value or address as an extra argument.
 */
-#define farr2val(h, k, tag, res) ((res)->tt_ = tag, (res)->value_ = *getArrVal(h, (k)))
+static l_forceinline void farr2val(const Table* h, lua_Unsigned k, lu_byte tag, TValue* res)
+{
+  res->tt_ = tag;
+  res->value_ = *getArrVal(h, k);
+}
 
-#define fval2arr(h, k, tag, val) (*tag = (val)->tt_, *getArrVal(h, (k)) = (val)->value_)
+static l_forceinline void fval2arr(const Table* h, lua_Unsigned k, lu_byte* tag, const TValue* val)
+{
+  *tag = val->tt_;
+  *getArrVal(h, k) = val->value_;
+}
 
 LUAI_FUNC lu_byte luaH_get(Table* t, const TValue* key, TValue* res);
 LUAI_FUNC lu_byte luaH_getshortstr(Table* t, TString* key, TValue* res);

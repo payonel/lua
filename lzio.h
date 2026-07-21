@@ -14,27 +14,12 @@
 
 typedef struct Zio ZIO;
 
-#define zgetc(z) (((z)->n--) > 0 ? ((unsigned char)(*(z)->p++)) : luaZ_fill(z))
-
 typedef struct Mbuffer
 {
   char* buffer;
   size_t n;
   size_t buffsize;
 } Mbuffer;
-
-#define luaZ_initbuffer(L, buff) ((buff)->buffer = NULL, (buff)->buffsize = 0)
-
-#define luaZ_buffer(buff)     ((buff)->buffer)
-#define luaZ_sizebuffer(buff) ((buff)->buffsize)
-#define luaZ_bufflen(buff)    ((buff)->n)
-
-#define luaZ_buffremove(buff, i) ((buff)->n -= ((size_t)(i)))
-#define luaZ_resetbuffer(buff)   ((buff)->n = 0)
-
-#define luaZ_resizebuffer(L, buff, size) ((buff)->buffer = ((char*)(luaM_saferealloc_(L, ((buff)->buffer), ((buff)->buffsize) * sizeof(char), (size) * sizeof(char)))), (buff)->buffsize = size)
-
-#define luaZ_freebuffer(L, buff) ((buff)->buffer = ((char*)(luaM_saferealloc_(L, (buff)->buffer, (buff)->buffsize * sizeof(char), (0) * sizeof(char)))), (buff)->buffsize = (0))
 
 LUAI_FUNC void luaZ_init(lua_State* L, ZIO* z, lua_Reader reader,
                          void* data);

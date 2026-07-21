@@ -229,33 +229,33 @@ constexpr int get_nresults(l_uint32 cs)
 ** Lua can correctly resume after an yield from a __close method called
 ** because of an error.  (Three bits are enough for error status.)
 */
-static inline lu_byte getcistrecst(const CallInfo* ci)
+static l_forceinline lu_byte getcistrecst(const CallInfo* ci)
 {
   return (lu_byte)((ci->callstatus >> CIST_RECST) & 7);
 }
-static inline void setcistrecst(CallInfo* ci, int st)
+static l_forceinline void setcistrecst(CallInfo* ci, int st)
 {
   lua_assert((st & 7) == st); /* status must fit in three bits */
   ci->callstatus = (ci->callstatus & ~(7u << CIST_RECST)) | ((l_uint32)st << CIST_RECST);
 }
 
 /* active function is a Lua function */
-static inline int isLua(const CallInfo* ci)
+static l_forceinline int isLua(const CallInfo* ci)
 {
   return !(ci->callstatus & CIST_C);
 }
 
 /* call is running Lua code (not a hook) */
-static inline int isLuacode(const CallInfo* ci)
+static l_forceinline int isLuacode(const CallInfo* ci)
 {
   return !(ci->callstatus & (CIST_C | CIST_HOOKED));
 }
 
-static inline void setoah(CallInfo* ci, int v)
+static l_forceinline void setoah(CallInfo* ci, int v)
 {
   ci->callstatus = v ? (ci->callstatus | CIST_OAH) : (ci->callstatus & ~CIST_OAH);
 }
-static inline lu_byte getoah(const CallInfo* ci)
+static l_forceinline lu_byte getoah(const CallInfo* ci)
 {
   return (ci->callstatus & CIST_OAH) ? 1 : 0;
 }
@@ -301,7 +301,7 @@ struct lua_State : GCObject
 ** functions in lobject.h because the GCObject upcast needs the
 ** complete lua_State type.
 */
-static inline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
+static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
 {
   lua_assert(x->tt == LUA_VTHREAD);
   obj->value_.gc = x;
@@ -309,36 +309,36 @@ static inline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
   checkliveness(L, obj);
 }
 
-static inline global_State* G(lua_State* L)
+static l_forceinline global_State* G(lua_State* L)
 {
   return L->l_G;
 }
 
 /* true if this thread does not have non-yieldable calls in the stack */
-static inline int yieldable(const lua_State* L)
+static l_forceinline int yieldable(const lua_State* L)
 {
   return (L->nCcalls & 0xffff0000) == 0;
 }
 
 /* real number of C calls */
-static inline int getCcalls(const lua_State* L)
+static l_forceinline int getCcalls(const lua_State* L)
 {
   return (int)(L->nCcalls & 0xffff);
 }
 
 /* increment the number of non-yieldable calls */
-static inline void incnny(lua_State* L)
+static l_forceinline void incnny(lua_State* L)
 {
   L->nCcalls += 0x10000;
 }
 
 /* decrement the number of non-yieldable calls */
-static inline void decnny(lua_State* L)
+static l_forceinline void decnny(lua_State* L)
 {
   L->nCcalls -= 0x10000;
 }
 
-static inline int stacksize(const lua_State* th)
+static l_forceinline int stacksize(const lua_State* th)
 {
   return (int)th->stack_last;
 }
@@ -430,29 +430,29 @@ LUAI_FUNC void luaE_freethread(lua_State* L, lua_State* L1);
 LUAI_FUNC lu_mem luaE_threadsize(lua_State* L);
 LUAI_FUNC CallInfo* luaE_extendCI(lua_State* L, int err);
 LUAI_FUNC void luaE_shrinkCI(lua_State* L);
-static inline lua_State* mainthread(global_State* g)
+static l_forceinline lua_State* mainthread(global_State* g)
 {
   return &g->mainth.l;
 }
 
-static inline int completestate(global_State* g)
+static l_forceinline int completestate(global_State* g)
 {
   return (g->nilvalue.tt_ & NOVARIANT_MASK) == LUA_TNIL;
 }
 
 /* actual number of total memory allocated */
-static inline l_mem gettotalbytes(global_State* g)
+static l_forceinline l_mem gettotalbytes(global_State* g)
 {
   return g->GCtotalbytes - g->GCdebt;
 }
 
 /* fast access to metamethods: NULL when no metamethod present */
-static inline const TValue* gfasttm(global_State* g, Table* mt, TMS e)
+static l_forceinline const TValue* gfasttm(global_State* g, Table* mt, TMS e)
 {
   return checknoTM(mt, e) ? NULL : luaT_gettm(mt, e, g->tmname[e]);
 }
 
-static inline const TValue* fasttm(lua_State* l, Table* mt, TMS e)
+static l_forceinline const TValue* fasttm(lua_State* l, Table* mt, TMS e)
 {
   return gfasttm(G(l), mt, e);
 }

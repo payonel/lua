@@ -222,9 +222,14 @@ typedef struct TString : GCObject
   std::string content; /* string data */
 } TString;
 
-#define getstr(ts)  ((ts)->content.c_str())
-#define tsslen(ts)  ((ts)->content.size())
-#define getlstr(ts, len) (((void)((len) = (ts)->content.size())), (ts)->content.c_str())
+static l_forceinline const char* getstr(const TString* ts)
+{
+  return ts->content.c_str();
+}
+static l_forceinline size_t tsslen(const TString* ts)
+{
+  return ts->content.size();
+}
 
 /* }================================================================== */
 
@@ -283,13 +288,23 @@ typedef struct Udata0 : GCObject
 } Udata0;
 
 /* compute the offset of the memory area of a userdata */
-#define udatamemoffset(nuv) ((nuv) == 0 ? sizeof(Udata0) - sizeof(((Udata0*)0)->bindata) : sizeof(Udata) - sizeof(UValue) + (sizeof(UValue) * (nuv)))
+static l_forceinline size_t udatamemoffset(unsigned short nuv)
+{
+  return nuv == 0 ? sizeof(Udata0) - sizeof(((Udata0*)0)->bindata)
+                  : sizeof(Udata) - sizeof(UValue) + sizeof(UValue) * nuv;
+}
 
 /* get the address of the memory block inside 'Udata' */
-#define getudatamem(u) (((char*)(u)) + udatamemoffset((u)->nuvalue))
+static l_forceinline char* getudatamem(Udata* u)
+{
+  return (char*)u + udatamemoffset(u->nuvalue);
+}
 
 /* compute the size of a userdata */
-#define sizeudata(nuv, nb) (udatamemoffset(nuv) + (nb))
+static l_forceinline size_t sizeudata(unsigned short nuv, size_t nb)
+{
+  return udatamemoffset(nuv) + nb;
+}
 
 /* }================================================================== */
 
@@ -349,13 +364,11 @@ typedef struct AbsLineInfo
 #define PF_FIXED 4 /* prototype has parts in fixed memory */
 
 /* a vararg function either has hidden args. or a vararg table */
-#define isvararg(p) ((p)->flag & (PF_VAHID | PF_VATAB))
 
 /*
 ** mark that a function needs a vararg table. (The flag PF_VAHID will
 ** be cleared later.)
 */
-#define needvatab(p) ((p)->flag |= PF_VATAB)
 
 /*
 ** Function Prototypes
@@ -384,6 +397,16 @@ typedef struct Proto : GCObject
   TString* source;          /* used for debug information */
   GCObject* gclist;
 } Proto;
+
+static l_forceinline int isvararg(const Proto* p)
+{
+  return p->flag & (PF_VAHID | PF_VATAB);
+}
+
+static l_forceinline void needvatab(Proto* p)
+{
+  p->flag = (lu_byte)(p->flag | PF_VATAB);
+}
 
 /* }================================================================== */
 
@@ -424,7 +447,10 @@ typedef struct CClosure : Closure
   TValue upvalue[1]; /* list of upvalues */
 } CClosure;
 
-#define sizeCclosure(n) (sizeof(CClosure) - sizeof(TValue) + sizeof(TValue) * ((unsigned int)(n)))
+constexpr size_t sizeCclosure(int n)
+{
+  return sizeof(CClosure) - sizeof(TValue) + sizeof(TValue) * (unsigned int)n;
+}
 
 typedef struct LClosure : Closure
 {
@@ -432,9 +458,17 @@ typedef struct LClosure : Closure
   UpVal* upvals[1]; /* list of upvalues */
 } LClosure;
 
-#define sizeLclosure(n) (sizeof(LClosure) - sizeof(UpVal*) + sizeof(UpVal*) * ((unsigned int)(n)))
+constexpr size_t sizeLclosure(int n)
+{
+  return sizeof(LClosure) - sizeof(UpVal*) + sizeof(UpVal*) * (unsigned int)n;
+}
 
-#define getproto(o) ((lua_assert((o)->tt_ == ctb(LUA_VLCL)), (lua_assert((((o)->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>(((o)->value_).gc)))->p)
+static l_forceinline Proto* getproto(const TValue* o)
+{
+  lua_assert(o->tt_ == ctb(LUA_VLCL));
+  lua_assert(o->value_.gc->tt == LUA_VLCL);
+  return static_cast<LClosure*>(o->value_.gc)->p;
+}
 
 /* }================================================================== */
 
@@ -482,10 +516,20 @@ typedef struct Table : GCObject
 /*
 ** 'module' operation for hashing (size is always a power of 2)
 */
-#define lmod(s, size) (check_exp((size & (size - 1)) == 0, (((unsigned int)(s)) & ((unsigned int)((size) - 1)))))
+static l_forceinline unsigned int lmod(lua_Unsigned s, unsigned int size)
+{
+  lua_assert((size & (size - 1)) == 0); /* size must be a power of 2 */
+  return (unsigned int)s & (size - 1);
+}
 
-#define twoto(x)    (1u << (x))
-#define sizenode(t) (twoto((t)->lsizenode))
+constexpr unsigned int twoto(int x)
+{
+  return 1u << x;
+}
+static l_forceinline unsigned int sizenode(const Table* t)
+{
+  return twoto(t->lsizenode);
+}
 
 /*
 ** {==================================================================
@@ -503,7 +547,7 @@ typedef struct Table : GCObject
 */
 LUAI_FUNC void luaO_checkliveness(struct lua_State* L, const TValue* obj);
 
-static inline void checkliveness(struct lua_State* L, const TValue* obj)
+static l_forceinline void checkliveness(struct lua_State* L, const TValue* obj)
 {
   (void) L;
   (void) obj;
@@ -511,7 +555,7 @@ static inline void checkliveness(struct lua_State* L, const TValue* obj)
 }
 
 /* main value copy (from 'obj2' to 'obj1') */
-static inline void setobj(struct lua_State* L, TValue* obj1, const TValue* obj2)
+static l_forceinline void setobj(struct lua_State* L, TValue* obj1, const TValue* obj2)
 {
   obj1->value_ = obj2->value_;
   obj1->tt_ = obj2->tt_;
@@ -519,52 +563,52 @@ static inline void setobj(struct lua_State* L, TValue* obj1, const TValue* obj2)
   lua_assert(!((((obj1)->tt_ & NOVARIANT_MASK) == LUA_TNIL) && !((obj1)->tt_ == LUA_VNIL)));
 }
 
-static inline void setfltvalue(TValue* obj, lua_Number x)
+static l_forceinline void setfltvalue(TValue* obj, lua_Number x)
 {
   obj->value_.n = x;
   obj->tt_ = LUA_VNUMFLT;
 }
 
 /* change value of a float, keeping its tag */
-static inline void chgfltvalue(TValue* obj, lua_Number x)
+static l_forceinline void chgfltvalue(TValue* obj, lua_Number x)
 {
   lua_assert(obj->tt_ == LUA_VNUMFLT);
   obj->value_.n = x;
 }
 
-static inline void setivalue(TValue* obj, lua_Integer x)
+static l_forceinline void setivalue(TValue* obj, lua_Integer x)
 {
   obj->value_.i = x;
   obj->tt_ = LUA_VNUMINT;
 }
 
 /* change value of an integer, keeping its tag */
-static inline void chgivalue(TValue* obj, lua_Integer x)
+static l_forceinline void chgivalue(TValue* obj, lua_Integer x)
 {
   lua_assert(obj->tt_ == LUA_VNUMINT);
   obj->value_.i = x;
 }
 
-static inline void setpvalue(TValue* obj, void* x)
+static l_forceinline void setpvalue(TValue* obj, void* x)
 {
   obj->value_.p = x;
   obj->tt_ = LUA_VLIGHTUSERDATA;
 }
 
-static inline void setfvalue(TValue* obj, lua_CFunction x)
+static l_forceinline void setfvalue(TValue* obj, lua_CFunction x)
 {
   obj->value_.f = x;
   obj->tt_ = LUA_VLCF;
 }
 
-static inline void setgcovalue(struct lua_State* L, TValue* obj, GCObject* x)
+static l_forceinline void setgcovalue(struct lua_State* L, TValue* obj, GCObject* x)
 {
   (void) L;
   obj->value_.gc = x;
   obj->tt_ = ctb(x->tt);
 }
 
-static inline void setsvalue(struct lua_State* L, TValue* obj, TString* x)
+static l_forceinline void setsvalue(struct lua_State* L, TValue* obj, TString* x)
 {
   lua_assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
   obj->value_.gc = x;
@@ -572,7 +616,7 @@ static inline void setsvalue(struct lua_State* L, TValue* obj, TString* x)
   checkliveness(L, obj);
 }
 
-static inline void setuvalue(struct lua_State* L, TValue* obj, Udata* x)
+static l_forceinline void setuvalue(struct lua_State* L, TValue* obj, Udata* x)
 {
   lua_assert(x->tt == LUA_VUSERDATA);
   obj->value_.gc = x;
@@ -580,7 +624,7 @@ static inline void setuvalue(struct lua_State* L, TValue* obj, Udata* x)
   checkliveness(L, obj);
 }
 
-static inline void sethvalue(struct lua_State* L, TValue* obj, Table* x)
+static l_forceinline void sethvalue(struct lua_State* L, TValue* obj, Table* x)
 {
   lua_assert(x->tt == LUA_VTABLE);
   obj->value_.gc = x;
@@ -588,7 +632,7 @@ static inline void sethvalue(struct lua_State* L, TValue* obj, Table* x)
   checkliveness(L, obj);
 }
 
-static inline void setclLvalue(struct lua_State* L, TValue* obj, LClosure* x)
+static l_forceinline void setclLvalue(struct lua_State* L, TValue* obj, LClosure* x)
 {
   lua_assert(x->tt == LUA_VLCL);
   obj->value_.gc = x;
@@ -596,7 +640,7 @@ static inline void setclLvalue(struct lua_State* L, TValue* obj, LClosure* x)
   checkliveness(L, obj);
 }
 
-static inline void setclCvalue(struct lua_State* L, TValue* obj, CClosure* x)
+static l_forceinline void setclCvalue(struct lua_State* L, TValue* obj, CClosure* x)
 {
   lua_assert(x->tt == LUA_VCCL);
   obj->value_.gc = x;
@@ -607,14 +651,14 @@ static inline void setclCvalue(struct lua_State* L, TValue* obj, CClosure* x)
 /* setthvalue lives in lstate.h — it needs the complete lua_State type */
 
 /* copy a value into a node key */
-static inline void setnodekey(Node* node, const TValue* obj)
+static l_forceinline void setnodekey(Node* node, const TValue* obj)
 {
   node->key_val = obj->value_;
   node->key_tt = obj->tt_;
 }
 
 /* copy a value from a node key */
-static inline void getnodekey(struct lua_State* L, TValue* obj, const Node* node)
+static l_forceinline void getnodekey(struct lua_State* L, TValue* obj, const Node* node)
 {
   obj->value_ = node->key_val;
   obj->tt_ = node->key_tt;
@@ -627,14 +671,6 @@ static inline void getnodekey(struct lua_State* L, TValue* obj, const Node* node
 #define UTF8BUFFSZ 8
 
 /* macro to call 'luaO_pushvfstring' correctly */
-#define pushvfstring(L, argp, fmt, msg)                    \
-  {                                                        \
-    va_start(argp, fmt);                                   \
-    msg = luaO_pushvfstring(L, fmt, argp);                 \
-    va_end(argp);                                          \
-    if (msg == NULL)                                       \
-      luaD_throw(L, LUA_ERRMEM); /* only after 'va_end' */ \
-  }
 
 LUAI_FUNC int luaO_utf8esc(char* buff, l_uint32 x);
 LUAI_FUNC lu_byte luaO_ceillog2(unsigned int x);

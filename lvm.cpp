@@ -76,7 +76,7 @@ static int l_strton(const TValue* obj, TValue* result)
   {
     TString* st = (lua_assert(((obj)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((obj)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((obj)->value_).gc)));
     size_t stlen;
-    const char* s = getlstr(st, stlen);
+    const char* s = ((void)((stlen) = (st)->content.size()), (st)->content.c_str());
     return (luaO_str2num(s, result) == stlen + 1);
   }
 }
@@ -400,9 +400,9 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
 static int l_strcmp(const TString* ts1, const TString* ts2)
 {
   size_t rl1; /* real length */
-  const char* s1 = getlstr(ts1, rl1);
+  const char* s1 = ((void)((rl1) = (ts1)->content.size()), (ts1)->content.c_str());
   size_t rl2;
-  const char* s2 = getlstr(ts2, rl2);
+  const char* s2 = ((void)((rl2) = (ts2)->content.size()), (ts2)->content.c_str());
   for (;;)
   { /* for each segment */
     int temp = l_strcoll(s1, s2);
@@ -708,7 +708,7 @@ static void copy2buff(lua_State* L, StkId top, int n, char* buff)
   {
     TString* st = (lua_assert((((&(L)->stack.p[top - n]))->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert(((((((&(L)->stack.p[top - n]))->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>((((&(L)->stack.p[top - n]))->value_).gc)));
     size_t l; /* length of string being copied */
-    const char* s = getlstr(st, l);
+    const char* s = ((void)((l) = (st)->content.size()), (st)->content.c_str());
     memcpy(buff + tl, s, l * sizeof(char));
     tl += l;
   } while (--n > 0);

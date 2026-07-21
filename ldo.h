@@ -34,27 +34,7 @@
   }
 #endif
 
-#define luaD_checkstackaux(L, n, pre, pos)              \
-  if (l_unlikely(L->stack_last - L->top <= ((StkId)(n)))) \
-  {                                                    \
-    pre;                                               \
-    luaD_growstack(L, n, 1);                           \
-    pos;                                               \
-  }                                                    \
-  else                                                 \
-  {                                                    \
-    condmovestack(L, pre, pos);                        \
-  }
-
-/* In general, 'pre'/'pos' are empty (nothing to save) */
-#define luaD_checkstack(L, n) luaD_checkstackaux(L, n, (void) 0, (void) 0)
-
 /* savestack/restorestack are now identity — StkId is already an index */
-#define savestack(L, i)    (i)
-#define restorestack(L, n) (static_cast<StkId>(n))
-
-/* macro to check stack size, preserving 'p' (no-op since indices survive realloc) */
-#define checkstackp(L, n, p) luaD_checkstackaux(L, n, (void) 0, (void) 0)
 
 /* type of protected functions, to be ran by 'runprotected' */
 typedef void (*Pfunc)(lua_State* L, void* ud);
@@ -79,6 +59,23 @@ LUAI_FUNC TStatus luaD_pcall(lua_State* L, Pfunc func, void* u,
 LUAI_FUNC void luaD_poscall(lua_State* L, CallInfo* ci, int nres);
 LUAI_FUNC int luaD_reallocstack(lua_State* L, int newsize, int raiseerror);
 LUAI_FUNC int luaD_growstack(lua_State* L, int n, int raiseerror);
+
+static l_forceinline void luaD_checkstack(lua_State* L, int n)
+{
+  if (l_unlikely(L->stack_last - L->top <= (StkId)n))
+    luaD_growstack(L, n, 1);
+  else
+  {
+    condmovestack(L, (void) 0, (void) 0);
+  }
+}
+
+/* check stack size, preserving 'p' (no-op since indices survive realloc) */
+static l_forceinline void checkstackp(lua_State* L, int n, StkId p)
+{
+  (void) p;
+  luaD_checkstack(L, n);
+}
 LUAI_FUNC void luaD_shrinkstack(lua_State* L);
 LUAI_FUNC void luaD_inctop(lua_State* L);
 LUAI_FUNC int luaD_checkminstack(lua_State* L);

@@ -8,12 +8,24 @@
 
 #include "lstate.h"
 
-#define pcRel(pc, p) (((int)((pc) - (p)->code)) - 1)
+static l_forceinline int pcRel(const Instruction* pc, const Proto* p)
+{
+  return (int)(pc - p->code) - 1;
+}
 
 /* Active Lua function (given call info) */
-#define ci_func(L, ci) ((lua_assert(((&(L)->stack.p[(ci)->func]))->tt_ == ctb(LUA_VLCL)), (lua_assert(((((&(L)->stack.p[(ci)->func]))->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>((((&(L)->stack.p[(ci)->func]))->value_).gc))))
+static l_forceinline LClosure* ci_func(lua_State* L, const CallInfo* ci)
+{
+  const TValue* o = &L->stack.p[ci->func];
+  lua_assert(o->tt_ == ctb(LUA_VLCL));
+  lua_assert(o->value_.gc->tt == LUA_VLCL);
+  return static_cast<LClosure*>(o->value_.gc);
+}
 
-#define resethookcount(L) (L->hookcount = L->basehookcount)
+static l_forceinline void resethookcount(lua_State* L)
+{
+  L->hookcount = L->basehookcount;
+}
 
 /*
 ** mark for entries in 'lineinfo' array that has absolute information in
