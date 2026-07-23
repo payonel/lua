@@ -355,13 +355,21 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
   int pc = fs->pc - 1; /* last instruction coded */
   if (abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS)
   {
-    ((f->abslineinfo) = ((AbsLineInfo*)(luaM_growaux_(fs->ls->L, f->abslineinfo, fs->nabslineinfo, &(f->sizeabslineinfo), sizeof(AbsLineInfo), ((((size_t)(INT_MAX)) <= MAX_SIZET / sizeof(AbsLineInfo)) ? (INT_MAX) : ((int)((MAX_SIZET / sizeof(AbsLineInfo))))), "lines"))));
+    int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(AbsLineInfo))
+                    ? INT_MAX
+                    : (int)(MAX_SIZET / sizeof(AbsLineInfo));
+    f->abslineinfo = (AbsLineInfo*)luaM_growaux_(fs->ls->L, f->abslineinfo, fs->nabslineinfo,
+                                                 &f->sizeabslineinfo, sizeof(AbsLineInfo), limit, "lines");
     f->abslineinfo[fs->nabslineinfo].pc = pc;
     f->abslineinfo[fs->nabslineinfo++].line = line;
     linedif = ABSLINEINFO; /* signal that there is absolute information */
     fs->iwthabs = 1;       /* restart counter */
   }
-  ((f->lineinfo) = ((ls_byte*)(luaM_growaux_(fs->ls->L, f->lineinfo, pc, &(f->sizelineinfo), sizeof(ls_byte), ((((size_t)(INT_MAX)) <= MAX_SIZET / sizeof(ls_byte)) ? (INT_MAX) : ((int)((MAX_SIZET / sizeof(ls_byte))))), "opcodes"))));
+  int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(ls_byte))
+                  ? INT_MAX
+                  : (int)(MAX_SIZET / sizeof(ls_byte));
+  f->lineinfo = (ls_byte*)luaM_growaux_(fs->ls->L, f->lineinfo, pc,
+                                        &f->sizelineinfo, sizeof(ls_byte), limit, "opcodes");
   f->lineinfo[pc] = ((ls_byte)(linedif));
   fs->previousline = line; /* last line saved */
 }
@@ -407,7 +415,11 @@ int luaK_code(FuncState* fs, Instruction i)
 {
   Proto* f = fs->f;
   /* put new instruction in code array */
-  ((f->code) = ((Instruction*)(luaM_growaux_(fs->ls->L, f->code, fs->pc, &(f->sizecode), sizeof(Instruction), ((((size_t)(INT_MAX)) <= MAX_SIZET / sizeof(Instruction)) ? (INT_MAX) : ((int)((MAX_SIZET / sizeof(Instruction))))), "opcodes"))));
+  int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(Instruction))
+                  ? INT_MAX
+                  : (int)(MAX_SIZET / sizeof(Instruction));
+  f->code = (Instruction*)luaM_growaux_(fs->ls->L, f->code, fs->pc,
+                                        &f->sizecode, sizeof(Instruction), limit, "opcodes");
   f->code[fs->pc++] = i;
   savelineinfo(fs, f, fs->ls->lastline);
   return fs->pc - 1; /* index of new instruction */
@@ -573,7 +585,10 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
   lua_State* L = fs->ls->L;
   int oldsize = f->sizek;
   int k = fs->nk;
-  ((f->k) = ((TValue*)(luaM_growaux_(L, f->k, k, &(f->sizek), sizeof(TValue), ((((size_t)(MAXARG_Ax)) <= MAX_SIZET / sizeof(TValue)) ? (MAXARG_Ax) : ((int)((MAX_SIZET / sizeof(TValue))))), "constants"))));
+  int limit = ((size_t)MAXARG_Ax <= MAX_SIZET / sizeof(TValue))
+                  ? MAXARG_Ax
+                  : (int)(MAX_SIZET / sizeof(TValue));
+  f->k = (TValue*)luaM_growaux_(L, f->k, k, &f->sizek, sizeof(TValue), limit, "constants");
   while (oldsize < f->sizek)
     ((&f->k[oldsize++])->tt_ = LUA_VNIL);
   setobj(L, &f->k[k], v);
@@ -1552,7 +1567,11 @@ static int validop(int op, TValue* v1, TValue* v2)
   case LUA_OPDIV:
   case LUA_OPIDIV:
   case LUA_OPMOD: /* division by 0 */
-    return ((lua_assert((((v2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)), (((v2)->tt_ == LUA_VNUMINT) ? ((lua_Number)((lua_assert((v2)->tt_ == LUA_VNUMINT), ((v2)->value_).i))) : (lua_assert((v2)->tt_ == LUA_VNUMFLT), ((v2)->value_).n))) != 0);
+  {
+    lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+    lua_Number n2 = (v2->tt_ == LUA_VNUMINT) ? (lua_Number)v2->value_.i : v2->value_.n;
+    return n2 != 0;
+  }
   default:
     return 1; /* everything else is valid */
   }

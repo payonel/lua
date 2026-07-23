@@ -225,7 +225,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   { /* operate only on floats */
     lua_Number n1;
     lua_Number n2;
-    if ((((p1)->tt_ == LUA_VNUMFLT) ? ((n1) = (p1)->value_.n, 1) : (((p1)->tt_ == LUA_VNUMINT) ? ((n1) = ((lua_Number)((p1)->value_.i)), 1) : 0)) && (((p2)->tt_ == LUA_VNUMFLT) ? ((n2) = (p2)->value_.n, 1) : (((p2)->tt_ == LUA_VNUMINT) ? ((n2) = ((lua_Number)((p2)->value_.i)), 1) : 0)))
+    if (tonumberns(p1, &n1) && tonumberns(p2, &n2))
     {
       setfltvalue(res, numarith(L, op, n1, n2));
       return 1;
@@ -242,7 +242,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
       setivalue(res, intarith(L, op, (lua_assert((p1)->tt_ == LUA_VNUMINT), ((p1)->value_).i), (lua_assert((p2)->tt_ == LUA_VNUMINT), ((p2)->value_).i)));
       return 1;
     }
-    else if ((((p1)->tt_ == LUA_VNUMFLT) ? ((n1) = (p1)->value_.n, 1) : (((p1)->tt_ == LUA_VNUMINT) ? ((n1) = ((lua_Number)((p1)->value_.i)), 1) : 0)) && (((p2)->tt_ == LUA_VNUMFLT) ? ((n2) = (p2)->value_.n, 1) : (((p2)->tt_ == LUA_VNUMINT) ? ((n2) = ((lua_Number)((p2)->value_.i)), 1) : 0)))
+    else if (tonumberns(p1, &n1) && tonumberns(p2, &n2))
     {
       setfltvalue(res, numarith(L, op, n1, n2));
       return 1;
@@ -645,7 +645,12 @@ static const char* clearbuff(BuffFS* buff)
   if (luaD_rawrunprotected(L, pushbuff, buff) != LUA_OK) /* errors? */
     res = NULL;                                          /* error message is on the top of the stack */
   else
-    res = getstr((lua_assert((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert(((((((&(L)->stack.p[L->top - 1]))->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>((((&(L)->stack.p[L->top - 1]))->value_).gc))));
+  {
+    TValue* s = &L->stack.p[L->top - 1]; /* result string is on the top of the stack */
+    lua_assert((s->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    lua_assert((s->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    res = getstr(static_cast<TString*>(s->value_.gc));
+  }
   if (buff->b != buff->space)                   /* using dynamic buffer? */
     luaM_free_(L, (buff->b), (buff->buffsize) * sizeof(*(buff->b))); /* free it */
   return res;

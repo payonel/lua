@@ -177,7 +177,11 @@ void luaF_newtbcupval(lua_State* L, StkId level)
   if (((((&(L)->stack.p[level]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[level]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
-  ((L->tbc) = ((StkId*)(luaM_growaux_(L, L->tbc, L->ntbc, &(L->sizetbc), sizeof(StkId), ((((size_t)(INT_MAX)) <= MAX_SIZET / sizeof(StkId)) ? (INT_MAX) : ((int)((MAX_SIZET / sizeof(StkId))))), "to-be-closed variables"))));
+  int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(StkId))
+                  ? INT_MAX
+                  : (int)(MAX_SIZET / sizeof(StkId));
+  L->tbc = (StkId*)luaM_growaux_(L, L->tbc, L->ntbc, &L->sizetbc,
+                                 sizeof(StkId), limit, "to-be-closed variables");
   L->tbc[L->ntbc++] = level;
   L->tbclist = level;
 }
@@ -270,7 +274,11 @@ Proto* luaF_newproto(lua_State* L)
 
 lu_mem luaF_protosize(Proto* p)
 {
-  lu_mem sz = ((lu_mem)(sizeof(Proto))) + ((unsigned int)(p->sizep)) * sizeof(Proto*) + ((unsigned int)(p->sizek)) * sizeof(TValue) + ((unsigned int)(p->sizelocvars)) * sizeof(LocVar) + ((unsigned int)(p->sizeupvalues)) * sizeof(Upvaldesc);
+  lu_mem sz = (lu_mem)sizeof(Proto)
+              + (unsigned int)p->sizep * sizeof(Proto*)
+              + (unsigned int)p->sizek * sizeof(TValue)
+              + (unsigned int)p->sizelocvars * sizeof(LocVar)
+              + (unsigned int)p->sizeupvalues * sizeof(Upvaldesc);
   if (!(p->flag & PF_FIXED))
   {
     sz += ((unsigned int)(p->sizecode)) * sizeof(Instruction);

@@ -517,7 +517,9 @@ static int lua_checkpc(lua_State* L, CallInfo* ci)
   else
   {
     StkId f = ci->func;
-    Proto* p = (lua_assert(((&(L)->stack.p[f]))->tt_ == ctb(LUA_VLCL)), (lua_assert(((((&(L)->stack.p[f]))->value_).gc)->tt == LUA_VLCL), static_cast<LClosure*>((((&(L)->stack.p[f]))->value_).gc)))->p;
+    lua_assert((&L->stack.p[f])->tt_ == ctb(LUA_VLCL));
+    lua_assert((&L->stack.p[f])->value_.gc->tt == LUA_VLCL);
+    Proto* p = static_cast<LClosure*>((&L->stack.p[f])->value_.gc)->p;
     return p->code <= ci->u.l.savedpc &&
            ci->u.l.savedpc <= p->code + p->sizecode;
   }
@@ -1162,7 +1164,9 @@ static int hash_query(lua_State* L)
   {
     TString* ts;
     luaL_argcheck(L, lua_type(L, 1) == LUA_TSTRING, 1, "string expected");
-    ts = (lua_assert(((obj_at(L, 1))->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((obj_at(L, 1))->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((obj_at(L, 1))->value_).gc)));
+    lua_assert(((obj_at(L, 1))->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    lua_assert(((obj_at(L, 1))->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    ts = static_cast<TString*>((obj_at(L, 1))->value_.gc);
     lua_pushinteger(L, ((int)(ts->hash)));
   }
   else

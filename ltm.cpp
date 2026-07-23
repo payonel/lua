@@ -88,12 +88,15 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
 const char* luaT_objtypename(lua_State* L, const TValue* o)
 {
   Table* mt;
-  if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = (lua_assert((o)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((o)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((o)->value_).gc)))->metatable) != NULL) ||
-      (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = (lua_assert((o)->tt_ == ctb(LUA_VUSERDATA)), (lua_assert((((o)->value_).gc)->tt == LUA_VUSERDATA), static_cast<Udata*>(((o)->value_).gc)))->metatable) != NULL))
+  if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = static_cast<Table*>(o->value_.gc)->metatable) != NULL) ||
+      (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = static_cast<Udata*>(o->value_.gc)->metatable) != NULL))
   {
     const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, "__name"));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
-      return getstr((lua_assert(((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((name)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((name)->value_).gc)))); /* use it as type name */
+    {
+      lua_assert((name->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      return getstr(static_cast<TString*>(name->value_.gc)); /* use it as type name */
+    }
   }
   return ttypename((o->tt_ & NOVARIANT_MASK)); /* else use standard type name */
 }
@@ -316,8 +319,10 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   }
   else if ((((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   { /* string value? */
-    size_t len;
-    const char* s = ((void)((len) = ((lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))))->content.size()), ((lua_assert(((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((rc)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((rc)->value_).gc))))->content.c_str());
+    lua_assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    TString* ts = static_cast<TString*>(rc->value_.gc);
+    size_t len = ts->content.size();
+    const char* s = ts->content.c_str();
     if (len == 1 && s[0] == 'n')
     { /* key is "n"? */
       setivalue((&(L)->stack.p[ra]), nextra);
@@ -355,7 +360,16 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
 void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
                      int vatab)
 {
-  Table* h = (vatab < 0) ? NULL : (lua_assert(((&(L)->stack.p[ci->func + vatab + 1]))->tt_ == ctb(LUA_VTABLE)), (lua_assert(((((&(L)->stack.p[ci->func + vatab + 1]))->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>((((&(L)->stack.p[ci->func + vatab + 1]))->value_).gc)));
+  Table* h;
+  if (vatab < 0)
+    h = NULL;
+  else
+  {
+    TValue* vt = &L->stack.p[ci->func + vatab + 1];
+    lua_assert(vt->tt_ == ctb(LUA_VTABLE));
+    lua_assert(vt->value_.gc->tt == LUA_VTABLE);
+    h = static_cast<Table*>(vt->value_.gc);
+  }
   int nargs = getnumargs(L, ci, h); /* number of available vararg args. */
   int i, touse;                     /* 'touse' is minimum between 'wanted' and 'nargs' */
   if (wanted < 0)

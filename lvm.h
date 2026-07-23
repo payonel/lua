@@ -103,6 +103,22 @@ static l_forceinline int tonumber(const TValue* o, lua_Number* nout)
   return luaV_tonumber_(o, nout);
 }
 
+/* convert to a float without string coercion */
+static l_forceinline int tonumberns(const TValue* o, lua_Number* nout)
+{
+  if (o->tt_ == LUA_VNUMFLT)
+  {
+    *nout = o->value_.n;
+    return 1;
+  }
+  if (o->tt_ == LUA_VNUMINT)
+  {
+    *nout = (lua_Number)o->value_.i;
+    return 1;
+  }
+  return 0;
+}
+
 static l_forceinline int tointeger(const TValue* o, lua_Integer* iout)
 {
   if (l_likely(o->tt_ == LUA_VNUMINT))

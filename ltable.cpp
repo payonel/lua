@@ -262,7 +262,10 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     if (((n2)->key_tt == ctb(LUA_VSHRSTR)) && (((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
     {
       /* an external string can be equal to a short-string key */
-      return luaS_eqstr((lua_assert(((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((k1)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((k1)->value_).gc))), ((lua_assert(((((n2)->key_val).gc)->tt & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((n2)->key_val).gc))));
+      lua_assert((k1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      lua_assert((n2->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      return luaS_eqstr(static_cast<TString*>(k1->value_.gc),
+                        static_cast<TString*>(n2->key_val.gc));
     }
     else if (deadok && ((n2)->key_tt == LUA_TDEADKEY) && ((k1)->tt_ & BIT_ISCOLLECTABLE))
     {
@@ -289,7 +292,12 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     case LUA_VLCF:
       return (lua_assert((k1)->tt_ == LUA_VLCF), ((k1)->value_).f) == ((((n2)->key_val)).f);
     case ctb(LUA_VLNGSTR):
-      return luaS_eqstr((lua_assert(((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((k1)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((k1)->value_).gc))), ((lua_assert(((((n2)->key_val).gc)->tt & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((n2)->key_val).gc))));
+    {
+      lua_assert((k1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      lua_assert((n2->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      return luaS_eqstr(static_cast<TString*>(k1->value_.gc),
+                        static_cast<TString*>(n2->key_val.gc));
+    }
     default:
       return (lua_assert((k1)->tt_ & BIT_ISCOLLECTABLE), ((k1)->value_).gc) == ((((n2)->key_val)).gc);
     }
@@ -1077,7 +1085,8 @@ lu_byte luaH_get(Table* t, const TValue* key, TValue* res)
   switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
-    slot = luaH_Hgetshortstr(t, (lua_assert(((key)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((key)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((key)->value_).gc))));
+    lua_assert((key->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    slot = luaH_Hgetshortstr(t, static_cast<TString*>(key->value_.gc));
     break;
   case LUA_VNUMINT:
     return luaH_getint(t, (lua_assert((key)->tt_ == LUA_VNUMINT), ((key)->value_).i), res);
@@ -1141,7 +1150,20 @@ int luaH_psetint(Table* t, lua_Integer key, TValue* val)
 static int psetint(Table* t, lua_Integer key, TValue* val)
 {
   int hres;
-  { Table* h_ = (t); lua_Unsigned u_ = ((lua_Unsigned)(key)) - 1u; if (u_ < h_->asize) { lu_byte* tag_ = getArrTag(h_, u_); if (checknoTM(h_->metatable, TM_NEWINDEX) || !(((*tag_) & NOVARIANT_MASK) == LUA_TNIL)) { fval2arr(h_, u_, tag_, val); (hres) = HOK; } else (hres) = ~((int)(u_)); } else { (hres) = luaH_psetint(h_, key, val); } };
+  lua_Unsigned u = (lua_Unsigned)key - 1u;
+  if (u < t->asize)
+  {
+    lu_byte* tag = getArrTag(t, u);
+    if (checknoTM(t->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
+    {
+      fval2arr(t, u, tag, val);
+      hres = HOK;
+    }
+    else
+      hres = ~(int)u;
+  }
+  else
+    hres = luaH_psetint(t, key, val);
   return hres;
 }
 
@@ -1193,7 +1215,8 @@ int luaH_pset(Table* t, const TValue* key, TValue* val)
   switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
-    return luaH_psetshortstr(t, (lua_assert(((key)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((key)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((key)->value_).gc))), val);
+    lua_assert((key->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    return luaH_psetshortstr(t, static_cast<TString*>(key->value_.gc), val);
   case LUA_VNUMINT:
     return psetint(t, (lua_assert((key)->tt_ == LUA_VNUMINT), ((key)->value_).i), val);
   case LUA_VNIL:

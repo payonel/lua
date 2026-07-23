@@ -182,7 +182,11 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
 {
   Proto* f = fs->f;
   int oldsize = f->sizelocvars;
-  ((f->locvars) = ((LocVar*)(luaM_growaux_(ls->L, f->locvars, fs->ndebugvars, &(f->sizelocvars), sizeof(LocVar), ((((size_t)(SHRT_MAX)) <= MAX_SIZET / sizeof(LocVar)) ? (SHRT_MAX) : ((int)((MAX_SIZET / sizeof(LocVar))))), "local variables"))));
+  int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(LocVar))
+                  ? SHRT_MAX
+                  : (int)(MAX_SIZET / sizeof(LocVar));
+  f->locvars = (LocVar*)luaM_growaux_(ls->L, f->locvars, fs->ndebugvars,
+      &f->sizelocvars, sizeof(LocVar), limit, "local variables");
   while (oldsize < f->sizelocvars)
     f->locvars[oldsize++].varname = NULL;
   f->locvars[fs->ndebugvars].varname = varname;
@@ -201,7 +205,11 @@ static int new_varkind(LexState* ls, TString* name, lu_byte kind)
   FuncState* fs = ls->fs;
   Dyndata* dyd = ls->dyd;
   Vardesc* var;
-  ((dyd->actvar.arr) = ((Vardesc*)(luaM_growaux_(L, dyd->actvar.arr, dyd->actvar.n + 1, &(dyd->actvar.size), sizeof(Vardesc), ((((size_t)(SHRT_MAX)) <= MAX_SIZET / sizeof(Vardesc)) ? (SHRT_MAX) : ((int)((MAX_SIZET / sizeof(Vardesc))))), "variable declarations"))));
+  int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(Vardesc))
+                  ? SHRT_MAX
+                  : (int)(MAX_SIZET / sizeof(Vardesc));
+  dyd->actvar.arr = (Vardesc*)luaM_growaux_(L, dyd->actvar.arr, dyd->actvar.n + 1,
+      &dyd->actvar.size, sizeof(Vardesc), limit, "variable declarations");
   var = &dyd->actvar.arr[dyd->actvar.n++];
   var->vd.kind = kind; /* default */
   var->vd.name = name;
@@ -319,7 +327,12 @@ static void check_readonly(LexState* ls, expdesc* e)
   case VINDEXED:
   {                  /* global variable */
     if (e->u.ind.ro) /* read-only? */
-      varname = (lua_assert(((&fs->f->k[e->u.ind.keystr])->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((&fs->f->k[e->u.ind.keystr])->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((&fs->f->k[e->u.ind.keystr])->value_).gc)));
+    {
+      TValue* kv = &fs->f->k[e->u.ind.keystr];
+      lua_assert((kv->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+      lua_assert((kv->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      varname = static_cast<TString*>(kv->value_.gc);
+    }
     break;
   }
   default:
@@ -385,7 +398,11 @@ static Upvaldesc* allocupvalue(FuncState* fs)
   Proto* f = fs->f;
   int oldsize = f->sizeupvalues;
   luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, "upvalues");
-  ((f->upvalues) = ((Upvaldesc*)(luaM_growaux_(fs->ls->L, f->upvalues, fs->nups, &(f->sizeupvalues), sizeof(Upvaldesc), ((((size_t)(MAXUPVAL)) <= MAX_SIZET / sizeof(Upvaldesc)) ? (MAXUPVAL) : ((int)((MAX_SIZET / sizeof(Upvaldesc))))), "upvalues"))));
+  int limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc))
+                  ? MAXUPVAL
+                  : (int)(MAX_SIZET / sizeof(Upvaldesc));
+  f->upvalues = (Upvaldesc*)luaM_growaux_(fs->ls->L, f->upvalues, fs->nups,
+      &f->sizeupvalues, sizeof(Upvaldesc), limit, "upvalues");
   while (oldsize < f->sizeupvalues)
     f->upvalues[oldsize++].name = NULL;
   return &f->upvalues[fs->nups++];
@@ -675,7 +692,11 @@ static int newlabelentry(LexState* ls, Labellist* l, TString* name,
                          int line, int pc)
 {
   int n = l->n;
-  ((l->arr) = ((Labeldesc*)(luaM_growaux_(ls->L, l->arr, n, &(l->size), sizeof(Labeldesc), ((((size_t)(SHRT_MAX)) <= MAX_SIZET / sizeof(Labeldesc)) ? (SHRT_MAX) : ((int)((MAX_SIZET / sizeof(Labeldesc))))), "labels/gotos"))));
+  int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(Labeldesc))
+                  ? SHRT_MAX
+                  : (int)(MAX_SIZET / sizeof(Labeldesc));
+  l->arr = (Labeldesc*)luaM_growaux_(ls->L, l->arr, n,
+      &l->size, sizeof(Labeldesc), limit, "labels/gotos");
   l->arr[n].name = name;
   l->arr[n].line = line;
   l->arr[n].nactvar = ls->fs->nactvar;
@@ -811,7 +832,11 @@ static Proto* addprototype(LexState* ls)
   if (fs->np >= f->sizep)
   {
     int oldsize = f->sizep;
-    ((f->p) = ((Proto**)(luaM_growaux_(L, f->p, fs->np, &(f->sizep), sizeof(Proto*), ((((size_t)(MAXARG_Bx)) <= MAX_SIZET / sizeof(Proto*)) ? (MAXARG_Bx) : ((int)((MAX_SIZET / sizeof(Proto*))))), "functions"))));
+    int limit = ((size_t)MAXARG_Bx <= MAX_SIZET / sizeof(Proto*))
+                    ? MAXARG_Bx
+                    : (int)(MAX_SIZET / sizeof(Proto*));
+    f->p = (Proto**)luaM_growaux_(L, f->p, fs->np,
+        &f->sizep, sizeof(Proto*), limit, "functions");
     while (oldsize < f->sizep)
       f->p[oldsize++] = NULL;
   }

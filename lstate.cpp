@@ -402,9 +402,14 @@ void luaE_warning(lua_State* L, const char* msg, int tocont)
 void luaE_warnerror(lua_State* L, const char* where)
 {
   TValue* errobj = (&(L)->stack.p[L->top - 1]); /* error object */
-  const char* msg = ((((errobj)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
-                        ? getstr((lua_assert(((errobj)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((errobj)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((errobj)->value_).gc))))
-                        : "error object is not a string";
+  const char* msg;
+  if ((errobj->tt_ & NOVARIANT_MASK) == LUA_TSTRING)
+  {
+    lua_assert((errobj->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    msg = getstr(static_cast<TString*>(errobj->value_.gc));
+  }
+  else
+    msg = "error object is not a string";
   /* produce warning "error in %s (%s)" (where, msg) */
   luaE_warning(L, "error in ", 1);
   luaE_warning(L, where, 1);

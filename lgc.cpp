@@ -649,7 +649,8 @@ static int getmode(global_State* g, Table* h)
     return 0; /* ignore non-string modes */
   else
   {
-    const char* smode = getstr((lua_assert(((mode)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((mode)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((mode)->value_).gc))));
+    lua_assert((mode->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    const char* smode = getstr(static_cast<TString*>(mode->value_.gc));
     const char* weakkey = strchr(smode, 'k');
     const char* weakvalue = strchr(smode, 'v');
     return ((weakkey != NULL) << 1) | (weakvalue != NULL);

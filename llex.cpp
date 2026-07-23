@@ -146,7 +146,11 @@ static TString* anchorstr(LexState* ls, TString* ts)
   TValue oldts;
   int tag = luaH_getstr(ls->h, ts, &oldts);
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))     /* string already present? */
-    return (lua_assert(((&oldts)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((&oldts)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((&oldts)->value_).gc))); /* use stored value */
+  {
+    lua_assert((oldts.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    lua_assert((oldts.value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    return static_cast<TString*>(oldts.value_.gc); /* use stored value */
+  }
   else
   {                                /* create a new entry */
     TValue* stv = (&(L)->stack.p[L->top++]); /* reserve stack space for string */
@@ -198,7 +202,11 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source,
      so they cannot be collected */
   ls->envn = (luaS_newlstr(L, "" LUA_ENV, (sizeof(LUA_ENV) / sizeof(char)) - 1)); /* get env string */
   ls->brkn = (luaS_newlstr(L, "" "break", (sizeof("break") / sizeof(char)) - 1)); /* get "break" string */
-  ((ls->buff)->buffer = ((char*)(luaM_saferealloc_(ls->L, (ls->buff)->buffer, (ls->buff)->buffsize * sizeof(char), (LUA_MINBUFFER) * sizeof(char)))), (ls->buff)->buffsize = (LUA_MINBUFFER)); /* initialize buffer */
+  /* initialize buffer */
+  ls->buff->buffer = (char*)luaM_saferealloc_(ls->L, ls->buff->buffer,
+                                              ls->buff->buffsize * sizeof(char),
+                                              LUA_MINBUFFER * sizeof(char));
+  ls->buff->buffsize = LUA_MINBUFFER;
 }
 
 /*
