@@ -603,7 +603,7 @@ retry:
     return precallC(L, func, status, ccl->f);
   }
   case LUA_VLCF: /* light C function */
-    return precallC(L, func, status, (lua_assert(((&(L)->stack.p[func]))->tt_ == LUA_VLCF), (((&(L)->stack.p[func]))->value_).f));
+    return precallC(L, func, status, (&L->stack.p[func])->value_.f);
   case LUA_VLCL:
   { /* Lua function */
     lua_assert((&L->stack.p[func])->value_.gc->tt == LUA_VLCL);
@@ -658,7 +658,7 @@ retry:
     return NULL;
   }
   case LUA_VLCF: /* light C function */
-    precallC(L, func, status, (lua_assert(((&(L)->stack.p[func]))->tt_ == LUA_VLCF), (((&(L)->stack.p[func]))->value_).f));
+    precallC(L, func, status, (&L->stack.p[func])->value_.f);
     return NULL;
   case LUA_VLCL:
   { /* Lua function */

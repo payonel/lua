@@ -239,7 +239,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
     lua_Number n2;
     if (((p1)->tt_ == LUA_VNUMINT) && ((p2)->tt_ == LUA_VNUMINT))
     {
-      setivalue(res, intarith(L, op, (lua_assert((p1)->tt_ == LUA_VNUMINT), ((p1)->value_).i), (lua_assert((p2)->tt_ == LUA_VNUMINT), ((p2)->value_).i)));
+      setivalue(res, intarith(L, op, p1->value_.i, p2->value_.i));
       return 1;
     }
     else if (tonumberns(p1, &n1) && tonumberns(p2, &n2))
@@ -555,9 +555,12 @@ unsigned luaO_tostringbuff(const TValue* obj, char* buff)
   int len;
   lua_assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if (((obj)->tt_ == LUA_VNUMINT))
-    len = lua_integer2str(buff, LUA_N2SBUFFSZ, (lua_assert((obj)->tt_ == LUA_VNUMINT), ((obj)->value_).i));
+    len = lua_integer2str(buff, LUA_N2SBUFFSZ, obj->value_.i);
   else
-    len = tostringbuffFloat((lua_assert((obj)->tt_ == LUA_VNUMFLT), ((obj)->value_).n), buff);
+  {
+    lua_assert(obj->tt_ == LUA_VNUMFLT);
+    len = tostringbuffFloat(obj->value_.n, buff);
+  }
   lua_assert(len < LUA_N2SBUFFSZ);
   return ((unsigned int)(len));
 }

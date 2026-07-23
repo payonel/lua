@@ -43,7 +43,8 @@ void luaT_init(lua_State* L)
   for (i = 0; i < TM_N; i++)
   {
     G(L)->tmname[i] = luaS_new(L, luaT_eventname[i]);
-    luaC_fix(L, (lua_assert((((G(L)->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(G(L)->tmname[i])))); /* never collect these names */
+    lua_assert((((G(L)->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
+    luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(G(L)->tmname[i]))); /* never collect these names */
   }
 }
 
@@ -70,10 +71,14 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
   switch ((o->tt_ & NOVARIANT_MASK))
   {
   case LUA_TTABLE:
-    mt = (lua_assert((o)->tt_ == ctb(LUA_VTABLE)), (lua_assert((((o)->value_).gc)->tt == LUA_VTABLE), static_cast<Table*>(((o)->value_).gc)))->metatable;
+    lua_assert(o->tt_ == ctb(LUA_VTABLE));
+    lua_assert(o->value_.gc->tt == LUA_VTABLE);
+    mt = static_cast<Table*>(o->value_.gc)->metatable;
     break;
   case LUA_TUSERDATA:
-    mt = (lua_assert((o)->tt_ == ctb(LUA_VUSERDATA)), (lua_assert((((o)->value_).gc)->tt == LUA_VUSERDATA), static_cast<Udata*>(((o)->value_).gc)))->metatable;
+    lua_assert(o->tt_ == ctb(LUA_VUSERDATA));
+    lua_assert(o->value_.gc->tt == LUA_VUSERDATA);
+    mt = static_cast<Udata*>(o->value_.gc)->metatable;
     break;
   default:
     mt = G(L)->mt[(o->tt_ & NOVARIANT_MASK)];
@@ -347,9 +352,10 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   {
     TValue res;
     if (luaH_getshortstr(h, luaS_new(L, "n"), &res) != LUA_VNUMINT ||
-        ((lua_Unsigned)((lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i))) > ((unsigned int)(INT_MAX / 2)))
+        ((lua_Unsigned)(((&res)->value_).i)) > ((unsigned int)(INT_MAX / 2)))
       luaG_runerror(L, "vararg table has no proper 'n'");
-    return ((int)((lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i)));
+    lua_assert((&res)->tt_ == LUA_VNUMINT);
+    return ((int)(((&res)->value_).i));
   }
 }
 

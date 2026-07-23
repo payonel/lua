@@ -22,7 +22,8 @@
 CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
   GCObject* o = luaC_newobj(L, LUA_VCCL, sizeCclosure(nupvals));
-  CClosure* c = (lua_assert((o)->tt == LUA_VCCL), static_cast<CClosure*>(o));
+  lua_assert(o->tt == LUA_VCCL);
+  CClosure* c = static_cast<CClosure*>(o);
   c->nupvalues = ((lu_byte)(nupvals));
   return c;
 }
@@ -30,7 +31,8 @@ CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 LClosure* luaF_newLclosure(lua_State* L, int nupvals)
 {
   GCObject* o = luaC_newobj(L, LUA_VLCL, sizeLclosure(nupvals));
-  LClosure* c = (lua_assert((o)->tt == LUA_VLCL), static_cast<LClosure*>(o));
+  lua_assert(o->tt == LUA_VLCL);
+  LClosure* c = static_cast<LClosure*>(o);
   c->p = NULL;
   c->nupvalues = ((lu_byte)(nupvals));
   while (nupvals--)
@@ -47,7 +49,8 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
   for (i = 0; i < cl->nupvalues; i++)
   {
     GCObject* o = luaC_newobj(L, LUA_VUPVAL, sizeof(UpVal));
-    UpVal* uv = (lua_assert((o)->tt == LUA_VUPVAL), static_cast<UpVal*>(o));
+    lua_assert(o->tt == LUA_VUPVAL);
+    UpVal* uv = static_cast<UpVal*>(o);
     uv->opennext = NULL;
     uv->previous = NULL;     /* NULL = closed */
     uv->owner = NULL;
@@ -65,7 +68,8 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
 static UpVal* newupval(lua_State* L, StkId level, UpVal** prev)
 {
   GCObject* o = luaC_newobj(L, LUA_VUPVAL, sizeof(UpVal));
-  UpVal* uv = (lua_assert((o)->tt == LUA_VUPVAL), static_cast<UpVal*>(o));
+  lua_assert(o->tt == LUA_VUPVAL);
+  UpVal* uv = static_cast<UpVal*>(o);
   UpVal* next = *prev;
   uv->owner = L;           /* current value lives in this thread's stack */
   uv->stkid = level;
@@ -248,7 +252,8 @@ StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy)
 Proto* luaF_newproto(lua_State* L)
 {
   GCObject* o = luaC_newobj(L, LUA_VPROTO, sizeof(Proto));
-  Proto* f = (lua_assert((o)->tt == LUA_VPROTO), static_cast<Proto*>(o));
+  lua_assert(o->tt == LUA_VPROTO);
+  Proto* f = static_cast<Proto*>(o);
   f->k = NULL;
   f->sizek = 0;
   f->p = NULL;

@@ -610,7 +610,8 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   int tag = luaH_get(fs->kcache, key, &val); /* query scanner table */
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
   { /* is there an index there? */
-    int k = ((int)((lua_assert((&val)->tt_ == LUA_VNUMINT), ((&val)->value_).i)));
+    lua_assert((&val)->tt_ == LUA_VNUMINT);
+    int k = ((int)(((&val)->value_).i));
     /* collisions can happen only for float keys */
     lua_assert(((key)->tt_ == LUA_VNUMFLT) || luaV_rawequalobj(&f->k[k], v));
     return k; /* reuse index */
@@ -778,11 +779,13 @@ static void const2exp(TValue* v, expdesc* e)
   {
   case LUA_VNUMINT:
     e->k = VKINT;
-    e->u.ival = (lua_assert((v)->tt_ == LUA_VNUMINT), ((v)->value_).i);
+    lua_assert(v->tt_ == LUA_VNUMINT);
+    e->u.ival = v->value_.i;
     break;
   case LUA_VNUMFLT:
     e->k = VKFLT;
-    e->u.nval = (lua_assert((v)->tt_ == LUA_VNUMFLT), ((v)->value_).n);
+    lua_assert(v->tt_ == LUA_VNUMFLT);
+    e->u.nval = v->value_.n;
     break;
   case LUA_VFALSE:
     e->k = VFALSE;
@@ -795,7 +798,9 @@ static void const2exp(TValue* v, expdesc* e)
     break;
   case LUA_VSHRSTR:
     e->k = VKSTR;
-    e->u.strval = (lua_assert(((v)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((v)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((v)->value_).gc)));
+    lua_assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    lua_assert((v->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    e->u.strval = static_cast<TString*>(v->value_.gc);
     break;
   default:
     lua_assert(0);
@@ -1591,11 +1596,13 @@ static int constfolding(FuncState* fs, int op, expdesc* e1,
   if (((&res)->tt_ == LUA_VNUMINT))
   {
     e1->k = VKINT;
-    e1->u.ival = (lua_assert((&res)->tt_ == LUA_VNUMINT), ((&res)->value_).i);
+    lua_assert((&res)->tt_ == LUA_VNUMINT);
+    e1->u.ival = ((&res)->value_).i;
   }
   else
   { /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
-    lua_Number n = (lua_assert((&res)->tt_ == LUA_VNUMFLT), ((&res)->value_).n);
+    lua_assert((&res)->tt_ == LUA_VNUMFLT);
+    lua_Number n = ((&res)->value_).n;
     if ((!((n) == (n))) || n == 0)
       return 0;
     e1->k = VKFLT;

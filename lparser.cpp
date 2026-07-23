@@ -885,7 +885,8 @@ static void open_func(LexState* ls, FuncState* fs, BlockCnt* bl)
   luaC_objbarrier(L, f, f->source);
   f->maxstacksize = 2;                           /* registers 0/1 are always valid */
   fs->kcache = luaH_new(L);                      /* create table for function */
-  luaD_anchorobj(L, ls->h, (lua_assert((((fs->kcache)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(fs->kcache)))); /* anchor it */
+  lua_assert((fs->kcache->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  luaD_anchorobj(L, ls->h, const_cast<GCObject*>(static_cast<const GCObject*>(fs->kcache))); /* anchor it */
   enterblock(fs, bl, 0);
 }
 
@@ -2385,7 +2386,8 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, Mbuffer* buff,
   LClosure* cl;
   lexstate.h = anchor;                    /* table for scanner */
   cl = luaF_newLclosure(L, 1);            /* create main closure */
-  luaD_anchorobj(L, anchor, (lua_assert((((cl)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(cl)))); /* anchor it in scanner table */
+  lua_assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  luaD_anchorobj(L, anchor, const_cast<GCObject*>(static_cast<const GCObject*>(cl))); /* anchor it in scanner table */
   funcstate.f = cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
   funcstate.f->source = luaS_new(L, name); /* create and anchor TString */

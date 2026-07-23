@@ -144,7 +144,8 @@ static void dumpString(DumpState* D, TString* ts)
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     {                                         /* string already saved? */
       dumpVarint(D, 0);                       /* reuse a saved string */
-      dumpVarint(D, ((lua_Unsigned)((lua_assert((&idx)->tt_ == LUA_VNUMINT), ((&idx)->value_).i)))); /* index of saved string */
+      lua_assert((&idx)->tt_ == LUA_VNUMINT);
+      dumpVarint(D, ((lua_Unsigned)(((&idx)->value_).i))); /* index of saved string */
     }
     else
     {                    /* must write and save the string */
@@ -185,13 +186,15 @@ static void dumpConstants(DumpState* D, const Proto* f)
     switch (tt)
     {
     case LUA_VNUMFLT:
-      dumpNumber(D, (lua_assert((o)->tt_ == LUA_VNUMFLT), ((o)->value_).n));
+      dumpNumber(D, o->value_.n);
       break;
     case LUA_VNUMINT:
-      dumpInteger(D, (lua_assert((o)->tt_ == LUA_VNUMINT), ((o)->value_).i));
+      dumpInteger(D, o->value_.i);
       break;
     case LUA_VSHRSTR:
-      dumpString(D, (lua_assert(((o)->tt_ & NOVARIANT_MASK) == LUA_TSTRING), (lua_assert((((((o)->value_).gc)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(((o)->value_).gc))));
+      lua_assert((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+      lua_assert((o->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      dumpString(D, static_cast<TString*>(o->value_.gc));
       break;
     default:
       lua_assert(tt == LUA_VNIL || tt == LUA_VFALSE || tt == LUA_VTRUE);

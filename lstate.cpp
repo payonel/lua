@@ -271,7 +271,8 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   luaC_checkGC(L);
   /* create new thread */
   o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX));
-  L1 = (lua_assert((o)->tt == LUA_VTHREAD), static_cast<lua_State*>(o));
+  lua_assert(o->tt == LUA_VTHREAD);
+  L1 = static_cast<lua_State*>(o);
   /* anchor it on L stack */
   setthvalue(L, (&(L)->stack.p[L->top]), L1);
   api_incr_top(L);
@@ -337,7 +338,8 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);
   preinit_thread(L, g);
-  g->allgc = (lua_assert((((L)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(L))); /* by now, only object is the main thread */
+  lua_assert((L->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  g->allgc = const_cast<GCObject*>(static_cast<const GCObject*>(L)); /* by now, only object is the main thread */
   L->next = NULL;
   incnny(L); /* main thread is always non yieldable */
   g->frealloc = f;

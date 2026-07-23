@@ -41,7 +41,8 @@ static TString* createstrobj(lua_State* L, const char* str, size_t l,
                              size_t h)
 {
   GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
-  TString* ts = (lua_assert((((o)->tt) & NOVARIANT_MASK) == LUA_TSTRING), static_cast<TString*>(o));
+  lua_assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  TString* ts = static_cast<TString*>(o);
   ts->hash = ((unsigned int)(h));
   ts->extra = 0;
   new (&ts->content) std::string(str, l);
@@ -73,7 +74,8 @@ void luaS_init(lua_State* L)
   int i, j;
   /* pre-create memory-error message */
   g->memerrmsg = (luaS_newlstr(L, "" MEMERRMSG, (sizeof(MEMERRMSG) / sizeof(char)) - 1));
-  luaC_fix(L, (lua_assert((((g->memerrmsg)->tt) & NOVARIANT_MASK) >= LUA_TSTRING), const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg)))); /* it should never be collected */
+  lua_assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg))); /* it should never be collected */
   for (i = 0; i < STRCACHE_N; i++)    /* fill cache with valid strings */
     for (j = 0; j < STRCACHE_M; j++)
       g->strcache[i][j] = g->memerrmsg;
@@ -168,7 +170,8 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   if (l_unlikely(s > MAX_SIZE - udatamemoffset(nuvalue)))
     luaM_toobig(L);
   o = luaC_newobj(L, LUA_VUSERDATA, sizeudata(nuvalue, s));
-  u = (lua_assert((o)->tt == LUA_VUSERDATA), static_cast<Udata*>(o));
+  lua_assert(o->tt == LUA_VUSERDATA);
+  u = static_cast<Udata*>(o);
   u->len = s;
   u->nuvalue = nuvalue;
   u->metatable = NULL;
