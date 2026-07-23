@@ -38,7 +38,10 @@
 #define GCScallfin     7
 #define GCSpause       8
 
-#define issweepphase(g) (GCSswpallgc <= (g)->gcstate && (g)->gcstate <= GCSswpend)
+static l_forceinline int issweepphase(global_State* g)
+{
+  return GCSswpallgc <= g->gcstate && g->gcstate <= GCSswpend;
+}
 
 /*
 ** macro to tell when main invariant (white objects cannot point to black
@@ -48,19 +51,23 @@
 ** are white again.
 */
 
-#define keepinvariant(g) ((g)->gcstate <= GCSatomic)
+static l_forceinline int keepinvariant(global_State* g)
+{
+  return g->gcstate <= GCSatomic;
+}
 
 /*
 ** some useful bit tricks
 */
-#define resetbits(x, m)  ((x) &= ((lu_byte)(~(m))))
-#define setbits(x, m)    ((x) |= (m))
-#define testbits(x, m)   ((x) & (m))
-#define bitmask(b)       (1 << (b))
-#define bit2mask(b1, b2) (bitmask(b1) | bitmask(b2))
-#define l_setbit(x, b)   ((x) |= (bitmask(b)))
-#define resetbit(x, b)   ((x) &= ((lu_byte)(~(bitmask(b)))))
-#define testbit(x, b)    ((x) & (bitmask(b)))
+constexpr int bitmask(int b)
+{
+  return 1 << b;
+}
+
+constexpr int bit2mask(int b1, int b2)
+{
+  return bitmask(b1) | bitmask(b2);
+}
 
 /*
 ** Layout for bit use in 'marked' field. First three bits are
@@ -95,18 +102,33 @@ static l_forceinline int tofinalize(const GCObject* x)
   return x->marked & bitmask(FINALIZEDBIT);
 }
 
-#define otherwhite(g)  ((g)->currentwhite ^ WHITEBITS)
-#define isdeadm(ow, m) ((m) & (ow))
-#define isdead(g, v)   isdeadm(otherwhite(g), (v)->marked)
+static l_forceinline lu_byte otherwhite(global_State* g)
+{
+  return (lu_byte)(g->currentwhite ^ WHITEBITS);
+}
+constexpr int isdeadm(lu_byte ow, lu_byte m)
+{
+  return m & ow;
+}
+static l_forceinline int isdead(global_State* g, const GCObject* v)
+{
+  return isdeadm(otherwhite(g), v->marked);
+}
 
-#define changewhite(x) ((x)->marked ^= WHITEBITS)
+static l_forceinline void changewhite(GCObject* x)
+{
+  x->marked = (lu_byte)(x->marked ^ WHITEBITS);
+}
 static l_forceinline void nw2black(GCObject* x)
 {
   lua_assert(!iswhite(x));
   x->marked = (lu_byte)(x->marked | bitmask(BLACKBIT));
 }
 
-#define luaC_white(g) ((lu_byte)((g)->currentwhite& WHITEBITS))
+static l_forceinline lu_byte luaC_white(global_State* g)
+{
+  return (lu_byte)(g->currentwhite & WHITEBITS);
+}
 
 /* object age in generational mode */
 #define G_NEW      0 /* created in current cycle */
@@ -119,9 +141,18 @@ static l_forceinline void nw2black(GCObject* x)
 
 #define AGEBITS 7 /* all age bits (111) */
 
-#define getage(o)    ((o)->marked & AGEBITS)
-#define setage(o, a) ((o)->marked = ((lu_byte)(((o)->marked & (~AGEBITS)) | a)))
-#define isold(o)     (getage(o) > G_SURVIVAL)
+static l_forceinline int getage(const GCObject* o)
+{
+  return o->marked & AGEBITS;
+}
+static l_forceinline void setage(GCObject* o, int a)
+{
+  o->marked = (lu_byte)((o->marked & ~AGEBITS) | a);
+}
+static l_forceinline int isold(const GCObject* o)
+{
+  return getage(o) > G_SURVIVAL;
+}
 
 /*
 ** In generational mode, objects are created 'new'. After surviving one
@@ -199,9 +230,6 @@ static l_forceinline void nw2black(GCObject* x)
 /* How many bytes to allocate before next GC step */
 #define LUAI_GCSTEPSIZE (200 * sizeof(Table))
 
-#define setgcparam(g, p, v)   (g->gcparams[LUA_GCP##p] = luaO_codeparam(v))
-#define applygcparam(g, p, x) luaO_applyparam(g->gcparams[LUA_GCP##p], x)
-
 /* }====================================================== */
 
 /*
@@ -210,7 +238,10 @@ static l_forceinline void nw2black(GCObject* x)
 #define GCSTPUSR     1 /* bit true when GC stopped by user */
 #define GCSTPGC      2 /* bit true when GC stopped by itself */
 #define GCSTPCLS     4 /* bit true when closing Lua state */
-#define gcrunning(g) ((g)->gcstp == 0)
+static l_forceinline int gcrunning(global_State* g)
+{
+  return g->gcstp == 0;
+}
 
 /*
 ** Does one step of collection when debt becomes zero. 'pre'/'pos'
@@ -232,7 +263,6 @@ static l_forceinline void nw2black(GCObject* x)
     }                                   \
   }
 #endif
-
 
 LUAI_FUNC void luaC_fix(lua_State* L, GCObject* o);
 LUAI_FUNC void luaC_freeallobjects(lua_State* L);

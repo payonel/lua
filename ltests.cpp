@@ -643,7 +643,7 @@ static l_mem checkgraylist(global_State* g, GCObject* o)
     assert(!!isgray(o) ^ (getage(o) == G_TOUCHED2));
     assert(!((o->marked) & bitmask(TESTBIT)));
     if (keepinvariant(g))
-      ((o->marked) |= bitmask(TESTBIT)); /* mark that object is in a gray list */
+      o->marked = (lu_byte)(o->marked | bitmask(TESTBIT)); /* mark that object is in a gray list */
     total++;
     switch (o->tt)
     {
