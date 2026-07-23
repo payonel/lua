@@ -9,11 +9,9 @@
 
 #include "lctype.h"
 
-#if !LUA_USE_CTYPE /* { */
-
 #include <limits.h>
 
-#define NONA 0x00 /* default */
+constexpr lu_byte NONA = 0x00; /* default */
 
 LUAI_DDEF const lu_byte luai_ctype_[UCHAR_MAX + 2] = {
     0x00,                                           /* EOZ */
@@ -49,5 +47,3 @@ LUAI_DDEF const lu_byte luai_ctype_[UCHAR_MAX + 2] = {
     NONA, NONA, NONA, NONA, NONA, NONA, NONA, NONA,
     NONA, NONA, NONA, NONA, NONA, 0x00, 0x00, 0x00, /* f. */
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-
-#endif /* } */

@@ -14,73 +14,77 @@
 ** optimized for the specific needs of Lua.
 */
 
-#if !defined(LUA_USE_CTYPE)
-
-#if 'A' == 65 && '0' == 48
-/* ASCII case: can use its own tables; faster and fixed */
-#define LUA_USE_CTYPE 0
-#else
-/* must use standard C ctype */
-#define LUA_USE_CTYPE 1
-#endif
-
-#endif
-
-#if !LUA_USE_CTYPE /* { */
+/* this port supports only ASCII hosts */
+static_assert('A' == 65 && '0' == 48, "this port supports only ASCII execution character sets");
 
 #include <limits.h>
 
 #include "llimits.h"
 
-#define ALPHABIT  0
-#define DIGITBIT  1
-#define PRINTBIT  2
-#define SPACEBIT  3
-#define XDIGITBIT 4
+inline constexpr int ALPHABIT = 0;
+inline constexpr int DIGITBIT = 1;
+inline constexpr int PRINTBIT = 2;
+inline constexpr int SPACEBIT = 3;
+inline constexpr int XDIGITBIT = 4;
 
-#define MASK(B) (1 << (B))
-
-/*
-** add 1 to char to allow index -1 (EOZ)
-*/
-#define testprop(c, p) (luai_ctype_[(c) + 1] & (p))
-
-/*
-** 'lalpha' (Lua alphabetic) and 'lalnum' (Lua alphanumeric) both include '_'
-*/
-#define lislalpha(c) testprop(c, MASK(ALPHABIT))
-#define lislalnum(c) testprop(c, (MASK(ALPHABIT) | MASK(DIGITBIT)))
-#define lisdigit(c)  testprop(c, MASK(DIGITBIT))
-#define lisspace(c)  testprop(c, MASK(SPACEBIT))
-#define lisprint(c)  testprop(c, MASK(PRINTBIT))
-#define lisxdigit(c) testprop(c, MASK(XDIGITBIT))
-
-/*
-** In ASCII, this 'ltolower' is correct for alphabetic characters and
-** for '.'. That is enough for Lua needs. ('check_exp' ensures that
-** the character either is an upper-case letter or is unchanged by
-** the transformation, which holds for lower-case letters and '.'.)
-*/
-#define ltolower(c) check_exp(('A' <= (c) && (c) <= 'Z') || (c) == ((c) | ('A' ^ 'a')), (c) | ('A' ^ 'a'))
+constexpr int MASK(int B)
+{
+  return 1 << B;
+}
 
 /* one entry for each character and for -1 (EOZ) */
 LUAI_DDEC(const lu_byte luai_ctype_[UCHAR_MAX + 2];)
 
-#else /* }{ */
+/*
+** add 1 to char to allow index -1 (EOZ)
+*/
+static l_forceinline int testprop(int c, int p)
+{
+  return luai_ctype_[c + 1] & p;
+}
 
 /*
-** use standard C ctypes
+** 'lislalpha' (Lua alphabetic) and 'lislalnum' (Lua alphanumeric) both
+** include '_'
 */
+static l_forceinline int lislalpha(int c)
+{
+  return testprop(c, MASK(ALPHABIT));
+}
 
-#include <ctype.h>
+static l_forceinline int lislalnum(int c)
+{
+  return testprop(c, (MASK(ALPHABIT) | MASK(DIGITBIT)));
+}
 
-#define lislalpha(c) (isalpha(c) || (c) == '_')
-#define lislalnum(c) (isalnum(c) || (c) == '_')
-#define lisdigit(c)  (isdigit(c))
-#define lisspace(c)  (isspace(c))
-#define lisprint(c)  (isprint(c))
-#define lisxdigit(c) (isxdigit(c))
+static l_forceinline int lisdigit(int c)
+{
+  return testprop(c, MASK(DIGITBIT));
+}
 
-#define ltolower(c) (tolower(c))
+static l_forceinline int lisspace(int c)
+{
+  return testprop(c, MASK(SPACEBIT));
+}
 
-#endif /* } */
+static l_forceinline int lisprint(int c)
+{
+  return testprop(c, MASK(PRINTBIT));
+}
+
+static l_forceinline int lisxdigit(int c)
+{
+  return testprop(c, MASK(XDIGITBIT));
+}
+
+/*
+** In ASCII, this 'ltolower' is correct for alphabetic characters and
+** for '.'. That is enough for Lua needs. (The assert ensures that
+** the character either is an upper-case letter or is unchanged by
+** the transformation, which holds for lower-case letters and '.'.)
+*/
+static l_forceinline int ltolower(int c)
+{
+  lua_assert(('A' <= c && c <= 'Z') || c == (c | ('A' ^ 'a')));
+  return c | ('A' ^ 'a');
+}
