@@ -140,7 +140,7 @@ static void setpath(lua_State* L, const char* fieldname,
                     const char* dft)
 {
   const char* dftmark;
-  const char* nver = lua_pushfstring(L, "%s%s", envname, LUA_VERSUFFIX);
+  const char* nver = lua_pushfstring(L, "%s%s", envname, LUA_VERSUFFIX.data());
   const char* path = getenv(nver);                           /* try versioned name */
   if (path == NULL)                                          /* no versioned environment variable? */
     path = getenv(envname);                                  /* try unversioned name */

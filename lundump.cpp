@@ -356,12 +356,12 @@ static void loadFunction(LoadState* S, Proto* f)
   loadDebug(S, f);
 }
 
-static void checkliteral(LoadState* S, const char* s, const char* msg)
+static void checkliteral(LoadState* S, std::string_view s, const char* msg)
 {
-  char buff[sizeof(LUA_SIGNATURE) + sizeof(LUAC_DATA)]; /* larger than both */
-  size_t len = strlen(s);
-  loadBlock(S, buff, ((size_t)(len)) * sizeof((buff)[0]));
-  if (memcmp(s, buff, len) != 0)
+  char buff[LUA_SIGNATURE.size() + LUAC_DATA.size()]; /* larger than both */
+  size_t len = s.size();
+  loadBlock(S, buff, len * sizeof(buff[0]));
+  if (memcmp(s.data(), buff, len) != 0)
     error(S, msg);
 }
 
@@ -386,7 +386,7 @@ static void checknumformat(LoadState* S, int eq, const char* tname)
 static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
-  checkliteral(S, &LUA_SIGNATURE[1], "not a binary chunk");
+  checkliteral(S, LUA_SIGNATURE.substr(1), "not a binary chunk");
   if (loadByte(S) != LUAC_VERSION)
     error(S, "version mismatch");
   if (loadByte(S) != LUAC_FORMAT)

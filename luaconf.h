@@ -160,7 +160,8 @@
 ** non-conventional directories.
 */
 
-#define LUA_VDIR LUA_VERSION_MAJOR "." LUA_VERSION_MINOR
+/* keep in sync with LUA_VERSION_MAJOR/MINOR (lua.h) */
+#define LUA_VDIR "5.5"
 
 #define LUA_ROOT "/usr/local/"
 #define LUA_LDIR LUA_ROOT "share/lua/" LUA_VDIR "/"

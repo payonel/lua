@@ -28,9 +28,10 @@
 
 #include "util_cast.h"
 
+/* keep in sync with LUA_COPYRIGHT / LUA_AUTHORS (lua.h) */
 const char lua_ident[] =
-    "$LuaVersion: " LUA_COPYRIGHT " $"
-    "$LuaAuthors: " LUA_AUTHORS " $";
+    "$LuaVersion: Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio $"
+    "$LuaAuthors: R. Ierusalimschy, L. H. de Figueiredo, W. Celes $";
 
 /*
 ** Test for a valid index (one that is not the 'nilvalue').

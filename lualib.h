@@ -9,7 +9,9 @@
 #include "lua.h"
 
 /* version suffix for environment variable names */
-#define LUA_VERSUFFIX "_" LUA_VERSION_MAJOR "_" LUA_VERSION_MINOR
+/* version suffix for environment variable names;
+   keep in sync with LUA_VERSION_MAJOR/MINOR (lua.h) */
+inline constexpr std::string_view LUA_VERSUFFIX = "_5_5";
 
 #define LUA_GLIBK 1
 LUAMOD_API int(luaopen_base)(lua_State* L);

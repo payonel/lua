@@ -31,8 +31,6 @@
 #define LUA_RLLIB_VAR "LUA_READLINELIB"
 #endif
 
-#define LUA_INITVARVERSION LUA_INIT_VAR LUA_VERSUFFIX
-
 static lua_State* globalL = NULL;
 
 static const char* progname = LUA_PROGNAME;
@@ -160,7 +158,7 @@ static int docall(lua_State* L, int narg, int nres)
 
 static void print_version(void)
 {
-  lua_writestring(LUA_COPYRIGHT, strlen(LUA_COPYRIGHT));
+  lua_writestring(LUA_COPYRIGHT.data(), LUA_COPYRIGHT.size());
   lua_writeline();
 }
 
@@ -392,11 +390,14 @@ static char* no_getenv(const char*)
 
 static int handle_luainit(lua_State* L)
 {
-  const char* name = "=" LUA_INITVARVERSION;
+  std::string vname = std::string("=") + LUA_INIT_VAR;
+  vname += LUA_VERSUFFIX; /* versioned name: e.g. "=LUA_INIT_5_5" */
+  const char* name = vname.c_str();
   const char* init = l_getenv(name + 1);
   if (init == NULL)
   {
-    name = "=" LUA_INIT_VAR;
+    vname = std::string("=") + LUA_INIT_VAR;
+    name = vname.c_str();
     init = l_getenv(name + 1); /* try alternative name */
   }
   if (init == NULL)

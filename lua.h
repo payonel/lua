@@ -10,21 +10,31 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <string>
+#include <string_view>
 
-#define LUA_COPYRIGHT LUA_RELEASE "  Copyright (C) 1994-2026 Lua.org, PUC-Rio"
-#define LUA_AUTHORS   "R. Ierusalimschy, L. H. de Figueiredo, W. Celes"
+/* version numbers */
+inline constexpr int LUA_VERSION_MAJOR_N = 5;
+inline constexpr int LUA_VERSION_MINOR_N = 5;
+inline constexpr int LUA_VERSION_RELEASE_N = 1;
 
-#define LUA_VERSION_MAJOR_N   5
-#define LUA_VERSION_MINOR_N   5
-#define LUA_VERSION_RELEASE_N 1
+inline constexpr int LUA_VERSION_NUM = LUA_VERSION_MAJOR_N * 100 + LUA_VERSION_MINOR_N;
+inline constexpr int LUA_VERSION_RELEASE_NUM = LUA_VERSION_NUM * 100 + LUA_VERSION_RELEASE_N;
 
-#define LUA_VERSION_NUM         (LUA_VERSION_MAJOR_N * 100 + LUA_VERSION_MINOR_N)
-#define LUA_VERSION_RELEASE_NUM (LUA_VERSION_NUM * 100 + LUA_VERSION_RELEASE_N)
+/* version strings; the static_assert below pins them to the numbers above */
+inline constexpr std::string_view LUA_VERSION_MAJOR = "5";
+inline constexpr std::string_view LUA_VERSION_MINOR = "5";
+inline constexpr std::string_view LUA_VERSION_RELEASE = "1";
+inline constexpr std::string_view LUA_VERSION = "Lua 5.5";
+inline constexpr std::string_view LUA_RELEASE = "Lua 5.5.1";
+inline constexpr std::string_view LUA_COPYRIGHT = "Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio";
+inline constexpr std::string_view LUA_AUTHORS = "R. Ierusalimschy, L. H. de Figueiredo, W. Celes";
+static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSION_RELEASE_N == 1,
+              "update the version strings above (and LUA_VDIR in luaconf.h) to match the new numbers");
 
 #include "luaconf.h"
 
 /* mark for precompiled code ('<esc>Lua') */
-#define LUA_SIGNATURE "\x1bLua"
+inline constexpr std::string_view LUA_SIGNATURE = "\x1bLua";
 
 /* option for multiple returns in 'lua_pcall' and 'lua_call' */
 #define LUA_MULTRET (-1)
@@ -467,16 +477,6 @@ struct lua_Debug
 };
 
 /* }====================================================================== */
-
-#define LUAI_TOSTRAUX(x) #x
-#define LUAI_TOSTR(x)    LUAI_TOSTRAUX(x)
-
-#define LUA_VERSION_MAJOR   LUAI_TOSTR(LUA_VERSION_MAJOR_N)
-#define LUA_VERSION_MINOR   LUAI_TOSTR(LUA_VERSION_MINOR_N)
-#define LUA_VERSION_RELEASE LUAI_TOSTR(LUA_VERSION_RELEASE_N)
-
-#define LUA_VERSION "Lua " LUA_VERSION_MAJOR "." LUA_VERSION_MINOR
-#define LUA_RELEASE LUA_VERSION "." LUA_VERSION_RELEASE
 
 /******************************************************************************
  * Copyright (C) 1994-2026 Lua.org, PUC-Rio.
