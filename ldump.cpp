@@ -61,10 +61,10 @@ static void dumpAlign(DumpState* D, unsigned align)
   if (padding < align)
   { /* padding == align means no padding */
     static lua_Integer paddingContent = 0;
-    lua_assert(align <= sizeof(lua_Integer));
+    assert(align <= sizeof(lua_Integer));
     dumpBlock(D, &paddingContent, padding);
   }
-  lua_assert(D->offset % align == 0);
+  assert(D->offset % align == 0);
 }
 
 static void dumpByte(DumpState* D, int y)
@@ -99,7 +99,7 @@ static void dumpSize(DumpState* D, size_t sz)
 
 static void dumpInt(DumpState* D, int x)
 {
-  lua_assert(x >= 0);
+  assert(x >= 0);
   dumpVarint(D, ((unsigned int)(x)));
 }
 
@@ -144,7 +144,7 @@ static void dumpString(DumpState* D, TString* ts)
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     {                                         /* string already saved? */
       dumpVarint(D, 0);                       /* reuse a saved string */
-      lua_assert((&idx)->tt_ == LUA_VNUMINT);
+      assert((&idx)->tt_ == LUA_VNUMINT);
       dumpVarint(D, ((lua_Unsigned)(((&idx)->value_).i))); /* index of saved string */
     }
     else
@@ -167,7 +167,7 @@ static void dumpCode(DumpState* D, const Proto* f)
 {
   dumpInt(D, f->sizecode);
   dumpAlign(D, sizeof(f->code[0]));
-  lua_assert(f->code != NULL);
+  assert(f->code != NULL);
   dumpBlock(D, f->code, (((unsigned int)(f->sizecode))) * sizeof((f->code)[0]));
 }
 
@@ -192,12 +192,12 @@ static void dumpConstants(DumpState* D, const Proto* f)
       dumpInteger(D, o->value_.i);
       break;
     case LUA_VSHRSTR:
-      lua_assert((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-      lua_assert((o->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((o->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       dumpString(D, static_cast<TString*>(o->value_.gc));
       break;
     default:
-      lua_assert(tt == LUA_VNIL || tt == LUA_VFALSE || tt == LUA_VTRUE);
+      assert(tt == LUA_VNIL || tt == LUA_VFALSE || tt == LUA_VTRUE);
     }
   }
 }

@@ -235,7 +235,7 @@ static l_forceinline lu_byte getcistrecst(const CallInfo* ci)
 }
 static l_forceinline void setcistrecst(CallInfo* ci, int st)
 {
-  lua_assert((st & 7) == st); /* status must fit in three bits */
+  assert((st & 7) == st); /* status must fit in three bits */
   ci->callstatus = (ci->callstatus & ~(7u << CIST_RECST)) | ((l_uint32)st << CIST_RECST);
 }
 
@@ -303,7 +303,7 @@ struct lua_State : GCObject
 */
 static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
 {
-  lua_assert(x->tt == LUA_VTHREAD);
+  assert(x->tt == LUA_VTHREAD);
   obj->value_.gc = x;
   obj->tt_ = ctb(LUA_VTHREAD);
   checkliveness(L, obj);

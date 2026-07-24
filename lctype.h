@@ -85,6 +85,6 @@ static l_forceinline int lisxdigit(int c)
 */
 static l_forceinline int ltolower(int c)
 {
-  lua_assert(('A' <= c && c <= 'Z') || c == (c | ('A' ^ 'a')));
+  assert(('A' <= c && c <= 'Z') || c == (c | ('A' ^ 'a')));
   return c | ('A' ^ 'a');
 }

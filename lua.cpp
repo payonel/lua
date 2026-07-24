@@ -354,7 +354,7 @@ static int runargs(lua_State* L, char** argv, int n)
   for (i = 1; i < n; i++)
   {
     int option = argv[i][1];
-    lua_assert(argv[i][0] == '-'); /* already checked */
+    assert(argv[i][0] == '-'); /* already checked */
     switch (option)
     {
     case 'e':
@@ -364,7 +364,7 @@ static int runargs(lua_State* L, char** argv, int n)
       char* extra = argv[i] + 2; /* both options need an argument */
       if (*extra == '\0')
         extra = argv[++i];
-      lua_assert(extra != NULL);
+      assert(extra != NULL);
       status = (option == 'e')
                    ? dostring(L, extra, "=(command line)")
                    : dolibrary(L, extra);
@@ -648,7 +648,7 @@ static int loadline(lua_State* L)
   if (line[0] != '\0')  /* non empty? */
     lua_saveline(line); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */
-  lua_assert(lua_gettop(L) == 1);
+  assert(lua_gettop(L) == 1);
   return status;
 }
 

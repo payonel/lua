@@ -351,7 +351,7 @@ static IdxT choosePivot(IdxT lo, IdxT up, unsigned int rnd)
 {
   IdxT r4 = (up - lo) / 4; /* range/4 */
   IdxT p = (rnd ^ lo ^ up) % (r4 * 2) + (lo + r4);
-  lua_assert(lo + r4 <= p && p <= up - r4);
+  assert(lo + r4 <= p && p <= up - r4);
   return p;
 }
 

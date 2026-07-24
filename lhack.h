@@ -33,11 +33,11 @@ LUA_API Memcontrol l_memcontrol;
 #define _getplock(l)                (ismainthread(l) ? ((uint64_t*)(lua_getextraspace(l))) : ((uint64_t*)(*((void**)(lua_getextraspace(l))))))
 
 #define luai_userstateopen(l)       (_getlock(l) = 0)
-#define luai_userstateclose(l)      lua_assert(_getlock(l) == 1 && ismainthread(l))
-#define luai_userstatethread(l, l1) lua_assert(_getplock(l1) == _getplock(l))
-#define luai_userstatefree(l, l1)   lua_assert(_getplock(l) == _getplock(l1))
-#define lua_lock(l)                 lua_assert((*_getplock(l))++ == 0)
-#define lua_unlock(l)               lua_assert(--(*_getplock(l)) == 0)
+#define luai_userstateclose(l)      assert(_getlock(l) == 1 && ismainthread(l))
+#define luai_userstatethread(l, l1) assert(_getplock(l1) == _getplock(l))
+#define luai_userstatefree(l, l1)   assert(_getplock(l) == _getplock(l1))
+#define lua_lock(l)                 assert((*_getplock(l))++ == 0)
+#define lua_unlock(l)               assert(--(*_getplock(l)) == 0)
 
 /* change some sizes to give some bugs a chance */
 

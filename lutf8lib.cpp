@@ -73,7 +73,7 @@ static const char* utf8_decode(const char* s, l_uint32* val, int strict)
         return NULL;                                /* invalid byte sequence */
       res = (res << 6) | (cc & 0x3F);               /* add lower 6 bits from cont. byte */
     }
-    lua_assert(count <= 5);
+    assert(count <= 5);
     res |= ((l_uint32) (c & 0x7F) << (count * 5)); /* add first byte */
     if (res > MAXUTF || res < limits[count])
       return NULL; /* invalid byte sequence */

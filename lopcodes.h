@@ -308,12 +308,12 @@ constexpr int GETARG_A(Instruction i)
 
 static l_forceinline int GETARG_B(Instruction i)
 {
-  lua_assert(checkopm(i, iABC));
+  assert(checkopm(i, iABC));
   return getarg(i, POS_B, SIZE_B);
 }
 static l_forceinline int GETARG_vB(Instruction i)
 {
-  lua_assert(checkopm(i, ivABC));
+  assert(checkopm(i, ivABC));
   return getarg(i, POS_vB, SIZE_vB);
 }
 static l_forceinline int GETARG_sB(Instruction i)
@@ -323,12 +323,12 @@ static l_forceinline int GETARG_sB(Instruction i)
 
 static l_forceinline int GETARG_C(Instruction i)
 {
-  lua_assert(checkopm(i, iABC));
+  assert(checkopm(i, iABC));
   return getarg(i, POS_C, SIZE_C);
 }
 static l_forceinline int GETARG_vC(Instruction i)
 {
-  lua_assert(checkopm(i, ivABC));
+  assert(checkopm(i, ivABC));
   return getarg(i, POS_vC, SIZE_vC);
 }
 static l_forceinline int GETARG_sC(Instruction i)
@@ -347,25 +347,25 @@ constexpr int GETARG_k(Instruction i)
 
 static l_forceinline int GETARG_Bx(Instruction i)
 {
-  lua_assert(checkopm(i, iABx));
+  assert(checkopm(i, iABx));
   return getarg(i, POS_Bx, SIZE_Bx);
 }
 
 static l_forceinline int GETARG_Ax(Instruction i)
 {
-  lua_assert(checkopm(i, iAx));
+  assert(checkopm(i, iAx));
   return getarg(i, POS_Ax, SIZE_Ax);
 }
 
 static l_forceinline int GETARG_sBx(Instruction i)
 {
-  lua_assert(checkopm(i, iAsBx));
+  assert(checkopm(i, iAsBx));
   return getarg(i, POS_Bx, SIZE_Bx) - OFFSET_sBx;
 }
 
 static l_forceinline int GETARG_sJ(Instruction i)
 {
-  lua_assert(checkopm(i, isJ));
+  assert(checkopm(i, isJ));
   return getarg(i, POS_sJ, SIZE_sJ) - OFFSET_sJ;
 }
 

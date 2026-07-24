@@ -78,12 +78,12 @@ void luaX_init(lua_State* L)
 {
   int i;
   TString* e = (luaS_newlstr(L, "" LUA_ENV, (sizeof(LUA_ENV) / sizeof(char)) - 1)); /* create env name */
-  lua_assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(e)));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
   {
     TString* ts = luaS_new(L, luaX_tokens[i]);
-    lua_assert((ts->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert((ts->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(ts)));     /* reserved words are never collected */
     ts->extra = ((lu_byte)(i + 1)); /* reserved word */
   }
@@ -149,8 +149,8 @@ static TString* anchorstr(LexState* ls, TString* ts)
   int tag = luaH_getstr(ls->h, ts, &oldts);
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))     /* string already present? */
   {
-    lua_assert((oldts.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((oldts.value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((oldts.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((oldts.value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     return static_cast<TString*>(oldts.value_.gc); /* use stored value */
   }
   else
@@ -180,7 +180,7 @@ TString* luaX_newstring(LexState* ls, const char* str, size_t l)
 static void inclinenumber(LexState* ls)
 {
   int old = ls->current;
-  lua_assert(currIsNewline(ls));
+  assert(currIsNewline(ls));
   next(ls); /* skip '\n' or '\r' */
   if (currIsNewline(ls) && ls->current != old)
     next(ls); /* skip '\n\r' or '\r\n' */
@@ -234,7 +234,7 @@ static int check_next1(LexState* ls, int c)
 */
 static int check_next2(LexState* ls, const char* set)
 {
-  lua_assert(set[2] == '\0');
+  assert(set[2] == '\0');
   if (ls->current == set[0] || ls->current == set[1])
   {
     save_and_next(ls);
@@ -262,7 +262,7 @@ static int read_numeral(LexState* ls, SemInfo* seminfo)
   TValue obj;
   const char* expo = "Ee";
   int first = ls->current;
-  lua_assert(lisdigit(ls->current));
+  assert(lisdigit(ls->current));
   save_and_next(ls);
   if (first == '0' && check_next2(ls, "xX")) /* hexadecimal? */
     expo = "Pp";
@@ -287,8 +287,8 @@ static int read_numeral(LexState* ls, SemInfo* seminfo)
   }
   else
   {
-    lua_assert(((&obj)->tt_ == LUA_VNUMFLT));
-    lua_assert((&obj)->tt_ == LUA_VNUMFLT);
+    assert(((&obj)->tt_ == LUA_VNUMFLT));
+    assert((&obj)->tt_ == LUA_VNUMFLT);
     seminfo->r = ((&obj)->value_).n;
     return TK_FLT;
   }
@@ -304,7 +304,7 @@ static size_t skip_sep(LexState* ls)
 {
   size_t count = 0;
   int s = ls->current;
-  lua_assert(s == '[' || s == ']');
+  assert(s == '[' || s == ']');
   save_and_next(ls);
   while (ls->current == '=')
   {
@@ -727,7 +727,7 @@ void luaX_next(LexState* ls)
 
 int luaX_lookahead(LexState* ls)
 {
-  lua_assert(ls->lookahead.token == TK_EOS);
+  assert(ls->lookahead.token == TK_EOS);
   ls->lookahead.token = llex(ls, &ls->lookahead.seminfo);
   return ls->lookahead.token;
 }

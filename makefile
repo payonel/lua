@@ -41,7 +41,7 @@ CWARNGCC= \
 	-Wno-aggressive-loop-optimizations \
 
 # enable Linux goodies
-CXXFLAGS.release =-O2 -DNDEBUG
+CXXFLAGS.release =-O2
 CXXFLAGS.debug   =-Og -g3 -ggdb
 
 CXXFLAGS      =-Wall $(CXXFLAGS.$(VARIANT)) $(TESTS) $(CWARNSCPP) $(CWARNGCC) -std=c++23 -DLUA_USE_LINUX -fno-stack-protector -fno-common -march=native -MMD

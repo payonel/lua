@@ -22,7 +22,7 @@
 CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
   GCObject* o = luaC_newobj(L, LUA_VCCL, sizeCclosure(nupvals));
-  lua_assert(o->tt == LUA_VCCL);
+  assert(o->tt == LUA_VCCL);
   CClosure* c = static_cast<CClosure*>(o);
   c->nupvalues = ((lu_byte)(nupvals));
   return c;
@@ -31,7 +31,7 @@ CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 LClosure* luaF_newLclosure(lua_State* L, int nupvals)
 {
   GCObject* o = luaC_newobj(L, LUA_VLCL, sizeLclosure(nupvals));
-  lua_assert(o->tt == LUA_VLCL);
+  assert(o->tt == LUA_VLCL);
   LClosure* c = static_cast<LClosure*>(o);
   c->p = NULL;
   c->nupvalues = ((lu_byte)(nupvals));
@@ -49,7 +49,7 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
   for (i = 0; i < cl->nupvalues; i++)
   {
     GCObject* o = luaC_newobj(L, LUA_VUPVAL, sizeof(UpVal));
-    lua_assert(o->tt == LUA_VUPVAL);
+    assert(o->tt == LUA_VUPVAL);
     UpVal* uv = static_cast<UpVal*>(o);
     uv->opennext = NULL;
     uv->previous = NULL;     /* NULL = closed */
@@ -68,7 +68,7 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
 static UpVal* newupval(lua_State* L, StkId level, UpVal** prev)
 {
   GCObject* o = luaC_newobj(L, LUA_VUPVAL, sizeof(UpVal));
-  lua_assert(o->tt == LUA_VUPVAL);
+  assert(o->tt == LUA_VUPVAL);
   UpVal* uv = static_cast<UpVal*>(o);
   UpVal* next = *prev;
   uv->owner = L;           /* current value lives in this thread's stack */
@@ -94,10 +94,10 @@ UpVal* luaF_findupval(lua_State* L, StkId level)
 {
   UpVal** pp = &L->openupval;
   UpVal* p;
-  lua_assert(isintwups(L) || L->openupval == NULL);
+  assert(isintwups(L) || L->openupval == NULL);
   while ((p = *pp) != NULL && uplevel(p) >= level)
   { /* search for it */
-    lua_assert(!isdead(G(L), p));
+    assert(!isdead(G(L), p));
     if (uplevel(p) == level) /* corresponding upvalue? */
       return p;              /* return it */
     pp = &p->opennext;
@@ -177,7 +177,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
 */
 void luaF_newtbcupval(lua_State* L, StkId level)
 {
-  lua_assert(level > L->tbclist);
+  assert(level > L->tbclist);
   if (((((&(L)->stack.p[level]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[level]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
@@ -192,7 +192,7 @@ void luaF_newtbcupval(lua_State* L, StkId level)
 
 void luaF_unlinkupval(UpVal* uv)
 {
-  lua_assert(upisopen(uv));
+  assert(upisopen(uv));
   *uv->previous = uv->opennext;
   if (uv->opennext)
     uv->opennext->previous = uv->previous;
@@ -207,7 +207,7 @@ void luaF_closeupval(lua_State* L, StkId level)
   while ((uv = L->openupval) != NULL && uplevel(uv) >= level)
   {
     TValue* slot = &uv->value; /* new position for value */
-    lua_assert(uplevel(uv) < L->top);
+    assert(uplevel(uv) < L->top);
     luaF_unlinkupval(uv);       /* remove upvalue from 'openupval' list */
     setobj(L, slot, (&(L)->stack.p[uv->stkid])); /* move value to upvalue slot */
     uv->previous = NULL;        /* mark as closed */
@@ -226,7 +226,7 @@ void luaF_closeupval(lua_State* L, StkId level)
 */
 static void poptbclist(lua_State* L)
 {
-  lua_assert(L->ntbc > 0 && L->tbc[L->ntbc - 1] == L->tbclist);
+  assert(L->ntbc > 0 && L->tbc[L->ntbc - 1] == L->tbclist);
   L->ntbc--;
   L->tbclist = (L->ntbc > 0) ? L->tbc[L->ntbc - 1] : 0;
 }
@@ -252,7 +252,7 @@ StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy)
 Proto* luaF_newproto(lua_State* L)
 {
   GCObject* o = luaC_newobj(L, LUA_VPROTO, sizeof(Proto));
-  lua_assert(o->tt == LUA_VPROTO);
+  assert(o->tt == LUA_VPROTO);
   Proto* f = static_cast<Proto*>(o);
   f->k = NULL;
   f->sizek = 0;

@@ -76,13 +76,13 @@ static inline int l_intfitsf(lua_Integer i)
 */
 static int l_strton(const TValue* obj, TValue* result)
 {
-  lua_assert(obj != result);
+  assert(obj != result);
   if (!cvt2num(obj)) /* is object not a string? */
     return 0;
   else
   {
-    lua_assert((obj->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((obj->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((obj->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((obj->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = static_cast<TString*>(obj->value_.gc);
     size_t stlen;
     const char* s = ((void)((stlen) = (st)->content.size()), (st)->content.c_str());
@@ -105,7 +105,7 @@ int luaV_tonumber_(const TValue* obj, lua_Number* n)
   else if (l_strton(obj, &v))
   {                  /* string coercible to number? */
     /* convert result of 'luaO_str2num' to a float */
-    lua_assert((v.tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+    assert((v.tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
     *n = (v.tt_ == LUA_VNUMINT) ? (lua_Number)v.value_.i : v.value_.n;
     return 1;
   }
@@ -281,11 +281,11 @@ static int forprep(lua_State* L, StkId ra)
 */
 static int floatforloop(lua_State* L, StkId ra)
 {
-  lua_assert(((&L->stack.p[ra + 1]))->tt_ == LUA_VNUMFLT);
+  assert(((&L->stack.p[ra + 1]))->tt_ == LUA_VNUMFLT);
   lua_Number step = (((&L->stack.p[ra + 1]))->value_).n;
-  lua_assert(((&L->stack.p[ra]))->tt_ == LUA_VNUMFLT);
+  assert(((&L->stack.p[ra]))->tt_ == LUA_VNUMFLT);
   lua_Number limit = (((&L->stack.p[ra]))->value_).n;
-  lua_assert(((&L->stack.p[ra + 2]))->tt_ == LUA_VNUMFLT);
+  assert(((&L->stack.p[ra + 2]))->tt_ == LUA_VNUMFLT);
   lua_Number idx = (((&L->stack.p[ra + 2]))->value_).n; /* control variable */
   idx = ((void)(L), (idx) + (step));        /* increment index */
   if (((0) < (step)) ? ((idx) <= (limit))
@@ -310,7 +310,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
   {
     if (tag == LUA_VNOTABLE)
     { /* 't' is not a table? */
-      lua_assert(!((t)->tt_ == ctb(LUA_VTABLE)));
+      assert(!((t)->tt_ == ctb(LUA_VTABLE)));
       tm = luaT_gettmbyobj(L, t, TM_INDEX);
       if (l_unlikely(notm(tm)))
         luaG_typeerror(L, t, "index"); /* no metamethod */
@@ -318,8 +318,8 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
     }
     else
     {                                                 /* 't' is a table */
-      lua_assert(t->tt_ == ctb(LUA_VTABLE));
-      lua_assert(t->value_.gc->tt == LUA_VTABLE);
+      assert(t->tt_ == ctb(LUA_VTABLE));
+      assert(t->value_.gc->tt == LUA_VTABLE);
       Table* h = static_cast<Table*>(t->value_.gc);
       tm = fasttm(L, h->metatable, TM_INDEX); /* table's metamethod */
       if (tm == NULL)
@@ -339,7 +339,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
       tag = LUA_VNOTABLE;
     else
     {
-      lua_assert(t->value_.gc->tt == LUA_VTABLE);
+      assert(t->value_.gc->tt == LUA_VTABLE);
       tag = luaH_get(static_cast<Table*>(t->value_.gc), key, &L->stack.p[val]);
     }
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
@@ -367,8 +367,8 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
     const TValue* tm; /* '__newindex' metamethod */
     if (hres != HNOTATABLE)
     {                                            /* is 't' a table? */
-      lua_assert(t->tt_ == ctb(LUA_VTABLE));
-      lua_assert(t->value_.gc->tt == LUA_VTABLE);
+      assert(t->tt_ == ctb(LUA_VTABLE));
+      assert(t->value_.gc->tt == LUA_VTABLE);
       Table* h = static_cast<Table*>(t->value_.gc);                      /* save 't' table */
       tm = fasttm(L, h->metatable, TM_NEWINDEX); /* get metamethod */
       if (tm == NULL)
@@ -378,7 +378,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
         luaH_finishset(L, h, key, val, hres); /* set new value */
         L->top--;
         invalidateTMcache(h);
-        lua_assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+        assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
         luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(h)), val);
         return;
       }
@@ -401,7 +401,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
       hres = HNOTATABLE;
     else
     {
-      lua_assert(t->value_.gc->tt == LUA_VTABLE);
+      assert(t->value_.gc->tt == LUA_VTABLE);
       hres = luaH_pset(static_cast<Table*>(t->value_.gc), key, val);
     }
     if (hres == HOK)
@@ -543,7 +543,7 @@ static inline int LEfloatint(lua_Number f, lua_Integer i)
 */
 static inline int LTnum(const TValue* l, const TValue* r)
 {
-  lua_assert((((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  assert((((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if (((l)->tt_ == LUA_VNUMINT))
   {
     lua_Integer li = l->value_.i;
@@ -551,19 +551,19 @@ static inline int LTnum(const TValue* l, const TValue* r)
       return li < r->value_.i; /* both are integers */
     else
     { /* 'l' is int and 'r' is float */
-      lua_assert(r->tt_ == LUA_VNUMFLT);
+      assert(r->tt_ == LUA_VNUMFLT);
       return LTintfloat(li, r->value_.n); /* l < r ? */
     }
   }
   else
   {
-    lua_assert(l->tt_ == LUA_VNUMFLT);
+    assert(l->tt_ == LUA_VNUMFLT);
     lua_Number lf = l->value_.n; /* 'l' must be float */
     if (((r)->tt_ == LUA_VNUMFLT))
       return lf < r->value_.n; /* both are float */
     else
     { /* 'l' is float and 'r' is int */
-      lua_assert(r->tt_ == LUA_VNUMINT);
+      assert(r->tt_ == LUA_VNUMINT);
       return LTfloatint(lf, r->value_.i);
     }
   }
@@ -574,7 +574,7 @@ static inline int LTnum(const TValue* l, const TValue* r)
 */
 static inline int LEnum(const TValue* l, const TValue* r)
 {
-  lua_assert((((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  assert((((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if (((l)->tt_ == LUA_VNUMINT))
   {
     lua_Integer li = l->value_.i;
@@ -582,19 +582,19 @@ static inline int LEnum(const TValue* l, const TValue* r)
       return li <= r->value_.i; /* both are integers */
     else
     { /* 'l' is int and 'r' is float */
-      lua_assert(r->tt_ == LUA_VNUMFLT);
+      assert(r->tt_ == LUA_VNUMFLT);
       return LEintfloat(li, r->value_.n); /* l <= r ? */
     }
   }
   else
   {
-    lua_assert(l->tt_ == LUA_VNUMFLT);
+    assert(l->tt_ == LUA_VNUMFLT);
     lua_Number lf = l->value_.n; /* 'l' must be float */
     if (((r)->tt_ == LUA_VNUMFLT))
       return lf <= r->value_.n; /* both are float */
     else
     { /* 'l' is float and 'r' is int */
-      lua_assert(r->tt_ == LUA_VNUMINT);
+      assert(r->tt_ == LUA_VNUMINT);
       return LEfloatint(lf, r->value_.i);
     }
   }
@@ -605,11 +605,11 @@ static inline int LEnum(const TValue* l, const TValue* r)
 */
 static int lessthanothers(lua_State* L, const TValue* l, const TValue* r)
 {
-  lua_assert(!(((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) || !(((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  assert(!(((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) || !(((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if ((((l)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TSTRING)) /* both are strings? */
   {
-    lua_assert((l->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((r->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((l->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((r->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     return l_strcmp(static_cast<TString*>(l->value_.gc), static_cast<TString*>(r->value_.gc)) < 0;
   }
   else
@@ -632,11 +632,11 @@ int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r)
 */
 static int lessequalothers(lua_State* L, const TValue* l, const TValue* r)
 {
-  lua_assert(!(((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) || !(((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  assert(!(((l)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) || !(((r)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if ((((l)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) && (((r)->tt_ & NOVARIANT_MASK) == LUA_TSTRING)) /* both are strings? */
   {
-    lua_assert((l->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((r->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((l->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((r->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     return l_strcmp(static_cast<TString*>(l->value_.gc), static_cast<TString*>(r->value_.gc)) <= 0;
   }
   else
@@ -672,20 +672,20 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       /* integer and float can only be equal if float has an integer
          value equal to the integer */
       lua_Integer i2;
-      lua_assert(t2->tt_ == LUA_VNUMFLT);
+      assert(t2->tt_ == LUA_VNUMFLT);
       return (luaV_flttointeger(t2->value_.n, &i2, F2Ieq) && t1->value_.i == i2);
     }
     case LUA_VNUMFLT:
     {                 /* float == integer? */
       lua_Integer i1; /* see comment in previous case */
-      lua_assert(t1->tt_ == LUA_VNUMFLT);
-      lua_assert(t2->tt_ == LUA_VNUMINT);
+      assert(t1->tt_ == LUA_VNUMFLT);
+      assert(t2->tt_ == LUA_VNUMINT);
       return (luaV_flttointeger(t1->value_.n, &i1, F2Ieq) && i1 == t2->value_.i);
     }
     case LUA_VSHRSTR:
     {
-      lua_assert((t1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-      lua_assert((t2->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((t1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((t2->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       return luaS_eqstr(static_cast<TString*>(t1->value_.gc), static_cast<TString*>(t2->value_.gc));
     }
     default:
@@ -703,24 +703,24 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
     case LUA_VTRUE:
       return 1;
     case LUA_VNUMINT:
-      lua_assert(t2->tt_ == LUA_VNUMINT);
+      assert(t2->tt_ == LUA_VNUMINT);
       return (t1->value_.i == t2->value_.i);
     case LUA_VNUMFLT:
-      lua_assert(t2->tt_ == LUA_VNUMFLT);
+      assert(t2->tt_ == LUA_VNUMFLT);
       return (t1->value_.n == t2->value_.n);
     case LUA_VLIGHTUSERDATA:
-      lua_assert(t2->tt_ == LUA_VLIGHTUSERDATA);
+      assert(t2->tt_ == LUA_VLIGHTUSERDATA);
       return t1->value_.p == t2->value_.p;
     case LUA_VSHRSTR:
     {
-      lua_assert((t1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-      lua_assert((t2->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((t1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((t2->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       return luaS_eqstr(static_cast<TString*>(t1->value_.gc), static_cast<TString*>(t2->value_.gc));
     }
     case LUA_VUSERDATA:
     {
-      lua_assert(t1->value_.gc->tt == LUA_VUSERDATA);
-      lua_assert(t2->value_.gc->tt == LUA_VUSERDATA);
+      assert(t1->value_.gc->tt == LUA_VUSERDATA);
+      assert(t2->value_.gc->tt == LUA_VUSERDATA);
       Udata* u1 = static_cast<Udata*>(t1->value_.gc);
       Udata* u2 = static_cast<Udata*>(t2->value_.gc);
       if (u1 == u2)
@@ -734,8 +734,8 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
     }
     case LUA_VTABLE:
     {
-      lua_assert(t1->value_.gc->tt == LUA_VTABLE);
-      lua_assert(t2->value_.gc->tt == LUA_VTABLE);
+      assert(t1->value_.gc->tt == LUA_VTABLE);
+      assert(t2->value_.gc->tt == LUA_VTABLE);
       Table* h1 = static_cast<Table*>(t1->value_.gc);
       Table* h2 = static_cast<Table*>(t2->value_.gc);
       if (h1 == h2)
@@ -748,11 +748,11 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       break; /* will try TM */
     }
     case LUA_VLCF:
-      lua_assert(t2->tt_ == LUA_VLCF);
+      assert(t2->tt_ == LUA_VLCF);
       return (t1->value_.f == t2->value_.f);
     default: /* functions and threads */
-      lua_assert(t1->tt_ & BIT_ISCOLLECTABLE);
-      lua_assert(t2->tt_ & BIT_ISCOLLECTABLE);
+      assert(t1->tt_ & BIT_ISCOLLECTABLE);
+      assert(t2->tt_ & BIT_ISCOLLECTABLE);
       return (t1->value_.gc == t2->value_.gc);
     }
     if (tm == NULL) /* no TM? */
@@ -796,8 +796,8 @@ static void copy2buff(lua_State* L, StkId top, int n, char* buff)
   do
   {
     TValue* v = &L->stack.p[top - n];
-    lua_assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((v->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((v->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = static_cast<TString*>(v->value_.gc);
     size_t l; /* length of string being copied */
     const char* s = ((void)((l) = (st)->content.size()), (st)->content.c_str());
@@ -831,15 +831,15 @@ void luaV_concat(lua_State* L, int total)
     else
     {
       /* at least two string values; get as many as possible */
-      lua_assert((v2->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((v2->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       size_t tl = tsslen(static_cast<TString*>(v2->value_.gc)); /* total length */
       TString* ts;
       /* collect total length and number of strings */
       for (n = 1; n < total && tostring(L, &L->stack.p[top - n - 1]); n++)
       {
         TValue* o = &L->stack.p[top - n - 1];
-        lua_assert((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-        lua_assert((o->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((o->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
         size_t l = tsslen(static_cast<TString*>(o->value_.gc));
         if (l_unlikely(l >= MAX_SIZE - sizeof(TString) - tl))
         {
@@ -878,8 +878,8 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb)
   {
   case LUA_VTABLE:
   {
-    lua_assert(rb->tt_ == ctb(LUA_VTABLE));
-    lua_assert(rb->value_.gc->tt == LUA_VTABLE);
+    assert(rb->tt_ == ctb(LUA_VTABLE));
+    assert(rb->value_.gc->tt == LUA_VTABLE);
     Table* h = static_cast<Table*>(rb->value_.gc);
     tm = fasttm(L, h->metatable, TM_LEN);
     if (tm)
@@ -889,7 +889,7 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb)
   }
   case LUA_VSHRSTR:
   {
-    lua_assert((rb->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((rb->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(rb->value_.gc);
     setivalue((&(L)->stack.p[ra]), (lua_Integer)tsslen(ts));
     return;
@@ -1047,7 +1047,7 @@ void luaV_finishOp(lua_State* L)
   { /* note that 'OP_EQI'/'OP_EQK' cannot yield */
     int res = !((((&(L)->stack.p[L->top - 1]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
     L->top--;
-    lua_assert(GET_OPCODE(*ci->u.l.savedpc) == OP_JMP);
+    assert(GET_OPCODE(*ci->u.l.savedpc) == OP_JMP);
     if (res != GETARG_k(inst)) /* condition failed? */
       ci->u.l.savedpc++;       /* skip jump instruction */
     break;
@@ -1080,7 +1080,7 @@ void luaV_finishOp(lua_State* L)
   default:
   {
     /* only these other opcodes can yield */
-    lua_assert(op == OP_TFORCALL || op == OP_CALL ||
+    assert(op == OP_TFORCALL || op == OP_CALL ||
                op == OP_TAILCALL || op == OP_SETTABUP || op == OP_SETTABLE ||
                op == OP_SETI || op == OP_SETFIELD);
     break;
@@ -1287,10 +1287,10 @@ returning: /* trap already set */
       base = ci->func + 1;          /* correct stack */
     }
     i = *(pc++);
-    lua_assert(base == ci->func + 1);
-    lua_assert(base <= L->top && L->top <= L->stack_last);
+    assert(base == ci->func + 1);
+    assert(base <= L->top && L->top <= L->stack_last);
     /* for tests, invalidate top for instructions not expecting it */
-    lua_assert(luaP_isIT(i) || (((void)(L->top = base)), 1));
+    assert(luaP_isIT(i) || (((void)(L->top = base)), 1));
     vmdispatch(GET_OPCODE(i))
     {
       vmcase(OP_MOVE)
@@ -1378,15 +1378,15 @@ returning: /* trap already set */
         StkId ra = (base + GETARG_A(i));
         TValue* upval = upvalval(cl->upvals[GETARG_B(i)]);
         TValue* rc = (k + GETARG_C(i));
-        lua_assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-        lua_assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = static_cast<TString*>(rc->value_.gc); /* key must be a short string */
         lu_byte tag;
         if (upval->tt_ != ctb(LUA_VTABLE))
           tag = LUA_VNOTABLE;
         else
         {
-          lua_assert(upval->value_.gc->tt == LUA_VTABLE);
+          assert(upval->value_.gc->tt == LUA_VTABLE);
           tag = luaH_getshortstr(static_cast<Table*>(upval->value_.gc), key, &L->stack.p[ra]);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
@@ -1410,7 +1410,7 @@ returning: /* trap already set */
             tag = LUA_VNOTABLE;
           else
           {
-            lua_assert(rb->value_.gc->tt == LUA_VTABLE);
+            assert(rb->value_.gc->tt == LUA_VTABLE);
             Table* h = static_cast<Table*>(rb->value_.gc);
             lua_Unsigned u = (lua_Unsigned)rc->value_.i - 1u;
             if (u < h->asize)
@@ -1427,7 +1427,7 @@ returning: /* trap already set */
           tag = LUA_VNOTABLE;
         else
         {
-          lua_assert(rb->value_.gc->tt == LUA_VTABLE);
+          assert(rb->value_.gc->tt == LUA_VTABLE);
           tag = luaH_get(static_cast<Table*>(rb->value_.gc), rc, &L->stack.p[ra]);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
@@ -1449,7 +1449,7 @@ returning: /* trap already set */
           tag = LUA_VNOTABLE;
         else
         {
-          lua_assert(rb->value_.gc->tt == LUA_VTABLE);
+          assert(rb->value_.gc->tt == LUA_VTABLE);
           Table* h = static_cast<Table*>(rb->value_.gc);
           lua_Unsigned u = (lua_Unsigned)c - 1u;
           if (u < h->asize)
@@ -1477,15 +1477,15 @@ returning: /* trap already set */
         StkId ra = (base + GETARG_A(i));
         TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
         TValue* rc = (k + GETARG_C(i));
-        lua_assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-        lua_assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = static_cast<TString*>(rc->value_.gc); /* key must be a short string */
         lu_byte tag;
         if (rb->tt_ != ctb(LUA_VTABLE))
           tag = LUA_VNOTABLE;
         else
         {
-          lua_assert(rb->value_.gc->tt == LUA_VTABLE);
+          assert(rb->value_.gc->tt == LUA_VTABLE);
           tag = luaH_getshortstr(static_cast<Table*>(rb->value_.gc), key, &L->stack.p[ra]);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
@@ -1503,14 +1503,14 @@ returning: /* trap already set */
         TValue* upval = upvalval(cl->upvals[GETARG_A(i)]);
         TValue* rb = (k + GETARG_B(i));
         TValue* rc = ((TESTARG_k(i)) ? k + GETARG_C(i) : (&(L)->stack.p[base + GETARG_C(i)]));
-        lua_assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-        lua_assert((rb->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rb->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = static_cast<TString*>(rb->value_.gc); /* key must be a short string */
         if (upval->tt_ != ctb(LUA_VTABLE))
           hres = HNOTATABLE;
         else
         {
-          lua_assert(upval->value_.gc->tt == LUA_VTABLE);
+          assert(upval->value_.gc->tt == LUA_VTABLE);
           hres = luaH_psetshortstr(static_cast<Table*>(upval->value_.gc), key, rc);
         }
         if (hres == HOK)
@@ -1537,7 +1537,7 @@ returning: /* trap already set */
             hres = HNOTATABLE;
           else
           {
-            lua_assert(t->value_.gc->tt == LUA_VTABLE);
+            assert(t->value_.gc->tt == LUA_VTABLE);
             Table* h = static_cast<Table*>(t->value_.gc);
             lua_Unsigned u = (lua_Unsigned)rb->value_.i - 1u;
             if (u < h->asize)
@@ -1562,7 +1562,7 @@ returning: /* trap already set */
             hres = HNOTATABLE;
           else
           {
-            lua_assert(t->value_.gc->tt == LUA_VTABLE);
+            assert(t->value_.gc->tt == LUA_VTABLE);
             hres = luaH_pset(static_cast<Table*>(t->value_.gc), rb, rc);
           }
         }
@@ -1588,7 +1588,7 @@ returning: /* trap already set */
           hres = HNOTATABLE;
         else
         {
-          lua_assert(t->value_.gc->tt == LUA_VTABLE);
+          assert(t->value_.gc->tt == LUA_VTABLE);
           Table* h = static_cast<Table*>(t->value_.gc);
           lua_Unsigned u = (lua_Unsigned)b - 1u;
           if (u < h->asize)
@@ -1624,15 +1624,15 @@ returning: /* trap already set */
         int hres;
         TValue* rb = (k + GETARG_B(i));
         TValue* rc = ((TESTARG_k(i)) ? k + GETARG_C(i) : (&(L)->stack.p[base + GETARG_C(i)]));
-        lua_assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-        lua_assert((rb->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rb->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = static_cast<TString*>(rb->value_.gc); /* key must be a short string */
         TValue* t = (&(L)->stack.p[ra]);
         if (t->tt_ != ctb(LUA_VTABLE))
           hres = HNOTATABLE;
         else
         {
-          lua_assert(t->value_.gc->tt == LUA_VTABLE);
+          assert(t->value_.gc->tt == LUA_VTABLE);
           hres = luaH_psetshortstr(static_cast<Table*>(t->value_.gc), key, rc);
         }
         if (hres == HOK)
@@ -1656,7 +1656,7 @@ returning: /* trap already set */
           b = 1u << (b - 1); /* hash size is 2^(b - 1) */
         if (TESTARG_k(i))
         { /* non-zero extra argument? */
-          lua_assert(GETARG_Ax(*pc) != 0);
+          assert(GETARG_Ax(*pc) != 0);
           /* add it to array size */
           c += ((unsigned int)(GETARG_Ax(*pc))) * (MAXARG_vC + 1);
         }
@@ -1683,15 +1683,15 @@ returning: /* trap already set */
         lu_byte tag;
         TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
         TValue* rc = (k + GETARG_C(i));
-        lua_assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-        lua_assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+        assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = static_cast<TString*>(rc->value_.gc); /* key must be a short string */
         setobj(L, (&(L)->stack.p[ra + 1]), rb);
         if (rb->tt_ != ctb(LUA_VTABLE))
           tag = LUA_VNOTABLE;
         else
         {
-          lua_assert(rb->value_.gc->tt == LUA_VTABLE);
+          assert(rb->value_.gc->tt == LUA_VTABLE);
           tag = luaH_getshortstr(static_cast<Table*>(rb->value_.gc), key, &L->stack.p[ra]);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
@@ -1727,7 +1727,7 @@ returning: /* trap already set */
       {
         TValue* v1 = &L->stack.p[base + GETARG_B(i)];
         TValue* v2 = k + GETARG_C(i);
-        lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+        assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
@@ -1753,7 +1753,7 @@ returning: /* trap already set */
       {
         TValue* v1 = &L->stack.p[base + GETARG_B(i)];
         TValue* v2 = k + GETARG_C(i);
-        lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+        assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
@@ -1779,7 +1779,7 @@ returning: /* trap already set */
       {
         TValue* v1 = &L->stack.p[base + GETARG_B(i)];
         TValue* v2 = k + GETARG_C(i);
-        lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+        assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
@@ -1807,7 +1807,7 @@ returning: /* trap already set */
         L->top = ci->top;
         TValue* v1 = &L->stack.p[base + GETARG_B(i)];
         TValue* v2 = k + GETARG_C(i);
-        lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+        assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
@@ -1833,7 +1833,7 @@ returning: /* trap already set */
       {
         TValue* v1 = &L->stack.p[base + GETARG_B(i)];
         TValue* v2 = k + GETARG_C(i);
-        lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+        assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         lua_Number n1;
         lua_Number n2;
         if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
@@ -1848,7 +1848,7 @@ returning: /* trap already set */
       {
         TValue* v1 = &L->stack.p[base + GETARG_B(i)];
         TValue* v2 = k + GETARG_C(i);
-        lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+        assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         lua_Number n1;
         lua_Number n2;
         if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
@@ -1865,7 +1865,7 @@ returning: /* trap already set */
         L->top = ci->top;
         TValue* v1 = &L->stack.p[base + GETARG_B(i)];
         TValue* v2 = k + GETARG_C(i);
-        lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+        assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
@@ -1893,7 +1893,7 @@ returning: /* trap already set */
         TValue* v2 = k + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2 = v2->value_.i;
-        lua_assert(v2->tt_ == LUA_VNUMINT);
+        assert(v2->tt_ == LUA_VNUMINT);
         if (tointegerns(v1, &i1))
         {
           StkId ra = base + GETARG_A(i);
@@ -1908,7 +1908,7 @@ returning: /* trap already set */
         TValue* v2 = k + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2 = v2->value_.i;
-        lua_assert(v2->tt_ == LUA_VNUMINT);
+        assert(v2->tt_ == LUA_VNUMINT);
         if (tointegerns(v1, &i1))
         {
           StkId ra = base + GETARG_A(i);
@@ -1923,7 +1923,7 @@ returning: /* trap already set */
         TValue* v2 = k + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2 = v2->value_.i;
-        lua_assert(v2->tt_ == LUA_VNUMINT);
+        assert(v2->tt_ == LUA_VNUMINT);
         if (tointegerns(v1, &i1))
         {
           StkId ra = base + GETARG_A(i);
@@ -2192,7 +2192,7 @@ returning: /* trap already set */
         TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
         TMS tm = (TMS) GETARG_C(i);
         StkId result = (base + GETARG_A(pi));
-        lua_assert(OP_ADD <= GET_OPCODE(pi) && GET_OPCODE(pi) <= OP_SHR);
+        assert(OP_ADD <= GET_OPCODE(pi) && GET_OPCODE(pi) <= OP_SHR);
         ci->u.l.savedpc = pc;
         L->top = ci->top;
         luaT_trybinTM(L, (&(L)->stack.p[ra]), rb, result, tm);
@@ -2308,7 +2308,7 @@ returning: /* trap already set */
       vmcase(OP_CLOSE)
       {
         StkId ra = (base + GETARG_A(i));
-        lua_assert(!GETARG_B(i)); /* 'close must be alive */
+        assert(!GETARG_B(i)); /* 'close must be alive */
         ci->u.l.savedpc = pc;
         L->top = ci->top;
         luaF_close(L, ra, LUA_OK, 1);
@@ -2634,8 +2634,8 @@ returning: /* trap already set */
         if (TESTARG_k(i))
         {
           luaF_closeupval(L, base);        /* close upvalues from current call */
-          lua_assert(L->tbclist < base); /* no pending tbc variables */
-          lua_assert(base == ci->func + 1);
+          assert(L->tbclist < base); /* no pending tbc variables */
+          assert(base == ci->func + 1);
         }
         if ((n = luaD_pretailcall(L, ci, ra, b, delta)) < 0) /* Lua function? */
           goto startfunc;                                    /* execute the callee */
@@ -2730,13 +2730,13 @@ returning: /* trap already set */
         StkId ra = (base + GETARG_A(i));
         if ((((&(L)->stack.p[ra + 1]))->tt_ == LUA_VNUMINT))
         { /* integer loop? */
-          lua_assert(((&L->stack.p[ra]))->tt_ == LUA_VNUMINT);
+          assert(((&L->stack.p[ra]))->tt_ == LUA_VNUMINT);
           lua_Unsigned count = ((lua_Unsigned)((((&L->stack.p[ra]))->value_).i));
           if (count > 0)
           { /* still more iterations? */
-            lua_assert(((&L->stack.p[ra + 1]))->tt_ == LUA_VNUMINT);
+            assert(((&L->stack.p[ra + 1]))->tt_ == LUA_VNUMINT);
             lua_Integer step = (((&L->stack.p[ra + 1]))->value_).i;
-            lua_assert(((&L->stack.p[ra + 2]))->tt_ == LUA_VNUMINT);
+            assert(((&L->stack.p[ra + 2]))->tt_ == LUA_VNUMINT);
             lua_Integer idx = (((&L->stack.p[ra + 2]))->value_).i;    /* control variable */
             chgivalue((&(L)->stack.p[ra]), ((lua_Integer)(count - 1))); /* update counter */
             idx = ((lua_Integer)(((lua_Unsigned)(idx)) + ((lua_Unsigned)(step))));                /* add step to index */
@@ -2777,7 +2777,7 @@ returning: /* trap already set */
         luaF_newtbcupval(L, ra + 2);
         pc += GETARG_Bx(i); /* go to end of the loop */
         i = *(pc++);        /* fetch next instruction */
-        lua_assert(GET_OPCODE(i) == OP_TFORCALL && ra == (base + GETARG_A(i)));
+        assert(GET_OPCODE(i) == OP_TFORCALL && ra == (base + GETARG_A(i)));
         goto l_tforcall;
       }
       vmcase(OP_TFORCALL)
@@ -2800,7 +2800,7 @@ returning: /* trap already set */
         trap = ci->u.l.trap;
         { if (l_unlikely(trap)) { (base = (ci)->func + 1); ra = (base + GETARG_A(i)); } };                              /* stack may have changed */
         i = *(pc++);                                  /* go to next instruction */
-        lua_assert(GET_OPCODE(i) == OP_TFORLOOP && ra == (base + GETARG_A(i)));
+        assert(GET_OPCODE(i) == OP_TFORLOOP && ra == (base + GETARG_A(i)));
         goto l_tforloop;
       }
       }
@@ -2819,8 +2819,8 @@ returning: /* trap already set */
         StkId ra = (base + GETARG_A(i));
         unsigned n = ((unsigned int)(GETARG_vB(i)));
         unsigned last = ((unsigned int)(GETARG_vC(i)));
-        lua_assert((&L->stack.p[ra])->tt_ == ctb(LUA_VTABLE));
-        lua_assert((&L->stack.p[ra])->value_.gc->tt == LUA_VTABLE);
+        assert((&L->stack.p[ra])->tt_ == ctb(LUA_VTABLE));
+        assert((&L->stack.p[ra])->value_.gc->tt == LUA_VTABLE);
         Table* h = static_cast<Table*>((&L->stack.p[ra])->value_.gc);
         if (n == 0)
           n = ((unsigned int)(L->top - ra)) - 1; /* get up to the top */
@@ -2836,7 +2836,7 @@ returning: /* trap already set */
         if (last > h->asize)
         { /* needs more space? */
           /* fixed-size sets should have space preallocated */
-          lua_assert(GETARG_vB(i) == 0);
+          assert(GETARG_vB(i) == 0);
           luaH_resizearray(L, h, last); /* preallocate it at once */
         }
         for (; n > 0; n--)
@@ -2844,7 +2844,7 @@ returning: /* trap already set */
           TValue* val = (&(L)->stack.p[ra + n]);
           obj2arr(h, last - 1, val);
           last--;
-          lua_assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+          assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
           luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(h)), val);
         }
         vmbreak;
@@ -2911,7 +2911,7 @@ returning: /* trap already set */
       }
       vmcase(OP_EXTRAARG)
       {
-        lua_assert(0);
+        assert(0);
         vmbreak;
       }
     }

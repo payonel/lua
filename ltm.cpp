@@ -43,7 +43,7 @@ void luaT_init(lua_State* L)
   for (i = 0; i < TM_N; i++)
   {
     G(L)->tmname[i] = luaS_new(L, luaT_eventname[i]);
-    lua_assert((((G(L)->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert((((G(L)->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(G(L)->tmname[i]))); /* never collect these names */
   }
 }
@@ -55,7 +55,7 @@ void luaT_init(lua_State* L)
 const TValue* luaT_gettm(Table* events, TMS event, TString* ename)
 {
   const TValue* tm = luaH_Hgetshortstr(events, ename);
-  lua_assert(event <= TM_EQ);
+  assert(event <= TM_EQ);
   if (notm(tm))
   {                                          /* no tag method? */
     events->flags |= ((lu_byte)(1u << event)); /* cache this fact */
@@ -71,13 +71,13 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
   switch ((o->tt_ & NOVARIANT_MASK))
   {
   case LUA_TTABLE:
-    lua_assert(o->tt_ == ctb(LUA_VTABLE));
-    lua_assert(o->value_.gc->tt == LUA_VTABLE);
+    assert(o->tt_ == ctb(LUA_VTABLE));
+    assert(o->value_.gc->tt == LUA_VTABLE);
     mt = static_cast<Table*>(o->value_.gc)->metatable;
     break;
   case LUA_TUSERDATA:
-    lua_assert(o->tt_ == ctb(LUA_VUSERDATA));
-    lua_assert(o->value_.gc->tt == LUA_VUSERDATA);
+    assert(o->tt_ == ctb(LUA_VUSERDATA));
+    assert(o->value_.gc->tt == LUA_VUSERDATA);
     mt = static_cast<Udata*>(o->value_.gc)->metatable;
     break;
   default:
@@ -99,7 +99,7 @@ const char* luaT_objtypename(lua_State* L, const TValue* o)
     const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, "__name"));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
     {
-      lua_assert((name->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((name->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       return getstr(static_cast<TString*>(name->value_.gc)); /* use it as type name */
     }
   }
@@ -294,18 +294,18 @@ void luaT_adjustvarargs(lua_State* L, CallInfo* ci, const Proto* p)
   int nextra = totalargs - nfixparams; /* number of extra arguments */
   if (p->flag & PF_VATAB)
   { /* does it need a vararg table? */
-    lua_assert(!(p->flag & PF_VAHID));
+    assert(!(p->flag & PF_VAHID));
     createvarargtab(L, ci->func + nfixparams + 1, nextra);
     /* move table to proper place (last parameter) */
     setobj(L, (&(L)->stack.p[ci->func + nfixparams + 1]), (&(L)->stack.p[L->top - 1]));
   }
   else
   { /* no table */
-    lua_assert(p->flag & PF_VAHID);
+    assert(p->flag & PF_VAHID);
     buildhiddenargs(L, ci, p, totalargs, nfixparams, nextra);
     /* set vararg parameter to nil */
     (((&(L)->stack.p[ci->func + nfixparams + 1]))->tt_ = LUA_VNIL);
-    lua_assert(L->top <= ci->top && ci->top <= L->stack_last);
+    assert(L->top <= ci->top && ci->top <= L->stack_last);
   }
 }
 
@@ -324,7 +324,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   }
   else if ((((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   { /* string value? */
-    lua_assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((rc->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(rc->value_.gc);
     size_t len = ts->content.size();
     const char* s = ts->content.c_str();
@@ -354,7 +354,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
     if (luaH_getshortstr(h, luaS_new(L, "n"), &res) != LUA_VNUMINT ||
         ((lua_Unsigned)(((&res)->value_).i)) > ((unsigned int)(INT_MAX / 2)))
       luaG_runerror(L, "vararg table has no proper 'n'");
-    lua_assert((&res)->tt_ == LUA_VNUMINT);
+    assert((&res)->tt_ == LUA_VNUMINT);
     return ((int)(((&res)->value_).i));
   }
 }
@@ -372,8 +372,8 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
   else
   {
     TValue* vt = &L->stack.p[ci->func + vatab + 1];
-    lua_assert(vt->tt_ == ctb(LUA_VTABLE));
-    lua_assert(vt->value_.gc->tt == LUA_VTABLE);
+    assert(vt->tt_ == ctb(LUA_VTABLE));
+    assert(vt->value_.gc->tt == LUA_VTABLE);
     h = static_cast<Table*>(vt->value_.gc);
   }
   int nargs = getnumargs(L, ci, h); /* number of available vararg args. */

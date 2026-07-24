@@ -360,7 +360,7 @@ static lua_Number I2d(uint64_t x)
   lua_Number res = (lua_Number) (sx) *scaleFIG;
   if (sx < 0)
     res += l_mathop(1.0); /* correct the two's complement if negative */
-  lua_assert(0 <= res && res < 1);
+  assert(0 <= res && res < 1);
   return res;
 }
 

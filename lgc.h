@@ -121,7 +121,7 @@ static l_forceinline void changewhite(GCObject* x)
 }
 static l_forceinline void nw2black(GCObject* x)
 {
-  lua_assert(!iswhite(x));
+  assert(!iswhite(x));
   x->marked = (lu_byte)(x->marked | bitmask(BLACKBIT));
 }
 

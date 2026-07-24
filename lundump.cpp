@@ -62,7 +62,7 @@ static void loadAlign(LoadState* S, unsigned align)
   { /* (padding == align) means no padding */
     lua_Integer paddingContent;
     loadBlock(S, &paddingContent, padding);
-    lua_assert(S->offset % align == 0);
+    assert(S->offset % align == 0);
   }
 }
 
@@ -144,13 +144,13 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     TValue stv;
     if (idx == 0)
     {                          /* no string? */
-      lua_assert(*sl == NULL); /* must be prefilled */
+      assert(*sl == NULL); /* must be prefilled */
       return;
     }
     if ((luaH_getint(S->h, ((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
       error(S, "invalid string index");
-    lua_assert((stv.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((stv.value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((stv.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((stv.value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     *sl = ts = static_cast<TString*>(stv.value_.gc); /* get its value */
     luaC_objbarrier(L, p, ts);
     return; /* do not save it again */
@@ -174,7 +174,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   S->nstr++;
   setsvalue(L, &sv, ts);
   luaH_setint(L, S->h, ((lua_Integer)(S->nstr)), &sv);
-  lua_assert((S->h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((S->h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_objbarrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(S->h)), ts);
 }
 
@@ -230,7 +230,7 @@ static void loadConstants(LoadState* S, Proto* f)
       break;
     case LUA_VSHRSTR:
     {
-      lua_assert(f->source == NULL);
+      assert(f->source == NULL);
       loadString(S, f, &f->source); /* use 'source' to anchor string */
       if (f->source == NULL)
         error(S, "bad format for constant string");
@@ -420,7 +420,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, const char* name,
   S.h = anchor;
   S.nstr = 0;
   cl = luaF_newLclosure(L, loadByte(&S));
-  lua_assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaD_anchorobj(L, anchor, const_cast<GCObject*>(static_cast<const GCObject*>(cl)));
   cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);

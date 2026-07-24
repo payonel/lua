@@ -1186,7 +1186,7 @@ static int num2straux(char* buff, unsigned sz, lua_Number x)
       } while (m > 0);
     }
     n += ((unsigned int)(l_sprintf(buff + n, sz - n, "p%+d", e))); /* add exponent */
-    lua_assert(n < sz);
+    assert(n < sz);
     return ((int)(n));
   }
 }
@@ -1553,7 +1553,7 @@ static int str_format(lua_State* L)
         return luaL_error(L, "invalid conversion '%s' to 'format'", form);
       }
       }
-      lua_assert(((unsigned int)(nb)) < maxitem);
+      assert(((unsigned int)(nb)) < maxitem);
       luaL_addsize(&b, ((unsigned int)(nb)));
     }
   }

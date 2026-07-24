@@ -173,7 +173,7 @@ static unsigned l_hashfloat(lua_Number n)
   n = l_mathop(frexp)(n, &i) * -((lua_Number)(INT_MIN));
   if (!lua_numbertointeger(n, &ni))
   { /* is 'n' inf/-inf/NaN? */
-    lua_assert((!((n) == (n))) || l_mathop(fabs)(n) == ((lua_Number)(HUGE_VAL)));
+    assert((!((n) == (n))) || l_mathop(fabs)(n) == ((lua_Number)(HUGE_VAL)));
     return 0;
   }
   else
@@ -204,8 +204,8 @@ static Node* mainpositionTV(const Table* t, const TValue* key)
   }
   case LUA_VSHRSTR:
   {
-    lua_assert((key->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((key->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((key->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((key->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(key->value_.gc);
     return hashstr(t, ts);
   }
@@ -225,7 +225,7 @@ static Node* mainpositionTV(const Table* t, const TValue* key)
   }
   default:
   {
-    lua_assert(key->tt_ & BIT_ISCOLLECTABLE);
+    assert(key->tt_ & BIT_ISCOLLECTABLE);
     GCObject* o = key->value_.gc;
     return hashpointer(t, o);
   }
@@ -265,15 +265,15 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     if (((n2)->key_tt == ctb(LUA_VSHRSTR)) && (((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
     {
       /* an external string can be equal to a short-string key */
-      lua_assert((k1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-      lua_assert((n2->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((k1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((n2->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       return luaS_eqstr(static_cast<TString*>(k1->value_.gc),
                         static_cast<TString*>(n2->key_val.gc));
     }
     else if (deadok && ((n2)->key_tt == LUA_TDEADKEY) && ((k1)->tt_ & BIT_ISCOLLECTABLE))
     {
       /* a collectable value can be equal to a dead key */
-      lua_assert(k1->tt_ & BIT_ISCOLLECTABLE);
+      assert(k1->tt_ & BIT_ISCOLLECTABLE);
       return k1->value_.gc == ((((n2)->key_val)).gc);
     }
     else
@@ -288,26 +288,26 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     case LUA_VTRUE:
       return 1;
     case LUA_VNUMINT:
-      lua_assert(k1->tt_ == LUA_VNUMINT);
+      assert(k1->tt_ == LUA_VNUMINT);
       return (k1->value_.i == (((n2)->key_val).i));
     case LUA_VNUMFLT:
-      lua_assert(k1->tt_ == LUA_VNUMFLT);
+      assert(k1->tt_ == LUA_VNUMFLT);
       return ((k1->value_.n) == (((((n2)->key_val)).n)));
     case LUA_VLIGHTUSERDATA:
-      lua_assert(k1->tt_ == LUA_VLIGHTUSERDATA);
+      assert(k1->tt_ == LUA_VLIGHTUSERDATA);
       return k1->value_.p == ((((n2)->key_val)).p);
     case LUA_VLCF:
-      lua_assert(k1->tt_ == LUA_VLCF);
+      assert(k1->tt_ == LUA_VLCF);
       return k1->value_.f == ((((n2)->key_val)).f);
     case ctb(LUA_VLNGSTR):
     {
-      lua_assert((k1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-      lua_assert((n2->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((k1->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((n2->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       return luaS_eqstr(static_cast<TString*>(k1->value_.gc),
                         static_cast<TString*>(n2->key_val.gc));
     }
     default:
-      lua_assert(k1->tt_ & BIT_ISCOLLECTABLE);
+      assert(k1->tt_ & BIT_ISCOLLECTABLE);
       return k1->value_.gc == ((((n2)->key_val)).gc);
     }
   }
@@ -573,7 +573,7 @@ static void numusehash(const Table* t, Counters* ct)
     Node* n = &t->node[i];
     if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
     {
-      lua_assert(!((n)->key_tt == LUA_TNIL)); /* entry was deleted; key cannot be nil */
+      assert(!((n)->key_tt == LUA_TNIL)); /* entry was deleted; key cannot be nil */
       ct->deleted = 1;
     }
     else
@@ -635,7 +635,7 @@ static Value* resizearray(lua_State* L, Table* t,
       Value* op = t->array; /* original array */
       unsigned tomove = (oldasize < newasize) ? oldasize : newasize;
       size_t tomoveb = (oldasize < newasize) ? oldasizeb : newasizeb;
-      lua_assert(tomoveb > 0);
+      assert(tomoveb > 0);
       memcpy(np - tomove, op - tomove, tomoveb);
       luaM_free_(L, (op - oldasize), (oldasizeb)); /* free old block */
     }
@@ -864,7 +864,7 @@ static void rehash(lua_State* L, Table* t, const TValue* ek)
 Table* luaH_new(lua_State* L)
 {
   GCObject* o = luaC_newobj(L, LUA_VTABLE, sizeof(Table));
-  lua_assert(o->tt == LUA_VTABLE);
+  assert(o->tt == LUA_VTABLE);
   Table* t = static_cast<Table*>(o);
   t->metatable = NULL;
   t->flags = maskflags; /* table has no metamethod fields */
@@ -929,14 +929,14 @@ static int insertkey(Table* t, const TValue* key, TValue* value)
 {
   Node* mp = mainpositionTV(t, key);
   /* table cannot already contain the key */
-  lua_assert(((getgeneric(t, key, 0))->tt_ == LUA_VABSTKEY));
+  assert(((getgeneric(t, key, 0))->tt_ == LUA_VABSTKEY));
   if (!((((&(mp)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL) || isdummy(t))
   { /* main position is taken? */
     Node* othern;
     Node* f = getfreepos(t); /* get a free place */
     if (f == NULL)           /* cannot find a free place? */
       return 0;
-    lua_assert(!isdummy(t));
+    assert(!isdummy(t));
     othern = mainpositionfromnode(t, mp);
     if (othern != mp)
     { /* is colliding node out of its main position? */
@@ -958,13 +958,13 @@ static int insertkey(Table* t, const TValue* key, TValue* value)
       if (((mp)->next) != 0)
         ((f)->next) = ((int)((mp + ((mp)->next)) - f)); /* chain new position */
       else
-        lua_assert(((f)->next) == 0);
+        assert(((f)->next) == 0);
       ((mp)->next) = ((int)(f - mp));
       mp = f;
     }
   }
   setnodekey(mp, key);
-  lua_assert(((((&(mp)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
+  assert(((((&(mp)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
   setobj(((lua_State*)(0)), (&(mp)->val), value);
   return 1;
 }
@@ -981,7 +981,7 @@ static void newcheckedkey(Table* t, const TValue* key, TValue* value)
   else
   {
     int done = insertkey(t, key, value); /* insert key in the hash part */
-    lua_assert(done);                    /* it cannot fail */
+    assert(done);                    /* it cannot fail */
     ((void)(done));                    /* to avoid warnings */
   }
 }
@@ -997,7 +997,7 @@ static void luaH_newkey(lua_State* L, Table* t, const TValue* key,
       rehash(L, t, key);            /* grow table */
       newcheckedkey(t, key, value); /* insert key in grown table */
     }
-    lua_assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(t)), key);
     /* for debugging only: any new key may force an emergency collection */
     condchangemem(L, (void) 0, (void) 0, 1);
@@ -1007,7 +1007,7 @@ static void luaH_newkey(lua_State* L, Table* t, const TValue* key,
 static const TValue* getintfromhash(Table* t, lua_Integer key)
 {
   Node* n = hashint(t, key);
-  lua_assert(!ikeyinarray(t, key));
+  assert(!ikeyinarray(t, key));
   for (;;)
   { /* check whether 'key' is somewhere in the chain */
     if (((n)->key_tt == LUA_VNUMINT) && (((n)->key_val).i) == key)
@@ -1062,7 +1062,7 @@ const TValue* luaH_Hgetshortstr(Table* t, TString* key)
   { /* check whether 'key' is somewhere in the chain */
     if (((n)->key_tt == ctb(LUA_VSHRSTR)))
     {
-      lua_assert((n->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((n->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       if (luaS_eqstr(static_cast<TString*>(n->key_val.gc), key))
         return (&(n)->val); /* that's it */
     }
@@ -1097,7 +1097,7 @@ lu_byte luaH_get(Table* t, const TValue* key, TValue* res)
   switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
-    lua_assert((key->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((key->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     slot = luaH_Hgetshortstr(t, static_cast<TString*>(key->value_.gc));
     break;
   case LUA_VNUMINT:
@@ -1155,7 +1155,7 @@ static int rawfinishnodeset(const TValue* slot, TValue* val)
 
 int luaH_psetint(Table* t, lua_Integer key, TValue* val)
 {
-  lua_assert(!ikeyinarray(t, key));
+  assert(!ikeyinarray(t, key));
   return finishnodeset(t, getintfromhash(t, key), val);
 }
 
@@ -1227,7 +1227,7 @@ int luaH_pset(Table* t, const TValue* key, TValue* val)
   switch (((key)->tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
-    lua_assert((key->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((key->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     return luaH_psetshortstr(t, static_cast<TString*>(key->value_.gc), val);
   case LUA_VNUMINT:
     return psetint(t, key->value_.i, val);
@@ -1254,7 +1254,7 @@ int luaH_pset(Table* t, const TValue* key, TValue* val)
 void luaH_finishset(lua_State* L, Table* t, const TValue* key,
                     TValue* value, int hres)
 {
-  lua_assert(hres != HOK);
+  assert(hres != HOK);
   if (hres == HNOTFOUND)
   {
     TValue aux;
@@ -1376,7 +1376,7 @@ static lua_Unsigned hash_search(lua_State* L, Table* t, unsigned asize)
 
 static unsigned int binsearch(Table* array, unsigned int i, unsigned int j)
 {
-  lua_assert(i <= j);
+  assert(i <= j);
   while (j - i > 1u)
   { /* binary search */
     unsigned int m = (i + j) / 2;
@@ -1391,7 +1391,7 @@ static unsigned int binsearch(Table* array, unsigned int i, unsigned int j)
 /* return a border, saving it as a hint for next call */
 static lua_Unsigned newhint(Table* t, unsigned hint)
 {
-  lua_assert(hint <= t->asize);
+  assert(hint <= t->asize);
   *lenhint(t) = hint;
   return hint;
 }
@@ -1451,7 +1451,7 @@ lua_Unsigned luaH_getn(lua_State* L, Table* t)
     *lenhint(t) = asize;
   }
   /* no array part or t[asize] is not empty; check the hash part */
-  lua_assert(asize == 0 || !arraykeyisempty(t, asize));
+  assert(asize == 0 || !arraykeyisempty(t, asize));
   if (isdummy(t) || hashkeyisempty(t, asize + 1))
     return asize; /* 'asize + 1' is empty */
   else            /* 'asize + 1' is also non empty */

@@ -43,8 +43,8 @@ void luaO_checkliveness(lua_State* L, const TValue* obj)
   (void) L; /* unused when asserts are disabled */
   if (obj->tt_ & BIT_ISCOLLECTABLE)
   {
-    lua_assert((((obj)->tt_ & WITHVARIANT_MASK) == ((obj)->value_).gc->tt));
-    lua_assert(L == NULL || !isdead(G(L), obj->value_.gc));
+    assert((((obj)->tt_ & WITHVARIANT_MASK) == ((obj)->value_).gc->tt));
+    assert(L == NULL || !isdead(G(L), obj->value_.gc));
   }
 }
 
@@ -166,7 +166,7 @@ static lua_Integer intarith(lua_State* L, int op, lua_Integer v1,
   case LUA_OPBNOT:
     return ((lua_Integer)(((lua_Unsigned)(~((lua_Unsigned)(0)))) ^ ((lua_Unsigned)(v1))));
   default:
-    lua_assert(0);
+    assert(0);
     return 0;
   }
 }
@@ -193,7 +193,7 @@ static lua_Number numarith(lua_State* L, int op, lua_Number v1,
   case LUA_OPMOD:
     return luaV_modf(L, v1, v2);
   default:
-    lua_assert(0);
+    assert(0);
     return 0;
   }
 }
@@ -265,7 +265,7 @@ void luaO_arith(lua_State* L, int op, const TValue* p1, const TValue* p2,
 
 lu_byte luaO_hexavalue(int c)
 {
-  lua_assert(lisxdigit(c));
+  assert(lisxdigit(c));
   if (lisdigit(c))
     return ((lu_byte)(c - '0'));
   else
@@ -487,7 +487,7 @@ size_t luaO_str2num(const char* s, TValue* o)
 int luaO_utf8esc(char* buff, l_uint32 x)
 {
   int n = 1; /* number of bytes put in buffer (backwards) */
-  lua_assert(x <= 0x7FFFFFFFu);
+  assert(x <= 0x7FFFFFFFu);
   if (x < 0x80) /* ASCII? */
     buff[UTF8BUFFSZ - 1] = ((char)(x));
   else
@@ -553,15 +553,15 @@ static int tostringbuffFloat(lua_Number n, char* buff)
 unsigned luaO_tostringbuff(const TValue* obj, char* buff)
 {
   int len;
-  lua_assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if (((obj)->tt_ == LUA_VNUMINT))
     len = lua_integer2str(buff, LUA_N2SBUFFSZ, obj->value_.i);
   else
   {
-    lua_assert(obj->tt_ == LUA_VNUMFLT);
+    assert(obj->tt_ == LUA_VNUMFLT);
     len = tostringbuffFloat(obj->value_.n, buff);
   }
-  lua_assert(len < LUA_N2SBUFFSZ);
+  assert(len < LUA_N2SBUFFSZ);
   return ((unsigned int)(len));
 }
 
@@ -650,8 +650,8 @@ static const char* clearbuff(BuffFS* buff)
   else
   {
     TValue* s = &L->stack.p[L->top - 1]; /* result string is on the top of the stack */
-    lua_assert((s->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((s->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((s->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((s->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     res = getstr(static_cast<TString*>(s->value_.gc));
   }
   if (buff->b != buff->space)                   /* using dynamic buffer? */

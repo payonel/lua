@@ -9,7 +9,7 @@
 #include "llimits.h"
 #include "lstate.h"
 
-#define api_check(l, e, msg) ((void) (l), lua_assert((e) && msg))
+#define api_check(l, e, msg) ((void) (l), assert((e) && msg))
 
 /* Increments 'L->top', checking for stack overflows */
 static l_forceinline void api_incr_top(lua_State* L)

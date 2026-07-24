@@ -465,8 +465,8 @@ constexpr size_t sizeLclosure(int n)
 
 static l_forceinline Proto* getproto(const TValue* o)
 {
-  lua_assert(o->tt_ == ctb(LUA_VLCL));
-  lua_assert(o->value_.gc->tt == LUA_VLCL);
+  assert(o->tt_ == ctb(LUA_VLCL));
+  assert(o->value_.gc->tt == LUA_VLCL);
   return static_cast<LClosure*>(o->value_.gc)->p;
 }
 
@@ -518,7 +518,7 @@ typedef struct Table : GCObject
 */
 static l_forceinline unsigned int lmod(lua_Unsigned s, unsigned int size)
 {
-  lua_assert((size & (size - 1)) == 0); /* size must be a power of 2 */
+  assert((size & (size - 1)) == 0); /* size must be a power of 2 */
   return (unsigned int)s & (size - 1);
 }
 
@@ -560,7 +560,7 @@ static l_forceinline void setobj(struct lua_State* L, TValue* obj1, const TValue
   obj1->value_ = obj2->value_;
   obj1->tt_ = obj2->tt_;
   checkliveness(L, obj1);
-  lua_assert(!((((obj1)->tt_ & NOVARIANT_MASK) == LUA_TNIL) && !((obj1)->tt_ == LUA_VNIL)));
+  assert(!((((obj1)->tt_ & NOVARIANT_MASK) == LUA_TNIL) && !((obj1)->tt_ == LUA_VNIL)));
 }
 
 static l_forceinline void setfltvalue(TValue* obj, lua_Number x)
@@ -572,7 +572,7 @@ static l_forceinline void setfltvalue(TValue* obj, lua_Number x)
 /* change value of a float, keeping its tag */
 static l_forceinline void chgfltvalue(TValue* obj, lua_Number x)
 {
-  lua_assert(obj->tt_ == LUA_VNUMFLT);
+  assert(obj->tt_ == LUA_VNUMFLT);
   obj->value_.n = x;
 }
 
@@ -585,7 +585,7 @@ static l_forceinline void setivalue(TValue* obj, lua_Integer x)
 /* change value of an integer, keeping its tag */
 static l_forceinline void chgivalue(TValue* obj, lua_Integer x)
 {
-  lua_assert(obj->tt_ == LUA_VNUMINT);
+  assert(obj->tt_ == LUA_VNUMINT);
   obj->value_.i = x;
 }
 
@@ -610,7 +610,7 @@ static l_forceinline void setgcovalue(struct lua_State* L, TValue* obj, GCObject
 
 static l_forceinline void setsvalue(struct lua_State* L, TValue* obj, TString* x)
 {
-  lua_assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
   obj->value_.gc = x;
   obj->tt_ = ctb(x->tt);
   checkliveness(L, obj);
@@ -618,7 +618,7 @@ static l_forceinline void setsvalue(struct lua_State* L, TValue* obj, TString* x
 
 static l_forceinline void setuvalue(struct lua_State* L, TValue* obj, Udata* x)
 {
-  lua_assert(x->tt == LUA_VUSERDATA);
+  assert(x->tt == LUA_VUSERDATA);
   obj->value_.gc = x;
   obj->tt_ = ctb(LUA_VUSERDATA);
   checkliveness(L, obj);
@@ -626,7 +626,7 @@ static l_forceinline void setuvalue(struct lua_State* L, TValue* obj, Udata* x)
 
 static l_forceinline void sethvalue(struct lua_State* L, TValue* obj, Table* x)
 {
-  lua_assert(x->tt == LUA_VTABLE);
+  assert(x->tt == LUA_VTABLE);
   obj->value_.gc = x;
   obj->tt_ = ctb(LUA_VTABLE);
   checkliveness(L, obj);
@@ -634,7 +634,7 @@ static l_forceinline void sethvalue(struct lua_State* L, TValue* obj, Table* x)
 
 static l_forceinline void setclLvalue(struct lua_State* L, TValue* obj, LClosure* x)
 {
-  lua_assert(x->tt == LUA_VLCL);
+  assert(x->tt == LUA_VLCL);
   obj->value_.gc = x;
   obj->tt_ = ctb(LUA_VLCL);
   checkliveness(L, obj);
@@ -642,7 +642,7 @@ static l_forceinline void setclLvalue(struct lua_State* L, TValue* obj, LClosure
 
 static l_forceinline void setclCvalue(struct lua_State* L, TValue* obj, CClosure* x)
 {
-  lua_assert(x->tt == LUA_VCCL);
+  assert(x->tt == LUA_VCCL);
   obj->value_.gc = x;
   obj->tt_ = ctb(LUA_VCCL);
   checkliveness(L, obj);

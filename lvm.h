@@ -146,7 +146,7 @@ static inline int luaV_rawequalobj(const TValue* t1, const TValue* t2)
 
 static inline void luaV_finishfastset(lua_State* L, const TValue* t, const TValue* v)
 {
-  lua_assert(t->tt_ & BIT_ISCOLLECTABLE);
+  assert(t->tt_ & BIT_ISCOLLECTABLE);
   luaC_barrierback(L, t->value_.gc, v);
 }
 

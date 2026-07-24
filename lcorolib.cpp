@@ -85,7 +85,7 @@ static int luaB_auxwrap(lua_State* L)
     if (stat != LUA_OK && stat != LUA_YIELD)
     {                                /* error in the coroutine? */
       stat = lua_closethread(co, L); /* close its tbc variables */
-      lua_assert(stat != LUA_OK);
+      assert(stat != LUA_OK);
       lua_xmove(co, L, 1); /* move error message to the caller */
     }
     if (stat != LUA_ERRMEM && /* not a memory error and ... */
@@ -213,7 +213,7 @@ static int luaB_close(lua_State* L)
     lua_closethread(co, L);             /* close itself */
     /* previous call does not return */ /* FALLTHROUGH */
   default:
-    lua_assert(0);
+    assert(0);
     return 0;
   }
 }

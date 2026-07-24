@@ -38,7 +38,7 @@ static const char* funcnamefromcall(lua_State* L, CallInfo* ci,
 
 static int currentpc(lua_State* L, CallInfo* ci)
 {
-  lua_assert(isLua(ci));
+  assert(isLua(ci));
   return pcRel(ci->u.l.savedpc, ci_func(L, ci)->p);
 }
 
@@ -66,7 +66,7 @@ static int getbaseline(const Proto* f, int pc, int* basepc)
   {
     int i = pc / MAXIWTHABS - 1; /* get an estimate */
     /* estimate must be a lower bound of the correct base */
-    lua_assert(i < 0 ||
+    assert(i < 0 ||
                (i < f->sizeabslineinfo && f->abslineinfo[i].pc <= pc));
     while (i + 1 < f->sizeabslineinfo && pc >= f->abslineinfo[i + 1].pc)
       i++; /* low estimate; adjust it */
@@ -90,7 +90,7 @@ int luaG_getfuncline(const Proto* f, int pc)
     int baseline = getbaseline(f, pc, &basepc);
     while (basepc++ < pc)
     { /* walk until given instruction */
-      lua_assert(f->lineinfo[basepc] != ABSLINEINFO);
+      assert(f->lineinfo[basepc] != ABSLINEINFO);
       baseline += f->lineinfo[basepc]; /* correct line */
     }
     return baseline;
@@ -192,8 +192,8 @@ static const char* upvalname(const Proto* p, int uv)
 static const char* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
 {
   TValue* fv = &L->stack.p[ci->func];
-  lua_assert(fv->tt_ == ctb(LUA_VLCL));
-  lua_assert(fv->value_.gc->tt == LUA_VLCL);
+  assert(fv->tt_ == ctb(LUA_VLCL));
+  assert(fv->value_.gc->tt == LUA_VLCL);
   LClosure* cl = static_cast<LClosure*>(fv->value_.gc);
   if (cl->p->flag & PF_VAHID)
   {
@@ -245,7 +245,7 @@ LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
     else /* consider live variables at function start (parameters) */
     {
       TValue* fv = &L->stack.p[L->top - 1];
-      lua_assert(fv->value_.gc->tt == LUA_VLCL);
+      assert(fv->value_.gc->tt == LUA_VLCL);
       name = luaF_getlocalname(static_cast<LClosure*>(fv->value_.gc)->p, n, 0);
     }
   }
@@ -339,7 +339,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
         i = 0;            /* consider all instructions */
       else
       { /* vararg function */
-        lua_assert(GET_OPCODE(p->code[0]) == OP_VARARGPREP);
+        assert(GET_OPCODE(p->code[0]) == OP_VARARGPREP);
         currentline = nextline(p, currentline, 0);
         i = 1; /* skip first instruction (OP_VARARGPREP) */
       }
@@ -459,11 +459,11 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   {
     ci = ar->i_ci;
     func = (&(L)->stack.p[ci->func]);
-    lua_assert((((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
+    assert((((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
   }
   if ((func)->tt_ == ctb(LUA_VLCL) || (func)->tt_ == ctb(LUA_VCCL))
   {
-    lua_assert((func->value_.gc->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
+    assert((func->value_.gc->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
     cl = static_cast<Closure*>(func->value_.gc);
   }
   else
@@ -557,7 +557,7 @@ static const char* kname(const Proto* p, int index, const char** name)
   TValue* kvalue = &p->k[index];
   if ((((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   {
-    lua_assert((kvalue->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((kvalue->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     *name = getstr(static_cast<TString*>(kvalue->value_.gc));
     return "constant";
   }
@@ -966,7 +966,7 @@ l_noret luaG_errormsg(lua_State* L)
   if (L->errfunc != 0)
   { /* is there an error handling function? */
     StkId errfunc = (static_cast<StkId>(L->errfunc));
-    lua_assert(((((&(L)->stack.p[errfunc]))->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
+    assert(((((&(L)->stack.p[errfunc]))->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
     setobj(L, (&(L)->stack.p[L->top]), (&(L)->stack.p[L->top - 1])); /* move argument */
     setobj(L, (&(L)->stack.p[L->top - 1]), (&(L)->stack.p[errfunc]));  /* push function */
     L->top++;                           /* assume EXTRA_STACK */

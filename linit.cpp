@@ -55,6 +55,6 @@ LUALIB_API void luaL_openselectedlibs(lua_State* L, int load, int preload)
       lua_setfield(L, -2, lib->name); /* add library to PRELOAD table */
     }
   }
-  lua_assert((mask >> 1) == LUA_UTF8LIBK);
+  assert((mask >> 1) == LUA_UTF8LIBK);
   lua_pop(L, 1); /* remove PRELOAD table */
 }

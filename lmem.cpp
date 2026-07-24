@@ -93,7 +93,7 @@ void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize,
     if (size < MINSIZEARRAY)
       size = MINSIZEARRAY; /* minimum size */
   }
-  lua_assert(nelems + 1 <= size && size <= limit);
+  assert(nelems + 1 <= size && size <= limit);
   /* 'limit' ensures that multiplication will not overflow */
   newblock = luaM_saferealloc_(L, block, ((size_t)(*psize)) * size_elems,
                                ((size_t)(size)) * size_elems);
@@ -113,7 +113,7 @@ void* luaM_shrinkvector_(lua_State* L, void* block, int* size,
   void* newblock;
   size_t oldsize = ((size_t)(*size)) * size_elem;
   size_t newsize = ((size_t)(final_n)) * size_elem;
-  lua_assert(newsize <= oldsize);
+  assert(newsize <= oldsize);
   newblock = luaM_saferealloc_(L, block, oldsize, newsize);
   *size = final_n;
   return newblock;
@@ -132,7 +132,7 @@ l_noret luaM_toobig(lua_State* L)
 void luaM_free_(lua_State* L, void* block, size_t osize)
 {
   global_State* g = G(L);
-  lua_assert((osize == 0) == (block == NULL));
+  assert((osize == 0) == (block == NULL));
   callfrealloc(g, block, osize, 0);
   g->GCdebt += ((l_mem)(osize));
 }
@@ -161,7 +161,7 @@ void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
 {
   void* newblock;
   global_State* g = G(L);
-  lua_assert((osize == 0) == (block == NULL));
+  assert((osize == 0) == (block == NULL));
   newblock = firsttry(g, block, osize, nsize);
   if (l_unlikely(newblock == NULL && nsize > 0))
   {
@@ -169,7 +169,7 @@ void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
     if (newblock == NULL) /* still no memory? */
       return NULL;        /* do not update 'GCdebt' */
   }
-  lua_assert((nsize == 0) == (newblock == NULL));
+  assert((nsize == 0) == (newblock == NULL));
   g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
   return newblock;
 }

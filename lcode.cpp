@@ -77,7 +77,7 @@ static int tonumeral(const expdesc* e, TValue* v)
 */
 static TValue* const2val(FuncState* fs, const expdesc* e)
 {
-  lua_assert(e->k == VCONST);
+  assert(e->k == VCONST);
   return &fs->ls->dyd->actvar.arr[e->u.info].k;
 }
 
@@ -180,10 +180,10 @@ static void fixjump(FuncState* fs, int pc, int dest)
 {
   Instruction* jmp = &fs->f->code[pc];
   int offset = dest - (pc + 1);
-  lua_assert(dest != NO_JUMP);
+  assert(dest != NO_JUMP);
   if (!(-OFFSET_sJ <= offset && offset <= MAXARG_sJ - OFFSET_sJ))
     luaX_syntaxerror(fs->ls, "control structure too long");
-  lua_assert(GET_OPCODE(*jmp) == OP_JMP);
+  assert(GET_OPCODE(*jmp) == OP_JMP);
   ((*jmp) = (((*jmp) & MASK0(SIZE_sJ, POS_sJ)) | ((((Instruction)(((unsigned int)((offset) + OFFSET_sJ)))) << POS_sJ) & MASK1(SIZE_sJ, POS_sJ))));
 }
 
@@ -329,7 +329,7 @@ static void patchlistaux(FuncState* fs, int list, int vtarget, int reg,
 */
 void luaK_patchlist(FuncState* fs, int list, int target)
 {
-  lua_assert(target <= fs->pc);
+  assert(target <= fs->pc);
   patchlistaux(fs, list, target, NO_REG, target);
 }
 
@@ -391,7 +391,7 @@ static void removelastlineinfo(FuncState* fs)
   }
   else
   { /* absolute line information */
-    lua_assert(f->abslineinfo[fs->nabslineinfo - 1].pc == pc);
+    assert(f->abslineinfo[fs->nabslineinfo - 1].pc == pc);
     fs->nabslineinfo--;           /* remove it */
     fs->iwthabs = MAXIWTHABS + 1; /* force next line info to be absolute */
   }
@@ -431,16 +431,16 @@ int luaK_code(FuncState* fs, Instruction i)
 */
 int luaK_codeABCk(FuncState* fs, OpCode o, int A, int B, int C, int k)
 {
-  lua_assert(getOpMode(o) == iABC);
-  lua_assert(A <= MAXARG_A && B <= MAXARG_B &&
+  assert(getOpMode(o) == iABC);
+  assert(A <= MAXARG_A && B <= MAXARG_B &&
              C <= MAXARG_C && (k & ~1) == 0);
   return luaK_code(fs, CREATE_ABCk(o, A, B, C, k));
 }
 
 int luaK_codevABCk(FuncState* fs, OpCode o, int A, int B, int C, int k)
 {
-  lua_assert(getOpMode(o) == ivABC);
-  lua_assert(A <= MAXARG_A && B <= MAXARG_vB &&
+  assert(getOpMode(o) == ivABC);
+  assert(A <= MAXARG_A && B <= MAXARG_vB &&
              C <= MAXARG_vC && (k & ~1) == 0);
   return luaK_code(fs, CREATE_vABCk(o, A, B, C, k));
 }
@@ -450,8 +450,8 @@ int luaK_codevABCk(FuncState* fs, OpCode o, int A, int B, int C, int k)
 */
 int luaK_codeABx(FuncState* fs, OpCode o, int A, int Bc)
 {
-  lua_assert(getOpMode(o) == iABx);
-  lua_assert(A <= MAXARG_A && Bc <= MAXARG_Bx);
+  assert(getOpMode(o) == iABx);
+  assert(A <= MAXARG_A && Bc <= MAXARG_Bx);
   return luaK_code(fs, CREATE_ABx(o, A, Bc));
 }
 
@@ -461,8 +461,8 @@ int luaK_codeABx(FuncState* fs, OpCode o, int A, int Bc)
 static int codeAsBx(FuncState* fs, OpCode o, int A, int Bc)
 {
   int b = Bc + OFFSET_sBx;
-  lua_assert(getOpMode(o) == iAsBx);
-  lua_assert(A <= MAXARG_A && b <= MAXARG_Bx);
+  assert(getOpMode(o) == iAsBx);
+  assert(A <= MAXARG_A && b <= MAXARG_Bx);
   return luaK_code(fs, CREATE_ABx(o, A, b));
 }
 
@@ -472,8 +472,8 @@ static int codeAsBx(FuncState* fs, OpCode o, int A, int Bc)
 static int codesJ(FuncState* fs, OpCode o, int sj, int k)
 {
   int j = sj + OFFSET_sJ;
-  lua_assert(getOpMode(o) == isJ);
-  lua_assert(j <= MAXARG_sJ && (k & ~1) == 0);
+  assert(getOpMode(o) == isJ);
+  assert(j <= MAXARG_sJ && (k & ~1) == 0);
   return luaK_code(fs, CREATE_sJ(o, j, k));
 }
 
@@ -482,7 +482,7 @@ static int codesJ(FuncState* fs, OpCode o, int sj, int k)
 */
 static int codeextraarg(FuncState* fs, int A)
 {
-  lua_assert(A <= MAXARG_Ax);
+  assert(A <= MAXARG_Ax);
   return luaK_code(fs, CREATE_Ax(OP_EXTRAARG, A));
 }
 
@@ -536,7 +536,7 @@ static void freereg(FuncState* fs, int reg)
   if (reg >= luaY_nvarstack(fs))
   {
     fs->freereg--;
-    lua_assert(reg == fs->freereg);
+    assert(reg == fs->freereg);
   }
 }
 
@@ -610,10 +610,10 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   int tag = luaH_get(fs->kcache, key, &val); /* query scanner table */
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
   { /* is there an index there? */
-    lua_assert((&val)->tt_ == LUA_VNUMINT);
+    assert((&val)->tt_ == LUA_VNUMINT);
     int k = ((int)(((&val)->value_).i));
     /* collisions can happen only for float keys */
-    lua_assert(((key)->tt_ == LUA_VNUMFLT) || luaV_rawequalobj(&f->k[k], v));
+    assert(((key)->tt_ == LUA_VNUMFLT) || luaV_rawequalobj(&f->k[k], v));
     return k; /* reuse index */
   }
   else
@@ -779,12 +779,12 @@ static void const2exp(TValue* v, expdesc* e)
   {
   case LUA_VNUMINT:
     e->k = VKINT;
-    lua_assert(v->tt_ == LUA_VNUMINT);
+    assert(v->tt_ == LUA_VNUMINT);
     e->u.ival = v->value_.i;
     break;
   case LUA_VNUMFLT:
     e->k = VKFLT;
-    lua_assert(v->tt_ == LUA_VNUMFLT);
+    assert(v->tt_ == LUA_VNUMFLT);
     e->u.nval = v->value_.n;
     break;
   case LUA_VFALSE:
@@ -798,12 +798,12 @@ static void const2exp(TValue* v, expdesc* e)
     break;
   case LUA_VSHRSTR:
     e->k = VKSTR;
-    lua_assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((v->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((v->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     e->u.strval = static_cast<TString*>(v->value_.gc);
     break;
   default:
-    lua_assert(0);
+    assert(0);
   }
 }
 
@@ -819,7 +819,7 @@ void luaK_setreturns(FuncState* fs, expdesc* e, int nresults)
     ((*pc) = (((*pc) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(nresults + 1)) << POS_C) & MASK1(SIZE_C, POS_C))));
   else
   {
-    lua_assert(e->k == VVARARG);
+    assert(e->k == VVARARG);
     ((*pc) = (((*pc) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(nresults + 1)) << POS_C) & MASK1(SIZE_C, POS_C))));
     ((*pc) = (((*pc) & MASK0(SIZE_A, POS_A)) | ((((Instruction)(fs->freereg)) << POS_A) & MASK1(SIZE_A, POS_A))));
     luaK_reserveregs(fs, 1);
@@ -831,7 +831,7 @@ void luaK_setreturns(FuncState* fs, expdesc* e, int nresults)
 */
 static int str2K(FuncState* fs, expdesc* e)
 {
-  lua_assert(e->k == VKSTR);
+  assert(e->k == VKSTR);
   e->u.info = stringK(fs, e->u.strval);
   e->k = VK;
   return e->u.info;
@@ -852,7 +852,7 @@ void luaK_setoneret(FuncState* fs, expdesc* e)
   if (e->k == VCALL)
   { /* expression is an open function call? */
     /* already returns 1 value */
-    lua_assert(GETARG_C(((fs)->f->code[(e)->u.info])) == 2);
+    assert(GETARG_C(((fs)->f->code[(e)->u.info])) == 2);
     e->k = VNONRELOC; /* result has fixed position */
     e->u.info = GETARG_A(((fs)->f->code[(e)->u.info]));
   }
@@ -1006,7 +1006,7 @@ static void discharge2reg(FuncState* fs, expdesc* e, int reg)
   }
   default:
   {
-    lua_assert(e->k == VJMP);
+    assert(e->k == VJMP);
     return; /* nothing to do... */
   }
   }
@@ -1255,7 +1255,7 @@ void luaK_storevar(FuncState* fs, expdesc* var, expdesc* ex)
     break;
   }
   default:
-    lua_assert(0); /* invalid var kind to store */
+    assert(0); /* invalid var kind to store */
   }
   freeexp(fs, ex);
 }
@@ -1266,7 +1266,7 @@ void luaK_storevar(FuncState* fs, expdesc* var, expdesc* ex)
 static void negatecondition(FuncState* fs, expdesc* e)
 {
   Instruction* pc = getjumpcontrol(fs, e->u.info);
-  lua_assert(testTMode(GET_OPCODE(*pc)) && GET_OPCODE(*pc) != OP_TESTSET &&
+  assert(testTMode(GET_OPCODE(*pc)) && GET_OPCODE(*pc) != OP_TESTSET &&
              GET_OPCODE(*pc) != OP_TEST);
   ((*pc) = (((*pc) & MASK0(1, POS_k)) | ((((Instruction)((GETARG_k(*pc) ^ 1))) << POS_k) & MASK1(1, POS_k))));
 }
@@ -1397,7 +1397,7 @@ static void codenot(FuncState* fs, expdesc* e)
     break;
   }
   default:
-    lua_assert(0); /* cannot happen */
+    assert(0); /* cannot happen */
   }
   /* interchange true and false lists */
   {
@@ -1479,7 +1479,7 @@ void luaK_self(FuncState* fs, expdesc* e, expdesc* key)
   base = e->u.info = fs->freereg; /* base register for op_self */
   e->k = VNONRELOC;               /* self expression has a fixed register */
   luaK_reserveregs(fs, 2);        /* method and 'self' produced by op_self */
-  lua_assert(key->k == VKSTR);
+  assert(key->k == VKSTR);
   /* is method name in a valid K index? */
   if (luaK_exp2K(fs, key))
   {
@@ -1513,7 +1513,7 @@ void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k)
   int keystr = -1;
   if (k->k == VKSTR)
     keystr = str2K(fs, k);
-  lua_assert(!hasjumps(t) &&
+  assert(!hasjumps(t) &&
              (t->k == VLOCAL || t->k == VVARGVAR ||
               t->k == VNONRELOC || t->k == VUPVAL));
   if (t->k == VUPVAL && !isKstr(fs, k)) /* upvalue indexed by non 'Kstr'? */
@@ -1522,14 +1522,14 @@ void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k)
   {
     lu_byte temp = ((lu_byte)(t->u.info)); /* upvalue index */
     t->u.ind.t = temp;                   /* (avoid a direct assignment; values overlap) */
-    lua_assert(isKstr(fs, k));
+    assert(isKstr(fs, k));
     fillidxk(t, k->u.info, VINDEXUP); /* literal short string */
   }
   else if (t->k == VVARGVAR)
   {                                          /* indexing the vararg parameter? */
     int kreg = luaK_exp2anyreg(fs, k);       /* put key in some register */
     lu_byte vreg = ((lu_byte)(t->u.var.ridx)); /* register with vararg param. */
-    lua_assert(vreg == fs->f->numparams);
+    assert(vreg == fs->f->numparams);
     t->u.ind.t = vreg;           /* (avoid a direct assignment; values may overlap?) */
     fillidxk(t, kreg, VVARGIND); /* 't' represents 'vararg[k]' */
   }
@@ -1573,7 +1573,7 @@ static int validop(int op, TValue* v1, TValue* v2)
   case LUA_OPIDIV:
   case LUA_OPMOD: /* division by 0 */
   {
-    lua_assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+    assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
     lua_Number n2 = (v2->tt_ == LUA_VNUMINT) ? (lua_Number)v2->value_.i : v2->value_.n;
     return n2 != 0;
   }
@@ -1596,12 +1596,12 @@ static int constfolding(FuncState* fs, int op, expdesc* e1,
   if (((&res)->tt_ == LUA_VNUMINT))
   {
     e1->k = VKINT;
-    lua_assert((&res)->tt_ == LUA_VNUMINT);
+    assert((&res)->tt_ == LUA_VNUMINT);
     e1->u.ival = ((&res)->value_).i;
   }
   else
   { /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
-    lua_assert((&res)->tt_ == LUA_VNUMFLT);
+    assert((&res)->tt_ == LUA_VNUMFLT);
     lua_Number n = ((&res)->value_).n;
     if ((!((n) == (n))) || n == 0)
       return 0;
@@ -1616,7 +1616,7 @@ static int constfolding(FuncState* fs, int op, expdesc* e1,
 */
 static inline OpCode binopr2op(BinOpr opr, BinOpr baser, OpCode base)
 {
-  lua_assert(baser <= opr &&
+  assert(baser <= opr &&
              ((baser == OPR_ADD && opr <= OPR_SHR) ||
               (baser == OPR_LT && opr <= OPR_LE)));
   return ((OpCode)((((int)(opr)) - ((int)(baser))) + ((int)(base))));
@@ -1636,7 +1636,7 @@ static inline OpCode unopr2op(UnOpr opr)
 */
 static inline TMS binopr2TM(BinOpr opr)
 {
-  lua_assert(OPR_ADD <= opr && opr <= OPR_SHR);
+  assert(OPR_ADD <= opr && opr <= OPR_SHR);
   return ((TMS)((((int)(opr)) - ((int)(OPR_ADD))) + ((int)(TM_ADD))));
 }
 
@@ -1684,9 +1684,9 @@ static void codebinexpval(FuncState* fs, BinOpr opr,
   OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
   int v2 = luaK_exp2anyreg(fs, e2); /* make sure 'e2' is in a register */
   /* 'e1' must be already in a register or it is a constant */
-  lua_assert((VNIL <= e1->k && e1->k <= VKSTR) ||
+  assert((VNIL <= e1->k && e1->k <= VKSTR) ||
              e1->k == VNONRELOC || e1->k == VRELOC);
-  lua_assert(OP_ADD <= op && op <= OP_SHR);
+  assert(OP_ADD <= op && op <= OP_SHR);
   finishbinexpval(fs, e1, e2, op, v2, 0, line, OP_MMBIN, binopr2TM(opr));
 }
 
@@ -1698,7 +1698,7 @@ static void codebini(FuncState* fs, OpCode op,
                      TMS event)
 {
   int v2 = int2sC(((int)(e2->u.ival))); /* immediate operand */
-  lua_assert(e2->k == VKINT);
+  assert(e2->k == VKINT);
   finishbinexpval(fs, e1, e2, op, v2, flip, line, OP_MMBINI, event);
 }
 
@@ -1855,7 +1855,7 @@ static void codeeq(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
   OpCode op;
   if (e1->k != VNONRELOC)
   {
-    lua_assert(e1->k == VK || e1->k == VKINT || e1->k == VKFLT);
+    assert(e1->k == VK || e1->k == VKINT || e1->k == VKFLT);
     swapexps(e1, e2);
   }
   r1 = luaK_exp2anyreg(fs, e1); /* 1st expression must be in register */
@@ -1900,7 +1900,7 @@ void luaK_prefix(FuncState* fs, UnOpr opr, expdesc* e, int line)
     codenot(fs, e);
     break;
   default:
-    lua_assert(0);
+    assert(0);
   }
 }
 
@@ -1967,7 +1967,7 @@ void luaK_infix(FuncState* fs, BinOpr op, expdesc* v)
     break;
   }
   default:
-    lua_assert(0);
+    assert(0);
   }
 }
 
@@ -1982,7 +1982,7 @@ static void codeconcat(FuncState* fs, expdesc* e1, expdesc* e2, int line)
   if (GET_OPCODE(*ie2) == OP_CONCAT)
   {                         /* is 'e2' a concatenation? */
     int n = GETARG_B(*ie2); /* # of elements concatenated in 'e2' */
-    lua_assert(e1->u.info + 1 == GETARG_A(*ie2));
+    assert(e1->u.info + 1 == GETARG_A(*ie2));
     freeexp(fs, e2);
     ((*ie2) = (((*ie2) & MASK0(SIZE_A, POS_A)) | ((((Instruction)(e1->u.info)) << POS_A) & MASK1(SIZE_A, POS_A)))); /* correct first element ('e1') */
     ((*ie2) = (((*ie2) & MASK0(SIZE_B, POS_B)) | ((((Instruction)(n + 1)) << POS_B) & MASK1(SIZE_B, POS_B))));      /* will concatenate one more element */
@@ -2008,14 +2008,14 @@ void luaK_posfix(FuncState* fs, BinOpr opr,
   {
   case OPR_AND:
   {
-    lua_assert(e1->t == NO_JUMP); /* list closed by 'luaK_infix' */
+    assert(e1->t == NO_JUMP); /* list closed by 'luaK_infix' */
     luaK_concat(fs, &e2->f, e1->f);
     *e1 = *e2;
     break;
   }
   case OPR_OR:
   {
-    lua_assert(e1->f == NO_JUMP); /* list closed by 'luaK_infix' */
+    assert(e1->f == NO_JUMP); /* list closed by 'luaK_infix' */
     luaK_concat(fs, &e2->t, e1->t);
     *e1 = *e2;
     break;
@@ -2096,7 +2096,7 @@ void luaK_posfix(FuncState* fs, BinOpr opr,
     break;
   }
   default:
-    lua_assert(0);
+    assert(0);
   }
 }
 
@@ -2130,7 +2130,7 @@ void luaK_settablesize(FuncState* fs, int pc, int ra, int asize, int hsize)
 */
 void luaK_setlist(FuncState* fs, int base, int nelems, int tostore)
 {
-  lua_assert(tostore != 0);
+  assert(tostore != 0);
   if (tostore == LUA_MULTRET)
     tostore = 0;
   if (nelems <= MAXARG_vC)
@@ -2179,7 +2179,7 @@ void luaK_finish(FuncState* fs)
     /* avoid "not used" warnings when assert is off (for 'onelua.c') */
     (void) luaP_isOT;
     (void) luaP_isIT;
-    lua_assert(i == 0 || luaP_isOT(*(pc - 1)) == luaP_isIT(*pc));
+    assert(i == 0 || luaP_isOT(*(pc - 1)) == luaP_isIT(*pc));
     switch (GET_OPCODE(*pc))
     {
     case OP_RETURN0:

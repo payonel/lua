@@ -270,7 +270,7 @@ static LocVar* localdebuginfo(FuncState* fs, int vidx)
   else
   {
     int idx = vd->vd.pidx;
-    lua_assert(idx < fs->ndebugvars);
+    assert(idx < fs->ndebugvars);
     return &fs->f->locvars[idx];
   }
 }
@@ -329,14 +329,14 @@ static void check_readonly(LexState* ls, expdesc* e)
     if (e->u.ind.ro) /* read-only? */
     {
       TValue* kv = &fs->f->k[e->u.ind.keystr];
-      lua_assert((kv->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-      lua_assert((kv->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((kv->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+      assert((kv->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       varname = static_cast<TString*>(kv->value_.gc);
     }
     break;
   }
   default:
-    lua_assert(e->k == VINDEXI); /* this one doesn't need any check */
+    assert(e->k == VINDEXI); /* this one doesn't need any check */
     return;                      /* integer index cannot be read-only */
   }
   if (varname)
@@ -417,14 +417,14 @@ static int newupvalue(FuncState* fs, TString* name, expdesc* v)
     up->instack = 1;
     up->idx = v->u.var.ridx;
     up->kind = getlocalvardesc(prev, v->u.var.vidx)->vd.kind;
-    lua_assert(eqstr(name, getlocalvardesc(prev, v->u.var.vidx)->vd.name));
+    assert(eqstr(name, getlocalvardesc(prev, v->u.var.vidx)->vd.name));
   }
   else
   {
     up->instack = 0;
     up->idx = ((lu_byte)(v->u.info));
     up->kind = prev->f->upvalues[v->u.info].kind;
-    lua_assert(eqstr(name, prev->f->upvalues[v->u.info].name));
+    assert(eqstr(name, prev->f->upvalues[v->u.info].name));
   }
   up->name = name;
   luaC_objbarrier(fs->ls->L, fs->f, name);
@@ -574,7 +574,7 @@ static void buildvar(LexState* ls, TString* varname, expdesc* var)
     if (info != -1 && ls->dyd->actvar.arr[info].vd.kind == GDKCONST)
       var->u.ind.ro = 1; /* mark variable as read-only */
     else                 /* anyway must be a global */
-      lua_assert(info == -1 || ls->dyd->actvar.arr[info].vd.kind == GDKREG);
+      assert(info == -1 || ls->dyd->actvar.arr[info].vd.kind == GDKREG);
   }
 }
 
@@ -649,7 +649,7 @@ static void closegoto(LexState* ls, int g, Labeldesc* label, int bup)
   FuncState* fs = ls->fs;
   Labellist* gl = &ls->dyd->gt; /* list of gotos */
   Labeldesc* gt = &gl->arr[g];  /* goto to be resolved */
-  lua_assert(eqstr(gt->name, label->name));
+  assert(eqstr(gt->name, label->name));
   if (l_unlikely(gt->nactvar < label->nactvar)) /* enter some scope? */
     jumpscopeerror(ls, gt);
   if (gt->close ||
@@ -785,7 +785,7 @@ static void enterblock(FuncState* fs, BlockCnt* bl, lu_byte isloop)
   bl->insidetbc = (fs->bl != NULL && fs->bl->insidetbc);
   bl->previous = fs->bl; /* link block in function's block list */
   fs->bl = bl;
-  lua_assert(fs->freereg == luaY_nvarstack(fs));
+  assert(fs->freereg == luaY_nvarstack(fs));
 }
 
 /*
@@ -794,7 +794,7 @@ static void enterblock(FuncState* fs, BlockCnt* bl, lu_byte isloop)
 static l_noret undefgoto(LexState* ls, Labeldesc* gt)
 {
   /* breaks are checked when created, cannot be undefined */
-  lua_assert(!eqstr(gt->name, ls->brkn));
+  assert(!eqstr(gt->name, ls->brkn));
   luaK_semerror(ls, "no visible label '%s' for <goto> at line %d",
                 getstr(gt->name), gt->line);
 }
@@ -808,7 +808,7 @@ static void leaveblock(FuncState* fs)
     luaK_codeABC(fs, OP_CLOSE, stklevel, 0, 0);
   fs->freereg = stklevel;                 /* free registers */
   removevars(fs, bl->nactvar);            /* remove block locals */
-  lua_assert(bl->nactvar == fs->nactvar); /* back to level on entry */
+  assert(bl->nactvar == fs->nactvar); /* back to level on entry */
   if (bl->isloop == 2)                    /* has to fix pending breaks? */
     createlabel(ls, ls->brkn, 0, 0);
   solvegotos(fs, bl);
@@ -885,7 +885,7 @@ static void open_func(LexState* ls, FuncState* fs, BlockCnt* bl)
   luaC_objbarrier(L, f, f->source);
   f->maxstacksize = 2;                           /* registers 0/1 are always valid */
   fs->kcache = luaH_new(L);                      /* create table for function */
-  lua_assert((fs->kcache->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((fs->kcache->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaD_anchorobj(L, ls->h, const_cast<GCObject*>(static_cast<const GCObject*>(fs->kcache))); /* anchor it */
   enterblock(fs, bl, 0);
 }
@@ -898,7 +898,7 @@ static void close_func(LexState* ls)
   TValue temp;
   luaK_ret(fs, luaY_nvarstack(fs), 0); /* final return */
   leaveblock(fs);
-  lua_assert(fs->bl == NULL);
+  assert(fs->bl == NULL);
   luaK_finish(fs);
   ((f->code) = ((Instruction*)(luaM_shrinkvector_(L, f->code, &(f->sizecode), fs->pc, sizeof(Instruction)))));
   ((f->lineinfo) = ((ls_byte*)(luaM_shrinkvector_(L, f->lineinfo, &(f->sizelineinfo), fs->pc, sizeof(ls_byte)))));
@@ -1024,7 +1024,7 @@ static void recfield(LexState* ls, ConsControl* cc)
 
 static void closelistfield(FuncState* fs, ConsControl* cc)
 {
-  lua_assert(cc->tostore > 0);
+  assert(cc->tostore > 0);
   luaK_exp2nextreg(fs, &cc->v);
   cc->v.k = VVOID;
   if (cc->tostore >= cc->maxtostore)
@@ -1263,7 +1263,7 @@ static void funcargs(LexState* ls, expdesc* f)
     return; /* to avoid warnings */
   }
   }
-  lua_assert(f->k == VNONRELOC);
+  assert(f->k == VNONRELOC);
   base = f->u.info; /* base register for call */
   if (hasmultret(args.k))
     nparams = LUA_MULTRET; /* open call */
@@ -1808,7 +1808,7 @@ static void exp1(LexState* ls)
   expdesc e;
   expr(ls, &e);
   luaK_exp2nextreg(ls->fs, &e);
-  lua_assert(e.k == VNONRELOC);
+  assert(e.k == VNONRELOC);
 }
 
 /*
@@ -2240,7 +2240,7 @@ static void retstat(LexState* ls)
       if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc)
       { /* tail call? */
         ((((fs)->f->code[(&e)->u.info])) = (((((fs)->f->code[(&e)->u.info])) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_TAILCALL)) << POS_OP) & MASK1(SIZE_OP, POS_OP))));
-        lua_assert(GETARG_A(((fs)->f->code[(&e)->u.info])) == luaY_nvarstack(fs));
+        assert(GETARG_A(((fs)->f->code[(&e)->u.info])) == luaY_nvarstack(fs));
       }
       nret = LUA_MULTRET; /* return all values */
     }
@@ -2251,7 +2251,7 @@ static void retstat(LexState* ls)
       else
       { /* values must go to the top of the stack */
         luaK_exp2nextreg(fs, &e);
-        lua_assert(nret == fs->freereg - first);
+        assert(nret == fs->freereg - first);
       }
     }
   }
@@ -2346,7 +2346,7 @@ static void statement(LexState* ls)
     break;
   }
   }
-  lua_assert(ls->fs->f->maxstacksize >= ls->fs->freereg &&
+  assert(ls->fs->f->maxstacksize >= ls->fs->freereg &&
              ls->fs->freereg >= luaY_nvarstack(ls->fs));
   ls->fs->freereg = luaY_nvarstack(ls->fs); /* free registers */
   leavelevel(ls);
@@ -2386,7 +2386,7 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, Mbuffer* buff,
   LClosure* cl;
   lexstate.h = anchor;                    /* table for scanner */
   cl = luaF_newLclosure(L, 1);            /* create main closure */
-  lua_assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaD_anchorobj(L, anchor, const_cast<GCObject*>(static_cast<const GCObject*>(cl))); /* anchor it in scanner table */
   funcstate.f = cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
@@ -2397,8 +2397,8 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, Mbuffer* buff,
   dyd->actvar.n = dyd->gt.n = dyd->label.n = 0;
   luaX_setinput(L, &lexstate, z, funcstate.f->source, firstchar);
   mainfunc(&lexstate, &funcstate);
-  lua_assert(!funcstate.prev && funcstate.nups == 1 && !lexstate.fs);
+  assert(!funcstate.prev && funcstate.nups == 1 && !lexstate.fs);
   /* all scopes should be correctly finished */
-  lua_assert(dyd->actvar.n == 0 && dyd->gt.n == 0 && dyd->label.n == 0);
+  assert(dyd->actvar.n == 0 && dyd->gt.n == 0 && dyd->label.n == 0);
   return cl;
 }

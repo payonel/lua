@@ -162,7 +162,7 @@ static l_mem objsize(GCObject* o)
   }
   case LUA_VSHRSTR:
   {
-    lua_assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
     res = sizeof(TString) + ts->content.capacity();
     break;
@@ -174,7 +174,7 @@ static l_mem objsize(GCObject* o)
   }
   default:
     res = 0;
-    lua_assert(0);
+    assert(0);
   }
   return ((l_mem)(res));
 }
@@ -196,11 +196,11 @@ static GCObject** getgclist(GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    lua_assert(u->nuvalue > 0);
+    assert(u->nuvalue > 0);
     return &u->gclist;
   }
   default:
-    lua_assert(0);
+    assert(0);
     return 0;
   }
 }
@@ -212,7 +212,7 @@ static GCObject** getgclist(GCObject* o)
 
 static void linkgclist_(GCObject* o, GCObject** pnext, GCObject** list)
 {
-  lua_assert(!isgray(o)); /* cannot be in a gray list */
+  assert(!isgray(o)); /* cannot be in a gray list */
   *pnext = *list;
   *list = o;
   set2gray(o); /* now it is */
@@ -232,7 +232,7 @@ static void linkgclist_(GCObject* o, GCObject** pnext, GCObject** list)
 */
 static void clearkey(Node* n)
 {
-  lua_assert(((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
+  assert(((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
   if (((n)->key_tt & BIT_ISCOLLECTABLE))
     ((n)->key_tt = LUA_TDEADKEY); /* unused key; remove it */
 }
@@ -275,19 +275,19 @@ static int iscleared(global_State* g, const GCObject* o)
 void luaC_barrier_(lua_State* L, GCObject* o, GCObject* v)
 {
   global_State* g = G(L);
-  lua_assert(isblack(o) && iswhite(v) && !isdead(g, v) && !isdead(g, o));
+  assert(isblack(o) && iswhite(v) && !isdead(g, v) && !isdead(g, o));
   if (keepinvariant(g))
   {                         /* must keep invariant? */
     reallymarkobject(g, v); /* restore invariant */
     if (isold(o))
     {
-      lua_assert(!isold(v)); /* white object could not be old */
+      assert(!isold(v)); /* white object could not be old */
       setage(v, G_OLD0);     /* restore generational invariant */
     }
   }
   else
   { /* sweep phase */
-    lua_assert(issweepphase(g));
+    assert(issweepphase(g));
     if (g->gckind != KGC_GENMINOR) /* incremental mode? */
       makewhite(g, o);             /* mark 'o' as white to avoid other barriers */
   }
@@ -300,8 +300,8 @@ void luaC_barrier_(lua_State* L, GCObject* o, GCObject* v)
 void luaC_barrierback_(lua_State* L, GCObject* o)
 {
   global_State* g = G(L);
-  lua_assert(isblack(o) && !isdead(g, o));
-  lua_assert((g->gckind != KGC_GENMINOR) || (isold(o) && getage(o) != G_TOUCHED1));
+  assert(isblack(o) && !isdead(g, o));
+  assert((g->gckind != KGC_GENMINOR) || (isold(o) && getage(o) != G_TOUCHED1));
   if (getage(o) == G_TOUCHED2) /* already in gray list? */
     set2gray(o);               /* make it gray to become touched1 */
   else                         /* link it in 'grayagain' and paint it gray */
@@ -313,7 +313,7 @@ void luaC_barrierback_(lua_State* L, GCObject* o)
 void luaC_fix(lua_State* L, GCObject* o)
 {
   global_State* g = G(L);
-  lua_assert(g->allgc == o); /* object must be 1st in 'allgc' list! */
+  assert(g->allgc == o); /* object must be 1st in 'allgc' list! */
   set2gray(o);               /* they will be gray forever */
   setage(o, G_OLD);          /* and old forever */
   g->allgc = o->next;        /* remove object from 'allgc' list */
@@ -405,7 +405,7 @@ static void reallymarkobject(global_State* g, GCObject* o)
     break;
   }
   default:
-    lua_assert(0);
+    assert(0);
     break;
   }
 }
@@ -452,15 +452,15 @@ static void remarkupvals(global_State* g)
     else
     { /* thread is not marked or without upvalues */
       UpVal* uv;
-      lua_assert(!isold(thread) || thread->openupval == NULL);
+      assert(!isold(thread) || thread->openupval == NULL);
       *p = thread->twups;     /* remove thread from the list */
       thread->twups = thread; /* mark that it is out of list */
       for (uv = thread->openupval; uv != NULL; uv = uv->opennext)
       {
-        lua_assert(getage(uv) <= getage(thread));
+        assert(getage(uv) <= getage(thread));
         if (!iswhite(uv))
         { /* upvalue already visited? */
-          lua_assert(upisopen(uv) && isgray(uv));
+          assert(upisopen(uv) && isgray(uv));
           markvalue(g, upvalval(uv)); /* mark its value */
         }
       }
@@ -510,7 +510,7 @@ static void restartcollection(global_State* g)
 */
 static void genlink(global_State* g, GCObject* o)
 {
-  lua_assert(isblack(o));
+  assert(isblack(o));
   if (getage(o) == G_TOUCHED1)
   {                                 /* touched in this cycle? */
     linkgclist_((o), getgclist(o), &(g->grayagain)); /* link it back in 'grayagain' */
@@ -538,7 +538,7 @@ static void traverseweakvalue(global_State* g, Table* h)
       clearkey(n);        /* clear its key */
     else
     {
-      lua_assert(!((n)->key_tt == LUA_TNIL));
+      assert(!((n)->key_tt == LUA_TNIL));
       markkey(g, n);
       if (!hasclears && iscleared(g, gcvalueN((&(n)->val)))) /* a white value? */
         hasclears = 1;                                   /* table will have to be cleared */
@@ -550,7 +550,7 @@ static void traverseweakvalue(global_State* g, Table* h)
     linkgclist_((h), &(h)->gclist, &(g->weak)); /* has to be cleared later */
   else
   {
-    lua_assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(h)));
   }
 }
@@ -622,7 +622,7 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
     linkgclist_((h), &(h)->gclist, &(g->allweak));   /* may have to clean white keys */
   else
   {
-    lua_assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(h))); /* check whether collector still needs to see it */
   }
   return marked;
@@ -638,12 +638,12 @@ static void traversestrongtable(global_State* g, Table* h)
       clearkey(n);        /* clear its key */
     else
     {
-      lua_assert(!((n)->key_tt == LUA_TNIL));
+      assert(!((n)->key_tt == LUA_TNIL));
       markkey(g, n);
       markvalue(g, (&(n)->val));
     }
   }
-  lua_assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(h)));
 }
 
@@ -657,7 +657,7 @@ static int getmode(global_State* g, Table* h)
     return 0; /* ignore non-string modes */
   else
   {
-    lua_assert((mode->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((mode->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     const char* smode = getstr(static_cast<TString*>(mode->value_.gc));
     const char* weakkey = strchr(smode, 'k');
     const char* weakvalue = strchr(smode, 'v');
@@ -695,7 +695,7 @@ static l_mem traverseudata(global_State* g, Udata* u)
   markobjectN(g, u->metatable); /* mark its metatable */
   for (i = 0; i < u->nuvalue; i++)
     markvalue(g, &u->uv[i].uv);
-  lua_assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(u)));
   return 1 + u->nuvalue;
 }
@@ -764,7 +764,7 @@ static l_mem traversethread(global_State* g, lua_State* th)
     linkgclist_((th), &(th)->gclist, &(g->grayagain)); /* insert into 'grayagain' list */
   if (th->stack.p == NULL)
     return 0; /* stack not completely built yet */
-  lua_assert(g->gcstate == GCSatomic ||
+  assert(g->gcstate == GCSatomic ||
              th->openupval == NULL || isintwups(th));
   for (; o < th->top; o++) /* mark live elements in the stack */
     markvalue(g, (&(th)->stack.p[o]));
@@ -810,7 +810,7 @@ static l_mem propagatemark(global_State* g)
   case LUA_VTHREAD:
     return traversethread(g, static_cast<lua_State*>(o));
   default:
-    lua_assert(0);
+    assert(0);
     return 0;
   }
 }
@@ -839,7 +839,7 @@ static void convergeephemerons(global_State* g)
     changed = 0;
     while ((w = next) != NULL)
     { /* for each ephemeron table */
-      lua_assert(w->tt == LUA_VTABLE);
+      assert(w->tt == LUA_VTABLE);
       Table* h = static_cast<Table*>(w);
       next = h->gclist; /* list is rebuilt during loop */
       nw2black(h);      /* out of the list (for now) */
@@ -868,7 +868,7 @@ static void clearbykeys(global_State* g, GCObject* l)
 {
   for (; l; l = static_cast<Table*>(l)->gclist)
   {
-    lua_assert(l->tt == LUA_VTABLE);
+    assert(l->tt == LUA_VTABLE);
     Table* h = static_cast<Table*>(l);
     Node* limit = gnodelast(h);
     Node* n;
@@ -890,7 +890,7 @@ static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
 {
   for (; l != f; l = static_cast<Table*>(l)->gclist)
   {
-    lua_assert(l->tt == LUA_VTABLE);
+    assert(l->tt == LUA_VTABLE);
     Table* h = static_cast<Table*>(l);
     Node *n, *limit = gnodelast(h);
     unsigned int i;
@@ -920,7 +920,7 @@ static void freeupval(lua_State* L, UpVal* uv)
 
 static void freeobj(lua_State* L, GCObject* o)
 {
-  assert_code(l_mem newmem = gettotalbytes(G(L)) - objsize(o));
+  l_mem newmem = gettotalbytes(G(L)) - objsize(o);
   switch (o->tt)
   {
   case LUA_VPROTO:
@@ -955,7 +955,7 @@ static void freeobj(lua_State* L, GCObject* o)
   }
   case LUA_VSHRSTR:
   {
-    lua_assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
     luaS_remove(L, ts);
     luaM_release(L, ts->content.capacity());
@@ -964,9 +964,9 @@ static void freeobj(lua_State* L, GCObject* o)
     break;
   }
   default:
-    lua_assert(0);
+    assert(0);
   }
-  lua_assert(gettotalbytes(G(L)) == newmem);
+  assert(gettotalbytes(G(L)) == newmem);
 }
 
 /*
@@ -1036,7 +1036,7 @@ static void checkSizes(lua_State* L, global_State* g)
 static GCObject* udata2finalize(global_State* g)
 {
   GCObject* o = g->tobefnz; /* get first element */
-  lua_assert(tofinalize(o));
+  assert(tofinalize(o));
   g->tobefnz = o->next; /* remove it from 'tobefnz' list */
   o->next = g->allgc;   /* return it to 'allgc' list */
   g->allgc = o;
@@ -1058,7 +1058,7 @@ static void GCTM(lua_State* L)
   global_State* g = G(L);
   const TValue* tm;
   TValue v;
-  lua_assert(!g->gcemergency);
+  assert(!g->gcemergency);
   setgcovalue(L, &v, udata2finalize(g));
   tm = luaT_gettmbyobj(L, &v, TM_GC);
   if (!notm(tm))
@@ -1117,7 +1117,7 @@ static void separatetobefnz(global_State* g, int all)
   GCObject** lastnext = findlast(&g->tobefnz);
   while ((curr = *p) != g->finobjold1)
   { /* traverse all finalizable objects */
-    lua_assert(tofinalize(curr));
+    assert(tofinalize(curr));
     if (!(iswhite(curr) || all)) /* not being collected? */
       p = &curr->next;           /* don't bother with it */
     else
@@ -1237,7 +1237,7 @@ static void sweep2old(lua_State* L, GCObject** p)
   {
     if (iswhite(curr))
     { /* is 'curr' dead? */
-      lua_assert(isdead(g, curr));
+      assert(isdead(g, curr));
       *p = curr->next;  /* remove 'curr' from list */
       freeobj(L, curr); /* erase 'curr' */
     }
@@ -1246,7 +1246,7 @@ static void sweep2old(lua_State* L, GCObject** p)
       setage(curr, G_OLD);
       if (curr->tt == LUA_VTHREAD)
       { /* threads must be watched */
-        lua_assert(curr->tt == LUA_VTHREAD);
+        assert(curr->tt == LUA_VTHREAD);
         lua_State* th = static_cast<lua_State*>(curr);
         linkgclist_((th), &(th)->gclist, &(g->grayagain)); /* insert into 'grayagain' list */
       }
@@ -1290,7 +1290,7 @@ static GCObject** sweepgen(lua_State* L, global_State* g, GCObject** p,
   {
     if (iswhite(curr))
     { /* is 'curr' dead? */
-      lua_assert(!isold(curr) && isdead(g, curr));
+      assert(!isold(curr) && isdead(g, curr));
       *p = curr->next;  /* remove 'curr' from list */
       freeobj(L, curr); /* erase 'curr' */
     }
@@ -1304,7 +1304,7 @@ static GCObject** sweepgen(lua_State* L, global_State* g, GCObject** p,
       }
       else
       {                            /* all other objects will be old, and so keep their color */
-        lua_assert(age != G_OLD1); /* advanced in 'markold' */
+        assert(age != G_OLD1); /* advanced in 'markold' */
         setage(curr, nextage[age]);
         if (getage(curr) == G_OLD1)
         {
@@ -1341,19 +1341,19 @@ static GCObject** correctgraylist(GCObject** p)
       goto remove; /* remove all white objects */
     else if (getage(curr) == G_TOUCHED1)
     { /* touched in this cycle? */
-      lua_assert(isgray(curr));
+      assert(isgray(curr));
       nw2black(curr); /* make it black, for next barrier */
       setage(curr, G_TOUCHED2);
       goto remain; /* keep it in the list and go to next element */
     }
     else if (curr->tt == LUA_VTHREAD)
     {
-      lua_assert(isgray(curr));
+      assert(isgray(curr));
       goto remain; /* keep non-white threads on the list */
     }
     else
     {                                 /* everything else is removed */
-      lua_assert(isold(curr));        /* young objects should be white here */
+      assert(isold(curr));        /* young objects should be white here */
       if (getage(curr) == G_TOUCHED2) /* advance from TOUCHED2... */
         setage(curr, G_OLD);          /* ... to OLD */
       nw2black(curr);                 /* make object black (to be removed) */
@@ -1398,7 +1398,7 @@ static void markold(global_State* g, GCObject* from, GCObject* to)
   {
     if (getage(p) == G_OLD1)
     {
-      lua_assert(!iswhite(p));
+      assert(!iswhite(p));
       setage(p, G_OLD); /* now they are old */
       if (isblack(p))
         reallymarkobject(g, p);
@@ -1459,7 +1459,7 @@ static void youngcollection(lua_State* L, global_State* g)
   l_mem marked = g->GCmarked; /* preserve 'g->GCmarked' */
   GCObject** psurvival;       /* to point to first non-dead survival object */
   GCObject* dummy;            /* dummy out parameter to 'sweepgen' */
-  lua_assert(g->gcstate == GCSpropagate);
+  assert(g->gcstate == GCSpropagate);
   if (g->firstold1)
   {                                         /* are there regular OLD1 objects? */
     markold(g, g->firstold1, g->reallyold); /* mark them */
@@ -1571,7 +1571,7 @@ void luaC_changemode(lua_State* L, int newmode)
       minor2inc(L, g, KGC_INC); /* entering incremental mode */
     else
     {
-      lua_assert(newmode == KGC_GENMINOR);
+      assert(newmode == KGC_GENMINOR);
       entergen(L, g);
     }
   }
@@ -1631,7 +1631,7 @@ static void entersweep(lua_State* L)
 {
   global_State* g = G(L);
   g->gcstate = GCSswpallgc;
-  lua_assert(g->sweepgc == NULL);
+  assert(g->sweepgc == NULL);
   g->sweepgc = sweeptolive(L, &g->allgc);
 }
 
@@ -1659,11 +1659,11 @@ void luaC_freeallobjects(lua_State* L)
   g->gcstp = GCSTPCLS; /* no extra finalizers after here */
   luaC_changemode(L, KGC_INC);
   separatetobefnz(g, 1); /* separate all objects with finalizers */
-  lua_assert(g->finobj == NULL);
+  assert(g->finobj == NULL);
   callallpendingfinalizers(L);
-  lua_assert((mainthread(g)->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((mainthread(g)->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   deletelist(L, g->allgc, const_cast<GCObject*>(static_cast<const GCObject*>(mainthread(g))));
-  lua_assert(g->finobj == NULL);   /* no new finalizers */
+  assert(g->finobj == NULL);   /* no new finalizers */
   deletelist(L, g->fixedgc, NULL); /* collect fixed objects */
 }
 
@@ -1673,8 +1673,8 @@ static void atomic(lua_State* L)
   GCObject *origweak, *origall;
   GCObject* grayagain = g->grayagain; /* save original list */
   g->grayagain = NULL;
-  lua_assert(g->ephemeron == NULL && g->weak == NULL);
-  lua_assert(!iswhite(mainthread(g)));
+  assert(g->ephemeron == NULL && g->weak == NULL);
+  assert(!iswhite(mainthread(g)));
   g->gcstate = GCSatomic;
   markobject(g, L); /* mark running thread */
   /* registry and global metatables may be changed by API */
@@ -1706,7 +1706,7 @@ static void atomic(lua_State* L)
   clearbyvalues(g, g->allweak, origall);
   luaS_clearcache(g);
   g->currentwhite = ((lu_byte)(otherwhite(g))); /* flip current white */
-  lua_assert(g->gray == NULL);
+  assert(g->gray == NULL);
 }
 
 /*
@@ -1746,7 +1746,7 @@ static l_mem singlestep(lua_State* L, int fast)
 {
   global_State* g = G(L);
   l_mem stepresult;
-  lua_assert(!g->gcstopem); /* collector is not reentrant */
+  assert(!g->gcstopem); /* collector is not reentrant */
   g->gcstopem = 1;          /* no emergency collections while collecting */
   switch (g->gcstate)
   {
@@ -1822,7 +1822,7 @@ static l_mem singlestep(lua_State* L, int fast)
     break;
   }
   default:
-    lua_assert(0);
+    assert(0);
     return 0;
   }
   g->gcstopem = 0;
@@ -1837,7 +1837,7 @@ static l_mem singlestep(lua_State* L, int fast)
 void luaC_runtilstate(lua_State* L, int state, int fast)
 {
   global_State* g = G(L);
-  lua_assert(g->gckind == KGC_INC);
+  assert(g->gckind == KGC_INC);
   while (state != g->gcstate)
     singlestep(L, fast);
 }
@@ -1879,7 +1879,7 @@ static void incstep(lua_State* L, global_State* g)
 void luaC_step(lua_State* L)
 {
   global_State* g = G(L);
-  lua_assert(!g->gcemergency);
+  assert(!g->gcemergency);
   if (!gcrunning(g))
   {                          /* not running? */
     if (g->gcstp & GCSTPUSR) /* stopped by the user? */
@@ -1929,7 +1929,7 @@ static void fullinc(lua_State* L, global_State* g)
 void luaC_fullgc(lua_State* L, int isemergency)
 {
   global_State* g = G(L);
-  lua_assert(!g->gcemergency);
+  assert(!g->gcemergency);
   g->gcemergency = ((lu_byte)(isemergency)); /* set flag */
   switch (g->gckind)
   {

@@ -353,7 +353,7 @@ static void hookf(lua_State* L, lua_Debug* ar)
       lua_pushinteger(L, ar->currentline); /* push current line */
     else
       lua_pushnil(L);
-    lua_assert(lua_getinfo(L, "lS", ar));
+    assert(lua_getinfo(L, "lS", ar));
     lua_call(L, 2, 0); /* call hook function */
   }
 }

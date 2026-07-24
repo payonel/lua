@@ -17,8 +17,8 @@ static l_forceinline int pcRel(const Instruction* pc, const Proto* p)
 static l_forceinline LClosure* ci_func(lua_State* L, const CallInfo* ci)
 {
   const TValue* o = &L->stack.p[ci->func];
-  lua_assert(o->tt_ == ctb(LUA_VLCL));
-  lua_assert(o->value_.gc->tt == LUA_VLCL);
+  assert(o->tt_ == ctb(LUA_VLCL));
+  assert(o->value_.gc->tt == LUA_VLCL);
   return static_cast<LClosure*>(o->value_.gc);
 }
 

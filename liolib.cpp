@@ -131,7 +131,7 @@ static FILE* tofile(lua_State* L)
   LStream* p = tolstream(L);
   if (l_unlikely(isclosed(p)))
     luaL_error(L, "attempt to use a closed file");
-  lua_assert(p->f);
+  assert(p->f);
   return p->f;
 }
 
@@ -609,7 +609,7 @@ static int io_readline(lua_State* L)
   for (i = 1; i <= n; i++) /* push arguments to 'g_read' */
     lua_pushvalue(L, lua_upvalueindex(3 + i));
   n = g_read(L, p->f, 2);   /* 'n' is number of results */
-  lua_assert(n > 0);        /* should return at least a nil */
+  assert(n > 0);        /* should return at least a nil */
   if (lua_toboolean(L, -n)) /* read at least one value? */
     return n;               /* return them */
   else

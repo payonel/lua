@@ -37,7 +37,7 @@ static inline LX* fromstate(lua_State* L)
 void luaE_setdebt(global_State* g, l_mem debt)
 {
   l_mem tb = gettotalbytes(g);
-  lua_assert(tb > 0);
+  assert(tb > 0);
   if (debt > MAX_LMEM - tb)
     debt = MAX_LMEM - tb; /* will make GCtotalbytes == MAX_LMEM */
   g->GCtotalbytes = tb + debt;
@@ -163,7 +163,7 @@ static void freestack(lua_State* L)
     return;            /* stack not completely built yet */
   L->ci = &L->base_ci; /* free the entire 'ci' list */
   freeCI(L);
-  lua_assert(L->nci == 0);
+  assert(L->nci == 0);
   /* free stack */
   luaM_free_(L, (L->stack.p), (((size_t)(stacksize(L) + EXTRA_STACK))) * sizeof(*(L->stack.p)));
 }
@@ -258,7 +258,7 @@ static void close_state(lua_State* L)
   }
   G(L)->strt.~unordered_map();
   freestack(L);
-  lua_assert(gettotalbytes(g) == sizeof(global_State));
+  assert(gettotalbytes(g) == sizeof(global_State));
   (*g->frealloc)(g->ud, g, sizeof(global_State), 0); /* free main block */
 }
 
@@ -271,7 +271,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   luaC_checkGC(L);
   /* create new thread */
   o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX));
-  lua_assert(o->tt == LUA_VTHREAD);
+  assert(o->tt == LUA_VTHREAD);
   L1 = static_cast<lua_State*>(o);
   /* anchor it on L stack */
   setthvalue(L, (&(L)->stack.p[L->top]), L1);
@@ -293,7 +293,7 @@ void luaE_freethread(lua_State* L, lua_State* L1)
 {
   LX* l = fromstate(L1);
   luaF_closeupval(L1, 0); /* close all upvalues */
-  lua_assert(L1->openupval == NULL);
+  assert(L1->openupval == NULL);
   luai_userstatefree(L, L1);
   freestack(L1);
   luaM_free_(L, (l), sizeof(*(l)));
@@ -338,7 +338,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);
   preinit_thread(L, g);
-  lua_assert((L->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((L->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   g->allgc = const_cast<GCObject*>(static_cast<const GCObject*>(L)); /* by now, only object is the main thread */
   L->next = NULL;
   incnny(L); /* main thread is always non yieldable */
@@ -407,7 +407,7 @@ void luaE_warnerror(lua_State* L, const char* where)
   const char* msg;
   if ((errobj->tt_ & NOVARIANT_MASK) == LUA_TSTRING)
   {
-    lua_assert((errobj->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((errobj->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     msg = getstr(static_cast<TString*>(errobj->value_.gc));
   }
   else

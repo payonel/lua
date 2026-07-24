@@ -208,7 +208,7 @@ static void freeblock(Memcontrol* mc, memHeader* block)
     size_t size = block->d.size;
     int i;
     for (i = 0; i < MARKSIZE; i++) /* check marks after block */
-      lua_assert(*(((char*)(block + 1)) + size + i) == MARK);
+      assert(*(((char*)(block + 1)) + size + i) == MARK);
     mc->objcount[block->d.type]--;
     dbg_unlink(block);
     memset(block, -MARK, sizeof(memHeader) + size + MARKSIZE); /* erase block */
@@ -237,7 +237,7 @@ static void* debug_realloc(void* ud, void* b, size_t oldsize, size_t size)
   {
     block--; /* go to real header */
     type = block->d.type;
-    lua_assert(oldsize == block->d.size);
+    assert(oldsize == block->d.size);
   }
   if (size == 0)
   {
@@ -298,8 +298,7 @@ static void* debug_realloc(void* ud, void* b, size_t oldsize, size_t size)
 ** {=====================================================================
 ** Functions to check memory consistency.
 ** Most of these checks are done through asserts, so this code does
-** not make sense with asserts off. For this reason, it uses 'assert'
-** directly, instead of 'lua_assert'.
+** not make sense with asserts off.
 ** ======================================================================
 */
 
@@ -359,8 +358,8 @@ static void lua_printvalue(TValue* v)
     break;
   }
   case LUA_VSHRSTR:
-    lua_assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert((v->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert((v->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     printf("'%s'", getstr(static_cast<TString*>(v->value_.gc)));
     break;
   case LUA_VFALSE:
@@ -373,8 +372,8 @@ static void lua_printvalue(TValue* v)
     printf("light udata: %p", v->value_.p);
     break;
   case LUA_VUSERDATA:
-    lua_assert(v->tt_ == ctb(LUA_VUSERDATA));
-    lua_assert(v->value_.gc->tt == LUA_VUSERDATA);
+    assert(v->tt_ == ctb(LUA_VUSERDATA));
+    assert(v->value_.gc->tt == LUA_VUSERDATA);
     printf("full udata: %p", static_cast<Udata*>(v->value_.gc));
     break;
   case LUA_VNIL:
@@ -384,27 +383,27 @@ static void lua_printvalue(TValue* v)
     printf("light C function: %p", v->value_.f);
     break;
   case LUA_VCCL:
-    lua_assert(v->tt_ == ctb(LUA_VCCL));
-    lua_assert(v->value_.gc->tt == LUA_VCCL);
+    assert(v->tt_ == ctb(LUA_VCCL));
+    assert(v->value_.gc->tt == LUA_VCCL);
     printf("C closure: %p", static_cast<CClosure*>(v->value_.gc));
     break;
   case LUA_VLCL:
-    lua_assert(v->tt_ == ctb(LUA_VLCL));
-    lua_assert(v->value_.gc->tt == LUA_VLCL);
+    assert(v->tt_ == ctb(LUA_VLCL));
+    assert(v->value_.gc->tt == LUA_VLCL);
     printf("Lua function: %p", static_cast<LClosure*>(v->value_.gc));
     break;
   case LUA_VTHREAD:
-    lua_assert(v->tt_ == ctb(LUA_VTHREAD));
-    lua_assert(v->value_.gc->tt == LUA_VTHREAD);
+    assert(v->tt_ == ctb(LUA_VTHREAD));
+    assert(v->value_.gc->tt == LUA_VTHREAD);
     printf("thread: %p", static_cast<lua_State*>(v->value_.gc));
     break;
   case LUA_VTABLE:
-    lua_assert(v->tt_ == ctb(LUA_VTABLE));
-    lua_assert(v->value_.gc->tt == LUA_VTABLE);
+    assert(v->tt_ == ctb(LUA_VTABLE));
+    assert(v->value_.gc->tt == LUA_VTABLE);
     printf("table: %p", static_cast<Table*>(v->value_.gc));
     break;
   default:
-    lua_assert(0);
+    assert(0);
   }
 }
 
@@ -449,7 +448,7 @@ static void checktable(global_State* g, Table* h)
   unsigned int i;
   unsigned int asize = h->asize;
   Node *n, *limit = gnode(h, sizenode(h));
-  lua_assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   GCObject* hgc = const_cast<GCObject*>(static_cast<const GCObject*>(h));
   checkobjrefN(g, hgc, h->metatable);
   for (i = 0; i < asize; i++)
@@ -474,7 +473,7 @@ static void checktable(global_State* g, Table* h)
 static void checkudata(global_State* g, Udata* u)
 {
   int i;
-  lua_assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   GCObject* hgc = const_cast<GCObject*>(static_cast<const GCObject*>(u));
   checkobjrefN(g, hgc, u->metatable);
   for (i = 0; i < u->nuvalue; i++)
@@ -484,7 +483,7 @@ static void checkudata(global_State* g, Udata* u)
 static void checkproto(global_State* g, Proto* f)
 {
   int i;
-  lua_assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   GCObject* fgc = const_cast<GCObject*>(static_cast<const GCObject*>(f));
   checkobjrefN(g, fgc, f->source);
   for (i = 0; i < f->sizek; i++)
@@ -502,7 +501,7 @@ static void checkproto(global_State* g, Proto* f)
 
 static void checkCclosure(global_State* g, CClosure* cl)
 {
-  lua_assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   GCObject* clgc = const_cast<GCObject*>(static_cast<const GCObject*>(cl));
   int i;
   for (i = 0; i < cl->nupvalues; i++)
@@ -511,7 +510,7 @@ static void checkCclosure(global_State* g, CClosure* cl)
 
 static void checkLclosure(global_State* g, LClosure* cl)
 {
-  lua_assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   GCObject* clgc = const_cast<GCObject*>(static_cast<const GCObject*>(cl));
   int i;
   checkobjrefN(g, clgc, cl->p);
@@ -523,7 +522,7 @@ static void checkLclosure(global_State* g, LClosure* cl)
       checkobjrefN(g, clgc, uv);
       if (!upisopen(uv))
       {
-        lua_assert((uv->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+        assert((uv->tt & NOVARIANT_MASK) >= LUA_TSTRING);
         checkvalref(g, const_cast<GCObject*>(static_cast<const GCObject*>(uv)), upvalval(uv));
       }
     }
@@ -537,8 +536,8 @@ static int lua_checkpc(lua_State* L, CallInfo* ci)
   else
   {
     StkId f = ci->func;
-    lua_assert((&L->stack.p[f])->tt_ == ctb(LUA_VLCL));
-    lua_assert((&L->stack.p[f])->value_.gc->tt == LUA_VLCL);
+    assert((&L->stack.p[f])->tt_ == ctb(LUA_VLCL));
+    assert((&L->stack.p[f])->value_.gc->tt == LUA_VLCL);
     Proto* p = static_cast<LClosure*>((&L->stack.p[f])->value_.gc)->p;
     return p->code <= ci->u.l.savedpc &&
            ci->u.l.savedpc <= p->code + p->sizecode;
@@ -686,7 +685,7 @@ static l_mem checkgraylist(global_State* g, GCObject* o)
       break;
     case LUA_VUSERDATA:
       assert(static_cast<Udata*>(o)->nuvalue > 0);
-      lua_assert(o->tt == LUA_VUSERDATA);
+      assert(o->tt == LUA_VUSERDATA);
       o = static_cast<Udata*>(o)->gclist;
       break;
     default:
@@ -778,10 +777,10 @@ static int lua_checkmemory(lua_State* L)
   if (keepinvariant(g))
   {
     assert(!iswhite(mainthread(g)));
-    lua_assert((&g->l_registry)->tt_ & BIT_ISCOLLECTABLE);
+    assert((&g->l_registry)->tt_ & BIT_ISCOLLECTABLE);
     assert(!iswhite(((&g->l_registry)->value_).gc));
   }
-  lua_assert((&g->l_registry)->tt_ & BIT_ISCOLLECTABLE);
+  assert((&g->l_registry)->tt_ & BIT_ISCOLLECTABLE);
   assert(!isdead(g, ((&g->l_registry)->value_).gc));
   assert(g->sweepgc == NULL || issweepphase(g));
   totalin = checkgrays(g);
@@ -1065,7 +1064,7 @@ static int settrick(lua_State* L)
     l_Trick = NULL;
   else
   {
-    lua_assert(obj_at(L, 1)->tt_ & BIT_ISCOLLECTABLE);
+    assert(obj_at(L, 1)->tt_ & BIT_ISCOLLECTABLE);
     l_Trick = obj_at(L, 1)->value_.gc;
   }
   return 0;
@@ -1080,7 +1079,7 @@ static int gc_color(lua_State* L)
     lua_pushstring(L, "no collectable");
   else
   {
-    lua_assert(o->tt_ & BIT_ISCOLLECTABLE);
+    assert(o->tt_ & BIT_ISCOLLECTABLE);
     GCObject* obj = o->value_.gc;
     lua_pushstring(L, isdead(G(L), obj) ? "dead" : iswhite(obj) ? "white"
                                                : isblack(obj)   ? "black"
@@ -1100,7 +1099,7 @@ static int gc_age(lua_State* L)
   {
     static const char* gennames[] = {"new", "survival", "old0", "old1",
                                      "old", "touched1", "touched2"};
-    lua_assert(o->tt_ & BIT_ISCOLLECTABLE);
+    assert(o->tt_ & BIT_ISCOLLECTABLE);
     GCObject* obj = o->value_.gc;
     lua_pushstring(L, gennames[getage(obj)]);
   }
@@ -1116,7 +1115,7 @@ static int gc_printobj(lua_State* L)
     printf("no collectable\n");
   else
   {
-    lua_assert(o->tt_ & BIT_ISCOLLECTABLE);
+    assert(o->tt_ & BIT_ISCOLLECTABLE);
     GCObject* obj = o->value_.gc;
     printobj(G(L), obj);
     printf("\n");
@@ -1150,7 +1149,7 @@ static int gc_state(lua_State* L)
       luaC_runtilstate(L, GCSpause, 1); /* run until pause */
     }
     luaC_runtilstate(L, option, 0); /* do not skip propagation state */
-    lua_assert(g->gcstate == option);
+    assert(g->gcstate == option);
     lua_unlock(L);
     return 0;
   }
@@ -1193,8 +1192,8 @@ static int hash_query(lua_State* L)
   {
     TString* ts;
     luaL_argcheck(L, lua_type(L, 1) == LUA_TSTRING, 1, "string expected");
-    lua_assert(((obj_at(L, 1))->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    lua_assert(((obj_at(L, 1))->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(((obj_at(L, 1))->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(((obj_at(L, 1))->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
     ts = static_cast<TString*>((obj_at(L, 1))->value_.gc);
     lua_pushinteger(L, ((int)(ts->hash)));
   }
@@ -1203,8 +1202,8 @@ static int hash_query(lua_State* L)
     TValue* o = obj_at(L, 1);
     Table* t;
     luaL_checktype(L, 2, LUA_TTABLE);
-    lua_assert(obj_at(L, 2)->tt_ == ctb(LUA_VTABLE));
-    lua_assert(obj_at(L, 2)->value_.gc->tt == LUA_VTABLE);
+    assert(obj_at(L, 2)->tt_ == ctb(LUA_VTABLE));
+    assert(obj_at(L, 2)->value_.gc->tt == LUA_VTABLE);
     t = static_cast<Table*>(obj_at(L, 2)->value_.gc);
     lua_pushinteger(L, ((lua_Integer)(luaH_mainposition(t, o) - t->node)));
   }
@@ -1250,8 +1249,8 @@ static int table_query(lua_State* L)
   int i = ((int)(luaL_optinteger(L, 2, -1)));
   unsigned int asize;
   luaL_checktype(L, 1, LUA_TTABLE);
-  lua_assert(obj_at(L, 1)->tt_ == ctb(LUA_VTABLE));
-  lua_assert(obj_at(L, 1)->value_.gc->tt == LUA_VTABLE);
+  assert(obj_at(L, 1)->tt_ == ctb(LUA_VTABLE));
+  assert(obj_at(L, 1)->value_.gc->tt == LUA_VTABLE);
   t = static_cast<Table*>(obj_at(L, 1)->value_.gc);
   asize = t->asize;
   if (i == -1)
@@ -1362,7 +1361,7 @@ static int tref(lua_State* L)
   lua_pushvalue(L, 1);
   lua_pushinteger(L, luaL_ref(L, t));
   ((void)(level));                       /* to avoid warnings */
-  lua_assert(lua_gettop(L) == level + 1); /* +1 for result */
+  assert(lua_gettop(L) == level + 1); /* +1 for result */
   return 1;
 }
 
@@ -1372,7 +1371,7 @@ static int getref(lua_State* L)
   int level = lua_gettop(L);
   lua_rawgeti(L, t, luaL_checkinteger(L, 1));
   ((void)(level)); /* to avoid warnings */
-  lua_assert(lua_gettop(L) == level + 1);
+  assert(lua_gettop(L) == level + 1);
   return 1;
 }
 
@@ -1382,7 +1381,7 @@ static int unref(lua_State* L)
   int level = lua_gettop(L);
   luaL_unref(L, t, ((int)(luaL_checkinteger(L, 1))));
   ((void)(level)); /* to avoid warnings */
-  lua_assert(lua_gettop(L) == level);
+  assert(lua_gettop(L) == level);
   return 0;
 }
 
@@ -1495,11 +1494,11 @@ static int loadlib(lua_State* L)
   int preload = ((int)(luaL_checkinteger(L, 3)));
   luaL_openselectedlibs(L1, load, preload);
   luaL_requiref(L1, "T", luaB_opentests, 0);
-  lua_assert(lua_type(L1, -1) == LUA_TTABLE);
+  assert(lua_type(L1, -1) == LUA_TTABLE);
   /* 'requiref' should not reload module already loaded... */
   luaL_requiref(L1, "T", NULL, 1); /* seg. fault if it reloads */
   /* ...but should return the same module */
-  lua_assert(lua_compare(L1, -1, -2, LUA_OPEQ));
+  assert(lua_compare(L1, -1, -2, LUA_OPEQ));
   return 0;
 }
 
@@ -1673,7 +1672,7 @@ static int getnum_aux(lua_State* L, lua_State* L1, const char** pc)
     else if (**pc == 'M')
       res = LUA_RIDX_MAINTHREAD;
     else
-      lua_assert(0);
+      assert(0);
     (*pc)++;
     return res;
   }
@@ -1851,7 +1850,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     {
       int t = getindex;
       int tp = lua_getfield(L1, t, getstring);
-      lua_assert(tp == lua_type(L1, -1));
+      assert(tp == lua_type(L1, -1));
     }
     else if (strcmp("getglobal", inst) == 0)
     {
@@ -1865,7 +1864,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     else if (strcmp("gettable", inst) == 0)
     {
       int tp = lua_gettable(L1, getindex);
-      lua_assert(tp == lua_type(L1, -1));
+      assert(tp == lua_type(L1, -1));
     }
     else if (strcmp("gettop", inst) == 0)
     {
@@ -2517,8 +2516,8 @@ static void checkfinalmem(void)
       fprintf(stderr, "  LEAKED: ptr=%p size=%zu type=%d\n",
               (void*)(h + 1), h->d.size, h->d.type);
   }
-  lua_assert(l_memcontrol.numblocks == 0);
-  lua_assert(l_memcontrol.total == 0);
+  assert(l_memcontrol.numblocks == 0);
+  assert(l_memcontrol.total == 0);
 }
 
 int luaB_opentests(lua_State* L)
@@ -2531,7 +2530,7 @@ int luaB_opentests(lua_State* L)
   lua_setglobal(L, "_WARN"); /* _WARN = false */
   regcodes(L);
   atexit(checkfinalmem);
-  lua_assert(f == debug_realloc && ud == &l_memcontrol);
+  assert(f == debug_realloc && ud == &l_memcontrol);
   lua_setallocf(L, f, ud); /* exercise this function */
   luaL_newlib(L, tests_funcs);
   return 1;

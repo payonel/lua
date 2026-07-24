@@ -28,7 +28,7 @@ static l_forceinline int upisopen(const UpVal* up)
 /* Get the stack index for an open upvalue */
 static l_forceinline StkId uplevel(const UpVal* up)
 {
-  lua_assert(upisopen(up));
+  assert(upisopen(up));
   return up->stkid;
 }
 

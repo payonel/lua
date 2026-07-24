@@ -563,7 +563,7 @@ static inline void checkbufferlevel(luaL_Buffer* B, int idx)
 {
   (void) B;
   (void) idx;
-  lua_assert(buffonstack(B) ? lua_touserdata(B->L, idx) != NULL : lua_touserdata(B->L, idx) == (void*) B);
+  assert(buffonstack(B) ? lua_touserdata(B->L, idx) != NULL : lua_touserdata(B->L, idx) == (void*) B);
 }
 
 /*
@@ -727,7 +727,7 @@ LUALIB_API int luaL_ref(lua_State* L, int t)
     ref = (int) lua_tointeger(L, -1);      /* ref = t[1] */
   else
   {                                    /* first access */
-    lua_assert(!lua_toboolean(L, -1)); /* must be nil or false */
+    assert(!lua_toboolean(L, -1)); /* must be nil or false */
     ref = 0;                           /* list is empty */
     lua_pushinteger(L, 0);             /* initialize as an empty list */
     lua_rawseti(L, t, 1);              /* ref = t[1] = 0 */
@@ -750,7 +750,7 @@ LUALIB_API void luaL_unref(lua_State* L, int t, int ref)
   {
     t = lua_absindex(L, t);
     lua_rawgeti(L, t, 1);
-    lua_assert(lua_isinteger(L, -1));
+    assert(lua_isinteger(L, -1));
     lua_rawseti(L, t, ref); /* t[ref] = t[1] */
     lua_pushinteger(L, ref);
     lua_rawseti(L, t, 1); /* t[1] = ref */
