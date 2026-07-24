@@ -124,7 +124,7 @@ LUA_API int lua_checkstack(lua_State* L, int n)
   lua_lock(L);
   ci = L->ci;
   api_check(L, n >= 0, "negative 'n'");
-  if (L->stack_last - L->top > ((StkId)(n))) /* stack large enough? */
+  if (L->top + ((StkId)(n)) < L->stack_last) /* stack large enough? */
     res = 1;                          /* yes; check is OK */
   else                                /* need to grow stack */
     res = luaD_growstack(L, n, 0);

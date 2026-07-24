@@ -206,7 +206,7 @@ int luaD_checkminstack(lua_State* L)
     return 0; /* unable to allocate first ci */
   if (L->ci->next->next == NULL && luaE_extendCI(L, 0) == NULL)
     return 0; /* unable to allocate second ci */
-  if (L->stack_last - L->top >= BASIC_STACK_SIZE)
+  if (L->top + BASIC_STACK_SIZE <= L->stack_last)
     return 1; /* enough (BASIC_STACK_SIZE) free slots in the Lua stack */
   else        /* try to grow stack to a size with enough free slots */
     return luaD_growstack(L, BASIC_STACK_SIZE, 0);
