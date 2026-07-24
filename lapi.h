@@ -9,13 +9,11 @@
 #include "llimits.h"
 #include "lstate.h"
 
-#define api_check(l, e, msg) ((void) (l), assert((e) && msg))
-
 /* Increments 'L->top', checking for stack overflows */
 static l_forceinline void api_incr_top(lua_State* L)
 {
   L->top++;
-  api_check(L, L->top <= L->ci->top, "stack overflow");
+  assert((L->top <= L->ci->top) && "stack overflow");
 }
 
 /*
@@ -34,7 +32,7 @@ static l_forceinline void api_checknelems(lua_State* L, int n)
 {
   (void) L;
   (void) n;
-  api_check(L, (StkId)n < (L->top - L->ci->func), "not enough elements in the stack");
+  assert(((StkId)n < (L->top - L->ci->func)) && "not enough elements in the stack");
 }
 
 /* Ensure the stack has at least 'n' elements to be popped. (Some
@@ -45,5 +43,5 @@ static l_forceinline void api_checkpop(lua_State* L, int n)
 {
   (void) L;
   (void) n;
-  api_check(L, (StkId)n < L->top - L->ci->func && L->tbclist < L->top - (lua_Unsigned)n, "not enough free elements in the stack");
+  assert(((StkId)n < L->top - L->ci->func && L->tbclist < L->top - (lua_Unsigned)n) && "not enough free elements in the stack");
 }

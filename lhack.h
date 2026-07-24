@@ -5,9 +5,6 @@
 #include "lua.h"
 #include <stdint.h>
 
-/* turn on assertions */
-#define LUAI_ASSERT
-
 /* test for sizes in 'l_sprintf' (make sure whole buffer is available) */
 #define l_sprintf(s, sz, f, i) (memset(s, 0xAB, sz), snprintf(s, sz, f, i))
 

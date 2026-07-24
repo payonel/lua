@@ -81,22 +81,13 @@ typedef LUAI_UACINT l_uacInt;
 
 /*
 ** Internal assertions for in-house debugging.
-** 'assert' is used literally throughout the core; the release build
-** does NOT define NDEBUG, so assertions are active in both build
-** modes (matching the managed-target model, where 'assert' is a
-** runtime switch rather than a build flavor).
+** 'assert' is used literally throughout the core; no build mode
+** defines NDEBUG, so assertions are active in both build modes
+** (matching the managed-target model, where 'assert' is a runtime
+** switch rather than a build flavor). Checks with side-effect-free
+** setup are written as 'assert(f(...))' where 'f' returns 1.
 */
-#if defined LUAI_ASSERT
-#undef NDEBUG
-#define assert_code(c) c
-#else
-#define assert_code(c) ((void) 0)
-#endif
 #include <assert.h>
-
-#define check_exp(c, e) (assert(c), (e))
-/* to avoid problems with conditions too long */
-#define lua_longassert(c) assert_code((c) ? (void) 0 : assert(0))
 
 #if !defined(l_castS2U)
 #endif

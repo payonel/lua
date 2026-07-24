@@ -38,7 +38,7 @@
 ** lua_State is available). Called only from debug builds (the
 ** checkliveness inline wrapper compiles the call away in release).
 */
-void luaO_checkliveness(lua_State* L, const TValue* obj)
+int luaO_checkliveness(lua_State* L, const TValue* obj)
 {
   (void) L; /* unused when asserts are disabled */
   if (obj->tt_ & BIT_ISCOLLECTABLE)
@@ -46,6 +46,7 @@ void luaO_checkliveness(lua_State* L, const TValue* obj)
     assert((((obj)->tt_ & WITHVARIANT_MASK) == ((obj)->value_).gc->tt));
     assert(L == NULL || !isdead(G(L), obj->value_.gc));
   }
+  return 1;
 }
 
 lu_byte luaO_ceillog2(unsigned int x)

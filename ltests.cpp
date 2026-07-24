@@ -2249,7 +2249,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       const char* s = lua_tostring(L1, getindex);
       const char* s1 = lua_pushstring(L1, s);
       ((void)(s1)); /* to avoid warnings */
-      lua_longassert((s == NULL && s1 == NULL) || strcmp(s, s1) == 0);
+      assert((s == NULL && s1 == NULL) || strcmp(s, s1) == 0);
     }
     else if (strcmp("Ltolstring", inst) == 0)
     {

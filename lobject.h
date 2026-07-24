@@ -542,16 +542,14 @@ static l_forceinline unsigned int sizenode(const Table* t)
 ** collectable, or the collectable object has the right tag
 ** and it is not dead. The option 'L == NULL' allows other
 ** callers to use it where L is not available.
-** Debug builds check via luaO_checkliveness; release builds compile
-** the check away (assert_code).
+** 'luaO_checkliveness' performs its checks via asserts and always
+** returns 1, so it can be called as 'assert(luaO_checkliveness(...))'.
 */
-LUAI_FUNC void luaO_checkliveness(struct lua_State* L, const TValue* obj);
+LUAI_FUNC int luaO_checkliveness(struct lua_State* L, const TValue* obj);
 
 static l_forceinline void checkliveness(struct lua_State* L, const TValue* obj)
 {
-  (void) L;
-  (void) obj;
-  assert_code(luaO_checkliveness(L, obj));
+  assert(luaO_checkliveness(L, obj));
 }
 
 /* main value copy (from 'obj2' to 'obj1') */

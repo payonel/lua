@@ -182,7 +182,8 @@ LUA_API int lua_getstack(lua_State* L, int level, lua_Debug* ar)
 
 static const char* upvalname(const Proto* p, int uv)
 {
-  TString* s = check_exp(uv < p->sizeupvalues, p->upvalues[uv].name);
+  assert(uv < p->sizeupvalues);
+  TString* s = p->upvalues[uv].name;
   if (s == NULL)
     return "?";
   else
@@ -451,7 +452,7 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   {
     ci = NULL;
     func = (&(L)->stack.p[L->top - 1]);
-    api_check(L, (((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION), "function expected");
+    assert(((((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION)) && "function expected");
     what++;     /* skip the '>' */
     L->top--; /* pop function */
   }
