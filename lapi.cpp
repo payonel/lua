@@ -140,7 +140,7 @@ LUA_API void lua_xmove(lua_State* from, lua_State* to, int n)
   lua_lock(to);
   api_checkpop(from, n);
   assert((G(from) == G(to)) && "moving among independent states");
-  assert((to->ci->top - to->top >= ((StkId)(n))) && "stack overflow");
+  assert((to->ci->top >= to->top + ((StkId)(n))) && "stack overflow");
   from->top -= n;
   for (i = 0; i < n; i++)
   {
@@ -1205,7 +1205,7 @@ static inline void checkresults(lua_State* L, int na, int nr)
   (void) L;
   (void) na;
   (void) nr;
-  assert((nr == LUA_MULTRET || (nr <= na || L->ci->top - L->top >= ((StkId)(nr - na)))) && "results from function overflow current stack size");
+  assert((nr == LUA_MULTRET || (nr <= na || L->ci->top >= L->top + ((StkId)(nr - na)))) && "results from function overflow current stack size");
   assert((LUA_MULTRET <= nr && nr <= MAXRESULTS) && "invalid number of results");
 }
 
