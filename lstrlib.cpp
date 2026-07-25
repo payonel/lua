@@ -7,6 +7,8 @@
 
 #include "lprefix.h"
 
+#include <bit>
+
 #include <ctype.h>
 #include <float.h>
 #include <limits.h>
@@ -1584,12 +1586,8 @@ constexpr int MC = ((1 << NB) - 1);
 /* size of a lua_Integer */
 constexpr int SZINT = ((int) sizeof(lua_Integer));
 
-/* dummy union to get native endianness */
-static const union
-{
-  int dummy;
-  char little; /* true iff machine is little endian */
-} nativeendian = {1};
+/* true iff machine is little endian */
+constexpr bool nativeendian_little = (std::endian::native == std::endian::little);
 
 /*
 ** information to pack/unpack stuff
@@ -1662,7 +1660,7 @@ static unsigned getnumlimit(Header* h, const char** fmt, size_t df)
 static void initheader(lua_State* L, Header* h)
 {
   h->L = L;
-  h->islittle = nativeendian.little;
+  h->islittle = nativeendian_little;
   h->maxalign = 1;
 }
 
@@ -1743,7 +1741,7 @@ static KOption getoption(Header* h, const char** fmt, size_t* size)
     h->islittle = 0;
     break;
   case '=':
-    h->islittle = nativeendian.little;
+    h->islittle = nativeendian_little;
     break;
   case '!':
   {
@@ -1828,7 +1826,7 @@ static void packint(luaL_Buffer* b, lua_Unsigned n,
 static void copywithendian(char* dest, const char* src,
                            unsigned size, int islittle)
 {
-  if (islittle == nativeendian.little)
+  if (islittle == nativeendian_little)
     memcpy(dest, src, size);
   else
   {

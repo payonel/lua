@@ -149,7 +149,7 @@ static TString* str_checkname(LexState* ls)
 {
   TString* ts;
   check(ls, TK_NAME);
-  ts = ls->t.seminfo.ts;
+  ts = ls->t.ts;
   luaX_next(ls);
   return ts;
 }
@@ -1251,7 +1251,7 @@ static void funcargs(LexState* ls, expdesc* f)
   }
   case TK_STRING:
   { /* funcargs -> STRING */
-    codestring(&args, ls->t.seminfo.ts);
+    codestring(&args, ls->t.ts);
     luaX_next(ls); /* must use 'seminfo' before 'next' */
     break;
   }
@@ -1365,18 +1365,18 @@ static void simpleexp(LexState* ls, expdesc* v)
   case TK_FLT:
   {
     init_exp(v, VKFLT, 0);
-    v->nval = ls->t.seminfo.r;
+    v->nval = ls->t.r;
     break;
   }
   case TK_INT:
   {
     init_exp(v, VKINT, 0);
-    v->ival = ls->t.seminfo.i;
+    v->ival = ls->t.i;
     break;
   }
   case TK_STRING:
   {
-    codestring(v, ls->t.seminfo.ts);
+    codestring(v, ls->t.ts);
     break;
   }
   case TK_NIL:

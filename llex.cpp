@@ -257,7 +257,7 @@ static int check_next2(LexState* ls, const char* set)
 **
 ** The caller might have already read an initial dot.
 */
-static int read_numeral(LexState* ls, SemInfo* seminfo)
+static int read_numeral(LexState* ls, Token* seminfo)
 {
   TValue obj;
   const char* expo = "Ee";
@@ -316,7 +316,7 @@ static size_t skip_sep(LexState* ls)
                             : 0;
 }
 
-static void read_long_string(LexState* ls, SemInfo* seminfo, size_t sep)
+static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
 {
   int line = ls->linenumber; /* initial line (for error message) */
   save_and_next(ls);         /* skip 2nd '[' */
@@ -438,7 +438,7 @@ static int readdecesc(LexState* ls)
   return r;
 }
 
-static void read_string(LexState* ls, int del, SemInfo* seminfo)
+static void read_string(LexState* ls, int del, Token* seminfo)
 {
   save_and_next(ls); /* keep delimiter (for error messages) */
   while (ls->current != del)
@@ -536,7 +536,7 @@ static void read_string(LexState* ls, int del, SemInfo* seminfo)
                                ((ls->buff)->n) - 2);
 }
 
-static int llex(LexState* ls, SemInfo* seminfo)
+static int llex(LexState* ls, Token* seminfo)
 {
   ((ls->buff)->n = 0);
   for (;;)
@@ -722,12 +722,12 @@ void luaX_next(LexState* ls)
     ls->lookahead.token = TK_EOS; /* and discharge it */
   }
   else
-    ls->t.token = llex(ls, &ls->t.seminfo); /* read next token */
+    ls->t.token = llex(ls, &ls->t); /* read next token */
 }
 
 int luaX_lookahead(LexState* ls)
 {
   assert(ls->lookahead.token == TK_EOS);
-  ls->lookahead.token = llex(ls, &ls->lookahead.seminfo);
+  ls->lookahead.token = llex(ls, &ls->lookahead);
   return ls->lookahead.token;
 }

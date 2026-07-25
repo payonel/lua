@@ -72,17 +72,14 @@ enum RESERVED
 /* number of reserved words */
 constexpr int NUM_RESERVED = (((int)(TK_WHILE - FIRST_RESERVED + 1)));
 
-typedef union
-{
-  lua_Number r;
-  lua_Integer i;
-  TString* ts;
-} SemInfo; /* semantics information */
-
 typedef struct Token
 {
-  int token;
-  SemInfo seminfo;
+  int token;      /* token kind */
+  /* semantic payload (was a separate 'SemInfo' union in upstream;
+     meaningful only for literal/name tokens): */
+  lua_Number r;   /* for TK_FLT */
+  lua_Integer i;  /* for TK_INT */
+  TString* ts;    /* for TK_STRING / TK_NAME */
 } Token;
 
 /* state of the scanner plus state of the parser when shared by all
