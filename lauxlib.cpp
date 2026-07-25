@@ -550,7 +550,7 @@ static void newbox(lua_State* L)
 */
 static inline int buffonstack(const luaL_Buffer* B)
 {
-  return B->b != B->init.b;
+  return B->b != B->init;
 }
 
 /*
@@ -687,7 +687,7 @@ LUALIB_API void luaL_addvalue(luaL_Buffer* B)
 LUALIB_API void luaL_buffinit(lua_State* L, luaL_Buffer* B)
 {
   B->L = L;
-  B->b = B->init.b;
+  B->b = B->init;
   B->n = 0;
   B->size = LUAL_BUFFERSIZE;
   lua_pushlightuserdata(L, (void*) B); /* push placeholder */

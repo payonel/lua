@@ -166,11 +166,10 @@ static void warnf(void* ud, const char* msg, int tocont)
 
 constexpr int MARK = 0x55; /* 01010101 (a nice pattern) */
 
-typedef union memHeader memHeader;
-union memHeader
+typedef struct memHeader memHeader;
+struct memHeader
 {
-  LUAI_MAXALIGN;
-  struct
+  alignas(std::max_align_t) struct
   {
     size_t size;
     int type;

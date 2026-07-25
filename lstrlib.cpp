@@ -1671,16 +1671,8 @@ static void initheader(lua_State* L, Header* h)
 */
 static KOption getoption(Header* h, const char** fmt, size_t* size)
 {
-  /* dummy structure to get native alignment requirements */
-  struct cD
-  {
-    char c;
-    union
-    {
-      LUAI_MAXALIGN;
-    } u;
-  };
-  const size_t maxalign = sizeof(struct cD) - sizeof(((struct cD*)0)->u);
+  /* native maximum alignment requirement */
+  constexpr size_t maxalign = alignof(std::max_align_t);
   int opt = *((*fmt)++);
   *size = 0; /* default */
   switch (opt)

@@ -505,16 +505,6 @@
 */
 #define LUA_IDSIZE 60
 
-/*
-@@ LUAI_MAXALIGN defines fields that, when used in a union, ensure
-** maximum alignment for the other items in that union.
-*/
-/* use ISO C99 stuff */
-#define LUAI_MAXALIGN \
-  long double u;      \
-  void* s;            \
-  long long l
-
 /* }================================================================== */
 
 /* =================================================================== */

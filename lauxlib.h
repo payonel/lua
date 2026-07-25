@@ -7,6 +7,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <cstddef>
 #include <stdio.h>
 
 #include "lua.h"
@@ -167,11 +168,7 @@ struct luaL_Buffer
   size_t size; /* buffer size */
   size_t n;    /* number of characters in buffer */
   lua_State* L;
-  union
-  {
-    LUAI_MAXALIGN;           /* ensure maximum alignment for buffer */
-    char b[LUAL_BUFFERSIZE]; /* initial buffer */
-  } init;
+  alignas(std::max_align_t) char init[LUAL_BUFFERSIZE]; /* initial buffer */
 };
 
 #define luaL_bufflen(bf)  ((bf)->n)

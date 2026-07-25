@@ -241,10 +241,9 @@ constexpr lu_byte LUA_VLIGHTUSERDATA = makevariant(LUA_TLIGHTUSERDATA, 0);
 constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
 
 /* Ensures that addresses after this type are always fully aligned. */
-typedef union UValue
+typedef struct UValue
 {
-  TValue uv;
-  LUAI_MAXALIGN; /* ensures maximum alignment for udata bytes */
+  alignas(std::max_align_t) TValue uv; /* ensures maximum alignment for udata bytes */
 } UValue;
 
 /*
@@ -274,10 +273,7 @@ typedef struct Udata0 : GCObject
   unsigned short nuvalue; /* number of user values */
   size_t len;             /* number of bytes */
   struct Table* metatable;
-  union
-  {
-    LUAI_MAXALIGN;
-  } bindata;
+  std::max_align_t bindata; /* ensures alignment for binary data after this header */
 } Udata0;
 
 /* compute the offset of the memory area of a userdata */
