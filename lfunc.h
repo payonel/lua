@@ -22,7 +22,7 @@ constexpr int MAXUPVAL = 255;
 
 static l_forceinline int upisopen(const UpVal* up)
 {
-  return up->previous != NULL;
+  return up->previous != nullptr;
 }
 
 /* Get the stack index for an open upvalue */

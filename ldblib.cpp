@@ -220,7 +220,7 @@ static int db_getlocal(lua_State* L)
   if (lua_isfunction(L, arg + 1))
   {                                                 /* function argument? */
     lua_pushvalue(L, arg + 1);                      /* push function */
-    lua_pushstring(L, lua_getlocal(L, NULL, nvar)); /* push local name */
+    lua_pushstring(L, lua_getlocal(L, nullptr, nvar)); /* push local name */
     return 1;                                       /* return only name (there is no value) */
   }
   else
@@ -262,7 +262,7 @@ static int db_setlocal(lua_State* L)
   checkstack(L, L1, 1);
   lua_xmove(L, L1, 1);
   name = lua_setlocal(L1, &ar, nvar);
-  if (name == NULL)
+  if (name == nullptr)
     lua_pop(L1, 1); /* pop value (if not popped by 'lua_setlocal') */
   lua_pushstring(L, name);
   return 1;
@@ -277,7 +277,7 @@ static int auxupvalue(lua_State* L, int get)
   int n = (int) luaL_checkinteger(L, 2); /* upvalue index */
   luaL_checktype(L, 1, LUA_TFUNCTION);   /* closure */
   name = get ? lua_getupvalue(L, 1, n) : lua_setupvalue(L, 1, n);
-  if (name == NULL)
+  if (name == nullptr)
     return 0;
   lua_pushstring(L, name);
   lua_insert(L, -(get + 1)); /* no-op if get is false */
@@ -307,7 +307,7 @@ static void* checkupval(lua_State* L, int argf, int argnup, int* pnup)
   id = lua_upvalueid(L, argf, nup);
   if (pnup)
   {
-    luaL_argcheck(L, id != NULL, argnup, "invalid upvalue index");
+    luaL_argcheck(L, id != nullptr, argnup, "invalid upvalue index");
     *pnup = nup;
   }
   return id;
@@ -315,8 +315,8 @@ static void* checkupval(lua_State* L, int argf, int argnup, int* pnup)
 
 static int db_upvalueid(lua_State* L)
 {
-  void* id = checkupval(L, 1, 2, NULL);
-  if (id != NULL)
+  void* id = checkupval(L, 1, 2, nullptr);
+  if (id != nullptr)
     lua_pushlightuserdata(L, id);
   else
     luaL_pushfail(L);
@@ -397,7 +397,7 @@ static int db_sethook(lua_State* L)
   if (lua_isnoneornil(L, arg + 1))
   { /* no hook? */
     lua_settop(L, arg + 1);
-    func = NULL;
+    func = nullptr;
     mask = 0;
     count = 0; /* turn off hooks */
   }
@@ -433,7 +433,7 @@ static int db_gethook(lua_State* L)
   char buff[5];
   int mask = lua_gethookmask(L1);
   lua_Hook hook = lua_gethook(L1);
-  if (hook == NULL)
+  if (hook == nullptr)
   { /* no hook? */
     luaL_pushfail(L);
     return 1;
@@ -460,12 +460,12 @@ static int db_debug(lua_State* L)
   {
     char buffer[250];
     lua_writestringerror("%s", "lua_debug> ");
-    if (fgets(buffer, sizeof(buffer), stdin) == NULL ||
+    if (fgets(buffer, sizeof(buffer), stdin) == nullptr ||
         strcmp(buffer, "cont\n") == 0)
       return 0;
     if (luaL_loadbufferx(L, buffer, strlen(buffer), "=(debug command)", "t") ||
         lua_pcall(L, 0, 0, 0))
-      lua_writestringerror("%s\n", luaL_tolstring(L, -1, NULL));
+      lua_writestringerror("%s\n", luaL_tolstring(L, -1, nullptr));
     lua_settop(L, 0); /* remove eventual returns */
   }
 }
@@ -475,7 +475,7 @@ static int db_traceback(lua_State* L)
   int arg;
   lua_State* L1 = getthread(L, &arg);
   const char* msg = lua_tostring(L, arg + 1);
-  if (msg == NULL && !lua_isnoneornil(L, arg + 1)) /* non-string 'msg'? */
+  if (msg == nullptr && !lua_isnoneornil(L, arg + 1)) /* non-string 'msg'? */
     lua_pushvalue(L, arg + 1);                     /* return it untouched */
   else
   {
@@ -502,7 +502,7 @@ static const luaL_Reg dblib[] = {
     {"setmetatable", db_setmetatable},
     {"setupvalue", db_setupvalue},
     {"traceback", db_traceback},
-    {NULL, NULL}};
+    {nullptr, nullptr}};
 
 LUAMOD_API int luaopen_debug(lua_State* L)
 {

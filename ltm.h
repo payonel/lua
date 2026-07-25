@@ -61,7 +61,7 @@ static l_forceinline int notm(const TValue* tm)
 
 static l_forceinline int checknoTM(const Table* mt, TMS e)
 {
-  return mt == NULL || (mt->flags & (1u << e));
+  return mt == nullptr || (mt->flags & (1u << e));
 }
 
 

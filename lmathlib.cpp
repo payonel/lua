@@ -481,7 +481,7 @@ static int math_randomseed(lua_State* L)
 static const luaL_Reg randfuncs[] = {
     {"random", math_random},
     {"randomseed", math_randomseed},
-    {NULL, NULL}};
+    {nullptr, nullptr}};
 
 /*
 ** Register the random functions and initialize their state.
@@ -528,13 +528,13 @@ static const luaL_Reg mathlib[] = {
     {"tan", math_tan},
     {"type", math_type},
     /* placeholders */
-    {"random", NULL},
-    {"randomseed", NULL},
-    {"pi", NULL},
-    {"huge", NULL},
-    {"maxinteger", NULL},
-    {"mininteger", NULL},
-    {NULL, NULL}};
+    {"random", nullptr},
+    {"randomseed", nullptr},
+    {"pi", nullptr},
+    {"huge", nullptr},
+    {"maxinteger", nullptr},
+    {"mininteger", nullptr},
+    {nullptr, nullptr}};
 
 /*
 ** Open math library

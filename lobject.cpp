@@ -34,7 +34,7 @@
 /*
 ** Debug check that a value being manipulated is alive: either it is
 ** not collectable, or the collectable object has the right tag and is
-** not dead. 'L == NULL' skips the deadness check (used where no
+** not dead. 'L == nullptr' skips the deadness check (used where no
 ** lua_State is available). Called only from debug builds (the
 ** checkliveness inline wrapper compiles the call away in release).
 */
@@ -44,7 +44,7 @@ int luaO_checkliveness(lua_State* L, const TValue* obj)
   if (obj->tt_ & BIT_ISCOLLECTABLE)
   {
     assert((((obj)->tt_ & WITHVARIANT_MASK) == ((obj)->value_).gc->tt));
-    assert(L == NULL || !isdead(G(L), obj->value_.gc));
+    assert(L == nullptr || !isdead(G(L), obj->value_.gc));
   }
   return 1;
 }
@@ -372,7 +372,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
 #endif
 
 /*
-** Convert string 's' to a Lua number (put in 'result'). Return NULL on
+** Convert string 's' to a Lua number (put in 'result'). Return nullptr on
 ** fail or the address of the ending '\0' on success. ('mode' == 'x')
 ** means a hexadecimal numeral.
 */
@@ -382,10 +382,10 @@ static const char* l_str2dloc(const char* s, lua_Number* result, int mode)
   *result = (mode == 'x') ? lua_strx2number(s, &endptr) /* try to convert */
                           : lua_str2number(s, &endptr);
   if (endptr == s)
-    return NULL; /* nothing recognized? */
+    return nullptr; /* nothing recognized? */
   while (lisspace(((unsigned char)(*endptr))))
     endptr++;                               /* skip trailing spaces */
-  return (*endptr == '\0') ? endptr : NULL; /* OK iff no trailing chars */
+  return (*endptr == '\0') ? endptr : nullptr; /* OK iff no trailing chars */
 }
 
 /*
@@ -407,18 +407,18 @@ static const char* l_str2d(const char* s, lua_Number* result)
   const char* pmode = strpbrk(s, ".xXnN"); /* look for special chars */
   int mode = pmode ? ltolower(((unsigned char)(*pmode))) : 0;
   if (mode == 'n') /* reject 'inf' and 'nan' */
-    return NULL;
+    return nullptr;
   endptr = l_str2dloc(s, result, mode); /* try to convert */
-  if (endptr == NULL)
+  if (endptr == nullptr)
   { /* failed? may be a different locale */
     char buff[L_MAXLENNUM + 1];
     const char* pdot = strchr(s, '.');
-    if (pdot == NULL || strlen(s) > L_MAXLENNUM)
-      return NULL;                            /* string too long or no dot; fail */
+    if (pdot == nullptr || strlen(s) > L_MAXLENNUM)
+      return nullptr;                            /* string too long or no dot; fail */
     strcpy(buff, s);                          /* copy string to buffer */
     buff[pdot - s] = lua_getlocaledecpoint(); /* correct decimal point */
     endptr = l_str2dloc(buff, result, mode);  /* try again */
-    if (endptr != NULL)
+    if (endptr != nullptr)
       endptr = s + (endptr - buff); /* make relative to 's' */
   }
   return endptr;
@@ -451,7 +451,7 @@ static const char* l_str2int(const char* s, lua_Integer* result)
     {
       int d = *s - '0';
       if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + neg)) /* overflow? */
-        return NULL;                                           /* do not accept it (as integer) */
+        return nullptr;                                           /* do not accept it (as integer) */
       a = a * 10 + ((unsigned int)(d));
       empty = 0;
     }
@@ -459,7 +459,7 @@ static const char* l_str2int(const char* s, lua_Integer* result)
   while (lisspace(((unsigned char)(*s))))
     s++; /* skip trailing spaces */
   if (empty || *s != '\0')
-    return NULL; /* something wrong in the numeral */
+    return nullptr; /* something wrong in the numeral */
   else
   {
     *result = ((lua_Integer)((neg) ? 0u - a : a));
@@ -472,11 +472,11 @@ size_t luaO_str2num(const char* s, TValue* o)
   lua_Integer i;
   lua_Number n;
   const char* e;
-  if ((e = l_str2int(s, &i)) != NULL)
+  if ((e = l_str2int(s, &i)) != nullptr)
   { /* try as an integer */
     setivalue(o, i);
   }
-  else if ((e = l_str2d(s, &n)) != NULL)
+  else if ((e = l_str2d(s, &n)) != nullptr)
   { /* else try as a float */
     setfltvalue(o, n);
   }
@@ -530,7 +530,7 @@ static int tostringbuffFloat(lua_Number n, char* buff)
   /* first conversion */
   int len = l_sprintf(buff, LUA_N2SBUFFSZ, LUA_NUMBER_FMT,
                       (LUAI_UACNUMBER) n);
-  lua_Number check = lua_str2number(buff, NULL); /* read it back */
+  lua_Number check = lua_str2number(buff, nullptr); /* read it back */
   if (check != n)
   { /* not enough precision? */
     /* convert again with more precision */
@@ -645,7 +645,7 @@ static const char* clearbuff(BuffFS* buff)
   lua_State* L = buff->L;
   const char* res;
   if (luaD_rawrunprotected(L, pushbuff, buff) != LUA_OK) /* errors? */
-    res = NULL;                                          /* error message is on the top of the stack */
+    res = nullptr;                                          /* error message is on the top of the stack */
   else
   {
     TValue* s = &L->stack.p[L->top - 1]; /* result string is on the top of the stack */
@@ -677,9 +677,9 @@ static void addstr2buff(BuffFS* buff, const char* str, size_t slen)
       size_t newsize = buff->buffsize + slen; /* limited to MAX_SIZE/2 */
       char* newb =
           (buff->b == buff->space) /* still using static space? */
-              ? (((char*)(luaM_realloc_(buff->L, NULL, ((size_t)(0)) * sizeof(char), ((size_t)(newsize)) * sizeof(char)))))
+              ? (((char*)(luaM_realloc_(buff->L, nullptr, ((size_t)(0)) * sizeof(char), ((size_t)(newsize)) * sizeof(char)))))
               : (((char*)(luaM_realloc_(buff->L, buff->b, ((size_t)(buff->buffsize)) * sizeof(char), ((size_t)(newsize)) * sizeof(char)))));
-      if (newb == NULL)
+      if (newb == nullptr)
       {                /* allocation error? */
         buff->err = 1; /* signal a memory error */
         return;
@@ -713,7 +713,7 @@ const char* luaO_pushvfstring(lua_State* L, const char* fmt, va_list argp)
   BuffFS buff;   /* holds last part of the result */
   const char* e; /* points to next '%' */
   initbuff(L, &buff);
-  while ((e = strchr(fmt, '%')) != NULL)
+  while ((e = strchr(fmt, '%')) != nullptr)
   {
     addstr2buff(&buff, fmt, ((size_t)(e - fmt))); /* add 'fmt' up to '%' */
     switch (*(e + 1))
@@ -721,7 +721,7 @@ const char* luaO_pushvfstring(lua_State* L, const char* fmt, va_list argp)
     case 's':
     { /* zero-terminated string */
       const char* s = va_arg(argp, char*);
-      if (s == NULL)
+      if (s == nullptr)
         s = "(null)";
       addstr2buff(&buff, s, strlen(s));
       break;
@@ -793,7 +793,7 @@ const char* luaO_pushfstring(lua_State* L, const char* fmt, ...)
   va_start(argp, fmt);
   msg = luaO_pushvfstring(L, fmt, argp);
   va_end(argp);
-  if (msg == NULL) /* error? */
+  if (msg == nullptr) /* error? */
     luaD_throw(L, LUA_ERRMEM);
   return msg;
 }
@@ -833,13 +833,13 @@ void luaO_chunkid(char* out, const char* source, size_t srclen)
     const char* nl = strchr(source, '\n'); /* find first new line (if any) */
     (memcpy(out, PRE, ((sizeof(PRE) / sizeof(char) - 1)) * sizeof(char)), (out) += ((sizeof(PRE) / sizeof(char) - 1)));             /* add prefix */
     bufflen -= (sizeof(PRE) - 1) + (sizeof(RETS) - 1) + (sizeof(POS) - 1) + 1; /* save space for prefix+suffix+'\0' */
-    if (srclen < bufflen && nl == NULL)
+    if (srclen < bufflen && nl == nullptr)
     {                              /* small one-line source? */
       (memcpy(out, source, (srclen) * sizeof(char)), (out) += (srclen)); /* keep it */
     }
     else
     {
-      if (nl != NULL)
+      if (nl != nullptr)
         srclen = ((size_t)(nl - source)); /* stop at first newline */
       if (srclen > bufflen)
         srclen = bufflen;

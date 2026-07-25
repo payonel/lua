@@ -438,7 +438,7 @@ static const luaL_Reg tab_funcs[] = {
     {"remove", tremove},
     {"move", tmove},
     {"sort", sort},
-    {NULL, NULL}};
+    {nullptr, nullptr}};
 
 LUAMOD_API int luaopen_table(lua_State* L)
 {

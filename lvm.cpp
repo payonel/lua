@@ -322,7 +322,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
       assert(t->value_.gc->tt == LUA_VTABLE);
       Table* h = static_cast<Table*>(t->value_.gc);
       tm = fasttm(L, h->metatable, TM_INDEX); /* table's metamethod */
-      if (tm == NULL)
+      if (tm == nullptr)
       {                     /* no metamethod? */
         (((&(L)->stack.p[val]))->tt_ = LUA_VNIL); /* result is nil */
         return LUA_VNIL;
@@ -371,7 +371,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
       assert(t->value_.gc->tt == LUA_VTABLE);
       Table* h = static_cast<Table*>(t->value_.gc);                      /* save 't' table */
       tm = fasttm(L, h->metatable, TM_NEWINDEX); /* get metamethod */
-      if (tm == NULL)
+      if (tm == nullptr)
       {                                       /* no metamethod? */
         sethvalue(L, (&(L)->stack.p[L->top]), h);          /* anchor 't' */
         L->top++;                           /* assume EXTRA_STACK */
@@ -656,7 +656,7 @@ int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r)
 
 /*
 ** Main operation for equality of Lua values; return 't1 == t2'.
-** L == NULL means raw equality (no metamethods)
+** L == nullptr means raw equality (no metamethods)
 */
 int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
 {
@@ -725,10 +725,10 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       Udata* u2 = static_cast<Udata*>(t2->value_.gc);
       if (u1 == u2)
         return 1;
-      else if (L == NULL)
+      else if (L == nullptr)
         return 0;
       tm = fasttm(L, u1->metatable, TM_EQ);
-      if (tm == NULL)
+      if (tm == nullptr)
         tm = fasttm(L, u2->metatable, TM_EQ);
       break; /* will try TM */
     }
@@ -740,10 +740,10 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       Table* h2 = static_cast<Table*>(t2->value_.gc);
       if (h1 == h2)
         return 1;
-      else if (L == NULL)
+      else if (L == nullptr)
         return 0;
       tm = fasttm(L, h1->metatable, TM_EQ);
-      if (tm == NULL)
+      if (tm == nullptr)
         tm = fasttm(L, h2->metatable, TM_EQ);
       break; /* will try TM */
     }
@@ -755,7 +755,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       assert(t2->tt_ & BIT_ISCOLLECTABLE);
       return (t1->value_.gc == t2->value_.gc);
     }
-    if (tm == NULL) /* no TM? */
+    if (tm == nullptr) /* no TM? */
       return 0;     /* objects are different */
     else
     {
@@ -2609,7 +2609,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           L->top = ra + b; /* top signals number of arguments */
         /* else previous instruction set top */
         ci->savedpc = pc; /* in case of errors */
-        if ((newci = luaD_precall(L, ra, nresults)) == NULL)
+        if ((newci = luaD_precall(L, ra, nresults)) == nullptr)
           trap = ci->trap; /* C call; nothing else to be done */
         else
         { /* Lua call: run function in this same C frame */

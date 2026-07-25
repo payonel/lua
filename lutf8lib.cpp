@@ -45,7 +45,7 @@ static lua_Integer u_posrelat(lua_Integer pos, size_t len)
 }
 
 /*
-** Decode one UTF-8 sequence, returning NULL if byte sequence is
+** Decode one UTF-8 sequence, returning nullptr if byte sequence is
 ** invalid.  The array 'limits' stores the minimum value for each
 ** sequence length, to check for overlong representations. Its first
 ** entry forces an error for non-ASCII bytes with no continuation
@@ -60,7 +60,7 @@ static const char* utf8_decode(const char* s, l_uint32* val, int strict)
   if (c < 0x80)     /* ASCII? */
     res = c;
   else if (c >= 0xfe) /* c >= 1111 1110b ? */
-    return NULL;      /* would need six or more continuation bytes */
+    return nullptr;      /* would need six or more continuation bytes */
   else
   {
     int count = 0; /* to count number of continuation bytes */
@@ -68,20 +68,20 @@ static const char* utf8_decode(const char* s, l_uint32* val, int strict)
     {                                               /* while it needs continuation bytes... */
       unsigned int cc = (unsigned char) s[++count]; /* read next byte */
       if (!iscont(cc))                              /* not a continuation byte? */
-        return NULL;                                /* invalid byte sequence */
+        return nullptr;                                /* invalid byte sequence */
       res = (res << 6) | (cc & 0x3F);               /* add lower 6 bits from cont. byte */
     }
     assert(count <= 5);
     res |= ((l_uint32) (c & 0x7F) << (count * 5)); /* add first byte */
     if (res > MAXUTF || res < limits[count])
-      return NULL; /* invalid byte sequence */
+      return nullptr; /* invalid byte sequence */
     s += count;    /* skip continuation bytes read */
   }
   if (strict)
   {
     /* check for invalid code points; too large or surrogates */
     if (res > MAXUNICODE || (0xD800u <= res && res <= 0xDFFFu))
-      return NULL;
+      return nullptr;
   }
   if (val)
     *val = res;
@@ -107,8 +107,8 @@ static int utflen(lua_State* L)
                 "final position out of bounds");
   while (posi <= posj)
   {
-    const char* s1 = utf8_decode(s + posi, NULL, !lax);
-    if (s1 == NULL)
+    const char* s1 = utf8_decode(s + posi, nullptr, !lax);
+    if (s1 == nullptr)
     {                               /* conversion error? */
       luaL_pushfail(L);             /* return fail ... */
       lua_pushinteger(L, posi + 1); /* ... and current position */
@@ -148,7 +148,7 @@ static int codepoint(lua_State* L)
   {
     l_uint32 code;
     s = utf8_decode(s, &code, !lax);
-    if (s == NULL)
+    if (s == nullptr)
       return luaL_error(L, MSGInvalid);
     lua_pushinteger(L, ((lua_Integer)(code)));
     n++;
@@ -267,7 +267,7 @@ static int iter_aux(lua_State* L, int strict)
   {
     l_uint32 code;
     const char* next = utf8_decode(s + n, &code, strict);
-    if (next == NULL || iscontp(next))
+    if (next == nullptr || iscontp(next))
       return luaL_error(L, MSGInvalid);
     lua_pushinteger(L, ((lua_Integer)(n + 1)));
     lua_pushinteger(L, ((lua_Integer)(code)));
@@ -306,8 +306,8 @@ static const luaL_Reg funcs[] = {
     {"len", utflen},
     {"codes", iter_codes},
     /* placeholders */
-    {"charpattern", NULL},
-    {NULL, NULL}};
+    {"charpattern", nullptr},
+    {nullptr, nullptr}};
 
 LUAMOD_API int luaopen_utf8(lua_State* L)
 {

@@ -31,7 +31,7 @@
 #define LUA_RLLIB_VAR "LUA_READLINELIB"
 #endif
 
-static lua_State* globalL = NULL;
+static lua_State* globalL = nullptr;
 
 static const char* progname = LUA_PROGNAME;
 
@@ -44,7 +44,7 @@ static void setsignal(int sig, void (*handler)(int))
   sa.sa_handler = handler;
   sa.sa_flags = 0;
   sigemptyset(&sa.sa_mask); /* do not mask any signal */
-  sigaction(sig, &sa, NULL);
+  sigaction(sig, &sa, nullptr);
 }
 
 /*
@@ -52,7 +52,7 @@ static void setsignal(int sig, void (*handler)(int))
 */
 static void lstop(lua_State* L, lua_Debug*)
 {
-  lua_sethook(L, NULL, 0, 0); /* reset hook */
+  lua_sethook(L, nullptr, 0, 0); /* reset hook */
   luaL_error(L, "interrupted!");
 }
 
@@ -111,7 +111,7 @@ static int report(lua_State* L, int status)
   if (status != LUA_OK)
   {
     const char* msg = lua_tostring(L, -1);
-    if (msg == NULL)
+    if (msg == nullptr)
       msg = "(error message not a string)";
     l_message(progname, msg);
     lua_pop(L, 1); /* remove message */
@@ -125,7 +125,7 @@ static int report(lua_State* L, int status)
 static int msghandler(lua_State* L)
 {
   const char* msg = lua_tostring(L, 1);
-  if (msg == NULL)
+  if (msg == nullptr)
   {                                          /* is error object not a string? */
     if (luaL_callmeta(L, 1, "__tostring") && /* does it have a metamethod */
         lua_type(L, -1) == LUA_TSTRING)      /* that produces a string? */
@@ -210,9 +210,9 @@ static int dostring(lua_State* L, const char* s, const char* name)
 static int dolibrary(lua_State* L, char* globname)
 {
   int status;
-  char* suffix = NULL;
+  char* suffix = nullptr;
   char* modname = strchr(globname, '=');
-  if (modname == NULL)
+  if (modname == nullptr)
   {                                        /* no explicit name? */
     modname = globname;                    /* module name is equal to global name */
     suffix = strchr(modname, *LUA_IGMARK); /* look for a suffix mark */
@@ -227,7 +227,7 @@ static int dolibrary(lua_State* L, char* globname)
   status = docall(L, 1, 1); /* call 'require(modname)' */
   if (status == LUA_OK)
   {
-    if (suffix != NULL)         /* is there a suffix mark? */
+    if (suffix != nullptr)         /* is there a suffix mark? */
       *suffix = '\0';           /* remove suffix from global name */
     lua_setglobal(L, globname); /* globname = require(modname) */
   }
@@ -255,7 +255,7 @@ static int handle_script(lua_State* L, char** argv)
   int status;
   const char* fname = argv[0];
   if (strcmp(fname, "-") == 0 && strcmp(argv[-1], "--") != 0)
-    fname = NULL; /* stdin */
+    fname = nullptr; /* stdin */
   status = luaL_loadfilex(L, fname, "bt");
   if (status == LUA_OK)
   {
@@ -283,7 +283,7 @@ static int collectargs(char** argv, int* first)
 {
   int args = 0;
   int i;
-  if (argv[0] != NULL)
+  if (argv[0] != nullptr)
   {                       /* is there a program name? */
     if (argv[0][0])       /* not empty? */
       progname = argv[0]; /* save it */
@@ -293,7 +293,7 @@ static int collectargs(char** argv, int* first)
     *first = -1;
     return 0;
   }
-  for (i = 1; argv[i] != NULL; i++)
+  for (i = 1; argv[i] != nullptr; i++)
   { /* handle arguments */
     *first = i;
     if (argv[i][0] != '-') /* not an option? */
@@ -304,7 +304,7 @@ static int collectargs(char** argv, int* first)
       if (argv[i][2] != '\0') /* extra characters after '--'? */
         return has_error;     /* invalid option */
       /* if there is a script name, it comes after '--' */
-      *first = (argv[i + 1] != NULL) ? i + 1 : 0;
+      *first = (argv[i + 1] != nullptr) ? i + 1 : 0;
       return args;
     case '\0':     /* '-' */
       return args; /* script "name" is '-' */
@@ -330,7 +330,7 @@ static int collectargs(char** argv, int* first)
       if (argv[i][2] == '\0')
       {      /* no concatenated argument? */
         i++; /* try next 'argv' */
-        if (argv[i] == NULL || argv[i][0] == '-')
+        if (argv[i] == nullptr || argv[i][0] == '-')
           return has_error; /* no next argument or it is another option */
       }
       break;
@@ -364,7 +364,7 @@ static int runargs(lua_State* L, char** argv, int n)
       char* extra = argv[i] + 2; /* both options need an argument */
       if (*extra == '\0')
         extra = argv[++i];
-      assert(extra != NULL);
+      assert(extra != nullptr);
       status = (option == 'e')
                    ? dostring(L, extra, "=(command line)")
                    : dolibrary(L, extra);
@@ -385,7 +385,7 @@ static char* (*l_getenv)(const char* name);
 /* Function to ignore environment variables, used by option -E */
 static char* no_getenv(const char*)
 {
-  return NULL;
+  return nullptr;
 }
 
 static int handle_luainit(lua_State* L)
@@ -394,13 +394,13 @@ static int handle_luainit(lua_State* L)
   vname += LUA_VERSUFFIX; /* versioned name: e.g. "=LUA_INIT_5_5" */
   const char* name = vname.c_str();
   const char* init = l_getenv(name + 1);
-  if (init == NULL)
+  if (init == nullptr)
   {
     vname = std::string("=") + LUA_INIT_VAR;
     name = vname.c_str();
     init = l_getenv(name + 1); /* try alternative name */
   }
-  if (init == NULL)
+  if (init == nullptr)
     return LUA_OK;
   else if (init[0] == '@')
     return dofile(L, init + 1);
@@ -449,15 +449,15 @@ constexpr char LUA_PROMPT2[] = ">> ";
 
 /* pointer to 'readline' function (if any) */
 typedef char* (*l_readlineT)(const char* prompt);
-static l_readlineT l_readline = NULL;
+static l_readlineT l_readline = nullptr;
 
 /* pointer to 'add_history' function (if any) */
 typedef void (*l_addhistT)(const char* string);
-static l_addhistT l_addhist = NULL;
+static l_addhistT l_addhist = nullptr;
 
 static char* lua_readline(char* buff, const char* prompt)
 {
-  if (l_readline != NULL)         /* is there a 'readline'? */
+  if (l_readline != nullptr)         /* is there a 'readline'? */
     return (*l_readline)(prompt); /* use it */
   else
   { /* emulate 'readline' over 'buff' */
@@ -469,14 +469,14 @@ static char* lua_readline(char* buff, const char* prompt)
 
 static void lua_saveline(const char* line)
 {
-  if (l_addhist != NULL) /* is there an 'add_history'? */
+  if (l_addhist != nullptr) /* is there an 'add_history'? */
     (*l_addhist)(line);  /* use it */
   /* else nothing to be done */
 }
 
 static void lua_freeline(char* line)
 {
-  if (l_readline != NULL) /* is there a 'readline'? */
+  if (l_readline != nullptr) /* is there a 'readline'? */
     free(line);           /* free line created by it */
   /* else 'lua_readline' used an automatic buffer; nothing to free */
 }
@@ -490,17 +490,17 @@ static void lua_initreadline(lua_State* L)
 {
   const char* rllib = l_getenv(LUA_RLLIB_VAR); /* name of readline library */
   void* lib;                                   /* library handle */
-  if (rllib == NULL)                           /* no environment variable? */
+  if (rllib == nullptr)                           /* no environment variable? */
     rllib = LUA_READLINELIB;                   /* use default name */
   lib = dlopen(rllib, RTLD_NOW | RTLD_LOCAL);
-  if (lib != NULL)
+  if (lib != nullptr)
   {
     const char** name = ((const char**)(dlsym(lib, "rl_readline_name")));
-    if (name != NULL)
+    if (name != nullptr)
       *name = "lua";
     l_readline = ((l_readlineT)(cast_func(dlsym(lib, "readline"))));
     l_addhist = ((l_addhistT)(cast_func(dlsym(lib, "add_history"))));
-    if (l_readline != NULL) /* could load readline function? */
+    if (l_readline != nullptr) /* could load readline function? */
       return;               /* everything ok */
     /* else emit a warning */
   }
@@ -512,7 +512,7 @@ static void lua_initreadline(lua_State* L)
 #else /* }{ */
 /* no dlopen or LUA_READLINELIB undefined */
 
-/* Leave pointers with NULL */
+/* Leave pointers with nullptr */
 #define lua_initreadline(L) ((void) L)
 
 #endif /* } */
@@ -530,7 +530,7 @@ static const char* get_prompt(lua_State* L, int firstline)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
-    const char* p = luaL_tolstring(L, -1, NULL);
+    const char* p = luaL_tolstring(L, -1, nullptr);
     lua_remove(L, -2); /* remove original value */
     return p;
   }
@@ -567,7 +567,7 @@ static int pushline(lua_State* L, int firstline)
   const char* prmt = get_prompt(L, firstline);
   char* b = lua_readline(buffer, prmt);
   lua_pop(L, 1); /* remove prompt */
-  if (b == NULL)
+  if (b == nullptr)
     return 0; /* no input */
   l = strlen(b);
   if (l > 0 && b[l - 1] == '\n') /* line ends with newline? */
@@ -599,7 +599,7 @@ static void checklocal(const char* line)
   static const char space[] = " \t";
   line += strspn(line, space);              /* skip spaces */
   if (strncmp(line, "local", szloc) == 0 && /* "local"? */
-      strchr(space, *(line + szloc)) != NULL)
+      strchr(space, *(line + szloc)) != nullptr)
   { /* followed by a space? */
     lua_writestringerror("%s\n",
                          "warning: locals do not survive across lines in interactive mode");
@@ -677,7 +677,7 @@ static void doREPL(lua_State* L)
 {
   int status;
   const char* oldprogname = progname;
-  progname = NULL; /* no 'progname' on errors in interactive mode */
+  progname = nullptr; /* no 'progname' on errors in interactive mode */
   lua_initreadline(L);
   while ((status = loadline(L)) != -1)
   {
@@ -745,7 +745,7 @@ static int pmain(lua_State* L)
       doREPL(L); /* do read-eval-print loop */
     }
     else
-      dofile(L, NULL); /* executes stdin as a file */
+      dofile(L, nullptr); /* executes stdin as a file */
   }
   lua_pushboolean(L, 1); /* signal no errors */
   return 1;
@@ -755,7 +755,7 @@ int main(int argc, char** argv)
 {
   int status, result;
   lua_State* L = luaL_newstate(); /* create state */
-  if (L == NULL)
+  if (L == nullptr)
   {
     l_message(argv[0], "cannot create state: not enough memory");
     return EXIT_FAILURE;

@@ -96,4 +96,4 @@ static const char* const opnames[] = {
     "ERRNNIL",
     "VARARGPREP",
     "EXTRAARG",
-    NULL};
+    nullptr};

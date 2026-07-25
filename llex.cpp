@@ -196,7 +196,7 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source,
   ls->current = firstchar;
   ls->lookahead.token = TK_EOS; /* no look-ahead token */
   ls->z = z;
-  ls->fs = NULL;
+  ls->fs = nullptr;
   ls->linenumber = 1;
   ls->lastline = 1;
   ls->source = source;
@@ -587,7 +587,7 @@ static int llex(LexState* ls, Token* seminfo)
         ((ls->buff)->n = 0); /* 'skip_sep' may dirty the buffer */
         if (sep >= 2)
         {
-          read_long_string(ls, NULL, sep); /* skip long comment */
+          read_long_string(ls, nullptr, sep); /* skip long comment */
           ((ls->buff)->n = 0);      /* previous call may dirty the buff. */
           break;
         }

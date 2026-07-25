@@ -207,8 +207,8 @@ constexpr char LUA_FILEHANDLE[] = "FILE*";
 
 typedef struct luaL_Stream
 {
-  FILE* f;              /* stream (NULL for incompletely created streams) */
-  lua_CFunction closef; /* to close stream (NULL for closed streams) */
+  FILE* f;              /* stream (nullptr for incompletely created streams) */
+  lua_CFunction closef; /* to close stream (nullptr for closed streams) */
 } luaL_Stream;
 
 /* }====================================================== */

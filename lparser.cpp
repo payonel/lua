@@ -188,7 +188,7 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
   f->locvars = (LocVar*)luaM_growaux_(ls->L, f->locvars, fs->ndebugvars,
       &f->sizelocvars, sizeof(LocVar), limit, "local variables");
   while (oldsize < f->sizelocvars)
-    f->locvars[oldsize++].varname = NULL;
+    f->locvars[oldsize++].varname = nullptr;
   f->locvars[fs->ndebugvars].varname = varname;
   f->locvars[fs->ndebugvars].startpc = fs->pc;
   luaC_objbarrier(ls->L, f, varname);
@@ -266,7 +266,7 @@ static LocVar* localdebuginfo(FuncState* fs, int vidx)
 {
   Vardesc* vd = getlocalvardesc(fs, vidx);
   if (!varinreg(vd))
-    return NULL; /* no debug info. for constants */
+    return nullptr; /* no debug info. for constants */
   else
   {
     int idx = vd->pidx;
@@ -294,7 +294,7 @@ static void init_var(FuncState* fs, expdesc* e, int vidx)
 static void check_readonly(LexState* ls, expdesc* e)
 {
   FuncState* fs = ls->fs;
-  TString* varname = NULL; /* to be set if variable is const */
+  TString* varname = nullptr; /* to be set if variable is const */
   switch (e->k)
   {
   case VCONST:
@@ -404,7 +404,7 @@ static Upvaldesc* allocupvalue(FuncState* fs)
   f->upvalues = (Upvaldesc*)luaM_growaux_(fs->ls->L, f->upvalues, fs->nups,
       &f->sizeupvalues, sizeof(Upvaldesc), limit, "upvalues");
   while (oldsize < f->sizeupvalues)
-    f->upvalues[oldsize++].name = NULL;
+    f->upvalues[oldsize++].name = nullptr;
   return &f->upvalues[fs->nups++];
 }
 
@@ -450,7 +450,7 @@ static int searchvar(FuncState* fs, TString* n, expdesc* var)
     Vardesc* vd = getlocalvardesc(fs, i);
     if (varglobal(vd))
     { /* global declaration? */
-      if (vd->name == NULL)
+      if (vd->name == nullptr)
       {                                     /* collective declaration? */
         if (var->info < 0)                /* no previous collective declaration? */
           var->info = fs->firstlocal + i; /* this is the first one */
@@ -530,7 +530,7 @@ static void singlevaraux(FuncState* fs, TString* n, expdesc* var, int base)
     int idx = searchupvalue(fs, n); /* try existing upvalues */
     if (idx < 0)
     {                                           /* not found? */
-      if (fs->prev != NULL)                     /* more levels? */
+      if (fs->prev != nullptr)                     /* more levels? */
         singlevaraux(fs->prev, n, var, 0);      /* try upper levels */
       if (var->k == VLOCAL || var->k == VUPVAL) /* local or upvalue? */
         idx = newupvalue(fs, n, var);           /* will be a new upvalue */
@@ -629,7 +629,7 @@ static inline void leavelevel(LexState* ls)
 static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
 {
   TString* tsname = getlocalvardesc(ls->fs, gt->nactvar)->name;
-  const char* varname = (tsname != NULL) ? getstr(tsname) : "*";
+  const char* varname = (tsname != nullptr) ? getstr(tsname) : "*";
   luaK_semerror(ls,
                 "<goto %s> at line %d jumps into the scope of '%s'",
                 getstr(gt->name), gt->line, varname); /* raise the error */
@@ -682,7 +682,7 @@ static Labeldesc* findlabel(LexState* ls, TString* name, int ilb)
     if (eqstr(lb->name, name)) /* correct label? */
       return lb;
   }
-  return NULL; /* label not found */
+  return nullptr; /* label not found */
 }
 
 /*
@@ -759,7 +759,7 @@ static void solvegotos(FuncState* fs, BlockCnt* bl)
     Labeldesc* gt = &gl->arr[igt];
     /* search for a matching label in the current block */
     Labeldesc* lb = findlabel(ls, gt->name, bl->firstlabel);
-    if (lb != NULL)                      /* found a match? */
+    if (lb != nullptr)                      /* found a match? */
       closegoto(ls, igt, lb, bl->upval); /* close and remove goto */
     else
     { /* adjust 'goto' for outer block */
@@ -782,7 +782,7 @@ static void enterblock(FuncState* fs, BlockCnt* bl, lu_byte isloop)
   bl->firstgoto = fs->ls->dyd->gt.n;
   bl->upval = 0;
   /* inherit 'insidetbc' from enclosing block */
-  bl->insidetbc = (fs->bl != NULL && fs->bl->insidetbc);
+  bl->insidetbc = (fs->bl != nullptr && fs->bl->insidetbc);
   bl->previous = fs->bl; /* link block in function's block list */
   fs->bl = bl;
   assert(fs->freereg == luaY_nvarstack(fs));
@@ -812,7 +812,7 @@ static void leaveblock(FuncState* fs)
   if (bl->isloop == 2)                    /* has to fix pending breaks? */
     createlabel(ls, ls->brkn, 0, 0);
   solvegotos(fs, bl);
-  if (bl->previous == NULL)
+  if (bl->previous == nullptr)
   {                                                   /* was it the last block? */
     if (bl->firstgoto < ls->dyd->gt.n)                /* still pending gotos? */
       undefgoto(ls, &ls->dyd->gt.arr[bl->firstgoto]); /* error */
@@ -838,7 +838,7 @@ static Proto* addprototype(LexState* ls)
     f->p = (Proto**)luaM_growaux_(L, f->p, fs->np,
         &f->sizep, sizeof(Proto*), limit, "functions");
     while (oldsize < f->sizep)
-      f->p[oldsize++] = NULL;
+      f->p[oldsize++] = nullptr;
   }
   f->p[fs->np++] = clp = luaF_newproto(L);
   luaC_objbarrier(L, f, clp);
@@ -880,7 +880,7 @@ static void open_func(LexState* ls, FuncState* fs, BlockCnt* bl)
   fs->needclose = 0;
   fs->firstlocal = ls->dyd->actvar.n;
   fs->firstlabel = ls->dyd->label.n;
-  fs->bl = NULL;
+  fs->bl = nullptr;
   f->source = ls->source;
   luaC_objbarrier(L, f, f->source);
   f->maxstacksize = 2;                           /* registers 0/1 are always valid */
@@ -898,7 +898,7 @@ static void close_func(LexState* ls)
   TValue temp;
   luaK_ret(fs, luaY_nvarstack(fs), 0); /* final return */
   leaveblock(fs);
-  assert(fs->bl == NULL);
+  assert(fs->bl == nullptr);
   luaK_finish(fs);
   ((f->code) = ((Instruction*)(luaM_shrinkvector_(L, f->code, &(f->sizecode), fs->pc, sizeof(Instruction)))));
   ((f->lineinfo) = ((ls_byte*)(luaM_shrinkvector_(L, f->lineinfo, &(f->sizelineinfo), fs->pc, sizeof(ls_byte)))));
@@ -1717,12 +1717,12 @@ static void gotostat(LexState* ls, int line)
 static void breakstat(LexState* ls, int line)
 {
   BlockCnt* bl; /* to look for an enclosing loop */
-  for (bl = ls->fs->bl; bl != NULL; bl = bl->previous)
+  for (bl = ls->fs->bl; bl != nullptr; bl = bl->previous)
   {
     if (bl->isloop) /* found one? */
       break;
   }
-  if (bl == NULL)
+  if (bl == nullptr)
     luaX_syntaxerror(ls, "break outside loop"); /* does not return */
   bl->isloop = 2; /* signal that block has pending breaks */
   luaX_next(ls);  /* skip break */
@@ -1736,7 +1736,7 @@ static void breakstat(LexState* ls, int line)
 static void checkrepeated(LexState* ls, TString* name)
 {
   Labeldesc* lb = findlabel(ls, name, ls->fs->firstlabel);
-  if (l_unlikely(lb != NULL)) /* already defined? */
+  if (l_unlikely(lb != nullptr)) /* already defined? */
     luaK_semerror(ls, "label '%s' already defined on line %d",
                   getstr(name), lb->line); /* error */
 }
@@ -2141,8 +2141,8 @@ static void globalstat(LexState* ls)
     globalnames(ls, defkind);
   else
   {
-    /* use NULL as name to represent '*' entries */
-    new_varkind(ls, NULL, defkind);
+    /* use nullptr as name to represent '*' entries */
+    new_varkind(ls, nullptr, defkind);
     fs->nactvar++; /* activate declaration */
   }
 }
@@ -2208,7 +2208,7 @@ static void exprstat(LexState* ls)
   suffixedexp(ls, &v.v);
   if (ls->t.token == '=' || ls->t.token == ',')
   { /* stat -> assignment ? */
-    v.prev = NULL;
+    v.prev = nullptr;
     restassign(ls, &v, 1);
   }
   else

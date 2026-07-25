@@ -106,11 +106,11 @@ constexpr int LUA_TMPNAMBUFSIZE = 32;
 
 static int os_execute(lua_State* L)
 {
-  const char* cmd = luaL_optstring(L, 1, NULL);
+  const char* cmd = luaL_optstring(L, 1, nullptr);
   int stat;
   errno = 0;
   stat = l_system(cmd);
-  if (cmd != NULL)
+  if (cmd != nullptr)
     return luaL_execresult(L, stat);
   else
   {
@@ -131,7 +131,7 @@ static int os_rename(lua_State* L)
   const char* fromname = luaL_checkstring(L, 1);
   const char* toname = luaL_checkstring(L, 2);
   errno = 0;
-  return luaL_fileresult(L, rename(fromname, toname) == 0, NULL);
+  return luaL_fileresult(L, rename(fromname, toname) == 0, nullptr);
 }
 
 static int os_tmpname(lua_State* L)
@@ -147,7 +147,7 @@ static int os_tmpname(lua_State* L)
 
 static int os_getenv(lua_State* L)
 {
-  lua_pushstring(L, getenv(luaL_checkstring(L, 1))); /* if NULL push nil */
+  lua_pushstring(L, getenv(luaL_checkstring(L, 1))); /* if nullptr push nil */
   return 1;
 }
 
@@ -274,7 +274,7 @@ static int os_date(lua_State* L)
 {
   size_t slen;
   const char* s = luaL_optlstring(L, 1, "%c", &slen);
-  time_t t = (lua_isnoneornil(L, (2)) ? (time(NULL)) : l_checktime(L, (2)));
+  time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
   const char* se = s + slen; /* 's' end */
   struct tm tmr, *stm;
   if (*s == '!')
@@ -284,7 +284,7 @@ static int os_date(lua_State* L)
   }
   else
     stm = l_localtime(&t, &tmr);
-  if (stm == NULL) /* invalid date? */
+  if (stm == nullptr) /* invalid date? */
     return luaL_error(L,
                       "date result cannot be represented in this installation");
   if (strcmp(s, "*t") == 0)
@@ -322,7 +322,7 @@ static int os_time(lua_State* L)
 {
   time_t t;
   if (lua_isnoneornil(L, 1)) /* called without args? */
-    t = time(NULL);          /* get current time */
+    t = time(nullptr);          /* get current time */
   else
   {
     struct tm ts;
@@ -360,8 +360,8 @@ static int os_setlocale(lua_State* L)
   static const int cat[] = {LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY,
                             LC_NUMERIC, LC_TIME};
   static const char* const catnames[] = {"all", "collate", "ctype", "monetary",
-                                         "numeric", "time", NULL};
-  const char* l = luaL_optstring(L, 1, NULL);
+                                         "numeric", "time", nullptr};
+  const char* l = luaL_optstring(L, 1, nullptr);
   int op = luaL_checkoption(L, 2, "all", catnames);
   lua_pushstring(L, setlocale(cat[op], l));
   return 1;
@@ -393,7 +393,7 @@ static const luaL_Reg syslib[] = {
     {"setlocale", os_setlocale},
     {"time", os_time},
     {"tmpname", os_tmpname},
-    {NULL, NULL}};
+    {nullptr, nullptr}};
 
 /* }====================================================== */
 

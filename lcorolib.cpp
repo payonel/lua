@@ -225,7 +225,7 @@ static const luaL_Reg co_funcs[] = {
     {"yield", luaB_yield},
     {"isyieldable", luaB_yieldable},
     {"close", luaB_close},
-    {NULL, NULL}};
+    {nullptr, nullptr}};
 
 LUAMOD_API int luaopen_coroutine(lua_State* L)
 {

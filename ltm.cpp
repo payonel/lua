@@ -59,7 +59,7 @@ const TValue* luaT_gettm(Table* events, TMS event, TString* ename)
   if (notm(tm))
   {                                          /* no tag method? */
     events->flags |= ((lu_byte)(1u << event)); /* cache this fact */
-    return NULL;
+    return nullptr;
   }
   else
     return tm;
@@ -93,8 +93,8 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
 const char* luaT_objtypename(lua_State* L, const TValue* o)
 {
   Table* mt;
-  if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = static_cast<Table*>(o->value_.gc)->metatable) != NULL) ||
-      (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = static_cast<Udata*>(o->value_.gc)->metatable) != NULL))
+  if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = static_cast<Table*>(o->value_.gc)->metatable) != nullptr) ||
+      (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = static_cast<Udata*>(o->value_.gc)->metatable) != nullptr))
   {
     const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, "__name"));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
@@ -346,7 +346,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
 */
 static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
 {
-  if (h == NULL) /* no vararg table? */
+  if (h == nullptr) /* no vararg table? */
     return ci->nextraargs;
   else
   {
@@ -368,7 +368,7 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
 {
   Table* h;
   if (vatab < 0)
-    h = NULL;
+    h = nullptr;
   else
   {
     TValue* vt = &L->stack.p[ci->func + vatab + 1];
@@ -386,7 +386,7 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
   }
   else
     touse = (nargs > wanted) ? wanted : nargs;
-  if (h == NULL)
+  if (h == nullptr)
   {                             /* no vararg table? */
     for (i = 0; i < touse; i++) /* get vararg values from the stack */
       setobj(L, (&(L)->stack.p[where + i]), (&(L)->stack.p[ci->func - nargs + i]));

@@ -139,7 +139,7 @@ static l_forceinline int tointegerns(const TValue* o, lua_Integer* iout)
 
 static inline int luaV_rawequalobj(const TValue* t1, const TValue* t2)
 {
-  return luaV_equalobj(NULL, t1, t2);
+  return luaV_equalobj(nullptr, t1, t2);
 }
 
 static inline void luaV_finishfastset(lua_State* L, const TValue* t, const TValue* v)

@@ -174,7 +174,7 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   u = static_cast<Udata*>(o);
   u->len = s;
   u->nuvalue = nuvalue;
-  u->metatable = NULL;
+  u->metatable = nullptr;
   for (i = 0; i < nuvalue; i++)
     ((&u->uv[i].uv)->tt_ = LUA_VNIL);
   return u;

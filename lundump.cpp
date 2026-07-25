@@ -76,7 +76,7 @@ static const void* getaddr_(LoadState* S, size_t size)
 {
   const void* block = luaZ_getaddr(S->Z, size);
   S->offset += size;
-  if (block == NULL)
+  if (block == nullptr)
     error(S, "truncated fixed buffer");
   return block;
 }
@@ -150,7 +150,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     TValue stv;
     if (idx == 0)
     {                          /* no string? */
-      assert(*sl == NULL); /* must be prefilled */
+      assert(*sl == nullptr); /* must be prefilled */
       return;
     }
     if ((luaH_getint(S->h, ((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
@@ -236,12 +236,12 @@ static void loadConstants(LoadState* S, Proto* f)
       break;
     case LUA_VSHRSTR:
     {
-      assert(f->source == NULL);
+      assert(f->source == nullptr);
       loadString(S, f, &f->source); /* use 'source' to anchor string */
-      if (f->source == NULL)
+      if (f->source == nullptr)
         error(S, "bad format for constant string");
       setsvalue(S->L, o, f->source); /* save it in the right place */
-      f->source = NULL;
+      f->source = nullptr;
       break;
     }
     default:
@@ -257,7 +257,7 @@ static void loadProtos(LoadState* S, Proto* f)
   f->p = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(Proto*))) ? luaM_toobig(S->L) : ((void)(0))), ((Proto**)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(Proto*), 0))));
   f->sizep = n;
   for (i = 0; i < n; i++)
-    f->p[i] = NULL;
+    f->p[i] = nullptr;
   for (i = 0; i < n; i++)
   {
     f->p[i] = luaF_newproto(S->L);
@@ -281,7 +281,7 @@ static void loadUpvalues(LoadState* S, Proto* f)
   f->upvalues = (Upvaldesc*)luaM_malloc_(S->L, (size_t)n * sizeof(Upvaldesc), 0);
   f->sizeupvalues = n;
   for (i = 0; i < n; i++) /* make array valid for GC */
-    f->upvalues[i].name = NULL;
+    f->upvalues[i].name = nullptr;
   for (i = 0; i < n; i++)
   { /* following calls can raise errors */
     f->upvalues[i].instack = loadByte(S);
@@ -331,7 +331,7 @@ static void loadDebug(LoadState* S, Proto* f)
   f->locvars = (LocVar*)luaM_malloc_(S->L, (size_t)n * sizeof(LocVar), 0);
   f->sizelocvars = n;
   for (i = 0; i < n; i++)
-    f->locvars[i].varname = NULL;
+    f->locvars[i].varname = nullptr;
   for (i = 0; i < n; i++)
   {
     loadString(S, f, &f->locvars[i].varname);

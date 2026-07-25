@@ -417,8 +417,8 @@ constexpr lu_byte LUA_VCCL = makevariant(LUA_TFUNCTION, 2); /* C closure */
 */
 typedef struct UpVal : GCObject
 {
-  struct UpVal* opennext;    /* next in open list (NULL when closed) */
-  struct UpVal** previous;   /* back-pointer in open list (NULL when closed) */
+  struct UpVal* opennext;    /* next in open list (nullptr when closed) */
+  struct UpVal** previous;   /* back-pointer in open list (nullptr when closed) */
   struct lua_State* owner;   /* thread whose stack holds the value (when open) */
   StkId stkid;              /* stack index in 'owner' when open */
   TValue value;             /* embedded storage for closed-over value */
@@ -529,7 +529,7 @@ static l_forceinline unsigned int sizenode(const Table* t)
 /*
 ** Any value being manipulated by the program either is non
 ** collectable, or the collectable object has the right tag
-** and it is not dead. The option 'L == NULL' allows other
+** and it is not dead. The option 'L == nullptr' allows other
 ** callers to use it where L is not available.
 ** 'luaO_checkliveness' performs its checks via asserts and always
 ** returns 1, so it can be called as 'assert(luaO_checkliveness(...))'.

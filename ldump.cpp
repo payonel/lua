@@ -37,7 +37,7 @@ typedef struct
 
 /*
 ** Dump the block of memory pointed by 'b' with given 'size'.
-** 'b' should not be NULL, except for the last call signaling the end
+** 'b' should not be nullptr, except for the last call signaling the end
 ** of the dump.
 */
 /*
@@ -129,7 +129,7 @@ static void dumpInteger(DumpState* D, lua_Integer x)
 /*
 ** Dump a String. First dump its "size":
 ** size==0 is followed by an index and means "reuse saved string with
-** that index"; index==0 means NULL.
+** that index"; index==0 means nullptr.
 ** size>=1 is followed by the string contents with real size==size-1 and
 ** means that string, which will be saved with the next available index.
 ** The real size does not include the ending '\0' (which is not dumped),
@@ -137,10 +137,10 @@ static void dumpInteger(DumpState* D, lua_Integer x)
 */
 static void dumpString(DumpState* D, TString* ts)
 {
-  if (ts == NULL)
+  if (ts == nullptr)
   {
-    dumpVarint(D, 0); /* will "reuse" NULL */
-    dumpVarint(D, 0); /* special index for NULL */
+    dumpVarint(D, 0); /* will "reuse" nullptr */
+    dumpVarint(D, 0); /* special index for nullptr */
   }
   else
   {
@@ -172,7 +172,7 @@ static void dumpCode(DumpState* D, const Proto* f)
 {
   dumpInt(D, f->sizecode);
   dumpAlign(D, sizeof(f->code[0]));
-  assert(f->code != NULL);
+  assert(f->code != nullptr);
   dumpBlock(D, f->code, (((unsigned int)(f->sizecode))) * sizeof((f->code)[0]));
 }
 
@@ -233,7 +233,7 @@ static void dumpDebug(DumpState* D, const Proto* f)
   int i, n;
   n = (D->strip) ? 0 : f->sizelineinfo;
   dumpInt(D, n);
-  if (f->lineinfo != NULL)
+  if (f->lineinfo != nullptr)
     dumpBlock(D, f->lineinfo, (((unsigned int)(n))) * sizeof((f->lineinfo)[0]));
   n = (D->strip) ? 0 : f->sizeabslineinfo;
   dumpInt(D, n);
@@ -268,7 +268,7 @@ static void dumpFunction(DumpState* D, const Proto* f)
   dumpConstants(D, f);
   dumpUpvalues(D, f);
   dumpProtos(D, f);
-  dumpString(D, D->strip ? NULL : f->source);
+  dumpString(D, D->strip ? nullptr : f->source);
   dumpDebug(D, f);
 }
 
@@ -304,6 +304,6 @@ int luaU_dump(lua_State* L, const Proto* f, lua_Writer w, void* data,
   dumpHeader(&D);
   dumpByte(&D, f->sizeupvalues);
   dumpFunction(&D, f);
-  dumpBlock(&D, NULL, 0); /* signal end of dump */
+  dumpBlock(&D, nullptr, 0); /* signal end of dump */
   return D.status;
 }

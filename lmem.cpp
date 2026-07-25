@@ -23,15 +23,15 @@
 ** void *frealloc (void *ud, void *ptr, size_t osize, size_t nsize);
 ** ('osize' is the old size, 'nsize' is the new size)
 **
-** - frealloc(ud, p, x, 0) frees the block 'p' and returns NULL.
-** Particularly, frealloc(ud, NULL, 0, 0) does nothing,
-** which is equivalent to free(NULL) in ISO C.
+** - frealloc(ud, p, x, 0) frees the block 'p' and returns nullptr.
+** Particularly, frealloc(ud, nullptr, 0, 0) does nothing,
+** which is equivalent to free(nullptr) in ISO C.
 **
-** - frealloc(ud, NULL, x, s) creates a new block of size 's'
-** (no matter 'x'). Returns NULL if it cannot create the new block.
+** - frealloc(ud, nullptr, x, s) creates a new block of size 's'
+** (no matter 'x'). Returns nullptr if it cannot create the new block.
 **
 ** - otherwise, frealloc(ud, b, x, y) reallocates the block 'b' from
-** size 'x' to size 'y'. Returns NULL if it cannot reallocate the
+** size 'x' to size 'y'. Returns nullptr if it cannot reallocate the
 ** block to the new size.
 */
 
@@ -132,7 +132,7 @@ l_noret luaM_toobig(lua_State* L)
 void luaM_free_(lua_State* L, void* block, size_t osize)
 {
   global_State* g = G(L);
-  assert((osize == 0) == (block == NULL));
+  assert((osize == 0) == (block == nullptr));
   callfrealloc(g, block, osize, 0);
   g->GCdebt += ((l_mem)(osize));
 }
@@ -151,7 +151,7 @@ static void* tryagain(lua_State* L, void* block,
     return callfrealloc(g, block, osize, nsize); /* try again */
   }
   else
-    return NULL; /* cannot run an emergency collection */
+    return nullptr; /* cannot run an emergency collection */
 }
 
 /*
@@ -161,15 +161,15 @@ void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
 {
   void* newblock;
   global_State* g = G(L);
-  assert((osize == 0) == (block == NULL));
+  assert((osize == 0) == (block == nullptr));
   newblock = firsttry(g, block, osize, nsize);
-  if (l_unlikely(newblock == NULL && nsize > 0))
+  if (l_unlikely(newblock == nullptr && nsize > 0))
   {
     newblock = tryagain(L, block, osize, nsize);
-    if (newblock == NULL) /* still no memory? */
-      return NULL;        /* do not update 'GCdebt' */
+    if (newblock == nullptr) /* still no memory? */
+      return nullptr;        /* do not update 'GCdebt' */
   }
-  assert((nsize == 0) == (newblock == NULL));
+  assert((nsize == 0) == (newblock == nullptr));
   g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
   return newblock;
 }
@@ -178,7 +178,7 @@ void* luaM_saferealloc_(lua_State* L, void* block, size_t osize,
                         size_t nsize)
 {
   void* newblock = luaM_realloc_(L, block, osize, nsize);
-  if (l_unlikely(newblock == NULL && nsize > 0)) /* allocation failed? */
+  if (l_unlikely(newblock == nullptr && nsize > 0)) /* allocation failed? */
     luaD_throw(L, LUA_ERRMEM);
   return newblock;
 }
@@ -186,15 +186,15 @@ void* luaM_saferealloc_(lua_State* L, void* block, size_t osize,
 void* luaM_malloc_(lua_State* L, size_t size, int tag)
 {
   if (size == 0)
-    return NULL; /* that's all */
+    return nullptr; /* that's all */
   else
   {
     global_State* g = G(L);
-    void* newblock = firsttry(g, NULL, ((size_t)(tag)), size);
-    if (l_unlikely(newblock == NULL))
+    void* newblock = firsttry(g, nullptr, ((size_t)(tag)), size);
+    if (l_unlikely(newblock == nullptr))
     {
-      newblock = tryagain(L, NULL, ((size_t)(tag)), size);
-      if (newblock == NULL)
+      newblock = tryagain(L, nullptr, ((size_t)(tag)), size);
+      if (newblock == nullptr)
         luaD_throw(L, LUA_ERRMEM);
     }
     g->GCdebt -= ((l_mem)(size));

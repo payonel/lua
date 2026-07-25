@@ -39,12 +39,12 @@ typedef struct CallInfo CallInfo;
 ** 'allgc' -> 'survival': new objects;
 ** 'survival' -> 'old': objects that survived one collection;
 ** 'old1' -> 'reallyold': objects that became old in last collection;
-** 'reallyold' -> NULL: objects old for more than one cycle.
+** 'reallyold' -> nullptr: objects old for more than one cycle.
 **
 ** 'finobj' -> 'finobjsur': new objects marked for finalization;
 ** 'finobjsur' -> 'finobjold1': survived   """";
 ** 'finobjold1' -> 'finobjrold': just old  """";
-** 'finobjrold' -> NULL: really old       """".
+** 'finobjrold' -> nullptr: really old       """".
 **
 ** All lists can contain elements older than their main ages, due
 ** to 'luaC_checkfinalizer' and 'udata2finalize', which move
@@ -436,10 +436,10 @@ static l_forceinline l_mem gettotalbytes(global_State* g)
   return g->GCtotalbytes - g->GCdebt;
 }
 
-/* fast access to metamethods: NULL when no metamethod present */
+/* fast access to metamethods: nullptr when no metamethod present */
 static l_forceinline const TValue* gfasttm(global_State* g, Table* mt, TMS e)
 {
-  return checknoTM(mt, e) ? NULL : luaT_gettm(mt, e, g->tmname[e]);
+  return checknoTM(mt, e) ? nullptr : luaT_gettm(mt, e, g->tmname[e]);
 }
 
 static l_forceinline const TValue* fasttm(lua_State* l, Table* mt, TMS e)

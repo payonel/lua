@@ -121,16 +121,16 @@ static inline int hashpointer(const Table* t, lua_CFunction p)
 ** Common hash part for tables with empty hash parts. That allows all
 ** tables to have a hash part, avoiding an extra check ("is there a hash
 ** part?") when indexing. Its sole node has an empty value and a key
-** (DEADKEY, NULL) that is different from any valid TValue.
+** (DEADKEY, nullptr) that is different from any valid TValue.
 */
 static const Node dummynode_ = {
-    {{NULL}, LUA_VEMPTY}, /* val (value and type) */
+    {{nullptr}, LUA_VEMPTY}, /* val (value and type) */
     LUA_TDEADKEY,         /* key_tt */
     0,                    /* next */
-    {NULL}                /* key_val */
+    {nullptr}                /* key_val */
 };
 
-static const TValue absentkey = {{NULL}, LUA_VABSTKEY};
+static const TValue absentkey = {{nullptr}, LUA_VABSTKEY};
 
 /*
 ** Hash for integers. To allow a good hash, use the remainder operator
@@ -230,7 +230,7 @@ static int mainpositionTV(const Table* t, const TValue* key)
 static inline int mainpositionfromnode(const Table* t, int nd)
 {
   TValue key;
-  getnodekey(((lua_State*)(NULL)), &key, gnode(t, nd));
+  getnodekey(((lua_State*)(nullptr)), &key, gnode(t, nd));
   return mainpositionTV(t, &key);
 }
 
@@ -624,14 +624,14 @@ static Value* resizearray(lua_State* L, Table* t,
   {                                              /* erasing array? */
     Value* op = t->array - oldasize;             /* original array's real address */
     luaM_free_(L, (op), (concretesize(oldasize))); /* free it */
-    return NULL;
+    return nullptr;
   }
   else
   {
     size_t newasizeb = concretesize(newasize);
-    Value* np = ((Value*)((((lu_byte*)(luaM_realloc_(L, NULL, ((size_t)(0)) * sizeof(lu_byte), ((size_t)(newasizeb)) * sizeof(lu_byte)))))));
-    if (np == NULL) /* allocation error? */
-      return NULL;
+    Value* np = ((Value*)((((lu_byte*)(luaM_realloc_(L, nullptr, ((size_t)(0)) * sizeof(lu_byte), ((size_t)(newasizeb)) * sizeof(lu_byte)))))));
+    if (np == nullptr) /* allocation error? */
+      return nullptr;
     np += newasize; /* shift pointer to the end of value segment */
     if (oldasize > 0)
     {
@@ -797,7 +797,7 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
   }
   /* allocate new array */
   newarray = resizearray(L, t, oldasize, newasize);
-  if (l_unlikely(newarray == NULL && newasize > 0))
+  if (l_unlikely(newarray == nullptr && newasize > 0))
   {                     /* allocation failed? */
     freehash(L, &newt); /* release new hash part */
     luaD_throw(L, LUA_ERRMEM);      /* raise error (with array unchanged) */
@@ -806,7 +806,7 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
   exchangehashpart(t, &newt); /* 't' has the new hash ('newt' has the old) */
   t->array = newarray;        /* set new array part */
   t->asize = newasize;
-  if (newarray != NULL)
+  if (newarray != nullptr)
     *lenhint(t) = newasize / 2u; /* set an initial hint */
   clearNewSlice(t, oldasize, newasize);
   /* re-insert elements from old hash part into new parts */
@@ -871,9 +871,9 @@ Table* luaH_new(lua_State* L)
   GCObject* o = luaC_newobj(L, LUA_VTABLE, sizeof(Table));
   assert(o->tt == LUA_VTABLE);
   Table* t = static_cast<Table*>(o);
-  t->metatable = NULL;
+  t->metatable = nullptr;
   t->flags = maskflags; /* table has no metamethod fields */
-  t->array = NULL;
+  t->array = nullptr;
   t->asize = 0;
   setnodevector(L, t, 0);
   return t;
@@ -1048,7 +1048,7 @@ static lu_byte finishnodeget(const TValue* val, TValue* res)
 {
   if (!(((val)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {
-    setobj(((lua_State*) NULL), res, val);
+    setobj(((lua_State*) nullptr), res, val);
   }
   return ((val)->tt_ & WITHVARIANT_MASK);
 }
@@ -1158,7 +1158,7 @@ static int finishnodeset(Table* t, int idx, TValue* val)
 {
   if (idx >= 0 && !((((&(gnode(t, idx))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {
-    setobj(((lua_State*) NULL), (&(gnode(t, idx))->val), val);
+    setobj(((lua_State*) nullptr), (&(gnode(t, idx))->val), val);
     return HOK; /* success */
   }
   else
@@ -1171,7 +1171,7 @@ static int rawfinishnodeset(Table* t, int idx, TValue* val)
     return 0; /* no slot with that key */
   else
   {
-    setobj(((lua_State*) NULL), (&(gnode(t, idx))->val), val);
+    setobj(((lua_State*) nullptr), (&(gnode(t, idx))->val), val);
     return 1; /* success */
   }
 }
@@ -1215,7 +1215,7 @@ int luaH_psetshortstr(Table* t, TString* key, TValue* val)
   int idx = nodeshortstr(t, key);
   if (idx >= 0 && !((((&(gnode(t, idx))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                                        /* key already has a value? (all too common) */
-    setobj(((lua_State*) NULL), (&(gnode(t, idx))->val), val); /* update it */
+    setobj(((lua_State*) nullptr), (&(gnode(t, idx))->val), val); /* update it */
     return HOK;                                            /* done */
   }
   else if (checknoTM(t->metatable, TM_NEWINDEX))
@@ -1226,7 +1226,7 @@ int luaH_psetshortstr(Table* t, TString* key, TValue* val)
         !(isblack(t) && iswhite(key)))
     {            /* and don't need barrier? */
       TValue tk; /* key as a TValue */
-      setsvalue(((lua_State*)(NULL)), &tk, key);
+      setsvalue(((lua_State*)(nullptr)), &tk, key);
       if (insertkey(t, &tk, val))
       { /* insert key, if there is space */
         invalidateTMcache(t);

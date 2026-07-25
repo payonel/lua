@@ -42,7 +42,7 @@ l_noret luaK_semerror(LexState* ls, const char* fmt, ...)
   va_start(argp, fmt);
   msg = luaO_pushvfstring(ls->L, fmt, argp);
   va_end(argp);
-  if (msg == NULL)
+  if (msg == nullptr)
     luaD_throw(ls->L, LUA_ERRMEM); /* only after 'va_end' */
   ls->t.token = 0;               /* remove "near <token>" from final message */
   ls->linenumber = ls->lastline; /* back to line of last used token */
@@ -1763,7 +1763,7 @@ static void codebinNoK(FuncState* fs, BinOpr opr,
 static void codearith(FuncState* fs, BinOpr opr,
                       expdesc* e1, expdesc* e2, int flip, int line)
 {
-  if (tonumeral(e2, NULL) && luaK_exp2K(fs, e2)) /* K operand? */
+  if (tonumeral(e2, nullptr) && luaK_exp2K(fs, e2)) /* K operand? */
     codebinK(fs, opr, e1, e2, flip, line);
   else /* 'e2' is neither an immediate nor a K operand */
     codebinNoK(fs, opr, e1, e2, flip, line);
@@ -1778,7 +1778,7 @@ static void codecommutative(FuncState* fs, BinOpr op,
                             expdesc* e1, expdesc* e2, int line)
 {
   int flip = 0;
-  if (tonumeral(e1, NULL))
+  if (tonumeral(e1, nullptr))
   {                   /* is first operand a numeric constant? */
     swapexps(e1, e2); /* change order */
     flip = 1;
@@ -1884,7 +1884,7 @@ static void codeeq(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
 */
 void luaK_prefix(FuncState* fs, UnOpr opr, expdesc* e, int line)
 {
-  static const expdesc ef = {VKINT, 0, 0, NULL, 0, {0, 0, 0, 0}, {0, 0}, NO_JUMP, NO_JUMP}; /* fake 2nd operand */
+  static const expdesc ef = {VKINT, 0, 0, nullptr, 0, {0, 0, 0, 0}, {0, 0}, NO_JUMP, NO_JUMP}; /* fake 2nd operand */
   luaK_dischargevars(fs, e);
   switch (opr)
   {
@@ -1941,7 +1941,7 @@ void luaK_infix(FuncState* fs, BinOpr op, expdesc* v)
   case OPR_SHL:
   case OPR_SHR:
   {
-    if (!tonumeral(v, NULL))
+    if (!tonumeral(v, nullptr))
       luaK_exp2anyreg(fs, v);
     /* else keep numeral, which may be folded or used as an immediate
        operand */
@@ -1950,7 +1950,7 @@ void luaK_infix(FuncState* fs, BinOpr op, expdesc* v)
   case OPR_EQ:
   case OPR_NE:
   {
-    if (!tonumeral(v, NULL))
+    if (!tonumeral(v, nullptr))
       exp2RK(fs, v);
     /* else keep numeral, which may be an immediate operand */
     break;
