@@ -1221,8 +1221,8 @@ LUA_API void lua_callk(lua_State* L, int nargs, int nresults,
   func = L->top - (nargs + 1);
   if (k != NULL && yieldable(L))
   {                               /* need to prepare continuation? */
-    L->ci->u.c.k = k;             /* save continuation */
-    L->ci->u.c.ctx = ctx;         /* save context */
+    L->ci->k = k;             /* save continuation */
+    L->ci->ctx = ctx;         /* save context */
     luaD_call(L, func, nresults); /* do the call */
   }
   else                                   /* no continuation or no yieldable */
@@ -1274,17 +1274,17 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   else
   { /* prepare continuation (call is already protected by 'resume') */
     CallInfo* ci = L->ci;
-    ci->u.c.k = k;     /* save continuation */
-    ci->u.c.ctx = ctx; /* save context */
+    ci->k = k;     /* save continuation */
+    ci->ctx = ctx; /* save context */
     /* save information for error recovery */
-    ci->u2.funcidx = ((int)((c.func)));
-    ci->u.c.old_errfunc = L->errfunc;
+    ci->funcidx = ((int)((c.func)));
+    ci->old_errfunc = L->errfunc;
     L->errfunc = func;
     setoah(ci, L->allowhook);       /* save value of 'allowhook' */
     ci->callstatus |= CIST_YPCALL;  /* function can do error recovery */
     luaD_call(L, c.func, nresults); /* do the call */
     ci->callstatus &= ~CIST_YPCALL;
-    L->errfunc = ci->u.c.old_errfunc;
+    L->errfunc = ci->old_errfunc;
     status = LUA_OK; /* if it is here, there were no errors */
   }
   adjustresults(L, nresults);

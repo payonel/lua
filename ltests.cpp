@@ -539,8 +539,8 @@ static int lua_checkpc(lua_State* L, CallInfo* ci)
     assert((&L->stack.p[f])->tt_ == ctb(LUA_VLCL));
     assert((&L->stack.p[f])->value_.gc->tt == LUA_VLCL);
     Proto* p = static_cast<LClosure*>((&L->stack.p[f])->value_.gc)->p;
-    return p->code <= ci->u.l.savedpc &&
-           ci->u.l.savedpc <= p->code + p->sizecode;
+    return p->code <= ci->savedpc &&
+           ci->savedpc <= p->code + p->sizecode;
   }
 }
 

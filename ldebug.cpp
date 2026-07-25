@@ -39,7 +39,7 @@ static const char* funcnamefromcall(lua_State* L, CallInfo* ci,
 static int currentpc(lua_State* L, CallInfo* ci)
 {
   assert(isLua(ci));
-  return pcRel(ci->u.l.savedpc, ci_func(L, ci)->p);
+  return pcRel(ci->savedpc, ci_func(L, ci)->p);
 }
 
 /*
@@ -117,7 +117,7 @@ static void settraps(CallInfo* ci)
 {
   for (; ci != NULL; ci = ci->previous)
     if (isLua(ci))
-      ci->u.l.trap = 1;
+      ci->trap = 1;
 }
 
 /*
@@ -198,7 +198,7 @@ static const char* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
   LClosure* cl = static_cast<LClosure*>(fv->value_.gc);
   if (cl->p->flag & PF_VAHID)
   {
-    int nextra = ci->u.l.nextraargs;
+    int nextra = ci->nextraargs;
     if (n >= -nextra)
     { /* 'n' is negative */
       *pos = ci->func - nextra - (n + 1);
@@ -1045,8 +1045,8 @@ int luaG_tracecall(lua_State* L)
 {
   CallInfo* ci = L->ci;
   Proto* p = ci_func(L, ci)->p;
-  ci->u.l.trap = 1; /* ensure hooks will be checked */
-  if (ci->u.l.savedpc == p->code)
+  ci->trap = 1; /* ensure hooks will be checked */
+  if (ci->savedpc == p->code)
   { /* first instruction (not resuming)? */
     if (isvararg(p))
       return 0;                                  /* hooks will start at VARARGPREP instruction */
@@ -1076,11 +1076,11 @@ int luaG_traceexec(lua_State* L, const Instruction* pc)
   int counthook;
   if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT)))
   {                   /* no hooks? */
-    ci->u.l.trap = 0; /* don't need to stop again */
+    ci->trap = 0; /* don't need to stop again */
     return 0;         /* turn off 'trap' */
   }
   pc++;                 /* reference is always next instruction */
-  ci->u.l.savedpc = pc; /* save 'pc' */
+  ci->savedpc = pc; /* save 'pc' */
   counthook = (mask & LUA_MASKCOUNT) && (--L->hookcount == 0);
   if (counthook)
     resethookcount(L); /* reset count */
@@ -1091,7 +1091,7 @@ int luaG_traceexec(lua_State* L, const Instruction* pc)
     ci->callstatus &= ~CIST_HOOKYIELD; /* erase mark */
     return 1;                          /* do not call hook again (VM yielded, so it did not move) */
   }
-  if (!luaP_isIT(*(ci->u.l.savedpc - 1))) /* top not being used? */
+  if (!luaP_isIT(*(ci->savedpc - 1))) /* top not being used? */
     L->top = ci->top;                 /* correct top */
   if (counthook)
     luaD_hook(L, LUA_HOOKCOUNT, -1, 0, 0); /* call count hook */

@@ -273,7 +273,7 @@ static void buildhiddenargs(lua_State* L, CallInfo* ci, const Proto* p,
                             int totalargs, int nfixparams, int nextra)
 {
   int i;
-  ci->u.l.nextraargs = nextra;
+  ci->nextraargs = nextra;
   luaD_checkstack(L, p->maxstacksize + 1);
   /* copy function to the top of the stack, after extra arguments */
   setobj(L, (&(L)->stack.p[L->top++]), (&(L)->stack.p[ci->func]));
@@ -311,7 +311,7 @@ void luaT_adjustvarargs(lua_State* L, CallInfo* ci, const Proto* p)
 
 void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
 {
-  int nextra = ci->u.l.nextraargs;
+  int nextra = ci->nextraargs;
   lua_Integer n;
   if (tointegerns(rc, &n))
   { /* integral value? */
@@ -347,7 +347,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
 static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
 {
   if (h == NULL) /* no vararg table? */
-    return ci->u.l.nextraargs;
+    return ci->nextraargs;
   else
   {
     TValue res;

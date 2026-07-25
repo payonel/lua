@@ -218,7 +218,7 @@ static void correctstack(lua_State* L)
   for (CallInfo* ci = L->ci; ci != NULL; ci = ci->previous)
   {
     if (isLua(ci))
-      ci->u.l.trap = 1; /* signal to update 'trap' in 'luaV_execute' */
+      ci->trap = 1; /* signal to update 'trap' in 'luaV_execute' */
   }
 }
 
@@ -395,9 +395,9 @@ void luaD_hookcall(lua_State* L, CallInfo* ci)
     int event = (ci->callstatus & CIST_TAIL) ? LUA_HOOKTAILCALL
                                              : LUA_HOOKCALL;
     Proto* p = ci_func(L, ci)->p;
-    ci->u.l.savedpc++; /* hooks assume 'pc' is already incremented */
+    ci->savedpc++; /* hooks assume 'pc' is already incremented */
     luaD_hook(L, event, -1, 1, p->numparams);
-    ci->u.l.savedpc--; /* correct 'pc' */
+    ci->savedpc--; /* correct 'pc' */
   }
 }
 
@@ -417,7 +417,7 @@ static void rethook(lua_State* L, CallInfo* ci, int nres)
     {
       Proto* p = ci_func(L, ci)->p;
       if (p->flag & PF_VAHID)
-        delta = ci->u.l.nextraargs + p->numparams + 1;
+        delta = ci->nextraargs + p->numparams + 1;
     }
     ci->func += delta; /* if vararg, back to virtual 'func' */
     ftransfer = ((int)(firstres - ci->func));
@@ -425,7 +425,7 @@ static void rethook(lua_State* L, CallInfo* ci, int nres)
     ci->func -= delta;
   }
   if (isLua(ci = ci->previous))
-    L->oldpc = pcRel(ci->u.l.savedpc, ci_func(L, ci)->p); /* set 'oldpc' */
+    L->oldpc = pcRel(ci->savedpc, ci_func(L, ci)->p); /* set 'oldpc' */
 }
 
 /*
@@ -498,7 +498,7 @@ static inline void moveresults(lua_State* L, StkId res, int nres,
     int wanted = get_nresults(fwanted);
     if (fwanted & CIST_TBC)
     { /* to-be-closed variables? */
-      L->ci->u2.nres = nres;
+      L->ci->nres = nres;
       L->ci->callstatus |= CIST_CLSRET; /* in case of yields */
       res = luaF_close(L, res, CLOSEKTOP, 1);
       L->ci->callstatus &= ~CIST_CLSRET;
@@ -620,7 +620,7 @@ retry:
       (((&(L)->stack.p[func + narg1]))->tt_ = LUA_VNIL); /* complete missing arguments */
     ci->top = func + 1 + fsize;  /* top for new function */
     assert(ci->top <= L->stack_last);
-    ci->u.l.savedpc = p->code; /* starting point */
+    ci->savedpc = p->code; /* starting point */
     ci->callstatus |= CIST_TAIL;
     L->top = func + narg1; /* set top */
     return -1;
@@ -670,7 +670,7 @@ retry:
     int fsize = p->maxstacksize; /* frame size */
     checkstackp(L, fsize, func);
     L->ci = ci = prepCallInfo(L, func, status, func + 1 + fsize);
-    ci->u.l.savedpc = p->code; /* starting point */
+    ci->savedpc = p->code; /* starting point */
     for (; narg < nfixparams; narg++)
       (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* complete missing arguments */
     assert(ci->top <= L->stack_last);
@@ -749,7 +749,7 @@ static TStatus finishpcallk(lua_State* L, CallInfo* ci)
     status = LUA_YIELD;              /* was interrupted by an yield */
   else
   { /* error */
-    StkId func = (static_cast<StkId>(ci->u2.funcidx));
+    StkId func = (static_cast<StkId>(ci->funcidx));
     L->allowhook = getoah(ci);             /* restore 'allowhook' */
     func = luaF_close(L, func, status, 1); /* can yield or raise an error */
     luaD_seterrorobj(L, status, func);
@@ -757,7 +757,7 @@ static TStatus finishpcallk(lua_State* L, CallInfo* ci)
     setcistrecst(ci, LUA_OK); /* clear original status */
   }
   ci->callstatus &= ~CIST_YPCALL;
-  L->errfunc = ci->u.c.old_errfunc;
+  L->errfunc = ci->old_errfunc;
   /* if it is here, there were errors or yields; unlike 'lua_pcallk',
      do not change status */
   return status;
@@ -782,20 +782,20 @@ static void finishCcall(lua_State* L, CallInfo* ci)
   if (ci->callstatus & CIST_CLSRET)
   { /* was closing TBC variable? */
     assert(ci->callstatus & CIST_TBC);
-    n = ci->u2.nres; /* just redo 'luaD_poscall' */
+    n = ci->nres; /* just redo 'luaD_poscall' */
     /* don't need to reset CIST_CLSRET, as it will be set again anyway */
   }
   else
   {
     TStatus status = LUA_YIELD;   /* default if there were no errors */
-    lua_KFunction kf = ci->u.c.k; /* continuation function */
+    lua_KFunction kf = ci->k; /* continuation function */
     /* must have a continuation and must be able to call it */
     assert(kf != NULL && yieldable(L));
     if (ci->callstatus & CIST_YPCALL) /* was inside a 'lua_pcallk'? */
       status = finishpcallk(L, ci);   /* finish it */
     adjustresults(L, LUA_MULTRET);    /* finish 'lua_callk' */
     lua_unlock(L);
-    n = (*kf)(L, ((int)(status)), ci->u.c.ctx); /* call continuation */
+    n = (*kf)(L, ((int)(status)), ci->ctx); /* call continuation */
     lua_lock(L);
     api_checknelems(L, n);
   }
@@ -875,16 +875,16 @@ static void resume(lua_State* L, void* ud)
       /* undo increment made by 'luaG_traceexec': instruction was not
          executed yet */
       assert(ci->callstatus & CIST_HOOKYIELD);
-      ci->u.l.savedpc--;
+      ci->savedpc--;
       L->top = firstArg; /* discard arguments */
       luaV_execute(L, ci); /* just continue running Lua code */
     }
     else
     { /* 'common' yield */
-      if (ci->u.c.k != NULL)
+      if (ci->k != NULL)
       { /* does it have a continuation function? */
         lua_unlock(L);
-        n = (*ci->u.c.k)(L, LUA_YIELD, ci->u.c.ctx); /* call continuation */
+        n = (*ci->k)(L, LUA_YIELD, ci->ctx); /* call continuation */
         lua_lock(L);
         api_checknelems(L, n);
       }
@@ -945,7 +945,7 @@ LUA_API int lua_resume(lua_State* L, lua_State* from, int nargs,
     luaD_seterrorobj(L, status, L->top); /* push error message */
     L->ci->top = L->top;
   }
-  *nresults = (status == LUA_YIELD) ? L->ci->u2.nyield
+  *nresults = (status == LUA_YIELD) ? L->ci->nyield
                                     : ((int)(L->top - (L->ci->func + 1)));
   lua_unlock(L);
   return ((int)(status));
@@ -972,7 +972,7 @@ LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
       luaG_runerror(L, "attempt to yield from outside a coroutine");
   }
   L->status = LUA_YIELD;
-  ci->u2.nyield = nresults; /* save number of results */
+  ci->nyield = nresults; /* save number of results */
   if (isLua(ci))
   { /* inside a hook? */
     assert(!isLuacode(ci));
@@ -981,8 +981,8 @@ LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
   }
   else
   {
-    if ((ci->u.c.k = k) != NULL) /* is there a continuation? */
-      ci->u.c.ctx = ctx;         /* save context */
+    if ((ci->k = k) != NULL) /* is there a continuation? */
+      ci->ctx = ctx;         /* save context */
     luaD_throw(L, LUA_YIELD);
   }
   assert(ci->callstatus & CIST_HOOKED); /* must be inside a hook */

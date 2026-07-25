@@ -138,10 +138,10 @@ constexpr int KGC_GENMAJOR = 2; /* generational in major mode */
 
 /*
 ** Information about a call.
-** About union 'u':
-** - field 'l' is used only for Lua functions;
-** - field 'c' is used only for C functions.
-** About union 'u2':
+** Fields 'savedpc', 'trap', and 'nextraargs' are used only for Lua
+** functions; fields 'k', 'old_errfunc', and 'ctx' are used only for C
+** functions. (They were unions in upstream Lua; flattened here —
+** memory parity is a non-goal.)
 ** - field 'funcidx' is used only by C functions while doing a
 ** protected call;
 ** - field 'nyield' is used only while a function is "doing" an
@@ -154,27 +154,17 @@ struct CallInfo
   StkId func;                       /* function index in the stack */
   StkId top;                        /* top for this function */
   struct CallInfo *previous, *next; /* dynamic call link */
-  union
-  {
-    struct
-    { /* only for Lua functions */
-      const Instruction* savedpc;
-      volatile l_signalT trap; /* function is tracing lines/counts */
-      int nextraargs;          /* # of extra arguments in vararg functions */
-    } l;
-    struct
-    {                  /* only for C functions */
-      lua_KFunction k; /* continuation in case of yields */
-      StkId old_errfunc;
-      lua_KContext ctx; /* context info. in case of yields */
-    } c;
-  } u;
-  union
-  {
-    int funcidx; /* called-function index */
-    int nyield;  /* number of values yielded */
-    int nres;    /* number of values returned */
-  } u2;
+  /* only for Lua functions: */
+  const Instruction* savedpc;
+  volatile l_signalT trap; /* function is tracing lines/counts */
+  int nextraargs;          /* # of extra arguments in vararg functions */
+  /* only for C functions: */
+  lua_KFunction k; /* continuation in case of yields */
+  StkId old_errfunc;
+  lua_KContext ctx; /* context info. in case of yields */
+  int funcidx;      /* called-function index */
+  int nyield;       /* number of values yielded */
+  int nres;         /* number of values returned */
   l_uint32 callstatus;
 };
 

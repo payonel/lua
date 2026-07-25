@@ -59,7 +59,7 @@ CallInfo* luaE_extendCI(lua_State* L, int err)
   L->ci->next = ci;
   if (ci->next)
     ci->next->previous = ci;
-  ci->u.l.trap = 0;
+  ci->trap = 0;
   L->nci++;
   return ci;
 }
@@ -134,7 +134,7 @@ static void resetCI(lua_State* L)
   ci->func = 0;
   (((&(L)->stack.p[ci->func]))->tt_ = LUA_VNIL);                 /* 'function' entry for basic 'ci' */
   ci->top = ci->func + 1 + LUA_MINSTACK; /* +1 for 'function' entry */
-  ci->u.c.k = NULL;
+  ci->k = NULL;
   ci->callstatus = CIST_C;
   L->status = LUA_OK;
   L->errfunc = 0; /* stack unwind can "throw away" the error function */
