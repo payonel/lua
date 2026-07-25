@@ -170,19 +170,19 @@ TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
 */
 
 /* some stack space for error handling */
-#define STACKERRSPACE 200
+constexpr int STACKERRSPACE = 200;
 
 /* maximum stack size that respects size_t */
-#define MAXSTACK_BYSIZET ((MAX_SIZET / sizeof(StackValue)) - STACKERRSPACE)
+constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / sizeof(StackValue)) - STACKERRSPACE);
 
 /*
 ** Minimum between LUAI_MAXSTACK and MAXSTACK_BYSIZET
 ** (Maximum size for the stack must respect size_t.)
 */
-#define MAXSTACK ((int)(LUAI_MAXSTACK < MAXSTACK_BYSIZET ? LUAI_MAXSTACK : MAXSTACK_BYSIZET))
+constexpr int MAXSTACK = ((int)(LUAI_MAXSTACK < MAXSTACK_BYSIZET ? LUAI_MAXSTACK : MAXSTACK_BYSIZET));
 
 /* stack size with extra space for error handling */
-#define ERRORSTACKSIZE (MAXSTACK + STACKERRSPACE)
+constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
 
 /* raise a stack error while running the message handler */
 l_noret luaD_errerr(lua_State* L)

@@ -266,11 +266,11 @@ static int handle_script(lua_State* L, char** argv)
 }
 
 /* bits of various argument indicators in 'args' */
-#define has_error 1  /* bad option */
-#define has_i     2  /* -i */
-#define has_v     4  /* -v */
-#define has_e     8  /* -e */
-#define has_E     16 /* -E */
+constexpr int has_error = 1; /* bad option */
+constexpr int has_i = 2; /* -i */
+constexpr int has_v = 4; /* -v */
+constexpr int has_e = 8; /* -e */
+constexpr int has_E = 16; /* -E */
 
 /*
 ** Traverses all arguments from 'argv', returning a mask with those
@@ -416,7 +416,7 @@ static int handle_luainit(lua_State* L)
 
 #if !defined(LUA_PROMPT)
 #define LUA_PROMPT  "> "
-#define LUA_PROMPT2 ">> "
+constexpr char LUA_PROMPT2[] = ">> ";
 #endif
 
 #if !defined(LUA_MAXINPUT)
@@ -537,8 +537,8 @@ static const char* get_prompt(lua_State* L, int firstline)
 }
 
 /* mark in error messages for incomplete statements */
-#define EOFMARK "<eof>"
-#define marklen (sizeof(EOFMARK) / sizeof(char) - 1)
+constexpr char EOFMARK[] = "<eof>";
+constexpr size_t marklen = (sizeof(EOFMARK) / sizeof(char) - 1);
 
 /*
 ** Check whether 'status' signals a syntax error and the error

@@ -43,31 +43,31 @@ enum OpMode
 /*
 ** size and position of opcode arguments.
 */
-#define SIZE_C  8
-#define SIZE_vC 10
-#define SIZE_B  8
-#define SIZE_vB 6
-#define SIZE_Bx (SIZE_C + SIZE_B + 1)
-#define SIZE_A  8
-#define SIZE_Ax (SIZE_Bx + SIZE_A)
-#define SIZE_sJ (SIZE_Bx + SIZE_A)
+constexpr int SIZE_C = 8;
+constexpr int SIZE_vC = 10;
+constexpr int SIZE_B = 8;
+constexpr int SIZE_vB = 6;
+constexpr int SIZE_Bx = (SIZE_C + SIZE_B + 1);
+constexpr int SIZE_A = 8;
+constexpr int SIZE_Ax = (SIZE_Bx + SIZE_A);
+constexpr int SIZE_sJ = (SIZE_Bx + SIZE_A);
 
-#define SIZE_OP 7
+constexpr int SIZE_OP = 7;
 
-#define POS_OP 0
+constexpr int POS_OP = 0;
 
-#define POS_A  (POS_OP + SIZE_OP)
-#define POS_k  (POS_A + SIZE_A)
-#define POS_B  (POS_k + 1)
-#define POS_vB (POS_k + 1)
-#define POS_C  (POS_B + SIZE_B)
-#define POS_vC (POS_vB + SIZE_vB)
+constexpr int POS_A = (POS_OP + SIZE_OP);
+constexpr int POS_k = (POS_A + SIZE_A);
+constexpr int POS_B = (POS_k + 1);
+constexpr int POS_vB = (POS_k + 1);
+constexpr int POS_C = (POS_B + SIZE_B);
+constexpr int POS_vC = (POS_vB + SIZE_vB);
 
-#define POS_Bx POS_k
+constexpr int POS_Bx = POS_k;
 
-#define POS_Ax POS_A
+constexpr int POS_Ax = POS_A;
 
-#define POS_sJ POS_A
+constexpr int POS_sJ = POS_A;
 
 /*
 ** limits for opcode arguments.
@@ -76,39 +76,31 @@ enum OpMode
 */
 
 /*
-** Check whether type 'int' has at least 'b' + 1 bits.
-** 'b' < 32; +1 for the sign bit.
+** All instruction-argument sizes must fit in an int (plus its sign
+** bit): checked at compile time. Upstream carried INT_MAX fallbacks
+** for narrower ints; this port requires (at least) 32-bit int, as the
+** managed targets do.
 */
-#define L_INTHASBITS(b) ((UINT_MAX >> (b)) >= 1)
+static_assert(SIZE_Ax < ((int)(sizeof(int) * CHAR_BIT)) - 1 &&
+                  SIZE_sJ < ((int)(sizeof(int) * CHAR_BIT)) - 1,
+              "int too narrow for instruction arguments");
 
-#if L_INTHASBITS(SIZE_Bx)
-#define MAXARG_Bx ((1 << SIZE_Bx) - 1)
-#else
-#define MAXARG_Bx INT_MAX
-#endif
+constexpr int MAXARG_Bx = (1 << SIZE_Bx) - 1;
 
-#define OFFSET_sBx (MAXARG_Bx >> 1) /* 'sBx' is signed */
+constexpr int OFFSET_sBx = MAXARG_Bx >> 1; /* 'sBx' is signed */
 
-#if L_INTHASBITS(SIZE_Ax)
-#define MAXARG_Ax ((1 << SIZE_Ax) - 1)
-#else
-#define MAXARG_Ax INT_MAX
-#endif
+constexpr int MAXARG_Ax = (1 << SIZE_Ax) - 1;
 
-#if L_INTHASBITS(SIZE_sJ)
-#define MAXARG_sJ ((1 << SIZE_sJ) - 1)
-#else
-#define MAXARG_sJ INT_MAX
-#endif
+constexpr int MAXARG_sJ = (1 << SIZE_sJ) - 1;
 
-#define OFFSET_sJ (MAXARG_sJ >> 1)
+constexpr int OFFSET_sJ = MAXARG_sJ >> 1;
 
-#define MAXARG_A  ((1 << SIZE_A) - 1)
-#define MAXARG_B  ((1 << SIZE_B) - 1)
-#define MAXARG_vB ((1 << SIZE_vB) - 1)
-#define MAXARG_C  ((1 << SIZE_C) - 1)
-#define MAXARG_vC ((1 << SIZE_vC) - 1)
-#define OFFSET_sC (MAXARG_C >> 1)
+constexpr int MAXARG_A = ((1 << SIZE_A) - 1);
+constexpr int MAXARG_B = ((1 << SIZE_B) - 1);
+constexpr int MAXARG_vB = ((1 << SIZE_vB) - 1);
+constexpr int MAXARG_C = ((1 << SIZE_C) - 1);
+constexpr int MAXARG_vC = ((1 << SIZE_vC) - 1);
+constexpr int OFFSET_sC = (MAXARG_C >> 1);
 
 constexpr int int2sC(int i)
 {
@@ -139,12 +131,12 @@ constexpr Instruction MASK0(int n, int p)
 ** Maximum size for the stack of a Lua function. It must fit in 8 bits.
 ** The highest valid register is one less than this value.
 */
-#define MAX_FSTACK MAXARG_A
+constexpr int MAX_FSTACK = MAXARG_A;
 
 /*
 ** Invalid register (one more than last valid register).
 */
-#define NO_REG MAX_FSTACK
+constexpr int NO_REG = MAX_FSTACK;
 
 /*
 ** R[x] - register
@@ -277,7 +269,7 @@ typedef enum
   OP_EXTRAARG /*  Ax  extra (larger) argument for previous opcode  */
 } OpCode;
 
-#define NUM_OPCODES ((int) (OP_EXTRAARG) + 1)
+constexpr int NUM_OPCODES = ((int) (OP_EXTRAARG) + 1);
 
 constexpr OpCode GET_OPCODE(Instruction i)
 {

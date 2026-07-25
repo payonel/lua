@@ -41,7 +41,7 @@
 ** the array of nodes, in the same block. Smaller tables do a complete
 ** search when looking for a free slot.
 */
-#define LIMFORLAST 3 /* log2 of real limit (8) */
+constexpr int LIMFORLAST = 3; /* log2 of real limit (8) */
 
 static inline int haslastfree(const Table* t)
 {
@@ -52,32 +52,32 @@ static inline int haslastfree(const Table* t)
 ** MAXABITS is the largest integer such that 2^MAXABITS fits in an
 ** unsigned int.
 */
-#define MAXABITS (((int)(sizeof(int) * CHAR_BIT)) - 1)
+constexpr int MAXABITS = (((int)(sizeof(int) * CHAR_BIT)) - 1);
 
 /*
 ** MAXASIZEB is the maximum number of elements in the array part such
 ** that the size of the array fits in 'size_t'.
 */
-#define MAXASIZEB (MAX_SIZET / (sizeof(Value) + 1))
+constexpr size_t MAXASIZEB = (MAX_SIZET / (sizeof(Value) + 1));
 
 /*
 ** MAXASIZE is the maximum size of the array part. It is the minimum
 ** between 2^MAXABITS and MAXASIZEB.
 */
-#define MAXASIZE (((1u << MAXABITS) < MAXASIZEB) ? (1u << MAXABITS) : ((unsigned int)(MAXASIZEB)))
+constexpr unsigned MAXASIZE = (((1u << MAXABITS) < MAXASIZEB) ? (1u << MAXABITS) : ((unsigned int)(MAXASIZEB)));
 
 /*
 ** MAXHBITS is the largest integer such that 2^MAXHBITS fits in a
 ** signed int.
 */
-#define MAXHBITS (MAXABITS - 1)
+constexpr int MAXHBITS = (MAXABITS - 1);
 
 /*
 ** MAXHSIZE is the maximum size of the hash part. It is the minimum
 ** between 2^MAXHBITS and the maximum size such that, measured in bytes,
 ** it fits in a 'size_t'.
 */
-#define MAXHSIZE ((((size_t)(1 << MAXHBITS)) <= MAX_SIZET / sizeof(Node)) ? (1 << MAXHBITS) : ((int)((MAX_SIZET / sizeof(Node)))))
+constexpr int MAXHSIZE = ((((size_t)(1 << MAXHBITS)) <= MAX_SIZET / sizeof(Node)) ? (1 << MAXHBITS) : ((int)((MAX_SIZET / sizeof(Node)))));
 
 /*
 ** When the original hash value is good, hashing by a power of 2
@@ -116,7 +116,6 @@ static inline int hashpointer(const Table* t, lua_CFunction p)
   return hashmod(t, point2uint(p));
 }
 
-#define dummynode (&dummynode_)
 
 /*
 ** Common hash part for tables with empty hash parts. That allows all
@@ -660,7 +659,7 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
 {
   if (size == 0)
   {                                   /* no elements to hash part? */
-    t->node = ((Node*)(dummynode)); /* use common 'dummynode' */
+    t->node = ((Node*)(&dummynode_)); /* use common 'dummynode' */
     t->lastfree = 0;
     t->lsizenode = 0;
     setdummy(t); /* signal that it is using dummy node */

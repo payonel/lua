@@ -105,13 +105,13 @@ typedef struct expdesc
 } expdesc;
 
 /* kinds of variables */
-#define VDKREG     0 /* regular local */
-#define RDKCONST   1 /* local constant */
-#define RDKVAVAR   2 /* vararg parameter */
-#define RDKTOCLOSE 3 /* to-be-closed */
-#define RDKCTC     4 /* local compile-time constant */
-#define GDKREG     5 /* regular global */
-#define GDKCONST   6 /* global constant */
+constexpr int VDKREG = 0; /* regular local */
+constexpr int RDKCONST = 1; /* local constant */
+constexpr int RDKVAVAR = 2; /* vararg parameter */
+constexpr int RDKTOCLOSE = 3; /* to-be-closed */
+constexpr int RDKCTC = 4; /* local compile-time constant */
+constexpr int GDKREG = 5; /* regular global */
+constexpr int GDKCONST = 6; /* global constant */
 
 /* description of an active variable */
 typedef union Vardesc

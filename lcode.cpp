@@ -340,7 +340,7 @@ void luaK_patchtohere(FuncState* fs, int list)
 }
 
 /* limit for difference between lines in relative line info. */
-#define LIMLINEDIFF 0x80
+constexpr int LIMLINEDIFF = 0x80;
 
 /*
 ** Save line info for a new instruction. If difference from last line

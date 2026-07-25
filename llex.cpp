@@ -77,7 +77,7 @@ static inline void save_and_next(LexState* ls)
 void luaX_init(lua_State* L)
 {
   int i;
-  TString* e = (luaS_newlstr(L, "" LUA_ENV, (sizeof(LUA_ENV) / sizeof(char)) - 1)); /* create env name */
+  TString* e = luaS_newlstr(L, LUA_ENV, sizeof(LUA_ENV) - 1); /* create env name */
   assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(e)));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
@@ -202,7 +202,7 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source,
   ls->source = source;
   /* all three strings here ("_ENV", "break", "global") were fixed,
      so they cannot be collected */
-  ls->envn = (luaS_newlstr(L, "" LUA_ENV, (sizeof(LUA_ENV) / sizeof(char)) - 1)); /* get env string */
+  ls->envn = luaS_newlstr(L, LUA_ENV, sizeof(LUA_ENV) - 1); /* get env string */
   ls->brkn = (luaS_newlstr(L, "" "break", (sizeof("break") / sizeof(char)) - 1)); /* get "break" string */
   /* initialize buffer */
   ls->buff->buffer = (char*)luaM_saferealloc_(ls->L, ls->buff->buffer,

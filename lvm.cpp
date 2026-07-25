@@ -29,7 +29,7 @@
 #include "lvm.h"
 
 /* limit for table tag-method chains (to avoid infinite loops) */
-#define MAXTAGLOOP 2000
+constexpr int MAXTAGLOOP = 2000;
 
 /*
 ** 'l_intfitsf' checks whether a given integer is in the range that
@@ -49,7 +49,7 @@
 #if ((((LUA_MAXINTEGER >> (NBM / 4)) >> (NBM / 4)) >> (NBM / 4)) >> (NBM - (3 * (NBM / 4)))) > 0
 
 /* limit for integers that fit in a float */
-#define MAXINTFITSF ((lua_Unsigned) 1 << NBM)
+constexpr lua_Unsigned MAXINTFITSF = ((lua_Unsigned) 1 << NBM);
 
 /* check whether 'i' is in the interval [-MAXINTFITSF, MAXINTFITSF] */
 static inline int l_intfitsf(lua_Integer i)
@@ -961,7 +961,7 @@ lua_Number luaV_modf(lua_State* L, lua_Number m, lua_Number n)
 }
 
 /* number of bits in an integer */
-#define NBITS ((int)(sizeof(lua_Integer) * CHAR_BIT))
+constexpr int NBITS = ((int)(sizeof(lua_Integer) * CHAR_BIT));
 
 /*
 ** Shift left operation. (Shift right just negates 'y'.)

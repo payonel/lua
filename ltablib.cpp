@@ -23,10 +23,10 @@
 ** Operations that an object must define to mimic a table
 ** (some functions only need some of them)
 */
-#define TAB_R  1               /* read */
-#define TAB_W  2               /* write */
-#define TAB_L  4               /* length */
-#define TAB_RW (TAB_R | TAB_W) /* read/write */
+constexpr int TAB_R = 1; /* read */
+constexpr int TAB_W = 2; /* write */
+constexpr int TAB_L = 4; /* length */
+constexpr int TAB_RW = (TAB_R | TAB_W); /* read/write */
 
 
 static int checkfield(lua_State* L, const char* key, int n)
@@ -271,7 +271,7 @@ static inline unsigned int l_randomizePivot(lua_State* L)
 #endif /* } */
 
 /* arrays larger than 'RANLIMIT' may use randomized pivots */
-#define RANLIMIT 100u
+constexpr unsigned RANLIMIT = 100u;
 
 static void set2(lua_State* L, IdxT i, IdxT j)
 {

@@ -86,7 +86,7 @@ static inline int l_checkmodep(const char* m)
 /* }====================================================== */
 
 #define IO_PREFIX  "_IO_"
-#define IOPREF_LEN (sizeof(IO_PREFIX) / sizeof(char) - 1)
+constexpr size_t IOPREF_LEN = (sizeof(IO_PREFIX) / sizeof(char) - 1);
 #define IO_INPUT   (IO_PREFIX "input")
 #define IO_OUTPUT  (IO_PREFIX "output")
 
@@ -295,7 +295,7 @@ static int io_readline(lua_State* L);
 ** maximum number of arguments to 'f:lines'/'io.lines' (it + 3 must fit
 ** in the limit for upvalues of a closure)
 */
-#define MAXARGLINE 250
+constexpr int MAXARGLINE = 250;
 
 /*
 ** Auxiliary function to create the iteration function for 'lines'.

@@ -122,10 +122,10 @@ static int luaB_yield(lua_State* L)
   return lua_yield(L, lua_gettop(L));
 }
 
-#define COS_RUN   0
-#define COS_DEAD  1
-#define COS_YIELD 2
-#define COS_NORM  3
+constexpr int COS_RUN = 0;
+constexpr int COS_DEAD = 1;
+constexpr int COS_YIELD = 2;
+constexpr int COS_NORM = 3;
 
 static const char* const statname[] =
     {"running", "dead", "suspended", "normal"};

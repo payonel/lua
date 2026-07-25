@@ -356,8 +356,8 @@ static const luaL_Reg stringmetamethods[] = {
 ** =======================================================
 */
 
-#define CAP_UNFINISHED (-1)
-#define CAP_POSITION   (-2)
+constexpr int CAP_UNFINISHED = (-1);
+constexpr int CAP_POSITION = (-2);
 
 typedef struct MatchState
 {
@@ -382,8 +382,8 @@ static const char* match(MatchState* ms, const char* s, const char* p);
 #define MAXCCALLS 200
 #endif
 
-#define L_ESC    '%'
-#define SPECIALS "^$*+?.([%-"
+constexpr char L_ESC = '%';
+constexpr char SPECIALS[] = "^$*+?.([%-";
 
 static int check_capture(MatchState* ms, int l)
 {
@@ -1132,7 +1132,7 @@ static int str_gsub(lua_State* L)
 ** Hexadecimal floating-point formatter
 */
 
-#define SIZELENMOD (sizeof(LUA_NUMBER_FRMLEN) / sizeof(char))
+constexpr size_t SIZELENMOD = (sizeof(LUA_NUMBER_FRMLEN) / sizeof(char));
 
 /*
 ** Number of bits that goes into the first digit. It can be any value
@@ -1140,7 +1140,7 @@ static int str_gsub(lua_State* L)
 ** to nibble boundaries by making what is left after that first digit a
 ** multiple of 4.
 */
-#define L_NBFD ((l_floatatt(MANT_DIG) - 1) % 4 + 1)
+constexpr int L_NBFD = ((l_floatatt(MANT_DIG) - 1) % 4 + 1);
 
 /*
 ** Add integer part of 'x' to buffer and return new 'x'
@@ -1214,7 +1214,7 @@ static int lua_number2strx(lua_State* L, char* buff, unsigned sz,
 ** and '\0') + number of decimal digits to represent maxfloat (which
 ** is maximum exponent + 1). (99+3+1, adding some extra, 110)
 */
-#define MAX_ITEMF (110 + l_floatatt(MAX_10_EXP))
+constexpr int MAX_ITEMF = (110 + l_floatatt(MAX_10_EXP));
 
 /*
 ** All formats except '%f' do not need that large limit.  The other
@@ -1224,7 +1224,7 @@ static int lua_number2strx(lua_State* L, char* buff, unsigned sz,
 ** worst case are floats: they may need 99 significant digits, plus
 ** '0x', '-', '.', 'e+XXXX', and '\0'. Adding some extra, 120.
 */
-#define MAX_ITEM 120
+constexpr int MAX_ITEM = 120;
 
 /* valid flags in a format specification */
 #if !defined(L_FMTFLAGSF)
@@ -1233,16 +1233,16 @@ static int lua_number2strx(lua_State* L, char* buff, unsigned sz,
 #define L_FMTFLAGSF "-+#0 "
 
 /* valid flags for o, x, and X conversions */
-#define L_FMTFLAGSX "-#0"
+constexpr char L_FMTFLAGSX[] = "-#0";
 
 /* valid flags for d and i conversions */
-#define L_FMTFLAGSI "-+0 "
+constexpr char L_FMTFLAGSI[] = "-+0 ";
 
 /* valid flags for u conversions */
-#define L_FMTFLAGSU "-0"
+constexpr char L_FMTFLAGSU[] = "-0";
 
 /* valid flags for c, p, and s conversions */
-#define L_FMTFLAGSC "-"
+constexpr char L_FMTFLAGSC[] = "-";
 
 #endif
 
@@ -1252,7 +1252,7 @@ static int lua_number2strx(lua_State* L, char* buff, unsigned sz,
 ** length modifier (8), conversion specifier, and final '\0', plus some
 ** extra.
 */
-#define MAX_FORMAT 32
+constexpr int MAX_FORMAT = 32;
 
 static void addquoted(luaL_Buffer* b, const char* s, size_t len)
 {
@@ -1575,16 +1575,16 @@ static int str_format(lua_State* L)
 #endif
 
 /* maximum size for the binary representation of an integer */
-#define MAXINTSIZE 16
+constexpr int MAXINTSIZE = 16;
 
 /* number of bits in a character */
-#define NB CHAR_BIT
+constexpr int NB = CHAR_BIT;
 
 /* mask for one character (NB 1's) */
-#define MC ((1 << NB) - 1)
+constexpr int MC = ((1 << NB) - 1);
 
 /* size of a lua_Integer */
-#define SZINT ((int) sizeof(lua_Integer))
+constexpr int SZINT = ((int) sizeof(lua_Integer));
 
 /* dummy union to get native endianness */
 static const union

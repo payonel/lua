@@ -38,10 +38,9 @@
 #endif
 
 /* prefix for open functions in C libraries */
-#define LUA_POF "luaopen_"
 
 /* separator for open functions in C libraries */
-#define LUA_OFSEP "_"
+constexpr char LUA_OFSEP[] = "_";
 
 /*
 ** key for table in the registry that keeps handles
@@ -49,7 +48,7 @@
 */
 static const char* const CLIBS = "_CLIBS";
 
-#define LIB_FAIL "open"
+constexpr char LIB_FAIL[] = "open";
 
 #define setprogdir(L) ((void) 0)
 
@@ -240,8 +239,8 @@ static void addtoclib(lua_State* L, const char* path, void* plib)
 }
 
 /* error codes for 'lookforfunc' */
-#define ERRLIB  1
-#define ERRFUNC 2
+constexpr int ERRLIB = 1;
+constexpr int ERRFUNC = 2;
 
 /*
 ** Look for a C function named 'sym' in a dynamically loaded library
@@ -446,13 +445,13 @@ static int loadfunc(lua_State* L, const char* filename, const char* modname)
   {
     int stat;
     openfunc = lua_pushlstring(L, modname, ((size_t)(mark - modname)));
-    openfunc = lua_pushfstring(L, LUA_POF "%s", openfunc);
+    openfunc = lua_pushfstring(L, "luaopen_%s", openfunc);
     stat = lookforfunc(L, filename, openfunc);
     if (stat != ERRFUNC)
       return stat;
     modname = mark + 1; /* else go ahead and try old-style name */
   }
-  openfunc = lua_pushfstring(L, LUA_POF "%s", modname);
+  openfunc = lua_pushfstring(L, "luaopen_%s", modname);
   return lookforfunc(L, filename, openfunc);
 }
 

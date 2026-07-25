@@ -24,7 +24,7 @@
 #include <stdint.h>
 
 #undef PI
-#define PI (l_mathop(3.141592653589793238462643383279502884))
+constexpr lua_Number PI = (l_mathop(3.141592653589793238462643383279502884));
 
 static int math_abs(lua_State* L)
 {
@@ -349,10 +349,10 @@ static uint64_t nextrand(uint64_t* state)
 */
 
 /* must throw out the extra (64 - FIGS) bits */
-#define shift64_FIG (64 - FIGS)
+constexpr int shift64_FIG = (64 - FIGS);
 
 /* 2^(-FIGS) == 2^-1 / 2^(FIGS-1) */
-#define scaleFIG (l_mathop(0.5) / ((uint64_t) 1 << (FIGS - 1)))
+constexpr lua_Number scaleFIG = (l_mathop(0.5) / ((uint64_t) 1 << (FIGS - 1)));
 
 static lua_Number I2d(uint64_t x)
 {

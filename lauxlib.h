@@ -15,18 +15,18 @@
 #include "lhack.h"
 
 /* global table */
-#define LUA_GNAME "_G"
+constexpr char LUA_GNAME[] = "_G";
 
 typedef struct luaL_Buffer luaL_Buffer;
 
 /* extra error code for 'luaL_loadfilex' */
-#define LUA_ERRFILE (LUA_ERRERR + 1)
+constexpr int LUA_ERRFILE = (LUA_ERRERR + 1);
 
 /* key, in the registry, for table of loaded modules */
-#define LUA_LOADED_TABLE "_LOADED"
+constexpr char LUA_LOADED_TABLE[] = "_LOADED";
 
 /* key, in the registry, for table of preloaded loaders */
-#define LUA_PRELOAD_TABLE "_PRELOAD"
+constexpr char LUA_PRELOAD_TABLE[] = "_PRELOAD";
 
 typedef struct luaL_Reg
 {
@@ -34,7 +34,7 @@ typedef struct luaL_Reg
   lua_CFunction func;
 } luaL_Reg;
 
-#define LUAL_NUMSIZES (sizeof(lua_Integer) * 16 + sizeof(lua_Number))
+constexpr size_t LUAL_NUMSIZES = (sizeof(lua_Integer) * 16 + sizeof(lua_Number));
 
 LUALIB_API void(luaL_checkversion_)(lua_State* L, lua_Number ver, size_t sz);
 #define luaL_checkversion(L) luaL_checkversion_(L, LUA_VERSION_NUM, LUAL_NUMSIZES)
@@ -77,8 +77,8 @@ LUALIB_API void*(luaL_alloc) (void* ud, void* ptr, size_t osize,
                               size_t nsize);
 
 /* predefined references */
-#define LUA_NOREF  (-2)
-#define LUA_REFNIL (-1)
+constexpr int LUA_NOREF = (-2);
+constexpr int LUA_REFNIL = (-1);
 
 LUALIB_API int(luaL_ref)(lua_State* L, int t);
 LUALIB_API void(luaL_unref)(lua_State* L, int t, int ref);
@@ -208,7 +208,7 @@ LUALIB_API char*(luaL_buffinitsize) (lua_State* L, luaL_Buffer* B, size_t sz);
 ** after that initial structure).
 */
 
-#define LUA_FILEHANDLE "FILE*"
+constexpr char LUA_FILEHANDLE[] = "FILE*";
 
 typedef struct luaL_Stream
 {

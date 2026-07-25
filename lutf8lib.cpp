@@ -19,11 +19,11 @@
 #include "llimits.h"
 #include "lualib.h"
 
-#define MAXUNICODE 0x10FFFFu
+constexpr unsigned MAXUNICODE = 0x10FFFFu;
 
-#define MAXUTF 0x7FFFFFFFu
+constexpr unsigned MAXUTF = 0x7FFFFFFFu;
 
-#define MSGInvalid "invalid UTF-8 code"
+constexpr char MSGInvalid[] = "invalid UTF-8 code";
 
 constexpr int iscont(int c)
 {

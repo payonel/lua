@@ -84,7 +84,7 @@
 
 #include <unistd.h>
 
-#define LUA_TMPNAMBUFSIZE 32
+constexpr int LUA_TMPNAMBUFSIZE = 32;
 
 #if !defined(LUA_TMPNAMTEMPLATE)
 #define LUA_TMPNAMTEMPLATE "/tmp/lua_XXXXXX"
@@ -270,7 +270,7 @@ static time_t l_checktime(lua_State* L, int arg)
 }
 
 /* maximum size for an individual 'strftime' item */
-#define SIZETIMEFMT 250
+constexpr int SIZETIMEFMT = 250;
 
 static int os_date(lua_State* L)
 {

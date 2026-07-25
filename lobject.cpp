@@ -295,7 +295,7 @@ static int isneg(const char** s)
 
 /* maximum number of significant digits to read (to avoid overflows
    even with single floats) */
-#define MAXSIGDIG 30
+constexpr int MAXSIGDIG = 30;
 
 /*
 ** convert a hexadecimal numeric string to a number, following
@@ -424,8 +424,8 @@ static const char* l_str2d(const char* s, lua_Number* result)
   return endptr;
 }
 
-#define MAXBY10  ((lua_Unsigned)(LUA_MAXINTEGER / 10))
-#define MAXLASTD ((int)(LUA_MAXINTEGER % 10))
+constexpr lua_Unsigned MAXBY10 = ((lua_Unsigned)(LUA_MAXINTEGER / 10));
+constexpr int MAXLASTD = ((int)(LUA_MAXINTEGER % 10));
 
 static const char* l_str2int(const char* s, lua_Integer* result)
 {
@@ -514,9 +514,7 @@ int luaO_utf8esc(char* buff, l_uint32 x)
 ** digits, the final '\0', plus the significant digits, which are
 ** approximately the *_DIG attribute.
 */
-#if LUA_N2SBUFFSZ < (20 + l_floatatt(DIG))
-#error "invalid value for LUA_N2SBUFFSZ"
-#endif
+static_assert(LUA_N2SBUFFSZ >= 20 + l_floatatt(DIG), "invalid value for LUA_N2SBUFFSZ");
 
 /*
 ** Convert a float to a string, adding it to a buffer. First try with
@@ -587,7 +585,7 @@ void luaO_tostring(lua_State* L, TValue* obj)
 ** (LUA_IDSIZE + LUA_N2SBUFFSZ) + a minimal space for basic messages,
 ** so that 'luaG_addinfo' can work directly on the static buffer.
 */
-#define BUFVFS ((unsigned int)(LUA_IDSIZE + LUA_N2SBUFFSZ + 95))
+constexpr unsigned BUFVFS = ((unsigned int)(LUA_IDSIZE + LUA_N2SBUFFSZ + 95));
 
 /*
 ** Buffer used by 'luaO_pushvfstring'. 'err' signals an error while
@@ -802,9 +800,9 @@ const char* luaO_pushfstring(lua_State* L, const char* fmt, ...)
 
 /* }================================================================== */
 
-#define RETS "..."
-#define PRE  "[string \""
-#define POS  "\"]"
+constexpr char RETS[] = "...";
+constexpr char PRE[] = "[string \"";
+constexpr char POS[] = "\"]";
 
 void luaO_chunkid(char* out, const char* source, size_t srclen)
 {
@@ -834,7 +832,7 @@ void luaO_chunkid(char* out, const char* source, size_t srclen)
   {                                        /* string; format as [string "source"] */
     const char* nl = strchr(source, '\n'); /* find first new line (if any) */
     (memcpy(out, PRE, ((sizeof(PRE) / sizeof(char) - 1)) * sizeof(char)), (out) += ((sizeof(PRE) / sizeof(char) - 1)));             /* add prefix */
-    bufflen -= (sizeof(PRE RETS POS) / sizeof(char) - 1) + 1;       /* save space for prefix+suffix+'\0' */
+    bufflen -= (sizeof(PRE) - 1) + (sizeof(RETS) - 1) + (sizeof(POS) - 1) + 1; /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == NULL)
     {                              /* small one-line source? */
       (memcpy(out, source, (srclen) * sizeof(char)), (out) += (srclen)); /* keep it */

@@ -37,51 +37,51 @@ static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSIO
 inline constexpr std::string_view LUA_SIGNATURE = "\x1bLua";
 
 /* option for multiple returns in 'lua_pcall' and 'lua_call' */
-#define LUA_MULTRET (-1)
+constexpr int LUA_MULTRET = (-1);
 
 /*
 ** Pseudo-indices
 ** (The stack size is limited to INT_MAX/2; we keep some free empty
 ** space after that to help overflow detection.)
 */
-#define LUA_REGISTRYINDEX   (-(INT_MAX / 2 + 1000))
+constexpr int LUA_REGISTRYINDEX = (-(INT_MAX / 2 + 1000));
 #define lua_upvalueindex(i) (LUA_REGISTRYINDEX - (i))
 
 /* thread status */
-#define LUA_OK        0
-#define LUA_YIELD     1
-#define LUA_ERRRUN    2
-#define LUA_ERRSYNTAX 3
-#define LUA_ERRMEM    4
-#define LUA_ERRERR    5
+constexpr int LUA_OK = 0;
+constexpr int LUA_YIELD = 1;
+constexpr int LUA_ERRRUN = 2;
+constexpr int LUA_ERRSYNTAX = 3;
+constexpr int LUA_ERRMEM = 4;
+constexpr int LUA_ERRERR = 5;
 
 typedef struct lua_State lua_State;
 
 /*
 ** basic types
 */
-#define LUA_TNONE (-1)
+constexpr int LUA_TNONE = (-1);
 
-#define LUA_TNIL           0
-#define LUA_TBOOLEAN       1
-#define LUA_TLIGHTUSERDATA 2
-#define LUA_TNUMBER        3
-#define LUA_TSTRING        4
-#define LUA_TTABLE         5
-#define LUA_TFUNCTION      6
-#define LUA_TUSERDATA      7
-#define LUA_TTHREAD        8
+constexpr int LUA_TNIL = 0;
+constexpr int LUA_TBOOLEAN = 1;
+constexpr int LUA_TLIGHTUSERDATA = 2;
+constexpr int LUA_TNUMBER = 3;
+constexpr int LUA_TSTRING = 4;
+constexpr int LUA_TTABLE = 5;
+constexpr int LUA_TFUNCTION = 6;
+constexpr int LUA_TUSERDATA = 7;
+constexpr int LUA_TTHREAD = 8;
 
-#define LUA_NUMTYPES 9
+constexpr int LUA_NUMTYPES = 9;
 
 /* minimum Lua stack available to a C function */
-#define LUA_MINSTACK 20
+constexpr int LUA_MINSTACK = 20;
 
 /* predefined values in the registry */
 /* index 1 is reserved for the reference mechanism */
-#define LUA_RIDX_GLOBALS    2
-#define LUA_RIDX_MAINTHREAD 3
-#define LUA_RIDX_LAST       3
+constexpr int LUA_RIDX_GLOBALS = 2;
+constexpr int LUA_RIDX_MAINTHREAD = 3;
+constexpr int LUA_RIDX_LAST = 3;
 
 /* type of numbers in Lua */
 typedef LUA_NUMBER lua_Number;
@@ -198,26 +198,26 @@ std::string lua_funcaddress(lua_State* L, int idx);
 ** Comparison and arithmetic functions
 */
 
-#define LUA_OPADD  0 /* ORDER TM, ORDER OP */
-#define LUA_OPSUB  1
-#define LUA_OPMUL  2
-#define LUA_OPMOD  3
-#define LUA_OPPOW  4
-#define LUA_OPDIV  5
-#define LUA_OPIDIV 6
-#define LUA_OPBAND 7
-#define LUA_OPBOR  8
-#define LUA_OPBXOR 9
-#define LUA_OPSHL  10
-#define LUA_OPSHR  11
-#define LUA_OPUNM  12
-#define LUA_OPBNOT 13
+constexpr int LUA_OPADD = 0; /* ORDER TM, ORDER OP */
+constexpr int LUA_OPSUB = 1;
+constexpr int LUA_OPMUL = 2;
+constexpr int LUA_OPMOD = 3;
+constexpr int LUA_OPPOW = 4;
+constexpr int LUA_OPDIV = 5;
+constexpr int LUA_OPIDIV = 6;
+constexpr int LUA_OPBAND = 7;
+constexpr int LUA_OPBOR = 8;
+constexpr int LUA_OPBXOR = 9;
+constexpr int LUA_OPSHL = 10;
+constexpr int LUA_OPSHR = 11;
+constexpr int LUA_OPUNM = 12;
+constexpr int LUA_OPBNOT = 13;
 
 LUA_API void(lua_arith)(lua_State* L, int op);
 
-#define LUA_OPEQ 0
-#define LUA_OPLT 1
-#define LUA_OPLE 2
+constexpr int LUA_OPEQ = 0;
+constexpr int LUA_OPLT = 1;
+constexpr int LUA_OPLE = 2;
 
 LUA_API int(lua_rawequal)(lua_State* L, int idx1, int idx2);
 LUA_API int(lua_compare)(lua_State* L, int idx1, int idx2, int op);
@@ -305,32 +305,32 @@ LUA_API void(lua_warning)(lua_State* L, const char* msg, int tocont);
 ** garbage-collection options
 */
 
-#define LUA_GCSTOP      0
-#define LUA_GCRESTART   1
-#define LUA_GCCOLLECT   2
-#define LUA_GCCOUNT     3
-#define LUA_GCCOUNTB    4
-#define LUA_GCSTEP      5
-#define LUA_GCISRUNNING 6
-#define LUA_GCGEN       7
-#define LUA_GCINC       8
-#define LUA_GCPARAM     9
+constexpr int LUA_GCSTOP = 0;
+constexpr int LUA_GCRESTART = 1;
+constexpr int LUA_GCCOLLECT = 2;
+constexpr int LUA_GCCOUNT = 3;
+constexpr int LUA_GCCOUNTB = 4;
+constexpr int LUA_GCSTEP = 5;
+constexpr int LUA_GCISRUNNING = 6;
+constexpr int LUA_GCGEN = 7;
+constexpr int LUA_GCINC = 8;
+constexpr int LUA_GCPARAM = 9;
 
 /*
 ** garbage-collection parameters
 */
 /* parameters for generational mode */
-#define LUA_GCPMINORMUL   0 /* control minor collections */
-#define LUA_GCPMAJORMINOR 1 /* control shift major->minor */
-#define LUA_GCPMINORMAJOR 2 /* control shift minor->major */
+constexpr int LUA_GCPMINORMUL = 0; /* control minor collections */
+constexpr int LUA_GCPMAJORMINOR = 1; /* control shift major->minor */
+constexpr int LUA_GCPMINORMAJOR = 2; /* control shift minor->major */
 
 /* parameters for incremental mode */
-#define LUA_GCPPAUSE    3 /* size of pause between successive GCs */
-#define LUA_GCPSTEPMUL  4 /* GC "speed" */
-#define LUA_GCPSTEPSIZE 5 /* GC granularity */
+constexpr int LUA_GCPPAUSE = 3; /* size of pause between successive GCs */
+constexpr int LUA_GCPSTEPMUL = 4; /* GC "speed" */
+constexpr int LUA_GCPSTEPSIZE = 5; /* GC granularity */
 
 /* number of parameters */
-#define LUA_GCPN 6
+constexpr int LUA_GCPN = 6;
 
 LUA_API int(lua_gc)(lua_State* L, int what, ...);
 
@@ -345,7 +345,7 @@ LUA_API int(lua_next)(lua_State* L, int idx);
 LUA_API void(lua_concat)(lua_State* L, int n);
 LUA_API void(lua_len)(lua_State* L, int idx);
 
-#define LUA_N2SBUFFSZ 64
+constexpr int LUA_N2SBUFFSZ = 64;
 LUA_API unsigned(lua_numbertocstring)(lua_State* L, int idx, char* buff);
 LUA_API size_t(lua_stringtonumber)(lua_State* L, const char* s);
 
@@ -423,19 +423,19 @@ LUA_API void(lua_closeslot)(lua_State* L, int idx);
 /*
 ** Event codes
 */
-#define LUA_HOOKCALL     0
-#define LUA_HOOKRET      1
-#define LUA_HOOKLINE     2
-#define LUA_HOOKCOUNT    3
-#define LUA_HOOKTAILCALL 4
+constexpr int LUA_HOOKCALL = 0;
+constexpr int LUA_HOOKRET = 1;
+constexpr int LUA_HOOKLINE = 2;
+constexpr int LUA_HOOKCOUNT = 3;
+constexpr int LUA_HOOKTAILCALL = 4;
 
 /*
 ** Event masks
 */
-#define LUA_MASKCALL  (1 << LUA_HOOKCALL)
-#define LUA_MASKRET   (1 << LUA_HOOKRET)
-#define LUA_MASKLINE  (1 << LUA_HOOKLINE)
-#define LUA_MASKCOUNT (1 << LUA_HOOKCOUNT)
+constexpr int LUA_MASKCALL = (1 << LUA_HOOKCALL);
+constexpr int LUA_MASKRET = (1 << LUA_HOOKRET);
+constexpr int LUA_MASKLINE = (1 << LUA_HOOKLINE);
+constexpr int LUA_MASKCOUNT = (1 << LUA_HOOKCOUNT);
 
 LUA_API int(lua_getstack)(lua_State* L, int level, lua_Debug* ar);
 LUA_API int(lua_getinfo)(lua_State* L, const char* what, lua_Debug* ar);

@@ -32,8 +32,8 @@
 ** =======================================================
 */
 
-#define LEVELS1 10 /* size of the first part of the stack */
-#define LEVELS2 11 /* size of the second part of the stack */
+constexpr int LEVELS1 = 10; /* size of the first part of the stack */
+constexpr int LEVELS2 = 11; /* size of the second part of the stack */
 
 /*
 ** Search for 'objidx' in table at index -1. ('objidx' must be an
@@ -79,7 +79,7 @@ static int pushglobalfuncname(lua_State* L, lua_Debug* ar)
   if (findfield(L, top + 1, 2))
   {
     const char* name = lua_tostring(L, -1);
-    if (strncmp(name, LUA_GNAME ".", 3) == 0)
+    if (strncmp(name, "_G.", 3) == 0)
     {                              /* name start with '_G.'? */
       lua_pushstring(L, name + 3); /* push name without prefix */
       lua_remove(L, -2);           /* remove original name */
@@ -1203,10 +1203,10 @@ static void warnfon(void* ud, const char* message, int tocont)
 #include <time.h>
 
 /* Size for the buffer, in bytes */
-#define BUFSEEDB (sizeof(void*) + sizeof(time_t))
+constexpr size_t BUFSEEDB = (sizeof(void*) + sizeof(time_t));
 
 /* Size for the buffer in int's, rounded up */
-#define BUFSEED ((BUFSEEDB + sizeof(int) - 1) / sizeof(int))
+constexpr size_t BUFSEED = ((BUFSEEDB + sizeof(int) - 1) / sizeof(int));
 
 /*
 ** Copy the contents of variable 'v' into the buffer pointed by 'b'.

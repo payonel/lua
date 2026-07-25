@@ -28,7 +28,7 @@
 
 /* maximum number of variable declarations per function (must be
    smaller than 250, due to the bytecode format) */
-#define MAXVARS 200
+constexpr int MAXVARS = 200;
 
 constexpr int hasmultret(expkind k)
 {
@@ -997,11 +997,9 @@ typedef struct ConsControl
 ** * overflows in 'extra' for OP_NEWTABLE and OP_SETLIST;
 ** * overflows when adding multiple returns in OP_SETLIST.
 */
-#define MAX_CNST (INT_MAX / 2)
-#if MAX_CNST / (MAXARG_vC + 1) > MAXARG_Ax
-#undef MAX_CNST
-#define MAX_CNST (MAXARG_Ax * (MAXARG_vC + 1))
-#endif
+constexpr int MAX_CNST = ((INT_MAX / 2) / (MAXARG_vC + 1) > MAXARG_Ax)
+                             ? MAXARG_Ax * (MAXARG_vC + 1)
+                             : INT_MAX / 2;
 
 static void recfield(LexState* ls, ConsControl* cc)
 {
@@ -1524,7 +1522,7 @@ static const struct
     {1, 1} /* and, or */
 };
 
-#define UNARY_PRIORITY 12 /* priority for unary operators */
+constexpr int UNARY_PRIORITY = 12; /* priority for unary operators */
 
 /*
 ** subexpr -> (simpleexp | unop subexpr) { binop subexpr }
