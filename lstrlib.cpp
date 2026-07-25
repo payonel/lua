@@ -627,12 +627,11 @@ static const char* match(MatchState* ms, const char* s, const char* p)
 {
   if (l_unlikely(ms->matchdepth-- == 0))
     luaL_error(ms->L, "pattern too complex");
-init: /* using goto to optimize tail recursion */
-  if (p != ms->p_end)
-  { /* end of pattern? */
-    switch (*p)
-    {
-    case '(':
+  for (;;) /* loop to optimize tail recursion: 'continue' == return match(ms, s, p) */
+  {
+    if (p == ms->p_end) /* end of pattern? */
+      break;
+    if (*p == '(')
     {                      /* start capture */
       if (*(p + 1) == ')') /* position capture? */
         s = start_capture(ms, s, p + 2, CAP_POSITION);
@@ -640,76 +639,51 @@ init: /* using goto to optimize tail recursion */
         s = start_capture(ms, s, p + 1, CAP_UNFINISHED);
       break;
     }
-    case ')':
+    else if (*p == ')')
     { /* end capture */
       s = end_capture(ms, s, p + 1);
       break;
     }
-    case '$':
-    {
-      if ((p + 1) != ms->p_end)          /* is the '$' the last char in pattern? */
-        goto dflt;                       /* no; go to default */
+    else if (*p == '$' && (p + 1) == ms->p_end)
+    { /* '$' as the last char in pattern (otherwise it is a plain class below) */
       s = (s == ms->src_end) ? s : NULL; /* check end of string */
       break;
     }
-    case L_ESC:
-    { /* escaped sequences not in the format class[*+?-]? */
-      switch (*(p + 1))
+    else if (*p == L_ESC && *(p + 1) == 'b')
+    { /* balanced string? */
+      s = matchbalance(ms, s, p + 2);
+      if (s == NULL) /* fail */
+        break;
+      p += 4;
+      continue; /* return match(ms, s, p + 4); */
+    }
+    else if (*p == L_ESC && *(p + 1) == 'f')
+    { /* frontier? */
+      const char* ep;
+      char previous;
+      p += 2;
+      if (l_unlikely(*p != '['))
+        luaL_error(ms->L, "missing '[' after '%%f' in pattern");
+      ep = classend(ms, p); /* points to what is next */
+      previous = (s == ms->src_init) ? '\0' : *(s - 1);
+      if (!matchbracketclass(((unsigned char)(previous)), p, ep - 1) &&
+          matchbracketclass(((unsigned char)(*s)), p, ep - 1))
       {
-      case 'b':
-      { /* balanced string? */
-        s = matchbalance(ms, s, p + 2);
-        if (s != NULL)
-        {
-          p += 4;
-          goto init; /* return match(ms, s, p + 4); */
-        } /* else fail (s == NULL) */
-        break;
+        p = ep;
+        continue; /* return match(ms, s, ep); */
       }
-      case 'f':
-      { /* frontier? */
-        const char* ep;
-        char previous;
-        p += 2;
-        if (l_unlikely(*p != '['))
-          luaL_error(ms->L, "missing '[' after '%%f' in pattern");
-        ep = classend(ms, p); /* points to what is next */
-        previous = (s == ms->src_init) ? '\0' : *(s - 1);
-        if (!matchbracketclass(((unsigned char)(previous)), p, ep - 1) &&
-            matchbracketclass(((unsigned char)(*s)), p, ep - 1))
-        {
-          p = ep;
-          goto init; /* return match(ms, s, ep); */
-        }
-        s = NULL; /* match failed */
-        break;
-      }
-      case '0':
-      case '1':
-      case '2':
-      case '3':
-      case '4':
-      case '5':
-      case '6':
-      case '7':
-      case '8':
-      case '9':
-      { /* capture results (%0-%9)? */
-        s = match_capture(ms, s, ((unsigned char)(*(p + 1))));
-        if (s != NULL)
-        {
-          p += 2;
-          goto init; /* return match(ms, s, p + 2) */
-        }
-        break;
-      }
-      default:
-        goto dflt;
-      }
+      s = NULL; /* match failed */
       break;
     }
-    default:
-    dflt:
+    else if (*p == L_ESC && '0' <= *(p + 1) && *(p + 1) <= '9')
+    { /* capture results (%0-%9)? */
+      s = match_capture(ms, s, ((unsigned char)(*(p + 1))));
+      if (s == NULL)
+        break;
+      p += 2;
+      continue; /* return match(ms, s, p + 2) */
+    }
+    else
     {                                   /* pattern class plus optional suffix */
       const char* ep = classend(ms, p); /* points to optional suffix */
       /* does not match at least once? */
@@ -718,7 +692,7 @@ init: /* using goto to optimize tail recursion */
         if (*ep == '*' || *ep == '?' || *ep == '-')
         { /* accept empty? */
           p = ep + 1;
-          goto init; /* return match(ms, s, ep + 1); */
+          continue; /* return match(ms, s, ep + 1); */
         }
         else        /* '+' or no suffix */
           s = NULL; /* fail */
@@ -735,7 +709,7 @@ init: /* using goto to optimize tail recursion */
           else
           {
             p = ep + 1;
-            goto init; /* else return match(ms, s, ep + 1); */
+            continue; /* else return match(ms, s, ep + 1); */
           }
           break;
         }
@@ -751,11 +725,10 @@ init: /* using goto to optimize tail recursion */
         default: /* no suffix */
           s++;
           p = ep;
-          goto init; /* return match(ms, s + 1, ep); */
+          continue; /* return match(ms, s + 1, ep); */
         }
       }
       break;
-    }
     }
   }
   ms->matchdepth++;
@@ -1429,7 +1402,6 @@ static int str_format(lua_State* L)
   size_t sfl;
   const char* strfrmt = luaL_checklstring(L, arg, &sfl);
   const char* strfrmt_end = strfrmt + sfl;
-  const char* flags;
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   while (strfrmt < strfrmt_end)
@@ -1457,19 +1429,27 @@ static int str_format(lua_State* L)
       }
       case 'd':
       case 'i':
-        flags = L_FMTFLAGSI;
-        goto intcase;
+      {
+        lua_Integer n = luaL_checkinteger(L, arg);
+        checkformat(L, form, L_FMTFLAGSI, 1);
+        addlenmod(form, LUA_INTEGER_FRMLEN);
+        nb = l_sprintf(buff, maxitem, form, (LUAI_UACINT) n);
+        break;
+      }
       case 'u':
-        flags = L_FMTFLAGSU;
-        goto intcase;
+      {
+        lua_Integer n = luaL_checkinteger(L, arg);
+        checkformat(L, form, L_FMTFLAGSU, 1);
+        addlenmod(form, LUA_INTEGER_FRMLEN);
+        nb = l_sprintf(buff, maxitem, form, (LUAI_UACINT) n);
+        break;
+      }
       case 'o':
       case 'x':
       case 'X':
-        flags = L_FMTFLAGSX;
-      intcase:
       {
         lua_Integer n = luaL_checkinteger(L, arg);
-        checkformat(L, form, flags, 1);
+        checkformat(L, form, L_FMTFLAGSX, 1);
         addlenmod(form, LUA_INTEGER_FRMLEN);
         nb = l_sprintf(buff, maxitem, form, (LUAI_UACINT) n);
         break;
