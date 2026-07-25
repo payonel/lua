@@ -38,7 +38,9 @@ typedef struct luaL_Reg
 constexpr size_t LUAL_NUMSIZES = (sizeof(lua_Integer) * 16 + sizeof(lua_Number));
 
 LUALIB_API void(luaL_checkversion_)(lua_State* L, lua_Number ver, size_t sz);
-#define luaL_checkversion(L) luaL_checkversion_(L, LUA_VERSION_NUM, LUAL_NUMSIZES)
+/* NB: as a compiled wrapper this bakes the library's own constants —
+   the cross-ABI check is moot for this port */
+LUALIB_API void luaL_checkversion(lua_State* L);
 
 LUALIB_API int(luaL_getmetafield)(lua_State* L, int obj, const char* e);
 LUALIB_API int(luaL_callmeta)(lua_State* L, int obj, const char* e);
@@ -87,7 +89,7 @@ LUALIB_API void(luaL_unref)(lua_State* L, int t, int ref);
 LUALIB_API int(luaL_loadfilex)(lua_State* L, const char* filename,
                                const char* mode);
 
-#define luaL_loadfile(L, f) luaL_loadfilex(L, f, NULL)
+LUALIB_API int luaL_loadfile(lua_State* L, const char* filename);
 
 LUALIB_API int(luaL_loadbufferx)(lua_State* L, const char* buff, size_t sz,
                                  const char* name, const char* mode);
@@ -120,41 +122,37 @@ LUALIB_API void(luaL_requiref)(lua_State* L, const char* modname,
 ** ===============================================================
 */
 
-#define luaL_newlibtable(L, l) lua_createtable(L, 0, sizeof(l) / sizeof((l)[0]) - 1)
 
-#define luaL_newlib(L, l) (luaL_checkversion(L), luaL_newlibtable(L, l), luaL_setfuncs(L, l, 0))
 
-#define luaL_argcheck(L, cond, arg, extramsg) ((void) (luai_likely(cond) || luaL_argerror(L, (arg), (extramsg))))
 
-#define luaL_argexpected(L, cond, arg, tname) ((void) (luai_likely(cond) || luaL_typeerror(L, (arg), (tname))))
 
-#define luaL_checkstring(L, n)  (luaL_checklstring(L, (n), NULL))
-#define luaL_optstring(L, n, d) (luaL_optlstring(L, (n), (d), NULL))
+LUALIB_API void luaL_argcheck(lua_State* L, bool cond, int arg, const char* extramsg);
 
-#define luaL_typename(L, i) lua_typename(L, lua_type(L, (i)))
+LUALIB_API void luaL_argexpected(lua_State* L, bool cond, int arg, const char* tname);
 
-#define luaL_dofile(L, fn) (luaL_loadfile(L, fn) || lua_pcall(L, 0, LUA_MULTRET, 0))
+LUALIB_API const char* luaL_checkstring(lua_State* L, int arg);
+LUALIB_API const char* luaL_optstring(lua_State* L, int arg, const char* d);
 
-#define luaL_dostring(L, s) (luaL_loadstring(L, s) || lua_pcall(L, 0, LUA_MULTRET, 0))
+LUALIB_API const char* luaL_typename(lua_State* L, int idx);
 
-#define luaL_getmetatable(L, n) (lua_getfield(L, LUA_REGISTRYINDEX, (n)))
+LUALIB_API int luaL_dofile(lua_State* L, const char* filename);
 
-#define luaL_opt(L, f, n, d) (lua_isnoneornil(L, (n)) ? (d) : f(L, (n)))
+LUALIB_API int luaL_dostring(lua_State* L, const char* str);
 
-#define luaL_loadbuffer(L, s, sz, n) luaL_loadbufferx(L, s, sz, n, NULL)
+LUALIB_API int luaL_getmetatable(lua_State* L, const char* tname);
+
+
+
+LUALIB_API int luaL_loadbuffer(lua_State* L, const char* buff, size_t sz, const char* name);
 
 /*
 ** Perform arithmetic operations on lua_Integer values with wrap-around
 ** semantics, as the Lua core does.
 */
-#define luaL_intop(op, v1, v2) ((lua_Integer) ((lua_Unsigned) (v1) op(lua_Unsigned)(v2)))
+
 
 /* push the value used to represent failure/error */
-#if defined(LUA_FAILISFALSE)
-#define luaL_pushfail(L) lua_pushboolean(L, 0)
-#else
-#define luaL_pushfail(L) lua_pushnil(L)
-#endif
+LUALIB_API void luaL_pushfail(lua_State* L);
 
 /*
 ** {======================================================
@@ -171,14 +169,14 @@ struct luaL_Buffer
   alignas(std::max_align_t) char init[LUAL_BUFFERSIZE]; /* initial buffer */
 };
 
-#define luaL_bufflen(bf)  ((bf)->n)
-#define luaL_buffaddr(bf) ((bf)->b)
+LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf);
+LUALIB_API char* luaL_buffaddr(luaL_Buffer* bf);
 
-#define luaL_addchar(B, c) ((void) ((B)->n < (B)->size || luaL_prepbuffsize((B), 1)), ((B)->b[(B)->n++] = (c)))
+LUALIB_API void luaL_addchar(luaL_Buffer* B, char c);
 
-#define luaL_addsize(B, s) ((B)->n += (s))
+LUALIB_API void luaL_addsize(luaL_Buffer* B, size_t s);
 
-#define luaL_buffsub(B, s) ((B)->n -= (s))
+LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s);
 
 LUALIB_API void(luaL_buffinit)(lua_State* L, luaL_Buffer* B);
 LUALIB_API char*(luaL_prepbuffsize) (luaL_Buffer* B, size_t sz);
@@ -189,7 +187,7 @@ LUALIB_API void(luaL_pushresult)(luaL_Buffer* B);
 LUALIB_API void(luaL_pushresultsize)(luaL_Buffer* B, size_t sz);
 LUALIB_API char*(luaL_buffinitsize) (lua_State* L, luaL_Buffer* B, size_t sz);
 
-#define luaL_prepbuffer(B) luaL_prepbuffsize(B, LUAL_BUFFERSIZE)
+LUALIB_API char* luaL_prepbuffer(luaL_Buffer* B);
 
 /* }====================================================== */
 

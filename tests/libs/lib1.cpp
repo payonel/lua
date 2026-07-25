@@ -35,7 +35,7 @@ LUAMOD_API int anotherfunc (lua_State *L) {
 LUAMOD_API int luaopen_lib1_sub (lua_State *L) {
   lua_setglobal(L, "y");  /* 2nd arg: extra value (file name) */
   lua_setglobal(L, "x");  /* 1st arg: module name */
-  luaL_newlib(L, funcs);
+  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(funcs) / sizeof((funcs)[0]) - 1), luaL_setfuncs(L, funcs, 0));
   return 1;
 }
 

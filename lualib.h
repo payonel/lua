@@ -56,4 +56,4 @@ LUAMOD_API int(luaopen_utf8)(lua_State* L);
 LUALIB_API void(luaL_openselectedlibs)(lua_State* L, int load, int preload);
 
 /* open all libraries */
-#define luaL_openlibs(L) luaL_openselectedlibs(L, ~0, 0)
+LUALIB_API void luaL_openlibs(lua_State* L);

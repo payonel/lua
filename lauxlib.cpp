@@ -454,7 +454,7 @@ LUALIB_API lua_Number luaL_checknumber(lua_State* L, int arg)
 
 LUALIB_API lua_Number luaL_optnumber(lua_State* L, int arg, lua_Number def)
 {
-  return luaL_opt(L, luaL_checknumber, arg, def);
+  return (lua_isnoneornil(L, (arg)) ? (def) : luaL_checknumber(L, (arg)));
 }
 
 static void interror(lua_State* L, int arg)
@@ -479,7 +479,7 @@ LUALIB_API lua_Integer luaL_checkinteger(lua_State* L, int arg)
 LUALIB_API lua_Integer luaL_optinteger(lua_State* L, int arg,
                                        lua_Integer def)
 {
-  return luaL_opt(L, luaL_checkinteger, arg, def);
+  return (lua_isnoneornil(L, (arg)) ? (def) : luaL_checkinteger(L, (arg)));
 }
 
 /* }====================================================== */
@@ -1259,3 +1259,116 @@ LUALIB_API void luaL_checkversion_(lua_State* L, lua_Number ver, size_t sz)
     luaL_error(L, "version mismatch: app. needs %f, Lua core provides %f",
                (LUAI_UACNUMBER) ver, (LUAI_UACNUMBER) v);
 }
+
+/*
+** {======================================================================
+** Public auxlib veneer: out-of-line wrappers (upstream macros, F8).
+** All cold paths (ryanbean decision, 2026-07-25).
+** =======================================================================
+*/
+
+LUALIB_API void luaL_checkversion(lua_State* L)
+{
+  luaL_checkversion_(L, LUA_VERSION_NUM, LUAL_NUMSIZES);
+}
+
+LUALIB_API int luaL_loadfile(lua_State* L, const char* filename)
+{
+  return luaL_loadfilex(L, filename, NULL);
+}
+
+LUALIB_API void luaL_argcheck(lua_State* L, bool cond, int arg, const char* extramsg)
+{
+  if (luai_unlikely(!cond))
+    luaL_argerror(L, arg, extramsg);
+}
+
+LUALIB_API void luaL_argexpected(lua_State* L, bool cond, int arg, const char* tname)
+{
+  if (luai_unlikely(!cond))
+    luaL_typeerror(L, arg, tname);
+}
+
+LUALIB_API const char* luaL_checkstring(lua_State* L, int arg)
+{
+  return luaL_checklstring(L, arg, NULL);
+}
+
+LUALIB_API const char* luaL_optstring(lua_State* L, int arg, const char* d)
+{
+  return luaL_optlstring(L, arg, d, NULL);
+}
+
+LUALIB_API const char* luaL_typename(lua_State* L, int idx)
+{
+  return lua_typename(L, lua_type(L, idx));
+}
+
+LUALIB_API int luaL_dofile(lua_State* L, const char* filename)
+{
+  int status = luaL_loadfile(L, filename);
+  if (status == LUA_OK)
+    status = lua_pcall(L, 0, LUA_MULTRET, 0);
+  return status;
+}
+
+LUALIB_API int luaL_dostring(lua_State* L, const char* str)
+{
+  int status = luaL_loadstring(L, str);
+  if (status == LUA_OK)
+    status = lua_pcall(L, 0, LUA_MULTRET, 0);
+  return status;
+}
+
+LUALIB_API int luaL_getmetatable(lua_State* L, const char* tname)
+{
+  return lua_getfield(L, LUA_REGISTRYINDEX, tname);
+}
+
+LUALIB_API int luaL_loadbuffer(lua_State* L, const char* buff, size_t sz, const char* name)
+{
+  return luaL_loadbufferx(L, buff, sz, name, NULL);
+}
+
+LUALIB_API void luaL_pushfail(lua_State* L)
+{
+#if defined(LUA_FAILISFALSE)
+  lua_pushboolean(L, 0);
+#else
+  lua_pushnil(L);
+#endif
+}
+
+LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf)
+{
+  return bf->n;
+}
+
+LUALIB_API char* luaL_buffaddr(luaL_Buffer* bf)
+{
+  return bf->b;
+}
+
+LUALIB_API void luaL_addchar(luaL_Buffer* B, char c)
+{
+  if (B->n >= B->size)
+    luaL_prepbuffsize(B, 1);
+  B->b[B->n++] = c;
+}
+
+LUALIB_API void luaL_addsize(luaL_Buffer* B, size_t s)
+{
+  B->n += s;
+}
+
+LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s)
+{
+  B->n -= s;
+}
+
+LUALIB_API char* luaL_prepbuffer(luaL_Buffer* B)
+{
+  return luaL_prepbuffsize(B, LUAL_BUFFERSIZE);
+}
+
+/* }====================================================================== */

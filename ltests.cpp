@@ -2528,7 +2528,7 @@ int luaB_opentests(lua_State* L)
   atexit(checkfinalmem);
   assert(f == debug_realloc && ud == &l_memcontrol);
   lua_setallocf(L, f, ud); /* exercise this function */
-  luaL_newlib(L, tests_funcs);
+  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(tests_funcs) / sizeof((tests_funcs)[0]) - 1), luaL_setfuncs(L, tests_funcs, 0));
   return 1;
 }
 

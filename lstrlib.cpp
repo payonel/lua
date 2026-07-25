@@ -2131,7 +2131,7 @@ static const luaL_Reg strlib[] = {
 static void createmetatable(lua_State* L)
 {
   /* table to be metatable for strings */
-  luaL_newlibtable(L, stringmetamethods);
+  lua_createtable(L, 0, sizeof(stringmetamethods) / sizeof((stringmetamethods)[0]) - 1);
   luaL_setfuncs(L, stringmetamethods, 0);
   lua_pushliteral(L, "");         /* dummy string */
   lua_pushvalue(L, -2);           /* copy table */
@@ -2147,7 +2147,7 @@ static void createmetatable(lua_State* L)
 */
 LUAMOD_API int luaopen_string(lua_State* L)
 {
-  luaL_newlib(L, strlib);
+  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(strlib) / sizeof((strlib)[0]) - 1), luaL_setfuncs(L, strlib, 0));
   createmetatable(L);
   return 1;
 }

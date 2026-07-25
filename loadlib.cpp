@@ -611,7 +611,7 @@ LUAMOD_API int luaopen_package(lua_State* L)
 {
   luaL_getsubtable(L, LUA_REGISTRYINDEX, CLIBS); /* create CLIBS table */
   lua_pop(L, 1);                                 /* will not use it now */
-  luaL_newlib(L, pk_funcs);                      /* create 'package' table */
+  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(pk_funcs) / sizeof((pk_funcs)[0]) - 1), luaL_setfuncs(L, pk_funcs, 0));                      /* create 'package' table */
   createsearcherstable(L);
   /* set paths */
   setpath(L, "path", LUA_PATH_VAR, LUA_PATH_DEFAULT);

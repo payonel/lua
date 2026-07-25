@@ -76,7 +76,7 @@ static int tinsert(lua_State* L)
 {
   lua_Integer pos; /* where to insert new element */
   lua_Integer e = aux_getn(L, 1, TAB_RW);
-  e = luaL_intop(+, e, 1); /* first empty element */
+  e = ((lua_Integer)((lua_Unsigned)(e) + (lua_Unsigned)(1))); /* first empty element */
   switch (lua_gettop(L))
   {
   case 2:
@@ -222,7 +222,7 @@ static int tunpack(lua_State* L)
   lua_Unsigned n;
   lua_Integer len = aux_getn(L, 1, TAB_R);
   lua_Integer i = luaL_optinteger(L, 2, 1);
-  lua_Integer e = luaL_opt(L, luaL_checkinteger, 3, len);
+  lua_Integer e = (lua_isnoneornil(L, (3)) ? (len) : luaL_checkinteger(L, (3)));
   if (i > e)
     return 0;                      /* empty range */
   n = ((lua_Unsigned)(e)) - ((lua_Unsigned)(i)); /* number of elements minus 1 */
@@ -442,6 +442,6 @@ static const luaL_Reg tab_funcs[] = {
 
 LUAMOD_API int luaopen_table(lua_State* L)
 {
-  luaL_newlib(L, tab_funcs);
+  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(tab_funcs) / sizeof((tab_funcs)[0]) - 1), luaL_setfuncs(L, tab_funcs, 0));
   return 1;
 }

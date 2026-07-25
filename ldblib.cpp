@@ -506,6 +506,6 @@ static const luaL_Reg dblib[] = {
 
 LUAMOD_API int luaopen_debug(lua_State* L)
 {
-  luaL_newlib(L, dblib);
+  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(dblib) / sizeof((dblib)[0]) - 1), luaL_setfuncs(L, dblib, 0));
   return 1;
 }

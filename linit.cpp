@@ -56,3 +56,8 @@ LUALIB_API void luaL_openselectedlibs(lua_State* L, int load, int preload)
   assert((mask >> 1) == LUA_UTF8LIBK);
   lua_pop(L, 1); /* remove PRELOAD table */
 }
+
+LUALIB_API void luaL_openlibs(lua_State* L)
+{
+  luaL_openselectedlibs(L, ~0, 0);
+}
