@@ -1715,3 +1715,161 @@ LUA_API void lua_upvaluejoin(lua_State* L, int fidx1, int n1,
   *up1 = *up2;
   luaC_objbarrier(L, f1, *up1);
 }
+
+/*
+** {======================================================================
+** Public API veneer: out-of-line wrappers over the primitive API
+** functions. These were macros in upstream Lua (F8); they are compiled
+** functions here — all cold paths (ryanbean decision, 2026-07-25).
+** =======================================================================
+*/
+
+LUA_API int lua_upvalueindex(int i)
+{
+  return LUA_REGISTRYINDEX - i;
+}
+
+LUA_API void lua_call(lua_State* L, int nargs, int nresults)
+{
+  lua_callk(L, nargs, nresults, 0, NULL);
+}
+
+LUA_API int lua_pcall(lua_State* L, int nargs, int nresults, int errfunc)
+{
+  return lua_pcallk(L, nargs, nresults, errfunc, 0, NULL);
+}
+
+LUA_API int lua_yield(lua_State* L, int nresults)
+{
+  return lua_yieldk(L, nresults, 0, NULL);
+}
+
+LUA_API void* lua_getextraspace(lua_State* L)
+{
+  return (void*)((char*)L + sizeof(lua_State));
+}
+
+LUA_API lua_Number lua_tonumber(lua_State* L, int idx)
+{
+  return lua_tonumberx(L, idx, NULL);
+}
+
+LUA_API lua_Integer lua_tointeger(lua_State* L, int idx)
+{
+  return lua_tointegerx(L, idx, NULL);
+}
+
+LUA_API void lua_pop(lua_State* L, int n)
+{
+  lua_settop(L, -n - 1);
+}
+
+LUA_API void lua_newtable(lua_State* L)
+{
+  lua_createtable(L, 0, 0);
+}
+
+LUA_API void lua_pushcfunction(lua_State* L, lua_CFunction f)
+{
+  lua_pushcclosure(L, f, 0);
+}
+
+LUA_API void lua_register(lua_State* L, const char* name, lua_CFunction f)
+{
+  lua_pushcfunction(L, f);
+  lua_setglobal(L, name);
+}
+
+LUA_API int lua_isfunction(lua_State* L, int idx)
+{
+  return lua_type(L, idx) == LUA_TFUNCTION;
+}
+
+LUA_API int lua_istable(lua_State* L, int idx)
+{
+  return lua_type(L, idx) == LUA_TTABLE;
+}
+
+LUA_API int lua_islightuserdata(lua_State* L, int idx)
+{
+  return lua_type(L, idx) == LUA_TLIGHTUSERDATA;
+}
+
+LUA_API int lua_isnil(lua_State* L, int idx)
+{
+  return lua_type(L, idx) == LUA_TNIL;
+}
+
+LUA_API int lua_isboolean(lua_State* L, int idx)
+{
+  return lua_type(L, idx) == LUA_TBOOLEAN;
+}
+
+LUA_API int lua_isthread(lua_State* L, int idx)
+{
+  return lua_type(L, idx) == LUA_TTHREAD;
+}
+
+LUA_API int lua_isnone(lua_State* L, int idx)
+{
+  return lua_type(L, idx) == LUA_TNONE;
+}
+
+LUA_API int lua_isnoneornil(lua_State* L, int idx)
+{
+  return lua_type(L, idx) <= 0;
+}
+
+LUA_API const char* lua_pushliteral(lua_State* L, const char* s)
+{
+  return lua_pushstring(L, s);
+}
+
+LUA_API void lua_pushglobaltable(lua_State* L)
+{
+  lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
+}
+
+LUA_API const char* lua_tostring(lua_State* L, int idx)
+{
+  return lua_tolstring(L, idx, NULL);
+}
+
+LUA_API void lua_insert(lua_State* L, int idx)
+{
+  lua_rotate(L, idx, 1);
+}
+
+LUA_API void lua_remove(lua_State* L, int idx)
+{
+  lua_rotate(L, idx, -1);
+  lua_pop(L, 1);
+}
+
+LUA_API void lua_replace(lua_State* L, int idx)
+{
+  lua_copy(L, -1, idx);
+  lua_pop(L, 1);
+}
+
+LUA_API void* lua_newuserdata(lua_State* L, size_t sz)
+{
+  return lua_newuserdatauv(L, sz, 1);
+}
+
+LUA_API int lua_getuservalue(lua_State* L, int idx)
+{
+  return lua_getiuservalue(L, idx, 1);
+}
+
+LUA_API int lua_setuservalue(lua_State* L, int idx)
+{
+  return lua_setiuservalue(L, idx, 1);
+}
+
+LUA_API int lua_resetthread(lua_State* L)
+{
+  return lua_closethread(L, NULL);
+}
+
+/* }====================================================================== */
