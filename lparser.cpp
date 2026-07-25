@@ -158,14 +158,14 @@ static void init_exp(expdesc* e, expkind k, int i)
 {
   e->f = e->t = NO_JUMP;
   e->k = k;
-  e->u.info = i;
+  e->info = i;
 }
 
 static void codestring(expdesc* e, TString* s)
 {
   e->f = e->t = NO_JUMP;
   e->k = VKSTR;
-  e->u.strval = s;
+  e->strval = s;
 }
 
 static void codename(LexState* ls, expdesc* e)
@@ -211,8 +211,8 @@ static int new_varkind(LexState* ls, TString* name, lu_byte kind)
   dyd->actvar.arr = (Vardesc*)luaM_growaux_(L, dyd->actvar.arr, dyd->actvar.n + 1,
       &dyd->actvar.size, sizeof(Vardesc), limit, "variable declarations");
   var = &dyd->actvar.arr[dyd->actvar.n++];
-  var->vd.kind = kind; /* default */
-  var->vd.name = name;
+  var->kind = kind; /* default */
+  var->name = name;
   return dyd->actvar.n - 1 - fs->firstlocal;
 }
 
@@ -245,7 +245,7 @@ static lu_byte reglevel(FuncState* fs, int nvar)
   {
     Vardesc* vd = getlocalvardesc(fs, nvar); /* get previous variable */
     if (varinreg(vd))                        /* is in a register? */
-      return ((lu_byte)(vd->vd.ridx + 1));
+      return ((lu_byte)(vd->ridx + 1));
   }
   return 0; /* no variables in registers */
 }
@@ -269,7 +269,7 @@ static LocVar* localdebuginfo(FuncState* fs, int vidx)
     return NULL; /* no debug info. for constants */
   else
   {
-    int idx = vd->vd.pidx;
+    int idx = vd->pidx;
     assert(idx < fs->ndebugvars);
     return &fs->f->locvars[idx];
   }
@@ -282,8 +282,8 @@ static void init_var(FuncState* fs, expdesc* e, int vidx)
 {
   e->f = e->t = NO_JUMP;
   e->k = VLOCAL;
-  e->u.var.vidx = ((short)(vidx));
-  e->u.var.ridx = getlocalvardesc(fs, vidx)->vd.ridx;
+  e->var.vidx = ((short)(vidx));
+  e->var.ridx = getlocalvardesc(fs, vidx)->ridx;
 }
 
 /*
@@ -299,20 +299,20 @@ static void check_readonly(LexState* ls, expdesc* e)
   {
   case VCONST:
   {
-    varname = ls->dyd->actvar.arr[e->u.info].vd.name;
+    varname = ls->dyd->actvar.arr[e->info].name;
     break;
   }
   case VLOCAL:
   case VVARGVAR:
   {
-    Vardesc* vardesc = getlocalvardesc(fs, e->u.var.vidx);
-    if (vardesc->vd.kind != VDKREG) /* not a regular variable? */
-      varname = vardesc->vd.name;
+    Vardesc* vardesc = getlocalvardesc(fs, e->var.vidx);
+    if (vardesc->kind != VDKREG) /* not a regular variable? */
+      varname = vardesc->name;
     break;
   }
   case VUPVAL:
   {
-    Upvaldesc* up = &fs->f->upvalues[e->u.info];
+    Upvaldesc* up = &fs->f->upvalues[e->info];
     if (up->kind != VDKREG)
       varname = up->name;
     break;
@@ -326,9 +326,9 @@ static void check_readonly(LexState* ls, expdesc* e)
   case VINDEXSTR:
   case VINDEXED:
   {                  /* global variable */
-    if (e->u.ind.ro) /* read-only? */
+    if (e->ind.ro) /* read-only? */
     {
-      TValue* kv = &fs->f->k[e->u.ind.keystr];
+      TValue* kv = &fs->f->k[e->ind.keystr];
       assert((kv->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
       assert((kv->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
       varname = static_cast<TString*>(kv->value_.gc);
@@ -356,8 +356,8 @@ static void adjustlocalvars(LexState* ls, int nvars)
   {
     int vidx = fs->nactvar++;
     Vardesc* var = getlocalvardesc(fs, vidx);
-    var->vd.ridx = ((lu_byte)(reglevel++));
-    var->vd.pidx = registerlocalvar(ls, fs, var->vd.name);
+    var->ridx = ((lu_byte)(reglevel++));
+    var->pidx = registerlocalvar(ls, fs, var->name);
     luaY_checklimit(fs, reglevel, MAXVARS, "local variables");
   }
 }
@@ -415,16 +415,16 @@ static int newupvalue(FuncState* fs, TString* name, expdesc* v)
   if (v->k == VLOCAL)
   {
     up->instack = 1;
-    up->idx = v->u.var.ridx;
-    up->kind = getlocalvardesc(prev, v->u.var.vidx)->vd.kind;
-    assert(eqstr(name, getlocalvardesc(prev, v->u.var.vidx)->vd.name));
+    up->idx = v->var.ridx;
+    up->kind = getlocalvardesc(prev, v->var.vidx)->kind;
+    assert(eqstr(name, getlocalvardesc(prev, v->var.vidx)->name));
   }
   else
   {
     up->instack = 0;
-    up->idx = ((lu_byte)(v->u.info));
-    up->kind = prev->f->upvalues[v->u.info].kind;
-    assert(eqstr(name, prev->f->upvalues[v->u.info].name));
+    up->idx = ((lu_byte)(v->info));
+    up->kind = prev->f->upvalues[v->info].kind;
+    assert(eqstr(name, prev->f->upvalues[v->info].name));
   }
   up->name = name;
   luaC_objbarrier(fs->ls->L, fs->f, name);
@@ -435,11 +435,11 @@ static int newupvalue(FuncState* fs, TString* name, expdesc* v)
 ** Look for an active variable with the name 'n' in the
 ** function 'fs'. If found, initialize 'var' with it and return
 ** its expression kind; otherwise return -1. While searching,
-** var->u.info==-1 means that the preambular global declaration is
+** var->info==-1 means that the preambular global declaration is
 ** active (the default while there is no other global declaration);
-** var->u.info==-2 means there is no active collective declaration
+** var->info==-2 means there is no active collective declaration
 ** (some previous global declaration but no collective declaration);
-** and var->u.info>=0 points to the inner-most (the first one found)
+** and var->info>=0 points to the inner-most (the first one found)
 ** collective declaration, if there is one.
 */
 static int searchvar(FuncState* fs, TString* n, expdesc* var)
@@ -450,30 +450,30 @@ static int searchvar(FuncState* fs, TString* n, expdesc* var)
     Vardesc* vd = getlocalvardesc(fs, i);
     if (varglobal(vd))
     { /* global declaration? */
-      if (vd->vd.name == NULL)
+      if (vd->name == NULL)
       {                                     /* collective declaration? */
-        if (var->u.info < 0)                /* no previous collective declaration? */
-          var->u.info = fs->firstlocal + i; /* this is the first one */
+        if (var->info < 0)                /* no previous collective declaration? */
+          var->info = fs->firstlocal + i; /* this is the first one */
       }
       else
       { /* global name */
-        if (eqstr(n, vd->vd.name))
+        if (eqstr(n, vd->name))
         { /* found? */
           init_exp(var, VGLOBAL, fs->firstlocal + i);
           return VGLOBAL;
         }
-        else if (var->u.info == -1) /* active preambular declaration? */
-          var->u.info = -2;         /* invalidate preambular declaration */
+        else if (var->info == -1) /* active preambular declaration? */
+          var->info = -2;         /* invalidate preambular declaration */
       }
     }
-    else if (eqstr(n, vd->vd.name))
+    else if (eqstr(n, vd->name))
     {                            /* found? */
-      if (vd->vd.kind == RDKCTC) /* compile-time constant? */
+      if (vd->kind == RDKCTC) /* compile-time constant? */
         init_exp(var, VCONST, fs->firstlocal + i);
       else
       { /* local variable */
         init_var(fs, var, i);
-        if (vd->vd.kind == RDKVAVAR) /* vararg parameter? */
+        if (vd->kind == RDKVAVAR) /* vararg parameter? */
           var->k = VVARGVAR;
       }
       return ((int)(var->k));
@@ -521,7 +521,7 @@ static void singlevaraux(FuncState* fs, TString* n, expdesc* var, int base)
       if (var->k == VVARGVAR)      /* vararg parameter? */
         luaK_vapar2local(fs, var); /* change it to a regular local */
       if (var->k == VLOCAL)
-        markupval(fs, var->u.var.vidx); /* will be used as an upvalue */
+        markupval(fs, var->var.vidx); /* will be used as an upvalue */
     }
     /* else nothing else to be done */
   }
@@ -566,15 +566,15 @@ static void buildvar(LexState* ls, TString* varname, expdesc* var)
   singlevaraux(fs, varname, var, 1);
   if (var->k == VGLOBAL)
   { /* global name? */
-    int info = var->u.info;
+    int info = var->info;
     /* global by default in the scope of a global declaration? */
     if (info == -2)
       luaK_semerror(ls, "variable '%s' not declared", getstr(varname));
     buildglobal(ls, varname, var);
-    if (info != -1 && ls->dyd->actvar.arr[info].vd.kind == GDKCONST)
-      var->u.ind.ro = 1; /* mark variable as read-only */
+    if (info != -1 && ls->dyd->actvar.arr[info].kind == GDKCONST)
+      var->ind.ro = 1; /* mark variable as read-only */
     else                 /* anyway must be a global */
-      assert(info == -1 || ls->dyd->actvar.arr[info].vd.kind == GDKREG);
+      assert(info == -1 || ls->dyd->actvar.arr[info].kind == GDKREG);
   }
 }
 
@@ -628,7 +628,7 @@ static inline void leavelevel(LexState* ls)
 */
 static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
 {
-  TString* tsname = getlocalvardesc(ls->fs, gt->nactvar)->vd.name;
+  TString* tsname = getlocalvardesc(ls->fs, gt->nactvar)->name;
   const char* varname = (tsname != NULL) ? getstr(tsname) : "*";
   luaK_semerror(ls,
                 "<goto %s> at line %d jumps into the scope of '%s'",
@@ -1027,7 +1027,7 @@ static void closelistfield(FuncState* fs, ConsControl* cc)
   cc->v.k = VVOID;
   if (cc->tostore >= cc->maxtostore)
   {
-    luaK_setlist(fs, cc->t->u.info, cc->na, cc->tostore); /* flush */
+    luaK_setlist(fs, cc->t->info, cc->na, cc->tostore); /* flush */
     cc->na += cc->tostore;
     cc->tostore = 0; /* no more items pending */
   }
@@ -1040,14 +1040,14 @@ static void lastlistfield(FuncState* fs, ConsControl* cc)
   if (hasmultret(cc->v.k))
   {
     luaK_setmultret(fs, &cc->v);
-    luaK_setlist(fs, cc->t->u.info, cc->na, LUA_MULTRET);
+    luaK_setlist(fs, cc->t->info, cc->na, LUA_MULTRET);
     cc->na--; /* do not count last expression (unknown number of elements) */
   }
   else
   {
     if (cc->v.k != VVOID)
       luaK_exp2nextreg(fs, &cc->v);
-    luaK_setlist(fs, cc->t->u.info, cc->na, cc->tostore);
+    luaK_setlist(fs, cc->t->info, cc->na, cc->tostore);
   }
   cc->na += cc->tostore;
 }
@@ -1129,7 +1129,7 @@ static void constructor(LexState* ls, expdesc* t)
   } while (testnext(ls, ',') || testnext(ls, ';'));
   check_match(ls, /*{*/ '}', '{' /*}*/, line);
   lastlistfield(fs, &cc);
-  luaK_settablesize(fs, pc, t->u.info, cc.na, cc.nh);
+  luaK_settablesize(fs, pc, t->info, cc.na, cc.nh);
 }
 
 /* }====================================================================== */
@@ -1262,7 +1262,7 @@ static void funcargs(LexState* ls, expdesc* f)
   }
   }
   assert(f->k == VNONRELOC);
-  base = f->u.info; /* base register for call */
+  base = f->info; /* base register for call */
   if (hasmultret(args.k))
     nparams = LUA_MULTRET; /* open call */
   else
@@ -1365,13 +1365,13 @@ static void simpleexp(LexState* ls, expdesc* v)
   case TK_FLT:
   {
     init_exp(v, VKFLT, 0);
-    v->u.nval = ls->t.seminfo.r;
+    v->nval = ls->t.seminfo.r;
     break;
   }
   case TK_INT:
   {
     init_exp(v, VKINT, 0);
-    v->u.ival = ls->t.seminfo.i;
+    v->ival = ls->t.seminfo.i;
     break;
   }
   case TK_STRING:
@@ -1611,26 +1611,26 @@ static void check_conflict(LexState* ls, struct LHS_assign* lh, expdesc* v)
     { /* assignment to table field? */
       if (lh->v.k == VINDEXUP)
       { /* is table an upvalue? */
-        if (v->k == VUPVAL && lh->v.u.ind.t == v->u.info)
+        if (v->k == VUPVAL && lh->v.ind.t == v->info)
         {
           conflict = 1; /* table is the upvalue being assigned now */
           lh->v.k = VINDEXSTR;
-          lh->v.u.ind.t = extra; /* assignment will use safe copy */
+          lh->v.ind.t = extra; /* assignment will use safe copy */
         }
       }
       else
       { /* table is a register */
-        if (v->k == VLOCAL && lh->v.u.ind.t == v->u.var.ridx)
+        if (v->k == VLOCAL && lh->v.ind.t == v->var.ridx)
         {
           conflict = 1;          /* table is the local being assigned now */
-          lh->v.u.ind.t = extra; /* assignment will use safe copy */
+          lh->v.ind.t = extra; /* assignment will use safe copy */
         }
         /* is index the local being assigned? */
         if (lh->v.k == VINDEXED && v->k == VLOCAL &&
-            lh->v.u.ind.idx == v->u.var.ridx)
+            lh->v.ind.idx == v->var.ridx)
         {
           conflict = 1;
-          lh->v.u.ind.idx = extra; /* previous assignment will use safe copy */
+          lh->v.ind.idx = extra; /* previous assignment will use safe copy */
         }
       }
     }
@@ -1639,9 +1639,9 @@ static void check_conflict(LexState* ls, struct LHS_assign* lh, expdesc* v)
   {
     /* copy upvalue/local value to a temporary (in position 'extra') */
     if (v->k == VLOCAL)
-      luaK_codeABC(fs, OP_MOVE, extra, v->u.var.ridx, 0);
+      luaK_codeABC(fs, OP_MOVE, extra, v->var.ridx, 0);
     else
-      luaK_codeABC(fs, OP_GETUPVAL, extra, v->u.info, 0);
+      luaK_codeABC(fs, OP_GETUPVAL, extra, v->info, 0);
     luaK_reserveregs(fs, 1);
   }
 }
@@ -2042,10 +2042,10 @@ static void localstat(LexState* ls)
   }
   var = getlocalvardesc(fs, vidx); /* retrieve last variable */
   if (nvars == nexps &&            /* no adjustments? */
-      var->vd.kind == RDKCONST &&  /* last variable is const? */
+      var->kind == RDKCONST &&  /* last variable is const? */
       luaK_exp2const(fs, &e, &var->k))
   {                                 /* compile-time constant? */
-    var->vd.kind = RDKCTC;          /* variable is a compile-time constant */
+    var->kind = RDKCTC;          /* variable is a compile-time constant */
     adjustlocalvars(ls, nvars - 1); /* exclude last variable */
     fs->nactvar++;                  /* but count it */
   }
@@ -2078,7 +2078,7 @@ static void checkglobal(LexState* ls, TString* varname, int line)
   expdesc var;
   int k;
   buildglobal(ls, varname, &var); /* create global variable in 'var' */
-  k = var.u.ind.keystr;           /* index of global name in 'k' */
+  k = var.ind.keystr;           /* index of global name in 'k' */
   luaK_codecheckglobal(fs, &var, k, line);
 }
 
@@ -2103,7 +2103,7 @@ static void initglobal(LexState* ls, int nvars, int firstidx, int n,
   { /* handle variable 'n' */
     FuncState* fs = ls->fs;
     expdesc var;
-    TString* varname = getlocalvardesc(fs, firstidx + n)->vd.name;
+    TString* varname = getlocalvardesc(fs, firstidx + n)->name;
     buildglobal(ls, varname, &var); /* create global variable in 'var' */
     enterlevel(ls);                 /* control recursion depth */
     initglobal(ls, nvars, firstidx, n + 1, line);
@@ -2215,7 +2215,7 @@ static void exprstat(LexState* ls)
   { /* stat -> func */
     Instruction* inst;
     check_condition(ls, v.v.k == VCALL, "syntax error");
-    inst = &((fs)->f->code[(&v.v)->u.info]);
+    inst = &((fs)->f->code[(&v.v)->info]);
     ((*inst) = (((*inst) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(1)) << POS_C) & MASK1(SIZE_C, POS_C)))); /* call statement uses no results */
   }
 }
@@ -2237,8 +2237,8 @@ static void retstat(LexState* ls)
       luaK_setmultret(fs, &e);
       if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc)
       { /* tail call? */
-        ((((fs)->f->code[(&e)->u.info])) = (((((fs)->f->code[(&e)->u.info])) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_TAILCALL)) << POS_OP) & MASK1(SIZE_OP, POS_OP))));
-        assert(GETARG_A(((fs)->f->code[(&e)->u.info])) == luaY_nvarstack(fs));
+        ((((fs)->f->code[(&e)->info])) = (((((fs)->f->code[(&e)->info])) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_TAILCALL)) << POS_OP) & MASK1(SIZE_OP, POS_OP))));
+        assert(GETARG_A(((fs)->f->code[(&e)->info])) == luaY_nvarstack(fs));
       }
       nret = LUA_MULTRET; /* return all values */
     }

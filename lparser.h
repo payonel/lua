@@ -81,25 +81,24 @@ constexpr int vkisindexed(expkind k)
 typedef struct expdesc
 {
   expkind k;
-  union
-  {
-    lua_Integer ival; /* for VKINT */
-    lua_Number nval;  /* for VKFLT */
-    TString* strval;  /* for VKSTR */
-    int info;         /* for generic use */
-    struct
-    {             /* for indexed variables */
-      short idx;  /* index (R or "long" K) */
-      lu_byte t;  /* table (register or upvalue) */
-      lu_byte ro; /* true if variable is read-only */
-      int keystr; /* index in 'k' of string key, or -1 if not a string */
-    } ind;
-    struct
-    {               /* for local variables */
-      lu_byte ridx; /* register holding the variable */
-      short vidx;   /* index in 'actvar.arr' */
-    } var;
-  } u;
+  /* (was a union in upstream Lua, discriminated by 'k'; flattened
+     here — memory parity is a non-goal) */
+  lua_Integer ival; /* for VKINT */
+  lua_Number nval;  /* for VKFLT */
+  TString* strval;  /* for VKSTR */
+  int info;         /* for generic use */
+  struct
+  {             /* for indexed variables */
+    short idx;  /* index (R or "long" K) */
+    lu_byte t;  /* table (register or upvalue) */
+    lu_byte ro; /* true if variable is read-only */
+    int keystr; /* index in 'k' of string key, or -1 if not a string */
+  } ind;
+  struct
+  {               /* for local variables */
+    lu_byte ridx; /* register holding the variable */
+    short vidx;   /* index in 'actvar.arr' */
+  } var;
   int t; /* patch list of 'exit when true' */
   int f; /* patch list of 'exit when false' */
 } expdesc;
@@ -114,30 +113,25 @@ constexpr int GDKREG = 5; /* regular global */
 constexpr int GDKCONST = 6; /* global constant */
 
 /* description of an active variable */
-typedef union Vardesc
+typedef struct Vardesc
 {
-  struct
-  {
-    Value value_; /* constant value (if it is a compile-time constant) */
-    lu_byte tt_;
-    lu_byte kind;
-    lu_byte ridx;  /* register holding the variable */
-    short pidx;    /* index of the variable in the Proto's 'locvars' array */
-    TString* name; /* variable name */
-  } vd;
-  TValue k; /* constant value (if any) */
+  TValue k;      /* constant value (if it is a compile-time constant) */
+  lu_byte kind;
+  lu_byte ridx;  /* register holding the variable */
+  short pidx;    /* index of the variable in the Proto's 'locvars' array */
+  TString* name; /* variable name */
 } Vardesc;
 
 /* variables that live in registers */
 static inline int varinreg(const Vardesc* v)
 {
-  return v->vd.kind <= RDKTOCLOSE;
+  return v->kind <= RDKTOCLOSE;
 }
 
 /* test for global variables */
 static inline int varglobal(const Vardesc* v)
 {
-  return v->vd.kind >= GDKREG;
+  return v->kind >= GDKREG;
 }
 
 /* description of pending goto statements and label statements */
