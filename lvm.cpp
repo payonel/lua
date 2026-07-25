@@ -1268,9 +1268,9 @@ void luaV_execute(lua_State* L, CallInfo* ci)
 #if LUA_USE_JUMPTABLE
 #include "ljumptab.h"
 #endif
-startfunc:
+  /* frame entry: this sequence is repeated inline at the call/return
+     arms (OP_CALL, OP_TAILCALL, OP_RETURN*) that switch frames */
   trap = L->hookmask;
-returning: /* trap already set */
   cl = ci_func(L, ci);
   k = cl->p->k;
   pc = ci->savedpc;
@@ -2614,7 +2614,14 @@ returning: /* trap already set */
         else
         { /* Lua call: run function in this same C frame */
           ci = newci;
-          goto startfunc;
+          /* frame entry (was 'goto startfunc') */
+          trap = L->hookmask;
+          cl = ci_func(L, ci);
+          k = cl->p->k;
+          pc = ci->savedpc;
+          if (l_unlikely(trap))
+            trap = luaG_tracecall(L);
+          base = ci->func + 1;
         }
         vmbreak;
       }
@@ -2638,14 +2645,32 @@ returning: /* trap already set */
           assert(base == ci->func + 1);
         }
         if ((n = luaD_pretailcall(L, ci, ra, b, delta)) < 0) /* Lua function? */
-          goto startfunc;                                    /* execute the callee */
+        { /* execute the callee (was 'goto startfunc') */
+          trap = L->hookmask;
+          cl = ci_func(L, ci);
+          k = cl->p->k;
+          pc = ci->savedpc;
+          if (l_unlikely(trap))
+            trap = luaG_tracecall(L);
+          base = ci->func + 1;
+        }
         else
         {                         /* C function? */
           ci->func -= delta;    /* restore 'func' (if vararg) */
           luaD_poscall(L, ci, n); /* finish caller */
           trap = ci->trap; /* 'luaD_poscall' can change hooks */
-          goto ret;               /* caller returns after the tail call */
+          /* caller returns after the tail call (was 'goto ret') */
+          if (ci->callstatus & CIST_FRESH)
+            return; /* end this frame */
+          ci = ci->previous; /* continue running caller in this frame */
+          cl = ci_func(L, ci);
+          k = cl->p->k;
+          pc = ci->savedpc;
+          if (l_unlikely(trap))
+            trap = luaG_tracecall(L);
+          base = ci->func + 1;
         }
+        vmbreak;
       }
       vmcase(OP_RETURN)
       {
@@ -2669,7 +2694,17 @@ returning: /* trap already set */
         L->top = ra + n; /* set call for 'luaD_poscall' */
         luaD_poscall(L, ci, n);
         trap = ci->trap; /* 'luaD_poscall' can change hooks */
-        goto ret;
+        /* return from a Lua function (was 'goto ret') */
+        if (ci->callstatus & CIST_FRESH)
+          return; /* end this frame */
+        ci = ci->previous; /* continue running caller in this frame */
+        cl = ci_func(L, ci);
+        k = cl->p->k;
+        pc = ci->savedpc;
+        if (l_unlikely(trap))
+          trap = luaG_tracecall(L);
+        base = ci->func + 1;
+        vmbreak;
       }
       vmcase(OP_RETURN0)
       {
@@ -2689,7 +2724,17 @@ returning: /* trap already set */
           for (; l_unlikely(nres > 0); nres--)
             (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* all results are nil */
         }
-        goto ret;
+        /* return from a Lua function (was 'goto ret') */
+        if (ci->callstatus & CIST_FRESH)
+          return; /* end this frame */
+        ci = ci->previous; /* continue running caller in this frame */
+        cl = ci_func(L, ci);
+        k = cl->p->k;
+        pc = ci->savedpc;
+        if (l_unlikely(trap))
+          trap = luaG_tracecall(L);
+        base = ci->func + 1;
+        vmbreak;
       }
       vmcase(OP_RETURN1)
       {
@@ -2716,14 +2761,17 @@ returning: /* trap already set */
               (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* complete missing results */
           }
         }
-      ret: /* return from a Lua function */
+        /* return from a Lua function */
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
-        else
-        {
-          ci = ci->previous;
-          goto returning; /* continue running caller in this frame */
-        }
+        ci = ci->previous; /* continue running caller in this frame */
+        cl = ci_func(L, ci);
+        k = cl->p->k;
+        pc = ci->savedpc;
+        if (l_unlikely(trap))
+          trap = luaG_tracecall(L);
+        base = ci->func + 1;
+        vmbreak;
       }
       vmcase(OP_FORLOOP)
       {
@@ -2778,11 +2826,31 @@ returning: /* trap already set */
         pc += GETARG_Bx(i); /* go to end of the loop */
         i = *(pc++);        /* fetch next instruction */
         assert(GET_OPCODE(i) == OP_TFORCALL && ra == (base + GETARG_A(i)));
-        goto l_tforcall;
+        /* run the iterator call (was 'goto l_tforcall'):
+           'ra' has the iterator function, 'ra + 1' has the state,
+           'ra + 2' has the closing variable, and 'ra + 3' has the control
+           variable. The call will use the stack starting at 'ra + 3',
+           so that it preserves the first three values, and the first
+           return will be the new value for the control variable.
+        */
+        ra = (base + GETARG_A(i));
+        setobj(L, (&(L)->stack.p[ra + 5]), (&(L)->stack.p[ra + 3])); /* copy the control variable */
+        setobj(L, (&(L)->stack.p[ra + 4]), (&(L)->stack.p[ra + 1])); /* copy state */
+        setobj(L, (&(L)->stack.p[ra + 3]), (&(L)->stack.p[ra]));     /* copy function */
+        L->top = ra + 3 + 3;
+        ci->savedpc = pc;
+        luaD_call(L, ra + 3, GETARG_C(i)); /* do the call */
+        trap = ci->trap;
+        { if (l_unlikely(trap)) { (base = (ci)->func + 1); ra = (base + GETARG_A(i)); } };                              /* stack may have changed */
+        i = *(pc++);                                  /* go to next instruction */
+        assert(GET_OPCODE(i) == OP_TFORLOOP && ra == (base + GETARG_A(i)));
+        /* close the loop iteration (was 'goto l_tforloop') */
+        ra = (base + GETARG_A(i));
+        if (!((((&(L)->stack.p[ra + 3]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* continue loop? */
+          pc -= GETARG_Bx(i);      /* jump back */
+        vmbreak;
       }
       vmcase(OP_TFORCALL)
-      {
-      l_tforcall:
       {
         /* 'ra' has the iterator function, 'ra + 1' has the state,
            'ra + 2' has the closing variable, and 'ra + 3' has the control
@@ -2801,18 +2869,18 @@ returning: /* trap already set */
         { if (l_unlikely(trap)) { (base = (ci)->func + 1); ra = (base + GETARG_A(i)); } };                              /* stack may have changed */
         i = *(pc++);                                  /* go to next instruction */
         assert(GET_OPCODE(i) == OP_TFORLOOP && ra == (base + GETARG_A(i)));
-        goto l_tforloop;
-      }
+        /* close the loop iteration (was 'goto l_tforloop') */
+        ra = (base + GETARG_A(i));
+        if (!((((&(L)->stack.p[ra + 3]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* continue loop? */
+          pc -= GETARG_Bx(i);      /* jump back */
+        vmbreak;
       }
       vmcase(OP_TFORLOOP)
-      {
-      l_tforloop:
       {
         StkId ra = (base + GETARG_A(i));
         if (!((((&(L)->stack.p[ra + 3]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* continue loop? */
           pc -= GETARG_Bx(i);      /* jump back */
         vmbreak;
-      }
       }
       vmcase(OP_SETLIST)
       {
