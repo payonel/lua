@@ -339,7 +339,10 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
       if (skip_sep(ls) == sep)
       {
         save_and_next(ls); /* skip 2nd ']' */
-        goto endloop;
+        if (seminfo)
+          seminfo->ts = luaX_newstring(ls, ((ls->buff)->buffer) + sep,
+                                       ((ls->buff)->n) - 2 * sep);
+        return;
       }
       break;
     }
@@ -361,10 +364,6 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
     }
     }
   }
-endloop:
-  if (seminfo)
-    seminfo->ts = luaX_newstring(ls, ((ls->buff)->buffer) + sep,
-                                 ((ls->buff)->n) - 2 * sep);
 }
 
 static void esccheck(LexState* ls, int c, const char* msg)
@@ -454,49 +453,73 @@ static void read_string(LexState* ls, int del, Token* seminfo)
       break; /* to avoid warnings */
     case '\\':
     {                    /* escape sequences */
-      int c;             /* final character to be saved */
       save_and_next(ls); /* keep '\\' for error messages */
       switch (ls->current)
       {
       case 'a':
-        c = '\a';
-        goto read_save;
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, '\a');
+        break;
       case 'b':
-        c = '\b';
-        goto read_save;
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, '\b');
+        break;
       case 'f':
-        c = '\f';
-        goto read_save;
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, '\f');
+        break;
       case 'n':
-        c = '\n';
-        goto read_save;
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, '\n');
+        break;
       case 'r':
-        c = '\r';
-        goto read_save;
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, '\r');
+        break;
       case 't':
-        c = '\t';
-        goto read_save;
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, '\t');
+        break;
       case 'v':
-        c = '\v';
-        goto read_save;
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, '\v');
+        break;
       case 'x':
-        c = readhexaesc(ls);
-        goto read_save;
+      {
+        int c = readhexaesc(ls); /* final character to be saved */
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, c);
+        break;
+      }
       case 'u':
-        utf8esc(ls);
-        goto no_save;
+        utf8esc(ls); /* saves the sequence itself */
+        break;
       case '\n':
       case '\r':
         inclinenumber(ls);
-        c = '\n';
-        goto only_save;
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, '\n');
+        break;
       case '\\':
       case '\"':
       case '\'':
-        c = ls->current;
-        goto read_save;
+      {
+        int c = ls->current; /* final character to be saved */
+        next(ls);
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, c);
+        break;
+      }
       case EOZ:
-        goto no_save; /* will raise an error next loop */
+        break; /* will raise an error next loop */
       case 'z':
       {                               /* zap following span of spaces */
         ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
@@ -508,23 +531,17 @@ static void read_string(LexState* ls, int del, Token* seminfo)
           else
             next(ls);
         }
-        goto no_save;
+        break;
       }
       default:
       {
         esccheck(ls, lisdigit(ls->current), "invalid escape sequence");
-        c = readdecesc(ls); /* digital escape '\ddd' */
-        goto only_save;
+        int c = readdecesc(ls); /* digital escape '\ddd' */
+        ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
+        save(ls, c);
+        break;
       }
       }
-    read_save:
-      next(ls);
-      /* go through */
-    only_save:
-      ((ls->buff)->n -= ((size_t)(1))); /* remove '\\' */
-      save(ls, c);
-      /* go through */
-    no_save:
       break;
     }
     default:
