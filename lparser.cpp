@@ -1720,10 +1720,10 @@ static void breakstat(LexState* ls, int line)
   for (bl = ls->fs->bl; bl != NULL; bl = bl->previous)
   {
     if (bl->isloop) /* found one? */
-      goto ok;
+      break;
   }
-  luaX_syntaxerror(ls, "break outside loop");
-ok:
+  if (bl == NULL)
+    luaX_syntaxerror(ls, "break outside loop"); /* does not return */
   bl->isloop = 2; /* signal that block has pending breaks */
   luaX_next(ls);  /* skip break */
   newgotoentry(ls, ls->brkn, line);
