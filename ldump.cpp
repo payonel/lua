@@ -6,6 +6,7 @@
 
 #include "lprefix.h"
 
+#include <bit>
 #include <limits.h>
 #include <stddef.h>
 
@@ -31,19 +32,17 @@ typedef struct
 } DumpState;
 
 /*
-** All high-level dumps go through dumpVector; you can change it to
-** change the endianness of the result
+** Every multi-byte field in a chunk has a width and byte order defined
+** by LUAC_FORMAT (little-endian, assembled byte-by-byte): chunks are
+** portable across hosts, and a managed reader/writer produces
+** identical bytes. Raw block I/O is used only for byte arrays
+** (signature/LUAC_DATA literals, string bodies, lineinfo).
 */
 
 /*
 ** Dump the block of memory pointed by 'b' with given 'size'.
 ** 'b' should not be nullptr, except for the last call signaling the end
 ** of the dump.
-*/
-/*
-** Multi-byte values are dumped in host byte order — guaranteed
-** little-endian (static_assert in llimits.h). A big-endian build would
-** have produced incompatible chunks; it fails the assert instead.
 */
 static void dumpBlock(DumpState* D, const void* b, size_t size)
 {
@@ -56,26 +55,25 @@ static void dumpBlock(DumpState* D, const void* b, size_t size)
   }
 }
 
-/*
-** Dump enough zeros to ensure that current position is a multiple of
-** 'align'.
-*/
-static void dumpAlign(DumpState* D, unsigned align)
-{
-  unsigned padding = align - ((unsigned int)(D->offset % align));
-  if (padding < align)
-  { /* padding == align means no padding */
-    static lua_Integer paddingContent = 0;
-    assert(align <= sizeof(lua_Integer));
-    dumpBlock(D, &paddingContent, padding);
-  }
-  assert(D->offset % align == 0);
-}
-
 static void dumpByte(DumpState* D, int y)
 {
   lu_byte x = (lu_byte) y;
   dumpBlock(D, &(x), (1) * sizeof((&(x))[0]));
+}
+
+/*
+** Dump an exact 32-bit unsigned value, little-endian by definition of
+** the format (LUAC_FORMAT 1) — independent of host memory layout.
+** (Java: the four DataOutput-style byte writes of an int.)
+*/
+static void dumpUint32(DumpState* D, l_uint32 x)
+{
+  lu_byte b[4];
+  b[0] = (lu_byte) (x & 0xFF);
+  b[1] = (lu_byte) ((x >> 8) & 0xFF);
+  b[2] = (lu_byte) ((x >> 16) & 0xFF);
+  b[3] = (lu_byte) ((x >> 24) & 0xFF);
+  dumpBlock(D, b, 4);
 }
 
 /*
@@ -108,9 +106,17 @@ static void dumpInt(DumpState* D, int x)
   dumpVarint(D, ((unsigned int)(x)));
 }
 
+/*
+** A Lua number is dumped as its IEEE-754 binary64 bit pattern, as two
+** little-endian 32-bit halves (low half first) — a format-defined
+** encoding, not a memory copy. The bit_cast statically checks that
+** lua_Number has exactly 64 bits. (Java: Double.doubleToLongBits.)
+*/
 static void dumpNumber(DumpState* D, lua_Number x)
 {
-  dumpBlock(D, &(x), (1) * sizeof((&(x))[0]));
+  lua_Unsigned bits = std::bit_cast<lua_Unsigned>(x);
+  dumpUint32(D, (l_uint32) (bits & 0xFFFFFFFFu));
+  dumpUint32(D, (l_uint32) (bits >> 32));
 }
 
 /*
@@ -170,10 +176,11 @@ static void dumpString(DumpState* D, TString* ts)
 
 static void dumpCode(DumpState* D, const Proto* f)
 {
+  int i;
   dumpInt(D, f->sizecode);
-  dumpAlign(D, sizeof(f->code[0]));
   assert(f->code != nullptr);
-  dumpBlock(D, f->code, (((unsigned int)(f->sizecode))) * sizeof((f->code)[0]));
+  for (i = 0; i < f->sizecode; i++) /* each instruction is a u32 field */
+    dumpUint32(D, f->code[i]);
 }
 
 static void dumpFunction(DumpState* D, const Proto* f);
@@ -237,11 +244,10 @@ static void dumpDebug(DumpState* D, const Proto* f)
     dumpBlock(D, f->lineinfo, (((unsigned int)(n))) * sizeof((f->lineinfo)[0]));
   n = (D->strip) ? 0 : f->sizeabslineinfo;
   dumpInt(D, n);
-  if (n > 0)
-  {
-    /* 'abslineinfo' is an array of structures of int's */
-    dumpAlign(D, sizeof(int));
-    dumpBlock(D, f->abslineinfo, (((unsigned int)(n))) * sizeof((f->abslineinfo)[0]));
+  for (i = 0; i < n; i++)
+  { /* each entry is two varint fields, not a struct image */
+    dumpInt(D, f->abslineinfo[i].pc);
+    dumpInt(D, f->abslineinfo[i].line);
   }
   n = (D->strip) ? 0 : f->sizelocvars;
   dumpInt(D, n);
@@ -272,16 +278,21 @@ static void dumpFunction(DumpState* D, const Proto* f)
   dumpDebug(D, f);
 }
 
+/*
+** Header: signature, version, format, LUAC_DATA, then three check
+** values written with the format's own field encodings (varint-signed
+** integer, u32 instruction, binary64 number). There are no native
+** size/layout probes: LUAC_FORMAT itself defines every field width.
+*/
 static void dumpHeader(DumpState* D)
 {
   dumpBlock(D, LUA_SIGNATURE.data(), LUA_SIGNATURE.size());
   dumpByte(D, LUAC_VERSION);
   dumpByte(D, LUAC_FORMAT);
   dumpBlock(D, LUAC_DATA.data(), LUAC_DATA.size());
-  { int i = LUAC_INT; dumpByte(D, sizeof(int)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
-  { Instruction i = LUAC_INST; dumpByte(D, sizeof(Instruction)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
-  { lua_Integer i = LUAC_INT; dumpByte(D, sizeof(lua_Integer)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
-  { lua_Number i = LUAC_NUM; dumpByte(D, sizeof(lua_Number)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
+  dumpInteger(D, LUAC_INT);
+  dumpUint32(D, LUAC_INST);
+  dumpNumber(D, LUAC_NUM);
 }
 
 /*

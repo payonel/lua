@@ -6,6 +6,7 @@
 
 #include "lprefix.h"
 
+#include <bit>
 #include <limits.h>
 #include <string.h>
 #include <string>
@@ -34,7 +35,6 @@ typedef struct
   Table* h;          /* list for string reuse */
   size_t offset;     /* current position relative to beginning of dump */
   lua_Unsigned nstr; /* number of strings in the list */
-  lu_byte fixed;     /* dump is fixed in memory */
 } LoadState;
 
 static l_noret error(LoadState* S, const char* why)
@@ -44,41 +44,16 @@ static l_noret error(LoadState* S, const char* why)
 }
 
 /*
-** All high-level loads go through loadVector; you can change it to
-** adapt to the endianness of the input
-*/
-
-/*
-** Multi-byte values are read in host byte order — guaranteed
-** little-endian (static_assert in llimits.h); chunks are therefore
-** always little-endian. A big-endian build would have read/produced
-** incompatible chunks; it fails the assert instead.
+** Every multi-byte field is read with the width and byte order the
+** format defines (little-endian, assembled byte-by-byte) — never by
+** reinterpreting raw memory. Raw block reads are used only for byte
+** arrays (literals, string bodies, lineinfo).
 */
 static void loadBlock(LoadState* S, void* b, size_t size)
 {
   if (luaZ_read(S->Z, b, size) != 0)
     error(S, "truncated chunk");
   S->offset += size;
-}
-
-static void loadAlign(LoadState* S, unsigned align)
-{
-  unsigned padding = align - ((unsigned int)(S->offset % align));
-  if (padding < align)
-  { /* (padding == align) means no padding */
-    lua_Integer paddingContent;
-    loadBlock(S, &paddingContent, padding);
-    assert(S->offset % align == 0);
-  }
-}
-
-static const void* getaddr_(LoadState* S, size_t size)
-{
-  const void* block = luaZ_getaddr(S->Z, size);
-  S->offset += size;
-  if (block == nullptr)
-    error(S, "truncated fixed buffer");
-  return block;
 }
 
 static lu_byte loadByte(LoadState* S)
@@ -88,6 +63,19 @@ static lu_byte loadByte(LoadState* S)
     error(S, "truncated chunk");
   S->offset++;
   return ((lu_byte)(b));
+}
+
+/*
+** Read an exact 32-bit unsigned value, little-endian by definition of
+** the format. (Java: the four DataInput-style byte reads of an int.)
+*/
+static l_uint32 loadUint32(LoadState* S)
+{
+  l_uint32 x = loadByte(S);
+  x |= (l_uint32) loadByte(S) << 8;
+  x |= (l_uint32) loadByte(S) << 16;
+  x |= (l_uint32) loadByte(S) << 24;
+  return x;
 }
 
 static lua_Unsigned loadVarint(LoadState* S, lua_Unsigned limit)
@@ -115,11 +103,16 @@ static int loadInt(LoadState* S)
   return ((int)(loadVarint(S, ((size_t)(INT_MAX)))));
 }
 
+/*
+** Mirror of dumpNumber: two little-endian u32 halves (low first)
+** reassembled into the IEEE-754 binary64 bit pattern.
+** (Java: Double.longBitsToDouble.)
+*/
 static lua_Number loadNumber(LoadState* S)
 {
-  lua_Number x;
-  loadBlock(S, &(x), ((size_t)(1)) * sizeof((&(x))[0]));
-  return x;
+  lua_Unsigned bits = loadUint32(S);
+  bits |= (lua_Unsigned) loadUint32(S) << 32;
+  return std::bit_cast<lua_Number>(bits);
 }
 
 static lua_Integer loadInteger(LoadState* S)
@@ -186,21 +179,14 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
 
 static void loadCode(LoadState* S, Proto* f)
 {
+  int i;
   int n = loadInt(S);
-  loadAlign(S, sizeof(f->code[0]));
-  if (S->fixed)
-  {
-    f->code = ((Instruction*)(getaddr_(S, ((size_t)(n)) * sizeof(Instruction))));
-    f->sizecode = n;
-  }
-  else
-  {
-    if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(Instruction))
-      luaM_toobig(S->L);
-    f->code = (Instruction*)luaM_malloc_(S->L, (size_t)n * sizeof(Instruction), 0);
-    f->sizecode = n;
-    loadBlock(S, f->code, ((size_t)(n)) * sizeof((f->code)[0]));
-  }
+  if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(Instruction))
+    luaM_toobig(S->L);
+  f->code = (Instruction*)luaM_malloc_(S->L, (size_t)n * sizeof(Instruction), 0);
+  f->sizecode = n;
+  for (i = 0; i < n; i++) /* each instruction is a u32 field */
+    f->code[i] = loadUint32(S);
 }
 
 static void loadFunction(LoadState* S, Proto* f);
@@ -294,35 +280,22 @@ static void loadDebug(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  if (S->fixed)
-  {
-    f->lineinfo = ((ls_byte*)(getaddr_(S, ((size_t)(n)) * sizeof(ls_byte))));
-    f->sizelineinfo = n;
-  }
-  else
-  {
-    if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(ls_byte))
-      luaM_toobig(S->L);
-    f->lineinfo = (ls_byte*)luaM_malloc_(S->L, (size_t)n * sizeof(ls_byte), 0);
-    f->sizelineinfo = n;
-    loadBlock(S, f->lineinfo, ((size_t)(n)) * sizeof((f->lineinfo)[0]));
-  }
+  if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(ls_byte))
+    luaM_toobig(S->L);
+  f->lineinfo = (ls_byte*)luaM_malloc_(S->L, (size_t)n * sizeof(ls_byte), 0);
+  f->sizelineinfo = n;
+  loadBlock(S, f->lineinfo, ((size_t)(n)) * sizeof((f->lineinfo)[0]));
   n = loadInt(S);
   if (n > 0)
   {
-    loadAlign(S, sizeof(int));
-    if (S->fixed)
-    {
-      f->abslineinfo = ((AbsLineInfo*)(getaddr_(S, ((size_t)(n)) * sizeof(AbsLineInfo))));
-      f->sizeabslineinfo = n;
-    }
-    else
-    {
-      if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(AbsLineInfo))
-        luaM_toobig(S->L);
-      f->abslineinfo = (AbsLineInfo*)luaM_malloc_(S->L, (size_t)n * sizeof(AbsLineInfo), 0);
-      f->sizeabslineinfo = n;
-      loadBlock(S, f->abslineinfo, ((size_t)(n)) * sizeof((f->abslineinfo)[0]));
+    if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(AbsLineInfo))
+      luaM_toobig(S->L);
+    f->abslineinfo = (AbsLineInfo*)luaM_malloc_(S->L, (size_t)n * sizeof(AbsLineInfo), 0);
+    f->sizeabslineinfo = n;
+    for (i = 0; i < n; i++)
+    { /* each entry is two varint fields, not a struct image */
+      f->abslineinfo[i].pc = loadInt(S);
+      f->abslineinfo[i].line = loadInt(S);
     }
   }
   n = loadInt(S);
@@ -351,9 +324,7 @@ static void loadFunction(LoadState* S, Proto* f)
   f->lastlinedefined = loadInt(S);
   f->numparams = loadByte(S);
   /* get only the meaningful flags */
-  f->flag = ((lu_byte)(loadByte(S) & ~PF_FIXED));
-  if (S->fixed)
-    f->flag |= PF_FIXED; /* signal that code is fixed */
+  f->flag = ((lu_byte)(loadByte(S) & (PF_VAHID | PF_VATAB)));
   f->maxstacksize = loadByte(S);
   loadCode(S, f);
   loadConstants(S, f);
@@ -372,24 +343,17 @@ static void checkliteral(LoadState* S, std::string_view s, const char* msg)
     error(S, msg);
 }
 
-static l_noret numerror(LoadState* S, const char* what, const char* tname)
+static l_noret numerror(LoadState* S, const char* tname)
 {
-  const char* msg = luaO_pushfstring(S->L, "%s %s mismatch", tname, what);
+  const char* msg = luaO_pushfstring(S->L, "%s format mismatch", tname);
   error(S, msg);
 }
 
-static void checknumsize(LoadState* S, int size, const char* tname)
-{
-  if (size != loadByte(S))
-    numerror(S, "size", tname);
-}
-
-static void checknumformat(LoadState* S, int eq, const char* tname)
-{
-  if (!eq)
-    numerror(S, "format", tname);
-}
-
+/*
+** Mirror of dumpHeader: after the literals, three check values read
+** with the format's own field decoders. A chunk produced with other
+** widths or byte order cannot reproduce these values.
+*/
 static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
@@ -399,17 +363,18 @@ static void checkHeader(LoadState* S)
   if (loadByte(S) != LUAC_FORMAT)
     error(S, "format mismatch");
   checkliteral(S, LUAC_DATA, "corrupted chunk");
-  { int i; checknumsize(S, sizeof(i), "int"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), "int"); };
-  { Instruction i; checknumsize(S, sizeof(i), "instruction"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INST), "instruction"); };
-  { lua_Integer i; checknumsize(S, sizeof(i), "Lua integer"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), "Lua integer"); };
-  { lua_Number i; checknumsize(S, sizeof(i), "Lua number"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_NUM), "Lua number"); };
+  if (loadInteger(S) != LUAC_INT)
+    numerror(S, "integer");
+  if (loadUint32(S) != LUAC_INST)
+    numerror(S, "instruction");
+  if (loadNumber(S) != LUAC_NUM)
+    numerror(S, "number");
 }
 
 /*
 ** Load precompiled chunk.
 */
-LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, const char* name,
-                      int fixed)
+LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, const char* name)
 {
   LoadState S;
   LClosure* cl;
@@ -420,7 +385,6 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, const char* name,
   S.name = name;
   S.L = L;
   S.Z = Z;
-  S.fixed = ((lu_byte)(fixed));
   S.offset = 1; /* fist byte was already read */
   checkHeader(&S);
   S.h = anchor;

@@ -1102,12 +1102,12 @@ static void f_parser(lua_State* L, void* ud)
   c = (((p->z)->n--) > 0 ? ((unsigned char)(*(p->z)->p++)) : luaZ_fill(p->z));                    /* read first character */
   if (c == LUA_SIGNATURE[0])
   {
-    int fixed = 0;
-    if (strchr(mode, 'B') != nullptr)
-      fixed = 1;
-    else
+    /* mode 'B' (fixed buffer) is accepted but behaves like 'b':
+       format 1 chunks are always decoded field-wise into fresh
+       arrays — nothing aliases the input buffer */
+    if (strchr(mode, 'B') == nullptr)
       checkmode(L, mode, "binary");
-    cl = luaU_undump(L, p->z, anchor, p->name, fixed);
+    cl = luaU_undump(L, p->z, anchor, p->name);
   }
   else
   {

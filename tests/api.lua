@@ -552,7 +552,10 @@ end
 
 
 do
-  print("testing load of binaries in fixed buffers")
+  print("testing load of binaries with mode 'B'")
+  -- format 1 chunks are always decoded field-wise into fresh arrays;
+  -- mode 'B' is accepted but no longer aliases the input buffer, so
+  -- there is no memory-sharing property to test — only behavior.
   local source = {}
   local N = 1000
   -- create a somewhat "large" source
@@ -566,29 +569,22 @@ do
   source = string.dump(source, true)
   -- each "X=X+1" generates 4 opcodes with 4 bytes each, plus the string
   assert(#source > N * 4 * 4 + N)
-  collectgarbage(); collectgarbage()
-  local m1 = collectgarbage"count" * 1024
-  -- load dump using fixed buffer
+  -- load dump using mode 'B'
   local code = T.testC([[
     loadstring 2 name B;
     return 1
   ]], source)
-  collectgarbage()
-  local m2 = collectgarbage"count" * 1024
-  -- load used fewer than 400 bytes. Code alone has more than 3*N bytes,
-  -- and string literal has N bytes. Both were not loaded.
-  assert(m2 > m1 and m2 - m1 < 1400)
   X = 0; code(); assert(X == N and Y == string.rep("a", N))
   X = nil; Y = nil
 
-  -- testing debug info in fixed buffers
+  -- testing debug info loaded with mode 'B'
   source = {"X = 0"}
   for i = 2, 300 do source[i] = "X = X + 1" end
   source[#source + 1] = "X = X + {}"   -- error in last line
   source = table.concat(source, "\n")
   source = load(source, "name1")
   source = string.dump(source)
-  -- load dump using fixed buffer
+  -- load dump using mode 'B'
   local code = T.testC([[
     loadstring 2 name B;
     return 1
