@@ -48,6 +48,12 @@ static l_noret error(LoadState* S, const char* why)
 ** adapt to the endianness of the input
 */
 
+/*
+** Multi-byte values are read in host byte order — guaranteed
+** little-endian (static_assert in llimits.h); chunks are therefore
+** always little-endian. A big-endian build would have read/produced
+** incompatible chunks; it fails the assert instead.
+*/
 static void loadBlock(LoadState* S, void* b, size_t size)
 {
   if (luaZ_read(S->Z, b, size) != 0)

@@ -9,9 +9,20 @@
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
+#include <bit>
 #include <cstddef>
 
 #include "lua.h"
+
+/*
+** This port supports only little-endian hosts (ryanbean decision,
+** 2026-07-25). Byte order is used naively wherever it leaks into
+** observable behavior — those places carry a "little-endian" comment
+** and would have behaved differently on a big-endian host (which
+** instead fails here at compile time).
+*/
+static_assert(std::endian::native == std::endian::little,
+              "this port supports little-endian hosts only");
 
 /*
 ** 'l_mem' is a signed integer big enough to count the total memory

@@ -1586,7 +1586,10 @@ constexpr int MC = ((1 << NB) - 1);
 /* size of a lua_Integer */
 constexpr int SZINT = ((int) sizeof(lua_Integer));
 
-/* true iff machine is little endian */
+/* Native byte order for pack/unpack's '=' mode. The host is guaranteed
+   little-endian (static_assert in llimits.h), so native-mode blobs are
+   always little-endian; on a big-endian host their layout would have
+   differed (that build fails the assert instead). */
 constexpr bool nativeendian_little = (std::endian::native == std::endian::little);
 
 /*
