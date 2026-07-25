@@ -26,12 +26,12 @@
 ** (Large enough to dissipate fixed overheads but small enough
 ** to allow small steps for the collector.)
 */
-#define GCSWEEPMAX 20
+constexpr int GCSWEEPMAX = 20;
 
 /*
 ** Cost (in work units) of running one finalizer.
 */
-#define CWUFIN 10
+constexpr int CWUFIN = 10;
 
 /* mask with all color bits */
 constexpr int maskcolors = bitmask(BLACKBIT) | WHITEBITS;
@@ -1738,9 +1738,9 @@ static void sweepstep(lua_State* L, global_State* g,
 ** weak tables.
 */
 
-#define step2pause -3 /* finished collection; entered pause state */
-#define atomicstep -2 /* atomic step */
-#define step2minor -1 /* moved to minor collections */
+constexpr int step2pause = -3; /* finished collection; entered pause state */
+constexpr int atomicstep = -2; /* atomic step */
+constexpr int step2minor = -1; /* moved to minor collections */
 
 static l_mem singlestep(lua_State* L, int fast)
 {

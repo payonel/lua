@@ -15,14 +15,14 @@
 /*
 ** Extra types for collectable non-values
 */
-#define LUA_TUPVAL   LUA_NUMTYPES       /* upvalues */
-#define LUA_TPROTO   (LUA_NUMTYPES + 1) /* function prototypes */
-#define LUA_TDEADKEY (LUA_NUMTYPES + 2) /* removed keys in tables */
+constexpr int LUA_TUPVAL = LUA_NUMTYPES; /* upvalues */
+constexpr int LUA_TPROTO = (LUA_NUMTYPES + 1); /* function prototypes */
+constexpr int LUA_TDEADKEY = (LUA_NUMTYPES + 2); /* removed keys in tables */
 
 /*
 ** number of all possible types (including LUA_TNONE but excluding DEADKEY)
 */
-#define LUA_TOTALTYPES (LUA_TPROTO + 2)
+constexpr int LUA_TOTALTYPES = (LUA_TPROTO + 2);
 
 /*
 ** tags for Tagged Values have the following use of bits:
@@ -58,13 +58,10 @@ typedef union Value
 ** an actual value plus a tag with its type.
 */
 
-#define TValuefields \
-  Value value_;      \
-  lu_byte tt_
-
 typedef struct TValue
 {
-  TValuefields;
+  Value value_;
+  lu_byte tt_;
 } TValue;
 
 /*
@@ -101,16 +98,16 @@ typedef size_t StkId;
 */
 
 /* Standard nil */
-#define LUA_VNIL makevariant(LUA_TNIL, 0)
+constexpr lu_byte LUA_VNIL = makevariant(LUA_TNIL, 0);
 
 /* Empty slot (which might be different from a slot containing nil) */
-#define LUA_VEMPTY makevariant(LUA_TNIL, 1)
+constexpr lu_byte LUA_VEMPTY = makevariant(LUA_TNIL, 1);
 
 /* Value returned for a key not found in a table (absent key) */
-#define LUA_VABSTKEY makevariant(LUA_TNIL, 2)
+constexpr lu_byte LUA_VABSTKEY = makevariant(LUA_TNIL, 2);
 
 /* Special variant to signal that a fast get is accessing a non-table */
-#define LUA_VNOTABLE makevariant(LUA_TNIL, 3)
+constexpr lu_byte LUA_VNOTABLE = makevariant(LUA_TNIL, 3);
 
 /*
 ** Macro to test the result of a table access. Formally, it should
@@ -130,7 +127,6 @@ typedef size_t StkId;
 */
 
 /* initializer for a value corresponding to an absent key */
-#define ABSTKEYCONSTANT {NULL}, LUA_VABSTKEY
 
 /* }================================================================== */
 
@@ -140,8 +136,8 @@ typedef size_t StkId;
 ** ===================================================================
 */
 
-#define LUA_VFALSE makevariant(LUA_TBOOLEAN, 0)
-#define LUA_VTRUE  makevariant(LUA_TBOOLEAN, 1)
+constexpr lu_byte LUA_VFALSE = makevariant(LUA_TBOOLEAN, 0);
+constexpr lu_byte LUA_VTRUE = makevariant(LUA_TBOOLEAN, 1);
 
 /* }================================================================== */
 
@@ -151,7 +147,7 @@ typedef size_t StkId;
 ** ===================================================================
 */
 
-#define LUA_VTHREAD makevariant(LUA_TTHREAD, 0)
+constexpr lu_byte LUA_VTHREAD = makevariant(LUA_TTHREAD, 0);
 
 /* }================================================================== */
 
@@ -165,19 +161,16 @@ typedef size_t StkId;
 ** Common Header for all collectable objects (in macro form, to be
 ** included in other objects)
 */
-#define CommonHeader     \
-  struct GCObject* next; \
-  lu_byte tt;            \
-  lu_byte marked
-
 /* Common type for all collectable objects */
 typedef struct GCObject
 {
-  CommonHeader;
+  struct GCObject* next;
+  lu_byte tt;
+  lu_byte marked;
 } GCObject;
 
 /* Bit mark for collectable types */
-#define BIT_ISCOLLECTABLE (1 << 6)
+constexpr int BIT_ISCOLLECTABLE = (1 << 6);
 
 /* mark a tag as collectable (usable in constant expressions and case
 ** labels) */
@@ -195,8 +188,8 @@ constexpr lu_byte ctb(lu_byte t)
 */
 
 /* Variant tags for numbers */
-#define LUA_VNUMINT makevariant(LUA_TNUMBER, 0) /* integer numbers */
-#define LUA_VNUMFLT makevariant(LUA_TNUMBER, 1) /* float numbers */
+constexpr lu_byte LUA_VNUMINT = makevariant(LUA_TNUMBER, 0); /* integer numbers */
+constexpr lu_byte LUA_VNUMFLT = makevariant(LUA_TNUMBER, 1); /* float numbers */
 
 /* }================================================================== */
 
@@ -207,10 +200,10 @@ constexpr lu_byte ctb(lu_byte t)
 */
 
 /* Variant tags for strings */
-#define LUA_VSTRING makevariant(LUA_TSTRING, 0)
+constexpr lu_byte LUA_VSTRING = makevariant(LUA_TSTRING, 0);
 /* Keep old names for now during transition */
-#define LUA_VSHRSTR LUA_VSTRING
-#define LUA_VLNGSTR LUA_VSTRING
+constexpr lu_byte LUA_VSHRSTR = LUA_VSTRING;
+constexpr lu_byte LUA_VLNGSTR = LUA_VSTRING;
 
 /*
 ** Header for a string value.
@@ -243,9 +236,9 @@ static l_forceinline size_t tsslen(const TString* ts)
 ** Light userdata should be a variant of userdata, but for compatibility
 ** reasons they are also different types.
 */
-#define LUA_VLIGHTUSERDATA makevariant(LUA_TLIGHTUSERDATA, 0)
+constexpr lu_byte LUA_VLIGHTUSERDATA = makevariant(LUA_TLIGHTUSERDATA, 0);
 
-#define LUA_VUSERDATA makevariant(LUA_TUSERDATA, 0)
+constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
 
 /* Ensures that addresses after this type are always fully aligned. */
 typedef union UValue
@@ -314,7 +307,7 @@ static l_forceinline size_t sizeudata(unsigned short nuv, size_t nb)
 ** ===================================================================
 */
 
-#define LUA_VPROTO makevariant(LUA_TPROTO, 0)
+constexpr lu_byte LUA_VPROTO = makevariant(LUA_TPROTO, 0);
 
 typedef l_uint32 Instruction;
 
@@ -359,9 +352,9 @@ typedef struct AbsLineInfo
 /*
 ** Flags in Prototypes
 */
-#define PF_VAHID 1 /* function has hidden vararg arguments */
-#define PF_VATAB 2 /* function has vararg table */
-#define PF_FIXED 4 /* prototype has parts in fixed memory */
+constexpr int PF_VAHID = 1; /* function has hidden vararg arguments */
+constexpr int PF_VATAB = 2; /* function has vararg table */
+constexpr int PF_FIXED = 4; /* prototype has parts in fixed memory */
 
 /* a vararg function either has hidden args. or a vararg table */
 
@@ -416,12 +409,12 @@ static l_forceinline void needvatab(Proto* p)
 ** ===================================================================
 */
 
-#define LUA_VUPVAL makevariant(LUA_TUPVAL, 0)
+constexpr lu_byte LUA_VUPVAL = makevariant(LUA_TUPVAL, 0);
 
 /* Variant tags for functions */
-#define LUA_VLCL makevariant(LUA_TFUNCTION, 0) /* Lua closure */
-#define LUA_VLCF makevariant(LUA_TFUNCTION, 1) /* light C function */
-#define LUA_VCCL makevariant(LUA_TFUNCTION, 2) /* C closure */
+constexpr lu_byte LUA_VLCL = makevariant(LUA_TFUNCTION, 0); /* Lua closure */
+constexpr lu_byte LUA_VLCF = makevariant(LUA_TFUNCTION, 1); /* light C function */
+constexpr lu_byte LUA_VCCL = makevariant(LUA_TFUNCTION, 2); /* C closure */
 
 /*
 ** Upvalues for Lua closures
@@ -478,7 +471,7 @@ static l_forceinline Proto* getproto(const TValue* o)
 ** ===================================================================
 */
 
-#define LUA_VTABLE makevariant(LUA_TTABLE, 0)
+constexpr lu_byte LUA_VTABLE = makevariant(LUA_TTABLE, 0);
 
 /*
 ** Nodes for Hash tables: A pack of two TValue's (key-value pairs)
@@ -666,7 +659,7 @@ static l_forceinline void getnodekey(struct lua_State* L, TValue* obj, const Nod
 /* }================================================================== */
 
 /* size of buffer for 'luaO_utf8esc' function */
-#define UTF8BUFFSZ 8
+constexpr int UTF8BUFFSZ = 8;
 
 /* macro to call 'luaO_pushvfstring' correctly */
 

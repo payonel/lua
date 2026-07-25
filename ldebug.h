@@ -31,7 +31,7 @@ static l_forceinline void resethookcount(lua_State* L)
 ** mark for entries in 'lineinfo' array that has absolute information in
 ** 'abslineinfo' array
 */
-#define ABSLINEINFO (-0x80)
+constexpr int ABSLINEINFO = (-0x80);
 
 LUAI_FUNC int luaG_getfuncline(const Proto* f, int pc);
 LUAI_FUNC const char* luaG_findlocal(lua_State* L, CallInfo* ci, int n,

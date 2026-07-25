@@ -73,7 +73,7 @@ void luaS_init(lua_State* L)
   global_State* g = G(L);
   int i, j;
   /* pre-create memory-error message */
-  g->memerrmsg = (luaS_newlstr(L, "" MEMERRMSG, (sizeof(MEMERRMSG) / sizeof(char)) - 1));
+  g->memerrmsg = luaS_newlstr(L, MEMERRMSG, sizeof(MEMERRMSG) - 1);
   assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg))); /* it should never be collected */
   for (i = 0; i < STRCACHE_N; i++)    /* fill cache with valid strings */

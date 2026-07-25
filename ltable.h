@@ -28,8 +28,8 @@ static l_forceinline void invalidateTMcache(Table* t)
 ** for its hash part.
 */
 
-#define BITDUMMY    (1 << 6)
-#define NOTBITDUMMY ((lu_byte)(~BITDUMMY))
+constexpr int BITDUMMY = (1 << 6);
+constexpr lu_byte NOTBITDUMMY = ((lu_byte)(~BITDUMMY));
 static l_forceinline int isdummy(const Table* t)
 {
   return t->flags & BITDUMMY;
@@ -51,10 +51,10 @@ static l_forceinline unsigned int allocsizenode(const Table* t)
 }
 
 /* results from pset */
-#define HOK        0
-#define HNOTFOUND  1
-#define HNOTATABLE 2
-#define HFIRSTNODE 3
+constexpr int HOK = 0;
+constexpr int HNOTFOUND = 1;
+constexpr int HNOTATABLE = 2;
+constexpr int HFIRSTNODE = 3;
 
 /*
 ** 'luaH_get*' operations set 'res', unless the value is absent, and

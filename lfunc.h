@@ -18,7 +18,7 @@ static l_forceinline int isintwups(lua_State* L)
 ** maximum number of upvalues in a closure (both C and Lua). (Value
 ** must fit in a VM register.)
 */
-#define MAXUPVAL 255
+constexpr int MAXUPVAL = 255;
 
 static l_forceinline int upisopen(const UpVal* up)
 {
@@ -45,10 +45,10 @@ static l_forceinline TValue* upvalval(UpVal* uv)
 ** maximum number of misses before giving up the cache of closures
 ** in prototypes
 */
-#define MAXMISS 10
+constexpr int MAXMISS = 10;
 
 /* special status to close upvalues preserving the top of the stack */
-#define CLOSEKTOP (LUA_ERRERR + 1)
+constexpr int CLOSEKTOP = (LUA_ERRERR + 1);
 
 LUAI_FUNC Proto* luaF_newproto(lua_State* L);
 LUAI_FUNC CClosure* luaF_newCclosure(lua_State* L, int nupvals);

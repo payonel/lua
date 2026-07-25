@@ -118,7 +118,8 @@ typedef union Vardesc
 {
   struct
   {
-    TValuefields; /* constant value (if it is a compile-time constant) */
+    Value value_; /* constant value (if it is a compile-time constant) */
+    lu_byte tt_;
     lu_byte kind;
     lu_byte ridx;  /* register holding the variable */
     short pidx;    /* index of the variable in the Proto's 'locvars' array */

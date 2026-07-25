@@ -131,7 +131,7 @@ static const Node dummynode_ = {
     {NULL}                /* key_val */
 };
 
-static const TValue absentkey = {ABSTKEYCONSTANT};
+static const TValue absentkey = {{NULL}, LUA_VABSTKEY};
 
 /*
 ** Hash for integers. To allow a good hash, use the remainder operator

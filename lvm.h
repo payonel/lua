@@ -29,15 +29,6 @@ static inline int cvt2num(const TValue* o)
 }
 
 /*
-** You can define LUA_FLOORN2I if you want to convert floats to integers
-** by flooring them (instead of raising an error if they are not
-** integral values)
-*/
-#if !defined(LUA_FLOORN2I)
-#define LUA_FLOORN2I F2Ieq
-#endif
-
-/*
 ** Rounding modes for float->integer coercion
 */
 typedef enum
@@ -46,6 +37,13 @@ typedef enum
   F2Ifloor, /* takes the floor of the number */
   F2Iceil   /* takes the ceiling of the number */
 } F2Imod;
+
+/*
+** Default mode for converting floats to integers: raise an error on
+** non-integral values. (Upstream allowed overriding this to flooring
+** via a build define; this port fixes it.)
+*/
+constexpr F2Imod LUA_FLOORN2I = F2Ieq;
 
 /* convert an object to a float (including string coercion) */
 
