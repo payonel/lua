@@ -8,8 +8,6 @@
 ** systems.
 */
 
-#define loadlib_c
-#define LUA_LIB
 
 #include "lprefix.h"
 

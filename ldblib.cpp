@@ -4,8 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define ldblib_c
-#define LUA_LIB
 
 #include "lprefix.h"
 

@@ -4,8 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#define liolib_c
-#define LUA_LIB
 
 #include "lprefix.h"
 
@@ -85,10 +83,10 @@ static inline int l_checkmodep(const char* m)
 
 /* }====================================================== */
 
-#define IO_PREFIX  "_IO_"
+constexpr char IO_PREFIX[] = "_IO_";
 constexpr size_t IOPREF_LEN = (sizeof(IO_PREFIX) / sizeof(char) - 1);
-#define IO_INPUT   (IO_PREFIX "input")
-#define IO_OUTPUT  (IO_PREFIX "output")
+constexpr char IO_INPUT[] = "_IO_input";
+constexpr char IO_OUTPUT[] = "_IO_output";
 
 typedef luaL_Stream LStream;
 
