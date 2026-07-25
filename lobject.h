@@ -499,7 +499,7 @@ typedef struct Table : GCObject
   unsigned int asize; /* number of slots in 'array' array */
   Value* array;       /* array part */
   Node* node;
-  Node* lastfree;     /* last free position in hash, scans backward */
+  int lastfree;       /* last free position in hash (node index), scans backward */
   struct Table* metatable;
   GCObject* gclist;
 } Table;

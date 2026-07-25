@@ -1205,7 +1205,7 @@ static int hash_query(lua_State* L)
     assert(obj_at(L, 2)->tt_ == ctb(LUA_VTABLE));
     assert(obj_at(L, 2)->value_.gc->tt == LUA_VTABLE);
     t = static_cast<Table*>(obj_at(L, 2)->value_.gc);
-    lua_pushinteger(L, ((lua_Integer)(luaH_mainposition(t, o) - t->node)));
+    lua_pushinteger(L, ((lua_Integer)(luaH_mainposition(t, o))));
   }
   return 1;
 }
