@@ -1395,6 +1395,20 @@ static void addlenmod(char* form, const char* lenmod)
   form[l + lm] = '\0';
 }
 
+/*
+** Format one integer item; shared body for the 'd'/'i', 'u', and
+** 'o'/'x'/'X' conversions, which differ only in their accepted flags.
+** Returns the number of bytes written to 'buff'.
+*/
+static int formatint(lua_State* L, int arg, char* form, char* buff,
+                     unsigned maxitem, const char* flags)
+{
+  lua_Integer n = luaL_checkinteger(L, arg);
+  checkformat(L, form, flags, 1);
+  addlenmod(form, LUA_INTEGER_FRMLEN);
+  return l_sprintf(buff, maxitem, form, (LUAI_UACINT) n);
+}
+
 static int str_format(lua_State* L)
 {
   int top = lua_gettop(L);
@@ -1429,31 +1443,16 @@ static int str_format(lua_State* L)
       }
       case 'd':
       case 'i':
-      {
-        lua_Integer n = luaL_checkinteger(L, arg);
-        checkformat(L, form, L_FMTFLAGSI, 1);
-        addlenmod(form, LUA_INTEGER_FRMLEN);
-        nb = l_sprintf(buff, maxitem, form, (LUAI_UACINT) n);
+        nb = formatint(L, arg, form, buff, maxitem, L_FMTFLAGSI);
         break;
-      }
       case 'u':
-      {
-        lua_Integer n = luaL_checkinteger(L, arg);
-        checkformat(L, form, L_FMTFLAGSU, 1);
-        addlenmod(form, LUA_INTEGER_FRMLEN);
-        nb = l_sprintf(buff, maxitem, form, (LUAI_UACINT) n);
+        nb = formatint(L, arg, form, buff, maxitem, L_FMTFLAGSU);
         break;
-      }
       case 'o':
       case 'x':
       case 'X':
-      {
-        lua_Integer n = luaL_checkinteger(L, arg);
-        checkformat(L, form, L_FMTFLAGSX, 1);
-        addlenmod(form, LUA_INTEGER_FRMLEN);
-        nb = l_sprintf(buff, maxitem, form, (LUAI_UACINT) n);
+        nb = formatint(L, arg, form, buff, maxitem, L_FMTFLAGSX);
         break;
-      }
       case 'a':
       case 'A':
         checkformat(L, form, L_FMTFLAGSF, 1);
