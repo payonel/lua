@@ -593,45 +593,47 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
                      int narg1, int delta)
 {
   unsigned status = LUA_MULTRET + 1;
-retry:
-  switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
+  for (;;) /* retry after resolving '__call' metamethods */
   {
-  case LUA_VCCL: /* C closure */
-  {
-    assert((&L->stack.p[func])->value_.gc->tt == LUA_VCCL);
-    CClosure* ccl = static_cast<CClosure*>((&L->stack.p[func])->value_.gc);
-    return precallC(L, func, status, ccl->f);
-  }
-  case LUA_VLCF: /* light C function */
-    return precallC(L, func, status, (&L->stack.p[func])->value_.f);
-  case LUA_VLCL:
-  { /* Lua function */
-    assert((&L->stack.p[func])->value_.gc->tt == LUA_VLCL);
-    Proto* p = static_cast<LClosure*>((&L->stack.p[func])->value_.gc)->p;
-    int fsize = p->maxstacksize; /* frame size */
-    int nfixparams = p->numparams;
-    int i;
-    checkstackp(L, fsize - delta, func);
-    ci->func -= delta;        /* restore 'func' (if vararg) */
-    for (i = 0; i < narg1; i++) /* move down function and arguments */
-      setobj(L, (&(L)->stack.p[ci->func + i]), (&(L)->stack.p[func + i]));
-    func = ci->func; /* moved-down function */
-    for (; narg1 <= nfixparams; narg1++)
-      (((&(L)->stack.p[func + narg1]))->tt_ = LUA_VNIL); /* complete missing arguments */
-    ci->top = func + 1 + fsize;  /* top for new function */
-    assert(ci->top <= L->stack_last);
-    ci->savedpc = p->code; /* starting point */
-    ci->callstatus |= CIST_TAIL;
-    L->top = func + narg1; /* set top */
-    return -1;
-  }
-  default:
-  {                                      /* not a function */
-    checkstackp(L, 1, func);             /* space for metamethod */
-    status = tryfuncTM(L, func, status); /* try '__call' metamethod */
-    narg1++;
-    goto retry; /* try again */
-  }
+    switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
+    {
+    case LUA_VCCL: /* C closure */
+    {
+      assert((&L->stack.p[func])->value_.gc->tt == LUA_VCCL);
+      CClosure* ccl = static_cast<CClosure*>((&L->stack.p[func])->value_.gc);
+      return precallC(L, func, status, ccl->f);
+    }
+    case LUA_VLCF: /* light C function */
+      return precallC(L, func, status, (&L->stack.p[func])->value_.f);
+    case LUA_VLCL:
+    { /* Lua function */
+      assert((&L->stack.p[func])->value_.gc->tt == LUA_VLCL);
+      Proto* p = static_cast<LClosure*>((&L->stack.p[func])->value_.gc)->p;
+      int fsize = p->maxstacksize; /* frame size */
+      int nfixparams = p->numparams;
+      int i;
+      checkstackp(L, fsize - delta, func);
+      ci->func -= delta;        /* restore 'func' (if vararg) */
+      for (i = 0; i < narg1; i++) /* move down function and arguments */
+        setobj(L, (&(L)->stack.p[ci->func + i]), (&(L)->stack.p[func + i]));
+      func = ci->func; /* moved-down function */
+      for (; narg1 <= nfixparams; narg1++)
+        (((&(L)->stack.p[func + narg1]))->tt_ = LUA_VNIL); /* complete missing arguments */
+      ci->top = func + 1 + fsize;  /* top for new function */
+      assert(ci->top <= L->stack_last);
+      ci->savedpc = p->code; /* starting point */
+      ci->callstatus |= CIST_TAIL;
+      L->top = func + narg1; /* set top */
+      return -1;
+    }
+    default:
+    {                                      /* not a function */
+      checkstackp(L, 1, func);             /* space for metamethod */
+      status = tryfuncTM(L, func, status); /* try '__call' metamethod */
+      narg1++;
+      continue; /* try again */
+    }
+    }
   }
 }
 
@@ -647,41 +649,43 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
 {
   unsigned status = ((unsigned int)(nresults + 1));
   assert(status <= MAXRESULTS + 1);
-retry:
-  switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
+  for (;;) /* retry after resolving '__call' metamethods */
   {
-  case LUA_VCCL: /* C closure */
-  {
-    assert((&L->stack.p[func])->value_.gc->tt == LUA_VCCL);
-    CClosure* ccl = static_cast<CClosure*>((&L->stack.p[func])->value_.gc);
-    precallC(L, func, status, ccl->f);
-    return NULL;
-  }
-  case LUA_VLCF: /* light C function */
-    precallC(L, func, status, (&L->stack.p[func])->value_.f);
-    return NULL;
-  case LUA_VLCL:
-  { /* Lua function */
-    CallInfo* ci;
-    assert((&L->stack.p[func])->value_.gc->tt == LUA_VLCL);
-    Proto* p = static_cast<LClosure*>((&L->stack.p[func])->value_.gc)->p;
-    int narg = ((int)(L->top - func)) - 1; /* number of real arguments */
-    int nfixparams = p->numparams;
-    int fsize = p->maxstacksize; /* frame size */
-    checkstackp(L, fsize, func);
-    L->ci = ci = prepCallInfo(L, func, status, func + 1 + fsize);
-    ci->savedpc = p->code; /* starting point */
-    for (; narg < nfixparams; narg++)
-      (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* complete missing arguments */
-    assert(ci->top <= L->stack_last);
-    return ci;
-  }
-  default:
-  {                                      /* not a function */
-    checkstackp(L, 1, func);             /* space for metamethod */
-    status = tryfuncTM(L, func, status); /* try '__call' metamethod */
-    goto retry;                          /* try again with metamethod */
-  }
+    switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
+    {
+    case LUA_VCCL: /* C closure */
+    {
+      assert((&L->stack.p[func])->value_.gc->tt == LUA_VCCL);
+      CClosure* ccl = static_cast<CClosure*>((&L->stack.p[func])->value_.gc);
+      precallC(L, func, status, ccl->f);
+      return NULL;
+    }
+    case LUA_VLCF: /* light C function */
+      precallC(L, func, status, (&L->stack.p[func])->value_.f);
+      return NULL;
+    case LUA_VLCL:
+    { /* Lua function */
+      CallInfo* ci;
+      assert((&L->stack.p[func])->value_.gc->tt == LUA_VLCL);
+      Proto* p = static_cast<LClosure*>((&L->stack.p[func])->value_.gc)->p;
+      int narg = ((int)(L->top - func)) - 1; /* number of real arguments */
+      int nfixparams = p->numparams;
+      int fsize = p->maxstacksize; /* frame size */
+      checkstackp(L, fsize, func);
+      L->ci = ci = prepCallInfo(L, func, status, func + 1 + fsize);
+      ci->savedpc = p->code; /* starting point */
+      for (; narg < nfixparams; narg++)
+        (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* complete missing arguments */
+      assert(ci->top <= L->stack_last);
+      return ci;
+    }
+    default:
+    {                                      /* not a function */
+      checkstackp(L, 1, func);             /* space for metamethod */
+      status = tryfuncTM(L, func, status); /* try '__call' metamethod */
+      continue;                            /* try again with metamethod */
+    }
+    }
   }
 }
 
