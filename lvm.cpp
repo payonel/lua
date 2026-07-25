@@ -1258,6 +1258,32 @@ static l_forceinline int l_gei(lua_Integer a, lua_Integer b)
 #define vmcase(l)     case l:
 #define vmbreak       break
 
+/*
+** (Re)load the interpreter registers to enter the frame of 'ci' (a
+** Lua closure). Shared by the luaV_execute prologue and the
+** call/return arms that switch frames. On entry '*trap' must already
+** hold the value for the new frame (L->hookmask for a fresh call;
+** the propagated trap for a return). Forced inline so the caller's
+** locals never live in memory; verified by objdump + interleaved A/B
+** (see todo.md).
+*/
+static l_forceinline void frameentry(lua_State* L, CallInfo* ci,
+                                     LClosure** cl, TValue** k,
+                                     const Instruction** pc,
+                                     StkId* base, int* trap)
+{
+  *cl = ci_func(L, ci);
+  *k = (*cl)->p->k;
+  *pc = ci->savedpc;
+  if (l_unlikely(*trap))
+    *trap = luaG_tracecall(L);
+  *base = ci->func + 1;
+  /* the interpreter loop-head invariant, checked here once per frame
+     transition (the jumptable build re-enters dispatch without
+     passing through the loop head) */
+  assert(*base <= L->top && L->top <= L->stack_last);
+}
+
 void luaV_execute(lua_State* L, CallInfo* ci)
 {
   LClosure* cl;
@@ -1268,15 +1294,8 @@ void luaV_execute(lua_State* L, CallInfo* ci)
 #if LUA_USE_JUMPTABLE
 #include "ljumptab.h"
 #endif
-  /* frame entry: this sequence is repeated inline at the call/return
-     arms (OP_CALL, OP_TAILCALL, OP_RETURN*) that switch frames */
   trap = L->hookmask;
-  cl = ci_func(L, ci);
-  k = cl->p->k;
-  pc = ci->savedpc;
-  if (l_unlikely(trap))
-    trap = luaG_tracecall(L);
-  base = ci->func + 1;
+  frameentry(L, ci, &cl, &k, &pc, &base, &trap);
   /* main loop of interpreter */
   for (;;)
   {
@@ -2616,12 +2635,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           ci = newci;
           /* frame entry (was 'goto startfunc') */
           trap = L->hookmask;
-          cl = ci_func(L, ci);
-          k = cl->p->k;
-          pc = ci->savedpc;
-          if (l_unlikely(trap))
-            trap = luaG_tracecall(L);
-          base = ci->func + 1;
+          frameentry(L, ci, &cl, &k, &pc, &base, &trap);
         }
         vmbreak;
       }
@@ -2647,12 +2661,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if ((n = luaD_pretailcall(L, ci, ra, b, delta)) < 0) /* Lua function? */
         { /* execute the callee (was 'goto startfunc') */
           trap = L->hookmask;
-          cl = ci_func(L, ci);
-          k = cl->p->k;
-          pc = ci->savedpc;
-          if (l_unlikely(trap))
-            trap = luaG_tracecall(L);
-          base = ci->func + 1;
+          frameentry(L, ci, &cl, &k, &pc, &base, &trap);
         }
         else
         {                         /* C function? */
@@ -2663,12 +2672,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           if (ci->callstatus & CIST_FRESH)
             return; /* end this frame */
           ci = ci->previous; /* continue running caller in this frame */
-          cl = ci_func(L, ci);
-          k = cl->p->k;
-          pc = ci->savedpc;
-          if (l_unlikely(trap))
-            trap = luaG_tracecall(L);
-          base = ci->func + 1;
+          frameentry(L, ci, &cl, &k, &pc, &base, &trap);
         }
         vmbreak;
       }
@@ -2698,12 +2702,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        cl = ci_func(L, ci);
-        k = cl->p->k;
-        pc = ci->savedpc;
-        if (l_unlikely(trap))
-          trap = luaG_tracecall(L);
-        base = ci->func + 1;
+        frameentry(L, ci, &cl, &k, &pc, &base, &trap);
         vmbreak;
       }
       vmcase(OP_RETURN0)
@@ -2728,12 +2727,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        cl = ci_func(L, ci);
-        k = cl->p->k;
-        pc = ci->savedpc;
-        if (l_unlikely(trap))
-          trap = luaG_tracecall(L);
-        base = ci->func + 1;
+        frameentry(L, ci, &cl, &k, &pc, &base, &trap);
         vmbreak;
       }
       vmcase(OP_RETURN1)
@@ -2765,12 +2759,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        cl = ci_func(L, ci);
-        k = cl->p->k;
-        pc = ci->savedpc;
-        if (l_unlikely(trap))
-          trap = luaG_tracecall(L);
-        base = ci->func + 1;
+        frameentry(L, ci, &cl, &k, &pc, &base, &trap);
         vmbreak;
       }
       vmcase(OP_FORLOOP)
