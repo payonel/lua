@@ -1338,18 +1338,18 @@ static GCObject** correctgraylist(GCObject** p)
   {
     GCObject** next = getgclist(curr);
     if (iswhite(curr))
-      goto remove; /* remove all white objects */
+      *p = *next; /* remove all white objects */
     else if (getage(curr) == G_TOUCHED1)
     { /* touched in this cycle? */
       assert(isgray(curr));
       nw2black(curr); /* make it black, for next barrier */
       setage(curr, G_TOUCHED2);
-      goto remain; /* keep it in the list and go to next element */
+      p = next; /* keep it in the list and go to next element */
     }
     else if (curr->tt == LUA_VTHREAD)
     {
       assert(isgray(curr));
-      goto remain; /* keep non-white threads on the list */
+      p = next; /* keep non-white threads on the list */
     }
     else
     {                                 /* everything else is removed */
@@ -1357,14 +1357,8 @@ static GCObject** correctgraylist(GCObject** p)
       if (getage(curr) == G_TOUCHED2) /* advance from TOUCHED2... */
         setage(curr, G_OLD);          /* ... to OLD */
       nw2black(curr);                 /* make object black (to be removed) */
-      goto remove;
+      *p = *next;
     }
-  remove:
-    *p = *next;
-    continue;
-  remain:
-    p = next;
-    continue;
   }
   return p;
 }
