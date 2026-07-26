@@ -476,7 +476,7 @@ static void checkudata(global_State* g, Udata* u)
   GCObject* hgc = const_cast<GCObject*>(static_cast<const GCObject*>(u));
   checkobjrefN(g, hgc, u->metatable);
   for (i = 0; i < u->nuvalue; i++)
-    checkvalref(g, hgc, &u->uv[i].uv);
+    checkvalref(g, hgc, &u->uv[i]);
 }
 
 static void checkproto(global_State* g, Proto* f)

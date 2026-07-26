@@ -240,59 +240,41 @@ constexpr lu_byte LUA_VLIGHTUSERDATA = makevariant(LUA_TLIGHTUSERDATA, 0);
 
 constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
 
-/* Ensures that addresses after this type are always fully aligned. */
-typedef struct UValue
-{
-  alignas(std::max_align_t) TValue uv; /* ensures maximum alignment for udata bytes */
-} UValue;
-
 /*
-** Header for userdata with user values;
-** memory area follows the end of this structure.
+** Header for userdata; the user values and the binary data area are
+** separately allocated luaM arrays (managed shape: an object holding
+** an array reference and a byte-array reference).
+** Userdata with no user values do not need to be gray during GC, and
+** therefore do not need a 'gclist'; the code never accesses 'gclist'
+** on userdata with no user values.
 */
 typedef struct Udata : GCObject
 {
   unsigned short nuvalue; /* number of user values */
-  size_t len;             /* number of bytes */
+  size_t len;             /* number of bytes in 'data' */
   struct Table* metatable;
   GCObject* gclist;
-  UValue uv[1]; /* user values */
+  TValue* uv; /* user values (luaM array of 'nuvalue' elements) */
+  char* data; /* user memory (luaM block of 'len' bytes) */
 } Udata;
-
-/*
-** Header for userdata with no user values. These userdata do not need
-** to be gray during GC, and therefore do not need a 'gclist' field.
-** To simplify, the code always use 'Udata' for both kinds of userdata,
-** making sure it never accesses 'gclist' on userdata with no user values.
-** This structure here is used only to compute the correct size for
-** this representation. (The 'bindata' field in its end ensures correct
-** alignment for binary data following this header.)
-*/
-typedef struct Udata0 : GCObject
-{
-  unsigned short nuvalue; /* number of user values */
-  size_t len;             /* number of bytes */
-  struct Table* metatable;
-  std::max_align_t bindata; /* ensures alignment for binary data after this header */
-} Udata0;
-
-/* compute the offset of the memory area of a userdata */
-static l_forceinline size_t udatamemoffset(unsigned short nuv)
-{
-  return nuv == 0 ? sizeof(Udata0) - sizeof(((Udata0*)0)->bindata)
-                  : sizeof(Udata) - sizeof(UValue) + sizeof(UValue) * nuv;
-}
 
 /* get the address of the memory block inside 'Udata' */
 static l_forceinline char* getudatamem(Udata* u)
 {
-  return (char*)u + udatamemoffset(u->nuvalue);
+  return u->data;
 }
 
-/* compute the size of a userdata */
-static l_forceinline size_t sizeudata(unsigned short nuv, size_t nb)
+/*
+** Allocated size of the data block for a userdata of 'len' bytes.
+** A zero-size userdata still allocates one byte: the C API promises a
+** non-null data pointer (lua_touserdata distinguishes userdata by it).
+** Used by allocation, freeing, and GC size accounting — the three must
+** agree. (Managed targets drop this: a zero-length array is a valid
+** non-null object there.)
+*/
+static l_forceinline size_t udatadatasize(size_t len)
 {
-  return udatamemoffset(nuv) + nb;
+  return len == 0 ? 1 : len;
 }
 
 /* }================================================================== */
@@ -432,23 +414,25 @@ typedef struct Closure : GCObject
 typedef struct CClosure : Closure
 {
   lua_CFunction f;
-  TValue upvalue[1]; /* list of upvalues */
+  TValue* upvalue; /* upvalues (luaM array of 'nupvalues' elements) */
 } CClosure;
 
+/* total bytes of a C closure (header + upvalue array), for GC accounting */
 constexpr size_t sizeCclosure(int n)
 {
-  return sizeof(CClosure) - sizeof(TValue) + sizeof(TValue) * (unsigned int)n;
+  return sizeof(CClosure) + sizeof(TValue) * (unsigned int)n;
 }
 
 typedef struct LClosure : Closure
 {
   struct Proto* p;
-  UpVal* upvals[1]; /* list of upvalues */
+  UpVal** upvals; /* upvalues (luaM array of 'nupvalues' elements) */
 } LClosure;
 
+/* total bytes of a Lua closure (header + upvals array), for GC accounting */
 constexpr size_t sizeLclosure(int n)
 {
-  return sizeof(LClosure) - sizeof(UpVal*) + sizeof(UpVal*) * (unsigned int)n;
+  return sizeof(LClosure) + sizeof(UpVal*) * (unsigned int)n;
 }
 
 static l_forceinline Proto* getproto(const TValue* o)

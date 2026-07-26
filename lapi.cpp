@@ -959,7 +959,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
   }
   else
   {
-    setobj(L, (&(L)->stack.p[L->top]), &u->uv[n - 1].uv);
+    setobj(L, (&(L)->stack.p[L->top]), &u->uv[n - 1]);
     t = ((&(L)->stack.p[L->top])->tt_ & NOVARIANT_MASK);
   }
   api_incr_top(L);
@@ -1186,7 +1186,7 @@ LUA_API int lua_setiuservalue(lua_State* L, int idx, int n)
     res = 0; /* 'n' not in [1, o's nuvalue] */
   else
   {
-    setobj(L, &u->uv[n - 1].uv, (&(L)->stack.p[L->top - 1]));
+    setobj(L, &u->uv[n - 1], (&(L)->stack.p[L->top - 1]));
     assert(o->tt_ & BIT_ISCOLLECTABLE);
     luaC_barrierback(L, o->value_.gc, (&(L)->stack.p[L->top - 1]));
     res = 1;

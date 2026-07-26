@@ -19,21 +19,54 @@
 #include "lobject.h"
 #include "lstate.h"
 
+/*
+** Closures are two luaM blocks: the header (a GC object) and its
+** upvalue array. The header is created first, in a consistent
+** array-less state (nupvalues == 0), so the collector can free it at
+** any point. The array is then allocated with the collector stopped
+** ('gcstopem', the ldo.cpp stack-reallocation precedent): the header
+** is not yet anchored anywhere, and the emergency collection that a
+** failing allocation would run could sweep it. On failure we throw with the
+** header still consistent — the next collection cycle reclaims it.
+** No unwind cleanup is needed on any path (unprotected errors reach
+** the panic function, which may exit with longjmp — C++ unwinding
+** cannot be relied on here).
+*/
 CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
-  GCObject* o = luaC_newobj(L, LUA_VCCL, sizeCclosure(nupvals));
+  global_State* g = G(L);
+  GCObject* o = luaC_newobj(L, LUA_VCCL, sizeof(CClosure));
   assert(o->tt == LUA_VCCL);
   CClosure* c = static_cast<CClosure*>(o);
+  c->nupvalues = 0; /* no upvalue array yet */
+  c->upvalue = nullptr;
+  lu_byte oldgcstop = g->gcstopem;
+  g->gcstopem = 1; /* no emergency collection: the header is unanchored */
+  TValue* upvalue = (TValue*)luaM_realloc_(L, nullptr, 0, (size_t)(unsigned)nupvals * sizeof(TValue));
+  g->gcstopem = oldgcstop;
+  if (upvalue == nullptr && nupvals > 0)
+    luaD_throw(L, LUA_ERRMEM);
+  c->upvalue = upvalue;
   c->nupvalues = ((lu_byte)(nupvals));
   return c;
 }
 
 LClosure* luaF_newLclosure(lua_State* L, int nupvals)
 {
-  GCObject* o = luaC_newobj(L, LUA_VLCL, sizeLclosure(nupvals));
+  global_State* g = G(L);
+  GCObject* o = luaC_newobj(L, LUA_VLCL, sizeof(LClosure));
   assert(o->tt == LUA_VLCL);
   LClosure* c = static_cast<LClosure*>(o);
   c->p = nullptr;
+  c->nupvalues = 0; /* no upvalue array yet */
+  c->upvals = nullptr;
+  lu_byte oldgcstop = g->gcstopem;
+  g->gcstopem = 1; /* no emergency collection: the header is unanchored */
+  UpVal** upvals = (UpVal**)luaM_realloc_(L, nullptr, 0, (size_t)(unsigned)nupvals * sizeof(UpVal*));
+  g->gcstopem = oldgcstop;
+  if (upvals == nullptr && nupvals > 0)
+    luaD_throw(L, LUA_ERRMEM);
+  c->upvals = upvals;
   c->nupvalues = ((lu_byte)(nupvals));
   while (nupvals--)
     c->upvals[nupvals] = nullptr;

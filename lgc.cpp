@@ -147,7 +147,8 @@ static l_mem objsize(GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    res = sizeudata(u->nuvalue, u->len);
+    res = sizeof(Udata) + (lu_mem)u->nuvalue * sizeof(TValue)
+        + (u->data != nullptr ? udatadatasize(u->len) : 0);
     break;
   }
   case LUA_VPROTO:
@@ -694,7 +695,7 @@ static l_mem traverseudata(global_State* g, Udata* u)
   int i;
   markobjectN(g, u->metatable); /* mark its metatable */
   for (i = 0; i < u->nuvalue; i++)
-    markvalue(g, &u->uv[i].uv);
+    markvalue(g, &u->uv[i]);
   assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(u)));
   return 1 + u->nuvalue;
@@ -932,13 +933,15 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VLCL:
   {
     LClosure* cl = static_cast<LClosure*>(o);
-    luaM_free_(L, (cl), (sizeLclosure(cl->nupvalues)));
+    luaM_free_(L, (cl->upvals), ((size_t)cl->nupvalues) * sizeof(UpVal*));
+    luaM_free_(L, (cl), sizeof(LClosure));
     break;
   }
   case LUA_VCCL:
   {
     CClosure* cl = static_cast<CClosure*>(o);
-    luaM_free_(L, (cl), (sizeCclosure(cl->nupvalues)));
+    luaM_free_(L, (cl->upvalue), ((size_t)cl->nupvalues) * sizeof(TValue));
+    luaM_free_(L, (cl), sizeof(CClosure));
     break;
   }
   case LUA_VTABLE:
@@ -950,7 +953,10 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    luaM_free_(L, (o), (sizeudata(u->nuvalue, u->len)));
+    luaM_free_(L, (u->uv), ((size_t)u->nuvalue) * sizeof(TValue));
+    if (u->data != nullptr) /* can be null after construction failure */
+      luaM_free_(L, (u->data), udatadatasize(u->len));
+    luaM_free_(L, (o), sizeof(Udata));
     break;
   }
   case LUA_VSHRSTR:

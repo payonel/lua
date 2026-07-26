@@ -162,20 +162,44 @@ TString* luaS_new(lua_State* L, const char* str)
   return p[0];
 }
 
+/*
+** A userdata is three luaM blocks: the header (a GC object), the user
+** values array, and the binary data area. The header is created first,
+** in a consistent empty state (nuvalue == 0, data == nullptr), so the
+** collector can free it at any point; the raw blocks are then
+** allocated with emergency collections stopped and committed to the
+** header as they arrive. No unwind cleanup is needed on any path —
+** see luaF_newCclosure for the reasoning.
+*/
 Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
 {
+  global_State* g = G(L);
   Udata* u;
   int i;
-  GCObject* o;
-  if (l_unlikely(s > MAX_SIZE - udatamemoffset(nuvalue)))
+  if (l_unlikely(s >= MAX_SIZE - sizeof(Udata)))
     luaM_toobig(L);
-  o = luaC_newobj(L, LUA_VUSERDATA, sizeudata(nuvalue, s));
+  GCObject* o = luaC_newobj(L, LUA_VUSERDATA, sizeof(Udata));
   assert(o->tt == LUA_VUSERDATA);
   u = static_cast<Udata*>(o);
-  u->len = s;
-  u->nuvalue = nuvalue;
+  u->len = 0; /* no data block yet */
+  u->nuvalue = 0; /* no user-value array yet */
   u->metatable = nullptr;
+  u->uv = nullptr;
+  u->data = nullptr;
+  lu_byte oldgcstop = g->gcstopem;
+  g->gcstopem = 1; /* no emergency collection: the header is unanchored */
+  TValue* uv = (TValue*)luaM_realloc_(L, nullptr, 0, (size_t)nuvalue * sizeof(TValue));
+  if (uv != nullptr || nuvalue == 0)
+  { /* commit the array before the next allocation can fail */
+    u->uv = uv;
+    u->nuvalue = nuvalue;
+    u->data = (char*)luaM_realloc_(L, nullptr, 0, udatadatasize(s));
+  }
+  g->gcstopem = oldgcstop;
+  if ((uv == nullptr && nuvalue > 0) || u->data == nullptr)
+    luaD_throw(L, LUA_ERRMEM);
+  u->len = s;
   for (i = 0; i < nuvalue; i++)
-    ((&u->uv[i].uv)->tt_ = LUA_VNIL);
+    ((&u->uv[i])->tt_ = LUA_VNIL);
   return u;
 }
