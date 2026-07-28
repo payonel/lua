@@ -741,7 +741,7 @@ static void pushbuff(lua_State* L, void* ud)
   default:
   { /* no errors, but it can raise one creating the new string */
     TString* ts = luaS_newlstr(L, buff->b, buff->blen);
-    setsvalue(L, (&(L)->stack.p[L->top]), ts);
+    setslots(L, L->top, ts);
     L->top++;
   }
   }

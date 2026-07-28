@@ -149,10 +149,10 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
   StkId top = L->top;
   StkId func = top;
   const TValue* tm = luaT_gettmbyobj(L, obj, TM_CLOSE);
-  setobj(L, (&(L)->stack.p[top++]), tm);    /* will call metamethod... */
-  setobj(L, (&(L)->stack.p[top++]), obj);   /* with 'self' as the 1st argument */
+  setslot(L, top++, tm);    /* will call metamethod... */
+  setslot(L, top++, obj);   /* with 'self' as the 1st argument */
   if (err != nullptr)           /* if there was an error... */
-    setobj(L, (&(L)->stack.p[top++]), err); /* then error object will be 2nd argument */
+    setslot(L, top++, err); /* then error object will be 2nd argument */
   L->top = top;            /* add function and arguments */
   if (yy)
     luaD_call(L, func, 0);
@@ -212,7 +212,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
 void luaF_newtbcupval(lua_State* L, StkId level)
 {
   assert(level > L->tbclist);
-  if (((((&(L)->stack.p[level]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[level]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
+  if ((slottag(L, level) == LUA_VFALSE) || ((slottag(L, level) & NOVARIANT_MASK) == LUA_TNIL))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
   int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(StkId))

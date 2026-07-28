@@ -132,7 +132,7 @@ static void resetCI(lua_State* L)
 {
   CallInfo* ci = L->ci = &L->base_ci;
   ci->func = 0;
-  (((&(L)->stack.p[ci->func]))->tt_ = LUA_VNIL);                 /* 'function' entry for basic 'ci' */
+  setslottag(L, ci->func, LUA_VNIL);                 /* 'function' entry for basic 'ci' */
   ci->top = ci->func + 1 + LUA_MINSTACK; /* +1 for 'function' entry */
   ci->k = nullptr;
   ci->callstatus = CIST_C;
@@ -147,7 +147,7 @@ static void stack_init(lua_State* L1, lua_State* L)
   L1->stack.p = ((StackValue*)(luaM_malloc_(L, ((size_t)(BASIC_STACK_SIZE + EXTRA_STACK)) * sizeof(StackValue), 0)));
   L1->tbclist = 0;
   for (i = 0; i < BASIC_STACK_SIZE + EXTRA_STACK; i++)
-    (((&(L1)->stack.p[i]))->tt_ = LUA_VNIL); /* erase new stack */
+    setslottag(L1, i, LUA_VNIL); /* erase new stack */
   L1->stack_last = BASIC_STACK_SIZE;
   /* initialize first ci */
   resetCI(L1);
@@ -274,7 +274,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   assert(o->tt == LUA_VTHREAD);
   L1 = static_cast<lua_State*>(o);
   /* anchor it on L stack */
-  setthvalue(L, (&(L)->stack.p[L->top]), L1);
+  setslotth(L, L->top, L1);
   api_incr_top(L);
   preinit_thread(L1, g);
   L1->hookmask = L->hookmask;

@@ -405,7 +405,7 @@ int luaH_next(lua_State* L, Table* t, StkId key)
     lu_byte tag = *getArrTag(t, i);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     { /* a non-empty entry? */
-      setivalue((&(L)->stack.p[key]), ((int)(i)) + 1);
+      setsloti(L, key, ((int)(i)) + 1);
       farr2val(t, i, tag, (&(L)->stack.p[key + 1]));
       return 1;
     }
@@ -416,7 +416,7 @@ int luaH_next(lua_State* L, Table* t, StkId key)
     { /* a non-empty entry? */
       Node* n = gnode(t, i);
       getnodekey(L, (&(L)->stack.p[key]), n);
-      setobj(L, (&(L)->stack.p[key + 1]), (&(n)->val));
+      setslot(L, key + 1, (&(n)->val));
       return 1;
     }
   }

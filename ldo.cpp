@@ -96,13 +96,13 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
 {
   if (errcode == LUA_ERRMEM)
   {                                          /* memory error? */
-    setsvalue(L, (&(L)->stack.p[oldtop]), G(L)->memerrmsg); /* reuse preregistered msg. */
+    setslots(L, oldtop, G(L)->memerrmsg); /* reuse preregistered msg. */
   }
   else
   {
     assert(errorstatus(errcode));        /* must be a real error */
-    assert(!((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL)); /* with a non-nil object */
-    setobj(L, (&(L)->stack.p[oldtop]), (&(L)->stack.p[L->top - 1]));      /* move it to 'oldtop' */
+    assert((slottag(L, L->top - 1) & NOVARIANT_MASK) != LUA_TNIL); /* with a non-nil object */
+    copyslot(L, oldtop, L->top - 1);      /* move it to 'oldtop' */
   }
   L->top = oldtop + 1; /* top goes back to old top plus error object */
 }
@@ -122,7 +122,8 @@ l_noret luaD_throw(lua_State* L, TStatus errcode)
     L->status = errcode;
     if (mainth->errorJmp)
     {                                              /* main thread has a handler? */
-      setobj(L, (&(mainth)->stack.p[mainth->top++]), (&(L)->stack.p[L->top - 1])); /* copy error obj. */
+      TValue v = getslot(L, L->top - 1); /* copy error obj. (cross-stack, by row) */
+      setslot(mainth, mainth->top++, &v);
       luaD_throw(mainth, errcode);                 /* re-throw in main thread */
     }
     else
@@ -188,7 +189,7 @@ constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
 l_noret luaD_errerr(lua_State* L)
 {
   TString* msg = (luaS_newlstr(L, "" "error in error handling", (sizeof("error in error handling") / sizeof(char)) - 1));
-  setsvalue(L, (&(L)->stack.p[L->top]), msg);
+  setslots(L, L->top, msg);
   L->top++; /* assume EXTRA_STACK */
   luaD_throw(L, LUA_ERRERR);
 }
@@ -445,9 +446,9 @@ static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
   if (l_unlikely((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))) /* no metamethod? */
     luaG_callerror(L, (&(L)->stack.p[func]));
   for (p = L->top; p > func; p--) /* open space for metamethod */
-    setobj(L, (&(L)->stack.p[p]), (&(L)->stack.p[p - 1]));
+    copyslot(L, p, p - 1);
   L->top++;                          /* stack space pre-allocated by the caller */
-  setobj(L, (&(L)->stack.p[func]), tm);               /* metamethod is the new function to be called */
+  setslot(L, func, tm);               /* metamethod is the new function to be called */
   if ((status & MAX_CCMT) == MAX_CCMT) /* is counter full? */
     luaG_runerror(L, "'__call' chain too long");
   return status + (1u << CIST_CCMT); /* increment counter */
@@ -462,9 +463,9 @@ static inline void genmoveresults(lua_State* L, StkId res, int nres,
   if (nres > wanted)         /* extra results? */
     nres = wanted;           /* don't need them */
   for (i = 0; i < nres; i++) /* move all results to correct place */
-    setobj(L, (&(L)->stack.p[res + i]), (&(L)->stack.p[firstresult + i]));
+    copyslot(L, res + i, firstresult + i);
   for (; i < wanted; i++) /* complete wanted number of results */
-    (((&(L)->stack.p[res + i]))->tt_ = LUA_VNIL);
+    setslottag(L, res + i, LUA_VNIL);
   L->top = res + wanted; /* top points after the last result */
 }
 
@@ -485,9 +486,9 @@ static inline void moveresults(lua_State* L, StkId res, int nres,
     return;
   case 1 + 1:                             /* one value needed */
     if (nres == 0)                        /* no results? */
-      (((&(L)->stack.p[res]))->tt_ = LUA_VNIL);             /* adjust with nil */
+      setslottag(L, res, LUA_VNIL);             /* adjust with nil */
     else                                  /* at least one result */
-      setobj(L, (&(L)->stack.p[res]), (&(L)->stack.p[L->top - nres])); /* move it to proper place */
+      copyslot(L, res, L->top - nres); /* move it to proper place */
     L->top = res + 1;
     return;
   case LUA_MULTRET + 1:
@@ -595,28 +596,28 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
   unsigned status = LUA_MULTRET + 1;
   for (;;) /* retry after resolving '__call' metamethods */
   {
-    switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
+    switch (slottag(L, func) & WITHVARIANT_MASK)
     {
     case LUA_VCCL: /* C closure */
     {
-      CClosure* ccl = clCvalue((&L->stack.p[func]));
+      CClosure* ccl = slotclCval(L, func);
       return precallC(L, func, status, ccl->f);
     }
     case LUA_VLCF: /* light C function */
-      return precallC(L, func, status, fvalue((&L->stack.p[func])));
+      return precallC(L, func, status, slotfval(L, func));
     case LUA_VLCL:
     { /* Lua function */
-      Proto* p = clLvalue((&L->stack.p[func]))->p;
+      Proto* p = slotclLval(L, func)->p;
       int fsize = p->maxstacksize; /* frame size */
       int nfixparams = p->numparams;
       int i;
       checkstackp(L, fsize - delta, func);
       ci->func -= delta;        /* restore 'func' (if vararg) */
       for (i = 0; i < narg1; i++) /* move down function and arguments */
-        setobj(L, (&(L)->stack.p[ci->func + i]), (&(L)->stack.p[func + i]));
+        copyslot(L, ci->func + i, func + i);
       func = ci->func; /* moved-down function */
       for (; narg1 <= nfixparams; narg1++)
-        (((&(L)->stack.p[func + narg1]))->tt_ = LUA_VNIL); /* complete missing arguments */
+        setslottag(L, func + narg1, LUA_VNIL); /* complete missing arguments */
       ci->top = func + 1 + fsize;  /* top for new function */
       assert(ci->top <= L->stack_last);
       ci->savedpc = 0; /* starting point */
@@ -649,21 +650,21 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
   assert(status <= MAXRESULTS + 1);
   for (;;) /* retry after resolving '__call' metamethods */
   {
-    switch ((&(L)->stack.p[func])->tt_ & WITHVARIANT_MASK)
+    switch (slottag(L, func) & WITHVARIANT_MASK)
     {
     case LUA_VCCL: /* C closure */
     {
-      CClosure* ccl = clCvalue((&L->stack.p[func]));
+      CClosure* ccl = slotclCval(L, func);
       precallC(L, func, status, ccl->f);
       return nullptr;
     }
     case LUA_VLCF: /* light C function */
-      precallC(L, func, status, fvalue((&L->stack.p[func])));
+      precallC(L, func, status, slotfval(L, func));
       return nullptr;
     case LUA_VLCL:
     { /* Lua function */
       CallInfo* ci;
-      Proto* p = clLvalue((&L->stack.p[func]))->p;
+      Proto* p = slotclLval(L, func)->p;
       int narg = ((int)(L->top - func)) - 1; /* number of real arguments */
       int nfixparams = p->numparams;
       int fsize = p->maxstacksize; /* frame size */
@@ -671,7 +672,7 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
       L->ci = ci = prepCallInfo(L, func, status, func + 1 + fsize);
       ci->savedpc = 0; /* starting point */
       for (; narg < nfixparams; narg++)
-        (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* complete missing arguments */
+        setslottag(L, L->top++, LUA_VNIL); /* complete missing arguments */
       assert(ci->top <= L->stack_last);
       return ci;
     }
@@ -846,7 +847,7 @@ static int resume_error(lua_State* L, const char* msg, int narg)
 {
   api_checkpop(L, narg);
   L->top -= narg;                           /* remove args from the stack */
-  setsvalue(L, (&(L)->stack.p[L->top]), luaS_new(L, msg)); /* push error message */
+  setslots(L, L->top, luaS_new(L, msg)); /* push error message */
   api_incr_top(L);
   lua_unlock(L);
   return LUA_ERRRUN;
@@ -1095,7 +1096,7 @@ static void f_parser(lua_State* L, void* ud)
   StkId otop = (L->top); /* original top */
   luaD_checkstack(L, 2);
   anchor = luaH_new(L);               /* create the anchor table */
-  sethvalue(L, (&(L)->stack.p[L->top++]), anchor); /* anchor the anchor table */
+  setsloth(L, L->top++, anchor); /* anchor the anchor table */
   c = (((p->z)->n--) > 0 ? ((unsigned char)(*(p->z)->p++)) : luaZ_fill(p->z));                    /* read first character */
   if (c == LUA_SIGNATURE[0])
   {
@@ -1112,7 +1113,7 @@ static void f_parser(lua_State* L, void* ud)
     cl = luaY_parser(L, p->z, anchor, &p->buff, &p->dyd, p->name, c);
   }
   L->top = (static_cast<StkId>(otop)); /* restore stack */
-  setclLvalue(L, (&(L)->stack.p[L->top++]), cl); /* push closure */
+  setslotclL(L, L->top++, cl); /* push closure */
   assert(cl->nupvalues == cl->p->sizeupvalues);
   luaF_initupvals(L, cl);
 }

@@ -775,7 +775,7 @@ static l_mem traversethread(global_State* g, lua_State* th)
     if (!g->gcemergency)
       luaD_shrinkstack(th); /* do not change stack in emergency cycle */
     for (o = th->top; o < th->stack_last + EXTRA_STACK; o++)
-      (((&(th)->stack.p[o]))->tt_ = LUA_VNIL); /* clear dead stack slice */
+      setslottag(th, o, LUA_VNIL); /* clear dead stack slice */
     /* 'remarkupvals' may have removed thread from 'twups' list */
     if (!isintwups(th) && th->openupval != nullptr)
     {
@@ -1073,8 +1073,8 @@ static void GCTM(lua_State* L)
     lu_byte oldgcstp = g->gcstp;
     g->gcstp |= GCSTPGC;           /* avoid GC steps */
     L->allowhook = 0;              /* stop debug hooks during GC metamethod */
-    setobj(L, (&(L)->stack.p[L->top++]), tm);   /* push finalizer... */
-    setobj(L, (&(L)->stack.p[L->top++]), &v);   /* ... and its argument */
+    setslot(L, L->top++, tm);   /* push finalizer... */
+    setslot(L, L->top++, &v);   /* ... and its argument */
     L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
     status = luaD_pcall(L, dothecall, nullptr, (L->top - 2), 0);
     L->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */

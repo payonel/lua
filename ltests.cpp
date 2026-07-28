@@ -81,7 +81,7 @@ static void setnameval(lua_State* L, const char* name, int val)
 
 static void pushobject(lua_State* L, const TValue* o)
 {
-  setobj(L, (&(L)->stack.p[L->top]), o);
+  setslot(L, L->top, o);
   api_incr_top(L);
 }
 
@@ -552,7 +552,7 @@ static int lua_checkpc(lua_State* L, CallInfo* ci)
   else
   {
     StkId f = ci->func;
-    Proto* p = clLvalue((&L->stack.p[f]))->p;
+    Proto* p = slotclLval(L, f)->p;
     return 0 <= ci->savedpc &&
            ci->savedpc <= p->sizecode;
   }
@@ -1276,7 +1276,7 @@ static int table_query(lua_State* L)
     if (!(((*getArrTag(t, i)) & NOVARIANT_MASK) == LUA_TNIL))
       arr2obj(t, ((unsigned int)(i)), (&(L)->stack.p[L->top]));
     else
-      (((&(L)->stack.p[L->top]))->tt_ = LUA_VNIL);
+      setslottag(L, L->top, LUA_VNIL);
     api_incr_top(L);
     lua_pushnil(L);
   }
@@ -1345,7 +1345,7 @@ static int string_query(lua_State* L)
     int n = 0;
     for (auto it = strt.begin(((size_t)(s))); it != strt.end(((size_t)(s))); ++it)
     {
-      setsvalue(L, (&(L)->stack.p[L->top]), it->second);
+      setslots(L, L->top, it->second);
       api_incr_top(L);
       n++;
     }
