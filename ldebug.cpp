@@ -39,7 +39,8 @@ static const char* funcnamefromcall(lua_State* L, CallInfo* ci,
 static int currentpc(lua_State* L, CallInfo* ci)
 {
   assert(isLua(ci));
-  return pcRel(ci->savedpc, ci_func(L, ci)->p);
+  (void)L;
+  return ci->savedpc - 1;
 }
 
 /*
@@ -1046,7 +1047,7 @@ int luaG_tracecall(lua_State* L)
   CallInfo* ci = L->ci;
   Proto* p = ci_func(L, ci)->p;
   ci->trap = 1; /* ensure hooks will be checked */
-  if (ci->savedpc == p->code)
+  if (ci->savedpc == 0)
   { /* first instruction (not resuming)? */
     if (isvararg(p))
       return 0;                                  /* hooks will start at VARARGPREP instruction */
@@ -1068,7 +1069,7 @@ int luaG_tracecall(lua_State* L)
 ** This function is not "Protected" when called, so it should correct
 ** 'L->top' before calling anything that can run the GC.
 */
-int luaG_traceexec(lua_State* L, const Instruction* pc)
+int luaG_traceexec(lua_State* L, int pc)
 {
   CallInfo* ci = L->ci;
   lu_byte mask = ((lu_byte)(L->hookmask));
@@ -1091,7 +1092,7 @@ int luaG_traceexec(lua_State* L, const Instruction* pc)
     ci->callstatus &= ~CIST_HOOKYIELD; /* erase mark */
     return 1;                          /* do not call hook again (VM yielded, so it did not move) */
   }
-  if (!luaP_isIT(*(ci->savedpc - 1))) /* top not being used? */
+  if (!luaP_isIT(p->code[ci->savedpc - 1])) /* top not being used? */
     L->top = ci->top;                 /* correct top */
   if (counthook)
     luaD_hook(L, LUA_HOOKCOUNT, -1, 0, 0); /* call count hook */
@@ -1099,7 +1100,7 @@ int luaG_traceexec(lua_State* L, const Instruction* pc)
   {
     /* 'L->oldpc' may be invalid; use zero in this case */
     int oldpc = (L->oldpc < p->sizecode) ? L->oldpc : 0;
-    int npci = pcRel(pc, p);
+    int npci = pc - 1;
     if (npci <= oldpc || /* call hook when jump back (loop), */
         changedline(p, oldpc, npci))
     { /* or when enter new line */

@@ -155,7 +155,7 @@ struct CallInfo
   StkId top;                        /* top for this function */
   struct CallInfo *previous, *next; /* dynamic call link */
   /* only for Lua functions: */
-  const Instruction* savedpc;
+  int savedpc; /* index of next instruction in 'p->code' */
   volatile l_signalT trap; /* function is tracing lines/counts */
   int nextraargs;          /* # of extra arguments in vararg functions */
   /* only for C functions: */

@@ -8,11 +8,6 @@
 
 #include "lstate.h"
 
-static l_forceinline int pcRel(const Instruction* pc, const Proto* p)
-{
-  return (int)(pc - p->code) - 1;
-}
-
 /* Active Lua function (given call info) */
 static l_forceinline LClosure* ci_func(lua_State* L, const CallInfo* ci)
 {
@@ -55,5 +50,5 @@ LUAI_FUNC l_noret luaG_runerror(lua_State* L, const char* fmt, ...);
 LUAI_FUNC const char* luaG_addinfo(lua_State* L, const char* msg,
                                    TString* src, int line);
 LUAI_FUNC l_noret luaG_errormsg(lua_State* L);
-LUAI_FUNC int luaG_traceexec(lua_State* L, const Instruction* pc);
+LUAI_FUNC int luaG_traceexec(lua_State* L, int pc);
 LUAI_FUNC int luaG_tracecall(lua_State* L);

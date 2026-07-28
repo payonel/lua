@@ -19,7 +19,7 @@
       trap = luaG_traceexec(L, pc);   \
       (base = (ci)->func + 1);        \
     }                                 \
-    i = *(pc++);                      \
+    i = code[pc++];                   \
   }                                   \
   vmdispatch(GET_OPCODE(i));
 

@@ -425,7 +425,7 @@ static void rethook(lua_State* L, CallInfo* ci, int nres)
     ci->func -= delta;
   }
   if (isLua(ci = ci->previous))
-    L->oldpc = pcRel(ci->savedpc, ci_func(L, ci)->p); /* set 'oldpc' */
+    L->oldpc = ci->savedpc - 1; /* set 'oldpc' */
 }
 
 /*
@@ -621,7 +621,7 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
         (((&(L)->stack.p[func + narg1]))->tt_ = LUA_VNIL); /* complete missing arguments */
       ci->top = func + 1 + fsize;  /* top for new function */
       assert(ci->top <= L->stack_last);
-      ci->savedpc = p->code; /* starting point */
+      ci->savedpc = 0; /* starting point */
       ci->callstatus |= CIST_TAIL;
       L->top = func + narg1; /* set top */
       return -1;
@@ -673,7 +673,7 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
       int fsize = p->maxstacksize; /* frame size */
       checkstackp(L, fsize, func);
       L->ci = ci = prepCallInfo(L, func, status, func + 1 + fsize);
-      ci->savedpc = p->code; /* starting point */
+      ci->savedpc = 0; /* starting point */
       for (; narg < nfixparams; narg++)
         (((&(L)->stack.p[L->top++]))->tt_ = LUA_VNIL); /* complete missing arguments */
       assert(ci->top <= L->stack_last);

@@ -1014,7 +1014,8 @@ void luaV_finishOp(lua_State* L)
 {
   CallInfo* ci = L->ci;
   StkId base = ci->func + 1;
-  Instruction inst = *(ci->savedpc - 1); /* interrupted instruction */
+  const Instruction* code = ci_func(L, ci)->p->code;
+  Instruction inst = code[ci->savedpc - 1]; /* interrupted instruction */
   OpCode op = GET_OPCODE(inst);
   switch (op)
   { /* finish its execution */
@@ -1022,7 +1023,7 @@ void luaV_finishOp(lua_State* L)
   case OP_MMBINI:
   case OP_MMBINK:
   {
-    setobj(L, (&(L)->stack.p[base + GETARG_A(*(ci->savedpc - 2))]), (&(L)->stack.p[--L->top]));
+    setobj(L, (&(L)->stack.p[base + GETARG_A(code[ci->savedpc - 2])]), (&(L)->stack.p[--L->top]));
     break;
   }
   case OP_UNM:
@@ -1047,7 +1048,7 @@ void luaV_finishOp(lua_State* L)
   { /* note that 'OP_EQI'/'OP_EQK' cannot yield */
     int res = !((((&(L)->stack.p[L->top - 1]))->tt_ == LUA_VFALSE) || ((((&(L)->stack.p[L->top - 1]))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
     L->top--;
-    assert(GET_OPCODE(*ci->savedpc) == OP_JMP);
+    assert(GET_OPCODE(code[ci->savedpc]) == OP_JMP);
     if (res != GETARG_k(inst)) /* condition failed? */
       ci->savedpc++;       /* skip jump instruction */
     break;
@@ -1269,11 +1270,12 @@ static l_forceinline int l_gei(lua_Integer a, lua_Integer b)
 */
 static l_forceinline void frameentry(lua_State* L, CallInfo* ci,
                                      LClosure** cl, TValue** k,
-                                     const Instruction** pc,
+                                     const Instruction** code, int* pc,
                                      StkId* base, int* trap)
 {
   *cl = ci_func(L, ci);
   *k = (*cl)->p->k;
+  *code = (*cl)->p->code;
   *pc = ci->savedpc;
   if (l_unlikely(*trap))
     *trap = luaG_tracecall(L);
@@ -1289,13 +1291,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
   LClosure* cl;
   TValue* k;
   StkId base;
-  const Instruction* pc;
+  const Instruction* code;
+  int pc;
   int trap;
 #if LUA_USE_JUMPTABLE
 #include "ljumptab.h"
 #endif
   trap = L->hookmask;
-  frameentry(L, ci, &cl, &k, &pc, &base, &trap);
+  frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
   /* main loop of interpreter */
   for (;;)
   {
@@ -1305,7 +1308,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       trap = luaG_traceexec(L, pc); /* handle hooks */
       base = ci->func + 1;          /* correct stack */
     }
-    i = *(pc++);
+    i = code[pc++];
     assert(base == ci->func + 1);
     assert(base <= L->top && L->top <= L->stack_last);
     /* for tests, invalidate top for instructions not expecting it */
@@ -1343,7 +1346,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         TValue* rb;
-        rb = k + GETARG_Ax(*pc);
+        rb = k + GETARG_Ax(code[pc]);
         pc++;
         setobj(L, (&(L)->stack.p[ra]), rb);
         vmbreak;
@@ -1675,9 +1678,9 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           b = 1u << (b - 1); /* hash size is 2^(b - 1) */
         if (TESTARG_k(i))
         { /* non-zero extra argument? */
-          assert(GETARG_Ax(*pc) != 0);
+          assert(GETARG_Ax(code[pc]) != 0);
           /* add it to array size */
-          c += ((unsigned int)(GETARG_Ax(*pc))) * (MAXARG_vC + 1);
+          c += ((unsigned int)(GETARG_Ax(code[pc]))) * (MAXARG_vC + 1);
         }
         pc++;              /* skip extra argument */
         L->top = ra + 1; /* correct top in case of emergency GC */
@@ -2207,7 +2210,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       vmcase(OP_MMBIN)
       {
         StkId ra = (base + GETARG_A(i));
-        Instruction pi = *(pc - 2); /* original arith. expression */
+        Instruction pi = code[pc - 2]; /* original arith. expression */
         TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
         TMS tm = (TMS) GETARG_C(i);
         StkId result = (base + GETARG_A(pi));
@@ -2221,7 +2224,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       vmcase(OP_MMBINI)
       {
         StkId ra = (base + GETARG_A(i));
-        Instruction pi = *(pc - 2); /* original arith. expression */
+        Instruction pi = code[pc - 2]; /* original arith. expression */
         int imm = GETARG_sB(i);
         TMS tm = (TMS) GETARG_C(i);
         int flip = GETARG_k(i);
@@ -2235,7 +2238,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       vmcase(OP_MMBINK)
       {
         StkId ra = (base + GETARG_A(i));
-        Instruction pi = *(pc - 2); /* original arith. expression */
+        Instruction pi = code[pc - 2]; /* original arith. expression */
         TValue* imm = (k + GETARG_B(i));
         TMS tm = (TMS) GETARG_C(i);
         int flip = GETARG_k(i);
@@ -2362,7 +2365,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = ci->trap;
         }
@@ -2392,7 +2395,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = (ci)->trap;
         }
@@ -2422,7 +2425,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = (ci)->trap;
         }
@@ -2438,7 +2441,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = ci->trap;
         }
@@ -2459,7 +2462,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = ci->trap;
         }
@@ -2490,7 +2493,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = (ci)->trap;
         }
@@ -2521,7 +2524,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = (ci)->trap;
         }
@@ -2552,7 +2555,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = (ci)->trap;
         }
@@ -2583,7 +2586,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = (ci)->trap;
         }
@@ -2597,7 +2600,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         else
         {
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = ci->trap;
         }
@@ -2612,7 +2615,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else
         {
           setobj(L, (&(L)->stack.p[ra]), rb);
-          Instruction ni = *pc;
+          Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = ci->trap;
         }
@@ -2635,7 +2638,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           ci = newci;
           /* frame entry (was 'goto startfunc') */
           trap = L->hookmask;
-          frameentry(L, ci, &cl, &k, &pc, &base, &trap);
+          frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
         }
         vmbreak;
       }
@@ -2661,7 +2664,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if ((n = luaD_pretailcall(L, ci, ra, b, delta)) < 0) /* Lua function? */
         { /* execute the callee (was 'goto startfunc') */
           trap = L->hookmask;
-          frameentry(L, ci, &cl, &k, &pc, &base, &trap);
+          frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
         }
         else
         {                         /* C function? */
@@ -2672,7 +2675,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           if (ci->callstatus & CIST_FRESH)
             return; /* end this frame */
           ci = ci->previous; /* continue running caller in this frame */
-          frameentry(L, ci, &cl, &k, &pc, &base, &trap);
+          frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
         }
         vmbreak;
       }
@@ -2702,7 +2705,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        frameentry(L, ci, &cl, &k, &pc, &base, &trap);
+        frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
         vmbreak;
       }
       vmcase(OP_RETURN0)
@@ -2727,7 +2730,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        frameentry(L, ci, &cl, &k, &pc, &base, &trap);
+        frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
         vmbreak;
       }
       vmcase(OP_RETURN1)
@@ -2759,7 +2762,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        frameentry(L, ci, &cl, &k, &pc, &base, &trap);
+        frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
         vmbreak;
       }
       vmcase(OP_FORLOOP)
@@ -2813,7 +2816,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         L->top = ci->top;
         luaF_newtbcupval(L, ra + 2);
         pc += GETARG_Bx(i); /* go to end of the loop */
-        i = *(pc++);        /* fetch next instruction */
+        i = code[pc++];        /* fetch next instruction */
         assert(GET_OPCODE(i) == OP_TFORCALL && ra == (base + GETARG_A(i)));
         /* run the iterator call (was 'goto l_tforcall'):
            'ra' has the iterator function, 'ra + 1' has the state,
@@ -2831,7 +2834,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         luaD_call(L, ra + 3, GETARG_C(i)); /* do the call */
         trap = ci->trap;
         { if (l_unlikely(trap)) { (base = (ci)->func + 1); ra = (base + GETARG_A(i)); } };                              /* stack may have changed */
-        i = *(pc++);                                  /* go to next instruction */
+        i = code[pc++];                                  /* go to next instruction */
         assert(GET_OPCODE(i) == OP_TFORLOOP && ra == (base + GETARG_A(i)));
         /* close the loop iteration (was 'goto l_tforloop') */
         ra = (base + GETARG_A(i));
@@ -2856,7 +2859,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         luaD_call(L, ra + 3, GETARG_C(i)); /* do the call */
         trap = ci->trap;
         { if (l_unlikely(trap)) { (base = (ci)->func + 1); ra = (base + GETARG_A(i)); } };                              /* stack may have changed */
-        i = *(pc++);                                  /* go to next instruction */
+        i = code[pc++];                                  /* go to next instruction */
         assert(GET_OPCODE(i) == OP_TFORLOOP && ra == (base + GETARG_A(i)));
         /* close the loop iteration (was 'goto l_tforloop') */
         ra = (base + GETARG_A(i));
@@ -2886,7 +2889,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         last += n;
         if (TESTARG_k(i))
         {
-          last += ((unsigned int)(GETARG_Ax(*pc))) * (MAXARG_vC + 1);
+          last += ((unsigned int)(GETARG_Ax(code[pc]))) * (MAXARG_vC + 1);
           pc++;
         }
         /* when 'n' is known, table should have proper size */
