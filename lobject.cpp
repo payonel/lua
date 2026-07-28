@@ -6,12 +6,13 @@
 
 #include "lprefix.h"
 
+#include <charconv>
 #include <float.h>
-#include <locale.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 
 #include "lua.h"
 
@@ -540,7 +541,12 @@ unsigned luaO_tostringbuff(const TValue* obj, char* buff)
   int len;
   assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if (((obj)->tt_ == LUA_VNUMINT))
-    len = lua_integer2str(buff, LUA_N2SBUFFSZ, obj->value_.i);
+  {
+    std::string s = std::to_string(obj->value_.i);
+    assert(s.size() < LUA_N2SBUFFSZ);
+    memcpy(buff, s.c_str(), s.size() + 1);
+    len = ((int)(s.size()));
+  }
   else
   {
     assert(obj->tt_ == LUA_VNUMFLT);
@@ -815,12 +821,16 @@ const char* luaO_pushvfstring(lua_State* L, const char* fmt, const FmtArgs& args
       break;
     }
     case 'p':
-    {                         /* a pointer */
-      char bf[LUA_N2SBUFFSZ]; /* enough space for '%p' */
+    {                         /* a pointer, as "0x" + lowercase hex digits */
+      char bf[LUA_N2SBUFFSZ];
       assert(argn < args.n && args.arg[argn].tag == 'p');
       const void* p = args.arg[argn++].p;
-      int len = lua_pointer2str(bf, LUA_N2SBUFFSZ, p);
-      addstr2buff(&buff, bf, ((unsigned int)(len)));
+      bf[0] = '0';
+      bf[1] = 'x';
+      std::to_chars_result res =
+          std::to_chars(bf + 2, bf + LUA_N2SBUFFSZ, ((uintptr_t)(p)), 16);
+      assert(res.ec == std::errc());
+      addstr2buff(&buff, bf, ((unsigned int)(res.ptr - bf)));
       break;
     }
     case 'U':

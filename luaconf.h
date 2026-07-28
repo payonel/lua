@@ -230,7 +230,6 @@
 @@ LUA_MAXINTEGER is the maximum value for a LUA_INTEGER.
 @@ LUA_MININTEGER is the minimum value for a LUA_INTEGER.
 @@ LUA_MAXUNSIGNED is the maximum value for a LUA_UNSIGNED.
-@@ lua_integer2str converts an integer to a string.
 */
 
 /* The following definitions are good for most cases here */
@@ -238,8 +237,6 @@
 #define LUA_INTEGER_FMT "%" LUA_INTEGER_FRMLEN "d"
 
 #define LUAI_UACINT LUA_INTEGER
-
-#define lua_integer2str(s, sz, n) l_sprintf((s), sz, LUA_INTEGER_FMT, (LUAI_UACINT) (n))
 
 /*
 ** use LUAI_UACINT here to avoid problems with promotions (which
@@ -264,12 +261,6 @@
 ** Dependencies with C99 and other C details
 ** ===================================================================
 */
-
-/*
-@@ lua_pointer2str converts a pointer to a readable string in a
-** non-specified way.
-*/
-#define lua_pointer2str(buff, sz, p) l_sprintf(buff, sz, "%p", p)
 
 /*
 ** 'strtof' and 'opf' variants for math functions are not valid in
