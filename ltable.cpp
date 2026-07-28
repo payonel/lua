@@ -165,10 +165,10 @@ static unsigned l_hashfloat(lua_Number n)
 {
   int i;
   lua_Integer ni;
-  n = l_mathop(frexp)(n, &i) * -((lua_Number)(INT_MIN));
+  n = frexp(n, &i) * -((lua_Number)(INT_MIN));
   if (!lua_numbertointeger(n, &ni))
   { /* is 'n' inf/-inf/NaN? */
-    assert((!((n) == (n))) || l_mathop(fabs)(n) == ((lua_Number)(HUGE_VAL)));
+    assert((!((n) == (n))) || fabs(n) == ((lua_Number)(HUGE_VAL)));
     return 0;
   }
   else

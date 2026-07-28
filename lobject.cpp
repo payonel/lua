@@ -185,9 +185,9 @@ static lua_Number numarith(lua_State* L, int op, lua_Number v1,
   case LUA_OPDIV:
     return ((void)(L), (v1) / (v2));
   case LUA_OPPOW:
-    return ((void)(L), ((v2) == 2) ? (v1) * (v1) : l_mathop(pow)(v1, v2));
+    return ((void)(L), ((v2) == 2) ? (v1) * (v1) : pow(v1, v2));
   case LUA_OPIDIV:
-    return ((void)(L), l_floor((v1) / (v2)));
+    return ((void)(L), floor((v1) / (v2)));
   case LUA_OPUNM:
     return ((void)(L), -(v1));
   case LUA_OPMOD:
@@ -303,7 +303,7 @@ constexpr int MAXSIGDIG = 30;
 static lua_Number lua_strx2number(const char* s, char** endptr)
 {
   int dot = lua_getlocaledecpoint();
-  lua_Number r = l_mathop(0.0); /* result (accumulator) */
+  lua_Number r = 0.0; /* result (accumulator) */
   int sigdig = 0;               /* number of significant digits */
   int nosigdig = 0;             /* number of non-significant digits */
   int e = 0;                    /* exponent correction */
@@ -314,7 +314,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
     s++;                                                    /* skip initial spaces */
   neg = isneg(&s);                                          /* check sign */
   if (!(*s == '0' && (*(s + 1) == 'x' || *(s + 1) == 'X'))) /* check '0x' */
-    return l_mathop(0.0);                                   /* invalid format (no '0x') */
+    return 0.0;                                   /* invalid format (no '0x') */
   for (s += 2;; s++)
   { /* skip '0x' and read numeral */
     if (*s == dot)
@@ -329,7 +329,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
       if (sigdig == 0 && *s == '0') /* non-significant digit (zero)? */
         nosigdig++;
       else if (++sigdig <= MAXSIGDIG) /* can read it without overflow? */
-        r = (r * l_mathop(16.0)) + luaO_hexavalue(*s);
+        r = (r * 16.0) + luaO_hexavalue(*s);
       else
         e++; /* too many digits; ignore, but still count for exponent */
       if (hasdot)
@@ -339,7 +339,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
       break; /* neither a dot nor a digit */
   }
   if (nosigdig + sigdig == 0) /* no digits? */
-    return l_mathop(0.0);     /* invalid format */
+    return 0.0;     /* invalid format */
   *endptr = util::remove_const_cast(s);    /* valid up to here */
   e *= 4;                     /* each digit multiplies/divides value by 2^4 */
   if (*s == 'p' || *s == 'P')
@@ -349,7 +349,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
     s++;              /* skip 'p' */
     neg1 = isneg(&s); /* sign */
     if (!lisdigit(((unsigned char)(*s))))
-      return l_mathop(0.0);          /* invalid; must have at least one digit */
+      return 0.0;          /* invalid; must have at least one digit */
     while (lisdigit(((unsigned char)(*s)))) /* read exponent */
       exp1 = exp1 * 10 + *(s++) - '0';
     if (neg1)
@@ -359,7 +359,7 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
   }
   if (neg)
     r = -r;
-  return l_mathop(ldexp)(r, e);
+  return ldexp(r, e);
 }
 
 #endif
@@ -513,7 +513,7 @@ int luaO_utf8esc(char* buff, l_uint32 x)
 ** digits, the final '\0', plus the significant digits, which are
 ** approximately the *_DIG attribute.
 */
-static_assert(LUA_N2SBUFFSZ >= 20 + l_floatatt(DIG), "invalid value for LUA_N2SBUFFSZ");
+static_assert(LUA_N2SBUFFSZ >= 20 + DBL_DIG, "invalid value for LUA_N2SBUFFSZ");
 
 /*
 ** Convert a float to a string, adding it to a buffer. First try with
@@ -528,13 +528,13 @@ static int tostringbuffFloat(lua_Number n, char* buff)
 {
   /* first conversion */
   int len = l_sprintf(buff, LUA_N2SBUFFSZ, LUA_NUMBER_FMT,
-                      (LUAI_UACNUMBER) n);
+                      n);
   lua_Number check = lua_str2number(buff, nullptr); /* read it back */
   if (check != n)
   { /* not enough precision? */
     /* convert again with more precision */
     len = l_sprintf(buff, LUA_N2SBUFFSZ, LUA_NUMBER_FMT_N,
-                    (LUAI_UACNUMBER) n);
+                    n);
   }
   /* looks like an integer? */
   if (buff[strspn(buff, "-0123456789")] == '\0')

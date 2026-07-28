@@ -136,7 +136,7 @@ LUA_API Memcontrol l_memcontrol;
 ** Otherwise, you can leave 'lua_number2strx' undefined and Lua will
 ** provide its own implementation.
 */
-#define lua_number2strx(L, b, sz, f, n) ((void) L, l_sprintf(b, sz, f, (LUAI_UACNUMBER) (n)))
+#define lua_number2strx(L, b, sz, f, n) ((void) L, l_sprintf(b, sz, f, (n)))
 
 #define luai_openlibs(L) luaL_openselectedlibs(L, ~0, 0)
 #define luai_tracegc(L, f) ((void) 0)

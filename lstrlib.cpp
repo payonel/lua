@@ -1122,7 +1122,7 @@ static int str_gsub(lua_State* L)
 ** Hexadecimal floating-point formatter
 */
 
-constexpr size_t SIZELENMOD = (sizeof(LUA_NUMBER_FRMLEN) / sizeof(char));
+
 
 /*
 ** Number of bits that goes into the first digit. It can be any value
@@ -1130,14 +1130,14 @@ constexpr size_t SIZELENMOD = (sizeof(LUA_NUMBER_FRMLEN) / sizeof(char));
 ** to nibble boundaries by making what is left after that first digit a
 ** multiple of 4.
 */
-constexpr int L_NBFD = ((l_floatatt(MANT_DIG) - 1) % 4 + 1);
+constexpr int L_NBFD = ((DBL_MANT_DIG - 1) % 4 + 1);
 
 /*
 ** Add integer part of 'x' to buffer and return new 'x'
 */
 static lua_Number adddigit(char* buff, unsigned n, lua_Number x)
 {
-  lua_Number dd = l_mathop(floor)(x); /* get integer part from 'x' */
+  lua_Number dd = floor(x); /* get integer part from 'x' */
   int d = (int) dd;
   buff[n] = ((char)(d < 10 ? d + '0' : d - 10 + 'a')); /* add to buffer */
   return x - dd;                                        /* return what is left */
@@ -1147,16 +1147,16 @@ static int num2straux(char* buff, unsigned sz, lua_Number x)
 {
   /* if 'inf' or 'NaN', format it like '%g' */
   if (x != x || x == (lua_Number) HUGE_VAL || x == -(lua_Number) HUGE_VAL)
-    return l_sprintf(buff, sz, LUA_NUMBER_FMT, (LUAI_UACNUMBER) x);
+    return l_sprintf(buff, sz, LUA_NUMBER_FMT, x);
   else if (x == 0)
   { /* can be -0... */
     /* create "0" or "-0" followed by exponent */
-    return l_sprintf(buff, sz, LUA_NUMBER_FMT "x0p+0", (LUAI_UACNUMBER) x);
+    return l_sprintf(buff, sz, LUA_NUMBER_FMT "x0p+0", x);
   }
   else
   {
     int e;
-    lua_Number m = l_mathop(frexp)(x, &e); /* 'x' fraction and exponent */
+    lua_Number m = frexp(x, &e); /* 'x' fraction and exponent */
     unsigned n = 0;                        /* character count */
     if (m < 0)
     {                  /* is number negative? */
@@ -1185,13 +1185,13 @@ static int lua_number2strx(lua_State* L, char* buff, unsigned sz,
                            const char* fmt, lua_Number x)
 {
   int n = num2straux(buff, sz, x);
-  if (fmt[SIZELENMOD] == 'A')
+  if (fmt[1] == 'A') /* fmt is "%a" or "%A" (no length modifier for double) */
   {
     int i;
     for (i = 0; i < n; i++)
       buff[i] = ((char)(toupper(((unsigned char)(buff[i])))));
   }
-  else if (l_unlikely(fmt[SIZELENMOD] != 'a'))
+  else if (l_unlikely(fmt[1] != 'a'))
     return luaL_error(L, "modifiers for format '%%a'/'%%A' not implemented");
   return n;
 }
@@ -1204,7 +1204,7 @@ static int lua_number2strx(lua_State* L, char* buff, unsigned sz,
 ** and '\0') + number of decimal digits to represent maxfloat (which
 ** is maximum exponent + 1). (99+3+1, adding some extra, 110)
 */
-constexpr int MAX_ITEMF = (110 + l_floatatt(MAX_10_EXP));
+constexpr int MAX_ITEMF = (110 + DBL_MAX_10_EXP);
 
 /*
 ** All formats except '%f' do not need that large limit.  The other
@@ -1288,7 +1288,7 @@ static int quotefloat(lua_State* L, char* buff, lua_Number n)
   else
   { /* format number as hexadecimal */
     int nb = lua_number2strx(L, buff, MAX_ITEM,
-                             "%" LUA_NUMBER_FRMLEN "a", n);
+                             "%a", n);
     /* ensures that 'buff' string uses a dot as the radix character */
     if (memchr(buff, '.', ((unsigned int)(nb))) == nullptr)
     {                                       /* no dot? */
@@ -1476,7 +1476,6 @@ static int str_format(lua_State* L)
       case 'a':
       case 'A':
         checkformat(L, form, L_FMTFLAGSF, 1);
-        addlenmod(form, LUA_NUMBER_FRMLEN);
         nb = lua_number2strx(L, buff, maxitem, form,
                              luaL_checknumber(L, arg));
         break;
@@ -1491,8 +1490,7 @@ static int str_format(lua_State* L)
       {
         lua_Number n = luaL_checknumber(L, arg);
         checkformat(L, form, L_FMTFLAGSF, 1);
-        addlenmod(form, LUA_NUMBER_FRMLEN);
-        nb = l_sprintf(buff, maxitem, form, (LUAI_UACNUMBER) n);
+        nb = l_sprintf(buff, maxitem, form, n);
         break;
       }
       case 'p':

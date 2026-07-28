@@ -37,7 +37,7 @@ constexpr int MAXTAGLOOP = 2000;
 */
 
 /* number of bits in the mantissa of a float */
-#define NBM (l_floatatt(MANT_DIG))
+#define NBM (DBL_MANT_DIG)
 
 /*
 ** Check whether some integers may not fit in a float, testing whether
@@ -118,7 +118,7 @@ int luaV_tonumber_(const TValue* obj, lua_Number* n)
 */
 int luaV_flttointeger(lua_Number n, lua_Integer* p, F2Imod mode)
 {
-  lua_Number f = l_floor(n);
+  lua_Number f = floor(n);
   if (n != f)
   { /* not an integral value? */
     if (mode == F2Ieq)

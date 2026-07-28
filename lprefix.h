@@ -19,7 +19,7 @@
 /*
 ** Allows manipulation of large files in gcc and some other compilers
 */
-#if !defined(LUA_32BITS) && !defined(_FILE_OFFSET_BITS)
+#if !defined(_FILE_OFFSET_BITS)
 #define _LARGEFILE_SOURCE 1
 #define _FILE_OFFSET_BITS 64
 #endif

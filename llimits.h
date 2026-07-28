@@ -10,6 +10,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <bit>
+#include <limits>
 #include <cstddef>
 
 #include "lua.h"
@@ -23,6 +24,13 @@
 */
 static_assert(std::endian::native == std::endian::little,
               "this port supports little-endian hosts only");
+
+/* numeric types are pinned (managed-target contract, see luaconf.h) */
+static_assert(std::numeric_limits<lua_Number>::is_iec559 &&
+                  sizeof(lua_Number) == 8,
+              "this port requires lua_Number to be IEEE-754 binary64");
+static_assert(sizeof(lua_Integer) == 8,
+              "this port requires a 64-bit lua_Integer");
 
 /*
 ** 'l_mem' is a signed integer big enough to count the total memory
@@ -88,8 +96,6 @@ static inline unsigned int point2uint(lua_CFunction p)
 }
 
 /* types of 'usual argument conversions' for lua_Number and lua_Integer */
-typedef LUAI_UACNUMBER l_uacNumber;
-typedef LUAI_UACINT l_uacInt;
 
 /*
 ** Internal assertions for in-house debugging.
@@ -187,8 +193,8 @@ static l_forceinline lua_Number luai_numadd(lua_State* L, lua_Number a, lua_Numb
 static l_forceinline lua_Number luai_numsub(lua_State* L, lua_Number a, lua_Number b) { (void) L; return a - b; }
 static l_forceinline lua_Number luai_nummul(lua_State* L, lua_Number a, lua_Number b) { (void) L; return a * b; }
 static l_forceinline lua_Number luai_numdiv(lua_State* L, lua_Number a, lua_Number b) { (void) L; return a / b; }
-static l_forceinline lua_Number luai_numpow(lua_State* L, lua_Number a, lua_Number b) { (void) L; return (b == 2) ? a * a : l_mathop(pow)(a, b); }
-static l_forceinline lua_Number luai_numidiv(lua_State* L, lua_Number a, lua_Number b) { return l_floor(luai_numdiv(L, a, b)); }
+static l_forceinline lua_Number luai_numpow(lua_State* L, lua_Number a, lua_Number b) { (void) L; return (b == 2) ? a * a : pow(a, b); }
+static l_forceinline lua_Number luai_numidiv(lua_State* L, lua_Number a, lua_Number b) { return floor(luai_numdiv(L, a, b)); }
 static l_forceinline lua_Number luai_numunm(lua_State* L, lua_Number a) { (void) L; return -a; }
 
 static l_forceinline int luai_numeq(lua_Number a, lua_Number b) { return a == b; }
@@ -200,7 +206,7 @@ static l_forceinline int luai_numisnan(lua_Number a) { return !(a == a); }
 
 static l_forceinline lua_Number luai_nummod(lua_State* L, lua_Number a, lua_Number b)
 {
-  lua_Number m = l_mathop(fmod)(a, b);
+  lua_Number m = fmod(a, b);
   (void) L;
   if ((m > 0) ? b < 0 : (m < 0 && b > 0))
     m += b;
