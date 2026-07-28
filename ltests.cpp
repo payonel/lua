@@ -456,7 +456,7 @@ static inline void checkobjrefN(global_State* g, GCObject* f, GCObject* t)
 
 static void checkvalref(global_State* g, GCObject* f, const TValue* t)
 {
-  assert(!((t)->tt_ & BIT_ISCOLLECTABLE) || ((((t)->tt_ & WITHVARIANT_MASK) == ((t)->value_).gc->tt) && testobjref(g, f, ((t)->value_).gc)));
+  assert(!((t)->tt_ & BIT_ISCOLLECTABLE) || ((((t)->tt_ & WITHVARIANT_MASK) == gcvalue(t)->tt) && testobjref(g, f, gcvalue(t))));
 }
 
 static void checktable(global_State* g, Table* h)
@@ -505,7 +505,7 @@ static void checkproto(global_State* g, Proto* f)
   for (i = 0; i < f->sizek; i++)
   {
     if (((f->k + i)->tt_ & BIT_ISCOLLECTABLE))
-      checkobjref(g, fgc, ((f->k + i)->value_).gc);
+      checkobjref(g, fgc, gcvalue(f->k + i));
   }
   for (i = 0; i < f->sizeupvalues; i++)
     checkobjrefN(g, fgc, f->upvalues[i].name);
@@ -792,10 +792,10 @@ static int lua_checkmemory(lua_State* L)
   {
     assert(!iswhite(mainthread(g)));
     assert((&g->l_registry)->tt_ & BIT_ISCOLLECTABLE);
-    assert(!iswhite(((&g->l_registry)->value_).gc));
+    assert(!iswhite(gcvalue(&g->l_registry)));
   }
   assert((&g->l_registry)->tt_ & BIT_ISCOLLECTABLE);
-  assert(!isdead(g, ((&g->l_registry)->value_).gc));
+  assert(!isdead(g, gcvalue(&g->l_registry)));
   assert(g->sweepgc == nullptr || issweepphase(g));
   totalin = checkgrays(g);
 

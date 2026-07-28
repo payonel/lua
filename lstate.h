@@ -294,7 +294,7 @@ struct lua_State : GCObject
 static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
 {
   assert(x->tt == LUA_VTHREAD);
-  obj->value_.gc = x;
+  obj->value_.ref = x;
   obj->tt_ = ctb(LUA_VTHREAD);
   checkliveness(L, obj);
 }
@@ -307,8 +307,8 @@ static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
 static l_forceinline lua_State* thvalue(const TValue* o)
 {
   assert(o->tt_ == ctb(LUA_VTHREAD));
-  assert(o->value_.gc->tt == LUA_VTHREAD);
-  return static_cast<lua_State*>(o->value_.gc);
+  assert(o->value_.ref->tt == LUA_VTHREAD);
+  return static_cast<lua_State*>(o->value_.ref);
 }
 
 static l_forceinline global_State* G(lua_State* L)

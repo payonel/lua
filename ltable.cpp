@@ -124,13 +124,13 @@ static inline int hashpointer(const Table* t, lua_CFunction p)
 ** (DEADKEY, nullptr) that is different from any valid TValue.
 */
 static const Node dummynode_ = {
-    {{nullptr}, LUA_VEMPTY}, /* val (value and type) */
+    {{0, nullptr}, LUA_VEMPTY}, /* val (value and type) */
     LUA_TDEADKEY,         /* key_tt */
     0,                    /* next */
-    {nullptr}                /* key_val */
+    {0, nullptr}             /* key_val */
 };
 
-static const TValue absentkey = {{nullptr}, LUA_VABSTKEY};
+static const TValue absentkey = {{0, nullptr}, LUA_VABSTKEY};
 
 /*
 ** Hash for integers. To allow a good hash, use the remainder operator
@@ -266,7 +266,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     {
       /* a collectable value can be equal to a dead key */
       assert(k1->tt_ & BIT_ISCOLLECTABLE);
-      return gcvalue(k1) == ((((n2)->key_val)).gc);
+      return gcvalue(k1) == gckey(n2);
     }
     else
       return 0; /* otherwise, different variants cannot be equal */
@@ -281,16 +281,16 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
       return 1;
     case LUA_VNUMINT:
       assert(k1->tt_ == LUA_VNUMINT);
-      return (ivalue(k1) == (((n2)->key_val).i));
+      return (ivalue(k1) == keyival(n2));
     case LUA_VNUMFLT:
       assert(k1->tt_ == LUA_VNUMFLT);
-      return ((fltvalue(k1)) == (((((n2)->key_val)).n)));
+      return (fltvalue(k1) == keyfltval(n2));
     case LUA_VLIGHTUSERDATA:
       assert(k1->tt_ == LUA_VLIGHTUSERDATA);
-      return pvalue(k1) == ((((n2)->key_val)).p);
+      return pvalue(k1) == keypval(n2);
     case LUA_VLCF:
       assert(k1->tt_ == LUA_VLCF);
-      return fvalue(k1) == ((((n2)->key_val)).f);
+      return fvalue(k1) == keyfval(n2);
     case ctb(LUA_VLNGSTR):
     {
       return luaS_eqstr(tsvalue(k1),
@@ -298,7 +298,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     }
     default:
       assert(k1->tt_ & BIT_ISCOLLECTABLE);
-      return gcvalue(k1) == ((((n2)->key_val)).gc);
+      return gcvalue(k1) == gckey(n2);
     }
   }
 }
@@ -580,7 +580,7 @@ static void numusehash(const Table* t, Counters* ct)
     {
       total++;
       if (((n)->key_tt == LUA_VNUMINT))
-        countint((((n)->key_val).i), ct);
+        countint(keyival(n), ct);
     }
   }
   ct->total += total;
@@ -1013,7 +1013,7 @@ static int nodeintfromhash(Table* t, lua_Integer key)
   for (;;)
   { /* check whether 'key' is somewhere in the chain */
     Node* n = gnode(t, i);
-    if (((n)->key_tt == LUA_VNUMINT) && (((n)->key_val).i) == key)
+    if (((n)->key_tt == LUA_VNUMINT) && keyival(n) == key)
       return i; /* that's it */
     else
     {

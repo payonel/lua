@@ -575,9 +575,13 @@ do
   ]], source)
   collectgarbage()
   local m2 = collectgarbage"count" * 1024
-  -- load used fewer than 400 bytes. Code alone has more than 3*N bytes,
+  -- load used few bytes. Code alone has more than 3*N bytes,
   -- and string literal has N bytes. Both were not loaded.
-  assert(m2 > m1 and m2 - m1 < 1400)
+  -- (Headroom raised from upstream's 1400 for this port's 24-byte
+  -- TValue -- the Value-union flattening; standing test exception,
+  -- ryanbean 2026-07-28. The aliasing property proven here is
+  -- unchanged: the ~17K of code and strings is not copied.)
+  assert(m2 > m1 and m2 - m1 < 2000)
   X = 0; code(); assert(X == N and Y == string.rep("a", N))
   X = nil; Y = nil
 

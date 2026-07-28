@@ -611,8 +611,7 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   int tag = luaH_get(fs->kcache, key, &val); /* query scanner table */
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
   { /* is there an index there? */
-    assert((&val)->tt_ == LUA_VNUMINT);
-    int k = ((int)(((&val)->value_).i));
+    int k = ((int)(ivalue(&val)));
     /* collisions can happen only for float keys */
     assert(((key)->tt_ == LUA_VNUMFLT) || luaV_rawequalobj(&f->k[k], v));
     return k; /* reuse index */
@@ -1597,12 +1596,12 @@ static int constfolding(FuncState* fs, int op, expdesc* e1,
   {
     e1->k = VKINT;
     assert((&res)->tt_ == LUA_VNUMINT);
-    e1->ival = ((&res)->value_).i;
+    e1->ival = ivalue(&res);
   }
   else
   { /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
     assert((&res)->tt_ == LUA_VNUMFLT);
-    lua_Number n = ((&res)->value_).n;
+    lua_Number n = fltvalue(&res);
     if ((!((n) == (n))) || n == 0)
       return 0;
     e1->k = VKFLT;

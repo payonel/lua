@@ -346,10 +346,10 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   {
     TValue res;
     if (luaH_getshortstr(h, luaS_new(L, "n"), &res) != LUA_VNUMINT ||
-        ((lua_Unsigned)(((&res)->value_).i)) > ((unsigned int)(INT_MAX / 2)))
+        ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
       luaG_runerror(L, "vararg table has no proper 'n'");
     assert((&res)->tt_ == LUA_VNUMINT);
-    return ((int)(((&res)->value_).i));
+    return ((int)(ivalue(&res)));
   }
 }
 

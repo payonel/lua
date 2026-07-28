@@ -280,12 +280,11 @@ static int forprep(lua_State* L, StkId ra)
 */
 static int floatforloop(lua_State* L, StkId ra)
 {
-  assert(((&L->stack.p[ra + 1]))->tt_ == LUA_VNUMFLT);
-  lua_Number step = (((&L->stack.p[ra + 1]))->value_).n;
+  lua_Number step = fltvalue(&L->stack.p[ra + 1]);
   assert(((&L->stack.p[ra]))->tt_ == LUA_VNUMFLT);
-  lua_Number limit = (((&L->stack.p[ra]))->value_).n;
+  lua_Number limit = fltvalue(&L->stack.p[ra]);
   assert(((&L->stack.p[ra + 2]))->tt_ == LUA_VNUMFLT);
-  lua_Number idx = (((&L->stack.p[ra + 2]))->value_).n; /* control variable */
+  lua_Number idx = fltvalue(&L->stack.p[ra + 2]); /* control variable */
   idx = ((void)(L), (idx) + (step));        /* increment index */
   if (((0) < (step)) ? ((idx) <= (limit))
                           : ((limit) <= (idx)))
@@ -2399,9 +2398,9 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         int cond;
         int im = GETARG_sB(i);
         if ((((&(L)->stack.p[ra]))->tt_ == LUA_VNUMINT))
-          cond = ((((&(L)->stack.p[ra]))->value_).i == im);
+          cond = (ivalue(&L->stack.p[ra]) == im);
         else if ((((&(L)->stack.p[ra]))->tt_ == LUA_VNUMFLT))
-          cond = ((((&(L)->stack.p[ra]))->value_).n == (((lua_Number)(im))));
+          cond = (fltvalue(&L->stack.p[ra]) == (((lua_Number)(im))));
         else
           cond = 0; /* other types cannot be equal to a number */
         if (cond != GETARG_k(i))
@@ -2717,13 +2716,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if ((((&(L)->stack.p[ra + 1]))->tt_ == LUA_VNUMINT))
         { /* integer loop? */
           assert(((&L->stack.p[ra]))->tt_ == LUA_VNUMINT);
-          lua_Unsigned count = ((lua_Unsigned)((((&L->stack.p[ra]))->value_).i));
+          lua_Unsigned count = ((lua_Unsigned)(ivalue(&L->stack.p[ra])));
           if (count > 0)
           { /* still more iterations? */
             assert(((&L->stack.p[ra + 1]))->tt_ == LUA_VNUMINT);
-            lua_Integer step = (((&L->stack.p[ra + 1]))->value_).i;
+            lua_Integer step = ivalue(&L->stack.p[ra + 1]);
             assert(((&L->stack.p[ra + 2]))->tt_ == LUA_VNUMINT);
-            lua_Integer idx = (((&L->stack.p[ra + 2]))->value_).i;    /* control variable */
+            lua_Integer idx = ivalue(&L->stack.p[ra + 2]);    /* control variable */
             chgivalue((&(L)->stack.p[ra]), ((lua_Integer)(count - 1))); /* update counter */
             idx = ((lua_Integer)(((lua_Unsigned)(idx)) + ((lua_Unsigned)(step))));                /* add step to index */
             chgivalue((&(L)->stack.p[ra + 2]), idx);              /* update control variable */

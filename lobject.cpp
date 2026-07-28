@@ -44,7 +44,7 @@ int luaO_checkliveness(lua_State* L, const TValue* obj)
   (void) L; /* unused when asserts are disabled */
   if (obj->tt_ & BIT_ISCOLLECTABLE)
   {
-    assert((((obj)->tt_ & WITHVARIANT_MASK) == ((obj)->value_).gc->tt));
+    assert((((obj)->tt_ & WITHVARIANT_MASK) == gcvalue(obj)->tt));
     assert(L == nullptr || !isdead(G(L), gcvalue(obj)));
   }
   return 1;

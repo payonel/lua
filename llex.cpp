@@ -281,14 +281,14 @@ static int read_numeral(LexState* ls, Token* seminfo)
     lexerror(ls, "malformed number", TK_FLT);
   if (((&obj)->tt_ == LUA_VNUMINT))
   {
-    seminfo->i = ((&obj)->value_).i;
+    seminfo->i = ivalue(&obj);
     return TK_INT;
   }
   else
   {
     assert(((&obj)->tt_ == LUA_VNUMFLT));
     assert((&obj)->tt_ == LUA_VNUMFLT);
-    seminfo->r = ((&obj)->value_).n;
+    seminfo->r = fltvalue(&obj);
     return TK_FLT;
   }
 }

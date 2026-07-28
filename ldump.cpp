@@ -149,8 +149,7 @@ static void dumpString(DumpState* D, TString* ts)
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     {                                         /* string already saved? */
       dumpVarint(D, 0);                       /* reuse a saved string */
-      assert((&idx)->tt_ == LUA_VNUMINT);
-      dumpVarint(D, ((lua_Unsigned)(((&idx)->value_).i))); /* index of saved string */
+      dumpVarint(D, ((lua_Unsigned)(ivalue(&idx)))); /* index of saved string */
     }
     else
     {                    /* must write and save the string */

@@ -39,17 +39,26 @@ constexpr lu_byte makevariant(int t, int v)
 }
 
 /*
-** Union of all Lua values
+** The two storage columns of a Lua value: a 64-bit primitive payload
+** and a GC reference. Which one is meaningful — and how the payload's
+** bits are interpreted — is dictated entirely by the enclosing tag
+** ('tt_' / 'key_tt' / array-part tag byte); the other column is
+** ignored (a numeric store leaves 'ref' stale — never read, because
+** the tag says non-collectable). This is the row form of the managed
+** representation (parallel primitive/reference/tag arrays — the
+** Truffle frame design): 'prim' transposes to the long[] column
+** (doubles as raw bits via bit_cast — Java doubleToRawLongBits),
+** 'ref' to the Object[] column. Port notes: managed setters null the
+** ref column on primitive stores (GC hygiene the C++ GC doesn't need,
+** since it consults the tag before tracing); light userdata and
+** C functions ride 'prim' here as pointer bits, but map to the ref
+** column (an Object) and the registry identifier respectively in the
+** managed port.
 */
-typedef union Value
+typedef struct Value
 {
-  struct GCObject* gc; /* collectable objects */
-  void* p;             /* light userdata */
-  lua_CFunction f;     /* light C functions */
-  lua_Integer i;       /* integer numbers */
-  lua_Number n;        /* float numbers */
-  /* not used, but may avoid warnings for uninitialized value */
-  lu_byte ub;
+  lua_Integer prim;     /* integers, float bits, light udata, C functions */
+  struct GCObject* ref; /* collectable objects */
 } Value;
 
 /*
@@ -515,60 +524,60 @@ static l_forceinline unsigned int sizenode(const Table* t)
 static l_forceinline lua_Integer ivalue(const TValue* o)
 {
   assert(o->tt_ == LUA_VNUMINT);
-  return o->value_.i;
+  return o->value_.prim;
 }
 
 static l_forceinline lua_Number fltvalue(const TValue* o)
 {
   assert(o->tt_ == LUA_VNUMFLT);
-  return o->value_.n;
+  return std::bit_cast<lua_Number>(o->value_.prim);
 }
 
 /* number (integer or float) coerced to a float */
 static l_forceinline lua_Number nvalue(const TValue* o)
 {
   assert(o->tt_ == LUA_VNUMINT || o->tt_ == LUA_VNUMFLT);
-  return (o->tt_ == LUA_VNUMINT) ? ((lua_Number)(o->value_.i))
-                                 : o->value_.n;
+  return (o->tt_ == LUA_VNUMINT) ? ((lua_Number)(o->value_.prim))
+                                 : std::bit_cast<lua_Number>(o->value_.prim);
 }
 
 static l_forceinline void* pvalue(const TValue* o)
 {
   assert(o->tt_ == LUA_VLIGHTUSERDATA);
-  return o->value_.p;
+  return reinterpret_cast<void*>(o->value_.prim);
 }
 
 static l_forceinline lua_CFunction fvalue(const TValue* o)
 {
   assert(o->tt_ == LUA_VLCF);
-  return o->value_.f;
+  return reinterpret_cast<lua_CFunction>(o->value_.prim);
 }
 
 static l_forceinline GCObject* gcvalue(const TValue* o)
 {
   assert(o->tt_ & BIT_ISCOLLECTABLE);
-  return o->value_.gc;
+  return o->value_.ref;
 }
 
 static l_forceinline TString* tsvalue(const TValue* o)
 {
   assert(o->tt_ == ctb(LUA_VSHRSTR) || o->tt_ == ctb(LUA_VLNGSTR));
-  assert((o->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-  return static_cast<TString*>(o->value_.gc);
+  assert((o->value_.ref->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  return static_cast<TString*>(o->value_.ref);
 }
 
 static l_forceinline Table* hvalue(const TValue* o)
 {
   assert(o->tt_ == ctb(LUA_VTABLE));
-  assert(o->value_.gc->tt == LUA_VTABLE);
-  return static_cast<Table*>(o->value_.gc);
+  assert(o->value_.ref->tt == LUA_VTABLE);
+  return static_cast<Table*>(o->value_.ref);
 }
 
 static l_forceinline Udata* uvalue(const TValue* o)
 {
   assert(o->tt_ == ctb(LUA_VUSERDATA));
-  assert(o->value_.gc->tt == LUA_VUSERDATA);
-  return static_cast<Udata*>(o->value_.gc);
+  assert(o->value_.ref->tt == LUA_VUSERDATA);
+  return static_cast<Udata*>(o->value_.ref);
 }
 
 /* thvalue is defined in lstate.h (needs the complete lua_State) */
@@ -576,22 +585,22 @@ static l_forceinline Udata* uvalue(const TValue* o)
 static l_forceinline Closure* clvalue(const TValue* o)
 {
   assert(o->tt_ == ctb(LUA_VLCL) || o->tt_ == ctb(LUA_VCCL));
-  assert(o->value_.gc->tt == LUA_VLCL || o->value_.gc->tt == LUA_VCCL);
-  return static_cast<Closure*>(o->value_.gc);
+  assert(o->value_.ref->tt == LUA_VLCL || o->value_.ref->tt == LUA_VCCL);
+  return static_cast<Closure*>(o->value_.ref);
 }
 
 static l_forceinline LClosure* clLvalue(const TValue* o)
 {
   assert(o->tt_ == ctb(LUA_VLCL));
-  assert(o->value_.gc->tt == LUA_VLCL);
-  return static_cast<LClosure*>(o->value_.gc);
+  assert(o->value_.ref->tt == LUA_VLCL);
+  return static_cast<LClosure*>(o->value_.ref);
 }
 
 static l_forceinline CClosure* clCvalue(const TValue* o)
 {
   assert(o->tt_ == ctb(LUA_VCCL));
-  assert(o->value_.gc->tt == LUA_VCCL);
-  return static_cast<CClosure*>(o->value_.gc);
+  assert(o->value_.ref->tt == LUA_VCCL);
+  return static_cast<CClosure*>(o->value_.ref);
 }
 
 static l_forceinline Proto* getproto(const TValue* o)
@@ -603,15 +612,40 @@ static l_forceinline Proto* getproto(const TValue* o)
 
 static l_forceinline GCObject* gckey(const Node* n)
 {
-  assert(n->key_tt & BIT_ISCOLLECTABLE);
-  return n->key_val.gc;
+  /* dead keys keep their reference for identity comparison in 'equalkey' */
+  assert((n->key_tt & BIT_ISCOLLECTABLE) || n->key_tt == LUA_TDEADKEY);
+  return n->key_val.ref;
 }
 
 static l_forceinline TString* keystrval(const Node* n)
 {
   assert(n->key_tt == ctb(LUA_VSHRSTR));
-  assert((n->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-  return static_cast<TString*>(n->key_val.gc);
+  assert((n->key_val.ref->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  return static_cast<TString*>(n->key_val.ref);
+}
+
+static l_forceinline lua_Integer keyival(const Node* n)
+{
+  assert(n->key_tt == LUA_VNUMINT);
+  return n->key_val.prim;
+}
+
+static l_forceinline lua_Number keyfltval(const Node* n)
+{
+  assert(n->key_tt == LUA_VNUMFLT);
+  return std::bit_cast<lua_Number>(n->key_val.prim);
+}
+
+static l_forceinline void* keypval(const Node* n)
+{
+  assert(n->key_tt == LUA_VLIGHTUSERDATA);
+  return reinterpret_cast<void*>(n->key_val.prim);
+}
+
+static l_forceinline lua_CFunction keyfval(const Node* n)
+{
+  assert(n->key_tt == LUA_VLCF);
+  return reinterpret_cast<lua_CFunction>(n->key_val.prim);
 }
 
 /* }================================================================== */
@@ -648,7 +682,7 @@ static l_forceinline void setobj(struct lua_State* L, TValue* obj1, const TValue
 
 static l_forceinline void setfltvalue(TValue* obj, lua_Number x)
 {
-  obj->value_.n = x;
+  obj->value_.prim = std::bit_cast<lua_Integer>(x);
   obj->tt_ = LUA_VNUMFLT;
 }
 
@@ -656,12 +690,12 @@ static l_forceinline void setfltvalue(TValue* obj, lua_Number x)
 static l_forceinline void chgfltvalue(TValue* obj, lua_Number x)
 {
   assert(obj->tt_ == LUA_VNUMFLT);
-  obj->value_.n = x;
+  obj->value_.prim = std::bit_cast<lua_Integer>(x);
 }
 
 static l_forceinline void setivalue(TValue* obj, lua_Integer x)
 {
-  obj->value_.i = x;
+  obj->value_.prim = x;
   obj->tt_ = LUA_VNUMINT;
 }
 
@@ -669,32 +703,32 @@ static l_forceinline void setivalue(TValue* obj, lua_Integer x)
 static l_forceinline void chgivalue(TValue* obj, lua_Integer x)
 {
   assert(obj->tt_ == LUA_VNUMINT);
-  obj->value_.i = x;
+  obj->value_.prim = x;
 }
 
 static l_forceinline void setpvalue(TValue* obj, void* x)
 {
-  obj->value_.p = x;
+  obj->value_.prim = reinterpret_cast<lua_Integer>(x);
   obj->tt_ = LUA_VLIGHTUSERDATA;
 }
 
 static l_forceinline void setfvalue(TValue* obj, lua_CFunction x)
 {
-  obj->value_.f = x;
+  obj->value_.prim = reinterpret_cast<lua_Integer>(x);
   obj->tt_ = LUA_VLCF;
 }
 
 static l_forceinline void setgcovalue(struct lua_State* L, TValue* obj, GCObject* x)
 {
   (void) L;
-  obj->value_.gc = x;
+  obj->value_.ref = x;
   obj->tt_ = ctb(x->tt);
 }
 
 static l_forceinline void setsvalue(struct lua_State* L, TValue* obj, TString* x)
 {
   assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
-  obj->value_.gc = x;
+  obj->value_.ref = x;
   obj->tt_ = ctb(x->tt);
   checkliveness(L, obj);
 }
@@ -702,7 +736,7 @@ static l_forceinline void setsvalue(struct lua_State* L, TValue* obj, TString* x
 static l_forceinline void setuvalue(struct lua_State* L, TValue* obj, Udata* x)
 {
   assert(x->tt == LUA_VUSERDATA);
-  obj->value_.gc = x;
+  obj->value_.ref = x;
   obj->tt_ = ctb(LUA_VUSERDATA);
   checkliveness(L, obj);
 }
@@ -710,7 +744,7 @@ static l_forceinline void setuvalue(struct lua_State* L, TValue* obj, Udata* x)
 static l_forceinline void sethvalue(struct lua_State* L, TValue* obj, Table* x)
 {
   assert(x->tt == LUA_VTABLE);
-  obj->value_.gc = x;
+  obj->value_.ref = x;
   obj->tt_ = ctb(LUA_VTABLE);
   checkliveness(L, obj);
 }
@@ -718,7 +752,7 @@ static l_forceinline void sethvalue(struct lua_State* L, TValue* obj, Table* x)
 static l_forceinline void setclLvalue(struct lua_State* L, TValue* obj, LClosure* x)
 {
   assert(x->tt == LUA_VLCL);
-  obj->value_.gc = x;
+  obj->value_.ref = x;
   obj->tt_ = ctb(LUA_VLCL);
   checkliveness(L, obj);
 }
@@ -726,7 +760,7 @@ static l_forceinline void setclLvalue(struct lua_State* L, TValue* obj, LClosure
 static l_forceinline void setclCvalue(struct lua_State* L, TValue* obj, CClosure* x)
 {
   assert(x->tt == LUA_VCCL);
-  obj->value_.gc = x;
+  obj->value_.ref = x;
   obj->tt_ = ctb(LUA_VCCL);
   checkliveness(L, obj);
 }

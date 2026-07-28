@@ -81,7 +81,7 @@ static inline GCObject* gcvalueN(const TValue* o)
 /* access to collectable objects in array part of tables */
 static inline GCObject* gcvalarr(Table* t, unsigned int i)
 {
-  return (*getArrTag(t, i) & BIT_ISCOLLECTABLE) ? getArrVal(t, i)->gc : nullptr;
+  return (*getArrTag(t, i) & BIT_ISCOLLECTABLE) ? getArrVal(t, i)->ref : nullptr;
 }
 
 static inline void markvalue(global_State* g, TValue* o)
@@ -602,16 +602,16 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
     Node* n = inv ? gnode(h, nsize - 1 - i) : gnode(h, i);
     if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
       clearkey(n);        /* clear its key */
-    else if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? ((n)->key_val).gc : nullptr)))
+    else if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? gckey(n) : nullptr)))
     {                          /* key is not marked (yet)? */
       hasclears = 1;           /* table must be cleared */
-      if (((((&(n)->val))->tt_ & BIT_ISCOLLECTABLE) && iswhite((((&(n)->val))->value_).gc))) /* value not marked yet? */
+      if ((((&(n)->val))->tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(&n->val))) /* value not marked yet? */
         hasww = 1;             /* white-white entry */
     }
-    else if (((((&(n)->val))->tt_ & BIT_ISCOLLECTABLE) && iswhite((((&(n)->val))->value_).gc)))
+    else if ((((&(n)->val))->tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(&n->val)))
     { /* value not marked yet? */
       marked = 1;
-      reallymarkobject(g, (((&n->val))->value_).gc); /* mark it now */
+      reallymarkobject(g, gcvalue(&n->val)); /* mark it now */
     }
   }
   /* link table into proper list */
@@ -874,7 +874,7 @@ static void clearbykeys(global_State* g, GCObject* l)
     Node* n;
     for (n = gnode(h, 0); n < limit; n++)
     {
-      if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? ((n)->key_val).gc : nullptr))) /* unmarked key? */
+      if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? gckey(n) : nullptr))) /* unmarked key? */
         (((&(n)->val))->tt_ = LUA_VEMPTY);         /* remove entry */
       if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))        /* is entry empty? */
         clearkey(n);               /* clear its key */
