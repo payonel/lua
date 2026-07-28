@@ -8,9 +8,6 @@
 /* test for sizes in 'l_sprintf' (make sure whole buffer is available) */
 #define l_sprintf(s, sz, f, i) (memset(s, 0xAB, sz), snprintf(s, sz, f, i))
 
-/* get a chance to test code without jump tables */
-#define LUA_USE_JUMPTABLE 0
-
 /* memory-allocator control variables */
 typedef struct Memcontrol
 {
@@ -68,12 +65,6 @@ LUA_API Memcontrol l_memcontrol;
 ** (All uses in Lua have only one format item.)
 */
 #define l_sprintf(s, sz, f, i) snprintf(s, sz, f, i)
-
-/*
-** By default, use jump tables in the main interpreter loop on gcc
-** and compatible compilers.
-*/
-#define LUA_USE_JUMPTABLE 1
 
 /*
 ** these macros allow user-specific actions when a thread is
