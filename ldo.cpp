@@ -442,9 +442,10 @@ static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
 {
   const TValue* tm;
   StkId p;
-  tm = luaT_gettmbyobj(L, (&(L)->stack.p[func]), TM_CALL);
+  TValue fv = getslot(L, func);
+  tm = luaT_gettmbyobj(L, &fv, TM_CALL);
   if (l_unlikely((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))) /* no metamethod? */
-    luaG_callerror(L, (&(L)->stack.p[func]));
+    luaG_callerror(L, &fv, func);
   for (p = L->top; p > func; p--) /* open space for metamethod */
     copyslot(L, p, p - 1);
   L->top++;                          /* stack space pre-allocated by the caller */
@@ -1125,8 +1126,11 @@ static void f_parser(lua_State* L, void* ud)
 */
 void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
 {
-  setgcovalue(L, (&(L)->stack.p[L->top++]), obj); /* temporary anchor in the stack */
-  luaH_set(L, anchor, (&(L)->stack.p[L->top - 1]), (&(L)->stack.p[L->top - 1]));
+  TValue v;
+  setgcovalue(L, &v, obj);
+  setslot(L, L->top, &v); /* temporary anchor in the stack */
+  L->top++;
+  luaH_set(L, anchor, &v, &v);
   /* Because this is a new key, luaH_set will call the GC barrier, so
      we don't need to call the barrier again here */
   L->top--;

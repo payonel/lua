@@ -399,14 +399,17 @@ static unsigned findindex(lua_State* L, Table* t, TValue* key,
 int luaH_next(lua_State* L, Table* t, StkId key)
 {
   unsigned int asize = t->asize;
-  unsigned int i = findindex(L, t, (&(L)->stack.p[key]), asize); /* find original key */
+  TValue keyv = getslot(L, key);
+  unsigned int i = findindex(L, t, &keyv, asize); /* find original key */
   for (; i < asize; i++)
   { /* try first array part */
     lu_byte tag = *getArrTag(t, i);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     { /* a non-empty entry? */
       setsloti(L, key, ((int)(i)) + 1);
-      farr2val(t, i, tag, (&(L)->stack.p[key + 1]));
+      TValue res;
+      farr2val(t, i, tag, &res);
+      setslot(L, key + 1, &res);
       return 1;
     }
   }
@@ -415,7 +418,9 @@ int luaH_next(lua_State* L, Table* t, StkId key)
     if (!((((&(gnode(t, i))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
     { /* a non-empty entry? */
       Node* n = gnode(t, i);
-      getnodekey(L, (&(L)->stack.p[key]), n);
+      TValue nk;
+      getnodekey(L, &nk, n);
+      setslot(L, key, &nk);
       setslot(L, key + 1, (&(n)->val));
       return 1;
     }

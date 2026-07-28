@@ -149,7 +149,7 @@ static int callbinTM(lua_State* L, const TValue* p1, const TValue* p2,
 }
 
 void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
-                   StkId res, TMS event)
+                   StkId res, TMS event, StkId src1, StkId src2)
 {
   if (l_unlikely(callbinTM(L, p1, p2, res, event) < 0))
   {
@@ -163,13 +163,13 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
     case TM_BNOT:
     {
       if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((p2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
-        luaG_tointerror(L, p1, p2);
+        luaG_tointerror(L, p1, p2, src1, src2);
       else
-        luaG_opinterror(L, p1, p2, "perform bitwise operation on");
+        luaG_opinterror(L, p1, p2, "perform bitwise operation on", src1, src2);
     }
     /* calls never return, but to avoid warnings: */ /* FALLTHROUGH */
     default:
-      luaG_opinterror(L, p1, p2, "perform arithmetic on");
+      luaG_opinterror(L, p1, p2, "perform arithmetic on", src1, src2);
     }
   }
 }
@@ -181,25 +181,27 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
 void luaT_tryconcatTM(lua_State* L)
 {
   StkId p1 = L->top - 2; /* first argument */
-  if (l_unlikely(callbinTM(L, (&(L)->stack.p[p1]), (&(L)->stack.p[p1 + 1]), p1, TM_CONCAT) < 0))
-    luaG_concaterror(L, (&(L)->stack.p[p1]), (&(L)->stack.p[p1 + 1]));
+  TValue v1 = getslot(L, p1);
+  TValue v2 = getslot(L, p1 + 1);
+  if (l_unlikely(callbinTM(L, &v1, &v2, p1, TM_CONCAT) < 0))
+    luaG_concaterror(L, &v1, &v2, p1, p1 + 1); /* no call was made; rows still valid */
 }
 
 void luaT_trybinassocTM(lua_State* L, const TValue* p1, const TValue* p2,
-                        int flip, StkId res, TMS event)
+                        int flip, StkId res, TMS event, StkId src1)
 {
   if (flip)
-    luaT_trybinTM(L, p2, p1, res, event);
+    luaT_trybinTM(L, p2, p1, res, event, NOSLOT, src1);
   else
-    luaT_trybinTM(L, p1, p2, res, event);
+    luaT_trybinTM(L, p1, p2, res, event, src1, NOSLOT);
 }
 
 void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
-                    int flip, StkId res, TMS event)
+                    int flip, StkId res, TMS event, StkId src1)
 {
   TValue aux;
   setivalue(&aux, i2);
-  luaT_trybinassocTM(L, p1, &aux, flip, res, event);
+  luaT_trybinassocTM(L, p1, &aux, flip, res, event, src1);
 }
 
 /*
@@ -254,7 +256,10 @@ static void createvarargtab(lua_State* L, StkId f, int n)
      cannot trigger a garbage collection */
   luaH_set(L, t, &key, &value); /* t.n = n */
   for (i = 0; i < n; i++)
-    luaH_setint(L, t, i + 1, (&(L)->stack.p[f + i]));
+  {
+    TValue v = getslot(L, f + i); /* original slot anchors the value */
+    luaH_setint(L, t, i + 1, &v);
+  }
   luaC_checkGC(L);
 }
 
@@ -387,9 +392,12 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
   { /* get vararg values from vararg table */
     for (i = 0; i < touse; i++)
     {
-      lu_byte tag = luaH_getint(h, i + 1, (&(L)->stack.p[where + i]));
+      TValue res;
+      lu_byte tag = luaH_getint(h, i + 1, &res);
       if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         setslottag(L, where + i, LUA_VNIL);
+      else
+        setslot(L, where + i, &res);
     }
   }
   for (; i < wanted; i++) /* complete required results with nil */

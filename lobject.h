@@ -99,6 +99,9 @@ typedef TValue StackValue;
 /* index to stack elements (integer offset from stack base) */
 typedef size_t StkId;
 
+/* sentinel for "value does not come from a stack slot" (error attribution) */
+constexpr StkId NOSLOT = ~(StkId)0;
+
 /*
 ** {==================================================================
 ** Nil

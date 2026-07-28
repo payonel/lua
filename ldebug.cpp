@@ -443,33 +443,33 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   int status;
   Closure* cl;
   CallInfo* ci;
-  TValue* func;
+  TValue func; /* row copy of the function value */
   lua_lock(L);
   if (*what == '>')
   {
     ci = nullptr;
-    func = (&(L)->stack.p[L->top - 1]);
-    assert(((((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION)) && "function expected");
+    func = getslot(L, L->top - 1);
+    assert(((((&func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION)) && "function expected");
     what++;     /* skip the '>' */
     L->top--; /* pop function */
   }
   else
   {
     ci = ar->i_ci;
-    func = (&(L)->stack.p[ci->func]);
-    assert((((func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
+    func = getslot(L, ci->func);
+    assert((((&func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
   }
-  if ((func)->tt_ == ctb(LUA_VLCL) || (func)->tt_ == ctb(LUA_VCCL))
+  if ((&func)->tt_ == ctb(LUA_VLCL) || (&func)->tt_ == ctb(LUA_VCCL))
   {
-    assert((gcvalue(func)->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
-    cl = clvalue(func);
+    assert((gcvalue(&func)->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
+    cl = clvalue(&func);
   }
   else
     cl = nullptr;
   status = auxgetinfo(L, what, ar, cl, ci);
   if (strchr(what, 'f'))
   {
-    setslot(L, L->top, func);
+    setslot(L, L->top, &func);
     api_incr_top(L);
   }
   if (strchr(what, 'L'))
@@ -839,21 +839,34 @@ static const char* formatvarinfo(lua_State* L, const char* kind,
 
 /*
 ** Build a string with a "description" for the value 'o', such as
-** "variable 'x'" or "upvalue 'y'".
+** "variable 'x'" or "upvalue 'y'". 'src' is the value's origin: its
+** stack index when it lives in the current frame, or -1. An explicit
+** origin drives attribution directly; the pointer-identity fallback
+** below it is transitional (callers not yet threading origins).
 */
-static const char* varinfo(lua_State* L, const TValue* o)
+static const char* varinfo(lua_State* L, const TValue* o, StkId src)
 {
   CallInfo* ci = L->ci;
   const char* name = nullptr; /* to avoid warnings */
   const char* kind = nullptr;
   if (isLua(ci))
   {
-    kind = getupvalname(L, ci, o, &name); /* check whether 'o' is an upvalue */
-    if (!kind)
-    {                           /* not an upvalue? */
-      int reg = instack(L, ci, o); /* try a register */
-      if (reg >= 0)             /* is 'o' a register? */
-        kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci), reg, &name);
+    if (src != NOSLOT)
+    { /* explicit origin: a register of the current frame */
+      StkId base = ci->func + 1;
+      if (src >= base && src < ci->top)
+        kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci),
+                          (int)(src - base), &name);
+    }
+    else
+    {
+      kind = getupvalname(L, ci, o, &name); /* check whether 'o' is an upvalue */
+      if (!kind)
+      {                           /* not an upvalue? */
+        int reg = instack(L, ci, o); /* try a register */
+        if (reg >= 0)             /* is 'o' a register? */
+          kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci), reg, &name);
+      }
     }
   }
   return formatvarinfo(L, kind, name);
@@ -873,9 +886,9 @@ static l_noret typeerror(lua_State* L, const TValue* o, const char* op,
 ** Raise a type error with "standard" information about the faulty
 ** object 'o' (using 'varinfo').
 */
-l_noret luaG_typeerror(lua_State* L, const TValue* o, const char* op)
+l_noret luaG_typeerror(lua_State* L, const TValue* o, const char* op, StkId src)
 {
-  typeerror(L, o, op, varinfo(L, o));
+  typeerror(L, o, op, varinfo(L, o, src));
 }
 
 /*
@@ -883,12 +896,12 @@ l_noret luaG_typeerror(lua_State* L, const TValue* o, const char* op)
 ** for the object based on how it was called ('funcnamefromcall'); if it
 ** cannot get a name there, try 'varinfo'.
 */
-l_noret luaG_callerror(lua_State* L, const TValue* o)
+l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
 {
   CallInfo* ci = L->ci;
   const char* name = nullptr; /* to avoid warnings */
   const char* kind = funcnamefromcall(L, ci, &name);
-  const char* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, o);
+  const char* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, o, src);
   typeerror(L, o, "call", extra);
 }
 
@@ -898,31 +911,43 @@ l_noret luaG_forerror(lua_State* L, const TValue* o, const char* what)
                 FmtArgs().str(what).str(luaT_objtypename(L, o)));
 }
 
-l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2)
+l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2,
+                         StkId src1, StkId src2)
 {
   if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(p1))
+  {
     p1 = p2;
-  luaG_typeerror(L, p1, "concatenate");
+    src1 = src2;
+  }
+  luaG_typeerror(L, p1, "concatenate", src1);
 }
 
 l_noret luaG_opinterror(lua_State* L, const TValue* p1,
-                        const TValue* p2, const char* msg)
+                        const TValue* p2, const char* msg,
+                        StkId src1, StkId src2)
 {
   if (!(((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) /* first operand is wrong? */
+  {
     p2 = p1;           /* now second is wrong */
-  luaG_typeerror(L, p2, msg);
+    src2 = src1;
+  }
+  luaG_typeerror(L, p2, msg, src2);
 }
 
 /*
 ** Error when both values are convertible to numbers, but not to integers
 */
-l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2)
+l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2,
+                        StkId src1, StkId src2)
 {
   lua_Integer temp;
   if (!luaV_tointegerns(p1, &temp, LUA_FLOORN2I))
+  {
     p2 = p1;
+    src2 = src1;
+  }
   luaG_runerror(L, "number%s has no integer representation",
-                FmtArgs().str(varinfo(L, p2)));
+                FmtArgs().str(varinfo(L, p2, src2)));
 }
 
 l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)

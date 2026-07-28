@@ -78,10 +78,11 @@ LUAI_FUNC int luaV_tointeger(const TValue* obj, lua_Integer* p, F2Imod mode);
 LUAI_FUNC int luaV_tointegerns(const TValue* obj, lua_Integer* p,
                                F2Imod mode);
 LUAI_FUNC int luaV_flttointeger(lua_Number n, lua_Integer* p, F2Imod mode);
+/* 'tsrc' is the origin of 't' for error attribution (stack index or -1) */
 LUAI_FUNC lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
-                                 StkId val, lu_byte tag);
+                                 StkId val, lu_byte tag, StkId tsrc = NOSLOT);
 LUAI_FUNC void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
-                              TValue* val, int aux);
+                              TValue* val, int aux, StkId tsrc = NOSLOT);
 LUAI_FUNC void luaV_finishOp(lua_State* L);
 LUAI_FUNC void luaV_execute(lua_State* L, CallInfo* ci);
 LUAI_FUNC void luaV_concat(lua_State* L, int total);
@@ -89,7 +90,7 @@ LUAI_FUNC lua_Integer luaV_idiv(lua_State* L, lua_Integer x, lua_Integer y);
 LUAI_FUNC lua_Integer luaV_mod(lua_State* L, lua_Integer x, lua_Integer y);
 LUAI_FUNC lua_Number luaV_modf(lua_State* L, lua_Number x, lua_Number y);
 LUAI_FUNC lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y);
-LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, const TValue* rb);
+LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src = NOSLOT);
 
 static l_forceinline int tonumber(const TValue* o, lua_Number* nout)
 {
@@ -137,6 +138,29 @@ static l_forceinline int tointegerns(const TValue* o, lua_Integer* iout)
   return luaV_tointegerns(o, iout, LUA_FLOORN2I);
 }
 
+/*
+** Slot-form overloads of the conversion predicates: read the slot by
+** value and dispatch on the row copy, so callers never hold a pointer
+** into the stack. (In the managed port these become frame-index reads.)
+*/
+static l_forceinline int tonumber(lua_State* L, StkId idx, lua_Number* nout)
+{
+  TValue v = getslot(L, idx);
+  return tonumber(&v, nout);
+}
+
+static l_forceinline int tonumberns(lua_State* L, StkId idx, lua_Number* nout)
+{
+  TValue v = getslot(L, idx);
+  return tonumberns(&v, nout);
+}
+
+static l_forceinline int tointegerns(lua_State* L, StkId idx, lua_Integer* iout)
+{
+  TValue v = getslot(L, idx);
+  return tointegerns(&v, iout);
+}
+
 static inline int luaV_rawequalobj(const TValue* t1, const TValue* t2)
 {
   return luaV_equalobj(nullptr, t1, t2);
@@ -146,6 +170,13 @@ static inline void luaV_finishfastset(lua_State* L, const TValue* t, const TValu
 {
   assert(t->tt_ & BIT_ISCOLLECTABLE);
   luaC_barrierback(L, gcvalue(t), v);
+}
+
+/* slot-form overload: the table operand is read by value from its slot */
+static inline void luaV_finishfastset(lua_State* L, StkId t, const TValue* v)
+{
+  TValue tv = getslot(L, t);
+  luaV_finishfastset(L, &tv, v);
 }
 
 static inline lua_Integer luaV_shiftr(lua_Integer x, lua_Integer y)

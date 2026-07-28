@@ -166,7 +166,8 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
 */
 static void checkclosemth(lua_State* L, StkId level)
 {
-  const TValue* tm = luaT_gettmbyobj(L, (&(L)->stack.p[level]), TM_CLOSE);
+  TValue lv = getslot(L, level);
+  const TValue* tm = luaT_gettmbyobj(L, &lv, TM_CLOSE);
   if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                            /* no metamethod? */
     int idx = ((int)(level - L->ci->func)); /* variable index */
@@ -189,21 +190,24 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
                              int yy)
 {
   StkId uv = level; /* value being closed */
-  TValue* errobj;
+  TValue errobj;    /* row copy of the error object, valid when 'haserr' */
+  int haserr;
   switch (status)
   {
   case LUA_OK:
     L->top = level + 1; /* call will be at this level */
     /* FALLTHROUGH */
   case CLOSEKTOP:  /* don't need to change top */
-    errobj = nullptr; /* no error object */
+    haserr = 0; /* no error object */
     break;
   default:                                  /* 'luaD_seterrorobj' will set top to level + 2 */
-    errobj = (&(L)->stack.p[level + 1]);                /* error object goes after 'uv' */
-    luaD_seterrorobj(L, status, level + 1); /* set error object */
+    luaD_seterrorobj(L, status, level + 1); /* set error object after 'uv' */
+    errobj = getslot(L, level + 1);
+    haserr = 1;
     break;
   }
-  callclosemethod(L, slotrow(L, uv), errobj, yy);
+  TValue uvv = getslot(L, uv);
+  callclosemethod(L, &uvv, haserr ? &errobj : nullptr, yy);
 }
 
 /*
@@ -243,7 +247,8 @@ void luaF_closeupval(lua_State* L, StkId level)
     TValue* slot = &uv->value; /* new position for value */
     assert(uplevel(uv) < L->top);
     luaF_unlinkupval(uv);       /* remove upvalue from 'openupval' list */
-    setobj(L, slot, (&(L)->stack.p[uv->stkid])); /* move value to upvalue slot */
+    TValue v = getslot(L, uv->stkid);
+    setobj(L, slot, &v); /* move value to upvalue slot */
     uv->previous = nullptr;        /* mark as closed */
     uv->opennext = nullptr;
     uv->owner = nullptr;
