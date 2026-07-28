@@ -171,8 +171,7 @@ LUA_API void lua_xmove(lua_State* from, lua_State* to, int n)
   from->top -= n;
   for (i = 0; i < n; i++)
   {
-    TValue v = getslot(from, from->top + i); /* cross-stack transport by row copy */
-    setslot(to, to->top, &v);
+    copyslot(to, to->top, from, from->top + i); /* cross-stack transfer */
     to->top++; /* stack already checked by previous 'api_check' */
   }
   lua_unlock(to);
@@ -388,9 +387,7 @@ LUA_API void lua_arith(lua_State* L, int op)
     api_incr_top(L);
   }
   /* first operand at top - 2, second at top - 1; result go to top - 2 */
-  TValue p1 = getslot(L, L->top - 2);
-  TValue p2 = getslot(L, L->top - 1);
-  luaO_arith(L, op, &p1, &p2, L->top - 2);
+  luaO_arith(L, op, L->top - 2, L->top - 1, L->top - 2);
   L->top--; /* pop second operand */
   lua_unlock(L);
 }
@@ -788,8 +785,7 @@ LUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
     cl->f = fn;
     for (i = 0; i < n; i++)
     {
-      TValue v = getslot(L, L->top - n + i);
-      setobj(L, &cl->upvalue[i], &v);
+      setobj(L, &cl->upvalue[i], L->top - n + i);
       /* does not need barrier because closure is white */
       assert(iswhite(cl));
     }

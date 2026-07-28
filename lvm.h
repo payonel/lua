@@ -23,6 +23,13 @@ static inline int cvt2str(const TValue* o)
 }
 #endif
 
+/* slot form */
+static inline int cvt2str(lua_State* L, StkId idx)
+{
+  TValue v = getslot(L, idx);
+  return cvt2str(&v);
+}
+
 static inline int cvt2num(const TValue* o)
 {
   return (o->tt_ & NOVARIANT_MASK) == LUA_TSTRING;
@@ -71,6 +78,7 @@ constexpr F2Imod LUA_FLOORN2I = F2Ieq;
 */
 
 LUAI_FUNC int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2);
+LUAI_FUNC int luaV_equalobj(lua_State* L, StkId t1, StkId t2); /* slot form */
 LUAI_FUNC int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r);
 LUAI_FUNC int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r);
 LUAI_FUNC int luaV_tonumber_(const TValue* obj, lua_Number* n);
@@ -91,6 +99,7 @@ LUAI_FUNC lua_Integer luaV_mod(lua_State* L, lua_Integer x, lua_Integer y);
 LUAI_FUNC lua_Number luaV_modf(lua_State* L, lua_Number x, lua_Number y);
 LUAI_FUNC lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y);
 LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src);
+LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, StkId rb); /* slot form */
 
 static l_forceinline int tonumber(const TValue* o, lua_Number* nout)
 {
@@ -164,6 +173,13 @@ static l_forceinline int tointegerns(lua_State* L, StkId idx, lua_Integer* iout)
 static inline int luaV_rawequalobj(const TValue* t1, const TValue* t2)
 {
   return luaV_equalobj(nullptr, t1, t2);
+}
+
+/* slot form: first operand named by stack index */
+static inline int luaV_rawequalobj(lua_State* L, StkId t1, const TValue* t2)
+{
+  TValue v1 = getslot(L, t1);
+  return luaV_equalobj(nullptr, &v1, t2);
 }
 
 static inline void luaV_finishfastset(lua_State* L, const TValue* t, const TValue* v)

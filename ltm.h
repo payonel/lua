@@ -75,6 +75,7 @@ static l_forceinline const char* ttypename(int x)
 LUAI_FUNC const char* luaT_objtypename(lua_State* L, const TValue* o);
 
 LUAI_FUNC const TValue* luaT_gettm(Table* events, TMS event, TString* ename);
+LUAI_FUNC const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event); /* slot form */
 LUAI_FUNC const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o,
                                         TMS event);
 LUAI_FUNC void luaT_init(lua_State* L);
@@ -91,20 +92,30 @@ LUAI_FUNC lu_byte luaT_callTMres(lua_State* L, const TValue* f,
 LUAI_FUNC void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
                              StkId res, TMS event,
                              StkId src1, StkId src2);
+/* slot-form overloads: operands named by stack index (no row at the site) */
+LUAI_FUNC void luaT_trybinTM(lua_State* L, StkId p1, StkId p2,
+                             StkId res, TMS event);
 LUAI_FUNC void luaT_tryconcatTM(lua_State* L);
 LUAI_FUNC void luaT_trybinassocTM(lua_State* L, const TValue* p1,
                                   const TValue* p2, int inv, StkId res, TMS event,
                                   StkId src1);
+LUAI_FUNC void luaT_trybinassocTM(lua_State* L, StkId p1,
+                                  const TValue* p2, int inv, StkId res, TMS event);
 LUAI_FUNC void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
                               int inv, StkId res, TMS event,
                               StkId src1);
+LUAI_FUNC void luaT_trybiniTM(lua_State* L, StkId p1, lua_Integer i2,
+                              int inv, StkId res, TMS event);
 LUAI_FUNC int luaT_callorderTM(lua_State* L, const TValue* p1,
                                const TValue* p2, TMS event);
+LUAI_FUNC int luaT_callorderiTM(lua_State* L, StkId p1, int v2,
+                                int inv, int isfloat, TMS event);
 LUAI_FUNC int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
                                 int inv, int isfloat, TMS event);
 
 LUAI_FUNC void luaT_adjustvarargs(lua_State* L, struct CallInfo* ci,
                                   const Proto* p);
 LUAI_FUNC void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc);
+LUAI_FUNC void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, StkId rc); /* slot form */
 LUAI_FUNC void luaT_getvarargs(lua_State* L, struct CallInfo* ci, StkId where,
                                int wanted, int vatab);

@@ -82,6 +82,13 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
   return (mt ? luaH_Hgetshortstr(mt, G(L)->tmname[event]) : &G(L)->nilvalue);
 }
 
+/* slot form */
+const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event)
+{
+  TValue v = getslot(L, o);
+  return luaT_gettmbyobj(L, &v, event);
+}
+
 /*
 ** Return the name of the type of an object. For tables and userdata
 ** with metatable, use their '__name' metafield, if present.
@@ -205,6 +212,32 @@ void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
 }
 
 /*
+** Slot-form overloads: operands are named by stack index; the row is
+** materialized here, once, at the storage boundary. (In the managed
+** port these bodies read the operand columns directly.)
+*/
+void luaT_trybinTM(lua_State* L, StkId p1, StkId p2, StkId res, TMS event)
+{
+  TValue v1 = getslot(L, p1);
+  TValue v2 = getslot(L, p2);
+  luaT_trybinTM(L, &v1, &v2, res, event, p1, p2);
+}
+
+void luaT_trybinassocTM(lua_State* L, StkId p1, const TValue* p2,
+                        int flip, StkId res, TMS event)
+{
+  TValue v1 = getslot(L, p1);
+  luaT_trybinassocTM(L, &v1, p2, flip, res, event, p1);
+}
+
+void luaT_trybiniTM(lua_State* L, StkId p1, lua_Integer i2,
+                    int flip, StkId res, TMS event)
+{
+  TValue v1 = getslot(L, p1);
+  luaT_trybiniTM(L, &v1, i2, flip, res, event, p1);
+}
+
+/*
 ** Calls an order tag method.
 */
 int luaT_callorderTM(lua_State* L, const TValue* p1, const TValue* p2,
@@ -236,6 +269,13 @@ int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
   else
     p2 = &aux;
   return luaT_callorderTM(L, p1, p2, event);
+}
+
+int luaT_callorderiTM(lua_State* L, StkId p1, int v2,
+                      int flip, int isfloat, TMS event)
+{
+  TValue v1 = getslot(L, p1);
+  return luaT_callorderiTM(L, &v1, v2, flip, isfloat, event);
 }
 
 /*
@@ -334,6 +374,13 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
     }
   }
   setslottag(L, ra, LUA_VNIL); /* else produce nil */
+}
+
+/* slot form */
+void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, StkId rc)
+{
+  TValue v = getslot(L, rc);
+  luaT_getvararg(L, ci, ra, &v);
 }
 
 /*

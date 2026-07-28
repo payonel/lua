@@ -255,9 +255,13 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   }
 }
 
-void luaO_arith(lua_State* L, int op, const TValue* p1, const TValue* p2,
+void luaO_arith(lua_State* L, int op, StkId p1slot, StkId p2slot,
                 StkId res)
 {
+  TValue p1v = getslot(L, p1slot);
+  TValue p2v = getslot(L, p2slot);
+  const TValue* p1 = &p1v;
+  const TValue* p2 = &p2v;
   TValue r;
   if (!luaO_rawarith(L, op, p1, p2, &r))
   {

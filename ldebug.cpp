@@ -443,33 +443,33 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   int status;
   Closure* cl;
   CallInfo* ci;
-  TValue func; /* row copy of the function value */
+  StkId func; /* slot of the function value (see note below for '>') */
   lua_lock(L);
   if (*what == '>')
   {
     ci = nullptr;
-    func = getslot(L, L->top - 1);
-    assert(((((&func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION)) && "function expected");
+    func = L->top - 1;
+    assert((slottag(L, func) & NOVARIANT_MASK) == LUA_TFUNCTION && "function expected");
     what++;     /* skip the '>' */
-    L->top--; /* pop function */
+    L->top--; /* pop function; the slot stays intact (nothing below pushes) */
   }
   else
   {
     ci = ar->i_ci;
-    func = getslot(L, ci->func);
-    assert((((&func)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION));
+    func = ci->func;
+    assert((slottag(L, func) & NOVARIANT_MASK) == LUA_TFUNCTION);
   }
-  if ((&func)->tt_ == ctb(LUA_VLCL) || (&func)->tt_ == ctb(LUA_VCCL))
+  if (slottag(L, func) == ctb(LUA_VLCL) || slottag(L, func) == ctb(LUA_VCCL))
   {
-    assert((gcvalue(&func)->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
-    cl = clvalue(&func);
+    cl = slotclval(L, func);
+    assert((cl->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
   }
   else
     cl = nullptr;
   status = auxgetinfo(L, what, ar, cl, ci);
   if (strchr(what, 'f'))
   {
-    setslot(L, L->top, &func);
+    copyslot(L, L->top, func);
     api_incr_top(L);
   }
   if (strchr(what, 'L'))

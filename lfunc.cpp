@@ -166,8 +166,7 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
 */
 static void checkclosemth(lua_State* L, StkId level)
 {
-  TValue lv = getslot(L, level);
-  const TValue* tm = luaT_gettmbyobj(L, &lv, TM_CLOSE);
+  const TValue* tm = luaT_gettmbyobj(L, level, TM_CLOSE);
   if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                            /* no metamethod? */
     int idx = ((int)(level - L->ci->func)); /* variable index */
@@ -247,8 +246,7 @@ void luaF_closeupval(lua_State* L, StkId level)
     TValue* slot = &uv->value; /* new position for value */
     assert(uplevel(uv) < L->top);
     luaF_unlinkupval(uv);       /* remove upvalue from 'openupval' list */
-    TValue v = getslot(L, uv->stkid);
-    setobj(L, slot, &v); /* move value to upvalue slot */
+    setobj(L, slot, uv->stkid); /* move value to upvalue slot */
     uv->previous = nullptr;        /* mark as closed */
     uv->opennext = nullptr;
     uv->owner = nullptr;

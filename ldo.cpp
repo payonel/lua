@@ -442,10 +442,9 @@ static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
 {
   const TValue* tm;
   StkId p;
-  TValue fv = getslot(L, func);
-  tm = luaT_gettmbyobj(L, &fv, TM_CALL);
+  tm = luaT_gettmbyobj(L, func, TM_CALL);
   if (l_unlikely((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))) /* no metamethod? */
-    luaG_callerror(L, &fv, func);
+    luaG_callerror(L, func);
   for (p = L->top; p > func; p--) /* open space for metamethod */
     copyslot(L, p, p - 1);
   L->top++;                          /* stack space pre-allocated by the caller */

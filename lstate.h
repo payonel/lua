@@ -326,9 +326,29 @@ static l_forceinline global_State* G(lua_State* L)
 ** section may derive a TValue* from a stack index. This is the
 ** Truffle frame API shape — getInt(slot)/setObject(slot)/getTag(slot)
 ** — and the transpose to parallel prim/ref/tag columns happens
-** entirely inside these bodies. 'slotrow' is the bridge to the row
-** form and must not escape this section's callers as a long-lived
-** pointer: a row copy ('getslot') is the currency for locals.
+** entirely inside these bodies.
+**
+** Access contract (binding for call sites and for the managed port):
+** - The default currency for a stack value is its NAME: the (L, StkId)
+**   handle. Prefer typed reads (slottag, slotival, slothval, ...) and
+**   slot-form function overloads; prefer copyslot/setobj-from-slot for
+**   transfers. None of these materialize a row at the call site.
+** - 'getslot' returns a SNAPSHOT: a shallow row copy — the ref field
+**   is shared, referents are NEVER cloned; deep copy does not exist
+**   in this codebase. Snapshots are immutable by convention (mutate a
+**   local only to store it back through a set) and are passed by
+**   pointer/reference; in the managed port a snapshot is one Value
+**   object and everything downstream is an ordinary reference.
+** - A row at a call site must be JUSTIFIED by one of: (a) the callee
+**   parameter is storage-polymorphic (may receive slots, constants,
+**   table cells, or upvalues — e.g. luaH_* keys/values,
+**   luaV_finishget/finishset operands); (b) the value is consumed
+**   more than once or across a write that may alias its slot
+**   (snapshot semantics); (c) read-modify-write (materialize, modify,
+**   store back). Single-consumer slot-sourced reads should use a
+**   slot-form overload instead — add one rather than materializing.
+** - 'slotrow' is the transitional bridge to the row form and must not
+**   escape this section; it dies with the transpose (step D).
 ** ===================================================================
 */
 
@@ -365,6 +385,19 @@ static l_forceinline void setslot(lua_State* L, StkId idx, const TValue* v)
 static l_forceinline void copyslot(lua_State* L, StkId dst, StkId src)
 {
   setslot(L, dst, &L->stack.p[src]);
+}
+
+/* cross-stack transfer: slot of 'from' -> slot of 'to' (no row at the site) */
+static l_forceinline void copyslot(lua_State* to, StkId dst, lua_State* from, StkId src)
+{
+  setslot(to, dst, &from->stack.p[src]);
+}
+
+/* transfer a slot's value into non-stack row storage (upvalue cells,
+** C-closure upvalues, userdata fields) — no row at the site */
+static l_forceinline void setobj(lua_State* L, TValue* dst, StkId src)
+{
+  setobj(L, dst, &L->stack.p[src]);
 }
 
 /* typed reads */

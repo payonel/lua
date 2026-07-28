@@ -173,9 +173,11 @@ int luaV_tointeger(const TValue* obj, lua_Integer* p, F2Imod mode)
 ** correct; even a limit of LUA_MININTEGER would run the loop once for
 ** an initial value equal to LUA_MININTEGER.)
 */
-static int forlimit(lua_State* L, lua_Integer init, const TValue* lim,
+static int forlimit(lua_State* L, lua_Integer init, StkId limslot,
                     lua_Integer* p, lua_Integer step)
 {
+  TValue limv = getslot(L, limslot);
+  const TValue* lim = &limv;
   if (!luaV_tointeger(lim, p, (step < 0 ? F2Iceil : F2Ifloor)))
   {
     /* not coercible to in integer */
@@ -223,8 +225,7 @@ static int forprep(lua_State* L, StkId ra)
     lua_Integer limit;
     if (step == 0)
       luaG_runerror(L, "'for' step is zero");
-    TValue vlimit = getslot(L, plimit);
-    if (forlimit(L, init, &vlimit, &limit, step))
+    if (forlimit(L, init, plimit, &limit, step))
       return 1; /* skip the loop */
     else
     { /* prepare loop counter */
@@ -784,6 +785,14 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
   }
 }
 
+/* slot form: operands named by stack index; rows materialized once here */
+int luaV_equalobj(lua_State* L, StkId t1, StkId t2)
+{
+  TValue v1 = getslot(L, t1);
+  TValue v2 = getslot(L, t2);
+  return luaV_equalobj(L, &v1, &v2);
+}
+
 /* macro used by 'luaV_concat' to ensure that element at 'o' is a string */
 
 /*
@@ -848,8 +857,7 @@ void luaV_concat(lua_State* L, int total)
     int n = 2; /* number of elements handled in this pass (at least 2) */
     StkId v1 = top - 2;
     StkId v2 = top - 1;
-    TValue v1v = getslot(L, v1);
-    if (!(((slottag(L, v1) & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(&v1v)) || !tostring(L, v2))
+    if (!(((slottag(L, v1) & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(L, v1)) || !tostring(L, v2))
       luaT_tryconcatTM(L);                  /* may invalidate 'top' */
     else if (isemptystr(L, v2))                /* second operand is empty? */
       (void)tostring(L, v1);                /* result is first operand */
@@ -927,6 +935,13 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src)
   }
   }
   luaT_callTMres(L, tm, rb, rb, ra);
+}
+
+/* slot form */
+void luaV_objlen(lua_State* L, StkId ra, StkId rb)
+{
+  TValue v = getslot(L, rb);
+  luaV_objlen(L, ra, &v, rb);
 }
 
 /*
@@ -1403,7 +1418,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         UpVal* uv = cl->upvals[GETARG_B(i)];
-        TValue rav = getslot(L, ra);
+        TValue rav = getslot(L, ra); /* row: consumed twice (store + GC barrier) */
         upvalsetval(L, uv, &rav);
         luaC_barrier(L, uv, &rav);
         break;
@@ -1463,11 +1478,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           tag = LUA_VNOTABLE;
         else
         {
-          TValue rcv = getslot(L, rc);
+          TValue rcv = getslot(L, rc); /* row: key crosses into stack-agnostic table code */
           tag = luaH_get(slothval(L, rb), &rcv, &res);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
+          /* rows: finishget's operands are storage-polymorphic (slot/upvalue/
+             metatable cell) and it writes slot 'ra', which may alias rb/rc */
           TValue rbv = getslot(L, rb);
           TValue rcv = getslot(L, rc);
           ci->savedpc = pc;
@@ -1606,7 +1623,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
             hres = HNOTATABLE;
           else
           {
-            TValue rbv = getslot(L, rb);
+            TValue rbv = getslot(L, rb); /* row: key crosses into stack-agnostic table code */
             hres = luaH_pset(slothval(L, t), &rbv, &rc);
           }
         }
@@ -2244,9 +2261,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         assert(OP_ADD <= GET_OPCODE(pi) && GET_OPCODE(pi) <= OP_SHR);
         ci->savedpc = pc;
         L->top = ci->top;
-        TValue rav = getslot(L, ra);
-        TValue rbv = getslot(L, rb);
-        luaT_trybinTM(L, &rav, &rbv, result, tm, ra, rb);
+        luaT_trybinTM(L, ra, rb, result, tm);
         trap = ci->trap;
         break;
       }
@@ -2260,8 +2275,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId result = (base + GETARG_A(pi));
         ci->savedpc = pc;
         L->top = ci->top;
-        TValue rav = getslot(L, ra);
-        luaT_trybiniTM(L, &rav, imm, flip, result, tm, ra);
+        luaT_trybiniTM(L, ra, imm, flip, result, tm);
         trap = ci->trap;
         break;
       }
@@ -2275,8 +2289,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId result = (base + GETARG_A(pi));
         ci->savedpc = pc;
         L->top = ci->top;
-        TValue rav = getslot(L, ra);
-        luaT_trybinassocTM(L, &rav, imm, flip, result, tm, ra);
+        luaT_trybinassocTM(L, ra, imm, flip, result, tm);
         trap = ci->trap;
         break;
       }
@@ -2298,8 +2311,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          TValue rbv = getslot(L, rb);
-          luaT_trybinTM(L, &rbv, &rbv, ra, TM_UNM, rb, rb);
+          luaT_trybinTM(L, rb, rb, ra, TM_UNM);
           trap = ci->trap;
         }
         break;
@@ -2317,8 +2329,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          TValue rbv = getslot(L, rb);
-          luaT_trybinTM(L, &rbv, &rbv, ra, TM_BNOT, rb, rb);
+          luaT_trybinTM(L, rb, rb, ra, TM_BNOT);
           trap = ci->trap;
         }
         break;
@@ -2338,8 +2349,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         ci->savedpc = pc;
         L->top = ci->top;
-        TValue rbv = getslot(L, base + GETARG_B(i));
-        luaV_objlen(L, ra, &rbv, base + GETARG_B(i));
+        luaV_objlen(L, ra, base + GETARG_B(i));
         trap = ci->trap;
         break;
       }
@@ -2393,9 +2403,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId rb = (base + GETARG_B(i));
         ci->savedpc = pc;
         L->top = ci->top;
-        TValue rav = getslot(L, ra);
-        TValue rbv = getslot(L, rb);
-        cond = luaV_equalobj(L, &rav, &rbv);
+        cond = luaV_equalobj(L, ra, rb);
         trap = ci->trap;
         if (cond != GETARG_k(i))
           pc++;
@@ -2472,8 +2480,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         TValue* rb = (k + GETARG_B(i));
         /* basic types do not use '__eq'; we can use raw equality */
-        TValue rav = getslot(L, ra);
-        int cond = luaV_rawequalobj(&rav, rb);
+        int cond = luaV_rawequalobj(L, ra, rb);
         if (cond != GETARG_k(i))
           pc++;
         else
@@ -2523,8 +2530,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           int isf = GETARG_C(i);
           ci->savedpc = pc;
           L->top = ci->top;
-          TValue rav = getslot(L, ra);
-          cond = luaT_callorderiTM(L, &rav, im, 0, isf, TM_LT);
+          cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LT);
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2555,8 +2561,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           int isf = GETARG_C(i);
           ci->savedpc = pc;
           L->top = ci->top;
-          TValue rav = getslot(L, ra);
-          cond = luaT_callorderiTM(L, &rav, im, 0, isf, TM_LE);
+          cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LE);
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2587,8 +2592,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           int isf = GETARG_C(i);
           ci->savedpc = pc;
           L->top = ci->top;
-          TValue rav = getslot(L, ra);
-          cond = luaT_callorderiTM(L, &rav, im, 1, isf, TM_LT);
+          cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LT);
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2619,8 +2623,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           int isf = GETARG_C(i);
           ci->savedpc = pc;
           L->top = ci->top;
-          TValue rav = getslot(L, ra);
-          cond = luaT_callorderiTM(L, &rav, im, 1, isf, TM_LE);
+          cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LE);
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2940,7 +2943,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         for (; n > 0; n--)
         {
           StkId val = ra + n;
-          TValue vv = getslot(L, val);
+          TValue vv = getslot(L, val); /* row: consumed twice (table store + GC barrier) */
           obj2arr(h, last - 1, &vv);
           last--;
           assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
@@ -2981,8 +2984,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         StkId rc = (base + GETARG_C(i));
-        TValue rcv = getslot(L, rc);
-        luaT_getvararg(L, ci, ra, &rcv);
+        luaT_getvararg(L, ci, ra, rc);
         break;
       }
       case OP_ERRNNIL:
