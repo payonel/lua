@@ -157,8 +157,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     if ((luaH_getint(S->h, ((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
       error(S, "invalid string index");
     assert((stv.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    assert((stv.value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    *sl = ts = static_cast<TString*>(stv.value_.gc); /* get its value */
+    *sl = ts = tsvalue(&stv); /* get its value */
     luaC_objbarrier(L, p, ts);
     return; /* do not save it again */
   }

@@ -781,12 +781,12 @@ static void const2exp(TValue* v, expdesc* e)
   case LUA_VNUMINT:
     e->k = VKINT;
     assert(v->tt_ == LUA_VNUMINT);
-    e->ival = v->value_.i;
+    e->ival = ivalue(v);
     break;
   case LUA_VNUMFLT:
     e->k = VKFLT;
     assert(v->tt_ == LUA_VNUMFLT);
-    e->nval = v->value_.n;
+    e->nval = fltvalue(v);
     break;
   case LUA_VFALSE:
     e->k = VFALSE;
@@ -800,8 +800,7 @@ static void const2exp(TValue* v, expdesc* e)
   case LUA_VSHRSTR:
     e->k = VKSTR;
     assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    assert((v->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    e->strval = static_cast<TString*>(v->value_.gc);
+    e->strval = tsvalue(v);
     break;
   default:
     assert(0);
@@ -1575,7 +1574,7 @@ static int validop(int op, TValue* v1, TValue* v2)
   case LUA_OPMOD: /* division by 0 */
   {
     assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-    lua_Number n2 = (v2->tt_ == LUA_VNUMINT) ? (lua_Number)v2->value_.i : v2->value_.n;
+    lua_Number n2 = (v2->tt_ == LUA_VNUMINT) ? (lua_Number)ivalue(v2) : fltvalue(v2);
     return n2 != 0;
   }
   default:

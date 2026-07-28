@@ -599,16 +599,14 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
     {
     case LUA_VCCL: /* C closure */
     {
-      assert((&L->stack.p[func])->value_.gc->tt == LUA_VCCL);
-      CClosure* ccl = static_cast<CClosure*>((&L->stack.p[func])->value_.gc);
+      CClosure* ccl = clCvalue((&L->stack.p[func]));
       return precallC(L, func, status, ccl->f);
     }
     case LUA_VLCF: /* light C function */
-      return precallC(L, func, status, (&L->stack.p[func])->value_.f);
+      return precallC(L, func, status, fvalue((&L->stack.p[func])));
     case LUA_VLCL:
     { /* Lua function */
-      assert((&L->stack.p[func])->value_.gc->tt == LUA_VLCL);
-      Proto* p = static_cast<LClosure*>((&L->stack.p[func])->value_.gc)->p;
+      Proto* p = clLvalue((&L->stack.p[func]))->p;
       int fsize = p->maxstacksize; /* frame size */
       int nfixparams = p->numparams;
       int i;
@@ -655,19 +653,17 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
     {
     case LUA_VCCL: /* C closure */
     {
-      assert((&L->stack.p[func])->value_.gc->tt == LUA_VCCL);
-      CClosure* ccl = static_cast<CClosure*>((&L->stack.p[func])->value_.gc);
+      CClosure* ccl = clCvalue((&L->stack.p[func]));
       precallC(L, func, status, ccl->f);
       return nullptr;
     }
     case LUA_VLCF: /* light C function */
-      precallC(L, func, status, (&L->stack.p[func])->value_.f);
+      precallC(L, func, status, fvalue((&L->stack.p[func])));
       return nullptr;
     case LUA_VLCL:
     { /* Lua function */
       CallInfo* ci;
-      assert((&L->stack.p[func])->value_.gc->tt == LUA_VLCL);
-      Proto* p = static_cast<LClosure*>((&L->stack.p[func])->value_.gc)->p;
+      Proto* p = clLvalue((&L->stack.p[func]))->p;
       int narg = ((int)(L->top - func)) - 1; /* number of real arguments */
       int nfixparams = p->numparams;
       int fsize = p->maxstacksize; /* frame size */

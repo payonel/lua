@@ -299,6 +299,18 @@ static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
   checkliveness(L, obj);
 }
 
+/*
+** Read a thread value. Defined here rather than with the other get
+** functions in lobject.h because the downcast needs the complete
+** lua_State type.
+*/
+static l_forceinline lua_State* thvalue(const TValue* o)
+{
+  assert(o->tt_ == ctb(LUA_VTHREAD));
+  assert(o->value_.gc->tt == LUA_VTHREAD);
+  return static_cast<lua_State*>(o->value_.gc);
+}
+
 static l_forceinline global_State* G(lua_State* L)
 {
   return L->l_G;

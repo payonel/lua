@@ -407,8 +407,7 @@ void luaE_warnerror(lua_State* L, const char* where)
   const char* msg;
   if ((errobj->tt_ & NOVARIANT_MASK) == LUA_TSTRING)
   {
-    assert((errobj->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    msg = getstr(static_cast<TString*>(errobj->value_.gc));
+    msg = getstr(tsvalue(errobj));
   }
   else
     msg = "error object is not a string";

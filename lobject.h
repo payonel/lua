@@ -435,13 +435,6 @@ constexpr size_t sizeLclosure(int n)
   return sizeof(LClosure) + sizeof(UpVal*) * (unsigned int)n;
 }
 
-static l_forceinline Proto* getproto(const TValue* o)
-{
-  assert(o->tt_ == ctb(LUA_VLCL));
-  assert(o->value_.gc->tt == LUA_VLCL);
-  return static_cast<LClosure*>(o->value_.gc)->p;
-}
-
 /* }================================================================== */
 
 /*
@@ -502,6 +495,126 @@ static l_forceinline unsigned int sizenode(const Table* t)
 {
   return twoto(t->lsizenode);
 }
+
+/*
+** {==================================================================
+** Get functions — typed reads out of TValues
+**
+** The single seam over the value representation: every read of a
+** value's payload goes through one of these. The managed port swaps
+** the representation (parallel primitive/reference/tag arrays — the
+** Truffle frame design) behind these exact signatures; nothing
+** outside this section and the Set functions below may touch the
+** representation directly. Each accessor asserts the tag it reads
+** under — the same check the managed slot API performs — and the
+** GC-object accessors also cross-check the referent's own 'tt'
+** (in Java, that second check is the checked cast itself).
+** ===================================================================
+*/
+
+static l_forceinline lua_Integer ivalue(const TValue* o)
+{
+  assert(o->tt_ == LUA_VNUMINT);
+  return o->value_.i;
+}
+
+static l_forceinline lua_Number fltvalue(const TValue* o)
+{
+  assert(o->tt_ == LUA_VNUMFLT);
+  return o->value_.n;
+}
+
+/* number (integer or float) coerced to a float */
+static l_forceinline lua_Number nvalue(const TValue* o)
+{
+  assert(o->tt_ == LUA_VNUMINT || o->tt_ == LUA_VNUMFLT);
+  return (o->tt_ == LUA_VNUMINT) ? ((lua_Number)(o->value_.i))
+                                 : o->value_.n;
+}
+
+static l_forceinline void* pvalue(const TValue* o)
+{
+  assert(o->tt_ == LUA_VLIGHTUSERDATA);
+  return o->value_.p;
+}
+
+static l_forceinline lua_CFunction fvalue(const TValue* o)
+{
+  assert(o->tt_ == LUA_VLCF);
+  return o->value_.f;
+}
+
+static l_forceinline GCObject* gcvalue(const TValue* o)
+{
+  assert(o->tt_ & BIT_ISCOLLECTABLE);
+  return o->value_.gc;
+}
+
+static l_forceinline TString* tsvalue(const TValue* o)
+{
+  assert(o->tt_ == ctb(LUA_VSHRSTR) || o->tt_ == ctb(LUA_VLNGSTR));
+  assert((o->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  return static_cast<TString*>(o->value_.gc);
+}
+
+static l_forceinline Table* hvalue(const TValue* o)
+{
+  assert(o->tt_ == ctb(LUA_VTABLE));
+  assert(o->value_.gc->tt == LUA_VTABLE);
+  return static_cast<Table*>(o->value_.gc);
+}
+
+static l_forceinline Udata* uvalue(const TValue* o)
+{
+  assert(o->tt_ == ctb(LUA_VUSERDATA));
+  assert(o->value_.gc->tt == LUA_VUSERDATA);
+  return static_cast<Udata*>(o->value_.gc);
+}
+
+/* thvalue is defined in lstate.h (needs the complete lua_State) */
+
+static l_forceinline Closure* clvalue(const TValue* o)
+{
+  assert(o->tt_ == ctb(LUA_VLCL) || o->tt_ == ctb(LUA_VCCL));
+  assert(o->value_.gc->tt == LUA_VLCL || o->value_.gc->tt == LUA_VCCL);
+  return static_cast<Closure*>(o->value_.gc);
+}
+
+static l_forceinline LClosure* clLvalue(const TValue* o)
+{
+  assert(o->tt_ == ctb(LUA_VLCL));
+  assert(o->value_.gc->tt == LUA_VLCL);
+  return static_cast<LClosure*>(o->value_.gc);
+}
+
+static l_forceinline CClosure* clCvalue(const TValue* o)
+{
+  assert(o->tt_ == ctb(LUA_VCCL));
+  assert(o->value_.gc->tt == LUA_VCCL);
+  return static_cast<CClosure*>(o->value_.gc);
+}
+
+static l_forceinline Proto* getproto(const TValue* o)
+{
+  return clLvalue(o)->p;
+}
+
+/* node keys: the same seam over a Node's key representation */
+
+static l_forceinline GCObject* gckey(const Node* n)
+{
+  assert(n->key_tt & BIT_ISCOLLECTABLE);
+  return n->key_val.gc;
+}
+
+static l_forceinline TString* keystrval(const Node* n)
+{
+  assert(n->key_tt == ctb(LUA_VSHRSTR));
+  assert((n->key_val.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  return static_cast<TString*>(n->key_val.gc);
+}
+
+/* }================================================================== */
 
 /*
 ** {==================================================================

@@ -95,7 +95,7 @@ static l_forceinline int tonumber(const TValue* o, lua_Number* nout)
 {
   if (o->tt_ == LUA_VNUMFLT)
   {
-    *nout = o->value_.n;
+    *nout = fltvalue(o);
     return 1;
   }
   return luaV_tonumber_(o, nout);
@@ -106,12 +106,12 @@ static l_forceinline int tonumberns(const TValue* o, lua_Number* nout)
 {
   if (o->tt_ == LUA_VNUMFLT)
   {
-    *nout = o->value_.n;
+    *nout = fltvalue(o);
     return 1;
   }
   if (o->tt_ == LUA_VNUMINT)
   {
-    *nout = (lua_Number)o->value_.i;
+    *nout = (lua_Number)ivalue(o);
     return 1;
   }
   return 0;
@@ -121,7 +121,7 @@ static l_forceinline int tointeger(const TValue* o, lua_Integer* iout)
 {
   if (l_likely(o->tt_ == LUA_VNUMINT))
   {
-    *iout = o->value_.i;
+    *iout = ivalue(o);
     return 1;
   }
   return luaV_tointeger(o, iout, LUA_FLOORN2I);
@@ -131,7 +131,7 @@ static l_forceinline int tointegerns(const TValue* o, lua_Integer* iout)
 {
   if (l_likely(o->tt_ == LUA_VNUMINT))
   {
-    *iout = o->value_.i;
+    *iout = ivalue(o);
     return 1;
   }
   return luaV_tointegerns(o, iout, LUA_FLOORN2I);
@@ -145,7 +145,7 @@ static inline int luaV_rawequalobj(const TValue* t1, const TValue* t2)
 static inline void luaV_finishfastset(lua_State* L, const TValue* t, const TValue* v)
 {
   assert(t->tt_ & BIT_ISCOLLECTABLE);
-  luaC_barrierback(L, t->value_.gc, v);
+  luaC_barrierback(L, gcvalue(t), v);
 }
 
 static inline lua_Integer luaV_shiftr(lua_Integer x, lua_Integer y)

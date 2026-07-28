@@ -334,8 +334,7 @@ static void check_readonly(LexState* ls, expdesc* e)
     {
       TValue* kv = &fs->f->k[e->ind.keystr];
       assert((kv->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-      assert((kv->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-      varname = static_cast<TString*>(kv->value_.gc);
+      varname = tsvalue(kv);
     }
     break;
   }

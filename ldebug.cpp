@@ -193,9 +193,7 @@ static const char* upvalname(const Proto* p, int uv)
 static const char* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
 {
   TValue* fv = &L->stack.p[ci->func];
-  assert(fv->tt_ == ctb(LUA_VLCL));
-  assert(fv->value_.gc->tt == LUA_VLCL);
-  LClosure* cl = static_cast<LClosure*>(fv->value_.gc);
+  LClosure* cl = clLvalue(fv);
   if (cl->p->flag & PF_VAHID)
   {
     int nextra = ci->nextraargs;
@@ -246,8 +244,7 @@ LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
     else /* consider live variables at function start (parameters) */
     {
       TValue* fv = &L->stack.p[L->top - 1];
-      assert(fv->value_.gc->tt == LUA_VLCL);
-      name = luaF_getlocalname(static_cast<LClosure*>(fv->value_.gc)->p, n, 0);
+      name = luaF_getlocalname(clLvalue(fv)->p, n, 0);
     }
   }
   else
@@ -464,8 +461,8 @@ LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
   }
   if ((func)->tt_ == ctb(LUA_VLCL) || (func)->tt_ == ctb(LUA_VCCL))
   {
-    assert((func->value_.gc->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
-    cl = static_cast<Closure*>(func->value_.gc);
+    assert((gcvalue(func)->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
+    cl = clvalue(func);
   }
   else
     cl = nullptr;
@@ -558,8 +555,7 @@ static const char* kname(const Proto* p, int index, const char** name)
   TValue* kvalue = &p->k[index];
   if ((((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   {
-    assert((kvalue->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    *name = getstr(static_cast<TString*>(kvalue->value_.gc));
+    *name = getstr(tsvalue(kvalue));
     return "constant";
   }
   else

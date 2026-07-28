@@ -150,8 +150,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))     /* string already present? */
   {
     assert((oldts.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    assert((oldts.value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    return static_cast<TString*>(oldts.value_.gc); /* use stored value */
+    return tsvalue(&oldts); /* use stored value */
   }
   else
   {                                /* create a new entry */

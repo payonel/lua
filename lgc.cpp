@@ -69,13 +69,13 @@ static inline void set2black(GCObject* x)
 
 static inline int keyiswhite(const Node* n)
 {
-  return (n->key_tt & BIT_ISCOLLECTABLE) && iswhite(n->key_val.gc);
+  return (n->key_tt & BIT_ISCOLLECTABLE) && iswhite(gckey(n));
 }
 
 /* protected access to objects in values */
 static inline GCObject* gcvalueN(const TValue* o)
 {
-  return (o->tt_ & BIT_ISCOLLECTABLE) ? o->value_.gc : nullptr;
+  return (o->tt_ & BIT_ISCOLLECTABLE) ? gcvalue(o) : nullptr;
 }
 
 /* access to collectable objects in array part of tables */
@@ -87,14 +87,14 @@ static inline GCObject* gcvalarr(Table* t, unsigned int i)
 static inline void markvalue(global_State* g, TValue* o)
 {
   checkliveness(mainthread(g), o);
-  if ((o->tt_ & BIT_ISCOLLECTABLE) && iswhite(o->value_.gc))
-    reallymarkobject(g, o->value_.gc);
+  if ((o->tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(o)))
+    reallymarkobject(g, gcvalue(o));
 }
 
 static inline void markkey(global_State* g, Node* n)
 {
   if (keyiswhite(n))
-    reallymarkobject(g, n->key_val.gc);
+    reallymarkobject(g, gckey(n));
 }
 
 static inline void markobject(global_State* g, GCObject* t)
@@ -658,8 +658,7 @@ static int getmode(global_State* g, Table* h)
     return 0; /* ignore non-string modes */
   else
   {
-    assert((mode->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    const char* smode = getstr(static_cast<TString*>(mode->value_.gc));
+    const char* smode = getstr(tsvalue(mode));
     const char* weakkey = strchr(smode, 'k');
     const char* weakvalue = strchr(smode, 'v');
     return ((weakkey != nullptr) << 1) | (weakvalue != nullptr);

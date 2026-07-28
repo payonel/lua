@@ -12,9 +12,7 @@
 static l_forceinline LClosure* ci_func(lua_State* L, const CallInfo* ci)
 {
   const TValue* o = &L->stack.p[ci->func];
-  assert(o->tt_ == ctb(LUA_VLCL));
-  assert(o->value_.gc->tt == LUA_VLCL);
-  return static_cast<LClosure*>(o->value_.gc);
+  return clLvalue(o);
 }
 
 static l_forceinline void resethookcount(lua_State* L)

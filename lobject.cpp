@@ -45,7 +45,7 @@ int luaO_checkliveness(lua_State* L, const TValue* obj)
   if (obj->tt_ & BIT_ISCOLLECTABLE)
   {
     assert((((obj)->tt_ & WITHVARIANT_MASK) == ((obj)->value_).gc->tt));
-    assert(L == nullptr || !isdead(G(L), obj->value_.gc));
+    assert(L == nullptr || !isdead(G(L), gcvalue(obj)));
   }
   return 1;
 }
@@ -241,7 +241,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
     lua_Number n2;
     if (((p1)->tt_ == LUA_VNUMINT) && ((p2)->tt_ == LUA_VNUMINT))
     {
-      setivalue(res, intarith(L, op, p1->value_.i, p2->value_.i));
+      setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
       return 1;
     }
     else if (tonumberns(p1, &n1) && tonumberns(p2, &n2))
@@ -657,7 +657,7 @@ unsigned luaO_tostringbuff(const TValue* obj, char* buff)
   assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
   if (((obj)->tt_ == LUA_VNUMINT))
   {
-    std::string s = std::to_string(obj->value_.i);
+    std::string s = std::to_string(ivalue(obj));
     assert(s.size() < LUA_N2SBUFFSZ);
     memcpy(buff, s.c_str(), s.size() + 1);
     len = ((int)(s.size()));
@@ -665,7 +665,7 @@ unsigned luaO_tostringbuff(const TValue* obj, char* buff)
   else
   {
     assert(obj->tt_ == LUA_VNUMFLT);
-    len = tostringbuffFloat(obj->value_.n, buff);
+    len = tostringbuffFloat(fltvalue(obj), buff);
   }
   assert(len < LUA_N2SBUFFSZ);
   return ((unsigned int)(len));
@@ -757,8 +757,7 @@ static const char* clearbuff(BuffFS* buff)
   {
     TValue* s = &L->stack.p[L->top - 1]; /* result string is on the top of the stack */
     assert((s->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    assert((s->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-    res = getstr(static_cast<TString*>(s->value_.gc));
+    res = getstr(tsvalue(s));
   }
   if (buff->b != buff->space)                   /* using dynamic buffer? */
     luaM_free_(L, (buff->b), (buff->buffsize) * sizeof(*(buff->b))); /* free it */

@@ -191,15 +191,14 @@ static void dumpConstants(DumpState* D, const Proto* f)
     switch (tt)
     {
     case LUA_VNUMFLT:
-      dumpNumber(D, o->value_.n);
+      dumpNumber(D, fltvalue(o));
       break;
     case LUA_VNUMINT:
-      dumpInteger(D, o->value_.i);
+      dumpInteger(D, ivalue(o));
       break;
     case LUA_VSHRSTR:
       assert((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-      assert((o->value_.gc->tt & NOVARIANT_MASK) == LUA_TSTRING);
-      dumpString(D, static_cast<TString*>(o->value_.gc));
+      dumpString(D, tsvalue(o));
       break;
     default:
       assert(tt == LUA_VNIL || tt == LUA_VFALSE || tt == LUA_VTRUE);

@@ -295,7 +295,7 @@ static l_forceinline void luaC_objbarrier(lua_State* L, GCObject* p, GCObject* o
 static l_forceinline void luaC_barrier(lua_State* L, GCObject* p, const TValue* v)
 {
   if (v->tt_ & BIT_ISCOLLECTABLE)
-    luaC_objbarrier(L, p, v->value_.gc);
+    luaC_objbarrier(L, p, gcvalue(v));
 }
 
 static l_forceinline void luaC_objbarrierback(lua_State* L, GCObject* p, GCObject* o)
@@ -307,7 +307,7 @@ static l_forceinline void luaC_objbarrierback(lua_State* L, GCObject* p, GCObjec
 static l_forceinline void luaC_barrierback(lua_State* L, GCObject* p, const TValue* v)
 {
   if (v->tt_ & BIT_ISCOLLECTABLE)
-    luaC_objbarrierback(L, p, v->value_.gc);
+    luaC_objbarrierback(L, p, gcvalue(v));
 }
 LUAI_FUNC void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt);
 LUAI_FUNC void luaC_changemode(lua_State* L, int newmode);
