@@ -313,8 +313,15 @@ do
   local a,b = load("return 4.5.")
   assert(string.find(b, "'4%.5%.'"))
 end
--- (full locale-immunity assertions arrive with the to_chars/from_chars
--- conversion, which removes the last libc locale dependence)
+-- number<->string conversion must be immune to the numeric locale
+-- (tostring/tonumber/lexer run on to_chars/from_chars; string.format's
+-- %-engine is a separate work item)
+if os.setlocale("pt_BR") or os.setlocale("ptb") then
+  assert(tonumber("3.4") == 3.4 and not tonumber("3,4"))
+  assert(tostring(3.4) == "3.4")
+  assert(assert(load("return 3.4"))() == 3.4)
+  assert(os.setlocale("C"))
+end
 
 
 -- testing %q x line ends

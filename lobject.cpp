@@ -370,17 +370,95 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
 #endif
 
 /*
+** Convert a decimal numeral 's' to a lua_Number via 'std::from_chars'
+** (locale-free, correctly rounded; Java: 'Double.parseDouble' on the
+** trimmed token). The C 'strtod' behaviors that 'from_chars' lacks are
+** explicit here: leading spaces and one optional sign are consumed by
+** this wrapper, and an out-of-range numeral saturates to +-HUGE_VAL /
+** +-0.0 instead of failing (the "1e9999" idiom; 'parseDouble'
+** saturates the same way). Returns where parsing stopped, or 's'
+** itself if nothing was recognized.
+*/
+static const char* str2dec(const char* s, lua_Number* result)
+{
+  const char* p = s;
+  while (lisspace(((unsigned char)(*p))))
+    p++; /* skip leading spaces */
+  int neg = 0;
+  if (*p == '+' || *p == '-')
+  { /* consume one optional sign; the sign is applied below */
+    neg = (*p == '-');
+    p++;
+  }
+  if (*p == '+' || *p == '-')
+    return s; /* a second sign is not a numeral */
+  lua_Number v;
+  std::from_chars_result res =
+      std::from_chars(p, p + strlen(p), v, std::chars_format::general);
+  if (res.ec == std::errc::result_out_of_range)
+  { /* saturate like C 'strtod' and Java 'parseDouble': overflow goes
+       to +-infinity, underflow to +-0. Classify by estimating the
+       decimal magnitude: the explicit exponent, plus one per
+       significant digit before the radix point, minus one per zero
+       between the point and the first significant digit. Overflow
+       (magnitude >= ~309) and underflow (<= ~-324) are hundreds of
+       orders apart, so the sign of the estimate classifies exactly. */
+    long e10 = 0;      /* explicit exponent */
+    int frac = 0;      /* inside the fractional part? */
+    int sig = 0;       /* seen a significant (nonzero) digit? */
+    long intdigits = 0; /* significant digits before the point */
+    long fraczeros = 0; /* zeros after the point before a significant digit */
+    const char* q;
+    for (q = p; q < res.ptr; q++)
+    {
+      if (*q == '.')
+        frac = 1;
+      else if (*q == 'e' || *q == 'E')
+      {
+        e10 = strtol(q + 1, nullptr, 10); /* saturates on huge exponents */
+        break;
+      }
+      else
+      { /* a digit */
+        if (!sig && *q != '0')
+          sig = 1; /* first significant digit */
+        if (sig && !frac)
+          intdigits++;
+        else if (!sig && frac)
+          fraczeros++;
+      }
+    }
+    long magnitude = e10 + ((intdigits > 0) ? intdigits : -fraczeros);
+    v = (magnitude > 0) ? ((lua_Number)(HUGE_VAL)) : 0.0;
+  }
+  else if (res.ec != std::errc())
+    return s; /* nothing recognized */
+  *result = neg ? -v : v;
+  return res.ptr;
+}
+
+/*
 ** Convert string 's' to a Lua number (put in 'result'). Return nullptr on
 ** fail or the address of the ending '\0' on success. ('mode' == 'x')
 ** means a hexadecimal numeral.
 */
 static const char* l_str2dloc(const char* s, lua_Number* result, int mode)
 {
-  char* endptr;
-  *result = (mode == 'x') ? lua_strx2number(s, &endptr) /* try to convert */
-                          : lua_str2number(s, &endptr);
-  if (endptr == s)
-    return nullptr; /* nothing recognized? */
+  char* hexend;
+  const char* endptr;
+  if (mode == 'x')
+  { /* hexadecimal numeral: Lua's own reader */
+    *result = lua_strx2number(s, &hexend);
+    endptr = hexend;
+    if (endptr == s)
+      return nullptr; /* nothing recognized? */
+  }
+  else
+  {
+    endptr = str2dec(s, result);
+    if (endptr == s)
+      return nullptr; /* nothing recognized? */
+  }
   while (lisspace(((unsigned char)(*endptr))))
     endptr++;                               /* skip trailing spaces */
   return (*endptr == '\0') ? endptr : nullptr; /* OK iff no trailing chars */
@@ -514,15 +592,26 @@ static_assert(LUA_N2SBUFFSZ >= 20 + DBL_DIG, "invalid value for LUA_N2SBUFFSZ");
 */
 static int tostringbuffFloat(lua_Number n, char* buff)
 {
-  /* first conversion */
-  int len = l_sprintf(buff, LUA_N2SBUFFSZ, LUA_NUMBER_FMT,
-                      n);
-  lua_Number check = lua_str2number(buff, nullptr); /* read it back */
+  /* first conversion, with 15 significant digits (LUA_NUMBER_FMT);
+     'std::to_chars' with explicit precision produces the printf '%g'
+     shape, locale-free */
+  std::to_chars_result res = std::to_chars(
+      buff, buff + LUA_N2SBUFFSZ - 3, n, std::chars_format::general, 15);
+  assert(res.ec == std::errc());
+  int len = ((int)(res.ptr - buff));
+  buff[len] = '\0';
+  lua_Number check;
+  std::from_chars(buff + (buff[0] == '-'), buff + len, check,
+                  std::chars_format::general); /* read it back */
+  if (buff[0] == '-')
+    check = -check;
   if (check != n)
-  { /* not enough precision? */
-    /* convert again with more precision */
-    len = l_sprintf(buff, LUA_N2SBUFFSZ, LUA_NUMBER_FMT_N,
-                    n);
+  { /* not enough precision? convert again with 17 digits (FMT_N) */
+    res = std::to_chars(buff, buff + LUA_N2SBUFFSZ - 3, n,
+                        std::chars_format::general, 17);
+    assert(res.ec == std::errc());
+    len = ((int)(res.ptr - buff));
+    buff[len] = '\0';
   }
   /* looks like an integer? */
   if (buff[strspn(buff, "-0123456789")] == '\0')

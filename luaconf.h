@@ -209,7 +209,6 @@
 @@ LUA_NUMBER_FMT_N is the format for writing floats with the minimum
 ** number of digits that ensures tonumber(tostring(number)) == number.
 ** (LUA_NUMBER_FMT+2.)
-@@ lua_str2number converts a decimal numeral to a number.
 */
 
 /* lua_Number: IEEE-754 binary64 */
@@ -219,7 +218,6 @@
 #define LUA_NUMBER_FMT    "%.15g"
 #define LUA_NUMBER_FMT_N  "%.17g"
 
-#define lua_str2number(s, p) strtod((s), (p))
 
 /*
 @@ LUA_UNSIGNED is the unsigned version of LUA_INTEGER.

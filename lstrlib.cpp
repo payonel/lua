@@ -9,6 +9,7 @@
 
 #include <bit>
 
+#include <cmath>
 #include <ctype.h>
 #include <float.h>
 #include <limits.h>
@@ -1145,12 +1146,24 @@ static lua_Number adddigit(char* buff, unsigned n, lua_Number x)
 static int num2straux(char* buff, unsigned sz, lua_Number x)
 {
   /* if 'inf' or 'NaN', format it like '%g' */
-  if (x != x || x == (lua_Number) HUGE_VAL || x == -(lua_Number) HUGE_VAL)
-    return l_sprintf(buff, sz, LUA_NUMBER_FMT, x);
+  if (x != x)
+  {
+    const char* r = std::signbit(x) ? "-nan" : "nan";
+    assert(sz > strlen(r));
+    strcpy(buff, r);
+    return ((int)(strlen(r)));
+  }
+  else if (x == (lua_Number) HUGE_VAL || x == -(lua_Number) HUGE_VAL)
+  {
+    const char* r = (x < 0) ? "-inf" : "inf";
+    strcpy(buff, r);
+    return ((int)(strlen(r)));
+  }
   else if (x == 0)
-  { /* can be -0... */
-    /* create "0" or "-0" followed by exponent */
-    return l_sprintf(buff, sz, LUA_NUMBER_FMT "x0p+0", x);
+  { /* can be -0... : "0" or "-0" followed by a zero hex exponent */
+    const char* r = std::signbit(x) ? "-0x0p+0" : "0x0p+0";
+    strcpy(buff, r);
+    return ((int)(strlen(r)));
   }
   else
   {
