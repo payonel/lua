@@ -188,7 +188,7 @@ static void checkclosemth(lua_State* L, StkId level)
 static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
                              int yy)
 {
-  TValue* uv = (&(L)->stack.p[level]); /* value being closed */
+  StkId uv = level; /* value being closed */
   TValue* errobj;
   switch (status)
   {
@@ -203,7 +203,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
     luaD_seterrorobj(L, status, level + 1); /* set error object */
     break;
   }
-  callclosemethod(L, uv, errobj, yy);
+  callclosemethod(L, slotrow(L, uv), errobj, yy);
 }
 
 /*

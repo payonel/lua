@@ -154,9 +154,9 @@ static TString* anchorstr(LexState* ls, TString* ts)
   }
   else
   {                                /* create a new entry */
-    TValue* stv = (&(L)->stack.p[L->top++]); /* reserve stack space for string */
-    setsvalue(L, stv, ts);         /* push (anchor) the string on the stack */
-    luaH_set(L, ls->h, stv, stv);  /* t[string] = string */
+    StkId stv = L->top++; /* reserve stack space for string */
+    setslots(L, stv, ts);         /* push (anchor) the string on the stack */
+    luaH_set(L, ls->h, slotrow(L, stv), slotrow(L, stv));  /* t[string] = string */
     /* table is not a metatable, so it does not need to invalidate cache */
     luaC_checkGC(L);
     L->top--; /* remove string from stack */

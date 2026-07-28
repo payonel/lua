@@ -755,9 +755,9 @@ static const char* clearbuff(BuffFS* buff)
     res = nullptr;                                          /* error message is on the top of the stack */
   else
   {
-    TValue* s = &L->stack.p[L->top - 1]; /* result string is on the top of the stack */
-    assert((s->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    res = getstr(tsvalue(s));
+    StkId s = L->top - 1; /* result string is on the top of the stack */
+    assert((slottag(L, s) & NOVARIANT_MASK) == LUA_TSTRING);
+    res = getstr(slottsval(L, s));
   }
   if (buff->b != buff->space)                   /* using dynamic buffer? */
     luaM_free_(L, (buff->b), (buff->buffsize) * sizeof(*(buff->b))); /* free it */

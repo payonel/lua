@@ -192,8 +192,8 @@ static const char* upvalname(const Proto* p, int uv)
 
 static const char* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
 {
-  TValue* fv = &L->stack.p[ci->func];
-  LClosure* cl = clLvalue(fv);
+  StkId fv = ci->func;
+  LClosure* cl = slotclLval(L, fv);
   if (cl->p->flag & PF_VAHID)
   {
     int nextra = ci->nextraargs;
@@ -243,8 +243,8 @@ LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
       name = nullptr;
     else /* consider live variables at function start (parameters) */
     {
-      TValue* fv = &L->stack.p[L->top - 1];
-      name = luaF_getlocalname(clLvalue(fv)->p, n, 0);
+      StkId fv = L->top - 1;
+      name = luaF_getlocalname(slotclLval(L, fv)->p, n, 0);
     }
   }
   else

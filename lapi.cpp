@@ -270,8 +270,8 @@ LUA_API void lua_copy(lua_State* L, int fromidx, int toidx)
   setobj(L, to, fr);
   if (isupvalue(toidx)) /* function upvalue? */
   {
-    TValue* fv = &L->stack.p[L->ci->func];
-    luaC_barrier(L, clCvalue(fv), fr);
+    StkId fv = L->ci->func;
+    luaC_barrier(L, slotclCval(L, fv), fr);
   }
   /* LUA_REGISTRYINDEX does not need gc barrier
      (collector revisits it before finishing collection) */
@@ -671,39 +671,39 @@ LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt)
     {
     case 's':
     { /* a string (a number is converted in place, as 'lua_tolstring') */
-      TValue* o = &L->stack.p[slot];
-      if ((o->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)
-        luaO_tostring(L, o);
-      assert(((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING) && "string expected");
-      args.str(getstr(tsvalue(o)));
+      StkId o = slot;
+      if ((slottag(L, o) & NOVARIANT_MASK) == LUA_TNUMBER)
+        luaO_tostring(L, slotrow(L, o));
+      assert(((slottag(L, o) & NOVARIANT_MASK) == LUA_TSTRING) && "string expected");
+      args.str(getstr(slottsval(L, o)));
       break;
     }
     case 'c':
     {
-      TValue* o = &L->stack.p[slot];
-      assert((o->tt_ == LUA_VNUMINT) && "integer expected");
-      args.chr(((int)(ivalue(o))));
+      StkId o = slot;
+      assert((slottag(L, o) == LUA_VNUMINT) && "integer expected");
+      args.chr(((int)(slotival(L, o))));
       break;
     }
     case 'd':
     {
-      TValue* o = &L->stack.p[slot];
-      assert((o->tt_ == LUA_VNUMINT) && "integer expected");
-      args.num(((int)(ivalue(o))));
+      StkId o = slot;
+      assert((slottag(L, o) == LUA_VNUMINT) && "integer expected");
+      args.num(((int)(slotival(L, o))));
       break;
     }
     case 'I':
     {
-      TValue* o = &L->stack.p[slot];
-      assert((o->tt_ == LUA_VNUMINT) && "integer expected");
-      args.lint(ivalue(o));
+      StkId o = slot;
+      assert((slottag(L, o) == LUA_VNUMINT) && "integer expected");
+      args.lint(slotival(L, o));
       break;
     }
     case 'f':
     {
-      TValue* o = &L->stack.p[slot];
-      assert((o->tt_ == LUA_VNUMFLT) && "float expected");
-      args.flt(fltvalue(o));
+      StkId o = slot;
+      assert((slottag(L, o) == LUA_VNUMFLT) && "float expected");
+      args.flt(slotfltval(L, o));
       break;
     }
     case 'p':
@@ -713,9 +713,9 @@ LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt)
     }
     case 'U':
     {
-      TValue* o = &L->stack.p[slot];
-      assert((o->tt_ == LUA_VNUMINT) && "integer expected");
-      args.utf8(((unsigned long)(ivalue(o))));
+      StkId o = slot;
+      assert((slottag(L, o) == LUA_VNUMINT) && "integer expected");
+      args.utf8(((unsigned long)(slotival(L, o))));
       break;
     }
     default:
@@ -1347,8 +1347,8 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
   status = luaD_protectedparser(L, &z, chunkname, mode);
   if (status == LUA_OK)
   {                                            /* no errors? */
-    TValue* s = &L->stack.p[L->top - 1];
-    LClosure* f = clLvalue(s); /* get new function */
+    StkId s = L->top - 1;
+    LClosure* f = slotclLval(L, s); /* get new function */
     if (f->nupvalues >= 1)
     { /* does it have an upvalue? */
       /* get global table from registry */
@@ -1371,11 +1371,11 @@ LUA_API int lua_dump(lua_State* L, lua_Writer writer, void* data, int strip)
 {
   int status;
   StkId otop = (L->top); /* original top */
-  TValue* f = (&(L)->stack.p[L->top - 1]);           /* function to be dumped */
+  StkId f = L->top - 1;           /* function to be dumped */
   lua_lock(L);
   api_checkpop(L, 1);
-  assert((((f)->tt_ == ctb(LUA_VLCL))) && "Lua function expected");
-  status = luaU_dump(L, clLvalue(f)->p, writer, data, strip);
+  assert(((slottag(L, f) == ctb(LUA_VLCL))) && "Lua function expected");
+  status = luaU_dump(L, slotclLval(L, f)->p, writer, data, strip);
   L->top = (static_cast<StkId>(otop)); /* restore top */
   lua_unlock(L);
   return status;

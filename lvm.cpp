@@ -213,17 +213,17 @@ static int forlimit(lua_State* L, lua_Integer init, const TValue* lim,
 */
 static int forprep(lua_State* L, StkId ra)
 {
-  TValue* pinit = (&(L)->stack.p[ra]);
-  TValue* plimit = (&(L)->stack.p[ra + 1]);
-  TValue* pstep = (&(L)->stack.p[ra + 2]);
-  if (((pinit)->tt_ == LUA_VNUMINT) && ((pstep)->tt_ == LUA_VNUMINT))
+  StkId pinit = ra;
+  StkId plimit = ra + 1;
+  StkId pstep = ra + 2;
+  if ((slottag(L, pinit) == LUA_VNUMINT) && (slottag(L, pstep) == LUA_VNUMINT))
   { /* integer loop? */
-    lua_Integer init = ivalue(pinit);
-    lua_Integer step = ivalue(pstep);
+    lua_Integer init = slotival(L, pinit);
+    lua_Integer step = slotival(L, pstep);
     lua_Integer limit;
     if (step == 0)
       luaG_runerror(L, "'for' step is zero");
-    if (forlimit(L, init, plimit, &limit, step))
+    if (forlimit(L, init, slotrow(L, plimit), &limit, step))
       return 1; /* skip the loop */
     else
     { /* prepare loop counter */
@@ -251,12 +251,12 @@ static int forprep(lua_State* L, StkId ra)
     lua_Number init;
     lua_Number limit;
     lua_Number step;
-    if (l_unlikely(!tonumber(plimit, &limit)))
-      luaG_forerror(L, plimit, "limit");
-    if (l_unlikely(!tonumber(pstep, &step)))
-      luaG_forerror(L, pstep, "step");
-    if (l_unlikely(!tonumber(pinit, &init)))
-      luaG_forerror(L, pinit, "initial value");
+    if (l_unlikely(!tonumber(slotrow(L, plimit), &limit)))
+      luaG_forerror(L, slotrow(L, plimit), "limit");
+    if (l_unlikely(!tonumber(slotrow(L, pstep), &step)))
+      luaG_forerror(L, slotrow(L, pstep), "step");
+    if (l_unlikely(!tonumber(slotrow(L, pinit), &init)))
+      luaG_forerror(L, slotrow(L, pinit), "initial value");
     if (step == 0)
       luaG_runerror(L, "'for' step is zero");
     if (((0) < (step)) ? ((limit) < (init))
@@ -775,9 +775,9 @@ static void copy2buff(lua_State* L, StkId top, int n, char* buff)
   size_t tl = 0; /* size already copied */
   do
   {
-    TValue* v = &L->stack.p[top - n];
-    assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    TString* st = tsvalue(v);
+    StkId v = top - n;
+    assert((slottag(L, v) & NOVARIANT_MASK) == LUA_TSTRING);
+    TString* st = slottsval(L, v);
     size_t l; /* length of string being copied */
     const char* s = ((void)((l) = (st)->content.size()), (st)->content.c_str());
     memcpy(buff + tl, s, l * sizeof(char));
@@ -797,27 +797,27 @@ void luaV_concat(lua_State* L, int total)
   {
     StkId top = L->top;
     int n = 2; /* number of elements handled in this pass (at least 2) */
-    TValue* v1 = &L->stack.p[top - 2];
-    TValue* v2 = &L->stack.p[top - 1];
-    if (!(((v1->tt_ & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(v1)) || !tostring(L, v2))
+    StkId v1 = top - 2;
+    StkId v2 = top - 1;
+    if (!(((slottag(L, v1) & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(slotrow(L, v1))) || !tostring(L, slotrow(L, v2)))
       luaT_tryconcatTM(L);                  /* may invalidate 'top' */
-    else if (isemptystr(v2))                /* second operand is empty? */
-      (void)tostring(L, v1);                /* result is first operand */
-    else if (isemptystr(v1))
+    else if (isemptystr(slotrow(L, v2)))                /* second operand is empty? */
+      (void)tostring(L, slotrow(L, v1));                /* result is first operand */
+    else if (isemptystr(slotrow(L, v1)))
     {                                 /* first operand is empty string? */
-      setobj(L, v1, v2); /* result is second op. */
+      copyslot(L, v1, v2); /* result is second op. */
     }
     else
     {
       /* at least two string values; get as many as possible */
-      size_t tl = tsslen(tsvalue(v2)); /* total length */
+      size_t tl = tsslen(slottsval(L, v2)); /* total length */
       TString* ts;
       /* collect total length and number of strings */
       for (n = 1; n < total && tostring(L, &L->stack.p[top - n - 1]); n++)
       {
-        TValue* o = &L->stack.p[top - n - 1];
-        assert((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-        size_t l = tsslen(tsvalue(o));
+        StkId o = top - n - 1;
+        assert((slottag(L, o) & NOVARIANT_MASK) == LUA_TSTRING);
+        size_t l = tsslen(slottsval(L, o));
         if (l_unlikely(l >= MAX_SIZE - sizeof(TString) - tl))
         {
           L->top = top - total; /* pop strings to avoid wasting stack */
@@ -1382,17 +1382,17 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_GETTABLE:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
-        TValue* rc = (&(L)->stack.p[(base + GETARG_C(i))]);
+        StkId rb = (base + GETARG_B(i));
+        StkId rc = (base + GETARG_C(i));
         lu_byte tag;
-        if (((rc)->tt_ == LUA_VNUMINT))
+        if ((slottag(L, rc) == LUA_VNUMINT))
         { /* fast track for integers? */
-          if (rb->tt_ != ctb(LUA_VTABLE))
+          if (slottag(L, rb) != ctb(LUA_VTABLE))
             tag = LUA_VNOTABLE;
           else
           {
-            Table* h = hvalue(rb);
-            lua_Unsigned u = (lua_Unsigned)ivalue(rc) - 1u;
+            Table* h = slothval(L, rb);
+            lua_Unsigned u = (lua_Unsigned)slotival(L, rc) - 1u;
             if (u < h->asize)
             {
               tag = *getArrTag(h, u);
@@ -1400,20 +1400,20 @@ void luaV_execute(lua_State* L, CallInfo* ci)
                 farr2val(h, u, tag, &L->stack.p[ra]);
             }
             else
-              tag = luaH_getint(h, ivalue(rc), &L->stack.p[ra]);
+              tag = luaH_getint(h, slotival(L, rc), &L->stack.p[ra]);
           }
         }
-        else if (rb->tt_ != ctb(LUA_VTABLE))
+        else if (slottag(L, rb) != ctb(LUA_VTABLE))
           tag = LUA_VNOTABLE;
         else
         {
-          tag = luaH_get(hvalue(rb), rc, &L->stack.p[ra]);
+          tag = luaH_get(slothval(L, rb), slotrow(L, rc), &L->stack.p[ra]);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishget(L, rb, rc, ra, tag);
+          luaV_finishget(L, slotrow(L, rb), slotrow(L, rc), ra, tag);
           trap = ci->trap;
         }
         break;
@@ -1421,14 +1421,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_GETI:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         int c = GETARG_C(i);
         lu_byte tag;
-        if (rb->tt_ != ctb(LUA_VTABLE))
+        if (slottag(L, rb) != ctb(LUA_VTABLE))
           tag = LUA_VNOTABLE;
         else
         {
-          Table* h = hvalue(rb);
+          Table* h = slothval(L, rb);
           lua_Unsigned u = (lua_Unsigned)c - 1u;
           if (u < h->asize)
           {
@@ -1445,7 +1445,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           setivalue(&key, c);
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishget(L, rb, &key, ra, tag);
+          luaV_finishget(L, slotrow(L, rb), &key, ra, tag);
           trap = ci->trap;
         }
         break;
@@ -1453,22 +1453,22 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_GETFIELD:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         TValue* rc = (k + GETARG_C(i));
         assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rc); /* key must be a short string */
         lu_byte tag;
-        if (rb->tt_ != ctb(LUA_VTABLE))
+        if (slottag(L, rb) != ctb(LUA_VTABLE))
           tag = LUA_VNOTABLE;
         else
         {
-          tag = luaH_getshortstr(hvalue(rb), key, &L->stack.p[ra]);
+          tag = luaH_getshortstr(slothval(L, rb), key, &L->stack.p[ra]);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishget(L, rb, rc, ra, tag);
+          luaV_finishget(L, slotrow(L, rb), rc, ra, tag);
           trap = ci->trap;
         }
         break;
@@ -1478,22 +1478,23 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         int hres;
         TValue* upval = upvalval(cl->upvals[GETARG_A(i)]);
         TValue* rb = (k + GETARG_B(i));
-        TValue* rc = ((TESTARG_k(i)) ? k + GETARG_C(i) : (&(L)->stack.p[base + GETARG_C(i)]));
+        /* value operand: constant or register, materialized as a row copy */
+        TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rb); /* key must be a short string */
         if (upval->tt_ != ctb(LUA_VTABLE))
           hres = HNOTATABLE;
         else
         {
-          hres = luaH_psetshortstr(hvalue(upval), key, rc);
+          hres = luaH_psetshortstr(hvalue(upval), key, &rc);
         }
         if (hres == HOK)
-          luaV_finishfastset(L, upval, rc);
+          luaV_finishfastset(L, upval, &rc);
         else
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishset(L, upval, rb, rc, hres);
+          luaV_finishset(L, upval, rb, &rc, hres);
           trap = ci->trap;
         }
         break;
@@ -1502,49 +1503,50 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         int hres;
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]); /* key (table is in 'ra') */
-        TValue* rc = ((TESTARG_k(i)) ? k + GETARG_C(i) : (&(L)->stack.p[base + GETARG_C(i)])); /* value */
-        if (((rb)->tt_ == LUA_VNUMINT))
+        StkId rb = (base + GETARG_B(i)); /* key (table is in 'ra') */
+        /* value operand: constant or register, materialized as a row copy */
+        TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i)); /* value */
+        if ((slottag(L, rb) == LUA_VNUMINT))
         { /* fast track for integers? */
-          TValue* t = (&(L)->stack.p[ra]);
-          if (t->tt_ != ctb(LUA_VTABLE))
+          StkId t = ra;
+          if (slottag(L, t) != ctb(LUA_VTABLE))
             hres = HNOTATABLE;
           else
           {
-            Table* h = hvalue(t);
-            lua_Unsigned u = (lua_Unsigned)ivalue(rb) - 1u;
+            Table* h = slothval(L, t);
+            lua_Unsigned u = (lua_Unsigned)slotival(L, rb) - 1u;
             if (u < h->asize)
             {
               lu_byte* tag = getArrTag(h, u);
               if (checknoTM(h->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
               {
-                fval2arr(h, u, tag, rc);
+                fval2arr(h, u, tag, &rc);
                 hres = HOK;
               }
               else
                 hres = ~(int)u;
             }
             else
-              hres = luaH_psetint(h, ivalue(rb), rc);
+              hres = luaH_psetint(h, slotival(L, rb), &rc);
           }
         }
         else
         {
-          TValue* t = (&(L)->stack.p[ra]);
-          if (t->tt_ != ctb(LUA_VTABLE))
+          StkId t = ra;
+          if (slottag(L, t) != ctb(LUA_VTABLE))
             hres = HNOTATABLE;
           else
           {
-            hres = luaH_pset(hvalue(t), rb, rc);
+            hres = luaH_pset(slothval(L, t), slotrow(L, rb), &rc);
           }
         }
         if (hres == HOK)
-          luaV_finishfastset(L, (&(L)->stack.p[ra]), rc);
+          luaV_finishfastset(L, (&(L)->stack.p[ra]), &rc);
         else
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishset(L, (&(L)->stack.p[ra]), rb, rc, hres);
+          luaV_finishset(L, (&(L)->stack.p[ra]), slotrow(L, rb), &rc, hres);
           trap = ci->trap;
         }
         break;
@@ -1554,37 +1556,38 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         int hres;
         int b = GETARG_B(i);
-        TValue* rc = ((TESTARG_k(i)) ? k + GETARG_C(i) : (&(L)->stack.p[base + GETARG_C(i)]));
-        TValue* t = (&(L)->stack.p[ra]);
-        if (t->tt_ != ctb(LUA_VTABLE))
+        /* value operand: constant or register, materialized as a row copy */
+        TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
+        StkId t = ra;
+        if (slottag(L, t) != ctb(LUA_VTABLE))
           hres = HNOTATABLE;
         else
         {
-          Table* h = hvalue(t);
+          Table* h = slothval(L, t);
           lua_Unsigned u = (lua_Unsigned)b - 1u;
           if (u < h->asize)
           {
             lu_byte* tag = getArrTag(h, u);
             if (checknoTM(h->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
             {
-              fval2arr(h, u, tag, rc);
+              fval2arr(h, u, tag, &rc);
               hres = HOK;
             }
             else
               hres = ~(int)u;
           }
           else
-            hres = luaH_psetint(h, b, rc);
+            hres = luaH_psetint(h, b, &rc);
         }
         if (hres == HOK)
-          luaV_finishfastset(L, (&(L)->stack.p[ra]), rc);
+          luaV_finishfastset(L, (&(L)->stack.p[ra]), &rc);
         else
         {
           TValue key;
           setivalue(&key, b);
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishset(L, (&(L)->stack.p[ra]), &key, rc, hres);
+          luaV_finishset(L, (&(L)->stack.p[ra]), &key, &rc, hres);
           trap = ci->trap;
         }
         break;
@@ -1594,23 +1597,24 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         int hres;
         TValue* rb = (k + GETARG_B(i));
-        TValue* rc = ((TESTARG_k(i)) ? k + GETARG_C(i) : (&(L)->stack.p[base + GETARG_C(i)]));
+        /* value operand: constant or register, materialized as a row copy */
+        TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rb); /* key must be a short string */
-        TValue* t = (&(L)->stack.p[ra]);
-        if (t->tt_ != ctb(LUA_VTABLE))
+        StkId t = ra;
+        if (slottag(L, t) != ctb(LUA_VTABLE))
           hres = HNOTATABLE;
         else
         {
-          hres = luaH_psetshortstr(hvalue(t), key, rc);
+          hres = luaH_psetshortstr(slothval(L, t), key, &rc);
         }
         if (hres == HOK)
-          luaV_finishfastset(L, (&(L)->stack.p[ra]), rc);
+          luaV_finishfastset(L, (&(L)->stack.p[ra]), &rc);
         else
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishset(L, (&(L)->stack.p[ra]), rb, rc, hres);
+          luaV_finishset(L, (&(L)->stack.p[ra]), rb, &rc, hres);
           trap = ci->trap;
         }
         break;
@@ -1650,55 +1654,55 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         lu_byte tag;
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         TValue* rc = (k + GETARG_C(i));
         assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rc); /* key must be a short string */
-        setslot(L, ra + 1, rb);
-        if (rb->tt_ != ctb(LUA_VTABLE))
+        copyslot(L, ra + 1, rb);
+        if (slottag(L, rb) != ctb(LUA_VTABLE))
           tag = LUA_VNOTABLE;
         else
         {
-          tag = luaH_getshortstr(hvalue(rb), key, &L->stack.p[ra]);
+          tag = luaH_getshortstr(slothval(L, rb), key, &L->stack.p[ra]);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishget(L, rb, rc, ra, tag);
+          luaV_finishget(L, slotrow(L, rb), rc, ra, tag);
           trap = ci->trap;
         }
         break;
       }
       case OP_ADDI:
       {
-        TValue* ra = &L->stack.p[base + GETARG_A(i)];
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId ra = base + GETARG_A(i);
+        StkId v1 = base + GETARG_B(i);
         int imm = GETARG_sC(i);
-        if (v1->tt_ == LUA_VNUMINT)
+        if (slottag(L, v1) == LUA_VNUMINT)
         {
-          lua_Integer iv1 = ivalue(v1);
+          lua_Integer iv1 = slotival(L, v1);
           pc++;
-          setivalue(ra, l_addi(L, iv1, imm));
+          setsloti(L, ra, l_addi(L, iv1, imm));
         }
-        else if (v1->tt_ == LUA_VNUMFLT)
+        else if (slottag(L, v1) == LUA_VNUMFLT)
         {
-          lua_Number nb = fltvalue(v1);
+          lua_Number nb = slotfltval(L, v1);
           lua_Number fimm = (lua_Number)imm;
           pc++;
-          setfltvalue(ra, luai_numadd(L, nb, fimm));
+          setslotflt(L, ra, luai_numadd(L, nb, fimm));
         }
         break;
       }
       case OP_ADDK:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        if (slottag(L, v1) == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
+          lua_Integer i1 = slotival(L, v1);
           lua_Integer i2 = ivalue(v2);
           pc++;
           setsloti(L, ra, l_addi(L, i1, i2));
@@ -1707,7 +1711,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -1718,13 +1722,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_SUBK:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        if (slottag(L, v1) == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
+          lua_Integer i1 = slotival(L, v1);
           lua_Integer i2 = ivalue(v2);
           pc++;
           setsloti(L, ra, l_subi(L, i1, i2));
@@ -1733,7 +1737,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -1744,13 +1748,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_MULK:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        if (slottag(L, v1) == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
+          lua_Integer i1 = slotival(L, v1);
           lua_Integer i2 = ivalue(v2);
           pc++;
           setsloti(L, ra, l_muli(L, i1, i2));
@@ -1759,7 +1763,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -1772,13 +1776,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         ci->savedpc = pc; /* in case of division by 0 */
         L->top = ci->top;
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        if (slottag(L, v1) == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
+          lua_Integer i1 = slotival(L, v1);
           lua_Integer i2 = ivalue(v2);
           pc++;
           setsloti(L, ra, luaV_mod(L, i1, i2));
@@ -1787,7 +1791,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -1798,12 +1802,12 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_POWK:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         lua_Number n1;
         lua_Number n2;
-        if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+        if (tonumberns(slotrow(L, v1), &n1) && tonumberns(v2, &n2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -1813,12 +1817,12 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_DIVK:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
         lua_Number n1;
         lua_Number n2;
-        if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+        if (tonumberns(slotrow(L, v1), &n1) && tonumberns(v2, &n2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -1830,13 +1834,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         ci->savedpc = pc; /* in case of division by 0 */
         L->top = ci->top;
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        if (slottag(L, v1) == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
+          lua_Integer i1 = slotival(L, v1);
           lua_Integer i2 = ivalue(v2);
           pc++;
           setsloti(L, ra, luaV_idiv(L, i1, i2));
@@ -1845,7 +1849,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -1856,12 +1860,12 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_BANDK:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2 = ivalue(v2);
         assert(v2->tt_ == LUA_VNUMINT);
-        if (tointegerns(v1, &i1))
+        if (tointegerns(slotrow(L, v1), &i1))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -1871,12 +1875,12 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_BORK:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2 = ivalue(v2);
         assert(v2->tt_ == LUA_VNUMINT);
-        if (tointegerns(v1, &i1))
+        if (tointegerns(slotrow(L, v1), &i1))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -1886,12 +1890,12 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_BXORK:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
+        StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2 = ivalue(v2);
         assert(v2->tt_ == LUA_VNUMINT);
-        if (tointegerns(v1, &i1))
+        if (tointegerns(slotrow(L, v1), &i1))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -1902,10 +1906,10 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_SHLI:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         int ic = GETARG_sC(i);
         lua_Integer ib;
-        if (tointegerns(rb, &ib))
+        if (tointegerns(slotrow(L, rb), &ib))
         {
           pc++;
           setsloti(L, ra, luaV_shiftl(ic, ib));
@@ -1915,10 +1919,10 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_SHRI:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         int ic = GETARG_sC(i);
         lua_Integer ib;
-        if (tointegerns(rb, &ib))
+        if (tointegerns(slotrow(L, rb), &ib))
         {
           pc++;
           setsloti(L, ra, luaV_shiftl(ib, -ic));
@@ -1927,13 +1931,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_ADD:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
+        if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
-          lua_Integer i2 = ivalue(v2);
+          lua_Integer i1 = slotival(L, v1);
+          lua_Integer i2 = slotival(L, v2);
           pc++;
           setsloti(L, ra, l_addi(L, i1, i2));
         }
@@ -1941,7 +1945,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(slotrow(L, v2), &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -1952,13 +1956,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_SUB:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
+        if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
-          lua_Integer i2 = ivalue(v2);
+          lua_Integer i1 = slotival(L, v1);
+          lua_Integer i2 = slotival(L, v2);
           pc++;
           setsloti(L, ra, l_subi(L, i1, i2));
         }
@@ -1966,7 +1970,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(slotrow(L, v2), &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -1977,13 +1981,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_MUL:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
+        if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
-          lua_Integer i2 = ivalue(v2);
+          lua_Integer i1 = slotival(L, v1);
+          lua_Integer i2 = slotival(L, v2);
           pc++;
           setsloti(L, ra, l_muli(L, i1, i2));
         }
@@ -1991,7 +1995,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(slotrow(L, v2), &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -2004,13 +2008,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         ci->savedpc = pc; /* in case of division by 0 */
         L->top = ci->top;
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
+        if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
-          lua_Integer i2 = ivalue(v2);
+          lua_Integer i1 = slotival(L, v1);
+          lua_Integer i2 = slotival(L, v2);
           pc++;
           setsloti(L, ra, luaV_mod(L, i1, i2));
         }
@@ -2018,7 +2022,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(slotrow(L, v2), &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -2029,11 +2033,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_POW:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
         lua_Number n1;
         lua_Number n2;
-        if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+        if (tonumberns(slotrow(L, v1), &n1) && tonumberns(slotrow(L, v2), &n2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -2043,11 +2047,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_DIV:
       { /* float division (always with floats) */
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
         lua_Number n1;
         lua_Number n2;
-        if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+        if (tonumberns(slotrow(L, v1), &n1) && tonumberns(slotrow(L, v2), &n2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -2059,13 +2063,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {                   /* floor division */
         ci->savedpc = pc; /* in case of division by 0 */
         L->top = ci->top;
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
-        if (v1->tt_ == LUA_VNUMINT && v2->tt_ == LUA_VNUMINT)
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
+        if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
         {
           StkId ra = base + GETARG_A(i);
-          lua_Integer i1 = ivalue(v1);
-          lua_Integer i2 = ivalue(v2);
+          lua_Integer i1 = slotival(L, v1);
+          lua_Integer i2 = slotival(L, v2);
           pc++;
           setsloti(L, ra, luaV_idiv(L, i1, i2));
         }
@@ -2073,7 +2077,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           lua_Number n1;
           lua_Number n2;
-          if (tonumberns(v1, &n1) && tonumberns(v2, &n2))
+          if (tonumberns(slotrow(L, v1), &n1) && tonumberns(slotrow(L, v2), &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
@@ -2084,11 +2088,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_BAND:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2;
-        if (tointegerns(v1, &i1) && tointegerns(v2, &i2))
+        if (tointegerns(slotrow(L, v1), &i1) && tointegerns(slotrow(L, v2), &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -2098,11 +2102,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_BOR:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2;
-        if (tointegerns(v1, &i1) && tointegerns(v2, &i2))
+        if (tointegerns(slotrow(L, v1), &i1) && tointegerns(slotrow(L, v2), &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -2112,11 +2116,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_BXOR:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2;
-        if (tointegerns(v1, &i1) && tointegerns(v2, &i2))
+        if (tointegerns(slotrow(L, v1), &i1) && tointegerns(slotrow(L, v2), &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -2126,11 +2130,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_SHL:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2;
-        if (tointegerns(v1, &i1) && tointegerns(v2, &i2))
+        if (tointegerns(slotrow(L, v1), &i1) && tointegerns(slotrow(L, v2), &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -2140,11 +2144,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_SHR:
       {
-        TValue* v1 = &L->stack.p[base + GETARG_B(i)];
-        TValue* v2 = &L->stack.p[base + GETARG_C(i)];
+        StkId v1 = base + GETARG_B(i);
+        StkId v2 = base + GETARG_C(i);
         lua_Integer i1;
         lua_Integer i2;
-        if (tointegerns(v1, &i1) && tointegerns(v2, &i2))
+        if (tointegerns(slotrow(L, v1), &i1) && tointegerns(slotrow(L, v2), &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
@@ -2156,13 +2160,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         Instruction pi = code[pc - 2]; /* original arith. expression */
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         TMS tm = (TMS) GETARG_C(i);
         StkId result = (base + GETARG_A(pi));
         assert(OP_ADD <= GET_OPCODE(pi) && GET_OPCODE(pi) <= OP_SHR);
         ci->savedpc = pc;
         L->top = ci->top;
-        luaT_trybinTM(L, (&(L)->stack.p[ra]), rb, result, tm);
+        luaT_trybinTM(L, (&(L)->stack.p[ra]), slotrow(L, rb), result, tm);
         trap = ci->trap;
         break;
       }
@@ -2197,14 +2201,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_UNM:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         lua_Number nb;
-        if (((rb)->tt_ == LUA_VNUMINT))
+        if ((slottag(L, rb) == LUA_VNUMINT))
         {
-          lua_Integer ib = ivalue(rb);
+          lua_Integer ib = slotival(L, rb);
           setsloti(L, ra, ((lua_Integer)(((lua_Unsigned)(0)) - ((lua_Unsigned)(ib)))));
         }
-        else if ((((rb)->tt_ == LUA_VNUMFLT) ? ((nb) = fltvalue((rb)), 1) : (((rb)->tt_ == LUA_VNUMINT) ? ((nb) = ((lua_Number)(ivalue((rb)))), 1) : 0)))
+        else if (((slottag(L, rb) == LUA_VNUMFLT) ? ((nb) = fltvalue((slotrow(L, rb))), 1) : ((slottag(L, rb) == LUA_VNUMINT) ? ((nb) = ((lua_Number)(ivalue((slotrow(L, rb))))), 1) : 0)))
         {
           setslotflt(L, ra, ((void)(L), -(nb)));
         }
@@ -2212,7 +2216,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaT_trybinTM(L, rb, rb, ra, TM_UNM);
+          luaT_trybinTM(L, slotrow(L, rb), slotrow(L, rb), ra, TM_UNM);
           trap = ci->trap;
         }
         break;
@@ -2220,9 +2224,9 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_BNOT:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         lua_Integer ib;
-        if (tointegerns(rb, &ib))
+        if (tointegerns(slotrow(L, rb), &ib))
         {
           setsloti(L, ra, ((lua_Integer)(((lua_Unsigned)(~((lua_Unsigned)(0)))) ^ ((lua_Unsigned)(ib)))));
         }
@@ -2230,7 +2234,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaT_trybinTM(L, rb, rb, ra, TM_BNOT);
+          luaT_trybinTM(L, slotrow(L, rb), slotrow(L, rb), ra, TM_BNOT);
           trap = ci->trap;
         }
         break;
@@ -2238,8 +2242,8 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_NOT:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
-        if ((((rb)->tt_ == LUA_VFALSE) || (((rb)->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
+        StkId rb = (base + GETARG_B(i));
+        if (((slottag(L, rb) == LUA_VFALSE) || ((slottag(L, rb) & NOVARIANT_MASK) == LUA_TNIL)))
           setslottag(L, ra, LUA_VTRUE);
         else
           setslottag(L, ra, LUA_VFALSE);
@@ -2301,10 +2305,10 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         int cond;
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
+        StkId rb = (base + GETARG_B(i));
         ci->savedpc = pc;
         L->top = ci->top;
-        cond = luaV_equalobj(L, (&(L)->stack.p[ra]), rb);
+        cond = luaV_equalobj(L, (&(L)->stack.p[ra]), slotrow(L, rb));
         trap = ci->trap;
         if (cond != GETARG_k(i))
           pc++;
@@ -2318,22 +2322,22 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_LT:
       {
-        TValue* ra = &L->stack.p[base + GETARG_A(i)];
-        TValue* rb = &L->stack.p[base + GETARG_B(i)];
+        StkId ra = base + GETARG_A(i);
+        StkId rb = base + GETARG_B(i);
         int cond;
-        if (ra->tt_ == LUA_VNUMINT && rb->tt_ == LUA_VNUMINT)
+        if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
         {
-          lua_Integer ia = ivalue(ra);
-          lua_Integer ib = ivalue(rb);
+          lua_Integer ia = slotival(L, ra);
+          lua_Integer ib = slotival(L, rb);
           cond = l_lti(ia, ib);
         }
-        else if ((ra->tt_ & NOVARIANT_MASK) == LUA_TNUMBER && (rb->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)
-          cond = LTnum(ra, rb);
+        else if ((slottag(L, ra) & NOVARIANT_MASK) == LUA_TNUMBER && (slottag(L, rb) & NOVARIANT_MASK) == LUA_TNUMBER)
+          cond = LTnum(slotrow(L, ra), slotrow(L, rb));
         else
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          cond = lessthanothers(L, ra, rb);
+          cond = lessthanothers(L, slotrow(L, ra), slotrow(L, rb));
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2348,22 +2352,22 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_LE:
       {
-        TValue* ra = &L->stack.p[base + GETARG_A(i)];
-        TValue* rb = &L->stack.p[base + GETARG_B(i)];
+        StkId ra = base + GETARG_A(i);
+        StkId rb = base + GETARG_B(i);
         int cond;
-        if (ra->tt_ == LUA_VNUMINT && rb->tt_ == LUA_VNUMINT)
+        if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
         {
-          lua_Integer ia = ivalue(ra);
-          lua_Integer ib = ivalue(rb);
+          lua_Integer ia = slotival(L, ra);
+          lua_Integer ib = slotival(L, rb);
           cond = l_lei(ia, ib);
         }
-        else if ((ra->tt_ & NOVARIANT_MASK) == LUA_TNUMBER && (rb->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)
-          cond = LEnum(ra, rb);
+        else if ((slottag(L, ra) & NOVARIANT_MASK) == LUA_TNUMBER && (slottag(L, rb) & NOVARIANT_MASK) == LUA_TNUMBER)
+          cond = LEnum(slotrow(L, ra), slotrow(L, rb));
         else
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          cond = lessequalothers(L, ra, rb);
+          cond = lessequalothers(L, slotrow(L, ra), slotrow(L, rb));
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2415,14 +2419,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_LTI:
       {
-        TValue* ra = &L->stack.p[base + GETARG_A(i)];
+        StkId ra = base + GETARG_A(i);
         int cond;
         int im = GETARG_sB(i);
-        if (ra->tt_ == LUA_VNUMINT)
-          cond = l_lti(ivalue(ra), im);
-        else if (ra->tt_ == LUA_VNUMFLT)
+        if (slottag(L, ra) == LUA_VNUMINT)
+          cond = l_lti(slotival(L, ra), im);
+        else if (slottag(L, ra) == LUA_VNUMFLT)
         {
-          lua_Number fa = fltvalue(ra);
+          lua_Number fa = slotfltval(L, ra);
           lua_Number fim = (lua_Number)im;
           cond = luai_numlt(fa, fim);
         }
@@ -2431,7 +2435,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           int isf = GETARG_C(i);
           ci->savedpc = pc;
           L->top = ci->top;
-          cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LT);
+          cond = luaT_callorderiTM(L, slotrow(L, ra), im, 0, isf, TM_LT);
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2446,14 +2450,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_LEI:
       {
-        TValue* ra = &L->stack.p[base + GETARG_A(i)];
+        StkId ra = base + GETARG_A(i);
         int cond;
         int im = GETARG_sB(i);
-        if (ra->tt_ == LUA_VNUMINT)
-          cond = l_lei(ivalue(ra), im);
-        else if (ra->tt_ == LUA_VNUMFLT)
+        if (slottag(L, ra) == LUA_VNUMINT)
+          cond = l_lei(slotival(L, ra), im);
+        else if (slottag(L, ra) == LUA_VNUMFLT)
         {
-          lua_Number fa = fltvalue(ra);
+          lua_Number fa = slotfltval(L, ra);
           lua_Number fim = (lua_Number)im;
           cond = luai_numle(fa, fim);
         }
@@ -2462,7 +2466,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           int isf = GETARG_C(i);
           ci->savedpc = pc;
           L->top = ci->top;
-          cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LE);
+          cond = luaT_callorderiTM(L, slotrow(L, ra), im, 0, isf, TM_LE);
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2477,14 +2481,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_GTI:
       {
-        TValue* ra = &L->stack.p[base + GETARG_A(i)];
+        StkId ra = base + GETARG_A(i);
         int cond;
         int im = GETARG_sB(i);
-        if (ra->tt_ == LUA_VNUMINT)
-          cond = l_gti(ivalue(ra), im);
-        else if (ra->tt_ == LUA_VNUMFLT)
+        if (slottag(L, ra) == LUA_VNUMINT)
+          cond = l_gti(slotival(L, ra), im);
+        else if (slottag(L, ra) == LUA_VNUMFLT)
         {
-          lua_Number fa = fltvalue(ra);
+          lua_Number fa = slotfltval(L, ra);
           lua_Number fim = (lua_Number)im;
           cond = luai_numgt(fa, fim);
         }
@@ -2493,7 +2497,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           int isf = GETARG_C(i);
           ci->savedpc = pc;
           L->top = ci->top;
-          cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LT);
+          cond = luaT_callorderiTM(L, slotrow(L, ra), im, 1, isf, TM_LT);
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2508,14 +2512,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       }
       case OP_GEI:
       {
-        TValue* ra = &L->stack.p[base + GETARG_A(i)];
+        StkId ra = base + GETARG_A(i);
         int cond;
         int im = GETARG_sB(i);
-        if (ra->tt_ == LUA_VNUMINT)
-          cond = l_gei(ivalue(ra), im);
-        else if (ra->tt_ == LUA_VNUMFLT)
+        if (slottag(L, ra) == LUA_VNUMINT)
+          cond = l_gei(slotival(L, ra), im);
+        else if (slottag(L, ra) == LUA_VNUMFLT)
         {
-          lua_Number fa = fltvalue(ra);
+          lua_Number fa = slotfltval(L, ra);
           lua_Number fim = (lua_Number)im;
           cond = luai_numge(fa, fim);
         }
@@ -2524,7 +2528,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           int isf = GETARG_C(i);
           ci->savedpc = pc;
           L->top = ci->top;
-          cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LE);
+          cond = luaT_callorderiTM(L, slotrow(L, ra), im, 1, isf, TM_LE);
           trap = ci->trap;
         }
         if (cond != GETARG_k(i))
@@ -2554,12 +2558,12 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_TESTSET:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rb = (&(L)->stack.p[(base + GETARG_B(i))]);
-        if ((((rb)->tt_ == LUA_VFALSE) || (((rb)->tt_ & NOVARIANT_MASK) == LUA_TNIL)) == GETARG_k(i))
+        StkId rb = (base + GETARG_B(i));
+        if (((slottag(L, rb) == LUA_VFALSE) || ((slottag(L, rb) & NOVARIANT_MASK) == LUA_TNIL)) == GETARG_k(i))
           pc++;
         else
         {
-          setslot(L, ra, rb);
+          copyslot(L, ra, rb);
           Instruction ni = code[pc];
           pc += GETARG_sJ(ni) + 1;
           trap = ci->trap;
@@ -2844,11 +2848,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         for (; n > 0; n--)
         {
-          TValue* val = (&(L)->stack.p[ra + n]);
-          obj2arr(h, last - 1, val);
+          StkId val = ra + n;
+          obj2arr(h, last - 1, slotrow(L, val));
           last--;
           assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-          luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(h)), val);
+          luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(h)), slotrow(L, val));
         }
         break;
       }
@@ -2884,14 +2888,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_GETVARG:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* rc = (&(L)->stack.p[(base + GETARG_C(i))]);
-        luaT_getvararg(L, ci, ra, rc);
+        StkId rc = (base + GETARG_C(i));
+        luaT_getvararg(L, ci, ra, slotrow(L, rc));
         break;
       }
       case OP_ERRNNIL:
       {
-        TValue* ra = (&(L)->stack.p[(base + GETARG_A(i))]);
-        if (!(((ra)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+        StkId ra = (base + GETARG_A(i));
+        if (!((slottag(L, ra) & NOVARIANT_MASK) == LUA_TNIL))
         {
           ci->savedpc = pc;
           L->top = ci->top;

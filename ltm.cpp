@@ -365,8 +365,8 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
     h = nullptr;
   else
   {
-    TValue* vt = &L->stack.p[ci->func + vatab + 1];
-    h = hvalue(vt);
+    StkId vt = ci->func + vatab + 1;
+    h = slothval(L, vt);
   }
   int nargs = getnumargs(L, ci, h); /* number of available vararg args. */
   int i, touse;                     /* 'touse' is minimum between 'wanted' and 'nargs' */

@@ -403,11 +403,11 @@ void luaE_warning(lua_State* L, const char* msg, int tocont)
 */
 void luaE_warnerror(lua_State* L, const char* where)
 {
-  TValue* errobj = (&(L)->stack.p[L->top - 1]); /* error object */
+  StkId errobj = L->top - 1; /* error object */
   const char* msg;
-  if ((errobj->tt_ & NOVARIANT_MASK) == LUA_TSTRING)
+  if ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
   {
-    msg = getstr(tsvalue(errobj));
+    msg = getstr(slottsval(L, errobj));
   }
   else
     msg = "error object is not a string";
