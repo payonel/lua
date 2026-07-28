@@ -30,28 +30,39 @@ LUAI_FUNC const char* luaG_findlocal(lua_State* L, CallInfo* ci, int n,
                                      StkId* pos);
 /*
 ** Error reporters take an explicit operand origin ('src'): the stack
-** index of the offending value when it lives in the current frame, or
-** NOSLOT when it does not (constants, immediates, metatable values). The
-** origin drives error attribution ("global 'x'", "local 'y'") — it
-** replaces recovering the register by scanning the stack for pointer
+** index of the offending value when it lives in the current frame,
+** an encoded upvalue index when it is an upvalue of the running
+** closure (OP_GETTABUP/OP_SETTABUP), or NOSLOT when neither
+** (constants, immediates, metatable values). The origin drives error
+** attribution ("global 'x'", "local 'y'", "upvalue 'z'") — it
+** replaces recovering the operand by scanning storage for pointer
 ** identity, which by-value operand rows (and the managed port) cannot
 ** support.
 */
+
+/* origins in [UPVALORIGIN, NOSLOT) encode upvalue indices */
+constexpr StkId UPVALORIGIN = ~(StkId)0 - 256; /* MAXUPVAL + 1 below NOSLOT */
+
+static l_forceinline StkId upvalorigin(int uvidx)
+{
+  return UPVALORIGIN + (StkId)uvidx;
+}
+
 LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o,
-                                 const char* opname, StkId src = NOSLOT);
-LUAI_FUNC l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src = NOSLOT);
+                                 const char* opname, StkId src);
+LUAI_FUNC l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src);
 LUAI_FUNC l_noret luaG_forerror(lua_State* L, const TValue* o,
                                 const char* what);
 LUAI_FUNC l_noret luaG_concaterror(lua_State* L, const TValue* p1,
                                    const TValue* p2,
-                                   StkId src1 = NOSLOT, StkId src2 = NOSLOT);
+                                   StkId src1, StkId src2);
 LUAI_FUNC l_noret luaG_opinterror(lua_State* L, const TValue* p1,
                                   const TValue* p2,
                                   const char* msg,
-                                  StkId src1 = NOSLOT, StkId src2 = NOSLOT);
+                                  StkId src1, StkId src2);
 LUAI_FUNC l_noret luaG_tointerror(lua_State* L, const TValue* p1,
                                   const TValue* p2,
-                                  StkId src1 = NOSLOT, StkId src2 = NOSLOT);
+                                  StkId src1, StkId src2);
 LUAI_FUNC l_noret luaG_ordererror(lua_State* L, const TValue* p1,
                                   const TValue* p2);
 
@@ -68,14 +79,14 @@ static l_forceinline l_noret luaG_forerror(lua_State* L, StkId idx, const char* 
 static l_forceinline l_noret luaG_callerror(lua_State* L, StkId idx)
 {
   TValue v = getslot(L, idx);
-  luaG_callerror(L, &v);
+  luaG_callerror(L, &v, idx);
 }
 
 static l_forceinline l_noret luaG_concaterror(lua_State* L, StkId p1, StkId p2)
 {
   TValue v1 = getslot(L, p1);
   TValue v2 = getslot(L, p2);
-  luaG_concaterror(L, &v1, &v2);
+  luaG_concaterror(L, &v1, &v2, p1, p2);
 }
 
 LUAI_FUNC l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k);

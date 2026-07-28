@@ -233,8 +233,8 @@ static int luaB_collectgarbage(lua_State* L)
   }
   case LUA_GCCOUNT:
   {
-    int k = lua_gc(L, o);
-    int b = lua_gc(L, LUA_GCCOUNTB);
+    int k = lua_gc(L, o, 0, 0, 0);
+    int b = lua_gc(L, LUA_GCCOUNTB, 0, 0, 0);
     { if ((k) == -1) break; };
     lua_pushnumber(L, (lua_Number) k + ((lua_Number) b / 1024));
     return 1;
@@ -242,25 +242,25 @@ static int luaB_collectgarbage(lua_State* L)
   case LUA_GCSTEP:
   {
     lua_Integer n = luaL_optinteger(L, 2, 0);
-    int res = lua_gc(L, o, ((size_t)(n)));
+    int res = lua_gc(L, o, ((size_t)(n)), 0, 0);
     { if ((res) == -1) break; };
     lua_pushboolean(L, res);
     return 1;
   }
   case LUA_GCISRUNNING:
   {
-    int res = lua_gc(L, o);
+    int res = lua_gc(L, o, 0, 0, 0);
     { if ((res) == -1) break; };
     lua_pushboolean(L, res);
     return 1;
   }
   case LUA_GCGEN:
   {
-    return pushmode(L, lua_gc(L, o));
+    return pushmode(L, lua_gc(L, o, 0, 0, 0));
   }
   case LUA_GCINC:
   {
-    return pushmode(L, lua_gc(L, o));
+    return pushmode(L, lua_gc(L, o, 0, 0, 0));
   }
   case LUA_GCPARAM:
   {
@@ -277,7 +277,7 @@ static int luaB_collectgarbage(lua_State* L)
   }
   default:
   {
-    int res = lua_gc(L, o);
+    int res = lua_gc(L, o, 0, 0, 0);
     { if ((res) == -1) break; };
     lua_pushinteger(L, res);
     return 1;

@@ -90,14 +90,14 @@ LUAI_FUNC lu_byte luaT_callTMres(lua_State* L, const TValue* f,
 */
 LUAI_FUNC void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
                              StkId res, TMS event,
-                             StkId src1 = NOSLOT, StkId src2 = NOSLOT);
+                             StkId src1, StkId src2);
 LUAI_FUNC void luaT_tryconcatTM(lua_State* L);
 LUAI_FUNC void luaT_trybinassocTM(lua_State* L, const TValue* p1,
                                   const TValue* p2, int inv, StkId res, TMS event,
-                                  StkId src1 = NOSLOT);
+                                  StkId src1);
 LUAI_FUNC void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
                               int inv, StkId res, TMS event,
-                              StkId src1 = NOSLOT);
+                              StkId src1);
 LUAI_FUNC int luaT_callorderTM(lua_State* L, const TValue* p1,
                                const TValue* p2, TMS event);
 LUAI_FUNC int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,

@@ -704,7 +704,11 @@ LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt)
     { /* a string (a number is converted in place, as 'lua_tolstring') */
       StkId o = slot;
       if ((slottag(L, o) & NOVARIANT_MASK) == LUA_TNUMBER)
-        luaO_tostring(L, slotrow(L, o));
+      {
+        TValue v = getslot(L, o);
+        luaO_tostring(L, &v);
+        setslot(L, o, &v);
+      }
       assert(((slottag(L, o) & NOVARIANT_MASK) == LUA_TSTRING) && "string expected");
       args.str(getstr(slottsval(L, o)));
       break;
@@ -850,7 +854,7 @@ static int auxgetstr(lua_State* L, const TValue* t, const char* k)
     setslots(L, L->top, str); /* the string anchors itself as the key */
     api_incr_top(L);
     TValue key = getslot(L, L->top - 1);
-    tag = luaV_finishget(L, t, &key, L->top - 1, tag);
+    tag = luaV_finishget(L, t, &key, L->top - 1, tag, NOSLOT);
   }
   lua_unlock(L);
   return ((tag) & NOVARIANT_MASK);
@@ -896,7 +900,7 @@ LUA_API int lua_gettable(lua_State* L, int idx)
   if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
   {
     TValue key = getslot(L, L->top - 1);
-    tag = luaV_finishget(L, &t, &key, L->top - 1, tag);
+    tag = luaV_finishget(L, &t, &key, L->top - 1, tag, NOSLOT);
   }
   lua_unlock(L);
   return ((tag) & NOVARIANT_MASK);
@@ -934,7 +938,7 @@ LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
   {
     TValue key;
     setivalue(&key, n);
-    tag = luaV_finishget(L, &t, &key, L->top, tag);
+    tag = luaV_finishget(L, &t, &key, L->top, tag, NOSLOT);
   }
   else
     setslot(L, L->top, &res);
@@ -1108,7 +1112,7 @@ static void auxsetstr(lua_State* L, const TValue* t, const char* k)
     api_incr_top(L);
     TValue key = getslot(L, L->top - 1);
     TValue val = getslot(L, L->top - 2);
-    luaV_finishset(L, t, &key, &val, hres);
+    luaV_finishset(L, t, &key, &val, hres, NOSLOT);
     L->top -= 2; /* pop value and key */
   }
   lua_unlock(L); /* lock done by caller */
@@ -1139,7 +1143,7 @@ LUA_API void lua_settable(lua_State* L, int idx)
   if (hres == HOK)
     luaV_finishfastset(L, &t, &val);
   else
-    luaV_finishset(L, &t, &key, &val, hres);
+    luaV_finishset(L, &t, &key, &val, hres, NOSLOT);
   L->top -= 2; /* pop index and value */
   lua_unlock(L);
 }
@@ -1184,7 +1188,7 @@ LUA_API void lua_seti(lua_State* L, int idx, lua_Integer n)
   {
     TValue temp;
     setivalue(&temp, n);
-    luaV_finishset(L, &t, &temp, &val, hres);
+    luaV_finishset(L, &t, &temp, &val, hres, NOSLOT);
   }
   L->top--; /* pop value */
   lua_unlock(L);
@@ -1420,7 +1424,7 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
       TValue gt;
       getGlobalTable(L, &gt);
       /* set global table as 1st upvalue of 'f' (may be LUA_ENV) */
-      setobj(L, upvalval(f->upvals[0]), &gt);
+      upvalsetval(L, f->upvals[0], &gt);
       luaC_barrier(L, f->upvals[0], &gt);
     }
   }
@@ -1618,7 +1622,7 @@ LUA_API void lua_len(lua_State* L, int idx)
 {
   lua_lock(L);
   TValue t = index2val(L, idx);
-  luaV_objlen(L, L->top, &t);
+  luaV_objlen(L, L->top, &t, NOSLOT);
   api_incr_top(L);
   lua_unlock(L);
 }
@@ -1680,7 +1684,18 @@ LUA_API void* lua_newuserdatauv(lua_State* L, size_t size, int nuvalue)
   return getudatamem(u);
 }
 
-static const char* aux_upvalue(TValue* fi, int n, TValue** val,
+/*
+** Discriminated address of a closure upvalue: a C closure's embedded
+** row (which is not stack storage) or a Lua closure's UpVal, whose
+** value is accessed through upvalgetval/upvalsetval.
+*/
+struct UpvalAddr
+{
+  TValue* row; /* C-closure upvalue storage, or null */
+  UpVal* uv;   /* Lua-closure upvalue, or null */
+};
+
+static const char* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
                                GCObject** owner)
 {
   switch (((fi)->tt_ & WITHVARIANT_MASK))
@@ -1690,7 +1705,7 @@ static const char* aux_upvalue(TValue* fi, int n, TValue** val,
     CClosure* f = clCvalue(fi);
     if (!(((unsigned int)(n)) - 1u < ((unsigned int)(f->nupvalues))))
       return nullptr; /* 'n' not in [1, f->nupvalues] */
-    *val = &f->upvalue[n - 1];
+    *addr = {&f->upvalue[n - 1], nullptr};
     if (owner)
     {
       assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
@@ -1705,7 +1720,7 @@ static const char* aux_upvalue(TValue* fi, int n, TValue** val,
     Proto* p = f->p;
     if (!(((unsigned int)(n)) - 1u < ((unsigned int)(p->sizeupvalues))))
       return nullptr; /* 'n' not in [1, p->sizeupvalues] */
-    *val = upvalval(f->upvals[n - 1]);
+    *addr = {nullptr, f->upvals[n - 1]};
     if (owner)
     {
       assert((f->upvals[n - 1]->tt & NOVARIANT_MASK) >= LUA_TSTRING);
@@ -1722,13 +1737,14 @@ static const char* aux_upvalue(TValue* fi, int n, TValue** val,
 LUA_API const char* lua_getupvalue(lua_State* L, int funcindex, int n)
 {
   const char* name;
-  TValue* val = nullptr; /* to avoid warnings */
+  UpvalAddr addr = {nullptr, nullptr};
   lua_lock(L);
   TValue fi = index2val(L, funcindex);
-  name = aux_upvalue(&fi, n, &val, nullptr);
+  name = aux_upvalue(&fi, n, &addr, nullptr);
   if (name)
   {
-    setslot(L, L->top, val);
+    TValue v = (addr.uv != nullptr) ? upvalgetval(addr.uv) : *addr.row;
+    setslot(L, L->top, &v);
     api_incr_top(L);
   }
   lua_unlock(L);
@@ -1738,17 +1754,22 @@ LUA_API const char* lua_getupvalue(lua_State* L, int funcindex, int n)
 LUA_API const char* lua_setupvalue(lua_State* L, int funcindex, int n)
 {
   const char* name;
-  TValue* val = nullptr;     /* to avoid warnings */
+  UpvalAddr addr = {nullptr, nullptr};
   GCObject* owner = nullptr; /* to avoid warnings */
   lua_lock(L);
   TValue fi = index2val(L, funcindex);
   api_checknelems(L, 1);
-  name = aux_upvalue(&fi, n, &val, &owner);
+  name = aux_upvalue(&fi, n, &addr, &owner);
   if (name)
   {
     L->top--;
     TValue v = getslot(L, L->top);
-    setobj(L, val, &v);
+    if (addr.uv != nullptr)
+      upvalsetval(L, addr.uv, &v);
+    else
+    {
+      setobj(L, addr.row, &v);
+    }
     luaC_barrier(L, owner, &v);
   }
   lua_unlock(L);

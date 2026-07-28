@@ -330,10 +330,9 @@ constexpr int LUA_GCPSTEPSIZE = 5; /* GC granularity */
 constexpr int LUA_GCPN = 6;
 
 /* 'stepsize' is used by LUA_GCSTEP and 'param'/'value' by LUA_GCPARAM;
-   other options ignore them (C linkage forbids overloads; a managed
-   port expresses the defaulted arguments as overloads) */
-LUA_API int(lua_gc)(lua_State* L, int what, size_t stepsize = 0,
-                    int param = 0, int value = 0);
+   other options ignore them (pass zeros) */
+LUA_API int(lua_gc)(lua_State* L, int what, size_t stepsize,
+                    int param, int value);
 
 /*
 ** miscellaneous functions

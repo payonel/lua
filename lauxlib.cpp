@@ -690,7 +690,7 @@ LUALIB_API void luaL_pushresult(luaL_Buffer* B)
     /* push the string first (may throw OOM); box still owns buffer */
     lua_pushlstring(L, s, len);
     lua_closeslot(L, -2); /* close the box (boxgc frees buffer) */
-    lua_gc(L, LUA_GCSTEP, len);
+    lua_gc(L, LUA_GCSTEP, len, 0, 0);
   }
   lua_remove(L, -2); /* remove box or placeholder from the stack */
 }

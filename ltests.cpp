@@ -38,9 +38,10 @@
 
 static void* l_Trick = 0;
 
-static inline TValue* obj_at(lua_State* L, int k)
+/* row copy of stack argument 'k' of the running C function */
+static inline TValue obj_at(lua_State* L, int k)
 {
-  return &L->stack.p[L->ci->func + (StkId)k];
+  return getslot(L, L->ci->func + (StkId)k);
 }
 
 /*
@@ -539,7 +540,8 @@ static void checkLclosure(global_State* g, LClosure* cl)
       if (!upisopen(uv))
       {
         assert((uv->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-        checkvalref(g, const_cast<GCObject*>(static_cast<const GCObject*>(uv)), upvalval(uv));
+        TValue uvv = upvalgetval(uv);
+        checkvalref(g, const_cast<GCObject*>(static_cast<const GCObject*>(uv)), &uvv);
       }
     }
   }
@@ -593,7 +595,8 @@ static void checkrefs(global_State* g, GCObject* o)
   }
   case LUA_VUPVAL:
   {
-    checkvalref(g, o, upvalval(static_cast<UpVal*>(o)));
+    TValue uvv = upvalgetval(static_cast<UpVal*>(o));
+    checkvalref(g, o, &uvv);
     break;
   }
   case LUA_VTABLE:
@@ -882,7 +885,8 @@ static int listcode(lua_State* L)
   Proto* p;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                 1, "Lua function expected");
-  p = getproto(obj_at(L, 1));
+  TValue o = obj_at(L, 1);
+  p = getproto(&o);
   lua_newtable(L);
   setnameval(L, "maxstack", p->maxstacksize);
   setnameval(L, "numparams", p->numparams);
@@ -902,7 +906,8 @@ static int printcode(lua_State* L)
   Proto* p;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                 1, "Lua function expected");
-  p = getproto(obj_at(L, 1));
+  TValue o = obj_at(L, 1);
+  p = getproto(&o);
   printf("maxstack: %d\n", p->maxstacksize);
   printf("numparams: %d\n", p->numparams);
   for (pc = 0; pc < p->sizecode; pc++)
@@ -919,7 +924,8 @@ static int listk(lua_State* L)
   int i;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                 1, "Lua function expected");
-  p = getproto(obj_at(L, 1));
+  TValue o = obj_at(L, 1);
+  p = getproto(&o);
   lua_createtable(L, p->sizek, 0);
   for (i = 0; i < p->sizek; i++)
   {
@@ -935,7 +941,8 @@ static int listabslineinfo(lua_State* L)
   int i;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                 1, "Lua function expected");
-  p = getproto(obj_at(L, 1));
+  TValue o = obj_at(L, 1);
+  p = getproto(&o);
   luaL_argcheck(L, p->abslineinfo != nullptr, 1, "function has no debug info");
   lua_createtable(L, 2 * p->sizeabslineinfo, 0);
   for (i = 0; i < p->sizeabslineinfo; i++)
@@ -956,7 +963,8 @@ static int listlocals(lua_State* L)
   const char* name;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                 1, "Lua function expected");
-  p = getproto(obj_at(L, 1));
+  TValue o = obj_at(L, 1);
+  p = getproto(&o);
   while ((name = luaF_getlocalname(p, ++i, pc)) != nullptr)
     lua_pushstring(L, name);
   return i - 1;
@@ -972,7 +980,8 @@ static void lua_printstack(lua_State* L)
   for (i = 1; i <= n; i++)
   {
     printf("%3d: ", i);
-    lua_printvalue((&(L)->stack.p[L->ci->func + i]));
+    TValue v = getslot(L, L->ci->func + i);
+    lua_printvalue(&v);
     printf("\n");
   }
   printf("<<\n");
@@ -995,7 +1004,8 @@ static int lua_printallstack(lua_State* L)
         ci = ci->next;
     }
     printf("%3d: ", i++);
-    lua_printvalue((&(L)->stack.p[p]));
+    TValue v = getslot(L, p);
+    lua_printvalue(&v);
     printf("\n");
   }
   printf("<<\n");
@@ -1075,27 +1085,27 @@ static int alloc_failnext(lua_State*)
 
 static int settrick(lua_State* L)
 {
-  if ((((obj_at(L, 1))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  TValue o = obj_at(L, 1);
+  if (((o.tt_ & NOVARIANT_MASK) == LUA_TNIL))
     l_Trick = nullptr;
   else
   {
-    assert(obj_at(L, 1)->tt_ & BIT_ISCOLLECTABLE);
-    l_Trick = gcvalue(obj_at(L, 1));
+    assert(o.tt_ & BIT_ISCOLLECTABLE);
+    l_Trick = gcvalue(&o);
   }
   return 0;
 }
 
 static int gc_color(lua_State* L)
 {
-  TValue* o;
   luaL_checkany(L, 1);
-  o = obj_at(L, 1);
-  if (!((o)->tt_ & BIT_ISCOLLECTABLE))
+  TValue o = obj_at(L, 1);
+  if (!(o.tt_ & BIT_ISCOLLECTABLE))
     lua_pushstring(L, "no collectable");
   else
   {
-    assert(o->tt_ & BIT_ISCOLLECTABLE);
-    GCObject* obj = gcvalue(o);
+    assert(o.tt_ & BIT_ISCOLLECTABLE);
+    GCObject* obj = gcvalue(&o);
     lua_pushstring(L, isdead(G(L), obj) ? "dead" : iswhite(obj) ? "white"
                                                : isblack(obj)   ? "black"
                                                                 : "gray");
@@ -1105,17 +1115,16 @@ static int gc_color(lua_State* L)
 
 static int gc_age(lua_State* L)
 {
-  TValue* o;
   luaL_checkany(L, 1);
-  o = obj_at(L, 1);
-  if (!((o)->tt_ & BIT_ISCOLLECTABLE))
+  TValue o = obj_at(L, 1);
+  if (!(o.tt_ & BIT_ISCOLLECTABLE))
     lua_pushstring(L, "no collectable");
   else
   {
     static const char* gennames[] = {"new", "survival", "old0", "old1",
                                      "old", "touched1", "touched2"};
-    assert(o->tt_ & BIT_ISCOLLECTABLE);
-    GCObject* obj = gcvalue(o);
+    assert(o.tt_ & BIT_ISCOLLECTABLE);
+    GCObject* obj = gcvalue(&o);
     lua_pushstring(L, gennames[getage(obj)]);
   }
   return 1;
@@ -1123,15 +1132,14 @@ static int gc_age(lua_State* L)
 
 static int gc_printobj(lua_State* L)
 {
-  TValue* o;
   luaL_checkany(L, 1);
-  o = obj_at(L, 1);
-  if (!((o)->tt_ & BIT_ISCOLLECTABLE))
+  TValue o = obj_at(L, 1);
+  if (!(o.tt_ & BIT_ISCOLLECTABLE))
     printf("no collectable\n");
   else
   {
-    assert(o->tt_ & BIT_ISCOLLECTABLE);
-    GCObject* obj = gcvalue(o);
+    assert(o.tt_ & BIT_ISCOLLECTABLE);
+    GCObject* obj = gcvalue(&o);
     printobj(G(L), obj);
     printf("\n");
   }
@@ -1207,17 +1215,19 @@ static int hash_query(lua_State* L)
   {
     TString* ts;
     luaL_argcheck(L, lua_type(L, 1) == LUA_TSTRING, 1, "string expected");
-    assert(((obj_at(L, 1))->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    ts = tsvalue((obj_at(L, 1)));
+    TValue o = obj_at(L, 1);
+    assert((o.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    ts = tsvalue(&o);
     lua_pushinteger(L, ((int)(ts->hash)));
   }
   else
   {
-    TValue* o = obj_at(L, 1);
+    TValue o = obj_at(L, 1);
+    TValue o2 = obj_at(L, 2);
     Table* t;
     luaL_checktype(L, 2, LUA_TTABLE);
-    t = hvalue(obj_at(L, 2));
-    lua_pushinteger(L, ((lua_Integer)(luaH_mainposition(t, o))));
+    t = hvalue(&o2);
+    lua_pushinteger(L, ((lua_Integer)(luaH_mainposition(t, &o))));
   }
   return 1;
 }
@@ -1261,7 +1271,8 @@ static int table_query(lua_State* L)
   int i = ((int)(luaL_optinteger(L, 2, -1)));
   unsigned int asize;
   luaL_checktype(L, 1, LUA_TTABLE);
-  t = hvalue(obj_at(L, 1));
+  TValue o = obj_at(L, 1);
+  t = hvalue(&o);
   asize = t->asize;
   if (i == -1)
   {
@@ -1274,7 +1285,11 @@ static int table_query(lua_State* L)
   {
     lua_pushinteger(L, i);
     if (!(((*getArrTag(t, i)) & NOVARIANT_MASK) == LUA_TNIL))
-      arr2obj(t, ((unsigned int)(i)), (&(L)->stack.p[L->top]));
+    {
+      TValue v;
+      arr2obj(t, ((unsigned int)(i)), &v);
+      setslot(L, L->top, &v);
+    }
     else
       setslottag(L, L->top, LUA_VNIL);
     api_incr_top(L);
@@ -1999,7 +2014,8 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       int n = getnum_aux(L, L1, &pc);
       if (n != 0)
       {
-        lua_printvalue((&(L)->stack.p[L->ci->func + n]));
+        TValue v = getslot(L, L->ci->func + n);
+        lua_printvalue(&v);
         printf("\n");
       }
       else

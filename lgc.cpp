@@ -382,7 +382,8 @@ static void reallymarkobject(global_State* g, GCObject* o)
       set2gray(uv); /* open upvalues are kept gray */
     else
       set2black(uv);        /* closed upvalues are visited here */
-    markvalue(g, upvalval(uv)); /* mark its content */
+    TValue uvv = upvalgetval(uv);
+    markvalue(g, &uvv); /* mark its content */
     break;
   }
   case LUA_VUSERDATA:
@@ -462,7 +463,8 @@ static void remarkupvals(global_State* g)
         if (!iswhite(uv))
         { /* upvalue already visited? */
           assert(upisopen(uv) && isgray(uv));
-          markvalue(g, upvalval(uv)); /* mark its value */
+          TValue uvv = upvalgetval(uv);
+          markvalue(g, &uvv); /* mark its value */
         }
       }
     }

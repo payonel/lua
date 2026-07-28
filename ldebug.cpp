@@ -807,27 +807,6 @@ static int instack(lua_State* L, CallInfo* ci, const TValue* o)
   return -1; /* not found */
 }
 
-/*
-** Checks whether value 'o' came from an upvalue. (That can only happen
-** with instructions OP_GETTABUP/OP_SETTABUP, which operate directly on
-** upvalues.)
-*/
-static const char* getupvalname(lua_State* L, CallInfo* ci, const TValue* o,
-                                const char** name)
-{
-  LClosure* c = ci_func(L, ci);
-  int i;
-  for (i = 0; i < c->nupvalues; i++)
-  {
-    if (upvalval(c->upvals[i]) == o)
-    {
-      *name = upvalname(c->p, i);
-      return strupval;
-    }
-  }
-  return nullptr;
-}
-
 static const char* formatvarinfo(lua_State* L, const char* kind,
                                  const char* name)
 {
@@ -851,7 +830,12 @@ static const char* varinfo(lua_State* L, const TValue* o, StkId src)
   const char* kind = nullptr;
   if (isLua(ci))
   {
-    if (src != NOSLOT)
+    if (src >= UPVALORIGIN && src != NOSLOT)
+    { /* explicit origin: an upvalue of the running closure */
+      name = upvalname(ci_func(L, ci)->p, (int)(src - UPVALORIGIN));
+      kind = strupval;
+    }
+    else if (src != NOSLOT)
     { /* explicit origin: a register of the current frame */
       StkId base = ci->func + 1;
       if (src >= base && src < ci->top)
@@ -859,14 +843,10 @@ static const char* varinfo(lua_State* L, const TValue* o, StkId src)
                           (int)(src - base), &name);
     }
     else
-    {
-      kind = getupvalname(L, ci, o, &name); /* check whether 'o' is an upvalue */
-      if (!kind)
-      {                           /* not an upvalue? */
-        int reg = instack(L, ci, o); /* try a register */
-        if (reg >= 0)             /* is 'o' a register? */
-          kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci), reg, &name);
-      }
+    { /* transitional fallback: try the pointer-identity register scan */
+      int reg = instack(L, ci, o); /* try a register */
+      if (reg >= 0)             /* is 'o' a register? */
+        kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci), reg, &name);
     }
   }
   return formatvarinfo(L, kind, name);

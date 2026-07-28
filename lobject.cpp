@@ -262,7 +262,7 @@ void luaO_arith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   if (!luaO_rawarith(L, op, p1, p2, &r))
   {
     /* could not perform raw operation; try metamethod */
-    luaT_trybinTM(L, p1, p2, res, ((TMS)((op - LUA_OPADD) + TM_ADD)));
+    luaT_trybinTM(L, p1, p2, res, ((TMS)((op - LUA_OPADD) + TM_ADD)), NOSLOT, NOSLOT);
   }
   else
     setslot(L, res, &r);

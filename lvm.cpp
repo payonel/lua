@@ -1395,7 +1395,8 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         int b = GETARG_B(i);
-        setslot(L, ra, upvalval(cl->upvals[b]));
+        TValue v = upvalgetval(cl->upvals[b]);
+        setslot(L, ra, &v);
         break;
       }
       case OP_SETUPVAL:
@@ -1403,30 +1404,30 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         UpVal* uv = cl->upvals[GETARG_B(i)];
         TValue rav = getslot(L, ra);
-        setobj(L, upvalval(uv), &rav);
+        upvalsetval(L, uv, &rav);
         luaC_barrier(L, uv, &rav);
         break;
       }
       case OP_GETTABUP:
       {
         StkId ra = (base + GETARG_A(i));
-        TValue* upval = upvalval(cl->upvals[GETARG_B(i)]);
+        TValue upval = upvalgetval(cl->upvals[GETARG_B(i)]);
         TValue* rc = (k + GETARG_C(i));
         assert((rc->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rc); /* key must be a short string */
         lu_byte tag;
         TValue res;
-        if (upval->tt_ != ctb(LUA_VTABLE))
+        if (upval.tt_ != ctb(LUA_VTABLE))
           tag = LUA_VNOTABLE;
         else
         {
-          tag = luaH_getshortstr(hvalue(upval), key, &res);
+          tag = luaH_getshortstr(hvalue(&upval), key, &res);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishget(L, upval, rc, ra, tag);
+          luaV_finishget(L, &upval, rc, ra, tag, upvalorigin(GETARG_B(i)));
           trap = ci->trap;
         }
         else
@@ -1544,25 +1545,25 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_SETTABUP:
       {
         int hres;
-        TValue* upval = upvalval(cl->upvals[GETARG_A(i)]);
+        TValue upval = upvalgetval(cl->upvals[GETARG_A(i)]);
         TValue* rb = (k + GETARG_B(i));
         /* value operand: constant or register, materialized as a row copy */
         TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rb); /* key must be a short string */
-        if (upval->tt_ != ctb(LUA_VTABLE))
+        if (upval.tt_ != ctb(LUA_VTABLE))
           hres = HNOTATABLE;
         else
         {
-          hres = luaH_psetshortstr(hvalue(upval), key, &rc);
+          hres = luaH_psetshortstr(hvalue(&upval), key, &rc);
         }
         if (hres == HOK)
-          luaV_finishfastset(L, upval, &rc);
+          luaV_finishfastset(L, &upval, &rc);
         else
         {
           ci->savedpc = pc;
           L->top = ci->top;
-          luaV_finishset(L, upval, rb, &rc, hres);
+          luaV_finishset(L, &upval, rb, &rc, hres, upvalorigin(GETARG_A(i)));
           trap = ci->trap;
         }
         break;

@@ -33,12 +33,24 @@ static l_forceinline StkId uplevel(const UpVal* up)
 }
 
 /*
-** Current location of an upvalue's value: a slot in the owner
-** thread's stack while open, its own embedded storage when closed.
+** An upvalue's value lives in a slot of the owner thread's stack while
+** open, in the upvalue's own embedded storage when closed. Access goes
+** by value: a row copy for reads, a discriminated store for writes —
+** no pointer into a stack ever escapes.
 */
-static l_forceinline TValue* upvalval(UpVal* uv)
+static l_forceinline TValue upvalgetval(const UpVal* uv)
 {
-  return upisopen(uv) ? &uv->owner->stack.p[uv->stkid] : &uv->value;
+  return upisopen(uv) ? getslot(uv->owner, uv->stkid) : uv->value;
+}
+
+static l_forceinline void upvalsetval(lua_State* L, UpVal* uv, const TValue* v)
+{
+  if (upisopen(uv))
+    setslot(uv->owner, uv->stkid, v);
+  else
+  {
+    setobj(L, &uv->value, v);
+  }
 }
 
 /*

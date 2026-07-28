@@ -80,9 +80,9 @@ LUAI_FUNC int luaV_tointegerns(const TValue* obj, lua_Integer* p,
 LUAI_FUNC int luaV_flttointeger(lua_Number n, lua_Integer* p, F2Imod mode);
 /* 'tsrc' is the origin of 't' for error attribution (stack index or -1) */
 LUAI_FUNC lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
-                                 StkId val, lu_byte tag, StkId tsrc = NOSLOT);
+                                 StkId val, lu_byte tag, StkId tsrc);
 LUAI_FUNC void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
-                              TValue* val, int aux, StkId tsrc = NOSLOT);
+                              TValue* val, int aux, StkId tsrc);
 LUAI_FUNC void luaV_finishOp(lua_State* L);
 LUAI_FUNC void luaV_execute(lua_State* L, CallInfo* ci);
 LUAI_FUNC void luaV_concat(lua_State* L, int total);
@@ -90,7 +90,7 @@ LUAI_FUNC lua_Integer luaV_idiv(lua_State* L, lua_Integer x, lua_Integer y);
 LUAI_FUNC lua_Integer luaV_mod(lua_State* L, lua_Integer x, lua_Integer y);
 LUAI_FUNC lua_Number luaV_modf(lua_State* L, lua_Number x, lua_Number y);
 LUAI_FUNC lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y);
-LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src = NOSLOT);
+LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src);
 
 static l_forceinline int tonumber(const TValue* o, lua_Number* nout)
 {
