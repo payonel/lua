@@ -643,27 +643,105 @@ LUA_API const char* lua_pushstring(lua_State* L, const char* s)
   return s;
 }
 
-LUA_API const char* lua_pushvfstring(lua_State* L, const char* fmt,
-                                     va_list argp)
+/*
+** Format 'fmt' taking one argument from the stack per conversion
+** directive (the replacement for C varargs in the public API): the
+** caller pushes the arguments in order before the call — a string for
+** '%s', an integer for '%d'/'%I'/'%c'/'%U', a float for '%f', and any
+** value for '%p' (formatted as its address). The arguments are
+** consumed and the formatted result is pushed (and also returned).
+*/
+LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt)
 {
   const char* ret;
+  FmtArgs args;
+  int n = 0; /* number of arguments taken from the stack */
+  const char* e;
   lua_lock(L);
-  ret = luaO_pushvfstring(L, fmt, argp);
-  luaC_checkGC(L);
-  lua_unlock(L);
-  return ret;
-}
-
-LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt, ...)
-{
-  const char* ret;
-  va_list argp;
-  lua_lock(L);
-  va_start(argp, fmt);
-  ret = luaO_pushvfstring(L, fmt, argp);
-  va_end(argp);
+  for (e = fmt; (e = strchr(e, '%')) != nullptr; e += 2)
+  { /* scan directives, collecting one stack argument for each */
+    switch (*(e + 1))
+    {
+    case 's':
+    case 'c':
+    case 'd':
+    case 'I':
+    case 'f':
+    case 'p':
+    case 'U':
+      n++;
+      break;
+    default: /* '%%' and unknown directives take no argument */
+      break;
+    }
+  }
+  api_checknelems(L, n);
+  for (e = fmt; (e = strchr(e, '%')) != nullptr; e += 2)
+  { /* arguments are at stack slots 'L->top - n' up to 'L->top - 1' */
+    StkId slot = L->top - n + args.n;
+    switch (*(e + 1))
+    {
+    case 's':
+    { /* a string (a number is converted in place, as 'lua_tolstring') */
+      TValue* o = &L->stack.p[slot];
+      if ((o->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)
+        luaO_tostring(L, o);
+      assert(((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING) && "string expected");
+      args.str(getstr(static_cast<TString*>(o->value_.gc)));
+      break;
+    }
+    case 'c':
+    {
+      TValue* o = &L->stack.p[slot];
+      assert((o->tt_ == LUA_VNUMINT) && "integer expected");
+      args.chr(((int)(o->value_.i)));
+      break;
+    }
+    case 'd':
+    {
+      TValue* o = &L->stack.p[slot];
+      assert((o->tt_ == LUA_VNUMINT) && "integer expected");
+      args.num(((int)(o->value_.i)));
+      break;
+    }
+    case 'I':
+    {
+      TValue* o = &L->stack.p[slot];
+      assert((o->tt_ == LUA_VNUMINT) && "integer expected");
+      args.lint(o->value_.i);
+      break;
+    }
+    case 'f':
+    {
+      TValue* o = &L->stack.p[slot];
+      assert((o->tt_ == LUA_VNUMFLT) && "float expected");
+      args.flt(o->value_.n);
+      break;
+    }
+    case 'p':
+    { /* any value, formatted as its address (as 'lua_topointer') */
+      args.ptr(lua_topointer(L, args.n - n)); /* negative API index of 'slot' */
+      break;
+    }
+    case 'U':
+    {
+      TValue* o = &L->stack.p[slot];
+      assert((o->tt_ == LUA_VNUMINT) && "integer expected");
+      args.utf8(((unsigned long)(o->value_.i)));
+      break;
+    }
+    default:
+      break;
+    }
+  }
+  ret = luaO_pushvfstring(L, fmt, args);
   if (ret == nullptr)
-    luaD_throw(L, LUA_ERRMEM); /* only after 'va_end' */
+    luaD_throw(L, LUA_ERRMEM);
+  if (n > 0)
+  { /* move result down, removing its arguments */
+    setobj(L, &L->stack.p[L->top - 1 - n], &L->stack.p[L->top - 1]);
+    L->top -= n;
+  }
   luaC_checkGC(L);
   lua_unlock(L);
   return ret;

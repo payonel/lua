@@ -27,8 +27,9 @@ LUAMOD_API int onefunction (lua_State *L) {
 
 LUAMOD_API int anotherfunc (lua_State *L) {
   luaL_checkversion(L);
-  lua_pushfstring(L, "%d%%%d\n", (int)lua_tointeger(L, 1),
-                                 (int)lua_tointeger(L, 2));
+  lua_pushinteger(L, lua_tointeger(L, 1));
+  lua_pushinteger(L, lua_tointeger(L, 2));
+  lua_pushfstring(L, "%d%%%d\n");
   return 1;
 } 
 

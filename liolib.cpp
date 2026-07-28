@@ -120,7 +120,10 @@ static int f_tostring(lua_State* L)
   if (isclosed(p))
     lua_pushliteral(L, "file (closed)");
   else
-    lua_pushfstring(L, "file (%p)", p->f);
+  {
+    lua_pushlightuserdata(L, p->f);
+    lua_pushfstring(L, "file (%p)");
+  }
   return 1;
 }
 
@@ -203,7 +206,11 @@ static void opencheck(lua_State* L, const char* fname, const char* mode)
   LStream* p = newfile(L);
   p->f = fopen(fname, mode);
   if (l_unlikely(p->f == nullptr))
-    luaL_error(L, "cannot open file '%s' (%s)", fname, strerror(errno));
+  {
+    lua_pushstring(L, fname);
+    lua_pushstring(L, strerror(errno));
+    luaL_error(L, "cannot open file '%s' (%s)");
+  }
 }
 
 static int io_open(lua_State* L)
@@ -254,7 +261,10 @@ static FILE* getiofile(lua_State* L, const char* findex)
   lua_getfield(L, LUA_REGISTRYINDEX, findex);
   p = (LStream*) lua_touserdata(L, -1);
   if (l_unlikely(isclosed(p)))
-    luaL_error(L, "default %s file is closed", findex + IOPREF_LEN);
+  {
+    lua_pushstring(L, findex + IOPREF_LEN);
+    luaL_error(L, "default %s file is closed");
+  }
   return p->f;
 }
 
@@ -615,7 +625,8 @@ static int io_readline(lua_State* L)
     if (n > 1)
     { /* is there error information? */
       /* 2nd result is error message */
-      return luaL_error(L, "%s", lua_tostring(L, -n + 1));
+      lua_pushvalue(L, -n + 1);
+      return luaL_error(L, "%s");
     }
     if (lua_toboolean(L, lua_upvalueindex(3)))
     {                                        /* generator created file? */

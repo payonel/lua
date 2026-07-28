@@ -203,7 +203,8 @@ static int luaB_close(lua_State* L)
     }
   }
   case COS_NORM:
-    return luaL_error(L, "cannot close a %s coroutine", statname[status]);
+    lua_pushstring(L, statname[status]);
+    return luaL_error(L, "cannot close a %s coroutine");
   case COS_RUN:
     lua_geti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD); /* get main */
     if (lua_tothread(L, -1) == co)

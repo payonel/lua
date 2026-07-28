@@ -160,7 +160,8 @@ static void pushutfchar(lua_State* L, int arg)
 {
   lua_Unsigned code = (lua_Unsigned) luaL_checkinteger(L, arg);
   luaL_argcheck(L, code <= MAXUTF, arg, "value out of range");
-  lua_pushfstring(L, "%U", ((unsigned long)(code)));
+  lua_pushinteger(L, ((lua_Integer)(code)));
+  lua_pushfstring(L, "%U");
 }
 
 /*

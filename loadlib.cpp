@@ -137,7 +137,9 @@ static void setpath(lua_State* L, const char* fieldname,
                     const char* dft)
 {
   const char* dftmark;
-  const char* nver = lua_pushfstring(L, "%s%s", envname, LUA_VERSUFFIX.data());
+  lua_pushstring(L, envname);
+  lua_pushstring(L, LUA_VERSUFFIX.data());
+  const char* nver = lua_pushfstring(L, "%s%s");
   const char* path = getenv(nver);                           /* try versioned name */
   if (path == nullptr)                                          /* no versioned environment variable? */
     path = getenv(envname);                                  /* try unversioned name */
@@ -399,7 +401,10 @@ static const char* findfile(lua_State* L, const char* name,
   lua_getfield(L, lua_upvalueindex(1), pname);
   path = lua_tostring(L, -1);
   if (l_unlikely(path == nullptr))
-    luaL_error(L, "'package.%s' must be a string", pname);
+  {
+    lua_pushstring(L, pname);
+    luaL_error(L, "'package.%s' must be a string");
+  }
   return searchpath(L, name, path, ".", dirsep);
 }
 
@@ -411,8 +416,12 @@ static int checkload(lua_State* L, int stat, const char* filename)
     return 2;                    /* return open function and file name */
   }
   else
-    return luaL_error(L, "error loading module '%s' from file '%s':\n\t%s",
-                      lua_tostring(L, 1), filename, lua_tostring(L, -1));
+  {
+    lua_pushvalue(L, 1);
+    lua_pushstring(L, filename);
+    lua_pushvalue(L, -3); /* original error message */
+    return luaL_error(L, "error loading module '%s' from file '%s':\n\t%s");
+  }
 }
 
 static int searcher_Lua(lua_State* L)
@@ -443,13 +452,15 @@ static int loadfunc(lua_State* L, const char* filename, const char* modname)
   {
     int stat;
     openfunc = lua_pushlstring(L, modname, ((size_t)(mark - modname)));
-    openfunc = lua_pushfstring(L, "luaopen_%s", openfunc);
+    lua_pushvalue(L, -1); /* 'openfunc' is the string on the top */
+    openfunc = lua_pushfstring(L, "luaopen_%s");
     stat = lookforfunc(L, filename, openfunc);
     if (stat != ERRFUNC)
       return stat;
     modname = mark + 1; /* else go ahead and try old-style name */
   }
-  openfunc = lua_pushfstring(L, "luaopen_%s", modname);
+  lua_pushstring(L, modname);
+  openfunc = lua_pushfstring(L, "luaopen_%s");
   return lookforfunc(L, filename, openfunc);
 }
 
@@ -480,7 +491,9 @@ static int searcher_Croot(lua_State* L)
       return checkload(L, 0, filename); /* real error */
     else
     { /* open function not found */
-      lua_pushfstring(L, "no module '%s' in file '%s'", name, filename);
+      lua_pushstring(L, name);
+      lua_pushstring(L, filename);
+      lua_pushfstring(L, "no module '%s' in file '%s'");
       return 1;
     }
   }
@@ -494,7 +507,8 @@ static int searcher_preload(lua_State* L)
   lua_getfield(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
   if (lua_getfield(L, -1, name) == LUA_TNIL)
   { /* not found? */
-    lua_pushfstring(L, "no field package.preload['%s']", name);
+    lua_pushstring(L, name);
+    lua_pushfstring(L, "no field package.preload['%s']");
     return 1;
   }
   else
@@ -521,7 +535,9 @@ static void findloader(lua_State* L, const char* name)
       lua_pop(L, 1);         /* remove nil */
       luaL_buffsub(&msg, 2); /* remove last prefix */
       luaL_pushresult(&msg); /* create error message */
-      luaL_error(L, "module '%s' not found:%s", name, lua_tostring(L, -1));
+      lua_pushstring(L, name);
+      lua_pushvalue(L, -2); /* error message from the buffer */
+      luaL_error(L, "module '%s' not found:%s");
     }
     lua_pushstring(L, name);
     lua_call(L, 1, 2);         /* call it */

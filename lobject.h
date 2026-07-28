@@ -699,8 +699,6 @@ LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
 LUAI_FUNC const char* luaO_pushvfstring(lua_State* L, const char* fmt,
                                         const FmtArgs& args);
-LUAI_FUNC const char* luaO_pushvfstring(lua_State* L, const char* fmt,
-                                        va_list argp); /* dies with the public va_list path */
 LUAI_FUNC const char* luaO_pushfstring(lua_State* L, const char* fmt,
                                        const FmtArgs& args);
 LUAI_FUNC const char* luaO_pushfstring(lua_State* L, const char* fmt);

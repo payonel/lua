@@ -131,8 +131,10 @@ static int msghandler(lua_State* L)
         lua_type(L, -1) == LUA_TSTRING)      /* that produces a string? */
       return 1;                              /* that is the message */
     else
-      msg = lua_pushfstring(L, "(error object is a %s value)",
-                            luaL_typename(L, 1));
+    {
+      lua_pushstring(L, luaL_typename(L, 1));
+      msg = lua_pushfstring(L, "(error object is a %s value)");
+    }
   }
   luaL_traceback(L, L, msg, 1); /* append a standard traceback */
   return 1;                     /* return the traceback */
@@ -584,7 +586,8 @@ static int pushline(lua_State* L, int firstline)
 static int addreturn(lua_State* L)
 {
   const char* line = lua_tostring(L, -1); /* original line */
-  const char* retline = lua_pushfstring(L, "return %s;", line);
+  lua_pushstring(L, line);
+  const char* retline = lua_pushfstring(L, "return %s;");
   int status = luaL_loadbufferx(L, retline, strlen(retline), "=stdin", "t");
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
@@ -664,8 +667,10 @@ static void l_print(lua_State* L)
     lua_getglobal(L, "print");
     lua_insert(L, 1);
     if (lua_pcall(L, n, 0, 0) != LUA_OK)
-      l_message(progname, lua_pushfstring(L, "error calling 'print' (%s)",
-                                          lua_tostring(L, -1)));
+    {
+      lua_pushvalue(L, -1); /* error message is the argument */
+      l_message(progname, lua_pushfstring(L, "error calling 'print' (%s)"));
+    }
   }
 }
 

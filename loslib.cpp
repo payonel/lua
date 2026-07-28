@@ -178,7 +178,10 @@ static void setfield(lua_State* L, const char* key, int value, int delta)
 {
 #if (defined(LUA_NUMTIME) && LUA_MAXINTEGER <= INT_MAX)
   if (l_unlikely(value > LUA_MAXINTEGER - delta))
-    luaL_error(L, "field '%s' is out-of-bound", key);
+  {
+    lua_pushstring(L, key);
+    luaL_error(L, "field '%s' is out-of-bound");
+  }
 #endif
   lua_pushinteger(L, (lua_Integer) value + delta);
   lua_setfield(L, -2, key);
@@ -223,16 +226,25 @@ static int getfield(lua_State* L, const char* key, int d, int delta)
   lua_Integer res = lua_tointegerx(L, -1, &isnum);
   if (!isnum)
   {                                /* field is not an integer? */
-    if (l_unlikely(t != LUA_TNIL)) /* some other value? */
-      return luaL_error(L, "field '%s' is not an integer", key);
-    else if (l_unlikely(d < 0)) /* absent field; no default? */
-      return luaL_error(L, "field '%s' missing in date table", key);
+    if (l_unlikely(t != LUA_TNIL))
+    { /* some other value? */
+      lua_pushstring(L, key);
+      return luaL_error(L, "field '%s' is not an integer");
+    }
+    else if (l_unlikely(d < 0))
+    { /* absent field; no default? */
+      lua_pushstring(L, key);
+      return luaL_error(L, "field '%s' missing in date table");
+    }
     res = d;
   }
   else
   {
     if (!(res >= 0 ? res - delta <= INT_MAX : INT_MIN + delta <= res))
-      return luaL_error(L, "field '%s' is out-of-bound", key);
+    {
+      lua_pushstring(L, key);
+      return luaL_error(L, "field '%s' is out-of-bound");
+    }
     res -= delta;
   }
   lua_pop(L, 1);
@@ -255,8 +267,9 @@ static const char* checkoption(lua_State* L, const char* conv,
       return conv + oplen; /* return next item */
     }
   }
+  lua_pushstring(L, conv);
   luaL_argerror(L, 1,
-                lua_pushfstring(L, "invalid conversion specifier '%%%s'", conv));
+                lua_pushfstring(L, "invalid conversion specifier '%%%s'"));
   return conv; /* to avoid warnings */
 }
 

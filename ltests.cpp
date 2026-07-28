@@ -43,6 +43,34 @@ static inline TValue* obj_at(lua_State* L, int k)
   return &L->stack.p[L->ci->func + (StkId)k];
 }
 
+/*
+** Number of stack arguments consumed by the directives in 'fmt'
+** (see 'lua_pushfstring').
+*/
+static int fmtnargs(const char* fmt)
+{
+  int n = 0;
+  const char* e;
+  for (e = fmt; (e = strchr(e, '%')) != nullptr; e += 2)
+  {
+    switch (*(e + 1))
+    {
+    case 's':
+    case 'c':
+    case 'd':
+    case 'I':
+    case 'f':
+    case 'p':
+    case 'U':
+      n++;
+      break;
+    default: /* '%%' and unknown directives take no argument */
+      break;
+    }
+  }
+  return n;
+}
+
 static int runC(lua_State* L, lua_State* L1, const char* pc);
 
 static void setnameval(lua_State* L, const char* name, int val)
@@ -1038,7 +1066,8 @@ static int mem_query(lua_State* L)
         return 1;
       }
     }
-    return luaL_error(L, "unknown type '%s'", t);
+    lua_pushstring(L, t);
+    return luaL_error(L, "unknown type '%s'");
   }
 }
 
@@ -1681,7 +1710,10 @@ static int getnum_aux(lua_State* L, lua_State* L1, const char** pc)
     (*pc)++;
   }
   if (!lisdigit(((unsigned char)(**pc))))
-    luaL_error(L, "number expected (%s)", *pc);
+  {
+    lua_pushstring(L, *pc);
+    luaL_error(L, "number expected (%s)");
+  }
   while (lisdigit(((unsigned char)(**pc))))
     res = res * 10 + (*(*pc)++) - '0';
   return sig * res;
@@ -2044,23 +2076,34 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("pushfstringI", inst) == 0)
     {
-      lua_pushfstring(L1, lua_tostring(L, -2), (int) lua_tointeger(L, -1));
+      const char* fmt = lua_tostring(L, -2);
+      if (fmtnargs(fmt) > 0)
+        lua_pushinteger(L1, lua_tointeger(L, -1));
+      lua_pushfstring(L1, fmt);
     }
     else if (strcmp("pushfstringS", inst) == 0)
     {
-      lua_pushfstring(L1, lua_tostring(L, -2), lua_tostring(L, -1));
+      const char* fmt = lua_tostring(L, -2);
+      if (fmtnargs(fmt) > 0)
+        lua_pushstring(L1, lua_tostring(L, -1));
+      lua_pushfstring(L1, fmt);
     }
     else if (strcmp("pushfstringP", inst) == 0)
     {
-      if (lua_islightcfunction(L, -1))
+      const char* fmt = lua_tostring(L, -2);
+      if (fmtnargs(fmt) > 0)
       {
-        auto fa = lua_funcaddress(L, -1);
-        lua_pushfstring(L1, lua_tostring(L, -2), fa.c_str());
+        if (lua_islightcfunction(L, -1))
+        {
+          auto fa = lua_funcaddress(L, -1);
+          lua_pushstring(L1, fa.c_str());
+        }
+        else
+        {
+          lua_pushlightuserdata(L1, const_cast<void*>(lua_topointer(L, -1)));
+        }
       }
-      else
-      {
-        lua_pushfstring(L1, lua_tostring(L, -2), lua_topointer(L, -1));
-      }
+      lua_pushfstring(L1, fmt);
     }
     else if (strcmp("rawget", inst) == 0)
     {
@@ -2294,7 +2337,10 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       luaL_argerror(L1, arg, getstring_aux(L, buff, &pc));
     }
     else
-      luaL_error(L, "unknown instruction %s", buff);
+    {
+      lua_pushstring(L, buff);
+      luaL_error(L, "unknown instruction %s");
+    }
   }
   return 0;
 }

@@ -281,8 +281,14 @@ static void trymt(lua_State* L, const char* mtkey, const char* opname)
   lua_settop(L, 2); /* back to the original arguments */
   if (l_unlikely(lua_type(L, 2) == LUA_TSTRING ||
                  !luaL_getmetafield(L, 2, mtkey)))
-    luaL_error(L, "attempt to %s a '%s' with a '%s'", opname,
-               luaL_typename(L, -2), luaL_typename(L, -1));
+  {
+    const char* t1 = luaL_typename(L, -2);
+    const char* t2 = luaL_typename(L, -1);
+    lua_pushstring(L, opname);
+    lua_pushstring(L, t1);
+    lua_pushstring(L, t2);
+    luaL_error(L, "attempt to %s a '%s' with a '%s'");
+  }
   lua_insert(L, -3); /* put metamethod before arguments */
   lua_call(L, 2, 1); /* call metamethod */
 }
@@ -390,7 +396,10 @@ static int check_capture(MatchState* ms, int l)
   l -= '1';
   if (l_unlikely(l < 0 || l >= ms->level ||
                  ms->capture[l].len == CAP_UNFINISHED))
-    return luaL_error(ms->L, "invalid capture index %%%d", l + 1);
+  {
+    lua_pushinteger(ms->L, l + 1);
+    return luaL_error(ms->L, "invalid capture index %%%d");
+  }
   return l;
 }
 
@@ -775,7 +784,10 @@ static ptrdiff_t get_onecapture(MatchState* ms, int i, const char* s,
   if (i >= ms->level)
   {
     if (l_unlikely(i != 0))
-      luaL_error(ms->L, "invalid capture index %%%d", i + 1);
+    {
+      lua_pushinteger(ms->L, i + 1);
+      luaL_error(ms->L, "invalid capture index %%%d");
+    }
     *cap = s;
     return (e - s);
   }
@@ -986,7 +998,10 @@ static void add_s(MatchState* ms, luaL_Buffer* b, const char* s,
         luaL_addlstring(b, cap, ((size_t)(resl)));
     }
     else
-      luaL_error(L, "invalid use of '%c' in replacement string", L_ESC);
+    {
+      lua_pushinteger(L, L_ESC);
+      luaL_error(L, "invalid use of '%c' in replacement string");
+    }
     l -= ((size_t)(p + 1 - news));
     news = p + 1;
   }
@@ -1031,8 +1046,10 @@ static int add_value(MatchState* ms, luaL_Buffer* b, const char* s,
     return 0;                                 /* no changes */
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
-    return luaL_error(L, "invalid replacement value (a %s)",
-                      luaL_typename(L, -1));
+  {
+    lua_pushstring(L, luaL_typename(L, -1));
+    return luaL_error(L, "invalid replacement value (a %s)");
+  }
   else
   {
     luaL_addvalue(b); /* add result to accumulator */
@@ -1359,8 +1376,11 @@ static void checkformat(lua_State* L, const char* form, const char* flags,
       spec = get2digits(spec); /* skip precision */
     }
   }
-  if (!isalpha(((unsigned char)(*spec)))) /* did not go to the end? */
-    luaL_error(L, "invalid conversion specification: '%s'", form);
+  if (!isalpha(((unsigned char)(*spec))))
+  { /* did not go to the end? */
+    lua_pushstring(L, form);
+    luaL_error(L, "invalid conversion specification: '%s'");
+  }
 }
 
 /*
@@ -1529,7 +1549,8 @@ static int str_format(lua_State* L)
       }
       default:
       { /* also treat cases 'pnLlh' */
-        return luaL_error(L, "invalid conversion '%s' to 'format'", form);
+        lua_pushstring(L, form);
+        return luaL_error(L, "invalid conversion '%s' to 'format'");
       }
       }
       assert(((unsigned int)(nb)) < maxitem);
@@ -1631,8 +1652,11 @@ static unsigned getnumlimit(Header* h, const char** fmt, size_t df)
 {
   size_t sz = getnum(fmt, df);
   if (l_unlikely((sz - 1u) >= MAXINTSIZE))
-    return ((unsigned int)(luaL_error(h->L,
-                                "integral size (%d) out of limits [1,%d]", sz, MAXINTSIZE)));
+  {
+    lua_pushinteger(h->L, ((lua_Integer)(sz)));
+    lua_pushinteger(h->L, MAXINTSIZE);
+    return ((unsigned int)(luaL_error(h->L, "integral size (%d) out of limits [1,%d]")));
+  }
   return ((unsigned int)(sz));
 }
 
@@ -1731,7 +1755,8 @@ static KOption getoption(Header* h, const char** fmt, size_t* size)
     break;
   }
   default:
-    luaL_error(h->L, "invalid format option '%c'", opt);
+    lua_pushinteger(h->L, opt);
+    luaL_error(h->L, "invalid format option '%c'");
   }
   return Knop;
 }
@@ -1992,7 +2017,10 @@ static lua_Integer unpackint(lua_State* L, const char* str,
     for (i = limit; i < size; i++)
     {
       if (l_unlikely((unsigned char) str[islittle ? i : size - 1 - i] != mask))
-        luaL_error(L, "%d-byte integer does not fit into Lua Integer", size);
+      {
+        lua_pushinteger(L, size);
+        luaL_error(L, "%d-byte integer does not fit into Lua Integer");
+      }
     }
   }
   return (lua_Integer) res;
