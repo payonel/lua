@@ -203,49 +203,30 @@
 */
 
 /*
-@@ LUA_NUMBER_FMT is the format for writing floats with the maximum
-** number of digits that respects tostring(tonumber(numeral)) == numeral.
-** (floor(log10(2^53)) = 15 for binary64.)
-@@ LUA_NUMBER_FMT_N is the format for writing floats with the minimum
-** number of digits that ensures tonumber(tostring(number)) == number.
-** (LUA_NUMBER_FMT+2.)
+** Float-to-string conversions (in lobject.cpp) use 15 significant
+** digits — the maximum that respects tostring(tonumber(numeral)) ==
+** numeral (floor(log10(2^53)) = 15 for binary64) — upgrading to 17,
+** the minimum that ensures tonumber(tostring(number)) == number, when
+** the shorter form does not round-trip.
 */
 
 /* lua_Number: IEEE-754 binary64 */
 
 #define LUA_NUMBER double
 
-#define LUA_NUMBER_FMT    "%.15g"
-#define LUA_NUMBER_FMT_N  "%.17g"
-
 
 /*
 @@ LUA_UNSIGNED is the unsigned version of LUA_INTEGER.
-@@ LUAI_UACINT is the result of a 'default argument promotion'
-@@ over a LUA_INTEGER.
-@@ LUA_INTEGER_FRMLEN is the length modifier for reading/writing integers.
-@@ LUA_INTEGER_FMT is the format for writing integers.
 @@ LUA_MAXINTEGER is the maximum value for a LUA_INTEGER.
 @@ LUA_MININTEGER is the minimum value for a LUA_INTEGER.
 @@ LUA_MAXUNSIGNED is the maximum value for a LUA_UNSIGNED.
 */
 
-/* The following definitions are good for most cases here */
-
-#define LUA_INTEGER_FMT "%" LUA_INTEGER_FRMLEN "d"
-
-#define LUAI_UACINT LUA_INTEGER
-
-/*
-** use LUAI_UACINT here to avoid problems with promotions (which
-** can turn a comparison between unsigneds into a signed comparison)
-*/
-#define LUA_UNSIGNED unsigned LUAI_UACINT
+#define LUA_UNSIGNED unsigned LUA_INTEGER
 
 /* lua_Integer: 64-bit */
 
-#define LUA_INTEGER        long long
-#define LUA_INTEGER_FRMLEN "ll"
+#define LUA_INTEGER long long
 
 #define LUA_MAXINTEGER LLONG_MAX
 #define LUA_MININTEGER LLONG_MIN

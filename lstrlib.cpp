@@ -9,6 +9,7 @@
 
 #include <bit>
 
+#include <charconv>
 #include <cmath>
 #include <ctype.h>
 #include <float.h>
@@ -1187,7 +1188,12 @@ static int num2straux(char* buff, unsigned sz, lua_Number x)
         m = adddigit(buff, n++, m * 16);
       } while (m > 0);
     }
-    n += ((unsigned int)(l_sprintf(buff + n, sz - n, "p%+d", e))); /* add exponent */
+    buff[n++] = 'p'; /* add exponent, always signed */
+    buff[n++] = (e >= 0) ? '+' : '-';
+    std::string es = std::to_string(e >= 0 ? e : -e);
+    assert(n + es.size() < sz);
+    memcpy(buff + n, es.c_str(), es.size());
+    n += ((unsigned int)(es.size()));
     assert(n < sz);
     return ((int)(n));
   }
@@ -1266,13 +1272,15 @@ static void addquoted(luaL_Buffer* b, const char* s, size_t len)
       luaL_addchar(b, *s);
     }
     else if (iscntrl(((unsigned char)(*s))))
-    {
-      char buff[10];
-      if (!isdigit(((unsigned char)(*(s + 1)))))
-        l_sprintf(buff, sizeof(buff), "\\%d", (int) ((unsigned char)(*s)));
-      else
-        l_sprintf(buff, sizeof(buff), "\\%03d", (int) ((unsigned char)(*s)));
-      luaL_addstring(b, buff);
+    { /* '\ddd' escape; 3 digits when followed by another digit */
+      std::string d = std::to_string((int) ((unsigned char)(*s)));
+      luaL_addchar(b, '\\');
+      if (isdigit(((unsigned char)(*(s + 1)))))
+      {
+        for (size_t i = d.size(); i < 3; i++)
+          luaL_addchar(b, '0');
+      }
+      luaL_addstring(b, d.c_str());
     }
     else
       luaL_addchar(b, *s);
@@ -1311,7 +1319,10 @@ static int quotefloat(lua_State* L, char* buff, lua_Number n)
     return nb;
   }
   /* for the fixed representations */
-  return l_sprintf(buff, MAX_ITEM, "%s", s);
+  size_t l = strlen(s);
+  assert(l < MAX_ITEM);
+  memcpy(buff, s, l + 1);
+  return ((int)(l));
 }
 
 static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
@@ -1334,10 +1345,22 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
     else
     { /* integers */
       lua_Integer n = lua_tointeger(L, arg);
-      const char* format = (n == LUA_MININTEGER)              /* corner case? */
-                               ? "0x%" LUA_INTEGER_FRMLEN "x" /* use hex */
-                               : LUA_INTEGER_FMT;             /* else use default format */
-      nb = l_sprintf(buff, MAX_ITEM, format, (LUAI_UACINT) n);
+      if (n == LUA_MININTEGER)
+      { /* corner case: use hex, which reads back as the same value */
+        buff[0] = '0';
+        buff[1] = 'x';
+        std::to_chars_result res = std::to_chars(
+            buff + 2, buff + MAX_ITEM, ((lua_Unsigned)(n)), 16);
+        assert(res.ec == std::errc());
+        nb = ((int)(res.ptr - buff));
+      }
+      else
+      {
+        std::string d = std::to_string(n);
+        assert(d.size() < MAX_ITEM);
+        memcpy(buff, d.c_str(), d.size());
+        nb = ((int)(d.size()));
+      }
     }
     luaL_addsize(b, ((unsigned int)(nb)));
     break;
@@ -1414,30 +1437,262 @@ static const char* getformat(lua_State* L, const char* strfrmt,
 }
 
 /*
-** add length modifier into formats
+** A parsed conversion specification. Filled by 'scanformat' from a
+** 'form' already validated by 'checkformat'.
 */
-static void addlenmod(char* form, const char* lenmod)
+struct FormatSpec
 {
-  size_t l = strlen(form);
-  size_t lm = strlen(lenmod);
-  char spec = form[l - 1];
-  strcpy(form + l - 1, lenmod);
-  form[l + lm - 1] = spec;
-  form[l + lm] = '\0';
+  bool left;     /* '-' flag */
+  bool plus;     /* '+' flag */
+  bool space;    /* ' ' flag */
+  bool alt;      /* '#' flag */
+  bool zero;     /* '0' flag */
+  int width;     /* minimum field width (0 if absent) */
+  int precision; /* precision (-1 if absent) */
+  char conv;     /* conversion specifier (last character of 'form') */
+};
+
+/*
+** Parse a validated conversion specification into a FormatSpec.
+** 'form' starts with '%' and ends with the conversion specifier;
+** flags may repeat, width and precision have at most 2 digits each
+** (both guaranteed by 'checkformat').
+*/
+static void scanformat(const char* form, FormatSpec* spec)
+{
+  const char* p = form + 1; /* skip '%' */
+  *spec = FormatSpec{};
+  spec->precision = -1;
+  for (;; p++)
+  { /* flags (any order, repeats allowed) */
+    switch (*p)
+    {
+      case '-': spec->left = true; continue;
+      case '+': spec->plus = true; continue;
+      case ' ': spec->space = true; continue;
+      case '#': spec->alt = true; continue;
+      case '0': spec->zero = true; continue;
+    }
+    break;
+  }
+  while (isdigit(((unsigned char)(*p)))) /* width */
+    spec->width = spec->width * 10 + (*p++ - '0');
+  if (*p == '.')
+  { /* precision ('.' alone means 0) */
+    p++;
+    spec->precision = 0;
+    while (isdigit(((unsigned char)(*p))))
+      spec->precision = spec->precision * 10 + (*p++ - '0');
+  }
+  spec->conv = form[strlen(form) - 1];
+}
+
+/*
+** Assemble a formatted item into 'buff' from its sign/prefix and body,
+** applying width padding: left-justified pads spaces on the right;
+** zero padding (when permitted for the item) goes between the prefix
+** and the body; otherwise spaces pad on the left. Returns the number
+** of bytes written.
+*/
+static int packformat(char* buff, unsigned maxitem, const FormatSpec* spec,
+                      const char* prefix, size_t prefixlen,
+                      const char* body, size_t bodylen, bool zeropadok)
+{
+  size_t content = prefixlen + bodylen;
+  size_t width = ((size_t)(spec->width));
+  size_t total = (content > width) ? content : width;
+  size_t pad = total - content;
+  char* out = buff;
+  assert(total < maxitem);
+  (void) maxitem;
+  if (spec->left)
+  { /* '[prefix][body][spaces]' */
+    memcpy(out, prefix, prefixlen);
+    out += prefixlen;
+    memcpy(out, body, bodylen);
+    out += bodylen;
+    memset(out, ' ', pad);
+  }
+  else if (spec->zero && zeropadok)
+  { /* '[prefix][zeros][body]' */
+    memcpy(out, prefix, prefixlen);
+    out += prefixlen;
+    memset(out, '0', pad);
+    out += pad;
+    memcpy(out, body, bodylen);
+  }
+  else
+  { /* '[spaces][prefix][body]' */
+    memset(out, ' ', pad);
+    out += pad;
+    memcpy(out, prefix, prefixlen);
+    out += prefixlen;
+    memcpy(out, body, bodylen);
+  }
+  return ((int)(total));
 }
 
 /*
 ** Format one integer item; shared body for the 'd'/'i', 'u', and
 ** 'o'/'x'/'X' conversions, which differ only in their accepted flags.
-** Returns the number of bytes written to 'buff'.
+** Digits come from 'std::to_chars' on the magnitude; sign, base
+** prefix, precision zero-extension, and padding are applied
+** explicitly. Returns the number of bytes written to 'buff'.
 */
-static int formatint(lua_State* L, int arg, char* form, char* buff,
+static int formatint(lua_State* L, int arg, const char* form, char* buff,
                      unsigned maxitem, const char* flags)
 {
   lua_Integer n = luaL_checkinteger(L, arg);
   checkformat(L, form, flags, 1);
-  addlenmod(form, LUA_INTEGER_FRMLEN);
-  return l_sprintf(buff, maxitem, form, (LUAI_UACINT) n);
+  FormatSpec spec;
+  scanformat(form, &spec);
+  bool issigned = (spec.conv == 'd' || spec.conv == 'i');
+  int base = (spec.conv == 'o') ? 8
+             : (spec.conv == 'x' || spec.conv == 'X') ? 16
+                                                      : 10;
+  /* magnitude for signed conversions; two's-complement bits otherwise */
+  unsigned long long u = (issigned && n < 0)
+                             ? 0ULL - ((unsigned long long)(n))
+                             : ((unsigned long long)(n));
+  char digits[24];
+  std::to_chars_result res = std::to_chars(digits, digits + sizeof(digits), u, base);
+  assert(res.ec == std::errc());
+  size_t ndigits = ((size_t)(res.ptr - digits));
+  if (spec.conv == 'X')
+  {
+    for (size_t i = 0; i < ndigits; i++)
+      digits[i] = ((char)(toupper(((unsigned char)(digits[i])))));
+  }
+  char body[MAX_ITEM];
+  size_t blen = 0;
+  if (u == 0 && spec.precision == 0)
+    ; /* explicit zero precision with value 0: no digits */
+  else
+  {
+    size_t mindigits = (spec.precision >= 0) ? ((size_t)(spec.precision)) : 1;
+    while (blen + ndigits < mindigits)
+      body[blen++] = '0'; /* zero-extend to the precision */
+    memcpy(body + blen, digits, ndigits);
+    blen += ndigits;
+  }
+  if (spec.alt && spec.conv == 'o' && (blen == 0 || body[0] != '0'))
+  { /* '#o': force a leading zero digit */
+    memmove(body + 1, body, blen);
+    body[0] = '0';
+    blen++;
+  }
+  char prefix[2];
+  size_t prefixlen = 0;
+  if (issigned)
+  { /* sign character, if any */
+    if (n < 0)
+      prefix[prefixlen++] = '-';
+    else if (spec.plus)
+      prefix[prefixlen++] = '+';
+    else if (spec.space)
+      prefix[prefixlen++] = ' ';
+  }
+  else if (spec.alt && (spec.conv == 'x' || spec.conv == 'X') && u != 0)
+  { /* '#x': base prefix (nonzero values only) */
+    prefix[prefixlen++] = '0';
+    prefix[prefixlen++] = spec.conv;
+  }
+  /* an explicit precision disables zero padding for integers */
+  return packformat(buff, maxitem, &spec, prefix, prefixlen, body, blen,
+                    spec.precision < 0);
+}
+
+/*
+** Format one float item for the 'f', 'e'/'E', and 'g'/'G' conversions.
+** The digits come from 'std::to_chars' with explicit precision (which
+** matches printf output byte for byte); the '#' flag, sign flags, and
+** padding are applied explicitly. Returns the number of bytes written
+** to 'buff'.
+*/
+static int formatfloat(lua_State* L, int arg, const char* form, char* buff,
+                       unsigned maxitem)
+{
+  lua_Number n = luaL_checknumber(L, arg);
+  checkformat(L, form, L_FMTFLAGSF, 1);
+  FormatSpec spec;
+  scanformat(form, &spec);
+  char lower = ((char)(tolower(((unsigned char)(spec.conv)))));
+  int precision = (spec.precision >= 0) ? spec.precision : 6;
+  char prefix[1];
+  size_t prefixlen = 0;
+  if (std::signbit(n)) /* sign applies to NaN and infinities too */
+    prefix[prefixlen++] = '-';
+  else if (spec.plus)
+    prefix[prefixlen++] = '+';
+  else if (spec.space)
+    prefix[prefixlen++] = ' ';
+  char body[MAX_ITEMF];
+  size_t blen;
+  bool zeropadok = true;
+  if (std::isinf(n) || std::isnan(n))
+  { /* fixed representations; zero padding does not apply */
+    const char* r = std::isinf(n) ? "inf" : "nan";
+    blen = strlen(r);
+    memcpy(body, r, blen);
+    zeropadok = false;
+  }
+  else
+  {
+    std::chars_format cf = (lower == 'f')   ? std::chars_format::fixed
+                           : (lower == 'e') ? std::chars_format::scientific
+                                            : std::chars_format::general;
+    if (lower == 'g' && precision == 0)
+      precision = 1; /* '%g' treats zero precision as 1 */
+    std::to_chars_result res = std::to_chars(body, body + sizeof(body),
+                                             std::fabs(n), cf, precision);
+    assert(res.ec == std::errc());
+    blen = ((size_t)(res.ptr - body));
+    if (spec.alt)
+    { /* '#': always show the radix point; '%g' also keeps zeros */
+      size_t epos = 0; /* position of the exponent (or end of body) */
+      bool haspoint = false;
+      while (epos < blen && body[epos] != 'e')
+      {
+        if (body[epos] == '.')
+          haspoint = true;
+        epos++;
+      }
+      if (!haspoint)
+      { /* insert the radix point before the exponent */
+        memmove(body + epos + 1, body + epos, blen - epos);
+        body[epos++] = '.';
+        blen++;
+      }
+      if (lower == 'g')
+      { /* restore trailing zeros up to 'precision' significant digits */
+        size_t sig = 0;
+        bool seennonzero = false;
+        for (size_t i = 0; i < epos; i++)
+        {
+          if (isdigit(((unsigned char)(body[i]))))
+          {
+            if (body[i] != '0')
+              seennonzero = true;
+            if (seennonzero)
+              sig++;
+          }
+        }
+        if (sig == 0)
+          sig = 1; /* the value 0 has one significant digit */
+        size_t zeros = (((size_t)(precision)) > sig) ? precision - sig : 0;
+        memmove(body + epos + zeros, body + epos, blen - epos);
+        memset(body + epos, '0', zeros);
+        blen += zeros;
+      }
+    }
+  }
+  if (spec.conv == 'E' || spec.conv == 'G')
+  { /* uppercase the body ('e', and 'inf'/'nan') */
+    for (size_t i = 0; i < blen; i++)
+      body[i] = ((char)(toupper(((unsigned char)(body[i])))));
+  }
+  return packformat(buff, maxitem, &spec, prefix, prefixlen, body, blen,
+                    zeropadok);
 }
 
 static int str_format(lua_State* L)
@@ -1469,7 +1724,10 @@ static int str_format(lua_State* L)
       case 'c':
       {
         checkformat(L, form, L_FMTFLAGSC, 0);
-        nb = l_sprintf(buff, maxitem, form, (int) luaL_checkinteger(L, arg));
+        FormatSpec spec;
+        scanformat(form, &spec);
+        char c = ((char)((unsigned char)(luaL_checkinteger(L, arg))));
+        nb = packformat(buff, maxitem, &spec, "", 0, &c, 1, false);
         break;
       }
       case 'd':
@@ -1499,31 +1757,42 @@ static int str_format(lua_State* L)
       case 'g':
       case 'G':
       {
-        lua_Number n = luaL_checknumber(L, arg);
-        checkformat(L, form, L_FMTFLAGSF, 1);
-        nb = l_sprintf(buff, maxitem, form, n);
+        nb = formatfloat(L, arg, form, buff, maxitem);
         break;
       }
       case 'p':
       {
         checkformat(L, form, L_FMTFLAGSC, 0);
+        FormatSpec spec;
+        scanformat(form, &spec);
+        char body[MAX_ITEM];
+        size_t blen;
         if (lua_islightcfunction(L, arg))
-        {
-          /* light C function — format from FuncAddress string */
+        { /* light C function — body is its FuncAddress string */
           auto fa = lua_funcaddress(L, arg);
-          form[strlen(form) - 1] = 's';
-          nb = l_sprintf(buff, maxitem, form, fa.c_str());
+          blen = fa.size();
+          assert(blen < sizeof(body));
+          memcpy(body, fa.c_str(), blen);
         }
         else
         {
           const void* p = lua_topointer(L, arg);
           if (p == nullptr)
-          {
-            p = "(null)";
-            form[strlen(form) - 1] = 's';
+          { /* null pointer has a fixed representation */
+            blen = strlen("(null)");
+            memcpy(body, "(null)", blen);
           }
-          nb = l_sprintf(buff, maxitem, form, p);
+          else
+          { /* "0x" + lowercase hex digits */
+            body[0] = '0';
+            body[1] = 'x';
+            std::to_chars_result res = std::to_chars(
+                body + 2, body + sizeof(body), ((uintptr_t)(p)), 16);
+            assert(res.ec == std::errc());
+            blen = ((size_t)(res.ptr - body));
+          }
         }
+        nb = packformat(buff, maxitem, &spec, "", 0, body, blen, false);
         break;
       }
       case 'q':
@@ -1550,7 +1819,12 @@ static int str_format(lua_State* L)
           }
           else
           { /* format the string into 'buff' */
-            nb = l_sprintf(buff, maxitem, form, s);
+            FormatSpec spec;
+            scanformat(form, &spec);
+            size_t blen = (spec.precision >= 0 && ((size_t)(spec.precision)) < l)
+                              ? ((size_t)(spec.precision)) /* truncate */
+                              : l;
+            nb = packformat(buff, maxitem, &spec, "", 0, s, blen, false);
             lua_pop(L, 1); /* remove result from 'luaL_tolstring' */
           }
         }

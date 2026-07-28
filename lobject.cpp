@@ -588,8 +588,8 @@ int luaO_utf8esc(char* buff, l_uint32 x)
 
 /*
 ** The size of the buffer for the conversion of a number to a string
-** 'LUA_N2SBUFFSZ' must be enough to accommodate both LUA_INTEGER_FMT
-** and LUA_NUMBER_FMT.  For a long long int, this is 19 digits plus a
+** 'LUA_N2SBUFFSZ' must be enough to accommodate both the integer and
+** the float conversions.  For a long long int, this is 19 digits plus a
 ** sign and a final '\0', adding to 21. For a long double, it can go to
 ** a sign, the dot, an exponent letter, an exponent sign, 4 exponent
 ** digits, the final '\0', plus the significant digits, which are
@@ -608,7 +608,7 @@ static_assert(LUA_N2SBUFFSZ >= 20 + DBL_DIG, "invalid value for LUA_N2SBUFFSZ");
 */
 static int tostringbuffFloat(lua_Number n, char* buff)
 {
-  /* first conversion, with 15 significant digits (LUA_NUMBER_FMT);
+  /* first conversion, with 15 significant digits;
      'std::to_chars' with explicit precision produces the printf '%g'
      shape, locale-free */
   std::to_chars_result res = std::to_chars(

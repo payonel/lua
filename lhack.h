@@ -5,9 +5,6 @@
 #include "lua.h"
 #include <stdint.h>
 
-/* test for sizes in 'l_sprintf' (make sure whole buffer is available) */
-#define l_sprintf(s, sz, f, i) (memset(s, 0xAB, sz), snprintf(s, sz, f, i))
-
 /* memory-allocator control variables */
 typedef struct Memcontrol
 {
@@ -59,12 +56,6 @@ LUA_API Memcontrol l_memcontrol;
 #define luai_openlibs(L) luai_openlibstest(L)
 
 #else
-
-/*
-@@ l_sprintf is equivalent to 'snprintf' or 'sprintf' in C89.
-** (All uses in Lua have only one format item.)
-*/
-#define l_sprintf(s, sz, f, i) snprintf(s, sz, f, i)
 
 /*
 ** these macros allow user-specific actions when a thread is

@@ -1,7 +1,7 @@
 #pragma once
 
+#include <charconv>
 #include <cstdint>
-#include <cstdio>
 #include <string>
 
 struct lua_State;
@@ -22,9 +22,10 @@ namespace util
   // formats a light C function pointer as a string for display/identity
   inline std::string func_to_string(lua_CFunction_t pf)
   {
-    char buf[20];
-    std::snprintf(buf, sizeof(buf), "%p", reinterpret_cast<void*>(pf));
-    return buf;
+    char buf[20] = { '0', 'x' };
+    std::to_chars_result res =
+        std::to_chars(buf + 2, buf + sizeof(buf), reinterpret_cast<uintptr_t>(pf), 16);
+    return std::string(buf, res.ptr);
   }
   
   // userdata is user defined. it could be a real address but lua side does not know
