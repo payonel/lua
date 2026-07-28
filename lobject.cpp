@@ -705,6 +705,165 @@ static void addnum2buff(BuffFS* buff, TValue* num)
 }
 
 /*
+** Typed appends for 'FmtArgs' (see lobject.h): each records the
+** directive it answers plus the value, to be consumed in order by
+** 'luaO_pushvfstring'.
+*/
+
+FmtArgs& FmtArgs::str(const char* s)
+{
+  assert(n < MAXFMTARGS);
+  arg[n].tag = 's';
+  arg[n].s = s;
+  n++;
+  return *this;
+}
+
+FmtArgs& FmtArgs::chr(int c)
+{
+  assert(n < MAXFMTARGS);
+  arg[n].tag = 'c';
+  arg[n].i = c;
+  n++;
+  return *this;
+}
+
+FmtArgs& FmtArgs::num(int d)
+{
+  assert(n < MAXFMTARGS);
+  arg[n].tag = 'd';
+  arg[n].i = d;
+  n++;
+  return *this;
+}
+
+FmtArgs& FmtArgs::lint(lua_Integer i)
+{
+  assert(n < MAXFMTARGS);
+  arg[n].tag = 'I';
+  arg[n].i = i;
+  n++;
+  return *this;
+}
+
+FmtArgs& FmtArgs::flt(lua_Number f)
+{
+  assert(n < MAXFMTARGS);
+  arg[n].tag = 'f';
+  arg[n].n = f;
+  n++;
+  return *this;
+}
+
+FmtArgs& FmtArgs::ptr(const void* p)
+{
+  assert(n < MAXFMTARGS);
+  arg[n].tag = 'p';
+  arg[n].p = p;
+  n++;
+  return *this;
+}
+
+FmtArgs& FmtArgs::utf8(unsigned long u)
+{
+  assert(n < MAXFMTARGS);
+  arg[n].tag = 'U';
+  arg[n].i = ((lua_Integer)(u));
+  n++;
+  return *this;
+}
+
+/*
+** this function handles only '%d', '%c', '%f', '%p', '%s', and '%%'
+   conventional formats, plus Lua-specific '%I' and '%U'
+*/
+const char* luaO_pushvfstring(lua_State* L, const char* fmt, const FmtArgs& args)
+{
+  BuffFS buff;   /* holds last part of the result */
+  const char* e; /* points to next '%' */
+  int argn = 0;  /* number of arguments already consumed */
+  initbuff(L, &buff);
+  while ((e = strchr(fmt, '%')) != nullptr)
+  {
+    addstr2buff(&buff, fmt, ((size_t)(e - fmt))); /* add 'fmt' up to '%' */
+    switch (*(e + 1))
+    { /* conversion specifier */
+    case 's':
+    { /* zero-terminated string */
+      assert(argn < args.n && args.arg[argn].tag == 's');
+      const char* s = args.arg[argn++].s;
+      if (s == nullptr)
+        s = "(null)";
+      addstr2buff(&buff, s, strlen(s));
+      break;
+    }
+    case 'c':
+    { /* an 'int' as a character */
+      assert(argn < args.n && args.arg[argn].tag == 'c');
+      char c = ((char)(args.arg[argn++].i));
+      addstr2buff(&buff, &c, sizeof(char));
+      break;
+    }
+    case 'd':
+    { /* an 'int' */
+      assert(argn < args.n && args.arg[argn].tag == 'd');
+      TValue num;
+      setivalue(&num, args.arg[argn++].i);
+      addnum2buff(&buff, &num);
+      break;
+    }
+    case 'I':
+    { /* a 'lua_Integer' */
+      assert(argn < args.n && args.arg[argn].tag == 'I');
+      TValue num;
+      setivalue(&num, args.arg[argn++].i);
+      addnum2buff(&buff, &num);
+      break;
+    }
+    case 'f':
+    { /* a 'lua_Number' */
+      assert(argn < args.n && args.arg[argn].tag == 'f');
+      TValue num;
+      setfltvalue(&num, args.arg[argn++].n);
+      addnum2buff(&buff, &num);
+      break;
+    }
+    case 'p':
+    {                         /* a pointer */
+      char bf[LUA_N2SBUFFSZ]; /* enough space for '%p' */
+      assert(argn < args.n && args.arg[argn].tag == 'p');
+      const void* p = args.arg[argn++].p;
+      int len = lua_pointer2str(bf, LUA_N2SBUFFSZ, p);
+      addstr2buff(&buff, bf, ((unsigned int)(len)));
+      break;
+    }
+    case 'U':
+    { /* a codepoint as a UTF-8 sequence */
+      char bf[UTF8BUFFSZ];
+      assert(argn < args.n && args.arg[argn].tag == 'U');
+      int len = luaO_utf8esc(bf, ((l_uint32)(args.arg[argn++].i)));
+      addstr2buff(&buff, bf + UTF8BUFFSZ - len, ((unsigned int)(len)));
+      break;
+    }
+    case '%':
+    {
+      addstr2buff(&buff, "%", 1);
+      break;
+    }
+    default:
+    {
+      addstr2buff(&buff, e, 2); /* keep unknown format in the result */
+      break;
+    }
+    }
+    fmt = e + 2; /* skip '%' and the specifier */
+  }
+  addstr2buff(&buff, fmt, strlen(fmt)); /* rest of 'fmt' */
+  assert(argn == args.n);               /* all arguments consumed */
+  return clearbuff(&buff);              /* empty buffer into a new string */
+}
+
+/*
 ** this function handles only '%d', '%c', '%f', '%p', '%s', and '%%'
    conventional formats, plus Lua-specific '%I' and '%U'
 */
@@ -786,16 +945,17 @@ const char* luaO_pushvfstring(lua_State* L, const char* fmt, va_list argp)
   return clearbuff(&buff);              /* empty buffer into a new string */
 }
 
-const char* luaO_pushfstring(lua_State* L, const char* fmt, ...)
+const char* luaO_pushfstring(lua_State* L, const char* fmt, const FmtArgs& args)
 {
-  const char* msg;
-  va_list argp;
-  va_start(argp, fmt);
-  msg = luaO_pushvfstring(L, fmt, argp);
-  va_end(argp);
+  const char* msg = luaO_pushvfstring(L, fmt, args);
   if (msg == nullptr) /* error? */
     luaD_throw(L, LUA_ERRMEM);
   return msg;
+}
+
+const char* luaO_pushfstring(lua_State* L, const char* fmt)
+{
+  return luaO_pushfstring(L, fmt, FmtArgs());
 }
 
 /* }================================================================== */

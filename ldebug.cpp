@@ -839,7 +839,7 @@ static const char* formatvarinfo(lua_State* L, const char* kind,
   if (kind == nullptr)
     return ""; /* no information */
   else
-    return luaO_pushfstring(L, " (%s '%s')", kind, name);
+    return luaO_pushfstring(L, " (%s '%s')", FmtArgs().str(kind).str(name));
 }
 
 /*
@@ -871,7 +871,7 @@ static l_noret typeerror(lua_State* L, const TValue* o, const char* op,
                          const char* extra)
 {
   const char* t = luaT_objtypename(L, o);
-  luaG_runerror(L, "attempt to %s a %s value%s", op, t, extra);
+  luaG_runerror(L, "attempt to %s a %s value%s", FmtArgs().str(op).str(t).str(extra));
 }
 
 /*
@@ -900,7 +900,7 @@ l_noret luaG_callerror(lua_State* L, const TValue* o)
 l_noret luaG_forerror(lua_State* L, const TValue* o, const char* what)
 {
   luaG_runerror(L, "bad 'for' %s (number expected, got %s)",
-                what, luaT_objtypename(L, o));
+                FmtArgs().str(what).str(luaT_objtypename(L, o)));
 }
 
 l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2)
@@ -926,7 +926,8 @@ l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2)
   lua_Integer temp;
   if (!luaV_tointegerns(p1, &temp, LUA_FLOORN2I))
     p2 = p1;
-  luaG_runerror(L, "number%s has no integer representation", varinfo(L, p2));
+  luaG_runerror(L, "number%s has no integer representation",
+                FmtArgs().str(varinfo(L, p2)));
 }
 
 l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
@@ -934,9 +935,9 @@ l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
   const char* t1 = luaT_objtypename(L, p1);
   const char* t2 = luaT_objtypename(L, p2);
   if (strcmp(t1, t2) == 0)
-    luaG_runerror(L, "attempt to compare two %s values", t1);
+    luaG_runerror(L, "attempt to compare two %s values", FmtArgs().str(t1));
   else
-    luaG_runerror(L, "attempt to compare %s with %s", t1, t2);
+    luaG_runerror(L, "attempt to compare %s with %s", FmtArgs().str(t1).str(t2));
 }
 
 l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
@@ -944,7 +945,7 @@ l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
   const char* globalname = "?"; /* default name if k == 0 */
   if (k > 0)
     kname(cl->p, k - 1, &globalname);
-  luaG_runerror(L, "global '%s' already defined", globalname);
+  luaG_runerror(L, "global '%s' already defined", FmtArgs().str(globalname));
 }
 
 /* add src:line information to 'msg' */
@@ -952,14 +953,14 @@ const char* luaG_addinfo(lua_State* L, const char* msg, TString* src,
                          int line)
 {
   if (src == nullptr) /* no debug information? */
-    return luaO_pushfstring(L, "?:?: %s", msg);
+    return luaO_pushfstring(L, "?:?: %s", FmtArgs().str(msg));
   else
   {
     char buff[LUA_IDSIZE];
     size_t idlen;
     const char* id = ((void)((idlen) = (src)->content.size()), (src)->content.c_str());
     luaO_chunkid(buff, id, idlen);
-    return luaO_pushfstring(L, "%s:%d: %s", buff, line, msg);
+    return luaO_pushfstring(L, "%s:%d: %s", FmtArgs().str(buff).num(line).str(msg));
   }
 }
 
@@ -982,17 +983,14 @@ l_noret luaG_errormsg(lua_State* L)
   luaD_throw(L, LUA_ERRRUN);
 }
 
-l_noret luaG_runerror(lua_State* L, const char* fmt, ...)
+l_noret luaG_runerror(lua_State* L, const char* fmt, const FmtArgs& args)
 {
   CallInfo* ci = L->ci;
   const char* msg;
-  va_list argp;
   luaC_checkGC(L); /* error message uses memory */
-  va_start(argp, fmt);
-  msg = luaO_pushvfstring(L, fmt, argp);
-  va_end(argp);
+  msg = luaO_pushvfstring(L, fmt, args);
   if (msg == nullptr)
-    luaD_throw(L, LUA_ERRMEM); /* only after 'va_end' */
+    luaD_throw(L, LUA_ERRMEM);
   if (isLua(ci))
   { /* Lua function? */
     /* add source:line information */
@@ -1001,6 +999,11 @@ l_noret luaG_runerror(lua_State* L, const char* fmt, ...)
     L->top--;
   }
   luaG_errormsg(L);
+}
+
+l_noret luaG_runerror(lua_State* L, const char* fmt)
+{
+  luaG_runerror(L, fmt, FmtArgs());
 }
 
 /*

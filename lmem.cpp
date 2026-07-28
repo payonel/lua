@@ -84,7 +84,7 @@ void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize,
   if (size >= limit / 2)
   {                                /* cannot double it? */
     if (l_unlikely(size >= limit)) /* cannot grow even a little? */
-      luaG_runerror(L, "too many %s (limit is %d)", what, limit);
+      luaG_runerror(L, "too many %s (limit is %d)", FmtArgs().str(what).num(limit));
     size = limit; /* still have at least one free place */
   }
   else

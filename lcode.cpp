@@ -35,18 +35,19 @@ static inline int hasjumps(const expdesc* e)
 static int codesJ(FuncState* fs, OpCode o, int sj, int k);
 
 /* semantic error */
-l_noret luaK_semerror(LexState* ls, const char* fmt, ...)
+l_noret luaK_semerror(LexState* ls, const char* fmt, const FmtArgs& args)
 {
-  const char* msg;
-  va_list argp;
-  va_start(argp, fmt);
-  msg = luaO_pushvfstring(ls->L, fmt, argp);
-  va_end(argp);
+  const char* msg = luaO_pushvfstring(ls->L, fmt, args);
   if (msg == nullptr)
-    luaD_throw(ls->L, LUA_ERRMEM); /* only after 'va_end' */
+    luaD_throw(ls->L, LUA_ERRMEM);
   ls->t.token = 0;               /* remove "near <token>" from final message */
   ls->linenumber = ls->lastline; /* back to line of last used token */
   luaX_syntaxerror(ls, msg);
+}
+
+l_noret luaK_semerror(LexState* ls, const char* fmt)
+{
+  luaK_semerror(ls, fmt, FmtArgs());
 }
 
 /*

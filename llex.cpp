@@ -94,15 +94,15 @@ const char* luaX_token2str(LexState* ls, int token)
   if (token < FIRST_RESERVED)
   { /* single-byte symbols? */
     if (lisprint(token))
-      return luaO_pushfstring(ls->L, "'%c'", token);
+      return luaO_pushfstring(ls->L, "'%c'", FmtArgs().chr(token));
     else /* control character */
-      return luaO_pushfstring(ls->L, "'<\\%d>'", token);
+      return luaO_pushfstring(ls->L, "'<\\%d>'", FmtArgs().num(token));
   }
   else
   {
     const char* s = luaX_tokens[token - FIRST_RESERVED];
     if (token < TK_EOS) /* fixed format (symbols and reserved words)? */
-      return luaO_pushfstring(ls->L, "'%s'", s);
+      return luaO_pushfstring(ls->L, "'%s'", FmtArgs().str(s));
     else /* names, strings, and numerals */
       return s;
   }
@@ -117,7 +117,7 @@ static const char* txtToken(LexState* ls, int token)
   case TK_FLT:
   case TK_INT:
     save(ls, '\0');
-    return luaO_pushfstring(ls->L, "'%s'", ((ls->buff)->buffer));
+    return luaO_pushfstring(ls->L, "'%s'", FmtArgs().str(((ls->buff)->buffer)));
   default:
     return luaX_token2str(ls, token);
   }
@@ -127,7 +127,7 @@ static l_noret lexerror(LexState* ls, const char* msg, int token)
 {
   msg = luaG_addinfo(ls->L, msg, ls->source, ls->linenumber);
   if (token)
-    luaO_pushfstring(ls->L, "%s near %s", msg, txtToken(ls, token));
+    luaO_pushfstring(ls->L, "%s near %s", FmtArgs().str(msg).str(txtToken(ls, token)));
   luaD_throw(ls->L, LUA_ERRSYNTAX);
 }
 
@@ -330,7 +330,8 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
     { /* error */
       const char* what = (seminfo ? "string" : "comment");
       const char* msg = luaO_pushfstring(ls->L,
-                                         "unfinished long %s (starting at line %d)", what, line);
+                                         "unfinished long %s (starting at line %d)",
+                                         FmtArgs().str(what).num(line));
       lexerror(ls, msg, TK_EOS);
       break; /* to avoid warnings */
     }

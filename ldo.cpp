@@ -1079,7 +1079,8 @@ static void checkmode(lua_State* L, const char* mode, const char* x)
   if (strchr(mode, x[0]) == nullptr)
   {
     luaO_pushfstring(L,
-                     "attempt to load a %s chunk (mode is '%s')", x, mode);
+                     "attempt to load a %s chunk (mode is '%s')",
+                     FmtArgs().str(x).str(mode));
     luaD_throw(L, LUA_ERRSYNTAX);
   }
 }

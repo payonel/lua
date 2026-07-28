@@ -65,7 +65,8 @@ static void expr(LexState* ls, expdesc* v);
 static l_noret error_expected(LexState* ls, int token)
 {
   luaX_syntaxerror(ls,
-                   luaO_pushfstring(ls->L, "%s expected", luaX_token2str(ls, token)));
+                   luaO_pushfstring(ls->L, "%s expected",
+                                    FmtArgs().str(luaX_token2str(ls, token))));
 }
 
 static l_noret errorlimit(FuncState* fs, int limit, const char* what)
@@ -75,9 +76,9 @@ static l_noret errorlimit(FuncState* fs, int limit, const char* what)
   int line = fs->f->linedefined;
   const char* where = (line == 0)
                           ? "main function"
-                          : luaO_pushfstring(L, "function at line %d", line);
+                          : luaO_pushfstring(L, "function at line %d", FmtArgs().num(line));
   msg = luaO_pushfstring(L, "too many %s (limit is %d) in %s",
-                         what, limit, where);
+                         FmtArgs().str(what).num(limit).str(where));
   luaX_syntaxerror(fs->ls, msg);
 }
 
@@ -140,7 +141,10 @@ static void check_match(LexState* ls, int what, int who, int where)
     {
       luaX_syntaxerror(ls, luaO_pushfstring(ls->L,
                                             "%s expected (to close %s at line %d)",
-                                            luaX_token2str(ls, what), luaX_token2str(ls, who), where));
+                                            FmtArgs()
+                                                .str(luaX_token2str(ls, what))
+                                                .str(luaX_token2str(ls, who))
+                                                .num(where)));
     }
   }
 }
@@ -341,7 +345,7 @@ static void check_readonly(LexState* ls, expdesc* e)
   }
   if (varname)
     luaK_semerror(ls, "attempt to assign to const variable '%s'",
-                  getstr(varname));
+                  FmtArgs().str(getstr(varname)));
 }
 
 /*
@@ -549,7 +553,7 @@ static void buildglobal(LexState* ls, TString* varname, expdesc* var)
   singlevaraux(fs, ls->envn, var, 1); /* get environment variable */
   if (var->k == VGLOBAL)
     luaK_semerror(ls, "%s is global when accessing variable '%s'",
-                  LUA_ENV, getstr(varname));
+                  FmtArgs().str(LUA_ENV).str(getstr(varname)));
   luaK_exp2anyregup(fs, var);  /* _ENV could be a constant */
   codestring(&key, varname);   /* key is variable name */
   luaK_indexed(fs, var, &key); /* 'var' represents _ENV[varname] */
@@ -569,7 +573,8 @@ static void buildvar(LexState* ls, TString* varname, expdesc* var)
     int info = var->info;
     /* global by default in the scope of a global declaration? */
     if (info == -2)
-      luaK_semerror(ls, "variable '%s' not declared", getstr(varname));
+      luaK_semerror(ls, "variable '%s' not declared",
+                    FmtArgs().str(getstr(varname)));
     buildglobal(ls, varname, var);
     if (info != -1 && ls->dyd->actvar.arr[info].kind == GDKCONST)
       var->ind.ro = 1; /* mark variable as read-only */
@@ -632,7 +637,7 @@ static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
   const char* varname = (tsname != nullptr) ? getstr(tsname) : "*";
   luaK_semerror(ls,
                 "<goto %s> at line %d jumps into the scope of '%s'",
-                getstr(gt->name), gt->line, varname); /* raise the error */
+                FmtArgs().str(getstr(gt->name)).num(gt->line).str(varname)); /* raise the error */
 }
 
 /*
@@ -796,7 +801,7 @@ static l_noret undefgoto(LexState* ls, Labeldesc* gt)
   /* breaks are checked when created, cannot be undefined */
   assert(!eqstr(gt->name, ls->brkn));
   luaK_semerror(ls, "no visible label '%s' for <goto> at line %d",
-                getstr(gt->name), gt->line);
+                FmtArgs().str(getstr(gt->name)).num(gt->line));
 }
 
 static void leaveblock(FuncState* fs)
@@ -1738,7 +1743,7 @@ static void checkrepeated(LexState* ls, TString* name)
   Labeldesc* lb = findlabel(ls, name, ls->fs->firstlabel);
   if (l_unlikely(lb != nullptr)) /* already defined? */
     luaK_semerror(ls, "label '%s' already defined on line %d",
-                  getstr(name), lb->line); /* error */
+                  FmtArgs().str(getstr(name)).num(lb->line)); /* error */
 }
 
 static void labelstat(LexState* ls, TString* name, int line)
@@ -1994,7 +1999,7 @@ static lu_byte getvarattribute(LexState* ls, lu_byte df)
     else if (strcmp(attr, "close") == 0)
       return RDKTOCLOSE; /* to-be-closed variable */
     else
-      luaK_semerror(ls, "unknown attribute '%s'", attr);
+      luaK_semerror(ls, "unknown attribute '%s'", FmtArgs().str(attr));
   }
   return df; /* return default value */
 }

@@ -640,7 +640,49 @@ static l_forceinline void getnodekey(struct lua_State* L, TValue* obj, const Nod
 /* size of buffer for 'luaO_utf8esc' function */
 constexpr int UTF8BUFFSZ = 8;
 
-/* macro to call 'luaO_pushvfstring' correctly */
+/*
+** {==================================================================
+** Arguments for 'luaO_pushvfstring': the replacement for C 'va_list'.
+** A fixed array of typed values, filled by explicit typed appends at
+** the call site, e.g.:
+**   luaG_runerror(L, "too many %s (limit is %d)",
+**                 FmtArgs().str(what).num(limit));
+** Each append records which format directive it answers ('s', 'c',
+** 'd', 'I', 'f', 'p', 'U'); the formatting loop asserts that
+** directives and appended arguments match in type and count.
+** ===================================================================
+*/
+
+/* maximum number of arguments to 'luaO_pushvfstring' */
+constexpr int MAXFMTARGS = 8;
+
+/*
+** One argument: a directive tag plus one field per possible type
+** (plain struct, no union; only the field selected by 'tag' is read)
+*/
+struct FmtArg
+{
+  char tag;      /* directive this argument answers */
+  const char* s; /* '%s' */
+  lua_Integer i; /* '%c', '%d', '%I', '%U' */
+  lua_Number n;  /* '%f' */
+  const void* p; /* '%p' */
+};
+
+struct FmtArgs
+{
+  int n = 0;              /* number of arguments appended */
+  FmtArg arg[MAXFMTARGS]; /* only 'arg[0..n-1]' are meaningful */
+  FmtArgs& str(const char* s);   /* '%s': a zero-terminated string */
+  FmtArgs& chr(int c);           /* '%c': an 'int' as a character */
+  FmtArgs& num(int d);           /* '%d': an 'int' */
+  FmtArgs& lint(lua_Integer i);  /* '%I': a 'lua_Integer' */
+  FmtArgs& flt(lua_Number f);    /* '%f': a 'lua_Number' */
+  FmtArgs& ptr(const void* p);   /* '%p': a pointer */
+  FmtArgs& utf8(unsigned long u); /* '%U': a codepoint as UTF-8 */
+};
+
+/* }================================================================== */
 
 LUAI_FUNC int luaO_utf8esc(char* buff, l_uint32 x);
 LUAI_FUNC lu_byte luaO_ceillog2(unsigned int x);
@@ -656,6 +698,10 @@ LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, char* buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
 LUAI_FUNC const char* luaO_pushvfstring(lua_State* L, const char* fmt,
-                                        va_list argp);
-LUAI_FUNC const char* luaO_pushfstring(lua_State* L, const char* fmt, ...);
+                                        const FmtArgs& args);
+LUAI_FUNC const char* luaO_pushvfstring(lua_State* L, const char* fmt,
+                                        va_list argp); /* dies with the public va_list path */
+LUAI_FUNC const char* luaO_pushfstring(lua_State* L, const char* fmt,
+                                       const FmtArgs& args);
+LUAI_FUNC const char* luaO_pushfstring(lua_State* L, const char* fmt);
 LUAI_FUNC void luaO_chunkid(char* out, const char* source, size_t srclen);
