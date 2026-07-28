@@ -6,3 +6,5 @@ lua
 
 .vscode/browse*
 
+core.*
+tests/core.*
