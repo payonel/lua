@@ -291,15 +291,6 @@
 #endif
 
 /*
-@@ lua_getlocaledecpoint gets the locale "radix character" (decimal point).
-** Change that if you do not want to use C locales. (Code using this
-** macro must include the header 'locale.h'.)
-*/
-#if !defined(lua_getlocaledecpoint)
-#define lua_getlocaledecpoint() (localeconv()->decimal_point[0])
-#endif
-
-/*
 ** macros to improve jump prediction, used mostly for error handling
 ** and debug facilities. (Some macros in the Lua API use these macros.
 ** Define LUA_NOBUILTIN if you do not want '__builtin_expect' in your

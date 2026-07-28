@@ -302,7 +302,7 @@ constexpr int MAXSIGDIG = 30;
 */
 static lua_Number lua_strx2number(const char* s, char** endptr)
 {
-  int dot = lua_getlocaledecpoint();
+  int dot = '.'; /* radix is pinned to '.' (no locale dependence) */
   lua_Number r = 0.0; /* result (accumulator) */
   int sigdig = 0;               /* number of significant digits */
   int nosigdig = 0;             /* number of non-significant digits */
@@ -407,19 +407,8 @@ static const char* l_str2d(const char* s, lua_Number* result)
   int mode = pmode ? ltolower(((unsigned char)(*pmode))) : 0;
   if (mode == 'n') /* reject 'inf' and 'nan' */
     return nullptr;
+  /* the radix character is pinned to '.'; no locale-retry */
   endptr = l_str2dloc(s, result, mode); /* try to convert */
-  if (endptr == nullptr)
-  { /* failed? may be a different locale */
-    char buff[L_MAXLENNUM + 1];
-    const char* pdot = strchr(s, '.');
-    if (pdot == nullptr || strlen(s) > L_MAXLENNUM)
-      return nullptr;                            /* string too long or no dot; fail */
-    strcpy(buff, s);                          /* copy string to buffer */
-    buff[pdot - s] = lua_getlocaledecpoint(); /* correct decimal point */
-    endptr = l_str2dloc(buff, result, mode);  /* try again */
-    if (endptr != nullptr)
-      endptr = s + (endptr - buff); /* make relative to 's' */
-  }
   return endptr;
 }
 
@@ -539,7 +528,7 @@ static int tostringbuffFloat(lua_Number n, char* buff)
   /* looks like an integer? */
   if (buff[strspn(buff, "-0123456789")] == '\0')
   {
-    buff[len++] = lua_getlocaledecpoint();
+    buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
   }
   return len;
