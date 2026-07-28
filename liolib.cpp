@@ -441,8 +441,8 @@ static int read_number(lua_State* L, FILE* f)
   char decp[2];
   rn.f = f;
   rn.n = 0;
-  decp[0] = '.'; /* radix is pinned to '.' (no locale dependence) */
-  decp[1] = '.';
+  decp[0] = ((char)(lua_getlocaledecpoint())); /* get decimal point from locale */
+  decp[1] = '.';                               /* always accept a dot */
   l_lockfile(rn.f);
   do
   {

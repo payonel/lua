@@ -8,6 +8,7 @@
 
 #include <charconv>
 #include <float.h>
+#include <locale.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -484,8 +485,23 @@ static const char* l_str2d(const char* s, lua_Number* result)
   int mode = pmode ? ltolower(((unsigned char)(*pmode))) : 0;
   if (mode == 'n') /* reject 'inf' and 'nan' */
     return nullptr;
-  /* the radix character is pinned to '.'; no locale-retry */
   endptr = l_str2dloc(s, result, mode); /* try to convert */
+  if (endptr == nullptr)
+  { /* failed? may use the locale radix character instead of '.'
+       (the conversion core is '.'-canonical; this shim maps the
+       locale point to '.' and retries -- the mirror of upstream,
+       whose core spoke the locale and whose shim mapped '.') */
+    char buff[L_MAXLENNUM + 1];
+    char point = ((char)(lua_getlocaledecpoint()));
+    const char* ppoint = (point != '.') ? strchr(s, point) : nullptr;
+    if (ppoint == nullptr || strlen(s) > L_MAXLENNUM)
+      return nullptr;                      /* string too long or no locale point; fail */
+    strcpy(buff, s);                       /* copy string to buffer */
+    buff[ppoint - s] = '.';                /* canonicalize decimal point */
+    endptr = l_str2dloc(buff, result, mode); /* try again */
+    if (endptr != nullptr)
+      endptr = s + (endptr - buff); /* make relative to 's' */
+  }
   return endptr;
 }
 
@@ -618,6 +634,16 @@ static int tostringbuffFloat(lua_Number n, char* buff)
   {
     buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
+  }
+  { /* output locale shim: the core is '.'-canonical; present the
+       locale radix character (a no-op in the "C" locale) */
+    char point = ((char)(lua_getlocaledecpoint()));
+    if (point != '.')
+    {
+      char* pdot = strchr(buff, '.');
+      if (pdot != nullptr)
+        *pdot = point;
+    }
   }
   return len;
 }

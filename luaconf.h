@@ -268,6 +268,16 @@
 */
 
 /*
+@@ lua_getlocaledecpoint gets the locale "radix character" (decimal point).
+** The conversion core (to_chars/from_chars) is always '.'-canonical;
+** this is used only by the explicit locale shims at the input/output
+** boundaries. (Code using this macro must include 'locale.h'.)
+*/
+#if !defined(lua_getlocaledecpoint)
+#define lua_getlocaledecpoint() (localeconv()->decimal_point[0])
+#endif
+
+/*
 @@ LUA_KCONTEXT is the type of the context ('ctx') for continuation
 ** functions.  It must be a numerical type; Lua will use 'intptr_t' if
 ** available, otherwise it will use 'ptrdiff_t' (the nearest thing to

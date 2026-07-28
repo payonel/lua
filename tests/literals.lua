@@ -295,32 +295,30 @@ for s in coroutine.wrap(function () gen("", len) end) do
 end
 
 
--- Decimal point locale tests removed: this port pins the radix
--- character to '.' (no locale dependence in number<->string
--- conversion; ryanbean decision 2026-07-28). Numerals parse and
--- format identically regardless of os.setlocale. The locale-independent
--- parts of the old block are kept:
-assert(tonumber"3.4" == 3.4)
-assert(tonumber("  -.4  ") == -0.4)
-assert(tonumber("  +0x.41  ") == 0X0.41)
-assert(assert(load("return 3.4"))() == 3.4)
-assert(assert(load("return .4,3"))() == .4)
-assert(assert(load("return 4."))() == 4.)
-assert(assert(load("return 4.+.5"))() == 4.5)
-assert(not tonumber"inf" and not tonumber"NAN")
-assert(assert(load(string.format("return %q", 4.51)))() == 4.51)
-do
+-- testing decimal point locale
+if os.setlocale("pt_BR") or os.setlocale("ptb") then
+  assert(tonumber("3,4") == 3.4 and tonumber"3.4" == 3.4)
+  assert(tonumber("  -.4  ") == -0.4)
+  assert(tonumber("  +0x.41  ") == 0X0.41)
+  assert(not load("a = (3,4)"))
+  assert(assert(load("return 3.4"))() == 3.4)
+  assert(assert(load("return .4,3"))() == .4)
+  assert(assert(load("return 4."))() == 4.)
+  assert(assert(load("return 4.+.5"))() == 4.5)
+
+  assert(" 0x.1 " + " 0x,1" + "-0X.1\t" == 0x0.1)
+
+  assert(not tonumber"inf" and not tonumber"NAN")
+
+  assert(assert(load(string.format("return %q", 4.51)))() == 4.51)
+
   local a,b = load("return 4.5.")
   assert(string.find(b, "'4%.5%.'"))
-end
--- number<->string conversion must be immune to the numeric locale
--- (tostring/tonumber/lexer run on to_chars/from_chars; string.format's
--- %-engine is a separate work item)
-if os.setlocale("pt_BR") or os.setlocale("ptb") then
-  assert(tonumber("3.4") == 3.4 and not tonumber("3,4"))
-  assert(tostring(3.4) == "3.4")
-  assert(assert(load("return 3.4"))() == 3.4)
+
   assert(os.setlocale("C"))
+else
+  (Message or print)(
+   '\n >>> pt_BR locale not available: skipping decimal point tests <<<\n')
 end
 
 
