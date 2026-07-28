@@ -143,8 +143,27 @@ static void resetCI(lua_State* L)
 static void stack_init(lua_State* L1, lua_State* L)
 {
   int i;
-  /* initialize stack array */
-  L1->stack.p = ((StackValue*)(luaM_malloc_(L, ((size_t)(BASIC_STACK_SIZE + EXTRA_STACK)) * sizeof(StackValue), 0)));
+  size_t nslots = (size_t)(BASIC_STACK_SIZE + EXTRA_STACK);
+  /* initialize the three stack columns; install only when all three
+     succeed, so 'freestack' sees either a complete stack or none */
+  lua_Integer* prim = (lua_Integer*)luaM_realloc_(L, nullptr, 0, nslots * sizeof(lua_Integer));
+  GCObject** ref = (GCObject**)luaM_realloc_(L, nullptr, 0, nslots * sizeof(GCObject*));
+  lu_byte* tag = (lu_byte*)luaM_realloc_(L, nullptr, 0, nslots * sizeof(lu_byte));
+  if (l_unlikely(prim == nullptr || ref == nullptr || tag == nullptr))
+  {
+    if (prim != nullptr)
+      luaM_free_(L, prim, nslots * sizeof(lua_Integer));
+    if (ref != nullptr)
+      luaM_free_(L, ref, nslots * sizeof(GCObject*));
+    if (tag != nullptr)
+      luaM_free_(L, tag, nslots * sizeof(lu_byte));
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  memset(prim, 0, nslots * sizeof(lua_Integer));
+  memset(ref, 0, nslots * sizeof(GCObject*));
+  L1->stack.prim = prim;
+  L1->stack.ref = ref;
+  L1->stack.tag = tag;
   L1->tbclist = 0;
   for (i = 0; i < BASIC_STACK_SIZE + EXTRA_STACK; i++)
     setslottag(L1, i, LUA_VNIL); /* erase new stack */
@@ -159,13 +178,18 @@ static void freestack(lua_State* L)
   luaM_free_(L, (L->tbc), (((size_t)(L->sizetbc))) * sizeof(*(L->tbc))); /* free tbc list */
   L->tbc = nullptr;
   L->ntbc = L->sizetbc = 0;
-  if (L->stack.p == nullptr)
+  if (L->stack.prim == nullptr)
     return;            /* stack not completely built yet */
   L->ci = &L->base_ci; /* free the entire 'ci' list */
   freeCI(L);
   assert(L->nci == 0);
-  /* free stack */
-  luaM_free_(L, (L->stack.p), (((size_t)(stacksize(L) + EXTRA_STACK))) * sizeof(*(L->stack.p)));
+  /* free the three stack columns */
+  {
+    size_t nslots = (size_t)(stacksize(L) + EXTRA_STACK);
+    luaM_free_(L, L->stack.prim, nslots * sizeof(lua_Integer));
+    luaM_free_(L, L->stack.ref, nslots * sizeof(GCObject*));
+    luaM_free_(L, L->stack.tag, nslots * sizeof(lu_byte));
+  }
 }
 
 /*
@@ -212,7 +236,9 @@ static void f_luaopen(lua_State* L, void*)
 static void preinit_thread(lua_State* L, global_State* g)
 {
   L->l_G = g;
-  L->stack.p = nullptr;
+  L->stack.prim = nullptr;
+  L->stack.ref = nullptr;
+  L->stack.tag = nullptr;
   L->tbclist = 0;
   L->tbc = nullptr;
   L->ntbc = 0;
@@ -237,8 +263,9 @@ static void preinit_thread(lua_State* L, global_State* g)
 lu_mem luaE_threadsize(lua_State* L)
 {
   lu_mem sz = ((lu_mem)(sizeof(LX))) + ((unsigned int)(L->nci)) * sizeof(CallInfo);
-  if (L->stack.p != nullptr)
-    sz += ((unsigned int)(stacksize(L) + EXTRA_STACK)) * sizeof(StackValue);
+  if (L->stack.prim != nullptr)
+    sz += ((unsigned int)(stacksize(L) + EXTRA_STACK)) *
+          (sizeof(lua_Integer) + sizeof(GCObject*) + sizeof(lu_byte));
   sz += ((unsigned int)(L->sizetbc)) * sizeof(StkId);
   return sz;
 }

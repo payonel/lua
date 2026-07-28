@@ -174,7 +174,8 @@ TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
 constexpr int STACKERRSPACE = 200;
 
 /* maximum stack size that respects size_t */
-constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / sizeof(StackValue)) - STACKERRSPACE);
+/* bound by the widest stack column (prim/ref are 8 bytes each) */
+constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / sizeof(lua_Integer)) - STACKERRSPACE);
 
 /*
 ** Minimum between LUAI_MAXSTACK and MAXSTACK_BYSIZET
@@ -227,31 +228,60 @@ static void correctstack(lua_State* L)
 ** Reallocate the stack to a new size, correcting all pointers into it.
 ** In case of allocation error, raise an error or return false according
 ** to 'raiseerror'.
+** The three columns are grown together: allocate three fresh arrays,
+** copy the live prefix, install, free the old ones (the Arrays.copyOf
+** shape of the managed port; there is no realloc-in-place for parallel
+** arrays). If any allocation fails, the old stack stays installed.
 */
 int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
 {
   int oldsize = stacksize(L);
   int i;
-  StackValue* newstack;
-  StackValue* oldstack = L->stack.p;
+  size_t oldn = (size_t)(oldsize + EXTRA_STACK);
+  size_t newn = (size_t)(newsize + EXTRA_STACK);
+  size_t keep = (oldn < newn) ? oldn : newn; /* live prefix to copy */
+  lua_Integer* newprim;
+  GCObject** newref;
+  lu_byte* newtag;
   lu_byte oldgcstop = G(L)->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
   G(L)->gcstopem = 1; /* stop emergency collection */
-  newstack = (((StackValue*)(luaM_realloc_(L, oldstack, ((size_t)(oldsize + EXTRA_STACK)) * sizeof(StackValue), ((size_t)(newsize + EXTRA_STACK)) * sizeof(StackValue)))));
+  newprim = (lua_Integer*)luaM_realloc_(L, nullptr, 0, newn * sizeof(lua_Integer));
+  newref = (GCObject**)luaM_realloc_(L, nullptr, 0, newn * sizeof(GCObject*));
+  newtag = (lu_byte*)luaM_realloc_(L, nullptr, 0, newn * sizeof(lu_byte));
   G(L)->gcstopem = oldgcstop; /* restore emergency collection */
-  if (l_unlikely(newstack == nullptr))
-  {                            /* reallocation failed? */
+  if (l_unlikely(newprim == nullptr || newref == nullptr || newtag == nullptr))
+  { /* some allocation failed? free the survivors, keep the old stack */
+    if (newprim != nullptr)
+      luaM_free_(L, newprim, newn * sizeof(lua_Integer));
+    if (newref != nullptr)
+      luaM_free_(L, newref, newn * sizeof(GCObject*));
+    if (newtag != nullptr)
+      luaM_free_(L, newtag, newn * sizeof(lu_byte));
     correctstack(L); /* restore upvalue pointers */
     if (raiseerror)
       luaD_throw(L, LUA_ERRMEM);
     else
       return 0; /* do not raise an error */
   }
-  L->stack.p = newstack;
+  memcpy(newprim, L->stack.prim, keep * sizeof(lua_Integer));
+  memcpy(newref, L->stack.ref, keep * sizeof(GCObject*));
+  memcpy(newtag, L->stack.tag, keep * sizeof(lu_byte));
+  if (newn > keep)
+  { /* define the fresh segment's payload columns (tags set below) */
+    memset(newprim + keep, 0, (newn - keep) * sizeof(lua_Integer));
+    memset(newref + keep, 0, (newn - keep) * sizeof(GCObject*));
+  }
+  luaM_free_(L, L->stack.prim, oldn * sizeof(lua_Integer));
+  luaM_free_(L, L->stack.ref, oldn * sizeof(GCObject*));
+  luaM_free_(L, L->stack.tag, oldn * sizeof(lu_byte));
+  L->stack.prim = newprim;
+  L->stack.ref = newref;
+  L->stack.tag = newtag;
   correctstack(L); /* fix upvalue pointers */
   L->stack_last = newsize;
   for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
-    ((&newstack[i])->tt_ = LUA_VNIL); /* erase new segment */
+    setslottag(L, i, LUA_VNIL); /* erase new segment */
   return 1;
 }
 

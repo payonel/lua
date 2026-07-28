@@ -566,7 +566,7 @@ static void check_stack(global_State* g, lua_State* L1)
   CallInfo* ci;
   UpVal* uv;
   assert(!isdead(g, L1));
-  if (L1->stack.p == nullptr)
+  if (L1->stack.prim == nullptr)
   { /* incomplete thread? */
     assert(L1->openupval == nullptr && L1->ci == nullptr);
     return;
@@ -581,7 +581,10 @@ static void check_stack(global_State* g, lua_State* L1)
     assert(lua_checkpc(L1, ci));
   }
   for (o = 0; o < L1->stack_last; o++)
-    checkliveness(L1, (&(L1)->stack.p[o])); /* entire stack must have valid values */
+  { /* entire stack must have valid values */
+    TValue v = getslot(L1, o);
+    checkliveness(L1, &v);
+  }
 }
 
 static void checkrefs(global_State* g, GCObject* o)
@@ -1030,7 +1033,9 @@ static int get_sizes(lua_State* L)
   setnameval(L, "global state", sizeof(global_State));
   setnameval(L, "TValue", sizeof(TValue));
   setnameval(L, "Node", sizeof(Node));
-  setnameval(L, "stack Value", sizeof(StackValue));
+  /* per-slot footprint across the three stack columns */
+  setnameval(L, "stack Value",
+             sizeof(lua_Integer) + sizeof(GCObject*) + sizeof(lu_byte));
   return 1;
 }
 

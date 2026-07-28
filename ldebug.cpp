@@ -789,24 +789,6 @@ static const char* funcnamefromcall(lua_State* L, CallInfo* ci,
 
 /* }====================================================== */
 
-/*
-** Check whether pointer 'o' points to some value in the stack frame of
-** the current function and, if so, returns its index.  Because 'o' may
-** not point to a value in this stack, we cannot compare it with the
-** region boundaries (undefined behavior in ISO C).
-*/
-static int instack(lua_State* L, CallInfo* ci, const TValue* o)
-{
-  int pos;
-  StkId base = ci->func + 1;
-  for (pos = 0; base + pos < ci->top; pos++)
-  {
-    if (o == (&(L)->stack.p[base + pos]))
-      return pos;
-  }
-  return -1; /* not found */
-}
-
 static const char* formatvarinfo(lua_State* L, const char* kind,
                                  const char* name)
 {
@@ -823,7 +805,7 @@ static const char* formatvarinfo(lua_State* L, const char* kind,
 ** origin drives attribution directly; the pointer-identity fallback
 ** below it is transitional (callers not yet threading origins).
 */
-static const char* varinfo(lua_State* L, const TValue* o, StkId src)
+static const char* varinfo(lua_State* L, StkId src)
 {
   CallInfo* ci = L->ci;
   const char* name = nullptr; /* to avoid warnings */
@@ -842,12 +824,7 @@ static const char* varinfo(lua_State* L, const TValue* o, StkId src)
         kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci),
                           (int)(src - base), &name);
     }
-    else
-    { /* transitional fallback: try the pointer-identity register scan */
-      int reg = instack(L, ci, o); /* try a register */
-      if (reg >= 0)             /* is 'o' a register? */
-        kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci), reg, &name);
-    }
+    /* else no origin: the value does not come from a named place */
   }
   return formatvarinfo(L, kind, name);
 }
@@ -868,7 +845,7 @@ static l_noret typeerror(lua_State* L, const TValue* o, const char* op,
 */
 l_noret luaG_typeerror(lua_State* L, const TValue* o, const char* op, StkId src)
 {
-  typeerror(L, o, op, varinfo(L, o, src));
+  typeerror(L, o, op, varinfo(L, src));
 }
 
 /*
@@ -881,7 +858,7 @@ l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
   CallInfo* ci = L->ci;
   const char* name = nullptr; /* to avoid warnings */
   const char* kind = funcnamefromcall(L, ci, &name);
-  const char* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, o, src);
+  const char* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, src);
   typeerror(L, o, "call", extra);
 }
 
@@ -921,13 +898,11 @@ l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2,
                         StkId src1, StkId src2)
 {
   lua_Integer temp;
+  (void)p2; /* attribution is origin-based; the faulty value itself is not shown */
   if (!luaV_tointegerns(p1, &temp, LUA_FLOORN2I))
-  {
-    p2 = p1;
     src2 = src1;
-  }
   luaG_runerror(L, "number%s has no integer representation",
-                FmtArgs().str(varinfo(L, p2, src2)));
+                FmtArgs().str(varinfo(L, src2)));
 }
 
 l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)

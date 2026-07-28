@@ -764,12 +764,15 @@ static l_mem traversethread(global_State* g, lua_State* th)
   StkId o = 0;
   if (isold(th) || g->gcstate == GCSpropagate)
     linkgclist_((th), &(th)->gclist, &(g->grayagain)); /* insert into 'grayagain' list */
-  if (th->stack.p == nullptr)
+  if (th->stack.prim == nullptr)
     return 0; /* stack not completely built yet */
   assert(g->gcstate == GCSatomic ||
              th->openupval == nullptr || isintwups(th));
   for (; o < th->top; o++) /* mark live elements in the stack */
-    markvalue(g, (&(th)->stack.p[o]));
+  {
+    TValue v = getslot(th, o);
+    markvalue(g, &v);
+  }
   for (uv = th->openupval; uv != nullptr; uv = uv->opennext)
     markobject(g, uv); /* open upvalues cannot be collected */
   if (g->gcstate == GCSatomic)

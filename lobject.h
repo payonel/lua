@@ -94,7 +94,6 @@ constexpr int WITHVARIANT_MASK = 0x3F;
 ** variables lives in a separate array in 'lua_State' ('tbc'), not
 ** threaded through the stack.
 */
-typedef TValue StackValue;
 
 /* index to stack elements (integer offset from stack base) */
 typedef size_t StkId;

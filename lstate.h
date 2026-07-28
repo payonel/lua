@@ -261,7 +261,20 @@ struct lua_State : GCObject
   struct global_State* l_G;
   CallInfo* ci;    /* call info for current function */
   StkId stack_last; /* end of stack (last element + 1) */
-  struct { StackValue* p; } stack; /* stack base */
+  struct
+  { /* the stack: three parallel columns, indexed in lockstep by StkId
+       (the Truffle frame layout — long[]/Object[]/byte[] in the port).
+       A slot's payload rides 'prim' (integers, float bits, light-udata
+       and C-function pointer bits) or 'ref' (collectable objects); the
+       'tag' column says which. Writes always define both payload
+       columns: 'ref' is nulled on primitive/nil stores (so a dead
+       reference never lingers — in the port the JVM GC scans the
+       Object[] column natively), 'prim' is zeroed on reference
+       stores. */
+    lua_Integer* prim; /* payload column */
+    GCObject** ref;    /* reference column */
+    lu_byte* tag;      /* type-tag column */
+  } stack; /* stack base */
   UpVal* openupval;    /* list of open upvalues in this stack */
   StkId tbclist;    /* top of to-be-closed list (0 when empty) */
   StkId* tbc;       /* array of indices of to-be-closed variables */
@@ -352,199 +365,270 @@ static l_forceinline global_State* G(lua_State* L)
 ** ===================================================================
 */
 
-/* the row behind a slot — transitional bridge, dies with step D */
-static l_forceinline TValue* slotrow(lua_State* L, StkId idx)
-{
-  return &L->stack.p[idx];
-}
-
 /* tag */
 static l_forceinline lu_byte slottag(lua_State* L, StkId idx)
 {
-  return L->stack.p[idx].tt_;
+  return L->stack.tag[idx];
 }
 
 static l_forceinline void setslottag(lua_State* L, StkId idx, lu_byte tt)
 {
-  L->stack.p[idx].tt_ = tt;
+  L->stack.tag[idx] = tt;
 }
 
 /* whole-slot copies (the setobj family over slots) */
 static l_forceinline TValue getslot(lua_State* L, StkId idx)
 {
-  return L->stack.p[idx];
+  TValue v;
+  v.value_.prim = L->stack.prim[idx];
+  v.value_.ref = L->stack.ref[idx];
+  v.tt_ = L->stack.tag[idx];
+  return v;
 }
 
 static l_forceinline void setslot(lua_State* L, StkId idx, const TValue* v)
 {
-  L->stack.p[idx].value_ = v->value_;
-  L->stack.p[idx].tt_ = v->tt_;
-  checkliveness(L, &L->stack.p[idx]);
+  /* discriminated store: only the payload column named by the tag is
+     read from the row (rows built by typed setters define only that
+     field); the other column is written to a defined empty value —
+     the exact managed setSlot */
+  if (v->tt_ & BIT_ISCOLLECTABLE)
+  {
+    L->stack.ref[idx] = v->value_.ref;
+    L->stack.prim[idx] = 0;
+  }
+  else
+  {
+    L->stack.prim[idx] = v->value_.prim;
+    L->stack.ref[idx] = nullptr;
+  }
+  L->stack.tag[idx] = v->tt_;
+  checkliveness(L, v);
 }
 
 static l_forceinline void copyslot(lua_State* L, StkId dst, StkId src)
 {
-  setslot(L, dst, &L->stack.p[src]);
+  TValue v = getslot(L, src);
+  setslot(L, dst, &v);
 }
 
 /* cross-stack transfer: slot of 'from' -> slot of 'to' (no row at the site) */
 static l_forceinline void copyslot(lua_State* to, StkId dst, lua_State* from, StkId src)
 {
-  setslot(to, dst, &from->stack.p[src]);
+  TValue v = getslot(from, src);
+  setslot(to, dst, &v);
 }
 
 /* transfer a slot's value into non-stack row storage (upvalue cells,
 ** C-closure upvalues, userdata fields) — no row at the site */
 static l_forceinline void setobj(lua_State* L, TValue* dst, StkId src)
 {
-  setobj(L, dst, &L->stack.p[src]);
+  TValue v = getslot(L, src);
+  setobj(L, dst, &v);
 }
 
 /* typed reads */
 static l_forceinline lua_Integer slotival(lua_State* L, StkId idx)
 {
-  return ivalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return ivalue(&v);
 }
 
 static l_forceinline lua_Number slotfltval(lua_State* L, StkId idx)
 {
-  return fltvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return fltvalue(&v);
 }
 
 static l_forceinline lua_Number slotnval(lua_State* L, StkId idx)
 {
-  return nvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return nvalue(&v);
 }
 
 static l_forceinline void* slotpval(lua_State* L, StkId idx)
 {
-  return pvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return pvalue(&v);
 }
 
 static l_forceinline lua_CFunction slotfval(lua_State* L, StkId idx)
 {
-  return fvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return fvalue(&v);
 }
 
 static l_forceinline GCObject* slotgcval(lua_State* L, StkId idx)
 {
-  return gcvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return gcvalue(&v);
 }
 
 static l_forceinline TString* slottsval(lua_State* L, StkId idx)
 {
-  return tsvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return tsvalue(&v);
 }
 
 static l_forceinline Table* slothval(lua_State* L, StkId idx)
 {
-  return hvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return hvalue(&v);
 }
 
 static l_forceinline Udata* slotuval(lua_State* L, StkId idx)
 {
-  return uvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return uvalue(&v);
 }
 
 static l_forceinline lua_State* slotthval(lua_State* L, StkId idx)
 {
-  return thvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return thvalue(&v);
 }
 
 static l_forceinline Closure* slotclval(lua_State* L, StkId idx)
 {
-  return clvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return clvalue(&v);
 }
 
 static l_forceinline LClosure* slotclLval(lua_State* L, StkId idx)
 {
-  return clLvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return clLvalue(&v);
 }
 
 static l_forceinline CClosure* slotclCval(lua_State* L, StkId idx)
 {
-  return clCvalue(&L->stack.p[idx]);
+  TValue v = getslot(L, idx);
+  return clCvalue(&v);
 }
 
 /* typed writes */
 static l_forceinline void setslotnil(lua_State* L, StkId idx)
 {
-  L->stack.p[idx].tt_ = LUA_VNIL;
+  L->stack.tag[idx] = LUA_VNIL;
+  L->stack.ref[idx] = nullptr; /* release the reference (GC-pinning parity with the port) */
 }
 
 static l_forceinline void setslotempty(lua_State* L, StkId idx)
 {
-  L->stack.p[idx].tt_ = LUA_VEMPTY;
+  L->stack.tag[idx] = LUA_VEMPTY;
+  L->stack.ref[idx] = nullptr; /* release the reference (GC-pinning parity with the port) */
 }
 
 static l_forceinline void setslotbt(lua_State* L, StkId idx)
 {
-  L->stack.p[idx].tt_ = LUA_VTRUE;
+  L->stack.tag[idx] = LUA_VTRUE;
+  L->stack.ref[idx] = nullptr; /* release the reference (GC-pinning parity with the port) */
 }
 
 static l_forceinline void setslotbf(lua_State* L, StkId idx)
 {
-  L->stack.p[idx].tt_ = LUA_VFALSE;
+  L->stack.tag[idx] = LUA_VFALSE;
+  L->stack.ref[idx] = nullptr; /* release the reference (GC-pinning parity with the port) */
 }
 
 static l_forceinline void setsloti(lua_State* L, StkId idx, lua_Integer x)
 {
-  setivalue(&L->stack.p[idx], x);
+  L->stack.prim[idx] = x;
+  L->stack.ref[idx] = nullptr;
+  L->stack.tag[idx] = LUA_VNUMINT;
 }
 
 static l_forceinline void setslotflt(lua_State* L, StkId idx, lua_Number x)
 {
-  setfltvalue(&L->stack.p[idx], x);
+  L->stack.prim[idx] = std::bit_cast<lua_Integer>(x);
+  L->stack.ref[idx] = nullptr;
+  L->stack.tag[idx] = LUA_VNUMFLT;
 }
 
 static l_forceinline void chgsloti(lua_State* L, StkId idx, lua_Integer x)
 {
-  chgivalue(&L->stack.p[idx], x);
+  assert(L->stack.tag[idx] == LUA_VNUMINT);
+  L->stack.prim[idx] = x;
 }
 
 static l_forceinline void chgslotflt(lua_State* L, StkId idx, lua_Number x)
 {
-  chgfltvalue(&L->stack.p[idx], x);
+  assert(L->stack.tag[idx] == LUA_VNUMFLT);
+  L->stack.prim[idx] = std::bit_cast<lua_Integer>(x);
 }
 
 static l_forceinline void setslotp(lua_State* L, StkId idx, void* x)
 {
-  setpvalue(&L->stack.p[idx], x);
+  L->stack.prim[idx] = reinterpret_cast<lua_Integer>(x);
+  L->stack.ref[idx] = nullptr;
+  L->stack.tag[idx] = LUA_VLIGHTUSERDATA;
 }
 
 static l_forceinline void setslotf(lua_State* L, StkId idx, lua_CFunction x)
 {
-  setfvalue(&L->stack.p[idx], x);
+  L->stack.prim[idx] = reinterpret_cast<lua_Integer>(x);
+  L->stack.ref[idx] = nullptr;
+  L->stack.tag[idx] = LUA_VLCF;
 }
 
 static l_forceinline void setslots(lua_State* L, StkId idx, TString* x)
 {
-  setsvalue(L, &L->stack.p[idx], x);
+  assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  L->stack.ref[idx] = x;
+  L->stack.prim[idx] = 0;
+  L->stack.tag[idx] = ctb(x->tt);
+  TValue v = getslot(L, idx);
+  checkliveness(L, &v);
 }
 
 static l_forceinline void setsloth(lua_State* L, StkId idx, Table* x)
 {
-  sethvalue(L, &L->stack.p[idx], x);
+  assert(x->tt == LUA_VTABLE);
+  L->stack.ref[idx] = x;
+  L->stack.prim[idx] = 0;
+  L->stack.tag[idx] = ctb(x->tt);
+  TValue v = getslot(L, idx);
+  checkliveness(L, &v);
 }
 
 static l_forceinline void setslotu(lua_State* L, StkId idx, Udata* x)
 {
-  setuvalue(L, &L->stack.p[idx], x);
+  assert(x->tt == LUA_VUSERDATA);
+  L->stack.ref[idx] = x;
+  L->stack.prim[idx] = 0;
+  L->stack.tag[idx] = ctb(x->tt);
+  TValue v = getslot(L, idx);
+  checkliveness(L, &v);
 }
 
 static l_forceinline void setslotclL(lua_State* L, StkId idx, LClosure* x)
 {
-  setclLvalue(L, &L->stack.p[idx], x);
+  assert(x->tt == LUA_VLCL);
+  L->stack.ref[idx] = x;
+  L->stack.prim[idx] = 0;
+  L->stack.tag[idx] = ctb(x->tt);
+  TValue v = getslot(L, idx);
+  checkliveness(L, &v);
 }
 
 static l_forceinline void setslotclC(lua_State* L, StkId idx, CClosure* x)
 {
-  setclCvalue(L, &L->stack.p[idx], x);
+  assert(x->tt == LUA_VCCL);
+  L->stack.ref[idx] = x;
+  L->stack.prim[idx] = 0;
+  L->stack.tag[idx] = ctb(x->tt);
+  TValue v = getslot(L, idx);
+  checkliveness(L, &v);
 }
 
 static l_forceinline void setslotth(lua_State* L, StkId idx, lua_State* x)
 {
-  setthvalue(L, &L->stack.p[idx], x);
+  assert(x->tt == LUA_VTHREAD);
+  L->stack.ref[idx] = x;
+  L->stack.prim[idx] = 0;
+  L->stack.tag[idx] = ctb(x->tt);
+  TValue v = getslot(L, idx);
+  checkliveness(L, &v);
 }
 
 /* }================================================================== */
