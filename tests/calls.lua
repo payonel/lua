@@ -509,18 +509,20 @@ assert((function (a) return a end)() == nil)
 
 print("testing binary chunks")
 do
-  -- format 1: no native size probes; fields have format-defined widths
-  -- ("I4" and "n" match the format because the host is little-endian
-  -- by the port's compile-time contract)
-  local headformat = "c4BBc6c3I4n"
+  local headformat = "c4BBc6BiBI4BjBn"
   local header = {  -- header components
     "\27Lua",               -- signature
     0x55,                   -- version 5.5 (0x55)
-    1,                      -- format (1 = this port's field-wise format)
+    0,                      -- format
     "\x19\x93\r\n\x1a\n",   -- a binary string
-    "\x82\xD9\x6F",         -- -0x5678 as a signed varint (zigzag 0xACEF)
-    0x12345678,             -- an instruction (u32)
-    -370.5,                 -- a Lua float (binary64)
+    string.packsize("i"),   -- size of an int
+    -0x5678,                -- an int
+    4,                      -- size of an instruction
+    0x12345678,             -- an instruction (4 bytes)
+    string.packsize("j"),   -- size of a Lua integer
+    -0x5678,                -- a Lua integer
+    string.packsize("n"),   -- size of a Lua float
+    -370.5,                 -- a Lua float
   }
 
   local c = string.dump(function ()
@@ -540,10 +542,12 @@ do
   end
 
   -- Testing corrupted header.
-  -- A single wrong byte in the head invalidates the chunk. (Every
-  -- field is a defined-width encoding with no padding, so the float
-  -- check bytes are significant too.)
+  -- A single wrong byte in the head invalidates the chunk,
+  -- except for the Lua float check. (If numbers are long double,
+  -- the representation may need padding, and changing that padding
+  -- will not invalidate the chunk.)
   local headlen = string.packsize(headformat)
+  headlen = headlen - string.packsize("n")     -- remove float check
   for i = 1, headlen do
     local s = string.sub(c, 1, i - 1) ..
               string.char((string.byte(string.sub(c, i, i)) + 1) & 0xFF) ..

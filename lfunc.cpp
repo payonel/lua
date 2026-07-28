@@ -318,17 +318,23 @@ lu_mem luaF_protosize(Proto* p)
               + (unsigned int)p->sizek * sizeof(TValue)
               + (unsigned int)p->sizelocvars * sizeof(LocVar)
               + (unsigned int)p->sizeupvalues * sizeof(Upvaldesc);
-  sz += ((unsigned int)(p->sizecode)) * sizeof(Instruction);
-  sz += ((unsigned int)(p->sizelineinfo)) * sizeof(lu_byte);
-  sz += ((unsigned int)(p->sizeabslineinfo)) * sizeof(AbsLineInfo);
+  if (!(p->flag & PF_FIXED))
+  {
+    sz += ((unsigned int)(p->sizecode)) * sizeof(Instruction);
+    sz += ((unsigned int)(p->sizelineinfo)) * sizeof(lu_byte);
+    sz += ((unsigned int)(p->sizeabslineinfo)) * sizeof(AbsLineInfo);
+  }
   return sz;
 }
 
 void luaF_freeproto(lua_State* L, Proto* f)
 {
-  luaM_free_(L, (f->code), (((size_t)(f->sizecode))) * sizeof(*(f->code)));
-  luaM_free_(L, (f->lineinfo), (((size_t)(f->sizelineinfo))) * sizeof(*(f->lineinfo)));
-  luaM_free_(L, (f->abslineinfo), (((size_t)(f->sizeabslineinfo))) * sizeof(*(f->abslineinfo)));
+  if (!(f->flag & PF_FIXED))
+  {
+    luaM_free_(L, (f->code), (((size_t)(f->sizecode))) * sizeof(*(f->code)));
+    luaM_free_(L, (f->lineinfo), (((size_t)(f->sizelineinfo))) * sizeof(*(f->lineinfo)));
+    luaM_free_(L, (f->abslineinfo), (((size_t)(f->sizeabslineinfo))) * sizeof(*(f->abslineinfo)));
+  }
   luaM_free_(L, (f->p), (((size_t)(f->sizep))) * sizeof(*(f->p)));
   luaM_free_(L, (f->k), (((size_t)(f->sizek))) * sizeof(*(f->k)));
   luaM_free_(L, (f->locvars), (((size_t)(f->sizelocvars))) * sizeof(*(f->locvars)));

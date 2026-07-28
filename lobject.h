@@ -331,6 +331,7 @@ typedef struct AbsLineInfo
 */
 constexpr int PF_VAHID = 1; /* function has hidden vararg arguments */
 constexpr int PF_VATAB = 2; /* function has vararg table */
+constexpr int PF_FIXED = 4; /* prototype has parts in fixed memory */
 
 /* a vararg function either has hidden args. or a vararg table */
 

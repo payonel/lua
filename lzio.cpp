@@ -73,3 +73,16 @@ size_t luaZ_read(ZIO* z, void* b, size_t n)
   }
   return 0;
 }
+
+const void* luaZ_getaddr(ZIO* z, size_t n)
+{
+  const void* res;
+  if (!checkbuffer(z))
+    return nullptr; /* no more input */
+  if (z->n < n)  /* not enough bytes? */
+    return nullptr; /* block not whole; cannot give an address */
+  res = z->p;    /* get block address */
+  z->n -= n;     /* consume these bytes */
+  z->p += n;
+  return res;
+}
