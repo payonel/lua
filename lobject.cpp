@@ -290,7 +290,6 @@ static int isneg(const char** s)
 ** ===================================================================
 */
 
-#if !defined(lua_strx2number)
 
 /* maximum number of significant digits to read (to avoid overflows
    even with single floats) */
@@ -362,7 +361,6 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
   return ldexp(r, e);
 }
 
-#endif
 /* }====================================================== */
 
 /* maximum length of a numeral to be converted to a number */

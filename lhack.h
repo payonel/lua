@@ -122,22 +122,6 @@ LUA_API Memcontrol l_memcontrol;
 */
 #define LUAI_MAXCCALLS 200
 
-/*
-@@ lua_strx2number converts a hexadecimal numeral to a number.
-** In C99, 'strtod' does that conversion. Otherwise, you can
-** leave 'lua_strx2number' undefined and Lua will provide its own
-** implementation.
-*/
-#define lua_strx2number(s, p) lua_str2number(s, p)
-
-/*
-@@ lua_number2strx converts a float to a hexadecimal numeral.
-** In C99, 'sprintf' (with format specifiers '%a'/'%A') does that.
-** Otherwise, you can leave 'lua_number2strx' undefined and Lua will
-** provide its own implementation.
-*/
-#define lua_number2strx(L, b, sz, f, n) ((void) L, l_sprintf(b, sz, f, (n)))
-
 #define luai_openlibs(L) luaL_openselectedlibs(L, ~0, 0)
 #define luai_tracegc(L, f) ((void) 0)
 

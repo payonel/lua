@@ -1116,7 +1116,6 @@ static int str_gsub(lua_State* L)
 ** =======================================================
 */
 
-#if !defined(lua_number2strx) /* { */
 
 /*
 ** Hexadecimal floating-point formatter
@@ -1196,7 +1195,6 @@ static int lua_number2strx(lua_State* L, char* buff, unsigned sz,
   return n;
 }
 
-#endif /* } */
 
 /*
 ** Maximum size for items formatted with '%f'. This size is produced
