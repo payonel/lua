@@ -272,7 +272,7 @@ static int luaB_collectgarbage(lua_State* L)
         LUA_GCPPAUSE, LUA_GCPSTEPMUL, LUA_GCPSTEPSIZE};
     int p = pnum[luaL_checkoption(L, 2, nullptr, params)];
     lua_Integer value = luaL_optinteger(L, 3, -1);
-    lua_pushinteger(L, lua_gc(L, o, p, (int) value));
+    lua_pushinteger(L, lua_gc(L, o, 0, p, (int) value));
     return 1;
   }
   default:

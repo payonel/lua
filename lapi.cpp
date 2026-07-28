@@ -7,7 +7,6 @@
 #include "lprefix.h"
 
 #include <limits.h>
-#include <stdarg.h>
 #include <string.h>
 
 #include "lua.h"
@@ -1427,17 +1426,17 @@ LUA_API int lua_status(lua_State* L)
 }
 
 /*
-** Garbage-collection function
+** Garbage-collection function. The explicit parameters cover all
+** options: 'stepsize' is used by LUA_GCSTEP and 'param'/'value' by
+** LUA_GCPARAM; other options ignore them (they default in lua.h).
 */
-LUA_API int lua_gc(lua_State* L, int what, ...)
+LUA_API int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
 {
-  va_list argp;
   int res = 0;
   global_State* g = G(L);
   if (g->gcstp & (GCSTPGC | GCSTPCLS)) /* internal stop? */
     return -1;                         /* all options are invalid when stopped */
   lua_lock(L);
-  va_start(argp, what);
   switch (what)
   {
   case LUA_GCSTOP:
@@ -1470,7 +1469,7 @@ LUA_API int lua_gc(lua_State* L, int what, ...)
   case LUA_GCSTEP:
   {
     lu_byte oldstp = g->gcstp;
-    l_mem n = ((l_mem)(va_arg(argp, size_t)));
+    l_mem n = ((l_mem)(stepsize));
     l_mem newdebt;
     int work = 0; /* true if GC did some work */
     g->gcstp = 0; /* allow GC to run (other bits must be zero here) */
@@ -1513,8 +1512,6 @@ LUA_API int lua_gc(lua_State* L, int what, ...)
   }
   case LUA_GCPARAM:
   {
-    int param = va_arg(argp, int);
-    int value = va_arg(argp, int);
     assert((0 <= param && param < LUA_GCPN) && "invalid parameter");
     res = ((int)(luaO_applyparam(g->gcparams[param], 100)));
     if (value >= 0)
@@ -1524,7 +1521,6 @@ LUA_API int lua_gc(lua_State* L, int what, ...)
   default:
     res = -1; /* invalid option */
   }
-  va_end(argp);
   lua_unlock(L);
   return res;
 }
