@@ -695,63 +695,37 @@ void luaO_tostring(lua_State* L, TValue* obj)
 */
 
 /*
-** Size for buffer space used by 'luaO_pushvfstring'. It should be
-** (LUA_IDSIZE + LUA_N2SBUFFSZ) + a minimal space for basic messages,
-** so that 'luaG_addinfo' can work directly on the static buffer.
-*/
-constexpr unsigned BUFVFS = ((unsigned int)(LUA_IDSIZE + LUA_N2SBUFFSZ + 95));
-
-/*
-** Buffer used by 'luaO_pushvfstring'. 'err' signals an error while
-** building result (memory error [1] or buffer overflow [2]).
+** Buffer used by 'luaO_pushvfstring': a ByteBuilder whose bytes are
+** ADOPTED by the result string (luaS_take — zero copy). 'err' == 2
+** signals a length overflow while building. (Growth memory errors
+** now surface as host allocation failure — the recorded payload
+** accounting status quo extended to builders.)
 */
 typedef struct BuffFS
 {
   lua_State* L;
-  char* b;
-  size_t buffsize;
-  size_t blen; /* length of string in 'buff' */
+  ByteBuilder bb;
   int err;
-  char space[BUFVFS]; /* initial buffer */
 } BuffFS;
 
 static void initbuff(lua_State* L, BuffFS* buff)
 {
   buff->L = L;
-  buff->b = buff->space;
-  buff->buffsize = sizeof(buff->space);
-  buff->blen = 0;
   buff->err = 0;
 }
 
 /*
 ** Push final result from 'luaO_pushvfstring'. This function may raise
-** errors explicitly or through memory errors, so it must run protected.
+** errors creating the string, so it must run protected.
 */
 static void pushbuff(lua_State* L, void* ud)
 {
   BuffFS* buff = ((BuffFS*)(ud));
-  switch (buff->err)
-  {
-  case 1: /* memory error */
-    luaD_throw(L, LUA_ERRMEM);
-    break;
-  case 2: /* length overflow: Add "..." at the end of result */
-    if (buff->buffsize - buff->blen < 3)
-      strcpy(buff->b + buff->blen - 3, "..."); /* 'blen' must be > 3 */
-    else
-    { /* there is enough space left for the "..." */
-      strcpy(buff->b + buff->blen, "...");
-      buff->blen += 3;
-    }
-    /* FALLTHROUGH */
-  default:
-  { /* no errors, but it can raise one creating the new string */
-    TString* ts = luaS_newlstr(L, buff->b, buff->blen);
-    setslots(L, L->top, ts);
-    L->top++;
-  }
-  }
+  if (buff->err == 2) /* length overflow: mark truncation */
+    buff->bb.append("...", 3);
+  TString* ts = luaS_take(L, buff->bb.finish()); /* adopt the bytes */
+  setslots(L, L->top, ts);
+  L->top++;
 }
 
 static const InternalString* clearbuff(BuffFS* buff)
@@ -766,45 +740,19 @@ static const InternalString* clearbuff(BuffFS* buff)
     assert((slottag(L, s) & NOVARIANT_MASK) == LUA_TSTRING);
     res = &slottsval(L, s)->data; /* borrowed view of the pushed string */
   }
-  if (buff->b != buff->space)                   /* using dynamic buffer? */
-    luaM_free_(L, (buff->b), (buff->buffsize) * sizeof(*(buff->b))); /* free it */
   return res;
 }
 
 static void addstr2buff(BuffFS* buff, const char* str, size_t slen)
 {
-  size_t left = buff->buffsize - buff->blen; /* space left in the buffer */
-  if (buff->err)                             /* do nothing else after an error */
+  if (buff->err) /* do nothing else after an error */
     return;
-  if (slen > left)
-  { /* new string doesn't fit into current buffer? */
-    if (slen > ((MAX_SIZE / 2) - buff->blen))
-    {                                          /* overflow? */
-      memcpy(buff->b + buff->blen, str, left); /* copy what it can */
-      buff->blen = buff->buffsize;
-      buff->err = 2; /* doesn't add anything else */
-      return;
-    }
-    else
-    {
-      size_t newsize = buff->buffsize + slen; /* limited to MAX_SIZE/2 */
-      char* newb =
-          (buff->b == buff->space) /* still using static space? */
-              ? (((char*)(luaM_realloc_(buff->L, nullptr, ((size_t)(0)) * sizeof(char), ((size_t)(newsize)) * sizeof(char)))))
-              : (((char*)(luaM_realloc_(buff->L, buff->b, ((size_t)(buff->buffsize)) * sizeof(char), ((size_t)(newsize)) * sizeof(char)))));
-      if (newb == nullptr)
-      {                /* allocation error? */
-        buff->err = 1; /* signal a memory error */
-        return;
-      }
-      if (buff->b == buff->space)          /* new buffer (not reallocated)? */
-        memcpy(newb, buff->b, buff->blen); /* copy previous content */
-      buff->b = newb;                      /* set new (larger) buffer... */
-      buff->buffsize = newsize;            /* ...and its new size */
-    }
+  if (slen > (MAX_SIZE / 2) - buff->bb.size())
+  {                /* overflow? */
+    buff->err = 2; /* doesn't add anything else; "..." marks it */
+    return;
   }
-  memcpy(buff->b + buff->blen, str, slen); /* copy new content */
-  buff->blen += slen;
+  buff->bb.append(str, slen);
 }
 
 /*

@@ -14,13 +14,6 @@ constexpr int EOZ = (-1); /* end of stream */
 
 typedef struct Zio ZIO;
 
-typedef struct Mbuffer
-{
-  char* buffer;
-  size_t n;
-  size_t buffsize;
-} Mbuffer;
-
 LUAI_FUNC void luaZ_init(lua_State* L, ZIO* z, lua_Reader reader,
                          void* data);
 LUAI_FUNC size_t luaZ_read(ZIO* z, void* b, size_t n); /* read next n bytes */

@@ -52,6 +52,21 @@ static TString* createstrobj(lua_State* L, const char* str, size_t l,
 }
 
 /*
+** Move form: adopts engine-owned bytes (builder finish) — zero copy.
+*/
+static TString* createstrobj(lua_State* L, InternalString&& str, size_t h)
+{
+  GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
+  assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  TString* ts = static_cast<TString*>(o);
+  ts->hash = ((unsigned int)(h));
+  ts->extra = 0;
+  new (&ts->data) InternalString(std::move(str));
+  luaM_reserve(L, ts->data.capacity());
+  return ts;
+}
+
+/*
 ** Clear API string cache. (Entries cannot be empty, so fill them with
 ** a non-collectable string.)
 */
@@ -115,6 +130,34 @@ TString* luaS_createstr(lua_State* L, const char* str, size_t l)
   }
   /* long string: no interning */
   return createstrobj(L, str, l, h);
+}
+
+/*
+** Create a string ADOPTING engine-owned bytes (ByteBuilder finish):
+** interning applies as usual for short strings (the buffer is simply
+** discarded on a hit); otherwise the TString takes the buffer with no
+** copy. Never call with bytes the host can still reach.
+*/
+TString* luaS_take(lua_State* L, InternalString&& str)
+{
+  global_State* g = G(L);
+  size_t h = InternalString::hashBytes(str.bytes(), str.size());
+  if (str.size() <= LUAI_MAXSHORTLEN)
+  {
+    global_State::InternKey key{str.view(), h};
+    auto it = g->strt.find(key);
+    if (it != g->strt.end())
+    {
+      TString* ts = it->second;
+      if (isdead(g, ts))
+        changewhite(ts); /* resurrect it */
+      return ts;         /* 'str' is discarded */
+    }
+    TString* ts = createstrobj(L, std::move(str), h);
+    g->strt.emplace(global_State::InternKey{ts->data.view(), h}, ts);
+    return ts;
+  }
+  return createstrobj(L, std::move(str), h);
 }
 
 /*

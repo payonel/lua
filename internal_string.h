@@ -193,3 +193,61 @@ const InternalString* lit()
 }
 
 /* }================================================================== */
+
+/*
+** {==================================================================
+** ByteBuilder — the engine's growable byte accumulator
+** ===================================================================
+**
+** Companion to InternalString (RULED): strings are BUILT here — the
+** lexer token buffer, luaO_pushvfstring's BuffFS, and eventually the
+** auxiliary-library buffer. In Java this is a plain byte-array
+** builder (emphatically NOT java.lang.StringBuilder, which is UTF-16
+** text). finish() hands the accumulated bytes to an InternalString by
+** move — engine-owned buffers may be adopted zero-copy (the one
+** sanctioned non-deep-copy path; nothing external ever holds the
+** reference).
+**
+** Accounting note: builder memory is host-allocated and uncounted
+** while building (the recorded payload status quo extended to the
+** builder); the bytes enter GC-debt accounting when a TString adopts
+** them (luaS_take -> luaM_reserve(capacity)).
+*/
+class ByteBuilder
+{
+public:
+  void append(char c) { bytes_.push_back(c); }
+  void append(const char* b, size_t n) { bytes_.append(b, n); }
+  void append(const InternalString* s)
+  {
+    bytes_.append(s->bytes(), s->size());
+  }
+
+  /* discard contents, keep capacity (builders are reused) */
+  void reset() noexcept { bytes_.clear(); }
+
+  /* remove the last 'k' bytes (lexer un-saves escapes/delimiters) */
+  void drop(size_t k) { bytes_.resize(bytes_.size() - k); }
+
+  size_t size() const noexcept { return bytes_.size(); }
+
+  /*
+  ** Contents pointer, valid until the next append/reset/finish. Only
+  ** NUL-terminated if the client appended a NUL (the lexer does so
+  ** explicitly before C-string consumers).
+  */
+  const char* data() const noexcept { return bytes_.data(); }
+
+  /* hand the bytes over (zero-copy); the builder is left empty */
+  InternalString finish() noexcept
+  {
+    InternalString s(std::move(bytes_));
+    bytes_.clear(); /* normalize the moved-from state */
+    return s;
+  }
+
+private:
+  std::string bytes_; /* byte container, same convention as InternalString */
+};
+
+/* }================================================================== */
