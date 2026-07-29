@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 /* memory-allocator control variables */
-typedef struct Memcontrol
+struct Memcontrol
 {
   int failnext;
   unsigned long numblocks;
@@ -15,7 +15,7 @@ typedef struct Memcontrol
   unsigned long memlimit;
   unsigned long countlimit;
   unsigned long objcount[LUA_NUMTYPES];
-} Memcontrol;
+};
 
 LUA_API Memcontrol l_memcontrol;
 

@@ -26,7 +26,7 @@
 #define luai_verifycode(L, f) /* empty */
 #endif
 
-typedef struct
+struct LoadState
 {
   lua_State* L;
   ZIO* Z;
@@ -35,7 +35,7 @@ typedef struct
   size_t offset;     /* current position relative to beginning of dump */
   lua_Unsigned nstr; /* number of strings in the list */
   lu_byte fixed;     /* dump is fixed in memory */
-} LoadState;
+};
 
 static l_noret error(LoadState* S, const InternalString* why)
 {

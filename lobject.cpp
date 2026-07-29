@@ -701,12 +701,12 @@ void luaO_tostring(lua_State* L, TValue* obj)
 ** now surface as host allocation failure — the recorded payload
 ** accounting status quo extended to builders.)
 */
-typedef struct BuffFS
+struct BuffFS
 {
   lua_State* L;
   ByteBuilder bb;
   int err;
-} BuffFS;
+};
 
 static void initbuff(lua_State* L, BuffFS* buff)
 {

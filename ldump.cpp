@@ -18,7 +18,7 @@
 #include "ltable.h"
 #include "lundump.h"
 
-typedef struct
+struct DumpState
 {
   lua_State* L;
   lua_Writer writer;
@@ -28,7 +28,7 @@ typedef struct
   int status;
   Table* h;          /* table to track saved strings */
   lua_Unsigned nstr; /* counter for counting saved strings */
-} DumpState;
+};
 
 /*
 ** All high-level dumps go through dumpVector; you can change it to

@@ -44,13 +44,15 @@ class InternalString
 {
 public:
   /*
-  ** Value semantics, like std::string: copy = deep byte copy,
-  ** move = buffer handover (engine-internal only).
+  ** Move-only (RULED 2026-07-29): copying is deleted so every deep
+  ** copy is an explicit, visible act (the from-bytes ctor) and no
+  ** accidental payload duplication can hide in a pass-by-value or
+  ** assignment. Moves hand over the buffer (engine-internal only).
   */
   InternalString() = default;
-  InternalString(const InternalString&) = default;
+  InternalString(const InternalString&) = delete;
   InternalString(InternalString&&) noexcept = default;
-  InternalString& operator=(const InternalString&) = default;
+  InternalString& operator=(const InternalString&) = delete;
   InternalString& operator=(InternalString&&) noexcept = default;
   ~InternalString() = default;
 

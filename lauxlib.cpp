@@ -528,11 +528,11 @@ LUALIB_API lua_Integer luaL_optinteger(lua_State* L, int arg,
 */
 
 /* userdata to box arbitrary data */
-typedef struct UBox
+struct UBox
 {
   void* box;
   size_t bsize;
-} UBox;
+};
 
 /* Resize the buffer used by a box. Optimize for the common case of
 ** resizing to the old size. (For instance, __gc will resize the box
@@ -800,12 +800,12 @@ LUALIB_API void luaL_unref(lua_State* L, int t, int ref)
 ** =======================================================
 */
 
-typedef struct LoadF
+struct LoadF
 {
   unsigned n;        /* number of pre-read characters */
   FILE* f;           /* file being read */
   char buff[BUFSIZ]; /* area for reading file */
-} LoadF;
+};
 
 static const char* getF(lua_State*, void* ud, size_t* size)
 {
@@ -938,11 +938,11 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
   return status;
 }
 
-typedef struct LoadS
+struct LoadS
 {
   const char* s;
   size_t size;
-} LoadS;
+};
 
 static const char* getS(lua_State*, void* ud, size_t* size)
 {

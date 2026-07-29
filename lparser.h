@@ -78,7 +78,7 @@ constexpr int vkisindexed(expkind k)
   return VINDEXED <= k && k <= VINDEXSTR;
 }
 
-typedef struct expdesc
+struct expdesc
 {
   expkind k;
   /* (was a union in upstream Lua, discriminated by 'k'; flattened
@@ -101,7 +101,7 @@ typedef struct expdesc
   } var;
   int t; /* patch list of 'exit when true' */
   int f; /* patch list of 'exit when false' */
-} expdesc;
+};
 
 /* kinds of variables */
 constexpr int VDKREG = 0; /* regular local */
@@ -113,14 +113,14 @@ constexpr int GDKREG = 5; /* regular global */
 constexpr int GDKCONST = 6; /* global constant */
 
 /* description of an active variable */
-typedef struct Vardesc
+struct Vardesc
 {
   TValue k;      /* constant value (if it is a compile-time constant) */
   lu_byte kind;
   lu_byte ridx;  /* register holding the variable */
   short pidx;    /* index of the variable in the Proto's 'locvars' array */
   TString* name; /* variable name */
-} Vardesc;
+};
 
 /* variables that live in registers */
 static inline int varinreg(const Vardesc* v)
@@ -135,25 +135,25 @@ static inline int varglobal(const Vardesc* v)
 }
 
 /* description of pending goto statements and label statements */
-typedef struct Labeldesc
+struct Labeldesc
 {
   TString* name; /* label identifier */
   int pc;        /* position in code */
   int line;      /* line where it appeared */
   short nactvar; /* number of active variables in that position */
   lu_byte close; /* true for goto that escapes upvalues */
-} Labeldesc;
+};
 
 /* list of labels or gotos */
-typedef struct Labellist
+struct Labellist
 {
   Labeldesc* arr; /* array */
   int n;          /* number of entries in use */
   int size;       /* array size */
-} Labellist;
+};
 
 /* dynamic structures used by the parser */
-typedef struct Dyndata
+struct Dyndata
 {
   struct
   { /* list of all active local variables */
@@ -163,13 +163,13 @@ typedef struct Dyndata
   } actvar;
   Labellist gt;    /* list of pending gotos */
   Labellist label; /* list of active labels */
-} Dyndata;
+};
 
 /* control of blocks */
 struct BlockCnt; /* defined in lparser.c */
 
 /* state needed to generate code for a given function */
-typedef struct FuncState
+struct FuncState
 {
   Proto* f;               /* current function header */
   struct FuncState* prev; /* enclosing function */
@@ -190,7 +190,7 @@ typedef struct FuncState
   lu_byte freereg;        /* first free register */
   lu_byte iwthabs;        /* instructions issued since last absolute line info */
   lu_byte needclose;      /* function needs to close upvalues when returning */
-} FuncState;
+};
 
 LUAI_FUNC lu_byte luaY_nvarstack(FuncState* fs);
 LUAI_FUNC void luaY_checklimit(FuncState* fs, int v, int l,

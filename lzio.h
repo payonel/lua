@@ -12,7 +12,7 @@
 
 constexpr int EOZ = (-1); /* end of stream */
 
-typedef struct Zio ZIO;
+struct ZIO;
 
 LUAI_FUNC void luaZ_init(lua_State* L, ZIO* z, lua_Reader reader,
                          void* data);
@@ -22,7 +22,7 @@ LUAI_FUNC const void* luaZ_getaddr(ZIO* z, size_t n);
 
 /* --------- Private Part ------------------ */
 
-struct Zio
+struct ZIO
 {
   size_t n;          /* bytes still unread */
   const char* p;     /* current position in buffer */

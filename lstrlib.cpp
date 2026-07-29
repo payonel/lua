@@ -367,7 +367,7 @@ static const luaL_Reg stringmetamethods[] = {
 constexpr int CAP_UNFINISHED = (-1);
 constexpr int CAP_POSITION = (-2);
 
-typedef struct MatchState
+struct MatchState
 {
   const char* src_init; /* init of source string */
   const char* src_end;  /* end ('\0') of source string */
@@ -380,7 +380,7 @@ typedef struct MatchState
     const char* init;
     ptrdiff_t len; /* length or special value (CAP_*) */
   } capture[LUA_MAXCAPTURES];
-} MatchState;
+};
 
 /* recursive function */
 static const char* match(MatchState* ms, const char* s, const char* p);
@@ -930,13 +930,13 @@ static int str_match(lua_State* L)
 }
 
 /* state for 'gmatch' */
-typedef struct GMatchState
+struct GMatchState
 {
   const char* src;       /* current position */
   const char* p;         /* pattern */
   const char* lastmatch; /* end of last match */
   MatchState ms;         /* match state */
-} GMatchState;
+};
 
 static int gmatch_aux(lua_State* L)
 {
@@ -1878,12 +1878,12 @@ constexpr bool nativeendian_little = (std::endian::native == std::endian::little
 /*
 ** information to pack/unpack stuff
 */
-typedef struct Header
+struct Header
 {
   lua_State* L;
   int islittle;
   unsigned maxalign;
-} Header;
+};
 
 /*
 ** options for pack/unpack

@@ -380,13 +380,13 @@ static int io_lines(lua_State* L)
 #endif
 
 /* auxiliary structure used by 'read_number' */
-typedef struct
+struct RN
 {
   FILE* f;                    /* file being read */
   int c;                      /* current character (look ahead) */
   int n;                      /* number of elements in buffer 'buff' */
   char buff[L_MAXLENNUM + 1]; /* +1 for ending '\0' */
-} RN;
+};
 
 /*
 ** Add current char to buffer (if not out of space) and read next one

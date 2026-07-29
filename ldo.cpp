@@ -55,12 +55,12 @@ constexpr int errorstatus(TStatus s)
 */
 
 /* chained list of long jump buffers */
-typedef struct lua_longjmp
+struct lua_longjmp
 {
   struct lua_longjmp* previous;
   jmp_buf b;
   volatile TStatus status; /* error code */
-} lua_longjmp;
+};
 
 /*
 ** LUAI_THROW/LUAI_TRY define how Lua does exception handling. By

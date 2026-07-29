@@ -12,7 +12,7 @@
 #include "lua.h"
 
 /* Some header files included here need this definition */
-typedef struct CallInfo CallInfo;
+struct CallInfo;
 
 #include "lobject.h"
 #include "ltm.h"
@@ -665,16 +665,16 @@ static l_forceinline int stacksize(const lua_State* th)
 /*
 ** thread state + extra space
 */
-typedef struct LX
+struct LX
 {
   lua_State l;
   void* extra;
-} LX;
+};
 
 /*
 ** 'global state', shared by all threads of this state
 */
-typedef struct global_State
+struct global_State
 {
   lua_Alloc frealloc; /* function to reallocate memory */
   void* ud;           /* auxiliary data to 'frealloc' */
@@ -735,7 +735,7 @@ typedef struct global_State
   lua_WarnFunction warnf;                    /* warning function */
   void* ud_warn;                             /* auxiliary data to 'warnf' */
   LX mainth;                                 /* main thread of this state */
-} global_State;
+};
 
 /*
 ** 'g->nilvalue' being a nil value flags that the state was completely

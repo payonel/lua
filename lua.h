@@ -54,7 +54,7 @@ constexpr int LUA_ERRSYNTAX = 3;
 constexpr int LUA_ERRMEM = 4;
 constexpr int LUA_ERRERR = 5;
 
-typedef struct lua_State lua_State;
+struct lua_State;
 
 /*
 ** basic types
@@ -124,7 +124,7 @@ typedef void (*lua_WarnFunction)(void* ud, const char* msg, int tocont);
 /*
 ** Type used by the debug API to collect debug information
 */
-typedef struct lua_Debug lua_Debug;
+struct lua_Debug;
 
 /*
 ** Functions to be called by the debugger in specific events

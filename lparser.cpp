@@ -45,7 +45,7 @@ static inline int eqstr(const TString* a, const TString* b)
 /*
 ** nodes for block list (list of active blocks)
 */
-typedef struct BlockCnt
+struct BlockCnt
 {
   struct BlockCnt* previous; /* chain */
   int firstlabel;            /* index of first label in this block */
@@ -54,7 +54,7 @@ typedef struct BlockCnt
   lu_byte upval;             /* true if some variable in the block is an upvalue */
   lu_byte isloop;            /* 1 if 'block' is a loop; 2 if it has pending breaks */
   lu_byte insidetbc;         /* true if inside the scope of a to-be-closed var. */
-} BlockCnt;
+};
 
 /*
 ** prototypes for recursive non-terminal functions
@@ -985,7 +985,7 @@ static void yindex(LexState* ls, expdesc* v)
 ** =======================================================================
 */
 
-typedef struct ConsControl
+struct ConsControl
 {
   expdesc v;      /* last list item read */
   expdesc* t;     /* table descriptor */
@@ -993,7 +993,7 @@ typedef struct ConsControl
   int na;         /* number of array elements already stored */
   int tostore;    /* number of array elements pending to be stored */
   int maxtostore; /* maximum number of pending elements */
-} ConsControl;
+};
 
 /*
 ** Maximum number of elements in a constructor, to control the following:

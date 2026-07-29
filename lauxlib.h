@@ -18,7 +18,7 @@
 /* global table */
 constexpr char LUA_GNAME[] = "_G";
 
-typedef struct luaL_Buffer luaL_Buffer;
+struct luaL_Buffer;
 
 /* extra error code for 'luaL_loadfilex' */
 constexpr int LUA_ERRFILE = (LUA_ERRERR + 1);
@@ -29,11 +29,11 @@ constexpr char LUA_LOADED_TABLE[] = "_LOADED";
 /* key, in the registry, for table of preloaded loaders */
 constexpr char LUA_PRELOAD_TABLE[] = "_PRELOAD";
 
-typedef struct luaL_Reg
+struct luaL_Reg
 {
   const char* name;
   lua_CFunction func;
-} luaL_Reg;
+};
 
 constexpr size_t LUAL_NUMSIZES = (sizeof(lua_Integer) * 16 + sizeof(lua_Number));
 
@@ -205,11 +205,11 @@ LUALIB_API char* luaL_prepbuffer(luaL_Buffer* B);
 
 constexpr char LUA_FILEHANDLE[] = "FILE*";
 
-typedef struct luaL_Stream
+struct luaL_Stream
 {
   FILE* f;              /* stream (nullptr for incompletely created streams) */
   lua_CFunction closef; /* to close stream (nullptr for closed streams) */
-} luaL_Stream;
+};
 
 /* }====================================================== */
 

@@ -72,7 +72,7 @@ enum RESERVED
 /* number of reserved words */
 constexpr int NUM_RESERVED = (((int)(TK_WHILE - FIRST_RESERVED + 1)));
 
-typedef struct Token
+struct Token
 {
   int token;      /* token kind */
   /* semantic payload (was a separate 'SemInfo' union in upstream;
@@ -80,11 +80,11 @@ typedef struct Token
   lua_Number r;   /* for TK_FLT */
   lua_Integer i;  /* for TK_INT */
   TString* ts;    /* for TK_STRING / TK_NAME */
-} Token;
+};
 
 /* state of the scanner plus state of the parser when shared by all
    functions */
-typedef struct LexState
+struct LexState
 {
   int current;          /* current character (charint) */
   int linenumber;       /* input line counter */
@@ -101,7 +101,7 @@ typedef struct LexState
   TString* envn;       /* environment variable name */
   TString* brkn;       /* "break" name (used as a label) */
   TString* glbn;       /* "global" name (when not a reserved word) */
-} LexState;
+};
 
 LUAI_FUNC void luaX_init(lua_State* L);
 LUAI_FUNC void luaX_setinput(lua_State* L, LexState* ls, ZIO* z,

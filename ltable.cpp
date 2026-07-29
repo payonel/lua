@@ -460,13 +460,13 @@ static void newcheckedkey(Table* t, const TValue* key, TValue* value);
 ** keys between 2^(i - 1) + 1 and 2^i. Note that 'na' is the summation
 ** of 'nums'.
 */
-typedef struct
+struct Counters
 {
   unsigned total;
   unsigned na;
   int deleted;
   unsigned nums[MAXABITS + 1];
-} Counters;
+};
 
 /*
 ** Check whether it is worth to use 'na' array entries instead of 'nh'

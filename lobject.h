@@ -56,22 +56,22 @@ constexpr lu_byte makevariant(int t, int v)
 ** column (an Object) and the registry identifier respectively in the
 ** managed port.
 */
-typedef struct Value
+struct Value
 {
   lua_Integer prim;     /* integers, float bits, light udata, C functions */
   struct GCObject* ref; /* collectable objects */
-} Value;
+};
 
 /*
 ** Tagged Values. This is the basic representation of values in Lua:
 ** an actual value plus a tag with its type.
 */
 
-typedef struct TValue
+struct TValue
 {
   Value value_;
   lu_byte tt_;
-} TValue;
+};
 
 /*
 ** Layout of a type tag byte (tt_ / tt):
@@ -173,12 +173,12 @@ constexpr lu_byte LUA_VTHREAD = makevariant(LUA_TTHREAD, 0);
 ** included in other objects)
 */
 /* Common type for all collectable objects */
-typedef struct GCObject
+struct GCObject
 {
   struct GCObject* next;
   lu_byte tt;
   lu_byte marked;
-} GCObject;
+};
 
 /* Bit mark for collectable types */
 constexpr int BIT_ISCOLLECTABLE = (1 << 6);
@@ -219,12 +219,12 @@ constexpr lu_byte LUA_VLNGSTR = LUA_VSTRING;
 /*
 ** Header for a string value.
 */
-typedef struct TString : GCObject
+struct TString : GCObject
 {
   lu_byte extra;       /* reserved words for short strings; "has hash" for longs */
   unsigned int hash;   /* cached hash value */
   InternalString data; /* the byte payload (see internal_string.h) */
-} TString;
+};
 
 static l_forceinline const char* getstr(const TString* ts)
 {
@@ -259,7 +259,7 @@ constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
 ** therefore do not need a 'gclist'; the code never accesses 'gclist'
 ** on userdata with no user values.
 */
-typedef struct Udata : GCObject
+struct Udata : GCObject
 {
   unsigned short nuvalue; /* number of user values */
   size_t len;             /* number of bytes in 'data' */
@@ -267,7 +267,7 @@ typedef struct Udata : GCObject
   GCObject* gclist;
   TValue* uv; /* user values (luaM array of 'nuvalue' elements) */
   char* data; /* user memory (luaM block of 'len' bytes) */
-} Udata;
+};
 
 /* get the address of the memory block inside 'Udata' */
 static l_forceinline char* getudatamem(Udata* u)
@@ -303,24 +303,24 @@ typedef l_uint32 Instruction;
 /*
 ** Description of an upvalue for function prototypes
 */
-typedef struct Upvaldesc
+struct Upvaldesc
 {
   TString* name;   /* upvalue name (for debug information) */
   lu_byte instack; /* whether it is in stack (register) */
   lu_byte idx;     /* index of upvalue (in stack or in outer function's list) */
   lu_byte kind;    /* kind of corresponding variable */
-} Upvaldesc;
+};
 
 /*
 ** Description of a local variable for function prototypes
 ** (used for debug information)
 */
-typedef struct LocVar
+struct LocVar
 {
   TString* varname;
   int startpc; /* first point where variable is active */
   int endpc;   /* first point where variable is dead */
-} LocVar;
+};
 
 /*
 ** Associates the absolute line source for a given instruction ('pc').
@@ -332,11 +332,11 @@ typedef struct LocVar
 ** absolute-line array, but we must traverse the 'lineinfo' array
 ** linearly to compute a line.)
 */
-typedef struct AbsLineInfo
+struct AbsLineInfo
 {
   int pc;
   int line;
-} AbsLineInfo;
+};
 
 /*
 ** Flags in Prototypes
@@ -355,7 +355,7 @@ constexpr int PF_FIXED = 4; /* prototype has parts in fixed memory */
 /*
 ** Function Prototypes
 */
-typedef struct Proto : GCObject
+struct Proto : GCObject
 {
   lu_byte numparams; /* number of fixed (named) parameters */
   lu_byte flag;
@@ -378,7 +378,7 @@ typedef struct Proto : GCObject
   LocVar* locvars;          /* information about local variables (debug information) */
   TString* source;          /* used for debug information */
   GCObject* gclist;
-} Proto;
+};
 
 static l_forceinline int isvararg(const Proto* p)
 {
@@ -408,26 +408,26 @@ constexpr lu_byte LUA_VCCL = makevariant(LUA_TFUNCTION, 2); /* C closure */
 /*
 ** Upvalues for Lua closures
 */
-typedef struct UpVal : GCObject
+struct UpVal : GCObject
 {
   struct UpVal* opennext;    /* next in open list (nullptr when closed) */
   struct UpVal** previous;   /* back-pointer in open list (nullptr when closed) */
   struct lua_State* owner;   /* thread whose stack holds the value (when open) */
   StkId stkid;              /* stack index in 'owner' when open */
   TValue value;             /* embedded storage for closed-over value */
-} UpVal;
+};
 
-typedef struct Closure : GCObject
+struct Closure : GCObject
 {
   lu_byte nupvalues;
   GCObject* gclist;
-} Closure;
+};
 
-typedef struct CClosure : Closure
+struct CClosure : Closure
 {
   lua_CFunction f;
   TValue* upvalue; /* upvalues (luaM array of 'nupvalues' elements) */
-} CClosure;
+};
 
 /* total bytes of a C closure (header + upvalue array), for GC accounting */
 constexpr size_t sizeCclosure(int n)
@@ -435,11 +435,11 @@ constexpr size_t sizeCclosure(int n)
   return sizeof(CClosure) + sizeof(TValue) * (unsigned int)n;
 }
 
-typedef struct LClosure : Closure
+struct LClosure : Closure
 {
   struct Proto* p;
   UpVal** upvals; /* upvalues (luaM array of 'nupvalues' elements) */
-} LClosure;
+};
 
 /* total bytes of a Lua closure (header + upvals array), for GC accounting */
 constexpr size_t sizeLclosure(int n)
@@ -461,15 +461,15 @@ constexpr lu_byte LUA_VTABLE = makevariant(LUA_TTABLE, 0);
 ** Nodes for Hash tables: A pack of two TValue's (key-value pairs)
 ** plus a 'next' field to link colliding entries.
 */
-typedef struct Node
+struct Node
 {
   TValue val;       /* node value */
   lu_byte key_tt;   /* key type */
   int next;         /* for chaining */
   Value key_val;    /* key value */
-} Node;
+};
 
-typedef struct Table : GCObject
+struct Table : GCObject
 {
   lu_byte flags;      /* 1<<p means tagmethod(p) is not present */
   lu_byte lsizenode;  /* log2 of number of slots of 'node' array */
@@ -479,7 +479,7 @@ typedef struct Table : GCObject
   int lastfree;       /* last free position in hash (node index), scans backward */
   struct Table* metatable;
   GCObject* gclist;
-} Table;
+};
 
 /*
 ** Dead keys in tables have the tag DEADKEY but keep their original

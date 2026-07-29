@@ -195,7 +195,7 @@ static void warnf(void* ud, const char* msg, int tocont)
 
 constexpr int MARK = 0x55; /* 01010101 (a nice pattern) */
 
-typedef struct memHeader memHeader;
+struct memHeader;
 struct memHeader
 {
   alignas(std::max_align_t) struct

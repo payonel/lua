@@ -377,10 +377,10 @@ constexpr uint64_t Int2I(lua_Integer x)
 /*
 ** A state uses four 'uint64_t' values.
 */
-typedef struct
+struct RanState
 {
   uint64_t s[4];
-} RanState;
+};
 
 /*
 ** Project the random integer 'ran' into the interval [0, n].
