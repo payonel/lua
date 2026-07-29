@@ -1095,7 +1095,8 @@ TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId old_top,
 struct SParser
 { /* data to 'f_parser' */
   ZIO* z;
-  ByteBuilder buff; /* token buffer for the scanner (ctor/dtor managed) */
+  ByteBuilder buff; /* token buffer for the scanner (ctor/dtor managed;
+                       growth ACCOUNTED via save(), charge released below) */
   Dyndata dyd;  /* dynamic structures used by the parser */
   const char* mode;
   const char* name;
@@ -1181,6 +1182,11 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, const char* name,
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
   status = luaD_pcall(L, f_parser, &p, (L->top), L->errfunc);
+  /* release the token buffer's accounted charge: llex save() reserved
+     every capacity growth (reserve-before-growth), so the charge held
+     is exactly the builder's capacity; the builder itself is freed by
+     SParser's destructor */
+  luaM_release(L, p.buff.capacity());
   luaM_free_(L, (p.dyd.actvar.arr), (((size_t)(p.dyd.actvar.size))) * sizeof(*(p.dyd.actvar.arr)));
   luaM_free_(L, (p.dyd.gt.arr), (((size_t)(p.dyd.gt.size))) * sizeof(*(p.dyd.gt.arr)));
   luaM_free_(L, (p.dyd.label.arr), (((size_t)(p.dyd.label.size))) * sizeof(*(p.dyd.label.arr)));

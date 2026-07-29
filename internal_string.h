@@ -212,18 +212,21 @@ const InternalString* lit()
 ** sanctioned non-deep-copy path; nothing external ever holds the
 ** reference).
 **
-** Accounting (RESERVE-BEFORE-GROWTH model, ruled 2026-07-29): the
-** engine-internal builders (lexer token buffer, BuffFS) are
-** host-allocated and uncounted while building — sanctioned because
-** their growth is BOUNDED by allocations the lua_State has already
-** admitted (a token by its chunk; an error message by its accounted
-** inputs). Adoption is a CHECKED admission: luaS_take reserves the
-** size (memlimit veto honored) before the state takes the bytes.
-** Builders on UNBOUNDED user-driven paths (the coming luaL_Buffer
-** conversion: io.read, string.rep/format/gsub) must use an accounted
-** mode that luaM_reserve's each capacity growth up front and honors
-** the veto — an untrusted script must never grow host memory the
-** state's limit cannot refuse.
+** Accounting (RESERVE-BEFORE-GROWTH model, ruled 2026-07-29): a
+** builder whose growth is script-driven and unbounded must reserve
+** each capacity growth with the lua_State BEFORE allocating and honor
+** the memlimit veto — an untrusted script must never grow host memory
+** the state's limit cannot refuse. Accounted clients: luaL_Buffer
+** (io.read, string.rep/format/gsub) and the lexer token buffer
+** (llex save(); a token is NOT bounded by any admitted allocation —
+** a streaming reader in lua_load anchors only one piece at a time
+** while the token accumulates them all, audit 2026-07-29; the
+** parse-wide charge equals capacity() and is released by
+** luaD_protectedparser). The one remaining uncounted builder is
+** BuffFS, sanctioned because an error/format message is BOUNDED by
+** its already-accounted inputs. Adoption is a CHECKED admission:
+** luaS_take/createstrobj reserve the size (memlimit veto honored)
+** before the state takes the bytes.
 */
 class ByteBuilder
 {

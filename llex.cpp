@@ -16,6 +16,7 @@
 #include "ldo.h"
 #include "lgc.h"
 #include "llex.h"
+#include "lmem.h"
 #include "lobject.h"
 #include "lparser.h"
 #include "lstate.h"
@@ -58,6 +59,20 @@ static void save(LexState* ls, int c)
   ByteBuilder* b = ls->buff;
   if (b->size() + 1 > (MAX_SIZE / 3 * 2)) /* larger than MAX_SIZE/1.5 ? */
     lexerror(ls, lit<"lexical element too long">(), 0);
+  if (b->size() + 1 > b->capacity())
+  { /* needs to grow — ACCOUNTED: a token is script-driven and not
+       bounded by any admitted allocation (a streaming reader feeds
+       pieces that are collected as they are consumed), so capacity
+       is reserved with the state BEFORE it is allocated and the
+       memory limit can veto. The parse-wide charge (== capacity())
+       is released by luaD_protectedparser. */
+    size_t newsize = b->capacity() + (b->capacity() >> 1); /* *= 1.5 */
+    if (newsize < LUA_MINBUFFER)
+      newsize = LUA_MINBUFFER;
+    if (l_unlikely(!luaM_reserve(ls->L, newsize - b->capacity())))
+      luaD_throw(ls->L, LUA_ERRMEM);
+    b->growTo(newsize);
+  }
   b->append(((char)(c)));
 }
 
