@@ -165,7 +165,7 @@ static l_mem objsize(GCObject* o)
   {
     assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
-    res = sizeof(TString) + ts->data.capacity();
+    res = sizeof(TString) + ts->data.size();
     break;
   }
   case LUA_VUPVAL:
@@ -968,7 +968,7 @@ static void freeobj(lua_State* L, GCObject* o)
     assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
     luaS_remove(L, ts);
-    luaM_release(L, ts->data.capacity());
+    luaM_release(L, ts->data.size());
     ts->data.~InternalString();
     luaM_free_(L, (ts), (sizeof(TString)));
     break;

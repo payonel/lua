@@ -34,9 +34,12 @@ static size_t luaS_hash(const char* str, size_t l)
 /*
 ** Create a new TString. The byte payload is an InternalString,
 ** placement-constructed into the manually-managed TString (deep copy
-** — the caller's pointer is never retained). The luaM_reserve seam
-** counts the payload capacity into GC debt (accounting status quo;
-** released in freeobj).
+** — the caller's pointer is never retained).
+** RESERVE-BEFORE-GROWTH (ruled 2026-07-29): the payload SIZE is
+** reserved against the lua_State — with the memlimit veto HONORED —
+** before any allocation happens; freeobj releases the same size.
+** Capacity slack (allocator rounding/SSO) stays uncounted but is
+** bounded by the counted size.
 */
 static TString* createstrobj(lua_State* L, const char* str, size_t l,
                              size_t h)
@@ -46,13 +49,18 @@ static TString* createstrobj(lua_State* L, const char* str, size_t l,
   TString* ts = static_cast<TString*>(o);
   ts->hash = ((unsigned int)(h));
   ts->extra = 0;
-  new (&ts->data) InternalString(str, l);
-  luaM_reserve(L, ts->data.capacity());
+  new (&ts->data) InternalString(); /* valid empty payload: sweepable if we throw */
+  if (l_unlikely(!luaM_reserve(L, l))) /* checked BEFORE the payload allocation */
+    luaD_throw(L, LUA_ERRMEM);
+  ts->data = InternalString(str, l); /* allocate only after admission */
   return ts;
 }
 
 /*
 ** Move form: adopts engine-owned bytes (builder finish) — zero copy.
+** The bytes exist already, so the reserve here is the CHECKED
+** admission of an allocation made while building (bounded builders)
+** — the memlimit veto still applies before the state adopts them.
 */
 static TString* createstrobj(lua_State* L, InternalString&& str, size_t h)
 {
@@ -61,8 +69,10 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h)
   TString* ts = static_cast<TString*>(o);
   ts->hash = ((unsigned int)(h));
   ts->extra = 0;
-  new (&ts->data) InternalString(std::move(str));
-  luaM_reserve(L, ts->data.capacity());
+  new (&ts->data) InternalString(); /* valid empty payload: sweepable if we throw */
+  if (l_unlikely(!luaM_reserve(L, str.size()))) /* checked admission */
+    luaD_throw(L, LUA_ERRMEM);
+  ts->data = std::move(str);
   return ts;
 }
 
@@ -169,7 +179,11 @@ void luaS_remove(lua_State* L, TString* ts)
   {
     global_State* g = G(L);
     size_t h = ts->hash;
-    g->strt.erase(global_State::InternKey{ts->data.view(), h});
+    auto it = g->strt.find(global_State::InternKey{ts->data.view(), h});
+    if (it != g->strt.end() && it->second == ts) /* identity guard: a
+        string that failed admission (empty payload, foreign hash) was
+        never interned and must not erase a legitimate entry */
+      g->strt.erase(it);
   }
 }
 

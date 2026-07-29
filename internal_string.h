@@ -103,10 +103,11 @@ public:
   const char* c_str() const noexcept { return bytes_.c_str(); }
 
   /*
-  ** Allocated payload capacity — the GC-debt accounting seam (status
-  ** quo RULED): bytes come from global new but are counted into GC
-  ** debt via luaM_reserve(capacity()) at creation and
-  ** luaM_release(capacity()) at destruction.
+  ** Allocated payload capacity. Accounting (RESERVE-BEFORE-GROWTH,
+  ** ruled 2026-07-29): the payload SIZE is luaM_reserve'd — memlimit
+  ** veto honored — BEFORE allocation at creation, and released at
+  ** destruction; capacity slack (allocator rounding/SSO) stays
+  ** uncounted but is bounded by the counted size.
   */
   size_t capacity() const noexcept { return bytes_.capacity(); }
 
@@ -210,10 +211,18 @@ const InternalString* lit()
 ** sanctioned non-deep-copy path; nothing external ever holds the
 ** reference).
 **
-** Accounting note: builder memory is host-allocated and uncounted
-** while building (the recorded payload status quo extended to the
-** builder); the bytes enter GC-debt accounting when a TString adopts
-** them (luaS_take -> luaM_reserve(capacity)).
+** Accounting (RESERVE-BEFORE-GROWTH model, ruled 2026-07-29): the
+** engine-internal builders (lexer token buffer, BuffFS) are
+** host-allocated and uncounted while building — sanctioned because
+** their growth is BOUNDED by allocations the lua_State has already
+** admitted (a token by its chunk; an error message by its accounted
+** inputs). Adoption is a CHECKED admission: luaS_take reserves the
+** size (memlimit veto honored) before the state takes the bytes.
+** Builders on UNBOUNDED user-driven paths (the coming luaL_Buffer
+** conversion: io.read, string.rep/format/gsub) must use an accounted
+** mode that luaM_reserve's each capacity growth up front and honors
+** the veto — an untrusted script must never grow host memory the
+** state's limit cannot refuse.
 */
 class ByteBuilder
 {
