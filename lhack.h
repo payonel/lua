@@ -36,9 +36,6 @@ LUA_API Memcontrol l_memcontrol;
 #define MINSTRTABSIZE   2
 #define MAXIWTHABS      3
 
-#define STRCACHE_N 23
-#define STRCACHE_M 5
-
 #define MAXINDEXRK 1
 
 /*
@@ -84,14 +81,6 @@ LUA_API Memcontrol l_memcontrol;
 ** information. (A power of two allows fast divisions.)
 */
 #define MAXIWTHABS 128
-
-/*
-** Size of cache for strings in the API. 'N' is the number of
-** sets (better be a prime) and "M" is the size of each set.
-** (M == 1 makes a direct cache.)
-*/
-#define STRCACHE_N 53
-#define STRCACHE_M 2
 
 #define MAXINDEXRK MAXARG_B
 

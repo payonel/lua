@@ -1708,7 +1708,6 @@ static void atomic(lua_State* L)
   /* clear values from resurrected weak tables */
   clearbyvalues(g, g->weak, origweak);
   clearbyvalues(g, g->allweak, origall);
-  luaS_clearcache(g);
   g->currentwhite = ((lu_byte)(otherwhite(g))); /* flip current white */
   assert(g->gray == nullptr);
 }

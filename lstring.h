@@ -33,7 +33,6 @@ static l_forceinline int eqshrstr(const TString* a, const TString* b)
 }
 
 LUAI_FUNC int luaS_eqstr(TString* a, TString* b);
-LUAI_FUNC void luaS_clearcache(global_State* g);
 LUAI_FUNC void luaS_init(lua_State* L);
 LUAI_FUNC void luaS_remove(lua_State* L, TString* ts);
 LUAI_FUNC Udata* luaS_newudata(lua_State* L, size_t s,

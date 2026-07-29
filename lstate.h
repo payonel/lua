@@ -731,7 +731,6 @@ struct global_State
   TString* memerrmsg;                        /* message for memory-allocation errors */
   TString* tmname[TM_N];                     /* array with tag-method names */
   struct Table* mt[LUA_NUMTYPES];            /* metatables for basic types */
-  TString* strcache[STRCACHE_N][STRCACHE_M]; /* cache for strings in API */
   lua_WarnFunction warnf;                    /* warning function */
   void* ud_warn;                             /* auxiliary data to 'warnf' */
   LX mainth;                                 /* main thread of this state */

@@ -77,34 +77,15 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h)
 }
 
 /*
-** Clear API string cache. (Entries cannot be empty, so fill them with
-** a non-collectable string.)
-*/
-void luaS_clearcache(global_State* g)
-{
-  int i, j;
-  for (i = 0; i < STRCACHE_N; i++)
-    for (j = 0; j < STRCACHE_M; j++)
-    {
-      if (iswhite(g->strcache[i][j]))     /* will entry be collected? */
-        g->strcache[i][j] = g->memerrmsg; /* replace it with something fixed */
-    }
-}
-
-/*
-** Initialize the string table and the string cache
+** Initialize the string table
 */
 void luaS_init(lua_State* L)
 {
   global_State* g = G(L);
-  int i, j;
   /* pre-create memory-error message */
   g->memerrmsg = luaS_newlstr(L, MEMERRMSG, sizeof(MEMERRMSG) - 1);
   assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg))); /* it should never be collected */
-  for (i = 0; i < STRCACHE_N; i++)    /* fill cache with valid strings */
-    for (j = 0; j < STRCACHE_M; j++)
-      g->strcache[i][j] = g->memerrmsg;
 }
 
 /*
@@ -196,27 +177,15 @@ TString* luaS_newlstr(lua_State* L, const char* str, size_t l)
 }
 
 /*
-** Create or reuse a zero-terminated string, first checking in the
-** cache (using the string address as a key). The cache can contain
-** only zero-terminated strings, so it is safe to use 'strcmp' to
-** check hits.
+** Create or reuse a zero-terminated string. (The C strcache that used
+** to sit in front of this was pointer-identity keyed and is gone: the
+** API layer converts by (bytes, len), engine literals are wrapped
+** InternalStrings or pre-interned TStrings, so this path only sees
+** occasional runtime char* strings.)
 */
 TString* luaS_new(lua_State* L, const char* str)
 {
-  unsigned int i = point2uint(str) % STRCACHE_N; /* hash */
-  int j;
-  TString** p = G(L)->strcache[i];
-  for (j = 0; j < STRCACHE_M; j++)
-  {
-    if (strcmp(str, getstr(p[j])) == 0) /* hit? */
-      return p[j];                      /* that is it */
-  }
-  /* normal route */
-  for (j = STRCACHE_M - 1; j > 0; j--)
-    p[j] = p[j - 1]; /* move out last element */
-  /* new element is first in the list */
-  p[0] = luaS_newlstr(L, str, strlen(str));
-  return p[0];
+  return luaS_newlstr(L, str, strlen(str));
 }
 
 /*
