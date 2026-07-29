@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "lua.h"
 
@@ -35,7 +36,8 @@ static inline int hasjumps(const expdesc* e)
 static int codesJ(FuncState* fs, OpCode o, int sj, int k);
 
 /* semantic error */
-l_noret luaK_semerror(LexState* ls, const char* fmt, const FmtArgs& args)
+l_noret luaK_semerror(LexState* ls, const InternalString* fmt,
+                      const FmtArgs& args)
 {
   const char* msg = luaO_pushvfstring(ls->L, fmt, args);
   if (msg == nullptr)
@@ -43,6 +45,18 @@ l_noret luaK_semerror(LexState* ls, const char* fmt, const FmtArgs& args)
   ls->t.token = 0;               /* remove "near <token>" from final message */
   ls->linenumber = ls->lastline; /* back to line of last used token */
   luaX_syntaxerror(ls, msg);
+}
+
+l_noret luaK_semerror(LexState* ls, const InternalString* fmt)
+{
+  luaK_semerror(ls, fmt, FmtArgs());
+}
+
+/* TRANSITIONAL char* forms: deep-copy fmt at the seam */
+l_noret luaK_semerror(LexState* ls, const char* fmt, const FmtArgs& args)
+{
+  InternalString f(fmt, strlen(fmt));
+  luaK_semerror(ls, &f, args);
 }
 
 l_noret luaK_semerror(LexState* ls, const char* fmt)
@@ -183,7 +197,7 @@ static void fixjump(FuncState* fs, int pc, int dest)
   int offset = dest - (pc + 1);
   assert(dest != NO_JUMP);
   if (!(-OFFSET_sJ <= offset && offset <= MAXARG_sJ - OFFSET_sJ))
-    luaX_syntaxerror(fs->ls, "control structure too long");
+    luaX_syntaxerror(fs->ls, lit<"control structure too long">());
   assert(GET_OPCODE(*jmp) == OP_JMP);
   ((*jmp) = (((*jmp) & MASK0(SIZE_sJ, POS_sJ)) | ((((Instruction)(((unsigned int)((offset) + OFFSET_sJ)))) << POS_sJ) & MASK1(SIZE_sJ, POS_sJ))));
 }

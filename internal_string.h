@@ -150,3 +150,46 @@ private:
   */
   std::string bytes_;
 };
+
+/*
+** {==================================================================
+** Literal wrapping (RULED: literals wrapped at their sites)
+** ===================================================================
+**
+** lit<"...">() yields a stable, lazily-created InternalString for a
+** source literal, passed around as const InternalString*. This is the
+** C++ staging analogue of a Java string literal: a Java literal IS an
+** interned String constant with stable identity, not a fresh object
+** per evaluation. A site transcribes 1:1 —
+**     luaS_new(L, lit<"__name">())   ->   luaS_new(L, "__name")
+** (the Java side converting its literal to the InternalString
+** constant however the port chooses to cache it).
+**
+** The per-literal static has C-literal lifetime (created on first
+** use, lives for the program), so the returned pointer satisfies the
+** InternalString* non-owning contract at every call depth.
+*/
+
+namespace istr_detail
+{
+/* Carries the literal's bytes as a non-type template parameter. */
+template <size_t N>
+struct LiteralBytes
+{
+  char v[N];
+  constexpr LiteralBytes(const char (&s)[N])
+  {
+    for (size_t i = 0; i < N; i++)
+      v[i] = s[i];
+  }
+};
+} /* namespace istr_detail */
+
+template <istr_detail::LiteralBytes S>
+const InternalString* lit()
+{
+  static const InternalString s(S.v, sizeof(S.v) - 1);
+  return &s;
+}
+
+/* }================================================================== */

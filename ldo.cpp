@@ -317,7 +317,7 @@ int luaD_growstack(lua_State* L, int n, int raiseerror)
   /* add extra size to be able to handle the error message */
   luaD_reallocstack(L, ERRORSTACKSIZE, raiseerror);
   if (raiseerror)
-    luaG_runerror(L, "stack overflow");
+    luaG_runerror(L, lit<"stack overflow">());
   return 0;
 }
 
@@ -480,7 +480,7 @@ static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
   L->top++;                          /* stack space pre-allocated by the caller */
   setslot(L, func, tm);               /* metamethod is the new function to be called */
   if ((status & MAX_CCMT) == MAX_CCMT) /* is counter full? */
-    luaG_runerror(L, "'__call' chain too long");
+    luaG_runerror(L, lit<"'__call' chain too long">());
   return status + (1u << CIST_CCMT); /* increment counter */
 }
 
@@ -998,9 +998,9 @@ LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
   if (l_unlikely(!yieldable(L)))
   {
     if (L != mainthread(G(L)))
-      luaG_runerror(L, "attempt to yield across a C-call boundary");
+      luaG_runerror(L, lit<"attempt to yield across a C-call boundary">());
     else
-      luaG_runerror(L, "attempt to yield from outside a coroutine");
+      luaG_runerror(L, lit<"attempt to yield from outside a coroutine">());
   }
   L->status = LUA_YIELD;
   ci->nyield = nresults; /* save number of results */
@@ -1106,7 +1106,7 @@ static void checkmode(lua_State* L, const char* mode, const char* x)
   if (strchr(mode, x[0]) == nullptr)
   {
     luaO_pushfstring(L,
-                     "attempt to load a %s chunk (mode is '%s')",
+                     lit<"attempt to load a %s chunk (mode is '%s')">(),
                      FmtArgs().str(x).str(mode));
     luaD_throw(L, LUA_ERRSYNTAX);
   }

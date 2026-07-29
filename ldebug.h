@@ -48,17 +48,31 @@ static l_forceinline StkId upvalorigin(int uvidx)
   return UPVALORIGIN + (StkId)uvidx;
 }
 
+/*
+** InternalString* forms are the primary signatures (literal sites pass
+** lit<"...">()); the const char* forms are TRANSITIONAL, kept for
+** callers holding computed messages (luaO_pushfstring returns) until
+** the return-type migration removes them.
+*/
 LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o,
                                  const char* opname, StkId src);
+LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o,
+                                 const InternalString* opname, StkId src);
 LUAI_FUNC l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src);
 LUAI_FUNC l_noret luaG_forerror(lua_State* L, const TValue* o,
                                 const char* what);
+LUAI_FUNC l_noret luaG_forerror(lua_State* L, const TValue* o,
+                                const InternalString* what);
 LUAI_FUNC l_noret luaG_concaterror(lua_State* L, const TValue* p1,
                                    const TValue* p2,
                                    StkId src1, StkId src2);
 LUAI_FUNC l_noret luaG_opinterror(lua_State* L, const TValue* p1,
                                   const TValue* p2,
                                   const char* msg,
+                                  StkId src1, StkId src2);
+LUAI_FUNC l_noret luaG_opinterror(lua_State* L, const TValue* p1,
+                                  const TValue* p2,
+                                  const InternalString* msg,
                                   StkId src1, StkId src2);
 LUAI_FUNC l_noret luaG_tointerror(lua_State* L, const TValue* p1,
                                   const TValue* p2,
@@ -71,6 +85,13 @@ LUAI_FUNC l_noret luaG_ordererror(lua_State* L, const TValue* p1,
 ** (the originals stay anchored in the stack while the message is built).
 */
 static l_forceinline l_noret luaG_forerror(lua_State* L, StkId idx, const char* what)
+{
+  TValue v = getslot(L, idx);
+  luaG_forerror(L, &v, what);
+}
+
+static l_forceinline l_noret luaG_forerror(lua_State* L, StkId idx,
+                                           const InternalString* what)
 {
   TValue v = getslot(L, idx);
   luaG_forerror(L, &v, what);
@@ -93,6 +114,9 @@ LUAI_FUNC l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k);
 LUAI_FUNC l_noret luaG_runerror(lua_State* L, const char* fmt,
                                 const FmtArgs& args);
 LUAI_FUNC l_noret luaG_runerror(lua_State* L, const char* fmt);
+LUAI_FUNC l_noret luaG_runerror(lua_State* L, const InternalString* fmt,
+                                const FmtArgs& args);
+LUAI_FUNC l_noret luaG_runerror(lua_State* L, const InternalString* fmt);
 LUAI_FUNC const char* luaG_addinfo(lua_State* L, const char* msg,
                                    TString* src, int line);
 LUAI_FUNC l_noret luaG_errormsg(lua_State* L);

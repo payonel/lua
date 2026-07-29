@@ -813,7 +813,8 @@ constexpr int MAXFMTARGS = 8;
 struct FmtArg
 {
   char tag;      /* directive this argument answers */
-  const char* s; /* '%s' */
+  const char* s; /* '%s' as tag 's' (transitional zero-terminated form) */
+  const InternalString* is; /* '%s' as tag 'S' */
   lua_Integer i; /* '%c', '%d', '%I', '%U' */
   lua_Number n;  /* '%f' */
   const void* p; /* '%p' */
@@ -823,7 +824,8 @@ struct FmtArgs
 {
   int n = 0;              /* number of arguments appended */
   FmtArg arg[MAXFMTARGS]; /* only 'arg[0..n-1]' are meaningful */
-  FmtArgs& str(const char* s);   /* '%s': a zero-terminated string */
+  FmtArgs& str(const char* s);   /* '%s': a zero-terminated string (transitional) */
+  FmtArgs& str(const InternalString* s); /* '%s': an engine string */
   FmtArgs& chr(int c);           /* '%c': an 'int' as a character */
   FmtArgs& num(int d);           /* '%d': an 'int' */
   FmtArgs& lint(lua_Integer i);  /* '%I': a 'lua_Integer' */
@@ -847,6 +849,21 @@ LUAI_FUNC size_t luaO_str2num(const char* s, TValue* o);
 LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, char* buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
+/*
+** Primary format entry points: fmt is an InternalString*, scanned by
+** offset (an interior cursor is (InternalString*, int), never a raw
+** pointer). The const char* overloads are TRANSITIONAL — they
+** deep-copy fmt into an InternalString at the seam (no external
+** pointer is retained) and exist for the staging C API layer.
+*/
+LUAI_FUNC const char* luaO_pushvfstring(lua_State* L,
+                                        const InternalString* fmt,
+                                        const FmtArgs& args);
+LUAI_FUNC const char* luaO_pushfstring(lua_State* L,
+                                       const InternalString* fmt,
+                                       const FmtArgs& args);
+LUAI_FUNC const char* luaO_pushfstring(lua_State* L,
+                                       const InternalString* fmt);
 LUAI_FUNC const char* luaO_pushvfstring(lua_State* L, const char* fmt,
                                         const FmtArgs& args);
 LUAI_FUNC const char* luaO_pushfstring(lua_State* L, const char* fmt,

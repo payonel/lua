@@ -795,7 +795,7 @@ static const char* formatvarinfo(lua_State* L, const char* kind,
   if (kind == nullptr)
     return ""; /* no information */
   else
-    return luaO_pushfstring(L, " (%s '%s')", FmtArgs().str(kind).str(name));
+    return luaO_pushfstring(L, lit<" (%s '%s')">(), FmtArgs().str(kind).str(name));
 }
 
 /*
@@ -832,20 +832,29 @@ static const char* varinfo(lua_State* L, StkId src)
 /*
 ** Raise a type error
 */
-static l_noret typeerror(lua_State* L, const TValue* o, const char* op,
-                         const char* extra)
+static l_noret typeerror(lua_State* L, const TValue* o,
+                         const InternalString* op, const char* extra)
 {
   const char* t = luaT_objtypename(L, o);
-  luaG_runerror(L, "attempt to %s a %s value%s", FmtArgs().str(op).str(t).str(extra));
+  luaG_runerror(L, lit<"attempt to %s a %s value%s">(),
+                FmtArgs().str(op).str(t).str(extra));
 }
 
 /*
 ** Raise a type error with "standard" information about the faulty
 ** object 'o' (using 'varinfo').
 */
-l_noret luaG_typeerror(lua_State* L, const TValue* o, const char* op, StkId src)
+l_noret luaG_typeerror(lua_State* L, const TValue* o,
+                       const InternalString* op, StkId src)
 {
   typeerror(L, o, op, varinfo(L, src));
+}
+
+/* TRANSITIONAL char* form: deep-copies 'op' at the seam */
+l_noret luaG_typeerror(lua_State* L, const TValue* o, const char* op, StkId src)
+{
+  InternalString ops(op, strlen(op));
+  typeerror(L, o, &ops, varinfo(L, src));
 }
 
 /*
@@ -859,13 +868,20 @@ l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
   const char* name = nullptr; /* to avoid warnings */
   const char* kind = funcnamefromcall(L, ci, &name);
   const char* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, src);
-  typeerror(L, o, "call", extra);
+  typeerror(L, o, lit<"call">(), extra);
 }
 
+l_noret luaG_forerror(lua_State* L, const TValue* o, const InternalString* what)
+{
+  luaG_runerror(L, lit<"bad 'for' %s (number expected, got %s)">(),
+                FmtArgs().str(what).str(luaT_objtypename(L, o)));
+}
+
+/* TRANSITIONAL char* form: deep-copies 'what' at the seam */
 l_noret luaG_forerror(lua_State* L, const TValue* o, const char* what)
 {
-  luaG_runerror(L, "bad 'for' %s (number expected, got %s)",
-                FmtArgs().str(what).str(luaT_objtypename(L, o)));
+  InternalString ws(what, strlen(what));
+  luaG_forerror(L, o, &ws);
 }
 
 l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2,
@@ -876,11 +892,11 @@ l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2,
     p1 = p2;
     src1 = src2;
   }
-  luaG_typeerror(L, p1, "concatenate", src1);
+  luaG_typeerror(L, p1, lit<"concatenate">(), src1);
 }
 
 l_noret luaG_opinterror(lua_State* L, const TValue* p1,
-                        const TValue* p2, const char* msg,
+                        const TValue* p2, const InternalString* msg,
                         StkId src1, StkId src2)
 {
   if (!(((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) /* first operand is wrong? */
@@ -889,6 +905,15 @@ l_noret luaG_opinterror(lua_State* L, const TValue* p1,
     src2 = src1;
   }
   luaG_typeerror(L, p2, msg, src2);
+}
+
+/* TRANSITIONAL char* form: deep-copies 'msg' at the seam */
+l_noret luaG_opinterror(lua_State* L, const TValue* p1,
+                        const TValue* p2, const char* msg,
+                        StkId src1, StkId src2)
+{
+  InternalString ms(msg, strlen(msg));
+  luaG_opinterror(L, p1, p2, &ms, src1, src2);
 }
 
 /*
@@ -901,7 +926,7 @@ l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2,
   (void)p2; /* attribution is origin-based; the faulty value itself is not shown */
   if (!luaV_tointegerns(p1, &temp, LUA_FLOORN2I))
     src2 = src1;
-  luaG_runerror(L, "number%s has no integer representation",
+  luaG_runerror(L, lit<"number%s has no integer representation">(),
                 FmtArgs().str(varinfo(L, src2)));
 }
 
@@ -910,9 +935,9 @@ l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
   const char* t1 = luaT_objtypename(L, p1);
   const char* t2 = luaT_objtypename(L, p2);
   if (strcmp(t1, t2) == 0)
-    luaG_runerror(L, "attempt to compare two %s values", FmtArgs().str(t1));
+    luaG_runerror(L, lit<"attempt to compare two %s values">(), FmtArgs().str(t1));
   else
-    luaG_runerror(L, "attempt to compare %s with %s", FmtArgs().str(t1).str(t2));
+    luaG_runerror(L, lit<"attempt to compare %s with %s">(), FmtArgs().str(t1).str(t2));
 }
 
 l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
@@ -920,7 +945,7 @@ l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
   const char* globalname = "?"; /* default name if k == 0 */
   if (k > 0)
     kname(cl->p, k - 1, &globalname);
-  luaG_runerror(L, "global '%s' already defined", FmtArgs().str(globalname));
+  luaG_runerror(L, lit<"global '%s' already defined">(), FmtArgs().str(globalname));
 }
 
 /* add src:line information to 'msg' */
@@ -928,14 +953,14 @@ const char* luaG_addinfo(lua_State* L, const char* msg, TString* src,
                          int line)
 {
   if (src == nullptr) /* no debug information? */
-    return luaO_pushfstring(L, "?:?: %s", FmtArgs().str(msg));
+    return luaO_pushfstring(L, lit<"?:?: %s">(), FmtArgs().str(msg));
   else
   {
     char buff[LUA_IDSIZE];
     size_t idlen;
     const char* id = ((void)((idlen) = (src)->data.size()), (src)->data.c_str());
     luaO_chunkid(buff, id, idlen);
-    return luaO_pushfstring(L, "%s:%d: %s", FmtArgs().str(buff).num(line).str(msg));
+    return luaO_pushfstring(L, lit<"%s:%d: %s">(), FmtArgs().str(buff).num(line).str(msg));
   }
 }
 
@@ -958,7 +983,8 @@ l_noret luaG_errormsg(lua_State* L)
   luaD_throw(L, LUA_ERRRUN);
 }
 
-l_noret luaG_runerror(lua_State* L, const char* fmt, const FmtArgs& args)
+l_noret luaG_runerror(lua_State* L, const InternalString* fmt,
+                      const FmtArgs& args)
 {
   CallInfo* ci = L->ci;
   const char* msg;
@@ -974,6 +1000,18 @@ l_noret luaG_runerror(lua_State* L, const char* fmt, const FmtArgs& args)
     L->top--;
   }
   luaG_errormsg(L);
+}
+
+l_noret luaG_runerror(lua_State* L, const InternalString* fmt)
+{
+  luaG_runerror(L, fmt, FmtArgs());
+}
+
+/* TRANSITIONAL char* forms: deep-copy fmt at the seam */
+l_noret luaG_runerror(lua_State* L, const char* fmt, const FmtArgs& args)
+{
+  InternalString f(fmt, strlen(fmt));
+  luaG_runerror(L, &f, args);
 }
 
 l_noret luaG_runerror(lua_State* L, const char* fmt)

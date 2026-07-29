@@ -99,7 +99,7 @@ const char* luaT_objtypename(lua_State* L, const TValue* o)
   if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != nullptr) ||
       (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = uvalue(o)->metatable) != nullptr))
   {
-    const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, "__name"));
+    const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, lit<"__name">()));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
     {
       return getstr(tsvalue(name)); /* use it as type name */
@@ -172,11 +172,11 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
       if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((p2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
         luaG_tointerror(L, p1, p2, src1, src2);
       else
-        luaG_opinterror(L, p1, p2, "perform bitwise operation on", src1, src2);
+        luaG_opinterror(L, p1, p2, lit<"perform bitwise operation on">(), src1, src2);
     }
     /* calls never return, but to avoid warnings: */ /* FALLTHROUGH */
     default:
-      luaG_opinterror(L, p1, p2, "perform arithmetic on", src1, src2);
+      luaG_opinterror(L, p1, p2, lit<"perform arithmetic on">(), src1, src2);
     }
   }
 }
@@ -290,7 +290,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   setsloth(L, L->top, t);
   L->top++;
   luaH_resize(L, t, ((unsigned int)(n)), 1);
-  setsvalue(L, &key, luaS_new(L, "n")); /* key is "n" */
+  setsvalue(L, &key, luaS_new(L, lit<"n">())); /* key is "n" */
   setivalue(&value, n);                 /* value is n */
   /* No need to anchor the key: Due to the resize, the next operation
      cannot trigger a garbage collection */
@@ -397,9 +397,9 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   else
   {
     TValue res;
-    if (luaH_getshortstr(h, luaS_new(L, "n"), &res) != LUA_VNUMINT ||
+    if (luaH_getshortstr(h, luaS_new(L, lit<"n">()), &res) != LUA_VNUMINT ||
         ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
-      luaG_runerror(L, "vararg table has no proper 'n'");
+      luaG_runerror(L, lit<"vararg table has no proper 'n'">());
     assert((&res)->tt_ == LUA_VNUMINT);
     return ((int)(ivalue(&res)));
   }

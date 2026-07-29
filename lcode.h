@@ -111,6 +111,9 @@ LUAI_FUNC void luaK_finish(FuncState* fs);
 LUAI_FUNC l_noret luaK_semerror(LexState* ls, const char* fmt,
                                 const FmtArgs& args);
 LUAI_FUNC l_noret luaK_semerror(LexState* ls, const char* fmt);
+LUAI_FUNC l_noret luaK_semerror(LexState* ls, const InternalString* fmt,
+                                const FmtArgs& args);
+LUAI_FUNC l_noret luaK_semerror(LexState* ls, const InternalString* fmt);
 
 static inline int luaK_codeABC(FuncState* fs, OpCode o, int a, int b, int c)
 {

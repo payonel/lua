@@ -832,6 +832,15 @@ FmtArgs& FmtArgs::str(const char* s)
   return *this;
 }
 
+FmtArgs& FmtArgs::str(const InternalString* s)
+{
+  assert(n < MAXFMTARGS);
+  arg[n].tag = 'S';
+  arg[n].is = s;
+  n++;
+  return *this;
+}
+
 FmtArgs& FmtArgs::chr(int c)
 {
   assert(n < MAXFMTARGS);
@@ -888,26 +897,46 @@ FmtArgs& FmtArgs::utf8(unsigned long u)
 
 /*
 ** this function handles only '%d', '%c', '%f', '%p', '%s', and '%%'
-   conventional formats, plus Lua-specific '%I' and '%U'
+   conventional formats, plus Lua-specific '%I' and '%U'.
+** The format cursor is (InternalString*, offset) — never a raw
+** pointer walked through the bytes.
 */
-const char* luaO_pushvfstring(lua_State* L, const char* fmt, const FmtArgs& args)
+const char* luaO_pushvfstring(lua_State* L, const InternalString* fmt,
+                              const FmtArgs& args)
 {
-  BuffFS buff;   /* holds last part of the result */
-  const char* e; /* points to next '%' */
-  int argn = 0;  /* number of arguments already consumed */
+  BuffFS buff;  /* holds last part of the result */
+  std::string_view f = fmt->view();
+  size_t pos = 0; /* scan offset into 'fmt' */
+  size_t e;       /* offset of next '%' */
+  int argn = 0;   /* number of arguments already consumed */
   initbuff(L, &buff);
-  while ((e = strchr(fmt, '%')) != nullptr)
+  while ((e = f.find('%', pos)) != std::string_view::npos)
   {
-    addstr2buff(&buff, fmt, ((size_t)(e - fmt))); /* add 'fmt' up to '%' */
-    switch (*(e + 1))
+    addstr2buff(&buff, f.data() + pos, e - pos); /* add 'fmt' up to '%' */
+    if (e + 1 >= f.size())
+    { /* format ends with a lone '%': keep it in the result */
+      addstr2buff(&buff, "%", 1);
+      pos = f.size();
+      break;
+    }
+    switch (f[e + 1])
     { /* conversion specifier */
     case 's':
-    { /* zero-terminated string */
-      assert(argn < args.n && args.arg[argn].tag == 's');
-      const char* s = args.arg[argn++].s;
-      if (s == nullptr)
-        s = "(null)";
-      addstr2buff(&buff, s, strlen(s));
+    { /* a string */
+      assert(argn < args.n &&
+             (args.arg[argn].tag == 's' || args.arg[argn].tag == 'S'));
+      if (args.arg[argn].tag == 'S')
+      { /* engine string: counted bytes */
+        const InternalString* is = args.arg[argn++].is;
+        addstr2buff(&buff, is->bytes(), is->size());
+      }
+      else
+      { /* transitional zero-terminated form */
+        const char* s = args.arg[argn++].s;
+        if (s == nullptr)
+          s = "(null)";
+        addstr2buff(&buff, s, strlen(s));
+      }
       break;
     }
     case 'c':
@@ -969,23 +998,45 @@ const char* luaO_pushvfstring(lua_State* L, const char* fmt, const FmtArgs& args
     }
     default:
     {
-      addstr2buff(&buff, e, 2); /* keep unknown format in the result */
+      addstr2buff(&buff, f.data() + e, 2); /* keep unknown format in the result */
       break;
     }
     }
-    fmt = e + 2; /* skip '%' and the specifier */
+    pos = e + 2; /* skip '%' and the specifier */
   }
-  addstr2buff(&buff, fmt, strlen(fmt)); /* rest of 'fmt' */
-  assert(argn == args.n);               /* all arguments consumed */
-  return clearbuff(&buff);              /* empty buffer into a new string */
+  addstr2buff(&buff, f.data() + pos, f.size() - pos); /* rest of 'fmt' */
+  assert(argn == args.n);  /* all arguments consumed */
+  return clearbuff(&buff); /* empty buffer into a new string */
 }
 
-const char* luaO_pushfstring(lua_State* L, const char* fmt, const FmtArgs& args)
+const char* luaO_pushfstring(lua_State* L, const InternalString* fmt,
+                             const FmtArgs& args)
 {
   const char* msg = luaO_pushvfstring(L, fmt, args);
   if (msg == nullptr) /* error? */
     luaD_throw(L, LUA_ERRMEM);
   return msg;
+}
+
+const char* luaO_pushfstring(lua_State* L, const InternalString* fmt)
+{
+  return luaO_pushfstring(L, fmt, FmtArgs());
+}
+
+/*
+** TRANSITIONAL const char* forms: deep-copy fmt at the seam (never
+** retained) and delegate. Used by the staging C API layer.
+*/
+const char* luaO_pushvfstring(lua_State* L, const char* fmt, const FmtArgs& args)
+{
+  InternalString f(fmt, strlen(fmt));
+  return luaO_pushvfstring(L, &f, args);
+}
+
+const char* luaO_pushfstring(lua_State* L, const char* fmt, const FmtArgs& args)
+{
+  InternalString f(fmt, strlen(fmt));
+  return luaO_pushfstring(L, &f, args);
 }
 
 const char* luaO_pushfstring(lua_State* L, const char* fmt)

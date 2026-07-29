@@ -183,7 +183,7 @@ static int forlimit(lua_State* L, lua_Integer init, StkId limslot,
     /* not coercible to in integer */
     lua_Number flim;           /* try to convert to float */
     if (!tonumber(lim, &flim)) /* cannot convert to float? */
-      luaG_forerror(L, lim, "limit");
+      luaG_forerror(L, lim, lit<"limit">());
     /* else 'flim' is a float out of integer bounds */
     if (((0) < (flim)))
     { /* if it is positive, it is too large */
@@ -224,7 +224,7 @@ static int forprep(lua_State* L, StkId ra)
     lua_Integer step = slotival(L, pstep);
     lua_Integer limit;
     if (step == 0)
-      luaG_runerror(L, "'for' step is zero");
+      luaG_runerror(L, lit<"'for' step is zero">());
     if (forlimit(L, init, plimit, &limit, step))
       return 1; /* skip the loop */
     else
@@ -254,13 +254,13 @@ static int forprep(lua_State* L, StkId ra)
     lua_Number limit;
     lua_Number step;
     if (l_unlikely(!tonumber(L, plimit, &limit)))
-      luaG_forerror(L, plimit, "limit");
+      luaG_forerror(L, plimit, lit<"limit">());
     if (l_unlikely(!tonumber(L, pstep, &step)))
-      luaG_forerror(L, pstep, "step");
+      luaG_forerror(L, pstep, lit<"step">());
     if (l_unlikely(!tonumber(L, pinit, &init)))
-      luaG_forerror(L, pinit, "initial value");
+      luaG_forerror(L, pinit, lit<"initial value">());
     if (step == 0)
-      luaG_runerror(L, "'for' step is zero");
+      luaG_runerror(L, lit<"'for' step is zero">());
     if (((0) < (step)) ? ((limit) < (init))
                             : ((init) < (limit)))
       return 1; /* skip the loop */
@@ -314,7 +314,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
       assert(!((t)->tt_ == ctb(LUA_VTABLE)));
       tm = luaT_gettmbyobj(L, t, TM_INDEX);
       if (l_unlikely(notm(tm)))
-        luaG_typeerror(L, t, "index", tsrc); /* no metamethod */
+        luaG_typeerror(L, t, lit<"index">(), tsrc); /* no metamethod */
       /* else will try the metamethod */
     }
     else
@@ -348,7 +348,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
     }
     /* else repeat (tail call 'luaV_finishget') */
   }
-  luaG_runerror(L, "'__index' chain too long; possible loop");
+  luaG_runerror(L, lit<"'__index' chain too long; possible loop">());
   return 0; /* to avoid warnings */
 }
 
@@ -388,7 +388,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
     { /* not a table; check metamethod */
       tm = luaT_gettmbyobj(L, t, TM_NEWINDEX);
       if (l_unlikely(notm(tm)))
-        luaG_typeerror(L, t, "index", tsrc);
+        luaG_typeerror(L, t, lit<"index">(), tsrc);
     }
     /* try the metamethod */
     if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION))
@@ -411,7 +411,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
     }
     /* else 'return luaV_finishset(L, t, key, val, slot)' (loop) */
   }
-  luaG_runerror(L, "'__newindex' chain too long; possible loop");
+  luaG_runerror(L, lit<"'__newindex' chain too long; possible loop">());
 }
 
 /*
@@ -879,7 +879,7 @@ void luaV_concat(lua_State* L, int total)
         if (l_unlikely(l >= MAX_SIZE - sizeof(TString) - tl))
         {
           L->top = top - total; /* pop strings to avoid wasting stack */
-          luaG_runerror(L, "string length overflow");
+          luaG_runerror(L, lit<"string length overflow">());
         }
         tl += l;
       }
@@ -930,7 +930,7 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src)
   { /* try metamethod */
     tm = luaT_gettmbyobj(L, rb, TM_LEN);
     if (l_unlikely(notm(tm))) /* no metamethod? */
-      luaG_typeerror(L, rb, "get length of", src);
+      luaG_typeerror(L, rb, lit<"get length of">(), src);
     break;
   }
   }
@@ -955,7 +955,7 @@ lua_Integer luaV_idiv(lua_State* L, lua_Integer m, lua_Integer n)
   if (l_unlikely(((lua_Unsigned)(n)) + 1u <= 1u))
   { /* special cases: -1 or 0 */
     if (n == 0)
-      luaG_runerror(L, "attempt to divide by zero");
+      luaG_runerror(L, lit<"attempt to divide by zero">());
     return ((lua_Integer)(((lua_Unsigned)(0)) - ((lua_Unsigned)(m)))); /* n==-1; avoid overflow with 0x80000...//-1 */
   }
   else
@@ -977,7 +977,7 @@ lua_Integer luaV_mod(lua_State* L, lua_Integer m, lua_Integer n)
   if (l_unlikely(((lua_Unsigned)(n)) + 1u <= 1u))
   { /* special cases: -1 or 0 */
     if (n == 0)
-      luaG_runerror(L, "attempt to perform 'n%%0'");
+      luaG_runerror(L, lit<"attempt to perform 'n%%0'">());
     return 0; /* m % -1 == 0; avoid overflow with 0x80000...%-1 */
   }
   else

@@ -39,7 +39,7 @@ typedef struct
 
 static l_noret error(LoadState* S, const char* why)
 {
-  luaO_pushfstring(S->L, "%s: bad binary format (%s)",
+  luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(),
                    FmtArgs().str(S->name).str(why));
   luaD_throw(S->L, LUA_ERRSYNTAX);
 }
@@ -374,7 +374,7 @@ static void checkliteral(LoadState* S, std::string_view s, const char* msg)
 
 static l_noret numerror(LoadState* S, const char* what, const char* tname)
 {
-  const char* msg = luaO_pushfstring(S->L, "%s %s mismatch",
+  const char* msg = luaO_pushfstring(S->L, lit<"%s %s mismatch">(),
                                      FmtArgs().str(tname).str(what));
   error(S, msg);
 }

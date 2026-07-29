@@ -116,7 +116,7 @@ void luaE_shrinkCI(lua_State* L)
 void luaE_checkcstack(lua_State* L)
 {
   if (getCcalls(L) == LUAI_MAXCCALLS)
-    luaG_runerror(L, "C stack overflow");
+    luaG_runerror(L, lit<"C stack overflow">());
   else if (getCcalls(L) >= (LUAI_MAXCCALLS / 10 * 11))
     luaD_errerr(L); /* error while handling stack error */
 }
@@ -444,4 +444,15 @@ void luaE_warnerror(lua_State* L, const char* where)
   luaE_warning(L, " (", 1);
   luaE_warning(L, msg, 1);
   luaE_warning(L, ")", 0);
+}
+
+/*
+** InternalString form (wrapped literal sites). c_str() is the
+** sanctioned transitional bridge into 'luaE_warning', whose char*
+** signature survives until the host-callback refactor (the warning
+** function is a host callback).
+*/
+void luaE_warnerror(lua_State* L, const InternalString* where)
+{
+  luaE_warnerror(L, where->c_str());
 }

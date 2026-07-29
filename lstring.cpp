@@ -163,6 +163,16 @@ TString* luaS_new(lua_State* L, const char* str)
 }
 
 /*
+** New string from an InternalString (wrapped literals and other
+** engine-held strings). Deep copy as always — 'str' is never
+** retained; interning may return an existing TString.
+*/
+TString* luaS_new(lua_State* L, const InternalString* str)
+{
+  return luaS_createstr(L, str->bytes(), str->size());
+}
+
+/*
 ** A userdata is three luaM blocks: the header (a GC object), the user
 ** values array, and the binary data area. The header is created first,
 ** in a consistent empty state (nuvalue == 0, data == nullptr), so the

@@ -65,7 +65,7 @@ static void expr(LexState* ls, expdesc* v);
 static l_noret error_expected(LexState* ls, int token)
 {
   luaX_syntaxerror(ls,
-                   luaO_pushfstring(ls->L, "%s expected",
+                   luaO_pushfstring(ls->L, lit<"%s expected">(),
                                     FmtArgs().str(luaX_token2str(ls, token))));
 }
 
@@ -76,8 +76,8 @@ static l_noret errorlimit(FuncState* fs, int limit, const char* what)
   int line = fs->f->linedefined;
   const char* where = (line == 0)
                           ? "main function"
-                          : luaO_pushfstring(L, "function at line %d", FmtArgs().num(line));
-  msg = luaO_pushfstring(L, "too many %s (limit is %d) in %s",
+                          : luaO_pushfstring(L, lit<"function at line %d">(), FmtArgs().num(line));
+  msg = luaO_pushfstring(L, lit<"too many %s (limit is %d) in %s">(),
                          FmtArgs().str(what).num(limit).str(where));
   luaX_syntaxerror(fs->ls, msg);
 }
@@ -140,7 +140,7 @@ static void check_match(LexState* ls, int what, int who, int where)
     else
     {
       luaX_syntaxerror(ls, luaO_pushfstring(ls->L,
-                                            "%s expected (to close %s at line %d)",
+                                            lit<"%s expected (to close %s at line %d)">(),
                                             FmtArgs()
                                                 .str(luaX_token2str(ls, what))
                                                 .str(luaX_token2str(ls, who))
@@ -343,8 +343,8 @@ static void check_readonly(LexState* ls, expdesc* e)
     return;                      /* integer index cannot be read-only */
   }
   if (varname)
-    luaK_semerror(ls, "attempt to assign to const variable '%s'",
-                  FmtArgs().str(getstr(varname)));
+    luaK_semerror(ls, lit<"attempt to assign to const variable '%s'">(),
+                  FmtArgs().str(&varname->data));
 }
 
 /*
@@ -551,8 +551,8 @@ static void buildglobal(LexState* ls, TString* varname, expdesc* var)
   init_exp(var, VGLOBAL, -1);         /* global by default */
   singlevaraux(fs, ls->envn, var, 1); /* get environment variable */
   if (var->k == VGLOBAL)
-    luaK_semerror(ls, "%s is global when accessing variable '%s'",
-                  FmtArgs().str(LUA_ENV).str(getstr(varname)));
+    luaK_semerror(ls, lit<"%s is global when accessing variable '%s'">(),
+                  FmtArgs().str(LUA_ENV).str(&varname->data));
   luaK_exp2anyregup(fs, var);  /* _ENV could be a constant */
   codestring(&key, varname);   /* key is variable name */
   luaK_indexed(fs, var, &key); /* 'var' represents _ENV[varname] */
@@ -572,8 +572,8 @@ static void buildvar(LexState* ls, TString* varname, expdesc* var)
     int info = var->info;
     /* global by default in the scope of a global declaration? */
     if (info == -2)
-      luaK_semerror(ls, "variable '%s' not declared",
-                    FmtArgs().str(getstr(varname)));
+      luaK_semerror(ls, lit<"variable '%s' not declared">(),
+                    FmtArgs().str(&varname->data));
     buildglobal(ls, varname, var);
     if (info != -1 && ls->dyd->actvar.arr[info].kind == GDKCONST)
       var->ind.ro = 1; /* mark variable as read-only */
@@ -635,8 +635,8 @@ static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
   TString* tsname = getlocalvardesc(ls->fs, gt->nactvar)->name;
   const char* varname = (tsname != nullptr) ? getstr(tsname) : "*";
   luaK_semerror(ls,
-                "<goto %s> at line %d jumps into the scope of '%s'",
-                FmtArgs().str(getstr(gt->name)).num(gt->line).str(varname)); /* raise the error */
+                lit<"<goto %s> at line %d jumps into the scope of '%s'">(),
+                FmtArgs().str(&gt->name->data).num(gt->line).str(varname)); /* raise the error */
 }
 
 /*
@@ -799,8 +799,8 @@ static l_noret undefgoto(LexState* ls, Labeldesc* gt)
 {
   /* breaks are checked when created, cannot be undefined */
   assert(!eqstr(gt->name, ls->brkn));
-  luaK_semerror(ls, "no visible label '%s' for <goto> at line %d",
-                FmtArgs().str(getstr(gt->name)).num(gt->line));
+  luaK_semerror(ls, lit<"no visible label '%s' for <goto> at line %d">(),
+                FmtArgs().str(&gt->name->data).num(gt->line));
 }
 
 static void leaveblock(FuncState* fs)
@@ -1174,7 +1174,7 @@ static void parlist(LexState* ls)
         break;
       }
       default:
-        luaX_syntaxerror(ls, "<name> or '...' expected");
+        luaX_syntaxerror(ls, lit<"<name> or '...' expected">());
       }
     } while (!varargk && testnext(ls, ','));
   }
@@ -1261,7 +1261,7 @@ static void funcargs(LexState* ls, expdesc* f)
   }
   default:
   {
-    luaX_syntaxerror(ls, "function arguments expected");
+    luaX_syntaxerror(ls, lit<"function arguments expected">());
     return; /* to avoid warnings */
   }
   }
@@ -1309,7 +1309,7 @@ static void primaryexp(LexState* ls, expdesc* v)
   }
   default:
   {
-    luaX_syntaxerror(ls, "unexpected symbol");
+    luaX_syntaxerror(ls, lit<"unexpected symbol">());
   }
   }
 }
@@ -1727,7 +1727,7 @@ static void breakstat(LexState* ls, int line)
       break;
   }
   if (bl == nullptr)
-    luaX_syntaxerror(ls, "break outside loop"); /* does not return */
+    luaX_syntaxerror(ls, lit<"break outside loop">()); /* does not return */
   bl->isloop = 2; /* signal that block has pending breaks */
   luaX_next(ls);  /* skip break */
   newgotoentry(ls, ls->brkn, line);
@@ -1741,8 +1741,8 @@ static void checkrepeated(LexState* ls, TString* name)
 {
   Labeldesc* lb = findlabel(ls, name, ls->fs->firstlabel);
   if (l_unlikely(lb != nullptr)) /* already defined? */
-    luaK_semerror(ls, "label '%s' already defined on line %d",
-                  FmtArgs().str(getstr(name)).num(lb->line)); /* error */
+    luaK_semerror(ls, lit<"label '%s' already defined on line %d">(),
+                  FmtArgs().str(&name->data).num(lb->line)); /* error */
 }
 
 static void labelstat(LexState* ls, TString* name, int line)
@@ -1825,7 +1825,7 @@ static void fixforjump(FuncState* fs, int pc, int dest, int back)
   if (back)
     offset = -offset;
   if (l_unlikely(offset > MAXARG_Bx))
-    luaX_syntaxerror(fs->ls, "control structure too long");
+    luaX_syntaxerror(fs->ls, lit<"control structure too long">());
   ((*jmp) = (((*jmp) & MASK0(SIZE_Bx, POS_Bx)) | ((((Instruction)(offset)) << POS_Bx) & MASK1(SIZE_Bx, POS_Bx))));
 }
 
@@ -1938,7 +1938,7 @@ static void forstat(LexState* ls, int line)
     forlist(ls, varname);
     break;
   default:
-    luaX_syntaxerror(ls, "'=' or 'in' expected");
+    luaX_syntaxerror(ls, lit<"'=' or 'in' expected">());
   }
   check_match(ls, TK_END, TK_FOR, line);
   leaveblock(fs); /* loop scope ('break' jumps to this point) */
@@ -1998,7 +1998,7 @@ static lu_byte getvarattribute(LexState* ls, lu_byte df)
     else if (strcmp(attr, "close") == 0)
       return RDKTOCLOSE; /* to-be-closed variable */
     else
-      luaK_semerror(ls, "unknown attribute '%s'", FmtArgs().str(attr));
+      luaK_semerror(ls, lit<"unknown attribute '%s'">(), FmtArgs().str(attr));
   }
   return df; /* return default value */
 }
@@ -2032,7 +2032,7 @@ static void localstat(LexState* ls)
     if (kind == RDKTOCLOSE)
     {                    /* to-be-closed? */
       if (toclose != -1) /* one already present? */
-        luaK_semerror(ls, "multiple to-be-closed variables in local list");
+        luaK_semerror(ls, lit<"multiple to-be-closed variables in local list">());
       toclose = fs->nactvar + nvars;
     }
     nvars++;
@@ -2067,7 +2067,7 @@ static lu_byte getglobalattribute(LexState* ls, lu_byte df)
   switch (kind)
   {
   case RDKTOCLOSE:
-    luaK_semerror(ls, "global variables cannot be to-be-closed");
+    luaK_semerror(ls, lit<"global variables cannot be to-be-closed">());
     return kind; /* to avoid warnings */
   case RDKCONST:
     return GDKCONST; /* adjust kind for global variable */
