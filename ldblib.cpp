@@ -108,7 +108,7 @@ static lua_State* getthread(lua_State* L, int* arg)
 ** from 'lua_getinfo' into result table. Key is always a string;
 ** value can be a string, an int, or a boolean.
 */
-static void settabss(lua_State* L, const char* k, const char* v)
+static void settabss(lua_State* L, const HostString& k, const HostString& v)
 {
   lua_pushstring(L, v);
   lua_setfield(L, -2, k);
@@ -153,13 +153,12 @@ static int db_getinfo(lua_State* L)
   lua_Debug ar;
   int arg;
   lua_State* L1 = getthread(L, &arg);
-  const char* options = luaL_optstring(L, arg + 2, "flnSrtu");
+  HostString options = luaL_optstring(L, arg + 2, "flnSrtu");
   checkstack(L, L1, 3);
   luaL_argcheck(L, options[0] != '>', arg + 2, "invalid option '>'");
   if (lua_isfunction(L, arg + 1))
   {                                               /* info about a function? */
-    lua_pushstring(L, options);
-    options = lua_pushfstring(L, ">%s"); /* add '>' to 'options' */
+    options.insert(0, 1, '>');                    /* add '>' to 'options' */
     lua_pushvalue(L, arg + 1);                    /* move function to 'L1' stack */
     lua_xmove(L, L1, 1);
   }
@@ -174,41 +173,42 @@ static int db_getinfo(lua_State* L)
   if (!lua_getinfo(L1, options, &ar))
     return luaL_argerror(L, arg + 2, "invalid option");
   lua_newtable(L); /* table to collect results */
-  if (strchr(options, 'S'))
+  if ((options.find('S') != HostString::npos))
   {
-    lua_pushlstring(L, ar.source, ar.srclen);
+    lua_pushlstring(L, ar.source.data(), ar.source.size());
     lua_setfield(L, -2, "source");
     settabss(L, "short_src", ar.short_src);
     settabsi(L, "linedefined", ar.linedefined);
     settabsi(L, "lastlinedefined", ar.lastlinedefined);
     settabss(L, "what", ar.what);
   }
-  if (strchr(options, 'l'))
+  if ((options.find('l') != HostString::npos))
     settabsi(L, "currentline", ar.currentline);
-  if (strchr(options, 'u'))
+  if ((options.find('u') != HostString::npos))
   {
     settabsi(L, "nups", ar.nups);
     settabsi(L, "nparams", ar.nparams);
     settabsb(L, "isvararg", ar.isvararg);
   }
-  if (strchr(options, 'n'))
+  if ((options.find('n') != HostString::npos))
   {
-    settabss(L, "name", ar.name);
+    if (!ar.name.empty()) /* empty = absent: field stays nil */
+      settabss(L, "name", ar.name);
     settabss(L, "namewhat", ar.namewhat);
   }
-  if (strchr(options, 'r'))
+  if ((options.find('r') != HostString::npos))
   {
     settabsi(L, "ftransfer", ar.ftransfer);
     settabsi(L, "ntransfer", ar.ntransfer);
   }
-  if (strchr(options, 't'))
+  if ((options.find('t') != HostString::npos))
   {
     settabsb(L, "istailcall", ar.istailcall);
     settabsi(L, "extraargs", ar.extraargs);
   }
-  if (strchr(options, 'L'))
+  if ((options.find('L') != HostString::npos))
     treatstackoption(L, L1, "activelines");
-  if (strchr(options, 'f'))
+  if ((options.find('f') != HostString::npos))
     treatstackoption(L, L1, "func");
   return 1; /* return table */
 }
@@ -220,9 +220,13 @@ static int db_getlocal(lua_State* L)
   int nvar = (int) luaL_checkinteger(L, arg + 2); /* local-variable index */
   if (lua_isfunction(L, arg + 1))
   {                                                 /* function argument? */
-    lua_pushvalue(L, arg + 1);                      /* push function */
-    lua_pushstring(L, lua_getlocal(L, nullptr, nvar)); /* push local name */
-    return 1;                                       /* return only name (there is no value) */
+    lua_pushvalue(L, arg + 1); /* push function */
+    const char* name = lua_getlocal(L, nullptr, nvar);
+    if (name != nullptr) /* push local name (or nil if none) */
+      lua_pushstring(L, name);
+    else
+      lua_pushnil(L);
+    return 1; /* return only name (there is no value) */
   }
   else
   { /* stack-level argument */
@@ -264,8 +268,12 @@ static int db_setlocal(lua_State* L)
   lua_xmove(L, L1, 1);
   name = lua_setlocal(L1, &ar, nvar);
   if (name == nullptr)
+  {
     lua_pop(L1, 1); /* pop value (if not popped by 'lua_setlocal') */
-  lua_pushstring(L, name);
+    lua_pushnil(L);
+  }
+  else
+    lua_pushstring(L, name);
   return 1;
 }
 
@@ -404,11 +412,11 @@ static int db_sethook(lua_State* L)
   }
   else
   {
-    const char* smask = luaL_checkstring(L, arg + 2);
+    HostString smask = luaL_checkstring(L, arg + 2);
     luaL_checktype(L, arg + 1, LUA_TFUNCTION);
     count = (int) luaL_optinteger(L, arg + 3, 0);
     func = hookf;
-    mask = makemask(smask, count);
+    mask = makemask(smask.c_str(), count);
   }
   if (!luaL_getsubtable(L, LUA_REGISTRYINDEX, HOOKKEY))
   {
@@ -475,13 +483,18 @@ static int db_traceback(lua_State* L)
 {
   int arg;
   lua_State* L1 = getthread(L, &arg);
-  const char* msg = lua_tostring(L, arg + 1);
-  if (msg == nullptr && !lua_isnoneornil(L, arg + 1)) /* non-string 'msg'? */
-    lua_pushvalue(L, arg + 1);                     /* return it untouched */
+  if (!lua_isstring(L, arg + 1) && !lua_isnoneornil(L, arg + 1)) /* non-string 'msg'? */
+    lua_pushvalue(L, arg + 1); /* return it untouched */
   else
   {
     int level = (int) luaL_optinteger(L, arg + 2, (L == L1) ? 1 : 0);
-    luaL_traceback(L, L1, msg, level);
+    if (lua_isnoneornil(L, arg + 1))
+      luaL_traceback(L, L1, nullptr, level);
+    else
+    {
+      HostString msg = lua_tostring(L, arg + 1);
+      luaL_traceback(L, L1, msg.c_str(), level);
+    }
   }
   return 1;
 }

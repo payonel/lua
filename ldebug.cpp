@@ -282,7 +282,6 @@ static void funcinfo(lua_Debug* ar, Closure* cl)
   if (!LuaClosure(cl))
   {
     ar->source = "=[C]";
-    ar->srclen = (sizeof("=[C]") / sizeof(char) - 1);
     ar->linedefined = -1;
     ar->lastlinedefined = -1;
     ar->what = "C";
@@ -290,20 +289,17 @@ static void funcinfo(lua_Debug* ar, Closure* cl)
   else
   {
     const Proto* p = static_cast<LClosure*>(cl)->p;
-    if (p->source)
-    {
-      ar->source = ((void)((ar->srclen) = (p->source)->data.size()), (p->source)->data.c_str());
-    }
+    if (p->source) /* boundary copy of the engine string */
+      ar->source = HostString(p->source->data.bytes(), p->source->data.size());
     else
-    {
       ar->source = "=?";
-      ar->srclen = (sizeof("=?") / sizeof(char) - 1);
-    }
     ar->linedefined = p->linedefined;
     ar->lastlinedefined = p->lastlinedefined;
     ar->what = (ar->linedefined == 0) ? "main" : "Lua";
   }
-  luaO_chunkid(ar->short_src, ar->source, ar->srclen);
+  char buff[LUA_IDSIZE];
+  luaO_chunkid(buff, ar->source.data(), ar->source.size());
+  ar->short_src = buff;
 }
 
 static int nextline(const Proto* p, int currentline, int pc)
@@ -409,12 +405,11 @@ static int auxgetinfo(lua_State* L, const char* what, lua_Debug* ar,
     }
     case 'n':
     {
-      ar->namewhat = getfuncname(L, ci, &ar->name);
-      if (ar->namewhat == nullptr)
-      {
-        ar->namewhat = ""; /* not found */
-        ar->name = nullptr;
-      }
+      const char* name = nullptr;
+      const char* namewhat = getfuncname(L, ci, &name);
+      /* boundary copies; empty = absent (see lua.h) */
+      ar->namewhat = (namewhat != nullptr) ? namewhat : "";
+      ar->name = (namewhat != nullptr && name != nullptr) ? name : "";
       break;
     }
     case 'r':
@@ -438,12 +433,13 @@ static int auxgetinfo(lua_State* L, const char* what, lua_Debug* ar,
   return status;
 }
 
-LUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar)
+LUA_API int lua_getinfo(lua_State* L, const HostString& options, lua_Debug* ar)
 {
   int status;
   Closure* cl;
   CallInfo* ci;
   StkId func; /* slot of the function value (see note below for '>') */
+  const char* what = options.c_str();
   lua_lock(L);
   if (*what == '>')
   {

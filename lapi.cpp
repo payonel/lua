@@ -322,11 +322,12 @@ LUA_API int lua_type(lua_State* L, int idx)
                                : LUA_TNONE);
 }
 
-LUA_API const char* lua_typename(lua_State* L, int t)
+LUA_API HostString lua_typename(lua_State* L, int t)
 {
   (void) L; /* public API signature; 'L' is not needed here */
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");
-  return ttypename(t)->c_str(); /* transitional C API */
+  const InternalString* n = ttypename(t);
+  return HostString(n->bytes(), n->size()); /* boundary copy */
 }
 
 LUA_API int lua_iscfunction(lua_State* L, int idx)
@@ -661,22 +662,24 @@ LUA_API const char* lua_pushlstring(lua_State* L, const char* s, size_t len)
   return getstr(ts);
 }
 
-LUA_API const char* lua_pushstring(lua_State* L, const char* s)
+LUA_API void lua_pushstring(lua_State* L, const HostString& s)
 {
   lua_lock(L);
-  if (s == nullptr)
-    setslottag(L, L->top, LUA_VNIL);
-  else
-  {
-    TString* ts;
-    ts = luaS_new(L, s);
-    setslots(L, L->top, ts);
-    s = getstr(ts); /* internal copy's address */
-  }
+  TString* ts = luaS_newlstr(L, s.data(), s.size()); /* boundary deep copy */
+  setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
   lua_unlock(L);
-  return s;
+}
+
+LUA_API void lua_pushistring(lua_State* L, InternalString&& s)
+{
+  lua_lock(L);
+  TString* ts = luaS_take(L, std::move(s)); /* adoption (zero copy) */
+  setslots(L, L->top, ts);
+  api_incr_top(L);
+  luaC_checkGC(L);
+  lua_unlock(L);
 }
 
 /*
@@ -687,9 +690,9 @@ LUA_API const char* lua_pushstring(lua_State* L, const char* s)
 ** value for '%p' (formatted as its address). The arguments are
 ** consumed and the formatted result is pushed (and also returned).
 */
-LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt)
+LUA_API const InternalString* lua_pushfstring(lua_State* L, const char* fmt)
 {
-  const char* ret;
+  const InternalString* ret;
   FmtArgs args;
   int n = 0; /* number of arguments taken from the stack */
   const char* e;
@@ -777,7 +780,7 @@ LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt)
   const InternalString* is = luaO_pushvfstring(L, fmt, args);
   if (is == nullptr)
     luaD_throw(L, LUA_ERRMEM);
-  ret = is->c_str(); /* transitional: C API returns char* */
+  ret = is; /* borrowed from the pushed value */
   if (n > 0)
   { /* move result down, removing its arguments */
     copyslot(L, L->top - 1 - n, L->top - 1);
@@ -850,11 +853,11 @@ LUA_API int lua_pushthread(lua_State* L)
 ** get functions (Lua -> stack)
 */
 
-static int auxgetstr(lua_State* L, const TValue* t, const char* k)
+static int auxgetstr(lua_State* L, const TValue* t, const HostString& k)
 {
   lu_byte tag;
   TValue res;
-  TString* str = luaS_new(L, k);
+  TString* str = luaS_newlstr(L, k.data(), k.size()); /* boundary copy */
   if (t->tt_ != ctb(LUA_VTABLE))
     tag = LUA_VNOTABLE;
   else
@@ -890,7 +893,7 @@ static void getGlobalTable(lua_State* L, TValue* gt)
   assert((((tag) & NOVARIANT_MASK) == LUA_TTABLE) && "global table must exist");
 }
 
-LUA_API int lua_getglobal(lua_State* L, const char* name)
+LUA_API int lua_getglobal(lua_State* L, const HostString& name)
 {
   TValue gt;
   lua_lock(L);
@@ -923,7 +926,7 @@ LUA_API int lua_gettable(lua_State* L, int idx)
   return ((tag) & NOVARIANT_MASK);
 }
 
-LUA_API int lua_getfield(lua_State* L, int idx, const char* k)
+LUA_API int lua_getfield(lua_State* L, int idx, const HostString& k)
 {
   lua_lock(L);
   TValue t = index2val(L, idx);
@@ -1105,10 +1108,10 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
 /*
 ** t[k] = value at the top of the stack (where 'k' is a string)
 */
-static void auxsetstr(lua_State* L, const TValue* t, const char* k)
+static void auxsetstr(lua_State* L, const TValue* t, const HostString& k)
 {
   int hres;
-  TString* str = luaS_new(L, k);
+  TString* str = luaS_newlstr(L, k.data(), k.size()); /* boundary copy */
   api_checkpop(L, 1);
   if (t->tt_ != ctb(LUA_VTABLE))
     hres = HNOTATABLE;
@@ -1135,7 +1138,7 @@ static void auxsetstr(lua_State* L, const TValue* t, const char* k)
   lua_unlock(L); /* lock done by caller */
 }
 
-LUA_API void lua_setglobal(lua_State* L, const char* name)
+LUA_API void lua_setglobal(lua_State* L, const HostString& name)
 {
   TValue gt;
   lua_lock(L); /* unlock done in 'auxsetstr' */
@@ -1165,7 +1168,7 @@ LUA_API void lua_settable(lua_State* L, int idx)
   lua_unlock(L);
 }
 
-LUA_API void lua_setfield(lua_State* L, int idx, const char* k)
+LUA_API void lua_setfield(lua_State* L, int idx, const HostString& k)
 {
   lua_lock(L); /* unlock done in 'auxsetstr' */
   TValue t = index2val(L, idx);
@@ -1421,16 +1424,14 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
 }
 
 LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
-                     const char* chunkname, const char* mode)
+                     const HostString& chunkname, const char* mode)
 {
   ZIO z;
   TStatus status;
   lua_lock(L);
   luaC_checkGC(L);
-  if (!chunkname)
-    chunkname = "?";
   luaZ_init(L, &z, reader, data);
-  status = luaD_protectedparser(L, &z, chunkname, mode);
+  status = luaD_protectedparser(L, &z, chunkname.c_str(), mode);
   if (status == LUA_OK)
   {                                            /* no errors? */
     StkId s = L->top - 1;
@@ -1681,11 +1682,29 @@ void lua_setwarnf(lua_State* L, lua_WarnFunction f, void* ud)
   lua_unlock(L);
 }
 
-void lua_warning(lua_State* L, const char* msg, int tocont)
+void lua_warning(lua_State* L, const HostString& msg, int tocont)
 {
   lua_lock(L);
-  luaE_warning(L, msg, tocont);
+  luaE_warning(L, msg.c_str(), tocont); /* warn fn is a host callback (char*) */
   lua_unlock(L);
+}
+
+/*
+** Public byte-budget seam (see lua.h): reserve/release host-side
+** buffer capacity against the state's accounting, so the memory
+** limit can veto script-driven growth before it is allocated.
+** Deliberately lock-free: pure accounting arithmetic (GC debt), and
+** release must be callable from destructors running during error
+** unwinding, when the API lock is still held.
+*/
+LUA_API int lua_reservebytes(lua_State* L, size_t sz)
+{
+  return luaM_reserve(L, sz);
+}
+
+LUA_API void lua_releasebytes(lua_State* L, size_t sz)
+{
+  luaM_release(L, sz);
 }
 
 LUA_API void* lua_newuserdatauv(lua_State* L, size_t size, int nuvalue)
@@ -1903,7 +1922,7 @@ LUA_API void lua_pushcfunction(lua_State* L, lua_CFunction f)
   lua_pushcclosure(L, f, 0);
 }
 
-LUA_API void lua_register(lua_State* L, const char* name, lua_CFunction f)
+LUA_API void lua_register(lua_State* L, const HostString& name, lua_CFunction f)
 {
   lua_pushcfunction(L, f);
   lua_setglobal(L, name);
@@ -1949,9 +1968,9 @@ LUA_API int lua_isnoneornil(lua_State* L, int idx)
   return lua_type(L, idx) <= 0;
 }
 
-LUA_API const char* lua_pushliteral(lua_State* L, const char* s)
+LUA_API void lua_pushliteral(lua_State* L, const HostString& s)
 {
-  return lua_pushstring(L, s);
+  lua_pushstring(L, s);
 }
 
 LUA_API void lua_pushglobaltable(lua_State* L)
@@ -1959,9 +1978,18 @@ LUA_API void lua_pushglobaltable(lua_State* L)
   lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
 }
 
-LUA_API const char* lua_tostring(lua_State* L, int idx)
+/*
+** Text accessor: a HostString COPY of the value (numbers coerced in
+** place, as in 'lua_tolstring'). Returns an empty HostString when the
+** value is not a string — callers needing the distinction from a
+** genuine empty string check lua_type first (conversion strictness
+** deferred; Java returns null there).
+*/
+LUA_API HostString lua_tostring(lua_State* L, int idx)
 {
-  return lua_tolstring(L, idx, nullptr);
+  size_t len;
+  const char* s = lua_tolstring(L, idx, &len);
+  return (s == nullptr) ? HostString() : HostString(s, len);
 }
 
 LUA_API void lua_insert(lua_State* L, int idx)

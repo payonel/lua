@@ -31,6 +31,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstring>
 #include <string>
 #include <string_view>
 
@@ -227,20 +228,31 @@ const InternalString* lit()
 class ByteBuilder
 {
 public:
-  void append(char c) { bytes_.push_back(c); }
-  void append(const char* b, size_t n) { bytes_.append(b, n); }
+  void append(char c)
+  {
+    *prep(1) = c;
+    commit(1);
+  }
+  void append(const char* b, size_t n)
+  {
+    if (n > 0)
+    {
+      memcpy(prep(n), b, n);
+      commit(n);
+    }
+  }
   void append(const InternalString* s)
   {
-    bytes_.append(s->bytes(), s->size());
+    append(s->bytes(), s->size());
   }
 
   /* discard contents, keep capacity (builders are reused) */
-  void reset() noexcept { bytes_.clear(); }
+  void reset() noexcept { len_ = 0; }
 
   /* remove the last 'k' bytes (lexer un-saves escapes/delimiters) */
-  void drop(size_t k) { bytes_.resize(bytes_.size() - k); }
+  void drop(size_t k) { len_ -= k; }
 
-  size_t size() const noexcept { return bytes_.size(); }
+  size_t size() const noexcept { return len_; }
 
   /*
   ** Contents pointer, valid until the next append/reset/finish. Only
@@ -249,16 +261,47 @@ public:
   */
   const char* data() const noexcept { return bytes_.data(); }
 
+  /* mutable contents pointer (luaL_buffaddr) */
+  char* data() noexcept { return bytes_.data(); }
+
+  /*
+  ** prep/commit protocol (luaL_prepbuffsize/luaL_addsize): 'prep'
+  ** returns a writable area of at least 'sz' bytes past the committed
+  ** length, growing capacity if needed (UNACCOUNTED growth — accounted
+  ** clients must pre-grow via growTo below); 'commit' extends the
+  ** committed length over bytes the client wrote.
+  */
+  char* prep(size_t sz)
+  {
+    if (len_ + sz > bytes_.size())
+      growTo(len_ + sz);
+    return &bytes_[len_];
+  }
+  void commit(size_t sz) noexcept { len_ += sz; }
+
+  /* writable capacity currently allocated */
+  size_t capacity() const noexcept { return bytes_.size(); }
+
+  /*
+  ** Grow the writable area to exactly 'cap' bytes. The accounted
+  ** growth seam: clients under the reserve-before-growth contract
+  ** reserve 'cap' with the lua_State BEFORE calling this.
+  */
+  void growTo(size_t cap) { bytes_.resize(cap); }
+
   /* hand the bytes over (zero-copy); the builder is left empty */
   InternalString finish() noexcept
   {
+    bytes_.resize(len_);
     InternalString s(std::move(bytes_));
     bytes_.clear(); /* normalize the moved-from state */
+    len_ = 0;
     return s;
   }
 
 private:
-  std::string bytes_; /* byte container, same convention as InternalString */
+  std::string bytes_; /* writable area; [0, len_) is committed content */
+  size_t len_ = 0;    /* committed length */
 };
 
 /* }================================================================== */

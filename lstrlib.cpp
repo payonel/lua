@@ -295,8 +295,8 @@ static void trymt(lua_State* L, const char* mtkey, const char* opname)
   if (l_unlikely(lua_type(L, 2) == LUA_TSTRING ||
                  !luaL_getmetafield(L, 2, mtkey)))
   {
-    const char* t1 = luaL_typename(L, -2);
-    const char* t2 = luaL_typename(L, -1);
+    HostString t1 = luaL_typename(L, -2);
+    HostString t2 = luaL_typename(L, -1);
     lua_pushstring(L, opname);
     lua_pushstring(L, t1);
     lua_pushstring(L, t2);
@@ -1972,17 +1972,18 @@ static int digit(int c)
   return '0' <= c && c <= '9';
 }
 
-static size_t getnum(const char** fmt, size_t df)
+static size_t getnum(Header* h, size_t df)
 {
-  if (!digit(**fmt)) /* no number? */
-    return df;       /* return default value */
+  if (!digit(fmtbyte(h))) /* no number? */
+    return df;            /* return default value */
   else
   {
     size_t a = 0;
     do
     {
-      a = a * 10 + ((unsigned int)(*((*fmt)++) - '0'));
-    } while (digit(**fmt) && a <= (MAX_SIZE - 9) / 10);
+      a = a * 10 + ((unsigned int)(fmtbyte(h) - '0'));
+      h->pos++;
+    } while (digit(fmtbyte(h)) && a <= (MAX_SIZE - 9) / 10);
     return a;
   }
 }
@@ -1991,9 +1992,9 @@ static size_t getnum(const char** fmt, size_t df)
 ** Read an integer numeral and raises an error if it is larger
 ** than the maximum size of integers.
 */
-static unsigned getnumlimit(Header* h, const char** fmt, size_t df)
+static unsigned getnumlimit(Header* h, size_t df)
 {
-  size_t sz = getnum(fmt, df);
+  size_t sz = getnum(h, df);
   if (l_unlikely((sz - 1u) >= MAXINTSIZE))
   {
     lua_pushinteger(h->L, ((lua_Integer)(sz)));
@@ -2006,9 +2007,11 @@ static unsigned getnumlimit(Header* h, const char** fmt, size_t df)
 /*
 ** Initialize Header
 */
-static void initheader(lua_State* L, Header* h)
+static void initheader(lua_State* L, Header* h, const InternalString* fmt)
 {
   h->L = L;
+  h->fmt = fmt;
+  h->pos = 0;
   h->islittle = nativeendian_little;
   h->maxalign = 1;
 }
@@ -2016,11 +2019,12 @@ static void initheader(lua_State* L, Header* h)
 /*
 ** Read and classify next option. 'size' is filled with option's size.
 */
-static KOption getoption(Header* h, const char** fmt, size_t* size)
+static KOption getoption(Header* h, size_t* size)
 {
   /* native maximum alignment requirement */
   constexpr size_t maxalign = alignof(std::max_align_t);
-  int opt = *((*fmt)++);
+  int opt = fmtbyte(h);
+  h->pos++;
   *size = 0; /* default */
   switch (opt)
   {
@@ -2061,16 +2065,16 @@ static KOption getoption(Header* h, const char** fmt, size_t* size)
     *size = sizeof(double);
     return Kdouble;
   case 'i':
-    *size = getnumlimit(h, fmt, sizeof(int));
+    *size = getnumlimit(h, sizeof(int));
     return Kint;
   case 'I':
-    *size = getnumlimit(h, fmt, sizeof(int));
+    *size = getnumlimit(h, sizeof(int));
     return Kuint;
   case 's':
-    *size = getnumlimit(h, fmt, sizeof(size_t));
+    *size = getnumlimit(h, sizeof(size_t));
     return Kstring;
   case 'c':
-    *size = getnum(fmt, ((size_t)(-1)));
+    *size = getnum(h, ((size_t)(-1)));
     if (l_unlikely(*size == ((size_t)(-1))))
       luaL_error(h->L, "missing size for format option 'c'");
     return Kchar;
@@ -2094,7 +2098,7 @@ static KOption getoption(Header* h, const char** fmt, size_t* size)
     break;
   case '!':
   {
-    h->maxalign = getnumlimit(h, fmt, maxalign);
+    h->maxalign = getnumlimit(h, maxalign);
     break;
   }
   default:
@@ -2113,14 +2117,14 @@ static KOption getoption(Header* h, const char** fmt, size_t* size)
 ** the maximum alignment ('maxalign'). Kchar option needs no alignment
 ** despite its size.
 */
-static KOption getdetails(Header* h, size_t totalsize, const char** fmt,
+static KOption getdetails(Header* h, size_t totalsize,
                           size_t* psize, unsigned* ntoalign)
 {
-  KOption opt = getoption(h, fmt, psize);
+  KOption opt = getoption(h, psize);
   size_t align = *psize; /* usually, alignment follows size */
   if (opt == Kpaddalign)
   { /* 'X' gets alignment from following option */
-    if (**fmt == '\0' || getoption(h, fmt, &align) == Kchar || align == 0)
+    if (fmtbyte(h) == '\0' || getoption(h, &align) == Kchar || align == 0)
       luaL_argerror(h->L, 1, "invalid next option for option 'X'");
   }
   if (align <= 1 || opt == Kchar) /* need no alignment? */
@@ -2190,17 +2194,17 @@ static int str_pack(lua_State* L)
 {
   luaL_Buffer b;
   Header h;
-  const char* fmt = luaL_checkstring(L, 1); /* format string */
-  int arg = 1;                              /* current argument to pack */
-  size_t totalsize = 0;                     /* accumulate total size of result */
-  initheader(L, &h);
+  const InternalString* fmt = luaL_checkistring(L, 1); /* format string */
+  int arg = 1;          /* current argument to pack */
+  size_t totalsize = 0; /* accumulate total size of result */
+  initheader(L, &h, fmt);
   lua_pushnil(L); /* mark to separate arguments from string buffer */
   luaL_buffinit(L, &b);
-  while (*fmt != '\0')
+  while (fmtbyte(&h) != '\0')
   {
     unsigned ntoalign;
     size_t size;
-    KOption opt = getdetails(&h, totalsize, &fmt, &size, &ntoalign);
+    KOption opt = getdetails(&h, totalsize, &size, &ntoalign);
     luaL_argcheck(L, size + ntoalign <= MAX_SIZE - totalsize, arg,
                   "result too long");
     totalsize += ntoalign + size;
@@ -2308,14 +2312,14 @@ static int str_pack(lua_State* L)
 static int str_packsize(lua_State* L)
 {
   Header h;
-  const char* fmt = luaL_checkstring(L, 1); /* format string */
-  size_t totalsize = 0;                     /* accumulate total size of result */
-  initheader(L, &h);
-  while (*fmt != '\0')
+  const InternalString* fmt = luaL_checkistring(L, 1); /* format string */
+  size_t totalsize = 0; /* accumulate total size of result */
+  initheader(L, &h, fmt);
+  while (fmtbyte(&h) != '\0')
   {
     unsigned ntoalign;
     size_t size;
-    KOption opt = getdetails(&h, totalsize, &fmt, &size, &ntoalign);
+    KOption opt = getdetails(&h, totalsize, &size, &ntoalign);
     luaL_argcheck(L, opt != Kstring && opt != Kzstr, 1,
                   "variable-length format");
     size += ntoalign; /* total space used by option */
@@ -2372,18 +2376,18 @@ static lua_Integer unpackint(lua_State* L, const char* str,
 static int str_unpack(lua_State* L)
 {
   Header h;
-  const char* fmt = luaL_checkstring(L, 1);
+  const InternalString* fmt = luaL_checkistring(L, 1);
   size_t ld;
   const char* data = luaL_checklstring(L, 2, &ld);
   size_t pos = posrelatI(luaL_optinteger(L, 3, 1), ld) - 1;
   int n = 0; /* number of results */
   luaL_argcheck(L, pos <= ld, 3, "initial position out of string");
-  initheader(L, &h);
-  while (*fmt != '\0')
+  initheader(L, &h, fmt);
+  while (fmtbyte(&h) != '\0')
   {
     unsigned ntoalign;
     size_t size;
-    KOption opt = getdetails(&h, pos, &fmt, &size, &ntoalign);
+    KOption opt = getdetails(&h, pos, &size, &ntoalign);
     luaL_argcheck(L, ntoalign + size <= ld - pos, 2,
                   "data string too short");
     pos += ntoalign; /* skip alignment */

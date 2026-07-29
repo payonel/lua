@@ -110,10 +110,9 @@ static int report(lua_State* L, int status)
 {
   if (status != LUA_OK)
   {
-    const char* msg = lua_tostring(L, -1);
-    if (msg == nullptr)
-      msg = "(error message not a string)";
-    l_message(progname, msg);
+    HostString msg = lua_isstring(L, -1) ? lua_tostring(L, -1)
+                                         : HostString("(error message not a string)");
+    l_message(progname, msg.c_str());
     lua_pop(L, 1); /* remove message */
   }
   return status;
@@ -124,20 +123,23 @@ static int report(lua_State* L, int status)
 */
 static int msghandler(lua_State* L)
 {
-  const char* msg = lua_tostring(L, 1);
-  if (msg == nullptr)
-  {                                          /* is error object not a string? */
+  HostString msg;
+  if (lua_isstring(L, 1))
+    msg = lua_tostring(L, 1);
+  else
+  {                                          /* error object not a string */
     if (luaL_callmeta(L, 1, "__tostring") && /* does it have a metamethod */
         lua_type(L, -1) == LUA_TSTRING)      /* that produces a string? */
       return 1;                              /* that is the message */
     else
     {
       lua_pushstring(L, luaL_typename(L, 1));
-      msg = lua_pushfstring(L, "(error object is a %s value)");
+      const InternalString* m = lua_pushfstring(L, "(error object is a %s value)");
+      msg = HostString(m->bytes(), m->size());
     }
   }
-  luaL_traceback(L, L, msg, 1); /* append a standard traceback */
-  return 1;                     /* return the traceback */
+  luaL_traceback(L, L, msg.c_str(), 1); /* append a standard traceback */
+  return 1;                             /* return the traceback */
 }
 
 /*
@@ -585,10 +587,9 @@ static int pushline(lua_State* L, int firstline)
 */
 static int addreturn(lua_State* L)
 {
-  const char* line = lua_tostring(L, -1); /* original line */
-  lua_pushstring(L, line);
-  const char* retline = lua_pushfstring(L, "return %s;");
-  int status = luaL_loadbufferx(L, retline, strlen(retline), "=stdin", "t");
+  lua_pushvalue(L, -1); /* duplicate original line */
+  const InternalString* retline = lua_pushfstring(L, "return %s;");
+  int status = luaL_loadbufferx(L, retline->bytes(), retline->size(), "=stdin", "t");
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
   else
@@ -640,16 +641,15 @@ static int multiline(lua_State* L)
 */
 static int loadline(lua_State* L)
 {
-  const char* line;
   int status;
   lua_settop(L, 0);
   if (!pushline(L, 1))
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
-  line = lua_tostring(L, 1);
-  if (line[0] != '\0')  /* non empty? */
-    lua_saveline(line); /* keep history */
+  HostString line = lua_tostring(L, 1);
+  if (!line.empty())            /* non empty? */
+    lua_saveline(line.c_str()); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */
   assert(lua_gettop(L) == 1);
   return status;
@@ -669,7 +669,8 @@ static void l_print(lua_State* L)
     if (lua_pcall(L, n, 0, 0) != LUA_OK)
     {
       lua_pushvalue(L, -1); /* error message is the argument */
-      l_message(progname, lua_pushfstring(L, "error calling 'print' (%s)"));
+      l_message(progname,
+                lua_pushfstring(L, "error calling 'print' (%s)")->c_str());
     }
   }
 }

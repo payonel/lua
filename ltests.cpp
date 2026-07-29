@@ -98,11 +98,11 @@ static void badexit(const char* fmt, const char* s1, const char* s2)
 
 static int tpanic(lua_State* L)
 {
-  const char* msg = (lua_type(L, -1) == LUA_TSTRING)
-                        ? lua_tostring(L, -1)
-                        : "error object is not a string";
+  HostString msg = (lua_type(L, -1) == LUA_TSTRING)
+                       ? lua_tostring(L, -1)
+                       : HostString("error object is not a string");
   return (badexit("PANIC: unprotected error in call to Lua API (%s)\n",
-                  msg, nullptr),
+                  msg.c_str(), nullptr),
           0); /* do not return to Lua */
 }
 
@@ -156,7 +156,7 @@ static void warnf(void* ud, const char* msg, int tocont)
     else
     {
       badexit("Unhandled warning in store mode: %s\naborting...\n",
-              lua_tostring(L, -1), buff);
+              lua_tostring(L, -1).c_str(), buff);
     }
     lua_lock(L);
     switch (mode)
@@ -1051,18 +1051,33 @@ static int mem_query(lua_State* L)
   else if (lua_isnumber(L, 1))
   {
     unsigned long limit = ((unsigned long)(luaL_checkinteger(L, 1)));
+    global_State* g = G(L);
     if (limit == 0)
-      limit = ULONG_MAX;
-    l_memcontrol.memlimit = limit;
+    {
+      l_memcontrol.memlimit = ULONG_MAX;
+      g->memlimit = 0; /* unlimited */
+    }
+    else
+    {
+      /* mirror the limit into the state's hard limit, expressed as
+         the same HEADROOM over the state's own accounting: string
+         payloads and buffers are host-allocated and policed through
+         luaM_reserve against g->memlimit, not by the test allocator */
+      long headroom = ((long)(limit)) - ((long)(l_memcontrol.total));
+      l_memcontrol.memlimit = limit;
+      g->memlimit = (headroom > 0)
+                        ? ((size_t)(gettotalbytes(g) + headroom))
+                        : 1; /* not 0: everything vetoed, not unlimited */
+    }
     return 0;
   }
   else
   {
-    const char* t = luaL_checkstring(L, 1);
+    HostString t = luaL_checkstring(L, 1);
     int i;
     for (i = LUA_NUMTYPES - 1; i >= 0; i--)
     {
-      if (strcmp(t, ttypename(i)->c_str()) == 0)
+      if (strcmp(t.c_str(), ttypename(i)->c_str()) == 0)
       {
         lua_pushinteger(L, ((lua_Integer)(l_memcontrol.objcount[i])));
         return 1;
@@ -1430,7 +1445,10 @@ static int upvalue(lua_State* L)
   else
   {
     const char* name = lua_setupvalue(L, 1, n);
-    lua_pushstring(L, name);
+    if (name != nullptr)
+      lua_pushstring(L, name);
+    else
+      lua_pushnil(L);
     return 1;
   }
 }
@@ -1472,7 +1490,7 @@ static int doonnewstack(lua_State* L)
 
 static int s2d(lua_State* L)
 {
-  lua_pushnumber(L, ((lua_Number)(*((const double*)(luaL_checkstring(L, 1))))));
+  lua_pushnumber(L, ((lua_Number)(*((const double*)(luaL_checklstring(L, 1, nullptr))))));
   return 1;
 }
 
@@ -1600,9 +1618,10 @@ static int checkpanic(lua_State* L)
   struct Aux b;
   void* ud;
   lua_State* L1;
-  const char* code = luaL_checkstring(L, 1);
+  HostString code = luaL_checkstring(L, 1);
   lua_Alloc f = lua_getallocf(L, &ud);
-  b.paniccode = luaL_optstring(L, 2, "");
+  HostString paniccode = luaL_optstring(L, 2, "");
+  b.paniccode = paniccode.c_str();
   b.L = L;
   L1 = lua_newstate(f, ud, 0); /* create new state */
   if (L1 == nullptr)
@@ -1615,7 +1634,7 @@ static int checkpanic(lua_State* L)
   lua_setfield(L1, LUA_REGISTRYINDEX, "_jmpbuf"); /* store 'Aux' struct */
   if (setjmp(b.jb) == 0)
   {                    /* set jump buffer */
-    runC(L, L1, code); /* run code unprotected */
+    runC(L, L1, code.c_str()); /* run code unprotected */
     lua_pushliteral(L, "no errors");
   }
   else
@@ -1843,8 +1862,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     {
       int sz = getnum_aux(L, L1, &pc);
       const char* msg = getstring_aux(L, buff, &pc);
-      if (*msg == '\0')
-        msg = nullptr; /* to test 'luaL_checkstack' with no message */
+      /* empty msg tests 'luaL_checkstack' with no message */
       luaL_checkstack(L1, sz, msg);
     }
     else if (strcmp("rawcheckstack", inst) == 0)
@@ -1959,7 +1977,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("loadfile", inst) == 0)
     {
-      luaL_loadfilex(L1, luaL_checkstring(L1, getnum_aux(L, L1, &pc)), "t");
+      luaL_loadfilex(L1, luaL_checkstring(L1, getnum_aux(L, L1, &pc)).c_str(), "t");
     }
     else if (strcmp("loadstring", inst) == 0)
     {
@@ -2079,22 +2097,22 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("pushfstringI", inst) == 0)
     {
-      const char* fmt = lua_tostring(L, -2);
-      if (fmtnargs(fmt) > 0)
+      HostString fmt = lua_tostring(L, -2);
+      if (fmtnargs(fmt.c_str()) > 0)
         lua_pushinteger(L1, lua_tointeger(L, -1));
-      lua_pushfstring(L1, fmt);
+      lua_pushfstring(L1, fmt.c_str());
     }
     else if (strcmp("pushfstringS", inst) == 0)
     {
-      const char* fmt = lua_tostring(L, -2);
-      if (fmtnargs(fmt) > 0)
+      HostString fmt = lua_tostring(L, -2);
+      if (fmtnargs(fmt.c_str()) > 0)
         lua_pushstring(L1, lua_tostring(L, -1));
-      lua_pushfstring(L1, fmt);
+      lua_pushfstring(L1, fmt.c_str());
     }
     else if (strcmp("pushfstringP", inst) == 0)
     {
-      const char* fmt = lua_tostring(L, -2);
-      if (fmtnargs(fmt) > 0)
+      HostString fmt = lua_tostring(L, -2);
+      if (fmtnargs(fmt.c_str()) > 0)
       {
         if (lua_islightcfunction(L, -1))
         {
@@ -2106,7 +2124,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
           lua_pushlightuserdata(L1, const_cast<void*>(lua_topointer(L, -1)));
         }
       }
-      lua_pushfstring(L1, fmt);
+      lua_pushfstring(L1, fmt.c_str());
     }
     else if (strcmp("rawget", inst) == 0)
     {
@@ -2288,10 +2306,15 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("tostring", inst) == 0)
     {
-      const char* s = lua_tostring(L1, getindex_aux(L, L1, &pc));
-      const char* s1 = lua_pushstring(L1, s);
-      ((void)(s1)); /* to avoid warnings */
-      assert((s == nullptr && s1 == nullptr) || strcmp(s, s1) == 0);
+      int i = getindex_aux(L, L1, &pc);
+      if (lua_tolstring(L1, i, nullptr) == nullptr) /* not convertible? */
+        lua_pushnil(L1);
+      else
+      {
+        HostString s = lua_tostring(L1, i);
+        lua_pushstring(L1, s);
+        assert(s == lua_tostring(L1, -1)); /* round-trips through the value */
+      }
     }
     else if (strcmp("Ltolstring", inst) == 0)
     {
@@ -2351,7 +2374,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
 static int testC(lua_State* L)
 {
   lua_State* L1;
-  const char* pc;
+  HostString pc;
   if (lua_isuserdata(L, 1))
   {
     L1 = getstate(L);
@@ -2367,12 +2390,13 @@ static int testC(lua_State* L)
     L1 = L;
     pc = luaL_checkstring(L, 1);
   }
-  return runC(L, L1, pc);
+  return runC(L, L1, pc.c_str());
 }
 
 static int Cfunc(lua_State* L)
 {
-  return runC(L, L, lua_tostring(L, lua_upvalueindex(1)));
+  HostString script = lua_tostring(L, lua_upvalueindex(1));
+  return runC(L, L, script.c_str());
 }
 
 static int Cfunck(lua_State* L, int status, lua_KContext ctx)
@@ -2381,7 +2405,8 @@ static int Cfunck(lua_State* L, int status, lua_KContext ctx)
   lua_setglobal(L, "status");
   lua_pushinteger(L, ((lua_Integer)(ctx)));
   lua_setglobal(L, "ctx");
-  return runC(L, L, lua_tostring(L, ((int)(ctx))));
+  HostString script = lua_tostring(L, ((int)(ctx)));
+  return runC(L, L, script.c_str());
 }
 
 static int makeCfunc(lua_State* L)
@@ -2404,16 +2429,15 @@ static int makeCfunc(lua_State* L)
 */
 static void Chook(lua_State* L, lua_Debug* ar)
 {
-  const char* scpt;
   const char* const events[] = {"call", "ret", "line", "count", "tailcall"};
   lua_getfield(L, LUA_REGISTRYINDEX, "C_HOOK");
   lua_pushlightuserdata(L, L);
-  lua_gettable(L, -2);                  /* get C_HOOK[L] (script saved by sethookaux) */
-  scpt = lua_tostring(L, -1);           /* not very religious (string will be popped) */
-  lua_pop(L, 2);                        /* remove C_HOOK and script */
-  lua_pushstring(L, events[ar->event]); /* may be used by script */
-  lua_pushinteger(L, ar->currentline);  /* may be used by script */
-  runC(L, L, scpt);                     /* run script from C_HOOK[L] */
+  lua_gettable(L, -2);                    /* get C_HOOK[L] (script saved by sethookaux) */
+  HostString scpt = lua_tostring(L, -1);  /* (a copy: string will be popped) */
+  lua_pop(L, 2);                          /* remove C_HOOK and script */
+  lua_pushstring(L, events[ar->event]);   /* may be used by script */
+  lua_pushinteger(L, ar->currentline);    /* may be used by script */
+  runC(L, L, scpt.c_str());               /* run script from C_HOOK[L] */
 }
 
 /*
@@ -2446,19 +2470,19 @@ static int sethook(lua_State* L)
     lua_sethook(L, nullptr, 0, 0); /* turn off hooks */
   else
   {
-    const char* scpt = luaL_checkstring(L, 1);
-    const char* smask = luaL_checkstring(L, 2);
+    HostString scpt = luaL_checkstring(L, 1);
+    HostString smask = luaL_checkstring(L, 2);
     int count = ((int)(luaL_optinteger(L, 3, 0)));
     int mask = 0;
-    if (strchr(smask, 'c'))
+    if (smask.find('c') != HostString::npos)
       mask |= LUA_MASKCALL;
-    if (strchr(smask, 'r'))
+    if (smask.find('r') != HostString::npos)
       mask |= LUA_MASKRET;
-    if (strchr(smask, 'l'))
+    if (smask.find('l') != HostString::npos)
       mask |= LUA_MASKLINE;
     if (count > 0)
       mask |= LUA_MASKCOUNT;
-    sethookaux(L, mask, count, scpt);
+    sethookaux(L, mask, count, scpt.c_str());
   }
   return 0;
 }

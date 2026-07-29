@@ -215,14 +215,13 @@ static void opencheck(lua_State* L, const char* fname, const char* mode)
 
 static int io_open(lua_State* L)
 {
-  const char* filename = luaL_checkstring(L, 1);
-  const char* mode = luaL_optstring(L, 2, "r");
+  HostString filename = luaL_checkstring(L, 1);
+  HostString mode = luaL_optstring(L, 2, "r");
   LStream* p = newfile(L);
-  const char* md = mode; /* to traverse/check mode */
-  luaL_argcheck(L, l_checkmode(md), 2, "invalid mode");
+  luaL_argcheck(L, l_checkmode(mode.c_str()), 2, "invalid mode");
   errno = 0;
-  p->f = fopen(filename, mode);
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename) : 1;
+  p->f = fopen(filename.c_str(), mode.c_str()); /* host seam */
+  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename.c_str()) : 1;
 }
 
 /*
@@ -237,14 +236,14 @@ static int io_pclose(lua_State* L)
 
 static int io_popen(lua_State* L)
 {
-  const char* filename = luaL_checkstring(L, 1);
-  const char* mode = luaL_optstring(L, 2, "r");
+  HostString filename = luaL_checkstring(L, 1);
+  HostString mode = luaL_optstring(L, 2, "r");
   LStream* p = newprefile(L);
-  luaL_argcheck(L, l_checkmodep(mode), 2, "invalid mode");
+  luaL_argcheck(L, l_checkmodep(mode.c_str()), 2, "invalid mode");
   errno = 0;
-  p->f = l_popen(L, filename, mode);
+  p->f = l_popen(L, filename.c_str(), mode.c_str()); /* host seam */
   p->closef = &io_pclose;
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename) : 1;
+  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename.c_str()) : 1;
 }
 
 static int io_tmpfile(lua_State* L)
@@ -272,9 +271,11 @@ static int g_iofile(lua_State* L, const char* f, const char* mode)
 {
   if (!lua_isnoneornil(L, 1))
   {
-    const char* filename = lua_tostring(L, 1);
-    if (filename)
-      opencheck(L, filename, mode);
+    if (lua_isstring(L, 1)) /* filename given (may be a number, too) */
+    {
+      HostString filename = lua_tostring(L, 1);
+      opencheck(L, filename.c_str(), mode);
+    }
     else
     {
       tofile(L); /* check that it's a valid file handle */
@@ -351,8 +352,8 @@ static int io_lines(lua_State* L)
   }
   else
   { /* open a new file */
-    const char* filename = luaL_checkstring(L, 1);
-    opencheck(L, filename, "r");
+    HostString filename = luaL_checkstring(L, 1);
+    opencheck(L, filename.c_str(), "r");
     lua_replace(L, 1); /* put file at index 1 */
     toclose = 1;       /* close it after iteration */
   }
@@ -558,7 +559,8 @@ static int g_read(lua_State* L, FILE* f, int first)
       }
       else
       {
-        const char* p = luaL_checkstring(L, n);
+        HostString fmt = luaL_checkstring(L, n);
+        const char* p = fmt.c_str();
         if (*p == '*')
           p++; /* skip optional '*' (for compatibility) */
         switch (*p)

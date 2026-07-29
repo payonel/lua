@@ -13,6 +13,7 @@
 #include "lua.h"
 #include "luaconf.h"
 
+#include "internal_string.h"
 #include "lhack.h"
 
 /* global table */
@@ -42,11 +43,14 @@ LUALIB_API void(luaL_checkversion_)(lua_State* L, lua_Number ver, size_t sz);
    the cross-ABI check is moot for this port */
 LUALIB_API void luaL_checkversion(lua_State* L);
 
-LUALIB_API int(luaL_getmetafield)(lua_State* L, int obj, const char* e);
-LUALIB_API int(luaL_callmeta)(lua_State* L, int obj, const char* e);
+LUALIB_API int(luaL_getmetafield)(lua_State* L, int obj, const HostString& e);
+LUALIB_API int(luaL_callmeta)(lua_State* L, int obj, const HostString& e);
+/* bytes accessor for the __tostring'd value: converts (honoring
+   '__tostring'), PUSHES the result, and returns its payload
+   (borrowed from the pushed value) */
 LUALIB_API const char*(luaL_tolstring) (lua_State* L, int idx, size_t* len);
-LUALIB_API int(luaL_argerror)(lua_State* L, int arg, const char* extramsg);
-LUALIB_API int(luaL_typeerror)(lua_State* L, int arg, const char* tname);
+LUALIB_API int(luaL_argerror)(lua_State* L, int arg, const HostString& extramsg);
+LUALIB_API int(luaL_typeerror)(lua_State* L, int arg, const HostString& tname);
 LUALIB_API const char*(luaL_checklstring) (lua_State* L, int arg,
                                            size_t* l);
 LUALIB_API const char*(luaL_optlstring) (lua_State* L, int arg,
@@ -69,14 +73,14 @@ LUALIB_API lua_Integer(luaL_checkinteger)(lua_State* L, int arg);
 LUALIB_API lua_Integer(luaL_optinteger)(lua_State* L, int arg,
                                         lua_Integer def);
 
-LUALIB_API void(luaL_checkstack)(lua_State* L, int sz, const char* msg);
+LUALIB_API void(luaL_checkstack)(lua_State* L, int sz, const HostString& msg);
 LUALIB_API void(luaL_checktype)(lua_State* L, int arg, int t);
 LUALIB_API void(luaL_checkany)(lua_State* L, int arg);
 
-LUALIB_API int(luaL_newmetatable)(lua_State* L, const char* tname);
-LUALIB_API void(luaL_setmetatable)(lua_State* L, const char* tname);
-LUALIB_API void*(luaL_testudata) (lua_State* L, int ud, const char* tname);
-LUALIB_API void*(luaL_checkudata) (lua_State* L, int ud, const char* tname);
+LUALIB_API int(luaL_newmetatable)(lua_State* L, const HostString& tname);
+LUALIB_API void(luaL_setmetatable)(lua_State* L, const HostString& tname);
+LUALIB_API void*(luaL_testudata) (lua_State* L, int ud, const HostString& tname);
+LUALIB_API void*(luaL_checkudata) (lua_State* L, int ud, const HostString& tname);
 
 LUALIB_API void(luaL_where)(lua_State* L, int lvl);
 LUALIB_API int(luaL_error)(lua_State* L, const char* fmt);
@@ -103,7 +107,7 @@ LUALIB_API int(luaL_loadfilex)(lua_State* L, const char* filename,
 LUALIB_API int luaL_loadfile(lua_State* L, const char* filename);
 
 LUALIB_API int(luaL_loadbufferx)(lua_State* L, const char* buff, size_t sz,
-                                 const char* name, const char* mode);
+                                 const HostString& name, const char* mode);
 LUALIB_API int(luaL_loadstring)(lua_State* L, const char* s);
 
 LUALIB_API lua_State*(luaL_newstate) (void);
@@ -112,19 +116,19 @@ LUALIB_API unsigned(luaL_makeseed)(lua_State* L);
 
 LUALIB_API lua_Integer(luaL_len)(lua_State* L, int idx);
 
-LUALIB_API void(luaL_addgsub)(luaL_Buffer* b, const char* s,
-                              const char* p, const char* r);
-LUALIB_API const char*(luaL_gsub) (lua_State* L, const char* s,
-                                   const char* p, const char* r);
+LUALIB_API void(luaL_addgsub)(luaL_Buffer* b, const HostString& s,
+                              const HostString& p, const HostString& r);
+LUALIB_API const InternalString*(luaL_gsub) (lua_State* L, const HostString& s,
+                                             const HostString& p, const HostString& r);
 
 LUALIB_API void(luaL_setfuncs)(lua_State* L, const luaL_Reg* l, int nup);
 
-LUALIB_API int(luaL_getsubtable)(lua_State* L, int idx, const char* fname);
+LUALIB_API int(luaL_getsubtable)(lua_State* L, int idx, const HostString& fname);
 
 LUALIB_API void(luaL_traceback)(lua_State* L, lua_State* L1,
                                 const char* msg, int level);
 
-LUALIB_API void(luaL_requiref)(lua_State* L, const char* modname,
+LUALIB_API void(luaL_requiref)(lua_State* L, const HostString& modname,
                                lua_CFunction openf, int glb);
 
 /*
@@ -137,24 +141,25 @@ LUALIB_API void(luaL_requiref)(lua_State* L, const char* modname,
 
 
 
-LUALIB_API void luaL_argcheck(lua_State* L, bool cond, int arg, const char* extramsg);
+LUALIB_API void luaL_argcheck(lua_State* L, bool cond, int arg, const HostString& extramsg);
 
-LUALIB_API void luaL_argexpected(lua_State* L, bool cond, int arg, const char* tname);
+LUALIB_API void luaL_argexpected(lua_State* L, bool cond, int arg, const HostString& tname);
 
-LUALIB_API const char* luaL_checkstring(lua_State* L, int arg);
-LUALIB_API const char* luaL_optstring(lua_State* L, int arg, const char* d);
+/* text accessors: HostString COPIES of the argument (see lua_tostring) */
+LUALIB_API HostString luaL_checkstring(lua_State* L, int arg);
+LUALIB_API HostString luaL_optstring(lua_State* L, int arg, const HostString& d);
 
-LUALIB_API const char* luaL_typename(lua_State* L, int idx);
+LUALIB_API HostString luaL_typename(lua_State* L, int idx);
 
 LUALIB_API int luaL_dofile(lua_State* L, const char* filename);
 
 LUALIB_API int luaL_dostring(lua_State* L, const char* str);
 
-LUALIB_API int luaL_getmetatable(lua_State* L, const char* tname);
+LUALIB_API int luaL_getmetatable(lua_State* L, const HostString& tname);
 
 
 
-LUALIB_API int luaL_loadbuffer(lua_State* L, const char* buff, size_t sz, const char* name);
+LUALIB_API int luaL_loadbuffer(lua_State* L, const char* buff, size_t sz, const HostString& name);
 
 /*
 ** Perform arithmetic operations on lua_Integer values with wrap-around
@@ -171,13 +176,25 @@ LUALIB_API void luaL_pushfail(lua_State* L);
 ** =======================================================
 */
 
+/*
+** A string builder over the engine's ByteBuilder, ACCOUNTED: capacity
+** growth reserves bytes with the lua_State first (reserve-before-
+** growth), so script-driven accumulation (io.read, string.rep,
+** table.concat) is subject to the state's memory limit. The
+** destructor releases the reservation on error unwind (errors are
+** C++ exceptions here). 'pushresult' hands the bytes to the result
+** string by adoption — no finish copy.
+*/
 struct luaL_Buffer
 {
-  char* b;     /* buffer address */
-  size_t size; /* buffer size */
-  size_t n;    /* number of characters in buffer */
-  lua_State* L;
-  alignas(std::max_align_t) char init[LUAL_BUFFERSIZE]; /* initial buffer */
+  ByteBuilder bldr;    /* accumulated bytes */
+  size_t reserved = 0; /* capacity charged to L's byte budget */
+  lua_State* L = nullptr;
+
+  ~luaL_Buffer();
+  luaL_Buffer() = default;
+  luaL_Buffer(const luaL_Buffer&) = delete;
+  luaL_Buffer& operator=(const luaL_Buffer&) = delete;
 };
 
 LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf);
@@ -192,7 +209,7 @@ LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s);
 LUALIB_API void(luaL_buffinit)(lua_State* L, luaL_Buffer* B);
 LUALIB_API char*(luaL_prepbuffsize) (luaL_Buffer* B, size_t sz);
 LUALIB_API void(luaL_addlstring)(luaL_Buffer* B, const char* s, size_t l);
-LUALIB_API void(luaL_addstring)(luaL_Buffer* B, const char* s);
+LUALIB_API void(luaL_addstring)(luaL_Buffer* B, const HostString& s);
 LUALIB_API void(luaL_addvalue)(luaL_Buffer* B);
 LUALIB_API void(luaL_pushresult)(luaL_Buffer* B);
 LUALIB_API void(luaL_pushresultsize)(luaL_Buffer* B, size_t sz);

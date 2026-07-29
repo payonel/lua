@@ -106,11 +106,12 @@ constexpr int LUA_TMPNAMBUFSIZE = 32;
 
 static int os_execute(lua_State* L)
 {
-  const char* cmd = luaL_optstring(L, 1, nullptr);
+  int nocmd = lua_isnoneornil(L, 1);
+  HostString cmd = nocmd ? HostString() : HostString(luaL_checkstring(L, 1));
   int stat;
   errno = 0;
-  stat = l_system(cmd);
-  if (cmd != nullptr)
+  stat = l_system(nocmd ? nullptr : cmd.c_str()); /* host seam */
+  if (!nocmd)
     return luaL_execresult(L, stat);
   else
   {
@@ -121,17 +122,17 @@ static int os_execute(lua_State* L)
 
 static int os_remove(lua_State* L)
 {
-  const char* filename = luaL_checkstring(L, 1);
+  HostString filename = luaL_checkstring(L, 1);
   errno = 0;
-  return luaL_fileresult(L, remove(filename) == 0, filename);
+  return luaL_fileresult(L, remove(filename.c_str()) == 0, filename.c_str());
 }
 
 static int os_rename(lua_State* L)
 {
-  const char* fromname = luaL_checkstring(L, 1);
-  const char* toname = luaL_checkstring(L, 2);
+  HostString fromname = luaL_checkstring(L, 1);
+  HostString toname = luaL_checkstring(L, 2);
   errno = 0;
-  return luaL_fileresult(L, rename(fromname, toname) == 0, nullptr);
+  return luaL_fileresult(L, rename(fromname.c_str(), toname.c_str()) == 0, nullptr);
 }
 
 static int os_tmpname(lua_State* L)
@@ -147,7 +148,11 @@ static int os_tmpname(lua_State* L)
 
 static int os_getenv(lua_State* L)
 {
-  lua_pushstring(L, getenv(luaL_checkstring(L, 1))); /* if nullptr push nil */
+  const char* v = getenv(luaL_checkstring(L, 1).c_str()); /* host seam */
+  if (v != nullptr)
+    lua_pushstring(L, v);
+  else
+    lua_pushnil(L);
   return 1;
 }
 
@@ -268,8 +273,9 @@ static const char* checkoption(lua_State* L, const char* conv,
     }
   }
   lua_pushstring(L, conv);
-  luaL_argerror(L, 1,
-                lua_pushfstring(L, "invalid conversion specifier '%%%s'"));
+  const InternalString* msg =
+      lua_pushfstring(L, "invalid conversion specifier '%%%s'");
+  luaL_argerror(L, 1, HostString(msg->bytes(), msg->size()));
   return conv; /* to avoid warnings */
 }
 
@@ -374,9 +380,14 @@ static int os_setlocale(lua_State* L)
                             LC_NUMERIC, LC_TIME};
   static const char* const catnames[] = {"all", "collate", "ctype", "monetary",
                                          "numeric", "time", nullptr};
-  const char* l = luaL_optstring(L, 1, nullptr);
+  int nol = lua_isnoneornil(L, 1); /* absent = query current locale */
+  HostString l = nol ? HostString() : HostString(luaL_checkstring(L, 1));
   int op = luaL_checkoption(L, 2, "all", catnames);
-  lua_pushstring(L, setlocale(cat[op], l));
+  const char* res = setlocale(cat[op], nol ? nullptr : l.c_str());
+  if (res != nullptr)
+    lua_pushstring(L, res);
+  else
+    lua_pushnil(L);
   return 1;
 }
 

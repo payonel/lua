@@ -100,6 +100,17 @@ typedef LUA_KCONTEXT lua_KContext;
 typedef int (*lua_CFunction)(lua_State* L);
 
 /*
+** HostString — the host platform's text type (see internal_string.h).
+** This is the TEXT half of the public API: string parameters are
+** taken as const HostString& and converted to engine strings exactly
+** at the boundary; string results are returned as HostString BY VALUE
+** (a copy — never a reference into engine memory). The BYTES half
+** (lua_pushlstring/lua_tolstring) carries binary payloads losslessly.
+** In the Java port HostString is java.lang.String.
+*/
+using HostString = std::string;
+
+/*
 ** Type for continuation functions
 */
 typedef int (*lua_KFunction)(lua_State* L, int status, lua_KContext ctx);
@@ -179,11 +190,19 @@ LUA_API int(lua_islightcfunction)(lua_State* L, int idx);
 LUA_API int(lua_isinteger)(lua_State* L, int idx);
 LUA_API int(lua_isuserdata)(lua_State* L, int idx);
 LUA_API int(lua_type)(lua_State* L, int idx);
-LUA_API const char*(lua_typename) (lua_State* L, int tp);
+LUA_API HostString(lua_typename) (lua_State* L, int tp);
 
 LUA_API lua_Number(lua_tonumberx)(lua_State* L, int idx, int* isnum);
 LUA_API lua_Integer(lua_tointegerx)(lua_State* L, int idx, int* isnum);
 LUA_API int(lua_toboolean)(lua_State* L, int idx);
+
+/*
+** Raw-bytes accessor (the BYTES half of the API, paired with
+** lua_pushlstring): the value's byte payload and length, numbers
+** coerced in place. Lossless for any lua string (embedded NULs,
+** invalid UTF-8). Borrowed pointer: valid while the value stays on
+** the stack. (Java: byte[] out, defensive copy.)
+*/
 LUA_API const char*(lua_tolstring) (lua_State* L, int idx, size_t* len);
 
 /*
@@ -240,9 +259,11 @@ LUA_API int(lua_compare)(lua_State* L, int idx1, int idx2, int op);
 LUA_API void(lua_pushnil)(lua_State* L);
 LUA_API void(lua_pushnumber)(lua_State* L, lua_Number n);
 LUA_API void(lua_pushinteger)(lua_State* L, lua_Integer n);
+/* bytes push (deep copy; pairs with lua_tolstring) */
 LUA_API const char*(lua_pushlstring) (lua_State* L, const char* s, size_t len);
-LUA_API const char*(lua_pushstring) (lua_State* L, const char* s);
-LUA_API const char*(lua_pushfstring) (lua_State* L, const char* fmt);
+/* text push: HostString converted at the boundary (deep copy) */
+LUA_API void(lua_pushstring) (lua_State* L, const HostString& s);
+LUA_API const InternalString*(lua_pushfstring) (lua_State* L, const char* fmt);
 LUA_API void(lua_pushcclosure)(lua_State* L, lua_CFunction fn, int n);
 LUA_API void(lua_pushboolean)(lua_State* L, int b);
 LUA_API void(lua_pushlightuserdata)(lua_State* L, void* p);
@@ -251,9 +272,9 @@ LUA_API int(lua_pushthread)(lua_State* L);
 /*
 ** get functions (Lua -> stack)
 */
-LUA_API int(lua_getglobal)(lua_State* L, const char* name);
+LUA_API int(lua_getglobal)(lua_State* L, const HostString& name);
 LUA_API int(lua_gettable)(lua_State* L, int idx);
-LUA_API int(lua_getfield)(lua_State* L, int idx, const char* k);
+LUA_API int(lua_getfield)(lua_State* L, int idx, const HostString& k);
 LUA_API int(lua_geti)(lua_State* L, int idx, lua_Integer n);
 LUA_API int(lua_rawget)(lua_State* L, int idx);
 LUA_API int(lua_rawgeti)(lua_State* L, int idx, lua_Integer n);
@@ -267,9 +288,9 @@ LUA_API int(lua_getiuservalue)(lua_State* L, int idx, int n);
 /*
 ** set functions (stack -> Lua)
 */
-LUA_API void(lua_setglobal)(lua_State* L, const char* name);
+LUA_API void(lua_setglobal)(lua_State* L, const HostString& name);
 LUA_API void(lua_settable)(lua_State* L, int idx);
-LUA_API void(lua_setfield)(lua_State* L, int idx, const char* k);
+LUA_API void(lua_setfield)(lua_State* L, int idx, const HostString& k);
 LUA_API void(lua_seti)(lua_State* L, int idx, lua_Integer n);
 LUA_API void(lua_rawset)(lua_State* L, int idx);
 LUA_API void(lua_rawseti)(lua_State* L, int idx, lua_Integer n);
@@ -289,7 +310,7 @@ LUA_API int(lua_pcallk)(lua_State* L, int nargs, int nresults, int errfunc,
 LUA_API int lua_pcall(lua_State* L, int nargs, int nresults, int errfunc);
 
 LUA_API int(lua_load)(lua_State* L, lua_Reader reader, void* dt,
-                      const char* chunkname, const char* mode);
+                      const HostString& chunkname, const char* mode);
 
 LUA_API int(lua_dump)(lua_State* L, lua_Writer writer, void* data, int strip);
 
@@ -309,7 +330,25 @@ LUA_API int lua_yield(lua_State* L, int nresults);
 ** Warning-related functions
 */
 LUA_API void(lua_setwarnf)(lua_State* L, lua_WarnFunction f, void* ud);
-LUA_API void(lua_warning)(lua_State* L, const char* msg, int tocont);
+LUA_API void(lua_warning)(lua_State* L, const HostString& msg, int tocont);
+
+/*
+** Byte-budget reservation (the public face of the engine's
+** reserve-before-growth accounting): host-side buffers whose growth
+** is script-driven reserve capacity BEFORE allocating it, so the
+** state's memory limit can veto (returns 0). Released bytes must
+** have been reserved. (Java: same seam on the VM object.)
+*/
+LUA_API int(lua_reservebytes)(lua_State* L, size_t sz);
+LUA_API void(lua_releasebytes)(lua_State* L, size_t sz);
+
+/*
+** Push by ADOPTION of an engine-owned byte buffer (zero copy; the
+** complement of the deep-copying pushes for buffers built inside the
+** engine/library layer, e.g. luaL_Buffer results). Never external
+** bytes — those go through the copying pushes.
+*/
+LUA_API void(lua_pushistring)(lua_State* L, InternalString&& s);
 
 /*
 ** garbage-collection options
@@ -386,7 +425,7 @@ LUA_API void lua_pop(lua_State* L, int n);
 
 LUA_API void lua_newtable(lua_State* L);
 
-LUA_API void lua_register(lua_State* L, const char* name, lua_CFunction f);
+LUA_API void lua_register(lua_State* L, const HostString& name, lua_CFunction f);
 
 LUA_API void lua_pushcfunction(lua_State* L, lua_CFunction f);
 
@@ -399,11 +438,14 @@ LUA_API int lua_isthread(lua_State* L, int idx);
 LUA_API int lua_isnone(lua_State* L, int idx);
 LUA_API int lua_isnoneornil(lua_State* L, int idx);
 
-LUA_API const char* lua_pushliteral(lua_State* L, const char* s);
+LUA_API void lua_pushliteral(lua_State* L, const HostString& s);
 
 LUA_API void lua_pushglobaltable(lua_State* L);
 
-LUA_API const char* lua_tostring(lua_State* L, int idx);
+/* text accessor: the value as a HostString COPY (numbers coerced in
+** place, as in lua_tolstring). Binary payloads round-trip unchecked
+** for now (conversion strictness deferred). */
+LUA_API HostString lua_tostring(lua_State* L, int idx);
 
 LUA_API void lua_insert(lua_State* L, int idx);
 
@@ -451,7 +493,14 @@ constexpr int LUA_MASKLINE = (1 << LUA_HOOKLINE);
 constexpr int LUA_MASKCOUNT = (1 << LUA_HOOKCOUNT);
 
 LUA_API int(lua_getstack)(lua_State* L, int level, lua_Debug* ar);
-LUA_API int(lua_getinfo)(lua_State* L, const char* what, lua_Debug* ar);
+LUA_API int(lua_getinfo)(lua_State* L, const HostString& what, lua_Debug* ar);
+/*
+** Local/upvalue names: TRANSITIONAL borrowed char* — nullptr means no
+** such local/upvalue (the return doubles as the success flag; note ""
+** is a genuine name for C-closure upvalues, so empty cannot mean
+** absent). Final shape decided in the raw-char* review (Java: String
+** or null).
+*/
 LUA_API const char*(lua_getlocal) (lua_State* L, const lua_Debug* ar, int n);
 LUA_API const char*(lua_setlocal) (lua_State* L, const lua_Debug* ar, int n);
 LUA_API const char*(lua_getupvalue) (lua_State* L, int funcindex, int n);
@@ -469,11 +518,10 @@ LUA_API int(lua_gethookcount)(lua_State* L);
 struct lua_Debug
 {
   int event;
-  const char* name;           /* (n) */
-  const char* namewhat;       /* (n) 'global', 'local', 'field', 'method' */
-  const char* what;           /* (S) 'Lua', 'C', 'main', 'tail' */
-  const char* source;         /* (S) */
-  size_t srclen;              /* (S) */
+  HostString name;            /* (n) empty = no name available */
+  HostString namewhat;        /* (n) 'global', 'local', 'field', 'method'; empty = no info */
+  HostString what;            /* (S) 'Lua', 'C', 'main', 'tail' */
+  HostString source;          /* (S) */
   int currentline;            /* (l) */
   int linedefined;            /* (S) */
   int lastlinedefined;        /* (S) */
@@ -484,7 +532,7 @@ struct lua_Debug
   char istailcall;            /* (t) */
   int ftransfer;              /* (r) index of first value transferred */
   int ntransfer;              /* (r) number of transferred values */
-  char short_src[LUA_IDSIZE]; /* (S) */
+  HostString short_src;       /* (S) */
   /* private part */
   struct CallInfo* i_ci; /* active function */
 };
