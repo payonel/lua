@@ -9,6 +9,7 @@
 #include <string>
 
 #include "llimits.h"
+#include "internal_string.h"
 #include "lua.h"
 
 /*
@@ -222,16 +223,16 @@ typedef struct TString : GCObject
 {
   lu_byte extra;       /* reserved words for short strings; "has hash" for longs */
   unsigned int hash;   /* cached hash value */
-  std::string content; /* string data */
+  InternalString data; /* the byte payload (see internal_string.h) */
 } TString;
 
 static l_forceinline const char* getstr(const TString* ts)
 {
-  return ts->content.c_str();
+  return ts->data.c_str();
 }
 static l_forceinline size_t tsslen(const TString* ts)
 {
-  return ts->content.size();
+  return ts->data.size();
 }
 
 /* }================================================================== */

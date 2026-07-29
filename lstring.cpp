@@ -23,19 +23,20 @@
 */
 int luaS_eqstr(TString* a, TString* b)
 {
-  return (a == b) || (a->content == b->content);
+  return (a == b) || (a->data == b->data);
 }
 
 static size_t luaS_hash(const char* str, size_t l)
 {
-  unsigned int h = 0x5bd1e995 ^ ((unsigned int)(l));
-  for (; l > 0; l--)
-    h ^= ((h << 5) + (h >> 2) + ((lu_byte)(str[l - 1])));
-  return h;
+  return InternalString::hashBytes(str, l);
 }
 
 /*
-** Create a new TString with placement-new for std::string
+** Create a new TString. The byte payload is an InternalString,
+** placement-constructed into the manually-managed TString (deep copy
+** — the caller's pointer is never retained). The luaM_reserve seam
+** counts the payload capacity into GC debt (accounting status quo;
+** released in freeobj).
 */
 static TString* createstrobj(lua_State* L, const char* str, size_t l,
                              size_t h)
@@ -45,8 +46,8 @@ static TString* createstrobj(lua_State* L, const char* str, size_t l,
   TString* ts = static_cast<TString*>(o);
   ts->hash = ((unsigned int)(h));
   ts->extra = 0;
-  new (&ts->content) std::string(str, l);
-  luaM_reserve(L, ts->content.capacity());
+  new (&ts->data) InternalString(str, l);
+  luaM_reserve(L, ts->data.capacity());
   return ts;
 }
 
@@ -109,7 +110,7 @@ TString* luaS_createstr(lua_State* L, const char* str, size_t l)
     }
     /* create new short string and intern it */
     TString* ts = createstrobj(L, str, l, h);
-    g->strt.emplace(global_State::InternKey{std::string_view(ts->content), h}, ts);
+    g->strt.emplace(global_State::InternKey{ts->data.view(), h}, ts);
     return ts;
   }
   /* long string: no interning */
@@ -121,12 +122,11 @@ TString* luaS_createstr(lua_State* L, const char* str, size_t l)
 */
 void luaS_remove(lua_State* L, TString* ts)
 {
-  if (ts->content.size() <= LUAI_MAXSHORTLEN)
+  if (ts->data.size() <= LUAI_MAXSHORTLEN)
   {
     global_State* g = G(L);
-    std::string_view sv(ts->content);
     size_t h = ts->hash;
-    g->strt.erase(global_State::InternKey{sv, h});
+    g->strt.erase(global_State::InternKey{ts->data.view(), h});
   }
 }
 

@@ -292,7 +292,7 @@ static void funcinfo(lua_Debug* ar, Closure* cl)
     const Proto* p = static_cast<LClosure*>(cl)->p;
     if (p->source)
     {
-      ar->source = ((void)((ar->srclen) = (p->source)->content.size()), (p->source)->content.c_str());
+      ar->source = ((void)((ar->srclen) = (p->source)->data.size()), (p->source)->data.c_str());
     }
     else
     {
@@ -933,7 +933,7 @@ const char* luaG_addinfo(lua_State* L, const char* msg, TString* src,
   {
     char buff[LUA_IDSIZE];
     size_t idlen;
-    const char* id = ((void)((idlen) = (src)->content.size()), (src)->content.c_str());
+    const char* id = ((void)((idlen) = (src)->data.size()), (src)->data.c_str());
     luaO_chunkid(buff, id, idlen);
     return luaO_pushfstring(L, "%s:%d: %s", FmtArgs().str(buff).num(line).str(msg));
   }

@@ -492,8 +492,8 @@ LUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len)
   TString* s = tsvalue(&o);
   if (len != nullptr)
   {
-    *len = s->content.size();
-    return s->content.c_str();
+    *len = s->data.size();
+    return s->data.c_str();
   }
   else
     return getstr(s);

@@ -155,7 +155,7 @@ static void dumpString(DumpState* D, TString* ts)
     {                    /* must write and save the string */
       TValue key, value; /* to save the string in the hash */
       size_t size;
-      const char* s = ((void)((size) = (ts)->content.size()), (ts)->content.c_str());
+      const char* s = ((void)((size) = (ts)->data.size()), (ts)->data.c_str());
       dumpSize(D, size + 1);
       dumpBlock(D, s, (size + 1) * sizeof((s)[0]));            /* include ending '\0' */
       D->nstr++;                             /* one more saved string */

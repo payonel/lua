@@ -84,7 +84,7 @@ static int l_strton(const TValue* obj, TValue* result)
     assert((obj->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = tsvalue(obj);
     size_t stlen;
-    const char* s = ((void)((stlen) = (st)->content.size()), (st)->content.c_str());
+    const char* s = ((void)((stlen) = (st)->data.size()), (st)->data.c_str());
     return (luaO_str2num(s, result) == stlen + 1);
   }
 }
@@ -432,9 +432,9 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
 static int l_strcmp(const TString* ts1, const TString* ts2)
 {
   size_t rl1; /* real length */
-  const char* s1 = ((void)((rl1) = (ts1)->content.size()), (ts1)->content.c_str());
+  const char* s1 = ((void)((rl1) = (ts1)->data.size()), (ts1)->data.c_str());
   size_t rl2;
-  const char* s2 = ((void)((rl2) = (ts2)->content.size()), (ts2)->content.c_str());
+  const char* s2 = ((void)((rl2) = (ts2)->data.size()), (ts2)->data.c_str());
   for (;;)
   { /* for each segment */
     int temp = l_strcoll(s1, s2);
@@ -837,7 +837,7 @@ static void copy2buff(lua_State* L, StkId top, int n, char* buff)
     assert((slottag(L, v) & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = slottsval(L, v);
     size_t l; /* length of string being copied */
-    const char* s = ((void)((l) = (st)->content.size()), (st)->content.c_str());
+    const char* s = ((void)((l) = (st)->data.size()), (st)->data.c_str());
     memcpy(buff + tl, s, l * sizeof(char));
     tl += l;
   } while (--n > 0);
