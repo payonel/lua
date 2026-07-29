@@ -779,6 +779,5 @@ static l_forceinline const TValue* fasttm(lua_State* l, Table* mt, TMS e)
 LUAI_FUNC void luaE_checkcstack(lua_State* L);
 LUAI_FUNC void luaE_incCstack(lua_State* L);
 LUAI_FUNC void luaE_warning(lua_State* L, const char* msg, int tocont);
-LUAI_FUNC void luaE_warnerror(lua_State* L, const char* where);
 LUAI_FUNC void luaE_warnerror(lua_State* L, const InternalString* where);
 LUAI_FUNC TStatus luaE_resetthread(lua_State* L, TStatus status);

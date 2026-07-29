@@ -20,13 +20,13 @@
 #include "ltm.h"
 #include "lvm.h"
 
-static const char udatatypename[] = "userdata";
 
-LUAI_DDEF const char* const luaT_typenames_[LUA_TOTALTYPES] = {
-    "no value",
-    "nil", "boolean", udatatypename, "number",
-    "string", "table", "function", udatatypename, "thread",
-    "upvalue", "proto" /* these last cases are used for tests only */
+LUAI_DDEF const InternalString* const luaT_typenames_[LUA_TOTALTYPES] = {
+    lit<"no value">(),
+    lit<"nil">(), lit<"boolean">(), lit<"userdata">(), lit<"number">(),
+    lit<"string">(), lit<"table">(), lit<"function">(), lit<"userdata">(),
+    lit<"thread">(),
+    lit<"upvalue">(), lit<"proto">() /* these last cases are used for tests only */
 };
 
 void luaT_init(lua_State* L)
@@ -93,7 +93,7 @@ const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event)
 ** Return the name of the type of an object. For tables and userdata
 ** with metatable, use their '__name' metafield, if present.
 */
-const char* luaT_objtypename(lua_State* L, const TValue* o)
+const InternalString* luaT_objtypename(lua_State* L, const TValue* o)
 {
   Table* mt;
   if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != nullptr) ||
@@ -102,7 +102,7 @@ const char* luaT_objtypename(lua_State* L, const TValue* o)
     const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, lit<"__name">()));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
     {
-      return getstr(tsvalue(name)); /* use it as type name */
+      return &tsvalue(name)->data; /* use it as type name */
     }
   }
   return ttypename((o->tt_ & NOVARIANT_MASK)); /* else use standard type name */

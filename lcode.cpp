@@ -39,7 +39,7 @@ static int codesJ(FuncState* fs, OpCode o, int sj, int k);
 l_noret luaK_semerror(LexState* ls, const InternalString* fmt,
                       const FmtArgs& args)
 {
-  const char* msg = luaO_pushvfstring(ls->L, fmt, args);
+  const InternalString* msg = luaO_pushvfstring(ls->L, fmt, args);
   if (msg == nullptr)
     luaD_throw(ls->L, LUA_ERRMEM);
   ls->t.token = 0;               /* remove "near <token>" from final message */
@@ -48,18 +48,6 @@ l_noret luaK_semerror(LexState* ls, const InternalString* fmt,
 }
 
 l_noret luaK_semerror(LexState* ls, const InternalString* fmt)
-{
-  luaK_semerror(ls, fmt, FmtArgs());
-}
-
-/* TRANSITIONAL char* forms: deep-copy fmt at the seam */
-l_noret luaK_semerror(LexState* ls, const char* fmt, const FmtArgs& args)
-{
-  InternalString f(fmt, strlen(fmt));
-  luaK_semerror(ls, &f, args);
-}
-
-l_noret luaK_semerror(LexState* ls, const char* fmt)
 {
   luaK_semerror(ls, fmt, FmtArgs());
 }

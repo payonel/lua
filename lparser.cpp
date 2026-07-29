@@ -72,10 +72,10 @@ static l_noret error_expected(LexState* ls, int token)
 static l_noret errorlimit(FuncState* fs, int limit, const char* what)
 {
   lua_State* L = fs->ls->L;
-  const char* msg;
+  const InternalString* msg;
   int line = fs->f->linedefined;
-  const char* where = (line == 0)
-                          ? "main function"
+  const InternalString* where = (line == 0)
+                          ? lit<"main function">()
                           : luaO_pushfstring(L, lit<"function at line %d">(), FmtArgs().num(line));
   msg = luaO_pushfstring(L, lit<"too many %s (limit is %d) in %s">(),
                          FmtArgs().str(what).num(limit).str(where));
@@ -120,7 +120,7 @@ static void checknext(LexState* ls, int c)
   luaX_next(ls);
 }
 
-static inline void check_condition(LexState* ls, int c, const char* msg)
+static inline void check_condition(LexState* ls, int c, const InternalString* msg)
 {
   if (!c)
     luaX_syntaxerror(ls, msg);
@@ -1402,7 +1402,7 @@ static void simpleexp(LexState* ls, expdesc* v)
   { /* vararg */
     FuncState* fs = ls->fs;
     check_condition(ls, isvararg(fs->f),
-                    "cannot use '...' outside a vararg function");
+                    lit<"cannot use '...' outside a vararg function">());
     init_exp(v, VVARARG, luaK_codeABC(fs, OP_VARARG, 0, fs->f->numparams, 1));
     break;
   }
@@ -1668,7 +1668,7 @@ static void storevartop(FuncState* fs, expdesc* var)
 static void restassign(LexState* ls, struct LHS_assign* lh, int nvars)
 {
   expdesc e;
-  check_condition(ls, vkisvar(lh->v.k), "syntax error");
+  check_condition(ls, vkisvar(lh->v.k), lit<"syntax error">());
   check_readonly(ls, &lh->v);
   if (testnext(ls, ','))
   { /* restassign -> ',' suffixedexp restassign */
@@ -2218,7 +2218,7 @@ static void exprstat(LexState* ls)
   else
   { /* stat -> func */
     Instruction* inst;
-    check_condition(ls, v.v.k == VCALL, "syntax error");
+    check_condition(ls, v.v.k == VCALL, lit<"syntax error">());
     inst = &((fs)->f->code[(&v.v)->info]);
     ((*inst) = (((*inst) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(1)) << POS_C) & MASK1(SIZE_C, POS_C)))); /* call statement uses no results */
   }

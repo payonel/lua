@@ -363,7 +363,7 @@ static int testobjref1(global_State* g, GCObject* f, GCObject* t)
 static void printobj(global_State* g, GCObject* o)
 {
   printf("||%s(%p)-%c%c(%02X)||",
-         ttypename(((o->tt) & NOVARIANT_MASK)), (void*) o,
+         ttypename(((o->tt) & NOVARIANT_MASK))->c_str(), (void*) o,
          isdead(g, o) ? 'd' : isblack(o) ? 'b'
                           : iswhite(o)   ? 'w'
                                          : 'g',
@@ -1062,7 +1062,7 @@ static int mem_query(lua_State* L)
     int i;
     for (i = LUA_NUMTYPES - 1; i >= 0; i--)
     {
-      if (strcmp(t, ttypename(i)) == 0)
+      if (strcmp(t, ttypename(i)->c_str()) == 0)
       {
         lua_pushinteger(L, ((lua_Integer)(l_memcontrol.objcount[i])));
         return 1;

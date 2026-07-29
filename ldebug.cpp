@@ -789,11 +789,11 @@ static const char* funcnamefromcall(lua_State* L, CallInfo* ci,
 
 /* }====================================================== */
 
-static const char* formatvarinfo(lua_State* L, const char* kind,
-                                 const char* name)
+static const InternalString* formatvarinfo(lua_State* L, const char* kind,
+                                           const char* name)
 {
   if (kind == nullptr)
-    return ""; /* no information */
+    return lit<"">(); /* no information */
   else
     return luaO_pushfstring(L, lit<" (%s '%s')">(), FmtArgs().str(kind).str(name));
 }
@@ -805,7 +805,7 @@ static const char* formatvarinfo(lua_State* L, const char* kind,
 ** origin drives attribution directly; the pointer-identity fallback
 ** below it is transitional (callers not yet threading origins).
 */
-static const char* varinfo(lua_State* L, StkId src)
+static const InternalString* varinfo(lua_State* L, StkId src)
 {
   CallInfo* ci = L->ci;
   const char* name = nullptr; /* to avoid warnings */
@@ -833,9 +833,9 @@ static const char* varinfo(lua_State* L, StkId src)
 ** Raise a type error
 */
 static l_noret typeerror(lua_State* L, const TValue* o,
-                         const InternalString* op, const char* extra)
+                         const InternalString* op, const InternalString* extra)
 {
-  const char* t = luaT_objtypename(L, o);
+  const InternalString* t = luaT_objtypename(L, o);
   luaG_runerror(L, lit<"attempt to %s a %s value%s">(),
                 FmtArgs().str(op).str(t).str(extra));
 }
@@ -850,13 +850,6 @@ l_noret luaG_typeerror(lua_State* L, const TValue* o,
   typeerror(L, o, op, varinfo(L, src));
 }
 
-/* TRANSITIONAL char* form: deep-copies 'op' at the seam */
-l_noret luaG_typeerror(lua_State* L, const TValue* o, const char* op, StkId src)
-{
-  InternalString ops(op, strlen(op));
-  typeerror(L, o, &ops, varinfo(L, src));
-}
-
 /*
 ** Raise an error for calling a non-callable object. Try to find a name
 ** for the object based on how it was called ('funcnamefromcall'); if it
@@ -867,7 +860,7 @@ l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
   CallInfo* ci = L->ci;
   const char* name = nullptr; /* to avoid warnings */
   const char* kind = funcnamefromcall(L, ci, &name);
-  const char* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, src);
+  const InternalString* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, src);
   typeerror(L, o, lit<"call">(), extra);
 }
 
@@ -875,13 +868,6 @@ l_noret luaG_forerror(lua_State* L, const TValue* o, const InternalString* what)
 {
   luaG_runerror(L, lit<"bad 'for' %s (number expected, got %s)">(),
                 FmtArgs().str(what).str(luaT_objtypename(L, o)));
-}
-
-/* TRANSITIONAL char* form: deep-copies 'what' at the seam */
-l_noret luaG_forerror(lua_State* L, const TValue* o, const char* what)
-{
-  InternalString ws(what, strlen(what));
-  luaG_forerror(L, o, &ws);
 }
 
 l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2,
@@ -907,15 +893,6 @@ l_noret luaG_opinterror(lua_State* L, const TValue* p1,
   luaG_typeerror(L, p2, msg, src2);
 }
 
-/* TRANSITIONAL char* form: deep-copies 'msg' at the seam */
-l_noret luaG_opinterror(lua_State* L, const TValue* p1,
-                        const TValue* p2, const char* msg,
-                        StkId src1, StkId src2)
-{
-  InternalString ms(msg, strlen(msg));
-  luaG_opinterror(L, p1, p2, &ms, src1, src2);
-}
-
 /*
 ** Error when both values are convertible to numbers, but not to integers
 */
@@ -932,9 +909,9 @@ l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2,
 
 l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
 {
-  const char* t1 = luaT_objtypename(L, p1);
-  const char* t2 = luaT_objtypename(L, p2);
-  if (strcmp(t1, t2) == 0)
+  const InternalString* t1 = luaT_objtypename(L, p1);
+  const InternalString* t2 = luaT_objtypename(L, p2);
+  if (*t1 == *t2)
     luaG_runerror(L, lit<"attempt to compare two %s values">(), FmtArgs().str(t1));
   else
     luaG_runerror(L, lit<"attempt to compare %s with %s">(), FmtArgs().str(t1).str(t2));
@@ -949,8 +926,8 @@ l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
 }
 
 /* add src:line information to 'msg' */
-const char* luaG_addinfo(lua_State* L, const char* msg, TString* src,
-                         int line)
+const InternalString* luaG_addinfo(lua_State* L, const InternalString* msg,
+                                   TString* src, int line)
 {
   if (src == nullptr) /* no debug information? */
     return luaO_pushfstring(L, lit<"?:?: %s">(), FmtArgs().str(msg));
@@ -987,7 +964,7 @@ l_noret luaG_runerror(lua_State* L, const InternalString* fmt,
                       const FmtArgs& args)
 {
   CallInfo* ci = L->ci;
-  const char* msg;
+  const InternalString* msg;
   luaC_checkGC(L); /* error message uses memory */
   msg = luaO_pushvfstring(L, fmt, args);
   if (msg == nullptr)
@@ -1003,18 +980,6 @@ l_noret luaG_runerror(lua_State* L, const InternalString* fmt,
 }
 
 l_noret luaG_runerror(lua_State* L, const InternalString* fmt)
-{
-  luaG_runerror(L, fmt, FmtArgs());
-}
-
-/* TRANSITIONAL char* forms: deep-copy fmt at the seam */
-l_noret luaG_runerror(lua_State* L, const char* fmt, const FmtArgs& args)
-{
-  InternalString f(fmt, strlen(fmt));
-  luaG_runerror(L, &f, args);
-}
-
-l_noret luaG_runerror(lua_State* L, const char* fmt)
 {
   luaG_runerror(L, fmt, FmtArgs());
 }

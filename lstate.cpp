@@ -428,7 +428,7 @@ void luaE_warning(lua_State* L, const char* msg, int tocont)
 /*
 ** Generate a warning from an error message
 */
-void luaE_warnerror(lua_State* L, const char* where)
+void luaE_warnerror(lua_State* L, const InternalString* where)
 {
   StkId errobj = L->top - 1; /* error object */
   const char* msg;
@@ -440,19 +440,8 @@ void luaE_warnerror(lua_State* L, const char* where)
     msg = "error object is not a string";
   /* produce warning "error in %s (%s)" (where, msg) */
   luaE_warning(L, "error in ", 1);
-  luaE_warning(L, where, 1);
+  luaE_warning(L, where->c_str(), 1); /* warning fn is a host callback (char*) */
   luaE_warning(L, " (", 1);
   luaE_warning(L, msg, 1);
   luaE_warning(L, ")", 0);
-}
-
-/*
-** InternalString form (wrapped literal sites). c_str() is the
-** sanctioned transitional bridge into 'luaE_warning', whose char*
-** signature survives until the host-callback refactor (the warning
-** function is a host callback).
-*/
-void luaE_warnerror(lua_State* L, const InternalString* where)
-{
-  luaE_warnerror(L, where->c_str());
 }

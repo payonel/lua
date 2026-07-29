@@ -326,7 +326,7 @@ LUA_API const char* lua_typename(lua_State* L, int t)
 {
   (void) L; /* public API signature; 'L' is not needed here */
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");
-  return ttypename(t);
+  return ttypename(t)->c_str(); /* transitional C API */
 }
 
 LUA_API int lua_iscfunction(lua_State* L, int idx)
@@ -754,9 +754,10 @@ LUA_API const char* lua_pushfstring(lua_State* L, const char* fmt)
       break;
     }
   }
-  ret = luaO_pushvfstring(L, fmt, args);
-  if (ret == nullptr)
+  const InternalString* is = luaO_pushvfstring(L, fmt, args);
+  if (is == nullptr)
     luaD_throw(L, LUA_ERRMEM);
+  ret = is->c_str(); /* transitional: C API returns char* */
   if (n > 0)
   { /* move result down, removing its arguments */
     copyslot(L, L->top - 1 - n, L->top - 1);

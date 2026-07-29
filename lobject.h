@@ -856,17 +856,20 @@ LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
 ** deep-copy fmt into an InternalString at the seam (no external
 ** pointer is retained) and exist for the staging C API layer.
 */
-LUAI_FUNC const char* luaO_pushvfstring(lua_State* L,
-                                        const InternalString* fmt,
-                                        const FmtArgs& args);
-LUAI_FUNC const char* luaO_pushfstring(lua_State* L,
-                                       const InternalString* fmt,
-                                       const FmtArgs& args);
-LUAI_FUNC const char* luaO_pushfstring(lua_State* L,
-                                       const InternalString* fmt);
-LUAI_FUNC const char* luaO_pushvfstring(lua_State* L, const char* fmt,
-                                        const FmtArgs& args);
-LUAI_FUNC const char* luaO_pushfstring(lua_State* L, const char* fmt,
-                                       const FmtArgs& args);
-LUAI_FUNC const char* luaO_pushfstring(lua_State* L, const char* fmt);
+LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L,
+                                                  const InternalString* fmt,
+                                                  const FmtArgs& args);
+LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
+                                                 const InternalString* fmt,
+                                                 const FmtArgs& args);
+LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
+                                                 const InternalString* fmt);
+LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L,
+                                                  const char* fmt,
+                                                  const FmtArgs& args);
+LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
+                                                 const char* fmt,
+                                                 const FmtArgs& args);
+LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
+                                                 const char* fmt);
 LUAI_FUNC void luaO_chunkid(char* out, const char* source, size_t srclen);

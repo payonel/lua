@@ -754,17 +754,17 @@ static void pushbuff(lua_State* L, void* ud)
   }
 }
 
-static const char* clearbuff(BuffFS* buff)
+static const InternalString* clearbuff(BuffFS* buff)
 {
   lua_State* L = buff->L;
-  const char* res;
+  const InternalString* res;
   if (luaD_rawrunprotected(L, pushbuff, buff) != LUA_OK) /* errors? */
     res = nullptr;                                          /* error message is on the top of the stack */
   else
   {
     StkId s = L->top - 1; /* result string is on the top of the stack */
     assert((slottag(L, s) & NOVARIANT_MASK) == LUA_TSTRING);
-    res = getstr(slottsval(L, s));
+    res = &slottsval(L, s)->data; /* borrowed view of the pushed string */
   }
   if (buff->b != buff->space)                   /* using dynamic buffer? */
     luaM_free_(L, (buff->b), (buff->buffsize) * sizeof(*(buff->b))); /* free it */
@@ -901,8 +901,9 @@ FmtArgs& FmtArgs::utf8(unsigned long u)
 ** The format cursor is (InternalString*, offset) — never a raw
 ** pointer walked through the bytes.
 */
-const char* luaO_pushvfstring(lua_State* L, const InternalString* fmt,
-                              const FmtArgs& args)
+const InternalString* luaO_pushvfstring(lua_State* L,
+                                        const InternalString* fmt,
+                                        const FmtArgs& args)
 {
   BuffFS buff;  /* holds last part of the result */
   std::string_view f = fmt->view();
@@ -1009,16 +1010,17 @@ const char* luaO_pushvfstring(lua_State* L, const InternalString* fmt,
   return clearbuff(&buff); /* empty buffer into a new string */
 }
 
-const char* luaO_pushfstring(lua_State* L, const InternalString* fmt,
-                             const FmtArgs& args)
+const InternalString* luaO_pushfstring(lua_State* L,
+                                       const InternalString* fmt,
+                                       const FmtArgs& args)
 {
-  const char* msg = luaO_pushvfstring(L, fmt, args);
+  const InternalString* msg = luaO_pushvfstring(L, fmt, args);
   if (msg == nullptr) /* error? */
     luaD_throw(L, LUA_ERRMEM);
   return msg;
 }
 
-const char* luaO_pushfstring(lua_State* L, const InternalString* fmt)
+const InternalString* luaO_pushfstring(lua_State* L, const InternalString* fmt)
 {
   return luaO_pushfstring(L, fmt, FmtArgs());
 }
@@ -1027,19 +1029,21 @@ const char* luaO_pushfstring(lua_State* L, const InternalString* fmt)
 ** TRANSITIONAL const char* forms: deep-copy fmt at the seam (never
 ** retained) and delegate. Used by the staging C API layer.
 */
-const char* luaO_pushvfstring(lua_State* L, const char* fmt, const FmtArgs& args)
+const InternalString* luaO_pushvfstring(lua_State* L, const char* fmt,
+                                        const FmtArgs& args)
 {
   InternalString f(fmt, strlen(fmt));
   return luaO_pushvfstring(L, &f, args);
 }
 
-const char* luaO_pushfstring(lua_State* L, const char* fmt, const FmtArgs& args)
+const InternalString* luaO_pushfstring(lua_State* L, const char* fmt,
+                                       const FmtArgs& args)
 {
   InternalString f(fmt, strlen(fmt));
   return luaO_pushfstring(L, &f, args);
 }
 
-const char* luaO_pushfstring(lua_State* L, const char* fmt)
+const InternalString* luaO_pushfstring(lua_State* L, const char* fmt)
 {
   return luaO_pushfstring(L, fmt, FmtArgs());
 }

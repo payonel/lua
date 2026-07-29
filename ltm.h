@@ -65,14 +65,14 @@ static l_forceinline int checknoTM(const Table* mt, TMS e)
 }
 
 
-LUAI_DDEC(const char* const luaT_typenames_[LUA_TOTALTYPES];)
+LUAI_DDEC(const InternalString* const luaT_typenames_[LUA_TOTALTYPES];)
 
-static l_forceinline const char* ttypename(int x)
+static l_forceinline const InternalString* ttypename(int x)
 {
   return luaT_typenames_[x + 1];
 }
 
-LUAI_FUNC const char* luaT_objtypename(lua_State* L, const TValue* o);
+LUAI_FUNC const InternalString* luaT_objtypename(lua_State* L, const TValue* o);
 
 LUAI_FUNC const TValue* luaT_gettm(Table* events, TMS event, TString* ename);
 LUAI_FUNC const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event); /* slot form */

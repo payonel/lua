@@ -37,7 +37,7 @@ typedef struct
   lu_byte fixed;     /* dump is fixed in memory */
 } LoadState;
 
-static l_noret error(LoadState* S, const char* why)
+static l_noret error(LoadState* S, const InternalString* why)
 {
   luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(),
                    FmtArgs().str(S->name).str(why));
@@ -58,7 +58,7 @@ static l_noret error(LoadState* S, const char* why)
 static void loadBlock(LoadState* S, void* b, size_t size)
 {
   if (luaZ_read(S->Z, b, size) != 0)
-    error(S, "truncated chunk");
+    error(S, lit<"truncated chunk">());
   S->offset += size;
 }
 
@@ -78,7 +78,7 @@ static const void* getaddr_(LoadState* S, size_t size)
   const void* block = luaZ_getaddr(S->Z, size);
   S->offset += size;
   if (block == nullptr)
-    error(S, "truncated fixed buffer");
+    error(S, lit<"truncated fixed buffer">());
   return block;
 }
 
@@ -86,7 +86,7 @@ static lu_byte loadByte(LoadState* S)
 {
   int b = (((S->Z)->n--) > 0 ? ((unsigned char)(*(S->Z)->p++)) : luaZ_fill(S->Z));
   if (b == EOZ)
-    error(S, "truncated chunk");
+    error(S, lit<"truncated chunk">());
   S->offset++;
   return ((lu_byte)(b));
 }
@@ -100,7 +100,7 @@ static lua_Unsigned loadVarint(LoadState* S, lua_Unsigned limit)
   {
     b = loadByte(S);
     if (x > limit)
-      error(S, "integer overflow");
+      error(S, lit<"integer overflow">());
     x = (x << 7) | (b & 0x7f);
   } while ((b & 0x80) != 0);
   return x;
@@ -155,7 +155,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
       return;
     }
     if ((luaH_getint(S->h, ((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
-      error(S, "invalid string index");
+      error(S, lit<"invalid string index">());
     assert((stv.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
     *sl = ts = tsvalue(&stv); /* get its value */
     luaC_objbarrier(L, p, ts);
@@ -239,13 +239,13 @@ static void loadConstants(LoadState* S, Proto* f)
       assert(f->source == nullptr);
       loadString(S, f, &f->source); /* use 'source' to anchor string */
       if (f->source == nullptr)
-        error(S, "bad format for constant string");
+        error(S, lit<"bad format for constant string">());
       setsvalue(S->L, o, f->source); /* save it in the right place */
       f->source = nullptr;
       break;
     }
     default:
-      error(S, "invalid constant");
+      error(S, lit<"invalid constant">());
     }
   }
 }
@@ -363,7 +363,8 @@ static void loadFunction(LoadState* S, Proto* f)
   loadDebug(S, f);
 }
 
-static void checkliteral(LoadState* S, std::string_view s, const char* msg)
+static void checkliteral(LoadState* S, std::string_view s,
+                         const InternalString* msg)
 {
   char buff[LUA_SIGNATURE.size() + LUAC_DATA.size()]; /* larger than both */
   size_t len = s.size();
@@ -374,7 +375,7 @@ static void checkliteral(LoadState* S, std::string_view s, const char* msg)
 
 static l_noret numerror(LoadState* S, const char* what, const char* tname)
 {
-  const char* msg = luaO_pushfstring(S->L, lit<"%s %s mismatch">(),
+  const InternalString* msg = luaO_pushfstring(S->L, lit<"%s %s mismatch">(),
                                      FmtArgs().str(tname).str(what));
   error(S, msg);
 }
@@ -394,12 +395,12 @@ static void checknumformat(LoadState* S, int eq, const char* tname)
 static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
-  checkliteral(S, LUA_SIGNATURE.substr(1), "not a binary chunk");
+  checkliteral(S, LUA_SIGNATURE.substr(1), lit<"not a binary chunk">());
   if (loadByte(S) != LUAC_VERSION)
-    error(S, "version mismatch");
+    error(S, lit<"version mismatch">());
   if (loadByte(S) != LUAC_FORMAT)
-    error(S, "format mismatch");
-  checkliteral(S, LUAC_DATA, "corrupted chunk");
+    error(S, lit<"format mismatch">());
+  checkliteral(S, LUAC_DATA, lit<"corrupted chunk">());
   { int i; checknumsize(S, sizeof(i), "int"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), "int"); };
   { Instruction i; checknumsize(S, sizeof(i), "instruction"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INST), "instruction"); };
   { lua_Integer i; checknumsize(S, sizeof(i), "Lua integer"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), "Lua integer"); };
@@ -433,7 +434,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, const char* name,
   luaC_objbarrier(L, cl, cl->p);
   loadFunction(&S, cl->p);
   if (cl->nupvalues != cl->p->sizeupvalues)
-    error(&S, "corrupted chunk");
+    error(&S, lit<"corrupted chunk">());
   luai_verifycode(L, cl->p);
   return cl;
 }
