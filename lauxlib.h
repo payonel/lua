@@ -51,6 +51,17 @@ LUALIB_API const char*(luaL_checklstring) (lua_State* L, int arg,
                                            size_t* l);
 LUALIB_API const char*(luaL_optlstring) (lua_State* L, int arg,
                                          const char* def, size_t* l);
+
+/*
+** Engine-side string accessors (see lua_toistring): borrowed
+** InternalString* views of stack values, for the standard libraries.
+*/
+LUALIB_API const InternalString*(luaL_checkistring) (lua_State* L, int arg);
+LUALIB_API const InternalString*(luaL_optistring) (lua_State* L, int arg,
+                                                   const InternalString* def);
+/* 'luaL_tolstring' companion: converts (honoring '__tostring'), PUSHES
+   the result, and returns its payload (borrowed from the pushed value) */
+LUALIB_API const InternalString*(luaL_toistring) (lua_State* L, int idx);
 LUALIB_API lua_Number(luaL_checknumber)(lua_State* L, int arg);
 LUALIB_API lua_Number(luaL_optnumber)(lua_State* L, int arg, lua_Number def);
 

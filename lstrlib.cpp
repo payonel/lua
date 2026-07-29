@@ -23,6 +23,7 @@
 
 #include "lua.h"
 
+#include "internal_string.h"
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
@@ -37,11 +38,20 @@
 #define LUA_MAXCAPTURES 32
 #endif
 
+/*
+** Byte at offset 'i' of an engine string, as unsigned 0..255; reads
+** '\0' at/past the end (the bound check replaces upstream's reliance
+** on the C terminator when a cursor peeks one past the end).
+*/
+static inline int istrbyte(const InternalString* s, size_t i)
+{
+  return (i < s->size()) ? s->byteAt(i) : 0;
+}
+
 static int str_len(lua_State* L)
 {
-  size_t l;
-  luaL_checklstring(L, 1, &l);
-  lua_pushinteger(L, (lua_Integer) l);
+  const InternalString* s = luaL_checkistring(L, 1);
+  lua_pushinteger(L, (lua_Integer) s->size());
   return 1;
 }
 
@@ -86,12 +96,12 @@ static size_t getendpos(lua_State* L, int arg, lua_Integer def,
 
 static int str_sub(lua_State* L)
 {
-  size_t l;
-  const char* s = luaL_checklstring(L, 1, &l);
+  const InternalString* s = luaL_checkistring(L, 1);
+  size_t l = s->size();
   size_t start = posrelatI(luaL_checkinteger(L, 2), l);
   size_t end = getendpos(L, 3, -1, l);
   if (start <= end)
-    lua_pushlstring(L, s + start - 1, (end - start) + 1);
+    lua_pushlstring(L, s->bytes() + start - 1, (end - start) + 1);
   else
     lua_pushliteral(L, "");
   return 1;
@@ -99,38 +109,39 @@ static int str_sub(lua_State* L)
 
 static int str_reverse(lua_State* L)
 {
-  size_t l, i;
+  size_t i;
   luaL_Buffer b;
-  const char* s = luaL_checklstring(L, 1, &l);
+  const InternalString* s = luaL_checkistring(L, 1);
+  size_t l = s->size();
   char* p = luaL_buffinitsize(L, &b, l);
   for (i = 0; i < l; i++)
-    p[i] = s[l - i - 1];
+    p[i] = ((char)(s->byteAt(l - i - 1)));
   luaL_pushresultsize(&b, l);
   return 1;
 }
 
 static int str_lower(lua_State* L)
 {
-  size_t l;
   size_t i;
   luaL_Buffer b;
-  const char* s = luaL_checklstring(L, 1, &l);
+  const InternalString* s = luaL_checkistring(L, 1);
+  size_t l = s->size();
   char* p = luaL_buffinitsize(L, &b, l);
   for (i = 0; i < l; i++)
-    p[i] = ((char)(tolower(((unsigned char)(s[i])))));
+    p[i] = ((char)(tolower(s->byteAt(i))));
   luaL_pushresultsize(&b, l);
   return 1;
 }
 
 static int str_upper(lua_State* L)
 {
-  size_t l;
   size_t i;
   luaL_Buffer b;
-  const char* s = luaL_checklstring(L, 1, &l);
+  const InternalString* s = luaL_checkistring(L, 1);
+  size_t l = s->size();
   char* p = luaL_buffinitsize(L, &b, l);
   for (i = 0; i < l; i++)
-    p[i] = ((char)(toupper(((unsigned char)(s[i])))));
+    p[i] = ((char)(toupper(s->byteAt(i))));
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -141,10 +152,11 @@ static int str_upper(lua_State* L)
 */
 static int str_rep(lua_State* L)
 {
-  size_t len, lsep;
-  const char* s = luaL_checklstring(L, 1, &len);
+  const InternalString* s = luaL_checkistring(L, 1);
   lua_Integer n = luaL_checkinteger(L, 2);
-  const char* sep = luaL_optlstring(L, 3, "", &lsep);
+  const InternalString* sep = luaL_optistring(L, 3, lit<"">());
+  size_t len = s->size();
+  size_t lsep = sep->size();
   if (n <= 0 || (len | lsep) == 0)
     lua_pushliteral(L, ""); /* no repetitions or both strings empty */
   else if (l_unlikely(len > MAX_SIZE - lsep ||
@@ -157,15 +169,15 @@ static int str_rep(lua_State* L)
     char* p = luaL_buffinitsize(L, &b, totallen);
     while (n-- > 1)
     { /* first n-1 copies (followed by separator) */
-      memcpy(p, s, len * sizeof(char));
+      memcpy(p, s->bytes(), len * sizeof(char));
       p += len;
       if (lsep > 0)
       { /* empty 'memcpy' is not that cheap */
-        memcpy(p, sep, lsep * sizeof(char));
+        memcpy(p, sep->bytes(), lsep * sizeof(char));
         p += lsep;
       }
     }
-    memcpy(p, s, len * sizeof(char)); /* last copy without separator */
+    memcpy(p, s->bytes(), len * sizeof(char)); /* last copy without separator */
     luaL_pushresultsize(&b, totallen);
   }
   return 1;
@@ -173,8 +185,8 @@ static int str_rep(lua_State* L)
 
 static int str_byte(lua_State* L)
 {
-  size_t l;
-  const char* s = luaL_checklstring(L, 1, &l);
+  const InternalString* s = luaL_checkistring(L, 1);
+  size_t l = s->size();
   lua_Integer pi = luaL_optinteger(L, 2, 1);
   size_t posi = posrelatI(pi, l);
   size_t pose = getendpos(L, 3, pi, l);
@@ -186,7 +198,7 @@ static int str_byte(lua_State* L)
   n = (int) (pose - posi) + 1;
   luaL_checkstack(L, n, "string slice too long");
   for (i = 0; i < n; i++)
-    lua_pushinteger(L, ((unsigned char)(s[posi + ((unsigned int)(i)) - 1])));
+    lua_pushinteger(L, s->byteAt(posi + ((unsigned int)(i)) - 1));
   return n;
 }
 
@@ -265,9 +277,8 @@ static int tonum(lua_State* L, int arg)
   }
   else
   { /* check whether it is a numerical string */
-    size_t len;
-    const char* s = lua_tolstring(L, arg, &len);
-    return (s != nullptr && lua_stringtonumber(L, s) == len + 1);
+    const InternalString* s = lua_toistring(L, arg);
+    return (s != nullptr && lua_stringtonumber(L, s->c_str()) == s->size() + 1);
   }
 }
 
@@ -367,23 +378,51 @@ static const luaL_Reg stringmetamethods[] = {
 constexpr int CAP_UNFINISHED = (-1);
 constexpr int CAP_POSITION = (-2);
 
+/*
+** Pattern-matching state. Cursor discipline (RULED 2026-07-29): the
+** two strings are hoisted here as InternalString* once; every
+** interior position travels as a plain integer offset — (string,
+** offset) is the only interior-pointer shape that transcribes to
+** Java. Offsets are ptrdiff_t (Java: int) and -1 is the "no match"
+** sentinel (was nullptr in the pointer version).
+*/
+constexpr ptrdiff_t NOMATCH = -1;
+
 struct MatchState
 {
-  const char* src_init; /* init of source string */
-  const char* src_end;  /* end ('\0') of source string */
-  const char* p_end;    /* end ('\0') of pattern */
+  const InternalString* src; /* source string (offsets 0..src_end) */
+  const InternalString* p;   /* pattern string (offsets 0..p_end) */
+  ptrdiff_t src_end;         /* end offset of source ('\0' position) */
+  ptrdiff_t p_end;           /* end offset of pattern */
   lua_State* L;
   int matchdepth; /* control for recursive depth (to avoid C stack overflow) */
   int level;      /* total number of captures (finished or unfinished) */
   struct
   {
-    const char* init;
+    ptrdiff_t init;
     ptrdiff_t len; /* length or special value (CAP_*) */
   } capture[LUA_MAXCAPTURES];
 };
 
 /* recursive function */
-static const char* match(MatchState* ms, const char* s, const char* p);
+static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p);
+
+/*
+** Byte at offset 'i' of the source/pattern, as unsigned 0..255. The
+** end offset reads as '\0': upstream's cursors relied on the C
+** terminator when peeking one past a validated position (suffix
+** checks, '%f' at end); the bound check reproduces that exactly
+** (InternalString has no terminator in the Java port).
+*/
+static inline int srcbyte(const MatchState* ms, ptrdiff_t i)
+{
+  return (i < ms->src_end) ? ms->src->byteAt(((size_t)(i))) : 0;
+}
+
+static inline int patbyte(const MatchState* ms, ptrdiff_t i)
+{
+  return (i < ms->p_end) ? ms->p->byteAt(((size_t)(i))) : 0;
+}
 
 /* maximum recursion depth for 'match' */
 #if !defined(MAXCCALLS)
@@ -414,9 +453,9 @@ static int capture_to_close(MatchState* ms)
   return luaL_error(ms->L, "invalid pattern capture");
 }
 
-static const char* classend(MatchState* ms, const char* p)
+static ptrdiff_t classend(MatchState* ms, ptrdiff_t p)
 {
-  switch (*p++)
+  switch (patbyte(ms, p++))
   {
   case L_ESC:
   {
@@ -426,15 +465,15 @@ static const char* classend(MatchState* ms, const char* p)
   }
   case '[':
   {
-    if (*p == '^')
+    if (patbyte(ms, p) == '^')
       p++;
     do
     { /* look for a ']' */
       if (l_unlikely(p == ms->p_end))
         luaL_error(ms->L, "malformed pattern (missing ']')");
-      if (*(p++) == L_ESC && p < ms->p_end)
+      if (patbyte(ms, p++) == L_ESC && p < ms->p_end)
         p++; /* skip escapes (e.g. '%]') */
-    } while (*p != ']');
+    } while (patbyte(ms, p) != ']');
     return p + 1;
   }
   default:
@@ -488,84 +527,85 @@ static int match_class(int c, int cl)
   return (islower(cl) ? res : !res);
 }
 
-static int matchbracketclass(int c, const char* p, const char* ec)
+static int matchbracketclass(MatchState* ms, int c, ptrdiff_t p,
+                             ptrdiff_t ec)
 {
   int sig = 1;
-  if (*(p + 1) == '^')
+  if (patbyte(ms, p + 1) == '^')
   {
     sig = 0;
     p++; /* skip the '^' */
   }
   while (++p < ec)
   {
-    if (*p == L_ESC)
+    if (patbyte(ms, p) == L_ESC)
     {
       p++;
-      if (match_class(c, ((unsigned char)(*p))))
+      if (match_class(c, patbyte(ms, p)))
         return sig;
     }
-    else if ((*(p + 1) == '-') && (p + 2 < ec))
+    else if ((patbyte(ms, p + 1) == '-') && (p + 2 < ec))
     {
       p += 2;
-      if (((unsigned char)(*(p - 2))) <= c && c <= ((unsigned char)(*p)))
+      if (patbyte(ms, p - 2) <= c && c <= patbyte(ms, p))
         return sig;
     }
-    else if (((unsigned char)(*p)) == c)
+    else if (patbyte(ms, p) == c)
       return sig;
   }
   return !sig;
 }
 
-static int singlematch(MatchState* ms, const char* s, const char* p,
-                       const char* ep)
+static int singlematch(MatchState* ms, ptrdiff_t s, ptrdiff_t p,
+                       ptrdiff_t ep)
 {
   if (s >= ms->src_end)
     return 0;
   else
   {
-    int c = ((unsigned char)(*s));
-    switch (*p)
+    int c = srcbyte(ms, s);
+    switch (patbyte(ms, p))
     {
     case '.':
       return 1; /* matches any char */
     case L_ESC:
-      return match_class(c, ((unsigned char)(*(p + 1))));
+      return match_class(c, patbyte(ms, p + 1));
     case '[':
-      return matchbracketclass(c, p, ep - 1);
+      return matchbracketclass(ms, c, p, ep - 1);
     default:
-      return (((unsigned char)(*p)) == c);
+      return (patbyte(ms, p) == c);
     }
   }
 }
 
-static const char* matchbalance(MatchState* ms, const char* s,
-                                const char* p)
+static ptrdiff_t matchbalance(MatchState* ms, ptrdiff_t s,
+                              ptrdiff_t p)
 {
   if (l_unlikely(p >= ms->p_end - 1))
     luaL_error(ms->L, "malformed pattern (missing arguments to '%%b')");
-  if (*s != *p)
-    return nullptr;
+  if (srcbyte(ms, s) != patbyte(ms, p))
+    return NOMATCH;
   else
   {
-    int b = *p;
-    int e = *(p + 1);
+    int b = patbyte(ms, p);
+    int e = patbyte(ms, p + 1);
     int cont = 1;
     while (++s < ms->src_end)
     {
-      if (*s == e)
+      if (srcbyte(ms, s) == e)
       {
         if (--cont == 0)
           return s + 1;
       }
-      else if (*s == b)
+      else if (srcbyte(ms, s) == b)
         cont++;
     }
   }
-  return nullptr; /* string ends out of balance */
+  return NOMATCH; /* string ends out of balance */
 }
 
-static const char* max_expand(MatchState* ms, const char* s,
-                              const char* p, const char* ep)
+static ptrdiff_t max_expand(MatchState* ms, ptrdiff_t s,
+                            ptrdiff_t p, ptrdiff_t ep)
 {
   ptrdiff_t i = 0; /* counts maximum expand for item */
   while (singlematch(ms, s + i, p, ep))
@@ -573,68 +613,69 @@ static const char* max_expand(MatchState* ms, const char* s,
   /* keeps trying to match with the maximum repetitions */
   while (i >= 0)
   {
-    const char* res = match(ms, (s + i), ep + 1);
-    if (res)
+    ptrdiff_t res = match(ms, (s + i), ep + 1);
+    if (res != NOMATCH)
       return res;
     i--; /* else didn't match; reduce 1 repetition to try again */
   }
-  return nullptr;
+  return NOMATCH;
 }
 
-static const char* min_expand(MatchState* ms, const char* s,
-                              const char* p, const char* ep)
+static ptrdiff_t min_expand(MatchState* ms, ptrdiff_t s,
+                            ptrdiff_t p, ptrdiff_t ep)
 {
   for (;;)
   {
-    const char* res = match(ms, s, ep + 1);
-    if (res != nullptr)
+    ptrdiff_t res = match(ms, s, ep + 1);
+    if (res != NOMATCH)
       return res;
     else if (singlematch(ms, s, p, ep))
       s++; /* try with one more repetition */
     else
-      return nullptr;
+      return NOMATCH;
   }
 }
 
-static const char* start_capture(MatchState* ms, const char* s,
-                                 const char* p, int what)
+static ptrdiff_t start_capture(MatchState* ms, ptrdiff_t s,
+                               ptrdiff_t p, int what)
 {
-  const char* res;
+  ptrdiff_t res;
   int level = ms->level;
   if (level >= LUA_MAXCAPTURES)
     luaL_error(ms->L, "too many captures");
   ms->capture[level].init = s;
   ms->capture[level].len = what;
   ms->level = level + 1;
-  if ((res = match(ms, s, p)) == nullptr) /* match failed? */
-    ms->level--;                       /* undo capture */
+  if ((res = match(ms, s, p)) == NOMATCH) /* match failed? */
+    ms->level--;                          /* undo capture */
   return res;
 }
 
-static const char* end_capture(MatchState* ms, const char* s,
-                               const char* p)
+static ptrdiff_t end_capture(MatchState* ms, ptrdiff_t s,
+                             ptrdiff_t p)
 {
   int l = capture_to_close(ms);
-  const char* res;
+  ptrdiff_t res;
   ms->capture[l].len = s - ms->capture[l].init; /* close capture */
-  if ((res = match(ms, s, p)) == nullptr)          /* match failed? */
+  if ((res = match(ms, s, p)) == NOMATCH)       /* match failed? */
     ms->capture[l].len = CAP_UNFINISHED;        /* undo capture */
   return res;
 }
 
-static const char* match_capture(MatchState* ms, const char* s, int l)
+static ptrdiff_t match_capture(MatchState* ms, ptrdiff_t s, int l)
 {
   size_t len;
   l = check_capture(ms, l);
   len = ((size_t)(ms->capture[l].len));
   if ((size_t) (ms->src_end - s) >= len &&
-      memcmp(ms->capture[l].init, s, len) == 0)
-    return s + len;
+      memcmp(ms->src->bytes() + ms->capture[l].init,
+             ms->src->bytes() + s, len) == 0)
+    return s + ((ptrdiff_t)(len));
   else
-    return nullptr;
+    return NOMATCH;
 }
 
-static const char* match(MatchState* ms, const char* s, const char* p)
+static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
 {
   if (l_unlikely(ms->matchdepth-- == 0))
     luaL_error(ms->L, "pattern too complex");
@@ -642,80 +683,82 @@ static const char* match(MatchState* ms, const char* s, const char* p)
   {
     if (p == ms->p_end) /* end of pattern? */
       break;
-    if (*p == '(')
-    {                      /* start capture */
-      if (*(p + 1) == ')') /* position capture? */
+    if (patbyte(ms, p) == '(')
+    {                                /* start capture */
+      if (patbyte(ms, p + 1) == ')') /* position capture? */
         s = start_capture(ms, s, p + 2, CAP_POSITION);
       else
         s = start_capture(ms, s, p + 1, CAP_UNFINISHED);
       break;
     }
-    else if (*p == ')')
+    else if (patbyte(ms, p) == ')')
     { /* end capture */
       s = end_capture(ms, s, p + 1);
       break;
     }
-    else if (*p == '$' && (p + 1) == ms->p_end)
+    else if (patbyte(ms, p) == '$' && (p + 1) == ms->p_end)
     { /* '$' as the last char in pattern (otherwise it is a plain class below) */
-      s = (s == ms->src_end) ? s : nullptr; /* check end of string */
+      s = (s == ms->src_end) ? s : NOMATCH; /* check end of string */
       break;
     }
-    else if (*p == L_ESC && *(p + 1) == 'b')
+    else if (patbyte(ms, p) == L_ESC && patbyte(ms, p + 1) == 'b')
     { /* balanced string? */
       s = matchbalance(ms, s, p + 2);
-      if (s == nullptr) /* fail */
+      if (s == NOMATCH) /* fail */
         break;
       p += 4;
       continue; /* return match(ms, s, p + 4); */
     }
-    else if (*p == L_ESC && *(p + 1) == 'f')
+    else if (patbyte(ms, p) == L_ESC && patbyte(ms, p + 1) == 'f')
     { /* frontier? */
-      const char* ep;
-      char previous;
+      ptrdiff_t ep;
+      int previous;
       p += 2;
-      if (l_unlikely(*p != '['))
+      if (l_unlikely(patbyte(ms, p) != '['))
         luaL_error(ms->L, "missing '[' after '%%f' in pattern");
       ep = classend(ms, p); /* points to what is next */
-      previous = (s == ms->src_init) ? '\0' : *(s - 1);
-      if (!matchbracketclass(((unsigned char)(previous)), p, ep - 1) &&
-          matchbracketclass(((unsigned char)(*s)), p, ep - 1))
+      previous = (s == 0) ? '\0' : srcbyte(ms, s - 1);
+      if (!matchbracketclass(ms, previous, p, ep - 1) &&
+          matchbracketclass(ms, srcbyte(ms, s), p, ep - 1))
       {
         p = ep;
         continue; /* return match(ms, s, ep); */
       }
-      s = nullptr; /* match failed */
+      s = NOMATCH; /* match failed */
       break;
     }
-    else if (*p == L_ESC && '0' <= *(p + 1) && *(p + 1) <= '9')
+    else if (patbyte(ms, p) == L_ESC && '0' <= patbyte(ms, p + 1) &&
+             patbyte(ms, p + 1) <= '9')
     { /* capture results (%0-%9)? */
-      s = match_capture(ms, s, ((unsigned char)(*(p + 1))));
-      if (s == nullptr)
+      s = match_capture(ms, s, patbyte(ms, p + 1));
+      if (s == NOMATCH)
         break;
       p += 2;
       continue; /* return match(ms, s, p + 2) */
     }
     else
-    {                                   /* pattern class plus optional suffix */
-      const char* ep = classend(ms, p); /* points to optional suffix */
+    {                                    /* pattern class plus optional suffix */
+      ptrdiff_t ep = classend(ms, p);    /* points to optional suffix */
       /* does not match at least once? */
       if (!singlematch(ms, s, p, ep))
       {
-        if (*ep == '*' || *ep == '?' || *ep == '-')
+        int sfx = patbyte(ms, ep);
+        if (sfx == '*' || sfx == '?' || sfx == '-')
         { /* accept empty? */
           p = ep + 1;
           continue; /* return match(ms, s, ep + 1); */
         }
-        else        /* '+' or no suffix */
-          s = nullptr; /* fail */
+        else          /* '+' or no suffix */
+          s = NOMATCH; /* fail */
       }
       else
       { /* matched once */
-        switch (*ep)
+        switch (patbyte(ms, ep))
         { /* handle optional suffix */
         case '?':
         { /* optional */
-          const char* res;
-          if ((res = match(ms, s + 1, ep + 1)) != nullptr)
+          ptrdiff_t res;
+          if ((res = match(ms, s + 1, ep + 1)) != NOMATCH)
             s = res;
           else
           {
@@ -777,11 +820,11 @@ static const char* lmemfind(const char* s1, size_t l1,
 ** get information about the i-th capture. If there are no captures
 ** and 'i==0', return information about the whole match, which
 ** is the range 's'..'e'. If the capture is a string, return
-** its length and put its address in '*cap'. If it is an integer
+** its length and put its start offset in '*cap'. If it is an integer
 ** (a position), push it on the stack and return CAP_POSITION.
 */
-static ptrdiff_t get_onecapture(MatchState* ms, int i, const char* s,
-                                const char* e, const char** cap)
+static ptrdiff_t get_onecapture(MatchState* ms, int i, ptrdiff_t s,
+                                ptrdiff_t e, ptrdiff_t* cap)
 {
   if (i >= ms->level)
   {
@@ -800,8 +843,7 @@ static ptrdiff_t get_onecapture(MatchState* ms, int i, const char* s,
     if (l_unlikely(capl == CAP_UNFINISHED))
       luaL_error(ms->L, "unfinished capture");
     else if (capl == CAP_POSITION)
-      lua_pushinteger(ms->L,
-                      ((lua_Integer)((size_t)(ms->capture[i].init - ms->src_init))) + 1);
+      lua_pushinteger(ms->L, ((lua_Integer)(ms->capture[i].init)) + 1);
     return capl;
   }
 }
@@ -809,20 +851,20 @@ static ptrdiff_t get_onecapture(MatchState* ms, int i, const char* s,
 /*
 ** Push the i-th capture on the stack.
 */
-static void push_onecapture(MatchState* ms, int i, const char* s,
-                            const char* e)
+static void push_onecapture(MatchState* ms, int i, ptrdiff_t s,
+                            ptrdiff_t e)
 {
-  const char* cap;
+  ptrdiff_t cap;
   ptrdiff_t l = get_onecapture(ms, i, s, e, &cap);
   if (l != CAP_POSITION)
-    lua_pushlstring(ms->L, cap, ((size_t)(l)));
+    lua_pushlstring(ms->L, ms->src->bytes() + cap, ((size_t)(l)));
   /* else position was already pushed */
 }
 
-static int push_captures(MatchState* ms, const char* s, const char* e)
+static int push_captures(MatchState* ms, ptrdiff_t s, ptrdiff_t e)
 {
   int i;
-  int nlevels = (ms->level == 0 && s) ? 1 : ms->level;
+  int nlevels = (ms->level == 0 && s != NOMATCH) ? 1 : ms->level;
   luaL_checkstack(ms->L, nlevels, "too many captures");
   for (i = 0; i < nlevels; i++)
     push_onecapture(ms, i, s, e);
@@ -844,14 +886,17 @@ static int nospecials(const char* p, size_t l)
 
 /*
 ** Prepare state for matches. These fields are not affected by each match.
+** An anchored pattern skips its '^' via the caller's start offset;
+** the pattern string itself is never "advanced".
 */
 static void prepstate(MatchState* ms, lua_State* L,
-                      const char* s, size_t ls, const char* p, size_t lp)
+                      const InternalString* s, const InternalString* p)
 {
   ms->L = L;
-  ms->src_init = s;
-  ms->src_end = s + ls;
-  ms->p_end = p + lp;
+  ms->src = s;
+  ms->src_end = ((ptrdiff_t)(s->size()));
+  ms->p = p;
+  ms->p_end = ((ptrdiff_t)(p->size()));
 }
 
 /*
@@ -866,9 +911,10 @@ static void reprepstate(MatchState* ms)
 
 static int str_find_aux(lua_State* L, int find)
 {
-  size_t ls, lp;
-  const char* s = luaL_checklstring(L, 1, &ls);
-  const char* p = luaL_checklstring(L, 2, &lp);
+  const InternalString* s = luaL_checkistring(L, 1);
+  const InternalString* p = luaL_checkistring(L, 2);
+  size_t ls = s->size();
+  size_t lp = p->size();
   size_t init = posrelatI(luaL_optinteger(L, 3, 1), ls) - 1;
   if (init > ls)
   {                   /* start after string's end? */
@@ -876,39 +922,36 @@ static int str_find_aux(lua_State* L, int find)
     return 1;
   }
   /* explicit request or no special characters? */
-  if (find && (lua_toboolean(L, 4) || nospecials(p, lp)))
+  if (find && (lua_toboolean(L, 4) || nospecials(p->c_str(), lp)))
   {
     /* do a plain search */
-    const char* s2 = lmemfind(s + init, ls - init, p, lp);
+    const char* s2 = lmemfind(s->bytes() + init, ls - init, p->bytes(), lp);
     if (s2)
     {
-      lua_pushinteger(L, ((lua_Integer)((size_t)(s2 - s))) + 1);
-      lua_pushinteger(L, ((lua_Integer)(((size_t)(s2 - s)) + lp)));
+      size_t pos = ((size_t)(s2 - s->bytes()));
+      lua_pushinteger(L, ((lua_Integer)(pos)) + 1);
+      lua_pushinteger(L, ((lua_Integer)(pos + lp)));
       return 2;
     }
   }
   else
   {
     MatchState ms;
-    const char* s1 = s + init;
-    int anchor = (*p == '^');
-    if (anchor)
-    {
-      p++;
-      lp--; /* skip anchor character */
-    }
-    prepstate(&ms, L, s, ls, p, lp);
+    ptrdiff_t s1 = ((ptrdiff_t)(init));
+    int anchor = (lp > 0 && p->byteAt(0) == '^');
+    ptrdiff_t pinit = anchor ? 1 : 0; /* skip anchor character */
+    prepstate(&ms, L, s, p);
     do
     {
-      const char* res;
+      ptrdiff_t res;
       reprepstate(&ms);
-      if ((res = match(&ms, s1, p)) != nullptr)
+      if ((res = match(&ms, s1, pinit)) != NOMATCH)
       {
         if (find)
         {
-          lua_pushinteger(L, ((lua_Integer)((size_t)(s1 - s))) + 1); /* start */
-          lua_pushinteger(L, ((lua_Integer)((size_t)(res - s))));    /* end */
-          return push_captures(&ms, nullptr, 0) + 2;
+          lua_pushinteger(L, ((lua_Integer)(s1)) + 1); /* start */
+          lua_pushinteger(L, ((lua_Integer)(res)));    /* end */
+          return push_captures(&ms, NOMATCH, 0) + 2;
         }
         else
           return push_captures(&ms, s1, res);
@@ -932,22 +975,22 @@ static int str_match(lua_State* L)
 /* state for 'gmatch' */
 struct GMatchState
 {
-  const char* src;       /* current position */
-  const char* p;         /* pattern */
-  const char* lastmatch; /* end of last match */
-  MatchState ms;         /* match state */
+  ptrdiff_t src;       /* current position */
+  ptrdiff_t p;         /* pattern start offset */
+  ptrdiff_t lastmatch; /* end of last match (NOMATCH if none) */
+  MatchState ms;       /* match state */
 };
 
 static int gmatch_aux(lua_State* L)
 {
   GMatchState* gm = (GMatchState*) lua_touserdata(L, lua_upvalueindex(3));
-  const char* src;
+  ptrdiff_t src;
   gm->ms.L = L;
   for (src = gm->src; src <= gm->ms.src_end; src++)
   {
-    const char* e;
+    ptrdiff_t e;
     reprepstate(&gm->ms);
-    if ((e = match(&gm->ms, src, gm->p)) != nullptr && e != gm->lastmatch)
+    if ((e = match(&gm->ms, src, gm->p)) != NOMATCH && e != gm->lastmatch)
     {
       gm->src = gm->lastmatch = e;
       return push_captures(&gm->ms, src, e);
@@ -958,56 +1001,57 @@ static int gmatch_aux(lua_State* L)
 
 static int gmatch(lua_State* L)
 {
-  size_t ls, lp;
-  const char* s = luaL_checklstring(L, 1, &ls);
-  const char* p = luaL_checklstring(L, 2, &lp);
+  const InternalString* s = luaL_checkistring(L, 1);
+  const InternalString* p = luaL_checkistring(L, 2);
+  size_t ls = s->size();
   size_t init = posrelatI(luaL_optinteger(L, 3, 1), ls) - 1;
   GMatchState* gm;
   lua_settop(L, 2); /* keep strings on closure to avoid being collected */
   gm = (GMatchState*) lua_newuserdatauv(L, sizeof(GMatchState), 0);
   if (init > ls)   /* start after string's end? */
-    init = ls + 1; /* avoid overflows in 's + init' */
-  prepstate(&gm->ms, L, s, ls, p, lp);
-  gm->src = s + init;
-  gm->p = p;
-  gm->lastmatch = nullptr;
+    init = ls + 1; /* avoid overflows in 'src + init' */
+  prepstate(&gm->ms, L, s, p);
+  gm->src = ((ptrdiff_t)(init));
+  gm->p = 0;
+  gm->lastmatch = NOMATCH;
   lua_pushcclosure(L, gmatch_aux, 3);
   return 1;
 }
 
-static void add_s(MatchState* ms, luaL_Buffer* b, const char* s,
-                  const char* e)
+static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
+                  ptrdiff_t e)
 {
-  size_t l;
   lua_State* L = ms->L;
-  const char* news = lua_tolstring(L, 3, &l);
-  const char* p;
-  while ((p = (char*) memchr(news, L_ESC, l)) != nullptr)
+  const InternalString* news = lua_toistring(L, 3);
+  const char* nb = news->bytes();
+  size_t l = news->size();
+  const char* pc;
+  while ((pc = (const char*) memchr(nb, L_ESC, l)) != nullptr)
   {
-    luaL_addlstring(b, news, ((size_t)(p - news)));
-    p++;             /* skip ESC */
-    if (*p == L_ESC) /* '%%' */
-      luaL_addchar(b, *p);
-    else if (*p == '0') /* '%0' */
-      luaL_addlstring(b, s, ((size_t)(e - s)));
-    else if (isdigit(((unsigned char)(*p))))
+    luaL_addlstring(b, nb, ((size_t)(pc - nb)));
+    pc++;              /* skip ESC */
+    if (*pc == L_ESC)  /* '%%' */
+      luaL_addchar(b, *pc);
+    else if (*pc == '0') /* '%0' */
+      luaL_addlstring(b, ms->src->bytes() + s, ((size_t)(e - s)));
+    else if (isdigit(((unsigned char)(*pc))))
     { /* '%n' */
-      const char* cap;
-      ptrdiff_t resl = get_onecapture(ms, *p - '1', s, e, &cap);
+      ptrdiff_t cap;
+      ptrdiff_t resl = get_onecapture(ms, *pc - '1', s, e, &cap);
       if (resl == CAP_POSITION)
         luaL_addvalue(b); /* add position to accumulated result */
       else
-        luaL_addlstring(b, cap, ((size_t)(resl)));
+        luaL_addlstring(b, ms->src->bytes() + cap, ((size_t)(resl)));
     }
     else
     {
       lua_pushinteger(L, L_ESC);
       luaL_error(L, "invalid use of '%c' in replacement string");
     }
-    l -= ((size_t)(p + 1 - news));
-    news = p + 1;
+    l -= ((size_t)(pc + 1 - nb));
+    nb = pc + 1;
   }
-  luaL_addlstring(b, news, l);
+  luaL_addlstring(b, nb, l);
 }
 
 /*
@@ -1015,8 +1059,8 @@ static void add_s(MatchState* ms, luaL_Buffer* b, const char* s,
 ** Return true if the original string was changed. (Function calls and
 ** table indexing resulting in nil or false do not change the subject.)
 */
-static int add_value(MatchState* ms, luaL_Buffer* b, const char* s,
-                     const char* e, int tr)
+static int add_value(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
+                     ptrdiff_t e, int tr)
 {
   lua_State* L = ms->L;
   switch (tr)
@@ -1042,10 +1086,11 @@ static int add_value(MatchState* ms, luaL_Buffer* b, const char* s,
   }
   }
   if (!lua_toboolean(L, -1))
-  {                                           /* nil or false? */
-    lua_pop(L, 1);                            /* remove value */
-    luaL_addlstring(b, s, ((size_t)(e - s))); /* keep original text */
-    return 0;                                 /* no changes */
+  {                /* nil or false? */
+    lua_pop(L, 1); /* remove value */
+    luaL_addlstring(b, ms->src->bytes() + s,
+                    ((size_t)(e - s))); /* keep original text */
+    return 0;                           /* no changes */
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
   {
@@ -1061,39 +1106,37 @@ static int add_value(MatchState* ms, luaL_Buffer* b, const char* s,
 
 static int str_gsub(lua_State* L)
 {
-  size_t srcl, lp;
-  const char* src = luaL_checklstring(L, 1, &srcl); /* subject */
-  const char* p = luaL_checklstring(L, 2, &lp);     /* pattern */
-  const char* lastmatch = nullptr;                     /* end of last match */
-  int tr = lua_type(L, 3);                          /* replacement type */
+  const InternalString* srcs = luaL_checkistring(L, 1); /* subject */
+  const InternalString* pat = luaL_checkistring(L, 2);  /* pattern */
+  size_t srcl = srcs->size();
+  size_t lp = pat->size();
+  ptrdiff_t src = 0;             /* current position */
+  ptrdiff_t lastmatch = NOMATCH; /* end of last match */
+  int tr = lua_type(L, 3);       /* replacement type */
   /* max replacements */
   lua_Integer max_s = luaL_optinteger(L, 4, ((lua_Integer)(srcl)) + 1);
-  int anchor = (*p == '^');
-  lua_Integer n = 0; /* replacement count */
-  int changed = 0;   /* change flag */
+  int anchor = (lp > 0 && pat->byteAt(0) == '^');
+  ptrdiff_t pinit = anchor ? 1 : 0; /* skip anchor character */
+  lua_Integer n = 0;                /* replacement count */
+  int changed = 0;                  /* change flag */
   MatchState ms;
   luaL_Buffer b;
   luaL_argexpected(L, tr == LUA_TNUMBER || tr == LUA_TSTRING || tr == LUA_TFUNCTION || tr == LUA_TTABLE, 3,
                    "string/function/table");
   luaL_buffinit(L, &b);
-  if (anchor)
-  {
-    p++;
-    lp--; /* skip anchor character */
-  }
-  prepstate(&ms, L, src, srcl, p, lp);
+  prepstate(&ms, L, srcs, pat);
   while (n < max_s)
   {
-    const char* e;
+    ptrdiff_t e;
     reprepstate(&ms); /* (re)prepare state for new match */
-    if ((e = match(&ms, src, p)) != nullptr && e != lastmatch)
+    if ((e = match(&ms, src, pinit)) != NOMATCH && e != lastmatch)
     { /* match? */
       n++;
       changed = add_value(&ms, &b, src, e, tr) || changed;
       src = lastmatch = e;
     }
     else if (src < ms.src_end) /* otherwise, skip one character */
-      luaL_addchar(&b, *src++);
+      luaL_addchar(&b, ((char)(srcs->byteAt(((size_t)(src++))))));
     else
       break; /* end of subject */
     if (anchor)
@@ -1103,7 +1146,7 @@ static int str_gsub(lua_State* L)
     lua_pushvalue(L, 1); /* return original string */
   else
   { /* something changed */
-    luaL_addlstring(&b, src, ((size_t)(ms.src_end - src)));
+    luaL_addlstring(&b, srcs->bytes() + src, ((size_t)(ms.src_end - src)));
     luaL_pushresult(&b); /* create and return new string */
   }
   lua_pushinteger(L, n); /* number of substitutions */
@@ -1261,30 +1304,32 @@ constexpr char L_FMTFLAGSC[] = "-";
 */
 constexpr int MAX_FORMAT = 32;
 
-static void addquoted(luaL_Buffer* b, const char* s, size_t len)
+static void addquoted(luaL_Buffer* b, const InternalString* s)
 {
+  size_t len = s->size();
+  size_t i = 0;
   luaL_addchar(b, '"');
-  while (len--)
+  for (; i < len; i++)
   {
-    if (*s == '"' || *s == '\\' || *s == '\n')
+    int c = s->byteAt(i);
+    if (c == '"' || c == '\\' || c == '\n')
     {
       luaL_addchar(b, '\\');
-      luaL_addchar(b, *s);
+      luaL_addchar(b, ((char)(c)));
     }
-    else if (iscntrl(((unsigned char)(*s))))
+    else if (iscntrl(c))
     { /* '\ddd' escape; 3 digits when followed by another digit */
-      std::string d = std::to_string((int) ((unsigned char)(*s)));
+      std::string d = std::to_string(c);
       luaL_addchar(b, '\\');
-      if (isdigit(((unsigned char)(*(s + 1)))))
+      if (isdigit(istrbyte(s, i + 1)))
       {
-        for (size_t i = d.size(); i < 3; i++)
+        for (size_t j = d.size(); j < 3; j++)
           luaL_addchar(b, '0');
       }
       luaL_addstring(b, d.c_str());
     }
     else
-      luaL_addchar(b, *s);
-    s++;
+      luaL_addchar(b, ((char)(c)));
   }
   luaL_addchar(b, '"');
 }
@@ -1331,9 +1376,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
   {
   case LUA_TSTRING:
   {
-    size_t len;
-    const char* s = lua_tolstring(L, arg, &len);
-    addquoted(b, s, len);
+    addquoted(b, lua_toistring(L, arg));
     break;
   }
   case LUA_TNUMBER:
@@ -1418,22 +1461,23 @@ static void checkformat(lua_State* L, const char* form, const char* flags,
 }
 
 /*
-** Get a conversion specification and copy it to 'form'.
-** Return the address of its last character.
+** Get a conversion specification (starting just after its '%' at
+** offset 'i' of 'sf') and copy it to 'form'.
+** Return the offset of its last character.
 */
-static const char* getformat(lua_State* L, const char* strfrmt,
-                             char* form)
+static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
+                        char* form)
 {
   /* spans flags, width, and precision ('0' is included as a flag) */
-  size_t len = strspn(strfrmt, L_FMTFLAGSF "123456789.");
+  size_t len = strspn(sf->c_str() + i, L_FMTFLAGSF "123456789.");
   len++; /* adds following character (should be the specifier) */
   /* still needs space for '%', '\0', plus a length modifier */
   if (len >= MAX_FORMAT - 10)
     luaL_error(L, "invalid format (too long)");
   *(form++) = '%';
-  memcpy(form, strfrmt, len * sizeof(char));
+  memcpy(form, sf->bytes() + i, len * sizeof(char));
   *(form + len) = '\0';
-  return strfrmt + len - 1;
+  return i + len - 1;
 }
 
 /*
@@ -1699,17 +1743,20 @@ static int str_format(lua_State* L)
 {
   int top = lua_gettop(L);
   int arg = 1;
-  size_t sfl;
-  const char* strfrmt = luaL_checklstring(L, arg, &sfl);
-  const char* strfrmt_end = strfrmt + sfl;
+  const InternalString* sf = luaL_checkistring(L, arg);
+  size_t sfl = sf->size();
+  size_t i = 0; /* cursor into 'sf' */
   luaL_Buffer b;
   luaL_buffinit(L, &b);
-  while (strfrmt < strfrmt_end)
+  while (i < sfl)
   {
-    if (*strfrmt != L_ESC)
-      luaL_addchar(&b, *strfrmt++);
-    else if (*++strfrmt == L_ESC)
-      luaL_addchar(&b, *strfrmt++); /* %% */
+    if (sf->byteAt(i) != L_ESC)
+      luaL_addchar(&b, ((char)(sf->byteAt(i++))));
+    else if (istrbyte(sf, ++i) == L_ESC)
+    {
+      luaL_addchar(&b, ((char)(sf->byteAt(i)))); /* %% */
+      i++;
+    }
     else
     {                                              /* format item */
       char form[MAX_FORMAT];                       /* to store the format ('%...') */
@@ -1718,8 +1765,8 @@ static int str_format(lua_State* L)
       int nb = 0;                                  /* number of bytes in result */
       if (++arg > top)
         return luaL_argerror(L, arg, "no value");
-      strfrmt = getformat(L, strfrmt, form);
-      switch (*strfrmt++)
+      i = getformat(L, sf, i, form);
+      switch (istrbyte(sf, i++))
       {
       case 'c':
       {
@@ -1804,13 +1851,14 @@ static int str_format(lua_State* L)
       }
       case 's':
       {
-        size_t l;
-        const char* s = luaL_tolstring(L, arg, &l);
+        const InternalString* s = luaL_toistring(L, arg);
+        size_t l = s->size();
         if (form[2] == '\0') /* no modifiers? */
           luaL_addvalue(&b); /* keep entire string */
         else
         {
-          luaL_argcheck(L, l == strlen(s), arg, "string contains zeros");
+          luaL_argcheck(L, memchr(s->bytes(), '\0', l) == nullptr, arg,
+                        "string contains zeros");
           checkformat(L, form, L_FMTFLAGSC, 1);
           if (strchr(form, '.') == nullptr && l >= 100)
           {
@@ -1824,8 +1872,8 @@ static int str_format(lua_State* L)
             size_t blen = (spec.precision >= 0 && ((size_t)(spec.precision)) < l)
                               ? ((size_t)(spec.precision)) /* truncate */
                               : l;
-            nb = packformat(buff, maxitem, &spec, "", 0, s, blen, false);
-            lua_pop(L, 1); /* remove result from 'luaL_tolstring' */
+            nb = packformat(buff, maxitem, &spec, "", 0, s->bytes(), blen, false);
+            lua_pop(L, 1); /* remove result from 'luaL_toistring' */
           }
         }
         break;
@@ -1876,14 +1924,26 @@ constexpr int SZINT = ((int) sizeof(lua_Integer));
 constexpr bool nativeendian_little = (std::endian::native == std::endian::little);
 
 /*
-** information to pack/unpack stuff
+** information to pack/unpack stuff. The format string is hoisted here
+** as an InternalString* and the cursor is a plain offset ('pos') —
+** the (string, offset) interior-cursor ruling. A read at/past the end
+** (or at an embedded NUL) yields '\0', preserving upstream's
+** terminator-based stops.
 */
 struct Header
 {
   lua_State* L;
+  const InternalString* fmt; /* format string */
+  size_t pos;                /* cursor into 'fmt' */
   int islittle;
   unsigned maxalign;
 };
+
+/* current format byte (0 at end / embedded NUL — see above) */
+static inline int fmtbyte(const Header* h)
+{
+  return istrbyte(h->fmt, h->pos);
+}
 
 /*
 ** options for pack/unpack

@@ -480,6 +480,23 @@ LUALIB_API const char* luaL_optlstring(lua_State* L, int arg,
     return luaL_checklstring(L, arg, len);
 }
 
+LUALIB_API const InternalString* luaL_checkistring(lua_State* L, int arg)
+{
+  const InternalString* s = lua_toistring(L, arg);
+  if (l_unlikely(!s))
+    tag_error(L, arg, LUA_TSTRING);
+  return s;
+}
+
+LUALIB_API const InternalString* luaL_optistring(lua_State* L, int arg,
+                                                 const InternalString* def)
+{
+  if (lua_isnoneornil(L, arg))
+    return def;
+  else
+    return luaL_checkistring(L, arg);
+}
+
 LUALIB_API lua_Number luaL_checknumber(lua_State* L, int arg)
 {
   int isnum;
@@ -1062,6 +1079,12 @@ LUALIB_API const char* luaL_tolstring(lua_State* L, int idx, size_t* len)
     }
   }
   return lua_tolstring(L, -1, len);
+}
+
+LUALIB_API const InternalString* luaL_toistring(lua_State* L, int idx)
+{
+  luaL_tolstring(L, idx, nullptr); /* push the conversion */
+  return lua_toistring(L, -1);     /* borrowed from the pushed value */
 }
 
 /*

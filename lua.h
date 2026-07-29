@@ -185,6 +185,19 @@ LUA_API lua_Number(lua_tonumberx)(lua_State* L, int idx, int* isnum);
 LUA_API lua_Integer(lua_tointegerx)(lua_State* L, int idx, int* isnum);
 LUA_API int(lua_toboolean)(lua_State* L, int idx);
 LUA_API const char*(lua_tolstring) (lua_State* L, int idx, size_t* len);
+
+/*
+** Engine-side string accessor: the value as an engine string
+** (InternalString — see internal_string.h), or nullptr if the value
+** is neither a string nor a number (numbers are converted in place,
+** as in 'lua_tolstring'). The returned pointer is BORROWED from the
+** value on the stack: valid while the value stays there. This is the
+** accessor the standard libraries use (in the Java port they receive
+** the engine string object itself); the host-facing text API converts
+** to HostString instead.
+*/
+class InternalString;
+LUA_API const InternalString*(lua_toistring) (lua_State* L, int idx);
 LUA_API lua_Unsigned(lua_rawlen)(lua_State* L, int idx);
 LUA_API lua_CFunction(lua_tocfunction)(lua_State* L, int idx);
 LUA_API void*(lua_touserdata) (lua_State* L, int idx);

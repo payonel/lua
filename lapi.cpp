@@ -499,6 +499,26 @@ LUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len)
     return getstr(s);
 }
 
+LUA_API const InternalString* lua_toistring(lua_State* L, int idx)
+{
+  lua_lock(L);
+  TValue o = index2val(L, idx);
+  if (!((o.tt_ & NOVARIANT_MASK) == LUA_TSTRING))
+  {
+    if (!cvt2str(&o))
+    { /* not convertible? */
+      lua_unlock(L);
+      return nullptr;
+    }
+    luaO_tostring(L, &o);    /* convert the row copy... */
+    setindexval(L, idx, &o); /* ...and store it back */
+    luaC_checkGC(L);
+  }
+  lua_unlock(L);
+  assert((o.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+  return &tsvalue(&o)->data;
+}
+
 LUA_API lua_Unsigned lua_rawlen(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
