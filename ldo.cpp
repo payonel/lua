@@ -873,7 +873,7 @@ static CallInfo* findpcall(lua_State* L)
 ** of the coroutine itself. (Such errors should not be handled by any
 ** coroutine error handler and should not kill the coroutine.)
 */
-static int resume_error(lua_State* L, const char* msg, int narg)
+static int resume_error(lua_State* L, const InternalString* msg, int narg)
 {
   api_checkpop(L, narg);
   L->top -= narg;                           /* remove args from the stack */
@@ -953,15 +953,15 @@ LUA_API int lua_resume(lua_State* L, lua_State* from, int nargs,
   if (L->status == LUA_OK)
   {                           /* may be starting a coroutine */
     if (L->ci != &L->base_ci) /* not in base level? */
-      return resume_error(L, "cannot resume non-suspended coroutine", nargs);
+      return resume_error(L, lit<"cannot resume non-suspended coroutine">(), nargs);
     else if (((int)(L->top - (L->ci->func + 1))) == nargs) /* no function? */
-      return resume_error(L, "cannot resume dead coroutine", nargs);
+      return resume_error(L, lit<"cannot resume dead coroutine">(), nargs);
   }
   else if (L->status != LUA_YIELD) /* ended with errors? */
-    return resume_error(L, "cannot resume dead coroutine", nargs);
+    return resume_error(L, lit<"cannot resume dead coroutine">(), nargs);
   L->nCcalls = (from) ? getCcalls(from) : 0;
   if (getCcalls(L) >= LUAI_MAXCCALLS)
-    return resume_error(L, "C stack overflow", nargs);
+    return resume_error(L, lit<"C stack overflow">(), nargs);
   L->nCcalls++;
   luai_userstateresume(L, nargs);
   api_checkpop(L, (L->status == LUA_OK) ? nargs + 1 : nargs);

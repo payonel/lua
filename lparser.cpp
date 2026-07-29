@@ -69,7 +69,7 @@ static l_noret error_expected(LexState* ls, int token)
                                     FmtArgs().str(luaX_token2str(ls, token))));
 }
 
-static l_noret errorlimit(FuncState* fs, int limit, const char* what)
+static l_noret errorlimit(FuncState* fs, int limit, const InternalString* what)
 {
   lua_State* L = fs->ls->L;
   const InternalString* msg;
@@ -82,7 +82,7 @@ static l_noret errorlimit(FuncState* fs, int limit, const char* what)
   luaX_syntaxerror(fs->ls, msg);
 }
 
-void luaY_checklimit(FuncState* fs, int v, int l, const char* what)
+void luaY_checklimit(FuncState* fs, int v, int l, const InternalString* what)
 {
   if (l_unlikely(v > l))
     errorlimit(fs, l, what);
@@ -361,7 +361,7 @@ static void adjustlocalvars(LexState* ls, int nvars)
     Vardesc* var = getlocalvardesc(fs, vidx);
     var->ridx = ((lu_byte)(reglevel++));
     var->pidx = registerlocalvar(ls, fs, var->name);
-    luaY_checklimit(fs, reglevel, MAXVARS, "local variables");
+    luaY_checklimit(fs, reglevel, MAXVARS, lit<"local variables">());
   }
 }
 
@@ -400,7 +400,7 @@ static Upvaldesc* allocupvalue(FuncState* fs)
 {
   Proto* f = fs->f;
   int oldsize = f->sizeupvalues;
-  luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, "upvalues");
+  luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, lit<"upvalues">());
   int limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc))
                   ? MAXUPVAL
                   : (int)(MAX_SIZET / sizeof(Upvaldesc));
@@ -1128,8 +1128,7 @@ static void constructor(LexState* ls, expdesc* t)
     if (cc.v.k != VVOID)       /* is there a previous list item? */
       closelistfield(fs, &cc); /* close it */
     field(ls, &cc);
-    luaY_checklimit(fs, cc.tostore + cc.na + cc.nh, MAX_CNST,
-                    "items in a constructor");
+    luaY_checklimit(fs, cc.tostore + cc.na + cc.nh, MAX_CNST, lit<"items in a constructor">());
   } while (testnext(ls, ',') || testnext(ls, ';'));
   check_match(ls, /*{*/ '}', '{' /*}*/, line);
   lastlistfield(fs, &cc);

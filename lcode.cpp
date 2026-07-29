@@ -236,7 +236,7 @@ void luaK_ret(FuncState* fs, int first, int nret)
     op = OP_RETURN;
     break;
   }
-  luaY_checklimit(fs, nret + 1, MAXARG_B, "returns");
+  luaY_checklimit(fs, nret + 1, MAXARG_B, lit<"returns">());
   luaK_codeABC(fs, op, first, nret + 1, 0);
 }
 
@@ -515,7 +515,7 @@ void luaK_checkstack(FuncState* fs, int n)
   int newstack = fs->freereg + n;
   if (newstack > fs->f->maxstacksize)
   {
-    luaY_checklimit(fs, newstack, MAX_FSTACK, "registers");
+    luaY_checklimit(fs, newstack, MAX_FSTACK, lit<"registers">());
     fs->f->maxstacksize = ((lu_byte)(newstack));
   }
 }
@@ -815,7 +815,7 @@ static void const2exp(TValue* v, expdesc* e)
 void luaK_setreturns(FuncState* fs, expdesc* e, int nresults)
 {
   Instruction* pc = &((fs)->f->code[(e)->info]);
-  luaY_checklimit(fs, nresults + 1, MAXARG_C, "multiple results");
+  luaY_checklimit(fs, nresults + 1, MAXARG_C, lit<"multiple results">());
   if (e->k == VCALL) /* expression is an open function call? */
     ((*pc) = (((*pc) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(nresults + 1)) << POS_C) & MASK1(SIZE_C, POS_C))));
   else
