@@ -16,7 +16,9 @@ static int id (lua_State *L) {
 
 static int newstr (lua_State *L) {
   size_t len;
-  const char *str = luaL_checklstring(L, 1, &len);
+  std::string_view sv = luaL_checklstring(L, 1);
+  const char *str = sv.data();
+  len = sv.size();
   void *ud;
   lua_Alloc allocf = lua_getallocf(L, &ud);
   char *buf = (char*)allocf(ud, NULL, 0, len + 1);

@@ -291,8 +291,12 @@ constexpr int SIZETIMEFMT = 250;
 
 static int os_date(lua_State* L)
 {
-  size_t slen;
-  const char* s = luaL_optlstring(L, 1, "%c", &slen);
+  std::string_view sfmt = luaL_optlstring(L, 1, "%c");
+  /* HOST seam (category 4): the strftime/checkoption walk below stays
+     pointer-based until the loslib host work; payload or literal is
+     NUL-terminated */
+  const char* s = sfmt.data();
+  size_t slen = sfmt.size();
   time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
   const char* se = s + slen; /* 's' end */
   struct tm tmr, *stm;

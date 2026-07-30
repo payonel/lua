@@ -298,7 +298,7 @@ static void funcinfo(lua_Debug* ar, Closure* cl)
     ar->what = (ar->linedefined == 0) ? "main" : "Lua";
   }
   char buff[LUA_IDSIZE];
-  luaO_chunkid(buff, ar->source.data(), ar->source.size());
+  luaO_chunkid(buff, ar->source);
   ar->short_src = buff;
 }
 
@@ -930,9 +930,7 @@ const InternalString* luaG_addinfo(lua_State* L, const InternalString* msg,
   else
   {
     char buff[LUA_IDSIZE];
-    size_t idlen;
-    const char* id = ((void)((idlen) = (src)->data.size()), (src)->data.c_str());
-    luaO_chunkid(buff, id, idlen);
+    luaO_chunkid(buff, src->data.view());
     return luaO_pushfstring(L, lit<"%s:%d: %s">(), FmtArgs().str(buff).num(line).str(msg));
   }
 }

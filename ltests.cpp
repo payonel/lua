@@ -1480,7 +1480,9 @@ static int doonnewstack(lua_State* L)
 {
   lua_State* L1 = lua_newthread(L);
   size_t l;
-  const char* s = luaL_checklstring(L, 1, &l);
+  std::string_view sv1 = luaL_checklstring(L, 1);
+  const char* s = sv1.data();
+  l = sv1.size();
   int status = luaL_loadbufferx(L1, std::string_view{s, l}, s, "t");
   if (status == LUA_OK)
     status = lua_pcall(L1, 0, 0, 0);
@@ -1490,7 +1492,7 @@ static int doonnewstack(lua_State* L)
 
 static int s2d(lua_State* L)
 {
-  lua_pushnumber(L, ((lua_Number)(*((const double*)(luaL_checklstring(L, 1, nullptr))))));
+  lua_pushnumber(L, ((lua_Number)(*((const double*)(luaL_checklstring(L, 1).data())))));
   return 1;
 }
 
@@ -1561,7 +1563,9 @@ static int doremote(lua_State* L)
 {
   lua_State* L1 = getstate(L);
   size_t lcode;
-  const char* code = luaL_checklstring(L, 2, &lcode);
+  std::string_view codev = luaL_checklstring(L, 2);
+  const char* code = codev.data();
+  lcode = codev.size();
   int status;
   lua_settop(L1, 0);
   status = luaL_loadbufferx(L1, std::string_view{code, lcode}, code, "t");
@@ -1649,7 +1653,9 @@ static int checkpanic(lua_State* L)
 static int externKstr(lua_State* L)
 {
   size_t len;
-  const char* s = luaL_checklstring(L, 1, &len);
+  std::string_view sv = luaL_checklstring(L, 1);
+  const char* s = sv.data();
+  len = sv.size();
   lua_pushlstring(L, std::string_view{s, len}, 0, len);
   return 1;
 }
@@ -1662,7 +1668,9 @@ static int externKstr(lua_State* L)
 static int externstr(lua_State* L)
 {
   size_t len;
-  const char* s = luaL_checklstring(L, 1, &len);
+  std::string_view sv = luaL_checklstring(L, 1);
+  const char* s = sv.data();
+  len = sv.size();
   /* push string directly (copies content internally) */
   lua_pushlstring(L, std::string_view{s, len}, 0, len);
   return 1;
@@ -1982,7 +1990,9 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     else if (strcmp("loadstring", inst) == 0)
     {
       size_t slen;
-      const char* s = luaL_checklstring(L1, getnum_aux(L, L1, &pc), &slen);
+      std::string_view sv2 = luaL_checklstring(L1, getnum_aux(L, L1, &pc));
+      const char* s = sv2.data();
+      slen = sv2.size();
       const char* name = getstring_aux(L, buff, &pc);
       const char* mode = getstring_aux(L, buff, &pc);
       luaL_loadbufferx(L1, std::string_view{s, slen}, name, mode);
@@ -2307,7 +2317,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     else if (strcmp("tostring", inst) == 0)
     {
       int i = getindex_aux(L, L1, &pc);
-      if (lua_tolstring(L1, i, nullptr) == nullptr) /* not convertible? */
+      if (lua_tolstring(L1, i).data() == nullptr) /* not convertible? */
         lua_pushnil(L1);
       else
       {
@@ -2318,7 +2328,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("Ltolstring", inst) == 0)
     {
-      luaL_tolstring(L1, getindex_aux(L, L1, &pc), nullptr);
+      luaL_tolstring(L1, getindex_aux(L, L1, &pc));
     }
     else if (strcmp("type", inst) == 0)
     {

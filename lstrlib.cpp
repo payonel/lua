@@ -1425,7 +1425,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
   case LUA_TNIL:
   case LUA_TBOOLEAN:
   {
-    luaL_tolstring(L, arg, nullptr);
+    luaL_tolstring(L, arg);
     luaL_addvalue(b);
     break;
   }
@@ -2291,10 +2291,10 @@ static int str_pack(lua_State* L)
     }
     case Kchar:
     { /* fixed-size string */
-      size_t len;
-      const char* s = luaL_checklstring(L, arg, &len);
+      std::string_view s = luaL_checklstring(L, arg);
+      size_t len = s.size();
       luaL_argcheck(L, len <= size, arg, "string longer than given size");
-      luaL_addlstring(&b, std::string_view{s, len}, 0, len); /* add string */
+      luaL_addlstring(&b, s, 0, len); /* add string */
       if (len < size)
       {                            /* does it need padding? */
         size_t psize = size - len; /* pad size */
@@ -2307,22 +2307,23 @@ static int str_pack(lua_State* L)
     }
     case Kstring:
     { /* strings with length count */
-      size_t len;
-      const char* s = luaL_checklstring(L, arg, &len);
+      std::string_view s = luaL_checklstring(L, arg);
+      size_t len = s.size();
       luaL_argcheck(L, size >= sizeof(lua_Unsigned) || len < ((lua_Unsigned) 1 << (size * NB)),
                     arg, "string length does not fit in given size");
       /* pack length */
       packint(&b, (lua_Unsigned) len, h.islittle, ((unsigned int)(size)), 0);
-      luaL_addlstring(&b, std::string_view{s, len}, 0, len);
+      luaL_addlstring(&b, s, 0, len);
       totalsize += len;
       break;
     }
     case Kzstr:
     { /* zero-terminated string */
-      size_t len;
-      const char* s = luaL_checklstring(L, arg, &len);
-      luaL_argcheck(L, strlen(s) == len, arg, "string contains zeros");
-      luaL_addlstring(&b, std::string_view{s, len}, 0, len);
+      std::string_view s = luaL_checklstring(L, arg);
+      size_t len = s.size();
+      luaL_argcheck(L, s.find('\0') == std::string_view::npos, arg,
+                    "string contains zeros");
+      luaL_addlstring(&b, s, 0, len);
       luaL_addchar(&b, '\0'); /* add zero at the end */
       totalsize += len + 1;
       break;
@@ -2369,7 +2370,7 @@ static int str_packsize(lua_State* L)
 ** it must check the unread bytes to see whether they do not cause an
 ** overflow.
 */
-static lua_Integer unpackint(lua_State* L, const char* str,
+static lua_Integer unpackint(lua_State* L, std::string_view data, size_t off,
                              int islittle, int size, int issigned)
 {
   lua_Unsigned res = 0;
@@ -2378,7 +2379,7 @@ static lua_Integer unpackint(lua_State* L, const char* str,
   for (i = limit - 1; i >= 0; i--)
   {
     res <<= NB;
-    res |= (lua_Unsigned) (unsigned char) str[islittle ? i : size - 1 - i];
+    res |= (lua_Unsigned) (unsigned char) data[off + ((size_t)(islittle ? i : size - 1 - i))];
   }
   if (size < SZINT)
   { /* real size smaller than lua_Integer? */
@@ -2393,7 +2394,7 @@ static lua_Integer unpackint(lua_State* L, const char* str,
     int mask = (!issigned || (lua_Integer) res >= 0) ? 0 : MC;
     for (i = limit; i < size; i++)
     {
-      if (l_unlikely((unsigned char) str[islittle ? i : size - 1 - i] != mask))
+      if (l_unlikely((unsigned char) data[off + ((size_t)(islittle ? i : size - 1 - i))] != mask))
       {
         lua_pushinteger(L, size);
         luaL_error(L, "%d-byte integer does not fit into Lua Integer");
@@ -2407,8 +2408,8 @@ static int str_unpack(lua_State* L)
 {
   Header h;
   const InternalString* fmt = luaL_checkistring(L, 1);
-  size_t ld;
-  const char* data = luaL_checklstring(L, 2, &ld);
+  std::string_view data = luaL_checklstring(L, 2);
+  size_t ld = data.size();
   size_t pos = posrelatI(luaL_optinteger(L, 3, 1), ld) - 1;
   int n = 0; /* number of results */
   luaL_argcheck(L, pos <= ld, 3, "initial position out of string");
@@ -2429,7 +2430,7 @@ static int str_unpack(lua_State* L)
     case Kint:
     case Kuint:
     {
-      lua_Integer res = unpackint(L, data + pos, h.islittle,
+      lua_Integer res = unpackint(L, data, pos, h.islittle,
                                   ((int)(size)), (opt == Kint));
       lua_pushinteger(L, res);
       break;
@@ -2437,44 +2438,48 @@ static int str_unpack(lua_State* L)
     case Kfloat:
     {
       float f;
-      copywithendian((char*) &f, data + pos, sizeof(f), h.islittle);
+      /* raw-memory seam: category-6 byte moving */
+      copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
     }
     case Knumber:
     {
       lua_Number f;
-      copywithendian((char*) &f, data + pos, sizeof(f), h.islittle);
+      /* raw-memory seam: category-6 byte moving */
+      copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, f);
       break;
     }
     case Kdouble:
     {
       double f;
-      copywithendian((char*) &f, data + pos, sizeof(f), h.islittle);
+      /* raw-memory seam: category-6 byte moving */
+      copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
     }
     case Kchar:
     {
-      lua_pushlstring(L, std::string_view{data + pos, size}, 0, size);
+      lua_pushlstring(L, data, pos, size);
       break;
     }
     case Kstring:
     {
-      lua_Unsigned len = (lua_Unsigned) unpackint(L, data + pos,
+      lua_Unsigned len = (lua_Unsigned) unpackint(L, data, pos,
                                                   h.islittle, ((int)(size)), 0);
       luaL_argcheck(L, len <= ld - pos - size, 2, "data string too short");
-      lua_pushlstring(L, std::string_view{data + pos + size, ((size_t)(len))}, 0, ((size_t)(len)));
+      lua_pushlstring(L, data, pos + size, ((size_t)(len)));
       pos += ((size_t)(len)); /* skip string */
       break;
     }
     case Kzstr:
     {
-      size_t len = strlen(data + pos);
-      luaL_argcheck(L, pos + len < ld, 2,
+      size_t zend = data.find('\0', pos); /* bounded scan (no NUL reliance) */
+      luaL_argcheck(L, zend != std::string_view::npos, 2,
                     "unfinished string for format 'z'");
-      lua_pushlstring(L, std::string_view{data + pos, len}, 0, len);
+      size_t len = zend - pos;
+      lua_pushlstring(L, data, pos, len);
       pos += len + 1; /* skip string plus final '\0' */
       break;
     }

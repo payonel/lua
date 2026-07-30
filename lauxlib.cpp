@@ -459,25 +459,21 @@ LUALIB_API void luaL_checkany(lua_State* L, int arg)
     luaL_argerror(L, arg, "value expected");
 }
 
-LUALIB_API const char* luaL_checklstring(lua_State* L, int arg, size_t* len)
+LUALIB_API std::string_view luaL_checklstring(lua_State* L, int arg)
 {
-  const char* s = lua_tolstring(L, arg, len);
-  if (l_unlikely(!s))
+  std::string_view s = lua_tolstring(L, arg);
+  if (l_unlikely(s.data() == nullptr))
     tag_error(L, arg, LUA_TSTRING);
   return s;
 }
 
-LUALIB_API const char* luaL_optlstring(lua_State* L, int arg,
-                                       const char* def, size_t* len)
+LUALIB_API std::string_view luaL_optlstring(lua_State* L, int arg,
+                                            std::string_view def)
 {
   if (lua_isnoneornil(L, arg))
-  {
-    if (len)
-      *len = (def ? strlen(def) : 0);
     return def;
-  }
   else
-    return luaL_checklstring(L, arg, len);
+    return luaL_checklstring(L, arg);
 }
 
 LUALIB_API const InternalString* luaL_checkistring(lua_State* L, int arg)
@@ -654,12 +650,11 @@ LUALIB_API void luaL_pushresultsize(luaL_Buffer* B, size_t sz)
 LUALIB_API void luaL_addvalue(luaL_Buffer* B)
 {
   lua_State* L = B->L;
-  size_t len;
-  const char* s = lua_tolstring(L, -1, &len);
-  size_t off = prepbuff(B, len);
+  std::string_view s = lua_tolstring(L, -1);
+  size_t off = prepbuff(B, s.size());
   /* Java: System.arraycopy(s, 0, buf, off, len) */
-  memcpy(B->bldr.area().data() + off, s, len * sizeof(char));
-  luaL_addsize(B, len);
+  memcpy(B->bldr.area().data() + off, s.data(), s.size() * sizeof(char));
+  luaL_addsize(B, s.size());
   lua_pop(L, 1); /* pop string */
 }
 
@@ -951,7 +946,7 @@ LUALIB_API lua_Integer luaL_len(lua_State* L, int idx)
   return l;
 }
 
-LUALIB_API const char* luaL_tolstring(lua_State* L, int idx, size_t* len)
+LUALIB_API std::string_view luaL_tolstring(lua_State* L, int idx)
 {
   idx = lua_absindex(L, idx);
   if (luaL_callmeta(L, idx, "__tostring"))
@@ -1003,13 +998,13 @@ LUALIB_API const char* luaL_tolstring(lua_State* L, int idx, size_t* len)
     }
     }
   }
-  return lua_tolstring(L, -1, len);
+  return lua_tolstring(L, -1);
 }
 
 LUALIB_API const InternalString* luaL_toistring(lua_State* L, int idx)
 {
-  luaL_tolstring(L, idx, nullptr); /* push the conversion */
-  return lua_toistring(L, -1);     /* borrowed from the pushed value */
+  luaL_tolstring(L, idx);      /* push the conversion */
+  return lua_toistring(L, -1); /* borrowed from the pushed value */
 }
 
 /*
@@ -1293,9 +1288,7 @@ LUALIB_API void luaL_argexpected(lua_State* L, bool cond, int arg, const HostStr
 
 LUALIB_API HostString luaL_checkstring(lua_State* L, int arg)
 {
-  size_t len;
-  const char* s = luaL_checklstring(L, arg, &len);
-  return HostString(s, len); /* boundary copy */
+  return HostString(luaL_checklstring(L, arg)); /* boundary copy */
 }
 
 LUALIB_API HostString luaL_optstring(lua_State* L, int arg, const HostString& d)

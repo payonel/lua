@@ -48,13 +48,12 @@ LUALIB_API int(luaL_callmeta)(lua_State* L, int obj, const HostString& e);
 /* bytes accessor for the __tostring'd value: converts (honoring
    '__tostring'), PUSHES the result, and returns its payload
    (borrowed from the pushed value) */
-LUALIB_API const char*(luaL_tolstring) (lua_State* L, int idx, size_t* len);
+LUALIB_API std::string_view(luaL_tolstring) (lua_State* L, int idx);
 LUALIB_API int(luaL_argerror)(lua_State* L, int arg, const HostString& extramsg);
 LUALIB_API int(luaL_typeerror)(lua_State* L, int arg, const HostString& tname);
-LUALIB_API const char*(luaL_checklstring) (lua_State* L, int arg,
-                                           size_t* l);
-LUALIB_API const char*(luaL_optlstring) (lua_State* L, int arg,
-                                         const char* def, size_t* l);
+LUALIB_API std::string_view(luaL_checklstring) (lua_State* L, int arg);
+LUALIB_API std::string_view(luaL_optlstring) (lua_State* L, int arg,
+                                              std::string_view def);
 
 /*
 ** Engine-side string accessors (see lua_toistring): borrowed

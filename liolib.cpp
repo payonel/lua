@@ -660,8 +660,12 @@ static int g_write(lua_State* L, FILE* f, int arg)
       s = buff;
       len--;
     }
-    else /* must be a string */
-      s = luaL_checklstring(L, arg, &len);
+    else
+    { /* must be a string */
+      std::string_view sv = luaL_checklstring(L, arg);
+      s = sv.data(); /* host write seam (fwrite) */
+      len = sv.size();
+    }
     numbytes = fwrite(s, sizeof(char), len, f);
     totalbytes += numbytes;
     if (numbytes < len)

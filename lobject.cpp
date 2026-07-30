@@ -1040,51 +1040,63 @@ constexpr char RETS[] = "...";
 constexpr char PRE[] = "[string \"";
 constexpr char POS[] = "\"]";
 
-void luaO_chunkid(std::span<char> out, const char* source, size_t srclen)
+void luaO_chunkid(std::span<char> out, std::string_view source)
 {
   assert(out.size() >= LUA_IDSIZE);
+  size_t srclen = source.size();
   size_t bufflen = LUA_IDSIZE; /* free space in buffer */
   size_t pos = 0;              /* write position in 'out' */
-  if (*source == '=')
+  if (sv_byteat(source, 0) == '=')
   {                        /* 'literal' source */
     if (srclen <= bufflen) /* small enough? */
-      memcpy(out.data(), source + 1, srclen * sizeof(char));
+    { /* copy the content and terminate explicitly (upstream read the
+         payload's NUL; the view is bounded) */
+      memcpy(out.data(), source.data() + 1, (srclen - 1) * sizeof(char));
+      out[srclen - 1] = '\0';
+    }
     else
     { /* truncate it */
-      memcpy(out.data(), source + 1, (bufflen - 1) * sizeof(char));
+      memcpy(out.data(), source.data() + 1, (bufflen - 1) * sizeof(char));
       out[bufflen - 1] = '\0';
     }
   }
-  else if (*source == '@')
+  else if (sv_byteat(source, 0) == '@')
   {                        /* file name */
     if (srclen <= bufflen) /* small enough? */
-      memcpy(out.data(), source + 1, srclen * sizeof(char));
+    { /* copy the content and terminate explicitly */
+      memcpy(out.data(), source.data() + 1, (srclen - 1) * sizeof(char));
+      out[srclen - 1] = '\0';
+    }
     else
     { /* add '...' before rest of name */
       memcpy(out.data(), RETS, (sizeof(RETS) / sizeof(char) - 1) * sizeof(char));
       pos += sizeof(RETS) / sizeof(char) - 1;
       bufflen -= (sizeof(RETS) / sizeof(char) - 1);
-      memcpy(out.data() + pos, source + 1 + srclen - bufflen, bufflen * sizeof(char));
+      /* last bufflen-1 content bytes plus an explicit terminator
+         (upstream's copy included the payload's NUL) */
+      memcpy(out.data() + pos, source.data() + 1 + srclen - bufflen,
+             (bufflen - 1) * sizeof(char));
+      out[pos + bufflen - 1] = '\0';
     }
   }
   else
   {                                                 /* string; format as [string "source"] */
-    const char* nl = (const char*) memchr(source, '\n', srclen); /* find first new line (if any) */
+    size_t nl = source.find('\n'); /* first new line (if any); npos if none */
     memcpy(out.data(), PRE, (sizeof(PRE) / sizeof(char) - 1) * sizeof(char)); /* add prefix */
     pos += sizeof(PRE) / sizeof(char) - 1;
     bufflen -= (sizeof(PRE) - 1) + (sizeof(RETS) - 1) + (sizeof(POS) - 1) + 1; /* save space for prefix+suffix+'\0' */
-    if (srclen < bufflen && nl == nullptr)
+    if (srclen < bufflen && nl == std::string_view::npos)
     { /* small one-line source? keep it */
-      memcpy(out.data() + pos, source, srclen * sizeof(char));
+      memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
       pos += srclen;
     }
     else
     {
-      if (nl != nullptr)
-        srclen = ((size_t)(nl - source)); /* stop at first newline */
+      if (nl != std::string_view::npos)
+        srclen = nl; /* stop at first newline */
       if (srclen > bufflen)
         srclen = bufflen;
-      memcpy(out.data() + pos, source, srclen * sizeof(char));
+      memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
       pos += srclen;
       memcpy(out.data() + pos, RETS, (sizeof(RETS) / sizeof(char) - 1) * sizeof(char));
       pos += sizeof(RETS) / sizeof(char) - 1;

@@ -534,7 +534,7 @@ static const char* get_prompt(lua_State* L, int firstline)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
-    const char* p = luaL_tolstring(L, -1, nullptr);
+    const char* p = luaL_tolstring(L, -1).data(); /* host print seam (NUL-terminated payload) */
     lua_remove(L, -2); /* remove original value */
     return p;
   }
@@ -553,8 +553,9 @@ static int incomplete(lua_State* L, int status)
 {
   if (status == LUA_ERRSYNTAX)
   {
-    size_t lmsg;
-    const char* msg = lua_tolstring(L, -1, &lmsg);
+    std::string_view msgv = lua_tolstring(L, -1);
+    size_t lmsg = msgv.size();
+    const char* msg = msgv.data();
     if (lmsg >= marklen && strcmp(msg + lmsg - marklen, EOFMARK) == 0)
       return 1;
   }
@@ -617,19 +618,18 @@ static void checklocal(const char* line)
 */
 static int multiline(lua_State* L)
 {
-  size_t len;
-  const char* line = lua_tolstring(L, 1, &len); /* get first line */
-  checklocal(line);
+  std::string_view line = lua_tolstring(L, 1); /* get first line */
+  checklocal(line.data()); /* host seam (NUL-terminated payload) */
   for (;;)
-  {                                                             /* repeat until gets a complete statement */
-    int status = luaL_loadbufferx(L, std::string_view{line, len}, "=stdin", "t"); /* try it */
+  {                                                  /* repeat until gets a complete statement */
+    int status = luaL_loadbufferx(L, line, "=stdin", "t"); /* try it */
     if (!incomplete(L, status) || !pushline(L, 0))
       return status;                  /* should not or cannot try to add continuation line */
     lua_remove(L, -2);                /* remove error message (from incomplete line) */
     lua_pushliteral(L, "\n");         /* add newline... */
     lua_insert(L, -2);                /* ...between the two lines */
     lua_concat(L, 3);                 /* join them */
-    line = lua_tolstring(L, 1, &len); /* get what is has */
+    line = lua_tolstring(L, 1);       /* get what is has */
   }
 }
 

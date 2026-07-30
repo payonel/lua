@@ -185,15 +185,14 @@ static int tconcat(lua_State* L)
 {
   luaL_Buffer b;
   lua_Integer last = aux_getn(L, 1, TAB_R);
-  size_t lsep;
-  const char* sep = luaL_optlstring(L, 2, "", &lsep);
+  std::string_view sep = luaL_optlstring(L, 2, "");
   lua_Integer i = luaL_optinteger(L, 3, 1);
   last = luaL_optinteger(L, 4, last);
   luaL_buffinit(L, &b);
   for (; i < last; i++)
   {
     addfield(L, &b, i);
-    luaL_addlstring(&b, std::string_view{sep, lsep}, 0, lsep);
+    luaL_addlstring(&b, sep, 0, sep.size());
   }
   if (i == last) /* add last value (if interval was not empty) */
     addfield(L, &b, i);

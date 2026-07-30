@@ -475,7 +475,8 @@ static int db_debug(lua_State* L)
       return 0;
     if (luaL_loadbufferx(L, std::string_view{buffer, strlen(buffer)}, "=(debug command)", "t") ||
         lua_pcall(L, 0, 0, 0))
-      lua_writestringerror("%s\n", luaL_tolstring(L, -1, nullptr));
+      /* host print seam: the payload is NUL-terminated (c_str) */
+      lua_writestringerror("%s\n", luaL_tolstring(L, -1).data());
     lua_settop(L, 0); /* remove eventual returns */
   }
 }

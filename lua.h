@@ -204,7 +204,9 @@ LUA_API int(lua_toboolean)(lua_State* L, int idx);
 ** invalid UTF-8). Borrowed pointer: valid while the value stays on
 ** the stack. (Java: byte[] out, defensive copy.)
 */
-LUA_API const char*(lua_tolstring) (lua_State* L, int idx, size_t* len);
+/* borrowed whole-payload view; absent (not convertible) has null data()
+   (Java: byte[] or null). Positions into it travel as offsets. */
+LUA_API std::string_view(lua_tolstring) (lua_State* L, int idx);
 
 /*
 ** Engine-side string accessor: the value as an engine string
@@ -401,7 +403,7 @@ LUA_API void(lua_len)(lua_State* L, int idx);
 
 constexpr int LUA_N2SBUFFSZ = 64;
 LUA_API unsigned(lua_numbertocstring)(lua_State* L, int idx, std::span<char> buff);
-LUA_API size_t(lua_stringtonumber)(lua_State* L, const char* s);
+LUA_API size_t(lua_stringtonumber)(lua_State* L, std::string_view s);
 
 LUA_API lua_Alloc(lua_getallocf)(lua_State* L, void** ud);
 LUA_API void(lua_setallocf)(lua_State* L, lua_Alloc f, void* ud);

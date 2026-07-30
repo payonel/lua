@@ -429,10 +429,13 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
 */
 static int l_strcmp(const TString* ts1, const TString* ts2)
 {
-  size_t rl1; /* real length */
-  const char* s1 = ((void)((rl1) = (ts1)->data.size()), (ts1)->data.c_str());
-  size_t rl2;
-  const char* s2 = ((void)((rl2) = (ts2)->data.size()), (ts2)->data.c_str());
+  /* LOCALE-item site: 'l_strcoll' (libc strcoll) walks NUL-delimited
+     segments, so the payload's c_str form is used deliberately here;
+     this function is rewritten by the locale item (own collation) */
+  size_t rl1 = ts1->data.size(); /* real length */
+  const char* s1 = ts1->data.c_str();
+  size_t rl2 = ts2->data.size();
+  const char* s2 = ts2->data.c_str();
   for (;;)
   { /* for each segment */
     int temp = l_strcoll(s1, s2);
@@ -834,11 +837,10 @@ static void copy2buff(lua_State* L, StkId top, int n, std::span<char> buff)
     StkId v = top - n;
     assert((slottag(L, v) & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = slottsval(L, v);
-    size_t l; /* length of string being copied */
-    const char* s = ((void)((l) = (st)->data.size()), (st)->data.c_str());
+    std::string_view s = st->data.view();
     /* Java: System.arraycopy(s, 0, buff, tl, l) */
-    memcpy(buff.data() + tl, s, l * sizeof(char));
-    tl += l;
+    memcpy(buff.data() + tl, s.data(), s.size() * sizeof(char));
+    tl += s.size();
   } while (--n > 0);
 }
 

@@ -878,4 +878,4 @@ LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
                                                  const FmtArgs& args);
 LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
                                                  const char* fmt);
-LUAI_FUNC void luaO_chunkid(std::span<char> out, const char* source, size_t srclen);
+LUAI_FUNC void luaO_chunkid(std::span<char> out, std::string_view source);

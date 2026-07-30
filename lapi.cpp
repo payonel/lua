@@ -433,10 +433,10 @@ LUA_API unsigned lua_numbertocstring(lua_State* L, int idx, std::span<char> buff
     return 0;
 }
 
-LUA_API size_t lua_stringtonumber(lua_State* L, const char* s)
+LUA_API size_t lua_stringtonumber(lua_State* L, std::string_view s)
 {
   TValue v;
-  size_t sz = luaO_str2num(std::string_view{s, strlen(s)}, &v);
+  size_t sz = luaO_str2num(s, &v);
   if (sz != 0)
   {
     setslot(L, L->top, &v);
@@ -471,18 +471,16 @@ LUA_API int lua_toboolean(lua_State* L, int idx)
   return !((o.tt_ == LUA_VFALSE) || ((o.tt_ & NOVARIANT_MASK) == LUA_TNIL));
 }
 
-LUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len)
+LUA_API std::string_view lua_tolstring(lua_State* L, int idx)
 {
   lua_lock(L);
   TValue o = index2val(L, idx);
   if (!((o.tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   {
     if (!cvt2str(&o))
-    { /* not convertible? */
-      if (len != nullptr)
-        *len = 0;
+    { /* not convertible? absent view (Java: null) */
       lua_unlock(L);
-      return nullptr;
+      return std::string_view{};
     }
     luaO_tostring(L, &o);      /* convert the row copy... */
     setindexval(L, idx, &o); /* ...and store it back */
@@ -491,13 +489,7 @@ LUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len)
   lua_unlock(L);
   assert((o.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
   TString* s = tsvalue(&o);
-  if (len != nullptr)
-  {
-    *len = s->data.size();
-    return s->data.c_str();
-  }
-  else
-    return getstr(s);
+  return s->data.view();
 }
 
 LUA_API const InternalString* lua_toistring(lua_State* L, int idx)
@@ -1988,9 +1980,8 @@ LUA_API void lua_pushglobaltable(lua_State* L)
 */
 LUA_API HostString lua_tostring(lua_State* L, int idx)
 {
-  size_t len;
-  const char* s = lua_tolstring(L, idx, &len);
-  return (s == nullptr) ? HostString() : HostString(s, len);
+  std::string_view s = lua_tolstring(L, idx);
+  return (s.data() == nullptr) ? HostString() : HostString(s);
 }
 
 LUA_API void lua_insert(lua_State* L, int idx)

@@ -660,10 +660,10 @@ static int getmode(global_State* g, Table* h)
     return 0; /* ignore non-string modes */
   else
   {
-    const char* smode = getstr(tsvalue(mode));
-    const char* weakkey = strchr(smode, 'k');
-    const char* weakvalue = strchr(smode, 'v');
-    return ((weakkey != nullptr) << 1) | (weakvalue != nullptr);
+    std::string_view smode = tsvalue(mode)->data.view();
+    bool weakkey = smode.find('k') != std::string_view::npos;
+    bool weakvalue = smode.find('v') != std::string_view::npos;
+    return (((int)(weakkey)) << 1) | ((int)(weakvalue));
   }
 }
 

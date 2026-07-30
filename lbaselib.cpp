@@ -24,11 +24,10 @@ static int luaB_print(lua_State* L)
   int i;
   for (i = 1; i <= n; i++)
   { /* for each argument */
-    size_t l;
-    const char* s = luaL_tolstring(L, i, &l); /* convert it to string */
-    if (i > 1)                                /* not the first element? */
-      lua_writestring("\t", 1);               /* add a tab before it */
-    lua_writestring(s, l);                    /* print it */
+    std::string_view s = luaL_tolstring(L, i); /* convert it to string */
+    if (i > 1)                                  /* not the first element? */
+      lua_writestring("\t", 1);                 /* add a tab before it */
+    lua_writestring(s.data(), s.size());        /* print it (host seam) */
     lua_pop(L, 1);                            /* pop result */
   }
   lua_writeline();
@@ -104,9 +103,8 @@ static int luaB_tonumber(lua_State* L)
     }
     else
     {
-      size_t l;
-      const char* s = lua_tolstring(L, 1, &l);
-      if (s != nullptr && lua_stringtonumber(L, s) == l + 1)
+      std::string_view s = lua_tolstring(L, 1);
+      if (s.data() != nullptr && lua_stringtonumber(L, s) == s.size() + 1)
         return 1; /* successful conversion to number */
       /* else not a number */
       luaL_checkany(L, 1); /* (but there must be some parameter) */
@@ -114,14 +112,12 @@ static int luaB_tonumber(lua_State* L)
   }
   else
   {
-    size_t l;
-    const char* s;
     lua_Integer n = 0; /* to avoid warnings */
     lua_Integer base = luaL_checkinteger(L, 2);
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
-    s = lua_tolstring(L, 1, &l);
+    std::string_view s = lua_tolstring(L, 1);
     luaL_argcheck(L, 2 <= base && base <= 36, 2, "base out of range");
-    if (b_str2int(std::string_view{s, l}, ((unsigned int)(base)), &n) == l)
+    if (b_str2int(s, ((unsigned int)(base)), &n) == s.size())
     {
       lua_pushinteger(L, n);
       return 1;
@@ -437,21 +433,24 @@ static const char* generic_reader(lua_State* L, void* ud, size_t* size)
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
     luaL_error(L, "reader function must return a string");
-  return lua_tolstring(L, -1, size);
+  /* stream-reader seam: return the payload as pointer+size
+     (category 5; Java: the reader hands back byte[] + length) */
+  std::string_view sv = lua_tolstring(L, -1);
+  *size = sv.size();
+  return sv.data();
 }
 
 static int luaB_load(lua_State* L)
 {
   int status;
-  size_t l;
-  const char* s = lua_tolstring(L, 1, &l);
+  std::string_view s = lua_tolstring(L, 1);
   HostString mode = getMode(L, 3);
   const char* modep = mode.empty() ? nullptr : mode.c_str();
   int env = (!lua_isnone(L, 4) ? 4 : 0); /* 'env' index or 0 if no 'env' */
-  if (s != nullptr)
+  if (s.data() != nullptr)
   { /* loading a string? */
-    HostString chunkname = luaL_optstring(L, 2, HostString(s, l));
-    status = luaL_loadbufferx(L, std::string_view{s, l}, chunkname, modep);
+    HostString chunkname = luaL_optstring(L, 2, HostString(s));
+    status = luaL_loadbufferx(L, s, chunkname, modep);
   }
   else
   {                    /* loading from a reader function */
@@ -500,7 +499,7 @@ static int luaB_assert(lua_State* L)
 static int luaB_select(lua_State* L)
 {
   int n = lua_gettop(L);
-  if (lua_type(L, 1) == LUA_TSTRING && *lua_tolstring(L, 1, nullptr) == '#')
+  if (lua_type(L, 1) == LUA_TSTRING && sv_byteat(lua_tolstring(L, 1), 0) == '#')
   {
     lua_pushinteger(L, n - 1);
     return 1;
@@ -566,7 +565,7 @@ static int luaB_xpcall(lua_State* L)
 static int luaB_tostring(lua_State* L)
 {
   luaL_checkany(L, 1);
-  luaL_tolstring(L, 1, nullptr);
+  luaL_tolstring(L, 1);
   return 1;
 }
 
