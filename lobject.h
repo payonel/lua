@@ -809,7 +809,6 @@ constexpr int MAXFMTARGS = 8;
 struct FmtArg
 {
   char tag;      /* directive this argument answers */
-  const char* s; /* '%s' as tag 's' (transitional zero-terminated form) */
   const InternalString* is; /* '%s' as tag 'S' */
   lua_Integer i; /* '%c', '%d', '%I', '%U' */
   lua_Number n;  /* '%f' */
@@ -820,7 +819,6 @@ struct FmtArgs
 {
   int n = 0;              /* number of arguments appended */
   FmtArg arg[MAXFMTARGS]; /* only 'arg[0..n-1]' are meaningful */
-  FmtArgs& str(const char* s);   /* '%s': a zero-terminated string (transitional) */
   FmtArgs& str(const InternalString* s); /* '%s': an engine string */
   FmtArgs& chr(int c);           /* '%c': an 'int' as a character */
   FmtArgs& num(int d);           /* '%d': an 'int' */
@@ -852,11 +850,11 @@ LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
 /*
-** Primary format entry points: fmt is an InternalString*, scanned by
-** offset (an interior cursor is (InternalString*, int), never a raw
-** pointer). The const char* overloads are TRANSITIONAL — they
-** deep-copy fmt into an InternalString at the seam (no external
-** pointer is retained) and exist for the staging C API layer.
+** Format entry points: fmt is an InternalString*, scanned by offset
+** (an interior cursor is (InternalString*, int), never a raw
+** pointer). The const char* overloads are GONE (retired 2026-07-30);
+** boundary callers deep-copy their transitional char* text at their
+** own seams.
 */
 LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L,
                                                   const InternalString* fmt,
@@ -866,12 +864,4 @@ LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
                                                  const FmtArgs& args);
 LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
                                                  const InternalString* fmt);
-LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L,
-                                                  const char* fmt,
-                                                  const FmtArgs& args);
-LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
-                                                 const char* fmt,
-                                                 const FmtArgs& args);
-LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
-                                                 const char* fmt);
 LUAI_FUNC void luaO_chunkid(std::span<char> out, std::string_view source);

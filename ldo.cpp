@@ -1102,13 +1102,17 @@ struct SParser
   const char* name;
 };
 
-static void checkmode(lua_State* L, const char* mode, const char* x)
+static void checkmode(lua_State* L, const char* mode,
+                      const InternalString* x)
 {
-  if (strchr(mode, x[0]) == nullptr)
+  if (strchr(mode, x->byteAt(0)) == nullptr)
   {
+    /* 'mode' is the transitional load-path char* param: deep-copy at
+       the seam for the message (dies with the HostString switch) */
+    InternalString m{mode, strlen(mode)};
     luaO_pushfstring(L,
                      lit<"attempt to load a %s chunk (mode is '%s')">(),
-                     FmtArgs().str(x).str(mode));
+                     FmtArgs().str(x).str(&m));
     luaD_throw(L, LUA_ERRSYNTAX);
   }
 }
@@ -1135,12 +1139,12 @@ static void f_parser(lua_State* L, void* ud)
     if (strchr(mode, 'B') != nullptr)
       fixed = 1;
     else
-      checkmode(L, mode, "binary");
+      checkmode(L, mode, lit<"binary">());
     cl = luaU_undump(L, p->z, anchor, p->name, fixed);
   }
   else
   {
-    checkmode(L, mode, "text");
+    checkmode(L, mode, lit<"text">());
     cl = luaY_parser(L, p->z, anchor, &p->buff, &p->dyd, p->name, c);
   }
   L->top = (static_cast<StkId>(otop)); /* restore stack */

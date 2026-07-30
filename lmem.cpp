@@ -75,7 +75,7 @@ static inline void* firsttry(global_State* g, void* block, size_t os, size_t ns)
 constexpr int MINSIZEARRAY = 4;
 
 void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize,
-                    unsigned size_elems, int limit, const char* what)
+                    unsigned size_elems, int limit, const InternalString* what)
 {
   void* newblock;
   int size = *psize;

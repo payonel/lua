@@ -39,8 +39,11 @@ struct LoadState
 
 static l_noret error(LoadState* S, const InternalString* why)
 {
+  /* 'name' is the transitional load-path char* chunkname: deep-copy
+     at the seam for the message (dies with the HostString switch) */
+  InternalString n{S->name, strlen(S->name)};
   luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(),
-                   FmtArgs().str(S->name).str(why));
+                   FmtArgs().str(&n).str(why));
   luaD_throw(S->L, LUA_ERRSYNTAX);
 }
 
@@ -373,23 +376,24 @@ static void checkliteral(LoadState* S, std::string_view s,
     error(S, msg);
 }
 
-static l_noret numerror(LoadState* S, const char* what, const char* tname)
+static l_noret numerror(LoadState* S, const InternalString* what,
+                        const InternalString* tname)
 {
   const InternalString* msg = luaO_pushfstring(S->L, lit<"%s %s mismatch">(),
                                      FmtArgs().str(tname).str(what));
   error(S, msg);
 }
 
-static void checknumsize(LoadState* S, int size, const char* tname)
+static void checknumsize(LoadState* S, int size, const InternalString* tname)
 {
   if (size != loadByte(S))
-    numerror(S, "size", tname);
+    numerror(S, lit<"size">(), tname);
 }
 
-static void checknumformat(LoadState* S, int eq, const char* tname)
+static void checknumformat(LoadState* S, int eq, const InternalString* tname)
 {
   if (!eq)
-    numerror(S, "format", tname);
+    numerror(S, lit<"format">(), tname);
 }
 
 static void checkHeader(LoadState* S)
@@ -403,10 +407,10 @@ static void checkHeader(LoadState* S)
   if (loadByte(S) != LUAC_FORMAT)
     error(S, lit<"format mismatch">());
   checkliteral(S, LUAC_DATA, lit<"corrupted chunk">());
-  { int i; checknumsize(S, sizeof(i), "int"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), "int"); };
-  { Instruction i; checknumsize(S, sizeof(i), "instruction"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INST), "instruction"); };
-  { lua_Integer i; checknumsize(S, sizeof(i), "Lua integer"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), "Lua integer"); };
-  { lua_Number i; checknumsize(S, sizeof(i), "Lua number"); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_NUM), "Lua number"); };
+  { int i; checknumsize(S, sizeof(i), lit<"int">()); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), lit<"int">()); };
+  { Instruction i; checknumsize(S, sizeof(i), lit<"instruction">()); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INST), lit<"instruction">()); };
+  { lua_Integer i; checknumsize(S, sizeof(i), lit<"Lua integer">()); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), lit<"Lua integer">()); };
+  { lua_Number i; checknumsize(S, sizeof(i), lit<"Lua number">()); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_NUM), lit<"Lua number">()); };
 }
 
 /*

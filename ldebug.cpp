@@ -958,7 +958,9 @@ const InternalString* luaG_addinfo(lua_State* L, const InternalString* msg,
   {
     char buff[LUA_IDSIZE];
     luaO_chunkid(buff, src->data.view());
-    return luaO_pushfstring(L, lit<"%s:%d: %s">(), FmtArgs().str(buff).num(line).str(msg));
+    /* seam copy of the chunkid scratch (Java: it builds a String) */
+    InternalString id{buff, strlen(buff)};
+    return luaO_pushfstring(L, lit<"%s:%d: %s">(), FmtArgs().str(&id).num(line).str(msg));
   }
 }
 

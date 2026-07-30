@@ -688,11 +688,14 @@ LUA_API const InternalString* lua_pushfstring(lua_State* L, const char* fmt)
   const InternalString* ret;
   FmtArgs args;
   int n = 0; /* number of arguments taken from the stack */
-  const char* e;
   lua_lock(L);
-  for (e = fmt; (e = strchr(e, '%')) != nullptr; e += 2)
+  /* API seam: deep-copy the format once; all scanning is by offset */
+  InternalString f{fmt, strlen(fmt)};
+  std::string_view fv = f.view();
+  size_t e;
+  for (e = 0; (e = fv.find('%', e)) != std::string_view::npos; e += 2)
   { /* scan directives, collecting one stack argument for each */
-    switch (*(e + 1))
+    switch (sv_byteat(fv, e + 1))
     {
     case 's':
     case 'c':
@@ -708,10 +711,10 @@ LUA_API const InternalString* lua_pushfstring(lua_State* L, const char* fmt)
     }
   }
   api_checknelems(L, n);
-  for (e = fmt; (e = strchr(e, '%')) != nullptr; e += 2)
+  for (e = 0; (e = fv.find('%', e)) != std::string_view::npos; e += 2)
   { /* arguments are at stack slots 'L->top - n' up to 'L->top - 1' */
     StkId slot = L->top - n + args.n;
-    switch (*(e + 1))
+    switch (sv_byteat(fv, e + 1))
     {
     case 's':
     { /* a string (a number is converted in place, as 'lua_tolstring') */
@@ -770,7 +773,7 @@ LUA_API const InternalString* lua_pushfstring(lua_State* L, const char* fmt)
       break;
     }
   }
-  const InternalString* is = luaO_pushvfstring(L, fmt, args);
+  const InternalString* is = luaO_pushvfstring(L, &f, args);
   if (is == nullptr)
     luaD_throw(L, LUA_ERRMEM);
   ret = is; /* borrowed from the pushed value */

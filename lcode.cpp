@@ -362,7 +362,7 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
                     ? INT_MAX
                     : (int)(MAX_SIZET / sizeof(AbsLineInfo));
     f->abslineinfo = (AbsLineInfo*)luaM_growaux_(fs->ls->L, f->abslineinfo, fs->nabslineinfo,
-                                                 &f->sizeabslineinfo, sizeof(AbsLineInfo), limit, "lines");
+                                                 &f->sizeabslineinfo, sizeof(AbsLineInfo), limit, lit<"lines">());
     f->abslineinfo[fs->nabslineinfo].pc = pc;
     f->abslineinfo[fs->nabslineinfo++].line = line;
     linedif = ABSLINEINFO; /* signal that there is absolute information */
@@ -372,7 +372,7 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(ls_byte));
   f->lineinfo = (ls_byte*)luaM_growaux_(fs->ls->L, f->lineinfo, pc,
-                                        &f->sizelineinfo, sizeof(ls_byte), limit, "opcodes");
+                                        &f->sizelineinfo, sizeof(ls_byte), limit, lit<"opcodes">());
   f->lineinfo[pc] = ((ls_byte)(linedif));
   fs->previousline = line; /* last line saved */
 }
@@ -422,7 +422,7 @@ int luaK_code(FuncState* fs, Instruction i)
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(Instruction));
   f->code = (Instruction*)luaM_growaux_(fs->ls->L, f->code, fs->pc,
-                                        &f->sizecode, sizeof(Instruction), limit, "opcodes");
+                                        &f->sizecode, sizeof(Instruction), limit, lit<"opcodes">());
   f->code[fs->pc++] = i;
   savelineinfo(fs, f, fs->ls->lastline);
   return fs->pc - 1; /* index of new instruction */
@@ -591,7 +591,7 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
   int limit = ((size_t)MAXARG_Ax <= MAX_SIZET / sizeof(TValue))
                   ? MAXARG_Ax
                   : (int)(MAX_SIZET / sizeof(TValue));
-  f->k = (TValue*)luaM_growaux_(L, f->k, k, &f->sizek, sizeof(TValue), limit, "constants");
+  f->k = (TValue*)luaM_growaux_(L, f->k, k, &f->sizek, sizeof(TValue), limit, lit<"constants">());
   while (oldsize < f->sizek)
     ((&f->k[oldsize++])->tt_ = LUA_VNIL);
   setobj(L, &f->k[k], v);

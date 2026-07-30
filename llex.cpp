@@ -124,8 +124,10 @@ static const InternalString* txtToken(LexState* ls, int token)
   case TK_STRING:
   case TK_FLT:
   case TK_INT:
-    save(ls, '\0');
-    return luaO_pushfstring(ls->L, lit<"'%s'">(), FmtArgs().str(ls->buff->view().data()));
+    /* anchor the token text as an engine string (GC-safe across the
+       push; counted bytes — the lexer no longer saves a NUL) */
+    return luaO_pushfstring(ls->L, lit<"'%s'">(),
+                            FmtArgs().str(&luaX_newstring(ls, ls->buff->view())->data));
   default:
     return luaX_token2str(ls, token);
   }
@@ -342,7 +344,7 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
     {
     case EOZ:
     { /* error */
-      const char* what = (seminfo ? "string" : "comment");
+      const InternalString* what = seminfo ? lit<"string">() : lit<"comment">();
       const InternalString* msg = luaO_pushfstring(ls->L,
                                          lit<"unfinished long %s (starting at line %d)">(),
                                          FmtArgs().str(what).num(line));

@@ -190,7 +190,7 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(LocVar));
   f->locvars = (LocVar*)luaM_growaux_(ls->L, f->locvars, fs->ndebugvars,
-      &f->sizelocvars, sizeof(LocVar), limit, "local variables");
+      &f->sizelocvars, sizeof(LocVar), limit, lit<"local variables">());
   while (oldsize < f->sizelocvars)
     f->locvars[oldsize++].varname = nullptr;
   f->locvars[fs->ndebugvars].varname = varname;
@@ -213,7 +213,7 @@ static int new_varkind(LexState* ls, TString* name, lu_byte kind)
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(Vardesc));
   dyd->actvar.arr = (Vardesc*)luaM_growaux_(L, dyd->actvar.arr, dyd->actvar.n + 1,
-      &dyd->actvar.size, sizeof(Vardesc), limit, "variable declarations");
+      &dyd->actvar.size, sizeof(Vardesc), limit, lit<"variable declarations">());
   var = &dyd->actvar.arr[dyd->actvar.n++];
   var->kind = kind; /* default */
   var->name = name;
@@ -405,7 +405,7 @@ static Upvaldesc* allocupvalue(FuncState* fs)
                   ? MAXUPVAL
                   : (int)(MAX_SIZET / sizeof(Upvaldesc));
   f->upvalues = (Upvaldesc*)luaM_growaux_(fs->ls->L, f->upvalues, fs->nups,
-      &f->sizeupvalues, sizeof(Upvaldesc), limit, "upvalues");
+      &f->sizeupvalues, sizeof(Upvaldesc), limit, lit<"upvalues">());
   while (oldsize < f->sizeupvalues)
     f->upvalues[oldsize++].name = nullptr;
   return &f->upvalues[fs->nups++];
@@ -552,7 +552,7 @@ static void buildglobal(LexState* ls, TString* varname, expdesc* var)
   singlevaraux(fs, ls->envn, var, 1); /* get environment variable */
   if (var->k == VGLOBAL)
     luaK_semerror(ls, lit<"%s is global when accessing variable '%s'">(),
-                  FmtArgs().str(LUA_ENV).str(&varname->data));
+                  FmtArgs().str(lit<LUA_ENV>()).str(&varname->data));
   luaK_exp2anyregup(fs, var);  /* _ENV could be a constant */
   codestring(&key, varname);   /* key is variable name */
   luaK_indexed(fs, var, &key); /* 'var' represents _ENV[varname] */
@@ -700,7 +700,7 @@ static int newlabelentry(LexState* ls, Labellist* l, TString* name,
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(Labeldesc));
   l->arr = (Labeldesc*)luaM_growaux_(ls->L, l->arr, n,
-      &l->size, sizeof(Labeldesc), limit, "labels/gotos");
+      &l->size, sizeof(Labeldesc), limit, lit<"labels/gotos">());
   l->arr[n].name = name;
   l->arr[n].line = line;
   l->arr[n].nactvar = ls->fs->nactvar;
@@ -840,7 +840,7 @@ static Proto* addprototype(LexState* ls)
                     ? MAXARG_Bx
                     : (int)(MAX_SIZET / sizeof(Proto*));
     f->p = (Proto**)luaM_growaux_(L, f->p, fs->np,
-        &f->sizep, sizeof(Proto*), limit, "functions");
+        &f->sizep, sizeof(Proto*), limit, lit<"functions">());
     while (oldsize < f->sizep)
       f->p[oldsize++] = nullptr;
   }
