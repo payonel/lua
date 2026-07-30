@@ -24,11 +24,11 @@ LUAI_FUNC const void* luaZ_getaddr(ZIO* z, size_t n);
 
 struct ZIO
 {
-  size_t n;          /* bytes still unread */
-  const char* p;     /* current position in buffer */
-  lua_Reader reader; /* reader function */
-  void* data;        /* additional data */
-  lua_State* L;      /* Lua state (for reader) */
+  std::string_view chunk; /* current piece handed over by the reader */
+  size_t pos;             /* read offset into 'chunk' (Java: byte[] + int) */
+  lua_Reader reader;      /* reader function */
+  void* data;             /* additional data */
+  lua_State* L;           /* Lua state (for reader) */
 };
 
 LUAI_FUNC int luaZ_fill(ZIO* z);

@@ -87,7 +87,9 @@ static const void* getaddr_(LoadState* S, size_t size)
 
 static lu_byte loadByte(LoadState* S)
 {
-  int b = (((S->Z)->n--) > 0 ? ((unsigned char)(*(S->Z)->p++)) : luaZ_fill(S->Z));
+  int b = (S->Z->pos < S->Z->chunk.size())
+              ? ((unsigned char)(S->Z->chunk[S->Z->pos++]))
+              : luaZ_fill(S->Z);
   if (b == EOZ)
     error(S, lit<"truncated chunk">());
   S->offset++;

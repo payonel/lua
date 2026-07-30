@@ -85,7 +85,7 @@ LUALIB_API void(luaL_where)(lua_State* L, int lvl);
 LUALIB_API int(luaL_error)(lua_State* L, const char* fmt);
 
 LUALIB_API int(luaL_checkoption)(lua_State* L, int arg, const char* def,
-                                 const char* const lst[]);
+                                 std::span<const std::string_view> lst);
 
 LUALIB_API int(luaL_fileresult)(lua_State* L, int stat, const char* fname);
 LUALIB_API int(luaL_execresult)(lua_State* L, int stat);

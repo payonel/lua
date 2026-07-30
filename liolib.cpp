@@ -693,7 +693,7 @@ static int f_write(lua_State* L)
 static int f_seek(lua_State* L)
 {
   static const int mode[] = {SEEK_SET, SEEK_CUR, SEEK_END};
-  static const char* const modenames[] = {"set", "cur", "end", nullptr};
+  static const std::string_view modenames[] = {"set", "cur", "end"};
   FILE* f = tofile(L);
   int op = luaL_checkoption(L, 2, "cur", modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
@@ -714,7 +714,7 @@ static int f_seek(lua_State* L)
 static int f_setvbuf(lua_State* L)
 {
   static const int mode[] = {_IONBF, _IOFBF, _IOLBF};
-  static const char* const modenames[] = {"no", "full", "line", nullptr};
+  static const std::string_view modenames[] = {"no", "full", "line"};
   FILE* f = tofile(L);
   int op = luaL_checkoption(L, 2, nullptr, modenames);
   lua_Integer sz = luaL_optinteger(L, 3, LUAL_BUFFERSIZE);

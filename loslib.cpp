@@ -383,8 +383,8 @@ static int os_setlocale(lua_State* L)
 {
   static const int cat[] = {LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY,
                             LC_NUMERIC, LC_TIME};
-  static const char* const catnames[] = {"all", "collate", "ctype", "monetary",
-                                         "numeric", "time", nullptr};
+  static const std::string_view catnames[] = {"all", "collate", "ctype", "monetary",
+                                              "numeric", "time"};
   int nol = lua_isnoneornil(L, 1); /* absent = query current locale */
   HostString l = nol ? HostString() : HostString(luaL_checkstring(L, 1));
   int op = luaL_checkoption(L, 2, "all", catnames);

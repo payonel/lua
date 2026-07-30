@@ -26,9 +26,11 @@ int luaZ_fill(ZIO* z)
   lua_lock(L);
   if (buff == nullptr || size == 0)
     return EOZ;
-  z->n = size - 1; /* discount char being returned */
-  z->p = buff;
-  return ((unsigned char)(*(z->p++)));
+  /* reader seam: adopt the piece as a view (Java: the reader hands
+     back a byte[] the ZIO scans by offset) */
+  z->chunk = std::string_view{buff, size};
+  z->pos = 1; /* consuming the first byte, returned below */
+  return ((unsigned char)(z->chunk[0]));
 }
 
 void luaZ_init(lua_State* L, ZIO* z, lua_Reader reader, void* data)
@@ -36,39 +38,39 @@ void luaZ_init(lua_State* L, ZIO* z, lua_Reader reader, void* data)
   z->L = L;
   z->reader = reader;
   z->data = data;
-  z->n = 0;
-  z->p = nullptr;
+  z->chunk = std::string_view{};
+  z->pos = 0;
 }
 
 /* --------------------------------------------------------------- read --- */
 
 static int checkbuffer(ZIO* z)
 {
-  if (z->n == 0)
+  if (z->pos == z->chunk.size())
   {                          /* no bytes in buffer? */
     if (luaZ_fill(z) == EOZ) /* try to read more */
       return 0;              /* no more input */
     else
-    {
-      z->n++; /* luaZ_fill consumed first byte; put it back */
-      z->p--;
-    }
+      z->pos--; /* luaZ_fill consumed first byte; put it back */
   }
   return 1; /* now buffer has something */
 }
 
 size_t luaZ_read(ZIO* z, void* b, size_t n)
 {
+  char* out = (char*) b; /* destination bytes (raw-memory seam) */
+  size_t outpos = 0;
   while (n)
   {
     size_t m;
     if (!checkbuffer(z))
-      return n;                 /* no more input; return number of missing bytes */
-    m = (n <= z->n) ? n : z->n; /* min. between n and z->n */
-    memcpy(b, z->p, m);
-    z->n -= m;
-    z->p += m;
-    b = (char*) b + m;
+      return n; /* no more input; return number of missing bytes */
+    size_t avail = z->chunk.size() - z->pos;
+    m = (n <= avail) ? n : avail; /* min. between n and available bytes */
+    /* Java: System.arraycopy(chunk, pos, out, outpos, m) */
+    memcpy(out + outpos, z->chunk.data() + z->pos, m);
+    z->pos += m;
+    outpos += m;
     n -= m;
   }
   return 0;
@@ -79,10 +81,11 @@ const void* luaZ_getaddr(ZIO* z, size_t n)
   const void* res;
   if (!checkbuffer(z))
     return nullptr; /* no more input */
-  if (z->n < n)  /* not enough bytes? */
+  if (z->chunk.size() - z->pos < n) /* not enough bytes? */
     return nullptr; /* block not whole; cannot give an address */
-  res = z->p;    /* get block address */
-  z->n -= n;     /* consume these bytes */
-  z->p += n;
+  /* fixed-buffer aliasing seam (mode 'B', a C++-side optimization:
+     the managed port loads copy-wise and never takes this address) */
+  res = z->chunk.data() + z->pos;
+  z->pos += n; /* consume these bytes */
   return res;
 }

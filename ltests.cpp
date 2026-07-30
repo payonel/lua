@@ -1166,7 +1166,11 @@ static int gc_printobj(lua_State* L)
   return 0;
 }
 
-static const char* const statenames[] = {
+/* note: "" is a REAL option (pairs with states[] == -1, the query
+   mode); the span carries the size, so no sentinel is needed and a
+   miss can no longer scan past the array (the old lst[i] loop had no
+   terminator here) */
+static const std::string_view statenames[] = {
     "propagate", "enteratomic", "atomic", "sweepallgc", "sweepfinobj",
     "sweeptobefnz", "sweepend", "callfin", "pause", ""};
 
@@ -1179,7 +1183,7 @@ static int gc_state(lua_State* L)
   global_State* g = G(L);
   if (option == -1)
   {
-    lua_pushstring(L, statenames[g->gcstate]);
+    lua_pushstring(L, HostString{statenames[g->gcstate]}); /* boundary copy */
     return 1;
   }
   else
@@ -1342,7 +1346,7 @@ static int gc_query(lua_State* L)
   lua_pushstring(L, g->gckind == KGC_INC        ? "inc"
                     : g->gckind == KGC_GENMAJOR ? "genmajor"
                                                 : "genminor");
-  lua_pushstring(L, statenames[g->gcstate]);
+  lua_pushstring(L, HostString{statenames[g->gcstate]}); /* boundary copy */
   lua_pushinteger(L, ((lua_Integer)(gettotalbytes(g))));
   lua_pushinteger(L, ((lua_Integer)(g->GCdebt)));
   lua_pushinteger(L, ((lua_Integer)(g->GCmarked)));

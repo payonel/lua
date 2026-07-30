@@ -412,16 +412,15 @@ LUALIB_API void* luaL_checkudata(lua_State* L, int ud, const HostString& tname)
 */
 
 LUALIB_API int luaL_checkoption(lua_State* L, int arg, const char* def,
-                                const char* const lst[])
+                                std::span<const std::string_view> lst)
 {
   HostString name = (def) ? luaL_optstring(L, arg, def) : luaL_checkstring(L, arg);
-  int i;
-  for (i = 0; lst[i]; i++)
+  for (size_t i = 0; i < lst.size(); i++)
     if (name == lst[i])
-      return i;
+      return ((int)(i));
   lua_pushstring(L, name);
   const InternalString* msg = lua_pushfstring(L, "invalid option '%s'");
-  return luaL_argerror(L, arg, HostString(msg->bytes(), msg->size()));
+  return luaL_argerror(L, arg, HostString{msg->view()});
 }
 
 /*

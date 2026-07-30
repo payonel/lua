@@ -1132,7 +1132,9 @@ static void f_parser(lua_State* L, void* ud)
   luaD_checkstack(L, 2);
   anchor = luaH_new(L);               /* create the anchor table */
   setsloth(L, L->top++, anchor); /* anchor the anchor table */
-  c = (((p->z)->n--) > 0 ? ((unsigned char)(*(p->z)->p++)) : luaZ_fill(p->z));                    /* read first character */
+  c = (p->z->pos < p->z->chunk.size())
+          ? ((unsigned char)(p->z->chunk[p->z->pos++]))
+          : luaZ_fill(p->z); /* read first character */
   if (c == LUA_SIGNATURE[0])
   {
     int fixed = 0;

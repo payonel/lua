@@ -28,7 +28,9 @@
 
 static l_forceinline void next(LexState* ls)
 {
-  ls->current = (ls->z->n-- > 0) ? (unsigned char)(*ls->z->p++) : luaZ_fill(ls->z);
+  ls->current = (ls->z->pos < ls->z->chunk.size())
+                    ? (unsigned char)(ls->z->chunk[ls->z->pos++])
+                    : luaZ_fill(ls->z);
 }
 
 /* minimum size for string buffer */

@@ -216,9 +216,9 @@ static int pushmode(lua_State* L, int oldmode)
 
 static int luaB_collectgarbage(lua_State* L)
 {
-  static const char* const opts[] = {"stop", "restart", "collect",
-                                     "count", "step", "isrunning", "generational", "incremental",
-                                     "param", "setlimit", "getlimit", nullptr};
+  static const std::string_view opts[] = {"stop", "restart", "collect",
+                                          "count", "step", "isrunning", "generational", "incremental",
+                                          "param", "setlimit", "getlimit"};
   static const char optsnum[] = {LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
                                  LUA_GCCOUNT, LUA_GCSTEP, LUA_GCISRUNNING, LUA_GCGEN, LUA_GCINC,
                                  LUA_GCPARAM, 100, 101};
@@ -269,9 +269,9 @@ static int luaB_collectgarbage(lua_State* L)
   }
   case LUA_GCPARAM:
   {
-    static const char* const params[] = {
+    static const std::string_view params[] = {
         "minormul", "majorminor", "minormajor",
-        "pause", "stepmul", "stepsize", nullptr};
+        "pause", "stepmul", "stepsize"};
     static const char pnum[] = {
         LUA_GCPMINORMUL, LUA_GCPMAJORMINOR, LUA_GCPMINORMAJOR,
         LUA_GCPPAUSE, LUA_GCPSTEPMUL, LUA_GCPSTEPSIZE};
