@@ -40,7 +40,6 @@ LUAI_FUNC Udata* luaS_newudata(lua_State* L, size_t s,
 LUAI_FUNC TString* luaS_newlstr(lua_State* L, std::string_view str);
 LUAI_FUNC TString* luaS_newlstr(lua_State* L, std::string_view str,
                                 size_t off, size_t len);
-LUAI_FUNC TString* luaS_new(lua_State* L, const char* str);
 LUAI_FUNC TString* luaS_new(lua_State* L, const InternalString* str);
 LUAI_FUNC TString* luaS_createstr(lua_State* L, std::string_view str,
                                   size_t off, size_t len);

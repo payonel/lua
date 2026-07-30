@@ -647,7 +647,7 @@ LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s,
 {
   TString* ts;
   lua_lock(L);
-  ts = (len == 0) ? luaS_new(L, "") : luaS_newlstr(L, s, off, len);
+  ts = (len == 0) ? luaS_new(L, lit<"">()) : luaS_newlstr(L, s, off, len);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);

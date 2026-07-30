@@ -31,14 +31,16 @@ LUAI_DDEF const InternalString* const luaT_typenames_[LUA_TOTALTYPES] = {
 
 void luaT_init(lua_State* L)
 {
-  static const char* const luaT_eventname[] = {/* ORDER TM */
-                                               "__index", "__newindex",
-                                               "__gc", "__mode", "__len", "__eq",
-                                               "__add", "__sub", "__mul", "__mod", "__pow",
-                                               "__div", "__idiv",
-                                               "__band", "__bor", "__bxor", "__shl", "__shr",
-                                               "__unm", "__bnot", "__lt", "__le",
-                                               "__concat", "__call", "__close"};
+  /* engine-destined literals: lit<> at the site (LIT ruling) */
+  static const InternalString* const luaT_eventname[] = {/* ORDER TM */
+      lit<"__index">(), lit<"__newindex">(),
+      lit<"__gc">(), lit<"__mode">(), lit<"__len">(), lit<"__eq">(),
+      lit<"__add">(), lit<"__sub">(), lit<"__mul">(), lit<"__mod">(), lit<"__pow">(),
+      lit<"__div">(), lit<"__idiv">(),
+      lit<"__band">(), lit<"__bor">(), lit<"__bxor">(), lit<"__shl">(), lit<"__shr">(),
+      lit<"__unm">(), lit<"__bnot">(), lit<"__lt">(), lit<"__le">(),
+      lit<"__concat">(), lit<"__call">(), lit<"__close">()};
+  static_assert(sizeof(luaT_eventname) / sizeof(luaT_eventname[0]) == TM_N);
   int i;
   for (i = 0; i < TM_N; i++)
   {

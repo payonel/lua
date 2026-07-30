@@ -186,21 +186,12 @@ TString* luaS_newlstr(lua_State* L, std::string_view str, size_t off, size_t len
 }
 
 /*
-** Create or reuse a zero-terminated string. (The C strcache that used
-** to sit in front of this was pointer-identity keyed and is gone: the
-** API layer converts by (bytes, len), engine literals are wrapped
-** InternalStrings or pre-interned TStrings, so this path only sees
-** occasional runtime char* strings.)
-*/
-TString* luaS_new(lua_State* L, const char* str)
-{
-  return luaS_newlstr(L, std::string_view{str, strlen(str)});
-}
-
-/*
 ** New string from an InternalString (wrapped literals and other
 ** engine-held strings). Deep copy as always — 'str' is never
-** retained; interning may return an existing TString.
+** retained; interning may return an existing TString. (The char*
+** overload and the pointer-identity strcache that fronted it are
+** gone: the API layer converts by (bytes, len), engine literals are
+** wrapped InternalStrings or pre-interned TStrings.)
 */
 TString* luaS_new(lua_State* L, const InternalString* str)
 {
