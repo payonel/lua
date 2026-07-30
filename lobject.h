@@ -836,7 +836,7 @@ struct FmtArgs
 
 /* }================================================================== */
 
-LUAI_FUNC int luaO_utf8esc(char* buff, l_uint32 x);
+LUAI_FUNC int luaO_utf8esc(std::span<char> buff, l_uint32 x);
 LUAI_FUNC lu_byte luaO_ceillog2(unsigned int x);
 LUAI_FUNC lu_byte luaO_codeparam(unsigned int p);
 LUAI_FUNC l_mem luaO_applyparam(lu_byte p, l_mem x);
@@ -852,7 +852,7 @@ LUAI_FUNC void luaO_arith(lua_State* L, int op, StkId p1, StkId p2,
 ** interior scanning requires the terminator (strtod). Java: byte[].
 */
 LUAI_FUNC size_t luaO_str2num(const char* s, TValue* o);
-LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, char* buff);
+LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
 /*
@@ -878,4 +878,4 @@ LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
                                                  const FmtArgs& args);
 LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
                                                  const char* fmt);
-LUAI_FUNC void luaO_chunkid(char* out, const char* source, size_t srclen);
+LUAI_FUNC void luaO_chunkid(std::span<char> out, const char* source, size_t srclen);

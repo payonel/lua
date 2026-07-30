@@ -828,7 +828,7 @@ static int tostring(lua_State* L, StkId idx)
 }
 
 /* copy strings in stack from top - n up to top - 1 to buffer */
-static void copy2buff(lua_State* L, StkId top, int n, char* buff)
+static void copy2buff(lua_State* L, StkId top, int n, std::span<char> buff)
 {
   size_t tl = 0; /* size already copied */
   do
@@ -838,7 +838,8 @@ static void copy2buff(lua_State* L, StkId top, int n, char* buff)
     TString* st = slottsval(L, v);
     size_t l; /* length of string being copied */
     const char* s = ((void)((l) = (st)->data.size()), (st)->data.c_str());
-    memcpy(buff + tl, s, l * sizeof(char));
+    /* Java: System.arraycopy(s, 0, buff, tl, l) */
+    memcpy(buff.data() + tl, s, l * sizeof(char));
     tl += l;
   } while (--n > 0);
 }
@@ -892,7 +893,7 @@ void luaV_concat(lua_State* L, int total)
       else
       { /* large result; heap buffer */
         char* buff = ((char*)(luaM_malloc_(L, ((size_t)(tl)) * sizeof(char), 0)));
-        copy2buff(L, top, n, buff);
+        copy2buff(L, top, n, std::span<char>{buff, tl});
         ts = luaS_newlstr(L, buff, tl);
         luaM_free_(L, (buff), (tl) * sizeof(*(buff)));
       }

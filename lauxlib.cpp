@@ -582,10 +582,11 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
 }
 
 /*
-** Returns a writable area with at least 'sz' bytes past the current
+** Ensures a writable area with at least 'sz' bytes past the current
 ** content, growing capacity through the accounted seam if needed.
+** Returns the write offset into the buffer's area.
 */
-static char* prepbuff(luaL_Buffer* B, size_t sz)
+static size_t prepbuff(luaL_Buffer* B, size_t sz)
 {
   if (B->bldr.size() + sz > B->bldr.capacity())
   {
@@ -603,7 +604,7 @@ static char* prepbuff(luaL_Buffer* B, size_t sz)
   return B->bldr.prep(sz);
 }
 
-LUALIB_API char* luaL_prepbuffsize(luaL_Buffer* B, size_t sz)
+LUALIB_API size_t luaL_prepbuffsize(luaL_Buffer* B, size_t sz)
 {
   return prepbuff(B, sz);
 }
@@ -612,8 +613,9 @@ LUALIB_API void luaL_addlstring(luaL_Buffer* B, const char* s, size_t l)
 {
   if (l > 0)
   { /* avoid 'memcpy' when 's' can be nullptr */
-    char* b = prepbuff(B, l);
-    memcpy(b, s, l * sizeof(char));
+    size_t off = prepbuff(B, l);
+    /* Java: System.arraycopy(s, 0, buf, off, l) */
+    memcpy(B->bldr.area().data() + off, s, l * sizeof(char));
     luaL_addsize(B, l);
   }
 }
@@ -653,8 +655,9 @@ LUALIB_API void luaL_addvalue(luaL_Buffer* B)
   lua_State* L = B->L;
   size_t len;
   const char* s = lua_tolstring(L, -1, &len);
-  char* b = prepbuff(B, len);
-  memcpy(b, s, len * sizeof(char));
+  size_t off = prepbuff(B, len);
+  /* Java: System.arraycopy(s, 0, buf, off, len) */
+  memcpy(B->bldr.area().data() + off, s, len * sizeof(char));
   luaL_addsize(B, len);
   lua_pop(L, 1); /* pop string */
 }
@@ -666,7 +669,7 @@ LUALIB_API void luaL_buffinit(lua_State* L, luaL_Buffer* B)
   /* (no stack placeholder: the builder lives in the luaL_Buffer) */
 }
 
-LUALIB_API char* luaL_buffinitsize(lua_State* L, luaL_Buffer* B, size_t sz)
+LUALIB_API size_t luaL_buffinitsize(lua_State* L, luaL_Buffer* B, size_t sz)
 {
   luaL_buffinit(L, B);
   return prepbuff(B, sz);
@@ -1344,14 +1347,15 @@ LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf)
   return bf->bldr.size();
 }
 
-LUALIB_API char* luaL_buffaddr(luaL_Buffer* bf)
+LUALIB_API std::span<char> luaL_buffarea(luaL_Buffer* bf)
 {
-  return bf->bldr.data();
+  return bf->bldr.area();
 }
 
 LUALIB_API void luaL_addchar(luaL_Buffer* B, char c)
 {
-  *luaL_prepbuffsize(B, 1) = c;
+  size_t off = luaL_prepbuffsize(B, 1);
+  B->bldr.area()[off] = c;
   luaL_addsize(B, 1);
 }
 
@@ -1365,7 +1369,7 @@ LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s)
   B->bldr.drop(s);
 }
 
-LUALIB_API char* luaL_prepbuffer(luaL_Buffer* B)
+LUALIB_API size_t luaL_prepbuffer(luaL_Buffer* B)
 {
   return luaL_prepbuffsize(B, LUAL_BUFFERSIZE);
 }

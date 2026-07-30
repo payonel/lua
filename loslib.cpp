@@ -324,11 +324,12 @@ static int os_date(lua_State* L)
       else
       {
         size_t reslen;
-        char* buff = luaL_prepbuffsize(&b, SIZETIMEFMT);
+        size_t off = luaL_prepbuffsize(&b, SIZETIMEFMT);
         s++; /* skip '%' */
         /* copy specifier to 'cc' */
         s = checkoption(L, s, ((size_t)(se - s)), cc + 1);
-        reslen = strftime(buff, SIZETIMEFMT, cc, stm);
+        /* host seam: strftime writes into the area (Java: formatter) */
+        reslen = strftime(luaL_buffarea(&b).data() + off, SIZETIMEFMT, cc, stm);
         luaL_addsize(&b, reslen);
       }
     }

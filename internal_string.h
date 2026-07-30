@@ -32,6 +32,7 @@
 
 #include <cstddef>
 #include <cstring>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -233,14 +234,16 @@ class ByteBuilder
 public:
   void append(char c)
   {
-    *prep(1) = c;
+    size_t off = prep(1);
+    bytes_[off] = c;
     commit(1);
   }
   void append(const char* b, size_t n)
   {
     if (n > 0)
     {
-      memcpy(prep(n), b, n);
+      size_t off = prep(n);
+      memcpy(&bytes_[off], b, n); /* Java: System.arraycopy(b, 0, buf, off, n) */
       commit(n);
     }
   }
@@ -258,27 +261,34 @@ public:
   size_t size() const noexcept { return len_; }
 
   /*
-  ** Contents pointer, valid until the next append/reset/finish. Only
-  ** NUL-terminated if the client appended a NUL (the lexer does so
-  ** explicitly before C-string consumers).
+  ** Committed contents, as a read-only view. Valid until the next
+  ** append/reset/finish. Only NUL-terminated if the client appended a
+  ** NUL (the lexer does so explicitly before C-string consumers).
+  ** Java: the builder's byte[] reference (positions travel as ints
+  ** alongside — see the view/offset discipline in the char* review).
   */
-  const char* data() const noexcept { return bytes_.data(); }
+  std::string_view view() const noexcept { return {bytes_.data(), len_}; }
 
-  /* mutable contents pointer (luaL_buffaddr) */
-  char* data() noexcept { return bytes_.data(); }
+  /*
+  ** The whole writable capacity (Java: the builder's byte[] itself).
+  ** Writes go at offsets returned by 'prep'; never slice the span.
+  ** Invalidated by growth (growTo/prep/append) — re-fetch after.
+  */
+  std::span<char> area() noexcept { return {bytes_.data(), bytes_.size()}; }
 
   /*
   ** prep/commit protocol (luaL_prepbuffsize/luaL_addsize): 'prep'
-  ** returns a writable area of at least 'sz' bytes past the committed
+  ** ensures a writable area of at least 'sz' bytes past the committed
   ** length, growing capacity if needed (UNACCOUNTED growth — accounted
-  ** clients must pre-grow via growTo below); 'commit' extends the
-  ** committed length over bytes the client wrote.
+  ** clients must pre-grow via growTo below), and returns the write
+  ** OFFSET into area(); 'commit' extends the committed length over
+  ** bytes the client wrote.
   */
-  char* prep(size_t sz)
+  size_t prep(size_t sz)
   {
     if (len_ + sz > bytes_.size())
       growTo(len_ + sz);
-    return &bytes_[len_];
+    return len_;
   }
   void commit(size_t sz) noexcept { len_ += sz; }
 

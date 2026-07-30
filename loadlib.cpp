@@ -372,7 +372,10 @@ static int searchpath(lua_State* L, HostString name,
   /* add path to the buffer, replacing marks ('?') with the file name */
   luaL_addgsub(&buff, path, LUA_PATH_MARK, name);
   luaL_addchar(&buff, '\0');
-  pathname = luaL_buffaddr(&buff); /* writable list of file names */
+  /* HOST-path staging (category 4): 'getnextfilename' splits the list
+     by writing NULs through raw pointers; flagged for an index-based
+     rewrite with the loadlib host work */
+  pathname = luaL_buffarea(&buff).data(); /* writable list of file names */
   endpathname = pathname + luaL_bufflen(&buff) - 1;
   while ((filename = getnextfilename(&pathname, endpathname)) != nullptr)
   {

@@ -383,19 +383,19 @@ static int makemask(const char* smask, int count)
 }
 
 /*
-** Convert a bit mask (for 'gethook') into a string mask
+** Convert a bit mask (for 'gethook') into a string mask. Writes into
+** 'smask' and returns the mask length.
 */
-static char* unmakemask(int mask, char* smask)
+static size_t unmakemask(int mask, std::span<char> smask)
 {
-  int i = 0;
+  size_t i = 0;
   if (mask & LUA_MASKCALL)
     smask[i++] = 'c';
   if (mask & LUA_MASKRET)
     smask[i++] = 'r';
   if (mask & LUA_MASKLINE)
     smask[i++] = 'l';
-  smask[i] = '\0';
-  return smask;
+  return i;
 }
 
 static int db_sethook(lua_State* L)
@@ -458,7 +458,7 @@ static int db_gethook(lua_State* L)
     lua_rawget(L, -2); /* 1st result = hooktable[L1] */
     lua_remove(L, -2); /* remove hook table */
   }
-  lua_pushstring(L, unmakemask(mask, buff)); /* 2nd result = mask */
+  lua_pushlstring(L, buff, unmakemask(mask, buff)); /* 2nd result = mask */
   lua_pushinteger(L, lua_gethookcount(L1));  /* 3rd result = count */
   return 3;
 }

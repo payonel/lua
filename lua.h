@@ -8,6 +8,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -398,7 +399,7 @@ LUA_API void(lua_concat)(lua_State* L, int n);
 LUA_API void(lua_len)(lua_State* L, int idx);
 
 constexpr int LUA_N2SBUFFSZ = 64;
-LUA_API unsigned(lua_numbertocstring)(lua_State* L, int idx, char* buff);
+LUA_API unsigned(lua_numbertocstring)(lua_State* L, int idx, std::span<char> buff);
 LUA_API size_t(lua_stringtonumber)(lua_State* L, const char* s);
 
 LUA_API lua_Alloc(lua_getallocf)(lua_State* L, void** ud);

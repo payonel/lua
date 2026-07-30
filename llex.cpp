@@ -125,7 +125,7 @@ static const InternalString* txtToken(LexState* ls, int token)
   case TK_FLT:
   case TK_INT:
     save(ls, '\0');
-    return luaO_pushfstring(ls->L, lit<"'%s'">(), FmtArgs().str(ls->buff->data()));
+    return luaO_pushfstring(ls->L, lit<"'%s'">(), FmtArgs().str(ls->buff->view().data()));
   default:
     return luaX_token2str(ls, token);
   }
@@ -288,7 +288,7 @@ static int read_numeral(LexState* ls, Token* seminfo)
   if (lislalpha(ls->current)) /* is numeral touching a letter? */
     save_and_next(ls);        /* force an error */
   save(ls, '\0');
-  if (luaO_str2num(ls->buff->data(), &obj) == 0) /* format error? */
+  if (luaO_str2num(ls->buff->view().data(), &obj) == 0) /* format error? */
     lexerror(ls, lit<"malformed number">(), TK_FLT);
   if (((&obj)->tt_ == LUA_VNUMINT))
   {
@@ -351,7 +351,7 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
       {
         save_and_next(ls); /* skip 2nd ']' */
         if (seminfo)
-          seminfo->ts = luaX_newstring(ls, ls->buff->data() + sep,
+          seminfo->ts = luaX_newstring(ls, ls->buff->view().data() + sep,
                                        ls->buff->size() - 2 * sep);
         return;
       }
@@ -560,7 +560,7 @@ static void read_string(LexState* ls, int del, Token* seminfo)
     }
   }
   save_and_next(ls); /* skip delimiter */
-  seminfo->ts = luaX_newstring(ls, ls->buff->data() + 1,
+  seminfo->ts = luaX_newstring(ls, ls->buff->view().data() + 1,
                                ls->buff->size() - 2);
 }
 
@@ -720,7 +720,7 @@ static int llex(LexState* ls, Token* seminfo)
           save_and_next(ls);
         } while (lislalnum(ls->current));
         /* find or create string */
-        ts = luaS_newlstr(ls->L, ls->buff->data(),
+        ts = luaS_newlstr(ls->L, ls->buff->view().data(),
                           ls->buff->size());
         if (isreserved(ts)) /* reserved word? */
           return ts->extra - 1 + FIRST_RESERVED;

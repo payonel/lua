@@ -492,11 +492,12 @@ static int read_line(lua_State* L, FILE* f, int chop)
   luaL_buffinit(L, &b);
   do
   {                                   /* may need to read several chunks to get whole line */
-    char* buff = luaL_prepbuffer(&b); /* preallocate buffer space */
+    size_t off = luaL_prepbuffer(&b); /* preallocate buffer space */
+    std::span<char> buff = luaL_buffarea(&b);
     unsigned i = 0;
     l_lockfile(f); /* no memory errors can happen inside the lock */
     while (i < LUAL_BUFFERSIZE && (c = l_getc(f)) != EOF && c != '\n')
-      buff[i++] = ((char)(c)); /* read up to end of line or buffer limit */
+      buff[off + i++] = ((char)(c)); /* read up to end of line or buffer limit */
     l_unlockfile(f);
     luaL_addsize(&b, i);
   } while (c != EOF && c != '\n'); /* repeat until end of line */
@@ -514,8 +515,9 @@ static void read_all(lua_State* L, FILE* f)
   luaL_buffinit(L, &b);
   do
   { /* read file in chunks of LUAL_BUFFERSIZE bytes */
-    char* p = luaL_prepbuffer(&b);
-    nr = fread(p, sizeof(char), LUAL_BUFFERSIZE, f);
+    size_t off = luaL_prepbuffer(&b);
+    /* host seam (Java: InputStream.read(buf, off, len)) */
+    nr = fread(luaL_buffarea(&b).data() + off, sizeof(char), LUAL_BUFFERSIZE, f);
     luaL_addsize(&b, nr);
   } while (nr == LUAL_BUFFERSIZE);
   luaL_pushresult(&b); /* close buffer */
@@ -524,11 +526,11 @@ static void read_all(lua_State* L, FILE* f)
 static int read_chars(lua_State* L, FILE* f, size_t n)
 {
   size_t nr; /* number of chars actually read */
-  char* p;
   luaL_Buffer b;
   luaL_buffinit(L, &b);
-  p = luaL_prepbuffsize(&b, n);      /* prepare buffer to read whole block */
-  nr = fread(p, sizeof(char), n, f); /* try to read 'n' chars */
+  size_t off = luaL_prepbuffsize(&b, n); /* prepare buffer to read whole block */
+  /* host seam (Java: InputStream.read(buf, off, len)) */
+  nr = fread(luaL_buffarea(&b).data() + off, sizeof(char), n, f); /* try to read 'n' chars */
   luaL_addsize(&b, nr);
   luaL_pushresult(&b); /* close buffer */
   return (nr > 0);     /* true iff read something */

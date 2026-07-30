@@ -420,7 +420,7 @@ LUA_API int lua_compare(lua_State* L, int index1, int index2, int op)
   return i;
 }
 
-LUA_API unsigned lua_numbertocstring(lua_State* L, int idx, char* buff)
+LUA_API unsigned lua_numbertocstring(lua_State* L, int idx, std::span<char> buff)
 {
   TValue o = index2val(L, idx);
   if (((o.tt_ & NOVARIANT_MASK) == LUA_TNUMBER))

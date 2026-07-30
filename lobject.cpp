@@ -573,7 +573,7 @@ size_t luaO_str2num(const char* s, TValue* o)
   return ((size_t)(e - s)) + 1; /* success; return string size */
 }
 
-int luaO_utf8esc(char* buff, l_uint32 x)
+int luaO_utf8esc(std::span<char> buff, l_uint32 x)
 {
   int n = 1; /* number of bytes put in buffer (backwards) */
   assert(x <= 0x7FFFFFFFu);
@@ -658,21 +658,26 @@ static int tostringbuffFloat(lua_Number n, char* buff)
 /*
 ** Convert a number object to a string, adding it to a buffer.
 */
-unsigned luaO_tostringbuff(const TValue* obj, char* buff)
+unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff)
 {
   int len;
   assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  assert(buff.size() >= LUA_N2SBUFFSZ);
   if (((obj)->tt_ == LUA_VNUMINT))
   {
     std::string s = std::to_string(ivalue(obj));
     assert(s.size() < LUA_N2SBUFFSZ);
-    memcpy(buff, s.c_str(), s.size() + 1);
+    /* Java: System.arraycopy of the digits (plus terminator) */
+    memcpy(buff.data(), s.c_str(), s.size() + 1);
     len = ((int)(s.size()));
   }
   else
   {
     assert(obj->tt_ == LUA_VNUMFLT);
-    len = tostringbuffFloat(fltvalue(obj), buff);
+    /* host-conversion seam: 'tostringbuffFloat' runs on to_chars/
+       strchr over a NUL-terminated scratch (Java: its own byte[]
+       digit assembly) */
+    len = tostringbuffFloat(fltvalue(obj), buff.data());
   }
   assert(len < LUA_N2SBUFFSZ);
   return ((unsigned int)(len));
@@ -1002,38 +1007,43 @@ constexpr char RETS[] = "...";
 constexpr char PRE[] = "[string \"";
 constexpr char POS[] = "\"]";
 
-void luaO_chunkid(char* out, const char* source, size_t srclen)
+void luaO_chunkid(std::span<char> out, const char* source, size_t srclen)
 {
+  assert(out.size() >= LUA_IDSIZE);
   size_t bufflen = LUA_IDSIZE; /* free space in buffer */
+  size_t pos = 0;              /* write position in 'out' */
   if (*source == '=')
   {                        /* 'literal' source */
     if (srclen <= bufflen) /* small enough? */
-      memcpy(out, source + 1, srclen * sizeof(char));
+      memcpy(out.data(), source + 1, srclen * sizeof(char));
     else
     { /* truncate it */
-      (memcpy(out, source + 1, (bufflen - 1) * sizeof(char)), (out) += (bufflen - 1));
-      *out = '\0';
+      memcpy(out.data(), source + 1, (bufflen - 1) * sizeof(char));
+      out[bufflen - 1] = '\0';
     }
   }
   else if (*source == '@')
   {                        /* file name */
     if (srclen <= bufflen) /* small enough? */
-      memcpy(out, source + 1, srclen * sizeof(char));
+      memcpy(out.data(), source + 1, srclen * sizeof(char));
     else
     { /* add '...' before rest of name */
-      (memcpy(out, RETS, ((sizeof(RETS) / sizeof(char) - 1)) * sizeof(char)), (out) += ((sizeof(RETS) / sizeof(char) - 1)));
+      memcpy(out.data(), RETS, (sizeof(RETS) / sizeof(char) - 1) * sizeof(char));
+      pos += sizeof(RETS) / sizeof(char) - 1;
       bufflen -= (sizeof(RETS) / sizeof(char) - 1);
-      memcpy(out, source + 1 + srclen - bufflen, bufflen * sizeof(char));
+      memcpy(out.data() + pos, source + 1 + srclen - bufflen, bufflen * sizeof(char));
     }
   }
   else
-  {                                        /* string; format as [string "source"] */
-    const char* nl = strchr(source, '\n'); /* find first new line (if any) */
-    (memcpy(out, PRE, ((sizeof(PRE) / sizeof(char) - 1)) * sizeof(char)), (out) += ((sizeof(PRE) / sizeof(char) - 1)));             /* add prefix */
+  {                                                 /* string; format as [string "source"] */
+    const char* nl = (const char*) memchr(source, '\n', srclen); /* find first new line (if any) */
+    memcpy(out.data(), PRE, (sizeof(PRE) / sizeof(char) - 1) * sizeof(char)); /* add prefix */
+    pos += sizeof(PRE) / sizeof(char) - 1;
     bufflen -= (sizeof(PRE) - 1) + (sizeof(RETS) - 1) + (sizeof(POS) - 1) + 1; /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == nullptr)
-    {                              /* small one-line source? */
-      (memcpy(out, source, (srclen) * sizeof(char)), (out) += (srclen)); /* keep it */
+    { /* small one-line source? keep it */
+      memcpy(out.data() + pos, source, srclen * sizeof(char));
+      pos += srclen;
     }
     else
     {
@@ -1041,9 +1051,11 @@ void luaO_chunkid(char* out, const char* source, size_t srclen)
         srclen = ((size_t)(nl - source)); /* stop at first newline */
       if (srclen > bufflen)
         srclen = bufflen;
-      (memcpy(out, source, (srclen) * sizeof(char)), (out) += (srclen));
-      (memcpy(out, RETS, ((sizeof(RETS) / sizeof(char) - 1)) * sizeof(char)), (out) += ((sizeof(RETS) / sizeof(char) - 1)));
+      memcpy(out.data() + pos, source, srclen * sizeof(char));
+      pos += srclen;
+      memcpy(out.data() + pos, RETS, (sizeof(RETS) / sizeof(char) - 1) * sizeof(char));
+      pos += sizeof(RETS) / sizeof(char) - 1;
     }
-    memcpy(out, POS, ((sizeof(POS) / sizeof(char) - 1) + 1) * sizeof(char));
+    memcpy(out.data() + pos, POS, ((sizeof(POS) / sizeof(char) - 1) + 1) * sizeof(char));
   }
 }
