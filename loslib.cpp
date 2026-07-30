@@ -124,7 +124,7 @@ static int os_remove(lua_State* L)
 {
   HostString filename = luaL_checkstring(L, 1);
   errno = 0;
-  return luaL_fileresult(L, remove(filename.c_str()) == 0, filename.c_str());
+  return luaL_fileresult(L, remove(filename.c_str()) == 0, &filename);
 }
 
 static int os_rename(lua_State* L)

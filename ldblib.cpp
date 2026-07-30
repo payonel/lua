@@ -496,7 +496,7 @@ static int db_traceback(lua_State* L)
     else
     {
       HostString msg = lua_tostring(L, arg + 1);
-      luaL_traceback(L, L1, msg.c_str(), level);
+      luaL_traceback(L, L1, &msg, level);
     }
   }
   return 1;

@@ -225,7 +225,7 @@ static int io_open(lua_State* L)
   luaL_argcheck(L, l_checkmode(mode), 2, "invalid mode");
   errno = 0;
   p->f = fopen(filename.c_str(), mode.c_str()); /* host boundary */
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename.c_str()) : 1;
+  return (p->f == nullptr) ? luaL_fileresult(L, 0, &filename) : 1;
 }
 
 /*
@@ -247,7 +247,7 @@ static int io_popen(lua_State* L)
   errno = 0;
   p->f = l_popen(L, filename.c_str(), mode.c_str()); /* host boundary */
   p->closef = &io_pclose;
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename.c_str()) : 1;
+  return (p->f == nullptr) ? luaL_fileresult(L, 0, &filename) : 1;
 }
 
 static int io_tmpfile(lua_State* L)

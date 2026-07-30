@@ -141,16 +141,16 @@ static int lastlevel(lua_State* L)
 }
 
 LUALIB_API void luaL_traceback(lua_State* L, lua_State* L1,
-                               const char* msg, int level)
+                               const HostString* msg, int level)
 {
   luaL_Buffer b;
   lua_Debug ar;
   int last = lastlevel(L1);
   int limit2show = (last - level > LEVELS1 + LEVELS2) ? LEVELS1 : -1;
   luaL_buffinit(L, &b);
-  if (msg)
+  if (msg != nullptr)
   {
-    luaL_addstring(&b, msg);
+    luaL_addstring(&b, *msg);
     luaL_addchar(&b, '\n');
   }
   luaL_addstring(&b, "stack traceback:");
@@ -289,7 +289,7 @@ LUALIB_API int luaL_error(lua_State* L, const HostString& fmt)
   return lua_error(L);
 }
 
-LUALIB_API int luaL_fileresult(lua_State* L, int stat, const char* fname)
+LUALIB_API int luaL_fileresult(lua_State* L, int stat, const HostString* fname)
 {
   int en = errno; /* calls to Lua API may change this value */
   if (stat)
@@ -299,12 +299,12 @@ LUALIB_API int luaL_fileresult(lua_State* L, int stat, const char* fname)
   }
   else
   {
-    const char* msg;
     luaL_pushfail(L);
-    msg = (en != 0) ? strerror(en) : "(no extra info)";
-    if (fname)
+    /* strerror is system ABI: adopt its text at the call */
+    HostString msg = (en != 0) ? HostString(strerror(en)) : HostString("(no extra info)");
+    if (fname != nullptr)
     {
-      lua_pushstring(L, fname);
+      lua_pushstring(L, *fname);
       lua_pushstring(L, msg);
       lua_pushfstring(L, "%s: %s");
     }
@@ -766,7 +766,7 @@ static std::string_view getF(lua_State*, void* ud)
   }
 }
 
-static int errfile(lua_State* L, const char* what, int fnameindex)
+static int errfile(lua_State* L, const HostString& what, int fnameindex)
 {
   int err = errno;
   HostString filename = lua_tostring(L, fnameindex).substr(1); /* skip '@'/'=' */
@@ -825,7 +825,7 @@ static int skipcomment(FILE* f, int* cp)
     return 0; /* no comment */
 }
 
-LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
+LUALIB_API int luaL_loadfilex(lua_State* L, const HostString* filename,
                               const InternalString* mode)
 {
   LoadF lf;
@@ -839,10 +839,10 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
   }
   else
   {
-    lua_pushstring(L, filename);
+    lua_pushstring(L, *filename);
     lua_pushfstring(L, "@%s");
     errno = 0;
-    lf.f = fopen(filename, "r");
+    lf.f = fopen(filename->c_str(), "r"); /* host boundary */
     if (lf.f == nullptr)
       return errfile(L, "open", fnameindex);
   }
@@ -852,10 +852,10 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
   if (c == LUA_SIGNATURE[0])
   {           /* binary file? */
     lf.n = 0; /* remove possible newline */
-    if (filename)
+    if (filename != nullptr)
     { /* "real" file? */
       errno = 0;
-      lf.f = freopen(filename, "rb", lf.f); /* reopen in binary mode */
+      lf.f = freopen(filename->c_str(), "rb", lf.f); /* reopen in binary mode */
       if (lf.f == nullptr)
         return errfile(L, "reopen", fnameindex);
       skipcomment(lf.f, &c); /* re-read initial portion */
@@ -867,7 +867,7 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
   status = lua_loadi(L, getF, &lf, lua_toistring(L, -1), mode);
   readstatus = ferror(lf.f);
   errno = 0; /* no useful error number until here */
-  if (filename)
+  if (filename != nullptr)
     fclose(lf.f); /* close file (even in case of errors) */
   if (readstatus)
   {
@@ -911,9 +911,9 @@ LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff,
   return luaL_loadbufferi(L, buff, &n, mode.empty() ? nullptr : &m);
 }
 
-LUALIB_API int luaL_loadstring(lua_State* L, const char* s)
+LUALIB_API int luaL_loadstring(lua_State* L, const HostString& s)
 {
-  return luaL_loadbufferx(L, std::string_view{s, strlen(s)}, s, "t");
+  return luaL_loadbufferx(L, s, s, "t");
 }
 
 /* }====================================================== */
@@ -1280,7 +1280,7 @@ LUALIB_API void luaL_checkversion(lua_State* L)
   luaL_checkversion_(L, LUA_VERSION_NUM, LUAL_NUMSIZES);
 }
 
-LUALIB_API int luaL_loadfile(lua_State* L, const char* filename)
+LUALIB_API int luaL_loadfile(lua_State* L, const HostString* filename)
 {
   return luaL_loadfilex(L, filename, nullptr); /* default mode */
 }
@@ -1314,7 +1314,7 @@ LUALIB_API HostString luaL_typename(lua_State* L, int idx)
   return lua_typename(L, lua_type(L, idx));
 }
 
-LUALIB_API int luaL_dofile(lua_State* L, const char* filename)
+LUALIB_API int luaL_dofile(lua_State* L, const HostString* filename)
 {
   int status = luaL_loadfile(L, filename);
   if (status == LUA_OK)
@@ -1322,7 +1322,7 @@ LUALIB_API int luaL_dofile(lua_State* L, const char* filename)
   return status;
 }
 
-LUALIB_API int luaL_dostring(lua_State* L, const char* str)
+LUALIB_API int luaL_dostring(lua_State* L, const HostString& str)
 {
   int status = luaL_loadstring(L, str);
   if (status == LUA_OK)

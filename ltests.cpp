@@ -1991,7 +1991,8 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("loadfile", inst) == 0)
     {
-      luaL_loadfilex(L1, luaL_checkstring(L1, getnum_aux(L, L1, &pc)).c_str(), lit<"t">());
+      HostString fn = luaL_checkstring(L1, getnum_aux(L, L1, &pc));
+      luaL_loadfilex(L1, &fn, lit<"t">());
     }
     else if (strcmp("loadstring", inst) == 0)
     {
@@ -2188,9 +2189,9 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("traceback", inst) == 0)
     {
-      const char* msg = getstring_aux(L, buff, &pc);
+      HostString msg(getstring_aux(L, buff, &pc)); /* host boundary copy */
       int level = getnum_aux(L, L1, &pc);
-      luaL_traceback(L1, L1, msg, level);
+      luaL_traceback(L1, L1, &msg, level);
     }
     else if (strcmp("threadstatus", inst) == 0)
     {

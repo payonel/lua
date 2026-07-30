@@ -405,7 +405,7 @@ static int luaB_loadfile(lua_State* L)
   HostString fname = isnil ? HostString() : HostString(luaL_checkstring(L, 1));
   const InternalString* mode = getMode(L, 2);
   int env = (!lua_isnone(L, 3) ? 3 : 0); /* 'env' index or 0 if no 'env' */
-  int status = luaL_loadfilex(L, isnil ? nullptr : fname.c_str(), mode);
+  int status = luaL_loadfilex(L, isnil ? nullptr : &fname, mode);
   return load_aux(L, status, env);
 }
 
@@ -474,7 +474,7 @@ static int luaB_dofile(lua_State* L)
   int isnil = lua_isnoneornil(L, 1); /* absent name = stdin */
   HostString fname = isnil ? HostString() : HostString(luaL_checkstring(L, 1));
   lua_settop(L, 1);
-  if (l_unlikely(luaL_loadfilex(L, isnil ? nullptr : fname.c_str(), nullptr) != LUA_OK))
+  if (l_unlikely(luaL_loadfilex(L, isnil ? nullptr : &fname, nullptr) != LUA_OK))
     return lua_error(L);
   lua_callk(L, 0, LUA_MULTRET, 0, dofilecont);
   return dofilecont(L, 0, 0);

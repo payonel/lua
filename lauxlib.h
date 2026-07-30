@@ -88,7 +88,8 @@ LUALIB_API int(luaL_checkoption)(lua_State* L, int arg,
                                  const InternalString* def,
                                  std::span<const InternalString* const> lst);
 
-LUALIB_API int(luaL_fileresult)(lua_State* L, int stat, const char* fname);
+/* nullable fname: nullptr = no file name to report (Java: String or null) */
+LUALIB_API int(luaL_fileresult)(lua_State* L, int stat, const HostString* fname);
 LUALIB_API int(luaL_execresult)(lua_State* L, int stat);
 
 LUALIB_API void*(luaL_alloc) (void* ud, void* ptr, size_t osize,
@@ -102,11 +103,11 @@ LUALIB_API int(luaL_ref)(lua_State* L, int t);
 LUALIB_API void(luaL_unref)(lua_State* L, int t, int ref);
 
 /* mode is an engine string (nullable = default "bt"); the filename
-   is host text (fopen boundary) */
-LUALIB_API int(luaL_loadfilex)(lua_State* L, const char* filename,
+   is host text at the fopen boundary (nullable: nullptr = stdin) */
+LUALIB_API int(luaL_loadfilex)(lua_State* L, const HostString* filename,
                                const InternalString* mode);
 
-LUALIB_API int luaL_loadfile(lua_State* L, const char* filename);
+LUALIB_API int luaL_loadfile(lua_State* L, const HostString* filename);
 
 /* engine-string form: name/mode already engine bytes (nullable mode) */
 LUALIB_API int luaL_loadbufferi(lua_State* L, std::string_view buff,
@@ -115,7 +116,7 @@ LUALIB_API int luaL_loadbufferi(lua_State* L, std::string_view buff,
 LUALIB_API int(luaL_loadbufferx)(lua_State* L, std::string_view buff,
                                  const HostString& name,
                                  const HostString& mode);
-LUALIB_API int(luaL_loadstring)(lua_State* L, const char* s);
+LUALIB_API int(luaL_loadstring)(lua_State* L, const HostString& s);
 
 LUALIB_API lua_State*(luaL_newstate) (void);
 
@@ -132,8 +133,9 @@ LUALIB_API void(luaL_setfuncs)(lua_State* L, const luaL_Reg* l, int nup);
 
 LUALIB_API int(luaL_getsubtable)(lua_State* L, int idx, const HostString& fname);
 
+/* nullable msg: nullptr = no message prefix */
 LUALIB_API void(luaL_traceback)(lua_State* L, lua_State* L1,
-                                const char* msg, int level);
+                                const HostString* msg, int level);
 
 LUALIB_API void(luaL_requiref)(lua_State* L, const HostString& modname,
                                lua_CFunction openf, int glb);
@@ -158,9 +160,10 @@ LUALIB_API HostString luaL_optstring(lua_State* L, int arg, const HostString& d)
 
 LUALIB_API HostString luaL_typename(lua_State* L, int idx);
 
-LUALIB_API int luaL_dofile(lua_State* L, const char* filename);
+/* nullable filename: nullptr = stdin */
+LUALIB_API int luaL_dofile(lua_State* L, const HostString* filename);
 
-LUALIB_API int luaL_dostring(lua_State* L, const char* str);
+LUALIB_API int luaL_dostring(lua_State* L, const HostString& str);
 
 LUALIB_API int luaL_getmetatable(lua_State* L, const HostString& tname);
 

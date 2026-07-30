@@ -138,7 +138,7 @@ static int msghandler(lua_State* L)
       msg = HostString(m->bytes(), m->size());
     }
   }
-  luaL_traceback(L, L, msg.c_str(), 1); /* append a standard traceback */
+  luaL_traceback(L, L, &msg, 1); /* append a standard traceback */
   return 1;                             /* return the traceback */
 }
 
@@ -198,7 +198,10 @@ static int dochunk(lua_State* L, int status)
 
 static int dofile(lua_State* L, const char* name)
 {
-  return dochunk(L, luaL_loadfilex(L, name, nullptr));
+  if (name == nullptr)
+    return dochunk(L, luaL_loadfilex(L, nullptr, nullptr)); /* stdin */
+  HostString fname(name); /* host boundary: adopt the argv text */
+  return dochunk(L, luaL_loadfilex(L, &fname, nullptr));
 }
 
 static int dostring(lua_State* L, const char* s, const char* name)
@@ -260,7 +263,13 @@ static int handle_script(lua_State* L, char** argv)
   const char* fname = argv[0];
   if (strcmp(fname, "-") == 0 && strcmp(argv[-1], "--") != 0)
     fname = nullptr; /* stdin */
-  status = luaL_loadfilex(L, fname, nullptr);
+  if (fname == nullptr)
+    status = luaL_loadfilex(L, nullptr, nullptr); /* stdin */
+  else
+  {
+    HostString scriptname(fname); /* host boundary: adopt the argv text */
+    status = luaL_loadfilex(L, &scriptname, nullptr);
+  }
   if (status == LUA_OK)
   {
     int n = pushargs(L); /* push arguments to script */
