@@ -27,7 +27,7 @@ constexpr int TAB_L = 4; /* length */
 constexpr int TAB_RW = (TAB_R | TAB_W); /* read/write */
 
 
-static int checkfield(lua_State* L, const char* key, int n)
+static int checkfield(lua_State* L, const HostString& key, int n)
 {
   lua_pushstring(L, key);
   return (lua_rawget(L, -n) != LUA_TNIL);

@@ -179,7 +179,7 @@ static int os_clock(lua_State* L)
 ** time 0x1.e1853b0d184f6p+55 would cause an overflow when adding 1900
 ** to compute the year.
 */
-static void setfield(lua_State* L, const char* key, int value, int delta)
+static void setfield(lua_State* L, const HostString& key, int value, int delta)
 {
 #if (defined(LUA_NUMTIME) && LUA_MAXINTEGER <= INT_MAX)
   if (l_unlikely(value > LUA_MAXINTEGER - delta))
@@ -192,7 +192,7 @@ static void setfield(lua_State* L, const char* key, int value, int delta)
   lua_setfield(L, -2, key);
 }
 
-static void setboolfield(lua_State* L, const char* key, int value)
+static void setboolfield(lua_State* L, const HostString& key, int value)
 {
   if (value < 0) /* undefined? */
     return;      /* does not set field */
@@ -216,7 +216,7 @@ static void setallfields(lua_State* L, struct tm* stm)
   setboolfield(L, "isdst", stm->tm_isdst);
 }
 
-static int getboolfield(lua_State* L, const char* key)
+static int getboolfield(lua_State* L, const HostString& key)
 {
   int res;
   res = (lua_getfield(L, -1, key) == LUA_TNIL) ? -1 : lua_toboolean(L, -1);
@@ -224,7 +224,7 @@ static int getboolfield(lua_State* L, const char* key)
   return res;
 }
 
-static int getfield(lua_State* L, const char* key, int d, int delta)
+static int getfield(lua_State* L, const HostString& key, int d, int delta)
 {
   int isnum;
   int t = lua_getfield(L, -1, key); /* get field and its type */

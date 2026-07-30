@@ -114,13 +114,13 @@ static void settabss(lua_State* L, const HostString& k, const HostString& v)
   lua_setfield(L, -2, k);
 }
 
-static void settabsi(lua_State* L, const char* k, int v)
+static void settabsi(lua_State* L, const HostString& k, int v)
 {
   lua_pushinteger(L, v);
   lua_setfield(L, -2, k);
 }
 
-static void settabsb(lua_State* L, const char* k, int v)
+static void settabsb(lua_State* L, const HostString& k, int v)
 {
   lua_pushboolean(L, v);
   lua_setfield(L, -2, k);

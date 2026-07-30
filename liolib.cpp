@@ -32,11 +32,15 @@
 #endif
 
 /* Check whether 'mode' matches '[rwa]%+?[L_MODEEXT]*' */
-static int l_checkmode(const char* mode)
+static int l_checkmode(std::string_view mode)
 {
-  return (*mode != '\0' && strchr("rwa", *(mode++)) != nullptr &&
-          (*mode != '+' || ((void) (++mode), 1)) &&   /* skip if char is '+' */
-          (strspn(mode, L_MODEEXT) == strlen(mode))); /* check extensions */
+  if (mode.empty() || std::string_view{"rwa"}.find(mode[0]) == std::string_view::npos)
+    return 0;
+  size_t i = 1;
+  if (i < mode.size() && mode[i] == '+') /* skip if char is '+' */
+    i++;
+  /* check extensions: remaining chars must all be in L_MODEEXT */
+  return mode.find_first_not_of(L_MODEEXT, i) == std::string_view::npos;
 }
 
 #endif
@@ -201,10 +205,10 @@ static LStream* newfile(lua_State* L)
   return p;
 }
 
-static void opencheck(lua_State* L, const char* fname, const char* mode)
+static void opencheck(lua_State* L, const HostString& fname, const HostString& mode)
 {
   LStream* p = newfile(L);
-  p->f = fopen(fname, mode);
+  p->f = fopen(fname.c_str(), mode.c_str()); /* host boundary */
   if (l_unlikely(p->f == nullptr))
   {
     lua_pushstring(L, fname);
@@ -218,7 +222,7 @@ static int io_open(lua_State* L)
   HostString filename = luaL_checkstring(L, 1);
   HostString mode = luaL_optstring(L, 2, "r");
   LStream* p = newfile(L);
-  luaL_argcheck(L, l_checkmode(mode.c_str()), 2, "invalid mode");
+  luaL_argcheck(L, l_checkmode(mode), 2, "invalid mode");
   errno = 0;
   p->f = fopen(filename.c_str(), mode.c_str()); /* host boundary */
   return (p->f == nullptr) ? luaL_fileresult(L, 0, filename.c_str()) : 1;
@@ -254,27 +258,28 @@ static int io_tmpfile(lua_State* L)
   return (p->f == nullptr) ? luaL_fileresult(L, 0, nullptr) : 1;
 }
 
-static FILE* getiofile(lua_State* L, const char* findex)
+static FILE* getiofile(lua_State* L, const HostString& findex)
 {
   LStream* p;
   lua_getfield(L, LUA_REGISTRYINDEX, findex);
   p = (LStream*) lua_touserdata(L, -1);
   if (l_unlikely(isclosed(p)))
   {
-    lua_pushstring(L, findex + IOPREF_LEN);
+    /* strip the IO_PREFIX: host-text deep copy (Java String.substring) */
+    lua_pushstring(L, findex.substr(IOPREF_LEN));
     luaL_error(L, "default %s file is closed");
   }
   return p->f;
 }
 
-static int g_iofile(lua_State* L, const char* f, const char* mode)
+static int g_iofile(lua_State* L, const HostString& f, const HostString& mode)
 {
   if (!lua_isnoneornil(L, 1))
   {
     if (lua_isstring(L, 1)) /* filename given (may be a number, too) */
     {
       HostString filename = lua_tostring(L, 1);
-      opencheck(L, filename.c_str(), mode);
+      opencheck(L, filename, mode);
     }
     else
     {
@@ -353,7 +358,7 @@ static int io_lines(lua_State* L)
   else
   { /* open a new file */
     HostString filename = luaL_checkstring(L, 1);
-    opencheck(L, filename.c_str(), "r");
+    opencheck(L, filename, "r");
     lua_replace(L, 1); /* put file at index 1 */
     toclose = 1;       /* close it after iteration */
   }
@@ -410,7 +415,7 @@ static int nextc(RN* rn)
 /*
 ** Accept current char if it is in 'set' (of size 2)
 */
-static int test2(RN* rn, const char* set)
+static int test2(RN* rn, std::string_view set)
 {
   if (rn->c == set[0] || rn->c == set[1])
     return nextc(rn);
@@ -458,7 +463,7 @@ static int read_number(lua_State* L, FILE* f)
       count = 1; /* count initial '0' as a valid digit */
   }
   count += readdigits(&rn, hex);   /* integral part */
-  if (test2(&rn, decp))            /* decimal point? */
+  if (test2(&rn, std::string_view{decp, 2})) /* decimal point? (no terminator) */
     count += readdigits(&rn, hex); /* fractional part */
   if (count > 0 && test2(&rn, (hex ? "pP" : "eE")))
   {                     /* exponent mark? */
@@ -805,13 +810,13 @@ static int io_noclose(lua_State* L)
   return 2;
 }
 
-static void createstdfile(lua_State* L, FILE* f, const char* k,
-                          const char* fname)
+static void createstdfile(lua_State* L, FILE* f, const HostString& k,
+                          const HostString& fname)
 {
   LStream* p = newprefile(L);
   p->f = f;
   p->closef = &io_noclose;
-  if (k != nullptr)
+  if (!k.empty()) /* empty = no registry entry (lua_Debug convention) */
   {
     lua_pushvalue(L, -1);
     lua_setfield(L, LUA_REGISTRYINDEX, k); /* add file to registry */
@@ -826,6 +831,6 @@ LUAMOD_API int luaopen_io(lua_State* L)
   /* create (and set) default files */
   createstdfile(L, stdin, IO_INPUT, "stdin");
   createstdfile(L, stdout, IO_OUTPUT, "stdout");
-  createstdfile(L, stderr, nullptr, "stderr");
+  createstdfile(L, stderr, "", "stderr");
   return 1;
 }
