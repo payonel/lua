@@ -369,7 +369,7 @@ static void printobj(global_State* g, GCObject* o)
                                          : 'g',
          "ns01oTt"[getage(o)], o -> marked);
   if (o->tt == LUA_VSTRING)
-    printf(" '%s'", getstr(static_cast<TString*>(o)));
+    printf(" '%s'", static_cast<TString*>(o)->data.c_str()); /* test print seam */
 }
 
 static void lua_printvalue(TValue* v)
@@ -387,7 +387,7 @@ static void lua_printvalue(TValue* v)
   }
   case LUA_VSHRSTR:
     assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    printf("'%s'", getstr(tsvalue(v)));
+    printf("'%s'", tsvalue(v)->data.c_str()); /* test print seam */
     break;
   case LUA_VFALSE:
     printf("%s", "false");
@@ -963,13 +963,13 @@ static int listlocals(lua_State* L)
   Proto* p;
   int pc = ((int)(luaL_checkinteger(L, 2))) - 1;
   int i = 0;
-  const char* name;
+  const InternalString* name;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                 1, "Lua function expected");
   TValue o = obj_at(L, 1);
   p = getproto(&o);
   while ((name = luaF_getlocalname(p, ++i, pc)) != nullptr)
-    lua_pushstring(L, name);
+    lua_pushlstring(L, name->view(), 0, name->size());
   return i - 1;
 }
 
@@ -1077,7 +1077,7 @@ static int mem_query(lua_State* L)
     int i;
     for (i = LUA_NUMTYPES - 1; i >= 0; i--)
     {
-      if (strcmp(t.c_str(), ttypename(i)->c_str()) == 0)
+      if (ttypename(i)->view() == std::string_view{t})
       {
         lua_pushinteger(L, ((lua_Integer)(l_memcontrol.objcount[i])));
         return 1;
@@ -1436,17 +1436,17 @@ static int upvalue(lua_State* L)
   luaL_checktype(L, 1, LUA_TFUNCTION);
   if (lua_isnone(L, 3))
   {
-    const char* name = lua_getupvalue(L, 1, n);
+    const InternalString* name = lua_getupvalue(L, 1, n);
     if (name == nullptr)
       return 0;
-    lua_pushstring(L, name);
+    lua_pushlstring(L, name->view(), 0, name->size());
     return 2;
   }
   else
   {
-    const char* name = lua_setupvalue(L, 1, n);
+    const InternalString* name = lua_setupvalue(L, 1, n);
     if (name != nullptr)
-      lua_pushstring(L, name);
+      lua_pushlstring(L, name->view(), 0, name->size());
     else
       lua_pushnil(L);
     return 1;

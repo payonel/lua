@@ -221,9 +221,9 @@ static int db_getlocal(lua_State* L)
   if (lua_isfunction(L, arg + 1))
   {                                                 /* function argument? */
     lua_pushvalue(L, arg + 1); /* push function */
-    const char* name = lua_getlocal(L, nullptr, nvar);
+    const InternalString* name = lua_getlocal(L, nullptr, nvar);
     if (name != nullptr) /* push local name (or nil if none) */
-      lua_pushstring(L, name);
+      lua_pushlstring(L, name->view(), 0, name->size());
     else
       lua_pushnil(L);
     return 1; /* return only name (there is no value) */
@@ -231,7 +231,7 @@ static int db_getlocal(lua_State* L)
   else
   { /* stack-level argument */
     lua_Debug ar;
-    const char* name;
+    const InternalString* name;
     int level = (int) luaL_checkinteger(L, arg + 1);
     if (l_unlikely(!lua_getstack(L1, level, &ar))) /* out of range? */
       return luaL_argerror(L, arg + 1, "level out of range");
@@ -239,8 +239,8 @@ static int db_getlocal(lua_State* L)
     name = lua_getlocal(L1, &ar, nvar);
     if (name)
     {
-      lua_xmove(L1, L, 1);     /* move local value */
-      lua_pushstring(L, name); /* push name */
+      lua_xmove(L1, L, 1); /* move local value */
+      lua_pushlstring(L, name->view(), 0, name->size()); /* push name */
       lua_rotate(L, -2, 1);    /* re-order */
       return 2;
     }
@@ -255,7 +255,7 @@ static int db_getlocal(lua_State* L)
 static int db_setlocal(lua_State* L)
 {
   int arg;
-  const char* name;
+  const InternalString* name;
   lua_State* L1 = getthread(L, &arg);
   lua_Debug ar;
   int level = (int) luaL_checkinteger(L, arg + 1);
@@ -273,7 +273,7 @@ static int db_setlocal(lua_State* L)
     lua_pushnil(L);
   }
   else
-    lua_pushstring(L, name);
+    lua_pushlstring(L, name->view(), 0, name->size());
   return 1;
 }
 
@@ -282,13 +282,13 @@ static int db_setlocal(lua_State* L)
 */
 static int auxupvalue(lua_State* L, int get)
 {
-  const char* name;
+  const InternalString* name;
   int n = (int) luaL_checkinteger(L, 2); /* upvalue index */
   luaL_checktype(L, 1, LUA_TFUNCTION);   /* closure */
   name = get ? lua_getupvalue(L, 1, n) : lua_setupvalue(L, 1, n);
   if (name == nullptr)
     return 0;
-  lua_pushstring(L, name);
+  lua_pushlstring(L, name->view(), 0, name->size());
   lua_insert(L, -(get + 1)); /* no-op if get is false */
   return get + 1;
 }

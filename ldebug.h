@@ -26,7 +26,7 @@ static l_forceinline void resethookcount(lua_State* L)
 constexpr int ABSLINEINFO = (-0x80);
 
 LUAI_FUNC int luaG_getfuncline(const Proto* f, int pc);
-LUAI_FUNC const char* luaG_findlocal(lua_State* L, CallInfo* ci, int n,
+LUAI_FUNC const InternalString* luaG_findlocal(lua_State* L, CallInfo* ci, int n,
                                      StkId* pos);
 /*
 ** Error reporters take an explicit operand origin ('src'): the stack

@@ -29,11 +29,33 @@ static inline int LuaClosure(const Closure* f)
   return f != nullptr && f->tt == LUA_VLCL;
 }
 
-static const char strlocal[] = "local";
-static const char strupval[] = "upvalue";
+/*
+** Kind/name constants for the debug-name web: lit<> singletons with
+** per-literal identity, so kind results compare by pointer (Java:
+** interned String constants compared by reference).
+*/
+static const InternalString* const strlocal = lit<"local">();
+static const InternalString* const strupval = lit<"upvalue">();
+static const InternalString* const strconstant = lit<"constant">();
 
-static const char* funcnamefromcall(lua_State* L, CallInfo* ci,
-                                    const char** name);
+/*
+** Metamethod names without their "__" prefix (ORDER TM), for
+** "metamethod 'index'"-style messages (upstream computed these as
+** getstr(tmname) + 2 — a payload slice the view discipline forbids).
+*/
+static const InternalString* const tmplainname[] = {
+    lit<"index">(), lit<"newindex">(),
+    lit<"gc">(), lit<"mode">(), lit<"len">(), lit<"eq">(),
+    lit<"add">(), lit<"sub">(), lit<"mul">(), lit<"mod">(), lit<"pow">(),
+    lit<"div">(), lit<"idiv">(),
+    lit<"band">(), lit<"bor">(), lit<"bxor">(), lit<"shl">(), lit<"shr">(),
+    lit<"unm">(), lit<"bnot">(), lit<"lt">(), lit<"le">(),
+    lit<"concat">(), lit<"call">(), lit<"close">()};
+static_assert(sizeof(tmplainname) / sizeof(tmplainname[0]) == TM_N,
+              "tmplainname must cover every metamethod (ORDER TM)");
+
+static const InternalString* funcnamefromcall(lua_State* L, CallInfo* ci,
+                                              const InternalString** name);
 
 static int currentpc(lua_State* L, CallInfo* ci)
 {
@@ -180,17 +202,17 @@ LUA_API int lua_getstack(lua_State* L, int level, lua_Debug* ar)
   return status;
 }
 
-static const char* upvalname(const Proto* p, int uv)
+static const InternalString* upvalname(const Proto* p, int uv)
 {
   assert(uv < p->sizeupvalues);
   TString* s = p->upvalues[uv].name;
   if (s == nullptr)
-    return "?";
+    return lit<"?">();
   else
-    return getstr(s);
+    return &s->data;
 }
 
-static const char* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
+static const InternalString* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
 {
   StkId fv = ci->func;
   LClosure* cl = slotclLval(L, fv);
@@ -200,16 +222,16 @@ static const char* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
     if (n >= -nextra)
     { /* 'n' is negative */
       *pos = ci->func - nextra - (n + 1);
-      return "(vararg)"; /* generic name for any vararg */
+      return lit<"(vararg)">(); /* generic name for any vararg */
     }
   }
   return nullptr; /* no such vararg */
 }
 
-const char* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* pos)
+const InternalString* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* pos)
 {
   StkId base = ci->func + 1;
-  const char* name = nullptr;
+  const InternalString* name = nullptr;
   if (isLua(ci))
   {
     if (n < 0) /* access to vararg values? */
@@ -223,7 +245,7 @@ const char* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* pos)
     if (limit - base >= ((StkId)(n)) && n > 0)
     { /* is 'n' inside 'ci' stack? */
       /* generic name for any valid slot */
-      name = isLua(ci) ? "(temporary)" : "(C temporary)";
+      name = isLua(ci) ? lit<"(temporary)">() : lit<"(C temporary)">();
     }
     else
       return nullptr; /* no name */
@@ -233,9 +255,9 @@ const char* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* pos)
   return name;
 }
 
-LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
+LUA_API const InternalString* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
 {
-  const char* name;
+  const InternalString* name;
   lua_lock(L);
   if (ar == nullptr)
   {                                      /* information about non-active function? */
@@ -261,10 +283,10 @@ LUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
   return name;
 }
 
-LUA_API const char* lua_setlocal(lua_State* L, const lua_Debug* ar, int n)
+LUA_API const InternalString* lua_setlocal(lua_State* L, const lua_Debug* ar, int n)
 {
   StkId pos = 0; /* to avoid warnings */
-  const char* name;
+  const InternalString* name;
   lua_lock(L);
   name = luaG_findlocal(L, ar->i_ci, n, &pos);
   if (name)
@@ -346,7 +368,8 @@ static void collectvalidlines(lua_State* L, Closure* f)
   }
 }
 
-static const char* getfuncname(lua_State* L, CallInfo* ci, const char** name)
+static const InternalString* getfuncname(lua_State* L, CallInfo* ci,
+                                         const InternalString** name)
 {
   /* calling function is a known function? */
   if (ci != nullptr && !(ci->callstatus & CIST_TAIL))
@@ -405,11 +428,11 @@ static int auxgetinfo(lua_State* L, const char* what, lua_Debug* ar,
     }
     case 'n':
     {
-      const char* name = nullptr;
-      const char* namewhat = getfuncname(L, ci, &name);
+      const InternalString* name = nullptr;
+      const InternalString* namewhat = getfuncname(L, ci, &name);
       /* boundary copies; empty = absent (see lua.h) */
-      ar->namewhat = (namewhat != nullptr) ? namewhat : "";
-      ar->name = (namewhat != nullptr && name != nullptr) ? name : "";
+      ar->namewhat = (namewhat != nullptr) ? HostString{namewhat->view()} : HostString{};
+      ar->name = (namewhat != nullptr && name != nullptr) ? HostString{name->view()} : HostString{};
       break;
     }
     case 'r':
@@ -546,23 +569,24 @@ static int findsetreg(const Proto* p, int lastpc, int reg)
 /*
 ** Find a "name" for the constant 'c'.
 */
-static const char* kname(const Proto* p, int index, const char** name)
+static const InternalString* kname(const Proto* p, int index,
+                                   const InternalString** name)
 {
   TValue* kvalue = &p->k[index];
   if ((((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   {
-    *name = getstr(tsvalue(kvalue));
-    return "constant";
+    *name = &tsvalue(kvalue)->data;
+    return strconstant;
   }
   else
   {
-    *name = "?";
+    *name = lit<"?">();
     return nullptr;
   }
 }
 
-static const char* basicgetobjname(const Proto* p, int* ppc, int reg,
-                                   const char** name)
+static const InternalString* basicgetobjname(const Proto* p, int* ppc, int reg,
+                                             const InternalString** name)
 {
   int pc = *ppc;
   *name = luaF_getlocalname(p, reg + 1, pc);
@@ -602,41 +626,43 @@ static const char* basicgetobjname(const Proto* p, int* ppc, int reg,
 /*
 ** Find a "name" for the register 'c'.
 */
-static void rname(const Proto* p, int pc, int c, const char** name)
+static void rname(const Proto* p, int pc, int c, const InternalString** name)
 {
-  const char* what = basicgetobjname(p, &pc, c, name); /* search for 'c' */
-  if (!(what && *what == 'c'))                         /* did not find a constant name? */
-    *name = "?";
+  const InternalString* what = basicgetobjname(p, &pc, c, name); /* search for 'c' */
+  if (what != strconstant) /* did not find a constant name? */
+    *name = lit<"?">();
 }
 
 /*
 ** Check whether table being indexed by instruction 'i' is the
 ** environment '_ENV'
 */
-static const char* isEnv(const Proto* p, int pc, Instruction i, int isup)
+static const InternalString* isEnv(const Proto* p, int pc, Instruction i, int isup)
 {
-  int t = GETARG_B(i); /* table index */
-  const char* name;    /* name of indexed variable */
-  if (isup)            /* is 't' an upvalue? */
+  int t = GETARG_B(i);       /* table index */
+  const InternalString* name; /* name of indexed variable */
+  if (isup)                  /* is 't' an upvalue? */
     name = upvalname(p, t);
   else
   { /* 't' is a register */
-    const char* what = basicgetobjname(p, &pc, t, &name);
+    const InternalString* what = basicgetobjname(p, &pc, t, &name);
     /* 'name' must be the name of a local variable (at the current
        level or an upvalue) */
     if (what != strlocal && what != strupval)
       name = nullptr; /* cannot be the variable _ENV */
   }
-  return (name && strcmp(name, LUA_ENV) == 0) ? "global" : "field";
+  return (name != nullptr && name->view() == std::string_view{LUA_ENV})
+             ? lit<"global">()
+             : lit<"field">();
 }
 
 /*
 ** Extend 'basicgetobjname' to handle table accesses
 */
-static const char* getobjname(const Proto* p, int lastpc, int reg,
-                              const char** name)
+static const InternalString* getobjname(const Proto* p, int lastpc, int reg,
+                                        const InternalString** name)
 {
-  const char* kind = basicgetobjname(p, &lastpc, reg, name);
+  const InternalString* kind = basicgetobjname(p, &lastpc, reg, name);
   if (kind != nullptr)
     return kind;
   else if (lastpc != -1)
@@ -660,8 +686,8 @@ static const char* getobjname(const Proto* p, int lastpc, int reg,
     }
     case OP_GETI:
     {
-      *name = "integer index";
-      return "field";
+      *name = lit<"integer index">();
+      return lit<"field">();
     }
     case OP_GETFIELD:
     {
@@ -673,7 +699,7 @@ static const char* getobjname(const Proto* p, int lastpc, int reg,
     {
       int k = GETARG_C(i); /* key index */
       kname(p, k, name);
-      return "method";
+      return lit<"method">();
     }
     default:
       break; /* go through to return nullptr */
@@ -688,8 +714,8 @@ static const char* getobjname(const Proto* p, int lastpc, int reg,
 ** Returns what the name is (e.g., "for iterator", "method",
 ** "metamethod") and sets '*name' to point to the name.
 */
-static const char* funcnamefromcode(lua_State* L, const Proto* p,
-                                    int pc, const char** name)
+static const InternalString* funcnamefromcode(const Proto* p, int pc,
+                                              const InternalString** name)
 {
   TMS tm = (TMS) 0;            /* (initial value avoids warnings) */
   Instruction i = p->code[pc]; /* calling instruction */
@@ -700,8 +726,8 @@ static const char* funcnamefromcode(lua_State* L, const Proto* p,
     return getobjname(p, pc, GETARG_A(i), name); /* get function name */
   case OP_TFORCALL:
   { /* for iterator */
-    *name = "for iterator";
-    return "for iterator";
+    *name = lit<"for iterator">();
+    return lit<"for iterator">();
   }
   /* other instructions can do calls through metamethods */
   case OP_SELF:
@@ -757,36 +783,37 @@ static const char* funcnamefromcode(lua_State* L, const Proto* p,
   default:
     return nullptr; /* cannot find a reasonable name */
   }
-  *name = getstr(G(L)->tmname[tm]) + 2;
-  return "metamethod";
+  *name = tmplainname[tm];
+  return lit<"metamethod">();
 }
 
 /*
 ** Try to find a name for a function based on how it was called.
 */
-static const char* funcnamefromcall(lua_State* L, CallInfo* ci,
-                                    const char** name)
+static const InternalString* funcnamefromcall(lua_State* L, CallInfo* ci,
+                                              const InternalString** name)
 {
   if (ci->callstatus & CIST_HOOKED)
   { /* was it called inside a hook? */
-    *name = "?";
-    return "hook";
+    *name = lit<"?">();
+    return lit<"hook">();
   }
   else if (ci->callstatus & CIST_FIN)
   { /* was it called as a finalizer? */
-    *name = "__gc";
-    return "metamethod"; /* report it as such */
+    *name = lit<"__gc">();
+    return lit<"metamethod">(); /* report it as such */
   }
   else if (isLua(ci))
-    return funcnamefromcode(L, ci_func(L, ci)->p, currentpc(L, ci), name);
+    return funcnamefromcode(ci_func(L, ci)->p, currentpc(L, ci), name);
   else
     return nullptr;
 }
 
 /* }====================================================== */
 
-static const InternalString* formatvarinfo(lua_State* L, const char* kind,
-                                           const char* name)
+static const InternalString* formatvarinfo(lua_State* L,
+                                           const InternalString* kind,
+                                           const InternalString* name)
 {
   if (kind == nullptr)
     return lit<"">(); /* no information */
@@ -804,8 +831,8 @@ static const InternalString* formatvarinfo(lua_State* L, const char* kind,
 static const InternalString* varinfo(lua_State* L, StkId src)
 {
   CallInfo* ci = L->ci;
-  const char* name = nullptr; /* to avoid warnings */
-  const char* kind = nullptr;
+  const InternalString* name = nullptr; /* to avoid warnings */
+  const InternalString* kind = nullptr;
   if (isLua(ci))
   {
     if (src >= UPVALORIGIN && src != NOSLOT)
@@ -854,8 +881,8 @@ l_noret luaG_typeerror(lua_State* L, const TValue* o,
 l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
 {
   CallInfo* ci = L->ci;
-  const char* name = nullptr; /* to avoid warnings */
-  const char* kind = funcnamefromcall(L, ci, &name);
+  const InternalString* name = nullptr; /* to avoid warnings */
+  const InternalString* kind = funcnamefromcall(L, ci, &name);
   const InternalString* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, src);
   typeerror(L, o, lit<"call">(), extra);
 }
@@ -915,7 +942,7 @@ l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
 
 l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
 {
-  const char* globalname = "?"; /* default name if k == 0 */
+  const InternalString* globalname = lit<"?">(); /* default name if k == 0 */
   if (k > 0)
     kname(cl->p, k - 1, &globalname);
   luaG_runerror(L, lit<"global '%s' already defined">(), FmtArgs().str(globalname));

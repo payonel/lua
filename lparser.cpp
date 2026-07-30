@@ -633,7 +633,7 @@ static inline void leavelevel(LexState* ls)
 static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
 {
   TString* tsname = getlocalvardesc(ls->fs, gt->nactvar)->name;
-  const char* varname = (tsname != nullptr) ? getstr(tsname) : "*";
+  const InternalString* varname = (tsname != nullptr) ? &tsname->data : lit<"*">();
   luaK_semerror(ls,
                 lit<"<goto %s> at line %d jumps into the scope of '%s'">(),
                 FmtArgs().str(&gt->name->data).num(gt->line).str(varname)); /* raise the error */
@@ -1990,14 +1990,14 @@ static lu_byte getvarattribute(LexState* ls, lu_byte df)
   if (testnext(ls, '<'))
   {
     TString* ts = str_checkname(ls);
-    const char* attr = getstr(ts);
+    std::string_view attr = ts->data.view();
     checknext(ls, '>');
-    if (strcmp(attr, "const") == 0)
+    if (attr == "const")
       return RDKCONST; /* read-only variable */
-    else if (strcmp(attr, "close") == 0)
+    else if (attr == "close")
       return RDKTOCLOSE; /* to-be-closed variable */
     else
-      luaK_semerror(ls, lit<"unknown attribute '%s'">(), FmtArgs().str(attr));
+      luaK_semerror(ls, lit<"unknown attribute '%s'">(), FmtArgs().str(&ts->data));
   }
   return df; /* return default value */
 }

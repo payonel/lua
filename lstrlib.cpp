@@ -284,7 +284,7 @@ static int tonum(lua_State* L, int arg)
   else
   { /* check whether it is a numerical string */
     const InternalString* s = lua_toistring(L, arg);
-    return (s != nullptr && lua_stringtonumber(L, s->c_str()) == s->size() + 1);
+    return (s != nullptr && lua_stringtonumber(L, s->view()) == s->size() + 1);
   }
 }
 
@@ -887,16 +887,11 @@ static int push_captures(MatchState* ms, ptrdiff_t s, ptrdiff_t e)
 }
 
 /* check whether pattern has no special characters */
-static int nospecials(const char* p, size_t l)
+static int nospecials(std::string_view p)
 {
-  size_t upto = 0;
-  do
-  {
-    if (strpbrk(p + upto, SPECIALS))
-      return 0;                   /* pattern has a special character */
-    upto += strlen(p + upto) + 1; /* may have more after \0 */
-  } while (upto <= l);
-  return 1; /* no special chars found */
+  /* bounded scan over the whole view (upstream hopped strpbrk over
+     embedded NULs; NUL is not a special, so one find covers all) */
+  return p.find_first_of(SPECIALS) == std::string_view::npos;
 }
 
 /*
@@ -937,7 +932,7 @@ static int str_find_aux(lua_State* L, int find)
     return 1;
   }
   /* explicit request or no special characters? */
-  if (find && (lua_toboolean(L, 4) || nospecials(p->c_str(), lp)))
+  if (find && (lua_toboolean(L, 4) || nospecials(p->view())))
   {
     /* do a plain search */
     size_t pos = lmemfind(s->view(), init, ls - init, p->view(), lp);

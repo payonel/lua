@@ -170,9 +170,9 @@ static void checkclosemth(lua_State* L, StkId level)
   if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                            /* no metamethod? */
     int idx = ((int)(level - L->ci->func)); /* variable index */
-    const char* vname = luaG_findlocal(L, L->ci, idx, nullptr);
+    const InternalString* vname = luaG_findlocal(L, L->ci, idx, nullptr);
     if (vname == nullptr)
-      vname = "?";
+      vname = lit<"?">();
     luaG_runerror(L, lit<"variable '%s' got a non-closable value">(),
                   FmtArgs().str(vname));
   }
@@ -349,7 +349,7 @@ void luaF_freeproto(lua_State* L, Proto* f)
 ** Look for n-th local variable at line 'line' in function 'func'.
 ** Returns nullptr if not found.
 */
-const char* luaF_getlocalname(const Proto* f, int local_number, int pc)
+const InternalString* luaF_getlocalname(const Proto* f, int local_number, int pc)
 {
   int i;
   for (i = 0; i < f->sizelocvars && f->locvars[i].startpc <= pc; i++)
@@ -358,7 +358,7 @@ const char* luaF_getlocalname(const Proto* f, int local_number, int pc)
     { /* is variable active? */
       local_number--;
       if (local_number == 0)
-        return getstr(f->locvars[i].varname);
+        return &f->locvars[i].varname->data;
     }
   }
   return nullptr; /* not found */

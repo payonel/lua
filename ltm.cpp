@@ -365,9 +365,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   else if ((((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   { /* string value? */
     TString* ts = tsvalue(rc);
-    size_t len = ts->data.size();
-    const char* s = ts->data.c_str();
-    if (len == 1 && s[0] == 'n')
+    if (ts->data.size() == 1 && ts->data.byteAt(0) == 'n')
     { /* key is "n"? */
       setsloti(L, ra, nextra);
       return;

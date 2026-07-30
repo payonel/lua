@@ -263,8 +263,8 @@ LUA_API void(lua_pushnil)(lua_State* L);
 LUA_API void(lua_pushnumber)(lua_State* L, lua_Number n);
 LUA_API void(lua_pushinteger)(lua_State* L, lua_Integer n);
 /* bytes push (deep copy; pairs with lua_tolstring) */
-LUA_API const char*(lua_pushlstring) (lua_State* L, std::string_view s,
-                                      size_t off, size_t len);
+LUA_API std::string_view(lua_pushlstring) (lua_State* L, std::string_view s,
+                                           size_t off, size_t len);
 /* text push: HostString converted at the boundary (deep copy) */
 LUA_API void(lua_pushstring) (lua_State* L, const HostString& s);
 LUA_API const InternalString*(lua_pushfstring) (lua_State* L, const char* fmt);
@@ -499,16 +499,17 @@ constexpr int LUA_MASKCOUNT = (1 << LUA_HOOKCOUNT);
 LUA_API int(lua_getstack)(lua_State* L, int level, lua_Debug* ar);
 LUA_API int(lua_getinfo)(lua_State* L, const HostString& what, lua_Debug* ar);
 /*
-** Local/upvalue names: TRANSITIONAL borrowed char* — nullptr means no
-** such local/upvalue (the return doubles as the success flag; note ""
-** is a genuine name for C-closure upvalues, so empty cannot mean
-** absent). Final shape decided in the raw-char* review (Java: String
-** or null).
+** Local/upvalue names: borrowed const InternalString* — nullptr means
+** no such local/upvalue (the return doubles as the success flag; note
+** "" is a genuine name for C-closure upvalues, so empty cannot mean
+** absent). RULED in the raw-char* review: literal-or-payload union
+** returns are InternalString*, literals via lit<> (Java: String or
+** null).
 */
-LUA_API const char*(lua_getlocal) (lua_State* L, const lua_Debug* ar, int n);
-LUA_API const char*(lua_setlocal) (lua_State* L, const lua_Debug* ar, int n);
-LUA_API const char*(lua_getupvalue) (lua_State* L, int funcindex, int n);
-LUA_API const char*(lua_setupvalue) (lua_State* L, int funcindex, int n);
+LUA_API const InternalString*(lua_getlocal) (lua_State* L, const lua_Debug* ar, int n);
+LUA_API const InternalString*(lua_setlocal) (lua_State* L, const lua_Debug* ar, int n);
+LUA_API const InternalString*(lua_getupvalue) (lua_State* L, int funcindex, int n);
+LUA_API const InternalString*(lua_setupvalue) (lua_State* L, int funcindex, int n);
 
 LUA_API void*(lua_upvalueid) (lua_State* L, int fidx, int n);
 LUA_API void(lua_upvaluejoin)(lua_State* L, int fidx1, int n1,

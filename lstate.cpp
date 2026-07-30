@@ -434,7 +434,7 @@ void luaE_warnerror(lua_State* L, const InternalString* where)
   const char* msg;
   if ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
   {
-    msg = getstr(slottsval(L, errobj));
+    msg = slottsval(L, errobj)->data.c_str(); /* host warn-callback seam */
   }
   else
     msg = "error object is not a string";

@@ -226,10 +226,6 @@ struct TString : GCObject
   InternalString data; /* the byte payload (see internal_string.h) */
 };
 
-static l_forceinline const char* getstr(const TString* ts)
-{
-  return ts->data.c_str();
-}
 static l_forceinline size_t tsslen(const TString* ts)
 {
   return ts->data.size();

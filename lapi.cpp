@@ -642,8 +642,8 @@ LUA_API void lua_pushinteger(lua_State* L, lua_Integer n)
 ** 'len' == 0 (as 's' can be nullptr in that case), due to later use of
 ** 'memcmp' and 'memcpy'.
 */
-LUA_API const char* lua_pushlstring(lua_State* L, std::string_view s,
-                                    size_t off, size_t len)
+LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s,
+                                         size_t off, size_t len)
 {
   TString* ts;
   lua_lock(L);
@@ -652,7 +652,7 @@ LUA_API const char* lua_pushlstring(lua_State* L, std::string_view s,
   api_incr_top(L);
   luaC_checkGC(L);
   lua_unlock(L);
-  return getstr(ts);
+  return ts->data.view(); /* borrowed view of the pushed copy */
 }
 
 LUA_API void lua_pushstring(lua_State* L, const HostString& s)
@@ -723,7 +723,7 @@ LUA_API const InternalString* lua_pushfstring(lua_State* L, const char* fmt)
         setslot(L, o, &v);
       }
       assert(((slottag(L, o) & NOVARIANT_MASK) == LUA_TSTRING) && "string expected");
-      args.str(getstr(slottsval(L, o)));
+      args.str(&slottsval(L, o)->data);
       break;
     }
     case 'c':
@@ -1724,7 +1724,7 @@ struct UpvalAddr
   UpVal* uv;   /* Lua-closure upvalue, or null */
 };
 
-static const char* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
+static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
                                GCObject** owner)
 {
   switch (((fi)->tt_ & WITHVARIANT_MASK))
@@ -1740,7 +1740,7 @@ static const char* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
       assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
       *owner = const_cast<GCObject*>(static_cast<const GCObject*>(f));
     }
-    return "";
+    return lit<"">();
   }
   case LUA_VLCL:
   { /* Lua closure */
@@ -1756,16 +1756,16 @@ static const char* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
       *owner = const_cast<GCObject*>(static_cast<const GCObject*>(f->upvals[n - 1]));
     }
     name = p->upvalues[n - 1].name;
-    return (name == nullptr) ? "(no name)" : getstr(name);
+    return (name == nullptr) ? lit<"(no name)">() : &name->data;
   }
   default:
     return nullptr; /* not a closure */
   }
 }
 
-LUA_API const char* lua_getupvalue(lua_State* L, int funcindex, int n)
+LUA_API const InternalString* lua_getupvalue(lua_State* L, int funcindex, int n)
 {
-  const char* name;
+  const InternalString* name;
   UpvalAddr addr = {nullptr, nullptr};
   lua_lock(L);
   TValue fi = index2val(L, funcindex);
@@ -1780,9 +1780,9 @@ LUA_API const char* lua_getupvalue(lua_State* L, int funcindex, int n)
   return name;
 }
 
-LUA_API const char* lua_setupvalue(lua_State* L, int funcindex, int n)
+LUA_API const InternalString* lua_setupvalue(lua_State* L, int funcindex, int n)
 {
-  const char* name;
+  const InternalString* name;
   UpvalAddr addr = {nullptr, nullptr};
   GCObject* owner = nullptr; /* to avoid warnings */
   lua_lock(L);
