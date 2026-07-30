@@ -116,36 +116,36 @@ static int tpanic(lua_State* L)
 ** - 1.allow: all messages are shown;
 ** - 2.store: all warnings go to the global '_WARN';
 */
-static void warnf(void* ud, const char* msg, int tocont)
+static void warnf(void* ud, const HostString& msg, int tocont)
 {
   lua_State* L = ((lua_State*)(ud));
   static char buff[200] = ""; /* should be enough for tests... */
   static int onoff = 0;
   static int mode = 0; /* start in normal mode */
   static int lasttocont = 0;
-  if (!lasttocont && !tocont && *msg == '@')
+  if (!lasttocont && !tocont && !msg.empty() && msg[0] == '@')
   { /* control message? */
     if (buff[0] != '\0')
-      badexit("Control warning during warning: %s\naborting...\n", msg, buff);
-    if (strcmp(msg, "@off") == 0)
+      badexit("Control warning during warning: %s\naborting...\n", msg.c_str(), buff);
+    if (msg == "@off")
       onoff = 0;
-    else if (strcmp(msg, "@on") == 0)
+    else if (msg == "@on")
       onoff = 1;
-    else if (strcmp(msg, "@normal") == 0)
+    else if (msg == "@normal")
       mode = 0;
-    else if (strcmp(msg, "@allow") == 0)
+    else if (msg == "@allow")
       mode = 1;
-    else if (strcmp(msg, "@store") == 0)
+    else if (msg == "@store")
       mode = 2;
     else
       badexit("Invalid control warning in test mode: %s\naborting...\n",
-              msg, nullptr);
+              msg.c_str(), nullptr);
     return;
   }
   lasttocont = tocont;
-  if (strlen(msg) >= sizeof(buff) - strlen(buff))
-    badexit("warnf-buffer overflow (%s)\n", msg, buff);
-  strcat(buff, msg); /* add new message to current warning */
+  if (msg.size() >= sizeof(buff) - strlen(buff))
+    badexit("warnf-buffer overflow (%s)\n", msg.c_str(), buff);
+  strcat(buff, msg.c_str()); /* add new message to current warning */
   if (!tocont)
   { /* message finished? */
     lua_unlock(L);

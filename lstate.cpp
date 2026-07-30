@@ -418,7 +418,7 @@ LUA_API void lua_close(lua_State* L)
   close_state(L);
 }
 
-void luaE_warning(lua_State* L, const char* msg, int tocont)
+void luaE_warning(lua_State* L, const HostString& msg, int tocont)
 {
   lua_WarnFunction wf = G(L)->warnf;
   if (wf != nullptr)
@@ -431,16 +431,18 @@ void luaE_warning(lua_State* L, const char* msg, int tocont)
 void luaE_warnerror(lua_State* L, const InternalString* where)
 {
   StkId errobj = L->top - 1; /* error object */
-  const char* msg;
+  HostString msg;
   if ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
   {
-    msg = slottsval(L, errobj)->data.c_str(); /* host warn-callback boundary */
+    /* engine -> host: deep copy at the warn boundary */
+    const InternalString& s = slottsval(L, errobj)->data;
+    msg = HostString(s.bytes(), s.size());
   }
   else
     msg = "error object is not a string";
   /* produce warning "error in %s (%s)" (where, msg) */
   luaE_warning(L, "error in ", 1);
-  luaE_warning(L, where->c_str(), 1); /* warning fn is a host callback (char*) */
+  luaE_warning(L, HostString(where->bytes(), where->size()), 1);
   luaE_warning(L, " (", 1);
   luaE_warning(L, msg, 1);
   luaE_warning(L, ")", 0);

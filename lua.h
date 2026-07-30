@@ -129,9 +129,12 @@ typedef int (*lua_Writer)(lua_State* L, const void* p, size_t sz, void* ud);
 typedef void* (*lua_Alloc)(void* ud, void* ptr, size_t osize, size_t nsize);
 
 /*
-** Type for warning functions
+** Type for warning functions. Host-settable callback (lua_setwarnf is
+** SDK-only surface), so the message crosses the boundary as HostString:
+** the engine converts once at the call site and the host never sees
+** engine memory. (Java: (Object ud, String msg, int tocont) -> void.)
 */
-typedef void (*lua_WarnFunction)(void* ud, const char* msg, int tocont);
+typedef void (*lua_WarnFunction)(void* ud, const HostString& msg, int tocont);
 
 /*
 ** Type used by the debug API to collect debug information

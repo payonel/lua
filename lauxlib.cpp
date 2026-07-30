@@ -1147,29 +1147,29 @@ static int panic(lua_State* L)
 ** warnfon: ready to start a new message
 ** warnfcont: previous message is to be continued
 */
-static void warnfoff(void* ud, const char* message, int tocont);
-static void warnfon(void* ud, const char* message, int tocont);
-static void warnfcont(void* ud, const char* message, int tocont);
+static void warnfoff(void* ud, const HostString& message, int tocont);
+static void warnfon(void* ud, const HostString& message, int tocont);
+static void warnfcont(void* ud, const HostString& message, int tocont);
 
 /*
 ** Check whether message is a control message. If so, execute the
 ** control or ignore it if unknown.
 */
-static int checkcontrol(lua_State* L, const char* message, int tocont)
+static int checkcontrol(lua_State* L, const HostString& message, int tocont)
 {
-  if (tocont || *(message++) != '@') /* not a control message? */
+  if (tocont || message.empty() || message[0] != '@') /* not a control message? */
     return 0;
   else
   {
-    if (strcmp(message, "off") == 0)
+    if (message.compare(1, HostString::npos, "off") == 0)
       lua_setwarnf(L, warnfoff, L); /* turn warnings off */
-    else if (strcmp(message, "on") == 0)
+    else if (message.compare(1, HostString::npos, "on") == 0)
       lua_setwarnf(L, warnfon, L); /* turn warnings on */
     return 1;                      /* it was a control message */
   }
 }
 
-static void warnfoff(void* ud, const char* message, int tocont)
+static void warnfoff(void* ud, const HostString& message, int tocont)
 {
   checkcontrol((lua_State*) ud, message, tocont);
 }
@@ -1178,10 +1178,10 @@ static void warnfoff(void* ud, const char* message, int tocont)
 ** Writes the message and handle 'tocont', finishing the message
 ** if needed and setting the next warn function.
 */
-static void warnfcont(void* ud, const char* message, int tocont)
+static void warnfcont(void* ud, const HostString& message, int tocont)
 {
   lua_State* L = (lua_State*) ud;
-  lua_writestringerror("%s", message); /* write message */
+  lua_writestringerror("%s", message.c_str()); /* write message (host sink) */
   if (tocont)                          /* not the last part? */
     lua_setwarnf(L, warnfcont, L);     /* to be continued */
   else
@@ -1191,7 +1191,7 @@ static void warnfcont(void* ud, const char* message, int tocont)
   }
 }
 
-static void warnfon(void* ud, const char* message, int tocont)
+static void warnfon(void* ud, const HostString& message, int tocont)
 {
   if (checkcontrol((lua_State*) ud, message, tocont)) /* control message? */
     return;                                           /* nothing else to be done */

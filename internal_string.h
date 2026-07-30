@@ -117,9 +117,10 @@ public:
   ** staging layer may depend on the terminator (Java byte[] has
   ** none). Internal code must use view()/byteAt()/size(). Sanctioned
   ** c_str() readers after the raw-char* review (2026-07-30): the
-  ** l_strcmp strcoll segment walk (LOCALE item), the host
-  ** warn-callback boundary (luaE_warnerror/luaE_warning), and ltests'
-  ** printf shims. Everything else is a bug.
+  ** l_strcmp strcoll segment walk (LOCALE item) and ltests'
+  ** printf shims. (The warn-callback boundary was re-ruled 2026-07-30:
+  ** lua_WarnFunction now takes HostString, built via bytes()/size().)
+  ** Everything else is a bug.
   */
   const char* c_str() const noexcept { return bytes_.c_str(); }
 
