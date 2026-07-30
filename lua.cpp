@@ -33,7 +33,8 @@
 
 static lua_State* globalL = nullptr;
 
-static const char* progname = LUA_PROGNAME;
+/* program name for error prefixes; empty = absent (interactive mode) */
+static HostString progname = LUA_PROGNAME;
 
 /*
 ** Use 'sigaction' when available.
@@ -69,13 +70,13 @@ static void laction(int i)
   lua_sethook(globalL, lstop, flag, 1);
 }
 
-static void print_usage(const char* badoption)
+static void print_usage(const HostString& badoption)
 {
-  lua_writestringerror("%s: ", progname);
-  if (badoption[1] == 'e' || badoption[1] == 'l')
-    lua_writestringerror("'%s' needs argument\n", badoption);
+  lua_writestringerror("%s: ", progname.c_str());
+  if (badoption.size() > 1 && (badoption[1] == 'e' || badoption[1] == 'l'))
+    lua_writestringerror("'%s' needs argument\n", badoption.c_str());
   else
-    lua_writestringerror("unrecognized option '%s'\n", badoption);
+    lua_writestringerror("unrecognized option '%s'\n", badoption.c_str());
   lua_writestringerror(
       "usage: %s [options] [script [args]]\n"
       "Available options are:\n"
@@ -88,18 +89,18 @@ static void print_usage(const char* badoption)
       "  -W        turn warnings on\n"
       "  --        stop handling options\n"
       "  -         stop handling options and execute stdin\n",
-      progname);
+      progname.c_str());
 }
 
 /*
 ** Prints an error message, adding the program name in front of it
-** (if present)
+** (if present; empty = absent)
 */
-static void l_message(const char* pname, const char* msg)
+static void l_message(const HostString& pname, const HostString& msg)
 {
-  if (pname)
-    lua_writestringerror("%s: ", pname);
-  lua_writestringerror("%s\n", msg);
+  if (!pname.empty())
+    lua_writestringerror("%s: ", pname.c_str());
+  lua_writestringerror("%s\n", msg.c_str());
 }
 
 /*
@@ -112,7 +113,7 @@ static int report(lua_State* L, int status)
   {
     HostString msg = lua_isstring(L, -1) ? lua_tostring(L, -1)
                                          : HostString("(error message not a string)");
-    l_message(progname, msg.c_str());
+    l_message(progname, msg);
     lua_pop(L, 1); /* remove message */
   }
   return status;
@@ -196,17 +197,14 @@ static int dochunk(lua_State* L, int status)
   return report(L, status);
 }
 
-static int dofile(lua_State* L, const char* name)
+static int dofile(lua_State* L, const HostString* name)
 {
-  if (name == nullptr)
-    return dochunk(L, luaL_loadfilex(L, nullptr, nullptr)); /* stdin */
-  HostString fname(name); /* host boundary: adopt the argv text */
-  return dochunk(L, luaL_loadfilex(L, &fname, nullptr));
+  return dochunk(L, luaL_loadfilex(L, name, nullptr)); /* nullptr = stdin */
 }
 
-static int dostring(lua_State* L, const char* s, const char* name)
+static int dostring(lua_State* L, const HostString& s, const HostString& name)
 {
-  return dochunk(L, luaL_loadbufferx(L, std::string_view{s, strlen(s)}, name, "t"));
+  return dochunk(L, luaL_loadbufferx(L, s, name, "t"));
 }
 
 /*
@@ -214,29 +212,31 @@ static int dostring(lua_State* L, const char* s, const char* name)
 ** If there is no explicit modname and globname contains a '-', cut
 ** the suffix after '-' (the "version") to make the global name.
 */
-static int dolibrary(lua_State* L, char* globname)
+static int dolibrary(lua_State* L, const HostString& arg)
 {
   int status;
-  char* suffix = nullptr;
-  char* modname = strchr(globname, '=');
-  if (modname == nullptr)
-  {                                        /* no explicit name? */
-    modname = globname;                    /* module name is equal to global name */
-    suffix = strchr(modname, *LUA_IGMARK); /* look for a suffix mark */
+  HostString globname, modname;
+  size_t suffix = HostString::npos;
+  size_t eq = arg.find('=');
+  if (eq == HostString::npos)
+  {                 /* no explicit name? */
+    globname = arg; /* module name is equal to global name */
+    modname = arg;
+    suffix = globname.find(*LUA_IGMARK); /* look for a suffix mark */
   }
   else
   {
-    *modname = '\0'; /* global name ends here */
-    modname++;       /* module name starts after the '=' */
+    globname = arg.substr(0, eq); /* global name ends here */
+    modname = arg.substr(eq + 1); /* module name starts after the '=' */
   }
   lua_getglobal(L, "require");
   lua_pushstring(L, modname);
   status = docall(L, 1, 1); /* call 'require(modname)' */
   if (status == LUA_OK)
   {
-    if (suffix != nullptr)         /* is there a suffix mark? */
-      *suffix = '\0';           /* remove suffix from global name */
-    lua_setglobal(L, globname); /* globname = require(modname) */
+    if (suffix != HostString::npos)          /* is there a suffix mark? */
+      globname = globname.substr(0, suffix); /* remove suffix from global name */
+    lua_setglobal(L, globname);              /* globname = require(modname) */
   }
   return report(L, status);
 }
@@ -374,10 +374,14 @@ static int runargs(lua_State* L, char** argv, int n)
     case 'l':
     {
       int status;
-      char* extra = argv[i] + 2; /* both options need an argument */
-      if (*extra == '\0')
-        extra = argv[++i];
-      assert(extra != nullptr);
+      HostString arg(argv[i]); /* host boundary: adopt the argv text */
+      HostString extra = arg.substr(2); /* both options need an argument */
+      if (extra.empty())
+      {
+        i++; /* try next 'argv' */
+        assert(argv[i] != nullptr); /* already checked by 'collectargs' */
+        extra = argv[i];
+      }
       status = (option == 'e')
                    ? dostring(L, extra, "=(command line)")
                    : dolibrary(L, extra);
@@ -403,22 +407,25 @@ static char* no_getenv(const char*)
 
 static int handle_luainit(lua_State* L)
 {
-  std::string vname = std::string("=") + LUA_INIT_VAR;
-  vname += LUA_VERSUFFIX; /* versioned name: e.g. "=LUA_INIT_5_5" */
-  const char* name = vname.c_str();
-  const char* init = l_getenv(name + 1);
-  if (init == nullptr)
+  HostString name = LUA_INIT_VAR;
+  name.append(LUA_VERSUFFIX); /* versioned name: e.g. "LUA_INIT_5_5" */
+  /* l_getenv is system ABI: char* in and out, converted at the call */
+  const char* einit = l_getenv(name.c_str());
+  if (einit == nullptr)
   {
-    vname = std::string("=") + LUA_INIT_VAR;
-    name = vname.c_str();
-    init = l_getenv(name + 1); /* try alternative name */
+    name = LUA_INIT_VAR;
+    einit = l_getenv(name.c_str()); /* try alternative name */
   }
-  if (init == nullptr)
+  if (einit == nullptr)
     return LUA_OK;
-  else if (init[0] == '@')
-    return dofile(L, init + 1);
+  HostString init(einit); /* host boundary: adopt the env value */
+  if (!init.empty() && init[0] == '@')
+  {
+    HostString fname = init.substr(1);
+    return dofile(L, &fname);
+  }
   else
-    return dostring(L, init, name);
+    return dostring(L, init, "=" + name);
 }
 
 /*
@@ -501,11 +508,11 @@ static void lua_freeline(char* line)
 
 static void lua_initreadline(lua_State* L)
 {
-  const char* rllib = l_getenv(LUA_RLLIB_VAR); /* name of readline library */
-  void* lib;                                   /* library handle */
-  if (rllib == nullptr)                           /* no environment variable? */
-    rllib = LUA_READLINELIB;                   /* use default name */
-  lib = dlopen(rllib, RTLD_NOW | RTLD_LOCAL);
+  /* l_getenv is system ABI: adopt the value at the call */
+  const char* erllib = l_getenv(LUA_RLLIB_VAR); /* name of readline library */
+  HostString rllib = (erllib != nullptr) ? HostString(erllib)
+                                         : HostString(LUA_READLINELIB); /* default name */
+  void* lib = dlopen(rllib.c_str(), RTLD_NOW | RTLD_LOCAL); /* system ABI */
   if (lib != nullptr)
   {
     const char** name = ((const char**)(dlsym(lib, "rl_readline_name")));
@@ -537,13 +544,13 @@ static void lua_initreadline(lua_State* L)
 ** the string (or nil, if using the default value) on the stack, to keep
 ** it anchored.
 */
-static const char* get_prompt(lua_State* L, int firstline)
+static HostString get_prompt(lua_State* L, int firstline)
 {
   if (lua_getglobal(L, firstline ? "_PROMPT" : "_PROMPT2") == LUA_TNIL)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
-    const char* p = luaL_tolstring(L, -1).data(); /* host print boundary (NUL-terminated payload) */
+    HostString p{luaL_tolstring(L, -1)}; /* host boundary: deep copy */
     lua_remove(L, -2); /* remove original value */
     return p;
   }
@@ -551,7 +558,6 @@ static const char* get_prompt(lua_State* L, int firstline)
 
 /* mark in error messages for incomplete statements */
 constexpr char EOFMARK[] = "<eof>";
-constexpr size_t marklen = (sizeof(EOFMARK) / sizeof(char) - 1);
 
 /*
 ** Check whether 'status' signals a syntax error and the error
@@ -563,9 +569,7 @@ static int incomplete(lua_State* L, int status)
   if (status == LUA_ERRSYNTAX)
   {
     std::string_view msgv = lua_tolstring(L, -1);
-    size_t lmsg = msgv.size();
-    const char* msg = msgv.data();
-    if (lmsg >= marklen && strcmp(msg + lmsg - marklen, EOFMARK) == 0)
+    if (msgv.ends_with(EOFMARK)) /* bounded suffix compare (Java endsWith) */
       return 1;
   }
   return 0; /* else... */
@@ -578,8 +582,8 @@ static int pushline(lua_State* L, int firstline)
 {
   char buffer[LUA_MAXINPUT];
   size_t l;
-  const char* prmt = get_prompt(L, firstline);
-  char* b = lua_readline(buffer, prmt);
+  HostString prmt = get_prompt(L, firstline);
+  char* b = lua_readline(buffer, prmt.c_str()); /* readline ABI boundary */
   lua_pop(L, 1); /* remove prompt */
   if (b == nullptr)
     return 0; /* no input */
@@ -607,14 +611,17 @@ static int addreturn(lua_State* L)
   return status;
 }
 
-static void checklocal(const char* line)
+static void checklocal(std::string_view line)
 {
-  static const size_t szloc = sizeof("local") - 1;
-  static const char space[] = " \t";
-  line += strspn(line, space);              /* skip spaces */
-  if (strncmp(line, "local", szloc) == 0 && /* "local"? */
-      strchr(space, *(line + szloc)) != nullptr)
-  { /* followed by a space? */
+  static constexpr std::string_view kw = "local";
+  static constexpr std::string_view space = " \t";
+  size_t i = line.find_first_not_of(space); /* skip spaces */
+  if (i == std::string_view::npos)
+    return; /* only spaces */
+  size_t j = i + kw.size();
+  if (line.compare(i, kw.size(), kw) == 0 &&      /* "local"? */
+      (j >= line.size() || line[j] == ' ' || line[j] == '\t'))
+  { /* followed by a space or end of line? */
     lua_writestringerror("%s\n",
                          "warning: locals do not survive across lines in interactive mode");
   }
@@ -628,7 +635,7 @@ static void checklocal(const char* line)
 static int multiline(lua_State* L)
 {
   std::string_view line = lua_tolstring(L, 1); /* get first line */
-  checklocal(line.data()); /* host boundary (NUL-terminated payload) */
+  checklocal(line);
   for (;;)
   {                                                  /* repeat until gets a complete statement */
     int status = luaL_loadbufferx(L, line, "=stdin", "t"); /* try it */
@@ -678,8 +685,8 @@ static void l_print(lua_State* L)
     if (lua_pcall(L, n, 0, 0) != LUA_OK)
     {
       lua_pushvalue(L, -1); /* error message is the argument */
-      l_message(progname,
-                lua_pushfstring(L, "error calling 'print' (%s)")->c_str());
+      const InternalString* m = lua_pushfstring(L, "error calling 'print' (%s)");
+      l_message(progname, HostString(m->bytes(), m->size())); /* boundary copy */
     }
   }
 }
@@ -691,8 +698,8 @@ static void l_print(lua_State* L)
 static void doREPL(lua_State* L)
 {
   int status;
-  const char* oldprogname = progname;
-  progname = nullptr; /* no 'progname' on errors in interactive mode */
+  HostString oldprogname = progname;
+  progname = ""; /* no 'progname' on errors in interactive mode */
   lua_initreadline(L);
   while ((status = loadline(L)) != -1)
   {
@@ -772,7 +779,8 @@ int main(int argc, char** argv)
   lua_State* L = luaL_newstate(); /* create state */
   if (L == nullptr)
   {
-    l_message(argv[0], "cannot create state: not enough memory");
+    l_message(argv[0] != nullptr ? argv[0] : "",
+              "cannot create state: not enough memory");
     return EXIT_FAILURE;
   }
   lua_gc(L, LUA_GCSTOP, 0, 0, 0);          /* stop GC while building state */
