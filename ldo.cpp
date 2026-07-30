@@ -1098,21 +1098,19 @@ struct SParser
   ByteBuilder buff; /* token buffer for the scanner (ctor/dtor managed;
                        growth ACCOUNTED via save(), charge released below) */
   Dyndata dyd;  /* dynamic structures used by the parser */
-  const char* mode;
-  const char* name;
+  const InternalString* mode; /* nullable: default "bt" */
+  const InternalString* name;
 };
 
-static void checkmode(lua_State* L, const char* mode,
+static void checkmode(lua_State* L, const InternalString* mode,
                       const InternalString* x)
 {
-  if (strchr(mode, x->byteAt(0)) == nullptr)
-  {
-    /* 'mode' is the transitional load-path char* param: deep-copy at
-       the boundary for the message (dies with the HostString switch) */
-    InternalString m{mode, strlen(mode)};
+  if (mode->view().find((char) x->byteAt(0)) == std::string_view::npos)
+  { /* engine strings end to end: no scan past a terminator and no
+       copy for the message */
     luaO_pushfstring(L,
                      lit<"attempt to load a %s chunk (mode is '%s')">(),
-                     FmtArgs().str(x).str(&m));
+                     FmtArgs().str(x).str(mode));
     luaD_throw(L, LUA_ERRSYNTAX);
   }
 }
@@ -1125,7 +1123,7 @@ static void f_parser(lua_State* L, void* ud)
 {
   LClosure* cl;
   struct SParser* p = ((struct SParser*)(ud));
-  const char* mode = p->mode ? p->mode : "bt";
+  const InternalString* mode = p->mode ? p->mode : lit<"bt">();
   int c;
   Table* anchor;
   StkId otop = (L->top); /* original top */
@@ -1138,7 +1136,7 @@ static void f_parser(lua_State* L, void* ud)
   if (c == LUA_SIGNATURE[0])
   {
     int fixed = 0;
-    if (strchr(mode, 'B') != nullptr)
+    if (mode->view().find('B') != std::string_view::npos)
       fixed = 1;
     else
       checkmode(L, mode, lit<"binary">());
@@ -1172,8 +1170,8 @@ void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
   L->top--;
 }
 
-TStatus luaD_protectedparser(lua_State* L, ZIO* z, const char* name,
-                             const char* mode)
+TStatus luaD_protectedparser(lua_State* L, ZIO* z, const InternalString* name,
+                             const InternalString* mode)
 {
   struct SParser p;
   TStatus status;

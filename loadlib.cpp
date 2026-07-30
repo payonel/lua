@@ -444,7 +444,7 @@ static int searcher_Lua(lua_State* L)
   if (!findfile(L, name, "path", LUA_LSUBSEP))
     return 1; /* module not found in this path (error message pushed) */
   HostString filename = lua_tostring(L, -1);
-  return checkload(L, (luaL_loadfilex(L, filename.c_str(), "bt") == LUA_OK), filename);
+  return checkload(L, (luaL_loadfilex(L, filename.c_str(), nullptr) == LUA_OK), filename);
 }
 
 /*

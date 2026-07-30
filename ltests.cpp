@@ -1991,7 +1991,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("loadfile", inst) == 0)
     {
-      luaL_loadfilex(L1, luaL_checkstring(L1, getnum_aux(L, L1, &pc)).c_str(), "t");
+      luaL_loadfilex(L1, luaL_checkstring(L1, getnum_aux(L, L1, &pc)).c_str(), lit<"t">());
     }
     else if (strcmp("loadstring", inst) == 0)
     {

@@ -197,4 +197,4 @@ LUAI_FUNC void luaY_checklimit(FuncState* fs, int v, int l,
                                const InternalString* what);
 LUAI_FUNC LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor,
                                 ByteBuilder* buff, Dyndata* dyd,
-                                const char* name, int firstchar);
+                                const InternalString* name, int firstchar);

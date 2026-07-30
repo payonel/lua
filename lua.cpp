@@ -198,7 +198,7 @@ static int dochunk(lua_State* L, int status)
 
 static int dofile(lua_State* L, const char* name)
 {
-  return dochunk(L, luaL_loadfilex(L, name, "bt"));
+  return dochunk(L, luaL_loadfilex(L, name, nullptr));
 }
 
 static int dostring(lua_State* L, const char* s, const char* name)
@@ -260,7 +260,7 @@ static int handle_script(lua_State* L, char** argv)
   const char* fname = argv[0];
   if (strcmp(fname, "-") == 0 && strcmp(argv[-1], "--") != 0)
     fname = nullptr; /* stdin */
-  status = luaL_loadfilex(L, fname, "bt");
+  status = luaL_loadfilex(L, fname, nullptr);
   if (status == LUA_OK)
   {
     int n = pushargs(L); /* push arguments to script */

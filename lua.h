@@ -313,8 +313,16 @@ LUA_API int(lua_pcallk)(lua_State* L, int nargs, int nresults, int errfunc,
                         lua_KContext ctx, lua_KFunction k);
 LUA_API int lua_pcall(lua_State* L, int nargs, int nresults, int errfunc);
 
+/* boundary form: host text converts to engine bytes exactly once
+   (empty mode = default "bt") */
 LUA_API int(lua_load)(lua_State* L, lua_Reader reader, void* dt,
-                      const HostString& chunkname, const char* mode);
+                      const HostString& chunkname, const HostString& mode);
+/* engine-string form: chunkname/mode are already engine bytes (the
+   G.load path — Lua-string arguments never round-trip through host
+   text); nullptr mode = default "bt" */
+LUA_API int(lua_loadi)(lua_State* L, lua_Reader reader, void* dt,
+                       const InternalString* chunkname,
+                       const InternalString* mode);
 
 LUA_API int(lua_dump)(lua_State* L, lua_Writer writer, void* data, int strip);
 

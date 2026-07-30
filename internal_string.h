@@ -71,6 +71,11 @@ public:
   /* From raw bytes: always a deep copy; 'bytes' is never retained. */
   InternalString(const char* bytes, size_t len) : bytes_(bytes, len) {}
 
+  /* deep copy of a sub-range of a view — the storage boundary where
+     an (off, len) pair materializes (Java: new byte[] copyOfRange) */
+  InternalString(std::string_view src, size_t off, size_t len)
+      : bytes_(src.data() + off, len) {}
+
   /*
   ** From HostString: the boundary conversion boundary (deep copy). For
   ** the C++ staging host text is already UTF-8 bytes, so this is a

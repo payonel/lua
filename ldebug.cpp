@@ -378,13 +378,13 @@ static const InternalString* getfuncname(lua_State* L, CallInfo* ci,
     return nullptr; /* no way to find a name */
 }
 
-static int auxgetinfo(lua_State* L, const char* what, lua_Debug* ar,
-                      Closure* f, CallInfo* ci)
+static int auxgetinfo(lua_State* L, std::string_view what, size_t wpos,
+                      lua_Debug* ar, Closure* f, CallInfo* ci)
 {
   int status = 1;
-  for (; *what; what++)
+  for (; wpos < what.size(); wpos++)
   {
-    switch (*what)
+    switch (what[wpos])
     {
     case 'S':
     {
@@ -462,14 +462,15 @@ LUA_API int lua_getinfo(lua_State* L, const HostString& options, lua_Debug* ar)
   Closure* cl;
   CallInfo* ci;
   StkId func; /* slot of the function value (see note below for '>') */
-  const char* what = options.c_str();
+  std::string_view what{options}; /* walked by offset */
+  size_t wpos = 0;
   lua_lock(L);
-  if (*what == '>')
+  if (sv_byteat(what, 0) == '>')
   {
     ci = nullptr;
     func = L->top - 1;
     assert((slottag(L, func) & NOVARIANT_MASK) == LUA_TFUNCTION && "function expected");
-    what++;     /* skip the '>' */
+    wpos = 1;   /* skip the '>' */
     L->top--; /* pop function; the slot stays intact (nothing below pushes) */
   }
   else
@@ -485,13 +486,13 @@ LUA_API int lua_getinfo(lua_State* L, const HostString& options, lua_Debug* ar)
   }
   else
     cl = nullptr;
-  status = auxgetinfo(L, what, ar, cl, ci);
-  if (strchr(what, 'f'))
+  status = auxgetinfo(L, what, wpos, ar, cl, ci);
+  if (what.find('f', wpos) != std::string_view::npos)
   {
     copyslot(L, L->top, func);
     api_incr_top(L);
   }
-  if (strchr(what, 'L'))
+  if (what.find('L', wpos) != std::string_view::npos)
     collectvalidlines(L, cl);
   lua_unlock(L);
   return status;

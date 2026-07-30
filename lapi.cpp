@@ -1429,15 +1429,16 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   return ((int)(status));
 }
 
-LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
-                     const HostString& chunkname, const char* mode)
+LUA_API int lua_loadi(lua_State* L, lua_Reader reader, void* data,
+                      const InternalString* chunkname,
+                      const InternalString* mode)
 {
   ZIO z;
   TStatus status;
   lua_lock(L);
   luaC_checkGC(L);
   luaZ_init(L, &z, reader, data);
-  status = luaD_protectedparser(L, &z, chunkname.c_str(), mode);
+  status = luaD_protectedparser(L, &z, chunkname, mode);
   if (status == LUA_OK)
   {                                            /* no errors? */
     StkId s = L->top - 1;
@@ -1454,6 +1455,15 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
   }
   lua_unlock(L);
   return ((int)(status));
+}
+
+LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
+                     const HostString& chunkname, const HostString& mode)
+{
+  /* boundary: host text converts to engine bytes exactly once */
+  InternalString name{chunkname};
+  InternalString m{mode};
+  return lua_loadi(L, reader, data, &name, mode.empty() ? nullptr : &m);
 }
 
 /*

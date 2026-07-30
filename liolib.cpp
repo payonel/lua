@@ -561,11 +561,12 @@ static int g_read(lua_State* L, FILE* f, int first)
       }
       else
       {
-        HostString fmt = luaL_checkstring(L, n);
-        const char* p = fmt.c_str();
-        if (*p == '*')
-          p++; /* skip optional '*' (for compatibility) */
-        switch (*p)
+        /* the format is a Lua string — engine bytes, read by offset */
+        const InternalString* fmt = luaL_checkistring(L, n);
+        size_t fp = 0;
+        if (sv_byteat(fmt->view(), fp) == '*')
+          fp++; /* skip optional '*' (for compatibility) */
+        switch (sv_byteat(fmt->view(), fp))
         {
         case 'n': /* number */
           success = read_number(L, f);

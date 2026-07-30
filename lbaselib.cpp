@@ -386,10 +386,12 @@ static int load_aux(lua_State* L, int status, int envidx)
 ** returned as a HostString, handed on as char* (mode is a nullable
 ** transitional param in the load API).
 */
-static HostString getMode(lua_State* L, int idx)
+/* the mode argument is a Lua string — engine bytes already; nullptr
+   when absent (default "bt"). It never round-trips through host text. */
+static const InternalString* getMode(lua_State* L, int idx)
 {
-  HostString mode = luaL_optstring(L, idx, "");
-  if (mode.find('B') != HostString::npos)
+  const InternalString* mode = luaL_optistring(L, idx, nullptr);
+  if (mode != nullptr && mode->view().find('B') != std::string_view::npos)
   {
     /* Lua code cannot use fixed buffers */
     luaL_argerror(L, idx, "invalid mode");
@@ -401,10 +403,9 @@ static int luaB_loadfile(lua_State* L)
 {
   int isnil = lua_isnoneornil(L, 1); /* absent name = stdin */
   HostString fname = isnil ? HostString() : HostString(luaL_checkstring(L, 1));
-  HostString mode = getMode(L, 2);
+  const InternalString* mode = getMode(L, 2);
   int env = (!lua_isnone(L, 3) ? 3 : 0); /* 'env' index or 0 if no 'env' */
-  int status = luaL_loadfilex(L, isnil ? nullptr : fname.c_str(),
-                              mode.empty() ? nullptr : mode.c_str());
+  int status = luaL_loadfilex(L, isnil ? nullptr : fname.c_str(), mode);
   return load_aux(L, status, env);
 }
 
@@ -445,20 +446,20 @@ static int luaB_load(lua_State* L)
 {
   int status;
   std::string_view s = lua_tolstring(L, 1);
-  HostString mode = getMode(L, 3);
-  const char* modep = mode.empty() ? nullptr : mode.c_str();
+  const InternalString* mode = getMode(L, 3);
   int env = (!lua_isnone(L, 4) ? 4 : 0); /* 'env' index or 0 if no 'env' */
   if (s.data() != nullptr)
-  { /* loading a string? */
-    HostString chunkname = luaL_optstring(L, 2, HostString(s));
-    status = luaL_loadbufferx(L, s, chunkname, modep);
+  { /* loading a string: everything is engine bytes, no host text */
+    const InternalString* chunkname =
+        luaL_optistring(L, 2, lua_toistring(L, 1));
+    status = luaL_loadbufferi(L, s, chunkname, mode);
   }
   else
   {                    /* loading from a reader function */
     int firstcall = 1; /* userdata for generic_reader */
-    HostString chunkname = luaL_optstring(L, 2, "=(load)");
+    const InternalString* chunkname = luaL_optistring(L, 2, lit<"=(load)">());
     luaL_checktype(L, 1, LUA_TFUNCTION);
-    status = lua_load(L, generic_reader, &firstcall, chunkname, modep);
+    status = lua_loadi(L, generic_reader, &firstcall, chunkname, mode);
   }
   return load_aux(L, status, env);
 }
@@ -477,7 +478,7 @@ static int luaB_dofile(lua_State* L)
   int isnil = lua_isnoneornil(L, 1); /* absent name = stdin */
   HostString fname = isnil ? HostString() : HostString(luaL_checkstring(L, 1));
   lua_settop(L, 1);
-  if (l_unlikely(luaL_loadfilex(L, isnil ? nullptr : fname.c_str(), "bt") != LUA_OK))
+  if (l_unlikely(luaL_loadfilex(L, isnil ? nullptr : fname.c_str(), nullptr) != LUA_OK))
     return lua_error(L);
   lua_callk(L, 0, LUA_MULTRET, 0, dofilecont);
   return dofilecont(L, 0, 0);

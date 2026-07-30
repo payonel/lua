@@ -42,8 +42,8 @@ typedef void (*Pfunc)(lua_State* L, void* ud);
 LUAI_FUNC l_noret luaD_errerr(lua_State* L);
 LUAI_FUNC void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop);
 LUAI_FUNC TStatus luaD_protectedparser(lua_State* L, ZIO* z,
-                                       const char* name,
-                                       const char* mode);
+                                       const InternalString* name,
+                                       const InternalString* mode);
 LUAI_FUNC void luaD_hook(lua_State* L, int event, int line,
                          int fTransfer, int nTransfer);
 LUAI_FUNC void luaD_hookcall(lua_State* L, CallInfo* ci);

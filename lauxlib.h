@@ -101,13 +101,20 @@ constexpr int LUA_REFNIL = (-1);
 LUALIB_API int(luaL_ref)(lua_State* L, int t);
 LUALIB_API void(luaL_unref)(lua_State* L, int t, int ref);
 
+/* mode is an engine string (nullable = default "bt"); the filename
+   is host text (fopen boundary) */
 LUALIB_API int(luaL_loadfilex)(lua_State* L, const char* filename,
-                               const char* mode);
+                               const InternalString* mode);
 
 LUALIB_API int luaL_loadfile(lua_State* L, const char* filename);
 
+/* engine-string form: name/mode already engine bytes (nullable mode) */
+LUALIB_API int luaL_loadbufferi(lua_State* L, std::string_view buff,
+                                const InternalString* name,
+                                const InternalString* mode);
 LUALIB_API int(luaL_loadbufferx)(lua_State* L, std::string_view buff,
-                                 const HostString& name, const char* mode);
+                                 const HostString& name,
+                                 const HostString& mode);
 LUALIB_API int(luaL_loadstring)(lua_State* L, const char* s);
 
 LUALIB_API lua_State*(luaL_newstate) (void);

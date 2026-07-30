@@ -825,7 +825,7 @@ static int skipcomment(FILE* f, int* cp)
 }
 
 LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
-                              const char* mode)
+                              const InternalString* mode)
 {
   LoadF lf;
   int status, readstatus;
@@ -862,7 +862,8 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
   }
   if (c != EOF)
     lf.buff[lf.n++] = ((char)(c)); /* 'c' is the first character */
-  status = lua_load(L, getF, &lf, lua_tostring(L, -1), mode);
+  /* chunkname was pushed above; borrow its engine string */
+  status = lua_loadi(L, getF, &lf, lua_toistring(L, -1), mode);
   readstatus = ferror(lf.f);
   errno = 0; /* no useful error number until here */
   if (filename)
@@ -892,15 +893,25 @@ static const char* getS(lua_State*, void* ud, size_t* size)
   return ls->s;
 }
 
-LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff,
-                                const HostString& name, const char* mode)
+LUALIB_API int luaL_loadbufferi(lua_State* L, std::string_view buff,
+                                const InternalString* name,
+                                const InternalString* mode)
 {
   LoadS ls;
   /* stream boundary: the reader holds the chunk as pointer+remaining
      (category 5; Java: byte[] + offset in the ZIO struct) */
   ls.s = buff.data();
   ls.size = buff.size();
-  return lua_load(L, getS, &ls, name, mode);
+  return lua_loadi(L, getS, &ls, name, mode);
+}
+
+LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff,
+                                const HostString& name, const HostString& mode)
+{
+  /* boundary: convert once, delegate to the engine-string form */
+  InternalString n{name};
+  InternalString m{mode};
+  return luaL_loadbufferi(L, buff, &n, mode.empty() ? nullptr : &m);
 }
 
 LUALIB_API int luaL_loadstring(lua_State* L, const char* s)
@@ -1274,7 +1285,7 @@ LUALIB_API void luaL_checkversion(lua_State* L)
 
 LUALIB_API int luaL_loadfile(lua_State* L, const char* filename)
 {
-  return luaL_loadfilex(L, filename, nullptr);
+  return luaL_loadfilex(L, filename, nullptr); /* default mode */
 }
 
 LUALIB_API void luaL_argcheck(lua_State* L, bool cond, int arg, const HostString& extramsg)
@@ -1329,7 +1340,7 @@ LUALIB_API int luaL_getmetatable(lua_State* L, const HostString& tname)
 
 LUALIB_API int luaL_loadbuffer(lua_State* L, const char* buff, size_t sz, const HostString& name)
 {
-  return luaL_loadbufferx(L, std::string_view{buff, sz}, name, nullptr);
+  return luaL_loadbufferx(L, std::string_view{buff, sz}, name, HostString{});
 }
 
 LUALIB_API void luaL_pushfail(lua_State* L)

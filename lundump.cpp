@@ -30,7 +30,7 @@ struct LoadState
 {
   lua_State* L;
   ZIO* Z;
-  const char* name;
+  const InternalString* name;
   Table* h;          /* list for string reuse */
   size_t offset;     /* current position relative to beginning of dump */
   lua_Unsigned nstr; /* number of strings in the list */
@@ -39,11 +39,8 @@ struct LoadState
 
 static l_noret error(LoadState* S, const InternalString* why)
 {
-  /* 'name' is the transitional load-path char* chunkname: deep-copy
-     at the boundary for the message (dies with the HostString switch) */
-  InternalString n{S->name, strlen(S->name)};
   luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(),
-                   FmtArgs().str(&n).str(why));
+                   FmtArgs().str(S->name).str(why));
   luaD_throw(S->L, LUA_ERRSYNTAX);
 }
 
@@ -418,15 +415,20 @@ static void checkHeader(LoadState* S)
 /*
 ** Load precompiled chunk.
 */
-LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, const char* name,
-                      int fixed)
+LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor,
+                      const InternalString* name, int fixed)
 {
   LoadState S;
   LClosure* cl;
-  if (*name == '@' || *name == '=')
-    name = name + 1;
-  else if (*name == LUA_SIGNATURE[0])
-    name = "binary string";
+  InternalString plain; /* holds a stripped copy when 'name' is decorated */
+  int c0 = sv_byteat(name->view(), 0);
+  if (c0 == '@' || c0 == '=')
+  { /* strip the source-name decoration for messages */
+    plain = InternalString{name->view(), 1, name->size() - 1};
+    name = &plain;
+  }
+  else if (c0 == LUA_SIGNATURE[0])
+    name = lit<"binary string">();
   S.name = name;
   S.L = L;
   S.Z = Z;
