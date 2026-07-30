@@ -846,12 +846,12 @@ LUAI_FUNC int luaO_rawarith(lua_State* L, int op, const TValue* p1,
 LUAI_FUNC void luaO_arith(lua_State* L, int op, StkId p1, StkId p2,
                           StkId res);
 /*
-** BYTES-path function (raw char* review classification, 2026-07-29):
-** the input is a NUL-terminated byte buffer — a TString payload
-** (c_str) or the lexer's ByteBuilder bytes — never a text string;
-** interior scanning requires the terminator (strtod). Java: byte[].
+** BYTES-path function: the input is a byte view — a TString payload
+** or the lexer's ByteBuilder bytes — never a text string. Scanning is
+** bounded by the view (the strtod NUL dependence is gone; the
+** conversion runs on 'from_chars' over the view range). Java: byte[].
 */
-LUAI_FUNC size_t luaO_str2num(const char* s, TValue* o);
+LUAI_FUNC size_t luaO_str2num(std::string_view s, TValue* o);
 LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);

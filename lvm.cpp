@@ -83,9 +83,7 @@ static int l_strton(const TValue* obj, TValue* result)
   {
     assert((obj->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = tsvalue(obj);
-    size_t stlen;
-    const char* s = ((void)((stlen) = (st)->data.size()), (st)->data.c_str());
-    return (luaO_str2num(s, result) == stlen + 1);
+    return (luaO_str2num(st->data.view(), result) == st->data.size() + 1);
   }
 }
 

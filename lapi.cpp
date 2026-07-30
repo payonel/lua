@@ -436,7 +436,7 @@ LUA_API unsigned lua_numbertocstring(lua_State* L, int idx, std::span<char> buff
 LUA_API size_t lua_stringtonumber(lua_State* L, const char* s)
 {
   TValue v;
-  size_t sz = luaO_str2num(s, &v);
+  size_t sz = luaO_str2num(std::string_view{s, strlen(s)}, &v);
   if (sz != 0)
   {
     setslot(L, L->top, &v);

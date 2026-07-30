@@ -292,8 +292,7 @@ static int read_numeral(LexState* ls, Token* seminfo)
   }
   if (lislalpha(ls->current)) /* is numeral touching a letter? */
     save_and_next(ls);        /* force an error */
-  save(ls, '\0');
-  if (luaO_str2num(ls->buff->view().data(), &obj) == 0) /* format error? */
+  if (luaO_str2num(ls->buff->view(), &obj) == 0) /* format error? */
     lexerror(ls, lit<"malformed number">(), TK_FLT);
   if (((&obj)->tt_ == LUA_VNUMINT))
   {

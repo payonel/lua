@@ -281,15 +281,16 @@ lu_byte luaO_hexavalue(int c)
     return ((lu_byte)((ltolower(c) - 'a') + 10));
 }
 
-static int isneg(const char** s)
+/* consume one optional sign at s[*off]; returns 1 if negative */
+static int isneg(std::string_view s, size_t* off)
 {
-  if (**s == '-')
+  if (sv_byteat(s, *off) == '-')
   {
-    (*s)++;
+    (*off)++;
     return 1;
   }
-  else if (**s == '+')
-    (*s)++;
+  else if (sv_byteat(s, *off) == '+')
+    (*off)++;
   return 0;
 }
 
@@ -308,7 +309,7 @@ constexpr int MAXSIGDIG = 30;
 ** convert a hexadecimal numeric string to a number, following
 ** C99 specification for 'strtod'
 */
-static lua_Number lua_strx2number(const char* s, char** endptr)
+static lua_Number lua_strx2number(std::string_view s, size_t off, size_t* endpos)
 {
   int dot = '.'; /* radix is pinned to '.' (no locale dependence) */
   lua_Number r = 0.0; /* result (accumulator) */
@@ -317,27 +318,28 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
   int e = 0;                    /* exponent correction */
   int neg;                      /* 1 if number is negative */
   int hasdot = 0;               /* true after seen a dot */
-  *endptr = util::remove_const_cast(s);      /* nothing is valid yet */
-  while (lisspace(((unsigned char)(*s))))
-    s++;                                                    /* skip initial spaces */
-  neg = isneg(&s);                                          /* check sign */
-  if (!(*s == '0' && (*(s + 1) == 'x' || *(s + 1) == 'X'))) /* check '0x' */
+  size_t p = off;               /* scan offset */
+  *endpos = off;                /* nothing is valid yet */
+  while (lisspace(sv_byteat(s, p)))
+    p++;                                                    /* skip initial spaces */
+  neg = isneg(s, &p);                                       /* check sign */
+  if (!(sv_byteat(s, p) == '0' && (sv_byteat(s, p + 1) == 'x' || sv_byteat(s, p + 1) == 'X'))) /* check '0x' */
     return 0.0;                                   /* invalid format (no '0x') */
-  for (s += 2;; s++)
+  for (p += 2;; p++)
   { /* skip '0x' and read numeral */
-    if (*s == dot)
+    if (sv_byteat(s, p) == dot)
     {
       if (hasdot)
         break; /* second dot? stop loop */
       else
         hasdot = 1;
     }
-    else if (lisxdigit(((unsigned char)(*s))))
+    else if (lisxdigit(sv_byteat(s, p)))
     {
-      if (sigdig == 0 && *s == '0') /* non-significant digit (zero)? */
+      if (sigdig == 0 && s[p] == '0') /* non-significant digit (zero)? */
         nosigdig++;
       else if (++sigdig <= MAXSIGDIG) /* can read it without overflow? */
-        r = (r * 16.0) + luaO_hexavalue(*s);
+        r = (r * 16.0) + luaO_hexavalue(s[p]);
       else
         e++; /* too many digits; ignore, but still count for exponent */
       if (hasdot)
@@ -348,22 +350,22 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
   }
   if (nosigdig + sigdig == 0) /* no digits? */
     return 0.0;     /* invalid format */
-  *endptr = util::remove_const_cast(s);    /* valid up to here */
+  *endpos = p;                /* valid up to here */
   e *= 4;                     /* each digit multiplies/divides value by 2^4 */
-  if (*s == 'p' || *s == 'P')
-  {                   /* exponent part? */
-    int exp1 = 0;     /* exponent value */
-    int neg1;         /* exponent sign */
-    s++;              /* skip 'p' */
-    neg1 = isneg(&s); /* sign */
-    if (!lisdigit(((unsigned char)(*s))))
+  if (sv_byteat(s, p) == 'p' || sv_byteat(s, p) == 'P')
+  {                     /* exponent part? */
+    int exp1 = 0;       /* exponent value */
+    int neg1;           /* exponent sign */
+    p++;                /* skip 'p' */
+    neg1 = isneg(s, &p); /* sign */
+    if (!lisdigit(sv_byteat(s, p)))
       return 0.0;          /* invalid; must have at least one digit */
-    while (lisdigit(((unsigned char)(*s)))) /* read exponent */
-      exp1 = exp1 * 10 + *(s++) - '0';
+    while (lisdigit(sv_byteat(s, p))) /* read exponent */
+      exp1 = exp1 * 10 + s[p++] - '0';
     if (neg1)
       exp1 = -exp1;
     e += exp1;
-    *endptr = util::remove_const_cast(s); /* valid up to here */
+    *endpos = p; /* valid up to here */
   }
   if (neg)
     r = -r;
@@ -387,22 +389,25 @@ static lua_Number lua_strx2number(const char* s, char** endptr)
 ** saturates the same way). Returns where parsing stopped, or 's'
 ** itself if nothing was recognized.
 */
-static const char* str2dec(const char* s, lua_Number* result)
+static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
 {
-  const char* p = s;
-  while (lisspace(((unsigned char)(*p))))
+  size_t p = off;
+  while (lisspace(sv_byteat(s, p)))
     p++; /* skip leading spaces */
   int neg = 0;
-  if (*p == '+' || *p == '-')
+  if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
   { /* consume one optional sign; the sign is applied below */
-    neg = (*p == '-');
+    neg = (s[p] == '-');
     p++;
   }
-  if (*p == '+' || *p == '-')
-    return s; /* a second sign is not a numeral */
+  if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
+    return off; /* a second sign is not a numeral */
   lua_Number v;
+  /* host-conversion seam (Java: correctly-rounded parse of the token) */
   std::from_chars_result res =
-      std::from_chars(p, p + strlen(p), v, std::chars_format::general);
+      std::from_chars(s.data() + p, s.data() + s.size(), v,
+                      std::chars_format::general);
+  size_t endp = ((size_t)(res.ptr - s.data()));
   if (res.ec == std::errc::result_out_of_range)
   { /* saturate like C 'strtod' and Java 'parseDouble': overflow goes
        to +-infinity, underflow to +-0. Classify by estimating the
@@ -416,19 +421,35 @@ static const char* str2dec(const char* s, lua_Number* result)
     int sig = 0;       /* seen a significant (nonzero) digit? */
     long intdigits = 0; /* significant digits before the point */
     long fraczeros = 0; /* zeros after the point before a significant digit */
-    const char* q;
-    for (q = p; q < res.ptr; q++)
+    size_t q;
+    for (q = p; q < endp; q++)
     {
-      if (*q == '.')
+      if (s[q] == '.')
         frac = 1;
-      else if (*q == 'e' || *q == 'E')
-      {
-        e10 = strtol(q + 1, nullptr, 10); /* saturates on huge exponents */
+      else if (s[q] == 'e' || s[q] == 'E')
+      { /* read the explicit exponent, clamped: only the SIGN of the
+           final magnitude matters and the clamp dwarfs the digit
+           corrections (upstream used 'strtol', which saturates) */
+        size_t x = q + 1;
+        int eneg = 0;
+        if (sv_byteat(s, x) == '+' || sv_byteat(s, x) == '-')
+        {
+          eneg = (s[x] == '-');
+          x++;
+        }
+        long acc = 0;
+        while (lisdigit(sv_byteat(s, x)))
+        {
+          if (acc < 1000000000L)
+            acc = acc * 10 + (s[x] - '0');
+          x++;
+        }
+        e10 = eneg ? -acc : acc;
         break;
       }
       else
       { /* a digit */
-        if (!sig && *q != '0')
+        if (!sig && s[q] != '0')
           sig = 1; /* first significant digit */
         if (sig && !frac)
           intdigits++;
@@ -440,36 +461,36 @@ static const char* str2dec(const char* s, lua_Number* result)
     v = (magnitude > 0) ? ((lua_Number)(HUGE_VAL)) : 0.0;
   }
   else if (res.ec != std::errc())
-    return s; /* nothing recognized */
+    return off; /* nothing recognized */
   *result = neg ? -v : v;
-  return res.ptr;
+  return endp;
 }
 
 /*
-** Convert string 's' to a Lua number (put in 'result'). Return nullptr on
-** fail or the address of the ending '\0' on success. ('mode' == 'x')
-** means a hexadecimal numeral.
+** Convert the numeral at s[off..] to a Lua number (put in 'result').
+** Return npos on fail, or the end offset (== s.size()) on success.
+** ('mode' == 'x') means a hexadecimal numeral.
 */
-static const char* l_str2dloc(const char* s, lua_Number* result, int mode)
+static size_t l_str2dloc(std::string_view s, size_t off, lua_Number* result,
+                         int mode)
 {
-  char* hexend;
-  const char* endptr;
+  size_t endpos;
   if (mode == 'x')
   { /* hexadecimal numeral: Lua's own reader */
-    *result = lua_strx2number(s, &hexend);
-    endptr = hexend;
-    if (endptr == s)
-      return nullptr; /* nothing recognized? */
+    *result = lua_strx2number(s, off, &endpos);
+    if (endpos == off)
+      return std::string_view::npos; /* nothing recognized? */
   }
   else
   {
-    endptr = str2dec(s, result);
-    if (endptr == s)
-      return nullptr; /* nothing recognized? */
+    endpos = str2dec(s, off, result);
+    if (endpos == off)
+      return std::string_view::npos; /* nothing recognized? */
   }
-  while (lisspace(((unsigned char)(*endptr))))
-    endptr++;                               /* skip trailing spaces */
-  return (*endptr == '\0') ? endptr : nullptr; /* OK iff no trailing chars */
+  while (lisspace(sv_byteat(s, endpos)))
+    endpos++; /* skip trailing spaces */
+  /* OK iff no trailing chars (offset form of upstream's NUL check) */
+  return (endpos == s.size()) ? endpos : std::string_view::npos;
 }
 
 /*
@@ -485,92 +506,97 @@ static const char* l_str2dloc(const char* s, lua_Number* result, int mode)
 ** - 'x' means a hexadecimal numeral
 ** - '.' just optimizes the search for the common case (no special chars)
 */
-static const char* l_str2d(const char* s, lua_Number* result)
+static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
 {
-  const char* endptr;
-  const char* pmode = strpbrk(s, ".xXnN"); /* look for special chars */
-  int mode = pmode ? ltolower(((unsigned char)(*pmode))) : 0;
+  size_t pmode = s.find_first_of(".xXnN", off); /* look for special chars */
+  int mode = (pmode != std::string_view::npos)
+                 ? ltolower(((unsigned char)(s[pmode])))
+                 : 0;
   if (mode == 'n') /* reject 'inf' and 'nan' */
-    return nullptr;
-  endptr = l_str2dloc(s, result, mode); /* try to convert */
-  if (endptr == nullptr)
+    return std::string_view::npos;
+  size_t endpos = l_str2dloc(s, off, result, mode); /* try to convert */
+  if (endpos == std::string_view::npos)
   { /* failed? may use the locale radix character instead of '.'
        (the conversion core is '.'-canonical; this shim maps the
        locale point to '.' and retries -- the mirror of upstream,
        whose core spoke the locale and whose shim mapped '.') */
     char buff[L_MAXLENNUM + 1];
     char point = ((char)(lua_getlocaledecpoint()));
-    const char* ppoint = (point != '.') ? strchr(s, point) : nullptr;
-    if (ppoint == nullptr || strlen(s) > L_MAXLENNUM)
-      return nullptr;                      /* string too long or no locale point; fail */
-    strcpy(buff, s);                       /* copy string to buffer */
-    buff[ppoint - s] = '.';                /* canonicalize decimal point */
-    endptr = l_str2dloc(buff, result, mode); /* try again */
-    if (endptr != nullptr)
-      endptr = s + (endptr - buff); /* make relative to 's' */
+    size_t ppoint = (point != '.') ? s.find(point, off)
+                                   : std::string_view::npos;
+    size_t len = s.size() - off;
+    if (ppoint == std::string_view::npos || len > L_MAXLENNUM)
+      return std::string_view::npos; /* string too long or no locale point; fail */
+    memcpy(buff, s.data() + off, len);     /* copy token (Java: arraycopy) */
+    buff[ppoint - off] = '.';              /* canonicalize decimal point */
+    endpos = l_str2dloc(std::string_view{buff, len}, 0, result, mode); /* try again */
+    if (endpos != std::string_view::npos)
+      endpos = off + endpos; /* make relative to 's' */
   }
-  return endptr;
+  return endpos;
 }
 
 constexpr lua_Unsigned MAXBY10 = ((lua_Unsigned)(LUA_MAXINTEGER / 10));
 constexpr int MAXLASTD = ((int)(LUA_MAXINTEGER % 10));
 
-static const char* l_str2int(const char* s, lua_Integer* result)
+static size_t l_str2int(std::string_view s, size_t off, lua_Integer* result)
 {
   lua_Unsigned a = 0;
   int empty = 1;
   int neg;
-  while (lisspace(((unsigned char)(*s))))
-    s++; /* skip initial spaces */
-  neg = isneg(&s);
-  if (s[0] == '0' &&
-      (s[1] == 'x' || s[1] == 'X'))
+  size_t p = off;
+  while (lisspace(sv_byteat(s, p)))
+    p++; /* skip initial spaces */
+  neg = isneg(s, &p);
+  if (sv_byteat(s, p) == '0' &&
+      (sv_byteat(s, p + 1) == 'x' || sv_byteat(s, p + 1) == 'X'))
   {         /* hex? */
-    s += 2; /* skip '0x' */
-    for (; lisxdigit(((unsigned char)(*s))); s++)
+    p += 2; /* skip '0x' */
+    for (; lisxdigit(sv_byteat(s, p)); p++)
     {
-      a = a * 16 + luaO_hexavalue(*s);
+      a = a * 16 + luaO_hexavalue(s[p]);
       empty = 0;
     }
   }
   else
   { /* decimal */
-    for (; lisdigit(((unsigned char)(*s))); s++)
+    for (; lisdigit(sv_byteat(s, p)); p++)
     {
-      int d = *s - '0';
+      int d = s[p] - '0';
       if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + neg)) /* overflow? */
-        return nullptr;                                           /* do not accept it (as integer) */
+        return std::string_view::npos;                            /* do not accept it (as integer) */
       a = a * 10 + ((unsigned int)(d));
       empty = 0;
     }
   }
-  while (lisspace(((unsigned char)(*s))))
-    s++; /* skip trailing spaces */
-  if (empty || *s != '\0')
-    return nullptr; /* something wrong in the numeral */
+  while (lisspace(sv_byteat(s, p)))
+    p++; /* skip trailing spaces */
+  if (empty || p != s.size())
+    return std::string_view::npos; /* something wrong in the numeral */
   else
   {
     *result = ((lua_Integer)((neg) ? 0u - a : a));
-    return s;
+    return p;
   }
 }
 
-size_t luaO_str2num(const char* s, TValue* o)
+size_t luaO_str2num(std::string_view s, TValue* o)
 {
   lua_Integer i;
   lua_Number n;
-  const char* e;
-  if ((e = l_str2int(s, &i)) != nullptr)
+  size_t e;
+  if ((e = l_str2int(s, 0, &i)) != std::string_view::npos)
   { /* try as an integer */
     setivalue(o, i);
   }
-  else if ((e = l_str2d(s, &n)) != nullptr)
+  else if ((e = l_str2d(s, 0, &n)) != std::string_view::npos)
   { /* else try as a float */
     setfltvalue(o, n);
   }
   else
-    return 0;                   /* conversion failed */
-  return ((size_t)(e - s)) + 1; /* success; return string size */
+    return 0; /* conversion failed */
+  assert(e == s.size());
+  return e + 1; /* success; return string size plus one */
 }
 
 int luaO_utf8esc(std::span<char> buff, l_uint32 x)

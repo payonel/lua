@@ -55,33 +55,42 @@ static int luaB_warn(lua_State* L)
 
 #define SPACECHARS " \f\n\r\t\v"
 
-static const char* b_str2int(const char* s, unsigned base, lua_Integer* pn)
+/*
+** Convert the numeral in 's' to an integer in the given base. Returns
+** the end offset of the scan, or npos on failure. (The cursor is a
+** view plus offset; Java: byte[] + int index.)
+*/
+static size_t b_str2int(std::string_view s, unsigned base, lua_Integer* pn)
 {
+  const std::string_view spacechars = SPACECHARS;
   lua_Unsigned n = 0;
   int neg = 0;
-  s += strspn(s, SPACECHARS); /* skip initial spaces */
-  if (*s == '-')
+  size_t p = 0;
+  while (p < s.size() && spacechars.find(s[p]) != std::string_view::npos)
+    p++; /* skip initial spaces */
+  if (sv_byteat(s, p) == '-')
   {
-    s++;
+    p++;
     neg = 1;
   } /* handle sign */
-  else if (*s == '+')
-    s++;
-  if (!isalnum(((unsigned char)(*s)))) /* no digit? */
-    return nullptr;
+  else if (sv_byteat(s, p) == '+')
+    p++;
+  if (!isalnum(sv_byteat(s, p))) /* no digit? */
+    return std::string_view::npos;
   do
   {
-    unsigned digit = ((unsigned int)(isdigit(((unsigned char)(*s)))
-                                   ? *s - '0'
-                                   : (toupper(((unsigned char)(*s))) - 'A') + 10));
+    unsigned digit = ((unsigned int)(isdigit(sv_byteat(s, p))
+                                   ? s[p] - '0'
+                                   : (toupper(sv_byteat(s, p)) - 'A') + 10));
     if (digit >= base)
-      return nullptr; /* invalid numeral */
+      return std::string_view::npos; /* invalid numeral */
     n = n * base + digit;
-    s++;
-  } while (isalnum(((unsigned char)(*s))));
-  s += strspn(s, SPACECHARS); /* skip trailing spaces */
+    p++;
+  } while (isalnum(sv_byteat(s, p)));
+  while (p < s.size() && spacechars.find(s[p]) != std::string_view::npos)
+    p++; /* skip trailing spaces */
   *pn = (lua_Integer) ((neg) ? (0u - n) : n);
-  return s;
+  return p;
 }
 
 static int luaB_tonumber(lua_State* L)
@@ -112,7 +121,7 @@ static int luaB_tonumber(lua_State* L)
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
     s = lua_tolstring(L, 1, &l);
     luaL_argcheck(L, 2 <= base && base <= 36, 2, "base out of range");
-    if (b_str2int(s, ((unsigned int)(base)), &n) == s + l)
+    if (b_str2int(std::string_view{s, l}, ((unsigned int)(base)), &n) == l)
     {
       lua_pushinteger(L, n);
       return 1;

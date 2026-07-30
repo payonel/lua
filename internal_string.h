@@ -42,6 +42,16 @@
 */
 using HostString = std::string;
 
+/*
+** Bounded byte read over a view: the byte at offset 'i', or -1
+** (EOZ-like, rejected by all lctype predicates) past the end.
+** (Java: i < b.length ? b[i] & 0xFF : -1)
+*/
+inline int sv_byteat(std::string_view s, size_t i)
+{
+  return (i < s.size()) ? ((unsigned char)(s[i])) : -1;
+}
+
 class InternalString
 {
 public:
