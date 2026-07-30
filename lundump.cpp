@@ -395,6 +395,8 @@ static void checknumformat(LoadState* S, int eq, const char* tname)
 static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
+  /* constant slice of a compile-time literal — Java materializes it as
+     its own String constant (the substr ban targets runtime views) */
   checkliteral(S, LUA_SIGNATURE.substr(1), lit<"not a binary chunk">());
   if (loadByte(S) != LUAC_VERSION)
     error(S, lit<"version mismatch">());
