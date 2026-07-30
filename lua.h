@@ -353,6 +353,9 @@ LUA_API void(lua_releasebytes)(lua_State* L, size_t sz);
 ** bytes — those go through the copying pushes.
 */
 LUA_API void(lua_pushistring)(lua_State* L, InternalString&& s);
+/* push a BORROWED engine string (deep copy/intern; never retained) —
+   the push for lit<> constants and other InternalString* references */
+LUA_API void(lua_pushistringref)(lua_State* L, const InternalString* s);
 
 /*
 ** garbage-collection options

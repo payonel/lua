@@ -125,8 +125,8 @@ constexpr int COS_DEAD = 1;
 constexpr int COS_YIELD = 2;
 constexpr int COS_NORM = 3;
 
-static const char* const statname[] =
-    {"running", "dead", "suspended", "normal"};
+static const InternalString* const statname[] = {
+    lit<"running">(), lit<"dead">(), lit<"suspended">(), lit<"normal">()};
 
 static int auxstatus(lua_State* L, lua_State* co)
 {
@@ -157,7 +157,7 @@ static int auxstatus(lua_State* L, lua_State* co)
 static int luaB_costatus(lua_State* L)
 {
   lua_State* co = getco(L);
-  lua_pushstring(L, statname[auxstatus(L, co)]);
+  lua_pushistringref(L, statname[auxstatus(L, co)]);
   return 1;
 }
 
@@ -203,7 +203,7 @@ static int luaB_close(lua_State* L)
     }
   }
   case COS_NORM:
-    lua_pushstring(L, statname[status]);
+    lua_pushistringref(L, statname[status]);
     return luaL_error(L, "cannot close a %s coroutine");
   case COS_RUN:
     lua_geti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD); /* get main */
@@ -226,7 +226,7 @@ static const luaL_Reg co_funcs[] = {
     {"yield", luaB_yield},
     {"isyieldable", luaB_yieldable},
     {"close", luaB_close},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 LUAMOD_API int luaopen_coroutine(lua_State* L)
 {

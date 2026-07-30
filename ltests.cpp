@@ -1170,20 +1170,21 @@ static int gc_printobj(lua_State* L)
    mode); the span carries the size, so no sentinel is needed and a
    miss can no longer scan past the array (the old lst[i] loop had no
    terminator here) */
-static const std::string_view statenames[] = {
-    "propagate", "enteratomic", "atomic", "sweepallgc", "sweepfinobj",
-    "sweeptobefnz", "sweepend", "callfin", "pause", ""};
+static const InternalString* const statenames[] = {
+    lit<"propagate">(), lit<"enteratomic">(), lit<"atomic">(),
+    lit<"sweepallgc">(), lit<"sweepfinobj">(), lit<"sweeptobefnz">(),
+    lit<"sweepend">(), lit<"callfin">(), lit<"pause">(), lit<"">()};
 
 static int gc_state(lua_State* L)
 {
   static const int states[] = {
       GCSpropagate, GCSenteratomic, GCSatomic, GCSswpallgc, GCSswpfinobj,
       GCSswptobefnz, GCSswpend, GCScallfin, GCSpause, -1};
-  int option = states[luaL_checkoption(L, 1, "", statenames)];
+  int option = states[luaL_checkoption(L, 1, lit<"">(), statenames)];
   global_State* g = G(L);
   if (option == -1)
   {
-    lua_pushstring(L, HostString{statenames[g->gcstate]}); /* boundary copy */
+    lua_pushistringref(L, statenames[g->gcstate]);
     return 1;
   }
   else
@@ -1346,7 +1347,7 @@ static int gc_query(lua_State* L)
   lua_pushstring(L, g->gckind == KGC_INC        ? "inc"
                     : g->gckind == KGC_GENMAJOR ? "genmajor"
                                                 : "genminor");
-  lua_pushstring(L, HostString{statenames[g->gcstate]}); /* boundary copy */
+  lua_pushistringref(L, statenames[g->gcstate]);
   lua_pushinteger(L, ((lua_Integer)(gettotalbytes(g))));
   lua_pushinteger(L, ((lua_Integer)(g->GCdebt)));
   lua_pushinteger(L, ((lua_Integer)(g->GCmarked)));
@@ -1798,8 +1799,9 @@ static int getindex_aux(lua_State* L, lua_State* L1, const char** pc)
   }
 }
 
-static const char* const statcodes[] = {"OK", "YIELD", "ERRRUN",
-                                        "ERRSYNTAX", MEMERRMSG, "ERRERR"};
+static const InternalString* const statcodes[] = {
+    lit<"OK">(), lit<"YIELD">(), lit<"ERRRUN">(),
+    lit<"ERRSYNTAX">(), lit<MEMERRMSG>(), lit<"ERRERR">()};
 
 /*
 ** Avoid these stat codes from being collected, to avoid possible
@@ -1811,7 +1813,7 @@ static void regcodes(lua_State* L)
   for (i = 0; i < sizeof(statcodes) / sizeof(statcodes[0]); i++)
   {
     lua_pushboolean(L, 1);
-    lua_setfield(L, LUA_REGISTRYINDEX, statcodes[i]);
+    lua_setfield(L, LUA_REGISTRYINDEX, HostString{statcodes[i]->view()});
   }
 }
 
@@ -2095,7 +2097,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("pushstatus", inst) == 0)
     {
-      lua_pushstring(L1, statcodes[status]);
+      lua_pushistringref(L1, statcodes[status]);
     }
     else if (strcmp("pushstring", inst) == 0)
     {
@@ -2192,7 +2194,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
     }
     else if (strcmp("threadstatus", inst) == 0)
     {
-      lua_pushstring(L1, statcodes[lua_status(L1)]);
+      lua_pushistringref(L1, statcodes[lua_status(L1)]);
     }
     else if (strcmp("alloccount", inst) == 0)
     {
@@ -2415,7 +2417,7 @@ static int Cfunc(lua_State* L)
 
 static int Cfunck(lua_State* L, int status, lua_KContext ctx)
 {
-  lua_pushstring(L, statcodes[status]);
+  lua_pushistringref(L, statcodes[status]);
   lua_setglobal(L, "status");
   lua_pushinteger(L, ((lua_Integer)(ctx)));
   lua_setglobal(L, "ctx");
@@ -2443,13 +2445,15 @@ static int makeCfunc(lua_State* L)
 */
 static void Chook(lua_State* L, lua_Debug* ar)
 {
-  const char* const events[] = {"call", "ret", "line", "count", "tailcall"};
+  const InternalString* const events[] = {
+      lit<"call">(), lit<"ret">(), lit<"line">(), lit<"count">(),
+      lit<"tailcall">()};
   lua_getfield(L, LUA_REGISTRYINDEX, "C_HOOK");
   lua_pushlightuserdata(L, L);
   lua_gettable(L, -2);                    /* get C_HOOK[L] (script saved by sethookaux) */
   HostString scpt = lua_tostring(L, -1);  /* (a copy: string will be popped) */
   lua_pop(L, 2);                          /* remove C_HOOK and script */
-  lua_pushstring(L, events[ar->event]);   /* may be used by script */
+  lua_pushistringref(L, events[ar->event]); /* may be used by script */
   lua_pushinteger(L, ar->currentline);    /* may be used by script */
   runC(L, L, scpt.c_str());               /* run script from C_HOOK[L] */
 }
@@ -2588,7 +2592,7 @@ static const struct luaL_Reg tests_funcs[] = {
     {"externKstr", externKstr},
     {"externstr", externstr},
     {"nonblock", nonblock},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 static void checkfinalmem(void)
 {

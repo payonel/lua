@@ -349,13 +349,14 @@ static int db_upvaluejoin(lua_State* L)
 */
 static void hookf(lua_State* L, lua_Debug* ar)
 {
-  static const char* const hooknames[] =
-      {"call", "return", "line", "count", "tail call"};
+  static const InternalString* const hooknames[] = {
+      lit<"call">(), lit<"return">(), lit<"line">(), lit<"count">(),
+      lit<"tail call">()};
   lua_getfield(L, LUA_REGISTRYINDEX, HOOKKEY);
   lua_pushthread(L);
   if (lua_rawget(L, -2) == LUA_TFUNCTION)
   {                                                /* is there a hook function? */
-    lua_pushstring(L, hooknames[(int) ar->event]); /* push event name */
+    lua_pushistringref(L, hooknames[(int) ar->event]); /* push event name */
     if (ar->currentline >= 0)
       lua_pushinteger(L, ar->currentline); /* push current line */
     else
@@ -518,7 +519,7 @@ static const luaL_Reg dblib[] = {
     {"setmetatable", db_setmetatable},
     {"setupvalue", db_setupvalue},
     {"traceback", db_traceback},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 LUAMOD_API int luaopen_debug(lua_State* L)
 {

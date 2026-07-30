@@ -216,13 +216,14 @@ static int pushmode(lua_State* L, int oldmode)
 
 static int luaB_collectgarbage(lua_State* L)
 {
-  static const std::string_view opts[] = {"stop", "restart", "collect",
-                                          "count", "step", "isrunning", "generational", "incremental",
-                                          "param", "setlimit", "getlimit"};
+  static const InternalString* const opts[] = {
+      lit<"stop">(), lit<"restart">(), lit<"collect">(),
+      lit<"count">(), lit<"step">(), lit<"isrunning">(), lit<"generational">(),
+      lit<"incremental">(), lit<"param">(), lit<"setlimit">(), lit<"getlimit">()};
   static const char optsnum[] = {LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
                                  LUA_GCCOUNT, LUA_GCSTEP, LUA_GCISRUNNING, LUA_GCGEN, LUA_GCINC,
                                  LUA_GCPARAM, 100, 101};
-  int o = optsnum[luaL_checkoption(L, 1, "collect", opts)];
+  int o = optsnum[luaL_checkoption(L, 1, lit<"collect">(), opts)];
   switch (o)
   {
   case 100: /* setlimit */
@@ -269,9 +270,9 @@ static int luaB_collectgarbage(lua_State* L)
   }
   case LUA_GCPARAM:
   {
-    static const std::string_view params[] = {
-        "minormul", "majorminor", "minormajor",
-        "pause", "stepmul", "stepsize"};
+    static const InternalString* const params[] = {
+        lit<"minormul">(), lit<"majorminor">(), lit<"minormajor">(),
+        lit<"pause">(), lit<"stepmul">(), lit<"stepsize">()};
     static const char pnum[] = {
         LUA_GCPMINORMUL, LUA_GCPMAJORMINOR, LUA_GCPMINORMAJOR,
         LUA_GCPPAUSE, LUA_GCPSTEPMUL, LUA_GCPSTEPSIZE};
@@ -596,7 +597,7 @@ static const luaL_Reg base_funcs[] = {
     /* placeholders */
     {LUA_GNAME, nullptr},
     {"_VERSION", nullptr},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 LUAMOD_API int luaopen_base(lua_State* L)
 {

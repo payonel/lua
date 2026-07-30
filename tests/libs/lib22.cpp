@@ -45,7 +45,7 @@ static void initstr (lua_State *L) {
 static const struct luaL_Reg funcs[] = {
   {"id", id},
   {"newstr", newstr},
-  {NULL, NULL}
+  {{}, NULL}
 };
 
 LUAMOD_API int luaopen_lib2 (lua_State *L) {

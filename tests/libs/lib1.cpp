@@ -9,7 +9,7 @@ static int id (lua_State *L) {
 
 static const struct luaL_Reg funcs[] = {
   {"id", id},
-  {NULL, NULL}
+  {{}, NULL}
 };
 
 /* function used by lib11.c */

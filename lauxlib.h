@@ -32,7 +32,7 @@ constexpr char LUA_PRELOAD_TABLE[] = "_PRELOAD";
 
 struct luaL_Reg
 {
-  const char* name;
+  std::string_view name; /* host text (Java: String); {} = sentinel */
   lua_CFunction func;
 };
 
@@ -84,8 +84,9 @@ LUALIB_API void*(luaL_checkudata) (lua_State* L, int ud, const HostString& tname
 LUALIB_API void(luaL_where)(lua_State* L, int lvl);
 LUALIB_API int(luaL_error)(lua_State* L, const char* fmt);
 
-LUALIB_API int(luaL_checkoption)(lua_State* L, int arg, const char* def,
-                                 std::span<const std::string_view> lst);
+LUALIB_API int(luaL_checkoption)(lua_State* L, int arg,
+                                 const InternalString* def,
+                                 std::span<const InternalString* const> lst);
 
 LUALIB_API int(luaL_fileresult)(lua_State* L, int stat, const char* fname);
 LUALIB_API int(luaL_execresult)(lua_State* L, int stat);

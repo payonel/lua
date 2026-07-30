@@ -665,6 +665,16 @@ LUA_API void lua_pushstring(lua_State* L, const HostString& s)
   lua_unlock(L);
 }
 
+LUA_API void lua_pushistringref(lua_State* L, const InternalString* s)
+{
+  lua_lock(L);
+  TString* ts = luaS_new(L, s); /* deep copy / intern */
+  setslots(L, L->top, ts);
+  api_incr_top(L);
+  luaC_checkGC(L);
+  lua_unlock(L);
+}
+
 LUA_API void lua_pushistring(lua_State* L, InternalString&& s)
 {
   lua_lock(L);
@@ -1769,7 +1779,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
 LUA_API const InternalString* lua_getupvalue(lua_State* L, int funcindex, int n)
 {
   const InternalString* name;
-  UpvalAddr addr = {nullptr, nullptr};
+  UpvalAddr addr = {{}, nullptr};
   lua_lock(L);
   TValue fi = index2val(L, funcindex);
   name = aux_upvalue(&fi, n, &addr, nullptr);
@@ -1786,7 +1796,7 @@ LUA_API const InternalString* lua_getupvalue(lua_State* L, int funcindex, int n)
 LUA_API const InternalString* lua_setupvalue(lua_State* L, int funcindex, int n)
 {
   const InternalString* name;
-  UpvalAddr addr = {nullptr, nullptr};
+  UpvalAddr addr = {{}, nullptr};
   GCObject* owner = nullptr; /* to avoid warnings */
   lua_lock(L);
   TValue fi = index2val(L, funcindex);

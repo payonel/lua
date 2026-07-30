@@ -411,14 +411,18 @@ LUALIB_API void* luaL_checkudata(lua_State* L, int ud, const HostString& tname)
 ** =======================================================
 */
 
-LUALIB_API int luaL_checkoption(lua_State* L, int arg, const char* def,
-                                std::span<const std::string_view> lst)
+LUALIB_API int luaL_checkoption(lua_State* L, int arg,
+                                const InternalString* def,
+                                std::span<const InternalString* const> lst)
 {
-  HostString name = (def) ? luaL_optstring(L, arg, def) : luaL_checkstring(L, arg);
+  /* engine-native: the argument is an engine string; options are lit<>
+     constants — no host text is involved */
+  const InternalString* name =
+      (def != nullptr) ? luaL_optistring(L, arg, def) : luaL_checkistring(L, arg);
   for (size_t i = 0; i < lst.size(); i++)
-    if (name == lst[i])
+    if (name->view() == lst[i]->view())
       return ((int)(i));
-  lua_pushstring(L, name);
+  lua_pushistringref(L, name);
   const InternalString* msg = lua_pushfstring(L, "invalid option '%s'");
   return luaL_argerror(L, arg, HostString{msg->view()});
 }
@@ -1014,7 +1018,7 @@ LUALIB_API const InternalString* luaL_toistring(lua_State* L, int idx)
 LUALIB_API void luaL_setfuncs(lua_State* L, const luaL_Reg* l, int nup)
 {
   luaL_checkstack(L, nup, "too many upvalues");
-  for (; l->name != nullptr; l++)
+  for (; l->name.data() != nullptr; l++)
   {                      /* fill the table with given functions */
     if (l->func == nullptr) /* placeholder? */
       lua_pushboolean(L, 0);
@@ -1025,7 +1029,7 @@ LUALIB_API void luaL_setfuncs(lua_State* L, const luaL_Reg* l, int nup)
         lua_pushvalue(L, -nup);
       lua_pushcclosure(L, l->func, nup); /* closure with those upvalues */
     }
-    lua_setfield(L, -(nup + 2), l->name);
+    lua_setfield(L, -(nup + 2), HostString{l->name});
   }
   lua_pop(L, nup); /* remove upvalues */
 }

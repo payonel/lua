@@ -30,7 +30,7 @@ static const luaL_Reg stdlibs[] = {
     {LUA_STRLIBNAME, luaopen_string},
     {LUA_TABLIBNAME, luaopen_table},
     {LUA_UTF8LIBNAME, luaopen_utf8},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 /*
 ** require and preload selected standard libraries
@@ -40,17 +40,17 @@ LUALIB_API void luaL_openselectedlibs(lua_State* L, int load, int preload)
   int mask;
   const luaL_Reg* lib;
   luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
-  for (lib = stdlibs, mask = 1; lib->name != nullptr; lib++, mask <<= 1)
+  for (lib = stdlibs, mask = 1; lib->name.data() != nullptr; lib++, mask <<= 1)
   {
     if (load & mask)
     {                                            /* selected? */
-      luaL_requiref(L, lib->name, lib->func, 1); /* require library */
+      luaL_requiref(L, HostString{lib->name}, lib->func, 1); /* require library */
       lua_pop(L, 1);                             /* remove result from the stack */
     }
     else if (preload & mask)
     { /* selected? */
       lua_pushcfunction(L, lib->func);
-      lua_setfield(L, -2, lib->name); /* add library to PRELOAD table */
+      lua_setfield(L, -2, HostString{lib->name}); /* add library to PRELOAD table */
     }
   }
   assert((mask >> 1) == LUA_UTF8LIBK);

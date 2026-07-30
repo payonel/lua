@@ -383,11 +383,12 @@ static int os_setlocale(lua_State* L)
 {
   static const int cat[] = {LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY,
                             LC_NUMERIC, LC_TIME};
-  static const std::string_view catnames[] = {"all", "collate", "ctype", "monetary",
-                                              "numeric", "time"};
+  static const InternalString* const catnames[] = {
+      lit<"all">(), lit<"collate">(), lit<"ctype">(), lit<"monetary">(),
+      lit<"numeric">(), lit<"time">()};
   int nol = lua_isnoneornil(L, 1); /* absent = query current locale */
   HostString l = nol ? HostString() : HostString(luaL_checkstring(L, 1));
-  int op = luaL_checkoption(L, 2, "all", catnames);
+  int op = luaL_checkoption(L, 2, lit<"all">(), catnames);
   const char* res = setlocale(cat[op], nol ? nullptr : l.c_str());
   if (res != nullptr)
     lua_pushstring(L, res);
@@ -422,7 +423,7 @@ static const luaL_Reg syslib[] = {
     {"setlocale", os_setlocale},
     {"time", os_time},
     {"tmpname", os_tmpname},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 /* }====================================================== */
 

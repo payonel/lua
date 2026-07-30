@@ -322,7 +322,7 @@ static const luaL_Reg funcs[] = {
     {"codes", iter_codes},
     /* placeholders */
     {"charpattern", nullptr},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 LUAMOD_API int luaopen_utf8(lua_State* L)
 {

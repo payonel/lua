@@ -371,7 +371,7 @@ static const luaL_Reg stringmetamethods[] = {
     {"__idiv", arith_idiv},
     {"__unm", arith_unm},
     {"__index", nullptr}, /* placeholder */
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 /* }====================================================== */
 
@@ -2510,7 +2510,7 @@ static const luaL_Reg strlib[] = {
     {"pack", str_pack},
     {"packsize", str_packsize},
     {"unpack", str_unpack},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 static void createmetatable(lua_State* L)
 {

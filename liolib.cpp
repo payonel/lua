@@ -693,9 +693,10 @@ static int f_write(lua_State* L)
 static int f_seek(lua_State* L)
 {
   static const int mode[] = {SEEK_SET, SEEK_CUR, SEEK_END};
-  static const std::string_view modenames[] = {"set", "cur", "end"};
+  static const InternalString* const modenames[] = {
+      lit<"set">(), lit<"cur">(), lit<"end">()};
   FILE* f = tofile(L);
-  int op = luaL_checkoption(L, 2, "cur", modenames);
+  int op = luaL_checkoption(L, 2, lit<"cur">(), modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
   l_seeknum offset = (l_seeknum) p3;
   luaL_argcheck(L, (lua_Integer) offset == p3, 3,
@@ -714,7 +715,8 @@ static int f_seek(lua_State* L)
 static int f_setvbuf(lua_State* L)
 {
   static const int mode[] = {_IONBF, _IOFBF, _IOLBF};
-  static const std::string_view modenames[] = {"no", "full", "line"};
+  static const InternalString* const modenames[] = {
+      lit<"no">(), lit<"full">(), lit<"line">()};
   FILE* f = tofile(L);
   int op = luaL_checkoption(L, 2, nullptr, modenames);
   lua_Integer sz = luaL_optinteger(L, 3, LUAL_BUFFERSIZE);
@@ -755,7 +757,7 @@ static const luaL_Reg iolib[] = {
     {"tmpfile", io_tmpfile},
     {"type", io_type},
     {"write", io_write},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 /*
 ** methods for file handles
@@ -768,7 +770,7 @@ static const luaL_Reg meth[] = {
     {"seek", f_seek},
     {"close", f_close},
     {"setvbuf", f_setvbuf},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 /*
 ** metamethods for file handles
@@ -778,7 +780,7 @@ static const luaL_Reg metameth[] = {
     {"__gc", f_gc},
     {"__close", f_gc},
     {"__tostring", f_tostring},
-    {nullptr, nullptr}};
+    {{}, nullptr}};
 
 static void createmeta(lua_State* L)
 {
