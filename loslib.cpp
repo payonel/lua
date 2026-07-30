@@ -256,27 +256,34 @@ static int getfield(lua_State* L, const char* key, int d, int delta)
   return (int) res;
 }
 
-static const char* checkoption(lua_State* L, const char* conv,
-                               size_t convlen, char* buff)
+/*
+** Check the strftime specifier at fmt[pos..] against the option
+** blocks; on a match copy it (NUL-terminated) into 'buff' for the
+** strftime call and return the offset past it.
+*/
+static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
+                          std::span<char> buff, size_t boff)
 {
-  const char* option = LUA_STRFTIMEOPTIONS;
+  std::string_view option = LUA_STRFTIMEOPTIONS;
+  size_t opos = 0;
+  size_t convlen = fmt.size() - pos;
   unsigned oplen = 1; /* length of options being checked */
-  for (; *option != '\0' && oplen <= convlen; option += oplen)
+  for (; opos < option.size() && oplen <= convlen; opos += oplen)
   {
-    if (*option == '|') /* next block? */
-      oplen++;          /* will check options with next length (+1) */
-    else if (memcmp(conv, option, oplen) == 0)
-    {                            /* match? */
-      memcpy(buff, conv, oplen); /* copy valid option to buffer */
-      buff[oplen] = '\0';
-      return conv + oplen; /* return next item */
+    if (option[opos] == '|') /* next block? */
+      oplen++;               /* will check options with next length (+1) */
+    else if (memcmp(fmt.data() + pos, option.data() + opos, oplen) == 0)
+    { /* match? copy valid option to buffer (host strftime boundary) */
+      memcpy(buff.data() + boff, fmt.data() + pos, oplen);
+      buff[boff + oplen] = '\0';
+      return pos + oplen; /* return next item */
     }
   }
-  lua_pushstring(L, conv);
+  lua_pushlstring(L, fmt, pos, fmt.size() - pos);
   const InternalString* msg =
       lua_pushfstring(L, "invalid conversion specifier '%%%s'");
-  luaL_argerror(L, 1, HostString(msg->bytes(), msg->size()));
-  return conv; /* to avoid warnings */
+  luaL_argerror(L, 1, HostString{msg->view()});
+  return pos; /* to avoid warnings */
 }
 
 static time_t l_checktime(lua_State* L, int arg)
@@ -292,25 +299,20 @@ constexpr int SIZETIMEFMT = 250;
 static int os_date(lua_State* L)
 {
   std::string_view sfmt = luaL_optlstring(L, 1, "%c");
-  /* HOST boundary (category 4): the strftime/checkoption walk below stays
-     pointer-based until the loslib host work; payload or literal is
-     NUL-terminated */
-  const char* s = sfmt.data();
-  size_t slen = sfmt.size();
+  size_t sp = 0; /* scan offset into the format */
   time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
-  const char* se = s + slen; /* 's' end */
   struct tm tmr, *stm;
-  if (*s == '!')
+  if (sv_byteat(sfmt, sp) == '!')
   { /* UTC? */
     stm = l_gmtime(&t, &tmr);
-    s++; /* skip '!' */
+    sp++; /* skip '!' */
   }
   else
     stm = l_localtime(&t, &tmr);
   if (stm == nullptr) /* invalid date? */
     return luaL_error(L,
                       "date result cannot be represented in this installation");
-  if (strcmp(s, "*t") == 0)
+  if (sfmt.size() - sp == 2 && sfmt[sp] == '*' && sfmt[sp + 1] == 't')
   {
     lua_createtable(L, 0, 9); /* 9 = number of fields */
     setallfields(L, stm);
@@ -321,17 +323,17 @@ static int os_date(lua_State* L)
     luaL_Buffer b;
     cc[0] = '%';
     luaL_buffinit(L, &b);
-    while (s < se)
+    while (sp < sfmt.size())
     {
-      if (*s != '%') /* not a conversion specifier? */
-        luaL_addchar(&b, *s++);
+      if (sfmt[sp] != '%') /* not a conversion specifier? */
+        luaL_addchar(&b, sfmt[sp++]);
       else
       {
         size_t reslen;
         size_t off = luaL_prepbuffsize(&b, SIZETIMEFMT);
-        s++; /* skip '%' */
-        /* copy specifier to 'cc' */
-        s = checkoption(L, s, ((size_t)(se - s)), cc + 1);
+        sp++; /* skip '%' */
+        /* copy specifier to 'cc' (span past the leading '%') */
+        sp = checkoption(L, sfmt, sp, cc, 1); /* write past the '%' */
         /* host boundary: strftime writes into the area (Java: formatter) */
         reslen = strftime(luaL_buffarea(&b).data() + off, SIZETIMEFMT, cc, stm);
         luaL_addsize(&b, reslen);

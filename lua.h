@@ -267,7 +267,7 @@ LUA_API std::string_view(lua_pushlstring) (lua_State* L, std::string_view s,
                                            size_t off, size_t len);
 /* text push: HostString converted at the boundary (deep copy) */
 LUA_API void(lua_pushstring) (lua_State* L, const HostString& s);
-LUA_API const InternalString*(lua_pushfstring) (lua_State* L, const char* fmt);
+LUA_API const InternalString*(lua_pushfstring) (lua_State* L, const HostString& fmt);
 LUA_API void(lua_pushcclosure)(lua_State* L, lua_CFunction fn, int n);
 LUA_API void(lua_pushboolean)(lua_State* L, int b);
 LUA_API void(lua_pushlightuserdata)(lua_State* L, void* p);

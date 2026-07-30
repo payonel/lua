@@ -280,7 +280,7 @@ LUALIB_API void luaL_where(lua_State* L, int level)
 ** arguments, see 'lua_pushfstring'); the location is then pushed and
 ** rotated before the message for the concatenation.
 */
-LUALIB_API int luaL_error(lua_State* L, const char* fmt)
+LUALIB_API int luaL_error(lua_State* L, const HostString& fmt)
 {
   lua_pushfstring(L, fmt); /* format message, consuming its arguments */
   luaL_where(L, 1);

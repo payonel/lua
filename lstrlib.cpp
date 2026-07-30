@@ -295,15 +295,15 @@ static int tonum(lua_State* L, int arg)
 ** doesn't work, the only other option would be for the second
 ** operand to have a different metamethod.
 */
-static void trymt(lua_State* L, const char* mtkey, const char* opname)
+static void trymt(lua_State* L, std::string_view mtkey, std::string_view opname)
 {
   lua_settop(L, 2); /* back to the original arguments */
   if (l_unlikely(lua_type(L, 2) == LUA_TSTRING ||
-                 !luaL_getmetafield(L, 2, mtkey)))
+                 !luaL_getmetafield(L, 2, HostString{mtkey})))
   {
     HostString t1 = luaL_typename(L, -2);
     HostString t2 = luaL_typename(L, -1);
-    lua_pushstring(L, opname);
+    lua_pushstring(L, HostString{opname});
     lua_pushstring(L, t1);
     lua_pushstring(L, t2);
     luaL_error(L, "attempt to %s a '%s' with a '%s'");
@@ -312,12 +312,14 @@ static void trymt(lua_State* L, const char* mtkey, const char* opname)
   lua_call(L, 2, 1); /* call metamethod */
 }
 
-static int arith(lua_State* L, int op, const char* mtname)
+static int arith(lua_State* L, int op, std::string_view mtname)
 {
   if (tonum(L, 1) && tonum(L, 2))
     lua_arith(L, op); /* result will be on the top */
   else
-    trymt(L, mtname, mtname + 2);
+    /* constant slice of a literal ("__add" -> "add"; Java: its own
+       String constant) */
+    trymt(L, mtname, mtname.substr(2));
   return 1;
 }
 
@@ -1200,22 +1202,22 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
   /* if 'inf' or 'NaN', format it like '%g' */
   if (x != x)
   {
-    const char* r = std::signbit(x) ? "-nan" : "nan";
-    assert(sz > strlen(r));
-    memcpy(area.data() + off, r, strlen(r));
-    return ((int)(strlen(r)));
+    std::string_view r = std::signbit(x) ? "-nan" : "nan";
+    assert(sz > r.size());
+    memcpy(area.data() + off, r.data(), r.size());
+    return ((int)(r.size()));
   }
   else if (x == (lua_Number) HUGE_VAL || x == -(lua_Number) HUGE_VAL)
   {
-    const char* r = (x < 0) ? "-inf" : "inf";
-    memcpy(area.data() + off, r, strlen(r));
-    return ((int)(strlen(r)));
+    std::string_view r = (x < 0) ? "-inf" : "inf";
+    memcpy(area.data() + off, r.data(), r.size());
+    return ((int)(r.size()));
   }
   else if (x == 0)
   { /* can be -0... : "0" or "-0" followed by a zero hex exponent */
-    const char* r = std::signbit(x) ? "-0x0p+0" : "0x0p+0";
-    memcpy(area.data() + off, r, strlen(r));
-    return ((int)(strlen(r)));
+    std::string_view r = std::signbit(x) ? "-0x0p+0" : "0x0p+0";
+    memcpy(area.data() + off, r.data(), r.size());
+    return ((int)(r.size()));
   }
   else
   {
@@ -1556,9 +1558,11 @@ static void scanformat(std::string_view form, FormatSpec* spec)
 */
 static int packformat(std::span<char> area, size_t off, unsigned maxitem,
                       const FormatSpec* spec,
-                      const char* prefix, size_t prefixlen,
-                      const char* body, size_t bodylen, bool zeropadok)
+                      std::string_view prefix, std::string_view body,
+                      bool zeropadok)
 {
+  size_t prefixlen = prefix.size();
+  size_t bodylen = body.size();
   size_t content = prefixlen + bodylen;
   size_t width = ((size_t)(spec->width));
   size_t total = (content > width) ? content : width;
@@ -1568,27 +1572,27 @@ static int packformat(std::span<char> area, size_t off, unsigned maxitem,
   (void) maxitem;
   if (spec->left)
   { /* '[prefix][body][spaces]' */
-    memcpy(area.data() + pos, prefix, prefixlen);
+    memcpy(area.data() + pos, prefix.data(), prefixlen);
     pos += prefixlen;
-    memcpy(area.data() + pos, body, bodylen);
+    memcpy(area.data() + pos, body.data(), bodylen);
     pos += bodylen;
     memset(area.data() + pos, ' ', pad);
   }
   else if (spec->zero && zeropadok)
   { /* '[prefix][zeros][body]' */
-    memcpy(area.data() + pos, prefix, prefixlen);
+    memcpy(area.data() + pos, prefix.data(), prefixlen);
     pos += prefixlen;
     memset(area.data() + pos, '0', pad);
     pos += pad;
-    memcpy(area.data() + pos, body, bodylen);
+    memcpy(area.data() + pos, body.data(), bodylen);
   }
   else
   { /* '[spaces][prefix][body]' */
     memset(area.data() + pos, ' ', pad);
     pos += pad;
-    memcpy(area.data() + pos, prefix, prefixlen);
+    memcpy(area.data() + pos, prefix.data(), prefixlen);
     pos += prefixlen;
-    memcpy(area.data() + pos, body, bodylen);
+    memcpy(area.data() + pos, body.data(), bodylen);
   }
   return ((int)(total));
 }
@@ -1660,8 +1664,9 @@ static int formatint(lua_State* L, int arg, std::string_view form,
     prefix[prefixlen++] = spec.conv;
   }
   /* an explicit precision disables zero padding for integers */
-  return packformat(area, off, maxitem, &spec, prefix, prefixlen, body, blen,
-                    spec.precision < 0);
+  return packformat(area, off, maxitem, &spec,
+                    std::string_view{prefix, prefixlen},
+                    std::string_view{body, blen}, spec.precision < 0);
 }
 
 /*
@@ -1693,9 +1698,9 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
   bool zeropadok = true;
   if (std::isinf(n) || std::isnan(n))
   { /* fixed representations; zero padding does not apply */
-    const char* r = std::isinf(n) ? "inf" : "nan";
-    blen = strlen(r);
-    memcpy(body, r, blen);
+    std::string_view r = std::isinf(n) ? "inf" : "nan";
+    blen = r.size();
+    memcpy(body, r.data(), blen);
     zeropadok = false;
   }
   else
@@ -1753,8 +1758,9 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
     for (size_t i = 0; i < blen; i++)
       body[i] = ((char)(toupper(((unsigned char)(body[i])))));
   }
-  return packformat(area, off, maxitem, &spec, prefix, prefixlen, body, blen,
-                    zeropadok);
+  return packformat(area, off, maxitem, &spec,
+                    std::string_view{prefix, prefixlen},
+                    std::string_view{body, blen}, zeropadok);
 }
 
 static int str_format(lua_State* L)
@@ -1794,7 +1800,8 @@ static int str_format(lua_State* L)
         FormatSpec spec;
         scanformat(formv, &spec);
         char c = ((char)((unsigned char)(luaL_checkinteger(L, arg))));
-        nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "", 0, &c, 1, false);
+        nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "",
+                        std::string_view{&c, 1}, false);
         break;
       }
       case 'd':
@@ -1859,7 +1866,8 @@ static int str_format(lua_State* L)
             blen = ((size_t)(res.ptr - body));
           }
         }
-        nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "", 0, body, blen, false);
+        nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "",
+                        std::string_view{body, blen}, false);
         break;
       }
       case 'q':
@@ -1892,7 +1900,8 @@ static int str_format(lua_State* L)
             size_t blen = (spec.precision >= 0 && ((size_t)(spec.precision)) < l)
                               ? ((size_t)(spec.precision)) /* truncate */
                               : l;
-            nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "", 0, s->bytes(), blen, false);
+            nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "",
+                            std::string_view{s->bytes(), blen}, false);
             lua_pop(L, 1); /* remove result from 'luaL_toistring' */
           }
         }

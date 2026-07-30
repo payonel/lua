@@ -693,14 +693,14 @@ LUA_API void lua_pushistring(lua_State* L, InternalString&& s)
 ** value for '%p' (formatted as its address). The arguments are
 ** consumed and the formatted result is pushed (and also returned).
 */
-LUA_API const InternalString* lua_pushfstring(lua_State* L, const char* fmt)
+LUA_API const InternalString* lua_pushfstring(lua_State* L, const HostString& fmt)
 {
   const InternalString* ret;
   FmtArgs args;
   int n = 0; /* number of arguments taken from the stack */
   lua_lock(L);
   /* API boundary: deep-copy the format once; all scanning is by offset */
-  InternalString f{fmt, strlen(fmt)};
+  InternalString f{fmt};
   std::string_view fv = f.view();
   size_t e;
   for (e = 0; (e = fv.find('%', e)) != std::string_view::npos; e += 2)

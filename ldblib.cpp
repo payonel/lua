@@ -369,14 +369,14 @@ static void hookf(lua_State* L, lua_Debug* ar)
 /*
 ** Convert a string mask (for 'sethook') into a bit mask
 */
-static int makemask(const char* smask, int count)
+static int makemask(std::string_view smask, int count)
 {
   int mask = 0;
-  if (strchr(smask, 'c'))
+  if (smask.find('c') != std::string_view::npos)
     mask |= LUA_MASKCALL;
-  if (strchr(smask, 'r'))
+  if (smask.find('r') != std::string_view::npos)
     mask |= LUA_MASKRET;
-  if (strchr(smask, 'l'))
+  if (smask.find('l') != std::string_view::npos)
     mask |= LUA_MASKLINE;
   if (count > 0)
     mask |= LUA_MASKCOUNT;
