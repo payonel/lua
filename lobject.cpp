@@ -403,7 +403,7 @@ static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
   if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
     return off; /* a second sign is not a numeral */
   lua_Number v;
-  /* host-conversion seam (Java: correctly-rounded parse of the token) */
+  /* host-conversion boundary (Java: correctly-rounded parse of the token) */
   std::from_chars_result res =
       std::from_chars(s.data() + p, s.data() + s.size(), v,
                       std::chars_format::general);
@@ -700,7 +700,7 @@ unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff)
   else
   {
     assert(obj->tt_ == LUA_VNUMFLT);
-    /* host-conversion seam: 'tostringbuffFloat' runs on to_chars/
+    /* host-conversion boundary: 'tostringbuffFloat' runs on to_chars/
        strchr over a NUL-terminated scratch (Java: its own byte[]
        digit assembly) */
     len = tostringbuffFloat(fltvalue(obj), buff.data());

@@ -369,7 +369,7 @@ static void printobj(global_State* g, GCObject* o)
                                          : 'g',
          "ns01oTt"[getage(o)], o -> marked);
   if (o->tt == LUA_VSTRING)
-    printf(" '%s'", static_cast<TString*>(o)->data.c_str()); /* test print seam */
+    printf(" '%s'", static_cast<TString*>(o)->data.c_str()); /* test print boundary */
 }
 
 static void lua_printvalue(TValue* v)
@@ -387,7 +387,7 @@ static void lua_printvalue(TValue* v)
   }
   case LUA_VSHRSTR:
     assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    printf("'%s'", tsvalue(v)->data.c_str()); /* test print seam */
+    printf("'%s'", tsvalue(v)->data.c_str()); /* test print boundary */
     break;
   case LUA_VFALSE:
     printf("%s", "false");

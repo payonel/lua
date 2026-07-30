@@ -110,7 +110,7 @@ static int os_execute(lua_State* L)
   HostString cmd = nocmd ? HostString() : HostString(luaL_checkstring(L, 1));
   int stat;
   errno = 0;
-  stat = l_system(nocmd ? nullptr : cmd.c_str()); /* host seam */
+  stat = l_system(nocmd ? nullptr : cmd.c_str()); /* host boundary */
   if (!nocmd)
     return luaL_execresult(L, stat);
   else
@@ -148,7 +148,7 @@ static int os_tmpname(lua_State* L)
 
 static int os_getenv(lua_State* L)
 {
-  const char* v = getenv(luaL_checkstring(L, 1).c_str()); /* host seam */
+  const char* v = getenv(luaL_checkstring(L, 1).c_str()); /* host boundary */
   if (v != nullptr)
     lua_pushstring(L, v);
   else
@@ -292,7 +292,7 @@ constexpr int SIZETIMEFMT = 250;
 static int os_date(lua_State* L)
 {
   std::string_view sfmt = luaL_optlstring(L, 1, "%c");
-  /* HOST seam (category 4): the strftime/checkoption walk below stays
+  /* HOST boundary (category 4): the strftime/checkoption walk below stays
      pointer-based until the loslib host work; payload or literal is
      NUL-terminated */
   const char* s = sfmt.data();
@@ -332,7 +332,7 @@ static int os_date(lua_State* L)
         s++; /* skip '%' */
         /* copy specifier to 'cc' */
         s = checkoption(L, s, ((size_t)(se - s)), cc + 1);
-        /* host seam: strftime writes into the area (Java: formatter) */
+        /* host boundary: strftime writes into the area (Java: formatter) */
         reslen = strftime(luaL_buffarea(&b).data() + off, SIZETIMEFMT, cc, stm);
         luaL_addsize(&b, reslen);
       }

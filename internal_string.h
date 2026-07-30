@@ -72,7 +72,7 @@ public:
   InternalString(const char* bytes, size_t len) : bytes_(bytes, len) {}
 
   /*
-  ** From HostString: the boundary conversion seam (deep copy). For
+  ** From HostString: the boundary conversion boundary (deep copy). For
   ** the C++ staging host text is already UTF-8 bytes, so this is a
   ** byte copy. At port time this becomes the STRICT UTF-16 -> UTF-8
   ** encoding: malformed text (e.g. lone surrogates) is an API-level
@@ -113,7 +113,7 @@ public:
   ** none). Internal code must use view()/byteAt()/size(). Sanctioned
   ** c_str() readers after the raw-char* review (2026-07-30): the
   ** l_strcmp strcoll segment walk (LOCALE item), the host
-  ** warn-callback seam (luaE_warnerror/luaE_warning), and ltests'
+  ** warn-callback boundary (luaE_warnerror/luaE_warning), and ltests'
   ** printf shims. Everything else is a bug.
   */
   const char* c_str() const noexcept { return bytes_.c_str(); }
@@ -316,7 +316,7 @@ public:
 
   /*
   ** Grow the writable area to exactly 'cap' bytes. The accounted
-  ** growth seam: clients under the reserve-before-growth contract
+  ** growth boundary: clients under the reserve-before-growth contract
   ** reserve 'cap' with the lua_State BEFORE calling this.
   */
   void growTo(size_t cap) { bytes_.resize(cap); }

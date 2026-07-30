@@ -27,7 +27,7 @@ static int luaB_print(lua_State* L)
     std::string_view s = luaL_tolstring(L, i); /* convert it to string */
     if (i > 1)                                  /* not the first element? */
       lua_writestring("\t", 1);                 /* add a tab before it */
-    lua_writestring(s.data(), s.size());        /* print it (host seam) */
+    lua_writestring(s.data(), s.size());        /* print it (host boundary) */
     lua_pop(L, 1);                            /* pop result */
   }
   lua_writeline();
@@ -433,7 +433,7 @@ static const char* generic_reader(lua_State* L, void* ud, size_t* size)
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
     luaL_error(L, "reader function must return a string");
-  /* stream-reader seam: return the payload as pointer+size
+  /* stream-reader boundary: return the payload as pointer+size
      (category 5; Java: the reader hands back byte[] + length) */
   std::string_view sv = lua_tolstring(L, -1);
   *size = sv.size();

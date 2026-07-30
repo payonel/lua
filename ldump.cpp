@@ -157,7 +157,7 @@ static void dumpString(DumpState* D, TString* ts)
       size_t size;
       std::string_view sv = ts->data.view();
       size = sv.size();
-      const char* s = sv.data(); /* stream seam: chunk writer (Java: write(byte[], off, len)) */
+      const char* s = sv.data(); /* stream boundary: chunk writer (Java: write(byte[], off, len)) */
       dumpSize(D, size + 1);
       dumpBlock(D, s, (size + 1) * sizeof((s)[0]));            /* include ending '\0' */
       D->nstr++;                             /* one more saved string */

@@ -508,7 +508,7 @@ static l_forceinline unsigned int sizenode(const Table* t)
 ** {==================================================================
 ** Get functions — typed reads out of TValues
 **
-** The single seam over the value representation: every read of a
+** The single boundary over the value representation: every read of a
 ** value's payload goes through one of these. The managed port swaps
 ** the representation (parallel primitive/reference/tag arrays — the
 ** Truffle frame design) behind these exact signatures; nothing
@@ -607,7 +607,7 @@ static l_forceinline Proto* getproto(const TValue* o)
   return clLvalue(o)->p;
 }
 
-/* node keys: the same seam over a Node's key representation */
+/* node keys: the same boundary over a Node's key representation */
 
 static l_forceinline GCObject* gckey(const Node* n)
 {
@@ -854,7 +854,7 @@ LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
 ** (an interior cursor is (InternalString*, int), never a raw
 ** pointer). The const char* overloads are GONE (retired 2026-07-30);
 ** boundary callers deep-copy their transitional char* text at their
-** own seams.
+** own boundaries.
 */
 LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L,
                                                   const InternalString* fmt,

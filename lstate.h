@@ -333,7 +333,7 @@ static l_forceinline global_State* G(lua_State* L)
 ** {==================================================================
 ** Slot functions — typed access to Lua-stack slots by index
 **
-** The stack-facing half of the value-representation seam (the row
+** The stack-facing half of the value-representation boundary (the row
 ** half lives in lobject.h). All access to a stack slot's payload or
 ** tag goes through these (L, StkId) forms; nothing outside this
 ** section may derive a TValue* from a stack index. This is the

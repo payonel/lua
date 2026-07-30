@@ -1108,7 +1108,7 @@ static void checkmode(lua_State* L, const char* mode,
   if (strchr(mode, x->byteAt(0)) == nullptr)
   {
     /* 'mode' is the transitional load-path char* param: deep-copy at
-       the seam for the message (dies with the HostString switch) */
+       the boundary for the message (dies with the HostString switch) */
     InternalString m{mode, strlen(mode)};
     luaO_pushfstring(L,
                      lit<"attempt to load a %s chunk (mode is '%s')">(),

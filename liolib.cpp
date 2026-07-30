@@ -220,7 +220,7 @@ static int io_open(lua_State* L)
   LStream* p = newfile(L);
   luaL_argcheck(L, l_checkmode(mode.c_str()), 2, "invalid mode");
   errno = 0;
-  p->f = fopen(filename.c_str(), mode.c_str()); /* host seam */
+  p->f = fopen(filename.c_str(), mode.c_str()); /* host boundary */
   return (p->f == nullptr) ? luaL_fileresult(L, 0, filename.c_str()) : 1;
 }
 
@@ -241,7 +241,7 @@ static int io_popen(lua_State* L)
   LStream* p = newprefile(L);
   luaL_argcheck(L, l_checkmodep(mode.c_str()), 2, "invalid mode");
   errno = 0;
-  p->f = l_popen(L, filename.c_str(), mode.c_str()); /* host seam */
+  p->f = l_popen(L, filename.c_str(), mode.c_str()); /* host boundary */
   p->closef = &io_pclose;
   return (p->f == nullptr) ? luaL_fileresult(L, 0, filename.c_str()) : 1;
 }
@@ -516,7 +516,7 @@ static void read_all(lua_State* L, FILE* f)
   do
   { /* read file in chunks of LUAL_BUFFERSIZE bytes */
     size_t off = luaL_prepbuffer(&b);
-    /* host seam (Java: InputStream.read(buf, off, len)) */
+    /* host boundary (Java: InputStream.read(buf, off, len)) */
     nr = fread(luaL_buffarea(&b).data() + off, sizeof(char), LUAL_BUFFERSIZE, f);
     luaL_addsize(&b, nr);
   } while (nr == LUAL_BUFFERSIZE);
@@ -529,7 +529,7 @@ static int read_chars(lua_State* L, FILE* f, size_t n)
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   size_t off = luaL_prepbuffsize(&b, n); /* prepare buffer to read whole block */
-  /* host seam (Java: InputStream.read(buf, off, len)) */
+  /* host boundary (Java: InputStream.read(buf, off, len)) */
   nr = fread(luaL_buffarea(&b).data() + off, sizeof(char), n, f); /* try to read 'n' chars */
   luaL_addsize(&b, nr);
   luaL_pushresult(&b); /* close buffer */
@@ -663,7 +663,7 @@ static int g_write(lua_State* L, FILE* f, int arg)
     else
     { /* must be a string */
       std::string_view sv = luaL_checklstring(L, arg);
-      s = sv.data(); /* host write seam (fwrite) */
+      s = sv.data(); /* host write boundary (fwrite) */
       len = sv.size();
     }
     numbytes = fwrite(s, sizeof(char), len, f);

@@ -578,7 +578,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
 
 /*
 ** Ensures a writable area with at least 'sz' bytes past the current
-** content, growing capacity through the accounted seam if needed.
+** content, growing capacity through the accounted boundary if needed.
 ** Returns the write offset into the buffer's area.
 */
 static size_t prepbuff(luaL_Buffer* B, size_t sz)
@@ -892,7 +892,7 @@ LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff,
                                 const HostString& name, const char* mode)
 {
   LoadS ls;
-  /* stream seam: the reader holds the chunk as pointer+remaining
+  /* stream boundary: the reader holds the chunk as pointer+remaining
      (category 5; Java: byte[] + offset in the ZIO struct) */
   ls.s = buff.data();
   ls.size = buff.size();

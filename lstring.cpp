@@ -101,7 +101,7 @@ void luaS_init(lua_State* L)
 TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t len)
 {
   global_State* g = G(L);
-  /* storage seam: the ingested sub-range materializes exactly once,
+  /* storage boundary: the ingested sub-range materializes exactly once,
      here (Java: hash/copy loops over (b, off, len)) */
   const char* s = str.data() + off;
   size_t l = len;

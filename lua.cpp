@@ -534,7 +534,7 @@ static const char* get_prompt(lua_State* L, int firstline)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
-    const char* p = luaL_tolstring(L, -1).data(); /* host print seam (NUL-terminated payload) */
+    const char* p = luaL_tolstring(L, -1).data(); /* host print boundary (NUL-terminated payload) */
     lua_remove(L, -2); /* remove original value */
     return p;
   }
@@ -619,7 +619,7 @@ static void checklocal(const char* line)
 static int multiline(lua_State* L)
 {
   std::string_view line = lua_tolstring(L, 1); /* get first line */
-  checklocal(line.data()); /* host seam (NUL-terminated payload) */
+  checklocal(line.data()); /* host boundary (NUL-terminated payload) */
   for (;;)
   {                                                  /* repeat until gets a complete statement */
     int status = luaL_loadbufferx(L, line, "=stdin", "t"); /* try it */

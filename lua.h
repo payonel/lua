@@ -341,7 +341,7 @@ LUA_API void(lua_warning)(lua_State* L, const HostString& msg, int tocont);
 ** reserve-before-growth accounting): host-side buffers whose growth
 ** is script-driven reserve capacity BEFORE allocating it, so the
 ** state's memory limit can veto (returns 0). Released bytes must
-** have been reserved. (Java: same seam on the VM object.)
+** have been reserved. (Java: same boundary on the VM object.)
 */
 LUA_API int(lua_reservebytes)(lua_State* L, size_t sz);
 LUA_API void(lua_releasebytes)(lua_State* L, size_t sz);

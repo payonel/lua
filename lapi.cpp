@@ -689,7 +689,7 @@ LUA_API const InternalString* lua_pushfstring(lua_State* L, const char* fmt)
   FmtArgs args;
   int n = 0; /* number of arguments taken from the stack */
   lua_lock(L);
-  /* API seam: deep-copy the format once; all scanning is by offset */
+  /* API boundary: deep-copy the format once; all scanning is by offset */
   InternalString f{fmt, strlen(fmt)};
   std::string_view fv = f.view();
   size_t e;
@@ -1686,7 +1686,7 @@ void lua_warning(lua_State* L, const HostString& msg, int tocont)
 }
 
 /*
-** Public byte-budget seam (see lua.h): reserve/release host-side
+** Public byte-budget boundary (see lua.h): reserve/release host-side
 ** buffer capacity against the state's accounting, so the memory
 ** limit can veto script-driven growth before it is allocated.
 ** Deliberately lock-free: pure accounting arithmetic (GC debt), and

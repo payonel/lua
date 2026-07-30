@@ -40,7 +40,7 @@ struct LoadState
 static l_noret error(LoadState* S, const InternalString* why)
 {
   /* 'name' is the transitional load-path char* chunkname: deep-copy
-     at the seam for the message (dies with the HostString switch) */
+     at the boundary for the message (dies with the HostString switch) */
   InternalString n{S->name, strlen(S->name)};
   luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(),
                    FmtArgs().str(&n).str(why));

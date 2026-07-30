@@ -2259,7 +2259,7 @@ static int str_pack(lua_State* L)
       float f = (float) luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
       /* move 'f' to final result, correcting endianness if needed
-         (raw-memory seam: 'copywithendian' is category-6 byte moving) */
+         (raw-memory boundary: 'copywithendian' is category-6 byte moving) */
       copywithendian(luaL_buffarea(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
       luaL_addsize(&b, size);
       break;
@@ -2269,7 +2269,7 @@ static int str_pack(lua_State* L)
       lua_Number f = luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
       /* move 'f' to final result, correcting endianness if needed
-         (raw-memory seam: 'copywithendian' is category-6 byte moving) */
+         (raw-memory boundary: 'copywithendian' is category-6 byte moving) */
       copywithendian(luaL_buffarea(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
       luaL_addsize(&b, size);
       break;
@@ -2279,7 +2279,7 @@ static int str_pack(lua_State* L)
       double f = (double) luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
       /* move 'f' to final result, correcting endianness if needed
-         (raw-memory seam: 'copywithendian' is category-6 byte moving) */
+         (raw-memory boundary: 'copywithendian' is category-6 byte moving) */
       copywithendian(luaL_buffarea(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
       luaL_addsize(&b, size);
       break;
@@ -2433,7 +2433,7 @@ static int str_unpack(lua_State* L)
     case Kfloat:
     {
       float f;
-      /* raw-memory seam: category-6 byte moving */
+      /* raw-memory boundary: category-6 byte moving */
       copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
@@ -2441,7 +2441,7 @@ static int str_unpack(lua_State* L)
     case Knumber:
     {
       lua_Number f;
-      /* raw-memory seam: category-6 byte moving */
+      /* raw-memory boundary: category-6 byte moving */
       copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, f);
       break;
@@ -2449,7 +2449,7 @@ static int str_unpack(lua_State* L)
     case Kdouble:
     {
       double f;
-      /* raw-memory seam: category-6 byte moving */
+      /* raw-memory boundary: category-6 byte moving */
       copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
