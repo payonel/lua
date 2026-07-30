@@ -72,7 +72,7 @@ static int fmtnargs(const char* fmt)
   return n;
 }
 
-static int runC(lua_State* L, lua_State* L1, const char* pc);
+static int runC(lua_State* L, lua_State* L1, std::string_view code);
 
 static void setnameval(lua_State* L, const char* name, int val)
 {
@@ -841,45 +841,46 @@ static int lua_checkmemory(lua_State* L)
 ** =======================================================
 */
 
-static char* buildop(Proto* p, int pc, char* buff)
+static HostString buildop(Proto* p, int pc)
 {
-  char* obuff = buff;
+  char buff[100]; /* test print shim: line composed via sprintf */
+  char* out = buff;
   Instruction i = p->code[pc];
   OpCode o = GET_OPCODE(i);
-  const char* name = opnames[o];
+  const char* name = opnames[o]; /* debug-name table feeding the shim */
   int line = luaG_getfuncline(p, pc);
   int lineinfo = (p->lineinfo != nullptr) ? p->lineinfo[pc] : 0;
   if (lineinfo == ABSLINEINFO)
-    buff += sprintf(buff, "(__");
+    out += sprintf(out, "(__");
   else
-    buff += sprintf(buff, "(%2d", lineinfo);
-  buff += sprintf(buff, " - %4d) %4d - ", line, pc);
+    out += sprintf(out, "(%2d", lineinfo);
+  out += sprintf(out, " - %4d) %4d - ", line, pc);
   switch (getOpMode(o))
   {
   case iABC:
-    sprintf(buff, "%-12s%4d %4d %4d%s", name,
+    sprintf(out, "%-12s%4d %4d %4d%s", name,
             GETARG_A(i), GETARG_B(i), GETARG_C(i),
             GETARG_k(i) ? " (k)" : "");
     break;
   case ivABC:
-    sprintf(buff, "%-12s%4d %4d %4d%s", name,
+    sprintf(out, "%-12s%4d %4d %4d%s", name,
             GETARG_A(i), GETARG_vB(i), GETARG_vC(i),
             GETARG_k(i) ? " (k)" : "");
     break;
   case iABx:
-    sprintf(buff, "%-12s%4d %4d", name, GETARG_A(i), GETARG_Bx(i));
+    sprintf(out, "%-12s%4d %4d", name, GETARG_A(i), GETARG_Bx(i));
     break;
   case iAsBx:
-    sprintf(buff, "%-12s%4d %4d", name, GETARG_A(i), GETARG_sBx(i));
+    sprintf(out, "%-12s%4d %4d", name, GETARG_A(i), GETARG_sBx(i));
     break;
   case iAx:
-    sprintf(buff, "%-12s%4d", name, GETARG_Ax(i));
+    sprintf(out, "%-12s%4d", name, GETARG_Ax(i));
     break;
   case isJ:
-    sprintf(buff, "%-12s%4d", name, GETARG_sJ(i));
+    sprintf(out, "%-12s%4d", name, GETARG_sJ(i));
     break;
   }
-  return obuff;
+  return HostString(buff); /* host-text copy of the composed line */
 }
 
 static int listcode(lua_State* L)
@@ -895,9 +896,8 @@ static int listcode(lua_State* L)
   setnameval(L, "numparams", p->numparams);
   for (pc = 0; pc < p->sizecode; pc++)
   {
-    char buff[100];
     lua_pushinteger(L, pc + 1);
-    lua_pushstring(L, buildop(p, pc, buff));
+    lua_pushstring(L, buildop(p, pc));
     lua_settable(L, -3);
   }
   return 1;
@@ -915,8 +915,7 @@ static int printcode(lua_State* L)
   printf("numparams: %d\n", p->numparams);
   for (pc = 0; pc < p->sizecode; pc++)
   {
-    char buff[100];
-    printf("%s\n", buildop(p, pc, buff));
+    printf("%s\n", buildop(p, pc).c_str()); /* test print shim */
   }
   return 0;
 }
@@ -1603,7 +1602,7 @@ static int log2_aux(lua_State* L)
 struct Aux
 {
   jmp_buf jb;
-  const char* paniccode;
+  HostString paniccode;
   lua_State* L;
 };
 
@@ -1629,8 +1628,7 @@ static int checkpanic(lua_State* L)
   lua_State* L1;
   HostString code = luaL_checkstring(L, 1);
   lua_Alloc f = lua_getallocf(L, &ud);
-  HostString paniccode = luaL_optstring(L, 2, "");
-  b.paniccode = paniccode.c_str();
+  b.paniccode = luaL_optstring(L, 2, "");
   b.L = L;
   L1 = lua_newstate(f, ud, 0); /* create new state */
   if (L1 == nullptr)
@@ -1643,7 +1641,7 @@ static int checkpanic(lua_State* L)
   lua_setfield(L1, LUA_REGISTRYINDEX, "_jmpbuf"); /* store 'Aux' struct */
   if (setjmp(b.jb) == 0)
   {                    /* set jump buffer */
-    runC(L, L1, code.c_str()); /* run code unprotected */
+    runC(L, L1, code); /* run code unprotected */
     lua_pushliteral(L, "no errors");
   }
   else
@@ -1688,109 +1686,137 @@ static int externstr(lua_State* L)
 ** =====================================================================
 */
 
-static void sethookaux(lua_State* L, int mask, int count, const char* code);
+static void sethookaux(lua_State* L, int mask, int count, const HostString& scpt);
 
-static const char* const delimits = " \t\n,;";
+/*
+** Cursor over a testC script (category 7): the whole script as a
+** view plus a read offset (Java: String + int index). curbyte gives
+** the bounded read: -1 (EOZ-like) past the end.
+*/
+struct CScript
+{
+  std::string_view code;
+  size_t pos;
+};
 
-static void skip(const char** pc)
+static int curbyte(const CScript* sc)
+{
+  return sv_byteat(sc->code, sc->pos);
+}
+
+static constexpr std::string_view delimits = " \t\n,;";
+
+static void skip(CScript* sc)
 {
   for (;;)
   {
-    if (**pc != '\0' && strchr(delimits, **pc))
-      (*pc)++;
-    else if (**pc == '#')
+    int c = curbyte(sc);
+    if (c != -1 && delimits.find((char) c) != std::string_view::npos)
+      sc->pos++;
+    else if (c == '#')
     { /* comment? */
-      while (**pc != '\n' && **pc != '\0')
-        (*pc)++; /* until end-of-line */
+      while (curbyte(sc) != '\n' && curbyte(sc) != -1)
+        sc->pos++; /* until end-of-line */
     }
     else
       break;
   }
 }
 
-static int getnum_aux(lua_State* L, lua_State* L1, const char** pc)
+static int getnum_aux(lua_State* L, lua_State* L1, CScript* sc)
 {
   int res = 0;
   int sig = 1;
-  skip(pc);
-  if (**pc == '.')
+  skip(sc);
+  if (curbyte(sc) == '.')
   {
     res = ((int)(lua_tointeger(L1, -1)));
     lua_pop(L1, 1);
-    (*pc)++;
+    sc->pos++;
     return res;
   }
-  else if (**pc == '*')
+  else if (curbyte(sc) == '*')
   {
     res = lua_gettop(L1);
-    (*pc)++;
+    sc->pos++;
     return res;
   }
-  else if (**pc == '!')
+  else if (curbyte(sc) == '!')
   {
-    (*pc)++;
-    if (**pc == 'G')
+    sc->pos++;
+    if (curbyte(sc) == 'G')
       res = LUA_RIDX_GLOBALS;
-    else if (**pc == 'M')
+    else if (curbyte(sc) == 'M')
       res = LUA_RIDX_MAINTHREAD;
     else
       assert(0);
-    (*pc)++;
+    sc->pos++;
     return res;
   }
-  else if (**pc == '-')
+  else if (curbyte(sc) == '-')
   {
     sig = -1;
-    (*pc)++;
+    sc->pos++;
   }
-  if (!lisdigit(((unsigned char)(**pc))))
+  if (!lisdigit(curbyte(sc)))
   {
-    lua_pushstring(L, *pc);
+    /* rest of the script: host-text deep copy for the message */
+    lua_pushstring(L, HostString(sc->code, sc->pos, sc->code.size() - sc->pos));
     luaL_error(L, "number expected (%s)");
   }
-  while (lisdigit(((unsigned char)(**pc))))
-    res = res * 10 + (*(*pc)++) - '0';
+  while (lisdigit(curbyte(sc)))
+  {
+    res = res * 10 + (curbyte(sc) - '0');
+    sc->pos++;
+  }
   return sig * res;
 }
 
-static const char* getstring_aux(lua_State* L, char* buff, const char** pc)
+static HostString getstring_aux(lua_State* L, CScript* sc)
 {
-  int i = 0;
-  skip(pc);
-  if (**pc == '"' || **pc == '\'')
+  HostString buff;
+  skip(sc);
+  int c = curbyte(sc);
+  if (c == '"' || c == '\'')
   { /* quoted string? */
-    int quote = *(*pc)++;
-    while (**pc != quote)
+    int quote = c;
+    sc->pos++;
+    while ((c = curbyte(sc)) != quote)
     {
-      if (**pc == '\0')
+      if (c == -1)
         luaL_error(L, "unfinished string in C script");
-      buff[i++] = *(*pc)++;
+      buff.push_back((char) c);
+      sc->pos++;
     }
-    (*pc)++;
+    sc->pos++;
   }
   else
   {
-    while (**pc != '\0' && !strchr(delimits, **pc))
-      buff[i++] = *(*pc)++;
+    while ((c = curbyte(sc)) != -1 && delimits.find((char) c) == std::string_view::npos)
+    {
+      buff.push_back((char) c);
+      sc->pos++;
+    }
   }
-  buff[i] = '\0';
   return buff;
 }
 
-static int getindex_aux(lua_State* L, lua_State* L1, const char** pc)
+static int getindex_aux(lua_State* L, lua_State* L1, CScript* sc)
 {
-  skip(pc);
-  switch (*(*pc)++)
+  skip(sc);
+  int c = curbyte(sc);
+  sc->pos++;
+  switch (c)
   {
   case 'R':
     return LUA_REGISTRYINDEX;
   case 'U':
-    return lua_upvalueindex(getnum_aux(L, L1, pc));
+    return lua_upvalueindex(getnum_aux(L, L1, sc));
   default:
   {
     int n;
-    (*pc)--; /* to read again */
-    n = getnum_aux(L, L1, pc);
+    sc->pos--; /* to read again */
+    n = getnum_aux(L, L1, sc);
     if (n == 0)
       return 0;
     else
@@ -1831,227 +1857,223 @@ static int Cfunck(lua_State* L, int status, lua_KContext ctx);
 */
 static const char ops[] = "+-*%^/\\&|~<>_!";
 
-static int runC(lua_State* L, lua_State* L1, const char* pc)
+static int runC(lua_State* L, lua_State* L1, std::string_view code)
 {
-  char buff[300];
   int status = 0;
-  if (pc == nullptr)
-    return luaL_error(L, "attempt to runC null script");
+  CScript sc{code, 0}; /* script cursor (Java: String + int) */
   for (;;)
   {
-    const char* inst = getstring_aux(L, buff, &pc);
-    if (strcmp("", inst) == 0)
+    HostString inst = getstring_aux(L, &sc);
+    if (inst.empty())
       return 0;
-    else if (strcmp("absindex", inst) == 0)
+    else if (inst == "absindex")
     {
-      lua_pushinteger(L1, getindex_aux(L, L1, &pc));
+      lua_pushinteger(L1, getindex_aux(L, L1, &sc));
     }
-    else if (strcmp("append", inst) == 0)
+    else if (inst == "append")
     {
-      int t = getindex_aux(L, L1, &pc);
+      int t = getindex_aux(L, L1, &sc);
       int i = ((int)(lua_rawlen(L1, t)));
       lua_rawseti(L1, t, i + 1);
     }
-    else if (strcmp("arith", inst) == 0)
+    else if (inst == "arith")
     {
       int op;
-      skip(&pc);
-      op = ((int)(strchr(ops, *pc++) - ops));
+      skip(&sc);
+      op = ((int)(std::string_view{ops}.find((char) curbyte(&sc))));
+      sc.pos++;
       lua_arith(L1, op);
     }
-    else if (strcmp("call", inst) == 0)
+    else if (inst == "call")
     {
-      int narg = getnum_aux(L, L1, &pc);
-      int nres = getnum_aux(L, L1, &pc);
+      int narg = getnum_aux(L, L1, &sc);
+      int nres = getnum_aux(L, L1, &sc);
       lua_call(L1, narg, nres);
     }
-    else if (strcmp("callk", inst) == 0)
+    else if (inst == "callk")
     {
-      int narg = getnum_aux(L, L1, &pc);
-      int nres = getnum_aux(L, L1, &pc);
-      int i = getindex_aux(L, L1, &pc);
+      int narg = getnum_aux(L, L1, &sc);
+      int nres = getnum_aux(L, L1, &sc);
+      int i = getindex_aux(L, L1, &sc);
       lua_callk(L1, narg, nres, i, Cfunck);
     }
-    else if (strcmp("checkstack", inst) == 0)
+    else if (inst == "checkstack")
     {
-      int sz = getnum_aux(L, L1, &pc);
-      const char* msg = getstring_aux(L, buff, &pc);
+      int sz = getnum_aux(L, L1, &sc);
+      HostString msg = getstring_aux(L, &sc);
       /* empty msg tests 'luaL_checkstack' with no message */
       luaL_checkstack(L1, sz, msg);
     }
-    else if (strcmp("rawcheckstack", inst) == 0)
+    else if (inst == "rawcheckstack")
     {
-      int sz = getnum_aux(L, L1, &pc);
+      int sz = getnum_aux(L, L1, &sc);
       lua_pushboolean(L1, lua_checkstack(L1, sz));
     }
-    else if (strcmp("compare", inst) == 0)
+    else if (inst == "compare")
     {
-      const char* opt = getstring_aux(L, buff, &pc); /* EQ, LT, or LE */
+      HostString opt = getstring_aux(L, &sc); /* EQ, LT, or LE */
       int op = (opt[0] == 'E')   ? LUA_OPEQ
                : (opt[1] == 'T') ? LUA_OPLT
                                  : LUA_OPLE;
-      int a = getindex_aux(L, L1, &pc);
-      int b = getindex_aux(L, L1, &pc);
+      int a = getindex_aux(L, L1, &sc);
+      int b = getindex_aux(L, L1, &sc);
       lua_pushboolean(L1, lua_compare(L1, a, b, op));
     }
-    else if (strcmp("concat", inst) == 0)
+    else if (inst == "concat")
     {
-      lua_concat(L1, getnum_aux(L, L1, &pc));
+      lua_concat(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("copy", inst) == 0)
+    else if (inst == "copy")
     {
-      int f = getindex_aux(L, L1, &pc);
-      lua_copy(L1, f, getindex_aux(L, L1, &pc));
+      int f = getindex_aux(L, L1, &sc);
+      lua_copy(L1, f, getindex_aux(L, L1, &sc));
     }
-    else if (strcmp("func2num", inst) == 0)
+    else if (inst == "func2num")
     {
-      lua_CFunction func = lua_tocfunction(L1, getindex_aux(L, L1, &pc));
+      lua_CFunction func = lua_tocfunction(L1, getindex_aux(L, L1, &sc));
       lua_pushinteger(L1, ((lua_Integer)(((size_t)(func)))));
     }
-    else if (strcmp("getfield", inst) == 0)
+    else if (inst == "getfield")
     {
-      int t = getindex_aux(L, L1, &pc);
-      int tp = lua_getfield(L1, t, getstring_aux(L, buff, &pc));
+      int t = getindex_aux(L, L1, &sc);
+      int tp = lua_getfield(L1, t, getstring_aux(L, &sc));
       assert(tp == lua_type(L1, -1));
     }
-    else if (strcmp("getglobal", inst) == 0)
+    else if (inst == "getglobal")
     {
-      lua_getglobal(L1, getstring_aux(L, buff, &pc));
+      lua_getglobal(L1, getstring_aux(L, &sc));
     }
-    else if (strcmp("getmetatable", inst) == 0)
+    else if (inst == "getmetatable")
     {
-      if (lua_getmetatable(L1, getindex_aux(L, L1, &pc)) == 0)
+      if (lua_getmetatable(L1, getindex_aux(L, L1, &sc)) == 0)
         lua_pushnil(L1);
     }
-    else if (strcmp("gettable", inst) == 0)
+    else if (inst == "gettable")
     {
-      int tp = lua_gettable(L1, getindex_aux(L, L1, &pc));
+      int tp = lua_gettable(L1, getindex_aux(L, L1, &sc));
       assert(tp == lua_type(L1, -1));
     }
-    else if (strcmp("gettop", inst) == 0)
+    else if (inst == "gettop")
     {
       lua_pushinteger(L1, lua_gettop(L1));
     }
-    else if (strcmp("gsub", inst) == 0)
+    else if (inst == "gsub")
     {
-      int a = getnum_aux(L, L1, &pc);
-      int b = getnum_aux(L, L1, &pc);
-      int c = getnum_aux(L, L1, &pc);
+      int a = getnum_aux(L, L1, &sc);
+      int b = getnum_aux(L, L1, &sc);
+      int c = getnum_aux(L, L1, &sc);
       luaL_gsub(L1, lua_tostring(L1, a),
                 lua_tostring(L1, b),
                 lua_tostring(L1, c));
     }
-    else if (strcmp("insert", inst) == 0)
+    else if (inst == "insert")
     {
-      lua_insert(L1, getnum_aux(L, L1, &pc));
+      lua_insert(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("iscfunction", inst) == 0)
+    else if (inst == "iscfunction")
     {
-      lua_pushboolean(L1, lua_iscfunction(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_iscfunction(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("isfunction", inst) == 0)
+    else if (inst == "isfunction")
     {
-      lua_pushboolean(L1, lua_isfunction(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_isfunction(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("isnil", inst) == 0)
+    else if (inst == "isnil")
     {
-      lua_pushboolean(L1, lua_isnil(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_isnil(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("isnull", inst) == 0)
+    else if (inst == "isnull")
     {
-      lua_pushboolean(L1, lua_isnone(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_isnone(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("isnumber", inst) == 0)
+    else if (inst == "isnumber")
     {
-      lua_pushboolean(L1, lua_isnumber(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_isnumber(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("isstring", inst) == 0)
+    else if (inst == "isstring")
     {
-      lua_pushboolean(L1, lua_isstring(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_isstring(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("istable", inst) == 0)
+    else if (inst == "istable")
     {
-      lua_pushboolean(L1, lua_istable(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_istable(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("isudataval", inst) == 0)
+    else if (inst == "isudataval")
     {
-      lua_pushboolean(L1, lua_islightuserdata(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_islightuserdata(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("isuserdata", inst) == 0)
+    else if (inst == "isuserdata")
     {
-      lua_pushboolean(L1, lua_isuserdata(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_isuserdata(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("len", inst) == 0)
+    else if (inst == "len")
     {
-      lua_len(L1, getindex_aux(L, L1, &pc));
+      lua_len(L1, getindex_aux(L, L1, &sc));
     }
-    else if (strcmp("Llen", inst) == 0)
+    else if (inst == "Llen")
     {
-      lua_pushinteger(L1, luaL_len(L1, getindex_aux(L, L1, &pc)));
+      lua_pushinteger(L1, luaL_len(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("loadfile", inst) == 0)
+    else if (inst == "loadfile")
     {
-      HostString fn = luaL_checkstring(L1, getnum_aux(L, L1, &pc));
+      HostString fn = luaL_checkstring(L1, getnum_aux(L, L1, &sc));
       luaL_loadfilex(L1, &fn, lit<"t">());
     }
-    else if (strcmp("loadstring", inst) == 0)
+    else if (inst == "loadstring")
     {
-      size_t slen;
-      std::string_view sv2 = luaL_checklstring(L1, getnum_aux(L, L1, &pc));
-      const char* s = sv2.data();
-      slen = sv2.size();
-      const char* name = getstring_aux(L, buff, &pc);
-      const char* mode = getstring_aux(L, buff, &pc);
-      luaL_loadbufferx(L1, std::string_view{s, slen}, name, mode);
+      std::string_view sv2 = luaL_checklstring(L1, getnum_aux(L, L1, &sc));
+      HostString name = getstring_aux(L, &sc);
+      HostString mode = getstring_aux(L, &sc);
+      luaL_loadbufferx(L1, sv2, name, mode);
     }
-    else if (strcmp("newmetatable", inst) == 0)
+    else if (inst == "newmetatable")
     {
-      lua_pushboolean(L1, luaL_newmetatable(L1, getstring_aux(L, buff, &pc)));
+      lua_pushboolean(L1, luaL_newmetatable(L1, getstring_aux(L, &sc)));
     }
-    else if (strcmp("newtable", inst) == 0)
+    else if (inst == "newtable")
     {
       lua_newtable(L1);
     }
-    else if (strcmp("newthread", inst) == 0)
+    else if (inst == "newthread")
     {
       lua_newthread(L1);
     }
-    else if (strcmp("resetthread", inst) == 0)
+    else if (inst == "resetthread")
     {
       lua_pushinteger(L1, lua_resetthread(L1)); /* deprecated */
     }
-    else if (strcmp("newuserdata", inst) == 0)
+    else if (inst == "newuserdata")
     {
-      lua_newuserdata(L1, ((size_t)(getnum_aux(L, L1, &pc))));
+      lua_newuserdata(L1, ((size_t)(getnum_aux(L, L1, &sc))));
     }
-    else if (strcmp("next", inst) == 0)
+    else if (inst == "next")
     {
       lua_next(L1, -2);
     }
-    else if (strcmp("objsize", inst) == 0)
+    else if (inst == "objsize")
     {
-      lua_pushinteger(L1, ((lua_Integer)(lua_rawlen(L1, getindex_aux(L, L1, &pc)))));
+      lua_pushinteger(L1, ((lua_Integer)(lua_rawlen(L1, getindex_aux(L, L1, &sc)))));
     }
-    else if (strcmp("pcall", inst) == 0)
+    else if (inst == "pcall")
     {
-      int narg = getnum_aux(L, L1, &pc);
-      int nres = getnum_aux(L, L1, &pc);
-      status = lua_pcall(L1, narg, nres, getnum_aux(L, L1, &pc));
+      int narg = getnum_aux(L, L1, &sc);
+      int nres = getnum_aux(L, L1, &sc);
+      status = lua_pcall(L1, narg, nres, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("pcallk", inst) == 0)
+    else if (inst == "pcallk")
     {
-      int narg = getnum_aux(L, L1, &pc);
-      int nres = getnum_aux(L, L1, &pc);
-      int i = getindex_aux(L, L1, &pc);
+      int narg = getnum_aux(L, L1, &sc);
+      int nres = getnum_aux(L, L1, &sc);
+      int i = getindex_aux(L, L1, &sc);
       status = lua_pcallk(L1, narg, nres, 0, i, Cfunck);
     }
-    else if (strcmp("pop", inst) == 0)
+    else if (inst == "pop")
     {
-      lua_pop(L1, getnum_aux(L, L1, &pc));
+      lua_pop(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("printstack", inst) == 0)
+    else if (inst == "printstack")
     {
-      int n = getnum_aux(L, L1, &pc);
+      int n = getnum_aux(L, L1, &sc);
       if (n != 0)
       {
         TValue v = getslot(L, L->ci->func + n);
@@ -2061,72 +2083,72 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       else
         lua_printstack(L1);
     }
-    else if (strcmp("print", inst) == 0)
+    else if (inst == "print")
     {
-      const char* msg = getstring_aux(L, buff, &pc);
-      printf("%s\n", msg);
+      HostString msg = getstring_aux(L, &sc);
+      printf("%s\n", msg.c_str()); /* test print shim */
     }
-    else if (strcmp("warningC", inst) == 0)
+    else if (inst == "warningC")
     {
-      const char* msg = getstring_aux(L, buff, &pc);
+      HostString msg = getstring_aux(L, &sc);
       lua_warning(L1, msg, 1);
     }
-    else if (strcmp("warning", inst) == 0)
+    else if (inst == "warning")
     {
-      const char* msg = getstring_aux(L, buff, &pc);
+      HostString msg = getstring_aux(L, &sc);
       lua_warning(L1, msg, 0);
     }
-    else if (strcmp("pushbool", inst) == 0)
+    else if (inst == "pushbool")
     {
-      lua_pushboolean(L1, getnum_aux(L, L1, &pc));
+      lua_pushboolean(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("pushcclosure", inst) == 0)
+    else if (inst == "pushcclosure")
     {
-      lua_pushcclosure(L1, testC, getnum_aux(L, L1, &pc));
+      lua_pushcclosure(L1, testC, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("pushint", inst) == 0)
+    else if (inst == "pushint")
     {
-      lua_pushinteger(L1, getnum_aux(L, L1, &pc));
+      lua_pushinteger(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("pushnil", inst) == 0)
+    else if (inst == "pushnil")
     {
       lua_pushnil(L1);
     }
-    else if (strcmp("pushnum", inst) == 0)
+    else if (inst == "pushnum")
     {
-      lua_pushnumber(L1, (lua_Number) getnum_aux(L, L1, &pc));
+      lua_pushnumber(L1, (lua_Number) getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("pushstatus", inst) == 0)
+    else if (inst == "pushstatus")
     {
       lua_pushistringref(L1, statcodes[status]);
     }
-    else if (strcmp("pushstring", inst) == 0)
+    else if (inst == "pushstring")
     {
-      lua_pushstring(L1, getstring_aux(L, buff, &pc));
+      lua_pushstring(L1, getstring_aux(L, &sc));
     }
-    else if (strcmp("pushupvalueindex", inst) == 0)
+    else if (inst == "pushupvalueindex")
     {
-      lua_pushinteger(L1, lua_upvalueindex(getnum_aux(L, L1, &pc)));
+      lua_pushinteger(L1, lua_upvalueindex(getnum_aux(L, L1, &sc)));
     }
-    else if (strcmp("pushvalue", inst) == 0)
+    else if (inst == "pushvalue")
     {
-      lua_pushvalue(L1, getindex_aux(L, L1, &pc));
+      lua_pushvalue(L1, getindex_aux(L, L1, &sc));
     }
-    else if (strcmp("pushfstringI", inst) == 0)
+    else if (inst == "pushfstringI")
     {
       HostString fmt = lua_tostring(L, -2);
       if (fmtnargs(fmt.c_str()) > 0)
         lua_pushinteger(L1, lua_tointeger(L, -1));
       lua_pushfstring(L1, fmt.c_str());
     }
-    else if (strcmp("pushfstringS", inst) == 0)
+    else if (inst == "pushfstringS")
     {
       HostString fmt = lua_tostring(L, -2);
       if (fmtnargs(fmt.c_str()) > 0)
         lua_pushstring(L1, lua_tostring(L, -1));
       lua_pushfstring(L1, fmt.c_str());
     }
-    else if (strcmp("pushfstringP", inst) == 0)
+    else if (inst == "pushfstringP")
     {
       HostString fmt = lua_tostring(L, -2);
       if (fmtnargs(fmt.c_str()) > 0)
@@ -2143,67 +2165,67 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       }
       lua_pushfstring(L1, fmt.c_str());
     }
-    else if (strcmp("rawget", inst) == 0)
+    else if (inst == "rawget")
     {
-      int t = getindex_aux(L, L1, &pc);
+      int t = getindex_aux(L, L1, &sc);
       lua_rawget(L1, t);
     }
-    else if (strcmp("rawgeti", inst) == 0)
+    else if (inst == "rawgeti")
     {
-      int t = getindex_aux(L, L1, &pc);
-      lua_rawgeti(L1, t, getnum_aux(L, L1, &pc));
+      int t = getindex_aux(L, L1, &sc);
+      lua_rawgeti(L1, t, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("rawgetp", inst) == 0)
+    else if (inst == "rawgetp")
     {
-      int t = getindex_aux(L, L1, &pc);
-      lua_rawgetp(L1, t, util::as_userdata(getnum_aux(L, L1, &pc)));
+      int t = getindex_aux(L, L1, &sc);
+      lua_rawgetp(L1, t, util::as_userdata(getnum_aux(L, L1, &sc)));
     }
-    else if (strcmp("rawset", inst) == 0)
+    else if (inst == "rawset")
     {
-      int t = getindex_aux(L, L1, &pc);
+      int t = getindex_aux(L, L1, &sc);
       lua_rawset(L1, t);
     }
-    else if (strcmp("rawseti", inst) == 0)
+    else if (inst == "rawseti")
     {
-      int t = getindex_aux(L, L1, &pc);
-      lua_rawseti(L1, t, getnum_aux(L, L1, &pc));
+      int t = getindex_aux(L, L1, &sc);
+      lua_rawseti(L1, t, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("rawsetp", inst) == 0)
+    else if (inst == "rawsetp")
     {
-      int t = getindex_aux(L, L1, &pc);
-      lua_rawsetp(L1, t, util::as_userdata(getnum_aux(L, L1, &pc)));
+      int t = getindex_aux(L, L1, &sc);
+      lua_rawsetp(L1, t, util::as_userdata(getnum_aux(L, L1, &sc)));
     }
-    else if (strcmp("remove", inst) == 0)
+    else if (inst == "remove")
     {
-      lua_remove(L1, getnum_aux(L, L1, &pc));
+      lua_remove(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("replace", inst) == 0)
+    else if (inst == "replace")
     {
-      lua_replace(L1, getindex_aux(L, L1, &pc));
+      lua_replace(L1, getindex_aux(L, L1, &sc));
     }
-    else if (strcmp("resume", inst) == 0)
+    else if (inst == "resume")
     {
-      int i = getindex_aux(L, L1, &pc);
+      int i = getindex_aux(L, L1, &sc);
       int nres;
-      status = lua_resume(lua_tothread(L1, i), L, getnum_aux(L, L1, &pc), &nres);
+      status = lua_resume(lua_tothread(L1, i), L, getnum_aux(L, L1, &sc), &nres);
     }
-    else if (strcmp("traceback", inst) == 0)
+    else if (inst == "traceback")
     {
-      HostString msg(getstring_aux(L, buff, &pc)); /* host boundary copy */
-      int level = getnum_aux(L, L1, &pc);
+      HostString msg(getstring_aux(L, &sc)); /* host boundary copy */
+      int level = getnum_aux(L, L1, &sc);
       luaL_traceback(L1, L1, &msg, level);
     }
-    else if (strcmp("threadstatus", inst) == 0)
+    else if (inst == "threadstatus")
     {
       lua_pushistringref(L1, statcodes[lua_status(L1)]);
     }
-    else if (strcmp("alloccount", inst) == 0)
+    else if (inst == "alloccount")
     {
-      l_memcontrol.countlimit = ((unsigned int)(getnum_aux(L, L1, &pc)));
+      l_memcontrol.countlimit = ((unsigned int)(getnum_aux(L, L1, &sc)));
     }
-    else if (strcmp("return", inst) == 0)
+    else if (inst == "return")
     {
-      int n = getnum_aux(L, L1, &pc);
+      int n = getnum_aux(L, L1, &sc);
       if (L1 != L)
       {
         int i;
@@ -2223,61 +2245,61 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       }
       return n;
     }
-    else if (strcmp("rotate", inst) == 0)
+    else if (inst == "rotate")
     {
-      int i = getindex_aux(L, L1, &pc);
-      lua_rotate(L1, i, getnum_aux(L, L1, &pc));
+      int i = getindex_aux(L, L1, &sc);
+      lua_rotate(L1, i, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("setfield", inst) == 0)
+    else if (inst == "setfield")
     {
-      int t = getindex_aux(L, L1, &pc);
-      const char* s = getstring_aux(L, buff, &pc);
+      int t = getindex_aux(L, L1, &sc);
+      HostString s = getstring_aux(L, &sc);
       lua_setfield(L1, t, s);
     }
-    else if (strcmp("seti", inst) == 0)
+    else if (inst == "seti")
     {
-      int t = getindex_aux(L, L1, &pc);
-      lua_seti(L1, t, getnum_aux(L, L1, &pc));
+      int t = getindex_aux(L, L1, &sc);
+      lua_seti(L1, t, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("setglobal", inst) == 0)
+    else if (inst == "setglobal")
     {
-      const char* s = getstring_aux(L, buff, &pc);
+      HostString s = getstring_aux(L, &sc);
       lua_setglobal(L1, s);
     }
-    else if (strcmp("sethook", inst) == 0)
+    else if (inst == "sethook")
     {
-      int mask = getnum_aux(L, L1, &pc);
-      int count = getnum_aux(L, L1, &pc);
-      const char* s = getstring_aux(L, buff, &pc);
+      int mask = getnum_aux(L, L1, &sc);
+      int count = getnum_aux(L, L1, &sc);
+      HostString s = getstring_aux(L, &sc);
       sethookaux(L1, mask, count, s);
     }
-    else if (strcmp("setmetatable", inst) == 0)
+    else if (inst == "setmetatable")
     {
-      int idx = getindex_aux(L, L1, &pc);
+      int idx = getindex_aux(L, L1, &sc);
       lua_setmetatable(L1, idx);
     }
-    else if (strcmp("settable", inst) == 0)
+    else if (inst == "settable")
     {
-      lua_settable(L1, getindex_aux(L, L1, &pc));
+      lua_settable(L1, getindex_aux(L, L1, &sc));
     }
-    else if (strcmp("settop", inst) == 0)
+    else if (inst == "settop")
     {
-      lua_settop(L1, getnum_aux(L, L1, &pc));
+      lua_settop(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("testudata", inst) == 0)
+    else if (inst == "testudata")
     {
-      int i = getindex_aux(L, L1, &pc);
-      lua_pushboolean(L1, luaL_testudata(L1, i, getstring_aux(L, buff, &pc)) != nullptr);
+      int i = getindex_aux(L, L1, &sc);
+      lua_pushboolean(L1, luaL_testudata(L1, i, getstring_aux(L, &sc)) != nullptr);
     }
-    else if (strcmp("error", inst) == 0)
+    else if (inst == "error")
     {
       lua_error(L1);
     }
-    else if (strcmp("abort", inst) == 0)
+    else if (inst == "abort")
     {
       abort();
     }
-    else if (strcmp("throw", inst) == 0)
+    else if (inst == "throw")
     {
       static struct X
       {
@@ -2286,25 +2308,25 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       throw x;
       break;
     }
-    else if (strcmp("tobool", inst) == 0)
+    else if (inst == "tobool")
     {
-      lua_pushboolean(L1, lua_toboolean(L1, getindex_aux(L, L1, &pc)));
+      lua_pushboolean(L1, lua_toboolean(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("tocfunction", inst) == 0)
+    else if (inst == "tocfunction")
     {
-      lua_pushcfunction(L1, lua_tocfunction(L1, getindex_aux(L, L1, &pc)));
+      lua_pushcfunction(L1, lua_tocfunction(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("tointeger", inst) == 0)
+    else if (inst == "tointeger")
     {
-      lua_pushinteger(L1, lua_tointeger(L1, getindex_aux(L, L1, &pc)));
+      lua_pushinteger(L1, lua_tointeger(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("tonumber", inst) == 0)
+    else if (inst == "tonumber")
     {
-      lua_pushnumber(L1, lua_tonumber(L1, getindex_aux(L, L1, &pc)));
+      lua_pushnumber(L1, lua_tonumber(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("topointer", inst) == 0)
+    else if (inst == "topointer")
     {
-      int idx = getindex_aux(L, L1, &pc);
+      int idx = getindex_aux(L, L1, &sc);
       if (lua_islightcfunction(L1, idx))
       {
         /* light C function — push string identity */
@@ -2317,13 +2339,13 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
         lua_pushlightuserdata(L1, util::remove_const_cast(p));
       }
     }
-    else if (strcmp("touserdata", inst) == 0)
+    else if (inst == "touserdata")
     {
-      lua_pushlightuserdata(L1, lua_touserdata(L1, getindex_aux(L, L1, &pc)));
+      lua_pushlightuserdata(L1, lua_touserdata(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (strcmp("tostring", inst) == 0)
+    else if (inst == "tostring")
     {
-      int i = getindex_aux(L, L1, &pc);
+      int i = getindex_aux(L, L1, &sc);
       if (lua_tolstring(L1, i).data() == nullptr) /* not convertible? */
         lua_pushnil(L1);
       else
@@ -2333,55 +2355,55 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
         assert(s == lua_tostring(L1, -1)); /* round-trips through the value */
       }
     }
-    else if (strcmp("Ltolstring", inst) == 0)
+    else if (inst == "Ltolstring")
     {
-      luaL_tolstring(L1, getindex_aux(L, L1, &pc));
+      luaL_tolstring(L1, getindex_aux(L, L1, &sc));
     }
-    else if (strcmp("type", inst) == 0)
+    else if (inst == "type")
     {
-      lua_pushstring(L1, luaL_typename(L1, getnum_aux(L, L1, &pc)));
+      lua_pushstring(L1, luaL_typename(L1, getnum_aux(L, L1, &sc)));
     }
-    else if (strcmp("xmove", inst) == 0)
+    else if (inst == "xmove")
     {
-      int f = getindex_aux(L, L1, &pc);
-      int t = getindex_aux(L, L1, &pc);
+      int f = getindex_aux(L, L1, &sc);
+      int t = getindex_aux(L, L1, &sc);
       lua_State* fs = (f == 0) ? L1 : lua_tothread(L1, f);
       lua_State* ts = (t == 0) ? L1 : lua_tothread(L1, t);
-      int n = getnum_aux(L, L1, &pc);
+      int n = getnum_aux(L, L1, &sc);
       if (n == 0)
         n = lua_gettop(fs);
       lua_xmove(fs, ts, n);
     }
-    else if (strcmp("isyieldable", inst) == 0)
+    else if (inst == "isyieldable")
     {
-      lua_pushboolean(L1, lua_isyieldable(lua_tothread(L1, getindex_aux(L, L1, &pc))));
+      lua_pushboolean(L1, lua_isyieldable(lua_tothread(L1, getindex_aux(L, L1, &sc))));
     }
-    else if (strcmp("yield", inst) == 0)
+    else if (inst == "yield")
     {
-      return lua_yield(L1, getnum_aux(L, L1, &pc));
+      return lua_yield(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("yieldk", inst) == 0)
+    else if (inst == "yieldk")
     {
-      int nres = getnum_aux(L, L1, &pc);
-      int i = getindex_aux(L, L1, &pc);
+      int nres = getnum_aux(L, L1, &sc);
+      int i = getindex_aux(L, L1, &sc);
       return lua_yieldk(L1, nres, i, Cfunck);
     }
-    else if (strcmp("toclose", inst) == 0)
+    else if (inst == "toclose")
     {
-      lua_toclose(L1, getnum_aux(L, L1, &pc));
+      lua_toclose(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("closeslot", inst) == 0)
+    else if (inst == "closeslot")
     {
-      lua_closeslot(L1, getnum_aux(L, L1, &pc));
+      lua_closeslot(L1, getnum_aux(L, L1, &sc));
     }
-    else if (strcmp("argerror", inst) == 0)
+    else if (inst == "argerror")
     {
-      int arg = getnum_aux(L, L1, &pc);
-      luaL_argerror(L1, arg, getstring_aux(L, buff, &pc));
+      int arg = getnum_aux(L, L1, &sc);
+      luaL_argerror(L1, arg, getstring_aux(L, &sc));
     }
     else
     {
-      lua_pushstring(L, buff);
+      lua_pushstring(L, inst);
       luaL_error(L, "unknown instruction %s");
     }
   }
@@ -2407,13 +2429,13 @@ static int testC(lua_State* L)
     L1 = L;
     pc = luaL_checkstring(L, 1);
   }
-  return runC(L, L1, pc.c_str());
+  return runC(L, L1, pc);
 }
 
 static int Cfunc(lua_State* L)
 {
   HostString script = lua_tostring(L, lua_upvalueindex(1));
-  return runC(L, L, script.c_str());
+  return runC(L, L, script);
 }
 
 static int Cfunck(lua_State* L, int status, lua_KContext ctx)
@@ -2423,7 +2445,7 @@ static int Cfunck(lua_State* L, int status, lua_KContext ctx)
   lua_pushinteger(L, ((lua_Integer)(ctx)));
   lua_setglobal(L, "ctx");
   HostString script = lua_tostring(L, ((int)(ctx)));
-  return runC(L, L, script.c_str());
+  return runC(L, L, script);
 }
 
 static int makeCfunc(lua_State* L)
@@ -2456,15 +2478,15 @@ static void Chook(lua_State* L, lua_Debug* ar)
   lua_pop(L, 2);                          /* remove C_HOOK and script */
   lua_pushistringref(L, events[ar->event]); /* may be used by script */
   lua_pushinteger(L, ar->currentline);    /* may be used by script */
-  runC(L, L, scpt.c_str());               /* run script from C_HOOK[L] */
+  runC(L, L, scpt);                       /* run script from C_HOOK[L] */
 }
 
 /*
 ** sets 'registry.C_HOOK[L] = scpt' and sets 'Chook' as a hook
 */
-static void sethookaux(lua_State* L, int mask, int count, const char* scpt)
+static void sethookaux(lua_State* L, int mask, int count, const HostString& scpt)
 {
-  if (*scpt == '\0')
+  if (scpt.empty())
   {                             /* no script? */
     lua_sethook(L, nullptr, 0, 0); /* turn off hooks */
     return;
@@ -2501,7 +2523,7 @@ static int sethook(lua_State* L)
       mask |= LUA_MASKLINE;
     if (count > 0)
       mask |= LUA_MASKCOUNT;
-    sethookaux(L, mask, count, scpt.c_str());
+    sethookaux(L, mask, count, scpt);
   }
   return 0;
 }
