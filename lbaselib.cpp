@@ -442,7 +442,7 @@ static int luaB_load(lua_State* L)
   if (s != nullptr)
   { /* loading a string? */
     HostString chunkname = luaL_optstring(L, 2, HostString(s, l));
-    status = luaL_loadbufferx(L, s, l, chunkname, modep);
+    status = luaL_loadbufferx(L, std::string_view{s, l}, chunkname, modep);
   }
   else
   {                    /* loading from a reader function */
@@ -599,7 +599,7 @@ LUAMOD_API int luaopen_base(lua_State* L)
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, LUA_GNAME);
   /* set global _VERSION */
-  lua_pushlstring(L, LUA_VERSION.data(), LUA_VERSION.size());
+  lua_pushlstring(L, LUA_VERSION, 0, LUA_VERSION.size());
   lua_setfield(L, -2, "_VERSION");
   return 1;
 }

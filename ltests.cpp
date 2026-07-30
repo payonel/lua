@@ -1481,7 +1481,7 @@ static int doonnewstack(lua_State* L)
   lua_State* L1 = lua_newthread(L);
   size_t l;
   const char* s = luaL_checklstring(L, 1, &l);
-  int status = luaL_loadbufferx(L1, s, l, s, "t");
+  int status = luaL_loadbufferx(L1, std::string_view{s, l}, s, "t");
   if (status == LUA_OK)
     status = lua_pcall(L1, 0, 0, 0);
   lua_pushinteger(L, status);
@@ -1497,7 +1497,7 @@ static int s2d(lua_State* L)
 static int d2s(lua_State* L)
 {
   double d = ((double)(luaL_checknumber(L, 1)));
-  lua_pushlstring(L, ((char*)(&d)), sizeof(d));
+  lua_pushlstring(L, std::string_view{((char*)(&d)), sizeof(d)}, 0, sizeof(d));
   return 1;
 }
 
@@ -1564,7 +1564,7 @@ static int doremote(lua_State* L)
   const char* code = luaL_checklstring(L, 2, &lcode);
   int status;
   lua_settop(L1, 0);
-  status = luaL_loadbufferx(L1, code, lcode, code, "t");
+  status = luaL_loadbufferx(L1, std::string_view{code, lcode}, code, "t");
   if (status == LUA_OK)
     status = lua_pcall(L1, 0, LUA_MULTRET, 0);
   if (status != LUA_OK)
@@ -1650,7 +1650,7 @@ static int externKstr(lua_State* L)
 {
   size_t len;
   const char* s = luaL_checklstring(L, 1, &len);
-  lua_pushlstring(L, s, len);
+  lua_pushlstring(L, std::string_view{s, len}, 0, len);
   return 1;
 }
 
@@ -1664,7 +1664,7 @@ static int externstr(lua_State* L)
   size_t len;
   const char* s = luaL_checklstring(L, 1, &len);
   /* push string directly (copies content internally) */
-  lua_pushlstring(L, s, len);
+  lua_pushlstring(L, std::string_view{s, len}, 0, len);
   return 1;
 }
 
@@ -1985,7 +1985,7 @@ static int runC(lua_State* L, lua_State* L1, const char* pc)
       const char* s = luaL_checklstring(L1, getnum_aux(L, L1, &pc), &slen);
       const char* name = getstring_aux(L, buff, &pc);
       const char* mode = getstring_aux(L, buff, &pc);
-      luaL_loadbufferx(L1, s, slen, name, mode);
+      luaL_loadbufferx(L1, std::string_view{s, slen}, name, mode);
     }
     else if (strcmp("newmetatable", inst) == 0)
     {

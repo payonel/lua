@@ -165,7 +165,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   {                                         /* small string? use stack buffer */
     char buff[41];
     loadBlock(S, buff, ((size_t)(size + 1)) * sizeof((buff)[0]));          /* load string into buffer */
-    *sl = ts = luaS_newlstr(L, buff, size); /* create string */
+    *sl = ts = luaS_newlstr(L, std::string_view{buff, ((size_t)(size))}); /* create string */
     luaC_objbarrier(L, p, ts);
   }
   else
@@ -173,7 +173,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     std::string tmp;
     tmp.resize(size + 1);
     loadBlock(S, tmp.data(), ((size_t)(size + 1)) * sizeof((tmp.data())[0]));
-    *sl = ts = luaS_newlstr(L, tmp.data(), size);
+    *sl = ts = luaS_newlstr(L, std::string_view{tmp.data(), ((size_t)(size))});
     luaC_objbarrier(L, p, ts);
   }
   /* add string to list of saved strings */

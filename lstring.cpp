@@ -83,7 +83,7 @@ void luaS_init(lua_State* L)
 {
   global_State* g = G(L);
   /* pre-create memory-error message */
-  g->memerrmsg = luaS_newlstr(L, MEMERRMSG, sizeof(MEMERRMSG) - 1);
+  g->memerrmsg = luaS_newlstr(L, std::string_view{MEMERRMSG, sizeof(MEMERRMSG) - 1});
   assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg))); /* it should never be collected */
 }
@@ -98,13 +98,17 @@ void luaS_init(lua_State* L)
 /*
 ** Create a new string, interning short strings in the global table.
 */
-TString* luaS_createstr(lua_State* L, const char* str, size_t l)
+TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t len)
 {
   global_State* g = G(L);
-  size_t h = luaS_hash(str, l);
+  /* storage seam: the ingested sub-range materializes exactly once,
+     here (Java: hash/copy loops over (b, off, len)) */
+  const char* s = str.data() + off;
+  size_t l = len;
+  size_t h = luaS_hash(s, l);
   if (l <= LUAI_MAXSHORTLEN)
   {
-    std::string_view sv(str, l);
+    std::string_view sv(s, l);
     global_State::InternKey key{sv, h};
     auto it = g->strt.find(key);
     if (it != g->strt.end())
@@ -115,12 +119,12 @@ TString* luaS_createstr(lua_State* L, const char* str, size_t l)
       return ts;
     }
     /* create new short string and intern it */
-    TString* ts = createstrobj(L, str, l, h);
+    TString* ts = createstrobj(L, s, l, h);
     g->strt.emplace(global_State::InternKey{ts->data.view(), h}, ts);
     return ts;
   }
   /* long string: no interning */
-  return createstrobj(L, str, l, h);
+  return createstrobj(L, s, l, h);
 }
 
 /*
@@ -169,11 +173,16 @@ void luaS_remove(lua_State* L, TString* ts)
 }
 
 /*
-** new string (with explicit length)
+** new string (whole view, or an explicit (off, len) sub-range)
 */
-TString* luaS_newlstr(lua_State* L, const char* str, size_t l)
+TString* luaS_newlstr(lua_State* L, std::string_view str)
 {
-  return luaS_createstr(L, str, l);
+  return luaS_createstr(L, str, 0, str.size());
+}
+
+TString* luaS_newlstr(lua_State* L, std::string_view str, size_t off, size_t len)
+{
+  return luaS_createstr(L, str, off, len);
 }
 
 /*
@@ -185,7 +194,7 @@ TString* luaS_newlstr(lua_State* L, const char* str, size_t l)
 */
 TString* luaS_new(lua_State* L, const char* str)
 {
-  return luaS_newlstr(L, str, strlen(str));
+  return luaS_newlstr(L, std::string_view{str, strlen(str)});
 }
 
 /*
@@ -195,7 +204,7 @@ TString* luaS_new(lua_State* L, const char* str)
 */
 TString* luaS_new(lua_State* L, const InternalString* str)
 {
-  return luaS_createstr(L, str->bytes(), str->size());
+  return luaS_createstr(L, str->view(), 0, str->size());
 }
 
 /*

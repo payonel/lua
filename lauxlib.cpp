@@ -609,20 +609,21 @@ LUALIB_API size_t luaL_prepbuffsize(luaL_Buffer* B, size_t sz)
   return prepbuff(B, sz);
 }
 
-LUALIB_API void luaL_addlstring(luaL_Buffer* B, const char* s, size_t l)
+LUALIB_API void luaL_addlstring(luaL_Buffer* B, std::string_view s,
+                                size_t off, size_t l)
 {
   if (l > 0)
-  { /* avoid 'memcpy' when 's' can be nullptr */
-    size_t off = prepbuff(B, l);
-    /* Java: System.arraycopy(s, 0, buf, off, l) */
-    memcpy(B->bldr.area().data() + off, s, l * sizeof(char));
+  {
+    size_t at = prepbuff(B, l);
+    /* Java: System.arraycopy(s, off, buf, at, l) */
+    memcpy(B->bldr.area().data() + at, s.data() + off, l * sizeof(char));
     luaL_addsize(B, l);
   }
 }
 
 LUALIB_API void luaL_addstring(luaL_Buffer* B, const HostString& s)
 {
-  luaL_addlstring(B, s.data(), s.size());
+  luaL_addlstring(B, s, 0, s.size());
 }
 
 LUALIB_API void luaL_pushresult(luaL_Buffer* B)
@@ -893,18 +894,20 @@ static const char* getS(lua_State*, void* ud, size_t* size)
   return ls->s;
 }
 
-LUALIB_API int luaL_loadbufferx(lua_State* L, const char* buff, size_t size,
+LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff,
                                 const HostString& name, const char* mode)
 {
   LoadS ls;
-  ls.s = buff;
-  ls.size = size;
+  /* stream seam: the reader holds the chunk as pointer+remaining
+     (category 5; Java: byte[] + offset in the ZIO struct) */
+  ls.s = buff.data();
+  ls.size = buff.size();
   return lua_load(L, getS, &ls, name, mode);
 }
 
 LUALIB_API int luaL_loadstring(lua_State* L, const char* s)
 {
-  return luaL_loadbufferx(L, s, strlen(s), s, "t");
+  return luaL_loadbufferx(L, std::string_view{s, strlen(s)}, s, "t");
 }
 
 /* }====================================================== */
@@ -1087,11 +1090,11 @@ LUALIB_API void luaL_addgsub(luaL_Buffer* b, const HostString& s,
   size_t wild;
   while ((wild = s.find(p, pos)) != HostString::npos)
   {
-    luaL_addlstring(b, s.data() + pos, wild - pos); /* push prefix */
+    luaL_addlstring(b, s, pos, wild - pos); /* push prefix */
     luaL_addstring(b, r);      /* push replacement in place of pattern */
     pos = wild + p.size();     /* continue after 'p' */
   }
-  luaL_addlstring(b, s.data() + pos, s.size() - pos); /* push last suffix */
+  luaL_addlstring(b, s, pos, s.size() - pos); /* push last suffix */
 }
 
 LUALIB_API const InternalString* luaL_gsub(lua_State* L, const HostString& s,
@@ -1330,7 +1333,7 @@ LUALIB_API int luaL_getmetatable(lua_State* L, const HostString& tname)
 
 LUALIB_API int luaL_loadbuffer(lua_State* L, const char* buff, size_t sz, const HostString& name)
 {
-  return luaL_loadbufferx(L, buff, sz, name, nullptr);
+  return luaL_loadbufferx(L, std::string_view{buff, sz}, name, nullptr);
 }
 
 LUALIB_API void luaL_pushfail(lua_State* L)

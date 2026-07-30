@@ -1169,7 +1169,7 @@ static void parlist(LexState* ls)
         if (ls->t.token == TK_NAME)
           new_varkind(ls, str_checkname(ls), RDKVAVAR);
         else
-          new_localvar(ls, luaX_newstring(ls, "" "(vararg table)", (sizeof("(vararg table)") / sizeof(char)) - 1));;
+          new_localvar(ls, luaX_newstring(ls, "(vararg table)"));;
         break;
       }
       default:
@@ -1199,7 +1199,7 @@ static void body(LexState* ls, expdesc* e, int ismethod, int line)
   checknext(ls, '(');
   if (ismethod)
   {
-    new_localvar(ls, luaX_newstring(ls, "" "self", (sizeof("self") / sizeof(char)) - 1));; /* create 'self' parameter */
+    new_localvar(ls, luaX_newstring(ls, "self"));; /* create 'self' parameter */
     adjustlocalvars(ls, 1);
   }
   parlist(ls);
@@ -1872,8 +1872,8 @@ static void fornum(LexState* ls, TString* varname, int line)
   /* fornum -> NAME = exp,exp[,exp] forbody */
   FuncState* fs = ls->fs;
   int base = fs->freereg;
-  new_localvar(ls, luaX_newstring(ls, "" "(for state)", (sizeof("(for state)") / sizeof(char)) - 1));;
-  new_localvar(ls, luaX_newstring(ls, "" "(for state)", (sizeof("(for state)") / sizeof(char)) - 1));;
+  new_localvar(ls, luaX_newstring(ls, "(for state)"));;
+  new_localvar(ls, luaX_newstring(ls, "(for state)"));;
   new_varkind(ls, varname, LOOPVARKIND); /* control variable */
   checknext(ls, '=');
   exp1(ls); /* initial value */
@@ -1899,9 +1899,9 @@ static void forlist(LexState* ls, TString* indexname)
   int line;
   int base = fs->freereg;
   /* create internal variables */
-  new_localvar(ls, luaX_newstring(ls, "" "(for state)", (sizeof("(for state)") / sizeof(char)) - 1));;  /* iterator function */
-  new_localvar(ls, luaX_newstring(ls, "" "(for state)", (sizeof("(for state)") / sizeof(char)) - 1));;  /* state */
-  new_localvar(ls, luaX_newstring(ls, "" "(for state)", (sizeof("(for state)") / sizeof(char)) - 1));;  /* closing var. (after swap) */
+  new_localvar(ls, luaX_newstring(ls, "(for state)"));;  /* iterator function */
+  new_localvar(ls, luaX_newstring(ls, "(for state)"));;  /* state */
+  new_localvar(ls, luaX_newstring(ls, "(for state)"));;  /* closing var. (after swap) */
   new_varkind(ls, indexname, LOOPVARKIND); /* control variable */
   /* other declared variables */
   while (testnext(ls, ','))

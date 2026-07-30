@@ -203,7 +203,7 @@ static int dofile(lua_State* L, const char* name)
 
 static int dostring(lua_State* L, const char* s, const char* name)
 {
-  return dochunk(L, luaL_loadbufferx(L, s, strlen(s), name, "t"));
+  return dochunk(L, luaL_loadbufferx(L, std::string_view{s, strlen(s)}, name, "t"));
 }
 
 /*
@@ -576,7 +576,7 @@ static int pushline(lua_State* L, int firstline)
   l = strlen(b);
   if (l > 0 && b[l - 1] == '\n') /* line ends with newline? */
     b[--l] = '\0';               /* remove it */
-  lua_pushlstring(L, b, l);
+  lua_pushlstring(L, std::string_view{b, l}, 0, l);
   lua_freeline(b);
   return 1;
 }
@@ -589,7 +589,7 @@ static int addreturn(lua_State* L)
 {
   lua_pushvalue(L, -1); /* duplicate original line */
   const InternalString* retline = lua_pushfstring(L, "return %s;");
-  int status = luaL_loadbufferx(L, retline->bytes(), retline->size(), "=stdin", "t");
+  int status = luaL_loadbufferx(L, retline->view(), "=stdin", "t");
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
   else
@@ -622,7 +622,7 @@ static int multiline(lua_State* L)
   checklocal(line);
   for (;;)
   {                                                             /* repeat until gets a complete statement */
-    int status = luaL_loadbufferx(L, line, len, "=stdin", "t"); /* try it */
+    int status = luaL_loadbufferx(L, std::string_view{line, len}, "=stdin", "t"); /* try it */
     if (!incomplete(L, status) || !pushline(L, 0))
       return status;                  /* should not or cannot try to add continuation line */
     lua_remove(L, -2);                /* remove error message (from incomplete line) */

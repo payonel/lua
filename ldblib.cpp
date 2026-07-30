@@ -175,7 +175,7 @@ static int db_getinfo(lua_State* L)
   lua_newtable(L); /* table to collect results */
   if ((options.find('S') != HostString::npos))
   {
-    lua_pushlstring(L, ar.source.data(), ar.source.size());
+    lua_pushlstring(L, ar.source, 0, ar.source.size());
     lua_setfield(L, -2, "source");
     settabss(L, "short_src", ar.short_src);
     settabsi(L, "linedefined", ar.linedefined);
@@ -458,7 +458,8 @@ static int db_gethook(lua_State* L)
     lua_rawget(L, -2); /* 1st result = hooktable[L1] */
     lua_remove(L, -2); /* remove hook table */
   }
-  lua_pushlstring(L, buff, unmakemask(mask, buff)); /* 2nd result = mask */
+  size_t masklen = unmakemask(mask, buff);
+  lua_pushlstring(L, std::string_view{buff, masklen}, 0, masklen); /* 2nd result = mask */
   lua_pushinteger(L, lua_gethookcount(L1));  /* 3rd result = count */
   return 3;
 }
@@ -472,7 +473,7 @@ static int db_debug(lua_State* L)
     if (fgets(buffer, sizeof(buffer), stdin) == nullptr ||
         strcmp(buffer, "cont\n") == 0)
       return 0;
-    if (luaL_loadbufferx(L, buffer, strlen(buffer), "=(debug command)", "t") ||
+    if (luaL_loadbufferx(L, std::string_view{buffer, strlen(buffer)}, "=(debug command)", "t") ||
         lua_pcall(L, 0, 0, 0))
       lua_writestringerror("%s\n", luaL_tolstring(L, -1, nullptr));
     lua_settop(L, 0); /* remove eventual returns */

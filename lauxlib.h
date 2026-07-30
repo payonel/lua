@@ -106,7 +106,7 @@ LUALIB_API int(luaL_loadfilex)(lua_State* L, const char* filename,
 
 LUALIB_API int luaL_loadfile(lua_State* L, const char* filename);
 
-LUALIB_API int(luaL_loadbufferx)(lua_State* L, const char* buff, size_t sz,
+LUALIB_API int(luaL_loadbufferx)(lua_State* L, std::string_view buff,
                                  const HostString& name, const char* mode);
 LUALIB_API int(luaL_loadstring)(lua_State* L, const char* s);
 
@@ -208,7 +208,8 @@ LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s);
 
 LUALIB_API void(luaL_buffinit)(lua_State* L, luaL_Buffer* B);
 LUALIB_API size_t(luaL_prepbuffsize) (luaL_Buffer* B, size_t sz);
-LUALIB_API void(luaL_addlstring)(luaL_Buffer* B, const char* s, size_t l);
+LUALIB_API void(luaL_addlstring)(luaL_Buffer* B, std::string_view s,
+                                 size_t off, size_t l);
 LUALIB_API void(luaL_addstring)(luaL_Buffer* B, const HostString& s);
 LUALIB_API void(luaL_addvalue)(luaL_Buffer* B);
 LUALIB_API void(luaL_pushresult)(luaL_Buffer* B);

@@ -154,14 +154,15 @@ static void setpath(lua_State* L, const char* fieldname,
     luaL_buffinit(L, &b);
     if (path < dftmark)
     {                                                        /* is there a prefix before ';;'? */
-      luaL_addlstring(&b, path, ((size_t)(dftmark - path))); /* add it */
+      luaL_addlstring(&b, std::string_view{path, len}, 0, ((size_t)(dftmark - path))); /* add it */
       luaL_addchar(&b, *LUA_PATH_SEP);
     }
     luaL_addstring(&b, dft); /* add default */
     if (dftmark < path + len - 2)
     { /* is there a suffix after ';;'? */
       luaL_addchar(&b, *LUA_PATH_SEP);
-      luaL_addlstring(&b, dftmark + 2, ((size_t)((path + len - 2) - dftmark)));
+      luaL_addlstring(&b, std::string_view{path, len}, ((size_t)(dftmark - path)) + 2,
+                      ((size_t)((path + len - 2) - dftmark)));
     }
     luaL_pushresult(&b);
   }
@@ -462,7 +463,7 @@ static int loadfunc(lua_State* L, const char* filename, const HostString& modnam
   if (mark != HostString::npos)
   {
     int stat;
-    lua_pushlstring(L, modname.data(), mark);
+    lua_pushlstring(L, modname, 0, mark);
     const InternalString* openfunc = lua_pushfstring(L, "luaopen_%s");
     stat = lookforfunc(L, filename, openfunc->c_str());
     if (stat != ERRFUNC)

@@ -888,13 +888,13 @@ void luaV_concat(lua_State* L, int total)
       { /* small result? use stack buffer */
         char buff[40];
         copy2buff(L, top, n, buff);
-        ts = luaS_newlstr(L, buff, tl);
+        ts = luaS_newlstr(L, std::string_view{buff, tl});
       }
       else
       { /* large result; heap buffer */
         char* buff = ((char*)(luaM_malloc_(L, ((size_t)(tl)) * sizeof(char), 0)));
         copy2buff(L, top, n, std::span<char>{buff, tl});
-        ts = luaS_newlstr(L, buff, tl);
+        ts = luaS_newlstr(L, std::string_view{buff, tl});
         luaM_free_(L, (buff), (tl) * sizeof(*(buff)));
       }
       setslots(L, top - n, ts); /* create result */

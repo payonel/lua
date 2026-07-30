@@ -238,18 +238,23 @@ public:
     bytes_[off] = c;
     commit(1);
   }
-  void append(const char* b, size_t n)
+  void append(std::string_view b)
+  {
+    append(b, 0, b.size());
+  }
+  void append(std::string_view b, size_t off, size_t n)
   {
     if (n > 0)
     {
-      size_t off = prep(n);
-      memcpy(&bytes_[off], b, n); /* Java: System.arraycopy(b, 0, buf, off, n) */
+      size_t at = prep(n);
+      /* Java: System.arraycopy(b, off, buf, at, n) */
+      memcpy(&bytes_[at], b.data() + off, n);
       commit(n);
     }
   }
   void append(const InternalString* s)
   {
-    append(s->bytes(), s->size());
+    append(s->view());
   }
 
   /* discard contents, keep capacity (builders are reused) */

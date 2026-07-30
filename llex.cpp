@@ -85,7 +85,7 @@ static inline void save_and_next(LexState* ls)
 void luaX_init(lua_State* L)
 {
   int i;
-  TString* e = luaS_newlstr(L, LUA_ENV, sizeof(LUA_ENV) - 1); /* create env name */
+  TString* e = luaS_newlstr(L, std::string_view{LUA_ENV, sizeof(LUA_ENV) - 1}); /* create env name */
   assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(e)));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
@@ -181,9 +181,14 @@ static TString* anchorstr(LexState* ls, TString* ts)
 /*
 ** Creates a new string and anchors it in scanner's table.
 */
-TString* luaX_newstring(LexState* ls, const char* str, size_t l)
+TString* luaX_newstring(LexState* ls, std::string_view str)
 {
-  return anchorstr(ls, luaS_newlstr(ls->L, str, l));
+  return anchorstr(ls, luaS_newlstr(ls->L, str));
+}
+
+TString* luaX_newstring(LexState* ls, std::string_view str, size_t off, size_t len)
+{
+  return anchorstr(ls, luaS_newlstr(ls->L, str, off, len));
 }
 
 /*
@@ -215,8 +220,8 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source,
   ls->source = source;
   /* all three strings here ("_ENV", "break", "global") were fixed,
      so they cannot be collected */
-  ls->envn = luaS_newlstr(L, LUA_ENV, sizeof(LUA_ENV) - 1); /* get env string */
-  ls->brkn = (luaS_newlstr(L, "" "break", (sizeof("break") / sizeof(char)) - 1)); /* get "break" string */
+  ls->envn = luaS_newlstr(L, std::string_view{LUA_ENV, sizeof(LUA_ENV) - 1}); /* get env string */
+  ls->brkn = luaS_newlstr(L, "break"); /* get "break" string */
   /* initialize buffer */
   ls->buff->reset();
 }
@@ -351,7 +356,7 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
       {
         save_and_next(ls); /* skip 2nd ']' */
         if (seminfo)
-          seminfo->ts = luaX_newstring(ls, ls->buff->view().data() + sep,
+          seminfo->ts = luaX_newstring(ls, ls->buff->view(), sep,
                                        ls->buff->size() - 2 * sep);
         return;
       }
@@ -560,7 +565,7 @@ static void read_string(LexState* ls, int del, Token* seminfo)
     }
   }
   save_and_next(ls); /* skip delimiter */
-  seminfo->ts = luaX_newstring(ls, ls->buff->view().data() + 1,
+  seminfo->ts = luaX_newstring(ls, ls->buff->view(), 1,
                                ls->buff->size() - 2);
 }
 
@@ -720,8 +725,7 @@ static int llex(LexState* ls, Token* seminfo)
           save_and_next(ls);
         } while (lislalnum(ls->current));
         /* find or create string */
-        ts = luaS_newlstr(ls->L, ls->buff->view().data(),
-                          ls->buff->size());
+        ts = luaS_newlstr(ls->L, ls->buff->view());
         if (isreserved(ts)) /* reserved word? */
           return ts->extra - 1 + FIRST_RESERVED;
         else

@@ -261,7 +261,8 @@ LUA_API void(lua_pushnil)(lua_State* L);
 LUA_API void(lua_pushnumber)(lua_State* L, lua_Number n);
 LUA_API void(lua_pushinteger)(lua_State* L, lua_Integer n);
 /* bytes push (deep copy; pairs with lua_tolstring) */
-LUA_API const char*(lua_pushlstring) (lua_State* L, const char* s, size_t len);
+LUA_API const char*(lua_pushlstring) (lua_State* L, std::string_view s,
+                                      size_t off, size_t len);
 /* text push: HostString converted at the boundary (deep copy) */
 LUA_API void(lua_pushstring) (lua_State* L, const HostString& s);
 LUA_API const InternalString*(lua_pushfstring) (lua_State* L, const char* fmt);

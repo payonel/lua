@@ -690,7 +690,7 @@ void luaO_tostring(lua_State* L, TValue* obj)
 {
   char buff[LUA_N2SBUFFSZ];
   unsigned len = luaO_tostringbuff(obj, buff);
-  setsvalue(L, obj, luaS_newlstr(L, buff, len));
+  setsvalue(L, obj, luaS_newlstr(L, std::string_view{buff, len}));
 }
 
 /*
@@ -727,7 +727,7 @@ static void pushbuff(lua_State* L, void* ud)
 {
   BuffFS* buff = ((BuffFS*)(ud));
   if (buff->err == 2) /* length overflow: mark truncation */
-    buff->bb.append("...", 3);
+    buff->bb.append("...");
   TString* ts = luaS_take(L, buff->bb.finish()); /* adopt the bytes */
   setslots(L, L->top, ts);
   L->top++;
@@ -748,7 +748,8 @@ static const InternalString* clearbuff(BuffFS* buff)
   return res;
 }
 
-static void addstr2buff(BuffFS* buff, const char* str, size_t slen)
+static void addstr2buff(BuffFS* buff, std::string_view str, size_t off,
+                        size_t slen)
 {
   if (buff->err) /* do nothing else after an error */
     return;
@@ -757,7 +758,12 @@ static void addstr2buff(BuffFS* buff, const char* str, size_t slen)
     buff->err = 2; /* doesn't add anything else; "..." marks it */
     return;
   }
-  buff->bb.append(str, slen);
+  buff->bb.append(str, off, slen);
+}
+
+static void addstr2buff(BuffFS* buff, std::string_view str)
+{
+  addstr2buff(buff, str, 0, str.size());
 }
 
 /*
@@ -767,7 +773,7 @@ static void addnum2buff(BuffFS* buff, TValue* num)
 {
   char numbuff[LUA_N2SBUFFSZ];
   unsigned len = luaO_tostringbuff(num, numbuff);
-  addstr2buff(buff, numbuff, len);
+  addstr2buff(buff, std::string_view{numbuff, len});
 }
 
 /*
@@ -866,10 +872,10 @@ const InternalString* luaO_pushvfstring(lua_State* L,
   initbuff(L, &buff);
   while ((e = f.find('%', pos)) != std::string_view::npos)
   {
-    addstr2buff(&buff, f.data() + pos, e - pos); /* add 'fmt' up to '%' */
+    addstr2buff(&buff, f, pos, e - pos); /* add 'fmt' up to '%' */
     if (e + 1 >= f.size())
     { /* format ends with a lone '%': keep it in the result */
-      addstr2buff(&buff, "%", 1);
+      addstr2buff(&buff, "%");
       pos = f.size();
       break;
     }
@@ -882,14 +888,14 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       if (args.arg[argn].tag == 'S')
       { /* engine string: counted bytes */
         const InternalString* is = args.arg[argn++].is;
-        addstr2buff(&buff, is->bytes(), is->size());
+        addstr2buff(&buff, is->view());
       }
       else
       { /* transitional zero-terminated form */
         const char* s = args.arg[argn++].s;
         if (s == nullptr)
           s = "(null)";
-        addstr2buff(&buff, s, strlen(s));
+        addstr2buff(&buff, std::string_view{s, strlen(s)});
       }
       break;
     }
@@ -897,7 +903,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     { /* an 'int' as a character */
       assert(argn < args.n && args.arg[argn].tag == 'c');
       char c = ((char)(args.arg[argn++].i));
-      addstr2buff(&buff, &c, sizeof(char));
+      addstr2buff(&buff, std::string_view{&c, sizeof(char)});
       break;
     }
     case 'd':
@@ -934,7 +940,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       std::to_chars_result res =
           std::to_chars(bf + 2, bf + LUA_N2SBUFFSZ, ((uintptr_t)(p)), 16);
       assert(res.ec == std::errc());
-      addstr2buff(&buff, bf, ((unsigned int)(res.ptr - bf)));
+      addstr2buff(&buff, std::string_view{bf, ((size_t)(res.ptr - bf))});
       break;
     }
     case 'U':
@@ -942,23 +948,24 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       char bf[UTF8BUFFSZ];
       assert(argn < args.n && args.arg[argn].tag == 'U');
       int len = luaO_utf8esc(bf, ((l_uint32)(args.arg[argn++].i)));
-      addstr2buff(&buff, bf + UTF8BUFFSZ - len, ((unsigned int)(len)));
+      addstr2buff(&buff, std::string_view{bf, UTF8BUFFSZ},
+                  ((size_t)(UTF8BUFFSZ - len)), ((unsigned int)(len)));
       break;
     }
     case '%':
     {
-      addstr2buff(&buff, "%", 1);
+      addstr2buff(&buff, "%");
       break;
     }
     default:
     {
-      addstr2buff(&buff, f.data() + e, 2); /* keep unknown format in the result */
+      addstr2buff(&buff, f, e, 2); /* keep unknown format in the result */
       break;
     }
     }
     pos = e + 2; /* skip '%' and the specifier */
   }
-  addstr2buff(&buff, f.data() + pos, f.size() - pos); /* rest of 'fmt' */
+  addstr2buff(&buff, f, pos, f.size() - pos); /* rest of 'fmt' */
   assert(argn == args.n);  /* all arguments consumed */
   return clearbuff(&buff); /* empty buffer into a new string */
 }

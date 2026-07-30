@@ -106,7 +106,9 @@ struct LexState
 LUAI_FUNC void luaX_init(lua_State* L);
 LUAI_FUNC void luaX_setinput(lua_State* L, LexState* ls, ZIO* z,
                              TString* source, int firstchar);
-LUAI_FUNC TString* luaX_newstring(LexState* ls, const char* str, size_t l);
+LUAI_FUNC TString* luaX_newstring(LexState* ls, std::string_view str);
+LUAI_FUNC TString* luaX_newstring(LexState* ls, std::string_view str,
+                                  size_t off, size_t len);
 LUAI_FUNC void luaX_next(LexState* ls);
 LUAI_FUNC int luaX_lookahead(LexState* ls);
 LUAI_FUNC l_noret luaX_syntaxerror(LexState* ls, const InternalString* s);

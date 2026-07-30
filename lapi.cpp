@@ -650,11 +650,12 @@ LUA_API void lua_pushinteger(lua_State* L, lua_Integer n)
 ** 'len' == 0 (as 's' can be nullptr in that case), due to later use of
 ** 'memcmp' and 'memcpy'.
 */
-LUA_API const char* lua_pushlstring(lua_State* L, const char* s, size_t len)
+LUA_API const char* lua_pushlstring(lua_State* L, std::string_view s,
+                                    size_t off, size_t len)
 {
   TString* ts;
   lua_lock(L);
-  ts = (len == 0) ? luaS_new(L, "") : luaS_newlstr(L, s, len);
+  ts = (len == 0) ? luaS_new(L, "") : luaS_newlstr(L, s, off, len);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -665,7 +666,7 @@ LUA_API const char* lua_pushlstring(lua_State* L, const char* s, size_t len)
 LUA_API void lua_pushstring(lua_State* L, const HostString& s)
 {
   lua_lock(L);
-  TString* ts = luaS_newlstr(L, s.data(), s.size()); /* boundary deep copy */
+  TString* ts = luaS_newlstr(L, s); /* boundary deep copy */
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -857,7 +858,7 @@ static int auxgetstr(lua_State* L, const TValue* t, const HostString& k)
 {
   lu_byte tag;
   TValue res;
-  TString* str = luaS_newlstr(L, k.data(), k.size()); /* boundary copy */
+  TString* str = luaS_newlstr(L, k); /* boundary copy */
   if (t->tt_ != ctb(LUA_VTABLE))
     tag = LUA_VNOTABLE;
   else
@@ -1111,7 +1112,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
 static void auxsetstr(lua_State* L, const TValue* t, const HostString& k)
 {
   int hres;
-  TString* str = luaS_newlstr(L, k.data(), k.size()); /* boundary copy */
+  TString* str = luaS_newlstr(L, k); /* boundary copy */
   api_checkpop(L, 1);
   if (t->tt_ != ctb(LUA_VTABLE))
     hres = HNOTATABLE;
@@ -1630,7 +1631,7 @@ LUA_API void lua_concat(lua_State* L, int n)
   }
   else
   {                                                   /* nothing to concatenate */
-    setslots(L, L->top, luaS_newlstr(L, "", 0)); /* push empty string */
+    setslots(L, L->top, luaS_newlstr(L, "")); /* push empty string */
     api_incr_top(L);
   }
   lua_unlock(L);

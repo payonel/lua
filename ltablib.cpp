@@ -193,7 +193,7 @@ static int tconcat(lua_State* L)
   for (; i < last; i++)
   {
     addfield(L, &b, i);
-    luaL_addlstring(&b, sep, lsep);
+    luaL_addlstring(&b, std::string_view{sep, lsep}, 0, lsep);
   }
   if (i == last) /* add last value (if interval was not empty) */
     addfield(L, &b, i);
