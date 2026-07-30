@@ -49,8 +49,14 @@ static void dumpBlock(DumpState* D, const void* b, size_t size)
 {
   if (D->status == 0)
   { /* do not write anything after an error */
+    /* writer boundary: engine bytes as a read-only view, valid only
+       during the call; default view (null data) signals end of dump
+       (Java: byte[] argument, null = end) */
+    std::string_view block = (b != nullptr)
+        ? std::string_view{(const char*)(b), size}
+        : std::string_view{};
     lua_unlock(D->L);
-    D->status = (*D->writer)(D->L, b, size, D->data);
+    D->status = (*D->writer)(D->L, block, D->data);
     lua_lock(D->L);
     D->offset += size;
   }

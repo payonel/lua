@@ -418,7 +418,7 @@ static int luaB_loadfile(lua_State* L)
 /*
 ** Reader for generic 'load' function.
 */
-static const char* generic_reader(lua_State* L, void* ud, size_t* size)
+static std::string_view generic_reader(lua_State* L, void* ud)
 {
   int* firstcall = ((int*)(ud));
   luaL_checkstack(L, 2, "too many nested functions");
@@ -429,17 +429,13 @@ static const char* generic_reader(lua_State* L, void* ud, size_t* size)
   lua_pushvalue(L, 1); /* get function */
   lua_call(L, 0, 1);   /* call it */
   if (lua_isnil(L, -1))
-  {
-    *size = 0;
-    return nullptr;
-  }
+    return {}; /* end of chunk */
   else if (l_unlikely(!lua_isstring(L, -1)))
     luaL_error(L, "reader function must return a string");
-  /* stream-reader boundary: return the payload as pointer+size
-     (category 5; Java: the reader hands back byte[] + length) */
-  std::string_view sv = lua_tolstring(L, -1);
-  *size = sv.size();
-  return sv.data();
+  /* stream-reader boundary: the result stays anchored on the stack
+     until the next call, so the view it backs remains valid
+     (category 5; Java: the reader hands back a byte[]) */
+  return lua_tolstring(L, -1);
 }
 
 static int luaB_load(lua_State* L)

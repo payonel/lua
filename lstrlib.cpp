@@ -236,7 +236,7 @@ struct str_Writer
   luaL_Buffer B;
 };
 
-static int writer(lua_State* L, const void* b, size_t size, void* ud)
+static int writer(lua_State* L, std::string_view b, void* ud)
 {
   struct str_Writer* state = (struct str_Writer*) ud;
   if (!state->init)
@@ -244,13 +244,13 @@ static int writer(lua_State* L, const void* b, size_t size, void* ud)
     state->init = 1;
     luaL_buffinit(L, &state->B);
   }
-  if (b == nullptr)
-  {                             /* finishing dump? */
+  if (b.data() == nullptr)
+  {                             /* finishing dump? (Java: null byte[]) */
     luaL_pushresult(&state->B); /* push result */
     lua_replace(L, 1);          /* move it to reserved slot */
   }
   else
-    luaL_addlstring(&state->B, std::string_view{(const char*) b, size}, 0, size);
+    luaL_addlstring(&state->B, b, 0, b.size());
   return 0;
 }
 

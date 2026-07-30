@@ -18,17 +18,15 @@
 
 int luaZ_fill(ZIO* z)
 {
-  size_t size;
   lua_State* L = z->L;
-  const char* buff;
   lua_unlock(L);
-  buff = z->reader(L, z->data, &size);
+  /* reader boundary: the host hands back a view of its own buffer
+     (Java: byte[]); empty means end of chunk */
+  std::string_view chunk = z->reader(L, z->data);
   lua_lock(L);
-  if (buff == nullptr || size == 0)
+  if (chunk.empty())
     return EOZ;
-  /* reader boundary: adopt the piece as a view (Java: the reader hands
-     back a byte[] the ZIO scans by offset) */
-  z->chunk = std::string_view{buff, size};
+  z->chunk = chunk;
   z->pos = 1; /* consuming the first byte, returned below */
   return ((unsigned char)(z->chunk[0]));
 }

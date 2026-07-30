@@ -745,13 +745,14 @@ struct LoadF
   char buff[BUFSIZ]; /* area for reading file */
 };
 
-static const char* getF(lua_State*, void* ud, size_t* size)
+static std::string_view getF(lua_State*, void* ud)
 {
   LoadF* lf = (LoadF*) ud;
   if (lf->n > 0)
-  {                /* are there pre-read characters to be read? */
-    *size = lf->n; /* return them (chars already in buffer) */
-    lf->n = 0;     /* no more pre-read characters */
+  {                          /* are there pre-read characters to be read? */
+    size_t n = lf->n;        /* return them (chars already in buffer) */
+    lf->n = 0;               /* no more pre-read characters */
+    return std::string_view{lf->buff, n};
   }
   else
   { /* read a block from file */
@@ -759,10 +760,10 @@ static const char* getF(lua_State*, void* ud, size_t* size)
        'getF' called 'fread', it might still wait for user input.
        The next check avoids this problem. */
     if (feof(lf->f))
-      return nullptr;
-    *size = fread(lf->buff, 1, sizeof(lf->buff), lf->f); /* read block */
+      return {}; /* end of chunk */
+    size_t n = fread(lf->buff, 1, sizeof(lf->buff), lf->f); /* read block */
+    return std::string_view{lf->buff, n};
   }
-  return lf->buff;
 }
 
 static int errfile(lua_State* L, const char* what, int fnameindex)
@@ -879,18 +880,15 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const char* filename,
 
 struct LoadS
 {
-  const char* s;
-  size_t size;
+  std::string_view chunk; /* unread remainder of the chunk (byte view) */
 };
 
-static const char* getS(lua_State*, void* ud, size_t* size)
+static std::string_view getS(lua_State*, void* ud)
 {
   LoadS* ls = (LoadS*) ud;
-  if (ls->size == 0)
-    return nullptr;
-  *size = ls->size;
-  ls->size = 0;
-  return ls->s;
+  std::string_view chunk = ls->chunk;
+  ls->chunk = {}; /* whole chunk handed over in one piece */
+  return chunk;
 }
 
 LUALIB_API int luaL_loadbufferi(lua_State* L, std::string_view buff,
@@ -898,10 +896,9 @@ LUALIB_API int luaL_loadbufferi(lua_State* L, std::string_view buff,
                                 const InternalString* mode)
 {
   LoadS ls;
-  /* stream boundary: the reader holds the chunk as pointer+remaining
-     (category 5; Java: byte[] + offset in the ZIO struct) */
-  ls.s = buff.data();
-  ls.size = buff.size();
+  /* stream boundary: the reader hands the whole chunk over as one
+     byte view (category 5; Java: the byte[] itself) */
+  ls.chunk = buff;
   return lua_loadi(L, getS, &ls, name, mode);
 }
 

@@ -117,11 +117,20 @@ using HostString = std::string;
 typedef int (*lua_KFunction)(lua_State* L, int status, lua_KContext ctx);
 
 /*
-** Type for functions that read/write blocks when loading/dumping Lua chunks
+** Types for functions that read/write blocks when loading/dumping Lua
+** chunks. BYTES half of the API (chunks may be binary): string_view is
+** a byte view here, never text — no HostString (Java: byte[], not
+** String).
+** Reader: the host hands back a view of a buffer IT owns, which must
+** stay valid until the next reader call; an empty view signals end of
+** chunk. (Java: byte[] result, null/empty = end.)
+** Writer: the host is handed a read-only view of engine-owned bytes,
+** valid only during the call; a default view (null data) signals end
+** of dump. (Java: byte[] argument, null = end of dump.)
 */
-typedef const char* (*lua_Reader)(lua_State* L, void* ud, size_t* sz);
+typedef std::string_view (*lua_Reader)(lua_State* L, void* ud);
 
-typedef int (*lua_Writer)(lua_State* L, const void* p, size_t sz, void* ud);
+typedef int (*lua_Writer)(lua_State* L, std::string_view b, void* ud);
 
 /*
 ** Type for memory-allocation functions
