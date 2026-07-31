@@ -1,17 +1,11 @@
-ifdef OBJ_DIR
-TOP_DIR         = .
-TEST_DIR        = tests/libs
-else
-TOP_DIR         = ../..
-TEST_DIR        = .
-endif
+# Include-only fragment: built from the top-level makefile, which provides
+# TOP_DIR, OBJ_DIR, CXX, and CXXFLAGS. Not meant to be run standalone.
 
-OBJ_DIR        ?= $(TOP_DIR)/obj
-CXXFLAGS       ?= -MMD
+TEST_DIR        = tests/libs
 TEST_CXXFLAGS   = -fPIC -shared -I$(TOP_DIR) -I$(TEST_DIR)
 TEST_OBJS       = lib1.so lib11.so lib2.so lib21.so lib2-v2.so
-TEST_DEP_FILES  = $(addprefix $(OBJ_DIR)/, $(TEST_OBJS:.so=.so.d))
 TEST_BUILD_FILES= $(addprefix $(TEST_DIR)/, $(TEST_OBJS))
+TEST_DEP_FILES  = $(addsuffix .d, $(addprefix $(OBJ_DIR)/, $(TEST_BUILD_FILES)))
 
 test_all: $(TEST_BUILD_FILES)
 

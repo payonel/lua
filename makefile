@@ -57,8 +57,6 @@ LUA_T         =lua
 
 all: $(LUA_T)
 
-export TOP_DIR OBJ_DIR
-
 include tests/libs/build.mk
 
 debug: VARIANT=debug
