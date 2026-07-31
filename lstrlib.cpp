@@ -23,6 +23,8 @@
 
 #include "lua.h"
 
+#include "lua_internal.h"
+
 #include "internal_string.h"
 #include "lauxlib.h"
 #include "llimits.h"
@@ -303,7 +305,7 @@ static void trymt(lua_State* L, std::string_view mtkey, std::string_view opname)
   {
     HostString t1 = luaL_typename(L, -2);
     HostString t2 = luaL_typename(L, -1);
-    lua_pushstring(L, HostString{opname});
+    lua_pushlstring(L, opname, 0, opname.size());
     lua_pushstring(L, t1);
     lua_pushstring(L, t2);
     luaL_error(L, "attempt to %s a '%s' with a '%s'");
@@ -1467,7 +1469,7 @@ static void checkformat(lua_State* L, std::string_view form,
   }
   if (!(p + 1 == form.size() && isalpha(sv_byteat(form, p))))
   { /* did not go to the end? */
-    lua_pushstring(L, HostString{form});
+    lua_pushlstring(L, form, 0, form.size());
     luaL_error(L, "invalid conversion specification: '%s'");
   }
 }
@@ -1909,7 +1911,7 @@ static int str_format(lua_State* L)
       }
       default:
       { /* also treat cases 'pnLlh' */
-        lua_pushstring(L, HostString{formv});
+        lua_pushlstring(L, formv, 0, formv.size());
         return luaL_error(L, "invalid conversion '%s' to 'format'");
       }
       }

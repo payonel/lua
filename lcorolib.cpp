@@ -11,6 +11,8 @@
 
 #include "lua.h"
 
+#include "lua_internal.h"
+
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
@@ -28,16 +30,16 @@ static lua_State* getco(lua_State* L)
 */
 static int auxresume(lua_State* L, lua_State* co, int narg)
 {
-  int status, nres;
   if (l_unlikely(!lua_checkstack(co, narg)))
   {
     lua_pushliteral(L, "too many arguments to resume");
     return -1; /* error flag */
   }
   lua_xmove(L, co, narg);
-  status = lua_resume(co, L, narg, &nres);
-  if (l_likely(status == LUA_OK || status == LUA_YIELD))
+  lua_ResumeResult rr = lua_resume(co, L, narg);
+  if (l_likely(rr.status == LUA_OK || rr.status == LUA_YIELD))
   {
+    int nres = rr.nres;
     if (l_unlikely(!lua_checkstack(L, nres + 1)))
     {
       lua_pop(co, nres); /* remove results anyway */
@@ -140,9 +142,8 @@ static int auxstatus(lua_State* L, lua_State* co)
       return COS_YIELD;
     case LUA_OK:
     {
-      lua_Debug ar;
-      if (lua_getstack(co, 0, &ar)) /* does it have frames? */
-        return COS_NORM;            /* it is running */
+      if (lua_getstack(co, 0)) /* does it have frames? */
+        return COS_NORM;       /* it is running */
       else if (lua_gettop(co) == 0)
         return COS_DEAD;
       else

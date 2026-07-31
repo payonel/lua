@@ -124,7 +124,7 @@ static int os_remove(lua_State* L)
 {
   HostString filename = luaL_checkstring(L, 1);
   errno = 0;
-  return luaL_fileresult(L, remove(filename.c_str()) == 0, &filename);
+  return luaL_fileresult(L, remove(filename.c_str()) == 0, filename);
 }
 
 static int os_rename(lua_State* L)
@@ -132,7 +132,7 @@ static int os_rename(lua_State* L)
   HostString fromname = luaL_checkstring(L, 1);
   HostString toname = luaL_checkstring(L, 2);
   errno = 0;
-  return luaL_fileresult(L, rename(fromname.c_str(), toname.c_str()) == 0, nullptr);
+  return luaL_fileresult(L, rename(fromname.c_str(), toname.c_str()) == 0, std::nullopt);
 }
 
 static int os_tmpname(lua_State* L)
@@ -226,10 +226,10 @@ static int getboolfield(lua_State* L, const HostString& key)
 
 static int getfield(lua_State* L, const HostString& key, int d, int delta)
 {
-  int isnum;
   int t = lua_getfield(L, -1, key); /* get field and its type */
-  lua_Integer res = lua_tointegerx(L, -1, &isnum);
-  if (!isnum)
+  std::optional<lua_Integer> ores = lua_tointegerx(L, -1);
+  lua_Integer res = ores.value_or(0);
+  if (!ores)
   {                                /* field is not an integer? */
     if (l_unlikely(t != LUA_TNIL))
     { /* some other value? */
@@ -280,9 +280,9 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
     }
   }
   lua_pushlstring(L, fmt, pos, fmt.size() - pos);
-  const InternalString* msg =
+  const HostString msg =
       lua_pushfstring(L, "invalid conversion specifier '%%%s'");
-  luaL_argerror(L, 1, HostString{msg->view()});
+  luaL_argerror(L, 1, msg);
   return pos; /* to avoid warnings */
 }
 
@@ -298,7 +298,7 @@ constexpr int SIZETIMEFMT = 250;
 
 static int os_date(lua_State* L)
 {
-  std::string_view sfmt = luaL_optlstring(L, 1, "%c");
+  std::string_view sfmt = *luaL_optlstring(L, 1, "%c");
   size_t sp = 0; /* scan offset into the format */
   time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
   struct tm tmr, *stm;
@@ -385,12 +385,12 @@ static int os_setlocale(lua_State* L)
 {
   static const int cat[] = {LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY,
                             LC_NUMERIC, LC_TIME};
-  static const InternalString* const catnames[] = {
-      lit<"all">(), lit<"collate">(), lit<"ctype">(), lit<"monetary">(),
-      lit<"numeric">(), lit<"time">()};
+  static constexpr std::string_view catnames[] = {
+      "all", "collate", "ctype", "monetary", "numeric", "time"};
+  static constexpr std::string_view defcat = "all";
   int nol = lua_isnoneornil(L, 1); /* absent = query current locale */
   HostString l = nol ? HostString() : HostString(luaL_checkstring(L, 1));
-  int op = luaL_checkoption(L, 2, lit<"all">(), catnames);
+  int op = luaL_checkoption(L, 2, defcat, catnames);
   const char* res = setlocale(cat[op], nol ? nullptr : l.c_str());
   if (res != nullptr)
     lua_pushstring(L, res);

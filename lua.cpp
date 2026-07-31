@@ -111,7 +111,7 @@ static int report(lua_State* L, int status)
 {
   if (status != LUA_OK)
   {
-    HostString msg = lua_isstring(L, -1) ? lua_tostring(L, -1)
+    HostString msg = lua_isstring(L, -1) ? *lua_tostring(L, -1)
                                          : HostString("(error message not a string)");
     l_message(progname, msg);
     lua_pop(L, 1); /* remove message */
@@ -126,7 +126,7 @@ static int msghandler(lua_State* L)
 {
   HostString msg;
   if (lua_isstring(L, 1))
-    msg = lua_tostring(L, 1);
+    msg = *lua_tostring(L, 1);
   else
   {                                          /* error object not a string */
     if (luaL_callmeta(L, 1, "__tostring") && /* does it have a metamethod */
@@ -135,11 +135,10 @@ static int msghandler(lua_State* L)
     else
     {
       lua_pushstring(L, luaL_typename(L, 1));
-      const InternalString* m = lua_pushfstring(L, "(error object is a %s value)");
-      msg = HostString(m->bytes(), m->size());
+      msg = lua_pushfstring(L, "(error object is a %s value)");
     }
   }
-  luaL_traceback(L, L, &msg, 1); /* append a standard traceback */
+  luaL_traceback(L, L, msg, 1); /* append a standard traceback */
   return 1;                             /* return the traceback */
 }
 
@@ -197,9 +196,9 @@ static int dochunk(lua_State* L, int status)
   return report(L, status);
 }
 
-static int dofile(lua_State* L, const HostString* name)
+static int dofile(lua_State* L, const std::optional<HostString>& name)
 {
-  return dochunk(L, luaL_loadfilex(L, name, nullptr)); /* nullptr = stdin */
+  return dochunk(L, luaL_loadfilex(L, name, std::nullopt)); /* nullopt = stdin */
 }
 
 static int dostring(lua_State* L, const HostString& s, const HostString& name)
@@ -264,11 +263,11 @@ static int handle_script(lua_State* L, char** argv)
   if (strcmp(fname, "-") == 0 && strcmp(argv[-1], "--") != 0)
     fname = nullptr; /* stdin */
   if (fname == nullptr)
-    status = luaL_loadfilex(L, nullptr, nullptr); /* stdin */
+    status = luaL_loadfilex(L, std::nullopt, std::nullopt); /* stdin */
   else
   {
     HostString scriptname(fname); /* host boundary: adopt the argv text */
-    status = luaL_loadfilex(L, &scriptname, nullptr);
+    status = luaL_loadfilex(L, scriptname, std::nullopt);
   }
   if (status == LUA_OK)
   {
@@ -422,7 +421,7 @@ static int handle_luainit(lua_State* L)
   if (!init.empty() && init[0] == '@')
   {
     HostString fname = init.substr(1);
-    return dofile(L, &fname);
+    return dofile(L, fname);
   }
   else
     return dostring(L, init, "=" + name);
@@ -602,8 +601,8 @@ static int pushline(lua_State* L, int firstline)
 static int addreturn(lua_State* L)
 {
   lua_pushvalue(L, -1); /* duplicate original line */
-  const InternalString* retline = lua_pushfstring(L, "return %s;");
-  int status = luaL_loadbufferx(L, retline->view(), "=stdin", "t");
+  const HostString retline = lua_pushfstring(L, "return %s;");
+  int status = luaL_loadbufferx(L, retline, "=stdin", "t");
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
   else
@@ -663,7 +662,7 @@ static int loadline(lua_State* L)
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
-  HostString line = lua_tostring(L, 1);
+  HostString line = *lua_tostring(L, 1);
   if (!line.empty())            /* non empty? */
     lua_saveline(line.c_str()); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */
@@ -685,8 +684,8 @@ static void l_print(lua_State* L)
     if (lua_pcall(L, n, 0, 0) != LUA_OK)
     {
       lua_pushvalue(L, -1); /* error message is the argument */
-      const InternalString* m = lua_pushfstring(L, "error calling 'print' (%s)");
-      l_message(progname, HostString(m->bytes(), m->size())); /* boundary copy */
+      const HostString m = lua_pushfstring(L, "error calling 'print' (%s)");
+      l_message(progname, m);
     }
   }
 }
@@ -767,7 +766,7 @@ static int pmain(lua_State* L)
       doREPL(L); /* do read-eval-print loop */
     }
     else
-      dofile(L, nullptr); /* executes stdin as a file */
+      dofile(L, std::nullopt); /* executes stdin as a file */
   }
   lua_pushboolean(L, 1); /* signal no errors */
   return 1;

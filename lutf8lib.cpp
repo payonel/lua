@@ -13,6 +13,8 @@
 
 #include "lua.h"
 
+#include "lua_internal.h"
+
 #include "internal_string.h"
 #include "lauxlib.h"
 #include "llimits.h"

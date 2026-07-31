@@ -14,6 +14,8 @@
 
 #include "lua.h"
 
+#include "lua_internal.h"
+
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
@@ -47,8 +49,8 @@ static int luaB_warn(lua_State* L)
   for (i = 2; i <= n; i++)
     luaL_checkstring(L, i); /* make sure all arguments are strings */
   for (i = 1; i < n; i++)   /* compose warning */
-    lua_warning(L, lua_tostring(L, i), 1);
-  lua_warning(L, lua_tostring(L, n), 0); /* close warning */
+    lua_warning(L, *lua_tostring(L, i), 1);
+  lua_warning(L, *lua_tostring(L, n), 0); /* close warning */
   return 0;
 }
 
@@ -216,14 +218,15 @@ static int pushmode(lua_State* L, int oldmode)
 
 static int luaB_collectgarbage(lua_State* L)
 {
-  static const InternalString* const opts[] = {
-      lit<"stop">(), lit<"restart">(), lit<"collect">(),
-      lit<"count">(), lit<"step">(), lit<"isrunning">(), lit<"generational">(),
-      lit<"incremental">(), lit<"param">(), lit<"setlimit">(), lit<"getlimit">()};
+  static constexpr std::string_view opts[] = {
+      "stop", "restart", "collect",
+      "count", "step", "isrunning", "generational",
+      "incremental", "param", "setlimit", "getlimit"};
   static const char optsnum[] = {LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
                                  LUA_GCCOUNT, LUA_GCSTEP, LUA_GCISRUNNING, LUA_GCGEN, LUA_GCINC,
                                  LUA_GCPARAM, 100, 101};
-  int o = optsnum[luaL_checkoption(L, 1, lit<"collect">(), opts)];
+  static constexpr std::string_view defopt = "collect";
+  int o = optsnum[luaL_checkoption(L, 1, defopt, opts)];
   switch (o)
   {
   case 100: /* setlimit */
@@ -270,13 +273,13 @@ static int luaB_collectgarbage(lua_State* L)
   }
   case LUA_GCPARAM:
   {
-    static const InternalString* const params[] = {
-        lit<"minormul">(), lit<"majorminor">(), lit<"minormajor">(),
-        lit<"pause">(), lit<"stepmul">(), lit<"stepsize">()};
+    static constexpr std::string_view params[] = {
+        "minormul", "majorminor", "minormajor",
+        "pause", "stepmul", "stepsize"};
     static const char pnum[] = {
         LUA_GCPMINORMUL, LUA_GCPMAJORMINOR, LUA_GCPMINORMAJOR,
         LUA_GCPPAUSE, LUA_GCPSTEPMUL, LUA_GCPSTEPSIZE};
-    int p = pnum[luaL_checkoption(L, 2, nullptr, params)];
+    int p = pnum[luaL_checkoption(L, 2, std::nullopt, params)];
     lua_Integer value = luaL_optinteger(L, 3, -1);
     lua_pushinteger(L, lua_gc(L, o, 0, p, (int) value));
     return 1;
@@ -401,11 +404,16 @@ static const InternalString* getMode(lua_State* L, int idx)
 
 static int luaB_loadfile(lua_State* L)
 {
-  int isnil = lua_isnoneornil(L, 1); /* absent name = stdin */
-  HostString fname = isnil ? HostString() : HostString(luaL_checkstring(L, 1));
+  std::optional<HostString> fname; /* nullopt = stdin */
+  if (!lua_isnoneornil(L, 1))
+    fname = luaL_checkstring(L, 1);
   const InternalString* mode = getMode(L, 2);
   int env = (!lua_isnone(L, 3) ? 3 : 0); /* 'env' index or 0 if no 'env' */
-  int status = luaL_loadfilex(L, isnil ? nullptr : &fname, mode);
+  /* boundary: mode crosses into the public loader as host text */
+  std::optional<HostString> hmode;
+  if (mode != nullptr)
+    hmode = HostString(mode->bytes(), mode->size());
+  int status = luaL_loadfilex(L, fname, hmode);
   return load_aux(L, status, env);
 }
 
@@ -471,10 +479,11 @@ static int dofilecont(lua_State* L, int d1, lua_KContext d2)
 
 static int luaB_dofile(lua_State* L)
 {
-  int isnil = lua_isnoneornil(L, 1); /* absent name = stdin */
-  HostString fname = isnil ? HostString() : HostString(luaL_checkstring(L, 1));
+  std::optional<HostString> fname; /* nullopt = stdin */
+  if (!lua_isnoneornil(L, 1))
+    fname = luaL_checkstring(L, 1);
   lua_settop(L, 1);
-  if (l_unlikely(luaL_loadfilex(L, isnil ? nullptr : &fname, nullptr) != LUA_OK))
+  if (l_unlikely(luaL_loadfilex(L, fname, std::nullopt) != LUA_OK))
     return lua_error(L);
   lua_callk(L, 0, LUA_MULTRET, 0, dofilecont);
   return dofilecont(L, 0, 0);

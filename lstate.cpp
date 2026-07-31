@@ -418,11 +418,11 @@ LUA_API void lua_close(lua_State* L)
   close_state(L);
 }
 
-void luaE_warning(lua_State* L, const HostString& msg, int tocont)
+void luaE_warning(lua_State* L, std::string_view msg, int tocont)
 {
   lua_WarnFunction wf = G(L)->warnf;
   if (wf != nullptr)
-    wf(G(L)->ud_warn, msg, tocont);
+    wf(G(L)->ud_warn, HostString{msg}, tocont); /* host boundary: deep copy */
 }
 
 /*
@@ -431,18 +431,12 @@ void luaE_warning(lua_State* L, const HostString& msg, int tocont)
 void luaE_warnerror(lua_State* L, const InternalString* where)
 {
   StkId errobj = L->top - 1; /* error object */
-  HostString msg;
-  if ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
-  {
-    /* engine -> host: deep copy at the warn boundary */
-    const InternalString& s = slottsval(L, errobj)->data;
-    msg = HostString(s.bytes(), s.size());
-  }
-  else
-    msg = "error object is not a string";
+  std::string_view msg = ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
+                             ? slottsval(L, errobj)->data.view()
+                             : std::string_view("error object is not a string");
   /* produce warning "error in %s (%s)" (where, msg) */
   luaE_warning(L, "error in ", 1);
-  luaE_warning(L, HostString(where->bytes(), where->size()), 1);
+  luaE_warning(L, where->view(), 1);
   luaE_warning(L, " (", 1);
   luaE_warning(L, msg, 1);
   luaE_warning(L, ")", 0);

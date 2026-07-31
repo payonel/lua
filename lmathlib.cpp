@@ -78,10 +78,9 @@ static int math_atan(lua_State* L)
 
 static int math_toint(lua_State* L)
 {
-  int valid;
-  lua_Integer n = lua_tointegerx(L, 1, &valid);
-  if (l_likely(valid))
-    lua_pushinteger(L, n);
+  std::optional<lua_Integer> n = lua_tointegerx(L, 1);
+  if (l_likely(n.has_value()))
+    lua_pushinteger(L, *n);
   else
   {
     luaL_checkany(L, 1);

@@ -16,6 +16,8 @@
 
 #include "lua.h"
 
+#include "lua_internal.h"
+
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
@@ -194,7 +196,7 @@ static int io_fclose(lua_State* L)
 {
   LStream* p = tolstream(L);
   errno = 0;
-  return luaL_fileresult(L, (fclose(p->f) == 0), nullptr);
+  return luaL_fileresult(L, (fclose(p->f) == 0), std::nullopt);
 }
 
 static LStream* newfile(lua_State* L)
@@ -220,12 +222,12 @@ static void opencheck(lua_State* L, const HostString& fname, const HostString& m
 static int io_open(lua_State* L)
 {
   HostString filename = luaL_checkstring(L, 1);
-  HostString mode = luaL_optstring(L, 2, "r");
+  HostString mode = *luaL_optstring(L, 2, "r");
   LStream* p = newfile(L);
   luaL_argcheck(L, l_checkmode(mode), 2, "invalid mode");
   errno = 0;
   p->f = fopen(filename.c_str(), mode.c_str()); /* host boundary */
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, &filename) : 1;
+  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename) : 1;
 }
 
 /*
@@ -241,13 +243,13 @@ static int io_pclose(lua_State* L)
 static int io_popen(lua_State* L)
 {
   HostString filename = luaL_checkstring(L, 1);
-  HostString mode = luaL_optstring(L, 2, "r");
+  HostString mode = *luaL_optstring(L, 2, "r");
   LStream* p = newprefile(L);
   luaL_argcheck(L, l_checkmodep(mode.c_str()), 2, "invalid mode");
   errno = 0;
   p->f = l_popen(L, filename.c_str(), mode.c_str()); /* host boundary */
   p->closef = &io_pclose;
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, &filename) : 1;
+  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename) : 1;
 }
 
 static int io_tmpfile(lua_State* L)
@@ -255,7 +257,7 @@ static int io_tmpfile(lua_State* L)
   LStream* p = newfile(L);
   errno = 0;
   p->f = tmpfile();
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, nullptr) : 1;
+  return (p->f == nullptr) ? luaL_fileresult(L, 0, std::nullopt) : 1;
 }
 
 static FILE* getiofile(lua_State* L, const HostString& findex)
@@ -278,7 +280,7 @@ static int g_iofile(lua_State* L, const HostString& f, const HostString& mode)
   {
     if (lua_isstring(L, 1)) /* filename given (may be a number, too) */
     {
-      HostString filename = lua_tostring(L, 1);
+      HostString filename = *lua_tostring(L, 1);
       opencheck(L, filename, mode);
     }
     else
@@ -593,7 +595,7 @@ static int g_read(lua_State* L, FILE* f, int first)
     }
   }
   if (ferror(f))
-    return luaL_fileresult(L, 0, nullptr);
+    return luaL_fileresult(L, 0, std::nullopt);
   if (!success)
   {
     lua_pop(L, 1);    /* remove last result */
@@ -657,14 +659,14 @@ static int g_write(lua_State* L, FILE* f, int arg)
   errno = 0;
   for (; nargs--; arg++)
   { /* for each argument */
-    char buff[LUA_N2SBUFFSZ];
     const char* s;
-    size_t numbytes;                                /* bytes written in one call to 'fwrite' */
-    size_t len = lua_numbertocstring(L, arg, buff); /* try as a number */
-    if (len > 0)
+    size_t len;
+    size_t numbytes; /* bytes written in one call to 'fwrite' */
+    std::optional<HostString> numtxt = lua_numbertocstring(L, arg); /* try as a number */
+    if (numtxt)
     { /* did conversion work (value was a number)? */
-      s = buff;
-      len--;
+      s = numtxt->data(); /* host write boundary (fwrite) */
+      len = numtxt->size();
     }
     else
     { /* must be a string */
@@ -676,7 +678,7 @@ static int g_write(lua_State* L, FILE* f, int arg)
     totalbytes += numbytes;
     if (numbytes < len)
     { /* write error? */
-      int n = luaL_fileresult(L, 0, nullptr);
+      int n = luaL_fileresult(L, 0, std::nullopt);
       lua_pushinteger(L, ((lua_Integer)(totalbytes)));
       return n + 1; /* return fail, error msg., error code, and counter */
     }
@@ -699,10 +701,10 @@ static int f_write(lua_State* L)
 static int f_seek(lua_State* L)
 {
   static const int mode[] = {SEEK_SET, SEEK_CUR, SEEK_END};
-  static const InternalString* const modenames[] = {
-      lit<"set">(), lit<"cur">(), lit<"end">()};
+  static constexpr std::string_view modenames[] = {"set", "cur", "end"};
+  static constexpr std::string_view defmode = "cur";
   FILE* f = tofile(L);
-  int op = luaL_checkoption(L, 2, lit<"cur">(), modenames);
+  int op = luaL_checkoption(L, 2, defmode, modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
   l_seeknum offset = (l_seeknum) p3;
   luaL_argcheck(L, (lua_Integer) offset == p3, 3,
@@ -710,7 +712,7 @@ static int f_seek(lua_State* L)
   errno = 0;
   op = l_fseek(f, offset, mode[op]);
   if (l_unlikely(op))
-    return luaL_fileresult(L, 0, nullptr); /* error */
+    return luaL_fileresult(L, 0, std::nullopt); /* error */
   else
   {
     lua_pushinteger(L, (lua_Integer) l_ftell(f));
@@ -721,21 +723,20 @@ static int f_seek(lua_State* L)
 static int f_setvbuf(lua_State* L)
 {
   static const int mode[] = {_IONBF, _IOFBF, _IOLBF};
-  static const InternalString* const modenames[] = {
-      lit<"no">(), lit<"full">(), lit<"line">()};
+  static constexpr std::string_view modenames[] = {"no", "full", "line"};
   FILE* f = tofile(L);
-  int op = luaL_checkoption(L, 2, nullptr, modenames);
+  int op = luaL_checkoption(L, 2, std::nullopt, modenames);
   lua_Integer sz = luaL_optinteger(L, 3, LUAL_BUFFERSIZE);
   int res;
   errno = 0;
   res = setvbuf(f, nullptr, mode[op], (size_t) sz);
-  return luaL_fileresult(L, res == 0, nullptr);
+  return luaL_fileresult(L, res == 0, std::nullopt);
 }
 
 static int aux_flush(lua_State* L, FILE* f)
 {
   errno = 0;
-  return luaL_fileresult(L, fflush(f) == 0, nullptr);
+  return luaL_fileresult(L, fflush(f) == 0, std::nullopt);
 }
 
 static int f_flush(lua_State* L)

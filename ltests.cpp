@@ -14,6 +14,8 @@
 
 #include "ltests.h"
 
+#include "lua_internal.h"
+
 #include "lapi.h"
 #include "lauxlib.h"
 #include "lcode.h"
@@ -99,7 +101,7 @@ static void badexit(const char* fmt, const char* s1, const char* s2)
 static int tpanic(lua_State* L)
 {
   HostString msg = (lua_type(L, -1) == LUA_TSTRING)
-                       ? lua_tostring(L, -1)
+                       ? *lua_tostring(L, -1)
                        : HostString("error object is not a string");
   return (badexit("PANIC: unprotected error in call to Lua API (%s)\n",
                   msg.c_str(), nullptr),
@@ -156,7 +158,7 @@ static void warnf(void* ud, const HostString& msg, int tocont)
     else
     {
       badexit("Unhandled warning in store mode: %s\naborting...\n",
-              lua_tostring(L, -1).c_str(), buff);
+              lua_tostring(L, -1)->c_str(), buff);
     }
     lua_lock(L);
     switch (mode)
@@ -1169,21 +1171,22 @@ static int gc_printobj(lua_State* L)
    mode); the span carries the size, so no sentinel is needed and a
    miss can no longer scan past the array (the old lst[i] loop had no
    terminator here) */
-static const InternalString* const statenames[] = {
-    lit<"propagate">(), lit<"enteratomic">(), lit<"atomic">(),
-    lit<"sweepallgc">(), lit<"sweepfinobj">(), lit<"sweeptobefnz">(),
-    lit<"sweepend">(), lit<"callfin">(), lit<"pause">(), lit<"">()};
+static constexpr std::string_view statenames[] = {
+    "propagate", "enteratomic", "atomic",
+    "sweepallgc", "sweepfinobj", "sweeptobefnz",
+    "sweepend", "callfin", "pause", ""};
 
 static int gc_state(lua_State* L)
 {
   static const int states[] = {
       GCSpropagate, GCSenteratomic, GCSatomic, GCSswpallgc, GCSswpfinobj,
       GCSswptobefnz, GCSswpend, GCScallfin, GCSpause, -1};
-  int option = states[luaL_checkoption(L, 1, lit<"">(), statenames)];
+  static constexpr std::string_view defstate = "";
+  int option = states[luaL_checkoption(L, 1, defstate, statenames)];
   global_State* g = G(L);
   if (option == -1)
   {
-    lua_pushistringref(L, statenames[g->gcstate]);
+    lua_pushlstring(L, statenames[g->gcstate], 0, statenames[g->gcstate].size());
     return 1;
   }
   else
@@ -1346,7 +1349,7 @@ static int gc_query(lua_State* L)
   lua_pushstring(L, g->gckind == KGC_INC        ? "inc"
                     : g->gckind == KGC_GENMAJOR ? "genmajor"
                                                 : "genminor");
-  lua_pushistringref(L, statenames[g->gcstate]);
+  lua_pushlstring(L, statenames[g->gcstate], 0, statenames[g->gcstate].size());
   lua_pushinteger(L, ((lua_Integer)(gettotalbytes(g))));
   lua_pushinteger(L, ((lua_Integer)(g->GCdebt)));
   lua_pushinteger(L, ((lua_Integer)(g->GCmarked)));
@@ -1440,17 +1443,17 @@ static int upvalue(lua_State* L)
   luaL_checktype(L, 1, LUA_TFUNCTION);
   if (lua_isnone(L, 3))
   {
-    const InternalString* name = lua_getupvalue(L, 1, n);
-    if (name == nullptr)
+    std::optional<HostString> name = lua_getupvalue(L, 1, n);
+    if (!name)
       return 0;
-    lua_pushlstring(L, name->view(), 0, name->size());
+    lua_pushstring(L, *name);
     return 2;
   }
   else
   {
-    const InternalString* name = lua_setupvalue(L, 1, n);
-    if (name != nullptr)
-      lua_pushlstring(L, name->view(), 0, name->size());
+    std::optional<HostString> name = lua_setupvalue(L, 1, n);
+    if (name)
+      lua_pushstring(L, *name);
     else
       lua_pushnil(L);
     return 1;
@@ -1522,7 +1525,7 @@ static int makeseed(lua_State* L)
 static int newstate(lua_State* L)
 {
   void* ud;
-  lua_Alloc f = lua_getallocf(L, &ud);
+  lua_Allocator a = lua_getallocf(L); lua_Alloc f = a.f; ud = a.ud;
   lua_State* L1 = lua_newstate(f, ud, 0);
   if (L1)
   {
@@ -1627,8 +1630,8 @@ static int checkpanic(lua_State* L)
   void* ud;
   lua_State* L1;
   HostString code = luaL_checkstring(L, 1);
-  lua_Alloc f = lua_getallocf(L, &ud);
-  b.paniccode = luaL_optstring(L, 2, "");
+  lua_Allocator a = lua_getallocf(L); lua_Alloc f = a.f; ud = a.ud;
+  b.paniccode = *luaL_optstring(L, 2, "");
   b.L = L;
   L1 = lua_newstate(f, ud, 0); /* create new state */
   if (L1 == nullptr)
@@ -1901,8 +1904,10 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     {
       int sz = getnum_aux(L, L1, &sc);
       HostString msg = getstring_aux(L, &sc);
-      /* empty msg tests 'luaL_checkstack' with no message */
-      luaL_checkstack(L1, sz, msg);
+      /* harness convention: empty msg tests 'luaL_checkstack' with no
+         message (nullopt at the API) */
+      luaL_checkstack(L1, sz,
+                      msg.empty() ? std::optional<HostString>{} : msg);
     }
     else if (inst == "rawcheckstack")
     {
@@ -1962,9 +1967,9 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       int a = getnum_aux(L, L1, &sc);
       int b = getnum_aux(L, L1, &sc);
       int c = getnum_aux(L, L1, &sc);
-      luaL_gsub(L1, lua_tostring(L1, a),
-                lua_tostring(L1, b),
-                lua_tostring(L1, c));
+      luaL_gsub(L1, *lua_tostring(L1, a),
+                *lua_tostring(L1, b),
+                *lua_tostring(L1, c));
     }
     else if (inst == "insert")
     {
@@ -2017,7 +2022,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     else if (inst == "loadfile")
     {
       HostString fn = luaL_checkstring(L1, getnum_aux(L, L1, &sc));
-      luaL_loadfilex(L1, &fn, lit<"t">());
+      luaL_loadfilex(L1, fn, "t");
     }
     else if (inst == "loadstring")
     {
@@ -2136,21 +2141,21 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     }
     else if (inst == "pushfstringI")
     {
-      HostString fmt = lua_tostring(L, -2);
+      HostString fmt = *lua_tostring(L, -2);
       if (fmtnargs(fmt.c_str()) > 0)
         lua_pushinteger(L1, lua_tointeger(L, -1));
       lua_pushfstring(L1, fmt.c_str());
     }
     else if (inst == "pushfstringS")
     {
-      HostString fmt = lua_tostring(L, -2);
+      HostString fmt = *lua_tostring(L, -2);
       if (fmtnargs(fmt.c_str()) > 0)
         lua_pushstring(L1, lua_tostring(L, -1));
       lua_pushfstring(L1, fmt.c_str());
     }
     else if (inst == "pushfstringP")
     {
-      HostString fmt = lua_tostring(L, -2);
+      HostString fmt = *lua_tostring(L, -2);
       if (fmtnargs(fmt.c_str()) > 0)
       {
         if (lua_islightcfunction(L, -1))
@@ -2206,14 +2211,13 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     else if (inst == "resume")
     {
       int i = getindex_aux(L, L1, &sc);
-      int nres;
-      status = lua_resume(lua_tothread(L1, i), L, getnum_aux(L, L1, &sc), &nres);
+      status = lua_resume(lua_tothread(L1, i), L, getnum_aux(L, L1, &sc)).status;
     }
     else if (inst == "traceback")
     {
       HostString msg(getstring_aux(L, &sc)); /* host boundary copy */
       int level = getnum_aux(L, L1, &sc);
-      luaL_traceback(L1, L1, &msg, level);
+      luaL_traceback(L1, L1, msg, level);
     }
     else if (inst == "threadstatus")
     {
@@ -2350,7 +2354,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
         lua_pushnil(L1);
       else
       {
-        HostString s = lua_tostring(L1, i);
+        HostString s = *lua_tostring(L1, i);
         lua_pushstring(L1, s);
         assert(s == lua_tostring(L1, -1)); /* round-trips through the value */
       }
@@ -2434,7 +2438,7 @@ static int testC(lua_State* L)
 
 static int Cfunc(lua_State* L)
 {
-  HostString script = lua_tostring(L, lua_upvalueindex(1));
+  HostString script = *lua_tostring(L, lua_upvalueindex(1));
   return runC(L, L, script);
 }
 
@@ -2444,7 +2448,7 @@ static int Cfunck(lua_State* L, int status, lua_KContext ctx)
   lua_setglobal(L, "status");
   lua_pushinteger(L, ((lua_Integer)(ctx)));
   lua_setglobal(L, "ctx");
-  HostString script = lua_tostring(L, ((int)(ctx)));
+  HostString script = *lua_tostring(L, ((int)(ctx)));
   return runC(L, L, script);
 }
 
@@ -2474,7 +2478,7 @@ static void Chook(lua_State* L, lua_Debug* ar)
   lua_getfield(L, LUA_REGISTRYINDEX, "C_HOOK");
   lua_pushlightuserdata(L, L);
   lua_gettable(L, -2);                    /* get C_HOOK[L] (script saved by sethookaux) */
-  HostString scpt = lua_tostring(L, -1);  /* (a copy: string will be popped) */
+  HostString scpt = *lua_tostring(L, -1);  /* (a copy: string will be popped) */
   lua_pop(L, 2);                          /* remove C_HOOK and script */
   lua_pushistringref(L, events[ar->event]); /* may be used by script */
   lua_pushinteger(L, ar->currentline);    /* may be used by script */
@@ -2530,10 +2534,10 @@ static int sethook(lua_State* L)
 
 static int coresume(lua_State* L)
 {
-  int status, nres;
   lua_State* co = lua_tothread(L, 1);
   luaL_argcheck(L, co, 1, "coroutine expected");
-  status = lua_resume(co, L, 0, &nres);
+  lua_ResumeResult rr = lua_resume(co, L, 0);
+  int status = rr.status;
   if (status != LUA_OK && status != LUA_YIELD)
   {
     lua_pushboolean(L, 0);
@@ -2633,7 +2637,7 @@ static void checkfinalmem(void)
 int luaB_opentests(lua_State* L)
 {
   void* ud;
-  lua_Alloc f = lua_getallocf(L, &ud);
+  lua_Allocator a = lua_getallocf(L); lua_Alloc f = a.f; ud = a.ud;
   lua_atpanic(L, &tpanic);
   lua_setwarnf(L, &warnf, L);
   lua_pushboolean(L, 0);

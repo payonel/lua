@@ -182,24 +182,23 @@ LUA_API int lua_gethookcount(lua_State* L)
   return L->basehookcount;
 }
 
-LUA_API int lua_getstack(lua_State* L, int level, lua_Debug* ar)
+LUA_API std::optional<lua_Debug> lua_getstack(lua_State* L, int level)
 {
-  int status;
   CallInfo* ci;
   if (level < 0)
-    return 0; /* invalid (negative) level */
+    return std::nullopt; /* invalid (negative) level */
   lua_lock(L);
   for (ci = L->ci; level > 0 && ci != &L->base_ci; ci = ci->previous)
     level--;
   if (level == 0 && ci != &L->base_ci)
   { /* level found? */
-    status = 1;
-    ar->i_ci = ci;
+    lua_unlock(L);
+    lua_Debug ar{};
+    ar.i_ci = ci;
+    return ar;
   }
-  else
-    status = 0; /* no such level */
   lua_unlock(L);
-  return status;
+  return std::nullopt; /* no such level */
 }
 
 static const InternalString* upvalname(const Proto* p, int uv)
@@ -255,7 +254,7 @@ const InternalString* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* p
   return name;
 }
 
-LUA_API const InternalString* lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
+LUA_API std::optional<HostString> lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
 {
   const InternalString* name;
   lua_lock(L);
@@ -280,10 +279,12 @@ LUA_API const InternalString* lua_getlocal(lua_State* L, const lua_Debug* ar, in
     }
   }
   lua_unlock(L);
-  return name;
+  if (name == nullptr)
+    return std::nullopt;
+  return HostString(name->bytes(), name->size()); /* boundary copy */
 }
 
-LUA_API const InternalString* lua_setlocal(lua_State* L, const lua_Debug* ar, int n)
+LUA_API std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug* ar, int n)
 {
   StkId pos = 0; /* to avoid warnings */
   const InternalString* name;
@@ -296,7 +297,9 @@ LUA_API const InternalString* lua_setlocal(lua_State* L, const lua_Debug* ar, in
     L->top--; /* pop value */
   }
   lua_unlock(L);
-  return name;
+  if (name == nullptr)
+    return std::nullopt;
+  return HostString(name->bytes(), name->size()); /* boundary copy */
 }
 
 static void funcinfo(lua_Debug* ar, Closure* cl)
@@ -456,12 +459,14 @@ static int auxgetinfo(lua_State* L, std::string_view what, size_t wpos,
   return status;
 }
 
-LUA_API int lua_getinfo(lua_State* L, const HostString& options, lua_Debug* ar)
+LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options,
+                                             const lua_Debug& arin)
 {
   int status;
   Closure* cl;
   CallInfo* ci;
   StkId func; /* slot of the function value (see note below for '>') */
+  lua_Debug ar = arin; /* filled copy is the return (no out-params) */
   std::string_view what{options}; /* walked by offset */
   size_t wpos = 0;
   lua_lock(L);
@@ -475,7 +480,7 @@ LUA_API int lua_getinfo(lua_State* L, const HostString& options, lua_Debug* ar)
   }
   else
   {
-    ci = ar->i_ci;
+    ci = ar.i_ci;
     func = ci->func;
     assert((slottag(L, func) & NOVARIANT_MASK) == LUA_TFUNCTION);
   }
@@ -486,7 +491,7 @@ LUA_API int lua_getinfo(lua_State* L, const HostString& options, lua_Debug* ar)
   }
   else
     cl = nullptr;
-  status = auxgetinfo(L, what, wpos, ar, cl, ci);
+  status = auxgetinfo(L, what, wpos, &ar, cl, ci);
   if (what.find('f', wpos) != std::string_view::npos)
   {
     copyslot(L, L->top, func);
@@ -495,7 +500,9 @@ LUA_API int lua_getinfo(lua_State* L, const HostString& options, lua_Debug* ar)
   if (what.find('L', wpos) != std::string_view::npos)
     collectvalidlines(L, cl);
   lua_unlock(L);
-  return status;
+  if (!status)
+    return std::nullopt; /* invalid option */
+  return ar;
 }
 
 /*

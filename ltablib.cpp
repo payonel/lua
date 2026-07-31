@@ -27,9 +27,9 @@ constexpr int TAB_L = 4; /* length */
 constexpr int TAB_RW = (TAB_R | TAB_W); /* read/write */
 
 
-static int checkfield(lua_State* L, const HostString& key, int n)
+static int checkfield(lua_State* L, std::string_view key, int n)
 {
-  lua_pushstring(L, key);
+  lua_pushlstring(L, key, 0, key.size());
   return (lua_rawget(L, -n) != LUA_TNIL);
 }
 
@@ -185,7 +185,7 @@ static int tconcat(lua_State* L)
 {
   luaL_Buffer b;
   lua_Integer last = aux_getn(L, 1, TAB_R);
-  std::string_view sep = luaL_optlstring(L, 2, "");
+  std::string_view sep = *luaL_optlstring(L, 2, "");
   lua_Integer i = luaL_optinteger(L, 3, 1);
   last = luaL_optinteger(L, 4, last);
   luaL_buffinit(L, &b);

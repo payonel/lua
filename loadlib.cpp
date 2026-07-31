@@ -140,9 +140,9 @@ static void setpath(lua_State* L, const HostString& fieldname,
 {
   lua_pushstring(L, envname);
   lua_pushstring(L, LUA_VERSUFFIX.data());
-  const InternalString* nver = lua_pushfstring(L, "%s%s");
+  const HostString nver = lua_pushfstring(L, "%s%s");
   /* getenv is system ABI: char* in and out, converted at the call */
-  const char* epath = getenv(nver->c_str());                 /* try versioned name */
+  const char* epath = getenv(nver.c_str());                 /* try versioned name */
   if (epath == nullptr)                                      /* no versioned environment variable? */
     epath = getenv(envname.c_str());                         /* try unversioned name */
   if (epath == nullptr || noenv(L)) /* no environment variable? */
@@ -346,8 +346,7 @@ static int searchpath(lua_State* L, HostString name,
   /* separator is non-empty and appears in 'name'? */
   if (!sep.empty() && name.find(sep) != HostString::npos)
   { /* replace it by 'dirsep' (result stays anchored on the stack) */
-    const InternalString* r = luaL_gsub(L, name, sep, dirsep);
-    name = HostString(r->bytes(), r->size());
+    name = luaL_gsub(L, name, sep, dirsep);
   }
   luaL_buffinit(L, &buff);
   /* add path to the buffer, replacing marks ('?') with the file name */
@@ -374,7 +373,7 @@ static int searchpath(lua_State* L, HostString name,
     }
   }
   luaL_pushresult(&buff);                    /* push path to create error message */
-  pusherrornotfound(L, lua_tostring(L, -1)); /* create error message */
+  pusherrornotfound(L, *lua_tostring(L, -1)); /* create error message */
   return 0; /* not found */
 }
 
@@ -382,8 +381,8 @@ static int ll_searchpath(lua_State* L)
 {
   int found = searchpath(L, luaL_checkstring(L, 1),
                          luaL_checkstring(L, 2),
-                         luaL_optstring(L, 3, "."),
-                         luaL_optstring(L, 4, LUA_DIRSEP));
+                         *luaL_optstring(L, 3, "."),
+                         *luaL_optstring(L, 4, LUA_DIRSEP));
   if (found)
     return 1;
   else
@@ -405,7 +404,7 @@ static int findfile(lua_State* L, const HostString& name,
     lua_pushstring(L, pname);
     luaL_error(L, "'package.%s' must be a string");
   }
-  HostString path = lua_tostring(L, -1);
+  HostString path = *lua_tostring(L, -1);
   return searchpath(L, name, path, ".", dirsep);
 }
 
@@ -430,8 +429,8 @@ static int searcher_Lua(lua_State* L)
   HostString name = luaL_checkstring(L, 1);
   if (!findfile(L, name, "path", LUA_LSUBSEP))
     return 1; /* module not found in this path (error message pushed) */
-  HostString filename = lua_tostring(L, -1);
-  return checkload(L, (luaL_loadfilex(L, &filename, nullptr) == LUA_OK), filename);
+  HostString filename = *lua_tostring(L, -1);
+  return checkload(L, (luaL_loadfilex(L, filename, std::nullopt) == LUA_OK), filename);
 }
 
 /*
@@ -444,23 +443,22 @@ static int searcher_Lua(lua_State* L)
 */
 static int loadfunc(lua_State* L, const HostString& filename, const HostString& modname0)
 {
-  const InternalString* r = luaL_gsub(L, modname0, ".", LUA_OFSEP);
-  HostString modname(r->bytes(), r->size());
+  HostString modname = luaL_gsub(L, modname0, ".", LUA_OFSEP);
   size_t mark = modname.find(*LUA_IGMARK);
   if (mark != HostString::npos)
   {
     int stat;
     lua_pushlstring(L, modname, 0, mark);
-    const InternalString* openfunc = lua_pushfstring(L, "luaopen_%s");
-    /* symbol is host text at the dlsym boundary: deep copy */
-    stat = lookforfunc(L, filename, HostString(openfunc->bytes(), openfunc->size()));
+    const HostString openfunc = lua_pushfstring(L, "luaopen_%s");
+    /* symbol is host text at the dlsym boundary */
+    stat = lookforfunc(L, filename, openfunc);
     if (stat != ERRFUNC)
       return stat;
     modname = modname.substr(mark + 1); /* else go ahead and try old-style name */
   }
   lua_pushstring(L, modname);
-  const InternalString* openfunc = lua_pushfstring(L, "luaopen_%s");
-  return lookforfunc(L, filename, HostString(openfunc->bytes(), openfunc->size()));
+  const HostString openfunc = lua_pushfstring(L, "luaopen_%s");
+  return lookforfunc(L, filename, openfunc);
 }
 
 static int searcher_C(lua_State* L)
@@ -468,7 +466,7 @@ static int searcher_C(lua_State* L)
   HostString name = luaL_checkstring(L, 1);
   if (!findfile(L, name, "cpath", LUA_CSUBSEP))
     return 1; /* module not found in this path (error message pushed) */
-  HostString filename = lua_tostring(L, -1);
+  HostString filename = *lua_tostring(L, -1);
   return checkload(L, (loadfunc(L, filename, name) == 0), filename);
 }
 
@@ -481,7 +479,7 @@ static int searcher_Croot(lua_State* L)
     return 0; /* is root */
   if (!findfile(L, name.substr(0, p), "cpath", LUA_CSUBSEP))
     return 1; /* root not found (error message pushed) */
-  HostString filename = lua_tostring(L, -1);
+  HostString filename = *lua_tostring(L, -1);
   if ((stat = loadfunc(L, filename, name)) != 0)
   {
     if (stat != ERRFUNC)
