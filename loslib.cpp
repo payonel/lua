@@ -16,6 +16,7 @@
 #include "lua.h"
 
 #include "lauxlib.h"
+#include "lua_internal.h"
 #include "llimits.h"
 #include "lualib.h"
 
@@ -107,10 +108,10 @@ constexpr int LUA_TMPNAMBUFSIZE = 32;
 static int os_execute(lua_State* L)
 {
   int nocmd = lua_isnoneornil(L, 1);
-  HostString cmd = nocmd ? HostString() : HostString(luaL_checkstring(L, 1));
+  const InternalString* cmd = nocmd ? nullptr : luaL_checkistring(L, 1);
   int stat;
   errno = 0;
-  stat = l_system(nocmd ? nullptr : cmd.c_str()); /* host boundary */
+  stat = l_system(nocmd ? nullptr : cmd->c_str()); /* OS edge (sanctioned c_str) */
   if (!nocmd)
     return luaL_execresult(L, stat);
   else
@@ -122,17 +123,17 @@ static int os_execute(lua_State* L)
 
 static int os_remove(lua_State* L)
 {
-  HostString filename = luaL_checkstring(L, 1);
+  const InternalString* filename = luaL_checkistring(L, 1);
   errno = 0;
-  return luaL_fileresult(L, remove(filename.c_str()) == 0, filename);
+  return luaL_fileresulti(L, remove(filename->c_str()) == 0, filename->view());
 }
 
 static int os_rename(lua_State* L)
 {
-  HostString fromname = luaL_checkstring(L, 1);
-  HostString toname = luaL_checkstring(L, 2);
+  const InternalString* fromname = luaL_checkistring(L, 1);
+  const InternalString* toname = luaL_checkistring(L, 2);
   errno = 0;
-  return luaL_fileresult(L, rename(fromname.c_str(), toname.c_str()) == 0, std::nullopt);
+  return luaL_fileresulti(L, rename(fromname->c_str(), toname->c_str()) == 0, {});
 }
 
 static int os_tmpname(lua_State* L)
@@ -148,7 +149,7 @@ static int os_tmpname(lua_State* L)
 
 static int os_getenv(lua_State* L)
 {
-  const char* v = getenv(luaL_checkstring(L, 1).c_str()); /* host boundary */
+  const char* v = getenv(luaL_checkistring(L, 1)->c_str()); /* OS edge (sanctioned c_str) */
   if (v != nullptr)
     lua_pushstring(L, v);
   else
@@ -280,9 +281,9 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
     }
   }
   lua_pushlstring(L, fmt, pos, fmt.size() - pos);
-  const HostString msg =
-      lua_pushfstring(L, "invalid conversion specifier '%%%s'");
-  luaL_argerror(L, 1, msg);
+  lua_pushfstring(L, "invalid conversion specifier '%%%s'");
+  /* message anchored on the stack; hand it on as consumer text */
+  luaL_argerror(L, 1, HostString(lua_tolstring(L, -1)));
   return pos; /* to avoid warnings */
 }
 
@@ -298,7 +299,7 @@ constexpr int SIZETIMEFMT = 250;
 
 static int os_date(lua_State* L)
 {
-  std::string_view sfmt = *luaL_optlstring(L, 1, "%c");
+  std::string_view sfmt = luaL_optlstring(L, 1, "%c");
   size_t sp = 0; /* scan offset into the format */
   time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
   struct tm tmr, *stm;
@@ -389,9 +390,9 @@ static int os_setlocale(lua_State* L)
       "all", "collate", "ctype", "monetary", "numeric", "time"};
   static constexpr std::string_view defcat = "all";
   int nol = lua_isnoneornil(L, 1); /* absent = query current locale */
-  HostString l = nol ? HostString() : HostString(luaL_checkstring(L, 1));
+  const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
   int op = luaL_checkoption(L, 2, defcat, catnames);
-  const char* res = setlocale(cat[op], nol ? nullptr : l.c_str());
+  const char* res = setlocale(cat[op], nol ? nullptr : l->c_str()); /* OS edge */
   if (res != nullptr)
     lua_pushstring(L, res);
   else

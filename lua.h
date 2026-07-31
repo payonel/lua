@@ -102,7 +102,7 @@ typedef LUA_KCONTEXT lua_KContext;
 typedef int (*lua_CFunction)(lua_State* L);
 
 /*
-** HostString — the host platform's text type (see internal_string.h).
+** HostString — the host platform's text type (see host_string.h).
 ** This is the TEXT half of the public API: string parameters are
 ** taken as const HostString& and converted to engine strings exactly
 ** at the boundary; string results are returned as HostString BY VALUE
@@ -110,7 +110,7 @@ typedef int (*lua_CFunction)(lua_State* L);
 ** (lua_pushlstring/lua_tolstring) carries binary payloads losslessly.
 ** In the Java port HostString is java.lang.String.
 */
-using HostString = std::string;
+#include "host_string.h"
 
 /*
 ** Type for continuation functions
@@ -228,7 +228,8 @@ LUA_API void*(lua_touserdata) (lua_State* L, int idx);
 LUA_API lua_State*(lua_tothread) (lua_State* L, int idx);
 LUA_API const void*(lua_topointer) (lua_State* L, int idx);
 
-std::string lua_funcaddress(lua_State* L, int idx);
+/* diagnostic text for a light C function (port-specific; consumer text) */
+HostString lua_funcaddress(lua_State* L, int idx);
 
 /*
 ** Comparison and arithmetic functions

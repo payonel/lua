@@ -96,3 +96,79 @@ const InternalString* luaL_toistring(lua_State* L, int idx);
 int luaL_loadbufferi(lua_State* L, std::string_view buff,
                      const InternalString* name,
                      const InternalString* mode);
+
+/* engine-string form of file load: nullptr filename = stdin,
+   nullptr mode = default "bt" */
+int luaL_loadfilei(lua_State* L, const InternalString* filename,
+                   const InternalString* mode);
+
+/* engine-byte field access (keys are engine bytes, not host text) */
+int lua_getfieldi(lua_State* L, int idx, std::string_view k);
+void lua_setfieldi(lua_State* L, int idx, std::string_view k);
+
+/* engine-byte form of lua_funcaddress (std::string as byte container) */
+std::string lua_funcaddressi(lua_State* L, int idx);
+
+/* internal form of lua_typename: the static engine string */
+const InternalString* lua_typenamei(lua_State* L, int tp);
+
+/* number->text into a caller buffer (>= LUA_N2SBUFFSZ bytes; the
+   official out-param shape). Null view = value is not a number. */
+std::string_view lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff);
+
+/* byte form of luaL_fileresult: null-view fname = no file name */
+int luaL_fileresulti(lua_State* L, int stat, std::string_view fname);
+
+/* byte forms of the gsub helpers; luaL_gsubi pushes the result and
+   returns a BORROWED view (valid while the result stays on the stack) */
+struct luaL_Buffer;
+void luaL_addgsubi(luaL_Buffer* b, std::string_view s,
+                   std::string_view p, std::string_view r);
+std::string_view luaL_gsubi(lua_State* L, std::string_view s,
+                            std::string_view p, std::string_view r);
+
+/*
+** ===============================================================
+** Internal debug interface (RULED 2026-07-31: lua_Debug split).
+** lua_Debug is the CONSUMER-facing record — HostString fields, the
+** host "out param". InternalDebug is the engine-side twin, shaped
+** like the original upstream struct: string_view fields pointing at
+** internal data (static literals, Proto sources, engine strings —
+** borrowed, valid for the duration of the debug call) and a value
+** buffer for short_src. null view = absent (the original char* NULL
+** convention; the consumer record uses empty-HostString instead).
+** Internal code (ldblib, lauxlib traceback/funcname/argerror) must
+** use these i-forms; the public HostString forms are thin wrappers
+** that convert at the boundary.
+** ===============================================================
+*/
+struct InternalDebug
+{
+  int event = 0;
+  std::string_view name;     /* (n) null = no name available */
+  std::string_view namewhat; /* (n) 'global'|'local'|'field'|'method'; null = no info */
+  std::string_view what;     /* (S) 'Lua', 'C', 'main', 'tail' */
+  std::string_view source;   /* (S) engine/static bytes */
+  int currentline = 0;       /* (l) */
+  int linedefined = 0;       /* (S) */
+  int lastlinedefined = 0;   /* (S) */
+  unsigned char nups = 0;    /* (u) */
+  unsigned char nparams = 0; /* (u) */
+  char isvararg = 0;         /* (u) */
+  unsigned char extraargs = 0; /* (t) */
+  char istailcall = 0;         /* (t) */
+  int ftransfer = 0;           /* (r) */
+  int ntransfer = 0;           /* (r) */
+  char short_src[LUA_IDSIZE] = {0}; /* (S) value buffer (luaO_chunkid) */
+  struct CallInfo* i_ci = nullptr;  /* active function */
+};
+
+std::optional<InternalDebug> lua_getstacki(lua_State* L, int level);
+std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view options,
+                                          const InternalDebug& ar);
+/* local names: borrowed engine strings, nullptr = no such local */
+const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n);
+const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n);
+/* upvalue names: borrowed engine strings, nullptr = no such upvalue */
+const InternalString* lua_getupvaluei(lua_State* L, int funcindex, int n);
+const InternalString* lua_setupvaluei(lua_State* L, int funcindex, int n);

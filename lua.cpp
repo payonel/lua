@@ -34,7 +34,7 @@
 static lua_State* globalL = nullptr;
 
 /* program name for error prefixes; empty = absent (interactive mode) */
-static HostString progname = LUA_PROGNAME;
+static std::string progname = LUA_PROGNAME; /* host program text (consumer side) */
 
 /*
 ** Use 'sigaction' when available.
@@ -70,7 +70,7 @@ static void laction(int i)
   lua_sethook(globalL, lstop, flag, 1);
 }
 
-static void print_usage(const HostString& badoption)
+static void print_usage(const std::string& badoption)
 {
   lua_writestringerror("%s: ", progname.c_str());
   if (badoption.size() > 1 && (badoption[1] == 'e' || badoption[1] == 'l'))
@@ -96,7 +96,7 @@ static void print_usage(const HostString& badoption)
 ** Prints an error message, adding the program name in front of it
 ** (if present; empty = absent)
 */
-static void l_message(const HostString& pname, const HostString& msg)
+static void l_message(const std::string& pname, const std::string& msg)
 {
   if (!pname.empty())
     lua_writestringerror("%s: ", pname.c_str());
@@ -111,8 +111,8 @@ static int report(lua_State* L, int status)
 {
   if (status != LUA_OK)
   {
-    HostString msg = lua_isstring(L, -1) ? *lua_tostring(L, -1)
-                                         : HostString("(error message not a string)");
+    std::string msg = lua_isstring(L, -1) ? std::string(lua_tostring(L, -1)->view())
+                                          : std::string("(error message not a string)");
     l_message(progname, msg);
     lua_pop(L, 1); /* remove message */
   }
@@ -201,7 +201,7 @@ static int dofile(lua_State* L, const std::optional<HostString>& name)
   return dochunk(L, luaL_loadfilex(L, name, std::nullopt)); /* nullopt = stdin */
 }
 
-static int dostring(lua_State* L, const HostString& s, const HostString& name)
+static int dostring(lua_State* L, std::string_view s, const HostString& name)
 {
   return dochunk(L, luaL_loadbufferx(L, s, name, "t"));
 }
@@ -211,13 +211,13 @@ static int dostring(lua_State* L, const HostString& s, const HostString& name)
 ** If there is no explicit modname and globname contains a '-', cut
 ** the suffix after '-' (the "version") to make the global name.
 */
-static int dolibrary(lua_State* L, const HostString& arg)
+static int dolibrary(lua_State* L, const std::string& arg)
 {
   int status;
-  HostString globname, modname;
-  size_t suffix = HostString::npos;
+  std::string globname, modname;
+  size_t suffix = std::string::npos;
   size_t eq = arg.find('=');
-  if (eq == HostString::npos)
+  if (eq == std::string::npos)
   {                 /* no explicit name? */
     globname = arg; /* module name is equal to global name */
     modname = arg;
@@ -229,13 +229,13 @@ static int dolibrary(lua_State* L, const HostString& arg)
     modname = arg.substr(eq + 1); /* module name starts after the '=' */
   }
   lua_getglobal(L, "require");
-  lua_pushstring(L, modname);
+  lua_pushstring(L, HostString(modname));
   status = docall(L, 1, 1); /* call 'require(modname)' */
   if (status == LUA_OK)
   {
-    if (suffix != HostString::npos)          /* is there a suffix mark? */
+    if (suffix != std::string::npos)         /* is there a suffix mark? */
       globname = globname.substr(0, suffix); /* remove suffix from global name */
-    lua_setglobal(L, globname);              /* globname = require(modname) */
+    lua_setglobal(L, HostString(globname));  /* globname = require(modname) */
   }
   return report(L, status);
 }
@@ -373,8 +373,8 @@ static int runargs(lua_State* L, char** argv, int n)
     case 'l':
     {
       int status;
-      HostString arg(argv[i]); /* host boundary: adopt the argv text */
-      HostString extra = arg.substr(2); /* both options need an argument */
+      std::string arg(argv[i]); /* adopt the argv text (host program side) */
+      std::string extra = arg.substr(2); /* both options need an argument */
       if (extra.empty())
       {
         i++; /* try next 'argv' */
@@ -406,7 +406,7 @@ static char* no_getenv(const char*)
 
 static int handle_luainit(lua_State* L)
 {
-  HostString name = LUA_INIT_VAR;
+  std::string name = LUA_INIT_VAR;
   name.append(LUA_VERSUFFIX); /* versioned name: e.g. "LUA_INIT_5_5" */
   /* l_getenv is system ABI: char* in and out, converted at the call */
   const char* einit = l_getenv(name.c_str());
@@ -417,14 +417,14 @@ static int handle_luainit(lua_State* L)
   }
   if (einit == nullptr)
     return LUA_OK;
-  HostString init(einit); /* host boundary: adopt the env value */
+  std::string init(einit); /* adopt the env value (host program side) */
   if (!init.empty() && init[0] == '@')
   {
-    HostString fname = init.substr(1);
+    HostString fname{init.substr(1)};
     return dofile(L, fname);
   }
   else
-    return dostring(L, init, "=" + name);
+    return dostring(L, init, HostString("=" + name));
 }
 
 /*
@@ -509,9 +509,9 @@ static void lua_initreadline(lua_State* L)
 {
   /* l_getenv is system ABI: adopt the value at the call */
   const char* erllib = l_getenv(LUA_RLLIB_VAR); /* name of readline library */
-  HostString rllib = (erllib != nullptr) ? HostString(erllib)
-                                         : HostString(LUA_READLINELIB); /* default name */
-  void* lib = dlopen(rllib.c_str(), RTLD_NOW | RTLD_LOCAL); /* system ABI */
+  const char* rllib = (erllib != nullptr) ? erllib
+                                          : LUA_READLINELIB; /* default name */
+  void* lib = dlopen(rllib, RTLD_NOW | RTLD_LOCAL); /* system ABI */
   if (lib != nullptr)
   {
     const char** name = ((const char**)(dlsym(lib, "rl_readline_name")));
@@ -543,13 +543,13 @@ static void lua_initreadline(lua_State* L)
 ** the string (or nil, if using the default value) on the stack, to keep
 ** it anchored.
 */
-static HostString get_prompt(lua_State* L, int firstline)
+static std::string get_prompt(lua_State* L, int firstline)
 {
   if (lua_getglobal(L, firstline ? "_PROMPT" : "_PROMPT2") == LUA_TNIL)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
-    HostString p{luaL_tolstring(L, -1)}; /* host boundary: deep copy */
+    std::string p{luaL_tolstring(L, -1).view()}; /* copy (host program side) */
     lua_remove(L, -2); /* remove original value */
     return p;
   }
@@ -581,7 +581,7 @@ static int pushline(lua_State* L, int firstline)
 {
   char buffer[LUA_MAXINPUT];
   size_t l;
-  HostString prmt = get_prompt(L, firstline);
+  std::string prmt = get_prompt(L, firstline);
   char* b = lua_readline(buffer, prmt.c_str()); /* readline ABI boundary */
   lua_pop(L, 1); /* remove prompt */
   if (b == nullptr)
@@ -601,7 +601,8 @@ static int pushline(lua_State* L, int firstline)
 static int addreturn(lua_State* L)
 {
   lua_pushvalue(L, -1); /* duplicate original line */
-  const HostString retline = lua_pushfstring(L, "return %s;");
+  lua_pushfstring(L, "return %s;"); /* modified line (anchored on the stack) */
+  std::string_view retline = lua_tolstring(L, -1); /* borrowed */
   int status = luaL_loadbufferx(L, retline, "=stdin", "t");
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
@@ -662,7 +663,7 @@ static int loadline(lua_State* L)
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
-  HostString line = *lua_tostring(L, 1);
+  std::string line{lua_tostring(L, 1)->view()}; /* host program copy */
   if (!line.empty())            /* non empty? */
     lua_saveline(line.c_str()); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */
@@ -685,7 +686,7 @@ static void l_print(lua_State* L)
     {
       lua_pushvalue(L, -1); /* error message is the argument */
       const HostString m = lua_pushfstring(L, "error calling 'print' (%s)");
-      l_message(progname, m);
+      l_message(progname, std::string(m.view()));
     }
   }
 }
@@ -697,7 +698,7 @@ static void l_print(lua_State* L)
 static void doREPL(lua_State* L)
 {
   int status;
-  HostString oldprogname = progname;
+  std::string oldprogname = progname;
   progname = ""; /* no 'progname' on errors in interactive mode */
   lua_initreadline(L);
   while ((status = loadline(L)) != -1)

@@ -32,7 +32,9 @@ constexpr char LUA_PRELOAD_TABLE[] = "_PRELOAD";
 
 struct luaL_Reg
 {
-  std::string_view name; /* host text (Java: String); {} = sentinel */
+  std::string_view name; /* registration key (utf8 literal bytes,
+                            interned into the state at luaL_setfuncs;
+                            NOT host text); {} = sentinel */
   lua_CFunction func;
 };
 
@@ -45,17 +47,19 @@ LUALIB_API void luaL_checkversion(lua_State* L);
 
 LUALIB_API int(luaL_getmetafield)(lua_State* L, int obj, const HostString& e);
 LUALIB_API int(luaL_callmeta)(lua_State* L, int obj, const HostString& e);
-/* bytes accessor for the __tostring'd value: converts (honoring
-   '__tostring'), PUSHES the result, and returns its payload
-   (borrowed from the pushed value) */
-LUALIB_API std::string_view(luaL_tolstring) (lua_State* L, int idx);
+/* the __tostring'd value as consumer TEXT (RULED 2026-07-31):
+   converts (honoring '__tostring'), PUSHES the result, and returns
+   it as a HostString COPY. Engine libraries use the internal twin
+   luaL_toistring (lua_internal.h) instead. */
+LUALIB_API HostString(luaL_tolstring) (lua_State* L, int idx);
 LUALIB_API int(luaL_argerror)(lua_State* L, int arg, const HostString& extramsg);
 LUALIB_API int(luaL_typeerror)(lua_State* L, int arg, const HostString& tname);
 LUALIB_API std::string_view(luaL_checklstring) (lua_State* L, int arg);
-/* nullopt def is allowed; the return is def when the argument is
-   absent (so it is nullopt exactly when def was) */
-LUALIB_API std::optional<std::string_view>(luaL_optlstring) (
-    lua_State* L, int arg, std::optional<std::string_view> def);
+/* a null-view def is allowed (string_view stores null natively; no
+   optional wrapper, RULED 2026-07-31); the return is def when the
+   argument is absent — so it has null data() exactly when def did */
+LUALIB_API std::string_view(luaL_optlstring) (
+    lua_State* L, int arg, std::string_view def);
 LUALIB_API lua_Number(luaL_checknumber)(lua_State* L, int arg);
 LUALIB_API lua_Number(luaL_optnumber)(lua_State* L, int arg, lua_Number def);
 
@@ -77,10 +81,10 @@ LUALIB_API void*(luaL_checkudata) (lua_State* L, int ud, const HostString& tname
 LUALIB_API void(luaL_where)(lua_State* L, int lvl);
 LUALIB_API int(luaL_error)(lua_State* L, const HostString& fmt);
 
-/* option names are text views; nullopt def = argument required
-   (note "" can be a genuine option, so empty is not a sentinel) */
+/* option names are byte views; null-view def = argument required
+   (note "" can be a genuine option/default — null != empty) */
 LUALIB_API int(luaL_checkoption)(lua_State* L, int arg,
-                                 std::optional<std::string_view> def,
+                                 std::string_view def,
                                  std::span<const std::string_view> lst);
 
 /* nullopt fname = no file name to report (Java: String or null) */

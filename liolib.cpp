@@ -207,13 +207,13 @@ static LStream* newfile(lua_State* L)
   return p;
 }
 
-static void opencheck(lua_State* L, const HostString& fname, const HostString& mode)
+static void opencheck(lua_State* L, const InternalString* fname, const char* mode)
 {
   LStream* p = newfile(L);
-  p->f = fopen(fname.c_str(), mode.c_str()); /* host boundary */
+  p->f = fopen(fname->c_str(), mode); /* OS edge (sanctioned c_str) */
   if (l_unlikely(p->f == nullptr))
   {
-    lua_pushstring(L, fname);
+    lua_pushistringref(L, fname);
     lua_pushstring(L, strerror(errno));
     luaL_error(L, "cannot open file '%s' (%s)");
   }
@@ -221,13 +221,13 @@ static void opencheck(lua_State* L, const HostString& fname, const HostString& m
 
 static int io_open(lua_State* L)
 {
-  HostString filename = luaL_checkstring(L, 1);
-  HostString mode = *luaL_optstring(L, 2, "r");
+  const InternalString* filename = luaL_checkistring(L, 1);
+  const InternalString* mode = luaL_optistring(L, 2, lit<"r">());
   LStream* p = newfile(L);
-  luaL_argcheck(L, l_checkmode(mode), 2, "invalid mode");
+  luaL_argcheck(L, l_checkmode(mode->view()), 2, "invalid mode");
   errno = 0;
-  p->f = fopen(filename.c_str(), mode.c_str()); /* host boundary */
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename) : 1;
+  p->f = fopen(filename->c_str(), mode->c_str()); /* OS edge (sanctioned c_str) */
+  return (p->f == nullptr) ? luaL_fileresulti(L, 0, filename->view()) : 1;
 }
 
 /*
@@ -242,14 +242,14 @@ static int io_pclose(lua_State* L)
 
 static int io_popen(lua_State* L)
 {
-  HostString filename = luaL_checkstring(L, 1);
-  HostString mode = *luaL_optstring(L, 2, "r");
+  const InternalString* filename = luaL_checkistring(L, 1);
+  const InternalString* mode = luaL_optistring(L, 2, lit<"r">());
   LStream* p = newprefile(L);
-  luaL_argcheck(L, l_checkmodep(mode.c_str()), 2, "invalid mode");
+  luaL_argcheck(L, l_checkmodep(mode->c_str()), 2, "invalid mode");
   errno = 0;
-  p->f = l_popen(L, filename.c_str(), mode.c_str()); /* host boundary */
+  p->f = l_popen(L, filename->c_str(), mode->c_str()); /* OS edge (sanctioned c_str) */
   p->closef = &io_pclose;
-  return (p->f == nullptr) ? luaL_fileresult(L, 0, filename) : 1;
+  return (p->f == nullptr) ? luaL_fileresulti(L, 0, filename->view()) : 1;
 }
 
 static int io_tmpfile(lua_State* L)
@@ -260,27 +260,28 @@ static int io_tmpfile(lua_State* L)
   return (p->f == nullptr) ? luaL_fileresult(L, 0, std::nullopt) : 1;
 }
 
-static FILE* getiofile(lua_State* L, const HostString& findex)
+static FILE* getiofile(lua_State* L, std::string_view findex)
 {
   LStream* p;
-  lua_getfield(L, LUA_REGISTRYINDEX, findex);
+  lua_getfieldi(L, LUA_REGISTRYINDEX, findex);
   p = (LStream*) lua_touserdata(L, -1);
   if (l_unlikely(isclosed(p)))
   {
-    /* strip the IO_PREFIX: host-text deep copy (Java String.substring) */
-    lua_pushstring(L, findex.substr(IOPREF_LEN));
+    /* strip the IO_PREFIX (byte sub-view) */
+    std::string_view name = findex.substr(IOPREF_LEN);
+    lua_pushlstring(L, name, 0, name.size());
     luaL_error(L, "default %s file is closed");
   }
   return p->f;
 }
 
-static int g_iofile(lua_State* L, const HostString& f, const HostString& mode)
+static int g_iofile(lua_State* L, std::string_view f, const char* mode)
 {
   if (!lua_isnoneornil(L, 1))
   {
     if (lua_isstring(L, 1)) /* filename given (may be a number, too) */
     {
-      HostString filename = *lua_tostring(L, 1);
+      const InternalString* filename = lua_toistring(L, 1); /* borrowed */
       opencheck(L, filename, mode);
     }
     else
@@ -288,10 +289,10 @@ static int g_iofile(lua_State* L, const HostString& f, const HostString& mode)
       tofile(L); /* check that it's a valid file handle */
       lua_pushvalue(L, 1);
     }
-    lua_setfield(L, LUA_REGISTRYINDEX, f);
+    lua_setfieldi(L, LUA_REGISTRYINDEX, f);
   }
   /* return current value */
-  lua_getfield(L, LUA_REGISTRYINDEX, f);
+  lua_getfieldi(L, LUA_REGISTRYINDEX, f);
   return 1;
 }
 
@@ -359,7 +360,7 @@ static int io_lines(lua_State* L)
   }
   else
   { /* open a new file */
-    HostString filename = luaL_checkstring(L, 1);
+    const InternalString* filename = luaL_checkistring(L, 1);
     opencheck(L, filename, "r");
     lua_replace(L, 1); /* put file at index 1 */
     toclose = 1;       /* close it after iteration */
@@ -662,11 +663,12 @@ static int g_write(lua_State* L, FILE* f, int arg)
     const char* s;
     size_t len;
     size_t numbytes; /* bytes written in one call to 'fwrite' */
-    std::optional<HostString> numtxt = lua_numbertocstring(L, arg); /* try as a number */
-    if (numtxt)
+    char numbuff[LUA_N2SBUFFSZ];
+    std::string_view numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
+    if (numtxt.data() != nullptr) /* null = not a number */
     { /* did conversion work (value was a number)? */
-      s = numtxt->data(); /* host write boundary (fwrite) */
-      len = numtxt->size();
+      s = numtxt.data(); /* host write boundary (fwrite) */
+      len = numtxt.size();
     }
     else
     { /* must be a string */
@@ -725,7 +727,7 @@ static int f_setvbuf(lua_State* L)
   static const int mode[] = {_IONBF, _IOFBF, _IOLBF};
   static constexpr std::string_view modenames[] = {"no", "full", "line"};
   FILE* f = tofile(L);
-  int op = luaL_checkoption(L, 2, std::nullopt, modenames);
+  int op = luaL_checkoption(L, 2, {}, modenames);
   lua_Integer sz = luaL_optinteger(L, 3, LUAL_BUFFERSIZE);
   int res;
   errno = 0;
@@ -811,16 +813,16 @@ static int io_noclose(lua_State* L)
   return 2;
 }
 
-static void createstdfile(lua_State* L, FILE* f, const HostString& k,
-                          const HostString& fname)
+static void createstdfile(lua_State* L, FILE* f, std::string_view k,
+                          const char* fname)
 {
   LStream* p = newprefile(L);
   p->f = f;
   p->closef = &io_noclose;
-  if (!k.empty()) /* empty = no registry entry (lua_Debug convention) */
+  if (!k.empty()) /* empty = no registry entry */
   {
     lua_pushvalue(L, -1);
-    lua_setfield(L, LUA_REGISTRYINDEX, k); /* add file to registry */
+    lua_setfieldi(L, LUA_REGISTRYINDEX, k); /* add file to registry */
   }
   lua_setfield(L, -2, fname); /* add file to module */
 }

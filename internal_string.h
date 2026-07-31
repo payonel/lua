@@ -37,10 +37,10 @@
 #include <string_view>
 
 /*
-** Boundary text type (see header comment). A marker class may replace
-** this typedef when the public API moves to HostString signatures.
+** Boundary text type — see host_string.h (std::string access cut,
+** RULED 2026-07-31; view() is the single sanctioned access).
 */
-using HostString = std::string;
+#include "host_string.h"
 
 /*
 ** Bounded byte read over a view: the byte at offset 'i', or -1
@@ -83,7 +83,7 @@ public:
   ** encoding: malformed text (e.g. lone surrogates) is an API-level
   ** error code, the lua_State untouched.
   */
-  explicit InternalString(const HostString& host) : bytes_(host) {}
+  explicit InternalString(const HostString& host) : bytes_(host.view()) {}
 
   /*
   ** Adopt an engine-OWNED buffer (builder finish): zero-copy move.

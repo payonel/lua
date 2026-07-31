@@ -110,19 +110,19 @@ static lua_State* getthread(lua_State* L, int* arg)
 ** from 'lua_getinfo' into result table. Key is always a string;
 ** value can be a string, an int, or a boolean.
 */
-static void settabss(lua_State* L, const HostString& k, const HostString& v)
+static void settabss(lua_State* L, const char* k, std::string_view v)
 {
-  lua_pushstring(L, v);
+  lua_pushlstring(L, v, 0, v.size());
   lua_setfield(L, -2, k);
 }
 
-static void settabsi(lua_State* L, const HostString& k, int v)
+static void settabsi(lua_State* L, const char* k, int v)
 {
   lua_pushinteger(L, v);
   lua_setfield(L, -2, k);
 }
 
-static void settabsb(lua_State* L, const HostString& k, int v)
+static void settabsb(lua_State* L, const char* k, int v)
 {
   lua_pushboolean(L, v);
   lua_setfield(L, -2, k);
@@ -152,22 +152,26 @@ static void treatstackoption(lua_State* L, lua_State* L1, const char* fname)
 */
 static int db_getinfo(lua_State* L)
 {
-  lua_Debug ar;
+  InternalDebug ar;
   int arg;
   lua_State* L1 = getthread(L, &arg);
-  HostString options = *luaL_optstring(L, arg + 2, "flnSrtu");
+  std::string_view options = luaL_optlstring(L, arg + 2, "flnSrtu");
   checkstack(L, L1, 3);
-  luaL_argcheck(L, options[0] != '>', arg + 2, "invalid option '>'");
+  luaL_argcheck(L, sv_byteat(options, 0) != '>', arg + 2, "invalid option '>'");
+  std::string optbuf; /* engine-internal byte buffer for the '>' prefix */
   if (lua_isfunction(L, arg + 1))
   {                                               /* info about a function? */
-    options.insert(0, 1, '>');                    /* add '>' to 'options' */
+    optbuf.reserve(options.size() + 1);           /* add '>' to 'options' */
+    optbuf.push_back('>');
+    optbuf.append(options);
+    options = optbuf;
     lua_pushvalue(L, arg + 1);                    /* move function to 'L1' stack */
     lua_xmove(L, L1, 1);
   }
   else
   { /* stack level */
-    std::optional<lua_Debug> oar =
-        lua_getstack(L1, (int) luaL_checkinteger(L, arg + 1));
+    std::optional<InternalDebug> oar =
+        lua_getstacki(L1, (int) luaL_checkinteger(L, arg + 1));
     if (!oar)
     {
       luaL_pushfail(L); /* level out of range */
@@ -175,47 +179,47 @@ static int db_getinfo(lua_State* L)
     }
     ar = *oar;
   }
-  std::optional<lua_Debug> res = lua_getinfo(L1, options, ar);
+  std::optional<InternalDebug> res = lua_getinfoi(L1, options, ar);
   if (!res)
     return luaL_argerror(L, arg + 2, "invalid option");
   ar = *res;
   lua_newtable(L); /* table to collect results */
-  if ((options.find('S') != HostString::npos))
+  if ((options.find('S') != std::string_view::npos))
   {
     lua_pushlstring(L, ar.source, 0, ar.source.size());
     lua_setfield(L, -2, "source");
-    settabss(L, "short_src", ar.short_src);
+    settabss(L, "short_src", std::string_view{ar.short_src});
     settabsi(L, "linedefined", ar.linedefined);
     settabsi(L, "lastlinedefined", ar.lastlinedefined);
     settabss(L, "what", ar.what);
   }
-  if ((options.find('l') != HostString::npos))
+  if ((options.find('l') != std::string_view::npos))
     settabsi(L, "currentline", ar.currentline);
-  if ((options.find('u') != HostString::npos))
+  if ((options.find('u') != std::string_view::npos))
   {
     settabsi(L, "nups", ar.nups);
     settabsi(L, "nparams", ar.nparams);
     settabsb(L, "isvararg", ar.isvararg);
   }
-  if ((options.find('n') != HostString::npos))
+  if ((options.find('n') != std::string_view::npos))
   {
-    if (!ar.name.empty()) /* empty = absent: field stays nil */
+    if (ar.name.data() != nullptr) /* null = absent: field stays nil */
       settabss(L, "name", ar.name);
     settabss(L, "namewhat", ar.namewhat);
   }
-  if ((options.find('r') != HostString::npos))
+  if ((options.find('r') != std::string_view::npos))
   {
     settabsi(L, "ftransfer", ar.ftransfer);
     settabsi(L, "ntransfer", ar.ntransfer);
   }
-  if ((options.find('t') != HostString::npos))
+  if ((options.find('t') != std::string_view::npos))
   {
     settabsb(L, "istailcall", ar.istailcall);
     settabsi(L, "extraargs", ar.extraargs);
   }
-  if ((options.find('L') != HostString::npos))
+  if ((options.find('L') != std::string_view::npos))
     treatstackoption(L, L1, "activelines");
-  if ((options.find('f') != HostString::npos))
+  if ((options.find('f') != std::string_view::npos))
     treatstackoption(L, L1, "func");
   return 1; /* return table */
 }
@@ -228,26 +232,25 @@ static int db_getlocal(lua_State* L)
   if (lua_isfunction(L, arg + 1))
   {                                                 /* function argument? */
     lua_pushvalue(L, arg + 1); /* push function */
-    std::optional<HostString> name = lua_getlocal(L, nullptr, nvar);
+    const InternalString* name = lua_getlocali(L, nullptr, nvar);
     if (name) /* push local name (or nil if none) */
-      lua_pushstring(L, *name);
+      lua_pushistringref(L, name);
     else
       lua_pushnil(L);
     return 1; /* return only name (there is no value) */
   }
   else
   { /* stack-level argument */
-    std::optional<HostString> name;
     int level = (int) luaL_checkinteger(L, arg + 1);
-    std::optional<lua_Debug> ar = lua_getstack(L1, level);
+    std::optional<InternalDebug> ar = lua_getstacki(L1, level);
     if (l_unlikely(!ar)) /* out of range? */
       return luaL_argerror(L, arg + 1, "level out of range");
     checkstack(L, L1, 1);
-    name = lua_getlocal(L1, &*ar, nvar);
+    const InternalString* name = lua_getlocali(L1, &*ar, nvar);
     if (name)
     {
       lua_xmove(L1, L, 1); /* move local value */
-      lua_pushstring(L, *name); /* push name */
+      lua_pushistringref(L, name); /* push name */
       lua_rotate(L, -2, 1);    /* re-order */
       return 2;
     }
@@ -262,25 +265,24 @@ static int db_getlocal(lua_State* L)
 static int db_setlocal(lua_State* L)
 {
   int arg;
-  std::optional<HostString> name;
   lua_State* L1 = getthread(L, &arg);
   int level = (int) luaL_checkinteger(L, arg + 1);
   int nvar = (int) luaL_checkinteger(L, arg + 2);
-  std::optional<lua_Debug> ar = lua_getstack(L1, level);
+  std::optional<InternalDebug> ar = lua_getstacki(L1, level);
   if (l_unlikely(!ar)) /* out of range? */
     return luaL_argerror(L, arg + 1, "level out of range");
   luaL_checkany(L, arg + 3);
   lua_settop(L, arg + 3);
   checkstack(L, L1, 1);
   lua_xmove(L, L1, 1);
-  name = lua_setlocal(L1, &*ar, nvar);
+  const InternalString* name = lua_setlocali(L1, &*ar, nvar);
   if (!name)
   {
     lua_pop(L1, 1); /* pop value (if not popped by 'lua_setlocal') */
     lua_pushnil(L);
   }
   else
-    lua_pushstring(L, *name);
+    lua_pushistringref(L, name);
   return 1;
 }
 
@@ -289,13 +291,13 @@ static int db_setlocal(lua_State* L)
 */
 static int auxupvalue(lua_State* L, int get)
 {
-  std::optional<HostString> name;
   int n = (int) luaL_checkinteger(L, 2); /* upvalue index */
   luaL_checktype(L, 1, LUA_TFUNCTION);   /* closure */
-  name = get ? lua_getupvalue(L, 1, n) : lua_setupvalue(L, 1, n);
+  const InternalString* name =
+      get ? lua_getupvaluei(L, 1, n) : lua_setupvaluei(L, 1, n);
   if (!name)
     return 0;
-  lua_pushstring(L, *name);
+  lua_pushistringref(L, name);
   lua_insert(L, -(get + 1)); /* no-op if get is false */
   return get + 1;
 }
@@ -368,7 +370,9 @@ static void hookf(lua_State* L, lua_Debug* ar)
       lua_pushinteger(L, ar->currentline); /* push current line */
     else
       lua_pushnil(L);
-    assert(lua_getinfo(L, "lS", *ar).has_value());
+    InternalDebug iar{}; /* internal record: only i_ci travels */
+    iar.i_ci = ar->i_ci;
+    assert(lua_getinfoi(L, "lS", iar).has_value());
     lua_call(L, 2, 0); /* call hook function */
   }
 }
@@ -484,7 +488,7 @@ static int db_debug(lua_State* L)
     if (luaL_loadbufferx(L, std::string_view{buffer, strlen(buffer)}, "=(debug command)", "t") ||
         lua_pcall(L, 0, 0, 0))
       /* host print boundary: the payload is NUL-terminated (c_str) */
-      lua_writestringerror("%s\n", luaL_tolstring(L, -1).data());
+      lua_writestringerror("%s\n", luaL_toistring(L, -1)->c_str());
     lua_settop(L, 0); /* remove eventual returns */
   }
 }

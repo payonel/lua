@@ -26,10 +26,10 @@ static int luaB_print(lua_State* L)
   int i;
   for (i = 1; i <= n; i++)
   { /* for each argument */
-    std::string_view s = luaL_tolstring(L, i); /* convert it to string */
+    const InternalString* s = luaL_toistring(L, i); /* convert it to string */
     if (i > 1)                                  /* not the first element? */
       lua_writestring("\t", 1);                 /* add a tab before it */
-    lua_writestring(s.data(), s.size());        /* print it (host boundary) */
+    lua_writestring(s->bytes(), s->size());     /* print it (host boundary) */
     lua_pop(L, 1);                            /* pop result */
   }
   lua_writeline();
@@ -279,7 +279,7 @@ static int luaB_collectgarbage(lua_State* L)
     static const char pnum[] = {
         LUA_GCPMINORMUL, LUA_GCPMAJORMINOR, LUA_GCPMINORMAJOR,
         LUA_GCPPAUSE, LUA_GCPSTEPMUL, LUA_GCPSTEPSIZE};
-    int p = pnum[luaL_checkoption(L, 2, std::nullopt, params)];
+    int p = pnum[luaL_checkoption(L, 2, {}, params)];
     lua_Integer value = luaL_optinteger(L, 3, -1);
     lua_pushinteger(L, lua_gc(L, o, 0, p, (int) value));
     return 1;
@@ -384,11 +384,6 @@ static int load_aux(lua_State* L, int status, int envidx)
   }
 }
 
-/*
-** Mode for load functions: empty = absent (use lua_load's default);
-** returned as a HostString, handed on as char* (mode is a nullable
-** transitional param in the load API).
-*/
 /* the mode argument is a Lua string — engine bytes already; nullptr
    when absent (default "bt"). It never round-trips through host text. */
 static const InternalString* getMode(lua_State* L, int idx)
@@ -404,16 +399,13 @@ static const InternalString* getMode(lua_State* L, int idx)
 
 static int luaB_loadfile(lua_State* L)
 {
-  std::optional<HostString> fname; /* nullopt = stdin */
-  if (!lua_isnoneornil(L, 1))
-    fname = luaL_checkstring(L, 1);
+  /* filename is a Lua string — engine bytes already (nullptr = stdin);
+     no host-text round trip (internal loader form) */
+  const InternalString* fname =
+      lua_isnoneornil(L, 1) ? nullptr : luaL_checkistring(L, 1);
   const InternalString* mode = getMode(L, 2);
   int env = (!lua_isnone(L, 3) ? 3 : 0); /* 'env' index or 0 if no 'env' */
-  /* boundary: mode crosses into the public loader as host text */
-  std::optional<HostString> hmode;
-  if (mode != nullptr)
-    hmode = HostString(mode->bytes(), mode->size());
-  int status = luaL_loadfilex(L, fname, hmode);
+  int status = luaL_loadfilei(L, fname, mode);
   return load_aux(L, status, env);
 }
 
@@ -479,11 +471,10 @@ static int dofilecont(lua_State* L, int d1, lua_KContext d2)
 
 static int luaB_dofile(lua_State* L)
 {
-  std::optional<HostString> fname; /* nullopt = stdin */
-  if (!lua_isnoneornil(L, 1))
-    fname = luaL_checkstring(L, 1);
+  const InternalString* fname =
+      lua_isnoneornil(L, 1) ? nullptr : luaL_checkistring(L, 1);
   lua_settop(L, 1);
-  if (l_unlikely(luaL_loadfilex(L, fname, std::nullopt) != LUA_OK))
+  if (l_unlikely(luaL_loadfilei(L, fname, nullptr) != LUA_OK))
     return lua_error(L);
   lua_callk(L, 0, LUA_MULTRET, 0, dofilecont);
   return dofilecont(L, 0, 0);
@@ -572,7 +563,7 @@ static int luaB_xpcall(lua_State* L)
 static int luaB_tostring(lua_State* L)
 {
   luaL_checkany(L, 1);
-  luaL_tolstring(L, 1);
+  luaL_toistring(L, 1); /* internal twin: push only */
   return 1;
 }
 

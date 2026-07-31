@@ -303,11 +303,12 @@ static void trymt(lua_State* L, std::string_view mtkey, std::string_view opname)
   if (l_unlikely(lua_type(L, 2) == LUA_TSTRING ||
                  !luaL_getmetafield(L, 2, HostString{mtkey})))
   {
-    HostString t1 = luaL_typename(L, -2);
-    HostString t2 = luaL_typename(L, -1);
+    /* borrowed views of the static typenames (engine strings) */
+    std::string_view t1 = lua_typenamei(L, lua_type(L, -2))->view();
+    std::string_view t2 = lua_typenamei(L, lua_type(L, -1))->view();
     lua_pushlstring(L, opname, 0, opname.size());
-    lua_pushstring(L, t1);
-    lua_pushstring(L, t2);
+    lua_pushlstring(L, t1, 0, t1.size());
+    lua_pushlstring(L, t2, 0, t2.size());
     luaL_error(L, "attempt to %s a '%s' with a '%s'");
   }
   lua_insert(L, -3); /* put metamethod before arguments */
@@ -1424,7 +1425,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
   case LUA_TNIL:
   case LUA_TBOOLEAN:
   {
-    luaL_tolstring(L, arg);
+    luaL_toistring(L, arg); /* internal twin: push only */
     luaL_addvalue(b);
     break;
   }
@@ -1845,10 +1846,10 @@ static int str_format(lua_State* L)
         size_t blen;
         if (lua_islightcfunction(L, arg))
         { /* light C function — body is its FuncAddress string */
-          auto fa = lua_funcaddress(L, arg);
+          std::string fa = lua_funcaddressi(L, arg); /* engine bytes */
           blen = fa.size();
           assert(blen < sizeof(body));
-          memcpy(body, fa.c_str(), blen);
+          memcpy(body, fa.data(), blen);
         }
         else
         {

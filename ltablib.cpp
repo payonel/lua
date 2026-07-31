@@ -185,7 +185,7 @@ static int tconcat(lua_State* L)
 {
   luaL_Buffer b;
   lua_Integer last = aux_getn(L, 1, TAB_R);
-  std::string_view sep = *luaL_optlstring(L, 2, "");
+  std::string_view sep = luaL_optlstring(L, 2, "");
   lua_Integer i = luaL_optinteger(L, 3, 1);
   last = luaL_optinteger(L, 4, last);
   luaL_buffinit(L, &b);
