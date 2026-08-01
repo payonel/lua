@@ -87,7 +87,7 @@ static inline void save_and_next(LexState* ls)
 void luaX_init(lua_State* L)
 {
   int i;
-  TString* e = luaS_newlstr(L, std::string_view{LUA_ENV, sizeof(LUA_ENV) - 1}); /* create env name */
+  TString* e = luaS_newlstr(L, LUA_ENV->view()); /* create env name */
   assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(e)));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
@@ -224,8 +224,8 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source,
   ls->source = source;
   /* all three strings here ("_ENV", "break", "global") were fixed,
      so they cannot be collected */
-  ls->envn = luaS_newlstr(L, std::string_view{LUA_ENV, sizeof(LUA_ENV) - 1}); /* get env string */
-  ls->brkn = luaS_newlstr(L, "break"); /* get "break" string */
+  ls->envn = luaS_newlstr(L, LUA_ENV->view()); /* get env string */
+  ls->brkn = luaS_newlstr(L, lit<"break">()->view()); /* get "break" string */
   /* initialize buffer */
   ls->buff->reset();
 }
@@ -251,9 +251,9 @@ static int check_next1(LexState* ls, int c)
 ** Check whether current char is in set 'set' (with two chars) and
 ** saves it
 */
-static int check_next2(LexState* ls, const char* set)
+static int check_next2(LexState* ls, std::string_view set)
 {
-  assert(set[2] == '\0');
+  assert(set.size() == 2);
   if (ls->current == set[0] || ls->current == set[1])
   {
     save_and_next(ls);
@@ -279,16 +279,16 @@ static int check_next2(LexState* ls, const char* set)
 static int read_numeral(LexState* ls, Token* seminfo)
 {
   TValue obj;
-  const char* expo = "Ee";
+  const InternalString* expo = lit<"Ee">();
   int first = ls->current;
   assert(lisdigit(ls->current));
   save_and_next(ls);
-  if (first == '0' && check_next2(ls, "xX")) /* hexadecimal? */
-    expo = "Pp";
+  if (first == '0' && check_next2(ls, lit<"xX">()->view())) /* hexadecimal? */
+    expo = lit<"Pp">();
   for (;;)
   {
-    if (check_next2(ls, expo))                             /* exponent mark? */
-      check_next2(ls, "-+");                               /* optional exponent sign */
+    if (check_next2(ls, expo->view()))                     /* exponent mark? */
+      check_next2(ls, lit<"-+">()->view());                /* optional exponent sign */
     else if (lisxdigit(ls->current) || ls->current == '.') /* '%x|%.' */
       save_and_next(ls);
     else

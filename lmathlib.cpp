@@ -129,7 +129,7 @@ static int math_fmod(lua_State* L)
     lua_Integer d = lua_tointeger(L, 2);
     if ((lua_Unsigned) d + 1u <= 1u)
     { /* special cases: -1 or 0 */
-      luaL_argcheck(L, d != 0, 2, "zero");
+      luaL_argcheck(L, d != 0, 2, HostString(lit<"zero">()->view()));
       lua_pushinteger(L, 0); /* avoid overflow with 0x80000... / -1 */
     }
     else
@@ -239,7 +239,7 @@ static int math_min(lua_State* L)
   int n = lua_gettop(L); /* number of arguments */
   int imin = 1;          /* index of current minimum value */
   int i;
-  luaL_argcheck(L, n >= 1, 1, "value expected");
+  luaL_argcheck(L, n >= 1, 1, HostString(lit<"value expected">()->view()));
   for (i = 2; i <= n; i++)
   {
     if (lua_compare(L, i, imin, LUA_OPLT))
@@ -254,7 +254,7 @@ static int math_max(lua_State* L)
   int n = lua_gettop(L); /* number of arguments */
   int imax = 1;          /* index of current maximum value */
   int i;
-  luaL_argcheck(L, n >= 1, 1, "value expected");
+  luaL_argcheck(L, n >= 1, 1, HostString(lit<"value expected">()->view()));
   for (i = 2; i <= n; i++)
   {
     if (lua_compare(L, imax, i, LUA_OPLT))
@@ -267,7 +267,7 @@ static int math_max(lua_State* L)
 static int math_type(lua_State* L)
 {
   if (lua_type(L, 1) == LUA_TNUMBER)
-    lua_pushstring(L, (lua_isinteger(L, 1)) ? "integer" : "float");
+    lua_pushstring(L, (lua_isinteger(L, 1)) ? HostString(lit<"integer">()->view()) : HostString(lit<"float">()->view()));
   else
   {
     luaL_checkany(L, 1);
@@ -435,10 +435,10 @@ static int math_random(lua_State* L)
     break;
   }
   default:
-    return luaL_error(L, "wrong number of arguments");
+    return luaL_error(L, HostString(lit<"wrong number of arguments">()->view()));
   }
   /* random integer in the interval [low, up] */
-  luaL_argcheck(L, low <= up, 1, "interval is empty");
+  luaL_argcheck(L, low <= up, 1, HostString(lit<"interval is empty">()->view()));
   /* project random integer into the interval [0, up - low] */
   p = project(I2UInt(rv), ((lua_Unsigned)(up)) - ((lua_Unsigned)(low)), state);
   lua_pushinteger(L, ((lua_Integer)(p + ((lua_Unsigned)(low)))));
@@ -478,8 +478,8 @@ static int math_randomseed(lua_State* L)
 }
 
 static const luaL_Reg randfuncs[] = {
-    {"random", math_random},
-    {"randomseed", math_randomseed},
+    {lit<"random">()->view(), math_random},
+    {lit<"randomseed">()->view(), math_randomseed},
     {{}, nullptr}};
 
 /*
@@ -503,25 +503,25 @@ static void setrandfunc(lua_State* L)
 /* }================================================================== */
 
 static const luaL_Reg mathlib[] = {
-    {"abs", math_abs},
-    {"acos", math_acos},
-    {"asin", math_asin},
-    {"atan", math_atan},
-    {"ceil", math_ceil},
-    {"cos", math_cos},
-    {"deg", math_deg},
-    {"exp", math_exp},
-    {"tointeger", math_toint},
-    {"floor", math_floor},
-    {"fmod", math_fmod},
-    {"frexp", math_frexp},
-    {"ult", math_ult},
-    {"ldexp", math_ldexp},
-    {"log", math_log},
-    {"max", math_max},
-    {"min", math_min},
-    {"modf", math_modf},
-    {"rad", math_rad},
+    {lit<"abs">()->view(), math_abs},
+    {lit<"acos">()->view(), math_acos},
+    {lit<"asin">()->view(), math_asin},
+    {lit<"atan">()->view(), math_atan},
+    {lit<"ceil">()->view(), math_ceil},
+    {lit<"cos">()->view(), math_cos},
+    {lit<"deg">()->view(), math_deg},
+    {lit<"exp">()->view(), math_exp},
+    {lit<"tointeger">()->view(), math_toint},
+    {lit<"floor">()->view(), math_floor},
+    {lit<"fmod">()->view(), math_fmod},
+    {lit<"frexp">()->view(), math_frexp},
+    {lit<"ult">()->view(), math_ult},
+    {lit<"ldexp">()->view(), math_ldexp},
+    {lit<"log">()->view(), math_log},
+    {lit<"max">()->view(), math_max},
+    {lit<"min">()->view(), math_min},
+    {lit<"modf">()->view(), math_modf},
+    {lit<"rad">()->view(), math_rad},
     {"sin", math_sin},
     {"sqrt", math_sqrt},
     {"tan", math_tan},

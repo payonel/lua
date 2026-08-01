@@ -797,7 +797,7 @@ static void createmeta(lua_State* L)
   luaL_setfuncs(L, metameth, 0);        /* add metamethods to new metatable */
   lua_createtable(L, 0, sizeof(meth) / sizeof((meth)[0]) - 1);            /* create method table */
   luaL_setfuncs(L, meth, 0);            /* add file methods to method table */
-  lua_setfield(L, -2, "__index");       /* metatable.__index = method table */
+  lua_setfield(L, -2, HostString(lit<"__index">()->view()));       /* metatable.__index = method table */
   lua_pop(L, 1);                        /* pop metatable */
 }
 
@@ -809,12 +809,12 @@ static int io_noclose(lua_State* L)
   LStream* p = tolstream(L);
   p->closef = &io_noclose; /* keep file opened */
   luaL_pushfail(L);
-  lua_pushliteral(L, "cannot close standard file");
+  lua_pushliteral(L, HostString(lit<"cannot close standard file">()->view()));
   return 2;
 }
 
 static void createstdfile(lua_State* L, FILE* f, std::string_view k,
-                          const char* fname)
+                          const InternalString* fname)
 {
   LStream* p = newprefile(L);
   p->f = f;
@@ -824,7 +824,7 @@ static void createstdfile(lua_State* L, FILE* f, std::string_view k,
     lua_pushvalue(L, -1);
     lua_setfieldi(L, LUA_REGISTRYINDEX, k); /* add file to registry */
   }
-  lua_setfield(L, -2, fname); /* add file to module */
+  lua_setfield(L, -2, HostString(fname->view())); /* add file to module */
 }
 
 LUAMOD_API int luaopen_io(lua_State* L)
@@ -832,8 +832,8 @@ LUAMOD_API int luaopen_io(lua_State* L)
   (luaL_checkversion(L), lua_createtable(L, 0, sizeof(iolib) / sizeof((iolib)[0]) - 1), luaL_setfuncs(L, iolib, 0)); /* new module */
   createmeta(L);
   /* create (and set) default files */
-  createstdfile(L, stdin, IO_INPUT->view(), "stdin");
-  createstdfile(L, stdout, IO_OUTPUT->view(), "stdout");
-  createstdfile(L, stderr, "", "stderr");
+  createstdfile(L, stdin, IO_INPUT->view(), lit<"stdin">());
+  createstdfile(L, stdout, IO_OUTPUT->view(), lit<"stdout">());
+  createstdfile(L, stderr, "", lit<"stderr">());
   return 1;
 }

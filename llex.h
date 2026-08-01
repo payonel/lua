@@ -18,7 +18,7 @@
 constexpr int FIRST_RESERVED = (UCHAR_MAX + 1);
 
 #if !defined(LUA_ENV)
-constexpr char LUA_ENV[] = "_ENV";
+inline const InternalString* const LUA_ENV = lit<"_ENV">();
 #endif
 
 /*

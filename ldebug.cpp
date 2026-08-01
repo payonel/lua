@@ -742,7 +742,7 @@ static const InternalString* isEnv(const Proto* p, int pc, Instruction i, int is
     if (what != strlocal && what != strupval)
       name = nullptr; /* cannot be the variable _ENV */
   }
-  return (name != nullptr && name->view() == std::string_view{LUA_ENV})
+  return (name != nullptr && name->view() == LUA_ENV->view())
              ? lit<"global">()
              : lit<"field">();
 }
