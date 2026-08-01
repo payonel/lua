@@ -30,9 +30,10 @@
 #include "util_cast.h"
 
 /* keep in sync with LUA_COPYRIGHT / LUA_AUTHORS (lua.h) */
-const char lua_ident[] =
-    "$LuaVersion: Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio $"
-    "$LuaAuthors: R. Ierusalimschy, L. H. de Figueiredo, W. Celes $";
+const std::string_view lua_ident =
+    lit<"$LuaVersion: Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio $"
+        "$LuaAuthors: R. Ierusalimschy, L. H. de Figueiredo, W. Celes $">()
+        ->view();
 
 /* test for pseudo index */
 constexpr int ispseudo(int i)
@@ -1509,7 +1510,7 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
 {
   /* boundary: host text converts to engine bytes exactly once
      (nullopt chunkname = "?", as in official lua_load) */
-  InternalString name{chunkname ? *chunkname : HostString("?")};
+  InternalString name{chunkname ? *chunkname : HostString(lit<"?">()->view())};
   InternalString m{mode ? *mode : HostString()};
   return lua_loadi(L, reader, data, &name, mode ? &m : nullptr);
 }
@@ -1694,7 +1695,7 @@ LUA_API void lua_concat(lua_State* L, int n)
   }
   else
   {                                                   /* nothing to concatenate */
-    setslots(L, L->top, luaS_newlstr(L, "")); /* push empty string */
+    setslots(L, L->top, luaS_newlstr(L, lit<"">()->view())); /* push empty string */
     api_incr_top(L);
   }
   lua_unlock(L);

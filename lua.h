@@ -166,7 +166,7 @@ typedef void (*lua_Hook)(lua_State* L, lua_Debug* ar);
 /*
 ** RCS ident string
 */
-extern const char lua_ident[];
+extern const std::string_view lua_ident;
 
 /*
 ** state manipulation

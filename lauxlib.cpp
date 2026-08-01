@@ -55,7 +55,7 @@ static int findfield(lua_State* L, int objidx, int level)
       else if (findfield(L, objidx, level - 1))
       { /* try recursively */
         /* stack: lib_name, lib_table, field_name (top) */
-        lua_pushliteral(L, "."); /* place '.' between the two names */
+        lua_pushliteral(L, HostString(lit<".">()->view())); /* place '.' between the two names */
         lua_replace(L, -3);      /* (in the slot occupied by table) */
         lua_concat(L, 3);        /* lib_name.field_name */
         return 1;
@@ -72,13 +72,13 @@ static int findfield(lua_State* L, int objidx, int level)
 static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
 {
   int top = lua_gettop(L);
-  lua_getinfoi(L, "f", *ar); /* push function (record unchanged by 'f') */
+  lua_getinfoi(L, lit<"f">()->view(), *ar); /* push function (record unchanged by 'f') */
   lua_getfield(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
-  luaL_checkstack(L, 6, "not enough stack"); /* slots for 'findfield' */
+  luaL_checkstack(L, 6, HostString(lit<"not enough stack">()->view())); /* slots for 'findfield' */
   if (findfield(L, top + 1, 2))
   {
     std::string_view name = lua_tolstring(L, -1); /* borrowed from the stack */
-    if (name.starts_with("_G."))
+    if (name.starts_with(lit<"_G.">()->view()))
     {                                                    /* name start with '_G.'? */
       lua_pushlstring(L, name, 3, name.size() - 3);      /* push name without prefix */
       lua_remove(L, -2);                                 /* remove original name */
@@ -100,14 +100,14 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
   { /* is there a name from code? (null = absent) */
     lua_pushlstring(L, ar->namewhat, 0, ar->namewhat.size());
     lua_pushlstring(L, ar->name, 0, ar->name.size());
-    lua_pushfstring(L, "%s '%s'"); /* use it */
+    lua_pushfstring(L, HostString(lit<"%s '%s'">()->view())); /* use it */
   }
   else if (ar->what[0] == 'm')                             /* main? */
-    lua_pushliteral(L, "main chunk");
+    lua_pushliteral(L, HostString(lit<"main chunk">()->view()));
   else if (pushglobalfuncname(L, ar))
   {                       /* try a global name */
     lua_pushvalue(L, -1); /* the name is the argument */
-    lua_pushfstring(L, "function '%s'");
+    lua_pushfstring(L, HostString(lit<"function '%s'">()->view()));
     lua_remove(L, -2); /* remove name */
   }
   else if (ar->what[0] != 'C')
@@ -115,10 +115,10 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
     std::string_view ss{ar->short_src};
     lua_pushlstring(L, ss, 0, ss.size());
     lua_pushinteger(L, ar->linedefined);
-    lua_pushfstring(L, "function <%s:%d>");
+    lua_pushfstring(L, HostString(lit<"function <%s:%d>">()->view()));
   }
   else /* nothing left... */
-    lua_pushliteral(L, "?");
+    lua_pushliteral(L, HostString(lit<"?">()->view()));
 }
 
 static int lastlevel(lua_State* L)
@@ -155,37 +155,37 @@ LUALIB_API void luaL_traceback(lua_State* L, lua_State* L1,
     luaL_addstring(&b, *msg);
     luaL_addchar(&b, '\n');
   }
-  luaL_addstring(&b, "stack traceback:");
+  luaL_addstring(&b, HostString(lit<"stack traceback:">()->view()));
   while ((oar = lua_getstacki(L1, level++)))
   {
     if (limit2show-- == 0)
     {                                     /* too many levels? */
       int n = last - level - LEVELS2 + 1; /* number of levels to skip */
       lua_pushinteger(L, n);
-      lua_pushfstring(L, "\n\t...\t(skipping %d levels)");
+      lua_pushfstring(L, HostString(lit<"\n\t...\t(skipping %d levels)">()->view()));
       luaL_addvalue(&b); /* add warning about skip */
       level += n;        /* and skip to last levels */
     }
     else
     {
-      InternalDebug ar = *lua_getinfoi(L1, "Slnt", *oar);
+      InternalDebug ar = *lua_getinfoi(L1, lit<"Slnt">()->view(), *oar);
       std::string_view ss{ar.short_src};
       if (ar.currentline <= 0)
       {
         lua_pushlstring(L, ss, 0, ss.size());
-        lua_pushfstring(L, "\n\t%s: in ");
+        lua_pushfstring(L, HostString(lit<"\n\t%s: in ">()->view()));
       }
       else
       {
         lua_pushlstring(L, ss, 0, ss.size());
         lua_pushinteger(L, ar.currentline);
-        lua_pushfstring(L, "\n\t%s:%d: in ");
+        lua_pushfstring(L, HostString(lit<"\n\t%s:%d: in ">()->view()));
       }
       luaL_addvalue(&b);
       pushfuncname(L, &ar);
       luaL_addvalue(&b);
       if (ar.istailcall)
-        luaL_addstring(&b, "\n\t(...tail calls...)");
+        luaL_addstring(&b, HostString(lit<"\n\t(...tail calls...)">()->view()));
     }
   }
   luaL_pushresult(&b);
@@ -201,55 +201,55 @@ LUALIB_API void luaL_traceback(lua_State* L, lua_State* L1,
 
 LUALIB_API int luaL_argerror(lua_State* L, int arg, const HostString& extramsg)
 {
-  const char* argword;
+  const InternalString* argword;
   std::optional<InternalDebug> oar = lua_getstacki(L, 0);
   if (!oar)
   { /* no stack frame? */
     lua_pushinteger(L, arg);
     lua_pushstring(L, extramsg);
-    return luaL_error(L, "bad argument #%d (%s)");
+    return luaL_error(L, HostString(lit<"bad argument #%d (%s)">()->view()));
   }
-  InternalDebug ar = *lua_getinfoi(L, "nt", *oar);
+  InternalDebug ar = *lua_getinfoi(L, lit<"nt">()->view(), *oar);
   if (arg <= ar.extraargs) /* error in an extra argument? */
-    argword = "extra argument";
+    argword = lit<"extra argument">();
   else
   {
     arg -= ar.extraargs; /* do not count extra arguments */
-    if (ar.namewhat == "method")
+    if (ar.namewhat == lit<"method">()->view())
     {               /* colon syntax? */
       arg--;        /* do not count (extra) self argument */
       if (arg == 0)
       { /* error in self argument? */
         lua_pushlstring(L, ar.name, 0, ar.name.size());
         lua_pushstring(L, extramsg);
-        return luaL_error(L, "calling '%s' on bad self (%s)");
+        return luaL_error(L, HostString(lit<"calling '%s' on bad self (%s)">()->view()));
       }
       /* else go through; error in a regular argument */
     }
-    argword = "argument";
+    argword = lit<"argument">();
   }
   if (ar.name.data() == nullptr) /* null = absent */
     ar.name = (pushglobalfuncname(L, &ar)) ? lua_tolstring(L, -1)
-                                           : std::string_view("?");
-  lua_pushstring(L, argword);
+                                           : lit<"?">()->view();
+  lua_pushstring(L, HostString(argword->view()));
   lua_pushinteger(L, arg);
   lua_pushlstring(L, ar.name, 0, ar.name.size());
   lua_pushstring(L, extramsg);
-  return luaL_error(L, "bad %s #%d to '%s' (%s)");
+  return luaL_error(L, HostString(lit<"bad %s #%d to '%s' (%s)">()->view()));
 }
 
 LUALIB_API int luaL_typeerror(lua_State* L, int arg, const HostString& tname)
 {
   HostString typearg; /* name for the type of the actual argument */
-  if (luaL_getmetafield(L, arg, "__name") == LUA_TSTRING)
+  if (luaL_getmetafield(L, arg, HostString(lit<"__name">()->view())) == LUA_TSTRING)
     typearg = *lua_tostring(L, -1); /* use the given type name */
   else if (lua_type(L, arg) == LUA_TLIGHTUSERDATA)
-    typearg = "light userdata"; /* special name for messages */
+    typearg = HostString(lit<"light userdata">()->view()); /* special name for messages */
   else
     typearg = luaL_typename(L, arg); /* standard name */
   lua_pushstring(L, tname);
   lua_pushstring(L, typearg);
-  const HostString msg = lua_pushfstring(L, "%s expected, got %s");
+  const HostString msg = lua_pushfstring(L, HostString(lit<"%s expected, got %s">()->view()));
   return luaL_argerror(L, arg, msg);
 }
 
@@ -267,17 +267,17 @@ LUALIB_API void luaL_where(lua_State* L, int level)
   std::optional<InternalDebug> oar = lua_getstacki(L, level);
   if (oar)
   {                                                /* check function at level */
-    InternalDebug ar = *lua_getinfoi(L, "Sl", *oar); /* get info about it */
+    InternalDebug ar = *lua_getinfoi(L, lit<"Sl">()->view(), *oar); /* get info about it */
     if (ar.currentline > 0)
     { /* is there info? */
       std::string_view ss{ar.short_src};
       lua_pushlstring(L, ss, 0, ss.size());
       lua_pushinteger(L, ar.currentline);
-      lua_pushfstring(L, "%s:%d: ");
+      lua_pushfstring(L, HostString(lit<"%s:%d: ">()->view()));
       return;
     }
   }
-  lua_pushfstring(L, ""); /* else, no information available... */
+  lua_pushfstring(L, HostString(lit<"">()->view())); /* else, no information available... */
 }
 
 /*
@@ -307,12 +307,12 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname)
     luaL_pushfail(L);
     /* strerror is system ABI: borrow its bytes at the call */
     std::string_view msg = (en != 0) ? std::string_view{strerror(en)}
-                                     : std::string_view{"(no extra info)"};
+                                     : lit<"(no extra info)">()->view();
     if (fname.data() != nullptr) /* null = no file name to report */
     {
       lua_pushlstring(L, fname, 0, fname.size());
       lua_pushlstring(L, msg, 0, msg.size());
-      lua_pushfstring(L, "%s: %s");
+      lua_pushfstring(L, HostString(lit<"%s: %s">()->view()));
     }
     else
       lua_pushlstring(L, msg, 0, msg.size());
@@ -343,7 +343,7 @@ LUALIB_API int luaL_execresult(lua_State* L, int stat)
     return luaL_fileresult(L, 0, std::nullopt);
   else
   {
-    const char* what = "exit";     /* type of termination */
+    const InternalString* what = lit<"exit">(); /* type of termination */
     /* interpret result */
     if (WIFEXITED(stat))
     {
@@ -352,13 +352,13 @@ LUALIB_API int luaL_execresult(lua_State* L, int stat)
     else if (WIFSIGNALED(stat))
     {
       stat = WTERMSIG(stat);
-      what = "signal";
+      what = lit<"signal">();
     }
-    if (*what == 'e' && stat == 0) /* successful termination? */
+    if (what == lit<"exit">() && stat == 0) /* successful termination? */
       lua_pushboolean(L, 1);
     else
       luaL_pushfail(L);
-    lua_pushstring(L, what);
+    lua_pushstring(L, HostString(what->view()));
     lua_pushinteger(L, stat);
     return 3; /* return true/fail,what,code */
   }
@@ -379,7 +379,7 @@ LUALIB_API int luaL_newmetatable(lua_State* L, const HostString& tname)
   lua_pop(L, 1);
   lua_createtable(L, 0, 4); /* create metatable (room for __name + methods) */
   lua_pushstring(L, tname);
-  lua_setfield(L, -2, "__name"); /* metatable.__name = tname */
+  lua_setfield(L, -2, HostString(lit<"__name">()->view())); /* metatable.__name = tname */
   lua_pushvalue(L, -1);
   lua_setfield(L, LUA_REGISTRYINDEX, tname); /* registry.name = metatable */
   return 1;
@@ -436,7 +436,7 @@ LUALIB_API int luaL_checkoption(lua_State* L, int arg,
     if (name == lst[i])
       return ((int)(i));
   lua_pushlstring(L, name, 0, name.size());
-  const HostString msg = lua_pushfstring(L, "invalid option '%s'");
+  const HostString msg = lua_pushfstring(L, HostString(lit<"invalid option '%s'">()->view()));
   return luaL_argerror(L, arg, msg);
 }
 
@@ -456,10 +456,10 @@ LUALIB_API void luaL_checkstack(lua_State* L, int space, const std::optional<Hos
     if (msg && lua_checkstack(L, 1))
     {
       lua_pushstring(L, *msg);
-      luaL_error(L, "stack overflow (%s)");
+      luaL_error(L, HostString(lit<"stack overflow (%s)">()->view()));
     }
     else
-      luaL_error(L, "stack overflow");
+      luaL_error(L, HostString(lit<"stack overflow">()->view()));
   }
 }
 
@@ -472,7 +472,7 @@ LUALIB_API void luaL_checktype(lua_State* L, int arg, int t)
 LUALIB_API void luaL_checkany(lua_State* L, int arg)
 {
   if (l_unlikely(lua_type(L, arg) == LUA_TNONE))
-    luaL_argerror(L, arg, "value expected");
+    luaL_argerror(L, arg, HostString(lit<"value expected">()->view()));
 }
 
 LUALIB_API std::string_view luaL_checklstring(lua_State* L, int arg)
@@ -525,7 +525,7 @@ LUALIB_API lua_Number luaL_optnumber(lua_State* L, int arg, lua_Number def)
 static void interror(lua_State* L, int arg)
 {
   if (lua_isnumber(L, arg))
-    luaL_argerror(L, arg, "number has no integer representation");
+    luaL_argerror(L, arg, HostString(lit<"number has no integer representation">()->view()));
   else
     tag_error(L, arg, LUA_TNUMBER);
 }
@@ -581,7 +581,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
   size_t newsize = B->bldr.capacity();
   size_t len = B->bldr.size();
   if (l_unlikely(sz >= MAX_SIZE - len))
-    return ((size_t)(luaL_error(B->L, "resulting string too large")));
+    return ((size_t)(luaL_error(B->L, HostString(lit<"resulting string too large">()->view()))));
   if (newsize <= MAX_SIZE / 3 * 2) /* no overflow? */
     newsize += (newsize >> 1);     /* new size *= 1.5 */
   if (newsize < len + sz)          /* not big enough? */
@@ -605,7 +605,7 @@ static size_t prepbuff(luaL_Buffer* B, size_t sz)
     assert(newsize >= B->reserved);
     if (l_unlikely(!lua_reservebytes(B->L, newsize - B->reserved)))
     {
-      lua_pushliteral(B->L, "not enough memory");
+      lua_pushliteral(B->L, HostString(lit<"not enough memory">()->view()));
       lua_error(B->L); /* raise a memory error */
     }
     B->reserved = newsize;
@@ -788,13 +788,13 @@ static int errfile(lua_State* L, std::string_view what, int fnameindex)
     lua_pushlstring(L, what, 0, what.size());
     lua_pushlstring(L, filename, 0, filename.size());
     lua_pushstring(L, strerror(err));
-    lua_pushfstring(L, "cannot %s %s: %s");
+    lua_pushfstring(L, HostString(lit<"cannot %s %s: %s">()->view()));
   }
   else
   {
     lua_pushlstring(L, what, 0, what.size());
     lua_pushlstring(L, filename, 0, filename.size());
-    lua_pushfstring(L, "cannot %s %s");
+    lua_pushfstring(L, HostString(lit<"cannot %s %s">()->view()));
   }
   lua_remove(L, fnameindex);
   return LUA_ERRFILE;
@@ -847,13 +847,13 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename,
   int fnameindex = lua_gettop(L) + 1; /* index of filename on the stack */
   if (filename == nullptr)
   {
-    lua_pushliteral(L, "=stdin");
+    lua_pushliteral(L, HostString(lit<"=stdin">()->view()));
     lf.f = stdin;
   }
   else
   {
     lua_pushistringref(L, filename);
-    lua_pushfstring(L, "@%s");
+    lua_pushfstring(L, HostString(lit<"@%s">()->view()));
     errno = 0;
     lf.f = fopen(filename->c_str(), "r"); /* OS edge (sanctioned c_str) */
     if (lf.f == nullptr)
