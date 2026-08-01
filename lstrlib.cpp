@@ -1205,20 +1205,20 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
   /* if 'inf' or 'NaN', format it like '%g' */
   if (x != x)
   {
-    std::string_view r = std::signbit(x) ? "-nan" : "nan";
+    std::string_view r = std::signbit(x) ? lit<"-nan">()->view() : lit<"nan">()->view();
     assert(sz > r.size());
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
   }
   else if (x == (lua_Number) HUGE_VAL || x == -(lua_Number) HUGE_VAL)
   {
-    std::string_view r = (x < 0) ? "-inf" : "inf";
+    std::string_view r = (x < 0) ? lit<"-inf">()->view() : lit<"inf">()->view();
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
   }
   else if (x == 0)
   { /* can be -0... : "0" or "-0" followed by a zero hex exponent */
-    std::string_view r = std::signbit(x) ? "-0x0p+0" : "0x0p+0";
+    std::string_view r = std::signbit(x) ? lit<"-0x0p+0">()->view() : lit<"0x0p+0">()->view();
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
   }

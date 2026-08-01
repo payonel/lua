@@ -22,18 +22,7 @@
 #include "llimits.h"
 #include "lualib.h"
 
-/*
-** Change this macro to accept other modes for 'fopen' besides
-** the standard ones.
-*/
-#if !defined(l_checkmode)
-
-/* accepted extensions to 'mode' in 'fopen' */
-#if !defined(L_MODEEXT)
-#define L_MODEEXT "b"
-#endif
-
-/* Check whether 'mode' matches '[rwa]%+?[L_MODEEXT]*' */
+/* Check whether 'mode' matches '[rwa]%+?[b]*' */
 static int l_checkmode(std::string_view mode)
 {
   if (mode.empty() || lit<"rwa">()->view().find(mode[0]) == std::string_view::npos)
@@ -41,51 +30,19 @@ static int l_checkmode(std::string_view mode)
   size_t i = 1;
   if (i < mode.size() && mode[i] == '+') /* skip if char is '+' */
     i++;
-  /* check extensions: remaining chars must all be in L_MODEEXT */
-  return mode.find_first_not_of(lit<L_MODEEXT>()->view(), i) == std::string_view::npos;
+  /* check extensions: remaining chars must all be in b */
+  return mode.find_first_not_of(lit<"b">()->view(), i) == std::string_view::npos;
 }
 
-#endif
-
-/*
-** {======================================================
-** l_popen spawns a new process connected to the current
-** one through the file streams.
-** =======================================================
-*/
-
-#define l_popen(L, c, m)  (fflush(nullptr), popen(c, m))
-#define l_pclose(L, file) (pclose(file))
-
-#if !defined(l_checkmodep)
 /* By default, Lua accepts only "r" or "w" as valid modes */
 static inline int l_checkmodep(const char* m)
 {
   return (m[0] == 'r' || m[0] == 'w') && m[1] == '\0';
 }
-#endif
 
 /* }====================================================== */
 
-#if !defined(l_getc) /* { */
-
-#define l_getc(f)       getc_unlocked(f)
-#define l_lockfile(f)   flockfile(f)
-#define l_unlockfile(f) funlockfile(f)
-
-#endif /* } */
-
-/*
-** {======================================================
-** l_fseek: configuration for longer offsets
-** =======================================================
-*/
-
 #include <sys/types.h>
-
-#define l_fseek(f, o, w) fseeko(f, o, w)
-#define l_ftell(f)       ftello(f)
-#define l_seeknum        off_t
 
 /* }====================================================== */
 
@@ -237,7 +194,7 @@ static int io_pclose(lua_State* L)
 {
   LStream* p = tolstream(L);
   errno = 0;
-  return luaL_execresult(L, l_pclose(L, p->f));
+  return luaL_execresult(L, pclose(p->f));
 }
 
 static int io_popen(lua_State* L)
@@ -247,7 +204,8 @@ static int io_popen(lua_State* L)
   LStream* p = newprefile(L);
   luaL_argcheck(L, l_checkmodep(mode->c_str()), 2, HostString(lit<"invalid mode">()->view()));
   errno = 0;
-  p->f = l_popen(L, filename->c_str(), mode->c_str()); /* OS edge (sanctioned c_str) */
+  fflush(nullptr);
+  p->f = popen(filename->c_str(), mode->c_str());
   p->closef = &io_pclose;
   return (p->f == nullptr) ? luaL_fileresulti(L, 0, filename->view()) : 1;
 }
@@ -384,9 +342,7 @@ static int io_lines(lua_State* L)
 */
 
 /* maximum length of a numeral */
-#if !defined(L_MAXLENNUM)
-#define L_MAXLENNUM 200
-#endif
+static constexpr int L_MAXLENNUM = 200;
 
 /* auxiliary structure used by 'read_number' */
 struct RN
@@ -410,7 +366,7 @@ static int nextc(RN* rn)
   else
   {
     rn->buff[rn->n++] = ((char)(rn->c)); /* save current char */
-    rn->c = l_getc(rn->f);                /* read next one */
+    rn->c = getc_unlocked(rn->f);                /* read next one */
     return 1;
   }
 }
@@ -452,10 +408,10 @@ static int read_number(lua_State* L, FILE* f)
   rn.n = 0;
   decp[0] = ((char)(lua_getlocaledecpoint())); /* get decimal point from locale */
   decp[1] = '.';                               /* always accept a dot */
-  l_lockfile(rn.f);
+  flockfile(rn.f);
   do
   {
-    rn.c = l_getc(rn.f);
+    rn.c = getc_unlocked(rn.f);
   } while (isspace(rn.c)); /* skip spaces */
   test2(&rn, lit<"-+">()->view());        /* optional sign */
   if (test2(&rn, lit<"00">()->view()))
@@ -474,7 +430,7 @@ static int read_number(lua_State* L, FILE* f)
     readdigits(&rn, 0); /* exponent digits */
   }
   ungetc(rn.c, rn.f); /* unread look-ahead char */
-  l_unlockfile(rn.f);
+  funlockfile(rn.f);
   rn.buff[rn.n] = '\0'; /* finish string */
   if (l_likely(lua_stringtonumber(L, rn.buff)))
     return 1; /* ok, it is a valid number */
@@ -503,10 +459,10 @@ static int read_line(lua_State* L, FILE* f, int chop)
     size_t off = luaL_prepbuffer(&b); /* preallocate buffer space */
     std::span<char> buff = luaL_buffarea(&b);
     unsigned i = 0;
-    l_lockfile(f); /* no memory errors can happen inside the lock */
-    while (i < LUAL_BUFFERSIZE && (c = l_getc(f)) != EOF && c != '\n')
+    flockfile(f); /* no memory errors can happen inside the lock */
+    while (i < LUAL_BUFFERSIZE && (c = getc_unlocked(f)) != EOF && c != '\n')
       buff[off + i++] = ((char)(c)); /* read up to end of line or buffer limit */
-    l_unlockfile(f);
+    funlockfile(f);
     luaL_addsize(&b, i);
   } while (c != EOF && c != '\n'); /* repeat until end of line */
   if (!chop && c == '\n')   /* want a newline and have one? */
@@ -708,16 +664,16 @@ static int f_seek(lua_State* L)
   FILE* f = tofile(L);
   int op = luaL_checkoption(L, 2, defmode, modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
-  l_seeknum offset = (l_seeknum) p3;
+  off_t offset = (off_t) p3;
   luaL_argcheck(L, (lua_Integer) offset == p3, 3,
                 HostString(lit<"not an integer in proper range">()->view()));
   errno = 0;
-  op = l_fseek(f, offset, mode[op]);
+  op = fseeko(f, offset, mode[op]);
   if (l_unlikely(op))
     return luaL_fileresult(L, 0, std::nullopt); /* error */
   else
   {
-    lua_pushinteger(L, (lua_Integer) l_ftell(f));
+    lua_pushinteger(L, (lua_Integer) ftello(f));
     return 1;
   }
 }

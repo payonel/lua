@@ -375,9 +375,7 @@ static lua_Number lua_strx2number(std::string_view s, size_t off, size_t* endpos
 /* }====================================================== */
 
 /* maximum length of a numeral to be converted to a number */
-#if !defined(L_MAXLENNUM)
-#define L_MAXLENNUM 200
-#endif
+static constexpr int L_MAXLENNUM = 200;
 
 /*
 ** Convert a decimal numeral 's' to a lua_Number via 'std::from_chars'
