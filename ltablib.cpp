@@ -44,10 +44,10 @@ static void checktab(lua_State* L, int arg, int what)
   {                                 /* is it not a table? */
     int n = 1;                      /* number of elements to pop */
     if (lua_getmetatable(L, arg) && /* must have metatable */
-        (!(what & TAB_R) || checkfield(L, "__index", ++n)) &&
-        (!(what & TAB_W) || checkfield(L, "__newindex", ++n)) &&
+        (!(what & TAB_R) || checkfield(L, lit<"__index">()->view(), ++n)) &&
+        (!(what & TAB_W) || checkfield(L, lit<"__newindex">()->view(), ++n)) &&
         (!(what & TAB_L) || /* strings don't need '__len' to have a length */
-         tp == LUA_TSTRING || checkfield(L, "__len", ++n)))
+         tp == LUA_TSTRING || checkfield(L, lit<"__len">()->view(), ++n)))
     {
       lua_pop(L, n); /* pop metatable and tested metamethods */
     }
@@ -66,8 +66,8 @@ static int tcreate(lua_State* L)
 {
   lua_Unsigned sizeseq = (lua_Unsigned) luaL_checkinteger(L, 1);
   lua_Unsigned sizerest = (lua_Unsigned) luaL_optinteger(L, 2, 0);
-  luaL_argcheck(L, sizeseq <= ((unsigned int)(INT_MAX)), 1, "out of range");
-  luaL_argcheck(L, sizerest <= ((unsigned int)(INT_MAX)), 2, "out of range");
+  luaL_argcheck(L, sizeseq <= ((unsigned int)(INT_MAX)), 1, HostString(lit<"out of range">()->view()));
+  luaL_argcheck(L, sizerest <= ((unsigned int)(INT_MAX)), 2, HostString(lit<"out of range">()->view()));
   lua_createtable(L, ((int)(sizeseq)), ((int)(sizerest)));
   return 1;
 }
@@ -90,7 +90,7 @@ static int tinsert(lua_State* L)
     pos = luaL_checkinteger(L, 2); /* 2nd argument is the position */
     /* check whether 'pos' is in [1, e] */
     luaL_argcheck(L, (lua_Unsigned) pos - 1u < (lua_Unsigned) e, 2,
-                  "position out of bounds");
+                  HostString(lit<"position out of bounds">()->view()));
     for (i = e; i > pos; i--)
     { /* move up elements */
       lua_geti(L, 1, i - 1);
@@ -100,7 +100,7 @@ static int tinsert(lua_State* L)
   }
   default:
   {
-    return luaL_error(L, "wrong number of arguments to 'insert'");
+    return luaL_error(L, HostString(lit<"wrong number of arguments to 'insert'">()->view()));
   }
   }
   lua_seti(L, 1, pos); /* t[pos] = v */
@@ -114,7 +114,7 @@ static int tremove(lua_State* L)
   if (pos != size) /* validate 'pos' if given */
     /* check whether 'pos' is in [1, size + 1] */
     luaL_argcheck(L, (lua_Unsigned) pos - 1u <= (lua_Unsigned) size, 2,
-                  "position out of bounds");
+                  HostString(lit<"position out of bounds">()->view()));
   lua_geti(L, 1, pos); /* result = t[pos] */
   for (; pos < size; pos++)
   {
@@ -144,10 +144,10 @@ static int tmove(lua_State* L)
   { /* otherwise, nothing to move */
     lua_Integer n, i;
     luaL_argcheck(L, f > 0 || e < LUA_MAXINTEGER + f, 3,
-                  "too many elements to move");
+                  HostString(lit<"too many elements to move">()->view()));
     n = e - f + 1; /* number of elements to move */
     luaL_argcheck(L, t <= LUA_MAXINTEGER - n + 1, 4,
-                  "destination wrap around");
+                  HostString(lit<"destination wrap around">()->view()));
     if (t > e || t <= f || (tt != 1 && !lua_compare(L, 1, tt, LUA_OPEQ)))
     {
       for (i = 0; i < n; i++)
@@ -176,7 +176,7 @@ static void addfield(lua_State* L, luaL_Buffer* b, lua_Integer i)
   {
     lua_pushstring(L, luaL_typename(L, -1));
     lua_pushinteger(L, i);
-    luaL_error(L, "invalid value (%s) at index %I in table for 'concat'");
+    luaL_error(L, HostString(lit<"invalid value (%s) at index %I in table for 'concat'">()->view()));
   }
   luaL_addvalue(b);
 }
@@ -185,7 +185,7 @@ static int tconcat(lua_State* L)
 {
   luaL_Buffer b;
   lua_Integer last = aux_getn(L, 1, TAB_R);
-  std::string_view sep = luaL_optlstring(L, 2, "");
+  std::string_view sep = luaL_optlstring(L, 2, lit<"">()->view());
   lua_Integer i = luaL_optinteger(L, 3, 1);
   last = luaL_optinteger(L, 4, last);
   luaL_buffinit(L, &b);
