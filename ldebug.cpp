@@ -338,10 +338,10 @@ static void funcinfo(InternalDebug* ar, Closure* cl)
 {
   if (!LuaClosure(cl))
   {
-    ar->source = "=[C]";
+    ar->source = lit<"=[C]">()->view();
     ar->linedefined = -1;
     ar->lastlinedefined = -1;
-    ar->what = "C";
+    ar->what = lit<"C">()->view();
   }
   else
   {
@@ -349,10 +349,10 @@ static void funcinfo(InternalDebug* ar, Closure* cl)
     if (p->source) /* borrowed view of the engine string */
       ar->source = p->source->data.view();
     else
-      ar->source = "=?";
+      ar->source = lit<"=?">()->view();
     ar->linedefined = p->linedefined;
     ar->lastlinedefined = p->lastlinedefined;
-    ar->what = (ar->linedefined == 0) ? "main" : "Lua";
+    ar->what = (ar->linedefined == 0) ? lit<"main">()->view() : lit<"Lua">()->view();
   }
   luaO_chunkid(ar->short_src, ar->source);
 }

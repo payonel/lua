@@ -43,7 +43,7 @@ static int auxresume(lua_State* L, lua_State* co, int narg)
     if (l_unlikely(!lua_checkstack(L, nres + 1)))
     {
       lua_pop(co, nres); /* remove results anyway */
-      lua_pushliteral(L, "too many results to resume");
+      lua_pushliteral(L, HostString(lit<"too many results to resume">()->view()));
       return -1; /* error flag */
     }
     lua_xmove(co, L, nres); /* move yielded values */
@@ -205,11 +205,11 @@ static int luaB_close(lua_State* L)
   }
   case COS_NORM:
     lua_pushistringref(L, statname[status]);
-    return luaL_error(L, "cannot close a %s coroutine");
+    return luaL_error(L, HostString(lit<"cannot close a %s coroutine">()->view()));
   case COS_RUN:
     lua_geti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD); /* get main */
     if (lua_tothread(L, -1) == co)
-      return luaL_error(L, "cannot close main thread");
+      return luaL_error(L, HostString(lit<"cannot close main thread">()->view()));
     lua_closethread(co, L);             /* close itself */
     /* previous call does not return */ /* FALLTHROUGH */
   default:
@@ -219,14 +219,14 @@ static int luaB_close(lua_State* L)
 }
 
 static const luaL_Reg co_funcs[] = {
-    {"create", luaB_cocreate},
-    {"resume", luaB_coresume},
-    {"running", luaB_corunning},
-    {"status", luaB_costatus},
-    {"wrap", luaB_cowrap},
-    {"yield", luaB_yield},
-    {"isyieldable", luaB_yieldable},
-    {"close", luaB_close},
+    {lit<"create">()->view(), luaB_cocreate},
+    {lit<"resume">()->view(), luaB_coresume},
+    {lit<"running">()->view(), luaB_corunning},
+    {lit<"status">()->view(), luaB_costatus},
+    {lit<"wrap">()->view(), luaB_cowrap},
+    {lit<"yield">()->view(), luaB_yield},
+    {lit<"isyieldable">()->view(), luaB_yieldable},
+    {lit<"close">()->view(), luaB_close},
     {{}, nullptr}};
 
 LUAMOD_API int luaopen_coroutine(lua_State* L)
