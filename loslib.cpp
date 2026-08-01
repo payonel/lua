@@ -142,7 +142,7 @@ static int os_tmpname(lua_State* L)
   int err;
   lua_tmpnam(buff, err);
   if (l_unlikely(err))
-    return luaL_error(L, "unable to generate a unique filename");
+    return luaL_error(L, HostString(lit<"unable to generate a unique filename">()->view()));
   lua_pushstring(L, buff);
   return 1;
 }
@@ -186,7 +186,7 @@ static void setfield(lua_State* L, const HostString& key, int value, int delta)
   if (l_unlikely(value > LUA_MAXINTEGER - delta))
   {
     lua_pushstring(L, key);
-    luaL_error(L, "field '%s' is out-of-bound");
+    luaL_error(L, HostString(lit<"field '%s' is out-of-bound">()->view()));
   }
 #endif
   lua_pushinteger(L, (lua_Integer) value + delta);
@@ -206,15 +206,15 @@ static void setboolfield(lua_State* L, const HostString& key, int value)
 */
 static void setallfields(lua_State* L, struct tm* stm)
 {
-  setfield(L, "year", stm->tm_year, 1900);
-  setfield(L, "month", stm->tm_mon, 1);
-  setfield(L, "day", stm->tm_mday, 0);
-  setfield(L, "hour", stm->tm_hour, 0);
-  setfield(L, "min", stm->tm_min, 0);
-  setfield(L, "sec", stm->tm_sec, 0);
-  setfield(L, "yday", stm->tm_yday, 1);
-  setfield(L, "wday", stm->tm_wday, 1);
-  setboolfield(L, "isdst", stm->tm_isdst);
+  setfield(L, HostString(lit<"year">()->view()), stm->tm_year, 1900);
+  setfield(L, HostString(lit<"month">()->view()), stm->tm_mon, 1);
+  setfield(L, HostString(lit<"day">()->view()), stm->tm_mday, 0);
+  setfield(L, HostString(lit<"hour">()->view()), stm->tm_hour, 0);
+  setfield(L, HostString(lit<"min">()->view()), stm->tm_min, 0);
+  setfield(L, HostString(lit<"sec">()->view()), stm->tm_sec, 0);
+  setfield(L, HostString(lit<"yday">()->view()), stm->tm_yday, 1);
+  setfield(L, HostString(lit<"wday">()->view()), stm->tm_wday, 1);
+  setboolfield(L, HostString(lit<"isdst">()->view()), stm->tm_isdst);
 }
 
 static int getboolfield(lua_State* L, const HostString& key)
@@ -235,12 +235,12 @@ static int getfield(lua_State* L, const HostString& key, int d, int delta)
     if (l_unlikely(t != LUA_TNIL))
     { /* some other value? */
       lua_pushstring(L, key);
-      return luaL_error(L, "field '%s' is not an integer");
+      return luaL_error(L, HostString(lit<"field '%s' is not an integer">()->view()));
     }
     else if (l_unlikely(d < 0))
     { /* absent field; no default? */
       lua_pushstring(L, key);
-      return luaL_error(L, "field '%s' missing in date table");
+      return luaL_error(L, HostString(lit<"field '%s' missing in date table">()->view()));
     }
     res = d;
   }
@@ -249,7 +249,7 @@ static int getfield(lua_State* L, const HostString& key, int d, int delta)
     if (!(res >= 0 ? res - delta <= INT_MAX : INT_MIN + delta <= res))
     {
       lua_pushstring(L, key);
-      return luaL_error(L, "field '%s' is out-of-bound");
+      return luaL_error(L, HostString(lit<"field '%s' is out-of-bound">()->view()));
     }
     res -= delta;
   }
@@ -265,7 +265,7 @@ static int getfield(lua_State* L, const HostString& key, int d, int delta)
 static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
                           std::span<char> buff, size_t boff)
 {
-  std::string_view option = LUA_STRFTIMEOPTIONS;
+  std::string_view option = lit<LUA_STRFTIMEOPTIONS>()->view();
   size_t opos = 0;
   size_t convlen = fmt.size() - pos;
   unsigned oplen = 1; /* length of options being checked */
@@ -281,7 +281,7 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
     }
   }
   lua_pushlstring(L, fmt, pos, fmt.size() - pos);
-  lua_pushfstring(L, "invalid conversion specifier '%%%s'");
+  lua_pushfstring(L, HostString(lit<"invalid conversion specifier '%%%s'">()->view()));
   /* message anchored on the stack; hand it on as consumer text */
   luaL_argerror(L, 1, HostString(lua_tolstring(L, -1)));
   return pos; /* to avoid warnings */
@@ -290,7 +290,7 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
 static time_t l_checktime(lua_State* L, int arg)
 {
   l_timet t = l_gettime(L, arg);
-  luaL_argcheck(L, (time_t) t == t, arg, "time out-of-bounds");
+  luaL_argcheck(L, (time_t) t == t, arg, HostString(lit<"time out-of-bounds">()->view()));
   return (time_t) t;
 }
 
@@ -299,7 +299,7 @@ constexpr int SIZETIMEFMT = 250;
 
 static int os_date(lua_State* L)
 {
-  std::string_view sfmt = luaL_optlstring(L, 1, "%c");
+  std::string_view sfmt = luaL_optlstring(L, 1, lit<"%c">()->view());
   size_t sp = 0; /* scan offset into the format */
   time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
   struct tm tmr, *stm;
@@ -312,7 +312,7 @@ static int os_date(lua_State* L)
     stm = l_localtime(&t, &tmr);
   if (stm == nullptr) /* invalid date? */
     return luaL_error(L,
-                      "date result cannot be represented in this installation");
+                      HostString(lit<"date result cannot be represented in this installation">()->view()));
   if (sfmt.size() - sp == 2 && sfmt[sp] == '*' && sfmt[sp + 1] == 't')
   {
     lua_createtable(L, 0, 9); /* 9 = number of fields */
