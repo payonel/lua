@@ -343,3 +343,9 @@ private:
 };
 
 /* }================================================================== */
+
+constexpr const char* operator""_os (const char* s, std::size_t n)
+{
+  (void)n;
+  return reinterpret_cast<const char*>(s);
+}
