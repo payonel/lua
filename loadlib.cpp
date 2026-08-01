@@ -151,7 +151,7 @@ static void setpath(lua_State* L, const InternalString* fieldname,
   else
   {
     std::string_view path{epath}; /* OS edge: borrow the env value bytes */
-    size_t dftmark = path.find(LUA_PATH_SEP LUA_PATH_SEP);
+    size_t dftmark = path.find(lit<LUA_PATH_SEP LUA_PATH_SEP>()->view());
     if (dftmark == std::string_view::npos)
       lua_pushlstring(L, path, 0, path.size()); /* nothing to change */
     else
@@ -161,12 +161,12 @@ static void setpath(lua_State* L, const InternalString* fieldname,
       if (dftmark > 0)
       { /* is there a prefix before ';;'? */
         luaL_addlstring(&b, path, 0, dftmark); /* add it */
-        luaL_addchar(&b, *LUA_PATH_SEP);
+        luaL_addchar(&b, lit<LUA_PATH_SEP>()->view()[0]);
       }
       luaL_addlstring(&b, dft, 0, dft.size()); /* add default */
       if (dftmark + 2 < path.size())
       { /* is there a suffix after ';;'? */
-        luaL_addchar(&b, *LUA_PATH_SEP);
+        luaL_addchar(&b, lit<LUA_PATH_SEP>()->view()[0]);
         luaL_addlstring(&b, path, dftmark + 2, path.size() - (dftmark + 2));
       }
       luaL_pushresult(&b);
@@ -330,7 +330,7 @@ static void pusherrornotfound(lua_State* L, std::string_view path)
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   luaL_addstring(&b, HostString(lit<"no file '">()->view()));
-  luaL_addgsubi(&b, path, LUA_PATH_SEP, lit<"'\n\tno file '">()->view());
+  luaL_addgsubi(&b, path, lit<LUA_PATH_SEP>()->view(), lit<"'\n\tno file '">()->view());
   luaL_addstring(&b, HostString(lit<"'">()->view()));
   luaL_pushresult(&b);
 }
@@ -352,7 +352,7 @@ static int searchpath(lua_State* L, std::string_view name,
   }
   luaL_buffinit(L, &buff);
   /* add path to the buffer, replacing marks ('?') with the file name */
-  luaL_addgsubi(&buff, path, LUA_PATH_MARK, name);
+  luaL_addgsubi(&buff, path, lit<LUA_PATH_MARK>()->view(), name);
   {
     /* walk the list 'name1;name2;name3;...' by offsets over a view of
        the buffer (Java: byte[] + int cursors); each candidate file
@@ -362,7 +362,7 @@ static int searchpath(lua_State* L, std::string_view name,
     size_t pos = 0;
     while (pos < list.size())
     {
-      size_t sepmark = list.find(*LUA_PATH_SEP, pos); /* next separator */
+      size_t sepmark = list.find(lit<LUA_PATH_SEP>()->view(), pos); /* next separator */
       if (sepmark == std::string_view::npos)          /* separator not found? */
         sepmark = list.size();                        /* name goes until the end */
       InternalString filename(list, pos, sepmark - pos); /* deep copy of the sub-range */
@@ -384,7 +384,7 @@ static int ll_searchpath(lua_State* L)
   int found = searchpath(L, luaL_checklstring(L, 1),
                          luaL_checklstring(L, 2),
                          luaL_optlstring(L, 3, lit<".">()->view()),
-                         luaL_optlstring(L, 4, LUA_DIRSEP));
+                         luaL_optlstring(L, 4, lit<LUA_DIRSEP>()->view()));
   if (found)
     return 1;
   else
@@ -429,7 +429,7 @@ static int checkload(lua_State* L, int stat, std::string_view filename)
 static int searcher_Lua(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
-  if (!findfile(L, name, lit<"path">(), LUA_LSUBSEP))
+  if (!findfile(L, name, lit<"path">(), lit<LUA_LSUBSEP>()->view()))
     return 1; /* module not found in this path (error message pushed) */
   const InternalString* filename = lua_toistring(L, -1); /* borrowed (anchored) */
   return checkload(L, (luaL_loadfilei(L, filename, nullptr) == LUA_OK),
@@ -448,7 +448,7 @@ static int loadfunc(lua_State* L, const InternalString* filename,
                     std::string_view modname0)
 {
   std::string_view modname = luaL_gsubi(L, modname0, lit<".">()->view(), LUA_OFSEP->view());
-  size_t mark = modname.find(*LUA_IGMARK);
+  size_t mark = modname.find(lit<LUA_IGMARK>()->view());
   if (mark != std::string_view::npos)
   {
     int stat;
@@ -469,7 +469,7 @@ static int loadfunc(lua_State* L, const InternalString* filename,
 static int searcher_C(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
-  if (!findfile(L, name, lit<"cpath">(), LUA_CSUBSEP))
+  if (!findfile(L, name, lit<"cpath">(), lit<LUA_CSUBSEP>()->view()))
     return 1; /* module not found in this path (error message pushed) */
   const InternalString* filename = lua_toistring(L, -1); /* borrowed (anchored) */
   return checkload(L, (loadfunc(L, filename, name) == 0), filename->view());
@@ -482,7 +482,7 @@ static int searcher_Croot(lua_State* L)
   int stat;
   if (p == std::string_view::npos)
     return 0; /* is root */
-  if (!findfile(L, name.substr(0, p), lit<"cpath">(), LUA_CSUBSEP))
+  if (!findfile(L, name.substr(0, p), lit<"cpath">(), lit<LUA_CSUBSEP>()->view()))
     return 1; /* root not found (error message pushed) */
   const InternalString* filename = lua_toistring(L, -1); /* borrowed (anchored) */
   if ((stat = loadfunc(L, filename, name)) != 0)
@@ -630,8 +630,8 @@ LUAMOD_API int luaopen_package(lua_State* L)
   (luaL_checkversion(L), lua_createtable(L, 0, sizeof(pk_funcs) / sizeof((pk_funcs)[0]) - 1), luaL_setfuncs(L, pk_funcs, 0));                      /* create 'package' table */
   createsearcherstable(L);
   /* set paths */
-  setpath(L, lit<"path">(), LUA_PATH_VAR, LUA_PATH_DEFAULT);
-  setpath(L, lit<"cpath">(), LUA_CPATH_VAR, LUA_CPATH_DEFAULT);
+  setpath(L, lit<"path">(), LUA_PATH_VAR, lit<LUA_PATH_DEFAULT>()->view());
+  setpath(L, lit<"cpath">(), LUA_CPATH_VAR, lit<LUA_CPATH_DEFAULT>()->view());
   /* store config information */
   lua_pushliteral(L, HostString(lit<LUA_DIRSEP "\n" LUA_PATH_SEP "\n" LUA_PATH_MARK "\n" LUA_EXEC_DIR "\n" LUA_IGMARK "\n">()->view()));
   lua_setfield(L, -2, HostString(lit<"config">()->view()));

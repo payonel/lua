@@ -221,7 +221,7 @@ static int dolibrary(lua_State* L, const std::string& arg)
   {                 /* no explicit name? */
     globname = arg; /* module name is equal to global name */
     modname = arg;
-    suffix = globname.find(*LUA_IGMARK); /* look for a suffix mark */
+    suffix = globname.find(lit<LUA_IGMARK>()->view()); /* look for a suffix mark */
   }
   else
   {
@@ -382,14 +382,14 @@ static int runargs(lua_State* L, char** argv, int n)
         extra = argv[i];
       }
       status = (option == 'e')
-                   ? dostring(L, extra, "=(command line)")
+                   ? dostring(L, extra, HostString(lit<"=(command line)">()->view()))
                    : dolibrary(L, extra);
       if (status != LUA_OK)
         return 0;
       break;
     }
     case 'W':
-      lua_warning(L, "@on", 0); /* warnings on */
+      lua_warning(L, HostString(lit<"@on">()->view()), 0); /* warnings on */
       break;
     }
   }
@@ -424,7 +424,7 @@ static int handle_luainit(lua_State* L)
     return dofile(L, fname);
   }
   else
-    return dostring(L, init, HostString("=" + name));
+    return dostring(L, init, HostString(std::string(lit<"=">()->view()) + name));
 }
 
 /*
@@ -523,9 +523,9 @@ static void lua_initreadline(lua_State* L)
       return;               /* everything ok */
     /* else emit a warning */
   }
-  lua_warning(L, "unable to load readline library '", 1);
+  lua_warning(L, HostString(lit<"unable to load readline library '">()->view()), 1);
   lua_warning(L, rllib, 1);
-  lua_warning(L, "'", 0);
+  lua_warning(L, HostString(lit<"'">()->view()), 0);
 }
 
 #else /* }{ */
@@ -545,7 +545,7 @@ static void lua_initreadline(lua_State* L)
 */
 static std::string get_prompt(lua_State* L, int firstline)
 {
-  if (lua_getglobal(L, firstline ? "_PROMPT" : "_PROMPT2") == LUA_TNIL)
+  if (lua_getglobal(L, HostString((firstline ? lit<"_PROMPT">() : lit<"_PROMPT2">())->view())) == LUA_TNIL)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
@@ -556,7 +556,7 @@ static std::string get_prompt(lua_State* L, int firstline)
 }
 
 /* mark in error messages for incomplete statements */
-constexpr char EOFMARK[] = "<eof>";
+const std::string_view EOFMARK = lit<"<eof>">()->view();
 
 /*
 ** Check whether 'status' signals a syntax error and the error
@@ -601,9 +601,10 @@ static int pushline(lua_State* L, int firstline)
 static int addreturn(lua_State* L)
 {
   lua_pushvalue(L, -1); /* duplicate original line */
-  lua_pushfstring(L, "return %s;"); /* modified line (anchored on the stack) */
+  lua_pushfstring(L, HostString(lit<"return %s;">()->view())); /* modified line (anchored on the stack) */
   std::string_view retline = lua_tolstring(L, -1); /* borrowed */
-  int status = luaL_loadbufferx(L, retline, "=stdin", "t");
+  int status = luaL_loadbufferx(L, retline, HostString(lit<"=stdin">()->view()),
+                                HostString(lit<"t">()->view()));
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
   else
@@ -613,8 +614,8 @@ static int addreturn(lua_State* L)
 
 static void checklocal(std::string_view line)
 {
-  static constexpr std::string_view kw = "local";
-  static constexpr std::string_view space = " \t";
+  static const std::string_view kw = lit<"local">()->view();
+  static const std::string_view space = lit<" \t">()->view();
   size_t i = line.find_first_not_of(space); /* skip spaces */
   if (i == std::string_view::npos)
     return; /* only spaces */
@@ -638,11 +639,12 @@ static int multiline(lua_State* L)
   checklocal(line);
   for (;;)
   {                                                  /* repeat until gets a complete statement */
-    int status = luaL_loadbufferx(L, line, "=stdin", "t"); /* try it */
+    int status = luaL_loadbufferx(L, line, HostString(lit<"=stdin">()->view()),
+                                  HostString(lit<"t">()->view())); /* try it */
     if (!incomplete(L, status) || !pushline(L, 0))
       return status;                  /* should not or cannot try to add continuation line */
     lua_remove(L, -2);                /* remove error message (from incomplete line) */
-    lua_pushliteral(L, "\n");         /* add newline... */
+    lua_pushliteral(L, HostString(lit<"\n">()->view()));         /* add newline... */
     lua_insert(L, -2);                /* ...between the two lines */
     lua_concat(L, 3);                 /* join them */
     line = lua_tolstring(L, 1);       /* get what is has */
@@ -679,13 +681,13 @@ static void l_print(lua_State* L)
   int n = lua_gettop(L);
   if (n > 0)
   { /* any result to be printed? */
-    luaL_checkstack(L, LUA_MINSTACK, "too many results to print");
-    lua_getglobal(L, "print");
+    luaL_checkstack(L, LUA_MINSTACK, HostString(lit<"too many results to print">()->view()));
+    lua_getglobal(L, HostString(lit<"print">()->view()));
     lua_insert(L, 1);
     if (lua_pcall(L, n, 0, 0) != LUA_OK)
     {
       lua_pushvalue(L, -1); /* error message is the argument */
-      const HostString m = lua_pushfstring(L, "error calling 'print' (%s)");
+      const HostString m = lua_pushfstring(L, HostString(lit<"error calling 'print' (%s)">()->view()));
       l_message(progname, std::string(m.view()));
     }
   }
@@ -740,7 +742,7 @@ static int pmain(lua_State* L)
   {                        /* option '-E'? */
     l_getenv = &no_getenv; /* program will ignore environment variables */
     lua_pushboolean(L, 1); /* signal for libraries to ignore env. vars. */
-    lua_setfield(L, LUA_REGISTRYINDEX, "LUA_NOENV");
+    lua_setfield(L, LUA_REGISTRYINDEX, HostString(lit<"LUA_NOENV">()->view()));
   }
   else
     l_getenv = &getenv;

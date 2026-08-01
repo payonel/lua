@@ -13,6 +13,8 @@
 #include <string>
 #include <string_view>
 
+#include "internal_string.h" /* lit<> for the version-string constants below */
+
 /* version numbers */
 inline constexpr int LUA_VERSION_MAJOR_N = 5;
 inline constexpr int LUA_VERSION_MINOR_N = 5;
@@ -25,16 +27,20 @@ inline constexpr int LUA_VERSION_RELEASE_NUM = LUA_VERSION_NUM * 100 + LUA_VERSI
 inline constexpr std::string_view LUA_VERSION_MAJOR = "5";
 inline constexpr std::string_view LUA_VERSION_MINOR = "5";
 inline constexpr std::string_view LUA_VERSION_RELEASE = "1";
-inline constexpr std::string_view LUA_VERSION = "Lua 5.5";
-inline constexpr std::string_view LUA_RELEASE = "Lua 5.5.1";
+inline const std::string_view LUA_VERSION = lit<"Lua 5.5">()->view();
+inline const std::string_view LUA_RELEASE = lit<"Lua 5.5.1">()->view();
+/* host-sink text (lua_writestring in lua.cpp is its only consumer) */
 inline constexpr std::string_view LUA_COPYRIGHT = "Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio";
-inline constexpr std::string_view LUA_AUTHORS = "R. Ierusalimschy, L. H. de Figueiredo, W. Celes";
+inline const std::string_view LUA_AUTHORS = lit<"R. Ierusalimschy, L. H. de Figueiredo, W. Celes">()->view();
 static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSION_RELEASE_N == 1,
               "update the version strings above (and LUA_VDIR in luaconf.h) to match the new numbers");
 
 #include "luaconf.h"
 
 /* mark for precompiled code ('<esc>Lua') */
+/* stays a compile-time literal (no lit<>): lundump.cpp uses its size as
+   an array bound, and lit<>() is not constexpr — same treatment as
+   LUAC_DATA (lundump.h) */
 inline constexpr std::string_view LUA_SIGNATURE = "\x1bLua";
 
 /* option for multiple returns in 'lua_pcall' and 'lua_call' */
