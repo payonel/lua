@@ -140,7 +140,7 @@ static void setpath(lua_State* L, const InternalString* fieldname,
                     std::string_view dft)
 {
   lua_pushstring(L, envname);
-  lua_pushstring(L, LUA_VERSUFFIX.data());
+  lua_pushstring(L, HostString(LUA_VERSUFFIX));
   lua_pushfstring(L, HostString(lit<"%s%s">()->view())); /* versioned name (anchored on the stack) */
   /* getenv is system ABI (internal OS edge stays char*, RULED) */
   const char* epath = getenv(lua_toistring(L, -1)->c_str()); /* try versioned name */
