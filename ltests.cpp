@@ -2608,28 +2608,28 @@ static const struct luaL_Reg tests_funcs[] = {
     {lit<"gcquery">()->view(), gc_query},
     {lit<"querystr">()->view(), string_query},
     {lit<"querytab">()->view(), table_query},
-    {"codeparam", test_codeparam},
-    {"applyparam", test_applyparam},
-    {"ref", tref},
-    {"resume", coresume},
-    {"s2d", s2d},
-    {"sethook", sethook},
-    {"stacklevel", stacklevel},
-    {"resetCI", resetCI},
-    {"reallocstack", reallocstack},
-    {"sizes", get_sizes},
-    {"testC", testC},
-    {"makeCfunc", makeCfunc},
-    {"totalmem", mem_query},
-    {"alloccount", alloc_count},
-    {"allocfailnext", alloc_failnext},
-    {"trick", settrick},
-    {"udataval", udataval},
-    {"unref", unref},
-    {"upvalue", upvalue},
-    {"externKstr", externKstr},
-    {"externstr", externstr},
-    {"nonblock", nonblock},
+    {lit<"codeparam">()->view(), test_codeparam},
+    {lit<"applyparam">()->view(), test_applyparam},
+    {lit<"ref">()->view(), tref},
+    {lit<"resume">()->view(), coresume},
+    {lit<"s2d">()->view(), s2d},
+    {lit<"sethook">()->view(), sethook},
+    {lit<"stacklevel">()->view(), stacklevel},
+    {lit<"resetCI">()->view(), resetCI},
+    {lit<"reallocstack">()->view(), reallocstack},
+    {lit<"sizes">()->view(), get_sizes},
+    {lit<"testC">()->view(), testC},
+    {lit<"makeCfunc">()->view(), makeCfunc},
+    {lit<"totalmem">()->view(), mem_query},
+    {lit<"alloccount">()->view(), alloc_count},
+    {lit<"allocfailnext">()->view(), alloc_failnext},
+    {lit<"trick">()->view(), settrick},
+    {lit<"udataval">()->view(), udataval},
+    {lit<"unref">()->view(), unref},
+    {lit<"upvalue">()->view(), upvalue},
+    {lit<"externKstr">()->view(), externKstr},
+    {lit<"externstr">()->view(), externstr},
+    {lit<"nonblock">()->view(), nonblock},
     {{}, nullptr}};
 
 static void checkfinalmem(void)
@@ -2652,7 +2652,7 @@ int luaB_opentests(lua_State* L)
   lua_atpanic(L, &tpanic);
   lua_setwarnf(L, &warnf, L);
   lua_pushboolean(L, 0);
-  lua_setglobal(L, "_WARN"); /* _WARN = false */
+  lua_setglobal(L, HostString(lit<"_WARN">()->view())); /* _WARN = false */
   regcodes(L);
   atexit(checkfinalmem);
   assert(f == debug_realloc && ud == &l_memcontrol);
@@ -2669,7 +2669,7 @@ lua_State* luai_newstate()
 void luai_openlibstest(lua_State* L)
 {
   luaL_openlibs(L);
-  luaL_requiref(L, "T", luaB_opentests, 1);
+  luaL_requiref(L, HostString(lit<"T">()->view()), luaB_opentests, 1);
   lua_pop(L, 1);
 }
 

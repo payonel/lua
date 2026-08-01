@@ -54,7 +54,7 @@ static void setsignal(int sig, void (*handler)(int))
 static void lstop(lua_State* L, lua_Debug*)
 {
   lua_sethook(L, nullptr, 0, 0); /* reset hook */
-  luaL_error(L, "interrupted!");
+  luaL_error(L, HostString(lit<"interrupted!">()->view()));
 }
 
 /*
@@ -129,13 +129,13 @@ static int msghandler(lua_State* L)
     msg = *lua_tostring(L, 1);
   else
   {                                          /* error object not a string */
-    if (luaL_callmeta(L, 1, "__tostring") && /* does it have a metamethod */
+    if (luaL_callmeta(L, 1, HostString(lit<"__tostring">()->view())) && /* does it have a metamethod */
         lua_type(L, -1) == LUA_TSTRING)      /* that produces a string? */
       return 1;                              /* that is the message */
     else
     {
       lua_pushstring(L, luaL_typename(L, 1));
-      msg = lua_pushfstring(L, "(error object is a %s value)");
+      msg = lua_pushfstring(L, HostString(lit<"(error object is a %s value)">()->view()));
     }
   }
   luaL_traceback(L, L, msg, 1); /* append a standard traceback */
@@ -186,7 +186,7 @@ static void createargtable(lua_State* L, char** argv, int argc, int script)
     lua_pushstring(L, argv[i]);
     lua_rawseti(L, -2, i - script);
   }
-  lua_setglobal(L, "arg");
+  lua_setglobal(L, HostString(lit<"arg">()->view()));
 }
 
 static int dochunk(lua_State* L, int status)
@@ -203,7 +203,7 @@ static int dofile(lua_State* L, const std::optional<HostString>& name)
 
 static int dostring(lua_State* L, std::string_view s, const HostString& name)
 {
-  return dochunk(L, luaL_loadbufferx(L, s, name, "t"));
+  return dochunk(L, luaL_loadbufferx(L, s, name, HostString(lit<"t">()->view())));
 }
 
 /*
@@ -228,7 +228,7 @@ static int dolibrary(lua_State* L, const std::string& arg)
     globname = arg.substr(0, eq); /* global name ends here */
     modname = arg.substr(eq + 1); /* module name starts after the '=' */
   }
-  lua_getglobal(L, "require");
+  lua_getglobal(L, HostString(lit<"require">()->view()));
   lua_pushstring(L, HostString(modname));
   status = docall(L, 1, 1); /* call 'require(modname)' */
   if (status == LUA_OK)
@@ -246,10 +246,10 @@ static int dolibrary(lua_State* L, const std::string& arg)
 static int pushargs(lua_State* L)
 {
   int i, n;
-  if (lua_getglobal(L, "arg") != LUA_TTABLE)
-    luaL_error(L, "'arg' is not a table");
+  if (lua_getglobal(L, HostString(lit<"arg">()->view())) != LUA_TTABLE)
+    luaL_error(L, HostString(lit<"'arg' is not a table">()->view()));
   n = (int) luaL_len(L, -1);
-  luaL_checkstack(L, n + 3, "too many arguments to script");
+  luaL_checkstack(L, n + 3, HostString(lit<"too many arguments to script">()->view()));
   for (i = 1; i <= n; i++)
     lua_rawgeti(L, -i, i);
   lua_remove(L, -i); /* remove table from the stack */
@@ -260,7 +260,7 @@ static int handle_script(lua_State* L, char** argv)
 {
   int status;
   const char* fname = argv[0];
-  if (strcmp(fname, "-") == 0 && strcmp(argv[-1], "--") != 0)
+  if (std::string_view(fname) == lit<"-">()->view() && std::string_view(argv[-1]) != lit<"--">()->view())
     fname = nullptr; /* stdin */
   if (fname == nullptr)
     status = luaL_loadfilex(L, std::nullopt, std::nullopt); /* stdin */
@@ -362,7 +362,7 @@ static int collectargs(char** argv, int* first)
 static int runargs(lua_State* L, char** argv, int n)
 {
   int i;
-  lua_warning(L, "@off", 0); /* by default, Lua stand-alone has warnings off */
+  lua_warning(L, HostString(lit<"@off">()->view()), 0); /* by default, Lua stand-alone has warnings off */
   for (i = 1; i < n; i++)
   {
     int option = argv[i][1];
