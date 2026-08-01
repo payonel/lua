@@ -76,10 +76,10 @@ static int fmtnargs(const char* fmt)
 
 static int runC(lua_State* L, lua_State* L1, std::string_view code);
 
-static void setnameval(lua_State* L, const char* name, int val)
+static void setnameval(lua_State* L, const InternalString* name, int val)
 {
   lua_pushinteger(L, val);
-  lua_setfield(L, -2, name);
+  lua_setfield(L, -2, HostString(name->view()));
 }
 
 static void pushobject(lua_State* L, const TValue* o)
@@ -131,15 +131,15 @@ static void warnf(void* ud, const HostString& msg, int tocont)
   { /* control message? */
     if (buff[0] != '\0')
       badexit("Control warning during warning: %s\naborting...\n", m.c_str(), buff);
-    if (m == "@off")
+    if (m == lit<"@off">()->view())
       onoff = 0;
-    else if (m == "@on")
+    else if (m == lit<"@on">()->view())
       onoff = 1;
-    else if (m == "@normal")
+    else if (m == lit<"@normal">()->view())
       mode = 0;
-    else if (m == "@allow")
+    else if (m == lit<"@allow">()->view())
       mode = 1;
-    else if (m == "@store")
+    else if (m == lit<"@store">()->view())
       mode = 2;
     else
       badexit("Invalid control warning in test mode: %s\naborting...\n",
@@ -153,8 +153,8 @@ static void warnf(void* ud, const HostString& msg, int tocont)
   if (!tocont)
   { /* message finished? */
     lua_unlock(L);
-    luaL_checkstack(L, 1, "warn stack space");
-    lua_getglobal(L, "_WARN");
+    luaL_checkstack(L, 1, HostString(lit<"warn stack space">()->view()));
+    lua_getglobal(L, HostString(lit<"_WARN">()->view()));
     if (!lua_toboolean(L, -1))
       lua_pop(L, 1); /* ok, no previous unexpected warning */
     else
@@ -180,9 +180,9 @@ static void warnf(void* ud, const HostString& msg, int tocont)
     case 2:
     { /* store */
       lua_unlock(L);
-      luaL_checkstack(L, 1, "warn stack space");
+      luaL_checkstack(L, 1, HostString(lit<"warn stack space">()->view()));
       lua_pushstring(L, buff);
-      lua_setglobal(L, "_WARN"); /* assign message to global '_WARN' */
+      lua_setglobal(L, HostString(lit<"_WARN">()->view())); /* assign message to global '_WARN' */
       lua_lock(L);
       break;
     }
@@ -894,12 +894,12 @@ static int listcode(lua_State* L)
   int pc;
   Proto* p;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
-                1, "Lua function expected");
+                1, HostString(lit<"Lua function expected">()->view()));
   TValue o = obj_at(L, 1);
   p = getproto(&o);
   lua_newtable(L);
-  setnameval(L, "maxstack", p->maxstacksize);
-  setnameval(L, "numparams", p->numparams);
+  setnameval(L, lit<"maxstack">(), p->maxstacksize);
+  setnameval(L, lit<"numparams">(), p->numparams);
   for (pc = 0; pc < p->sizecode; pc++)
   {
     lua_pushinteger(L, pc + 1);
@@ -914,7 +914,7 @@ static int printcode(lua_State* L)
   int pc;
   Proto* p;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
-                1, "Lua function expected");
+                1, HostString(lit<"Lua function expected">()->view()));
   TValue o = obj_at(L, 1);
   p = getproto(&o);
   printf("maxstack: %d\n", p->maxstacksize);
@@ -931,7 +931,7 @@ static int listk(lua_State* L)
   Proto* p;
   int i;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
-                1, "Lua function expected");
+                1, HostString(lit<"Lua function expected">()->view()));
   TValue o = obj_at(L, 1);
   p = getproto(&o);
   lua_createtable(L, p->sizek, 0);
@@ -948,10 +948,10 @@ static int listabslineinfo(lua_State* L)
   Proto* p;
   int i;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
-                1, "Lua function expected");
+                1, HostString(lit<"Lua function expected">()->view()));
   TValue o = obj_at(L, 1);
   p = getproto(&o);
-  luaL_argcheck(L, p->abslineinfo != nullptr, 1, "function has no debug info");
+  luaL_argcheck(L, p->abslineinfo != nullptr, 1, HostString(lit<"function has no debug info">()->view()));
   lua_createtable(L, 2 * p->sizeabslineinfo, 0);
   for (i = 0; i < p->sizeabslineinfo; i++)
   {
@@ -970,7 +970,7 @@ static int listlocals(lua_State* L)
   int i = 0;
   const InternalString* name;
   luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
-                1, "Lua function expected");
+                1, HostString(lit<"Lua function expected">()->view()));
   TValue o = obj_at(L, 1);
   p = getproto(&o);
   while ((name = luaF_getlocalname(p, ++i, pc)) != nullptr)
@@ -1023,23 +1023,23 @@ static int lua_printallstack(lua_State* L)
 static int get_limits(lua_State* L)
 {
   lua_createtable(L, 0, 5);
-  setnameval(L, "IS32INT", LUAI_IS32INT);
-  setnameval(L, "MAXARG_Ax", MAXARG_Ax);
-  setnameval(L, "MAXARG_Bx", MAXARG_Bx);
-  setnameval(L, "OFFSET_sBx", OFFSET_sBx);
-  setnameval(L, "NUM_OPCODES", NUM_OPCODES);
+  setnameval(L, lit<"IS32INT">(), LUAI_IS32INT);
+  setnameval(L, lit<"MAXARG_Ax">(), MAXARG_Ax);
+  setnameval(L, lit<"MAXARG_Bx">(), MAXARG_Bx);
+  setnameval(L, lit<"OFFSET_sBx">(), OFFSET_sBx);
+  setnameval(L, lit<"NUM_OPCODES">(), NUM_OPCODES);
   return 1;
 }
 
 static int get_sizes(lua_State* L)
 {
   lua_newtable(L);
-  setnameval(L, "Lua state", sizeof(lua_State));
-  setnameval(L, "global state", sizeof(global_State));
-  setnameval(L, "TValue", sizeof(TValue));
-  setnameval(L, "Node", sizeof(Node));
+  setnameval(L, lit<"Lua state">(), sizeof(lua_State));
+  setnameval(L, lit<"global state">(), sizeof(global_State));
+  setnameval(L, lit<"TValue">(), sizeof(TValue));
+  setnameval(L, lit<"Node">(), sizeof(Node));
   /* per-slot footprint across the three stack columns */
-  setnameval(L, "stack Value",
+  setnameval(L, lit<"stack Value">(),
              sizeof(lua_Integer) + sizeof(GCObject*) + sizeof(lu_byte));
   return 1;
 }
