@@ -522,17 +522,17 @@ static const luaL_Reg mathlib[] = {
     {lit<"min">()->view(), math_min},
     {lit<"modf">()->view(), math_modf},
     {lit<"rad">()->view(), math_rad},
-    {"sin", math_sin},
-    {"sqrt", math_sqrt},
-    {"tan", math_tan},
-    {"type", math_type},
+    {lit<"sin">()->view(), math_sin},
+    {lit<"sqrt">()->view(), math_sqrt},
+    {lit<"tan">()->view(), math_tan},
+    {lit<"type">()->view(), math_type},
     /* placeholders */
-    {"random", nullptr},
-    {"randomseed", nullptr},
-    {"pi", nullptr},
-    {"huge", nullptr},
-    {"maxinteger", nullptr},
-    {"mininteger", nullptr},
+    {lit<"random">()->view(), nullptr},
+    {lit<"randomseed">()->view(), nullptr},
+    {lit<"pi">()->view(), nullptr},
+    {lit<"huge">()->view(), nullptr},
+    {lit<"maxinteger">()->view(), nullptr},
+    {lit<"mininteger">()->view(), nullptr},
     {{}, nullptr}};
 
 /*
@@ -542,13 +542,13 @@ LUAMOD_API int luaopen_math(lua_State* L)
 {
   (luaL_checkversion(L), lua_createtable(L, 0, sizeof(mathlib) / sizeof((mathlib)[0]) - 1), luaL_setfuncs(L, mathlib, 0));
   lua_pushnumber(L, PI);
-  lua_setfield(L, -2, "pi");
+  lua_setfield(L, -2, HostString(lit<"pi">()->view()));
   lua_pushnumber(L, (lua_Number) HUGE_VAL);
-  lua_setfield(L, -2, "huge");
+  lua_setfield(L, -2, HostString(lit<"huge">()->view()));
   lua_pushinteger(L, LUA_MAXINTEGER);
-  lua_setfield(L, -2, "maxinteger");
+  lua_setfield(L, -2, HostString(lit<"maxinteger">()->view()));
   lua_pushinteger(L, LUA_MININTEGER);
-  lua_setfield(L, -2, "mininteger");
+  lua_setfield(L, -2, HostString(lit<"mininteger">()->view()));
   setrandfunc(L);
   return 1;
 }

@@ -851,7 +851,9 @@ static std::string buildop(Proto* p, int pc) /* test-host text builder */
   char* out = buff;
   Instruction i = p->code[pc];
   OpCode o = GET_OPCODE(i);
-  const char* name = opnames[o]; /* debug-name table feeding the shim */
+  /* debug-name table feeding the shim (ltests printf shims are
+     sanctioned c_str() readers) */
+  const char* name = opnames[o]->c_str();
   int line = luaG_getfuncline(p, pc);
   int lineinfo = (p->lineinfo != nullptr) ? p->lineinfo[pc] : 0;
   if (lineinfo == ABSLINEINFO)

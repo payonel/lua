@@ -508,7 +508,7 @@ static size_t l_str2dloc(std::string_view s, size_t off, lua_Number* result,
 */
 static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
 {
-  size_t pmode = s.find_first_of(".xXnN", off); /* look for special chars */
+  size_t pmode = s.find_first_of(lit<".xXnN">()->view(), off); /* look for special chars */
   int mode = (pmode != std::string_view::npos)
                  ? ltolower(((unsigned char)(s[pmode])))
                  : 0;
@@ -662,8 +662,10 @@ static int tostringbuffFloat(lua_Number n, char* buff)
     len = ((int)(res.ptr - buff));
     buff[len] = '\0';
   }
-  /* looks like an integer? */
-  if (buff[strspn(buff, "-0123456789")] == '\0')
+  /* looks like an integer? (bounded scan over the written bytes;
+     equivalent to the upstream strspn-to-NUL walk) */
+  if (std::string_view{buff, ((size_t)(len))}.find_first_not_of(
+          lit<"-0123456789">()->view()) == std::string_view::npos)
   {
     buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
@@ -753,7 +755,7 @@ static void pushbuff(lua_State* L, void* ud)
 {
   BuffFS* buff = ((BuffFS*)(ud));
   if (buff->err == 2) /* length overflow: mark truncation */
-    buff->bb.append("...");
+    buff->bb.append(lit<"...">());
   TString* ts = luaS_take(L, buff->bb.finish()); /* adopt the bytes */
   setslots(L, L->top, ts);
   L->top++;
@@ -961,7 +963,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     }
     case '%':
     {
-      addstr2buff(&buff, "%");
+      addstr2buff(&buff, lit<"%">()->view());
       break;
     }
     default:
@@ -994,9 +996,9 @@ const InternalString* luaO_pushfstring(lua_State* L, const InternalString* fmt)
 
 /* }================================================================== */
 
-constexpr char RETS[] = "...";
-constexpr char PRE[] = "[string \"";
-constexpr char POS[] = "\"]";
+static const InternalString* const RETS = lit<"...">();
+static const InternalString* const PRE = lit<"[string \"">();
+static const InternalString* const POS = lit<"\"]">();
 
 void luaO_chunkid(std::span<char> out, std::string_view source)
 {
@@ -1027,9 +1029,9 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
     }
     else
     { /* add '...' before rest of name */
-      memcpy(out.data(), RETS, (sizeof(RETS) / sizeof(char) - 1) * sizeof(char));
-      pos += sizeof(RETS) / sizeof(char) - 1;
-      bufflen -= (sizeof(RETS) / sizeof(char) - 1);
+      memcpy(out.data(), RETS->bytes(), RETS->size() * sizeof(char));
+      pos += RETS->size();
+      bufflen -= RETS->size();
       /* last bufflen-1 content bytes plus an explicit terminator
          (upstream's copy included the payload's NUL) */
       memcpy(out.data() + pos, source.data() + 1 + srclen - bufflen,
@@ -1040,9 +1042,9 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
   else
   {                                                 /* string; format as [string "source"] */
     size_t nl = source.find('\n'); /* first new line (if any); npos if none */
-    memcpy(out.data(), PRE, (sizeof(PRE) / sizeof(char) - 1) * sizeof(char)); /* add prefix */
-    pos += sizeof(PRE) / sizeof(char) - 1;
-    bufflen -= (sizeof(PRE) - 1) + (sizeof(RETS) - 1) + (sizeof(POS) - 1) + 1; /* save space for prefix+suffix+'\0' */
+    memcpy(out.data(), PRE->bytes(), PRE->size() * sizeof(char)); /* add prefix */
+    pos += PRE->size();
+    bufflen -= PRE->size() + RETS->size() + POS->size() + 1; /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == std::string_view::npos)
     { /* small one-line source? keep it */
       memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
@@ -1056,9 +1058,10 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
         srclen = bufflen;
       memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
       pos += srclen;
-      memcpy(out.data() + pos, RETS, (sizeof(RETS) / sizeof(char) - 1) * sizeof(char));
-      pos += sizeof(RETS) / sizeof(char) - 1;
+      memcpy(out.data() + pos, RETS->bytes(), RETS->size() * sizeof(char));
+      pos += RETS->size();
     }
-    memcpy(out.data() + pos, POS, ((sizeof(POS) / sizeof(char) - 1) + 1) * sizeof(char));
+    memcpy(out.data() + pos, POS->bytes(), POS->size() * sizeof(char));
+    out[pos + POS->size()] = '\0'; /* terminate explicitly */
   }
 }
