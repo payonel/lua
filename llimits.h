@@ -157,17 +157,6 @@ typedef void (*voidf)(void);
 typedef unsigned int l_uint32;
 
 /*
-** The luai_num* macros define the primitive operations over numbers.
-*/
-
-#if !defined(luai_numidiv)
-#endif
-
-/* float division */
-#if !defined(luai_numdiv)
-#endif
-
-/*
 ** modulo: defined as 'a - floor(a/b)*b'; the direct computation
 ** using this definition has several problems with rounding errors,
 ** so it is better to use 'fmod'. 'fmod' gives the result of

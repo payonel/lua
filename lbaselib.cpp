@@ -54,8 +54,6 @@ static int luaB_warn(lua_State* L)
   return 0;
 }
 
-#define SPACECHARS " \f\n\r\t\v"
-
 /*
 ** Convert the numeral in 's' to an integer in the given base. Returns
 ** the end offset of the scan, or npos on failure. (The cursor is a
@@ -63,7 +61,7 @@ static int luaB_warn(lua_State* L)
 */
 static size_t b_str2int(std::string_view s, unsigned base, lua_Integer* pn)
 {
-  const std::string_view spacechars = lit<SPACECHARS>()->view();
+  const std::string_view spacechars = lit<" \f\n\r\t\v">()->view();
   lua_Unsigned n = 0;
   int neg = 0;
   size_t p = 0;

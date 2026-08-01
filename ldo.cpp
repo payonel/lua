@@ -37,18 +37,6 @@ constexpr int errorstatus(TStatus s)
 }
 
 /*
-** these macros allow user-specific actions when a thread is
-** resumed/yielded.
-*/
-#if !defined(luai_userstateresume)
-#define luai_userstateresume(L, n) ((void) L)
-#endif
-
-#if !defined(luai_userstateyield)
-#define luai_userstateyield(L, n) ((void) L)
-#endif
-
-/*
 ** {======================================================
 ** Error-recovery functions
 ** =======================================================
@@ -61,17 +49,6 @@ struct lua_longjmp
   jmp_buf b;
   volatile TStatus status; /* error code */
 };
-
-/*
-** LUAI_THROW/LUAI_TRY define how Lua does exception handling. By
-** default, Lua handles errors with exceptions when compiling as
-** C++ code, with _longjmp/_setjmp when available (POSIX), and with
-** longjmp/setjmp otherwise.
-*/
-#if !defined(LUAI_THROW) /* { */
-
-/* C++ exceptions */
-#define LUAI_THROW(L, c) throw(c)
 
 static void LUAI_TRY(lua_State* L, lua_longjmp* c, Pfunc f, void* ud)
 {
@@ -89,8 +66,6 @@ static void LUAI_TRY(lua_State* L, lua_longjmp* c, Pfunc f, void* ud)
     c->status = -1; /* create some error code */
   }
 }
-
-#endif /* } */
 
 void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
 {
@@ -112,7 +87,7 @@ l_noret luaD_throw(lua_State* L, TStatus errcode)
   if (L->errorJmp)
   {                                /* thread has an error handler? */
     L->errorJmp->status = errcode; /* set status */
-    LUAI_THROW(L, L->errorJmp);    /* jump to it */
+    throw L->errorJmp;    /* jump to it */
   }
   else
   { /* thread has no error handler */
@@ -962,7 +937,6 @@ LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
   if (getCcalls(L) >= LUAI_MAXCCALLS)
     return {resume_error(L, lit<"C stack overflow">(), nargs), 1};
   L->nCcalls++;
-  luai_userstateresume(L, nargs);
   api_checkpop(L, (L->status == LUA_OK) ? nargs + 1 : nargs);
   status = luaD_rawrunprotected(L, resume, &nargs);
   /* continue running after recoverable errors */
@@ -990,7 +964,6 @@ LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
                        lua_KFunction k)
 {
   CallInfo* ci;
-  luai_userstateyield(L, nresults);
   lua_lock(L);
   ci = L->ci;
   api_checkpop(L, nresults);
