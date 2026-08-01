@@ -83,7 +83,7 @@ void luaS_init(lua_State* L)
 {
   global_State* g = G(L);
   /* pre-create memory-error message */
-  g->memerrmsg = luaS_newlstr(L, std::string_view{MEMERRMSG, sizeof(MEMERRMSG) - 1});
+  g->memerrmsg = luaS_newlstr(L, MEMERRMSG->view());
   assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg))); /* it should never be collected */
 }

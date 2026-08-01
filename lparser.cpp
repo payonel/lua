@@ -1169,7 +1169,7 @@ static void parlist(LexState* ls)
         if (ls->t.token == TK_NAME)
           new_varkind(ls, str_checkname(ls), RDKVAVAR);
         else
-          new_localvar(ls, luaX_newstring(ls, "(vararg table)"));;
+          new_localvar(ls, luaX_newstring(ls, lit<"(vararg table)">()->view()));;
         break;
       }
       default:
@@ -1199,7 +1199,7 @@ static void body(LexState* ls, expdesc* e, int ismethod, int line)
   checknext(ls, '(');
   if (ismethod)
   {
-    new_localvar(ls, luaX_newstring(ls, "self"));; /* create 'self' parameter */
+    new_localvar(ls, luaX_newstring(ls, lit<"self">()->view()));; /* create 'self' parameter */
     adjustlocalvars(ls, 1);
   }
   parlist(ls);
@@ -1872,8 +1872,8 @@ static void fornum(LexState* ls, TString* varname, int line)
   /* fornum -> NAME = exp,exp[,exp] forbody */
   FuncState* fs = ls->fs;
   int base = fs->freereg;
-  new_localvar(ls, luaX_newstring(ls, "(for state)"));;
-  new_localvar(ls, luaX_newstring(ls, "(for state)"));;
+  new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;
+  new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;
   new_varkind(ls, varname, LOOPVARKIND); /* control variable */
   checknext(ls, '=');
   exp1(ls); /* initial value */
@@ -1899,9 +1899,9 @@ static void forlist(LexState* ls, TString* indexname)
   int line;
   int base = fs->freereg;
   /* create internal variables */
-  new_localvar(ls, luaX_newstring(ls, "(for state)"));;  /* iterator function */
-  new_localvar(ls, luaX_newstring(ls, "(for state)"));;  /* state */
-  new_localvar(ls, luaX_newstring(ls, "(for state)"));;  /* closing var. (after swap) */
+  new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;  /* iterator function */
+  new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;  /* state */
+  new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;  /* closing var. (after swap) */
   new_varkind(ls, indexname, LOOPVARKIND); /* control variable */
   /* other declared variables */
   while (testnext(ls, ','))
@@ -1992,9 +1992,9 @@ static lu_byte getvarattribute(LexState* ls, lu_byte df)
     TString* ts = str_checkname(ls);
     std::string_view attr = ts->data.view();
     checknext(ls, '>');
-    if (attr == "const")
+    if (attr == lit<"const">()->view())
       return RDKCONST; /* read-only variable */
-    else if (attr == "close")
+    else if (attr == lit<"close">()->view())
       return RDKTOCLOSE; /* to-be-closed variable */
     else
       luaK_semerror(ls, lit<"unknown attribute '%s'">(), FmtArgs().str(&ts->data));

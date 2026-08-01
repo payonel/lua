@@ -355,19 +355,19 @@ static int os_time(lua_State* L)
     struct tm ts;
     luaL_checktype(L, 1, LUA_TTABLE);
     lua_settop(L, 1); /* make sure table is at the top */
-    ts.tm_year = getfield(L, "year", -1, 1900);
-    ts.tm_mon = getfield(L, "month", -1, 1);
-    ts.tm_mday = getfield(L, "day", -1, 0);
-    ts.tm_hour = getfield(L, "hour", 12, 0);
-    ts.tm_min = getfield(L, "min", 0, 0);
-    ts.tm_sec = getfield(L, "sec", 0, 0);
-    ts.tm_isdst = getboolfield(L, "isdst");
+    ts.tm_year = getfield(L, HostString(lit<"year">()->view()), -1, 1900);
+    ts.tm_mon = getfield(L, HostString(lit<"month">()->view()), -1, 1);
+    ts.tm_mday = getfield(L, HostString(lit<"day">()->view()), -1, 0);
+    ts.tm_hour = getfield(L, HostString(lit<"hour">()->view()), 12, 0);
+    ts.tm_min = getfield(L, HostString(lit<"min">()->view()), 0, 0);
+    ts.tm_sec = getfield(L, HostString(lit<"sec">()->view()), 0, 0);
+    ts.tm_isdst = getboolfield(L, HostString(lit<"isdst">()->view()));
     t = mktime(&ts);
     setallfields(L, &ts); /* update fields with normalized values */
   }
   if (t != (time_t) (l_timet) t || t == (time_t) (-1))
     return luaL_error(L,
-                      "time result cannot be represented in this installation");
+                      HostString(lit<"time result cannot be represented in this installation">()->view()));
   l_pushtime(L, t);
   return 1;
 }
@@ -386,9 +386,10 @@ static int os_setlocale(lua_State* L)
 {
   static const int cat[] = {LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY,
                             LC_NUMERIC, LC_TIME};
-  static constexpr std::string_view catnames[] = {
-      "all", "collate", "ctype", "monetary", "numeric", "time"};
-  static constexpr std::string_view defcat = "all";
+  static const std::string_view catnames[] = {
+      lit<"all">()->view(), lit<"collate">()->view(), lit<"ctype">()->view(),
+      lit<"monetary">()->view(), lit<"numeric">()->view(), lit<"time">()->view()};
+  static const std::string_view defcat = lit<"all">()->view();
   int nol = lua_isnoneornil(L, 1); /* absent = query current locale */
   const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
   int op = luaL_checkoption(L, 2, defcat, catnames);
@@ -415,17 +416,17 @@ static int os_exit(lua_State* L)
 }
 
 static const luaL_Reg syslib[] = {
-    {"clock", os_clock},
-    {"date", os_date},
-    {"difftime", os_difftime},
-    {"execute", os_execute},
-    {"exit", os_exit},
-    {"getenv", os_getenv},
-    {"remove", os_remove},
-    {"rename", os_rename},
-    {"setlocale", os_setlocale},
-    {"time", os_time},
-    {"tmpname", os_tmpname},
+    {lit<"clock">()->view(), os_clock},
+    {lit<"date">()->view(), os_date},
+    {lit<"difftime">()->view(), os_difftime},
+    {lit<"execute">()->view(), os_execute},
+    {lit<"exit">()->view(), os_exit},
+    {lit<"getenv">()->view(), os_getenv},
+    {lit<"remove">()->view(), os_remove},
+    {lit<"rename">()->view(), os_rename},
+    {lit<"setlocale">()->view(), os_setlocale},
+    {lit<"time">()->view(), os_time},
+    {lit<"tmpname">()->view(), os_tmpname},
     {{}, nullptr}};
 
 /* }====================================================== */

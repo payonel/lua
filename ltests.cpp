@@ -1640,7 +1640,7 @@ static int checkpanic(lua_State* L)
   L1 = lua_newstate(f, ud, 0); /* create new state */
   if (L1 == nullptr)
   { /* error? */
-    lua_pushstring(L, MEMERRMSG);
+    lua_pushstring(L, HostString(MEMERRMSG->view()));
     return 1;
   }
   lua_atpanic(L1, panicback); /* set its panic function */
@@ -1834,7 +1834,7 @@ static int getindex_aux(lua_State* L, lua_State* L1, CScript* sc)
 
 static const InternalString* const statcodes[] = {
     lit<"OK">(), lit<"YIELD">(), lit<"ERRRUN">(),
-    lit<"ERRSYNTAX">(), lit<MEMERRMSG>(), lit<"ERRERR">()};
+    lit<"ERRSYNTAX">(), MEMERRMSG, lit<"ERRERR">()};
 
 /*
 ** Avoid these stat codes from being collected, to avoid possible

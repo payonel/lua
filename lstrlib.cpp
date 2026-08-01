@@ -105,7 +105,7 @@ static int str_sub(lua_State* L)
   if (start <= end)
     lua_pushlstring(L, s->view(), start - 1, (end - start) + 1);
   else
-    lua_pushliteral(L, "");
+    lua_pushliteral(L, HostString(lit<"">()->view()));
   return 1;
 }
 
@@ -163,10 +163,10 @@ static int str_rep(lua_State* L)
   size_t len = s->size();
   size_t lsep = sep->size();
   if (n <= 0 || (len | lsep) == 0)
-    lua_pushliteral(L, ""); /* no repetitions or both strings empty */
+    lua_pushliteral(L, HostString(lit<"">()->view())); /* no repetitions or both strings empty */
   else if (l_unlikely(len > MAX_SIZE - lsep ||
                       ((lua_Integer)(len + lsep)) > ((lua_Integer)(MAX_SIZE)) / n))
-    return luaL_error(L, "resulting string too large");
+    return luaL_error(L, HostString(lit<"resulting string too large">()->view()));
   else
   {
     size_t totallen = (((size_t)(n)) * (len + lsep)) - lsep;
@@ -201,9 +201,9 @@ static int str_byte(lua_State* L)
   if (posi > pose)
     return 0;                                      /* empty interval; return no values */
   if (l_unlikely(pose - posi >= (size_t) INT_MAX)) /* arithmetic overflow? */
-    return luaL_error(L, "string slice too long");
+    return luaL_error(L, HostString(lit<"string slice too long">()->view()));
   n = (int) (pose - posi) + 1;
-  luaL_checkstack(L, n, "string slice too long");
+  luaL_checkstack(L, n, HostString(lit<"string slice too long">()->view()));
   for (i = 0; i < n; i++)
     lua_pushinteger(L, s->byteAt(posi + ((unsigned int)(i)) - 1));
   return n;
@@ -219,7 +219,7 @@ static int str_char(lua_State* L)
   for (i = 1; i <= n; i++)
   {
     lua_Unsigned c = (lua_Unsigned) luaL_checkinteger(L, i);
-    luaL_argcheck(L, c <= (lua_Unsigned) UCHAR_MAX, i, "value out of range");
+    luaL_argcheck(L, c <= (lua_Unsigned) UCHAR_MAX, i, HostString(lit<"value out of range">()->view()));
     p[off + i - 1] = ((char)(((unsigned char)(c))));
   }
   luaL_pushresultsize(&b, ((unsigned int)(n)));
@@ -261,7 +261,7 @@ static int str_dump(lua_State* L)
   struct str_Writer state;
   int strip = lua_toboolean(L, 2);
   luaL_argcheck(L, lua_type(L, 1) == LUA_TFUNCTION && !lua_iscfunction(L, 1),
-                1, "Lua function expected");
+                1, HostString(lit<"Lua function expected">()->view()));
   /* ensure function is on the top of the stack and vacate slot 1 */
   lua_pushvalue(L, 1);
   state.init = 0;
@@ -309,7 +309,7 @@ static void trymt(lua_State* L, std::string_view mtkey, std::string_view opname)
     lua_pushlstring(L, opname, 0, opname.size());
     lua_pushlstring(L, t1, 0, t1.size());
     lua_pushlstring(L, t2, 0, t2.size());
-    luaL_error(L, "attempt to %s a '%s' with a '%s'");
+    luaL_error(L, HostString(lit<"attempt to %s a '%s' with a '%s'">()->view()));
   }
   lua_insert(L, -3); /* put metamethod before arguments */
   lua_call(L, 2, 1); /* call metamethod */
@@ -328,54 +328,54 @@ static int arith(lua_State* L, int op, std::string_view mtname)
 
 static int arith_add(lua_State* L)
 {
-  return arith(L, LUA_OPADD, "__add");
+  return arith(L, LUA_OPADD, lit<"__add">()->view());
 }
 
 static int arith_sub(lua_State* L)
 {
-  return arith(L, LUA_OPSUB, "__sub");
+  return arith(L, LUA_OPSUB, lit<"__sub">()->view());
 }
 
 static int arith_mul(lua_State* L)
 {
-  return arith(L, LUA_OPMUL, "__mul");
+  return arith(L, LUA_OPMUL, lit<"__mul">()->view());
 }
 
 static int arith_mod(lua_State* L)
 {
-  return arith(L, LUA_OPMOD, "__mod");
+  return arith(L, LUA_OPMOD, lit<"__mod">()->view());
 }
 
 static int arith_pow(lua_State* L)
 {
-  return arith(L, LUA_OPPOW, "__pow");
+  return arith(L, LUA_OPPOW, lit<"__pow">()->view());
 }
 
 static int arith_div(lua_State* L)
 {
-  return arith(L, LUA_OPDIV, "__div");
+  return arith(L, LUA_OPDIV, lit<"__div">()->view());
 }
 
 static int arith_idiv(lua_State* L)
 {
-  return arith(L, LUA_OPIDIV, "__idiv");
+  return arith(L, LUA_OPIDIV, lit<"__idiv">()->view());
 }
 
 static int arith_unm(lua_State* L)
 {
-  return arith(L, LUA_OPUNM, "__unm");
+  return arith(L, LUA_OPUNM, lit<"__unm">()->view());
 }
 
 static const luaL_Reg stringmetamethods[] = {
-    {"__add", arith_add},
-    {"__sub", arith_sub},
-    {"__mul", arith_mul},
-    {"__mod", arith_mod},
-    {"__pow", arith_pow},
-    {"__div", arith_div},
+    {lit<"__add">()->view(), arith_add},
+    {lit<"__sub">()->view(), arith_sub},
+    {lit<"__mul">()->view(), arith_mul},
+    {lit<"__mod">()->view(), arith_mod},
+    {lit<"__pow">()->view(), arith_pow},
+    {lit<"__div">()->view(), arith_div},
     {"__idiv", arith_idiv},
     {"__unm", arith_unm},
-    {"__index", nullptr}, /* placeholder */
+    {lit<"__index">()->view(), nullptr}, /* placeholder */
     {{}, nullptr}};
 
 /* }====================================================== */

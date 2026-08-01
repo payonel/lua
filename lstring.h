@@ -14,7 +14,7 @@
 ** Memory-allocation error message must be preallocated (it cannot
 ** be created after memory is exhausted)
 */
-constexpr char MEMERRMSG[] = "not enough memory";
+inline const InternalString* const MEMERRMSG = lit<"not enough memory">();
 
 /*
 ** test whether a string is a reserved word
