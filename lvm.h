@@ -10,18 +10,10 @@
 #include "lobject.h"
 #include "ltm.h"
 
-#if !defined(LUA_NOCVTN2S)
 static inline int cvt2str(const TValue* o)
 {
   return (o->tt_ & NOVARIANT_MASK) == LUA_TNUMBER;
 }
-#else
-static inline int cvt2str(const TValue* o)
-{
-  (void) o;
-  return 0; /* no conversion from numbers to strings */
-}
-#endif
 
 /* slot form */
 static inline int cvt2str(lua_State* L, StkId idx)

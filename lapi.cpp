@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <limits.h>
 #include <string.h>
@@ -1599,7 +1598,6 @@ LUA_API int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value
         luaC_step(L);
         work = 1;
       }
-      condchangemem(L, (void) 0, work = 1, 0);
     }
     if (work && g->gcstate == GCSpause) /* end of cycle? */
       res = 1;                          /* signal it */

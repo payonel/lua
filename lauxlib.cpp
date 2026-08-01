@@ -5,7 +5,6 @@
 */
 
 
-#include "lprefix.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -327,15 +326,7 @@ LUALIB_API int luaL_fileresult(lua_State* L, int stat, const std::optional<HostS
   return luaL_fileresulti(L, stat, fname ? fname->view() : std::string_view{});
 }
 
-#if !defined(l_inspectstat) /* { */
-
-#include <sys/wait.h>
-
-/*
-** use appropriate macros to interpret 'pclose' return status
-*/
-
-#endif /* } */
+#include <sys/wait.h> /* waitpid macros to interpret 'pclose' return status */
 
 LUALIB_API int luaL_execresult(lua_State* L, int stat)
 {
@@ -1183,8 +1174,8 @@ static int panic(lua_State* L)
   const char* msg = (lua_type(L, -1) == LUA_TSTRING)
                         ? lua_toistring(L, -1)->c_str()
                         : "error object is not a string";
-  lua_writestringerror("PANIC: unprotected error in call to Lua API (%s)\n",
-                       msg);
+  fprintf(stderr, "PANIC: unprotected error in call to Lua API (%s)\n", msg);
+  fflush(stderr);
   return 0; /* return to Lua to abort */
 }
 
@@ -1233,13 +1224,15 @@ static void warnfcont(void* ud, const HostString& message, int tocont)
   lua_State* L = (lua_State*) ud;
   /* host sink: local NUL-terminated copy for the C stream shim */
   std::string msg{message.view()};
-  lua_writestringerror("%s", msg.c_str()); /* write message (host sink) */
+  fprintf(stderr, "%s", msg.c_str()); /* write message (host sink) */
+  fflush(stderr);
   if (tocont)                          /* not the last part? */
     lua_setwarnf(L, warnfcont, L);     /* to be continued */
   else
-  {                                   /* last part */
-    lua_writestringerror("%s", "\n"); /* finish message with end-of-line */
-    lua_setwarnf(L, warnfon, L);      /* next call is a new message */
+  {                                /* last part */
+    fprintf(stderr, "%s", "\n");   /* finish message with end-of-line */
+    fflush(stderr);
+    lua_setwarnf(L, warnfon, L);   /* next call is a new message */
   }
 }
 
@@ -1247,8 +1240,9 @@ static void warnfon(void* ud, const HostString& message, int tocont)
 {
   if (checkcontrol((lua_State*) ud, message, tocont)) /* control message? */
     return;                                           /* nothing else to be done */
-  lua_writestringerror("%s", "Lua warning: ");        /* start a new warning */
-  warnfcont(ud, message, tocont);                     /* finish processing */
+  fprintf(stderr, "%s", "Lua warning: "); /* start a new warning */
+  fflush(stderr);
+  warnfcont(ud, message, tocont);         /* finish processing */
 }
 
 /*
@@ -1256,8 +1250,6 @@ static void warnfon(void* ud, const HostString& message, int tocont)
 ** randomness. Rely on Address Space Layout Randomization (if present)
 ** and the current time.
 */
-#if !defined(luai_makeseed)
-
 #include <time.h>
 
 /* Size for the buffer, in bytes */
@@ -1287,8 +1279,6 @@ static unsigned int luai_makeseed(void)
     res ^= (res >> 3) + (res << 7) + buff[i];
   return res;
 }
-
-#endif
 
 LUALIB_API unsigned int luaL_makeseed(lua_State*)
 {
@@ -1399,11 +1389,7 @@ LUALIB_API int luaL_loadbuffer(lua_State* L, std::string_view buff,
 
 LUALIB_API void luaL_pushfail(lua_State* L)
 {
-#if defined(LUA_FAILISFALSE)
-  lua_pushboolean(L, 0);
-#else
   lua_pushnil(L);
-#endif
 }
 
 LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf)

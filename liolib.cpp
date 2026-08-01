@@ -5,7 +5,6 @@
 */
 
 
-#include "lprefix.h"
 
 #include <ctype.h>
 #include <errno.h>

@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <limits.h>
 #include <setjmp.h>

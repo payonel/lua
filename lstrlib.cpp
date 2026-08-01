@@ -5,7 +5,6 @@
 */
 
 
-#include "lprefix.h"
 
 #include <bit>
 
@@ -36,9 +35,7 @@
 ** pattern-matching. This limit is arbitrary, but must fit in
 ** an unsigned char.
 */
-#if !defined(LUA_MAXCAPTURES)
-#define LUA_MAXCAPTURES 32
-#endif
+constexpr int LUA_MAXCAPTURES = 32;
 
 /*
 ** Byte at offset 'i' of an engine string, as unsigned 0..255; reads
@@ -436,9 +433,7 @@ static inline int patbyte(const MatchState* ms, ptrdiff_t i)
 }
 
 /* maximum recursion depth for 'match' */
-#if !defined(MAXCCALLS)
-#define MAXCCALLS 200
-#endif
+constexpr int MAXCCALLS = 200;
 
 constexpr char L_ESC = '%';
 static const InternalString* const SPECIALS = lit<"^$*+?.([%-">();
@@ -1290,7 +1285,6 @@ constexpr int MAX_ITEMF = (110 + DBL_MAX_10_EXP);
 constexpr int MAX_ITEM = 120;
 
 /* valid flags in a format specification */
-#if !defined(L_FMTFLAGSF)
 
 /* valid flags for a, A, e, E, f, F, g, and G conversions */
 #define L_FMTFLAGSF "-+#0 "
@@ -1306,8 +1300,6 @@ static const InternalString* const L_FMTFLAGSU = lit<"-0">();
 
 /* valid flags for c, p, and s conversions */
 static const InternalString* const L_FMTFLAGSC = lit<"-">();
-
-#endif
 
 /*
 ** Maximum size of each format specification (such as "%-099.99d"):
@@ -1935,9 +1927,7 @@ static int str_format(lua_State* L)
 */
 
 /* value used for padding */
-#if !defined(LUAL_PACKPADBYTE)
-#define LUAL_PACKPADBYTE 0x00
-#endif
+constexpr char LUAL_PACKPADBYTE = 0x00;
 
 /* maximum size for the binary representation of an integer */
 constexpr int MAXINTSIZE = 16;

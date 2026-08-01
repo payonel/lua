@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,18 +17,12 @@
 #include "llimits.h"
 #include "lualib.h"
 
-#if !defined(LUA_PROGNAME)
-#define LUA_PROGNAME "lua"
-#endif
+constexpr char LUA_PROGNAME[] = "lua";
 
-#if !defined(LUA_INIT_VAR)
-#define LUA_INIT_VAR "LUA_INIT"
-#endif
+constexpr char LUA_INIT_VAR[] = "LUA_INIT";
 
 /* Name of the environment variable with the name of the readline library */
-#if !defined(LUA_RLLIB_VAR)
-#define LUA_RLLIB_VAR "LUA_READLINELIB"
-#endif
+constexpr char LUA_RLLIB_VAR[] = "LUA_READLINELIB";
 
 static lua_State* globalL = nullptr;
 
@@ -72,12 +65,19 @@ static void laction(int i)
 
 static void print_usage(const std::string& badoption)
 {
-  lua_writestringerror("%s: ", progname.c_str());
+  fprintf(stderr, "%s: ", progname.c_str());
+  fflush(stderr);
   if (badoption.size() > 1 && (badoption[1] == 'e' || badoption[1] == 'l'))
-    lua_writestringerror("'%s' needs argument\n", badoption.c_str());
+  {
+    fprintf(stderr, "'%s' needs argument\n", badoption.c_str());
+    fflush(stderr);
+  }
   else
-    lua_writestringerror("unrecognized option '%s'\n", badoption.c_str());
-  lua_writestringerror(
+  {
+    fprintf(stderr, "unrecognized option '%s'\n", badoption.c_str());
+    fflush(stderr);
+  }
+  fprintf(stderr,
       "usage: %s [options] [script [args]]\n"
       "Available options are:\n"
       "  -e stat   execute string 'stat'\n"
@@ -90,6 +90,7 @@ static void print_usage(const std::string& badoption)
       "  --        stop handling options\n"
       "  -         stop handling options and execute stdin\n",
       progname.c_str());
+  fflush(stderr);
 }
 
 /*
@@ -99,8 +100,12 @@ static void print_usage(const std::string& badoption)
 static void l_message(const std::string& pname, const std::string& msg)
 {
   if (!pname.empty())
-    lua_writestringerror("%s: ", pname.c_str());
-  lua_writestringerror("%s\n", msg.c_str());
+  {
+    fprintf(stderr, "%s: ", pname.c_str());
+    fflush(stderr);
+  }
+  fprintf(stderr, "%s\n", msg.c_str());
+  fflush(stderr);
 }
 
 /*
@@ -162,8 +167,9 @@ static int docall(lua_State* L, int narg, int nres)
 
 static void print_version(void)
 {
-  lua_writestring(LUA_COPYRIGHT.data(), LUA_COPYRIGHT.size());
-  lua_writeline();
+  fwrite(LUA_COPYRIGHT.data(), sizeof(char), LUA_COPYRIGHT.size(), stdout);
+  fwrite("\n", sizeof(char), 1, stdout);
+  fflush(stdout);
 }
 
 /*
@@ -221,7 +227,7 @@ static int dolibrary(lua_State* L, const std::string& arg)
   {                 /* no explicit name? */
     globname = arg; /* module name is equal to global name */
     modname = arg;
-    suffix = globname.find(lit<LUA_IGMARK>()->view()); /* look for a suffix mark */
+    suffix = globname.find(LUA_IGMARK->view()); /* look for a suffix mark */
   }
   else
   {
@@ -433,25 +439,20 @@ static int handle_luainit(lua_State* L)
 ** ===================================================================
 */
 
-#if !defined(LUA_PROMPT)
-#define LUA_PROMPT  "> "
+constexpr char LUA_PROMPT[] = "> ";
 constexpr char LUA_PROMPT2[] = ">> ";
-#endif
 
-#if !defined(LUA_MAXINPUT)
-#define LUA_MAXINPUT 512
-#endif
+constexpr int LUA_MAXINPUT = 512;
 
 /*
 ** lua_stdin_is_tty detects whether the standard input is a 'tty' (that
 ** is, whether we're running lua interactively).
 */
-#if !defined(lua_stdin_is_tty) /* { */
-
 #include <unistd.h>
-#define lua_stdin_is_tty() isatty(0)
-
-#endif /* } */
+static inline int lua_stdin_is_tty(void)
+{
+  return isatty(0);
+}
 
 /*
 ** * lua_initreadline initializes the readline system.
@@ -460,9 +461,6 @@ constexpr char LUA_PROMPT2[] = ">> ";
 ** * lua_saveline defines how to "save" a read line in a "history".
 ** * lua_freeline defines how to free a line read by lua_readline.
 */
-
-#if !defined(lua_readline) /* { */
-/* Otherwise, all previously listed functions should be defined. */
 
 /* use dynamically loaded readline (or nothing) */
 
@@ -500,7 +498,6 @@ static void lua_freeline(char* line)
   /* else 'lua_readline' used an automatic buffer; nothing to free */
 }
 
-#if defined(LUA_USE_DLOPEN) && defined(LUA_READLINELIB) /* { */
 /* try to load 'readline' dynamically */
 
 #include <dlfcn.h>
@@ -527,16 +524,6 @@ static void lua_initreadline(lua_State* L)
   lua_warning(L, rllib, 1);
   lua_warning(L, HostString(lit<"'">()->view()), 0);
 }
-
-#else /* }{ */
-/* no dlopen or LUA_READLINELIB undefined */
-
-/* Leave pointers with nullptr */
-#define lua_initreadline(L) ((void) L)
-
-#endif /* } */
-
-#endif /* } */
 
 /*
 ** Return the string to be used as a prompt by the interpreter. Leave
@@ -623,8 +610,9 @@ static void checklocal(std::string_view line)
   if (line.compare(i, kw.size(), kw) == 0 &&      /* "local"? */
       (j >= line.size() || line[j] == ' ' || line[j] == '\t'))
   { /* followed by a space or end of line? */
-    lua_writestringerror("%s\n",
-                         "warning: locals do not survive across lines in interactive mode");
+    fprintf(stderr, "%s\n",
+            "warning: locals do not survive across lines in interactive mode");
+    fflush(stderr);
   }
 }
 
@@ -713,7 +701,8 @@ static void doREPL(lua_State* L)
       report(L, status);
   }
   lua_settop(L, 0); /* clear stack */
-  lua_writeline();
+  fwrite("\n", sizeof(char), 1, stdout);
+  fflush(stdout);
   progname = oldprogname;
 }
 

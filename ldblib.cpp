@@ -5,7 +5,6 @@
 */
 
 
-#include "lprefix.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -481,14 +480,18 @@ static int db_debug(lua_State* L)
   for (;;)
   {
     char buffer[250];
-    lua_writestringerror("%s", "lua_debug> ");
+    fprintf(stderr, "%s", "lua_debug> ");
+    fflush(stderr);
     if (fgets(buffer, sizeof(buffer), stdin) == nullptr ||
         std::string_view{buffer, strlen(buffer)} == lit<"cont\n">()->view())
       return 0;
     if (luaL_loadbufferx(L, std::string_view{buffer, strlen(buffer)}, HostString(lit<"=(debug command)">()->view()), HostString(lit<"t">()->view())) ||
         lua_pcall(L, 0, 0, 0))
+    {
       /* host print boundary: the payload is NUL-terminated (c_str) */
-      lua_writestringerror("%s\n", luaL_toistring(L, -1)->c_str());
+      fprintf(stderr, "%s\n", luaL_toistring(L, -1)->c_str());
+      fflush(stderr);
+    }
     lua_settop(L, 0); /* remove eventual returns */
   }
 }

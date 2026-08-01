@@ -5,7 +5,6 @@
 */
 
 
-#include "lprefix.h"
 
 #include <float.h>
 #include <limits.h>
@@ -21,7 +20,6 @@
 
 #include <stdint.h>
 
-#undef PI
 constexpr lua_Number PI = (3.141592653589793238462643383279502884);
 
 static int math_abs(lua_State* L)
@@ -285,19 +283,13 @@ static int math_type(lua_State* L)
 /*
 ** This code uses lots of shifts. ISO C does not allow shifts greater
 ** than or equal to the width of the type being shifted, so some shifts
-** are written in convoluted ways to match that restriction. For
-** preprocessor tests, it assumes a width of 32 bits, so the maximum
-** shift there is 31 bits.
+** are written in convoluted ways to match that restriction.
 */
 
-/* number of binary digits in the mantissa of a float */
-#define FIGS DBL_MANT_DIG
-
-#if FIGS > 64
-/* there are only 64 random bits; use them all */
-#undef FIGS
-#define FIGS 64
-#endif
+/* number of binary digits in the mantissa of a float (53 for the
+   pinned binary64 lua_Number — always fits the 64 random bits) */
+constexpr int FIGS = DBL_MANT_DIG;
+static_assert(FIGS <= 64, "there are only 64 random bits");
 
 /* try to find an integer type with at least 64 bits */
 

@@ -29,7 +29,7 @@ inline constexpr std::string_view LUA_VERSION_MINOR = "5";
 inline constexpr std::string_view LUA_VERSION_RELEASE = "1";
 inline const std::string_view LUA_VERSION = lit<"Lua 5.5">()->view();
 inline const std::string_view LUA_RELEASE = lit<"Lua 5.5.1">()->view();
-/* host-sink text (lua_writestring in lua.cpp is its only consumer) */
+/* host-sink text (print_version's fwrite in lua.cpp is its only consumer) */
 inline constexpr std::string_view LUA_COPYRIGHT = "Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio";
 inline const std::string_view LUA_AUTHORS = lit<"R. Ierusalimschy, L. H. de Figueiredo, W. Celes">()->view();
 static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSION_RELEASE_N == 1,
@@ -90,17 +90,17 @@ constexpr int LUA_RIDX_GLOBALS = 2;
 constexpr int LUA_RIDX_MAINTHREAD = 3;
 constexpr int LUA_RIDX_LAST = 3;
 
-/* type of numbers in Lua */
-typedef LUA_NUMBER lua_Number;
+/* type of numbers in Lua: IEEE-754 binary64 (pinned, see luaconf.h) */
+typedef double lua_Number;
 
-/* type for integer functions */
-typedef LUA_INTEGER lua_Integer;
+/* type for integer functions: 64-bit (pinned, see luaconf.h) */
+typedef long long lua_Integer;
 
 /* unsigned integer type */
-typedef LUA_UNSIGNED lua_Unsigned;
+typedef unsigned long long lua_Unsigned;
 
 /* type for continuation-function contexts */
-typedef LUA_KCONTEXT lua_KContext;
+typedef ptrdiff_t lua_KContext;
 
 /*
 ** Type for C functions registered with Lua

@@ -244,25 +244,8 @@ static l_forceinline int gcrunning(global_State* g)
 }
 
 /*
-** Does one step of collection when debt becomes zero. 'pre'/'pos'
-** allows some adjustments to be done only when needed. macro
-** 'condchangemem' is used only for heavy tests (forcing a full
-** GC cycle on every opportunity)
+** Does one step of collection when debt becomes zero.
 */
-
-#if !defined(HARDMEMTESTS)
-#define condchangemem(L, pre, pos, emg) ((void) 0)
-#else
-#define condchangemem(L, pre, pos, emg) \
-  {                                     \
-    if (gcrunning(G(L)))                \
-    {                                   \
-      pre;                              \
-      luaC_fullgc(L, emg);              \
-      pos;                              \
-    }                                   \
-  }
-#endif
 
 LUAI_FUNC void luaC_fix(lua_State* L, GCObject* o);
 LUAI_FUNC void luaC_freeallobjects(lua_State* L);
@@ -272,7 +255,6 @@ static l_forceinline void luaC_checkGC(lua_State* L)
 {
   if (G(L)->GCdebt <= 0)
     luaC_step(L);
-  condchangemem(L, (void) 0, (void) 0, 0);
 }
 LUAI_FUNC void luaC_runtilstate(lua_State* L, int state, int fast);
 LUAI_FUNC void luaC_fullgc(lua_State* L, int isemergency);

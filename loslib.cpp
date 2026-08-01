@@ -5,7 +5,6 @@
 */
 
 
-#include "lprefix.h"
 
 #include <errno.h>
 #include <locale.h>
@@ -26,14 +25,10 @@
 ** options are grouped by length; group of length 2 start with '||'.
 ** ===================================================================
 */
-#if !defined(LUA_STRFTIMEOPTIONS) /* { */
-
 #define LUA_STRFTIMEOPTIONS "aAbBcCdDeFgGhHIjmMnprRStTuUVwWxXyYzZ%" \
                             "||"                                    \
                             "EcECExEXEyEY"                          \
                             "OdOeOHOIOmOMOSOuOUOVOwOWOy" /* two-char options */
-
-#endif /* } */
 /* }================================================================== */
 
 /*
@@ -43,32 +38,11 @@
 */
 
 /*
-** type to represent time_t in Lua
-*/
-#if !defined(LUA_NUMTIME) /* { */
-
-#define l_timet           lua_Integer
-#define l_pushtime(L, t)  lua_pushinteger(L, (lua_Integer) (t))
-#define l_gettime(L, arg) luaL_checkinteger(L, arg)
-
-#else /* }{ */
-
-#define l_timet           lua_Number
-#define l_pushtime(L, t)  lua_pushnumber(L, (lua_Number) (t))
-#define l_gettime(L, arg) luaL_checknumber(L, arg)
-
-#endif /* } */
-
-#if !defined(l_gmtime) /* { */
-/*
-** By default, Lua uses gmtime/localtime, except when POSIX is available,
-** where it uses gmtime_r/localtime_r
+** time_t is represented in Lua as a lua_Integer (expanded in place at
+** the use sites below)
 */
 
-#define l_gmtime(t, r)    gmtime_r(t, r)
-#define l_localtime(t, r) localtime_r(t, r)
-
-#endif /* } */
+/* Lua uses the reentrant POSIX variants gmtime_r/localtime_r */
 
 /* }================================================================== */
 
@@ -79,31 +53,23 @@
 ** it uses mkstemp.
 ** ===================================================================
 */
-#if !defined(lua_tmpnam) /* { */
-
 #include <unistd.h>
 
 constexpr int LUA_TMPNAMBUFSIZE = 32;
 
-#if !defined(LUA_TMPNAMTEMPLATE)
-#define LUA_TMPNAMTEMPLATE "/tmp/lua_XXXXXX"
-#endif
+constexpr char LUA_TMPNAMTEMPLATE[] = "/tmp/lua_XXXXXX";
 
-#define lua_tmpnam(b, e)           \
-  {                                \
-    strcpy(b, LUA_TMPNAMTEMPLATE); \
-    e = mkstemp(b);                \
-    if (e != -1)                   \
-      close(e);                    \
-    e = (e == -1);                 \
-  }
+/* 'b' must have room for LUA_TMPNAMBUFSIZE bytes; returns 0 on success */
+static inline int lua_tmpnam(char* b)
+{
+  strcpy(b, LUA_TMPNAMTEMPLATE);
+  int e = mkstemp(b);
+  if (e != -1)
+    close(e);
+  return (e == -1);
+}
 
-#endif /* } */
 /* }================================================================== */
-
-#if !defined(l_system)
-#define l_system(cmd) system(cmd) /* default definition */
-#endif
 
 static int os_execute(lua_State* L)
 {
@@ -111,7 +77,7 @@ static int os_execute(lua_State* L)
   const InternalString* cmd = nocmd ? nullptr : luaL_checkistring(L, 1);
   int stat;
   errno = 0;
-  stat = l_system(nocmd ? nullptr : cmd->c_str()); /* OS edge (sanctioned c_str) */
+  stat = system(nocmd ? nullptr : cmd->c_str()); /* OS edge (sanctioned c_str) */
   if (!nocmd)
     return luaL_execresult(L, stat);
   else
@@ -139,8 +105,7 @@ static int os_rename(lua_State* L)
 static int os_tmpname(lua_State* L)
 {
   char buff[LUA_TMPNAMBUFSIZE];
-  int err;
-  lua_tmpnam(buff, err);
+  int err = lua_tmpnam(buff);
   if (l_unlikely(err))
     return luaL_error(L, HostString(lit<"unable to generate a unique filename">()->view()));
   lua_pushstring(L, buff);
@@ -172,23 +137,11 @@ static int os_clock(lua_State* L)
 */
 
 /*
-** About the overflow check: an overflow cannot occur when time
-** is represented by a lua_Integer, because either lua_Integer is
-** large enough to represent all int fields or it is not large enough
-** to represent a time that cause a field to overflow.  However, if
-** times are represented as doubles and lua_Integer is int, then the
-** time 0x1.e1853b0d184f6p+55 would cause an overflow when adding 1900
-** to compute the year.
+** No overflow check is needed: time is represented by a lua_Integer,
+** which is large enough to represent all int fields.
 */
 static void setfield(lua_State* L, const HostString& key, int value, int delta)
 {
-#if (defined(LUA_NUMTIME) && LUA_MAXINTEGER <= INT_MAX)
-  if (l_unlikely(value > LUA_MAXINTEGER - delta))
-  {
-    lua_pushstring(L, key);
-    luaL_error(L, HostString(lit<"field '%s' is out-of-bound">()->view()));
-  }
-#endif
   lua_pushinteger(L, (lua_Integer) value + delta);
   lua_setfield(L, -2, key);
 }
@@ -289,7 +242,7 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
 
 static time_t l_checktime(lua_State* L, int arg)
 {
-  l_timet t = l_gettime(L, arg);
+  lua_Integer t = luaL_checkinteger(L, arg);
   luaL_argcheck(L, (time_t) t == t, arg, HostString(lit<"time out-of-bounds">()->view()));
   return (time_t) t;
 }
@@ -305,11 +258,11 @@ static int os_date(lua_State* L)
   struct tm tmr, *stm;
   if (sv_byteat(sfmt, sp) == '!')
   { /* UTC? */
-    stm = l_gmtime(&t, &tmr);
+    stm = gmtime_r(&t, &tmr);
     sp++; /* skip '!' */
   }
   else
-    stm = l_localtime(&t, &tmr);
+    stm = localtime_r(&t, &tmr);
   if (stm == nullptr) /* invalid date? */
     return luaL_error(L,
                       HostString(lit<"date result cannot be represented in this installation">()->view()));
@@ -365,10 +318,10 @@ static int os_time(lua_State* L)
     t = mktime(&ts);
     setallfields(L, &ts); /* update fields with normalized values */
   }
-  if (t != (time_t) (l_timet) t || t == (time_t) (-1))
+  if (t != (time_t) (lua_Integer) t || t == (time_t) (-1))
     return luaL_error(L,
                       HostString(lit<"time result cannot be represented in this installation">()->view()));
-  l_pushtime(L, t);
+  lua_pushinteger(L, (lua_Integer) t);
   return 1;
 }
 

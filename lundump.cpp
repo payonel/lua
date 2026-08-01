@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <limits.h>
 #include <string.h>
@@ -21,10 +20,6 @@
 #include "ltable.h"
 #include "lundump.h"
 #include "lzio.h"
-
-#if !defined(luai_verifycode)
-#define luai_verifycode(L, f) /* empty */
-#endif
 
 struct LoadState
 {
@@ -445,6 +440,5 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor,
   loadFunction(&S, cl->p);
   if (cl->nupvalues != cl->p->sizeupvalues)
     error(&S, lit<"corrupted chunk">());
-  luai_verifycode(L, cl->p);
   return cl;
 }

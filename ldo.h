@@ -11,29 +11,6 @@
 #include "lstate.h"
 #include "lzio.h"
 
-/*
-** Macro to check stack size and grow stack if needed.  Parameters
-** 'pre'/'pos' allow the macro to preserve a pointer into the
-** stack across reallocations, doing the work only when needed.
-** It also allows the running of one GC step when the stack is
-** reallocated.
-** 'condmovestack' is used in heavy tests to force a stack reallocation
-** at every check.
-*/
-
-#if !defined(HARDSTACKTESTS)
-#define condmovestack(L, pre, pos) ((void) 0)
-#else
-/* realloc stack keeping its size */
-#define condmovestack(L, pre, pos)  \
-  {                                 \
-    int sz_ = stacksize(L);         \
-    pre;                            \
-    luaD_reallocstack((L), sz_, 0); \
-    pos;                            \
-  }
-#endif
-
 /* savestack/restorestack are now identity — StkId is already an index */
 
 /* type of protected functions, to be ran by 'runprotected' */
@@ -67,10 +44,6 @@ static l_forceinline void luaD_checkstack(lua_State* L, int n)
      'stack_last - top' would underflow */
   if (l_unlikely(L->top + (StkId)n >= L->stack_last))
     luaD_growstack(L, n, 1);
-  else
-  {
-    condmovestack(L, (void) 0, (void) 0);
-  }
 }
 
 /* check stack size, preserving 'p' (no-op since indices survive realloc) */

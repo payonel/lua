@@ -70,29 +70,18 @@ constexpr size_t MAX_SIZE = sizeof(size_t) < sizeof(lua_Integer) ? MAX_SIZET : (
 /*
 ** conversion of pointer to unsigned integer: this is for hashing only;
 ** there is no problem if the integer cannot hold the whole pointer
-** value. (In strict ISO C this may cause undefined behavior, but no
-** actual machine seems to bother.)
+** value. (size_t covers the full pointer range on this target.)
 */
-#if !defined(LUA_USE_C89) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-#include <stdint.h>
-#if defined(UINTPTR_MAX) /* even in C99 this type is optional */
-#define L_P2I uintptr_t
-#else                   /* no 'intptr'? */
-#define L_P2I uintmax_t /* use the largest available integer */
-#endif
-#else /* C89 option */
-#define L_P2I size_t
-#endif
 
 static inline unsigned int point2uint(const void* p)
 {
-  return (unsigned int)((L_P2I)(p) & UINT_MAX);
+  return (unsigned int)((size_t)(p) & UINT_MAX);
 }
 
 /* overload for light C function pointers (not convertible to void*) */
 static inline unsigned int point2uint(lua_CFunction p)
 {
-  return (unsigned int)((L_P2I)(p) & UINT_MAX);
+  return (unsigned int)((size_t)(p) & UINT_MAX);
 }
 
 /* types of 'usual argument conversions' for lua_Number and lua_Integer */
@@ -106,17 +95,6 @@ static inline unsigned int point2uint(lua_CFunction p)
 ** setup are written as 'assert(f(...))' where 'f' returns 1.
 */
 #include <assert.h>
-
-#if !defined(l_castS2U)
-#endif
-
-/*
-** cast a lua_Unsigned to a signed lua_Integer; this cast is
-** not strict ISO C, but two-complement architectures should
-** work fine.
-*/
-#if !defined(l_castU2S)
-#endif
 
 /*
 ** cast a size_t to lua_Integer: These casts are always valid for
@@ -136,20 +114,19 @@ static inline unsigned int point2uint(lua_CFunction p)
 typedef void (*voidf)(void);
 
 /*
-** Macro to convert pointer-to-void* to pointer-to-function. This cast
+** Convert pointer-to-void* to pointer-to-function. This cast
 ** is undefined according to ISO C, but POSIX assumes that it works.
 ** (The '__extension__' in gnu compilers is only to avoid warnings.)
 */
-#define cast_func(p) (__extension__(voidf)(p))
+static inline voidf cast_func(void* p)
+{
+  return __extension__(voidf) p;
+}
 
 /*
 ** non-return type
 */
-#if !defined(l_noret)
-
 #define l_noret void __attribute__((noreturn))
-
-#endif
 
 /*
 ** An unsigned with (at least) 4 bytes
@@ -167,7 +144,7 @@ typedef unsigned int l_uint32;
 ** 'b' with different signs, or 'm' and 'b' with different signs
 ** (as the result 'm' of 'fmod' has the same sign of 'a').
 */
-#if !defined(luai_nummod)
+
 /*
 ** Force inlining for tiny hot helpers even at -Og (debug builds).
 ** Build-config attribute, in the same category as LUAI_FUNC/l_noret.
@@ -201,15 +178,6 @@ static l_forceinline lua_Number luai_nummod(lua_State* L, lua_Number a, lua_Numb
     m += b;
   return m;
 }
-#endif
-
-/* exponentiation */
-#if !defined(luai_numpow)
-#endif
-
-/* the others are quite standard operations */
-#if !defined(luai_numadd)
-#endif
 
 /*
 ** lua_numbertointeger converts a float number with an integral value
@@ -220,7 +188,15 @@ static l_forceinline lua_Number luai_nummod(lua_State* L, lua_Number a, lua_Numb
 ** MAXINTEGER may not have one, and therefore its conversion to float
 ** may have an ill-defined value.)
 */
-#define lua_numbertointeger(n, p) ((n) >= (LUA_NUMBER) (LUA_MININTEGER) && (n) < -(LUA_NUMBER) (LUA_MININTEGER) && (*(p) = (LUA_INTEGER) (n), 1))
+static inline int lua_numbertointeger(lua_Number n, lua_Integer* p)
+{
+  if (n >= (lua_Number)LUA_MININTEGER && n < -(lua_Number)LUA_MININTEGER)
+  {
+    *p = (lua_Integer)n;
+    return 1;
+  }
+  return 0;
+}
 
 /*
 ** LUAI_FUNC is a mark for all extern functions that are not to be
@@ -235,38 +211,11 @@ static l_forceinline lua_Number luai_nummod(lua_State* L, lua_Number a, lua_Numb
 ** without support give a warning about it. To avoid these warnings,
 ** change to the default definition.
 */
-#if !defined(LUAI_FUNC)
-
 #define LUAI_FUNC __attribute__((visibility("internal"))) extern
 
 #define LUAI_DDEC(dec) LUAI_FUNC dec
 #define LUAI_DDEF      /* empty */
 
-#endif
-
 /* Give these macros simpler names for internal use */
 #define l_likely(x)   luai_likely(x)
 #define l_unlikely(x) luai_unlikely(x)
-
-/*
-** {==================================================================
-** "Abstraction Layer" for basic report of messages and errors
-** ===================================================================
-*/
-
-/* print a string */
-#if !defined(lua_writestring)
-#define lua_writestring(s, l) fwrite((s), sizeof(char), (l), stdout)
-#endif
-
-/* print a newline and flush the output */
-#if !defined(lua_writeline)
-#define lua_writeline() (lua_writestring("\n", 1), fflush(stdout))
-#endif
-
-/* print an error message */
-#if !defined(lua_writestringerror)
-#define lua_writestringerror(s, p) (fprintf(stderr, (s), (p)), fflush(stderr))
-#endif
-
-/* }================================================================== */

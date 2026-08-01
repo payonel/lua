@@ -13,55 +13,31 @@
 ** ===================================================================
 ** General Configuration File for Lua
 **
-** Some definitions here can be changed externally, through the compiler
-** (e.g., with '-D' options): They are commented out or protected
-** by '#if !defined' guards. However, several other definitions
-** should be changed directly here, either because they affect the
-** Lua ABI (by making the changes here, you ensure that all software
-** connected to Lua, such as C libraries, will be compiled with the same
-** configuration); or because they are seldom changed.
-**
-** Search for "@@" to find all configurable definitions.
+** Definitions here affect the Lua ABI: by making changes here, you
+** ensure that all software connected to Lua, such as C libraries,
+** will be compiled with the same configuration.
 ** ===================================================================
 */
 
 /*
 ** {====================================================================
-** System Configuration: macros to adapt (if needed) Lua to some
-** particular platform, for instance restricting it to C89.
+** System Configuration
 ** =====================================================================
 */
 
 /*
-@@ LUA_USE_C89 controls the use of non-ISO-C89 features.
-** Define it if you want Lua to avoid the use of a few C99 features
-** or Windows-specific features on Windows.
+** The Lua stand-alone application dynamically links a 'readline'
+** facility for its REPL.  LUA_READLINELIB is the name of the library
+** it will look for those facilities.  If lua.cpp cannot open the
+** specified library, it will generate a warning and then run without
+** 'readline'.
 */
-/* #define LUA_USE_C89 */
+constexpr char LUA_READLINELIB[] = "libreadline.so";
 
 /*
-** By default, Lua on Windows use (some) specific Windows features
+** LUAI_IS32INT is true iff 'int' has (at least) 32 bits.
 */
-
-/*
-** When POSIX DLL ('LUA_USE_DLOPEN') is enabled, the Lua stand-alone
-** application will try to dynamically link a 'readline' facility
-** for its REPL.  In that case, LUA_READLINELIB is the name of the
-** library it will look for those facilities.  If lua.c cannot open
-** the specified library, it will generate a warning and then run
-** without 'readline'.  If that macro is not defined, lua.c will not
-** use 'readline'.
-*/
-#define LUA_USE_POSIX
-#define LUA_USE_DLOPEN /* needs an extra library: -ldl */
-#if !defined(LUA_READLINELIB)
-#define LUA_READLINELIB "libreadline.so"
-#endif
-
-/*
-@@ LUAI_IS32INT is true iff 'int' has (at least) 32 bits.
-*/
-#define LUAI_IS32INT ((UINT_MAX >> 30) >= 3)
+constexpr int LUAI_IS32INT = ((UINT_MAX >> 30) >= 3);
 
 /* }================================================================== */
 
@@ -97,9 +73,9 @@
 ** LUA_EXEC_DIR in a Windows path is replaced by the executable's
 ** directory.
 */
-#define LUA_PATH_SEP  ";"
-#define LUA_PATH_MARK "?"
-#define LUA_EXEC_DIR  "!"
+static const InternalString* LUA_PATH_SEP = lit<";">();
+static const InternalString* LUA_PATH_MARK = lit<"?">();
+static const InternalString* LUA_EXEC_DIR = lit<"!">();
 
 /*
 @@ LUA_PATH_DEFAULT is the default path that Lua uses to look for
@@ -112,33 +88,13 @@
 */
 
 /* keep in sync with LUA_VERSION_MAJOR/MINOR (lua.h) */
-#define LUA_VDIR "5.5"
-
-#define LUA_ROOT "/usr/local/"
-#define LUA_LDIR LUA_ROOT "share/lua/" LUA_VDIR "/"
-#define LUA_CDIR LUA_ROOT "lib/lua/" LUA_VDIR "/"
-
-#if !defined(LUA_PATH_DEFAULT)
-#define LUA_PATH_DEFAULT LUA_LDIR "?.lua;" LUA_LDIR "?/init.lua;" LUA_CDIR "?.lua;" LUA_CDIR "?/init.lua;" \
-                                  "./?.lua;"                                                               \
-                                  "./?/init.lua"
-#endif
-
-#if !defined(LUA_CPATH_DEFAULT)
-#define LUA_CPATH_DEFAULT LUA_CDIR "?.so;" LUA_CDIR "loadall.so;" \
-                                   "./?.so"
-#endif
+static const InternalString* LUA_PATH_DEFAULT = lit<"/usr/local/share/lua/5.5/?.lua;/usr/local/share/lua/5.5/?/init.lua;/usr/local/lib/lua/5.5/?.lua;/usr/local/lib/lua/5.5/?/init.lua;./?.lua;./?/init.lua">();
+static const InternalString* LUA_CPATH_DEFAULT = lit<"/usr/local/lib/lua/5.5/?.so;/usr/local/lib/lua/5.5/loadall.so;./?.so">();
 
 /*
-@@ LUA_DIRSEP is the directory separator (for submodules).
-** CHANGE it if your machine does not use "/" as the directory separator
-** and is not Windows. (On Windows Lua automatically uses "\".)
+** LUA_DIRSEP is the directory separator (for submodules).
 */
-#if !defined(LUA_DIRSEP)
-
-#define LUA_DIRSEP "/"
-
-#endif
+static const InternalString* LUA_DIRSEP = lit<"/">();
 
 /*
 ** LUA_IGMARK is a mark to ignore all after it when building the
@@ -146,7 +102,8 @@
 ** Typically, the suffix after the mark is the module version,
 ** as in "mod-v1.2.so".
 */
-#define LUA_IGMARK "-"
+static const InternalString* LUA_IGMARK = lit<"-">();
+static const InternalString* CONFIG = lit<"/\n;\n?\n!\n-\n">();
 
 /* }================================================================== */
 
@@ -180,25 +137,7 @@
 
 /*
 ** {==================================================================
-** Compatibility with previous versions
-** ===================================================================
-*/
-
-/*
-@@ LUA_COMPAT_LOOPVAR makes for-loop control variables not read-only,
-** as they were in previous versions.
-*/
-#if !defined(LUA_COMPAT_LOOPVAR)
-#define LUA_COMPAT_LOOPVAR 0
-#endif
-
-/* }================================================================== */
-
-/*
-** {==================================================================
 ** Configuration for Numbers (low-level part).
-** Change these definitions if no predefined LUA_FLOAT_* / LUA_INT_*
-** satisfy your needs.
 ** ===================================================================
 */
 
@@ -210,124 +149,57 @@
 ** the shorter form does not round-trip.
 */
 
-/* lua_Number: IEEE-754 binary64 */
-
-#define LUA_NUMBER double
-
+/* lua_Number: IEEE-754 binary64 ('double');
+** lua_Integer: 64-bit ('long long');
+** lua_Unsigned: 'unsigned long long'.
+** The typedefs live in lua.h. */
 
 /*
-@@ LUA_UNSIGNED is the unsigned version of LUA_INTEGER.
-@@ LUA_MAXINTEGER is the maximum value for a LUA_INTEGER.
-@@ LUA_MININTEGER is the minimum value for a LUA_INTEGER.
-@@ LUA_MAXUNSIGNED is the maximum value for a LUA_UNSIGNED.
+** LUA_MAXINTEGER is the maximum value for a lua_Integer.
+** LUA_MININTEGER is the minimum value for a lua_Integer.
+** LUA_MAXUNSIGNED is the maximum value for a lua_Unsigned.
 */
+constexpr long long LUA_MAXINTEGER = LLONG_MAX;
+constexpr long long LUA_MININTEGER = LLONG_MIN;
 
-#define LUA_UNSIGNED unsigned LUA_INTEGER
-
-/* lua_Integer: 64-bit */
-
-#define LUA_INTEGER long long
-
-#define LUA_MAXINTEGER LLONG_MAX
-#define LUA_MININTEGER LLONG_MIN
-
-#define LUA_MAXUNSIGNED ULLONG_MAX
+constexpr unsigned long long LUA_MAXUNSIGNED = ULLONG_MAX;
 
 /* }================================================================== */
 
 /*
 ** {==================================================================
-** Dependencies with C99 and other C details
+** Other C details
 ** ===================================================================
 */
 
 /*
-** 'strtof' and 'opf' variants for math functions are not valid in
-** C89. Otherwise, the macro 'HUGE_VALF' is a good proxy for testing the
-** availability of these variants. ('math.h' is already included in
-** all files that use these macros.)
-*/
-
-/*
-@@ lua_getlocaledecpoint gets the locale "radix character" (decimal point).
+** lua_getlocaledecpoint gets the locale "radix character" (decimal point).
 ** The conversion core (to_chars/from_chars) is always '.'-canonical;
 ** this is used only by the explicit locale shims at the input/output
-** boundaries. (Code using this macro must include 'locale.h'.)
+** boundaries.
 */
-#if !defined(lua_getlocaledecpoint)
-#define lua_getlocaledecpoint() (localeconv()->decimal_point[0])
-#endif
+#include <locale.h>
+static inline char lua_getlocaledecpoint(void)
+{
+  return localeconv()->decimal_point[0];
+}
 
-/*
-@@ LUA_KCONTEXT is the type of the context ('ctx') for continuation
-** functions.  It must be a numerical type; Lua will use 'intptr_t' if
-** available, otherwise it will use 'ptrdiff_t' (the nearest thing to
-** 'intptr_t' in C89)
-*/
-#define LUA_KCONTEXT ptrdiff_t
-
-#if !defined(LUA_USE_C89) && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-#include <stdint.h>
-#endif
+/* lua_KContext (the type of the context for continuation functions) is
+** 'ptrdiff_t'; the typedef lives in lua.h. */
 
 /*
 ** macros to improve jump prediction, used mostly for error handling
-** and debug facilities. (Some macros in the Lua API use these macros.
-** Define LUA_NOBUILTIN if you do not want '__builtin_expect' in your
-** code.)
+** and debug facilities. (Some macros in the Lua API use these macros.)
 */
-#if !defined(luai_likely)
-
 #define luai_likely(x)   (__builtin_expect(((x) != 0), 1))
 #define luai_unlikely(x) (__builtin_expect(((x) != 0), 0))
 
-#endif
-
 /* }================================================================== */
 
 /*
-** {==================================================================
-** Language Variations
-** =====================================================================
-*/
-
-/*
-@@ LUA_NOCVTN2S/LUA_NOCVTS2N control how Lua performs some
-** coercions. Define LUA_NOCVTN2S to turn off automatic coercion from
-** numbers to strings. Define LUA_NOCVTS2N to turn off automatic
-** coercion from strings to numbers.
-*/
-/* #define LUA_NOCVTN2S */
-/* #define LUA_NOCVTS2N */
-
-/*
-@@ LUA_USE_APICHECK turns on several consistency checks on the C API.
-** Define it as a help when debugging C code.
-*/
-/* #define LUA_USE_APICHECK */
-
-/* }================================================================== */
-
-/*
-** {==================================================================
-** Macros that affect the API and must be stable (that is, must be the
-** same when you compile Lua and when you compile code that links to
-** Lua).
-** =====================================================================
-*/
-
-/*
-@@ LUA_IDSIZE gives the maximum size for the description of the source
+** LUA_IDSIZE gives the maximum size for the description of the source
 ** of a function in debug information.
-** CHANGE it if you want a different size.
+** (Part of the API: must be the same when you compile Lua and when you
+** compile code that links to Lua.)
 */
-#define LUA_IDSIZE 60
-
-/* }================================================================== */
-
-/* =================================================================== */
-
-/*
-** Local configuration. You can use this space to add your redefinitions
-** without modifying the main part of the file.
-*/
+constexpr int LUA_IDSIZE = 60;

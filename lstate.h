@@ -115,10 +115,8 @@ struct lua_longjmp; /* defined in ldo.c */
 ** Atomic type (relative to signals) to better ensure that 'lua_sethook'
 ** is thread safe
 */
-#if !defined(l_signalT)
 #include <signal.h>
-#define l_signalT sig_atomic_t
-#endif
+typedef sig_atomic_t l_signalT;
 
 /*
 ** Extra stack space to handle TM calls and some other extras. This

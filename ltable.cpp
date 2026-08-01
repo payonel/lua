@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 /*
 ** Implementation of tables (aka arrays, objects, or hash tables).
@@ -160,7 +159,6 @@ static int hashint(const Table* t, lua_Integer i)
 ** adding 'i'; the use of '~u' (instead of '-u') avoids problems with
 ** INT_MIN.
 */
-#if !defined(l_hashfloat)
 static unsigned l_hashfloat(lua_Number n)
 {
   int i;
@@ -177,7 +175,6 @@ static unsigned l_hashfloat(lua_Number n)
     return (u <= ((unsigned int)(INT_MAX)) ? u : ~u);
   }
 }
-#endif
 
 /*
 ** returns the 'main' position of an element in a table (that is,
@@ -1002,8 +999,6 @@ static void luaH_newkey(lua_State* L, Table* t, const TValue* key,
     }
     assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(t)), key);
-    /* for debugging only: any new key may force an emergency collection */
-    condchangemem(L, (void) 0, (void) 0, 1);
   }
 }
 

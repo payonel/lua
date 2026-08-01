@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <setjmp.h>
 #include <stdlib.h>
@@ -337,9 +336,8 @@ void luaD_shrinkstack(lua_State* L)
     int nsize = (inuse > MAXSTACK / 2) ? MAXSTACK : inuse * 2;
     luaD_reallocstack(L, nsize, 0); /* ok if that fails */
   }
-  else                                    /* don't change stack */
-    condmovestack(L, (void) 0, (void) 0); /* (change only for debugging) */
-  luaE_shrinkCI(L);                       /* shrink CI list */
+  /* else don't change stack */
+  luaE_shrinkCI(L); /* shrink CI list */
 }
 
 void luaD_inctop(lua_State* L)

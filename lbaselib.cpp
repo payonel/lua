@@ -5,7 +5,6 @@
 */
 
 
-#include "lprefix.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -27,12 +26,13 @@ static int luaB_print(lua_State* L)
   for (i = 1; i <= n; i++)
   { /* for each argument */
     const InternalString* s = luaL_toistring(L, i); /* convert it to string */
-    if (i > 1)                                  /* not the first element? */
-      lua_writestring("\t", 1);                 /* add a tab before it */
-    lua_writestring(s->bytes(), s->size());     /* print it (host boundary) */
-    lua_pop(L, 1);                            /* pop result */
+    if (i > 1)                                      /* not the first element? */
+      fwrite("\t", sizeof(char), 1, stdout);        /* add a tab before it */
+    fwrite(s->bytes(), sizeof(char), s->size(), stdout); /* print it (host boundary) */
+    lua_pop(L, 1);                                  /* pop result */
   }
-  lua_writeline();
+  fwrite("\n", sizeof(char), 1, stdout);
+  fflush(stdout);
   return 0;
 }
 

@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <limits.h>
 #include <string.h>
@@ -1858,14 +1857,7 @@ static void forbody(LexState* ls, int base, int line, int nvars, int isgen)
   luaK_fixline(fs, line);
 }
 
-/*
-** Control whether for-loop control variables are read-only
-*/
-#if LUA_COMPAT_LOOPVAR
-#define LOOPVARKIND VDKREG
-#else /* by default, these variables are read only */
-#define LOOPVARKIND RDKCONST
-#endif
+/* for-loop control variables are read only */
 
 static void fornum(LexState* ls, TString* varname, int line)
 {
@@ -1874,7 +1866,7 @@ static void fornum(LexState* ls, TString* varname, int line)
   int base = fs->freereg;
   new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;
   new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;
-  new_varkind(ls, varname, LOOPVARKIND); /* control variable */
+  new_varkind(ls, varname, RDKCONST); /* control variable (read only) */
   checknext(ls, '=');
   exp1(ls); /* initial value */
   checknext(ls, ',');
@@ -1902,7 +1894,7 @@ static void forlist(LexState* ls, TString* indexname)
   new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;  /* iterator function */
   new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;  /* state */
   new_localvar(ls, luaX_newstring(ls, lit<"(for state)">()->view()));;  /* closing var. (after swap) */
-  new_varkind(ls, indexname, LOOPVARKIND); /* control variable */
+  new_varkind(ls, indexname, RDKCONST); /* control variable (read only) */
   /* other declared variables */
   while (testnext(ls, ','))
   {

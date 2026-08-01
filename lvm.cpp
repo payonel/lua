@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <float.h>
 #include <limits.h>
@@ -37,16 +36,13 @@ constexpr int MAXTAGLOOP = 2000;
 */
 
 /* number of bits in the mantissa of a float */
-#define NBM (DBL_MANT_DIG)
+constexpr int NBM = DBL_MANT_DIG;
 
 /*
-** Check whether some integers may not fit in a float, testing whether
-** (maxinteger >> NBM) > 0. (That implies (1 << NBM) <= maxinteger.)
-** (The shifts are done in parts, to avoid shifting by more than the size
-** of an integer. In a worst case, NBM == 113 for long double and
-** sizeof(long) == 32.)
+** Some integers do not fit in a float: with a 64-bit lua_Integer and a
+** 53-bit binary64 mantissa (both pinned for this port, see luaconf.h),
+** (maxinteger >> NBM) > 0.
 */
-#if ((((LUA_MAXINTEGER >> (NBM / 4)) >> (NBM / 4)) >> (NBM / 4)) >> (NBM - (3 * (NBM / 4)))) > 0
 
 /* limit for integers that fit in a float */
 constexpr lua_Unsigned MAXINTFITSF = ((lua_Unsigned) 1 << NBM);
@@ -56,16 +52,6 @@ static inline int l_intfitsf(lua_Integer i)
 {
   return (MAXINTFITSF + (lua_Unsigned)i) <= (2 * MAXINTFITSF);
 }
-
-#else /* all integers fit in a float precisely */
-
-static inline int l_intfitsf(lua_Integer i)
-{
-  (void) i;
-  return 1;
-}
-
-#endif
 
 /*
 ** Try to convert a value from string to a number value.
@@ -413,13 +399,6 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
 }
 
 /*
-** Function to be used for 0-terminated string order comparison
-*/
-#if !defined(l_strcoll)
-#define l_strcoll strcoll
-#endif
-
-/*
 ** Compare two strings 'ts1' x 'ts2', returning an integer less-equal-
 ** -greater than zero if 'ts1' is less-equal-greater than 'ts2'.
 ** The code is a little tricky because it allows '\0' in the strings
@@ -429,7 +408,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
 */
 static int l_strcmp(const TString* ts1, const TString* ts2)
 {
-  /* LOCALE-item site: 'l_strcoll' (libc strcoll) walks NUL-delimited
+  /* LOCALE-item site: 'strcoll' (libc) walks NUL-delimited
      segments, so the payload's c_str form is used deliberately here;
      this function is rewritten by the locale item (own collation) */
   size_t rl1 = ts1->data.size(); /* real length */
@@ -438,7 +417,7 @@ static int l_strcmp(const TString* ts1, const TString* ts2)
   const char* s2 = ts2->data.c_str();
   for (;;)
   { /* for each segment */
-    int temp = l_strcoll(s1, s2);
+    int temp = strcoll(s1, s2);
     if (temp != 0) /* not equal? */
       return temp; /* done */
     else
@@ -1280,16 +1259,15 @@ static l_forceinline int l_gei(lua_Integer a, lua_Integer b)
 */
 
 /*
-** macro executed during Lua functions at points where the
+** executed during Lua functions at points where the
 ** function can yield.
 */
-#if !defined(luai_threadyield)
-#define luai_threadyield(L) \
-  {                         \
-    lua_unlock(L);          \
-    lua_lock(L);            \
-  }
-#endif
+static inline void luai_threadyield(lua_State* L)
+{
+  (void) L; /* release lock/unlock are no-ops */
+  lua_unlock(L);
+  lua_lock(L);
+}
 
 /* 'c' is the limit of live values in the stack */
 
@@ -1738,7 +1716,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           luaC_step(L);
           trap = ci->trap;
         }
-        condchangemem(L, (ci->savedpc = pc, L->top = ra + 1), (trap = ci->trap), 0);
         luai_threadyield(L);
         break;
       }
@@ -2368,7 +2345,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           luaC_step(L);
           trap = ci->trap;
         }
-        condchangemem(L, (ci->savedpc = pc), (trap = ci->trap), 0);
         luai_threadyield(L);
         break;
       }
@@ -2966,7 +2942,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           luaC_step(L);
           trap = ci->trap;
         }
-        condchangemem(L, (ci->savedpc = pc, L->top = ra + 1), (trap = ci->trap), 0);
         luai_threadyield(L);
         break;
       }

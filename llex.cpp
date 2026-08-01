@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <locale.h>
 #include <string.h>
@@ -34,9 +33,7 @@ static l_forceinline void next(LexState* ls)
 }
 
 /* minimum size for string buffer */
-#if !defined(LUA_MINBUFFER)
-#define LUA_MINBUFFER 32
-#endif
+constexpr int LUA_MINBUFFER = 32;
 
 static inline int currIsNewline(const LexState* ls)
 {

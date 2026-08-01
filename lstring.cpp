@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-#include "lprefix.h"
 
 #include <new>
 #include <string.h>
@@ -91,9 +90,7 @@ void luaS_init(lua_State* L)
 /*
 ** Maximum length for strings that are internalized.
 */
-#if !defined(LUAI_MAXSHORTLEN)
-#define LUAI_MAXSHORTLEN 40
-#endif
+constexpr int LUAI_MAXSHORTLEN = 40;
 
 /*
 ** Create a new string, interning short strings in the global table.

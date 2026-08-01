@@ -5,7 +5,6 @@
 */
 
 
-#include "lprefix.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -263,12 +262,6 @@ typedef unsigned int IdxT;
 ** of a partition. (If you don't want/need this "randomness", ~0 is a
 ** good choice.)
 */
-#if !defined(l_randomizePivot)
-static inline unsigned int l_randomizePivot(lua_State* L)
-{
-  return luaL_makeseed(L);
-}
-#endif /* } */
 
 /* arrays larger than 'RANLIMIT' may use randomized pivots */
 constexpr unsigned RANLIMIT = 100u;
@@ -411,7 +404,7 @@ static void auxsort(lua_State* L, IdxT lo, IdxT up, unsigned rnd)
       up = p - 1;                 /* tail call for [lo .. p - 1]  (lower interval) */
     }
     if ((up - lo) / 128 > n)     /* partition too imbalanced? */
-      rnd = l_randomizePivot(L); /* try a new randomization */
+      rnd = luaL_makeseed(L); /* try a new randomization */
   } /* tail call auxsort(L, lo, up, rnd) */
 }
 
