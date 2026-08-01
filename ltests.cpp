@@ -2099,72 +2099,72 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       else
         lua_printstack(L1);
     }
-    else if (inst == "print")
+    else if (inst == lit<"print">()->view())
     {
       std::string msg = getstring_aux(L, &sc);
       printf("%s\n", msg.c_str()); /* test print shim */
     }
-    else if (inst == "warningC")
+    else if (inst == lit<"warningC">()->view())
     {
       std::string msg = getstring_aux(L, &sc);
       lua_warning(L1, HostString(msg), 1);
     }
-    else if (inst == "warning")
+    else if (inst == lit<"warning">()->view())
     {
       std::string msg = getstring_aux(L, &sc);
       lua_warning(L1, HostString(msg), 0);
     }
-    else if (inst == "pushbool")
+    else if (inst == lit<"pushbool">()->view())
     {
       lua_pushboolean(L1, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "pushcclosure")
+    else if (inst == lit<"pushcclosure">()->view())
     {
       lua_pushcclosure(L1, testC, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "pushint")
+    else if (inst == lit<"pushint">()->view())
     {
       lua_pushinteger(L1, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "pushnil")
+    else if (inst == lit<"pushnil">()->view())
     {
       lua_pushnil(L1);
     }
-    else if (inst == "pushnum")
+    else if (inst == lit<"pushnum">()->view())
     {
       lua_pushnumber(L1, (lua_Number) getnum_aux(L, L1, &sc));
     }
-    else if (inst == "pushstatus")
+    else if (inst == lit<"pushstatus">()->view())
     {
       lua_pushistringref(L1, statcodes[status]);
     }
-    else if (inst == "pushstring")
+    else if (inst == lit<"pushstring">()->view())
     {
       lua_pushstring(L1, HostString(getstring_aux(L, &sc)));
     }
-    else if (inst == "pushupvalueindex")
+    else if (inst == lit<"pushupvalueindex">()->view())
     {
       lua_pushinteger(L1, lua_upvalueindex(getnum_aux(L, L1, &sc)));
     }
-    else if (inst == "pushvalue")
+    else if (inst == lit<"pushvalue">()->view())
     {
       lua_pushvalue(L1, getindex_aux(L, L1, &sc));
     }
-    else if (inst == "pushfstringI")
+    else if (inst == lit<"pushfstringI">()->view())
     {
       const InternalString* fmt = lua_toistring(L, -2); /* sanctioned shim */
       if (fmtnargs(fmt->c_str()) > 0)
         lua_pushinteger(L1, lua_tointeger(L, -1));
       lua_pushfstring(L1, fmt->c_str());
     }
-    else if (inst == "pushfstringS")
+    else if (inst == lit<"pushfstringS">()->view())
     {
       const InternalString* fmt = lua_toistring(L, -2); /* sanctioned shim */
       if (fmtnargs(fmt->c_str()) > 0)
         lua_pushstring(L1, lua_tostring(L, -1));
       lua_pushfstring(L1, fmt->c_str());
     }
-    else if (inst == "pushfstringP")
+    else if (inst == lit<"pushfstringP">()->view())
     {
       const InternalString* fmt = lua_toistring(L, -2); /* sanctioned shim */
       if (fmtnargs(fmt->c_str()) > 0)
@@ -2181,64 +2181,64 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       }
       lua_pushfstring(L1, fmt->c_str());
     }
-    else if (inst == "rawget")
+    else if (inst == lit<"rawget">()->view())
     {
       int t = getindex_aux(L, L1, &sc);
       lua_rawget(L1, t);
     }
-    else if (inst == "rawgeti")
+    else if (inst == lit<"rawgeti">()->view())
     {
       int t = getindex_aux(L, L1, &sc);
       lua_rawgeti(L1, t, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "rawgetp")
+    else if (inst == lit<"rawgetp">()->view())
     {
       int t = getindex_aux(L, L1, &sc);
       lua_rawgetp(L1, t, util::as_userdata(getnum_aux(L, L1, &sc)));
     }
-    else if (inst == "rawset")
+    else if (inst == lit<"rawset">()->view())
     {
       int t = getindex_aux(L, L1, &sc);
       lua_rawset(L1, t);
     }
-    else if (inst == "rawseti")
+    else if (inst == lit<"rawseti">()->view())
     {
       int t = getindex_aux(L, L1, &sc);
       lua_rawseti(L1, t, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "rawsetp")
+    else if (inst == lit<"rawsetp">()->view())
     {
       int t = getindex_aux(L, L1, &sc);
       lua_rawsetp(L1, t, util::as_userdata(getnum_aux(L, L1, &sc)));
     }
-    else if (inst == "remove")
+    else if (inst == lit<"remove">()->view())
     {
       lua_remove(L1, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "replace")
+    else if (inst == lit<"replace">()->view())
     {
       lua_replace(L1, getindex_aux(L, L1, &sc));
     }
-    else if (inst == "resume")
+    else if (inst == lit<"resume">()->view())
     {
       int i = getindex_aux(L, L1, &sc);
       status = lua_resume(lua_tothread(L1, i), L, getnum_aux(L, L1, &sc)).status;
     }
-    else if (inst == "traceback")
+    else if (inst == lit<"traceback">()->view())
     {
       HostString msg(getstring_aux(L, &sc)); /* host boundary copy */
       int level = getnum_aux(L, L1, &sc);
       luaL_traceback(L1, L1, msg, level);
     }
-    else if (inst == "threadstatus")
+    else if (inst == lit<"threadstatus">()->view())
     {
       lua_pushistringref(L1, statcodes[lua_status(L1)]);
     }
-    else if (inst == "alloccount")
+    else if (inst == lit<"alloccount">()->view())
     {
       l_memcontrol.countlimit = ((unsigned int)(getnum_aux(L, L1, &sc)));
     }
-    else if (inst == "return")
+    else if (inst == lit<"return">()->view())
     {
       int n = getnum_aux(L, L1, &sc);
       if (L1 != L)
@@ -2260,61 +2260,61 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       }
       return n;
     }
-    else if (inst == "rotate")
+    else if (inst == lit<"rotate">()->view())
     {
       int i = getindex_aux(L, L1, &sc);
       lua_rotate(L1, i, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "setfield")
+    else if (inst == lit<"setfield">()->view())
     {
       int t = getindex_aux(L, L1, &sc);
       HostString s{getstring_aux(L, &sc)};
       lua_setfield(L1, t, s);
     }
-    else if (inst == "seti")
+    else if (inst == lit<"seti">()->view())
     {
       int t = getindex_aux(L, L1, &sc);
       lua_seti(L1, t, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "setglobal")
+    else if (inst == lit<"setglobal">()->view())
     {
       HostString s{getstring_aux(L, &sc)};
       lua_setglobal(L1, s);
     }
-    else if (inst == "sethook")
+    else if (inst == lit<"sethook">()->view())
     {
       int mask = getnum_aux(L, L1, &sc);
       int count = getnum_aux(L, L1, &sc);
       std::string s = getstring_aux(L, &sc);
       sethookaux(L1, mask, count, s);
     }
-    else if (inst == "setmetatable")
+    else if (inst == lit<"setmetatable">()->view())
     {
       int idx = getindex_aux(L, L1, &sc);
       lua_setmetatable(L1, idx);
     }
-    else if (inst == "settable")
+    else if (inst == lit<"settable">()->view())
     {
       lua_settable(L1, getindex_aux(L, L1, &sc));
     }
-    else if (inst == "settop")
+    else if (inst == lit<"settop">()->view())
     {
       lua_settop(L1, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "testudata")
+    else if (inst == lit<"testudata">()->view())
     {
       int i = getindex_aux(L, L1, &sc);
       lua_pushboolean(L1, luaL_testudata(L1, i, HostString(getstring_aux(L, &sc))) != nullptr);
     }
-    else if (inst == "error")
+    else if (inst == lit<"error">()->view())
     {
       lua_error(L1);
     }
-    else if (inst == "abort")
+    else if (inst == lit<"abort">()->view())
     {
       abort();
     }
-    else if (inst == "throw")
+    else if (inst == lit<"throw">()->view())
     {
       static struct X
       {
@@ -2323,23 +2323,23 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       throw x;
       break;
     }
-    else if (inst == "tobool")
+    else if (inst == lit<"tobool">()->view())
     {
       lua_pushboolean(L1, lua_toboolean(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (inst == "tocfunction")
+    else if (inst == lit<"tocfunction">()->view())
     {
       lua_pushcfunction(L1, lua_tocfunction(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (inst == "tointeger")
+    else if (inst == lit<"tointeger">()->view())
     {
       lua_pushinteger(L1, lua_tointeger(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (inst == "tonumber")
+    else if (inst == lit<"tonumber">()->view())
     {
       lua_pushnumber(L1, lua_tonumber(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (inst == "topointer")
+    else if (inst == lit<"topointer">()->view())
     {
       int idx = getindex_aux(L, L1, &sc);
       if (lua_islightcfunction(L1, idx))
@@ -2354,11 +2354,11 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
         lua_pushlightuserdata(L1, util::remove_const_cast(p));
       }
     }
-    else if (inst == "touserdata")
+    else if (inst == lit<"touserdata">()->view())
     {
       lua_pushlightuserdata(L1, lua_touserdata(L1, getindex_aux(L, L1, &sc)));
     }
-    else if (inst == "tostring")
+    else if (inst == lit<"tostring">()->view())
     {
       int i = getindex_aux(L, L1, &sc);
       if (lua_tolstring(L1, i).data() == nullptr) /* not convertible? */
@@ -2370,15 +2370,15 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
         assert(s == lua_tostring(L1, -1)); /* round-trips through the value */
       }
     }
-    else if (inst == "Ltolstring")
+    else if (inst == lit<"Ltolstring">()->view())
     {
       luaL_tolstring(L1, getindex_aux(L, L1, &sc));
     }
-    else if (inst == "type")
+    else if (inst == lit<"type">()->view())
     {
       lua_pushstring(L1, luaL_typename(L1, getnum_aux(L, L1, &sc)));
     }
-    else if (inst == "xmove")
+    else if (inst == lit<"xmove">()->view())
     {
       int f = getindex_aux(L, L1, &sc);
       int t = getindex_aux(L, L1, &sc);
@@ -2389,29 +2389,29 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
         n = lua_gettop(fs);
       lua_xmove(fs, ts, n);
     }
-    else if (inst == "isyieldable")
+    else if (inst == lit<"isyieldable">()->view())
     {
       lua_pushboolean(L1, lua_isyieldable(lua_tothread(L1, getindex_aux(L, L1, &sc))));
     }
-    else if (inst == "yield")
+    else if (inst == lit<"yield">()->view())
     {
       return lua_yield(L1, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "yieldk")
+    else if (inst == lit<"yieldk">()->view())
     {
       int nres = getnum_aux(L, L1, &sc);
       int i = getindex_aux(L, L1, &sc);
       return lua_yieldk(L1, nres, i, Cfunck);
     }
-    else if (inst == "toclose")
+    else if (inst == lit<"toclose">()->view())
     {
       lua_toclose(L1, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "closeslot")
+    else if (inst == lit<"closeslot">()->view())
     {
       lua_closeslot(L1, getnum_aux(L, L1, &sc));
     }
-    else if (inst == "argerror")
+    else if (inst == lit<"argerror">()->view())
     {
       int arg = getnum_aux(L, L1, &sc);
       luaL_argerror(L1, arg, HostString(getstring_aux(L, &sc)));
@@ -2419,7 +2419,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     else
     {
       lua_pushstring(L, HostString(inst));
-      luaL_error(L, "unknown instruction %s");
+      luaL_error(L, HostString(lit<"unknown instruction %s">()->view()));
     }
   }
   return 0;
@@ -2456,9 +2456,9 @@ static int Cfunc(lua_State* L)
 static int Cfunck(lua_State* L, int status, lua_KContext ctx)
 {
   lua_pushistringref(L, statcodes[status]);
-  lua_setglobal(L, "status");
+  lua_setglobal(L, HostString(lit<"status">()->view()));
   lua_pushinteger(L, ((lua_Integer)(ctx)));
-  lua_setglobal(L, "ctx");
+  lua_setglobal(L, HostString(lit<"ctx">()->view()));
   std::string_view script = lua_tolstring(L, ((int)(ctx))); /* borrowed */
   return runC(L, L, script);
 }
@@ -2486,7 +2486,7 @@ static void Chook(lua_State* L, lua_Debug* ar)
   const InternalString* const events[] = {
       lit<"call">(), lit<"ret">(), lit<"line">(), lit<"count">(),
       lit<"tailcall">()};
-  lua_getfield(L, LUA_REGISTRYINDEX, "C_HOOK");
+  lua_getfield(L, LUA_REGISTRYINDEX, HostString(lit<"C_HOOK">()->view()));
   lua_pushlightuserdata(L, L);
   lua_gettable(L, -2);                    /* get C_HOOK[L] (script saved by sethookaux) */
   std::string scpt{lua_tostring(L, -1)->view()}; /* (a copy: string will be popped) */
@@ -2506,13 +2506,13 @@ static void sethookaux(lua_State* L, int mask, int count, std::string_view scpt)
     lua_sethook(L, nullptr, 0, 0); /* turn off hooks */
     return;
   }
-  lua_getfield(L, LUA_REGISTRYINDEX, "C_HOOK"); /* get C_HOOK table */
+  lua_getfield(L, LUA_REGISTRYINDEX, HostString(lit<"C_HOOK">()->view())); /* get C_HOOK table */
   if (!lua_istable(L, -1))
   {                  /* no hook table? */
     lua_pop(L, 1);   /* remove previous value */
     lua_newtable(L); /* create new C_HOOK table */
     lua_pushvalue(L, -1);
-    lua_setfield(L, LUA_REGISTRYINDEX, "C_HOOK"); /* register it */
+    lua_setfield(L, LUA_REGISTRYINDEX, HostString(lit<"C_HOOK">()->view())); /* register it */
   }
   lua_pushlightuserdata(L, L);
   lua_pushlstring(L, scpt, 0, scpt.size());
@@ -2546,7 +2546,7 @@ static int sethook(lua_State* L)
 static int coresume(lua_State* L)
 {
   lua_State* co = lua_tothread(L, 1);
-  luaL_argcheck(L, co, 1, "coroutine expected");
+  luaL_argcheck(L, co, 1, HostString(lit<"coroutine expected">()->view()));
   lua_ResumeResult rr = lua_resume(co, L, 0);
   int status = rr.status;
   if (status != LUA_OK && status != LUA_YIELD)
@@ -2578,36 +2578,36 @@ static int nonblock(lua_State* L)
 /* }====================================================== */
 
 static const struct luaL_Reg tests_funcs[] = {
-    {"checkmemory", lua_checkmemory},
-    {"closestate", closestate},
-    {"d2s", d2s},
-    {"doonnewstack", doonnewstack},
-    {"doremote", doremote},
-    {"gccolor", gc_color},
-    {"gcage", gc_age},
-    {"gcstate", gc_state},
-    {"tracegc", tracegc},
-    {"pobj", gc_printobj},
-    {"getref", getref},
-    {"hash", hash_query},
-    {"log2", log2_aux},
-    {"limits", get_limits},
-    {"listcode", listcode},
-    {"printcode", printcode},
-    {"printallstack", lua_printallstack},
-    {"listk", listk},
-    {"listabslineinfo", listabslineinfo},
-    {"listlocals", listlocals},
-    {"loadlib", loadlib},
-    {"checkpanic", checkpanic},
-    {"newstate", newstate},
-    {"newuserdata", newuserdata},
-    {"num2int", num2int},
-    {"makeseed", makeseed},
-    {"pushuserdata", pushuserdata},
-    {"gcquery", gc_query},
-    {"querystr", string_query},
-    {"querytab", table_query},
+    {lit<"checkmemory">()->view(), lua_checkmemory},
+    {lit<"closestate">()->view(), closestate},
+    {lit<"d2s">()->view(), d2s},
+    {lit<"doonnewstack">()->view(), doonnewstack},
+    {lit<"doremote">()->view(), doremote},
+    {lit<"gccolor">()->view(), gc_color},
+    {lit<"gcage">()->view(), gc_age},
+    {lit<"gcstate">()->view(), gc_state},
+    {lit<"tracegc">()->view(), tracegc},
+    {lit<"pobj">()->view(), gc_printobj},
+    {lit<"getref">()->view(), getref},
+    {lit<"hash">()->view(), hash_query},
+    {lit<"log2">()->view(), log2_aux},
+    {lit<"limits">()->view(), get_limits},
+    {lit<"listcode">()->view(), listcode},
+    {lit<"printcode">()->view(), printcode},
+    {lit<"printallstack">()->view(), lua_printallstack},
+    {lit<"listk">()->view(), listk},
+    {lit<"listabslineinfo">()->view(), listabslineinfo},
+    {lit<"listlocals">()->view(), listlocals},
+    {lit<"loadlib">()->view(), loadlib},
+    {lit<"checkpanic">()->view(), checkpanic},
+    {lit<"newstate">()->view(), newstate},
+    {lit<"newuserdata">()->view(), newuserdata},
+    {lit<"num2int">()->view(), num2int},
+    {lit<"makeseed">()->view(), makeseed},
+    {lit<"pushuserdata">()->view(), pushuserdata},
+    {lit<"gcquery">()->view(), gc_query},
+    {lit<"querystr">()->view(), string_query},
+    {lit<"querytab">()->view(), table_query},
     {"codeparam", test_codeparam},
     {"applyparam", test_applyparam},
     {"ref", tref},
