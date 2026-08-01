@@ -36,13 +36,13 @@
 /* Check whether 'mode' matches '[rwa]%+?[L_MODEEXT]*' */
 static int l_checkmode(std::string_view mode)
 {
-  if (mode.empty() || std::string_view{"rwa"}.find(mode[0]) == std::string_view::npos)
+  if (mode.empty() || lit<"rwa">()->view().find(mode[0]) == std::string_view::npos)
     return 0;
   size_t i = 1;
   if (i < mode.size() && mode[i] == '+') /* skip if char is '+' */
     i++;
   /* check extensions: remaining chars must all be in L_MODEEXT */
-  return mode.find_first_not_of(L_MODEEXT, i) == std::string_view::npos;
+  return mode.find_first_not_of(lit<L_MODEEXT>()->view(), i) == std::string_view::npos;
 }
 
 #endif
@@ -89,10 +89,10 @@ static inline int l_checkmodep(const char* m)
 
 /* }====================================================== */
 
-constexpr char IO_PREFIX[] = "_IO_";
-constexpr size_t IOPREF_LEN = (sizeof(IO_PREFIX) / sizeof(char) - 1);
-constexpr char IO_INPUT[] = "_IO_input";
-constexpr char IO_OUTPUT[] = "_IO_output";
+static const InternalString* const IO_PREFIX = lit<"_IO_">();
+static const size_t IOPREF_LEN = IO_PREFIX->view().size();
+static const InternalString* const IO_INPUT = lit<"_IO_input">();
+static const InternalString* const IO_OUTPUT = lit<"_IO_output">();
 
 typedef luaL_Stream LStream;
 
@@ -114,9 +114,9 @@ static int io_type(lua_State* L)
   if (p == nullptr)
     luaL_pushfail(L); /* not a file */
   else if (isclosed(p))
-    lua_pushliteral(L, "closed file");
+    lua_pushliteral(L, HostString(lit<"closed file">()->view()));
   else
-    lua_pushliteral(L, "file");
+    lua_pushliteral(L, HostString(lit<"file">()->view()));
   return 1;
 }
 
@@ -124,11 +124,11 @@ static int f_tostring(lua_State* L)
 {
   LStream* p = tolstream(L);
   if (isclosed(p))
-    lua_pushliteral(L, "file (closed)");
+    lua_pushliteral(L, HostString(lit<"file (closed)">()->view()));
   else
   {
     lua_pushlightuserdata(L, p->f);
-    lua_pushfstring(L, "file (%p)");
+    lua_pushfstring(L, HostString(lit<"file (%p)">()->view()));
   }
   return 1;
 }
@@ -137,7 +137,7 @@ static FILE* tofile(lua_State* L)
 {
   LStream* p = tolstream(L);
   if (l_unlikely(isclosed(p)))
-    luaL_error(L, "attempt to use a closed file");
+    luaL_error(L, HostString(lit<"attempt to use a closed file">()->view()));
   assert(p->f);
   return p->f;
 }
@@ -177,7 +177,7 @@ static int f_close(lua_State* L)
 static int io_close(lua_State* L)
 {
   if (lua_isnone(L, 1))                            /* no argument? */
-    lua_getfield(L, LUA_REGISTRYINDEX, IO_OUTPUT); /* use default output */
+    lua_getfield(L, LUA_REGISTRYINDEX, HostString(IO_OUTPUT->view())); /* use default output */
   return f_close(L);
 }
 
@@ -215,7 +215,7 @@ static void opencheck(lua_State* L, const InternalString* fname, const char* mod
   {
     lua_pushistringref(L, fname);
     lua_pushstring(L, strerror(errno));
-    luaL_error(L, "cannot open file '%s' (%s)");
+    luaL_error(L, HostString(lit<"cannot open file '%s' (%s)">()->view()));
   }
 }
 
@@ -224,7 +224,7 @@ static int io_open(lua_State* L)
   const InternalString* filename = luaL_checkistring(L, 1);
   const InternalString* mode = luaL_optistring(L, 2, lit<"r">());
   LStream* p = newfile(L);
-  luaL_argcheck(L, l_checkmode(mode->view()), 2, "invalid mode");
+  luaL_argcheck(L, l_checkmode(mode->view()), 2, HostString(lit<"invalid mode">()->view()));
   errno = 0;
   p->f = fopen(filename->c_str(), mode->c_str()); /* OS edge (sanctioned c_str) */
   return (p->f == nullptr) ? luaL_fileresulti(L, 0, filename->view()) : 1;
@@ -245,7 +245,7 @@ static int io_popen(lua_State* L)
   const InternalString* filename = luaL_checkistring(L, 1);
   const InternalString* mode = luaL_optistring(L, 2, lit<"r">());
   LStream* p = newprefile(L);
-  luaL_argcheck(L, l_checkmodep(mode->c_str()), 2, "invalid mode");
+  luaL_argcheck(L, l_checkmodep(mode->c_str()), 2, HostString(lit<"invalid mode">()->view()));
   errno = 0;
   p->f = l_popen(L, filename->c_str(), mode->c_str()); /* OS edge (sanctioned c_str) */
   p->closef = &io_pclose;
@@ -270,7 +270,7 @@ static FILE* getiofile(lua_State* L, std::string_view findex)
     /* strip the IO_PREFIX (byte sub-view) */
     std::string_view name = findex.substr(IOPREF_LEN);
     lua_pushlstring(L, name, 0, name.size());
-    luaL_error(L, "default %s file is closed");
+    luaL_error(L, HostString(lit<"default %s file is closed">()->view()));
   }
   return p->f;
 }
@@ -298,12 +298,12 @@ static int g_iofile(lua_State* L, std::string_view f, const char* mode)
 
 static int io_input(lua_State* L)
 {
-  return g_iofile(L, IO_INPUT, "r");
+  return g_iofile(L, IO_INPUT->view(), "r");
 }
 
 static int io_output(lua_State* L)
 {
-  return g_iofile(L, IO_OUTPUT, "w");
+  return g_iofile(L, IO_OUTPUT->view(), "w");
 }
 
 static int io_readline(lua_State* L);
@@ -326,7 +326,7 @@ constexpr int MAXARGLINE = 250;
 static void aux_lines(lua_State* L, int toclose)
 {
   int n = lua_gettop(L) - 1; /* number of arguments to read */
-  luaL_argcheck(L, n <= MAXARGLINE, MAXARGLINE + 2, "too many arguments");
+  luaL_argcheck(L, n <= MAXARGLINE, MAXARGLINE + 2, HostString(lit<"too many arguments">()->view()));
   lua_pushvalue(L, 1);         /* file */
   lua_pushinteger(L, n);       /* number of arguments to read */
   lua_pushboolean(L, toclose); /* close/not close file when finished */
@@ -353,7 +353,7 @@ static int io_lines(lua_State* L)
     lua_pushnil(L); /* at least one argument */
   if (lua_isnil(L, 1))
   {                                               /* no file name? */
-    lua_getfield(L, LUA_REGISTRYINDEX, IO_INPUT); /* get default input */
+    lua_getfield(L, LUA_REGISTRYINDEX, HostString(IO_INPUT->view())); /* get default input */
     lua_replace(L, 1);                            /* put it at index 1 */
     tofile(L);                                    /* check that it's a valid file handle */
     toclose = 0;                                  /* do not close it after iteration */
@@ -457,10 +457,10 @@ static int read_number(lua_State* L, FILE* f)
   {
     rn.c = l_getc(rn.f);
   } while (isspace(rn.c)); /* skip spaces */
-  test2(&rn, "-+");        /* optional sign */
-  if (test2(&rn, "00"))
+  test2(&rn, lit<"-+">()->view());        /* optional sign */
+  if (test2(&rn, lit<"00">()->view()))
   {
-    if (test2(&rn, "xX"))
+    if (test2(&rn, lit<"xX">()->view()))
       hex = 1; /* numeral is hexadecimal */
     else
       count = 1; /* count initial '0' as a valid digit */
@@ -468,9 +468,9 @@ static int read_number(lua_State* L, FILE* f)
   count += readdigits(&rn, hex);   /* integral part */
   if (test2(&rn, std::string_view{decp, 2})) /* decimal point? (no terminator) */
     count += readdigits(&rn, hex); /* fractional part */
-  if (count > 0 && test2(&rn, (hex ? "pP" : "eE")))
+  if (count > 0 && test2(&rn, (hex ? lit<"pP">()->view() : lit<"eE">()->view())))
   {                     /* exponent mark? */
-    test2(&rn, "-+");   /* exponent sign */
+    test2(&rn, lit<"-+">()->view());   /* exponent sign */
     readdigits(&rn, 0); /* exponent digits */
   }
   ungetc(rn.c, rn.f); /* unread look-ahead char */
@@ -489,7 +489,7 @@ static int test_eof(lua_State* L, FILE* f)
 {
   int c = getc(f);
   ungetc(c, f); /* no-op when c == EOF */
-  lua_pushliteral(L, "");
+  lua_pushliteral(L, HostString(lit<"">()->view()));
   return (c != EOF);
 }
 
@@ -558,7 +558,7 @@ static int g_read(lua_State* L, FILE* f, int first)
   else
   {
     /* ensure stack space for all results and for auxlib's buffer */
-    luaL_checkstack(L, nargs + LUA_MINSTACK, "too many arguments");
+    luaL_checkstack(L, nargs + LUA_MINSTACK, HostString(lit<"too many arguments">()->view()));
     success = 1;
     for (n = first; nargs-- && success; n++)
     {
@@ -590,7 +590,7 @@ static int g_read(lua_State* L, FILE* f, int first)
           success = 1;    /* always success */
           break;
         default:
-          return luaL_argerror(L, n, "invalid format");
+          return luaL_argerror(L, n, HostString(lit<"invalid format">()->view()));
         }
       }
     }
@@ -607,7 +607,7 @@ static int g_read(lua_State* L, FILE* f, int first)
 
 static int io_read(lua_State* L)
 {
-  return g_read(L, getiofile(L, IO_INPUT), 1);
+  return g_read(L, getiofile(L, IO_INPUT->view()), 1);
 }
 
 static int f_read(lua_State* L)
@@ -624,9 +624,9 @@ static int io_readline(lua_State* L)
   int i;
   int n = (int) lua_tointeger(L, lua_upvalueindex(2));
   if (isclosed(p)) /* file is already closed? */
-    return luaL_error(L, "file is already closed");
+    return luaL_error(L, HostString(lit<"file is already closed">()->view()));
   lua_settop(L, 1);
-  luaL_checkstack(L, n, "too many arguments");
+  luaL_checkstack(L, n, HostString(lit<"too many arguments">()->view()));
   for (i = 1; i <= n; i++) /* push arguments to 'g_read' */
     lua_pushvalue(L, lua_upvalueindex(3 + i));
   n = g_read(L, p->f, 2);   /* 'n' is number of results */
@@ -639,7 +639,7 @@ static int io_readline(lua_State* L)
     { /* is there error information? */
       /* 2nd result is error message */
       lua_pushvalue(L, -n + 1);
-      return luaL_error(L, "%s");
+      return luaL_error(L, HostString(lit<"%s">()->view()));
     }
     if (lua_toboolean(L, lua_upvalueindex(3)))
     {                                        /* generator created file? */
@@ -690,7 +690,7 @@ static int g_write(lua_State* L, FILE* f, int arg)
 
 static int io_write(lua_State* L)
 {
-  return g_write(L, getiofile(L, IO_OUTPUT), 1);
+  return g_write(L, getiofile(L, IO_OUTPUT->view()), 1);
 }
 
 static int f_write(lua_State* L)
@@ -703,14 +703,14 @@ static int f_write(lua_State* L)
 static int f_seek(lua_State* L)
 {
   static const int mode[] = {SEEK_SET, SEEK_CUR, SEEK_END};
-  static constexpr std::string_view modenames[] = {"set", "cur", "end"};
-  static constexpr std::string_view defmode = "cur";
+  static const std::string_view modenames[] = {lit<"set">()->view(), lit<"cur">()->view(), lit<"end">()->view()};
+  static const std::string_view defmode = lit<"cur">()->view();
   FILE* f = tofile(L);
   int op = luaL_checkoption(L, 2, defmode, modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
   l_seeknum offset = (l_seeknum) p3;
   luaL_argcheck(L, (lua_Integer) offset == p3, 3,
-                "not an integer in proper range");
+                HostString(lit<"not an integer in proper range">()->view()));
   errno = 0;
   op = l_fseek(f, offset, mode[op]);
   if (l_unlikely(op))
@@ -725,7 +725,7 @@ static int f_seek(lua_State* L)
 static int f_setvbuf(lua_State* L)
 {
   static const int mode[] = {_IONBF, _IOFBF, _IOLBF};
-  static constexpr std::string_view modenames[] = {"no", "full", "line"};
+  static const std::string_view modenames[] = {lit<"no">()->view(), lit<"full">()->view(), lit<"line">()->view()};
   FILE* f = tofile(L);
   int op = luaL_checkoption(L, 2, {}, modenames);
   lua_Integer sz = luaL_optinteger(L, 3, LUAL_BUFFERSIZE);
@@ -748,47 +748,47 @@ static int f_flush(lua_State* L)
 
 static int io_flush(lua_State* L)
 {
-  return aux_flush(L, getiofile(L, IO_OUTPUT));
+  return aux_flush(L, getiofile(L, IO_OUTPUT->view()));
 }
 
 /*
 ** functions for 'io' library
 */
 static const luaL_Reg iolib[] = {
-    {"close", io_close},
-    {"flush", io_flush},
-    {"input", io_input},
-    {"lines", io_lines},
-    {"open", io_open},
-    {"output", io_output},
-    {"popen", io_popen},
-    {"read", io_read},
-    {"tmpfile", io_tmpfile},
-    {"type", io_type},
-    {"write", io_write},
+    {lit<"close">()->view(), io_close},
+    {lit<"flush">()->view(), io_flush},
+    {lit<"input">()->view(), io_input},
+    {lit<"lines">()->view(), io_lines},
+    {lit<"open">()->view(), io_open},
+    {lit<"output">()->view(), io_output},
+    {lit<"popen">()->view(), io_popen},
+    {lit<"read">()->view(), io_read},
+    {lit<"tmpfile">()->view(), io_tmpfile},
+    {lit<"type">()->view(), io_type},
+    {lit<"write">()->view(), io_write},
     {{}, nullptr}};
 
 /*
 ** methods for file handles
 */
 static const luaL_Reg meth[] = {
-    {"read", f_read},
-    {"write", f_write},
-    {"lines", f_lines},
-    {"flush", f_flush},
-    {"seek", f_seek},
-    {"close", f_close},
-    {"setvbuf", f_setvbuf},
+    {lit<"read">()->view(), f_read},
+    {lit<"write">()->view(), f_write},
+    {lit<"lines">()->view(), f_lines},
+    {lit<"flush">()->view(), f_flush},
+    {lit<"seek">()->view(), f_seek},
+    {lit<"close">()->view(), f_close},
+    {lit<"setvbuf">()->view(), f_setvbuf},
     {{}, nullptr}};
 
 /*
 ** metamethods for file handles
 */
 static const luaL_Reg metameth[] = {
-    {"__index", nullptr}, /* placeholder */
-    {"__gc", f_gc},
-    {"__close", f_gc},
-    {"__tostring", f_tostring},
+    {lit<"__index">()->view(), nullptr}, /* placeholder */
+    {lit<"__gc">()->view(), f_gc},
+    {lit<"__close">()->view(), f_gc},
+    {lit<"__tostring">()->view(), f_tostring},
     {{}, nullptr}};
 
 static void createmeta(lua_State* L)
@@ -832,8 +832,8 @@ LUAMOD_API int luaopen_io(lua_State* L)
   (luaL_checkversion(L), lua_createtable(L, 0, sizeof(iolib) / sizeof((iolib)[0]) - 1), luaL_setfuncs(L, iolib, 0)); /* new module */
   createmeta(L);
   /* create (and set) default files */
-  createstdfile(L, stdin, IO_INPUT, "stdin");
-  createstdfile(L, stdout, IO_OUTPUT, "stdout");
+  createstdfile(L, stdin, IO_INPUT->view(), "stdin");
+  createstdfile(L, stdout, IO_OUTPUT->view(), "stdout");
   createstdfile(L, stderr, "", "stderr");
   return 1;
 }
