@@ -73,7 +73,7 @@ static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
 {
   int top = lua_gettop(L);
   lua_getinfoi(L, lit<"f">()->view(), *ar); /* push function (record unchanged by 'f') */
-  lua_getfield(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+  lua_getfield(L, LUA_REGISTRYINDEX, HostString(LUA_LOADED_TABLE->view()));
   luaL_checkstack(L, 6, HostString(lit<"not enough stack">()->view())); /* slots for 'findfield' */
   if (findfield(L, top + 1, 2))
   {
@@ -857,7 +857,7 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename,
     errno = 0;
     lf.f = fopen(filename->c_str(), "r"); /* OS edge (sanctioned c_str) */
     if (lf.f == nullptr)
-      return errfile(L, "open", fnameindex);
+      return errfile(L, lit<"open">()->view(), fnameindex);
   }
   lf.n = 0;
   if (skipcomment(lf.f, &c)) /* read initial portion */
@@ -870,7 +870,7 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename,
       errno = 0;
       lf.f = freopen(filename->c_str(), "rb", lf.f); /* reopen in binary mode */
       if (lf.f == nullptr)
-        return errfile(L, "reopen", fnameindex);
+        return errfile(L, lit<"reopen">()->view(), fnameindex);
       skipcomment(lf.f, &c); /* re-read initial portion */
     }
   }
@@ -885,7 +885,7 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename,
   if (readstatus)
   {
     lua_settop(L, fnameindex); /* ignore results from 'lua_load' */
-    return errfile(L, "read", fnameindex);
+    return errfile(L, lit<"read">()->view(), fnameindex);
   }
   lua_remove(L, fnameindex);
   return status;
@@ -941,7 +941,7 @@ LUALIB_API int luaL_loadstring(lua_State* L, const HostString& s)
 {
   /* the one place host TEXT becomes chunk BYTES: at port time this
      view() is the strict UTF-16 -> UTF-8 encode of the source */
-  return luaL_loadbufferx(L, s.view(), s, "t");
+  return luaL_loadbufferx(L, s.view(), s, HostString(lit<"t">()->view()));
 }
 
 /* }====================================================== */
@@ -978,7 +978,7 @@ LUALIB_API lua_Integer luaL_len(lua_State* L, int idx)
   lua_len(L, idx);
   std::optional<lua_Integer> l = lua_tointegerx(L, -1);
   if (l_unlikely(!l))
-    luaL_error(L, "object length is not an integer");
+    luaL_error(L, HostString(lit<"object length is not an integer">()->view()));
   lua_pop(L, 1); /* remove object */
   return *l;
 }
@@ -986,10 +986,10 @@ LUALIB_API lua_Integer luaL_len(lua_State* L, int idx)
 const InternalString* luaL_toistring(lua_State* L, int idx)
 {
   idx = lua_absindex(L, idx);
-  if (luaL_callmeta(L, idx, "__tostring"))
+  if (luaL_callmeta(L, idx, HostString(lit<"__tostring">()->view())))
   { /* metafield? */
     if (!lua_isstring(L, -1))
-      luaL_error(L, "'__tostring' must return a string");
+      luaL_error(L, HostString(lit<"'__tostring' must return a string">()->view()));
   }
   else
   {
@@ -1006,14 +1006,16 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
       lua_pushvalue(L, idx);
       break;
     case LUA_TBOOLEAN:
-      lua_pushstring(L, (lua_toboolean(L, idx) ? "true" : "false"));
+      lua_pushstring(L, (lua_toboolean(L, idx)
+                             ? HostString(lit<"true">()->view())
+                             : HostString(lit<"false">()->view())));
       break;
     case LUA_TNIL:
-      lua_pushliteral(L, "nil");
+      lua_pushliteral(L, HostString(lit<"nil">()->view()));
       break;
     default:
     {
-      int tt = luaL_getmetafield(L, idx, "__name"); /* try name */
+      int tt = luaL_getmetafield(L, idx, HostString(lit<"__name">()->view())); /* try name */
       /* borrowed view: '__name' string (anchored) or the static typename */
       std::string_view kind = (tt == LUA_TSTRING)
                                   ? lua_tolstring(L, -1)
@@ -1030,7 +1032,7 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
       {
         lua_pushlstring(L, kind, 0, kind.size());
         lua_pushvalue(L, idx);
-        lua_pushfstring(L, "%s: %p");
+        lua_pushfstring(L, HostString(lit<"%s: %p">()->view()));
       }
       if (tt != LUA_TNIL)
         lua_remove(L, -2); /* remove '__name' */
@@ -1055,7 +1057,7 @@ LUALIB_API HostString luaL_tolstring(lua_State* L, int idx)
 */
 LUALIB_API void luaL_setfuncs(lua_State* L, const luaL_Reg* l, int nup)
 {
-  luaL_checkstack(L, nup, "too many upvalues");
+  luaL_checkstack(L, nup, HostString(lit<"too many upvalues">()->view()));
   for (; l->name.data() != nullptr; l++)
   {                      /* fill the table with given functions */
     if (l->func == nullptr) /* placeholder? */
@@ -1100,7 +1102,7 @@ LUALIB_API int luaL_getsubtable(lua_State* L, int idx, const HostString& fname)
 LUALIB_API void luaL_requiref(lua_State* L, const HostString& modname,
                               lua_CFunction openf, int glb)
 {
-  luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, HostString(LUA_LOADED_TABLE->view()));
   lua_getfield(L, -1, modname); /* LOADED[modname] */
   if (!lua_toboolean(L, -1))
   {                /* package not already loaded? */
@@ -1209,9 +1211,9 @@ static int checkcontrol(lua_State* L, const HostString& message, int tocont)
     return 0;
   else
   {
-    if (m.substr(1) == "off")
+    if (m.substr(1) == lit<"off">()->view())
       lua_setwarnf(L, warnfoff, L); /* turn warnings off */
-    else if (m.substr(1) == "on")
+    else if (m.substr(1) == lit<"on">()->view())
       lua_setwarnf(L, warnfon, L); /* turn warnings on */
     return 1;                      /* it was a control message */
   }
@@ -1312,12 +1314,12 @@ LUALIB_API void luaL_checkversion_(lua_State* L, lua_Number ver, size_t sz)
 {
   lua_Number v = lua_version(L);
   if (sz != LUAL_NUMSIZES) /* check numeric types */
-    luaL_error(L, "core and library have incompatible numeric types");
+    luaL_error(L, HostString(lit<"core and library have incompatible numeric types">()->view()));
   else if (v != ver)
   {
     lua_pushnumber(L, ver);
     lua_pushnumber(L, v);
-    luaL_error(L, "version mismatch: app. needs %f, Lua core provides %f");
+    luaL_error(L, HostString(lit<"version mismatch: app. needs %f, Lua core provides %f">()->view()));
   }
 }
 

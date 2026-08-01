@@ -17,7 +17,7 @@
 #include "lhack.h"
 
 /* global table */
-constexpr char LUA_GNAME[] = "_G";
+inline const InternalString* const LUA_GNAME = lit<"_G">();
 
 struct luaL_Buffer;
 
@@ -25,10 +25,10 @@ struct luaL_Buffer;
 constexpr int LUA_ERRFILE = (LUA_ERRERR + 1);
 
 /* key, in the registry, for table of loaded modules */
-constexpr char LUA_LOADED_TABLE[] = "_LOADED";
+inline const InternalString* const LUA_LOADED_TABLE = lit<"_LOADED">();
 
 /* key, in the registry, for table of preloaded loaders */
-constexpr char LUA_PRELOAD_TABLE[] = "_PRELOAD";
+inline const InternalString* const LUA_PRELOAD_TABLE = lit<"_PRELOAD">();
 
 struct luaL_Reg
 {
@@ -243,7 +243,7 @@ LUALIB_API size_t luaL_prepbuffer(luaL_Buffer* B);
 ** after that initial structure).
 */
 
-constexpr char LUA_FILEHANDLE[] = "FILE*";
+inline const InternalString* const LUA_FILEHANDLE = lit<"FILE*">();
 
 struct luaL_Stream
 {

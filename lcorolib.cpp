@@ -20,7 +20,7 @@
 static lua_State* getco(lua_State* L)
 {
   lua_State* co = lua_tothread(L, 1);
-  luaL_argexpected(L, co, 1, "thread");
+  luaL_argexpected(L, co, 1, HostString(lit<"thread">()->view()));
   return co;
 }
 
@@ -32,7 +32,7 @@ static int auxresume(lua_State* L, lua_State* co, int narg)
 {
   if (l_unlikely(!lua_checkstack(co, narg)))
   {
-    lua_pushliteral(L, "too many arguments to resume");
+    lua_pushliteral(L, HostString(lit<"too many arguments to resume">()->view()));
     return -1; /* error flag */
   }
   lua_xmove(L, co, narg);

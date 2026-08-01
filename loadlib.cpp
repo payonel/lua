@@ -504,7 +504,7 @@ static int searcher_Croot(lua_State* L)
 static int searcher_preload(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
-  lua_getfield(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
+  lua_getfield(L, LUA_REGISTRYINDEX, HostString(LUA_PRELOAD_TABLE->view()));
   if (lua_getfieldi(L, -1, name) == LUA_TNIL)
   { /* not found? */
     lua_pushlstring(L, name, 0, name.size());
@@ -558,7 +558,7 @@ static int ll_require(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
   lua_settop(L, 1); /* LOADED table will be at index 2 */
-  lua_getfield(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+  lua_getfield(L, LUA_REGISTRYINDEX, HostString(LUA_LOADED_TABLE->view()));
   lua_getfieldi(L, 2, name); /* LOADED[name] */
   if (lua_toboolean(L, -1)) /* is it there? */
     return 1;               /* package is already loaded */
@@ -636,10 +636,10 @@ LUAMOD_API int luaopen_package(lua_State* L)
   lua_pushliteral(L, LUA_DIRSEP "\n" LUA_PATH_SEP "\n" LUA_PATH_MARK "\n" LUA_EXEC_DIR "\n" LUA_IGMARK "\n");
   lua_setfield(L, -2, "config");
   /* set field 'loaded' */
-  luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, HostString(LUA_LOADED_TABLE->view()));
   lua_setfield(L, -2, "loaded");
   /* set field 'preload' */
-  luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, HostString(LUA_PRELOAD_TABLE->view()));
   lua_setfield(L, -2, "preload");
   lua_pushglobaltable(L);
   lua_pushvalue(L, -2);          /* set 'package' as upvalue for next lib */

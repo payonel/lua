@@ -20,7 +20,7 @@
 ** respective constants LUA_<libname>K.)
 */
 static const luaL_Reg stdlibs[] = {
-    {LUA_GNAME, luaopen_base},
+    {LUA_GNAME->view(), luaopen_base},
     {LUA_LOADLIBNAME, luaopen_package},
     {LUA_COLIBNAME, luaopen_coroutine},
     {LUA_DBLIBNAME, luaopen_debug},
@@ -39,7 +39,7 @@ LUALIB_API void luaL_openselectedlibs(lua_State* L, int load, int preload)
 {
   int mask;
   const luaL_Reg* lib;
-  luaL_getsubtable(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, HostString(LUA_PRELOAD_TABLE->view()));
   for (lib = stdlibs, mask = 1; lib->name.data() != nullptr; lib++, mask <<= 1)
   {
     if (load & mask)
