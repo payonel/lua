@@ -683,10 +683,9 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
   lua_unlock(L);
 }
 
-void lua_pushistringref(lua_State* L, const InternalString* s)
+void lua_pushistringref(lua_State* L, std::string_view bytes)
 {
   lua_lock(L);
-  std::string_view bytes = s->view();
   TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
   setslots(L, L->top, ts);
   api_incr_top(L);

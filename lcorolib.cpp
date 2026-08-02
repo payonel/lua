@@ -31,7 +31,7 @@ static int auxresume(lua_State* L, lua_State* co, int narg)
 {
   if (l_unlikely(!lua_checkstack(co, narg)))
   {
-    lua_pushistringref(L, lit<"too many arguments to resume">());
+    lua_pushistringref(L, lit<"too many arguments to resume">()->view());
     return -1; /* error flag */
   }
   lua_xmove(L, co, narg);
@@ -42,7 +42,7 @@ static int auxresume(lua_State* L, lua_State* co, int narg)
     if (l_unlikely(!lua_checkstack(L, nres + 1)))
     {
       lua_pop(co, nres); /* remove results anyway */
-      lua_pushistringref(L, lit<"too many results to resume">());
+      lua_pushistringref(L, lit<"too many results to resume">()->view());
       return -1; /* error flag */
     }
     lua_xmove(co, L, nres); /* move yielded values */
@@ -157,7 +157,7 @@ static int auxstatus(lua_State* L, lua_State* co)
 static int luaB_costatus(lua_State* L)
 {
   lua_State* co = getco(L);
-  lua_pushistringref(L, statname[auxstatus(L, co)]);
+  lua_pushistringref(L, statname[auxstatus(L, co)]->view());
   return 1;
 }
 
@@ -203,7 +203,7 @@ static int luaB_close(lua_State* L)
     }
   }
   case COS_NORM:
-    lua_pushistringref(L, statname[status]);
+    lua_pushistringref(L, statname[status]->view());
     return luaL_errori(L, lit<"cannot close a %s coroutine">()->view());
   case COS_RUN:
     lua_geti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD); /* get main */

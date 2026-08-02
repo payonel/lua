@@ -139,7 +139,7 @@ static int msghandler(lua_State* L)
       return 1;                              /* that is the message */
     else
     {
-      lua_pushistringref(L, lua_typenamei(L, lua_type(L, 1)));
+      lua_pushistringref(L, lua_typenamei(L, lua_type(L, 1))->view());
       msg = lua_pushfstringi(L, lit<"(error object is a %s value)">()->view())->view();
     }
   }
@@ -633,7 +633,7 @@ static int multiline(lua_State* L)
     if (!incomplete(L, status) || !pushline(L, 0))
       return status;                  /* should not or cannot try to add continuation line */
     lua_remove(L, -2);                /* remove error message (from incomplete line) */
-    lua_pushistringref(L, lit<"\n">());         /* add newline... */
+    lua_pushistringref(L, lit<"\n">()->view());         /* add newline... */
     lua_insert(L, -2);                /* ...between the two lines */
     lua_concat(L, 3);                 /* join them */
     line = lua_tolstring(L, 1);       /* get what is has */

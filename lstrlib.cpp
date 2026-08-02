@@ -97,7 +97,7 @@ static int str_sub(lua_State* L)
   if (start <= end)
     lua_pushlstring(L, s->view(), start - 1, (end - start) + 1);
   else
-    lua_pushistringref(L, lit<"">());
+    lua_pushistringref(L, lit<"">()->view());
   return 1;
 }
 
@@ -155,7 +155,7 @@ static int str_rep(lua_State* L)
   size_t len = s->size();
   size_t lsep = sep->size();
   if (n <= 0 || (len | lsep) == 0)
-    lua_pushistringref(L, lit<"">()); /* no repetitions or both strings empty */
+    lua_pushistringref(L, lit<"">()->view()); /* no repetitions or both strings empty */
   else if (l_unlikely(len > MAX_SIZE - lsep ||
                       ((lua_Integer)(len + lsep)) > ((lua_Integer)(MAX_SIZE)) / n))
     return luaL_errori(L, lit<"resulting string too large">()->view());
@@ -1065,7 +1065,7 @@ static int add_value(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
   {
-    lua_pushistringref(L, lua_typenamei(L, lua_type(L, -1)));
+    lua_pushistringref(L, lua_typenamei(L, lua_type(L, -1))->view());
     return luaL_errori(L, lit<"invalid replacement value (a %s)">()->view());
   }
   else
@@ -2412,7 +2412,7 @@ static void createmetatable(lua_State* L)
   /* table to be metatable for strings */
   lua_createtable(L, 0, sizeof(stringmetamethods) / sizeof((stringmetamethods)[0]) - 1);
   luaL_setfuncs(L, stringmetamethods, 0);
-  lua_pushistringref(L, lit<"">());         /* dummy string */
+  lua_pushistringref(L, lit<"">()->view());         /* dummy string */
   lua_pushvalue(L, -2);           /* copy table */
   lua_setmetatable(L, -2);        /* set table as metatable for strings */
   lua_pop(L, 1);                  /* pop dummy string */

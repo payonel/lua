@@ -69,9 +69,9 @@ static int io_type(lua_State* L)
   if (p == nullptr)
     luaL_pushfail(L); /* not a file */
   else if (isclosed(p))
-    lua_pushistringref(L, lit<"closed file">());
+    lua_pushistringref(L, lit<"closed file">()->view());
   else
-    lua_pushistringref(L, lit<"file">());
+    lua_pushistringref(L, lit<"file">()->view());
   return 1;
 }
 
@@ -79,7 +79,7 @@ static int f_tostring(lua_State* L)
 {
   LStream* p = tolstream(L);
   if (isclosed(p))
-    lua_pushistringref(L, lit<"file (closed)">());
+    lua_pushistringref(L, lit<"file (closed)">()->view());
   else
   {
     lua_pushlightuserdata(L, p->f);
@@ -168,7 +168,7 @@ static void opencheck(lua_State* L, const InternalString* fname, const char* mod
   p->f = fopen(fname->c_str(), mode);
   if (l_unlikely(p->f == nullptr))
   {
-    lua_pushistringref(L, fname);
+    lua_pushistringref(L, fname->view());
     std::string_view errmsg{strerror(errno)};
     lua_pushlstring(L, errmsg, 0, errmsg.size());
     luaL_errori(L, lit<"cannot open file '%s' (%s)">()->view());
@@ -443,7 +443,7 @@ static int test_eof(lua_State* L, FILE* f)
 {
   int c = getc(f);
   ungetc(c, f); /* no-op when c == EOF */
-  lua_pushistringref(L, lit<"">());
+  lua_pushistringref(L, lit<"">()->view());
   return (c != EOF);
 }
 
@@ -759,7 +759,7 @@ static int io_noclose(lua_State* L)
   LStream* p = tolstream(L);
   p->closef = &io_noclose; /* keep file opened */
   luaL_pushfail(L);
-  lua_pushistringref(L, lit<"cannot close standard file">());
+  lua_pushistringref(L, lit<"cannot close standard file">()->view());
   return 2;
 }
 

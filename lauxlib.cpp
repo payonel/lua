@@ -54,7 +54,7 @@ static int findfield(lua_State* L, int objidx, int level)
       else if (findfield(L, objidx, level - 1))
       { /* try recursively */
         /* stack: lib_name, lib_table, field_name (top) */
-        lua_pushistringref(L, lit<".">()); /* place '.' between the two names */
+        lua_pushistringref(L, lit<".">()->view()); /* place '.' between the two names */
         lua_replace(L, -3);      /* (in the slot occupied by table) */
         lua_concat(L, 3);        /* lib_name.field_name */
         return 1;
@@ -102,7 +102,7 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
     lua_pushfstringi(L, lit<"%s '%s'">()->view()); /* use it */
   }
   else if (ar->what[0] == 'm')                             /* main? */
-    lua_pushistringref(L, lit<"main chunk">());
+    lua_pushistringref(L, lit<"main chunk">()->view());
   else if (pushglobalfuncname(L, ar))
   {                       /* try a global name */
     lua_pushvalue(L, -1);
@@ -117,7 +117,7 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
     lua_pushfstringi(L, lit<"function <%s:%d>">()->view());
   }
   else /* nothing left... */
-    lua_pushistringref(L, lit<"?">());
+    lua_pushistringref(L, lit<"?">()->view());
 }
 
 static int lastlevel(lua_State* L)
@@ -241,7 +241,7 @@ int luaL_argerrori(lua_State* L, int arg, std::string_view extramsg)
   if (ar.name.data() == nullptr)
     ar.name = (pushglobalfuncname(L, &ar)) ? lua_tolstring(L, -1)
                                            : lit<"?">()->view();
-  lua_pushistringref(L, argword);
+  lua_pushistringref(L, argword->view());
   lua_pushinteger(L, arg);
   lua_pushlstring(L, ar.name, 0, ar.name.size());
   lua_pushlstring(L, extramsg, 0, extramsg.size());
@@ -610,7 +610,7 @@ static size_t prepbuff(luaL_Buffer* B, size_t sz)
     assert(newsize >= B->reserved);
     if (l_unlikely(!lua_reservebytes(B->L, newsize - B->reserved)))
     {
-      lua_pushistringref(B->L, lit<"not enough memory">());
+      lua_pushistringref(B->L, lit<"not enough memory">()->view());
       lua_error(B->L); /* raise a memory error */
     }
     B->reserved = newsize;
@@ -841,12 +841,12 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename, const InternalS
   int fnameindex = lua_gettop(L) + 1; /* index of filename on the stack */
   if (filename == nullptr)
   {
-    lua_pushistringref(L, lit<"=stdin">());
+    lua_pushistringref(L, lit<"=stdin">()->view());
     lf.f = stdin;
   }
   else
   {
-    lua_pushistringref(L, filename);
+    lua_pushistringref(L, filename->view());
     lua_pushfstringi(L, lit<"@%s">()->view());
     errno = 0;
     lf.f = fopen(filename->c_str(), "r");
@@ -1007,10 +1007,10 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
       lua_pushvalue(L, idx);
       break;
     case LUA_TBOOLEAN:
-      lua_pushistringref(L, lua_toboolean(L, idx) ? lit<"true">() : lit<"false">());
+      lua_pushistringref(L, lua_toboolean(L, idx) ? lit<"true">()->view() : lit<"false">()->view());
       break;
     case LUA_TNIL:
-      lua_pushistringref(L, lit<"nil">());
+      lua_pushistringref(L, lit<"nil">()->view());
       break;
     default:
     {

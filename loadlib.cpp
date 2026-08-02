@@ -337,7 +337,7 @@ static int searchpath(lua_State* L, std::string_view name,
       InternalString filename(list, pos, sepmark - pos);
       if (readable(filename.c_str()))
       {                                    /* does file exist and is readable? */
-        lua_pushistringref(L, &filename);  /* save and return name */
+        lua_pushistringref(L, filename.view());  /* save and return name */
         return 1;
       }
       pos = sepmark + 1;
@@ -460,12 +460,12 @@ static int searcher_Croot(lua_State* L)
     else
     { /* open function not found */
       lua_pushlstring(L, name, 0, name.size());
-      lua_pushistringref(L, filename);
+      lua_pushistringref(L, filename->view());
       lua_pushfstringi(L, lit<"no module '%s' in file '%s'">()->view());
       return 1;
     }
   }
-  lua_pushistringref(L, filename); /* will be 2nd argument to module */
+  lua_pushistringref(L, filename->view()); /* will be 2nd argument to module */
   return 2;
 }
 
@@ -481,7 +481,7 @@ static int searcher_preload(lua_State* L)
   }
   else
   {
-    lua_pushistringref(L, lit<":preload:">());
+    lua_pushistringref(L, lit<":preload:">()->view());
     return 2;
   }
 }

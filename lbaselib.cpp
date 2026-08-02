@@ -199,7 +199,7 @@ static int pushmode(lua_State* L, int oldmode)
   if (oldmode == -1)
     luaL_pushfail(L); /* invalid call to 'lua_gc' */
   else
-    lua_pushistringref(L, (oldmode == LUA_GCINC) ? lit<"incremental">() : lit<"generational">());
+    lua_pushistringref(L, (oldmode == LUA_GCINC) ? lit<"incremental">()->view() : lit<"generational">()->view());
   return 1;
 }
 
@@ -291,7 +291,7 @@ static int luaB_type(lua_State* L)
 {
   int t = lua_type(L, 1);
   luaL_argchecki(L, t != LUA_TNONE, 1, lit<"value expected">()->view());
-  lua_pushistringref(L, lua_typenamei(L, t));
+  lua_pushistringref(L, lua_typenamei(L, t)->view());
   return 1;
 }
 
@@ -472,7 +472,7 @@ static int luaB_assert(lua_State* L)
   {                                          /* error */
     luaL_checkany(L, 1);                     /* there must be a condition */
     lua_remove(L, 1);                        /* remove it */
-    lua_pushistringref(L, lit<"assertion failed!">()); /* default message */
+    lua_pushistringref(L, lit<"assertion failed!">()->view()); /* default message */
     lua_settop(L, 1);                        /* leave only message (default if no other one) */
     return luaB_error(L);                    /* call 'error' */
   }

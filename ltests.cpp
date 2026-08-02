@@ -2102,7 +2102,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     }
     else if (inst == lit<"pushstatus">()->view())
     {
-      lua_pushistringref(L1, statcodes[status]);
+      lua_pushistringref(L1, statcodes[status]->view());
     }
     else if (inst == lit<"pushstring">()->view())
     {
@@ -2198,7 +2198,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     }
     else if (inst == lit<"threadstatus">()->view())
     {
-      lua_pushistringref(L1, statcodes[lua_status(L1)]);
+      lua_pushistringref(L1, statcodes[lua_status(L1)]->view());
     }
     else if (inst == lit<"alloccount">()->view())
     {
@@ -2420,7 +2420,7 @@ static int Cfunc(lua_State* L)
 
 static int Cfunck(lua_State* L, int status, lua_KContext ctx)
 {
-  lua_pushistringref(L, statcodes[status]);
+  lua_pushistringref(L, statcodes[status]->view());
   lua_setglobal(L, HostString(lit<"status">()->view()));
   lua_pushinteger(L, ((lua_Integer)(ctx)));
   lua_setglobal(L, HostString(lit<"ctx">()->view()));
@@ -2456,7 +2456,7 @@ static void Chook(lua_State* L, lua_Debug* ar)
   lua_gettable(L, -2);                    /* get C_HOOK[L] (script saved by sethookaux) */
   std::string scpt{lua_tostring(L, -1)->to_utf8()};
   lua_pop(L, 2);                          /* remove C_HOOK and script */
-  lua_pushistringref(L, events[ar->event]); /* may be used by script */
+  lua_pushistringref(L, events[ar->event]->view()); /* may be used by script */
   lua_pushinteger(L, ar->currentline);    /* may be used by script */
   runC(L, L, scpt);                       /* run script from C_HOOK[L] */
 }

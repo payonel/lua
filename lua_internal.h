@@ -17,7 +17,7 @@ int lua_reservebytes(lua_State* L, size_t sz);
 void lua_releasebytes(lua_State* L, size_t sz);
 
 void lua_pushistring(lua_State* L, InternalString&& s);
-void lua_pushistringref(lua_State* L, const InternalString* s);
+void lua_pushistringref(lua_State* L, std::string_view bytes);
 
 void lua_setmemlimit(lua_State* L, size_t limit);
 size_t lua_getmemlimit(lua_State* L);

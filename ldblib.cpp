@@ -233,7 +233,7 @@ static int db_getlocal(lua_State* L)
     lua_pushvalue(L, arg + 1); /* push function */
     const InternalString* name = lua_getlocali(L, nullptr, nvar);
     if (name)
-      lua_pushistringref(L, name);
+      lua_pushistringref(L, name->view());
     else
       lua_pushnil(L);
     return 1; /* return only name (there is no value) */
@@ -249,7 +249,7 @@ static int db_getlocal(lua_State* L)
     if (name)
     {
       lua_xmove(L1, L, 1); /* move local value */
-      lua_pushistringref(L, name); /* push name */
+      lua_pushistringref(L, name->view()); /* push name */
       lua_rotate(L, -2, 1);    /* re-order */
       return 2;
     }
@@ -281,7 +281,7 @@ static int db_setlocal(lua_State* L)
     lua_pushnil(L);
   }
   else
-    lua_pushistringref(L, name);
+    lua_pushistringref(L, name->view());
   return 1;
 }
 
@@ -296,7 +296,7 @@ static int auxupvalue(lua_State* L, int get)
       get ? lua_getupvaluei(L, 1, n) : lua_setupvaluei(L, 1, n);
   if (!name)
     return 0;
-  lua_pushistringref(L, name);
+  lua_pushistringref(L, name->view());
   lua_insert(L, -(get + 1)); /* no-op if get is false */
   return get + 1;
 }
@@ -364,7 +364,7 @@ static void hookf(lua_State* L, lua_Debug* ar)
   lua_pushthread(L);
   if (lua_rawget(L, -2) == LUA_TFUNCTION)
   {                                                /* is there a hook function? */
-    lua_pushistringref(L, hooknames[(int) ar->event]); /* push event name */
+    lua_pushistringref(L, hooknames[(int) ar->event]->view()); /* push event name */
     if (ar->currentline >= 0)
       lua_pushinteger(L, ar->currentline); /* push current line */
     else
@@ -428,7 +428,7 @@ static int db_sethook(lua_State* L)
   if (!luaL_getsubtablei(L, LUA_REGISTRYINDEX, HOOKKEY->view()))
   {
     /* table just created; initialize it */
-    lua_pushistringref(L, lit<"k">());
+    lua_pushistringref(L, lit<"k">()->view());
     lua_setfieldi(L, -2, lit<"__mode">()->view()); /** hooktable.__mode = "k" */
     lua_pushvalue(L, -1);
     lua_setmetatable(L, -2); /* metatable(hooktable) = hooktable */
@@ -455,7 +455,7 @@ static int db_gethook(lua_State* L)
     return 1;
   }
   else if (hook != hookf) /* external hook? */
-    lua_pushistringref(L, lit<"external hook">());
+    lua_pushistringref(L, lit<"external hook">()->view());
   else
   { /* hook table must exist */
     lua_getfieldi(L, LUA_REGISTRYINDEX, HOOKKEY->view());

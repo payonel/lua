@@ -266,7 +266,7 @@ static int math_max(lua_State* L)
 static int math_type(lua_State* L)
 {
   if (lua_type(L, 1) == LUA_TNUMBER)
-    lua_pushistringref(L, (lua_isinteger(L, 1)) ? lit<"integer">() : lit<"float">());
+    lua_pushistringref(L, (lua_isinteger(L, 1)) ? lit<"integer">()->view() : lit<"float">()->view());
   else
   {
     luaL_checkany(L, 1);
