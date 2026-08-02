@@ -53,7 +53,7 @@ typedef luaL_Stream LStream;
 
 static inline LStream* tolstream(lua_State* L)
 {
-  return (LStream*)luaL_checkudata(L, 1, HostString(LUA_FILEHANDLE->view()));
+  return (LStream*)luaL_checkudatai(L, 1, LUA_FILEHANDLE->view());
 }
 
 static inline int isclosed(const LStream* p)
@@ -65,13 +65,13 @@ static int io_type(lua_State* L)
 {
   LStream* p;
   luaL_checkany(L, 1);
-  p = (LStream*) luaL_testudata(L, 1, HostString(LUA_FILEHANDLE->view()));
+  p = (LStream*) luaL_testudatai(L, 1, LUA_FILEHANDLE->view());
   if (p == nullptr)
     luaL_pushfail(L); /* not a file */
   else if (isclosed(p))
-    lua_pushliteral(L, HostString(lit<"closed file">()->view()));
+    lua_pushistringref(L, lit<"closed file">());
   else
-    lua_pushliteral(L, HostString(lit<"file">()->view()));
+    lua_pushistringref(L, lit<"file">());
   return 1;
 }
 
@@ -79,11 +79,11 @@ static int f_tostring(lua_State* L)
 {
   LStream* p = tolstream(L);
   if (isclosed(p))
-    lua_pushliteral(L, HostString(lit<"file (closed)">()->view()));
+    lua_pushistringref(L, lit<"file (closed)">());
   else
   {
     lua_pushlightuserdata(L, p->f);
-    lua_pushfstring(L, HostString(lit<"file (%p)">()->view()));
+    lua_pushfstringi(L, lit<"file (%p)">()->view());
   }
   return 1;
 }
@@ -92,7 +92,7 @@ static FILE* tofile(lua_State* L)
 {
   LStream* p = tolstream(L);
   if (l_unlikely(isclosed(p)))
-    luaL_error(L, HostString(lit<"attempt to use a closed file">()->view()));
+    luaL_errori(L, lit<"attempt to use a closed file">()->view());
   assert(p->f);
   return p->f;
 }
@@ -106,7 +106,7 @@ static LStream* newprefile(lua_State* L)
 {
   LStream* p = (LStream*) lua_newuserdatauv(L, sizeof(LStream), 0);
   p->closef = nullptr; /* mark file handle as 'closed' */
-  luaL_setmetatable(L, HostString(LUA_FILEHANDLE->view()));
+  luaL_setmetatablei(L, LUA_FILEHANDLE->view());
   return p;
 }
 
@@ -132,7 +132,7 @@ static int f_close(lua_State* L)
 static int io_close(lua_State* L)
 {
   if (lua_isnone(L, 1))                            /* no argument? */
-    lua_getfield(L, LUA_REGISTRYINDEX, HostString(IO_OUTPUT->view())); /* use default output */
+    lua_getfieldi(L, LUA_REGISTRYINDEX, IO_OUTPUT->view()); /* use default output */
   return f_close(L);
 }
 
@@ -169,8 +169,9 @@ static void opencheck(lua_State* L, const InternalString* fname, const char* mod
   if (l_unlikely(p->f == nullptr))
   {
     lua_pushistringref(L, fname);
-    lua_pushstring(L, strerror(errno));
-    luaL_error(L, HostString(lit<"cannot open file '%s' (%s)">()->view()));
+    std::string_view errmsg{strerror(errno)};
+    lua_pushlstring(L, errmsg, 0, errmsg.size());
+    luaL_errori(L, lit<"cannot open file '%s' (%s)">()->view());
   }
 }
 
@@ -179,7 +180,7 @@ static int io_open(lua_State* L)
   const InternalString* filename = luaL_checkistring(L, 1);
   const InternalString* mode = luaL_optistring(L, 2, lit<"r">());
   LStream* p = newfile(L);
-  luaL_argcheck(L, l_checkmode(mode->view()), 2, HostString(lit<"invalid mode">()->view()));
+  luaL_argchecki(L, l_checkmode(mode->view()), 2, lit<"invalid mode">()->view());
   errno = 0;
   p->f = fopen(filename->c_str(), mode->c_str());
   return (p->f == nullptr) ? luaL_fileresulti(L, 0, filename->view()) : 1;
@@ -200,7 +201,7 @@ static int io_popen(lua_State* L)
   const InternalString* filename = luaL_checkistring(L, 1);
   const InternalString* mode = luaL_optistring(L, 2, lit<"r">());
   LStream* p = newprefile(L);
-  luaL_argcheck(L, l_checkmodep(mode->c_str()), 2, HostString(lit<"invalid mode">()->view()));
+  luaL_argchecki(L, l_checkmodep(mode->c_str()), 2, lit<"invalid mode">()->view());
   errno = 0;
   fflush(nullptr);
   p->f = popen(filename->c_str(), mode->c_str());
@@ -225,7 +226,7 @@ static FILE* getiofile(lua_State* L, std::string_view findex)
   {
     std::string_view name = findex.substr(IOPREF_LEN);
     lua_pushlstring(L, name, 0, name.size());
-    luaL_error(L, HostString(lit<"default %s file is closed">()->view()));
+    luaL_errori(L, lit<"default %s file is closed">()->view());
   }
   return p->f;
 }
@@ -281,7 +282,7 @@ constexpr int MAXARGLINE = 250;
 static void aux_lines(lua_State* L, int toclose)
 {
   int n = lua_gettop(L) - 1; /* number of arguments to read */
-  luaL_argcheck(L, n <= MAXARGLINE, MAXARGLINE + 2, HostString(lit<"too many arguments">()->view()));
+  luaL_argchecki(L, n <= MAXARGLINE, MAXARGLINE + 2, lit<"too many arguments">()->view());
   lua_pushvalue(L, 1);         /* file */
   lua_pushinteger(L, n);       /* number of arguments to read */
   lua_pushboolean(L, toclose); /* close/not close file when finished */
@@ -308,7 +309,7 @@ static int io_lines(lua_State* L)
     lua_pushnil(L); /* at least one argument */
   if (lua_isnil(L, 1))
   {                                               /* no file name? */
-    lua_getfield(L, LUA_REGISTRYINDEX, HostString(IO_INPUT->view())); /* get default input */
+    lua_getfieldi(L, LUA_REGISTRYINDEX, IO_INPUT->view()); /* get default input */
     lua_replace(L, 1);                            /* put it at index 1 */
     tofile(L);                                    /* check that it's a valid file handle */
     toclose = 0;                                  /* do not close it after iteration */
@@ -442,7 +443,7 @@ static int test_eof(lua_State* L, FILE* f)
 {
   int c = getc(f);
   ungetc(c, f); /* no-op when c == EOF */
-  lua_pushliteral(L, HostString(lit<"">()->view()));
+  lua_pushistringref(L, lit<"">());
   return (c != EOF);
 }
 
@@ -509,7 +510,7 @@ static int g_read(lua_State* L, FILE* f, int first)
   else
   {
     /* ensure stack space for all results and for auxlib's buffer */
-    luaL_checkstack(L, nargs + LUA_MINSTACK, HostString(lit<"too many arguments">()->view()));
+    luaL_checkstacki(L, nargs + LUA_MINSTACK, lit<"too many arguments">()->view());
     success = 1;
     for (n = first; nargs-- && success; n++)
     {
@@ -540,7 +541,7 @@ static int g_read(lua_State* L, FILE* f, int first)
           success = 1;    /* always success */
           break;
         default:
-          return luaL_argerror(L, n, HostString(lit<"invalid format">()->view()));
+          return luaL_argerrori(L, n, lit<"invalid format">()->view());
         }
       }
     }
@@ -574,9 +575,9 @@ static int io_readline(lua_State* L)
   int i;
   int n = (int) lua_tointeger(L, lua_upvalueindex(2));
   if (isclosed(p)) /* file is already closed? */
-    return luaL_error(L, HostString(lit<"file is already closed">()->view()));
+    return luaL_errori(L, lit<"file is already closed">()->view());
   lua_settop(L, 1);
-  luaL_checkstack(L, n, HostString(lit<"too many arguments">()->view()));
+  luaL_checkstacki(L, n, lit<"too many arguments">()->view());
   for (i = 1; i <= n; i++) /* push arguments to 'g_read' */
     lua_pushvalue(L, lua_upvalueindex(3 + i));
   n = g_read(L, p->f, 2);   /* 'n' is number of results */
@@ -589,7 +590,7 @@ static int io_readline(lua_State* L)
     { /* is there error information? */
       /* 2nd result is error message */
       lua_pushvalue(L, -n + 1);
-      return luaL_error(L, HostString(lit<"%s">()->view()));
+      return luaL_errori(L, lit<"%s">()->view());
     }
     if (lua_toboolean(L, lua_upvalueindex(3)))
     {                                        /* generator created file? */
@@ -659,8 +660,7 @@ static int f_seek(lua_State* L)
   int op = luaL_checkoption(L, 2, defmode, modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
   off_t offset = (off_t) p3;
-  luaL_argcheck(L, (lua_Integer) offset == p3, 3,
-                HostString(lit<"not an integer in proper range">()->view()));
+  luaL_argchecki(L, (lua_Integer) offset == p3, 3, lit<"not an integer in proper range">()->view());
   errno = 0;
   op = fseeko(f, offset, mode[op]);
   if (l_unlikely(op))
@@ -743,11 +743,11 @@ static const luaL_Reg metameth[] = {
 
 static void createmeta(lua_State* L)
 {
-  luaL_newmetatable(L, HostString(LUA_FILEHANDLE->view())); /* metatable for file handles */
+  luaL_newmetatablei(L, LUA_FILEHANDLE->view()); /* metatable for file handles */
   luaL_setfuncs(L, metameth, 0);        /* add metamethods to new metatable */
   lua_createtable(L, 0, sizeof(meth) / sizeof((meth)[0]) - 1);            /* create method table */
   luaL_setfuncs(L, meth, 0);            /* add file methods to method table */
-  lua_setfield(L, -2, HostString(lit<"__index">()->view()));       /* metatable.__index = method table */
+  lua_setfieldi(L, -2, lit<"__index">()->view());       /* metatable.__index = method table */
   lua_pop(L, 1);                        /* pop metatable */
 }
 
@@ -759,7 +759,7 @@ static int io_noclose(lua_State* L)
   LStream* p = tolstream(L);
   p->closef = &io_noclose; /* keep file opened */
   luaL_pushfail(L);
-  lua_pushliteral(L, HostString(lit<"cannot close standard file">()->view()));
+  lua_pushistringref(L, lit<"cannot close standard file">());
   return 2;
 }
 
@@ -774,7 +774,7 @@ static void createstdfile(lua_State* L, FILE* f, std::string_view k,
     lua_pushvalue(L, -1);
     lua_setfieldi(L, LUA_REGISTRYINDEX, k); /* add file to registry */
   }
-  lua_setfield(L, -2, HostString(fname->view())); /* add file to module */
+  lua_setfieldi(L, -2, fname->view()); /* add file to module */
 }
 
 LUAMOD_API int luaopen_io(lua_State* L)

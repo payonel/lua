@@ -15,6 +15,11 @@ public:
 
   std::string_view view() const noexcept { return std::string_view(str.data(), str.size()); }
 
+  std::string_view to_utf8() const noexcept
+  {
+    return std::string_view(str.data(), str.size());
+  }
+
   bool operator==(const char* s) const noexcept { return str == s; }
   bool operator==(const HostString& o) const noexcept { return str == o.str; }
 

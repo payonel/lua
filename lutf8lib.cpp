@@ -102,10 +102,8 @@ static int utflen(lua_State* L)
   lua_Integer posi = u_posrelat(luaL_optinteger(L, 2, 1), len);
   lua_Integer posj = u_posrelat(luaL_optinteger(L, 3, -1), len);
   int lax = lua_toboolean(L, 4);
-  luaL_argcheck(L, 1 <= posi && --posi <= (lua_Integer) len, 2,
-                HostString(lit<"initial position out of bounds">()->view()));
-  luaL_argcheck(L, --posj < (lua_Integer) len, 3,
-                HostString(lit<"final position out of bounds">()->view()));
+  luaL_argchecki(L, 1 <= posi && --posi <= (lua_Integer) len, 2, lit<"initial position out of bounds">()->view());
+  luaL_argchecki(L, --posj < (lua_Integer) len, 3, lit<"final position out of bounds">()->view());
   while (posi <= posj)
   {
     size_t s1 = utf8_decode(s, (size_t) posi, nullptr, !lax);
@@ -135,14 +133,14 @@ static int codepoint(lua_State* L)
   int lax = lua_toboolean(L, 4);
   int n;
   size_t se;
-  luaL_argcheck(L, posi >= 1, 2, HostString(lit<"out of bounds">()->view()));
-  luaL_argcheck(L, pose <= (lua_Integer) len, 3, HostString(lit<"out of bounds">()->view()));
+  luaL_argchecki(L, posi >= 1, 2, lit<"out of bounds">()->view());
+  luaL_argchecki(L, pose <= (lua_Integer) len, 3, lit<"out of bounds">()->view());
   if (posi > pose)
     return 0;                 /* empty interval; return no values */
   if (pose - posi >= INT_MAX) /* (lua_Integer -> int) overflow? */
-    return luaL_error(L, HostString(lit<"string slice too long">()->view()));
+    return luaL_errori(L, lit<"string slice too long">()->view());
   n = (int) (pose - posi) + 1; /* upper bound for number of returns */
-  luaL_checkstack(L, n, HostString(lit<"string slice too long">()->view()));
+  luaL_checkstacki(L, n, lit<"string slice too long">()->view());
   n = 0;             /* count the number of returns */
   se = (size_t) pose; /* string end */
   for (size_t pos = (size_t) posi - 1; pos < se;)
@@ -150,7 +148,7 @@ static int codepoint(lua_State* L)
     l_uint32 code;
     pos = utf8_decode(s, pos, &code, !lax);
     if (pos == 0)
-      return luaL_error(L, HostString(MSGInvalid->view()));
+      return luaL_errori(L, MSGInvalid->view());
     lua_pushinteger(L, ((lua_Integer)(code)));
     n++;
   }
@@ -160,9 +158,9 @@ static int codepoint(lua_State* L)
 static void pushutfchar(lua_State* L, int arg)
 {
   lua_Unsigned code = (lua_Unsigned) luaL_checkinteger(L, arg);
-  luaL_argcheck(L, code <= MAXUTF, arg, HostString(lit<"value out of range">()->view()));
+  luaL_argchecki(L, code <= MAXUTF, arg, lit<"value out of range">()->view());
   lua_pushinteger(L, ((lua_Integer)(code)));
-  lua_pushfstring(L, HostString(lit<"%U">()->view()));
+  lua_pushfstringi(L, lit<"%U">()->view());
 }
 
 /*
@@ -199,8 +197,7 @@ static int byteoffset(lua_State* L)
   lua_Integer n = luaL_checkinteger(L, 2);
   lua_Integer posi = (n >= 0) ? 1 : ((lua_Integer)(len)) + 1;
   posi = u_posrelat(luaL_optinteger(L, 3, posi), len);
-  luaL_argcheck(L, 1 <= posi && --posi <= (lua_Integer) len, 3,
-                HostString(lit<"position out of bounds">()->view()));
+  luaL_argchecki(L, 1 <= posi && --posi <= (lua_Integer) len, 3, lit<"position out of bounds">()->view());
   if (n == 0)
   {
     /* find beginning of current byte sequence */
@@ -210,7 +207,7 @@ static int byteoffset(lua_State* L)
   else
   {
     if (iscontat(s, (size_t) posi))
-      return luaL_error(L, HostString(lit<"initial position is a continuation byte">()->view()));
+      return luaL_errori(L, lit<"initial position is a continuation byte">()->view());
     if (n < 0)
     {
       while (n < 0 && posi > 0)
@@ -244,7 +241,7 @@ static int byteoffset(lua_State* L)
   if ((ubyte(s, (size_t) posi) & 0x80) != 0)
   { /* multi-byte character? */
     if (iscont(ubyte(s, (size_t) posi)))
-      return luaL_error(L, HostString(lit<"initial position is a continuation byte">()->view()));
+      return luaL_errori(L, lit<"initial position is a continuation byte">()->view());
     while (iscontat(s, (size_t) posi + 1))
       posi++; /* skip to last continuation byte */
   }
@@ -270,7 +267,7 @@ static int iter_aux(lua_State* L, int strict)
     l_uint32 code;
     size_t next = utf8_decode(s, n, &code, strict);
     if (next == 0 || iscontat(s, next))
-      return luaL_error(L, HostString(MSGInvalid->view()));
+      return luaL_errori(L, MSGInvalid->view());
     lua_pushinteger(L, ((lua_Integer)(n + 1)));
     lua_pushinteger(L, ((lua_Integer)(code)));
     return 2;
@@ -291,7 +288,7 @@ static int iter_codes(lua_State* L)
 {
   int lax = lua_toboolean(L, 2);
   const InternalString* s = luaL_checkistring(L, 1);
-  luaL_argcheck(L, !iscontat(s, 0), 1, HostString(MSGInvalid->view()));
+  luaL_argchecki(L, !iscontat(s, 0), 1, MSGInvalid->view());
   lua_pushcfunction(L, lax ? iter_auxlax : iter_auxstrict);
   lua_pushvalue(L, 1);
   lua_pushinteger(L, 0);
@@ -316,6 +313,6 @@ LUAMOD_API int luaopen_utf8(lua_State* L)
   (luaL_checkversion(L), lua_createtable(L, 0, sizeof(funcs) / sizeof((funcs)[0]) - 1), luaL_setfuncs(L, funcs, 0));
   const std::string_view patt = lit<UTF8PATT>()->view();
   lua_pushlstring(L, patt, 0, patt.size());
-  lua_setfield(L, -2, HostString(lit<"charpattern">()->view()));
+  lua_setfieldi(L, -2, lit<"charpattern">()->view());
   return 1;
 }

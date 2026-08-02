@@ -32,7 +32,7 @@ static const InternalString* const HOOKKEY = lit<"_HOOKKEY">();
 static void checkstack(lua_State* L, lua_State* L1, int n)
 {
   if (l_unlikely(L != L1 && !lua_checkstack(L1, n)))
-    luaL_error(L, HostString(lit<"stack overflow">()->view()));
+    luaL_errori(L, lit<"stack overflow">()->view());
 }
 
 static int db_getregistry(lua_State* L)
@@ -54,7 +54,7 @@ static int db_getmetatable(lua_State* L)
 static int db_setmetatable(lua_State* L)
 {
   int t = lua_type(L, 2);
-  luaL_argexpected(L, t == LUA_TNIL || t == LUA_TTABLE, 2, HostString(lit<"nil or table">()->view()));
+  luaL_argexpectedi(L, t == LUA_TNIL || t == LUA_TTABLE, 2, lit<"nil or table">()->view());
   lua_settop(L, 2);
   lua_setmetatable(L, 1);
   return 1; /* return 1st argument */
@@ -112,19 +112,19 @@ static lua_State* getthread(lua_State* L, int* arg)
 static void settabss(lua_State* L, const InternalString* k, std::string_view v)
 {
   lua_pushlstring(L, v, 0, v.size());
-  lua_setfield(L, -2, HostString(k->view()));
+  lua_setfieldi(L, -2, k->view());
 }
 
 static void settabsi(lua_State* L, const InternalString* k, int v)
 {
   lua_pushinteger(L, v);
-  lua_setfield(L, -2, HostString(k->view()));
+  lua_setfieldi(L, -2, k->view());
 }
 
 static void settabsb(lua_State* L, const InternalString* k, int v)
 {
   lua_pushboolean(L, v);
-  lua_setfield(L, -2, HostString(k->view()));
+  lua_setfieldi(L, -2, k->view());
 }
 
 /*
@@ -140,7 +140,7 @@ static void treatstackoption(lua_State* L, lua_State* L1, const InternalString* 
     lua_rotate(L, -2, 1); /* exchange object and table */
   else
     lua_xmove(L1, L, 1);      /* move object to the "main" stack */
-  lua_setfield(L, -2, HostString(fname->view())); /* put object into table */
+  lua_setfieldi(L, -2, fname->view()); /* put object into table */
 }
 
 /*
@@ -156,7 +156,7 @@ static int db_getinfo(lua_State* L)
   lua_State* L1 = getthread(L, &arg);
   std::string_view options = luaL_optlstring(L, arg + 2, lit<"flnSrtu">()->view());
   checkstack(L, L1, 3);
-  luaL_argcheck(L, sv_byteat(options, 0) != '>', arg + 2, HostString(lit<"invalid option '>'">()->view()));
+  luaL_argchecki(L, sv_byteat(options, 0) != '>', arg + 2, lit<"invalid option '>'">()->view());
   std::string optbuf;
   if (lua_isfunction(L, arg + 1))
   {                                               /* info about a function? */
@@ -180,13 +180,13 @@ static int db_getinfo(lua_State* L)
   }
   std::optional<InternalDebug> res = lua_getinfoi(L1, options, ar);
   if (!res)
-    return luaL_argerror(L, arg + 2, HostString(lit<"invalid option">()->view()));
+    return luaL_argerrori(L, arg + 2, lit<"invalid option">()->view());
   ar = *res;
   lua_newtable(L); /* table to collect results */
   if ((options.find('S') != std::string_view::npos))
   {
     lua_pushlstring(L, ar.source, 0, ar.source.size());
-    lua_setfield(L, -2, HostString(lit<"source">()->view()));
+    lua_setfieldi(L, -2, lit<"source">()->view());
     settabss(L, lit<"short_src">(), std::string_view{ar.short_src});
     settabsi(L, lit<"linedefined">(), ar.linedefined);
     settabsi(L, lit<"lastlinedefined">(), ar.lastlinedefined);
@@ -243,7 +243,7 @@ static int db_getlocal(lua_State* L)
     int level = (int) luaL_checkinteger(L, arg + 1);
     std::optional<InternalDebug> ar = lua_getstacki(L1, level);
     if (l_unlikely(!ar)) /* out of range? */
-      return luaL_argerror(L, arg + 1, HostString(lit<"level out of range">()->view()));
+      return luaL_argerrori(L, arg + 1, lit<"level out of range">()->view());
     checkstack(L, L1, 1);
     const InternalString* name = lua_getlocali(L1, &*ar, nvar);
     if (name)
@@ -269,7 +269,7 @@ static int db_setlocal(lua_State* L)
   int nvar = (int) luaL_checkinteger(L, arg + 2);
   std::optional<InternalDebug> ar = lua_getstacki(L1, level);
   if (l_unlikely(!ar)) /* out of range? */
-    return luaL_argerror(L, arg + 1, HostString(lit<"level out of range">()->view()));
+    return luaL_argerrori(L, arg + 1, lit<"level out of range">()->view());
   luaL_checkany(L, arg + 3);
   lua_settop(L, arg + 3);
   checkstack(L, L1, 1);
@@ -324,7 +324,7 @@ static void* checkupval(lua_State* L, int argf, int argnup, int* pnup)
   id = lua_upvalueid(L, argf, nup);
   if (pnup)
   {
-    luaL_argcheck(L, id != nullptr, argnup, HostString(lit<"invalid upvalue index">()->view()));
+    luaL_argchecki(L, id != nullptr, argnup, lit<"invalid upvalue index">()->view());
     *pnup = nup;
   }
   return id;
@@ -345,8 +345,8 @@ static int db_upvaluejoin(lua_State* L)
   int n1, n2;
   checkupval(L, 1, 2, &n1);
   checkupval(L, 3, 4, &n2);
-  luaL_argcheck(L, !lua_iscfunction(L, 1), 1, HostString(lit<"Lua function expected">()->view()));
-  luaL_argcheck(L, !lua_iscfunction(L, 3), 3, HostString(lit<"Lua function expected">()->view()));
+  luaL_argchecki(L, !lua_iscfunction(L, 1), 1, lit<"Lua function expected">()->view());
+  luaL_argchecki(L, !lua_iscfunction(L, 3), 3, lit<"Lua function expected">()->view());
   lua_upvaluejoin(L, 1, n1, 3, n2);
   return 0;
 }
@@ -360,7 +360,7 @@ static void hookf(lua_State* L, lua_Debug* ar)
   static const InternalString* const hooknames[] = {
       lit<"call">(), lit<"return">(), lit<"line">(), lit<"count">(),
       lit<"tail call">()};
-  lua_getfield(L, LUA_REGISTRYINDEX, HostString(HOOKKEY->view()));
+  lua_getfieldi(L, LUA_REGISTRYINDEX, HOOKKEY->view());
   lua_pushthread(L);
   if (lua_rawget(L, -2) == LUA_TFUNCTION)
   {                                                /* is there a hook function? */
@@ -425,11 +425,11 @@ static int db_sethook(lua_State* L)
     func = hookf;
     mask = makemask(smask, count);
   }
-  if (!luaL_getsubtable(L, LUA_REGISTRYINDEX, HostString(HOOKKEY->view())))
+  if (!luaL_getsubtablei(L, LUA_REGISTRYINDEX, HOOKKEY->view()))
   {
     /* table just created; initialize it */
-    lua_pushliteral(L, HostString(lit<"k">()->view()));
-    lua_setfield(L, -2, HostString(lit<"__mode">()->view())); /** hooktable.__mode = "k" */
+    lua_pushistringref(L, lit<"k">());
+    lua_setfieldi(L, -2, lit<"__mode">()->view()); /** hooktable.__mode = "k" */
     lua_pushvalue(L, -1);
     lua_setmetatable(L, -2); /* metatable(hooktable) = hooktable */
   }
@@ -455,10 +455,10 @@ static int db_gethook(lua_State* L)
     return 1;
   }
   else if (hook != hookf) /* external hook? */
-    lua_pushliteral(L, HostString(lit<"external hook">()->view()));
+    lua_pushistringref(L, lit<"external hook">());
   else
   { /* hook table must exist */
-    lua_getfield(L, LUA_REGISTRYINDEX, HostString(HOOKKEY->view()));
+    lua_getfieldi(L, LUA_REGISTRYINDEX, HOOKKEY->view());
     checkstack(L, L1, 1);
     lua_pushthread(L1);
     lua_xmove(L1, L, 1);
@@ -481,7 +481,7 @@ static int db_debug(lua_State* L)
     if (fgets(buffer, sizeof(buffer), stdin) == nullptr ||
         std::string_view{buffer, strlen(buffer)} == lit<"cont\n">()->view())
       return 0;
-    if (luaL_loadbufferx(L, std::string_view{buffer, strlen(buffer)}, HostString(lit<"=(debug command)">()->view()), HostString(lit<"t">()->view())) ||
+    if (luaL_loadbufferi(L, std::string_view{buffer, strlen(buffer)}, lit<"=(debug command)">(), lit<"t">()) ||
         lua_pcall(L, 0, 0, 0))
     {
       fprintf(stderr, "%s\n", luaL_toistring(L, -1)->c_str());

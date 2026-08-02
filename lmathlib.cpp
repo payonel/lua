@@ -19,6 +19,7 @@
 #include "lualib.h"
 
 #include <stdint.h>
+#include "lua_internal.h"
 
 constexpr lua_Number PI = (3.141592653589793238462643383279502884);
 
@@ -127,7 +128,7 @@ static int math_fmod(lua_State* L)
     lua_Integer d = lua_tointeger(L, 2);
     if ((lua_Unsigned) d + 1u <= 1u)
     { /* special cases: -1 or 0 */
-      luaL_argcheck(L, d != 0, 2, HostString(lit<"zero">()->view()));
+      luaL_argchecki(L, d != 0, 2, lit<"zero">()->view());
       lua_pushinteger(L, 0); /* avoid overflow with 0x80000... / -1 */
     }
     else
@@ -237,7 +238,7 @@ static int math_min(lua_State* L)
   int n = lua_gettop(L); /* number of arguments */
   int imin = 1;          /* index of current minimum value */
   int i;
-  luaL_argcheck(L, n >= 1, 1, HostString(lit<"value expected">()->view()));
+  luaL_argchecki(L, n >= 1, 1, lit<"value expected">()->view());
   for (i = 2; i <= n; i++)
   {
     if (lua_compare(L, i, imin, LUA_OPLT))
@@ -252,7 +253,7 @@ static int math_max(lua_State* L)
   int n = lua_gettop(L); /* number of arguments */
   int imax = 1;          /* index of current maximum value */
   int i;
-  luaL_argcheck(L, n >= 1, 1, HostString(lit<"value expected">()->view()));
+  luaL_argchecki(L, n >= 1, 1, lit<"value expected">()->view());
   for (i = 2; i <= n; i++)
   {
     if (lua_compare(L, imax, i, LUA_OPLT))
@@ -265,7 +266,7 @@ static int math_max(lua_State* L)
 static int math_type(lua_State* L)
 {
   if (lua_type(L, 1) == LUA_TNUMBER)
-    lua_pushstring(L, (lua_isinteger(L, 1)) ? HostString(lit<"integer">()->view()) : HostString(lit<"float">()->view()));
+    lua_pushistringref(L, (lua_isinteger(L, 1)) ? lit<"integer">() : lit<"float">());
   else
   {
     luaL_checkany(L, 1);
@@ -425,10 +426,10 @@ static int math_random(lua_State* L)
     break;
   }
   default:
-    return luaL_error(L, HostString(lit<"wrong number of arguments">()->view()));
+    return luaL_errori(L, lit<"wrong number of arguments">()->view());
   }
   /* random integer in the interval [low, up] */
-  luaL_argcheck(L, low <= up, 1, HostString(lit<"interval is empty">()->view()));
+  luaL_argchecki(L, low <= up, 1, lit<"interval is empty">()->view());
   /* project random integer into the interval [0, up - low] */
   p = project(I2UInt(rv), ((lua_Unsigned)(up)) - ((lua_Unsigned)(low)), state);
   lua_pushinteger(L, ((lua_Integer)(p + ((lua_Unsigned)(low)))));
@@ -532,13 +533,13 @@ LUAMOD_API int luaopen_math(lua_State* L)
 {
   (luaL_checkversion(L), lua_createtable(L, 0, sizeof(mathlib) / sizeof((mathlib)[0]) - 1), luaL_setfuncs(L, mathlib, 0));
   lua_pushnumber(L, PI);
-  lua_setfield(L, -2, HostString(lit<"pi">()->view()));
+  lua_setfieldi(L, -2, lit<"pi">()->view());
   lua_pushnumber(L, (lua_Number) HUGE_VAL);
-  lua_setfield(L, -2, HostString(lit<"huge">()->view()));
+  lua_setfieldi(L, -2, lit<"huge">()->view());
   lua_pushinteger(L, LUA_MAXINTEGER);
-  lua_setfield(L, -2, HostString(lit<"maxinteger">()->view()));
+  lua_setfieldi(L, -2, lit<"maxinteger">()->view());
   lua_pushinteger(L, LUA_MININTEGER);
-  lua_setfield(L, -2, HostString(lit<"mininteger">()->view()));
+  lua_setfieldi(L, -2, lit<"mininteger">()->view());
   setrandfunc(L);
   return 1;
 }

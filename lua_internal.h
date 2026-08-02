@@ -41,6 +41,38 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename,
 int lua_getfieldi(lua_State* L, int idx, std::string_view k);
 void lua_setfieldi(lua_State* L, int idx, std::string_view k);
 
+const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt);
+
+int lua_getglobali(lua_State* L, std::string_view name);
+void lua_setglobali(lua_State* L, std::string_view name);
+
+void lua_warningi(lua_State* L, std::string_view msg, int tocont);
+
+int luaL_errori(lua_State* L, std::string_view fmt);
+int luaL_argerrori(lua_State* L, int arg, std::string_view extramsg);
+int luaL_typeerrori(lua_State* L, int arg, std::string_view tname);
+void luaL_argchecki(lua_State* L, bool cond, int arg, std::string_view extramsg);
+void luaL_argexpectedi(lua_State* L, bool cond, int arg, std::string_view tname);
+
+void luaL_checkstacki(lua_State* L, int space, std::string_view msg);
+
+int luaL_getmetafieldi(lua_State* L, int obj, std::string_view event);
+int luaL_callmetai(lua_State* L, int obj, std::string_view event);
+
+int luaL_newmetatablei(lua_State* L, std::string_view tname);
+void luaL_setmetatablei(lua_State* L, std::string_view tname);
+void* luaL_testudatai(lua_State* L, int ud, std::string_view tname);
+void* luaL_checkudatai(lua_State* L, int ud, std::string_view tname);
+int luaL_getmetatablei(lua_State* L, std::string_view tname);
+
+int luaL_getsubtablei(lua_State* L, int idx, std::string_view fname);
+void luaL_requirefi(lua_State* L, std::string_view modname,
+                    lua_CFunction openf, int glb);
+
+void luaL_tracebacki(lua_State* L, lua_State* L1,
+                     std::string_view msg, int level);
+
+
 std::string lua_funcaddressi(lua_State* L, int idx);
 
 const InternalString* lua_typenamei(lua_State* L, int tp);

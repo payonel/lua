@@ -13,6 +13,7 @@
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
+#include "lua_internal.h"
 
 /*
 ** Standard Libraries. (Must be listed in the same ORDER of their
@@ -38,7 +39,7 @@ LUALIB_API void luaL_openselectedlibs(lua_State* L, int load, int preload)
 {
   int mask;
   const luaL_Reg* lib;
-  luaL_getsubtable(L, LUA_REGISTRYINDEX, HostString(LUA_PRELOAD_TABLE->view()));
+  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE->view());
   for (lib = stdlibs, mask = 1; lib->name.data() != nullptr; lib++, mask <<= 1)
   {
     if (load & mask)

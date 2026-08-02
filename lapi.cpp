@@ -700,11 +700,16 @@ void lua_pushistring(lua_State* L, InternalString&& s)
 
 LUA_API HostString lua_pushfstring(lua_State* L, const HostString& fmt)
 {
+  return HostString(lua_pushfstringi(L, fmt.to_utf8())->view());
+}
+
+const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt)
+{
   const InternalString* ret;
   FmtArgs args;
   int n = 0;
   lua_lock(L);
-  InternalString f{fmt};
+  InternalString f{fmt, 0, fmt.size()};
   std::string_view fv = f.view();
   size_t e;
   for (e = 0; (e = fv.find('%', e)) != std::string_view::npos; e += 2)
@@ -798,7 +803,7 @@ LUA_API HostString lua_pushfstring(lua_State* L, const HostString& fmt)
   }
   luaC_checkGC(L);
   lua_unlock(L);
-  return HostString(ret->view());
+  return ret;
 }
 
 LUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
@@ -905,10 +910,15 @@ static void getGlobalTable(lua_State* L, TValue* gt)
 
 LUA_API int lua_getglobal(lua_State* L, const HostString& name)
 {
+  return lua_getglobali(L, name.to_utf8());
+}
+
+int lua_getglobali(lua_State* L, std::string_view name)
+{
   TValue gt;
   lua_lock(L);
   getGlobalTable(L, &gt);
-  return auxgetstr(L, &gt, name.view());
+  return auxgetstr(L, &gt, name);
 }
 
 LUA_API int lua_gettable(lua_State* L, int idx)
@@ -1150,10 +1160,15 @@ static void auxsetstr(lua_State* L, const TValue* t, std::string_view k)
 
 LUA_API void lua_setglobal(lua_State* L, const HostString& name)
 {
+  lua_setglobali(L, name.to_utf8());
+}
+
+void lua_setglobali(lua_State* L, std::string_view name)
+{
   TValue gt;
   lua_lock(L); /* unlock done in 'auxsetstr' */
   getGlobalTable(L, &gt);
-  auxsetstr(L, &gt, name.view());
+  auxsetstr(L, &gt, name);
 }
 
 LUA_API void lua_settable(lua_State* L, int idx)
@@ -1479,8 +1494,12 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
                      const std::optional<HostString>& chunkname,
                      const std::optional<HostString>& mode)
 {
-  InternalString name{chunkname ? *chunkname : HostString(lit<"?">()->view())};
-  InternalString m{mode ? *mode : HostString()};
+  InternalString name = chunkname
+      ? InternalString{chunkname->to_utf8(), 0, chunkname->to_utf8().size()}
+      : InternalString{lit<"?">()->view(), 0, lit<"?">()->size()};
+  InternalString m = mode
+      ? InternalString{mode->to_utf8(), 0, mode->to_utf8().size()}
+      : InternalString{};
   return lua_loadi(L, reader, data, &name, mode ? &m : nullptr);
 }
 
@@ -1711,8 +1730,13 @@ void lua_setwarnf(lua_State* L, lua_WarnFunction f, void* ud)
 
 void lua_warning(lua_State* L, const HostString& msg, int tocont)
 {
+  lua_warningi(L, msg.to_utf8(), tocont);
+}
+
+void lua_warningi(lua_State* L, std::string_view msg, int tocont)
+{
   lua_lock(L);
-  luaE_warning(L, msg.view(), tocont);
+  luaE_warning(L, msg, tocont);
   lua_unlock(L);
 }
 

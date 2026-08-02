@@ -97,7 +97,7 @@ static int str_sub(lua_State* L)
   if (start <= end)
     lua_pushlstring(L, s->view(), start - 1, (end - start) + 1);
   else
-    lua_pushliteral(L, HostString(lit<"">()->view()));
+    lua_pushistringref(L, lit<"">());
   return 1;
 }
 
@@ -155,10 +155,10 @@ static int str_rep(lua_State* L)
   size_t len = s->size();
   size_t lsep = sep->size();
   if (n <= 0 || (len | lsep) == 0)
-    lua_pushliteral(L, HostString(lit<"">()->view())); /* no repetitions or both strings empty */
+    lua_pushistringref(L, lit<"">()); /* no repetitions or both strings empty */
   else if (l_unlikely(len > MAX_SIZE - lsep ||
                       ((lua_Integer)(len + lsep)) > ((lua_Integer)(MAX_SIZE)) / n))
-    return luaL_error(L, HostString(lit<"resulting string too large">()->view()));
+    return luaL_errori(L, lit<"resulting string too large">()->view());
   else
   {
     size_t totallen = (((size_t)(n)) * (len + lsep)) - lsep;
@@ -193,9 +193,9 @@ static int str_byte(lua_State* L)
   if (posi > pose)
     return 0;                                      /* empty interval; return no values */
   if (l_unlikely(pose - posi >= (size_t) INT_MAX)) /* arithmetic overflow? */
-    return luaL_error(L, HostString(lit<"string slice too long">()->view()));
+    return luaL_errori(L, lit<"string slice too long">()->view());
   n = (int) (pose - posi) + 1;
-  luaL_checkstack(L, n, HostString(lit<"string slice too long">()->view()));
+  luaL_checkstacki(L, n, lit<"string slice too long">()->view());
   for (i = 0; i < n; i++)
     lua_pushinteger(L, s->byteAt(posi + ((unsigned int)(i)) - 1));
   return n;
@@ -211,7 +211,7 @@ static int str_char(lua_State* L)
   for (i = 1; i <= n; i++)
   {
     lua_Unsigned c = (lua_Unsigned) luaL_checkinteger(L, i);
-    luaL_argcheck(L, c <= (lua_Unsigned) UCHAR_MAX, i, HostString(lit<"value out of range">()->view()));
+    luaL_argchecki(L, c <= (lua_Unsigned) UCHAR_MAX, i, lit<"value out of range">()->view());
     p[off + i - 1] = ((char)(((unsigned char)(c))));
   }
   luaL_pushresultsize(&b, ((unsigned int)(n)));
@@ -252,8 +252,7 @@ static int str_dump(lua_State* L)
 {
   struct str_Writer state;
   int strip = lua_toboolean(L, 2);
-  luaL_argcheck(L, lua_type(L, 1) == LUA_TFUNCTION && !lua_iscfunction(L, 1),
-                1, HostString(lit<"Lua function expected">()->view()));
+  luaL_argchecki(L, lua_type(L, 1) == LUA_TFUNCTION && !lua_iscfunction(L, 1), 1, lit<"Lua function expected">()->view());
   /* ensure function is on the top of the stack and vacate slot 1 */
   lua_pushvalue(L, 1);
   state.init = 0;
@@ -300,7 +299,7 @@ static void trymt(lua_State* L, std::string_view mtkey, std::string_view opname)
     lua_pushlstring(L, opname, 0, opname.size());
     lua_pushlstring(L, t1, 0, t1.size());
     lua_pushlstring(L, t2, 0, t2.size());
-    luaL_error(L, HostString(lit<"attempt to %s a '%s' with a '%s'">()->view()));
+    luaL_errori(L, lit<"attempt to %s a '%s' with a '%s'">()->view());
   }
   lua_insert(L, -3); /* put metamethod before arguments */
   lua_call(L, 2, 1); /* call metamethod */
@@ -422,7 +421,7 @@ static int check_capture(MatchState* ms, int l)
                  ms->capture[l].len == CAP_UNFINISHED))
   {
     lua_pushinteger(ms->L, l + 1);
-    return luaL_error(ms->L, HostString(lit<"invalid capture index %%%d">()->view()));
+    return luaL_errori(ms->L, lit<"invalid capture index %%%d">()->view());
   }
   return l;
 }
@@ -433,7 +432,7 @@ static int capture_to_close(MatchState* ms)
   for (level--; level >= 0; level--)
     if (ms->capture[level].len == CAP_UNFINISHED)
       return level;
-  return luaL_error(ms->L, HostString(lit<"invalid pattern capture">()->view()));
+  return luaL_errori(ms->L, lit<"invalid pattern capture">()->view());
 }
 
 static ptrdiff_t classend(MatchState* ms, ptrdiff_t p)
@@ -443,7 +442,7 @@ static ptrdiff_t classend(MatchState* ms, ptrdiff_t p)
   case L_ESC:
   {
     if (l_unlikely(p == ms->p_end))
-      luaL_error(ms->L, HostString(lit<"malformed pattern (ends with '%%')">()->view()));
+      luaL_errori(ms->L, lit<"malformed pattern (ends with '%%')">()->view());
     return p + 1;
   }
   case '[':
@@ -453,7 +452,7 @@ static ptrdiff_t classend(MatchState* ms, ptrdiff_t p)
     do
     { /* look for a ']' */
       if (l_unlikely(p == ms->p_end))
-        luaL_error(ms->L, HostString(lit<"malformed pattern (missing ']')">()->view()));
+        luaL_errori(ms->L, lit<"malformed pattern (missing ']')">()->view());
       if (patbyte(ms, p++) == L_ESC && p < ms->p_end)
         p++; /* skip escapes (e.g. '%]') */
     } while (patbyte(ms, p) != ']');
@@ -565,7 +564,7 @@ static ptrdiff_t matchbalance(MatchState* ms, ptrdiff_t s,
                               ptrdiff_t p)
 {
   if (l_unlikely(p >= ms->p_end - 1))
-    luaL_error(ms->L, HostString(lit<"malformed pattern (missing arguments to '%%b')">()->view()));
+    luaL_errori(ms->L, lit<"malformed pattern (missing arguments to '%%b')">()->view());
   if (srcbyte(ms, s) != patbyte(ms, p))
     return NOMATCH;
   else
@@ -625,7 +624,7 @@ static ptrdiff_t start_capture(MatchState* ms, ptrdiff_t s,
   ptrdiff_t res;
   int level = ms->level;
   if (level >= LUA_MAXCAPTURES)
-    luaL_error(ms->L, HostString(lit<"too many captures">()->view()));
+    luaL_errori(ms->L, lit<"too many captures">()->view());
   ms->capture[level].init = s;
   ms->capture[level].len = what;
   ms->level = level + 1;
@@ -661,7 +660,7 @@ static ptrdiff_t match_capture(MatchState* ms, ptrdiff_t s, int l)
 static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
 {
   if (l_unlikely(ms->matchdepth-- == 0))
-    luaL_error(ms->L, HostString(lit<"pattern too complex">()->view()));
+    luaL_errori(ms->L, lit<"pattern too complex">()->view());
   for (;;)
   {
     if (p == ms->p_end) /* end of pattern? */
@@ -698,7 +697,7 @@ static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
       int previous;
       p += 2;
       if (l_unlikely(patbyte(ms, p) != '['))
-        luaL_error(ms->L, HostString(lit<"missing '[' after '%%f' in pattern">()->view()));
+        luaL_errori(ms->L, lit<"missing '[' after '%%f' in pattern">()->view());
       ep = classend(ms, p); /* points to what is next */
       previous = (s == 0) ? '\0' : srcbyte(ms, s - 1);
       if (!matchbracketclass(ms, previous, p, ep - 1) &&
@@ -817,7 +816,7 @@ static ptrdiff_t get_onecapture(MatchState* ms, int i, ptrdiff_t s,
     if (l_unlikely(i != 0))
     {
       lua_pushinteger(ms->L, i + 1);
-      luaL_error(ms->L, HostString(lit<"invalid capture index %%%d">()->view()));
+      luaL_errori(ms->L, lit<"invalid capture index %%%d">()->view());
     }
     *cap = s;
     return (e - s);
@@ -827,7 +826,7 @@ static ptrdiff_t get_onecapture(MatchState* ms, int i, ptrdiff_t s,
     ptrdiff_t capl = ms->capture[i].len;
     *cap = ms->capture[i].init;
     if (l_unlikely(capl == CAP_UNFINISHED))
-      luaL_error(ms->L, HostString(lit<"unfinished capture">()->view()));
+      luaL_errori(ms->L, lit<"unfinished capture">()->view());
     else if (capl == CAP_POSITION)
       lua_pushinteger(ms->L, ((lua_Integer)(ms->capture[i].init)) + 1);
     return capl;
@@ -851,7 +850,7 @@ static int push_captures(MatchState* ms, ptrdiff_t s, ptrdiff_t e)
 {
   int i;
   int nlevels = (ms->level == 0 && s != NOMATCH) ? 1 : ms->level;
-  luaL_checkstack(ms->L, nlevels, HostString(lit<"too many captures">()->view()));
+  luaL_checkstacki(ms->L, nlevels, lit<"too many captures">()->view());
   for (i = 0; i < nlevels; i++)
     push_onecapture(ms, i, s, e);
   return nlevels; /* number of strings pushed */
@@ -1019,7 +1018,7 @@ static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
     else
     {
       lua_pushinteger(L, L_ESC);
-      luaL_error(L, HostString(lit<"invalid use of '%c' in replacement string">()->view()));
+      luaL_errori(L, lit<"invalid use of '%c' in replacement string">()->view());
     }
     nb = pc + 1;
   }
@@ -1066,8 +1065,8 @@ static int add_value(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
   {
-    lua_pushstring(L, luaL_typename(L, -1));
-    return luaL_error(L, HostString(lit<"invalid replacement value (a %s)">()->view()));
+    lua_pushistringref(L, lua_typenamei(L, lua_type(L, -1)));
+    return luaL_errori(L, lit<"invalid replacement value (a %s)">()->view());
   }
   else
   {
@@ -1093,8 +1092,7 @@ static int str_gsub(lua_State* L)
   int changed = 0;                  /* change flag */
   MatchState ms;
   luaL_Buffer b;
-  luaL_argexpected(L, tr == LUA_TNUMBER || tr == LUA_TSTRING || tr == LUA_TFUNCTION || tr == LUA_TTABLE, 3,
-                   HostString(lit<"string/function/table">()->view()));
+  luaL_argexpectedi(L, tr == LUA_TNUMBER || tr == LUA_TSTRING || tr == LUA_TFUNCTION || tr == LUA_TTABLE, 3, lit<"string/function/table">()->view());
   luaL_buffinit(L, &b);
   prepstate(&ms, L, srcs, pat);
   while (n < max_s)
@@ -1225,7 +1223,7 @@ static int lua_number2strx(lua_State* L, std::span<char> area, size_t off,
       area[off + i] = ((char)(toupper(((unsigned char)(area[off + i])))));
   }
   else if (l_unlikely(fmt[1] != 'a'))
-    return luaL_error(L, HostString(lit<"modifiers for format '%%a'/'%%A' not implemented">()->view()));
+    return luaL_errori(L, lit<"modifiers for format '%%a'/'%%A' not implemented">()->view());
   return n;
 }
 
@@ -1295,7 +1293,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
         for (size_t j = d.size(); j < 3; j++)
           luaL_addchar(b, '0');
       }
-      luaL_addstring(b, d.c_str());
+      luaL_addlstring(b, d, 0, d.size());
     }
     else
       luaL_addchar(b, ((char)(c)));
@@ -1388,7 +1386,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
   }
   default:
   {
-    luaL_argerror(L, arg, HostString(lit<"value has no literal form">()->view()));
+    luaL_argerrori(L, arg, lit<"value has no literal form">()->view());
   }
   }
 }
@@ -1428,7 +1426,7 @@ static void checkformat(lua_State* L, std::string_view form,
   if (!(p + 1 == form.size() && isalpha(sv_byteat(form, p))))
   { /* did not go to the end? */
     lua_pushlstring(L, form, 0, form.size());
-    luaL_error(L, HostString(lit<"invalid conversion specification: '%s'">()->view()));
+    luaL_errori(L, lit<"invalid conversion specification: '%s'">()->view());
   }
 }
 
@@ -1444,7 +1442,7 @@ static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
   len++; /* adds following character (should be the specifier) */
   /* still needs space for '%', '\0', plus a length modifier */
   if (len >= MAX_FORMAT - 10)
-    luaL_error(L, HostString(lit<"invalid format (too long)">()->view()));
+    luaL_errori(L, lit<"invalid format (too long)">()->view());
   form[0] = '%';
   memcpy(form.data() + 1, sv.data() + i, len * sizeof(char));
   form[1 + len] = '\0';
@@ -1710,7 +1708,7 @@ static int str_format(lua_State* L)
       size_t boff = luaL_prepbuffsize(&b, maxitem); /* to put result */
       int nb = 0;                                   /* number of bytes in result */
       if (++arg > top)
-        return luaL_argerror(L, arg, HostString(lit<"no value">()->view()));
+        return luaL_argerrori(L, arg, lit<"no value">()->view());
       i = getformat(L, sf, i, form, &formlen);
       std::string_view formv{form, formlen};
       switch (istrbyte(sf, i++))
@@ -1795,7 +1793,7 @@ static int str_format(lua_State* L)
       case 'q':
       {
         if (formlen != 2) /* modifiers? */
-          return luaL_error(L, HostString(lit<"specifier '%%q' cannot have modifiers">()->view()));
+          return luaL_errori(L, lit<"specifier '%%q' cannot have modifiers">()->view());
         addliteral(L, &b, arg);
         break;
       }
@@ -1807,8 +1805,7 @@ static int str_format(lua_State* L)
           luaL_addvalue(&b); /* keep entire string */
         else
         {
-          luaL_argcheck(L, memchr(s->bytes(), '\0', l) == nullptr, arg,
-                        HostString(lit<"string contains zeros">()->view()));
+          luaL_argchecki(L, memchr(s->bytes(), '\0', l) == nullptr, arg, lit<"string contains zeros">()->view());
           checkformat(L, formv, L_FMTFLAGSC->view(), 1);
           if (formv.find('.') == std::string_view::npos && l >= 100)
           {
@@ -1832,7 +1829,7 @@ static int str_format(lua_State* L)
       default:
       { /* also treat cases 'pnLlh' */
         lua_pushlstring(L, formv, 0, formv.size());
-        return luaL_error(L, HostString(lit<"invalid conversion '%s' to 'format'">()->view()));
+        return luaL_errori(L, lit<"invalid conversion '%s' to 'format'">()->view());
       }
       }
       assert(((unsigned int)(nb)) < maxitem);
@@ -1936,7 +1933,7 @@ static unsigned getnumlimit(Header* h, size_t df)
   {
     lua_pushinteger(h->L, ((lua_Integer)(sz)));
     lua_pushinteger(h->L, MAXINTSIZE);
-    return ((unsigned int)(luaL_error(h->L, HostString(lit<"integral size (%d) out of limits [1,%d]">()->view()))));
+    return ((unsigned int)(luaL_errori(h->L, lit<"integral size (%d) out of limits [1,%d]">()->view())));
   }
   return ((unsigned int)(sz));
 }
@@ -2012,7 +2009,7 @@ static KOption getoption(Header* h, size_t* size)
   case 'c':
     *size = getnum(h, ((size_t)(-1)));
     if (l_unlikely(*size == ((size_t)(-1))))
-      luaL_error(h->L, HostString(lit<"missing size for format option 'c'">()->view()));
+      luaL_errori(h->L, lit<"missing size for format option 'c'">()->view());
     return Kchar;
   case 'z':
     return Kzstr;
@@ -2039,7 +2036,7 @@ static KOption getoption(Header* h, size_t* size)
   }
   default:
     lua_pushinteger(h->L, opt);
-    luaL_error(h->L, HostString(lit<"invalid format option '%c'">()->view()));
+    luaL_errori(h->L, lit<"invalid format option '%c'">()->view());
   }
   return Knop;
 }
@@ -2061,7 +2058,7 @@ static KOption getdetails(Header* h, size_t totalsize,
   if (opt == Kpaddalign)
   { /* 'X' gets alignment from following option */
     if (fmtbyte(h) == '\0' || getoption(h, &align) == Kchar || align == 0)
-      luaL_argerror(h->L, 1, HostString(lit<"invalid next option for option 'X'">()->view()));
+      luaL_argerrori(h->L, 1, lit<"invalid next option for option 'X'">()->view());
   }
   if (align <= 1 || opt == Kchar) /* need no alignment? */
     *ntoalign = 0;
@@ -2072,7 +2069,7 @@ static KOption getdetails(Header* h, size_t totalsize,
     if (l_unlikely(!(((align) & ((align) - 1)) == 0)))
     {                /* not a power of 2? */
       *ntoalign = 0; /* to avoid warnings */
-      luaL_argerror(h->L, 1, HostString(lit<"format asks for alignment not power of 2">()->view()));
+      luaL_argerrori(h->L, 1, lit<"format asks for alignment not power of 2">()->view());
     }
     else
     {
@@ -2142,8 +2139,7 @@ static int str_pack(lua_State* L)
     unsigned ntoalign;
     size_t size;
     KOption opt = getdetails(&h, totalsize, &size, &ntoalign);
-    luaL_argcheck(L, size + ntoalign <= MAX_SIZE - totalsize, arg,
-                  HostString(lit<"result too long">()->view()));
+    luaL_argchecki(L, size + ntoalign <= MAX_SIZE - totalsize, arg, lit<"result too long">()->view());
     totalsize += ntoalign + size;
     while (ntoalign-- > 0)
       luaL_addchar(&b, LUAL_PACKPADBYTE); /* fill alignment */
@@ -2156,7 +2152,7 @@ static int str_pack(lua_State* L)
       if (size < SZINT)
       { /* need overflow check? */
         lua_Integer lim = (lua_Integer) 1 << ((size * NB) - 1);
-        luaL_argcheck(L, -lim <= n && n < lim, arg, HostString(lit<"integer overflow">()->view()));
+        luaL_argchecki(L, -lim <= n && n < lim, arg, lit<"integer overflow">()->view());
       }
       packint(&b, (lua_Unsigned) n, h.islittle, ((unsigned int)(size)), (n < 0));
       break;
@@ -2165,8 +2161,7 @@ static int str_pack(lua_State* L)
     { /* unsigned integers */
       lua_Integer n = luaL_checkinteger(L, arg);
       if (size < SZINT) /* need overflow check? */
-        luaL_argcheck(L, (lua_Unsigned) n < ((lua_Unsigned) 1 << (size * NB)),
-                      arg, HostString(lit<"unsigned overflow">()->view()));
+        luaL_argchecki(L, (lua_Unsigned) n < ((lua_Unsigned) 1 << (size * NB)), arg, lit<"unsigned overflow">()->view());
       packint(&b, (lua_Unsigned) n, h.islittle, ((unsigned int)(size)), 0);
       break;
     }
@@ -2198,7 +2193,7 @@ static int str_pack(lua_State* L)
     { /* fixed-size string */
       std::string_view s = luaL_checklstring(L, arg);
       size_t len = s.size();
-      luaL_argcheck(L, len <= size, arg, HostString(lit<"string longer than given size">()->view()));
+      luaL_argchecki(L, len <= size, arg, lit<"string longer than given size">()->view());
       luaL_addlstring(&b, s, 0, len); /* add string */
       if (len < size)
       {                            /* does it need padding? */
@@ -2213,8 +2208,7 @@ static int str_pack(lua_State* L)
     { /* strings with length count */
       std::string_view s = luaL_checklstring(L, arg);
       size_t len = s.size();
-      luaL_argcheck(L, size >= sizeof(lua_Unsigned) || len < ((lua_Unsigned) 1 << (size * NB)),
-                    arg, HostString(lit<"string length does not fit in given size">()->view()));
+      luaL_argchecki(L, size >= sizeof(lua_Unsigned) || len < ((lua_Unsigned) 1 << (size * NB)), arg, lit<"string length does not fit in given size">()->view());
       /* pack length */
       packint(&b, (lua_Unsigned) len, h.islittle, ((unsigned int)(size)), 0);
       luaL_addlstring(&b, s, 0, len);
@@ -2225,8 +2219,7 @@ static int str_pack(lua_State* L)
     { /* zero-terminated string */
       std::string_view s = luaL_checklstring(L, arg);
       size_t len = s.size();
-      luaL_argcheck(L, s.find('\0') == std::string_view::npos, arg,
-                    HostString(lit<"string contains zeros">()->view()));
+      luaL_argchecki(L, s.find('\0') == std::string_view::npos, arg, lit<"string contains zeros">()->view());
       luaL_addlstring(&b, s, 0, len);
       luaL_addchar(&b, '\0'); /* add zero at the end */
       totalsize += len + 1;
@@ -2255,11 +2248,9 @@ static int str_packsize(lua_State* L)
     unsigned ntoalign;
     size_t size;
     KOption opt = getdetails(&h, totalsize, &size, &ntoalign);
-    luaL_argcheck(L, opt != Kstring && opt != Kzstr, 1,
-                  HostString(lit<"variable-length format">()->view()));
+    luaL_argchecki(L, opt != Kstring && opt != Kzstr, 1, lit<"variable-length format">()->view());
     size += ntoalign; /* total space used by option */
-    luaL_argcheck(L, totalsize <= MAX_SIZE - size,
-                  1, HostString(lit<"format result too large">()->view()));
+    luaL_argchecki(L, totalsize <= MAX_SIZE - size, 1, lit<"format result too large">()->view());
     totalsize += size;
   }
   lua_pushinteger(L, ((lua_Integer)(totalsize)));
@@ -2301,7 +2292,7 @@ static lua_Integer unpackint(lua_State* L, std::string_view data, size_t off,
       if (l_unlikely((unsigned char) data[off + ((size_t)(islittle ? i : size - 1 - i))] != mask))
       {
         lua_pushinteger(L, size);
-        luaL_error(L, HostString(lit<"%d-byte integer does not fit into Lua Integer">()->view()));
+        luaL_errori(L, lit<"%d-byte integer does not fit into Lua Integer">()->view());
       }
     }
   }
@@ -2316,18 +2307,17 @@ static int str_unpack(lua_State* L)
   size_t ld = data.size();
   size_t pos = posrelatI(luaL_optinteger(L, 3, 1), ld) - 1;
   int n = 0; /* number of results */
-  luaL_argcheck(L, pos <= ld, 3, HostString(lit<"initial position out of string">()->view()));
+  luaL_argchecki(L, pos <= ld, 3, lit<"initial position out of string">()->view());
   initheader(L, &h, fmt);
   while (fmtbyte(&h) != '\0')
   {
     unsigned ntoalign;
     size_t size;
     KOption opt = getdetails(&h, pos, &size, &ntoalign);
-    luaL_argcheck(L, ntoalign + size <= ld - pos, 2,
-                  HostString(lit<"data string too short">()->view()));
+    luaL_argchecki(L, ntoalign + size <= ld - pos, 2, lit<"data string too short">()->view());
     pos += ntoalign; /* skip alignment */
     /* stack space for item + next position */
-    luaL_checkstack(L, 2, HostString(lit<"too many results">()->view()));
+    luaL_checkstacki(L, 2, lit<"too many results">()->view());
     n++;
     switch (opt)
     {
@@ -2369,7 +2359,7 @@ static int str_unpack(lua_State* L)
     {
       lua_Unsigned len = (lua_Unsigned) unpackint(L, data, pos,
                                                   h.islittle, ((int)(size)), 0);
-      luaL_argcheck(L, len <= ld - pos - size, 2, HostString(lit<"data string too short">()->view()));
+      luaL_argchecki(L, len <= ld - pos - size, 2, lit<"data string too short">()->view());
       lua_pushlstring(L, data, pos + size, ((size_t)(len)));
       pos += ((size_t)(len)); /* skip string */
       break;
@@ -2377,8 +2367,7 @@ static int str_unpack(lua_State* L)
     case Kzstr:
     {
       size_t zend = data.find('\0', pos);
-      luaL_argcheck(L, zend != std::string_view::npos, 2,
-                    HostString(lit<"unfinished string for format 'z'">()->view()));
+      luaL_argchecki(L, zend != std::string_view::npos, 2, lit<"unfinished string for format 'z'">()->view());
       size_t len = zend - pos;
       lua_pushlstring(L, data, pos, len);
       pos += len + 1; /* skip string plus final '\0' */
@@ -2423,12 +2412,12 @@ static void createmetatable(lua_State* L)
   /* table to be metatable for strings */
   lua_createtable(L, 0, sizeof(stringmetamethods) / sizeof((stringmetamethods)[0]) - 1);
   luaL_setfuncs(L, stringmetamethods, 0);
-  lua_pushliteral(L, HostString(lit<"">()->view()));         /* dummy string */
+  lua_pushistringref(L, lit<"">());         /* dummy string */
   lua_pushvalue(L, -2);           /* copy table */
   lua_setmetatable(L, -2);        /* set table as metatable for strings */
   lua_pop(L, 1);                  /* pop dummy string */
   lua_pushvalue(L, -2);           /* get string library */
-  lua_setfield(L, -2, HostString(lit<"__index">()->view())); /* metatable.__index = string */
+  lua_setfieldi(L, -2, lit<"__index">()->view()); /* metatable.__index = string */
   lua_pop(L, 1);                  /* pop metatable */
 }
 
