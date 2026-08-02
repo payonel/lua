@@ -63,9 +63,7 @@ static void expr(LexState* ls, expdesc* v);
 
 static l_noret error_expected(LexState* ls, int token)
 {
-  luaX_syntaxerror(ls,
-                   luaO_pushfstring(ls->L, lit<"%s expected">()->view(),
-                                    FmtArgs().str(luaX_token2str(ls, token)->view())));
+  luaX_syntaxerror(ls, luaO_pushfstring(ls->L, lit<"%s expected">()->view(), FmtArgs().str(luaX_token2str(ls, token)->view()))->view());
 }
 
 static l_noret errorlimit(FuncState* fs, int limit, const InternalString* what)
@@ -76,9 +74,8 @@ static l_noret errorlimit(FuncState* fs, int limit, const InternalString* what)
   const InternalString* where = (line == 0)
                           ? lit<"main function">()
                           : luaO_pushfstring(L, lit<"function at line %d">()->view(), FmtArgs().num(line));
-  msg = luaO_pushfstring(L, lit<"too many %s (limit is %d) in %s">()->view(),
-                         FmtArgs().str(what->view()).num(limit).str(where->view()));
-  luaX_syntaxerror(fs->ls, msg);
+  msg = luaO_pushfstring(L, lit<"too many %s (limit is %d) in %s">()->view(), FmtArgs().str(what->view()).num(limit).str(where->view()));
+  luaX_syntaxerror(fs->ls, msg->view());
 }
 
 void luaY_checklimit(FuncState* fs, int v, int l, const InternalString* what)
@@ -122,7 +119,7 @@ static void checknext(LexState* ls, int c)
 static inline void check_condition(LexState* ls, int c, const InternalString* msg)
 {
   if (!c)
-    luaX_syntaxerror(ls, msg);
+    luaX_syntaxerror(ls, msg->view());
 }
 
 /*
@@ -143,7 +140,7 @@ static void check_match(LexState* ls, int what, int who, int where)
                                             FmtArgs()
                                                 .str(luaX_token2str(ls, what)->view())
                                                 .str(luaX_token2str(ls, who)->view())
-                                                .num(where)));
+                                                .num(where))->view());
     }
   }
 }
@@ -1175,7 +1172,7 @@ static void parlist(LexState* ls)
         break;
       }
       default:
-        luaX_syntaxerror(ls, lit<"<name> or '...' expected">());
+        luaX_syntaxerror(ls, lit<"<name> or '...' expected">()->view());
       }
     } while (!varargk && testnext(ls, ','));
   }
@@ -1263,7 +1260,7 @@ static void funcargs(LexState* ls, expdesc* f)
   }
   default:
   {
-    luaX_syntaxerror(ls, lit<"function arguments expected">());
+    luaX_syntaxerror(ls, lit<"function arguments expected">()->view());
     return; /* to avoid warnings */
   }
   }
@@ -1311,7 +1308,7 @@ static void primaryexp(LexState* ls, expdesc* v)
   }
   default:
   {
-    luaX_syntaxerror(ls, lit<"unexpected symbol">());
+    luaX_syntaxerror(ls, lit<"unexpected symbol">()->view());
   }
   }
 }
@@ -1729,7 +1726,7 @@ static void breakstat(LexState* ls, int line)
       break;
   }
   if (bl == nullptr)
-    luaX_syntaxerror(ls, lit<"break outside loop">());
+    luaX_syntaxerror(ls, lit<"break outside loop">()->view());
   bl->isloop = 2; /* signal that block has pending breaks */
   luaX_next(ls);  /* skip break */
   newgotoentry(ls, ls->brkn, line);
@@ -1827,7 +1824,7 @@ static void fixforjump(FuncState* fs, int pc, int dest, int back)
   if (back)
     offset = -offset;
   if (l_unlikely(offset > MAXARG_Bx))
-    luaX_syntaxerror(fs->ls, lit<"control structure too long">());
+    luaX_syntaxerror(fs->ls, lit<"control structure too long">()->view());
   ((*jmp) = (((*jmp) & MASK0(SIZE_Bx, POS_Bx)) | ((((Instruction)(offset)) << POS_Bx) & MASK1(SIZE_Bx, POS_Bx))));
 }
 
@@ -1935,7 +1932,7 @@ static void forstat(LexState* ls, int line)
     forlist(ls, varname);
     break;
   default:
-    luaX_syntaxerror(ls, lit<"'=' or 'in' expected">());
+    luaX_syntaxerror(ls, lit<"'=' or 'in' expected">()->view());
   }
   check_match(ls, TK_END, TK_FOR, line);
   leaveblock(fs); /* loop scope ('break' jumps to this point) */

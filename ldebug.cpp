@@ -1009,17 +1009,15 @@ l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
 }
 
 /* add src:line information to 'msg' */
-const InternalString* luaG_addinfo(lua_State* L, const InternalString* msg,
-                                   TString* src, int line)
+const InternalString* luaG_addinfo(lua_State* L, std::string_view msg, TString* src, int line)
 {
   if (src == nullptr) /* no debug information? */
-    return luaO_pushfstring(L, lit<"?:?: %s">()->view(), FmtArgs().str(msg->view()));
+    return luaO_pushfstring(L, lit<"?:?: %s">()->view(), FmtArgs().str(msg));
   else
   {
     char buff[LUA_IDSIZE];
     luaO_chunkid(buff, src->data.view());
-    return luaO_pushfstring(L, lit<"%s:%d: %s">()->view(),
-                            FmtArgs().str(std::string_view{buff, strlen(buff)}).num(line).str(msg->view()));
+    return luaO_pushfstring(L, lit<"%s:%d: %s">()->view(), FmtArgs().str(std::string_view{buff, strlen(buff)}).num(line).str(msg));
   }
 }
 
@@ -1055,7 +1053,7 @@ l_noret luaG_runerror(lua_State* L, std::string_view fmt,
   if (isLua(ci))
   { /* Lua function? */
     /* add source:line information */
-    luaG_addinfo(L, msg, ci_func(L, ci)->p->source, getcurrentline(L, ci));
+    luaG_addinfo(L, msg->view(), ci_func(L, ci)->p->source, getcurrentline(L, ci));
     copyslot(L, L->top - 2, L->top - 1); /* remove 'msg' */
     L->top--;
   }
