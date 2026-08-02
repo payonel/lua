@@ -337,7 +337,7 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname)
 
 LUALIB_API int luaL_fileresult(lua_State* L, int stat, const std::optional<HostString>& fname)
 {
-  return luaL_fileresulti(L, stat, fname ? fname->view() : std::string_view{});
+  return luaL_fileresulti(L, stat, fname ? fname->to_utf8() : std::string_view{});
 }
 
 #include <sys/wait.h> /* waitpid macros to interpret 'pclose' return status */
@@ -637,7 +637,7 @@ LUALIB_API void luaL_addlstring(luaL_Buffer* B, std::string_view s,
 
 LUALIB_API void luaL_addstring(luaL_Buffer* B, const HostString& s)
 {
-  std::string_view sv = s.view();
+  std::string_view sv = s.to_utf8();
   luaL_addlstring(B, sv, 0, sv.size());
 }
 
@@ -833,8 +833,7 @@ static int skipcomment(FILE* f, int* cp)
     return 0; /* no comment */
 }
 
-int luaL_loadfilei(lua_State* L, const InternalString* filename,
-                   const InternalString* mode)
+int luaL_loadfilei(lua_State* L, const InternalString* filename, const InternalString* mode)
 {
   LoadF lf;
   int status, readstatus;
@@ -1142,14 +1141,12 @@ void luaL_addgsubi(luaL_Buffer* b, std::string_view s,
   luaL_addlstring(b, s, pos, s.size() - pos); /* push last suffix */
 }
 
-LUALIB_API void luaL_addgsub(luaL_Buffer* b, const HostString& s,
-                             const HostString& p, const HostString& r)
+LUALIB_API void luaL_addgsub(luaL_Buffer* b, const HostString& s, const HostString& p, const HostString& r)
 {
-  luaL_addgsubi(b, s.view(), p.view(), r.view());
+  luaL_addgsubi(b, s.to_utf8(), p.to_utf8(), r.to_utf8());
 }
 
-std::string_view luaL_gsubi(lua_State* L, std::string_view s,
-                            std::string_view p, std::string_view r)
+std::string_view luaL_gsubi(lua_State* L, std::string_view s, std::string_view p, std::string_view r)
 {
   luaL_Buffer b;
   luaL_buffinit(L, &b);
@@ -1158,10 +1155,9 @@ std::string_view luaL_gsubi(lua_State* L, std::string_view s,
   return lua_tolstring(L, -1);
 }
 
-LUALIB_API HostString luaL_gsub(lua_State* L, const HostString& s,
-                                const HostString& p, const HostString& r)
+LUALIB_API HostString luaL_gsub(lua_State* L, const HostString& s, const HostString& p, const HostString& r)
 {
-  return HostString(luaL_gsubi(L, s.view(), p.view(), r.view()));
+  return HostString(luaL_gsubi(L, s.to_utf8(), p.to_utf8(), r.to_utf8()));
 }
 
 static void* luaL_alloc(void*, void* ptr, size_t, size_t nsize)
@@ -1205,7 +1201,7 @@ static void warnfcont(void* ud, const HostString& message, int tocont);
 */
 static int checkcontrol(lua_State* L, const HostString& message, int tocont)
 {
-  std::string_view m = message.view();
+  std::string_view m = message.to_utf8();
   if (tocont || m.empty() || m[0] != '@') /* not a control message? */
     return 0;
   else
@@ -1230,7 +1226,7 @@ static void warnfoff(void* ud, const HostString& message, int tocont)
 static void warnfcont(void* ud, const HostString& message, int tocont)
 {
   lua_State* L = (lua_State*) ud;
-  std::string msg{message.view()};
+  std::string msg{message.to_utf8()};
   fprintf(stderr, "%s", msg.c_str());
   fflush(stderr);
   if (tocont)                          /* not the last part? */

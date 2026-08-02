@@ -29,13 +29,12 @@ public:
   InternalString(std::string_view src, size_t off, size_t len)
       : bytes_(src.data() + off, len) {}
 
-  explicit InternalString(const HostString& host) : bytes_(host.view()) {}
+  explicit InternalString(const HostString& host) : bytes_(host.to_utf8()) {}
 
   explicit InternalString(std::string&& engineOwned) noexcept
       : bytes_(std::move(engineOwned))
   {
   }
-
 
   size_t size() const noexcept { return bytes_.size(); }
   bool empty() const noexcept { return bytes_.empty(); }
@@ -49,7 +48,6 @@ public:
   const char* c_str() const noexcept { return bytes_.c_str(); }
 
   size_t capacity() const noexcept { return bytes_.capacity(); }
-
 
   bool operator==(const InternalString& o) const noexcept
   {

@@ -13,8 +13,6 @@ public:
 
   HostString(const char* s) : str(s) {}
 
-  std::string_view view() const noexcept { return std::string_view(str.data(), str.size()); }
-
   std::string_view to_utf8() const noexcept
   {
     return std::string_view(str.data(), str.size());

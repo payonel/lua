@@ -119,7 +119,7 @@ static void warnf(void* ud, const HostString& msg, int tocont)
   static int onoff = 0;
   static int mode = 0; /* start in normal mode */
   static int lasttocont = 0;
-  std::string m{msg.view()};
+  std::string m{msg.to_utf8()};
   if (!lasttocont && !tocont && !m.empty() && m[0] == '@')
   { /* control message? */
     if (buff[0] != '\0')
@@ -2454,7 +2454,7 @@ static void Chook(lua_State* L, lua_Debug* ar)
   lua_getfield(L, LUA_REGISTRYINDEX, HostString(lit<"C_HOOK">()->view()));
   lua_pushlightuserdata(L, L);
   lua_gettable(L, -2);                    /* get C_HOOK[L] (script saved by sethookaux) */
-  std::string scpt{lua_tostring(L, -1)->view()};
+  std::string scpt{lua_tostring(L, -1)->to_utf8()};
   lua_pop(L, 2);                          /* remove C_HOOK and script */
   lua_pushistringref(L, events[ar->event]); /* may be used by script */
   lua_pushinteger(L, ar->currentline);    /* may be used by script */

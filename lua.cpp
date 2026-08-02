@@ -116,7 +116,7 @@ static int report(lua_State* L, int status)
 {
   if (status != LUA_OK)
   {
-    std::string msg = lua_isstring(L, -1) ? std::string(lua_tostring(L, -1)->view())
+    std::string msg = lua_isstring(L, -1) ? std::string(lua_tostring(L, -1)->to_utf8())
                                           : std::string("(error message not a string)");
     l_message(progname, msg);
     lua_pop(L, 1); /* remove message */
@@ -539,7 +539,7 @@ static std::string get_prompt(lua_State* L, int firstline)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
-    std::string p{luaL_tolstring(L, -1).view()};
+    std::string p{luaL_tolstring(L, -1).to_utf8()};
     lua_remove(L, -2); /* remove original value */
     return p;
   }
@@ -654,7 +654,7 @@ static int loadline(lua_State* L)
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
-  std::string line{lua_tostring(L, 1)->view()};
+  std::string line{lua_tostring(L, 1)->to_utf8()};
   if (!line.empty())            /* non empty? */
     lua_saveline(line.c_str()); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */

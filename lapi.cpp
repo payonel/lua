@@ -670,7 +670,7 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
     return;
   }
   lua_lock(L);
-  std::string_view bytes = s->view();
+  std::string_view bytes = s->to_utf8();
   TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
   setslots(L, L->top, ts);
   api_incr_top(L);
@@ -950,7 +950,7 @@ LUA_API int lua_getfield(lua_State* L, int idx, const HostString& k)
 {
   lua_lock(L);
   TValue t = index2val(L, idx);
-  return auxgetstr(L, &t, k.view());
+  return auxgetstr(L, &t, k.to_utf8());
 }
 
 LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
@@ -1197,7 +1197,7 @@ LUA_API void lua_setfield(lua_State* L, int idx, const HostString& k)
 {
   lua_lock(L); /* unlock done in 'auxsetstr' */
   TValue t = index2val(L, idx);
-  auxsetstr(L, &t, k.view());
+  auxsetstr(L, &t, k.to_utf8());
 }
 
 int lua_getfieldi(lua_State* L, int idx, std::string_view k)
