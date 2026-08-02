@@ -30,20 +30,10 @@ static inline int LuaClosure(const Closure* f)
   return f != nullptr && f->tt == LUA_VLCL;
 }
 
-/*
-** Kind/name constants for the debug-name web: lit<> singletons with
-** per-literal identity, so kind results compare by pointer (Java:
-** interned String constants compared by reference).
-*/
 static const InternalString* const strlocal = lit<"local">();
 static const InternalString* const strupval = lit<"upvalue">();
 static const InternalString* const strconstant = lit<"constant">();
 
-/*
-** Metamethod names without their "__" prefix (ORDER TM), for
-** "metamethod 'index'"-style messages (upstream computed these as
-** getstr(tmname) + 2 — a payload slice the view discipline forbids).
-*/
 static const InternalString* const tmplainname[] = {
     lit<"index">(), lit<"newindex">(),
     lit<"gc">(), lit<"mode">(), lit<"len">(), lit<"eq">(),
@@ -202,7 +192,6 @@ std::optional<InternalDebug> lua_getstacki(lua_State* L, int level)
   return std::nullopt; /* no such level */
 }
 
-/* boundary wrapper: consumer record out (only i_ci travels) */
 LUA_API std::optional<lua_Debug> lua_getstack(lua_State* L, int level)
 {
   std::optional<InternalDebug> iar = lua_getstacki(L, level);
@@ -294,7 +283,6 @@ const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n
   return name;
 }
 
-/* boundary wrapper: only i_ci travels in; the name is converted out */
 LUA_API std::optional<HostString> lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
 {
   InternalDebug iar{};
@@ -303,7 +291,7 @@ LUA_API std::optional<HostString> lua_getlocal(lua_State* L, const lua_Debug* ar
   const InternalString* name = lua_getlocali(L, (ar != nullptr) ? &iar : nullptr, n);
   if (name == nullptr)
     return std::nullopt;
-  return HostString(name->view()); /* boundary copy */
+  return HostString(name->view());
 }
 
 const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n)
@@ -322,7 +310,6 @@ const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n
   return name;
 }
 
-/* boundary wrapper (see lua_getlocal) */
 LUA_API std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug* ar, int n)
 {
   InternalDebug iar{};
@@ -330,7 +317,7 @@ LUA_API std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug* ar
   const InternalString* name = lua_setlocali(L, &iar, n);
   if (name == nullptr)
     return std::nullopt;
-  return HostString(name->view()); /* boundary copy */
+  return HostString(name->view());
 }
 
 static void funcinfo(InternalDebug* ar, Closure* cl)
@@ -345,7 +332,7 @@ static void funcinfo(InternalDebug* ar, Closure* cl)
   else
   {
     const Proto* p = static_cast<LClosure*>(cl)->p;
-    if (p->source) /* borrowed view of the engine string */
+    if (p->source)
       ar->source = p->source->data.view();
     else
       ar->source = lit<"=?">()->view();
@@ -462,7 +449,6 @@ static int auxgetinfo(lua_State* L, std::string_view what, size_t wpos,
     {
       const InternalString* name = nullptr;
       const InternalString* namewhat = getfuncname(L, ci, &name);
-      /* borrowed views; null = absent (original char* NULL convention) */
       ar->namewhat = (namewhat != nullptr) ? namewhat->view() : std::string_view{};
       ar->name = (namewhat != nullptr && name != nullptr) ? name->view() : std::string_view{};
       break;
@@ -494,8 +480,8 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view what,
   int status;
   Closure* cl;
   CallInfo* ci;
-  StkId func; /* slot of the function value (see note below for '>') */
-  InternalDebug ar = arin; /* filled copy is the return (no out-params) */
+  StkId func;
+  InternalDebug ar = arin;
   size_t wpos = 0;
   lua_lock(L);
   if (sv_byteat(what, 0) == '>')
@@ -504,7 +490,7 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view what,
     func = L->top - 1;
     assert((slottag(L, func) & NOVARIANT_MASK) == LUA_TFUNCTION && "function expected");
     wpos = 1;   /* skip the '>' */
-    L->top--; /* pop function; the slot stays intact (nothing below pushes) */
+    L->top--;
   }
   else
   {
@@ -533,18 +519,10 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view what,
   return ar;
 }
 
-/*
-** Boundary wrapper: runs the engine-side core, then converts the
-** requested groups into the consumer record (HostString copies —
-** never a reference into engine memory). Groups not requested keep
-** the caller's values, as in the official out-param form. The
-** null-view "absent" of the internal record becomes the consumer
-** record's empty-HostString convention (see lua.h).
-*/
 LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options,
                                              const lua_Debug& arin)
 {
-  std::string_view what = options.view(); /* boundary view */
+  std::string_view what = options.view();
   InternalDebug iar{};
   iar.event = arin.event;
   iar.i_ci = arin.i_ci;
@@ -556,7 +534,7 @@ LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& opt
   if (what.find('S') != std::string_view::npos)
   {
     ar.source = HostString(res->source);
-    ar.short_src = HostString(res->short_src); /* chunkid NUL-terminates */
+    ar.short_src = HostString(res->short_src);
     ar.what = HostString(res->what);
     ar.linedefined = res->linedefined;
     ar.lastlinedefined = res->lastlinedefined;
@@ -792,7 +770,7 @@ static const InternalString* getobjname(const Proto* p, int lastpc, int reg,
       return lit<"method">();
     }
     default:
-      break; /* go through to return nullptr */
+      break;
     }
   }
   return nullptr; /* could not find reasonable name */
@@ -911,13 +889,6 @@ static const InternalString* formatvarinfo(lua_State* L,
     return luaO_pushfstring(L, lit<" (%s '%s')">(), FmtArgs().str(kind).str(name));
 }
 
-/*
-** Build a string with a "description" for the value 'o', such as
-** "variable 'x'" or "upvalue 'y'". 'src' is the value's origin: its
-** stack index when it lives in the current frame, or -1. An explicit
-** origin drives attribution directly; the pointer-identity fallback
-** below it is transitional (callers not yet threading origins).
-*/
 static const InternalString* varinfo(lua_State* L, StkId src)
 {
   CallInfo* ci = L->ci;
@@ -926,18 +897,17 @@ static const InternalString* varinfo(lua_State* L, StkId src)
   if (isLua(ci))
   {
     if (src >= UPVALORIGIN && src != NOSLOT)
-    { /* explicit origin: an upvalue of the running closure */
+    {
       name = upvalname(ci_func(L, ci)->p, (int)(src - UPVALORIGIN));
       kind = strupval;
     }
     else if (src != NOSLOT)
-    { /* explicit origin: a register of the current frame */
+    {
       StkId base = ci->func + 1;
       if (src >= base && src < ci->top)
         kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci),
                           (int)(src - base), &name);
     }
-    /* else no origin: the value does not come from a named place */
   }
   return formatvarinfo(L, kind, name);
 }
@@ -1013,7 +983,7 @@ l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2,
                         StkId src1, StkId src2)
 {
   lua_Integer temp;
-  (void)p2; /* attribution is origin-based; the faulty value itself is not shown */
+  (void)p2;
   if (!luaV_tointegerns(p1, &temp, LUA_FLOORN2I))
     src2 = src1;
   luaG_runerror(L, lit<"number%s has no integer representation">(),
@@ -1048,7 +1018,6 @@ const InternalString* luaG_addinfo(lua_State* L, const InternalString* msg,
   {
     char buff[LUA_IDSIZE];
     luaO_chunkid(buff, src->data.view());
-    /* boundary copy of the chunkid scratch (Java: it builds a String) */
     InternalString id{buff, strlen(buff)};
     return luaO_pushfstring(L, lit<"%s:%d: %s">(), FmtArgs().str(&id).num(line).str(msg));
   }

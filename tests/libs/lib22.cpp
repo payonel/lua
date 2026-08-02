@@ -28,7 +28,7 @@ static int newstr (lua_State *L) {
   }
   memcpy(buf, str, len + 1);
   lua_pushlstring(L, std::string_view{buf, len}, 0, len);
-  allocf(ud, buf, len + 1, 0);  /* free buffer after copy */
+  allocf(ud, buf, len + 1, 0);
   return 1;
 }
 

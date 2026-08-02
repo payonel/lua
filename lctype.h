@@ -14,7 +14,6 @@
 ** optimized for the specific needs of Lua.
 */
 
-/* this port supports only ASCII hosts */
 static_assert('A' == 65 && '0' == 48, "this port supports only ASCII execution character sets");
 
 #include <limits.h>

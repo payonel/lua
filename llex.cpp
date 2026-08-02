@@ -59,13 +59,8 @@ static void save(LexState* ls, int c)
   if (b->size() + 1 > (MAX_SIZE / 3 * 2)) /* larger than MAX_SIZE/1.5 ? */
     lexerror(ls, lit<"lexical element too long">(), 0);
   if (b->size() + 1 > b->capacity())
-  { /* needs to grow — ACCOUNTED: a token is script-driven and not
-       bounded by any admitted allocation (a streaming reader feeds
-       pieces that are collected as they are consumed), so capacity
-       is reserved with the state BEFORE it is allocated and the
-       memory limit can veto. The parse-wide charge (== capacity())
-       is released by luaD_protectedparser. */
-    size_t newsize = b->capacity() + (b->capacity() >> 1); /* *= 1.5 */
+  {
+    size_t newsize = b->capacity() + (b->capacity() >> 1);
     if (newsize < LUA_MINBUFFER)
       newsize = LUA_MINBUFFER;
     if (l_unlikely(!luaM_reserve(ls->L, newsize - b->capacity())))
@@ -123,8 +118,6 @@ static const InternalString* txtToken(LexState* ls, int token)
   case TK_STRING:
   case TK_FLT:
   case TK_INT:
-    /* anchor the token text as an engine string (GC-safe across the
-       push; counted bytes — the lexer no longer saves a NUL) */
     return luaO_pushfstring(ls->L, lit<"'%s'">(),
                             FmtArgs().str(&luaX_newstring(ls, ls->buff->view(), 0, ls->buff->view().size())->data));
   default:
@@ -140,11 +133,6 @@ static l_noret lexerror(LexState* ls, const InternalString* msg, int token)
   luaD_throw(ls->L, LUA_ERRSYNTAX);
 }
 
-/*
-** InternalString form (wrapped literal sites). c_str() is the
-** sanctioned transitional bridge into 'lexerror' until the
-** message-plumbing (lexerror/addinfo) migrates off const char*.
-*/
 l_noret luaX_syntaxerror(LexState* ls, const InternalString* msg)
 {
   lexerror(ls, msg, ls->t.token);
@@ -170,7 +158,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
   {                                /* create a new entry */
     StkId stv = L->top++; /* reserve stack space for string */
     setslots(L, stv, ts);         /* push (anchor) the string on the stack */
-    TValue sv = getslot(L, stv); /* the slot anchors the string */
+    TValue sv = getslot(L, stv);
     luaH_set(L, ls->h, &sv, &sv);  /* t[string] = string */
     /* table is not a metatable, so it does not need to invalidate cache */
     luaC_checkGC(L);
@@ -512,7 +500,7 @@ static void read_string(LexState* ls, int del, Token* seminfo)
         break;
       }
       case 'u':
-        utf8esc(ls); /* saves the sequence itself */
+        utf8esc(ls);
         break;
       case '\n':
       case '\r':

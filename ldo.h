@@ -11,7 +11,6 @@
 #include "lstate.h"
 #include "lzio.h"
 
-/* savestack/restorestack are now identity — StkId is already an index */
 
 /* type of protected functions, to be ran by 'runprotected' */
 typedef void (*Pfunc)(lua_State* L, void* ud);
@@ -39,14 +38,10 @@ LUAI_FUNC int luaD_growstack(lua_State* L, int n, int raiseerror);
 
 static l_forceinline void luaD_checkstack(lua_State* L, int n)
 {
-  /* written as an addition: 'L->top' may legitimately be above
-     'stack_last' (using the extra error space), and an unsigned
-     'stack_last - top' would underflow */
   if (l_unlikely(L->top + (StkId)n >= L->stack_last))
     luaD_growstack(L, n, 1);
 }
 
-/* check stack size, preserving 'p' (no-op since indices survive realloc) */
 static l_forceinline void checkstackp(lua_State* L, int n, StkId p)
 {
   (void) p;

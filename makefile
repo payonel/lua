@@ -32,8 +32,6 @@ CWARNSCPP= \
 	-Wconversion \
 	# -Wcast-qual \
 	# -Wformat=2 \
-	# -Wsign-conversion \
-	# -Wconversion  \
 
 # Warnings for gcc, not valid for clang
 CWARNGCC= \

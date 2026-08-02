@@ -37,11 +37,6 @@
 */
 constexpr int LUA_MAXCAPTURES = 32;
 
-/*
-** Byte at offset 'i' of an engine string, as unsigned 0..255; reads
-** '\0' at/past the end (the bound check replaces upstream's reliance
-** on the C terminator when a cursor peeks one past the end).
-*/
 static inline int istrbyte(const InternalString* s, size_t i)
 {
   return (i < s->size()) ? s->byteAt(i) : 0;
@@ -244,7 +239,7 @@ static int writer(lua_State* L, std::string_view b, void* ud)
     luaL_buffinit(L, &state->B);
   }
   if (b.data() == nullptr)
-  {                             /* finishing dump? (Java: null byte[]) */
+  {
     luaL_pushresult(&state->B); /* push result */
     lua_replace(L, 1);          /* move it to reserved slot */
   }
@@ -300,7 +295,6 @@ static void trymt(lua_State* L, std::string_view mtkey, std::string_view opname)
   if (l_unlikely(lua_type(L, 2) == LUA_TSTRING ||
                  !luaL_getmetafield(L, 2, HostString{mtkey})))
   {
-    /* borrowed views of the static typenames (engine strings) */
     std::string_view t1 = lua_typenamei(L, lua_type(L, -2))->view();
     std::string_view t2 = lua_typenamei(L, lua_type(L, -1))->view();
     lua_pushlstring(L, opname, 0, opname.size());
@@ -317,8 +311,6 @@ static int arith(lua_State* L, int op, std::string_view mtname)
   if (tonum(L, 1) && tonum(L, 2))
     lua_arith(L, op); /* result will be on the top */
   else
-    /* constant slice of a literal ("__add" -> "add"; Java: its own
-       String constant) */
     trymt(L, mtname, mtname.substr(2));
   return 1;
 }
@@ -386,22 +378,14 @@ static const luaL_Reg stringmetamethods[] = {
 constexpr int CAP_UNFINISHED = (-1);
 constexpr int CAP_POSITION = (-2);
 
-/*
-** Pattern-matching state. Cursor discipline (RULED 2026-07-29): the
-** two strings are hoisted here as InternalString* once; every
-** interior position travels as a plain integer offset — (string,
-** offset) is the only interior-pointer shape that transcribes to
-** Java. Offsets are ptrdiff_t (Java: int) and -1 is the "no match"
-** sentinel (was nullptr in the pointer version).
-*/
 constexpr ptrdiff_t NOMATCH = -1;
 
 struct MatchState
 {
-  const InternalString* src; /* source string (offsets 0..src_end) */
-  const InternalString* p;   /* pattern string (offsets 0..p_end) */
-  ptrdiff_t src_end;         /* end offset of source ('\0' position) */
-  ptrdiff_t p_end;           /* end offset of pattern */
+  const InternalString* src;
+  const InternalString* p;
+  ptrdiff_t src_end;
+  ptrdiff_t p_end;
   lua_State* L;
   int matchdepth; /* control for recursive depth (to avoid C stack overflow) */
   int level;      /* total number of captures (finished or unfinished) */
@@ -415,13 +399,6 @@ struct MatchState
 /* recursive function */
 static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p);
 
-/*
-** Byte at offset 'i' of the source/pattern, as unsigned 0..255. The
-** end offset reads as '\0': upstream's cursors relied on the C
-** terminator when peeking one past a validated position (suffix
-** checks, '%f' at end); the bound check reproduces that exactly
-** (InternalString has no terminator in the Java port).
-*/
 static inline int srcbyte(const MatchState* ms, ptrdiff_t i)
 {
   return (i < ms->src_end) ? ms->src->byteAt(((size_t)(i))) : 0;
@@ -685,7 +662,7 @@ static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
 {
   if (l_unlikely(ms->matchdepth-- == 0))
     luaL_error(ms->L, HostString(lit<"pattern too complex">()->view()));
-  for (;;) /* loop to optimize tail recursion: 'continue' == return match(ms, s, p) */
+  for (;;)
   {
     if (p == ms->p_end) /* end of pattern? */
       break;
@@ -703,7 +680,7 @@ static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
       break;
     }
     else if (patbyte(ms, p) == '$' && (p + 1) == ms->p_end)
-    { /* '$' as the last char in pattern (otherwise it is a plain class below) */
+    {
       s = (s == ms->src_end) ? s : NOMATCH; /* check end of string */
       break;
     }
@@ -795,11 +772,6 @@ static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
   return s;
 }
 
-/*
-** Find the pattern bytes s2[0..l2) inside s1[off1..off1+l1). Returns
-** the match offset into 's1', or npos when absent. (Java: indexOf
-** over (byte[], off, len) pairs.)
-*/
 static size_t lmemfind(std::string_view s1, size_t off1, size_t l1,
                        std::string_view s2, size_t l2)
 {
@@ -809,16 +781,15 @@ static size_t lmemfind(std::string_view s1, size_t off1, size_t l1,
     return std::string_view::npos; /* avoids a negative 'l1' */
   else
   {
-    size_t p = off1;      /* scan offset into 's1' */
-    l2--;                 /* 1st char is checked by the find below */
+    size_t p = off1;
+    l2--;
     l1 = l1 - l2;         /* 's2' cannot be found after that */
     while (l1 > 0)
     {
-      size_t init = s1.find(s2[0], p); /* search for the 1st char */
+      size_t init = s1.find(s2[0], p);
       if (init == std::string_view::npos || init >= p + l1)
-        break;                         /* not found in the window */
+        break;
       init++; /* 1st char is already checked */
-      /* compare the rest (Java: bounded byte loop / mismatch) */
       if (memcmp(s1.data() + init, s2.data() + 1, l2) == 0)
         return init - 1;
       else
@@ -889,16 +860,9 @@ static int push_captures(MatchState* ms, ptrdiff_t s, ptrdiff_t e)
 /* check whether pattern has no special characters */
 static int nospecials(std::string_view p)
 {
-  /* bounded scan over the whole view (upstream hopped strpbrk over
-     embedded NULs; NUL is not a special, so one find covers all) */
   return p.find_first_of(SPECIALS->view()) == std::string_view::npos;
 }
 
-/*
-** Prepare state for matches. These fields are not affected by each match.
-** An anchored pattern skips its '^' via the caller's start offset;
-** the pattern string itself is never "advanced".
-*/
 static void prepstate(MatchState* ms, lua_State* L,
                       const InternalString* s, const InternalString* p)
 {
@@ -985,8 +949,8 @@ static int str_match(lua_State* L)
 struct GMatchState
 {
   ptrdiff_t src;       /* current position */
-  ptrdiff_t p;         /* pattern start offset */
-  ptrdiff_t lastmatch; /* end of last match (NOMATCH if none) */
+  ptrdiff_t p;
+  ptrdiff_t lastmatch;
   MatchState ms;       /* match state */
 };
 
@@ -1033,7 +997,7 @@ static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
   lua_State* L = ms->L;
   const InternalString* news = lua_toistring(L, 3);
   std::string_view nv = news->view();
-  size_t nb = 0; /* scan offset into 'news' */
+  size_t nb = 0;
   size_t pc;
   while ((pc = nv.find(L_ESC, nb)) != std::string_view::npos)
   {
@@ -1212,7 +1176,7 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
     return ((int)(r.size()));
   }
   else if (x == 0)
-  { /* can be -0... : "0" or "-0" followed by a zero hex exponent */
+  {
     std::string_view r = std::signbit(x) ? lit<"-0x0p+0">()->view() : lit<"0x0p+0">()->view();
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
@@ -1239,7 +1203,7 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
         m = adddigit(area, off + n++, m * 16);
       } while (m > 0);
     }
-    area[off + n++] = 'p'; /* add exponent, always signed */
+    area[off + n++] = 'p';
     area[off + n++] = (e >= 0) ? '+' : '-';
     std::string es = std::to_string(e >= 0 ? e : -e);
     assert(n + es.size() < sz);
@@ -1254,7 +1218,7 @@ static int lua_number2strx(lua_State* L, std::span<char> area, size_t off,
                            unsigned sz, std::string_view fmt, lua_Number x)
 {
   int n = num2straux(area, off, sz, x);
-  if (fmt[1] == 'A') /* fmt is "%a" or "%A" (no length modifier for double) */
+  if (fmt[1] == 'A')
   {
     int i;
     for (i = 0; i < n; i++)
@@ -1323,7 +1287,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
       luaL_addchar(b, ((char)(c)));
     }
     else if (iscntrl(c))
-    { /* '\ddd' escape; 3 digits when followed by another digit */
+    {
       std::string d = std::to_string(c);
       luaL_addchar(b, '\\');
       if (isdigit(istrbyte(s, i + 1)))
@@ -1396,7 +1360,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
     { /* integers */
       lua_Integer n = lua_tointeger(L, arg);
       if (n == LUA_MININTEGER)
-      { /* corner case: use hex, which reads back as the same value */
+      {
         area[off] = '0';
         area[off + 1] = 'x';
         std::to_chars_result res = std::to_chars(
@@ -1418,7 +1382,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
   case LUA_TNIL:
   case LUA_TBOOLEAN:
   {
-    luaL_toistring(L, arg); /* internal twin: push only */
+    luaL_toistring(L, arg);
     luaL_addvalue(b);
     break;
   }
@@ -1468,11 +1432,6 @@ static void checkformat(lua_State* L, std::string_view form,
   }
 }
 
-/*
-** Get a conversion specification (starting just after its '%' at
-** offset 'i' of 'sf') and copy it to 'form'.
-** Return the offset of its last character.
-*/
 static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
                         std::span<char> form, size_t* formlen)
 {
@@ -1487,42 +1446,31 @@ static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
   if (len >= MAX_FORMAT - 10)
     luaL_error(L, HostString(lit<"invalid format (too long)">()->view()));
   form[0] = '%';
-  /* Java: System.arraycopy(sf, i, form, 1, len) */
   memcpy(form.data() + 1, sv.data() + i, len * sizeof(char));
   form[1 + len] = '\0';
   *formlen = 1 + len;
   return i + len - 1;
 }
 
-/*
-** A parsed conversion specification. Filled by 'scanformat' from a
-** 'form' already validated by 'checkformat'.
-*/
 struct FormatSpec
 {
-  bool left;     /* '-' flag */
-  bool plus;     /* '+' flag */
-  bool space;    /* ' ' flag */
-  bool alt;      /* '#' flag */
-  bool zero;     /* '0' flag */
-  int width;     /* minimum field width (0 if absent) */
-  int precision; /* precision (-1 if absent) */
-  char conv;     /* conversion specifier (last character of 'form') */
+  bool left;
+  bool plus;
+  bool space;
+  bool alt;
+  bool zero;
+  int width;
+  int precision;
+  char conv;
 };
 
-/*
-** Parse a validated conversion specification into a FormatSpec.
-** 'form' starts with '%' and ends with the conversion specifier;
-** flags may repeat, width and precision have at most 2 digits each
-** (both guaranteed by 'checkformat').
-*/
 static void scanformat(std::string_view form, FormatSpec* spec)
 {
   size_t p = 1; /* skip '%' */
   *spec = FormatSpec{};
   spec->precision = -1;
   for (;; p++)
-  { /* flags (any order, repeats allowed) */
+  {
     switch (sv_byteat(form, p))
     {
       case '-': spec->left = true; continue;
@@ -1533,10 +1481,10 @@ static void scanformat(std::string_view form, FormatSpec* spec)
     }
     break;
   }
-  while (isdigit(sv_byteat(form, p))) /* width */
+  while (isdigit(sv_byteat(form, p)))
     spec->width = spec->width * 10 + (form[p++] - '0');
   if (sv_byteat(form, p) == '.')
-  { /* precision ('.' alone means 0) */
+  {
     p++;
     spec->precision = 0;
     while (isdigit(sv_byteat(form, p)))
@@ -1545,13 +1493,6 @@ static void scanformat(std::string_view form, FormatSpec* spec)
   spec->conv = form[form.size() - 1];
 }
 
-/*
-** Assemble a formatted item into 'buff' from its sign/prefix and body,
-** applying width padding: left-justified pads spaces on the right;
-** zero padding (when permitted for the item) goes between the prefix
-** and the body; otherwise spaces pad on the left. Returns the number
-** of bytes written.
-*/
 static int packformat(std::span<char> area, size_t off, unsigned maxitem,
                       const FormatSpec* spec,
                       std::string_view prefix, std::string_view body,
@@ -1563,11 +1504,11 @@ static int packformat(std::span<char> area, size_t off, unsigned maxitem,
   size_t width = ((size_t)(spec->width));
   size_t total = (content > width) ? content : width;
   size_t pad = total - content;
-  size_t pos = off; /* write position (Java: arraycopy/fill offsets) */
+  size_t pos = off;
   assert(total < maxitem);
   (void) maxitem;
   if (spec->left)
-  { /* '[prefix][body][spaces]' */
+  {
     memcpy(area.data() + pos, prefix.data(), prefixlen);
     pos += prefixlen;
     memcpy(area.data() + pos, body.data(), bodylen);
@@ -1575,7 +1516,7 @@ static int packformat(std::span<char> area, size_t off, unsigned maxitem,
     memset(area.data() + pos, ' ', pad);
   }
   else if (spec->zero && zeropadok)
-  { /* '[prefix][zeros][body]' */
+  {
     memcpy(area.data() + pos, prefix.data(), prefixlen);
     pos += prefixlen;
     memset(area.data() + pos, '0', pad);
@@ -1583,7 +1524,7 @@ static int packformat(std::span<char> area, size_t off, unsigned maxitem,
     memcpy(area.data() + pos, body.data(), bodylen);
   }
   else
-  { /* '[spaces][prefix][body]' */
+  {
     memset(area.data() + pos, ' ', pad);
     pos += pad;
     memcpy(area.data() + pos, prefix.data(), prefixlen);
@@ -1593,13 +1534,6 @@ static int packformat(std::span<char> area, size_t off, unsigned maxitem,
   return ((int)(total));
 }
 
-/*
-** Format one integer item; shared body for the 'd'/'i', 'u', and
-** 'o'/'x'/'X' conversions, which differ only in their accepted flags.
-** Digits come from 'std::to_chars' on the magnitude; sign, base
-** prefix, precision zero-extension, and padding are applied
-** explicitly. Returns the number of bytes written to 'buff'.
-*/
 static int formatint(lua_State* L, int arg, std::string_view form,
                      std::span<char> area, size_t off,
                      unsigned maxitem, std::string_view flags)
@@ -1612,7 +1546,6 @@ static int formatint(lua_State* L, int arg, std::string_view form,
   int base = (spec.conv == 'o') ? 8
              : (spec.conv == 'x' || spec.conv == 'X') ? 16
                                                       : 10;
-  /* magnitude for signed conversions; two's-complement bits otherwise */
   unsigned long long u = (issigned && n < 0)
                              ? 0ULL - ((unsigned long long)(n))
                              : ((unsigned long long)(n));
@@ -1628,17 +1561,17 @@ static int formatint(lua_State* L, int arg, std::string_view form,
   char body[MAX_ITEM];
   size_t blen = 0;
   if (u == 0 && spec.precision == 0)
-    ; /* explicit zero precision with value 0: no digits */
+    ;
   else
   {
     size_t mindigits = (spec.precision >= 0) ? ((size_t)(spec.precision)) : 1;
     while (blen + ndigits < mindigits)
-      body[blen++] = '0'; /* zero-extend to the precision */
+      body[blen++] = '0';
     memcpy(body + blen, digits, ndigits);
     blen += ndigits;
   }
   if (spec.alt && spec.conv == 'o' && (blen == 0 || body[0] != '0'))
-  { /* '#o': force a leading zero digit */
+  {
     memmove(body + 1, body, blen);
     body[0] = '0';
     blen++;
@@ -1646,7 +1579,7 @@ static int formatint(lua_State* L, int arg, std::string_view form,
   char prefix[2];
   size_t prefixlen = 0;
   if (issigned)
-  { /* sign character, if any */
+  {
     if (n < 0)
       prefix[prefixlen++] = '-';
     else if (spec.plus)
@@ -1655,23 +1588,15 @@ static int formatint(lua_State* L, int arg, std::string_view form,
       prefix[prefixlen++] = ' ';
   }
   else if (spec.alt && (spec.conv == 'x' || spec.conv == 'X') && u != 0)
-  { /* '#x': base prefix (nonzero values only) */
+  {
     prefix[prefixlen++] = '0';
     prefix[prefixlen++] = spec.conv;
   }
-  /* an explicit precision disables zero padding for integers */
   return packformat(area, off, maxitem, &spec,
                     std::string_view{prefix, prefixlen},
                     std::string_view{body, blen}, spec.precision < 0);
 }
 
-/*
-** Format one float item for the 'f', 'e'/'E', and 'g'/'G' conversions.
-** The digits come from 'std::to_chars' with explicit precision (which
-** matches printf output byte for byte); the '#' flag, sign flags, and
-** padding are applied explicitly. Returns the number of bytes written
-** to 'buff'.
-*/
 static int formatfloat(lua_State* L, int arg, std::string_view form,
                        std::span<char> area, size_t off, unsigned maxitem)
 {
@@ -1683,7 +1608,7 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
   int precision = (spec.precision >= 0) ? spec.precision : 6;
   char prefix[1];
   size_t prefixlen = 0;
-  if (std::signbit(n)) /* sign applies to NaN and infinities too */
+  if (std::signbit(n))
     prefix[prefixlen++] = '-';
   else if (spec.plus)
     prefix[prefixlen++] = '+';
@@ -1693,7 +1618,7 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
   size_t blen;
   bool zeropadok = true;
   if (std::isinf(n) || std::isnan(n))
-  { /* fixed representations; zero padding does not apply */
+  {
     std::string_view r = std::isinf(n) ? "inf" : "nan";
     blen = r.size();
     memcpy(body, r.data(), blen);
@@ -1705,14 +1630,14 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
                            : (lower == 'e') ? std::chars_format::scientific
                                             : std::chars_format::general;
     if (lower == 'g' && precision == 0)
-      precision = 1; /* '%g' treats zero precision as 1 */
+      precision = 1;
     std::to_chars_result res = std::to_chars(body, body + sizeof(body),
                                              std::fabs(n), cf, precision);
     assert(res.ec == std::errc());
     blen = ((size_t)(res.ptr - body));
     if (spec.alt)
-    { /* '#': always show the radix point; '%g' also keeps zeros */
-      size_t epos = 0; /* position of the exponent (or end of body) */
+    {
+      size_t epos = 0;
       bool haspoint = false;
       while (epos < blen && body[epos] != 'e')
       {
@@ -1721,13 +1646,13 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
         epos++;
       }
       if (!haspoint)
-      { /* insert the radix point before the exponent */
+      {
         memmove(body + epos + 1, body + epos, blen - epos);
         body[epos++] = '.';
         blen++;
       }
       if (lower == 'g')
-      { /* restore trailing zeros up to 'precision' significant digits */
+      {
         size_t sig = 0;
         bool seennonzero = false;
         for (size_t i = 0; i < epos; i++)
@@ -1741,7 +1666,7 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
           }
         }
         if (sig == 0)
-          sig = 1; /* the value 0 has one significant digit */
+          sig = 1;
         size_t zeros = (((size_t)(precision)) > sig) ? precision - sig : 0;
         memmove(body + epos + zeros, body + epos, blen - epos);
         memset(body + epos, '0', zeros);
@@ -1750,7 +1675,7 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
     }
   }
   if (spec.conv == 'E' || spec.conv == 'G')
-  { /* uppercase the body ('e', and 'inf'/'nan') */
+  {
     for (size_t i = 0; i < blen; i++)
       body[i] = ((char)(toupper(((unsigned char)(body[i])))));
   }
@@ -1765,7 +1690,7 @@ static int str_format(lua_State* L)
   int arg = 1;
   const InternalString* sf = luaL_checkistring(L, arg);
   size_t sfl = sf->size();
-  size_t i = 0; /* cursor into 'sf' */
+  size_t i = 0;
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   while (i < sfl)
@@ -1780,7 +1705,7 @@ static int str_format(lua_State* L)
     else
     {                                              /* format item */
       char form[MAX_FORMAT];                        /* to store the format ('%...') */
-      size_t formlen;                               /* its length */
+      size_t formlen;
       unsigned maxitem = MAX_ITEM;                  /* maximum length for the result */
       size_t boff = luaL_prepbuffsize(&b, maxitem); /* to put result */
       int nb = 0;                                   /* number of bytes in result */
@@ -1838,8 +1763,8 @@ static int str_format(lua_State* L)
         char body[MAX_ITEM];
         size_t blen;
         if (lua_islightcfunction(L, arg))
-        { /* light C function — body is its FuncAddress string */
-          std::string fa = lua_funcaddressi(L, arg); /* engine bytes */
+        {
+          std::string fa = lua_funcaddressi(L, arg);
           blen = fa.size();
           assert(blen < sizeof(body));
           memcpy(body, fa.data(), blen);
@@ -1848,13 +1773,13 @@ static int str_format(lua_State* L)
         {
           const void* p = lua_topointer(L, arg);
           if (p == nullptr)
-          { /* null pointer has a fixed representation */
+          {
             const std::string_view nullrep = lit<"(null)">()->view();
             blen = nullrep.size();
             memcpy(body, nullrep.data(), blen);
           }
           else
-          { /* "0x" + lowercase hex digits */
+          {
             body[0] = '0';
             body[1] = 'x';
             std::to_chars_result res = std::to_chars(
@@ -1941,29 +1866,17 @@ constexpr int MC = ((1 << NB) - 1);
 /* size of a lua_Integer */
 constexpr int SZINT = ((int) sizeof(lua_Integer));
 
-/* Native byte order for pack/unpack's '=' mode. The host is guaranteed
-   little-endian (static_assert in llimits.h), so native-mode blobs are
-   always little-endian; on a big-endian host their layout would have
-   differed (that build fails the assert instead). */
 constexpr bool nativeendian_little = (std::endian::native == std::endian::little);
 
-/*
-** information to pack/unpack stuff. The format string is hoisted here
-** as an InternalString* and the cursor is a plain offset ('pos') —
-** the (string, offset) interior-cursor ruling. A read at/past the end
-** (or at an embedded NUL) yields '\0', preserving upstream's
-** terminator-based stops.
-*/
 struct Header
 {
   lua_State* L;
   const InternalString* fmt; /* format string */
-  size_t pos;                /* cursor into 'fmt' */
+  size_t pos;
   int islittle;
   unsigned maxalign;
 };
 
-/* current format byte (0 at end / embedded NUL — see above) */
 static inline int fmtbyte(const Header* h)
 {
   return istrbyte(h->fmt, h->pos);
@@ -2045,7 +1958,6 @@ static void initheader(lua_State* L, Header* h, const InternalString* fmt)
 */
 static KOption getoption(Header* h, size_t* size)
 {
-  /* native maximum alignment requirement */
   constexpr size_t maxalign = alignof(std::max_align_t);
   int opt = fmtbyte(h);
   h->pos++;
@@ -2262,8 +2174,6 @@ static int str_pack(lua_State* L)
     {                                             /* C float */
       float f = (float) luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      /* move 'f' to final result, correcting endianness if needed
-         (raw-memory boundary: 'copywithendian' is category-6 byte moving) */
       copywithendian(luaL_buffarea(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
       luaL_addsize(&b, size);
       break;
@@ -2272,8 +2182,6 @@ static int str_pack(lua_State* L)
     {                                          /* Lua float */
       lua_Number f = luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      /* move 'f' to final result, correcting endianness if needed
-         (raw-memory boundary: 'copywithendian' is category-6 byte moving) */
       copywithendian(luaL_buffarea(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
       luaL_addsize(&b, size);
       break;
@@ -2282,8 +2190,6 @@ static int str_pack(lua_State* L)
     {                                               /* C double */
       double f = (double) luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      /* move 'f' to final result, correcting endianness if needed
-         (raw-memory boundary: 'copywithendian' is category-6 byte moving) */
       copywithendian(luaL_buffarea(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
       luaL_addsize(&b, size);
       break;
@@ -2298,7 +2204,6 @@ static int str_pack(lua_State* L)
       {                            /* does it need padding? */
         size_t psize = size - len; /* pad size */
         size_t off = luaL_prepbuffsize(&b, psize);
-        /* Java: Arrays.fill(buf, off, off + psize, PACKPADBYTE) */
         memset(luaL_buffarea(&b).data() + off, LUAL_PACKPADBYTE, psize);
         luaL_addsize(&b, psize);
       }
@@ -2437,7 +2342,6 @@ static int str_unpack(lua_State* L)
     case Kfloat:
     {
       float f;
-      /* raw-memory boundary: category-6 byte moving */
       copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
@@ -2445,7 +2349,6 @@ static int str_unpack(lua_State* L)
     case Knumber:
     {
       lua_Number f;
-      /* raw-memory boundary: category-6 byte moving */
       copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, f);
       break;
@@ -2453,7 +2356,6 @@ static int str_unpack(lua_State* L)
     case Kdouble:
     {
       double f;
-      /* raw-memory boundary: category-6 byte moving */
       copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
@@ -2474,7 +2376,7 @@ static int str_unpack(lua_State* L)
     }
     case Kzstr:
     {
-      size_t zend = data.find('\0', pos); /* bounded scan (no NUL reliance) */
+      size_t zend = data.find('\0', pos);
       luaL_argcheck(L, zend != std::string_view::npos, 2,
                     HostString(lit<"unfinished string for format 'z'">()->view()));
       size_t len = zend - pos;

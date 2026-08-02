@@ -124,9 +124,9 @@ static inline int hashpointer(const Table* t, lua_CFunction p)
 */
 static const Node dummynode_ = {
     {{0, nullptr}, LUA_VEMPTY}, /* val (value and type) */
-    LUA_TDEADKEY,         /* key_tt */
-    0,                    /* next */
-    {0, nullptr}             /* key_val */
+    LUA_TDEADKEY,
+    0,
+    {0, nullptr}
 };
 
 static const TValue absentkey = {{0, nullptr}, LUA_VABSTKEY};
@@ -300,13 +300,6 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
   }
 }
 
-/*
-** "Generic" search version, returning the index of the Node that
-** holds the key, or -1 if the key is not in the hash part. (Not that
-** generic: not valid for integers, which may be in array part, nor
-** for floats with integral values.) See explanation about 'deadok'
-** in function 'equalkey'.
-*/
 static int nodegeneric(Table* t, const TValue* key, int deadok)
 {
   int i = mainpositionTV(t, key);
@@ -325,7 +318,6 @@ static int nodegeneric(Table* t, const TValue* key, int deadok)
   }
 }
 
-/* value-returning form of 'nodegeneric' */
 static const TValue* getgeneric(Table* t, const TValue* key, int deadok)
 {
   int idx = nodegeneric(t, key, deadok);
@@ -1002,10 +994,6 @@ static void luaH_newkey(lua_State* L, Table* t, const TValue* key,
   }
 }
 
-/*
-** search function for integers in the hash part: returns the index
-** of the Node holding the key, or -1 if the key is not in the table
-*/
 static int nodeintfromhash(Table* t, lua_Integer key)
 {
   int i = hashint(t, key);
@@ -1026,7 +1014,6 @@ static int nodeintfromhash(Table* t, lua_Integer key)
   return -1;
 }
 
-/* value-returning form of 'nodeintfromhash' */
 static const TValue* getintfromhash(Table* t, lua_Integer key)
 {
   int idx = nodeintfromhash(t, key);
@@ -1062,10 +1049,6 @@ lu_byte luaH_getint(Table* t, lua_Integer key, TValue* res)
     return finishnodeget(getintfromhash(t, key), res);
 }
 
-/*
-** search function for short strings: returns the index of the Node
-** holding the key, or -1 if the key is not in the table
-*/
 static int nodeshortstr(Table* t, TString* key)
 {
   int i = hashstr(t, key);

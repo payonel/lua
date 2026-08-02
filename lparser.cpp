@@ -1729,7 +1729,7 @@ static void breakstat(LexState* ls, int line)
       break;
   }
   if (bl == nullptr)
-    luaX_syntaxerror(ls, lit<"break outside loop">()); /* does not return */
+    luaX_syntaxerror(ls, lit<"break outside loop">());
   bl->isloop = 2; /* signal that block has pending breaks */
   luaX_next(ls);  /* skip break */
   newgotoentry(ls, ls->brkn, line);
@@ -1871,7 +1871,7 @@ static void fornum(LexState* ls, TString* varname, int line)
   const InternalString* forstate = lit<"(for state)">();
   new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));
   new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));
-  new_varkind(ls, varname, RDKCONST); /* control variable (read only) */
+  new_varkind(ls, varname, RDKCONST);
   checknext(ls, '=');
   exp1(ls); /* initial value */
   checknext(ls, ',');
@@ -1900,7 +1900,7 @@ static void forlist(LexState* ls, TString* indexname)
   new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));  /* iterator function */
   new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));  /* state */
   new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));  /* closing var. (after swap) */
-  new_varkind(ls, indexname, RDKCONST); /* control variable (read only) */
+  new_varkind(ls, indexname, RDKCONST);
   /* other declared variables */
   while (testnext(ls, ','))
   {

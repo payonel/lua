@@ -134,26 +134,13 @@ constexpr int KGC_INC = 0; /* incremental gc */
 constexpr int KGC_GENMINOR = 1; /* generational gc in minor (regular) mode */
 constexpr int KGC_GENMAJOR = 2; /* generational in major mode */
 
-/*
-** Information about a call.
-** Fields 'savedpc', 'trap', and 'nextraargs' are used only for Lua
-** functions; fields 'k', 'old_errfunc', and 'ctx' are used only for C
-** functions. (They were unions in upstream Lua; flattened here —
-** memory parity is a non-goal.)
-** - field 'funcidx' is used only by C functions while doing a
-** protected call;
-** - field 'nyield' is used only while a function is "doing" an
-** yield (from the yield until the next resume);
-** - field 'nres' is used only while closing tbc variables when
-** returning from a function;
-*/
 struct CallInfo
 {
   StkId func;                       /* function index in the stack */
   StkId top;                        /* top for this function */
   struct CallInfo *previous, *next; /* dynamic call link */
   /* only for Lua functions: */
-  int savedpc; /* index of next instruction in 'p->code' */
+  int savedpc;
   volatile l_signalT trap; /* function is tracing lines/counts */
   int nextraargs;          /* # of extra arguments in vararg functions */
   /* only for C functions: */
@@ -260,24 +247,16 @@ struct lua_State : GCObject
   CallInfo* ci;    /* call info for current function */
   StkId stack_last; /* end of stack (last element + 1) */
   struct
-  { /* the stack: three parallel columns, indexed in lockstep by StkId
-       (the Truffle frame layout — long[]/Object[]/byte[] in the port).
-       A slot's payload rides 'prim' (integers, float bits, light-udata
-       and C-function pointer bits) or 'ref' (collectable objects); the
-       'tag' column says which. Writes always define both payload
-       columns: 'ref' is nulled on primitive/nil stores (so a dead
-       reference never lingers — in the port the JVM GC scans the
-       Object[] column natively), 'prim' is zeroed on reference
-       stores. */
-    lua_Integer* prim; /* payload column */
-    GCObject** ref;    /* reference column */
-    lu_byte* tag;      /* type-tag column */
+  {
+    lua_Integer* prim;
+    GCObject** ref;
+    lu_byte* tag;
   } stack; /* stack base */
   UpVal* openupval;    /* list of open upvalues in this stack */
-  StkId tbclist;    /* top of to-be-closed list (0 when empty) */
-  StkId* tbc;       /* array of indices of to-be-closed variables */
+  StkId tbclist;
+  StkId* tbc;
   int ntbc;         /* number of elements in 'tbc' */
-  int sizetbc;      /* allocated size of 'tbc' */
+  int sizetbc;
   GCObject* gclist;
   struct lua_State* twups;      /* list of threads with open upvalues */
   struct lua_longjmp* errorJmp; /* current error recover point */
@@ -297,11 +276,6 @@ struct lua_State : GCObject
   } transferinfo;
 };
 
-/*
-** Set a thread value. Defined here rather than with the other set
-** functions in lobject.h because the GCObject upcast needs the
-** complete lua_State type.
-*/
 static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
 {
   assert(x->tt == LUA_VTHREAD);
@@ -310,11 +284,6 @@ static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
   checkliveness(L, obj);
 }
 
-/*
-** Read a thread value. Defined here rather than with the other get
-** functions in lobject.h because the downcast needs the complete
-** lua_State type.
-*/
 static l_forceinline lua_State* thvalue(const TValue* o)
 {
   assert(o->tt_ == ctb(LUA_VTHREAD));
@@ -327,43 +296,7 @@ static l_forceinline global_State* G(lua_State* L)
   return L->l_G;
 }
 
-/*
-** {==================================================================
-** Slot functions — typed access to Lua-stack slots by index
-**
-** The stack-facing half of the value-representation boundary (the row
-** half lives in lobject.h). All access to a stack slot's payload or
-** tag goes through these (L, StkId) forms; nothing outside this
-** section may derive a TValue* from a stack index. This is the
-** Truffle frame API shape — getInt(slot)/setObject(slot)/getTag(slot)
-** — and the transpose to parallel prim/ref/tag columns happens
-** entirely inside these bodies.
-**
-** Access contract (binding for call sites and for the managed port):
-** - The default currency for a stack value is its NAME: the (L, StkId)
-**   handle. Prefer typed reads (slottag, slotival, slothval, ...) and
-**   slot-form function overloads; prefer copyslot/setobj-from-slot for
-**   transfers. None of these materialize a row at the call site.
-** - 'getslot' returns a SNAPSHOT: a shallow row copy — the ref field
-**   is shared, referents are NEVER cloned; deep copy does not exist
-**   in this codebase. Snapshots are immutable by convention (mutate a
-**   local only to store it back through a set) and are passed by
-**   pointer/reference; in the managed port a snapshot is one Value
-**   object and everything downstream is an ordinary reference.
-** - A row at a call site must be JUSTIFIED by one of: (a) the callee
-**   parameter is storage-polymorphic (may receive slots, constants,
-**   table cells, or upvalues — e.g. luaH_* keys/values,
-**   luaV_finishget/finishset operands); (b) the value is consumed
-**   more than once or across a write that may alias its slot
-**   (snapshot semantics); (c) read-modify-write (materialize, modify,
-**   store back). Single-consumer slot-sourced reads should use a
-**   slot-form overload instead — add one rather than materializing.
-** - 'slotrow' is the transitional bridge to the row form and must not
-**   escape this section; it dies with the transpose (step D).
-** ===================================================================
-*/
 
-/* tag */
 static l_forceinline lu_byte slottag(lua_State* L, StkId idx)
 {
   return L->stack.tag[idx];
@@ -374,7 +307,6 @@ static l_forceinline void setslottag(lua_State* L, StkId idx, lu_byte tt)
   L->stack.tag[idx] = tt;
 }
 
-/* whole-slot copies (the setobj family over slots) */
 static l_forceinline TValue getslot(lua_State* L, StkId idx)
 {
   TValue v;
@@ -386,10 +318,6 @@ static l_forceinline TValue getslot(lua_State* L, StkId idx)
 
 static l_forceinline void setslot(lua_State* L, StkId idx, const TValue* v)
 {
-  /* discriminated store: only the payload column named by the tag is
-     read from the row (rows built by typed setters define only that
-     field); the other column is written to a defined empty value —
-     the exact managed setSlot */
   if (v->tt_ & BIT_ISCOLLECTABLE)
   {
     L->stack.ref[idx] = v->value_.ref;
@@ -410,22 +338,18 @@ static l_forceinline void copyslot(lua_State* L, StkId dst, StkId src)
   setslot(L, dst, &v);
 }
 
-/* cross-stack transfer: slot of 'from' -> slot of 'to' (no row at the site) */
 static l_forceinline void copyslot(lua_State* to, StkId dst, lua_State* from, StkId src)
 {
   TValue v = getslot(from, src);
   setslot(to, dst, &v);
 }
 
-/* transfer a slot's value into non-stack row storage (upvalue cells,
-** C-closure upvalues, userdata fields) — no row at the site */
 static l_forceinline void setobj(lua_State* L, TValue* dst, StkId src)
 {
   TValue v = getslot(L, src);
   setobj(L, dst, &v);
 }
 
-/* typed reads */
 static l_forceinline lua_Integer slotival(lua_State* L, StkId idx)
 {
   TValue v = getslot(L, idx);
@@ -504,29 +428,28 @@ static l_forceinline CClosure* slotclCval(lua_State* L, StkId idx)
   return clCvalue(&v);
 }
 
-/* typed writes */
 static l_forceinline void setslotnil(lua_State* L, StkId idx)
 {
   L->stack.tag[idx] = LUA_VNIL;
-  L->stack.ref[idx] = nullptr; /* release the reference (GC-pinning parity with the port) */
+  L->stack.ref[idx] = nullptr;
 }
 
 static l_forceinline void setslotempty(lua_State* L, StkId idx)
 {
   L->stack.tag[idx] = LUA_VEMPTY;
-  L->stack.ref[idx] = nullptr; /* release the reference (GC-pinning parity with the port) */
+  L->stack.ref[idx] = nullptr;
 }
 
 static l_forceinline void setslotbt(lua_State* L, StkId idx)
 {
   L->stack.tag[idx] = LUA_VTRUE;
-  L->stack.ref[idx] = nullptr; /* release the reference (GC-pinning parity with the port) */
+  L->stack.ref[idx] = nullptr;
 }
 
 static l_forceinline void setslotbf(lua_State* L, StkId idx)
 {
   L->stack.tag[idx] = LUA_VFALSE;
-  L->stack.ref[idx] = nullptr; /* release the reference (GC-pinning parity with the port) */
+  L->stack.ref[idx] = nullptr;
 }
 
 static l_forceinline void setsloti(lua_State* L, StkId idx, lua_Integer x)
@@ -678,7 +601,7 @@ struct global_State
   void* ud;           /* auxiliary data to 'frealloc' */
   l_mem GCtotalbytes; /* number of bytes currently allocated + debt */
   l_mem GCdebt;       /* bytes counted but not yet allocated */
-  size_t memlimit;    /* hard memory limit (0 = unlimited) */
+  size_t memlimit;
   l_mem GCmarked;     /* number of objects marked in a GC cycle */
   l_mem GCmajorminor; /* auxiliary counter to control major-minor shifts */
   struct InternKey
@@ -762,7 +685,6 @@ static l_forceinline l_mem gettotalbytes(global_State* g)
   return g->GCtotalbytes - g->GCdebt;
 }
 
-/* fast access to metamethods: nullptr when no metamethod present */
 static l_forceinline const TValue* gfasttm(global_State* g, Table* mt, TMS e)
 {
   return checknoTM(mt, e) ? nullptr : luaT_gettm(mt, e, g->tmname[e]);

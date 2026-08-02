@@ -13,9 +13,8 @@
 #include <string>
 #include <string_view>
 
-#include "internal_string.h" /* lit<> for the version-string constants below */
+#include "internal_string.h"
 
-/* version numbers */
 inline constexpr int LUA_VERSION_MAJOR_N = 5;
 inline constexpr int LUA_VERSION_MINOR_N = 5;
 inline constexpr int LUA_VERSION_RELEASE_N = 1;
@@ -23,13 +22,11 @@ inline constexpr int LUA_VERSION_RELEASE_N = 1;
 inline constexpr int LUA_VERSION_NUM = LUA_VERSION_MAJOR_N * 100 + LUA_VERSION_MINOR_N;
 inline constexpr int LUA_VERSION_RELEASE_NUM = LUA_VERSION_NUM * 100 + LUA_VERSION_RELEASE_N;
 
-/* version strings; the static_assert below pins them to the numbers above */
 inline constexpr std::string_view LUA_VERSION_MAJOR = "5";
 inline constexpr std::string_view LUA_VERSION_MINOR = "5";
 inline constexpr std::string_view LUA_VERSION_RELEASE = "1";
 inline const std::string_view LUA_VERSION = lit<"Lua 5.5">()->view();
 inline const std::string_view LUA_RELEASE = lit<"Lua 5.5.1">()->view();
-/* host-sink text (print_version's fwrite in lua.cpp is its only consumer) */
 inline constexpr std::string_view LUA_COPYRIGHT = "Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio";
 inline const std::string_view LUA_AUTHORS = lit<"R. Ierusalimschy, L. H. de Figueiredo, W. Celes">()->view();
 static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSION_RELEASE_N == 1,
@@ -38,9 +35,6 @@ static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSIO
 #include "luaconf.h"
 
 /* mark for precompiled code ('<esc>Lua') */
-/* stays a compile-time literal (no lit<>): lundump.cpp uses its size as
-   an array bound, and lit<>() is not constexpr — same treatment as
-   LUAC_DATA (lundump.h) */
 inline constexpr std::string_view LUA_SIGNATURE = "\x1bLua";
 
 /* option for multiple returns in 'lua_pcall' and 'lua_call' */
@@ -90,10 +84,8 @@ constexpr int LUA_RIDX_GLOBALS = 2;
 constexpr int LUA_RIDX_MAINTHREAD = 3;
 constexpr int LUA_RIDX_LAST = 3;
 
-/* type of numbers in Lua: IEEE-754 binary64 (pinned, see luaconf.h) */
 typedef double lua_Number;
 
-/* type for integer functions: 64-bit (pinned, see luaconf.h) */
 typedef long long lua_Integer;
 
 /* unsigned integer type */
@@ -107,15 +99,6 @@ typedef ptrdiff_t lua_KContext;
 */
 typedef int (*lua_CFunction)(lua_State* L);
 
-/*
-** HostString — the host platform's text type (see host_string.h).
-** This is the TEXT half of the public API: string parameters are
-** taken as const HostString& and converted to engine strings exactly
-** at the boundary; string results are returned as HostString BY VALUE
-** (a copy — never a reference into engine memory). The BYTES half
-** (lua_pushlstring/lua_tolstring) carries binary payloads losslessly.
-** In the Java port HostString is java.lang.String.
-*/
 #include "host_string.h"
 
 /*
@@ -123,18 +106,6 @@ typedef int (*lua_CFunction)(lua_State* L);
 */
 typedef int (*lua_KFunction)(lua_State* L, int status, lua_KContext ctx);
 
-/*
-** Types for functions that read/write blocks when loading/dumping Lua
-** chunks. BYTES half of the API (chunks may be binary): string_view is
-** a byte view here, never text — no HostString (Java: byte[], not
-** String).
-** Reader: the host hands back a view of a buffer IT owns, which must
-** stay valid until the next reader call; an empty view signals end of
-** chunk. (Java: byte[] result, null/empty = end.)
-** Writer: the host is handed a read-only view of engine-owned bytes,
-** valid only during the call; a default view (null data) signals end
-** of dump. (Java: byte[] argument, null = end of dump.)
-*/
 typedef std::string_view (*lua_Reader)(lua_State* L, void* ud);
 
 typedef int (*lua_Writer)(lua_State* L, std::string_view b, void* ud);
@@ -144,12 +115,6 @@ typedef int (*lua_Writer)(lua_State* L, std::string_view b, void* ud);
 */
 typedef void* (*lua_Alloc)(void* ud, void* ptr, size_t osize, size_t nsize);
 
-/*
-** Type for warning functions. Host-settable callback (lua_setwarnf is
-** SDK-only surface), so the message crosses the boundary as HostString:
-** the engine converts once at the call site and the host never sees
-** engine memory. (Java: (Object ud, String msg, int tocont) -> void.)
-*/
 typedef void (*lua_WarnFunction)(void* ud, const HostString& msg, int tocont);
 
 /*
@@ -211,21 +176,10 @@ LUA_API int(lua_isuserdata)(lua_State* L, int idx);
 LUA_API int(lua_type)(lua_State* L, int idx);
 LUA_API HostString(lua_typename) (lua_State* L, int tp);
 
-/* conversion accessors: nullopt = value not convertible (the official
-   'isnum' out-param is folded into the optional return) */
 LUA_API std::optional<lua_Number>(lua_tonumberx)(lua_State* L, int idx);
 LUA_API std::optional<lua_Integer>(lua_tointegerx)(lua_State* L, int idx);
 LUA_API int(lua_toboolean)(lua_State* L, int idx);
 
-/*
-** Raw-bytes accessor (the BYTES half of the API, paired with
-** lua_pushlstring): the value's byte payload and length, numbers
-** coerced in place. Lossless for any lua string (embedded NULs,
-** invalid UTF-8). Borrowed pointer: valid while the value stays on
-** the stack. (Java: byte[] out, defensive copy.)
-*/
-/* borrowed whole-payload view; absent (not convertible) has null data()
-   (Java: byte[] or null). Positions into it travel as offsets. */
 LUA_API std::string_view(lua_tolstring) (lua_State* L, int idx);
 
 LUA_API lua_Unsigned(lua_rawlen)(lua_State* L, int idx);
@@ -234,7 +188,6 @@ LUA_API void*(lua_touserdata) (lua_State* L, int idx);
 LUA_API lua_State*(lua_tothread) (lua_State* L, int idx);
 LUA_API const void*(lua_topointer) (lua_State* L, int idx);
 
-/* diagnostic text for a light C function (port-specific; consumer text) */
 HostString lua_funcaddress(lua_State* L, int idx);
 
 /*
@@ -271,14 +224,9 @@ LUA_API int(lua_compare)(lua_State* L, int idx1, int idx2, int op);
 LUA_API void(lua_pushnil)(lua_State* L);
 LUA_API void(lua_pushnumber)(lua_State* L, lua_Number n);
 LUA_API void(lua_pushinteger)(lua_State* L, lua_Integer n);
-/* bytes push (deep copy; pairs with lua_tolstring) */
 LUA_API std::string_view(lua_pushlstring) (lua_State* L, std::string_view s,
                                            size_t off, size_t len);
-/* text push: HostString converted at the boundary (deep copy);
-   nullopt pushes nil (official NULL semantics) */
 LUA_API void(lua_pushstring) (lua_State* L, const std::optional<HostString>& s);
-/* format push: HostString format in, formatted result pushed and also
-** returned as a HostString COPY (never a reference into engine memory) */
 LUA_API HostString(lua_pushfstring) (lua_State* L, const HostString& fmt);
 LUA_API void(lua_pushcclosure)(lua_State* L, lua_CFunction fn, int n);
 LUA_API void(lua_pushboolean)(lua_State* L, int b);
@@ -325,8 +273,6 @@ LUA_API int(lua_pcallk)(lua_State* L, int nargs, int nresults, int errfunc,
                         lua_KContext ctx, lua_KFunction k);
 LUA_API int lua_pcall(lua_State* L, int nargs, int nresults, int errfunc);
 
-/* boundary form: host text converts to engine bytes exactly once
-   (nullopt chunkname = "?", nullopt mode = default "bt") */
 LUA_API int(lua_load)(lua_State* L, lua_Reader reader, void* dt,
                       const std::optional<HostString>& chunkname,
                       const std::optional<HostString>& mode);
@@ -338,13 +284,10 @@ LUA_API int(lua_dump)(lua_State* L, lua_Writer writer, void* data, int strip);
 */
 LUA_API int(lua_yieldk)(lua_State* L, int nresults, lua_KContext ctx,
                         lua_KFunction k);
-/* result record for lua_resume: the official 'int* nres' out-param is
-   folded into the return (no out-params in this port; Java: record).
-   'nres' is meaningful when status is LUA_OK or LUA_YIELD. */
 struct lua_ResumeResult
 {
-  int status; /* LUA_OK, LUA_YIELD, or an error code */
-  int nres;   /* number of values returned/yielded */
+  int status;
+  int nres;
 };
 LUA_API lua_ResumeResult(lua_resume)(lua_State* L, lua_State* from, int narg);
 LUA_API int(lua_status)(lua_State* L);
@@ -389,8 +332,6 @@ constexpr int LUA_GCPSTEPSIZE = 5; /* GC granularity */
 /* number of parameters */
 constexpr int LUA_GCPN = 6;
 
-/* 'stepsize' is used by LUA_GCSTEP and 'param'/'value' by LUA_GCPARAM;
-   other options ignore them (pass zeros) */
 LUA_API int(lua_gc)(lua_State* L, int what, size_t stepsize,
                     int param, int value);
 
@@ -406,15 +347,9 @@ LUA_API void(lua_concat)(lua_State* L, int n);
 LUA_API void(lua_len)(lua_State* L, int idx);
 
 constexpr int LUA_N2SBUFFSZ = 64;
-/* number→text conversion: the value at 'idx' as a HostString COPY,
-** or nullopt if it is not a number (official form writes into a
-** caller char buffer; the text-return form is the port's boundary
-** shape — Java: String or null) */
 LUA_API std::optional<HostString>(lua_numbertocstring)(lua_State* L, int idx);
 LUA_API size_t(lua_stringtonumber)(lua_State* L, std::string_view s);
 
-/* allocator record: the official 'void** ud' out-param of
-   lua_getallocf is folded into the return */
 struct lua_Allocator
 {
   lua_Alloc f;
@@ -458,10 +393,6 @@ LUA_API void lua_pushliteral(lua_State* L, const HostString& s);
 
 LUA_API void lua_pushglobaltable(lua_State* L);
 
-/* text accessor: the value as a HostString COPY (numbers coerced in
-** place, as in lua_tolstring); nullopt when the value is not a
-** string (official NULL semantics). Binary payloads round-trip
-** unchecked for now (conversion strictness deferred). */
 LUA_API std::optional<HostString> lua_tostring(lua_State* L, int idx);
 
 LUA_API void lua_insert(lua_State* L, int idx);
@@ -498,7 +429,7 @@ constexpr int LUA_MASKCOUNT = (1 << LUA_HOOKCOUNT);
 struct lua_Debug
 {
   int event;
-  HostString name;            /* (n) empty = no name available */
+  HostString name;
   HostString namewhat;        /* (n) 'global', 'local', 'field', 'method'; empty = no info */
   HostString what;            /* (S) 'Lua', 'C', 'main', 'tail' */
   HostString source;          /* (S) */
@@ -517,21 +448,9 @@ struct lua_Debug
   struct CallInfo* i_ci; /* active function */
 };
 
-/* the official 'lua_Debug* ar' out-params are folded into the returns
-   (no out-params in this port): lua_getstack returns the activation
-   record for 'level' (nullopt = no such level); lua_getinfo takes the
-   record from lua_getstack (ignored for the '>' form) and returns it
-   filled per 'what' (nullopt = invalid option) */
 LUA_API std::optional<lua_Debug>(lua_getstack)(lua_State* L, int level);
 LUA_API std::optional<lua_Debug>(lua_getinfo)(lua_State* L, const HostString& what,
                                               const lua_Debug& ar);
-/*
-** Local/upvalue names: std::optional<HostString> — nullopt means no
-** such local/upvalue (the return doubles as the success flag; note
-** "" is a genuine name for C-closure upvalues, so empty cannot mean
-** absent). The name is a boundary COPY of the engine string (Java:
-** String or null).
-*/
 LUA_API std::optional<HostString>(lua_getlocal) (lua_State* L, const lua_Debug* ar, int n);
 LUA_API std::optional<HostString>(lua_setlocal) (lua_State* L, const lua_Debug* ar, int n);
 LUA_API std::optional<HostString>(lua_getupvalue) (lua_State* L, int funcindex, int n);

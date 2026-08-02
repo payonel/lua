@@ -75,12 +75,6 @@ constexpr int POS_sJ = POS_A;
 ** so they must fit in ints.
 */
 
-/*
-** All instruction-argument sizes must fit in an int (plus its sign
-** bit): checked at compile time. Upstream carried INT_MAX fallbacks
-** for narrower ints; this port requires (at least) 32-bit int, as the
-** managed targets do.
-*/
 static_assert(SIZE_Ax < ((int)(sizeof(int) * CHAR_BIT)) - 1 &&
                   SIZE_sJ < ((int)(sizeof(int) * CHAR_BIT)) - 1,
               "int too narrow for instruction arguments");
@@ -445,15 +439,6 @@ constexpr Instruction CREATE_sJ(int o, unsigned int j, int k)
 
 ===========================================================================*/
 
-/*
-** masks for instruction properties. The format is:
-** bits 0-2: op mode
-** bit 3: instruction set register A
-** bit 4: operator is a test (next instruction must be a jump)
-** bit 5: instruction uses 'L->top' set by previous instruction (when B == 0)
-** bit 6: instruction sets 'L->top' for next instruction (when C == 0)
-** bit 7: instruction is an MM instruction (call a metamethod)
-*/
 
 static l_forceinline int testAMode(int m)
 {

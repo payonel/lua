@@ -18,29 +18,16 @@
 #include "lobject.h"
 #include "lstate.h"
 
-/*
-** Closures are two luaM blocks: the header (a GC object) and its
-** upvalue array. The header is created first, in a consistent
-** array-less state (nupvalues == 0), so the collector can free it at
-** any point. The array is then allocated with the collector stopped
-** ('gcstopem', the ldo.cpp stack-reallocation precedent): the header
-** is not yet anchored anywhere, and the emergency collection that a
-** failing allocation would run could sweep it. On failure we throw with the
-** header still consistent — the next collection cycle reclaims it.
-** No unwind cleanup is needed on any path (unprotected errors reach
-** the panic function, which may exit with longjmp — C++ unwinding
-** cannot be relied on here).
-*/
 CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
   global_State* g = G(L);
   GCObject* o = luaC_newobj(L, LUA_VCCL, sizeof(CClosure));
   assert(o->tt == LUA_VCCL);
   CClosure* c = static_cast<CClosure*>(o);
-  c->nupvalues = 0; /* no upvalue array yet */
+  c->nupvalues = 0;
   c->upvalue = nullptr;
   lu_byte oldgcstop = g->gcstopem;
-  g->gcstopem = 1; /* no emergency collection: the header is unanchored */
+  g->gcstopem = 1;
   TValue* upvalue = (TValue*)luaM_realloc_(L, nullptr, 0, (size_t)(unsigned)nupvals * sizeof(TValue));
   g->gcstopem = oldgcstop;
   if (upvalue == nullptr && nupvals > 0)
@@ -57,10 +44,10 @@ LClosure* luaF_newLclosure(lua_State* L, int nupvals)
   assert(o->tt == LUA_VLCL);
   LClosure* c = static_cast<LClosure*>(o);
   c->p = nullptr;
-  c->nupvalues = 0; /* no upvalue array yet */
+  c->nupvalues = 0;
   c->upvals = nullptr;
   lu_byte oldgcstop = g->gcstopem;
-  g->gcstopem = 1; /* no emergency collection: the header is unanchored */
+  g->gcstopem = 1;
   UpVal** upvals = (UpVal**)luaM_realloc_(L, nullptr, 0, (size_t)(unsigned)nupvals * sizeof(UpVal*));
   g->gcstopem = oldgcstop;
   if (upvals == nullptr && nupvals > 0)
@@ -84,10 +71,10 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
     assert(o->tt == LUA_VUPVAL);
     UpVal* uv = static_cast<UpVal*>(o);
     uv->opennext = nullptr;
-    uv->previous = nullptr;     /* nullptr = closed */
+    uv->previous = nullptr;
     uv->owner = nullptr;
     uv->stkid = 0;
-    ((&uv->value)->tt_ = LUA_VNIL); /* closed: value lives in own storage */
+    ((&uv->value)->tt_ = LUA_VNIL);
     cl->upvals[i] = uv;
     luaC_objbarrier(L, cl, uv);
   }
@@ -188,7 +175,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
                              int yy)
 {
   StkId uv = level; /* value being closed */
-  TValue errobj;    /* row copy of the error object, valid when 'haserr' */
+  TValue errobj;
   int haserr;
   switch (status)
   {
@@ -246,7 +233,7 @@ void luaF_closeupval(lua_State* L, StkId level)
     assert(uplevel(uv) < L->top);
     luaF_unlinkupval(uv);       /* remove upvalue from 'openupval' list */
     setobj(L, slot, uv->stkid); /* move value to upvalue slot */
-    uv->previous = nullptr;        /* mark as closed */
+    uv->previous = nullptr;
     uv->opennext = nullptr;
     uv->owner = nullptr;
     if (!iswhite(uv))
@@ -257,9 +244,6 @@ void luaF_closeupval(lua_State* L, StkId level)
   }
 }
 
-/*
-** Remove first element from the tbclist.
-*/
 static void poptbclist(lua_State* L)
 {
   assert(L->ntbc > 0 && L->tbc[L->ntbc - 1] == L->tbclist);

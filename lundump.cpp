@@ -44,12 +44,6 @@ static l_noret error(LoadState* S, const InternalString* why)
 ** adapt to the endianness of the input
 */
 
-/*
-** Multi-byte values are read in host byte order — guaranteed
-** little-endian (static_assert in llimits.h); chunks are therefore
-** always little-endian. A big-endian build would have read/produced
-** incompatible chunks; it fails the assert instead.
-*/
 static void loadBlock(LoadState* S, void* b, size_t size)
 {
   if (luaZ_read(S->Z, b, size) != 0)
@@ -159,7 +153,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     return; /* do not save it again */
   }
   else if ((size -= 1) <= 40)
-  {                                         /* small string? use stack buffer */
+  {
     char buff[41];
     loadBlock(S, buff, ((size_t)(size + 1)) * sizeof((buff)[0]));          /* load string into buffer */
     std::string_view buffstr{buff, size};
@@ -395,8 +389,6 @@ static void checknumformat(LoadState* S, int eq, const InternalString* tname)
 static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
-  /* constant slice of a compile-time literal — Java materializes it as
-     its own String constant (the substr ban targets runtime views) */
   checkliteral(S, LUA_SIGNATURE.substr(1), lit<"not a binary chunk">());
   if (loadByte(S) != LUAC_VERSION)
     error(S, lit<"version mismatch">());
@@ -417,10 +409,10 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor,
 {
   LoadState S;
   LClosure* cl;
-  InternalString plain; /* holds a stripped copy when 'name' is decorated */
+  InternalString plain;
   int c0 = sv_byteat(name->view(), 0);
   if (c0 == '@' || c0 == '=')
-  { /* strip the source-name decoration for messages */
+  {
     plain = InternalString{name->view(), 1, name->size() - 1};
     name = &plain;
   }

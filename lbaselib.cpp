@@ -28,7 +28,7 @@ static int luaB_print(lua_State* L)
     const InternalString* s = luaL_toistring(L, i); /* convert it to string */
     if (i > 1)                                      /* not the first element? */
       fwrite("\t", sizeof(char), 1, stdout);        /* add a tab before it */
-    fwrite(s->bytes(), sizeof(char), s->size(), stdout); /* print it (host boundary) */
+    fwrite(s->bytes(), sizeof(char), s->size(), stdout);
     lua_pop(L, 1);                                  /* pop result */
   }
   fwrite("\n", sizeof(char), 1, stdout);
@@ -54,11 +54,6 @@ static int luaB_warn(lua_State* L)
   return 0;
 }
 
-/*
-** Convert the numeral in 's' to an integer in the given base. Returns
-** the end offset of the scan, or npos on failure. (The cursor is a
-** view plus offset; Java: byte[] + int index.)
-*/
 static size_t b_str2int(std::string_view s, unsigned base, lua_Integer* pn)
 {
   const std::string_view spacechars = lit<" \f\n\r\t\v">()->view();
@@ -228,13 +223,13 @@ static int luaB_collectgarbage(lua_State* L)
   int o = optsnum[luaL_checkoption(L, 1, defopt, opts)];
   switch (o)
   {
-  case 100: /* setlimit */
+  case 100:
   {
     lua_Integer limit = luaL_checkinteger(L, 2);
     lua_setmemlimit(L, (size_t)(limit <= 0 ? 0 : limit));
     return 0;
   }
-  case 101: /* getlimit */
+  case 101:
   {
     lua_pushinteger(L, ((lua_Integer)(lua_getmemlimit(L))));
     return 1;
@@ -383,8 +378,6 @@ static int load_aux(lua_State* L, int status, int envidx)
   }
 }
 
-/* the mode argument is a Lua string — engine bytes already; nullptr
-   when absent (default "bt"). It never round-trips through host text. */
 static const InternalString* getMode(lua_State* L, int idx)
 {
   const InternalString* mode = luaL_optistring(L, idx, nullptr);
@@ -398,8 +391,6 @@ static const InternalString* getMode(lua_State* L, int idx)
 
 static int luaB_loadfile(lua_State* L)
 {
-  /* filename is a Lua string — engine bytes already (nullptr = stdin);
-     no host-text round trip (internal loader form) */
   const InternalString* fname =
       lua_isnoneornil(L, 1) ? nullptr : luaL_checkistring(L, 1);
   const InternalString* mode = getMode(L, 2);
@@ -428,12 +419,9 @@ static std::string_view generic_reader(lua_State* L, void* ud)
   lua_pushvalue(L, 1); /* get function */
   lua_call(L, 0, 1);   /* call it */
   if (lua_isnil(L, -1))
-    return {}; /* end of chunk */
+    return {};
   else if (l_unlikely(!lua_isstring(L, -1)))
     luaL_error(L, HostString(lit<"reader function must return a string">()->view()));
-  /* stream-reader boundary: the result stays anchored on the stack
-     until the next call, so the view it backs remains valid
-     (category 5; Java: the reader hands back a byte[]) */
   return lua_tolstring(L, -1);
 }
 
@@ -444,7 +432,7 @@ static int luaB_load(lua_State* L)
   const InternalString* mode = getMode(L, 3);
   int env = (!lua_isnone(L, 4) ? 4 : 0); /* 'env' index or 0 if no 'env' */
   if (s.data() != nullptr)
-  { /* loading a string: everything is engine bytes, no host text */
+  {
     const InternalString* chunkname =
         luaL_optistring(L, 2, lua_toistring(L, 1));
     status = luaL_loadbufferi(L, s, chunkname, mode);
@@ -562,7 +550,7 @@ static int luaB_xpcall(lua_State* L)
 static int luaB_tostring(lua_State* L)
 {
   luaL_checkany(L, 1);
-  luaL_toistring(L, 1); /* internal twin: push only */
+  luaL_toistring(L, 1);
   return 1;
 }
 

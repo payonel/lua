@@ -39,18 +39,10 @@ struct DumpState
 ** 'b' should not be nullptr, except for the last call signaling the end
 ** of the dump.
 */
-/*
-** Multi-byte values are dumped in host byte order — guaranteed
-** little-endian (static_assert in llimits.h). A big-endian build would
-** have produced incompatible chunks; it fails the assert instead.
-*/
 static void dumpBlock(DumpState* D, const void* b, size_t size)
 {
   if (D->status == 0)
   { /* do not write anything after an error */
-    /* writer boundary: engine bytes as a read-only view, valid only
-       during the call; default view (null data) signals end of dump
-       (Java: byte[] argument, null = end) */
     std::string_view block = (b != nullptr)
         ? std::string_view{(const char*)(b), size}
         : std::string_view{};
@@ -144,8 +136,8 @@ static void dumpString(DumpState* D, TString* ts)
 {
   if (ts == nullptr)
   {
-    dumpVarint(D, 0); /* will "reuse" nullptr */
-    dumpVarint(D, 0); /* special index for nullptr */
+    dumpVarint(D, 0);
+    dumpVarint(D, 0);
   }
   else
   {
@@ -162,7 +154,7 @@ static void dumpString(DumpState* D, TString* ts)
       size_t size;
       std::string_view sv = ts->data.view();
       size = sv.size();
-      const char* s = sv.data(); /* stream boundary: chunk writer (Java: write(byte[], off, len)) */
+      const char* s = sv.data();
       dumpSize(D, size + 1);
       dumpBlock(D, s, (size + 1) * sizeof((s)[0]));            /* include ending '\0' */
       D->nstr++;                             /* one more saved string */

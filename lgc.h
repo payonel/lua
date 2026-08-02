@@ -263,11 +263,6 @@ LUAI_FUNC GCObject* luaC_newobjdt(lua_State* L, lu_byte tt, size_t sz);
 LUAI_FUNC void luaC_barrier_(lua_State* L, GCObject* o, GCObject* v);
 LUAI_FUNC void luaC_barrierback_(lua_State* L, GCObject* o);
 
-/*
-** GC barriers. 'p' is the parent object, 'v'/'o' the newly referenced
-** value/object. Forward barrier marks the new object; back barrier
-** re-grays the parent.
-*/
 static l_forceinline void luaC_objbarrier(lua_State* L, GCObject* p, GCObject* o)
 {
   if (isblack(p) && iswhite(o))

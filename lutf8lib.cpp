@@ -30,11 +30,6 @@ constexpr int iscont(int c)
   return (c & 0xC0) == 0x80;
 }
 
-/*
-** Byte at offset 'i' of an engine string, as unsigned 0..255; reads
-** '\0' at/past the end (the bound check replaces upstream's reliance
-** on the C terminator when a cursor peeks past the end).
-*/
 static inline int ubyte(const InternalString* s, size_t i)
 {
   return (i < s->size()) ? s->byteAt(i) : 0;
@@ -57,15 +52,6 @@ static lua_Integer u_posrelat(lua_Integer pos, size_t len)
     return (lua_Integer) len + pos + 1;
 }
 
-/*
-** Decode one UTF-8 sequence starting at offset 'pos' of 's', returning
-** the offset one past the sequence, or 0 if the byte sequence is
-** invalid (0 can never be a successful result: success is always
-** >= pos + 1).  The array 'limits' stores the minimum value for each
-** sequence length, to check for overlong representations. Its first
-** entry forces an error for non-ASCII bytes with no continuation
-** bytes (count == 0).
-*/
 static size_t utf8_decode(const InternalString* s, size_t pos, l_uint32* val, int strict)
 {
   static const l_uint32 limits[] =
@@ -148,7 +134,7 @@ static int codepoint(lua_State* L)
   lua_Integer pose = u_posrelat(luaL_optinteger(L, 3, posi), len);
   int lax = lua_toboolean(L, 4);
   int n;
-  size_t se; /* string end (offset one past the slice) */
+  size_t se;
   luaL_argcheck(L, posi >= 1, 2, HostString(lit<"out of bounds">()->view()));
   luaL_argcheck(L, pose <= (lua_Integer) len, 3, HostString(lit<"out of bounds">()->view()));
   if (posi > pose)
@@ -244,7 +230,7 @@ static int byteoffset(lua_State* L)
         do
         { /* find beginning of next character */
           posi++;
-        } while (iscontat(s, (size_t) posi)); /* (cannot pass the end: ubyte reads '\0' there) */
+        } while (iscontat(s, (size_t) posi));
         n--;
       }
     }
@@ -328,8 +314,6 @@ static const luaL_Reg funcs[] = {
 LUAMOD_API int luaopen_utf8(lua_State* L)
 {
   (luaL_checkversion(L), lua_createtable(L, 0, sizeof(funcs) / sizeof((funcs)[0]) - 1), luaL_setfuncs(L, funcs, 0));
-  /* lit<> carries the bytes as a template parameter, so UTF8PATT's
-     embedded '\0' and full length are preserved in the view */
   const std::string_view patt = lit<UTF8PATT>()->view();
   lua_pushlstring(L, patt, 0, patt.size());
   lua_setfield(L, -2, HostString(lit<"charpattern">()->view()));

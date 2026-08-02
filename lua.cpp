@@ -26,8 +26,7 @@ constexpr char LUA_RLLIB_VAR[] = "LUA_READLINELIB";
 
 static lua_State* globalL = nullptr;
 
-/* program name for error prefixes; empty = absent (interactive mode) */
-static std::string progname = LUA_PROGNAME; /* host program text (consumer side) */
+static std::string progname = LUA_PROGNAME;
 
 /*
 ** Use 'sigaction' when available.
@@ -204,7 +203,7 @@ static int dochunk(lua_State* L, int status)
 
 static int dofile(lua_State* L, const std::optional<HostString>& name)
 {
-  return dochunk(L, luaL_loadfilex(L, name, std::nullopt)); /* nullopt = stdin */
+  return dochunk(L, luaL_loadfilex(L, name, std::nullopt));
 }
 
 static int dostring(lua_State* L, std::string_view s, const HostString& name)
@@ -272,7 +271,7 @@ static int handle_script(lua_State* L, char** argv)
     status = luaL_loadfilex(L, std::nullopt, std::nullopt); /* stdin */
   else
   {
-    HostString scriptname(fname); /* host boundary: adopt the argv text */
+    HostString scriptname(fname);
     status = luaL_loadfilex(L, scriptname, std::nullopt);
   }
   if (status == LUA_OK)
@@ -379,12 +378,12 @@ static int runargs(lua_State* L, char** argv, int n)
     case 'l':
     {
       int status;
-      std::string arg(argv[i]); /* adopt the argv text (host program side) */
+      std::string arg(argv[i]);
       std::string extra = arg.substr(2); /* both options need an argument */
       if (extra.empty())
       {
         i++; /* try next 'argv' */
-        assert(argv[i] != nullptr); /* already checked by 'collectargs' */
+        assert(argv[i] != nullptr);
         extra = argv[i];
       }
       status = (option == 'e')
@@ -413,8 +412,7 @@ static char* no_getenv(const char*)
 static int handle_luainit(lua_State* L)
 {
   std::string name = LUA_INIT_VAR;
-  name.append(LUA_VERSUFFIX); /* versioned name: e.g. "LUA_INIT_5_5" */
-  /* l_getenv is system ABI: char* in and out, converted at the call */
+  name.append(LUA_VERSUFFIX);
   const char* einit = l_getenv(name.c_str());
   if (einit == nullptr)
   {
@@ -423,7 +421,7 @@ static int handle_luainit(lua_State* L)
   }
   if (einit == nullptr)
     return LUA_OK;
-  std::string init(einit); /* adopt the env value (host program side) */
+  std::string init(einit);
   if (!init.empty() && init[0] == '@')
   {
     HostString fname{init.substr(1)};
@@ -504,11 +502,10 @@ static void lua_freeline(char* line)
 
 static void lua_initreadline(lua_State* L)
 {
-  /* l_getenv is system ABI: adopt the value at the call */
   const char* erllib = l_getenv(LUA_RLLIB_VAR); /* name of readline library */
   const char* rllib = (erllib != nullptr) ? erllib
                                           : LUA_READLINELIB; /* default name */
-  void* lib = dlopen(rllib, RTLD_NOW | RTLD_LOCAL); /* system ABI */
+  void* lib = dlopen(rllib, RTLD_NOW | RTLD_LOCAL);
   if (lib != nullptr)
   {
     const char** name = ((const char**)(dlsym(lib, "rl_readline_name")));
@@ -536,7 +533,7 @@ static std::string get_prompt(lua_State* L, int firstline)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
-    std::string p{luaL_tolstring(L, -1).view()}; /* copy (host program side) */
+    std::string p{luaL_tolstring(L, -1).view()};
     lua_remove(L, -2); /* remove original value */
     return p;
   }
@@ -555,7 +552,7 @@ static int incomplete(lua_State* L, int status)
   if (status == LUA_ERRSYNTAX)
   {
     std::string_view msgv = lua_tolstring(L, -1);
-    if (msgv.ends_with(EOFMARK)) /* bounded suffix compare (Java endsWith) */
+    if (msgv.ends_with(EOFMARK))
       return 1;
   }
   return 0; /* else... */
@@ -569,7 +566,7 @@ static int pushline(lua_State* L, int firstline)
   char buffer[LUA_MAXINPUT];
   size_t l;
   std::string prmt = get_prompt(L, firstline);
-  char* b = lua_readline(buffer, prmt.c_str()); /* readline ABI boundary */
+  char* b = lua_readline(buffer, prmt.c_str());
   lua_pop(L, 1); /* remove prompt */
   if (b == nullptr)
     return 0; /* no input */
@@ -587,9 +584,9 @@ static int pushline(lua_State* L, int firstline)
 */
 static int addreturn(lua_State* L)
 {
-  lua_pushvalue(L, -1); /* duplicate original line */
-  lua_pushfstring(L, HostString(lit<"return %s;">()->view())); /* modified line (anchored on the stack) */
-  std::string_view retline = lua_tolstring(L, -1); /* borrowed */
+  lua_pushvalue(L, -1);
+  lua_pushfstring(L, HostString(lit<"return %s;">()->view()));
+  std::string_view retline = lua_tolstring(L, -1);
   int status = luaL_loadbufferx(L, retline, HostString(lit<"=stdin">()->view()),
                                 HostString(lit<"t">()->view()));
   if (status == LUA_OK)
@@ -605,11 +602,11 @@ static void checklocal(std::string_view line)
   static const std::string_view space = lit<" \t">()->view();
   size_t i = line.find_first_not_of(space); /* skip spaces */
   if (i == std::string_view::npos)
-    return; /* only spaces */
+    return;
   size_t j = i + kw.size();
   if (line.compare(i, kw.size(), kw) == 0 &&      /* "local"? */
       (j >= line.size() || line[j] == ' ' || line[j] == '\t'))
-  { /* followed by a space or end of line? */
+  {
     fprintf(stderr, "%s\n",
             "warning: locals do not survive across lines in interactive mode");
     fflush(stderr);
@@ -653,7 +650,7 @@ static int loadline(lua_State* L)
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
-  std::string line{lua_tostring(L, 1)->view()}; /* host program copy */
+  std::string line{lua_tostring(L, 1)->view()};
   if (!line.empty())            /* non empty? */
     lua_saveline(line.c_str()); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */
@@ -674,7 +671,7 @@ static void l_print(lua_State* L)
     lua_insert(L, 1);
     if (lua_pcall(L, n, 0, 0) != LUA_OK)
     {
-      lua_pushvalue(L, -1); /* error message is the argument */
+      lua_pushvalue(L, -1);
       const HostString m = lua_pushfstring(L, HostString(lit<"error calling 'print' (%s)">()->view()));
       l_message(progname, std::string(m.view()));
     }

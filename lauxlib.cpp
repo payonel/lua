@@ -71,12 +71,12 @@ static int findfield(lua_State* L, int objidx, int level)
 static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
 {
   int top = lua_gettop(L);
-  lua_getinfoi(L, lit<"f">()->view(), *ar); /* push function (record unchanged by 'f') */
+  lua_getinfoi(L, lit<"f">()->view(), *ar);
   lua_getfield(L, LUA_REGISTRYINDEX, HostString(LUA_LOADED_TABLE->view()));
   luaL_checkstack(L, 6, HostString(lit<"not enough stack">()->view())); /* slots for 'findfield' */
   if (findfield(L, top + 1, 2))
   {
-    std::string_view name = lua_tolstring(L, -1); /* borrowed from the stack */
+    std::string_view name = lua_tolstring(L, -1);
     if (name.starts_with(lit<"_G.">()->view()))
     {                                                    /* name start with '_G.'? */
       lua_pushlstring(L, name, 3, name.size() - 3);      /* push name without prefix */
@@ -96,7 +96,7 @@ static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
 static void pushfuncname(lua_State* L, InternalDebug* ar)
 {
   if (ar->namewhat.data() != nullptr)
-  { /* is there a name from code? (null = absent) */
+  {
     lua_pushlstring(L, ar->namewhat, 0, ar->namewhat.size());
     lua_pushlstring(L, ar->name, 0, ar->name.size());
     lua_pushfstring(L, HostString(lit<"%s '%s'">()->view())); /* use it */
@@ -105,7 +105,7 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
     lua_pushliteral(L, HostString(lit<"main chunk">()->view()));
   else if (pushglobalfuncname(L, ar))
   {                       /* try a global name */
-    lua_pushvalue(L, -1); /* the name is the argument */
+    lua_pushvalue(L, -1);
     lua_pushfstring(L, HostString(lit<"function '%s'">()->view()));
     lua_remove(L, -2); /* remove name */
   }
@@ -227,7 +227,7 @@ LUALIB_API int luaL_argerror(lua_State* L, int arg, const HostString& extramsg)
     }
     argword = lit<"argument">();
   }
-  if (ar.name.data() == nullptr) /* null = absent */
+  if (ar.name.data() == nullptr)
     ar.name = (pushglobalfuncname(L, &ar)) ? lua_tolstring(L, -1)
                                            : lit<"?">()->view();
   lua_pushstring(L, HostString(argword->view()));
@@ -279,16 +279,11 @@ LUALIB_API void luaL_where(lua_State* L, int level)
   lua_pushfstring(L, HostString(lit<"">()->view())); /* else, no information available... */
 }
 
-/*
-** The error message is formatted first (consuming its stack
-** arguments, see 'lua_pushfstring'); the location is then pushed and
-** rotated before the message for the concatenation.
-*/
 LUALIB_API int luaL_error(lua_State* L, const HostString& fmt)
 {
-  lua_pushfstring(L, fmt); /* format message, consuming its arguments */
+  lua_pushfstring(L, fmt);
   luaL_where(L, 1);
-  lua_rotate(L, -2, 1); /* move location before message */
+  lua_rotate(L, -2, 1);
   lua_concat(L, 2);
   return lua_error(L);
 }
@@ -304,10 +299,9 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname)
   else
   {
     luaL_pushfail(L);
-    /* strerror is system ABI: borrow its bytes at the call */
     std::string_view msg = (en != 0) ? std::string_view{strerror(en)}
                                      : lit<"(no extra info)">()->view();
-    if (fname.data() != nullptr) /* null = no file name to report */
+    if (fname.data() != nullptr)
     {
       lua_pushlstring(L, fname, 0, fname.size());
       lua_pushlstring(L, msg, 0, msg.size());
@@ -320,7 +314,6 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname)
   }
 }
 
-/* boundary wrapper (nullopt fname = no file name to report) */
 LUALIB_API int luaL_fileresult(lua_State* L, int stat, const std::optional<HostString>& fname)
 {
   return luaL_fileresulti(L, stat, fname ? fname->view() : std::string_view{});
@@ -368,7 +361,7 @@ LUALIB_API int luaL_newmetatable(lua_State* L, const HostString& tname)
   if (luaL_getmetatable(L, tname) != LUA_TNIL) /* name already in use? */
     return 0;                                  /* leave previous value on top, but return 0 */
   lua_pop(L, 1);
-  lua_createtable(L, 0, 4); /* create metatable (room for __name + methods) */
+  lua_createtable(L, 0, 4);
   lua_pushstring(L, tname);
   lua_setfield(L, -2, HostString(lit<"__name">()->view())); /* metatable.__name = tname */
   lua_pushvalue(L, -1);
@@ -418,8 +411,6 @@ LUALIB_API int luaL_checkoption(lua_State* L, int arg,
                                 std::string_view def,
                                 std::span<const std::string_view> lst)
 {
-  /* the argument's byte payload compared against option names;
-     null-view def = argument required (null != "") */
   std::string_view name = (def.data() != nullptr)
                               ? luaL_optlstring(L, arg, def)
                               : luaL_checklstring(L, arg);
@@ -442,8 +433,6 @@ LUALIB_API void luaL_checkstack(lua_State* L, int space, const std::optional<Hos
 {
   if (l_unlikely(!lua_checkstack(L, space)))
   {
-    /* the argument push needs a free slot; on a completely full stack,
-       fall back to the plain message */
     if (msg && lua_checkstack(L, 1))
     {
       lua_pushstring(L, *msg);
@@ -478,7 +467,7 @@ LUALIB_API std::string_view luaL_optlstring(
     lua_State* L, int arg, std::string_view def)
 {
   if (lua_isnoneornil(L, arg))
-    return def; /* null data() exactly when def had it */
+    return def;
   else
     return luaL_checklstring(L, arg);
 }
@@ -545,16 +534,6 @@ LUALIB_API lua_Integer luaL_optinteger(lua_State* L, int arg,
 ** =======================================================
 */
 
-/*
-** The buffer accumulates into an engine ByteBuilder embedded in the
-** luaL_Buffer itself. Growth is ACCOUNTED: capacity is reserved with
-** the lua_State BEFORE it is allocated (reserve-before-growth), so
-** script-driven accumulation (io.read, string.rep, table.concat) is
-** subject to the state's memory limit. 'B->reserved' tracks the
-** capacity charged so far; the destructor releases it on error
-** unwind, and 'pushresult' releases it after handing the bytes to
-** the result string by adoption.
-*/
 
 luaL_Buffer::~luaL_Buffer()
 {
@@ -562,11 +541,6 @@ luaL_Buffer::~luaL_Buffer()
     lua_releasebytes(L, reserved);
 }
 
-/*
-** Compute new buffer capacity, enough to accommodate 'sz' extra
-** bytes on top of the current content. (Same growth policy as the
-** old box buffer: at least 1.5x.)
-*/
 static size_t newbuffsize(luaL_Buffer* B, size_t sz)
 {
   size_t newsize = B->bldr.capacity();
@@ -577,22 +551,16 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
     newsize += (newsize >> 1);     /* new size *= 1.5 */
   if (newsize < len + sz)          /* not big enough? */
     newsize = len + sz;
-  if (newsize < LUAL_BUFFERSIZE)   /* keep a minimum useful capacity */
+  if (newsize < LUAL_BUFFERSIZE)
     newsize = LUAL_BUFFERSIZE;
   return newsize;
 }
 
-/*
-** Ensures a writable area with at least 'sz' bytes past the current
-** content, growing capacity through the accounted boundary if needed.
-** Returns the write offset into the buffer's area.
-*/
 static size_t prepbuff(luaL_Buffer* B, size_t sz)
 {
   if (B->bldr.size() + sz > B->bldr.capacity())
   {
     size_t newsize = newbuffsize(B, sz);
-    /* reserve BEFORE allocating; the memory limit can veto */
     assert(newsize >= B->reserved);
     if (l_unlikely(!lua_reservebytes(B->L, newsize - B->reserved)))
     {
@@ -616,7 +584,6 @@ LUALIB_API void luaL_addlstring(luaL_Buffer* B, std::string_view s,
   if (l > 0)
   {
     size_t at = prepbuff(B, l);
-    /* Java: System.arraycopy(s, off, buf, at, l) */
     memcpy(B->bldr.area().data() + at, s.data() + off, l * sizeof(char));
     luaL_addsize(B, l);
   }
@@ -624,7 +591,7 @@ LUALIB_API void luaL_addlstring(luaL_Buffer* B, std::string_view s,
 
 LUALIB_API void luaL_addstring(luaL_Buffer* B, const HostString& s)
 {
-  std::string_view sv = s.view(); /* boundary conversion (public API) */
+  std::string_view sv = s.view();
   luaL_addlstring(B, sv, 0, sv.size());
 }
 
@@ -632,17 +599,10 @@ LUALIB_API void luaL_pushresult(luaL_Buffer* B)
 {
   lua_State* L = B->L;
   size_t len = B->bldr.size();
-  /* hand our capacity charge back BEFORE adoption re-reserves the
-     size: these bytes were already admitted for this buffer, so the
-     handoff window is bounded — whereas holding both charges would
-     double-count and could trip the memory limit on the very push
-     that releases the buffer */
   size_t reserved = B->reserved;
   B->reserved = 0;
   if (reserved != 0)
     lua_releasebytes(L, reserved);
-  /* adoption: the result string takes the built bytes (no copy);
-     admission does a checked reserve of the size */
   lua_pushistring(L, B->bldr.finish());
   lua_gc(L, LUA_GCSTEP, len, 0, 0);
 }
@@ -658,7 +618,6 @@ LUALIB_API void luaL_addvalue(luaL_Buffer* B)
   lua_State* L = B->L;
   std::string_view s = lua_tolstring(L, -1);
   size_t off = prepbuff(B, s.size());
-  /* Java: System.arraycopy(s, 0, buf, off, len) */
   memcpy(B->bldr.area().data() + off, s.data(), s.size() * sizeof(char));
   luaL_addsize(B, s.size());
   lua_pop(L, 1); /* pop string */
@@ -668,7 +627,6 @@ LUALIB_API void luaL_buffinit(lua_State* L, luaL_Buffer* B)
 {
   B->L = L;
   B->bldr.reset();
-  /* (no stack placeholder: the builder lives in the luaL_Buffer) */
 }
 
 LUALIB_API size_t luaL_buffinitsize(lua_State* L, luaL_Buffer* B, size_t sz)
@@ -763,7 +721,7 @@ static std::string_view getF(lua_State*, void* ud)
        'getF' called 'fread', it might still wait for user input.
        The next check avoids this problem. */
     if (feof(lf->f))
-      return {}; /* end of chunk */
+      return {};
     size_t n = fread(lf->buff, 1, sizeof(lf->buff), lf->f); /* read block */
     return std::string_view{lf->buff, n};
   }
@@ -772,7 +730,6 @@ static std::string_view getF(lua_State*, void* ud)
 static int errfile(lua_State* L, std::string_view what, int fnameindex)
 {
   int err = errno;
-  /* borrowed view of the stack string; skip '@'/'=' */
   std::string_view filename = lua_tolstring(L, fnameindex).substr(1);
   if (err != 0)
   {
@@ -846,7 +803,7 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename,
     lua_pushistringref(L, filename);
     lua_pushfstring(L, HostString(lit<"@%s">()->view()));
     errno = 0;
-    lf.f = fopen(filename->c_str(), "r"); /* OS edge (sanctioned c_str) */
+    lf.f = fopen(filename->c_str(), "r");
     if (lf.f == nullptr)
       return errfile(L, lit<"open">()->view(), fnameindex);
   }
@@ -867,7 +824,6 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename,
   }
   if (c != EOF)
     lf.buff[lf.n++] = ((char)(c)); /* 'c' is the first character */
-  /* chunkname was pushed above; borrow its engine string */
   status = lua_loadi(L, getF, &lf, lua_toistring(L, -1), mode);
   readstatus = ferror(lf.f);
   errno = 0; /* no useful error number until here */
@@ -882,8 +838,6 @@ int luaL_loadfilei(lua_State* L, const InternalString* filename,
   return status;
 }
 
-/* boundary wrapper: converts host text once (nullopt filename = stdin,
-   nullopt mode = default "bt") and delegates to the engine-string form */
 LUALIB_API int luaL_loadfilex(lua_State* L,
                               const std::optional<HostString>& filename,
                               const std::optional<HostString>& mode)
@@ -895,14 +849,14 @@ LUALIB_API int luaL_loadfilex(lua_State* L,
 
 struct LoadS
 {
-  std::string_view chunk; /* unread remainder of the chunk (byte view) */
+  std::string_view chunk;
 };
 
 static std::string_view getS(lua_State*, void* ud)
 {
   LoadS* ls = (LoadS*) ud;
   std::string_view chunk = ls->chunk;
-  ls->chunk = {}; /* whole chunk handed over in one piece */
+  ls->chunk = {};
   return chunk;
 }
 
@@ -911,8 +865,6 @@ int luaL_loadbufferi(lua_State* L, std::string_view buff,
                      const InternalString* mode)
 {
   LoadS ls;
-  /* stream boundary: the reader hands the whole chunk over as one
-     byte view (category 5; Java: the byte[] itself) */
   ls.chunk = buff;
   return lua_loadi(L, getS, &ls, name, mode);
 }
@@ -921,8 +873,6 @@ LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff,
                                 const std::optional<HostString>& name,
                                 const std::optional<HostString>& mode)
 {
-  /* boundary: convert once, delegate to the engine-string form
-     (nullopt name = "?", as in lua_load) */
   InternalString n{name ? *name : HostString("?")};
   InternalString m{mode ? *mode : HostString()};
   return luaL_loadbufferi(L, buff, &n, mode ? &m : nullptr);
@@ -930,8 +880,6 @@ LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff,
 
 LUALIB_API int luaL_loadstring(lua_State* L, const HostString& s)
 {
-  /* the one place host TEXT becomes chunk BYTES: at port time this
-     view() is the strict UTF-16 -> UTF-8 encode of the source */
   return luaL_loadbufferx(L, s.view(), s, HostString(lit<"t">()->view()));
 }
 
@@ -989,7 +937,7 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
     case LUA_TNUMBER:
     {
       char nbuff[LUA_N2SBUFFSZ];
-      std::string_view n = lua_numbertocstringi(L, idx, nbuff); /* idx is a number */
+      std::string_view n = lua_numbertocstringi(L, idx, nbuff);
       lua_pushlstring(L, n, 0, n.size());
       break;
     }
@@ -1007,13 +955,11 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
     default:
     {
       int tt = luaL_getmetafield(L, idx, HostString(lit<"__name">()->view())); /* try name */
-      /* borrowed view: '__name' string (anchored) or the static typename */
       std::string_view kind = (tt == LUA_TSTRING)
                                   ? lua_tolstring(L, -1)
                                   : lua_typenamei(L, lua_type(L, idx))->view();
       if (lua_islightcfunction(L, idx))
       {
-        /* light C function — no GC object, use string representation */
         std::string fa = lua_funcaddressi(L, idx);
         lua_pushlstring(L, kind, 0, kind.size());
         lua_pushlstring(L, fa, 0, fa.size());
@@ -1031,11 +977,9 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
     }
     }
   }
-  return lua_toistring(L, -1); /* borrowed from the pushed value */
+  return lua_toistring(L, -1);
 }
 
-/* boundary wrapper (RULED 2026-07-31): pushes the conversion and
-   returns it as consumer TEXT (a HostString copy) */
 LUALIB_API HostString luaL_tolstring(lua_State* L, int idx)
 {
   return HostString(luaL_toistring(L, idx)->view());
@@ -1126,15 +1070,12 @@ void luaL_addgsubi(luaL_Buffer* b, std::string_view s,
   luaL_addlstring(b, s, pos, s.size() - pos); /* push last suffix */
 }
 
-/* boundary wrapper: converts once, the walk is on bytes */
 LUALIB_API void luaL_addgsub(luaL_Buffer* b, const HostString& s,
                              const HostString& p, const HostString& r)
 {
   luaL_addgsubi(b, s.view(), p.view(), r.view());
 }
 
-/* internal form: pushes the result and returns a BORROWED view of it
-   (valid while the result stays on the stack) */
 std::string_view luaL_gsubi(lua_State* L, std::string_view s,
                             std::string_view p, std::string_view r)
 {
@@ -1142,17 +1083,15 @@ std::string_view luaL_gsubi(lua_State* L, std::string_view s,
   luaL_buffinit(L, &b);
   luaL_addgsubi(&b, s, p, r);
   luaL_pushresult(&b);
-  return lua_tolstring(L, -1); /* borrowed from the pushed result */
+  return lua_tolstring(L, -1);
 }
 
-/* boundary wrapper: pushes the result and returns a HostString COPY */
 LUALIB_API HostString luaL_gsub(lua_State* L, const HostString& s,
                                 const HostString& p, const HostString& r)
 {
   return HostString(luaL_gsubi(L, s.view(), p.view(), r.view()));
 }
 
-/* the default allocator (official Lua keeps this static in lauxlib) */
 static void* luaL_alloc(void*, void* ptr, size_t, size_t nsize)
 {
   if (nsize == 0)
@@ -1170,7 +1109,6 @@ static void* luaL_alloc(void*, void* ptr, size_t, size_t nsize)
 */
 static int panic(lua_State* L)
 {
-  /* sanctioned c_str printf-shim reader (host sink) */
   const char* msg = (lua_type(L, -1) == LUA_TSTRING)
                         ? lua_toistring(L, -1)->c_str()
                         : "error object is not a string";
@@ -1195,8 +1133,6 @@ static void warnfcont(void* ud, const HostString& message, int tocont);
 */
 static int checkcontrol(lua_State* L, const HostString& message, int tocont)
 {
-  /* the default warn functions ARE host-side sink code; the callback
-     hands them host text, converted here at their own boundary */
   std::string_view m = message.view();
   if (tocont || m.empty() || m[0] != '@') /* not a control message? */
     return 0;
@@ -1222,9 +1158,8 @@ static void warnfoff(void* ud, const HostString& message, int tocont)
 static void warnfcont(void* ud, const HostString& message, int tocont)
 {
   lua_State* L = (lua_State*) ud;
-  /* host sink: local NUL-terminated copy for the C stream shim */
   std::string msg{message.view()};
-  fprintf(stderr, "%s", msg.c_str()); /* write message (host sink) */
+  fprintf(stderr, "%s", msg.c_str());
   fflush(stderr);
   if (tocont)                          /* not the last part? */
     lua_setwarnf(L, warnfcont, L);     /* to be continued */
@@ -1313,12 +1248,6 @@ LUALIB_API void luaL_checkversion_(lua_State* L, lua_Number ver, size_t sz)
   }
 }
 
-/*
-** {======================================================================
-** Public auxlib veneer: out-of-line wrappers (upstream macros, F8).
-** All cold paths (ryanbean decision, 2026-07-25).
-** =======================================================================
-*/
 
 LUALIB_API void luaL_checkversion(lua_State* L)
 {
@@ -1327,7 +1256,7 @@ LUALIB_API void luaL_checkversion(lua_State* L)
 
 LUALIB_API int luaL_loadfile(lua_State* L, const std::optional<HostString>& filename)
 {
-  return luaL_loadfilex(L, filename, std::nullopt); /* default mode */
+  return luaL_loadfilex(L, filename, std::nullopt);
 }
 
 LUALIB_API void luaL_argcheck(lua_State* L, bool cond, int arg, const HostString& extramsg)
@@ -1344,7 +1273,7 @@ LUALIB_API void luaL_argexpected(lua_State* L, bool cond, int arg, const HostStr
 
 LUALIB_API HostString luaL_checkstring(lua_State* L, int arg)
 {
-  return HostString(luaL_checklstring(L, arg)); /* boundary copy */
+  return HostString(luaL_checklstring(L, arg));
 }
 
 LUALIB_API std::optional<HostString> luaL_optstring(lua_State* L, int arg,

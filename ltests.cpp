@@ -39,16 +39,11 @@
 
 static void* l_Trick = 0;
 
-/* row copy of stack argument 'k' of the running C function */
 static inline TValue obj_at(lua_State* L, int k)
 {
   return getslot(L, L->ci->func + (StkId)k);
 }
 
-/*
-** Number of stack arguments consumed by the directives in 'fmt'
-** (see 'lua_pushfstring').
-*/
 static int fmtnargs(const char* fmt)
 {
   int n = 0;
@@ -66,7 +61,7 @@ static int fmtnargs(const char* fmt)
     case 'U':
       n++;
       break;
-    default: /* '%%' and unknown directives take no argument */
+    default:
       break;
     }
   }
@@ -99,7 +94,6 @@ static void badexit(const char* fmt, const char* s1, const char* s2)
 
 static int tpanic(lua_State* L)
 {
-  /* sanctioned c_str printf-shim reader (test host sink) */
   const char* msg = (lua_type(L, -1) == LUA_TSTRING)
                         ? lua_toistring(L, -1)->c_str()
                         : "error object is not a string";
@@ -125,7 +119,7 @@ static void warnf(void* ud, const HostString& msg, int tocont)
   static int onoff = 0;
   static int mode = 0; /* start in normal mode */
   static int lasttocont = 0;
-  std::string m{msg.view()}; /* host-side copy of the callback text */
+  std::string m{msg.view()};
   if (!lasttocont && !tocont && !m.empty() && m[0] == '@')
   { /* control message? */
     if (buff[0] != '\0')
@@ -210,7 +204,7 @@ struct memHeader
   } d;
 };
 
-static memHeader dbg_list_head = {};  /* sentinel for doubly-linked list */
+static memHeader dbg_list_head = {};
 
 static void dbg_link(memHeader* block)
 {
@@ -325,13 +319,6 @@ static void* debug_realloc(void* ud, void* b, size_t oldsize, size_t size)
 
 /* }====================================================================== */
 
-/*
-** {=====================================================================
-** Functions to check memory consistency.
-** Most of these checks are done through asserts, so this code does
-** not make sense with asserts off.
-** ======================================================================
-*/
 
 #include <assert.h>
 
@@ -372,7 +359,7 @@ static void printobj(global_State* g, GCObject* o)
                                          : 'g',
          "ns01oTt"[getage(o)], o -> marked);
   if (o->tt == LUA_VSTRING)
-    printf(" '%s'", static_cast<TString*>(o)->data.c_str()); /* test print boundary */
+    printf(" '%s'", static_cast<TString*>(o)->data.c_str());
 }
 
 static void lua_printvalue(TValue* v)
@@ -390,7 +377,7 @@ static void lua_printvalue(TValue* v)
   }
   case LUA_VSHRSTR:
     assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    printf("'%s'", tsvalue(v)->data.c_str()); /* test print boundary */
+    printf("'%s'", tsvalue(v)->data.c_str());
     break;
   case LUA_VFALSE:
     printf("%s", "false");
@@ -844,14 +831,12 @@ static int lua_checkmemory(lua_State* L)
 ** =======================================================
 */
 
-static std::string buildop(Proto* p, int pc) /* test-host text builder */
+static std::string buildop(Proto* p, int pc)
 {
-  char buff[100]; /* test print shim: line composed via sprintf */
+  char buff[100];
   char* out = buff;
   Instruction i = p->code[pc];
   OpCode o = GET_OPCODE(i);
-  /* debug-name table feeding the shim (ltests printf shims are
-     sanctioned c_str() readers) */
   const char* name = opnames[o]->c_str();
   int line = luaG_getfuncline(p, pc);
   int lineinfo = (p->lineinfo != nullptr) ? p->lineinfo[pc] : 0;
@@ -885,7 +870,7 @@ static std::string buildop(Proto* p, int pc) /* test-host text builder */
     sprintf(out, "%-12s%4d", name, GETARG_sJ(i));
     break;
   }
-  return buff; /* composed line (test-host text) */
+  return buff;
 }
 
 static int listcode(lua_State* L)
@@ -920,7 +905,7 @@ static int printcode(lua_State* L)
   printf("numparams: %d\n", p->numparams);
   for (pc = 0; pc < p->sizecode; pc++)
   {
-    printf("%s\n", buildop(p, pc).c_str()); /* test print shim */
+    printf("%s\n", buildop(p, pc).c_str());
   }
   return 0;
 }
@@ -1037,7 +1022,6 @@ static int get_sizes(lua_State* L)
   setnameval(L, lit<"global state">(), sizeof(global_State));
   setnameval(L, lit<"TValue">(), sizeof(TValue));
   setnameval(L, lit<"Node">(), sizeof(Node));
-  /* per-slot footprint across the three stack columns */
   setnameval(L, lit<"stack Value">(),
              sizeof(lua_Integer) + sizeof(GCObject*) + sizeof(lu_byte));
   return 1;
@@ -1059,25 +1043,21 @@ static int mem_query(lua_State* L)
     if (limit == 0)
     {
       l_memcontrol.memlimit = ULONG_MAX;
-      g->memlimit = 0; /* unlimited */
+      g->memlimit = 0;
     }
     else
     {
-      /* mirror the limit into the state's hard limit, expressed as
-         the same HEADROOM over the state's own accounting: string
-         payloads and buffers are host-allocated and policed through
-         luaM_reserve against g->memlimit, not by the test allocator */
       long headroom = ((long)(limit)) - ((long)(l_memcontrol.total));
       l_memcontrol.memlimit = limit;
       g->memlimit = (headroom > 0)
                         ? ((size_t)(gettotalbytes(g) + headroom))
-                        : 1; /* not 0: everything vetoed, not unlimited */
+                        : 1;
     }
     return 0;
   }
   else
   {
-    std::string_view t = luaL_checklstring(L, 1); /* borrowed from arg */
+    std::string_view t = luaL_checklstring(L, 1);
     int i;
     for (i = LUA_NUMTYPES - 1; i >= 0; i--)
     {
@@ -1173,10 +1153,6 @@ static int gc_printobj(lua_State* L)
   return 0;
 }
 
-/* note: "" is a REAL option (pairs with states[] == -1, the query
-   mode); the span carries the size, so no sentinel is needed and a
-   miss can no longer scan past the array (the old lst[i] loop had no
-   terminator here) */
 static const std::string_view statenames[] = {
     lit<"propagate">()->view(), lit<"enteratomic">()->view(),
     lit<"atomic">()->view(), lit<"sweepallgc">()->view(),
@@ -1614,7 +1590,7 @@ static int log2_aux(lua_State* L)
 struct Aux
 {
   jmp_buf jb;
-  std::string paniccode; /* owned host-side copy (outlives the longjmp) */
+  std::string paniccode;
   lua_State* L;
 };
 
@@ -1638,7 +1614,7 @@ static int checkpanic(lua_State* L)
   struct Aux b;
   void* ud;
   lua_State* L1;
-  std::string_view code = luaL_checklstring(L, 1); /* borrowed from arg */
+  std::string_view code = luaL_checklstring(L, 1);
   lua_Allocator a = lua_getallocf(L); lua_Alloc f = a.f; ud = a.ud;
   b.paniccode = std::string(luaL_optlstring(L, 2, lit<"">()->view()));
   b.L = L;
@@ -1686,7 +1662,6 @@ static int externstr(lua_State* L)
   std::string_view sv = luaL_checklstring(L, 1);
   const char* s = sv.data();
   len = sv.size();
-  /* push string directly (copies content internally) */
   lua_pushlstring(L, std::string_view{s, len}, 0, len);
   return 1;
 }
@@ -1700,11 +1675,6 @@ static int externstr(lua_State* L)
 
 static void sethookaux(lua_State* L, int mask, int count, std::string_view scpt);
 
-/*
-** Cursor over a testC script (category 7): the whole script as a
-** view plus a read offset (Java: String + int index). curbyte gives
-** the bounded read: -1 (EOZ-like) past the end.
-*/
 struct CScript
 {
   std::string_view code;
@@ -1772,7 +1742,6 @@ static int getnum_aux(lua_State* L, lua_State* L1, CScript* sc)
   }
   if (!lisdigit(curbyte(sc)))
   {
-    /* rest of the script: host-text deep copy for the message */
     lua_pushstring(L, HostString(sc->code.substr(sc->pos)));
     luaL_error(L, HostString(lit<"number expected (%s)">()->view()));
   }
@@ -1786,7 +1755,7 @@ static int getnum_aux(lua_State* L, lua_State* L1, CScript* sc)
 
 static std::string getstring_aux(lua_State* L, CScript* sc)
 {
-  std::string buff; /* test-host text builder */
+  std::string buff;
   skip(sc);
   int c = curbyte(sc);
   if (c == '"' || c == '\'')
@@ -1872,7 +1841,7 @@ static const std::string_view ops = lit<"+-*%^/\\&|~<>_!">()->view();
 static int runC(lua_State* L, lua_State* L1, std::string_view code)
 {
   int status = 0;
-  CScript sc{code, 0}; /* script cursor (Java: String + int) */
+  CScript sc{code, 0};
   for (;;)
   {
     std::string inst = getstring_aux(L, &sc);
@@ -1913,8 +1882,6 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     {
       int sz = getnum_aux(L, L1, &sc);
       std::string msg = getstring_aux(L, &sc);
-      /* harness convention: empty msg tests 'luaL_checkstack' with no
-         message (nullopt at the API) */
       luaL_checkstack(L1, sz,
                       msg.empty() ? std::optional<HostString>{}
                                   : std::optional<HostString>{HostString(msg)});
@@ -2101,7 +2068,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     else if (inst == lit<"print">()->view())
     {
       std::string msg = getstring_aux(L, &sc);
-      printf("%s\n", msg.c_str()); /* test print shim */
+      printf("%s\n", msg.c_str());
     }
     else if (inst == lit<"warningC">()->view())
     {
@@ -2151,21 +2118,21 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     }
     else if (inst == lit<"pushfstringI">()->view())
     {
-      const InternalString* fmt = lua_toistring(L, -2); /* sanctioned shim */
+      const InternalString* fmt = lua_toistring(L, -2);
       if (fmtnargs(fmt->c_str()) > 0)
         lua_pushinteger(L1, lua_tointeger(L, -1));
       lua_pushfstring(L1, fmt->c_str());
     }
     else if (inst == lit<"pushfstringS">()->view())
     {
-      const InternalString* fmt = lua_toistring(L, -2); /* sanctioned shim */
+      const InternalString* fmt = lua_toistring(L, -2);
       if (fmtnargs(fmt->c_str()) > 0)
         lua_pushstring(L1, lua_tostring(L, -1));
       lua_pushfstring(L1, fmt->c_str());
     }
     else if (inst == lit<"pushfstringP">()->view())
     {
-      const InternalString* fmt = lua_toistring(L, -2); /* sanctioned shim */
+      const InternalString* fmt = lua_toistring(L, -2);
       if (fmtnargs(fmt->c_str()) > 0)
       {
         if (lua_islightcfunction(L, -1))
@@ -2225,7 +2192,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     }
     else if (inst == lit<"traceback">()->view())
     {
-      HostString msg(getstring_aux(L, &sc)); /* host boundary copy */
+      HostString msg(getstring_aux(L, &sc));
       int level = getnum_aux(L, L1, &sc);
       luaL_traceback(L1, L1, msg, level);
     }
@@ -2343,7 +2310,6 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       int idx = getindex_aux(L, L1, &sc);
       if (lua_islightcfunction(L1, idx))
       {
-        /* light C function — push string identity */
         HostString fa = lua_funcaddress(L1, idx);
         lua_pushstring(L1, fa);
       }
@@ -2366,7 +2332,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       {
         HostString s = *lua_tostring(L1, i);
         lua_pushstring(L1, s);
-        assert(s == lua_tostring(L1, -1)); /* round-trips through the value */
+        assert(s == lua_tostring(L1, -1));
       }
     }
     else if (inst == lit<"Ltolstring">()->view())
@@ -2427,7 +2393,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
 static int testC(lua_State* L)
 {
   lua_State* L1;
-  std::string_view pc; /* borrowed from the arg (anchored on the stack) */
+  std::string_view pc;
   if (lua_isuserdata(L, 1))
   {
     L1 = getstate(L);
@@ -2448,7 +2414,7 @@ static int testC(lua_State* L)
 
 static int Cfunc(lua_State* L)
 {
-  std::string_view script = lua_tolstring(L, lua_upvalueindex(1)); /* borrowed */
+  std::string_view script = lua_tolstring(L, lua_upvalueindex(1));
   return runC(L, L, script);
 }
 
@@ -2458,7 +2424,7 @@ static int Cfunck(lua_State* L, int status, lua_KContext ctx)
   lua_setglobal(L, HostString(lit<"status">()->view()));
   lua_pushinteger(L, ((lua_Integer)(ctx)));
   lua_setglobal(L, HostString(lit<"ctx">()->view()));
-  std::string_view script = lua_tolstring(L, ((int)(ctx))); /* borrowed */
+  std::string_view script = lua_tolstring(L, ((int)(ctx)));
   return runC(L, L, script);
 }
 
@@ -2488,7 +2454,7 @@ static void Chook(lua_State* L, lua_Debug* ar)
   lua_getfield(L, LUA_REGISTRYINDEX, HostString(lit<"C_HOOK">()->view()));
   lua_pushlightuserdata(L, L);
   lua_gettable(L, -2);                    /* get C_HOOK[L] (script saved by sethookaux) */
-  std::string scpt{lua_tostring(L, -1)->view()}; /* (a copy: string will be popped) */
+  std::string scpt{lua_tostring(L, -1)->view()};
   lua_pop(L, 2);                          /* remove C_HOOK and script */
   lua_pushistringref(L, events[ar->event]); /* may be used by script */
   lua_pushinteger(L, ar->currentline);    /* may be used by script */
@@ -2525,8 +2491,8 @@ static int sethook(lua_State* L)
     lua_sethook(L, nullptr, 0, 0); /* turn off hooks */
   else
   {
-    std::string_view scpt = luaL_checklstring(L, 1);  /* borrowed */
-    std::string_view smask = luaL_checklstring(L, 2); /* borrowed */
+    std::string_view scpt = luaL_checklstring(L, 1);
+    std::string_view smask = luaL_checklstring(L, 2);
     int count = ((int)(luaL_optinteger(L, 3, 0)));
     int mask = 0;
     if (smask.find('c') != std::string_view::npos)

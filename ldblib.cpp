@@ -157,7 +157,7 @@ static int db_getinfo(lua_State* L)
   std::string_view options = luaL_optlstring(L, arg + 2, lit<"flnSrtu">()->view());
   checkstack(L, L1, 3);
   luaL_argcheck(L, sv_byteat(options, 0) != '>', arg + 2, HostString(lit<"invalid option '>'">()->view()));
-  std::string optbuf; /* engine-internal byte buffer for the '>' prefix */
+  std::string optbuf;
   if (lua_isfunction(L, arg + 1))
   {                                               /* info about a function? */
     optbuf.reserve(options.size() + 1);           /* add '>' to 'options' */
@@ -202,7 +202,7 @@ static int db_getinfo(lua_State* L)
   }
   if ((options.find('n') != std::string_view::npos))
   {
-    if (ar.name.data() != nullptr) /* null = absent: field stays nil */
+    if (ar.name.data() != nullptr)
       settabss(L, lit<"name">(), ar.name);
     settabss(L, lit<"namewhat">(), ar.namewhat);
   }
@@ -232,7 +232,7 @@ static int db_getlocal(lua_State* L)
   {                                                 /* function argument? */
     lua_pushvalue(L, arg + 1); /* push function */
     const InternalString* name = lua_getlocali(L, nullptr, nvar);
-    if (name) /* push local name (or nil if none) */
+    if (name)
       lua_pushistringref(L, name);
     else
       lua_pushnil(L);
@@ -369,7 +369,7 @@ static void hookf(lua_State* L, lua_Debug* ar)
       lua_pushinteger(L, ar->currentline); /* push current line */
     else
       lua_pushnil(L);
-    InternalDebug iar{}; /* internal record: only i_ci travels */
+    InternalDebug iar{};
     iar.i_ci = ar->i_ci;
     assert(lua_getinfoi(L, lit<"lS">()->view(), iar).has_value());
     lua_call(L, 2, 0); /* call hook function */
@@ -393,10 +393,6 @@ static int makemask(std::string_view smask, int count)
   return mask;
 }
 
-/*
-** Convert a bit mask (for 'gethook') into a string mask. Writes into
-** 'smask' and returns the mask length.
-*/
 static size_t unmakemask(int mask, std::span<char> smask)
 {
   size_t i = 0;
@@ -488,7 +484,6 @@ static int db_debug(lua_State* L)
     if (luaL_loadbufferx(L, std::string_view{buffer, strlen(buffer)}, HostString(lit<"=(debug command)">()->view()), HostString(lit<"t">()->view())) ||
         lua_pcall(L, 0, 0, 0))
     {
-      /* host print boundary: the payload is NUL-terminated (c_str) */
       fprintf(stderr, "%s\n", luaL_toistring(L, -1)->c_str());
       fflush(stderr);
     }

@@ -32,33 +32,14 @@ constexpr int LUA_TOTALTYPES = (LUA_TPROTO + 2);
 */
 
 /* add variant bits to a type */
-/* add variant bits to a basic type tag (usable in constant expressions
-** and case labels) */
 constexpr lu_byte makevariant(int t, int v)
 {
   return ((lu_byte)(t | (v << 4)));
 }
 
-/*
-** The two storage columns of a Lua value: a 64-bit primitive payload
-** and a GC reference. Which one is meaningful — and how the payload's
-** bits are interpreted — is dictated entirely by the enclosing tag
-** ('tt_' / 'key_tt' / array-part tag byte); the other column is
-** ignored (a numeric store leaves 'ref' stale — never read, because
-** the tag says non-collectable). This is the row form of the managed
-** representation (parallel primitive/reference/tag arrays — the
-** Truffle frame design): 'prim' transposes to the long[] column
-** (doubles as raw bits via bit_cast — Java doubleToRawLongBits),
-** 'ref' to the Object[] column. Port notes: managed setters null the
-** ref column on primitive stores (GC hygiene the C++ GC doesn't need,
-** since it consults the tag before tracing); light userdata and
-** C functions ride 'prim' here as pointer bits, but map to the ref
-** column (an Object) and the registry identifier respectively in the
-** managed port.
-*/
 struct Value
 {
-  lua_Integer prim;     /* integers, float bits, light udata, C functions */
+  lua_Integer prim;
   struct GCObject* ref; /* collectable objects */
 };
 
@@ -73,33 +54,18 @@ struct TValue
   lu_byte tt_;
 };
 
-/*
-** Layout of a type tag byte (tt_ / tt):
-**   bits 0-3: basic type (LUA_TNIL, LUA_TNUMBER, ...)
-**   bits 4-5: variant bits (e.g. LUA_VNUMINT vs LUA_VNUMFLT)
-**   bit 6:    BIT_ISCOLLECTABLE
-*/
 
-/* selects the basic type (bits 0-3) of a tag — was the novariant macro */
 constexpr int NOVARIANT_MASK = 0x0F;
 
-/* selects type + variant bits (bits 0-5) of a tag — was the withvariant macro */
 constexpr int WITHVARIANT_MASK = 0x3F;
 
 /* Macros for internal tests */
 
 /* collectable object has the same tag as the original value */
 
-/*
-** Entries in a Lua stack: plain values. The list of to-be-closed
-** variables lives in a separate array in 'lua_State' ('tbc'), not
-** threaded through the stack.
-*/
 
-/* index to stack elements (integer offset from stack base) */
 typedef size_t StkId;
 
-/* sentinel for "value does not come from a stack slot" (error attribution) */
 constexpr StkId NOSLOT = ~(StkId)0;
 
 /*
@@ -137,7 +103,6 @@ constexpr lu_byte LUA_VNOTABLE = makevariant(LUA_TNIL, 3);
 ** be accepted as empty.)
 */
 
-/* initializer for a value corresponding to an absent key */
 
 /* }================================================================== */
 
@@ -183,8 +148,6 @@ struct GCObject
 /* Bit mark for collectable types */
 constexpr int BIT_ISCOLLECTABLE = (1 << 6);
 
-/* mark a tag as collectable (usable in constant expressions and case
-** labels) */
 constexpr lu_byte ctb(lu_byte t)
 {
   return ((lu_byte)(t | BIT_ISCOLLECTABLE));
@@ -212,7 +175,6 @@ constexpr lu_byte LUA_VNUMFLT = makevariant(LUA_TNUMBER, 1); /* float numbers */
 
 /* Variant tags for strings */
 constexpr lu_byte LUA_VSTRING = makevariant(LUA_TSTRING, 0);
-/* Keep old names for now during transition */
 constexpr lu_byte LUA_VSHRSTR = LUA_VSTRING;
 constexpr lu_byte LUA_VLNGSTR = LUA_VSTRING;
 
@@ -222,8 +184,8 @@ constexpr lu_byte LUA_VLNGSTR = LUA_VSTRING;
 struct TString : GCObject
 {
   lu_byte extra;       /* reserved words for short strings; "has hash" for longs */
-  unsigned int hash;   /* cached hash value */
-  InternalString data; /* the byte payload (see internal_string.h) */
+  unsigned int hash;
+  InternalString data;
 };
 
 static l_forceinline size_t tsslen(const TString* ts)
@@ -247,22 +209,14 @@ constexpr lu_byte LUA_VLIGHTUSERDATA = makevariant(LUA_TLIGHTUSERDATA, 0);
 
 constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
 
-/*
-** Header for userdata; the user values and the binary data area are
-** separately allocated luaM arrays (managed shape: an object holding
-** an array reference and a byte-array reference).
-** Userdata with no user values do not need to be gray during GC, and
-** therefore do not need a 'gclist'; the code never accesses 'gclist'
-** on userdata with no user values.
-*/
 struct Udata : GCObject
 {
   unsigned short nuvalue; /* number of user values */
-  size_t len;             /* number of bytes in 'data' */
+  size_t len;
   struct Table* metatable;
   GCObject* gclist;
-  TValue* uv; /* user values (luaM array of 'nuvalue' elements) */
-  char* data; /* user memory (luaM block of 'len' bytes) */
+  TValue* uv;
+  char* data;
 };
 
 /* get the address of the memory block inside 'Udata' */
@@ -271,14 +225,6 @@ static l_forceinline char* getudatamem(Udata* u)
   return u->data;
 }
 
-/*
-** Allocated size of the data block for a userdata of 'len' bytes.
-** A zero-size userdata still allocates one byte: the C API promises a
-** non-null data pointer (lua_touserdata distinguishes userdata by it).
-** Used by allocation, freeing, and GC size accounting — the three must
-** agree. (Managed targets drop this: a zero-length array is a valid
-** non-null object there.)
-*/
 static l_forceinline size_t udatadatasize(size_t len)
 {
   return len == 0 ? 1 : len;
@@ -406,11 +352,11 @@ constexpr lu_byte LUA_VCCL = makevariant(LUA_TFUNCTION, 2); /* C closure */
 */
 struct UpVal : GCObject
 {
-  struct UpVal* opennext;    /* next in open list (nullptr when closed) */
-  struct UpVal** previous;   /* back-pointer in open list (nullptr when closed) */
-  struct lua_State* owner;   /* thread whose stack holds the value (when open) */
-  StkId stkid;              /* stack index in 'owner' when open */
-  TValue value;             /* embedded storage for closed-over value */
+  struct UpVal* opennext;
+  struct UpVal** previous;
+  struct lua_State* owner;
+  StkId stkid;
+  TValue value;
 };
 
 struct Closure : GCObject
@@ -422,10 +368,9 @@ struct Closure : GCObject
 struct CClosure : Closure
 {
   lua_CFunction f;
-  TValue* upvalue; /* upvalues (luaM array of 'nupvalues' elements) */
+  TValue* upvalue;
 };
 
-/* total bytes of a C closure (header + upvalue array), for GC accounting */
 constexpr size_t sizeCclosure(int n)
 {
   return sizeof(CClosure) + sizeof(TValue) * (unsigned int)n;
@@ -434,10 +379,9 @@ constexpr size_t sizeCclosure(int n)
 struct LClosure : Closure
 {
   struct Proto* p;
-  UpVal** upvals; /* upvalues (luaM array of 'nupvalues' elements) */
+  UpVal** upvals;
 };
 
-/* total bytes of a Lua closure (header + upvals array), for GC accounting */
 constexpr size_t sizeLclosure(int n)
 {
   return sizeof(LClosure) + sizeof(UpVal*) * (unsigned int)n;
@@ -459,7 +403,7 @@ constexpr lu_byte LUA_VTABLE = makevariant(LUA_TTABLE, 0);
 */
 struct Node
 {
-  TValue val;       /* node value */
+  TValue val;
   lu_byte key_tt;   /* key type */
   int next;         /* for chaining */
   Value key_val;    /* key value */
@@ -472,7 +416,7 @@ struct Table : GCObject
   unsigned int asize; /* number of slots in 'array' array */
   Value* array;       /* array part */
   Node* node;
-  int lastfree;       /* last free position in hash (node index), scans backward */
+  int lastfree;
   struct Table* metatable;
   GCObject* gclist;
 };
@@ -491,7 +435,7 @@ struct Table : GCObject
 */
 static l_forceinline unsigned int lmod(lua_Unsigned s, unsigned int size)
 {
-  assert((size & (size - 1)) == 0); /* size must be a power of 2 */
+  assert((size & (size - 1)) == 0);
   return (unsigned int)s & (size - 1);
 }
 
@@ -504,21 +448,6 @@ static l_forceinline unsigned int sizenode(const Table* t)
   return twoto(t->lsizenode);
 }
 
-/*
-** {==================================================================
-** Get functions — typed reads out of TValues
-**
-** The single boundary over the value representation: every read of a
-** value's payload goes through one of these. The managed port swaps
-** the representation (parallel primitive/reference/tag arrays — the
-** Truffle frame design) behind these exact signatures; nothing
-** outside this section and the Set functions below may touch the
-** representation directly. Each accessor asserts the tag it reads
-** under — the same check the managed slot API performs — and the
-** GC-object accessors also cross-check the referent's own 'tt'
-** (in Java, that second check is the checked cast itself).
-** ===================================================================
-*/
 
 static l_forceinline lua_Integer ivalue(const TValue* o)
 {
@@ -532,7 +461,6 @@ static l_forceinline lua_Number fltvalue(const TValue* o)
   return std::bit_cast<lua_Number>(o->value_.prim);
 }
 
-/* number (integer or float) coerced to a float */
 static l_forceinline lua_Number nvalue(const TValue* o)
 {
   assert(o->tt_ == LUA_VNUMINT || o->tt_ == LUA_VNUMFLT);
@@ -579,7 +507,6 @@ static l_forceinline Udata* uvalue(const TValue* o)
   return static_cast<Udata*>(o->value_.ref);
 }
 
-/* thvalue is defined in lstate.h (needs the complete lua_State) */
 
 static l_forceinline Closure* clvalue(const TValue* o)
 {
@@ -607,11 +534,9 @@ static l_forceinline Proto* getproto(const TValue* o)
   return clLvalue(o)->p;
 }
 
-/* node keys: the same boundary over a Node's key representation */
 
 static l_forceinline GCObject* gckey(const Node* n)
 {
-  /* dead keys keep their reference for identity comparison in 'equalkey' */
   assert((n->key_tt & BIT_ISCOLLECTABLE) || n->key_tt == LUA_TDEADKEY);
   return n->key_val.ref;
 }
@@ -655,14 +580,6 @@ static l_forceinline lua_CFunction keyfval(const Node* n)
 ** ===================================================================
 */
 
-/*
-** Any value being manipulated by the program either is non
-** collectable, or the collectable object has the right tag
-** and it is not dead. The option 'L == nullptr' allows other
-** callers to use it where L is not available.
-** 'luaO_checkliveness' performs its checks via asserts and always
-** returns 1, so it can be called as 'assert(luaO_checkliveness(...))'.
-*/
 LUAI_FUNC int luaO_checkliveness(struct lua_State* L, const TValue* obj);
 
 static l_forceinline void checkliveness(struct lua_State* L, const TValue* obj)
@@ -670,7 +587,6 @@ static l_forceinline void checkliveness(struct lua_State* L, const TValue* obj)
   assert(luaO_checkliveness(L, obj));
 }
 
-/* main value copy (from 'obj2' to 'obj1') */
 static l_forceinline void setobj(struct lua_State* L, TValue* obj1, const TValue* obj2)
 {
   obj1->value_ = obj2->value_;
@@ -685,7 +601,6 @@ static l_forceinline void setfltvalue(TValue* obj, lua_Number x)
   obj->tt_ = LUA_VNUMFLT;
 }
 
-/* change value of a float, keeping its tag */
 static l_forceinline void chgfltvalue(TValue* obj, lua_Number x)
 {
   assert(obj->tt_ == LUA_VNUMFLT);
@@ -698,7 +613,6 @@ static l_forceinline void setivalue(TValue* obj, lua_Integer x)
   obj->tt_ = LUA_VNUMINT;
 }
 
-/* change value of an integer, keeping its tag */
 static l_forceinline void chgivalue(TValue* obj, lua_Integer x)
 {
   assert(obj->tt_ == LUA_VNUMINT);
@@ -764,7 +678,6 @@ static l_forceinline void setclCvalue(struct lua_State* L, TValue* obj, CClosure
   checkliveness(L, obj);
 }
 
-/* setthvalue lives in lstate.h — it needs the complete lua_State type */
 
 /* copy a value into a node key */
 static l_forceinline void setnodekey(Node* node, const TValue* obj)
@@ -786,46 +699,29 @@ static l_forceinline void getnodekey(struct lua_State* L, TValue* obj, const Nod
 /* size of buffer for 'luaO_utf8esc' function */
 constexpr int UTF8BUFFSZ = 8;
 
-/*
-** {==================================================================
-** Arguments for 'luaO_pushvfstring': the replacement for C 'va_list'.
-** A fixed array of typed values, filled by explicit typed appends at
-** the call site, e.g.:
-**   luaG_runerror(L, "too many %s (limit is %d)",
-**                 FmtArgs().str(what).num(limit));
-** Each append records which format directive it answers ('s', 'c',
-** 'd', 'I', 'f', 'p', 'U'); the formatting loop asserts that
-** directives and appended arguments match in type and count.
-** ===================================================================
-*/
 
-/* maximum number of arguments to 'luaO_pushvfstring' */
 constexpr int MAXFMTARGS = 8;
 
-/*
-** One argument: a directive tag plus one field per possible type
-** (plain struct, no union; only the field selected by 'tag' is read)
-*/
 struct FmtArg
 {
-  char tag;      /* directive this argument answers */
-  const InternalString* is; /* '%s' as tag 'S' */
-  lua_Integer i; /* '%c', '%d', '%I', '%U' */
-  lua_Number n;  /* '%f' */
-  const void* p; /* '%p' */
+  char tag;
+  const InternalString* is;
+  lua_Integer i;
+  lua_Number n;
+  const void* p;
 };
 
 struct FmtArgs
 {
-  int n = 0;              /* number of arguments appended */
-  FmtArg arg[MAXFMTARGS]; /* only 'arg[0..n-1]' are meaningful */
-  FmtArgs& str(const InternalString* s); /* '%s': an engine string */
-  FmtArgs& chr(int c);           /* '%c': an 'int' as a character */
-  FmtArgs& num(int d);           /* '%d': an 'int' */
-  FmtArgs& lint(lua_Integer i);  /* '%I': a 'lua_Integer' */
-  FmtArgs& flt(lua_Number f);    /* '%f': a 'lua_Number' */
-  FmtArgs& ptr(const void* p);   /* '%p': a pointer */
-  FmtArgs& utf8(unsigned long u); /* '%U': a codepoint as UTF-8 */
+  int n = 0;
+  FmtArg arg[MAXFMTARGS];
+  FmtArgs& str(const InternalString* s);
+  FmtArgs& chr(int c);
+  FmtArgs& num(int d);
+  FmtArgs& lint(lua_Integer i);
+  FmtArgs& flt(lua_Number f);
+  FmtArgs& ptr(const void* p);
+  FmtArgs& utf8(unsigned long u);
 };
 
 /* }================================================================== */
@@ -839,23 +735,10 @@ LUAI_FUNC int luaO_rawarith(lua_State* L, int op, const TValue* p1,
                             const TValue* p2, TValue* res);
 LUAI_FUNC void luaO_arith(lua_State* L, int op, StkId p1, StkId p2,
                           StkId res);
-/*
-** BYTES-path function: the input is a byte view — a TString payload
-** or the lexer's ByteBuilder bytes — never a text string. Scanning is
-** bounded by the view (the strtod NUL dependence is gone; the
-** conversion runs on 'from_chars' over the view range). Java: byte[].
-*/
 LUAI_FUNC size_t luaO_str2num(std::string_view s, TValue* o);
 LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
-/*
-** Format entry points: fmt is an InternalString*, scanned by offset
-** (an interior cursor is (InternalString*, int), never a raw
-** pointer). The const char* overloads are GONE (retired 2026-07-30);
-** boundary callers deep-copy their transitional char* text at their
-** own boundaries.
-*/
 LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L,
                                                   const InternalString* fmt,
                                                   const FmtArgs& args);

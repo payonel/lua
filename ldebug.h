@@ -28,32 +28,14 @@ constexpr int ABSLINEINFO = (-0x80);
 LUAI_FUNC int luaG_getfuncline(const Proto* f, int pc);
 LUAI_FUNC const InternalString* luaG_findlocal(lua_State* L, CallInfo* ci, int n,
                                      StkId* pos);
-/*
-** Error reporters take an explicit operand origin ('src'): the stack
-** index of the offending value when it lives in the current frame,
-** an encoded upvalue index when it is an upvalue of the running
-** closure (OP_GETTABUP/OP_SETTABUP), or NOSLOT when neither
-** (constants, immediates, metatable values). The origin drives error
-** attribution ("global 'x'", "local 'y'", "upvalue 'z'") — it
-** replaces recovering the operand by scanning storage for pointer
-** identity, which by-value operand rows (and the managed port) cannot
-** support.
-*/
 
-/* origins in [UPVALORIGIN, NOSLOT) encode upvalue indices */
-constexpr StkId UPVALORIGIN = ~(StkId)0 - 256; /* MAXUPVAL + 1 below NOSLOT */
+constexpr StkId UPVALORIGIN = ~(StkId)0 - 256;
 
 static l_forceinline StkId upvalorigin(int uvidx)
 {
   return UPVALORIGIN + (StkId)uvidx;
 }
 
-/*
-** InternalString* forms are the primary signatures (literal sites pass
-** lit<"...">()); the const char* forms are TRANSITIONAL, kept for
-** callers holding computed messages (luaO_pushfstring returns) until
-** the return-type migration removes them.
-*/
 LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o,
                                  const InternalString* opname, StkId src);
 LUAI_FUNC l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src);
@@ -72,10 +54,6 @@ LUAI_FUNC l_noret luaG_tointerror(lua_State* L, const TValue* p1,
 LUAI_FUNC l_noret luaG_ordererror(lua_State* L, const TValue* p1,
                                   const TValue* p2);
 
-/*
-** Slot-form overloads: materialize row copies of the offending slots
-** (the originals stay anchored in the stack while the message is built).
-*/
 static l_forceinline l_noret luaG_forerror(lua_State* L, StkId idx,
                                            const InternalString* what)
 {

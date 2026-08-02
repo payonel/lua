@@ -1,5 +1,3 @@
-# Include-only fragment: built from the top-level makefile, which provides
-# TOP_DIR, OBJ_DIR, CXX, and CXXFLAGS. Not meant to be run standalone.
 
 TEST_DIR        = tests/libs
 TEST_CXXFLAGS   = -fPIC -shared -I$(TOP_DIR) -I$(TEST_DIR)

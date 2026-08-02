@@ -2176,7 +2176,6 @@ void luaK_finish(FuncState* fs)
   for (i = 0; i < fs->pc; i++)
   {
     Instruction* pc = &p->code[i];
-    /* avoid "not used" warnings when assert is off (for 'onelua.c') */
     (void) luaP_isOT;
     (void) luaP_isIT;
     assert(i == 0 || luaP_isOT(*(pc - 1)) == luaP_isIT(*pc));

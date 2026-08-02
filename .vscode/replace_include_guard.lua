@@ -23,7 +23,6 @@ function replace_include_guard(filename)
   end
   file:close()
 
-  -- Pattern for ifndef and define
   local ifndef_pattern = "#ifndef ([a-zA-Z_]+_[hH])"
   local ifndef_alt_pattern = "#if !defined%(([a-zA-Z_]+_[hH])%)"
   local define_pattern = "#define ([a-zA-Z_]+_[hH])"
@@ -31,7 +30,6 @@ function replace_include_guard(filename)
   local ifndef_index, define_index, endif_index = nil, nil, nil
   local ifndef_match, define_match = nil, nil
 
-  -- Find ifndef, define, and the last non-empty line (presumed endif)
   for i, line in ipairs(content) do
     if not ifndef_index and line:match(ifndef_pattern) then
       ifndef_index, ifndef_match = i, line:match(ifndef_pattern)
@@ -47,7 +45,6 @@ function replace_include_guard(filename)
 
   local line_count = #content
 
-  -- Check for required pattern matches and positions
   if ifndef_index and define_index and endif_index and ifndef_match == define_match and define_index == ifndef_index + 1 then
     content[ifndef_index] = "#pragma once"
     content[define_index] = nil
@@ -57,7 +54,6 @@ function replace_include_guard(filename)
     return
   end
 
-  -- Write changes back to file
   file = io.open(filename, "w")
   for i=1,line_count do
     local line = content[i]
@@ -69,7 +65,6 @@ function replace_include_guard(filename)
   print(filename .. " updated")
 end
 
--- Process each file passed as a command-line argument
 for i = 1, #arg do
   replace_include_guard(arg[i])
 end

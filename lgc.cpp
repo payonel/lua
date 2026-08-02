@@ -102,7 +102,6 @@ static inline void markobject(global_State* g, GCObject* t)
     reallymarkobject(g, t);
 }
 
-/* mark an object that can be nullptr */
 static inline void markobjectN(global_State* g, GCObject* t)
 {
   if (t)
@@ -250,8 +249,6 @@ static int iscleared(global_State* g, const GCObject* o)
     return 0; /* non-collectable value */
   else if (((o->tt) & NOVARIANT_MASK) == LUA_TSTRING)
   {
-    /* strings are 'values', so are never weak; marking mutates the
-    ** object, which the GC intentionally does through const pointers */
     markobject(g, const_cast<GCObject*>(o));
     return 0;
   }
@@ -957,7 +954,7 @@ static void freeobj(lua_State* L, GCObject* o)
   {
     Udata* u = static_cast<Udata*>(o);
     luaM_free_(L, (u->uv), ((size_t)u->nuvalue) * sizeof(TValue));
-    if (u->data != nullptr) /* can be null after construction failure */
+    if (u->data != nullptr)
       luaM_free_(L, (u->data), udatadatasize(u->len));
     luaM_free_(L, (o), sizeof(Udata));
     break;

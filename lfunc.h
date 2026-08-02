@@ -25,19 +25,12 @@ static l_forceinline int upisopen(const UpVal* up)
   return up->previous != nullptr;
 }
 
-/* Get the stack index for an open upvalue */
 static l_forceinline StkId uplevel(const UpVal* up)
 {
   assert(upisopen(up));
   return up->stkid;
 }
 
-/*
-** An upvalue's value lives in a slot of the owner thread's stack while
-** open, in the upvalue's own embedded storage when closed. Access goes
-** by value: a row copy for reads, a discriminated store for writes —
-** no pointer into a stack ever escapes.
-*/
 static l_forceinline TValue upvalgetval(const UpVal* uv)
 {
   return upisopen(uv) ? getslot(uv->owner, uv->stkid) : uv->value;

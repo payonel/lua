@@ -81,8 +81,6 @@ constexpr int vkisindexed(expkind k)
 struct expdesc
 {
   expkind k;
-  /* (was a union in upstream Lua, discriminated by 'k'; flattened
-     here — memory parity is a non-goal) */
   lua_Integer ival; /* for VKINT */
   lua_Number nval;  /* for VKFLT */
   TString* strval;  /* for VKSTR */

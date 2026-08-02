@@ -21,10 +21,6 @@
 #include "lua_internal.h"
 #include "lualib.h"
 
-/*
-** LUA_DIRSEP is the character that replaces dots in submodule names
-** when searching for a C or Lua loader.
-*/
 
 /* prefix for open functions in C libraries */
 
@@ -71,7 +67,6 @@ static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym);
 
 static void* lsys_load(lua_State* L, const char* path, int seeglb)
 {
-  /* dlopen is system ABI (internal OS edge stays char*, RULED) */
   void* lib = dlopen(path, RTLD_NOW | (seeglb ? RTLD_GLOBAL : RTLD_LOCAL));
   if (l_unlikely(lib == nullptr))
     lua_pushstring(L, dlerror());
@@ -80,7 +75,6 @@ static void* lsys_load(lua_State* L, const char* path, int seeglb)
 
 static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym)
 {
-  /* dlsym is system ABI (internal OS edge stays char*, RULED) */
   lua_CFunction f = ((lua_CFunction)(cast_func(dlsym(lib, sym))));
   if (l_unlikely(f == nullptr))
     lua_pushstring(L, dlerror());
@@ -125,8 +119,7 @@ static void setpath(lua_State* L, const InternalString* fieldname,
 {
   lua_pushstring(L, envname);
   lua_pushstring(L, HostString(LUA_VERSUFFIX));
-  lua_pushfstring(L, HostString(lit<"%s%s">()->view())); /* versioned name (anchored on the stack) */
-  /* getenv is system ABI (internal OS edge stays char*, RULED) */
+  lua_pushfstring(L, HostString(lit<"%s%s">()->view()));
   const char* epath = getenv(lua_toistring(L, -1)->c_str()); /* try versioned name */
   if (epath == nullptr)                                      /* no versioned environment variable? */
     epath = getenv(envname);                                 /* try unversioned name */
@@ -134,7 +127,7 @@ static void setpath(lua_State* L, const InternalString* fieldname,
     lua_pushlstring(L, dft, 0, dft.size()); /* use default */
   else
   {
-    std::string_view path{epath}; /* OS edge: borrow the env value bytes */
+    std::string_view path{epath};
     size_t dftmark = path.find(lit<";;">()->view());
     if (dftmark == std::string_view::npos)
       lua_pushlstring(L, path, 0, path.size()); /* nothing to change */
@@ -184,9 +177,6 @@ static void* checkclib(lua_State* L, const InternalString* path)
   return plib;
 }
 
-/*
-** __gc for library userdata — unloads the DLL.
-*/
 static int lib_gc(lua_State* L)
 {
   void** p = (void**) lua_touserdata(L, 1);
@@ -198,9 +188,6 @@ static int lib_gc(lua_State* L)
   return 0;
 }
 
-/*
-** Create a userdata that, when collected, will unload 'plib'
-*/
 static void createlibstr(lua_State* L, void* plib)
 {
   void** p = (void**) lua_newuserdatauv(L, sizeof(void*), 0);
@@ -294,7 +281,6 @@ static int ll_loadlib(lua_State* L)
 
 static int readable(const char* filename)
 {
-  /* fopen is system ABI (internal OS edge stays char*, RULED) */
   FILE* f = fopen(filename, "r"); /* try to open file */
   if (f == nullptr)
     return 0; /* open failed */
@@ -318,10 +304,6 @@ static void pusherrornotfound(lua_State* L, std::string_view path)
   luaL_pushresult(&b);
 }
 
-/*
-** Returns 1 with the found file name pushed on the stack, or 0 with
-** the error message pushed.
-*/
 static int searchpath(lua_State* L, std::string_view name,
                       std::string_view path,
                       std::string_view sep,
@@ -330,16 +312,13 @@ static int searchpath(lua_State* L, std::string_view name,
   luaL_Buffer buff;
   /* separator is non-empty and appears in 'name'? */
   if (!sep.empty() && name.find(sep) != std::string_view::npos)
-  { /* replace it by 'dirsep' (result stays anchored on the stack) */
+  {
     name = luaL_gsubi(L, name, sep, dirsep);
   }
   luaL_buffinit(L, &buff);
   /* add path to the buffer, replacing marks ('?') with the file name */
   luaL_addgsubi(&buff, path, LUA_PATH_MARK->view(), name);
   {
-    /* walk the list 'name1;name2;name3;...' by offsets over a view of
-       the buffer (Java: byte[] + int cursors); each candidate file
-       name materializes as an engine string for the fopen probe */
     std::span<char> area = luaL_buffarea(&buff);
     std::string_view list{area.data(), luaL_bufflen(&buff)};
     size_t pos = 0;
@@ -348,13 +327,13 @@ static int searchpath(lua_State* L, std::string_view name,
       size_t sepmark = list.find(LUA_PATH_SEP->view(), pos); /* next separator */
       if (sepmark == std::string_view::npos)          /* separator not found? */
         sepmark = list.size();                        /* name goes until the end */
-      InternalString filename(list, pos, sepmark - pos); /* deep copy of the sub-range */
+      InternalString filename(list, pos, sepmark - pos);
       if (readable(filename.c_str()))
       {                                    /* does file exist and is readable? */
         lua_pushistringref(L, &filename);  /* save and return name */
         return 1;
       }
-      pos = sepmark + 1; /* continue after the separator */
+      pos = sepmark + 1;
     }
   }
   luaL_pushresult(&buff);                     /* push path to create error message */
@@ -378,7 +357,6 @@ static int ll_searchpath(lua_State* L)
   }
 }
 
-/* same contract as 'searchpath': 1 = file name pushed, 0 = error pushed */
 static int findfile(lua_State* L, std::string_view name,
                     const InternalString* pname,
                     std::string_view dirsep)
@@ -389,7 +367,7 @@ static int findfile(lua_State* L, std::string_view name,
     lua_pushstring(L, HostString(pname->view()));
     luaL_error(L, HostString(lit<"'package.%s' must be a string">()->view()));
   }
-  std::string_view path = lua_tolstring(L, -1); /* borrowed (stays anchored) */
+  std::string_view path = lua_tolstring(L, -1);
   return searchpath(L, name, path, lit<".">()->view(), dirsep);
 }
 
@@ -404,7 +382,7 @@ static int checkload(lua_State* L, int stat, std::string_view filename)
   {
     lua_pushvalue(L, 1);
     lua_pushlstring(L, filename, 0, filename.size());
-    lua_pushvalue(L, -3); /* original error message */
+    lua_pushvalue(L, -3);
     return luaL_error(L, HostString(lit<"error loading module '%s' from file '%s':\n\t%s">()->view()));
   }
 }
@@ -413,8 +391,8 @@ static int searcher_Lua(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
   if (!findfile(L, name, lit<"path">(), LUA_DIRSEP->view()))
-    return 1; /* module not found in this path (error message pushed) */
-  const InternalString* filename = lua_toistring(L, -1); /* borrowed (anchored) */
+    return 1;
+  const InternalString* filename = lua_toistring(L, -1);
   return checkload(L, (luaL_loadfilei(L, filename, nullptr) == LUA_OK),
                    filename->view());
 }
@@ -436,7 +414,7 @@ static int loadfunc(lua_State* L, const InternalString* filename,
   {
     int stat;
     lua_pushlstring(L, modname, 0, mark);
-    lua_pushfstring(L, HostString(lit<"luaopen_%s">()->view())); /* symbol name (anchored on the stack) */
+    lua_pushfstring(L, HostString(lit<"luaopen_%s">()->view()));
     const InternalString* openfunc = lua_toistring(L, -1);
     stat = lookforfunc(L, filename, openfunc);
     if (stat != ERRFUNC)
@@ -444,7 +422,7 @@ static int loadfunc(lua_State* L, const InternalString* filename,
     modname = modname.substr(mark + 1); /* else go ahead and try old-style name */
   }
   lua_pushlstring(L, modname, 0, modname.size());
-  lua_pushfstring(L, HostString(lit<"luaopen_%s">()->view())); /* symbol name (anchored on the stack) */
+  lua_pushfstring(L, HostString(lit<"luaopen_%s">()->view()));
   const InternalString* openfunc = lua_toistring(L, -1);
   return lookforfunc(L, filename, openfunc);
 }
@@ -453,8 +431,8 @@ static int searcher_C(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
   if (!findfile(L, name, lit<"cpath">(), LUA_DIRSEP->view()))
-    return 1; /* module not found in this path (error message pushed) */
-  const InternalString* filename = lua_toistring(L, -1); /* borrowed (anchored) */
+    return 1;
+  const InternalString* filename = lua_toistring(L, -1);
   return checkload(L, (loadfunc(L, filename, name) == 0), filename->view());
 }
 
@@ -466,8 +444,8 @@ static int searcher_Croot(lua_State* L)
   if (p == std::string_view::npos)
     return 0; /* is root */
   if (!findfile(L, name.substr(0, p), lit<"cpath">(), LUA_DIRSEP->view()))
-    return 1; /* root not found (error message pushed) */
-  const InternalString* filename = lua_toistring(L, -1); /* borrowed (anchored) */
+    return 1;
+  const InternalString* filename = lua_toistring(L, -1);
   if ((stat = loadfunc(L, filename, name)) != 0)
   {
     if (stat != ERRFUNC)
@@ -519,7 +497,7 @@ static void findloader(lua_State* L, std::string_view name)
       luaL_buffsub(&msg, 2); /* remove last prefix */
       luaL_pushresult(&msg); /* create error message */
       lua_pushlstring(L, name, 0, name.size());
-      lua_pushvalue(L, -2); /* error message from the buffer */
+      lua_pushvalue(L, -2);
       luaL_error(L, HostString(lit<"module '%s' not found:%s">()->view()));
     }
     lua_pushlstring(L, name, 0, name.size());

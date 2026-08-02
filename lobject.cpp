@@ -31,16 +31,9 @@
 ** Computes ceil(log2(x)), which is the smallest integer n such that
 ** x <= (1 << n).
 */
-/*
-** Debug check that a value being manipulated is alive: either it is
-** not collectable, or the collectable object has the right tag and is
-** not dead. 'L == nullptr' skips the deadness check (used where no
-** lua_State is available). Called only from debug builds (the
-** checkliveness inline wrapper compiles the call away in release).
-*/
 int luaO_checkliveness(lua_State* L, const TValue* obj)
 {
-  (void) L; /* unused when asserts are disabled */
+  (void) L;
   if (obj->tt_ & BIT_ISCOLLECTABLE)
   {
     assert((((obj)->tt_ & WITHVARIANT_MASK) == gcvalue(obj)->tt));
@@ -280,7 +273,6 @@ lu_byte luaO_hexavalue(int c)
     return ((lu_byte)((ltolower(c) - 'a') + 10));
 }
 
-/* consume one optional sign at s[*off]; returns 1 if negative */
 static int isneg(std::string_view s, size_t* off)
 {
   if (sv_byteat(s, *off) == '-')
@@ -310,14 +302,14 @@ constexpr int MAXSIGDIG = 30;
 */
 static lua_Number lua_strx2number(std::string_view s, size_t off, size_t* endpos)
 {
-  int dot = '.'; /* radix is pinned to '.' (no locale dependence) */
+  int dot = '.';
   lua_Number r = 0.0; /* result (accumulator) */
   int sigdig = 0;               /* number of significant digits */
   int nosigdig = 0;             /* number of non-significant digits */
   int e = 0;                    /* exponent correction */
   int neg;                      /* 1 if number is negative */
   int hasdot = 0;               /* true after seen a dot */
-  size_t p = off;               /* scan offset */
+  size_t p = off;
   *endpos = off;                /* nothing is valid yet */
   while (lisspace(sv_byteat(s, p)))
     p++;                                                    /* skip initial spaces */
@@ -376,16 +368,6 @@ static lua_Number lua_strx2number(std::string_view s, size_t off, size_t* endpos
 /* maximum length of a numeral to be converted to a number */
 static constexpr int L_MAXLENNUM = 200;
 
-/*
-** Convert a decimal numeral 's' to a lua_Number via 'std::from_chars'
-** (locale-free, correctly rounded; Java: 'Double.parseDouble' on the
-** trimmed token). The C 'strtod' behaviors that 'from_chars' lacks are
-** explicit here: leading spaces and one optional sign are consumed by
-** this wrapper, and an out-of-range numeral saturates to +-HUGE_VAL /
-** +-0.0 instead of failing (the "1e9999" idiom; 'parseDouble'
-** saturates the same way). Returns where parsing stopped, or 's'
-** itself if nothing was recognized.
-*/
 static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
 {
   size_t p = off;
@@ -393,40 +375,31 @@ static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
     p++; /* skip leading spaces */
   int neg = 0;
   if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
-  { /* consume one optional sign; the sign is applied below */
+  {
     neg = (s[p] == '-');
     p++;
   }
   if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
-    return off; /* a second sign is not a numeral */
+    return off;
   lua_Number v;
-  /* host-conversion boundary (Java: correctly-rounded parse of the token) */
   std::from_chars_result res =
       std::from_chars(s.data() + p, s.data() + s.size(), v,
                       std::chars_format::general);
   size_t endp = ((size_t)(res.ptr - s.data()));
   if (res.ec == std::errc::result_out_of_range)
-  { /* saturate like C 'strtod' and Java 'parseDouble': overflow goes
-       to +-infinity, underflow to +-0. Classify by estimating the
-       decimal magnitude: the explicit exponent, plus one per
-       significant digit before the radix point, minus one per zero
-       between the point and the first significant digit. Overflow
-       (magnitude >= ~309) and underflow (<= ~-324) are hundreds of
-       orders apart, so the sign of the estimate classifies exactly. */
-    long e10 = 0;      /* explicit exponent */
-    int frac = 0;      /* inside the fractional part? */
-    int sig = 0;       /* seen a significant (nonzero) digit? */
-    long intdigits = 0; /* significant digits before the point */
-    long fraczeros = 0; /* zeros after the point before a significant digit */
+  {
+    long e10 = 0;
+    int frac = 0;
+    int sig = 0;
+    long intdigits = 0;
+    long fraczeros = 0;
     size_t q;
     for (q = p; q < endp; q++)
     {
       if (s[q] == '.')
         frac = 1;
       else if (s[q] == 'e' || s[q] == 'E')
-      { /* read the explicit exponent, clamped: only the SIGN of the
-           final magnitude matters and the clamp dwarfs the digit
-           corrections (upstream used 'strtol', which saturates) */
+      {
         size_t x = q + 1;
         int eneg = 0;
         if (sv_byteat(s, x) == '+' || sv_byteat(s, x) == '-')
@@ -445,9 +418,9 @@ static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
         break;
       }
       else
-      { /* a digit */
+      {
         if (!sig && s[q] != '0')
-          sig = 1; /* first significant digit */
+          sig = 1;
         if (sig && !frac)
           intdigits++;
         else if (!sig && frac)
@@ -463,17 +436,12 @@ static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
   return endp;
 }
 
-/*
-** Convert the numeral at s[off..] to a Lua number (put in 'result').
-** Return npos on fail, or the end offset (== s.size()) on success.
-** ('mode' == 'x') means a hexadecimal numeral.
-*/
 static size_t l_str2dloc(std::string_view s, size_t off, lua_Number* result,
                          int mode)
 {
   size_t endpos;
   if (mode == 'x')
-  { /* hexadecimal numeral: Lua's own reader */
+  {
     *result = lua_strx2number(s, off, &endpos);
     if (endpos == off)
       return std::string_view::npos; /* nothing recognized? */
@@ -486,7 +454,6 @@ static size_t l_str2dloc(std::string_view s, size_t off, lua_Number* result,
   }
   while (lisspace(sv_byteat(s, endpos)))
     endpos++; /* skip trailing spaces */
-  /* OK iff no trailing chars (offset form of upstream's NUL check) */
   return (endpos == s.size()) ? endpos : std::string_view::npos;
 }
 
@@ -513,10 +480,7 @@ static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
     return std::string_view::npos;
   size_t endpos = l_str2dloc(s, off, result, mode); /* try to convert */
   if (endpos == std::string_view::npos)
-  { /* failed? may use the locale radix character instead of '.'
-       (the conversion core is '.'-canonical; this shim maps the
-       locale point to '.' and retries -- the mirror of upstream,
-       whose core spoke the locale and whose shim mapped '.') */
+  {
     char buff[L_MAXLENNUM + 1];
     char point = ((char)(lua_getlocaledecpoint()));
     size_t ppoint = (point != '.') ? s.find(point, off)
@@ -524,8 +488,8 @@ static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
     size_t len = s.size() - off;
     if (ppoint == std::string_view::npos || len > L_MAXLENNUM)
       return std::string_view::npos; /* string too long or no locale point; fail */
-    memcpy(buff, s.data() + off, len);     /* copy token (Java: arraycopy) */
-    buff[ppoint - off] = '.';              /* canonicalize decimal point */
+    memcpy(buff, s.data() + off, len);
+    buff[ppoint - off] = '.';
     endpos = l_str2dloc(std::string_view{buff, len}, 0, result, mode); /* try again */
     if (endpos != std::string_view::npos)
       endpos = off + endpos; /* make relative to 's' */
@@ -638,9 +602,6 @@ static_assert(LUA_N2SBUFFSZ >= 20 + DBL_DIG, "invalid value for LUA_N2SBUFFSZ");
 */
 static int tostringbuffFloat(lua_Number n, char* buff)
 {
-  /* first conversion, with 15 significant digits;
-     'std::to_chars' with explicit precision produces the printf '%g'
-     shape, locale-free */
   std::to_chars_result res = std::to_chars(
       buff, buff + LUA_N2SBUFFSZ - 3, n, std::chars_format::general, 15);
   assert(res.ec == std::errc());
@@ -652,23 +613,20 @@ static int tostringbuffFloat(lua_Number n, char* buff)
   if (buff[0] == '-')
     check = -check;
   if (check != n)
-  { /* not enough precision? convert again with 17 digits (FMT_N) */
+  {
     res = std::to_chars(buff, buff + LUA_N2SBUFFSZ - 3, n,
                         std::chars_format::general, 17);
     assert(res.ec == std::errc());
     len = ((int)(res.ptr - buff));
     buff[len] = '\0';
   }
-  /* looks like an integer? (bounded scan over the written bytes;
-     equivalent to the upstream strspn-to-NUL walk) */
   if (std::string_view{buff, ((size_t)(len))}.find_first_not_of(
           lit<"-0123456789">()->view()) == std::string_view::npos)
   {
     buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
   }
-  { /* output locale shim: the core is '.'-canonical; present the
-       locale radix character (a no-op in the "C" locale) */
+  {
     char point = ((char)(lua_getlocaledecpoint()));
     if (point != '.')
     {
@@ -692,16 +650,12 @@ unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff)
   {
     std::string s = std::to_string(ivalue(obj));
     assert(s.size() < LUA_N2SBUFFSZ);
-    /* Java: System.arraycopy of the digits (plus terminator) */
     memcpy(buff.data(), s.c_str(), s.size() + 1);
     len = ((int)(s.size()));
   }
   else
   {
     assert(obj->tt_ == LUA_VNUMFLT);
-    /* host-conversion boundary: 'tostringbuffFloat' runs on to_chars/
-       strchr over a NUL-terminated scratch (Java: its own byte[]
-       digit assembly) */
     len = tostringbuffFloat(fltvalue(obj), buff.data());
   }
   assert(len < LUA_N2SBUFFSZ);
@@ -725,13 +679,6 @@ void luaO_tostring(lua_State* L, TValue* obj)
 ** ===================================================================
 */
 
-/*
-** Buffer used by 'luaO_pushvfstring': a ByteBuilder whose bytes are
-** ADOPTED by the result string (luaS_take — zero copy). 'err' == 2
-** signals a length overflow while building. (Growth memory errors
-** now surface as host allocation failure — the recorded payload
-** accounting status quo extended to builders.)
-*/
 struct BuffFS
 {
   lua_State* L;
@@ -752,9 +699,9 @@ static void initbuff(lua_State* L, BuffFS* buff)
 static void pushbuff(lua_State* L, void* ud)
 {
   BuffFS* buff = ((BuffFS*)(ud));
-  if (buff->err == 2) /* length overflow: mark truncation */
+  if (buff->err == 2)
     buff->bb.append(lit<"...">());
-  TString* ts = luaS_take(L, buff->bb.finish()); /* adopt the bytes */
+  TString* ts = luaS_take(L, buff->bb.finish());
   setslots(L, L->top, ts);
   L->top++;
 }
@@ -769,7 +716,7 @@ static const InternalString* clearbuff(BuffFS* buff)
   {
     StkId s = L->top - 1; /* result string is on the top of the stack */
     assert((slottag(L, s) & NOVARIANT_MASK) == LUA_TSTRING);
-    res = &slottsval(L, s)->data; /* borrowed view of the pushed string */
+    res = &slottsval(L, s)->data;
   }
   return res;
 }
@@ -781,7 +728,7 @@ static void addstr2buff(BuffFS* buff, std::string_view str, size_t off,
     return;
   if (slen > (MAX_SIZE / 2) - buff->bb.size())
   {                /* overflow? */
-    buff->err = 2; /* doesn't add anything else; "..." marks it */
+    buff->err = 2;
     return;
   }
   buff->bb.append(str, off, slen);
@@ -802,11 +749,6 @@ static void addnum2buff(BuffFS* buff, TValue* num)
   addstr2buff(buff, std::string_view{numbuff, len});
 }
 
-/*
-** Typed appends for 'FmtArgs' (see lobject.h): each records the
-** directive it answers plus the value, to be consumed in order by
-** 'luaO_pushvfstring'.
-*/
 
 FmtArgs& FmtArgs::str(const InternalString* s)
 {
@@ -872,27 +814,21 @@ FmtArgs& FmtArgs::utf8(unsigned long u)
   return *this;
 }
 
-/*
-** this function handles only '%d', '%c', '%f', '%p', '%s', and '%%'
-   conventional formats, plus Lua-specific '%I' and '%U'.
-** The format cursor is (InternalString*, offset) — never a raw
-** pointer walked through the bytes.
-*/
 const InternalString* luaO_pushvfstring(lua_State* L,
                                         const InternalString* fmt,
                                         const FmtArgs& args)
 {
   BuffFS buff;  /* holds last part of the result */
   std::string_view f = fmt->view();
-  size_t pos = 0; /* scan offset into 'fmt' */
-  size_t e;       /* offset of next '%' */
-  int argn = 0;   /* number of arguments already consumed */
+  size_t pos = 0;
+  size_t e;
+  int argn = 0;
   initbuff(L, &buff);
   while ((e = f.find('%', pos)) != std::string_view::npos)
   {
     addstr2buff(&buff, f, pos, e - pos); /* add 'fmt' up to '%' */
     if (e + 1 >= f.size())
-    { /* format ends with a lone '%': keep it in the result */
+    {
       addstr2buff(&buff, "%");
       pos = f.size();
       break;
@@ -900,7 +836,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     switch (f[e + 1])
     { /* conversion specifier */
     case 's':
-    { /* a string (an engine string: counted bytes) */
+    {
       assert(argn < args.n && args.arg[argn].tag == 'S');
       const InternalString* is = args.arg[argn++].is;
       addstr2buff(&buff, is->view());
@@ -938,7 +874,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       break;
     }
     case 'p':
-    {                         /* a pointer, as "0x" + lowercase hex digits */
+    {
       char bf[LUA_N2SBUFFSZ];
       assert(argn < args.n && args.arg[argn].tag == 'p');
       const void* p = args.arg[argn++].p;
@@ -951,7 +887,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       break;
     }
     case 'U':
-    { /* a codepoint as a UTF-8 sequence */
+    {
       char bf[UTF8BUFFSZ];
       assert(argn < args.n && args.arg[argn].tag == 'U');
       int len = luaO_utf8esc(bf, ((l_uint32)(args.arg[argn++].i)));
@@ -973,7 +909,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     pos = e + 2; /* skip '%' and the specifier */
   }
   addstr2buff(&buff, f, pos, f.size() - pos); /* rest of 'fmt' */
-  assert(argn == args.n);  /* all arguments consumed */
+  assert(argn == args.n);
   return clearbuff(&buff); /* empty buffer into a new string */
 }
 
@@ -1003,12 +939,11 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
   assert(out.size() >= LUA_IDSIZE);
   size_t srclen = source.size();
   size_t bufflen = LUA_IDSIZE; /* free space in buffer */
-  size_t pos = 0;              /* write position in 'out' */
+  size_t pos = 0;
   if (sv_byteat(source, 0) == '=')
   {                        /* 'literal' source */
     if (srclen <= bufflen) /* small enough? */
-    { /* copy the content and terminate explicitly (upstream read the
-         payload's NUL; the view is bounded) */
+    {
       memcpy(out.data(), source.data() + 1, (srclen - 1) * sizeof(char));
       out[srclen - 1] = '\0';
     }
@@ -1021,7 +956,7 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
   else if (sv_byteat(source, 0) == '@')
   {                        /* file name */
     if (srclen <= bufflen) /* small enough? */
-    { /* copy the content and terminate explicitly */
+    {
       memcpy(out.data(), source.data() + 1, (srclen - 1) * sizeof(char));
       out[srclen - 1] = '\0';
     }
@@ -1030,8 +965,6 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
       memcpy(out.data(), RETS->bytes(), RETS->size() * sizeof(char));
       pos += RETS->size();
       bufflen -= RETS->size();
-      /* last bufflen-1 content bytes plus an explicit terminator
-         (upstream's copy included the payload's NUL) */
       memcpy(out.data() + pos, source.data() + 1 + srclen - bufflen,
              (bufflen - 1) * sizeof(char));
       out[pos + bufflen - 1] = '\0';
@@ -1039,7 +972,7 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
   }
   else
   {                                                 /* string; format as [string "source"] */
-    size_t nl = source.find('\n'); /* first new line (if any); npos if none */
+    size_t nl = source.find('\n');
     memcpy(out.data(), PRE->bytes(), PRE->size() * sizeof(char)); /* add prefix */
     pos += PRE->size();
     bufflen -= PRE->size() + RETS->size() + POS->size() + 1; /* save space for prefix+suffix+'\0' */
@@ -1060,6 +993,6 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
       pos += RETS->size();
     }
     memcpy(out.data() + pos, POS->bytes(), POS->size() * sizeof(char));
-    out[pos + POS->size()] = '\0'; /* terminate explicitly */
+    out[pos + POS->size()] = '\0';
   }
 }

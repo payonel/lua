@@ -9,15 +9,6 @@
 #include <limits.h>
 #include <stddef.h>
 
-/*
-** ===================================================================
-** General Configuration File for Lua
-**
-** Definitions here affect the Lua ABI: by making changes here, you
-** ensure that all software connected to Lua, such as C libraries,
-** will be compiled with the same configuration.
-** ===================================================================
-*/
 
 /*
 ** {====================================================================
@@ -25,13 +16,6 @@
 ** =====================================================================
 */
 
-/*
-** The Lua stand-alone application dynamically links a 'readline'
-** facility for its REPL.  LUA_READLINELIB is the name of the library
-** it will look for those facilities.  If lua.cpp cannot open the
-** specified library, it will generate a warning and then run without
-** 'readline'.
-*/
 constexpr char LUA_READLINELIB[] = "libreadline.so";
 
 /*
@@ -49,14 +33,6 @@ constexpr int LUAI_IS32INT = ((UINT_MAX >> 30) >= 3);
 ** ===================================================================
 */
 
-/*
-** Numeric types are pinned for this port (managed-target contract,
-** ryanbean decision 2026-07-28): lua_Number is IEEE-754 binary64
-** ('double') and lua_Integer is 64-bit ('long long') -- the exact
-** Java 'double'/'long' shapes. Enforced by static_asserts in
-** llimits.h. The upstream LUA_INT_TYPE/LUA_FLOAT_TYPE selection
-** machinery (LUA_32BITS, LUA_C89_NUMBERS) is deleted.
-*/
 
 /* }================================================================== */
 
@@ -87,7 +63,6 @@ static const InternalString* LUA_EXEC_DIR = lit<"!">();
 ** non-conventional directories.
 */
 
-/* keep in sync with LUA_VERSION_MAJOR/MINOR (lua.h) */
 static const InternalString* LUA_PATH_DEFAULT = lit<"/usr/local/share/lua/5.5/?.lua;/usr/local/share/lua/5.5/?/init.lua;/usr/local/lib/lua/5.5/?.lua;/usr/local/lib/lua/5.5/?/init.lua;./?.lua;./?/init.lua">();
 static const InternalString* LUA_CPATH_DEFAULT = lit<"/usr/local/lib/lua/5.5/?.so;/usr/local/lib/lua/5.5/loadall.so;./?.so">();
 
@@ -141,24 +116,8 @@ static const InternalString* CONFIG = lit<"/\n;\n?\n!\n-\n">();
 ** ===================================================================
 */
 
-/*
-** Float-to-string conversions (in lobject.cpp) use 15 significant
-** digits — the maximum that respects tostring(tonumber(numeral)) ==
-** numeral (floor(log10(2^53)) = 15 for binary64) — upgrading to 17,
-** the minimum that ensures tonumber(tostring(number)) == number, when
-** the shorter form does not round-trip.
-*/
 
-/* lua_Number: IEEE-754 binary64 ('double');
-** lua_Integer: 64-bit ('long long');
-** lua_Unsigned: 'unsigned long long'.
-** The typedefs live in lua.h. */
 
-/*
-** LUA_MAXINTEGER is the maximum value for a lua_Integer.
-** LUA_MININTEGER is the minimum value for a lua_Integer.
-** LUA_MAXUNSIGNED is the maximum value for a lua_Unsigned.
-*/
 constexpr long long LUA_MAXINTEGER = LLONG_MAX;
 constexpr long long LUA_MININTEGER = LLONG_MIN;
 
@@ -172,34 +131,16 @@ constexpr unsigned long long LUA_MAXUNSIGNED = ULLONG_MAX;
 ** ===================================================================
 */
 
-/*
-** lua_getlocaledecpoint gets the locale "radix character" (decimal point).
-** The conversion core (to_chars/from_chars) is always '.'-canonical;
-** this is used only by the explicit locale shims at the input/output
-** boundaries.
-*/
 #include <locale.h>
 static inline char lua_getlocaledecpoint(void)
 {
   return localeconv()->decimal_point[0];
 }
 
-/* lua_KContext (the type of the context for continuation functions) is
-** 'ptrdiff_t'; the typedef lives in lua.h. */
 
-/*
-** macros to improve jump prediction, used mostly for error handling
-** and debug facilities. (Some macros in the Lua API use these macros.)
-*/
 #define luai_likely(x)   (__builtin_expect(((x) != 0), 1))
 #define luai_unlikely(x) (__builtin_expect(((x) != 0), 0))
 
 /* }================================================================== */
 
-/*
-** LUA_IDSIZE gives the maximum size for the description of the source
-** of a function in debug information.
-** (Part of the API: must be the same when you compile Lua and when you
-** compile code that links to Lua.)
-*/
 constexpr int LUA_IDSIZE = 60;

@@ -9,8 +9,6 @@
 #include "lua.h"
 
 /* version suffix for environment variable names */
-/* version suffix for environment variable names;
-   keep in sync with LUA_VERSION_MAJOR/MINOR (lua.h) */
 inline const std::string_view LUA_VERSUFFIX = lit<"_5_5">()->view();
 
 constexpr int LUA_GLIBK = 1;

@@ -28,7 +28,6 @@
 
 #include "util_cast.h"
 
-/* keep in sync with LUA_COPYRIGHT / LUA_AUTHORS (lua.h) */
 const std::string_view lua_ident =
     lit<"$LuaVersion: Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio $"
         "$LuaAuthors: R. Ierusalimschy, L. H. de Figueiredo, W. Celes $">()
@@ -46,18 +45,10 @@ constexpr int isupvalue(int i)
   return i < LUA_REGISTRYINDEX;
 }
 
-/*
-** Resolution of an acceptable index: either a stack slot of the current
-** frame ('row' is null) or a pointer to non-stack storage — the
-** registry, a C-closure upvalue, or the global nil sentinel for
-** non-valid indices. This is the discriminated address the managed
-** port needs: stack values are named by index, never by pointer; only
-** non-stack rows (which survive the stack transpose) are pointed to.
-*/
 struct IndexAddr
 {
-  StkId slot;  /* stack slot, meaningful when 'row' is null */
-  TValue* row; /* non-stack storage, or null for a stack slot */
+  StkId slot;
+  TValue* row;
 };
 
 static IndexAddr resolveindex(lua_State* L, int idx)
@@ -97,21 +88,18 @@ static IndexAddr resolveindex(lua_State* L, int idx)
   }
 }
 
-/* row copy of the value at an acceptable index (non-valid reads as nil) */
 static TValue index2val(lua_State* L, int idx)
 {
   IndexAddr a = resolveindex(L, idx);
   return (a.row != nullptr) ? *a.row : getslot(L, a.slot);
 }
 
-/* does the index denote existing storage? (replaces pointer 'isvalid') */
 static int isvalidindex(lua_State* L, int idx)
 {
   IndexAddr a = resolveindex(L, idx);
-  return a.row != &G(L)->nilvalue; /* stack slots are always valid */
+  return a.row != &G(L)->nilvalue;
 }
 
-/* write the row 'v' to the storage denoted by a valid index */
 static void setindexval(lua_State* L, int idx, const TValue* v)
 {
   IndexAddr a = resolveindex(L, idx);
@@ -173,7 +161,7 @@ LUA_API void lua_xmove(lua_State* from, lua_State* to, int n)
   from->top -= n;
   for (i = 0; i < n; i++)
   {
-    copyslot(to, to->top, from, from->top + i); /* cross-stack transfer */
+    copyslot(to, to->top, from, from->top + i);
     to->top++; /* stack already checked by previous 'api_check' */
   }
   lua_unlock(to);
@@ -326,10 +314,10 @@ LUA_API int lua_type(lua_State* L, int idx)
 
 LUA_API HostString lua_typename(lua_State* L, int t)
 {
-  (void) L; /* public API signature; 'L' is not needed here */
+  (void) L;
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");
   const InternalString* n = ttypename(t);
-  return HostString(n->view()); /* boundary copy */
+  return HostString(n->view());
 }
 
 LUA_API int lua_iscfunction(lua_State* L, int idx)
@@ -422,9 +410,6 @@ LUA_API int lua_compare(lua_State* L, int index1, int index2, int op)
   return i;
 }
 
-/* internal form (official shape): writes the text into the caller's
-   buffer (>= LUA_N2SBUFFSZ bytes) and returns a view of it; null view
-   = value is not a number */
 std::string_view lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff)
 {
   TValue o = index2val(L, idx);
@@ -437,14 +422,13 @@ std::string_view lua_numbertocstringi(lua_State* L, int idx, std::span<char> buf
     return std::string_view{};
 }
 
-/* boundary wrapper */
 LUA_API std::optional<HostString> lua_numbertocstring(lua_State* L, int idx)
 {
   char buff[LUA_N2SBUFFSZ];
   std::string_view s = lua_numbertocstringi(L, idx, buff);
   if (s.data() == nullptr)
     return std::nullopt;
-  return HostString(s); /* boundary copy */
+  return HostString(s);
 }
 
 LUA_API size_t lua_stringtonumber(lua_State* L, std::string_view s)
@@ -490,12 +474,12 @@ LUA_API std::string_view lua_tolstring(lua_State* L, int idx)
   if (!((o.tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   {
     if (!cvt2str(&o))
-    { /* not convertible? absent view (Java: null) */
+    {
       lua_unlock(L);
       return std::string_view{};
     }
-    luaO_tostring(L, &o);      /* convert the row copy... */
-    setindexval(L, idx, &o); /* ...and store it back */
+    luaO_tostring(L, &o);
+    setindexval(L, idx, &o);
     luaC_checkGC(L);
   }
   lua_unlock(L);
@@ -515,8 +499,8 @@ const InternalString* lua_toistring(lua_State* L, int idx)
       lua_unlock(L);
       return nullptr;
     }
-    luaO_tostring(L, &o);    /* convert the row copy... */
-    setindexval(L, idx, &o); /* ...and store it back */
+    luaO_tostring(L, &o);
+    setindexval(L, idx, &o);
     luaC_checkGC(L);
   }
   lua_unlock(L);
@@ -600,7 +584,7 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
   switch ((o.tt_ & WITHVARIANT_MASK))
   {
   case LUA_VLCF:
-    return nullptr;  /* use lua_funcaddress for light C functions */
+    return nullptr;
   case LUA_VUSERDATA:
   case LUA_VLIGHTUSERDATA:
     return touserdata(&o);
@@ -614,7 +598,6 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
   }
 }
 
-/* internal form: engine byte buffer (std::string as byte container) */
 std::string lua_funcaddressi(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
@@ -622,13 +605,11 @@ std::string lua_funcaddressi(lua_State* L, int idx)
   return util::func_to_string(fvalue(&o));
 }
 
-/* boundary wrapper: diagnostic text for the consumer */
 HostString lua_funcaddress(lua_State* L, int idx)
 {
   return HostString(std::string_view{lua_funcaddressi(L, idx)});
 }
 
-/* internal form of lua_typename: the static engine string */
 const InternalString* lua_typenamei(lua_State*, int t)
 {
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");
@@ -678,19 +659,19 @@ LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s,
   api_incr_top(L);
   luaC_checkGC(L);
   lua_unlock(L);
-  return ts->data.view(); /* borrowed view of the pushed copy */
+  return ts->data.view();
 }
 
 LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
 {
   if (!s)
-  { /* official NULL semantics: push nil */
+  {
     lua_pushnil(L);
     return;
   }
   lua_lock(L);
   std::string_view bytes = s->view();
-  TString* ts = luaS_createstr(L, bytes, 0, bytes.size()); /* boundary deep copy */
+  TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -700,7 +681,7 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
 void lua_pushistringref(lua_State* L, const InternalString* s)
 {
   lua_lock(L);
-  TString* ts = luaS_new(L, s); /* deep copy / intern */
+  TString* ts = luaS_new(L, s);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -710,33 +691,24 @@ void lua_pushistringref(lua_State* L, const InternalString* s)
 void lua_pushistring(lua_State* L, InternalString&& s)
 {
   lua_lock(L);
-  TString* ts = luaS_take(L, std::move(s)); /* adoption (zero copy) */
+  TString* ts = luaS_take(L, std::move(s));
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
   lua_unlock(L);
 }
 
-/*
-** Format 'fmt' taking one argument from the stack per conversion
-** directive (the replacement for C varargs in the public API): the
-** caller pushes the arguments in order before the call — a string for
-** '%s', an integer for '%d'/'%I'/'%c'/'%U', a float for '%f', and any
-** value for '%p' (formatted as its address). The arguments are
-** consumed and the formatted result is pushed (and also returned).
-*/
 LUA_API HostString lua_pushfstring(lua_State* L, const HostString& fmt)
 {
   const InternalString* ret;
   FmtArgs args;
-  int n = 0; /* number of arguments taken from the stack */
+  int n = 0;
   lua_lock(L);
-  /* API boundary: deep-copy the format once; all scanning is by offset */
   InternalString f{fmt};
   std::string_view fv = f.view();
   size_t e;
   for (e = 0; (e = fv.find('%', e)) != std::string_view::npos; e += 2)
-  { /* scan directives, collecting one stack argument for each */
+  {
     switch (sv_byteat(fv, e + 1))
     {
     case 's':
@@ -748,18 +720,18 @@ LUA_API HostString lua_pushfstring(lua_State* L, const HostString& fmt)
     case 'U':
       n++;
       break;
-    default: /* '%%' and unknown directives take no argument */
+    default:
       break;
     }
   }
   api_checknelems(L, n);
   for (e = 0; (e = fv.find('%', e)) != std::string_view::npos; e += 2)
-  { /* arguments are at stack slots 'L->top - n' up to 'L->top - 1' */
+  {
     StkId slot = L->top - n + args.n;
     switch (sv_byteat(fv, e + 1))
     {
     case 's':
-    { /* a string (a number is converted in place, as 'lua_tolstring') */
+    {
       StkId o = slot;
       if ((slottag(L, o) & NOVARIANT_MASK) == LUA_TNUMBER)
       {
@@ -800,8 +772,8 @@ LUA_API HostString lua_pushfstring(lua_State* L, const HostString& fmt)
       break;
     }
     case 'p':
-    { /* any value, formatted as its address (as 'lua_topointer') */
-      args.ptr(lua_topointer(L, args.n - n)); /* negative API index of 'slot' */
+    {
+      args.ptr(lua_topointer(L, args.n - n));
       break;
     }
     case 'U':
@@ -818,15 +790,15 @@ LUA_API HostString lua_pushfstring(lua_State* L, const HostString& fmt)
   const InternalString* is = luaO_pushvfstring(L, &f, args);
   if (is == nullptr)
     luaD_throw(L, LUA_ERRMEM);
-  ret = is; /* borrowed from the pushed value */
+  ret = is;
   if (n > 0)
-  { /* move result down, removing its arguments */
+  {
     copyslot(L, L->top - 1 - n, L->top - 1);
     L->top -= n;
   }
   luaC_checkGC(L);
   lua_unlock(L);
-  return HostString(ret->view()); /* boundary copy */
+  return HostString(ret->view());
 }
 
 LUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
@@ -895,7 +867,7 @@ static int auxgetstr(lua_State* L, const TValue* t, std::string_view k)
 {
   lu_byte tag;
   TValue res;
-  TString* str = luaS_createstr(L, k, 0, k.size()); /* deep copy/intern */
+  TString* str = luaS_createstr(L, k, 0, k.size());
   if (t->tt_ != ctb(LUA_VTABLE))
     tag = LUA_VNOTABLE;
   else
@@ -909,7 +881,7 @@ static int auxgetstr(lua_State* L, const TValue* t, std::string_view k)
   }
   else
   {
-    setslots(L, L->top, str); /* the string anchors itself as the key */
+    setslots(L, L->top, str);
     api_incr_top(L);
     TValue key = getslot(L, L->top - 1);
     tag = luaV_finishget(L, t, &key, L->top - 1, tag, NOSLOT);
@@ -936,7 +908,7 @@ LUA_API int lua_getglobal(lua_State* L, const HostString& name)
   TValue gt;
   lua_lock(L);
   getGlobalTable(L, &gt);
-  return auxgetstr(L, &gt, name.view()); /* boundary conversion */
+  return auxgetstr(L, &gt, name.view());
 }
 
 LUA_API int lua_gettable(lua_State* L, int idx)
@@ -968,7 +940,7 @@ LUA_API int lua_getfield(lua_State* L, int idx, const HostString& k)
 {
   lua_lock(L);
   TValue t = index2val(L, idx);
-  return auxgetstr(L, &t, k.view()); /* boundary conversion */
+  return auxgetstr(L, &t, k.view());
 }
 
 LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
@@ -1149,7 +1121,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
 static void auxsetstr(lua_State* L, const TValue* t, std::string_view k)
 {
   int hres;
-  TString* str = luaS_createstr(L, k, 0, k.size()); /* deep copy/intern */
+  TString* str = luaS_createstr(L, k, 0, k.size());
   api_checkpop(L, 1);
   if (t->tt_ != ctb(LUA_VTABLE))
     hres = HNOTATABLE;
@@ -1181,7 +1153,7 @@ LUA_API void lua_setglobal(lua_State* L, const HostString& name)
   TValue gt;
   lua_lock(L); /* unlock done in 'auxsetstr' */
   getGlobalTable(L, &gt);
-  auxsetstr(L, &gt, name.view()); /* boundary conversion */
+  auxsetstr(L, &gt, name.view());
 }
 
 LUA_API void lua_settable(lua_State* L, int idx)
@@ -1210,10 +1182,9 @@ LUA_API void lua_setfield(lua_State* L, int idx, const HostString& k)
 {
   lua_lock(L); /* unlock done in 'auxsetstr' */
   TValue t = index2val(L, idx);
-  auxsetstr(L, &t, k.view()); /* boundary conversion */
+  auxsetstr(L, &t, k.view());
 }
 
-/* engine-byte field access (internal channel; keys are engine bytes) */
 int lua_getfieldi(lua_State* L, int idx, std::string_view k)
 {
   lua_lock(L);
@@ -1508,8 +1479,6 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
                      const std::optional<HostString>& chunkname,
                      const std::optional<HostString>& mode)
 {
-  /* boundary: host text converts to engine bytes exactly once
-     (nullopt chunkname = "?", as in official lua_load) */
   InternalString name{chunkname ? *chunkname : HostString(lit<"?">()->view())};
   InternalString m{mode ? *mode : HostString()};
   return lua_loadi(L, reader, data, &name, mode ? &m : nullptr);
@@ -1538,11 +1507,6 @@ LUA_API int lua_status(lua_State* L)
   return ((int)(L->status));
 }
 
-/*
-** Garbage-collection function. The explicit parameters cover all
-** options: 'stepsize' is used by LUA_GCSTEP and 'param'/'value' by
-** LUA_GCPARAM; other options ignore them (they default in lua.h).
-*/
 LUA_API int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
 {
   int res = 0;
@@ -1752,14 +1716,6 @@ void lua_warning(lua_State* L, const HostString& msg, int tocont)
   lua_unlock(L);
 }
 
-/*
-** Public byte-budget boundary (see lua.h): reserve/release host-side
-** buffer capacity against the state's accounting, so the memory
-** limit can veto script-driven growth before it is allocated.
-** Deliberately lock-free: pure accounting arithmetic (GC debt), and
-** release must be callable from destructors running during error
-** unwinding, when the API lock is still held.
-*/
 int lua_reservebytes(lua_State* L, size_t sz)
 {
   return luaM_reserve(L, sz);
@@ -1783,15 +1739,10 @@ LUA_API void* lua_newuserdatauv(lua_State* L, size_t size, int nuvalue)
   return getudatamem(u);
 }
 
-/*
-** Discriminated address of a closure upvalue: a C closure's embedded
-** row (which is not stack storage) or a Lua closure's UpVal, whose
-** value is accessed through upvalgetval/upvalsetval.
-*/
 struct UpvalAddr
 {
-  TValue* row; /* C-closure upvalue storage, or null */
-  UpVal* uv;   /* Lua-closure upvalue, or null */
+  TValue* row;
+  UpVal* uv;
 };
 
 static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
@@ -1850,13 +1801,12 @@ const InternalString* lua_getupvaluei(lua_State* L, int funcindex, int n)
   return name;
 }
 
-/* boundary wrapper */
 LUA_API std::optional<HostString> lua_getupvalue(lua_State* L, int funcindex, int n)
 {
   const InternalString* name = lua_getupvaluei(L, funcindex, n);
   if (name == nullptr)
     return std::nullopt;
-  return HostString(name->view()); /* boundary copy */
+  return HostString(name->view());
 }
 
 const InternalString* lua_setupvaluei(lua_State* L, int funcindex, int n)
@@ -1884,13 +1834,12 @@ const InternalString* lua_setupvaluei(lua_State* L, int funcindex, int n)
   return name;
 }
 
-/* boundary wrapper */
 LUA_API std::optional<HostString> lua_setupvalue(lua_State* L, int funcindex, int n)
 {
   const InternalString* name = lua_setupvaluei(L, funcindex, n);
   if (name == nullptr)
     return std::nullopt;
-  return HostString(name->view()); /* boundary copy */
+  return HostString(name->view());
 }
 
 static UpVal** getupvalref(lua_State* L, int fidx, int n, LClosure** pf)
@@ -1945,13 +1894,6 @@ LUA_API void lua_upvaluejoin(lua_State* L, int fidx1, int n1,
   luaC_objbarrier(L, f1, *up1);
 }
 
-/*
-** {======================================================================
-** Public API veneer: out-of-line wrappers over the primitive API
-** functions. These were macros in upstream Lua (F8); they are compiled
-** functions here — all cold paths (ryanbean decision, 2026-07-25).
-** =======================================================================
-*/
 
 LUA_API int lua_upvalueindex(int i)
 {
@@ -2059,18 +2001,11 @@ LUA_API void lua_pushglobaltable(lua_State* L)
   lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
 }
 
-/*
-** Text accessor: a HostString COPY of the value (numbers coerced in
-** place, as in 'lua_tolstring'). Returns an empty HostString when the
-** value is not a string — callers needing the distinction from a
-** genuine empty string check lua_type first (conversion strictness
-** deferred; Java returns null there).
-*/
 LUA_API std::optional<HostString> lua_tostring(lua_State* L, int idx)
 {
   std::string_view s = lua_tolstring(L, idx);
   if (s.data() == nullptr)
-    return std::nullopt; /* official NULL semantics */
+    return std::nullopt;
   return HostString(s);
 }
 

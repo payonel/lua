@@ -38,11 +38,6 @@ constexpr int MAXTAGLOOP = 2000;
 /* number of bits in the mantissa of a float */
 constexpr int NBM = DBL_MANT_DIG;
 
-/*
-** Some integers do not fit in a float: with a 64-bit lua_Integer and a
-** 53-bit binary64 mantissa (both pinned for this port, see luaconf.h),
-** (maxinteger >> NBM) > 0.
-*/
 
 /* limit for integers that fit in a float */
 constexpr lua_Unsigned MAXINTFITSF = ((lua_Unsigned) 1 << NBM);
@@ -290,7 +285,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
 {
   int loop;         /* counter to avoid infinite loops */
   const TValue* tm; /* metamethod */
-  TValue res;       /* result of a raw access, copied to 'val' when found */
+  TValue res;
   for (loop = 0; loop < MAXTAGLOOP; loop++)
   {
     if (tag == LUA_VNOTABLE)
@@ -318,7 +313,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
       return tag;                               /* return tag of the result */
     }
     t = tm; /* else try to access 'tm[key]' */
-    tsrc = NOSLOT; /* 't' no longer comes from the original slot */
+    tsrc = NOSLOT;
     if (t->tt_ != ctb(LUA_VTABLE))
       tag = LUA_VNOTABLE;
     else
@@ -381,7 +376,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
       return;
     }
     t = tm; /* else repeat assignment over 'tm' */
-    tsrc = NOSLOT; /* 't' no longer comes from the original slot */
+    tsrc = NOSLOT;
     if (t->tt_ != ctb(LUA_VTABLE))
       hres = HNOTATABLE;
     else
@@ -408,9 +403,6 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
 */
 static int l_strcmp(const TString* ts1, const TString* ts2)
 {
-  /* LOCALE-item site: 'strcoll' (libc) walks NUL-delimited
-     segments, so the payload's c_str form is used deliberately here;
-     this function is rewritten by the locale item (own collation) */
   size_t rl1 = ts1->data.size(); /* real length */
   const char* s1 = ts1->data.c_str();
   size_t rl2 = ts2->data.size();
@@ -619,10 +611,6 @@ static int lessequalothers(lua_State* L, const TValue* l, const TValue* r)
     return luaT_callorderTM(L, l, r, TM_LE);
 }
 
-/*
-** Slot-form overloads of the comparison helpers: operands are read by
-** value, so no pointer into the stack crosses these boundaries.
-*/
 static inline int LTnum(lua_State* L, StkId l, StkId r)
 {
   TValue lv = getslot(L, l);
@@ -765,7 +753,6 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
   }
 }
 
-/* slot form: operands named by stack index; rows materialized once here */
 int luaV_equalobj(lua_State* L, StkId t1, StkId t2)
 {
   TValue v1 = getslot(L, t1);
@@ -786,9 +773,6 @@ static int isemptystr(const TValue* o)
          tsslen(tsvalue(o)) == 0;
 }
 
-/* slot-form string helpers: read the slot by value; 'tostring' converts
-** 'o' to a string (returning 1 if the value is (now) a string) and writes
-** the converted string back through the slot API */
 static int isemptystr(lua_State* L, StkId idx)
 {
   TValue v = getslot(L, idx);
@@ -802,7 +786,7 @@ static int tostring(lua_State* L, StkId idx)
   TValue v = getslot(L, idx);
   if (!cvt2str(&v))
     return 0;
-  luaO_tostring(L, &v); /* number: conversion allocates but 'v' has no referent */
+  luaO_tostring(L, &v);
   setslot(L, idx, &v);
   return 1;
 }
@@ -817,7 +801,6 @@ static void copy2buff(lua_State* L, StkId top, int n, std::span<char> buff)
     assert((slottag(L, v) & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = slottsval(L, v);
     std::string_view s = st->data.view();
-    /* Java: System.arraycopy(s, 0, buff, tl, l) */
     memcpy(buff.data() + tl, s.data(), s.size() * sizeof(char));
     tl += s.size();
   } while (--n > 0);
@@ -864,14 +847,14 @@ void luaV_concat(lua_State* L, int total)
         tl += l;
       }
       if (tl <= 40)
-      { /* small result? use stack buffer */
+      {
         char buff[40];
         copy2buff(L, top, n, buff);
         std::string_view buffstr{buff, tl};
         ts = luaS_createstr(L, buffstr, 0, buffstr.size());
       }
       else
-      { /* large result; heap buffer */
+      {
         char* buff = ((char*)(luaM_malloc_(L, ((size_t)(tl)) * sizeof(char), 0)));
         copy2buff(L, top, n, std::span<char>{buff, tl});
         std::string_view buffstr{buff, tl};
@@ -919,7 +902,6 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src)
   luaT_callTMres(L, tm, rb, rb, ra);
 }
 
-/* slot form */
 void luaV_objlen(lua_State* L, StkId ra, StkId rb)
 {
   TValue v = getslot(L, rb);
@@ -1266,22 +1248,13 @@ static l_forceinline int l_gei(lua_Integer a, lua_Integer b)
 */
 static inline void luai_threadyield(lua_State* L)
 {
-  (void) L; /* release lock/unlock are no-ops */
+  (void) L;
   lua_unlock(L);
   lua_lock(L);
 }
 
 /* 'c' is the limit of live values in the stack */
 
-/*
-** (Re)load the interpreter registers to enter the frame of 'ci' (a
-** Lua closure). Shared by the luaV_execute prologue and the
-** call/return arms that switch frames. On entry '*trap' must already
-** hold the value for the new frame (L->hookmask for a fresh call;
-** the propagated trap for a return). Forced inline so the caller's
-** locals never live in memory; verified by objdump + interleaved A/B
-** (see todo.md).
-*/
 static l_forceinline void frameentry(lua_State* L, CallInfo* ci,
                                      LClosure** cl, TValue** k,
                                      const Instruction** code, int* pc,
@@ -1399,7 +1372,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         UpVal* uv = cl->upvals[GETARG_B(i)];
-        TValue rav = getslot(L, ra); /* row: consumed twice (store + GC barrier) */
+        TValue rav = getslot(L, ra);
         upvalsetval(L, uv, &rav);
         luaC_barrier(L, uv, &rav);
         break;
@@ -1459,13 +1432,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           tag = LUA_VNOTABLE;
         else
         {
-          TValue rcv = getslot(L, rc); /* row: key crosses into stack-agnostic table code */
+          TValue rcv = getslot(L, rc);
           tag = luaH_get(slothval(L, rb), &rcv, &res);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
-          /* rows: finishget's operands are storage-polymorphic (slot/upvalue/
-             metatable cell) and it writes slot 'ra', which may alias rb/rc */
           TValue rbv = getslot(L, rb);
           TValue rcv = getslot(L, rc);
           ci->savedpc = pc;
@@ -1545,7 +1516,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         int hres;
         TValue upval = upvalgetval(cl->upvals[GETARG_A(i)]);
         TValue* rb = (k + GETARG_B(i));
-        /* value operand: constant or register, materialized as a row copy */
         TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rb); /* key must be a short string */
@@ -1571,7 +1541,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         int hres;
         StkId rb = (base + GETARG_B(i)); /* key (table is in 'ra') */
-        /* value operand: constant or register, materialized as a row copy */
         TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i)); /* value */
         if ((slottag(L, rb) == LUA_VNUMINT))
         { /* fast track for integers? */
@@ -1604,7 +1573,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
             hres = HNOTATABLE;
           else
           {
-            TValue rbv = getslot(L, rb); /* row: key crosses into stack-agnostic table code */
+            TValue rbv = getslot(L, rb);
             hres = luaH_pset(slothval(L, t), &rbv, &rc);
           }
         }
@@ -1626,7 +1595,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         int hres;
         int b = GETARG_B(i);
-        /* value operand: constant or register, materialized as a row copy */
         TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         StkId t = ra;
         if (slottag(L, t) != ctb(LUA_VTABLE))
@@ -1668,7 +1636,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         int hres;
         TValue* rb = (k + GETARG_B(i));
-        /* value operand: constant or register, materialized as a row copy */
         TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rb); /* key must be a short string */
@@ -2659,7 +2626,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else
         { /* Lua call: run function in this same C frame */
           ci = newci;
-          /* frame entry (was 'goto startfunc') */
           trap = L->hookmask;
           frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
         }
@@ -2685,7 +2651,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           assert(base == ci->func + 1);
         }
         if ((n = luaD_pretailcall(L, ci, ra, b, delta)) < 0) /* Lua function? */
-        { /* execute the callee (was 'goto startfunc') */
+        {
           trap = L->hookmask;
           frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
         }
@@ -2724,7 +2690,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         L->top = ra + n; /* set call for 'luaD_poscall' */
         luaD_poscall(L, ci, n);
         trap = ci->trap; /* 'luaD_poscall' can change hooks */
-        /* return from a Lua function (was 'goto ret') */
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
@@ -2749,7 +2714,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           for (; l_unlikely(nres > 0); nres--)
             setslottag(L, L->top++, LUA_VNIL); /* all results are nil */
         }
-        /* return from a Lua function (was 'goto ret') */
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
@@ -2840,13 +2804,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         pc += GETARG_Bx(i); /* go to end of the loop */
         i = code[pc++];        /* fetch next instruction */
         assert(GET_OPCODE(i) == OP_TFORCALL && ra == (base + GETARG_A(i)));
-        /* run the iterator call (was 'goto l_tforcall'):
-           'ra' has the iterator function, 'ra + 1' has the state,
-           'ra + 2' has the closing variable, and 'ra + 3' has the control
-           variable. The call will use the stack starting at 'ra + 3',
-           so that it preserves the first three values, and the first
-           return will be the new value for the control variable.
-        */
         ra = (base + GETARG_A(i));
         copyslot(L, ra + 5, ra + 3); /* copy the control variable */
         copyslot(L, ra + 4, ra + 1); /* copy state */
@@ -2858,7 +2815,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         { if (l_unlikely(trap)) { (base = (ci)->func + 1); ra = (base + GETARG_A(i)); } };                              /* stack may have changed */
         i = code[pc++];                                  /* go to next instruction */
         assert(GET_OPCODE(i) == OP_TFORLOOP && ra == (base + GETARG_A(i)));
-        /* close the loop iteration (was 'goto l_tforloop') */
         ra = (base + GETARG_A(i));
         if ((slottag(L, ra + 3) & NOVARIANT_MASK) != LUA_TNIL) /* continue loop? */
           pc -= GETARG_Bx(i);      /* jump back */
@@ -2883,7 +2839,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         { if (l_unlikely(trap)) { (base = (ci)->func + 1); ra = (base + GETARG_A(i)); } };                              /* stack may have changed */
         i = code[pc++];                                  /* go to next instruction */
         assert(GET_OPCODE(i) == OP_TFORLOOP && ra == (base + GETARG_A(i)));
-        /* close the loop iteration (was 'goto l_tforloop') */
         ra = (base + GETARG_A(i));
         if ((slottag(L, ra + 3) & NOVARIANT_MASK) != LUA_TNIL) /* continue loop? */
           pc -= GETARG_Bx(i);      /* jump back */
@@ -2922,7 +2877,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         for (; n > 0; n--)
         {
           StkId val = ra + n;
-          TValue vv = getslot(L, val); /* row: consumed twice (table store + GC barrier) */
+          TValue vv = getslot(L, val);
           obj2arr(h, last - 1, &vv);
           last--;
           assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);

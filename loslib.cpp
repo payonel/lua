@@ -37,12 +37,7 @@
 ** ===================================================================
 */
 
-/*
-** time_t is represented in Lua as a lua_Integer (expanded in place at
-** the use sites below)
-*/
 
-/* Lua uses the reentrant POSIX variants gmtime_r/localtime_r */
 
 /* }================================================================== */
 
@@ -59,7 +54,6 @@ constexpr int LUA_TMPNAMBUFSIZE = 32;
 
 constexpr char LUA_TMPNAMTEMPLATE[] = "/tmp/lua_XXXXXX";
 
-/* 'b' must have room for LUA_TMPNAMBUFSIZE bytes; returns 0 on success */
 static inline int lua_tmpnam(char* b)
 {
   strcpy(b, LUA_TMPNAMTEMPLATE);
@@ -77,7 +71,7 @@ static int os_execute(lua_State* L)
   const InternalString* cmd = nocmd ? nullptr : luaL_checkistring(L, 1);
   int stat;
   errno = 0;
-  stat = system(nocmd ? nullptr : cmd->c_str()); /* OS edge (sanctioned c_str) */
+  stat = system(nocmd ? nullptr : cmd->c_str());
   if (!nocmd)
     return luaL_execresult(L, stat);
   else
@@ -114,7 +108,7 @@ static int os_tmpname(lua_State* L)
 
 static int os_getenv(lua_State* L)
 {
-  const char* v = getenv(luaL_checkistring(L, 1)->c_str()); /* OS edge (sanctioned c_str) */
+  const char* v = getenv(luaL_checkistring(L, 1)->c_str());
   if (v != nullptr)
     lua_pushstring(L, v);
   else
@@ -136,10 +130,6 @@ static int os_clock(lua_State* L)
 ** =======================================================
 */
 
-/*
-** No overflow check is needed: time is represented by a lua_Integer,
-** which is large enough to represent all int fields.
-*/
 static void setfield(lua_State* L, const HostString& key, int value, int delta)
 {
   lua_pushinteger(L, (lua_Integer) value + delta);
@@ -210,11 +200,6 @@ static int getfield(lua_State* L, const HostString& key, int d, int delta)
   return (int) res;
 }
 
-/*
-** Check the strftime specifier at fmt[pos..] against the option
-** blocks; on a match copy it (NUL-terminated) into 'buff' for the
-** strftime call and return the offset past it.
-*/
 static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
                           std::span<char> buff, size_t boff)
 {
@@ -227,7 +212,7 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
     if (option[opos] == '|') /* next block? */
       oplen++;               /* will check options with next length (+1) */
     else if (memcmp(fmt.data() + pos, option.data() + opos, oplen) == 0)
-    { /* match? copy valid option to buffer (host strftime boundary) */
+    {
       memcpy(buff.data() + boff, fmt.data() + pos, oplen);
       buff[boff + oplen] = '\0';
       return pos + oplen; /* return next item */
@@ -235,7 +220,6 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
   }
   lua_pushlstring(L, fmt, pos, fmt.size() - pos);
   lua_pushfstring(L, HostString(lit<"invalid conversion specifier '%%%s'">()->view()));
-  /* message anchored on the stack; hand it on as consumer text */
   luaL_argerror(L, 1, HostString(lua_tolstring(L, -1)));
   return pos; /* to avoid warnings */
 }
@@ -253,7 +237,7 @@ constexpr int SIZETIMEFMT = 250;
 static int os_date(lua_State* L)
 {
   std::string_view sfmt = luaL_optlstring(L, 1, lit<"%c">()->view());
-  size_t sp = 0; /* scan offset into the format */
+  size_t sp = 0;
   time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
   struct tm tmr, *stm;
   if (sv_byteat(sfmt, sp) == '!')
@@ -286,9 +270,7 @@ static int os_date(lua_State* L)
         size_t reslen;
         size_t off = luaL_prepbuffsize(&b, SIZETIMEFMT);
         sp++; /* skip '%' */
-        /* copy specifier to 'cc' (span past the leading '%') */
-        sp = checkoption(L, sfmt, sp, cc, 1); /* write past the '%' */
-        /* host boundary: strftime writes into the area (Java: formatter) */
+        sp = checkoption(L, sfmt, sp, cc, 1);
         reslen = strftime(luaL_buffarea(&b).data() + off, SIZETIMEFMT, cc, stm);
         luaL_addsize(&b, reslen);
       }
@@ -343,10 +325,10 @@ static int os_setlocale(lua_State* L)
       lit<"all">()->view(), lit<"collate">()->view(), lit<"ctype">()->view(),
       lit<"monetary">()->view(), lit<"numeric">()->view(), lit<"time">()->view()};
   static const std::string_view defcat = lit<"all">()->view();
-  int nol = lua_isnoneornil(L, 1); /* absent = query current locale */
+  int nol = lua_isnoneornil(L, 1);
   const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
   int op = luaL_checkoption(L, 2, defcat, catnames);
-  const char* res = setlocale(cat[op], nol ? nullptr : l->c_str()); /* OS edge */
+  const char* res = setlocale(cat[op], nol ? nullptr : l->c_str());
   if (res != nullptr)
     lua_pushstring(L, res);
   else

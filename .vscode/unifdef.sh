@@ -17,7 +17,6 @@ for file in "$@"; do
   fi
   
   sed 's/\t/  /g' -i "$file"
-  # Join continuation lines (repeat to handle nested cases)
   for i in {1..6}; do
     sed -e ':a' -e 'N' -e '$!ba' -e 's/\\\n */ /g' -i "$file"
   done

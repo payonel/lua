@@ -24,9 +24,6 @@ static l_forceinline int isreserved(const TString* s)
   return s->extra > 0;
 }
 
-/*
-** equality for strings
-*/
 static l_forceinline int eqshrstr(const TString* a, const TString* b)
 {
   return a == b;

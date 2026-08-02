@@ -30,7 +30,6 @@ LUAI_DDEF const InternalString* const luaT_typenames_[LUA_TOTALTYPES] = {
 
 void luaT_init(lua_State* L)
 {
-  /* engine-destined literals: lit<> at the site (LIT ruling) */
   static const InternalString* const luaT_eventname[] = {/* ORDER TM */
       lit<"__index">(), lit<"__newindex">(),
       lit<"__gc">(), lit<"__mode">(), lit<"__len">(), lit<"__eq">(),
@@ -83,7 +82,6 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
   return (mt ? luaH_Hgetshortstr(mt, G(L)->tmname[event]) : &G(L)->nilvalue);
 }
 
-/* slot form */
 const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event)
 {
   TValue v = getslot(L, o);
@@ -192,7 +190,7 @@ void luaT_tryconcatTM(lua_State* L)
   TValue v1 = getslot(L, p1);
   TValue v2 = getslot(L, p1 + 1);
   if (l_unlikely(callbinTM(L, &v1, &v2, p1, TM_CONCAT) < 0))
-    luaG_concaterror(L, &v1, &v2, p1, p1 + 1); /* no call was made; rows still valid */
+    luaG_concaterror(L, &v1, &v2, p1, p1 + 1);
 }
 
 void luaT_trybinassocTM(lua_State* L, const TValue* p1, const TValue* p2,
@@ -212,11 +210,6 @@ void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
   luaT_trybinassocTM(L, p1, &aux, flip, res, event, src1);
 }
 
-/*
-** Slot-form overloads: operands are named by stack index; the row is
-** materialized here, once, at the storage boundary. (In the managed
-** port these bodies read the operand columns directly.)
-*/
 void luaT_trybinTM(lua_State* L, StkId p1, StkId p2, StkId res, TMS event)
 {
   TValue v1 = getslot(L, p1);
@@ -298,7 +291,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   luaH_set(L, t, &key, &value); /* t.n = n */
   for (i = 0; i < n; i++)
   {
-    TValue v = getslot(L, f + i); /* original slot anchors the value */
+    TValue v = getslot(L, f + i);
     luaH_setint(L, t, i + 1, &v);
   }
   luaC_checkGC(L);
@@ -375,7 +368,6 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   setslottag(L, ra, LUA_VNIL); /* else produce nil */
 }
 
-/* slot form */
 void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, StkId rc)
 {
   TValue v = getslot(L, rc);

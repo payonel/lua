@@ -30,16 +30,6 @@ static size_t luaS_hash(const char* str, size_t l)
   return InternalString::hashBytes(str, l);
 }
 
-/*
-** Create a new TString. The byte payload is an InternalString,
-** placement-constructed into the manually-managed TString (deep copy
-** — the caller's pointer is never retained).
-** RESERVE-BEFORE-GROWTH (ruled 2026-07-29): the payload SIZE is
-** reserved against the lua_State — with the memlimit veto HONORED —
-** before any allocation happens; freeobj releases the same size.
-** Capacity slack (allocator rounding/SSO) stays uncounted but is
-** bounded by the counted size.
-*/
 static TString* createstrobj(lua_State* L, const char* str, size_t l,
                              size_t h)
 {
@@ -48,19 +38,13 @@ static TString* createstrobj(lua_State* L, const char* str, size_t l,
   TString* ts = static_cast<TString*>(o);
   ts->hash = ((unsigned int)(h));
   ts->extra = 0;
-  new (&ts->data) InternalString(); /* valid empty payload: sweepable if we throw */
-  if (l_unlikely(!luaM_reserve(L, l))) /* checked BEFORE the payload allocation */
+  new (&ts->data) InternalString();
+  if (l_unlikely(!luaM_reserve(L, l)))
     luaD_throw(L, LUA_ERRMEM);
-  ts->data = InternalString(str, l); /* allocate only after admission */
+  ts->data = InternalString(str, l);
   return ts;
 }
 
-/*
-** Move form: adopts engine-owned bytes (builder finish) — zero copy.
-** The bytes exist already, so the reserve here is the CHECKED
-** admission of an allocation made while building (bounded builders)
-** — the memlimit veto still applies before the state adopts them.
-*/
 static TString* createstrobj(lua_State* L, InternalString&& str, size_t h)
 {
   GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
@@ -68,8 +52,8 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h)
   TString* ts = static_cast<TString*>(o);
   ts->hash = ((unsigned int)(h));
   ts->extra = 0;
-  new (&ts->data) InternalString(); /* valid empty payload: sweepable if we throw */
-  if (l_unlikely(!luaM_reserve(L, str.size()))) /* checked admission */
+  new (&ts->data) InternalString();
+  if (l_unlikely(!luaM_reserve(L, str.size())))
     luaD_throw(L, LUA_ERRMEM);
   ts->data = std::move(str);
   return ts;
@@ -87,19 +71,11 @@ void luaS_init(lua_State* L)
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg))); /* it should never be collected */
 }
 
-/*
-** Maximum length for strings that are internalized.
-*/
 constexpr int LUAI_MAXSHORTLEN = 40;
 
-/*
-** Create a new string, interning short strings in the global table.
-*/
 TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t len)
 {
   global_State* g = G(L);
-  /* storage boundary: the ingested sub-range materializes exactly once,
-     here (Java: hash/copy loops over (b, off, len)) */
   const char* s = str.data() + off;
   size_t l = len;
   size_t h = luaS_hash(s, l);
@@ -115,21 +91,13 @@ TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t l
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    /* create new short string and intern it */
     TString* ts = createstrobj(L, s, l, h);
     g->strt.emplace(global_State::InternKey{ts->data.view(), h}, ts);
     return ts;
   }
-  /* long string: no interning */
   return createstrobj(L, s, l, h);
 }
 
-/*
-** Create a string ADOPTING engine-owned bytes (ByteBuilder finish):
-** interning applies as usual for short strings (the buffer is simply
-** discarded on a hit); otherwise the TString takes the buffer with no
-** copy. Never call with bytes the host can still reach.
-*/
 TString* luaS_take(lua_State* L, InternalString&& str)
 {
   global_State* g = G(L);
@@ -143,7 +111,7 @@ TString* luaS_take(lua_State* L, InternalString&& str)
       TString* ts = it->second;
       if (isdead(g, ts))
         changewhite(ts); /* resurrect it */
-      return ts;         /* 'str' is discarded */
+      return ts;
     }
     TString* ts = createstrobj(L, std::move(str), h);
     g->strt.emplace(global_State::InternKey{ts->data.view(), h}, ts);
@@ -152,9 +120,6 @@ TString* luaS_take(lua_State* L, InternalString&& str)
   return createstrobj(L, std::move(str), h);
 }
 
-/*
-** Remove a string from the interning table (called during GC sweep)
-*/
 void luaS_remove(lua_State* L, TString* ts)
 {
   if (ts->data.size() <= LUAI_MAXSHORTLEN)
@@ -162,35 +127,16 @@ void luaS_remove(lua_State* L, TString* ts)
     global_State* g = G(L);
     size_t h = ts->hash;
     auto it = g->strt.find(global_State::InternKey{ts->data.view(), h});
-    if (it != g->strt.end() && it->second == ts) /* identity guard: a
-        string that failed admission (empty payload, foreign hash) was
-        never interned and must not erase a legitimate entry */
+    if (it != g->strt.end() && it->second == ts)
       g->strt.erase(it);
   }
 }
 
-/*
-** New string from an InternalString (wrapped literals and other
-** engine-held strings). Deep copy as always — 'str' is never
-** retained; interning may return an existing TString. (The char*
-** overload and the pointer-identity strcache that fronted it are
-** gone: the API layer converts by (bytes, len), engine literals are
-** wrapped InternalStrings or pre-interned TStrings.)
-*/
 TString* luaS_new(lua_State* L, const InternalString* str)
 {
   return luaS_createstr(L, str->view(), 0, str->size());
 }
 
-/*
-** A userdata is three luaM blocks: the header (a GC object), the user
-** values array, and the binary data area. The header is created first,
-** in a consistent empty state (nuvalue == 0, data == nullptr), so the
-** collector can free it at any point; the raw blocks are then
-** allocated with emergency collections stopped and committed to the
-** header as they arrive. No unwind cleanup is needed on any path —
-** see luaF_newCclosure for the reasoning.
-*/
 Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
 {
   global_State* g = G(L);
@@ -201,16 +147,16 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   GCObject* o = luaC_newobj(L, LUA_VUSERDATA, sizeof(Udata));
   assert(o->tt == LUA_VUSERDATA);
   u = static_cast<Udata*>(o);
-  u->len = 0; /* no data block yet */
-  u->nuvalue = 0; /* no user-value array yet */
+  u->len = 0;
+  u->nuvalue = 0;
   u->metatable = nullptr;
   u->uv = nullptr;
   u->data = nullptr;
   lu_byte oldgcstop = g->gcstopem;
-  g->gcstopem = 1; /* no emergency collection: the header is unanchored */
+  g->gcstopem = 1;
   TValue* uv = (TValue*)luaM_realloc_(L, nullptr, 0, (size_t)nuvalue * sizeof(TValue));
   if (uv != nullptr || nuvalue == 0)
-  { /* commit the array before the next allocation can fail */
+  {
     u->uv = uv;
     u->nuvalue = nuvalue;
     u->data = (char*)luaM_realloc_(L, nullptr, 0, udatadatasize(s));

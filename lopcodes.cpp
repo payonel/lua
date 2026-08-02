@@ -187,10 +187,6 @@ LUAI_DDEF const lu_byte luaP_opmodes[NUM_OPCODES] = {
     opmode(0, 0, 0, 0, 0, iAx) /* OP_EXTRAARG */
 };
 
-/*
-** Check whether instruction sets top for next instruction, that is,
-** it results in multiple values.
-*/
 int luaP_isOT(Instruction i)
 {
   OpCode op = GET_OPCODE(i);
@@ -203,10 +199,6 @@ int luaP_isOT(Instruction i)
   }
 }
 
-/*
-** Check whether instruction uses top from previous instruction, that is,
-** it accepts multiple results.
-*/
 int luaP_isIT(Instruction i)
 {
   OpCode op = GET_OPCODE(i);

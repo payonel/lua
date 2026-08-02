@@ -15,17 +15,9 @@
 
 #include "lua.h"
 
-/*
-** This port supports only little-endian hosts (ryanbean decision,
-** 2026-07-25). Byte order is used naively wherever it leaks into
-** observable behavior — those places carry a "little-endian" comment
-** and would have behaved differently on a big-endian host (which
-** instead fails here at compile time).
-*/
 static_assert(std::endian::native == std::endian::little,
               "this port supports little-endian hosts only");
 
-/* numeric types are pinned (managed-target contract, see luaconf.h) */
 static_assert(std::numeric_limits<lua_Number>::is_iec559 &&
                   sizeof(lua_Number) == 8,
               "this port requires lua_Number to be IEEE-754 binary64");
@@ -67,18 +59,12 @@ constexpr size_t MAX_SIZE = sizeof(size_t) < sizeof(lua_Integer) ? MAX_SIZET : (
 
 /* number of chars of a literal string without the ending \0 */
 
-/*
-** conversion of pointer to unsigned integer: this is for hashing only;
-** there is no problem if the integer cannot hold the whole pointer
-** value. (size_t covers the full pointer range on this target.)
-*/
 
 static inline unsigned int point2uint(const void* p)
 {
   return (unsigned int)((size_t)(p) & UINT_MAX);
 }
 
-/* overload for light C function pointers (not convertible to void*) */
 static inline unsigned int point2uint(lua_CFunction p)
 {
   return (unsigned int)((size_t)(p) & UINT_MAX);
@@ -86,14 +72,6 @@ static inline unsigned int point2uint(lua_CFunction p)
 
 /* types of 'usual argument conversions' for lua_Number and lua_Integer */
 
-/*
-** Internal assertions for in-house debugging.
-** 'assert' is used literally throughout the core; no build mode
-** defines NDEBUG, so assertions are active in both build modes
-** (matching the managed-target model, where 'assert' is a runtime
-** switch rather than a build flavor). Checks with side-effect-free
-** setup are written as 'assert(f(...))' where 'f' returns 1.
-*/
 #include <assert.h>
 
 /*
@@ -145,16 +123,8 @@ typedef unsigned int l_uint32;
 ** (as the result 'm' of 'fmod' has the same sign of 'a').
 */
 
-/*
-** Force inlining for tiny hot helpers even at -Og (debug builds).
-** Build-config attribute, in the same category as LUAI_FUNC/l_noret.
-*/
 #define l_forceinline inline __attribute__((always_inline))
 
-/*
-** Primitive operations over floats. Real functions (not macros) so the
-** interpreter's op_arith* dispatch can pass them by name.
-*/
 static l_forceinline lua_Number luai_numadd(lua_State* L, lua_Number a, lua_Number b) { (void) L; return a + b; }
 static l_forceinline lua_Number luai_numsub(lua_State* L, lua_Number a, lua_Number b) { (void) L; return a - b; }
 static l_forceinline lua_Number luai_nummul(lua_State* L, lua_Number a, lua_Number b) { (void) L; return a * b; }

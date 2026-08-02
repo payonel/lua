@@ -286,8 +286,6 @@ static int math_type(lua_State* L)
 ** are written in convoluted ways to match that restriction.
 */
 
-/* number of binary digits in the mantissa of a float (53 for the
-   pinned binary64 lua_Number — always fits the 64 random bits) */
 constexpr int FIGS = DBL_MANT_DIG;
 static_assert(FIGS <= 64, "there are only 64 random bits");
 

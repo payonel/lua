@@ -143,8 +143,6 @@ static void stack_init(lua_State* L1, lua_State* L)
 {
   int i;
   size_t nslots = (size_t)(BASIC_STACK_SIZE + EXTRA_STACK);
-  /* initialize the three stack columns; install only when all three
-     succeed, so 'freestack' sees either a complete stack or none */
   lua_Integer* prim = (lua_Integer*)luaM_realloc_(L, nullptr, 0, nslots * sizeof(lua_Integer));
   GCObject** ref = (GCObject**)luaM_realloc_(L, nullptr, 0, nslots * sizeof(GCObject*));
   lu_byte* tag = (lu_byte*)luaM_realloc_(L, nullptr, 0, nslots * sizeof(lu_byte));
@@ -174,7 +172,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
-  luaM_free_(L, (L->tbc), (((size_t)(L->sizetbc))) * sizeof(*(L->tbc))); /* free tbc list */
+  luaM_free_(L, (L->tbc), (((size_t)(L->sizetbc))) * sizeof(*(L->tbc)));
   L->tbc = nullptr;
   L->ntbc = L->sizetbc = 0;
   if (L->stack.prim == nullptr)
@@ -182,7 +180,6 @@ static void freestack(lua_State* L)
   L->ci = &L->base_ci; /* free the entire 'ci' list */
   freeCI(L);
   assert(L->nci == 0);
-  /* free the three stack columns */
   {
     size_t nslots = (size_t)(stacksize(L) + EXTRA_STACK);
     luaM_free_(L, L->stack.prim, nslots * sizeof(lua_Integer));
@@ -359,7 +356,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   if (g == nullptr)
     return nullptr;
   L = &g->mainth.l;
-  g->mainth.extra = nullptr;  /* initialize to 0 */
+  g->mainth.extra = nullptr;
   L->tt = LUA_VTHREAD;
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);
@@ -421,7 +418,7 @@ void luaE_warning(lua_State* L, std::string_view msg, int tocont)
 {
   lua_WarnFunction wf = G(L)->warnf;
   if (wf != nullptr)
-    wf(G(L)->ud_warn, HostString{msg}, tocont); /* host boundary: deep copy */
+    wf(G(L)->ud_warn, HostString{msg}, tocont);
 }
 
 /*

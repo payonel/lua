@@ -24,8 +24,8 @@ LUAI_FUNC const void* luaZ_getaddr(ZIO* z, size_t n);
 
 struct ZIO
 {
-  std::string_view chunk; /* current piece handed over by the reader */
-  size_t pos;             /* read offset into 'chunk' (Java: byte[] + int) */
+  std::string_view chunk;
+  size_t pos;
   lua_Reader reader;      /* reader function */
   void* data;             /* additional data */
   lua_State* L;           /* Lua state (for reader) */

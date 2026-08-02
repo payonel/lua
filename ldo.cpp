@@ -96,7 +96,7 @@ l_noret luaD_throw(lua_State* L, TStatus errcode)
     L->status = errcode;
     if (mainth->errorJmp)
     {                                              /* main thread has a handler? */
-      TValue v = getslot(L, L->top - 1); /* copy error obj. (cross-stack, by row) */
+      TValue v = getslot(L, L->top - 1);
       setslot(mainth, mainth->top++, &v);
       luaD_throw(mainth, errcode);                 /* re-throw in main thread */
     }
@@ -148,7 +148,6 @@ TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
 constexpr int STACKERRSPACE = 200;
 
 /* maximum stack size that respects size_t */
-/* bound by the widest stack column (prim/ref are 8 bytes each) */
 constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / sizeof(lua_Integer)) - STACKERRSPACE);
 
 /*
@@ -191,7 +190,6 @@ int luaD_checkminstack(lua_State* L)
 
 static void correctstack(lua_State* L)
 {
-  /* upvalues hold stack indices, not pointers: nothing to correct there */
   for (CallInfo* ci = L->ci; ci != nullptr; ci = ci->previous)
   {
     if (isLua(ci))
@@ -199,22 +197,13 @@ static void correctstack(lua_State* L)
   }
 }
 
-/*
-** Reallocate the stack to a new size, correcting all pointers into it.
-** In case of allocation error, raise an error or return false according
-** to 'raiseerror'.
-** The three columns are grown together: allocate three fresh arrays,
-** copy the live prefix, install, free the old ones (the Arrays.copyOf
-** shape of the managed port; there is no realloc-in-place for parallel
-** arrays). If any allocation fails, the old stack stays installed.
-*/
 int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
 {
   int oldsize = stacksize(L);
   int i;
   size_t oldn = (size_t)(oldsize + EXTRA_STACK);
   size_t newn = (size_t)(newsize + EXTRA_STACK);
-  size_t keep = (oldn < newn) ? oldn : newn; /* live prefix to copy */
+  size_t keep = (oldn < newn) ? oldn : newn;
   lua_Integer* newprim;
   GCObject** newref;
   lu_byte* newtag;
@@ -226,14 +215,14 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   newtag = (lu_byte*)luaM_realloc_(L, nullptr, 0, newn * sizeof(lu_byte));
   G(L)->gcstopem = oldgcstop; /* restore emergency collection */
   if (l_unlikely(newprim == nullptr || newref == nullptr || newtag == nullptr))
-  { /* some allocation failed? free the survivors, keep the old stack */
+  {
     if (newprim != nullptr)
       luaM_free_(L, newprim, newn * sizeof(lua_Integer));
     if (newref != nullptr)
       luaM_free_(L, newref, newn * sizeof(GCObject*));
     if (newtag != nullptr)
       luaM_free_(L, newtag, newn * sizeof(lu_byte));
-    correctstack(L); /* restore upvalue pointers */
+    correctstack(L);
     if (raiseerror)
       luaD_throw(L, LUA_ERRMEM);
     else
@@ -243,7 +232,7 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   memcpy(newref, L->stack.ref, keep * sizeof(GCObject*));
   memcpy(newtag, L->stack.tag, keep * sizeof(lu_byte));
   if (newn > keep)
-  { /* define the fresh segment's payload columns (tags set below) */
+  {
     memset(newprim + keep, 0, (newn - keep) * sizeof(lua_Integer));
     memset(newref + keep, 0, (newn - keep) * sizeof(GCObject*));
   }
@@ -253,7 +242,7 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   L->stack.prim = newprim;
   L->stack.ref = newref;
   L->stack.tag = newtag;
-  correctstack(L); /* fix upvalue pointers */
+  correctstack(L);
   L->stack_last = newsize;
   for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
     setslottag(L, i, LUA_VNIL); /* erase new segment */
@@ -511,7 +500,7 @@ static inline void moveresults(lua_State* L, StkId res, int nres,
       { /* if needed, call hook after '__close's */
         StkId savedres = res;
         rethook(L, L->ci, nres);
-        res = savedres; /* indices survive realloc */
+        res = savedres;
       }
       if (wanted == LUA_MULTRET)
         wanted = nres; /* we want all results */
@@ -598,7 +587,7 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
                      int narg1, int delta)
 {
   unsigned status = LUA_MULTRET + 1;
-  for (;;) /* retry after resolving '__call' metamethods */
+  for (;;)
   {
     switch (slottag(L, func) & WITHVARIANT_MASK)
     {
@@ -640,19 +629,11 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
   }
 }
 
-/*
-** Prepares the call to a function (C or Lua). For C functions, also do
-** the call. The function to be called is at '*func'.  The arguments
-** are on the stack, right after the function.  Returns the CallInfo
-** to be executed, if it was a Lua function. Otherwise (a C function)
-** returns nullptr, with all the results on the stack, starting at the
-** original function position.
-*/
 CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
 {
   unsigned status = ((unsigned int)(nresults + 1));
   assert(status <= MAXRESULTS + 1);
-  for (;;) /* retry after resolving '__call' metamethods */
+  for (;;)
   {
     switch (slottag(L, func) & WITHVARIANT_MASK)
     {
@@ -1066,10 +1047,9 @@ TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId old_top,
 struct SParser
 { /* data to 'f_parser' */
   ZIO* z;
-  ByteBuilder buff; /* token buffer for the scanner (ctor/dtor managed;
-                       growth ACCOUNTED via save(), charge released below) */
+  ByteBuilder buff;
   Dyndata dyd;  /* dynamic structures used by the parser */
-  const InternalString* mode; /* nullable: default "bt" */
+  const InternalString* mode;
   const InternalString* name;
 };
 
@@ -1077,8 +1057,7 @@ static void checkmode(lua_State* L, const InternalString* mode,
                       const InternalString* x)
 {
   if (mode->view().find((char) x->byteAt(0)) == std::string_view::npos)
-  { /* engine strings end to end: no scan past a terminator and no
-       copy for the message */
+  {
     luaO_pushfstring(L,
                      lit<"attempt to load a %s chunk (mode is '%s')">(),
                      FmtArgs().str(x).str(mode));
@@ -1157,10 +1136,6 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, const InternalString* name,
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
   status = luaD_pcall(L, f_parser, &p, (L->top), L->errfunc);
-  /* release the token buffer's accounted charge: llex save() reserved
-     every capacity growth (reserve-before-growth), so the charge held
-     is exactly the builder's capacity; the builder itself is freed by
-     SParser's destructor */
   luaM_release(L, p.buff.capacity());
   luaM_free_(L, (p.dyd.actvar.arr), (((size_t)(p.dyd.actvar.size))) * sizeof(*(p.dyd.actvar.arr)));
   luaM_free_(L, (p.dyd.gt.arr), (((size_t)(p.dyd.gt.size))) * sizeof(*(p.dyd.gt.arr)));
