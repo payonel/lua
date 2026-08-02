@@ -1068,7 +1068,8 @@ l_noret luaG_errormsg(lua_State* L)
   if ((slottag(L, L->top - 1) & NOVARIANT_MASK) == LUA_TNIL)
   { /* error object is nil? */
     /* change it to a proper message */
-    setslots(L, L->top - 1, luaS_newlstr(L, lit<"<no error object>">()->view()));
+    const InternalString* errstr = lit<"<no error object>">();
+    setslots(L, L->top - 1, luaS_createstr(L, errstr->view(), 0, errstr->size()));
   }
   luaD_throw(L, LUA_ERRRUN);
 }

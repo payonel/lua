@@ -673,7 +673,7 @@ LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s,
 {
   TString* ts;
   lua_lock(L);
-  ts = (len == 0) ? luaS_new(L, lit<"">()) : luaS_newlstr(L, s, off, len);
+  ts = (len == 0) ? luaS_new(L, lit<"">()) : luaS_createstr(L, s, off, len);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -689,7 +689,8 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
     return;
   }
   lua_lock(L);
-  TString* ts = luaS_newlstr(L, s->view()); /* boundary deep copy */
+  std::string_view bytes = s->view();
+  TString* ts = luaS_createstr(L, bytes, 0, bytes.size()); /* boundary deep copy */
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -894,7 +895,7 @@ static int auxgetstr(lua_State* L, const TValue* t, std::string_view k)
 {
   lu_byte tag;
   TValue res;
-  TString* str = luaS_newlstr(L, k); /* deep copy/intern */
+  TString* str = luaS_createstr(L, k, 0, k.size()); /* deep copy/intern */
   if (t->tt_ != ctb(LUA_VTABLE))
     tag = LUA_VNOTABLE;
   else
@@ -1148,7 +1149,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
 static void auxsetstr(lua_State* L, const TValue* t, std::string_view k)
 {
   int hres;
-  TString* str = luaS_newlstr(L, k); /* deep copy/intern */
+  TString* str = luaS_createstr(L, k, 0, k.size()); /* deep copy/intern */
   api_checkpop(L, 1);
   if (t->tt_ != ctb(LUA_VTABLE))
     hres = HNOTATABLE;
@@ -1693,7 +1694,7 @@ LUA_API void lua_concat(lua_State* L, int n)
   }
   else
   {                                                   /* nothing to concatenate */
-    setslots(L, L->top, luaS_newlstr(L, lit<"">()->view())); /* push empty string */
+    setslots(L, L->top, luaS_createstr(L, lit<"">()->view(), 0, 0)); /* push empty string */
     api_incr_top(L);
   }
   lua_unlock(L);

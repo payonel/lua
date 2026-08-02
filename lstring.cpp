@@ -82,7 +82,7 @@ void luaS_init(lua_State* L)
 {
   global_State* g = G(L);
   /* pre-create memory-error message */
-  g->memerrmsg = luaS_newlstr(L, MEMERRMSG->view());
+  g->memerrmsg = luaS_createstr(L, MEMERRMSG->view(), 0, MEMERRMSG->size());
   assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg))); /* it should never be collected */
 }
@@ -167,19 +167,6 @@ void luaS_remove(lua_State* L, TString* ts)
         never interned and must not erase a legitimate entry */
       g->strt.erase(it);
   }
-}
-
-/*
-** new string (whole view, or an explicit (off, len) sub-range)
-*/
-TString* luaS_newlstr(lua_State* L, std::string_view str)
-{
-  return luaS_createstr(L, str, 0, str.size());
-}
-
-TString* luaS_newlstr(lua_State* L, std::string_view str, size_t off, size_t len)
-{
-  return luaS_createstr(L, str, off, len);
 }
 
 /*

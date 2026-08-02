@@ -163,7 +163,8 @@ constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
 /* raise a stack error while running the message handler */
 l_noret luaD_errerr(lua_State* L)
 {
-  TString* msg = luaS_newlstr(L, lit<"error in error handling">()->view());
+  const InternalString* errstr = lit<"error in error handling">();
+  TString* msg = luaS_createstr(L, errstr->view(), 0, errstr->size());
   setslots(L, L->top, msg);
   L->top++; /* assume EXTRA_STACK */
   luaD_throw(L, LUA_ERRERR);

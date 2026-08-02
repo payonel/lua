@@ -84,7 +84,7 @@ static inline void save_and_next(LexState* ls)
 void luaX_init(lua_State* L)
 {
   int i;
-  TString* e = luaS_newlstr(L, LUA_ENV->view()); /* create env name */
+  TString* e = luaS_createstr(L, LUA_ENV->view(), 0, LUA_ENV->size()); /* create env name */
   assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(e)));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
@@ -184,12 +184,12 @@ static TString* anchorstr(LexState* ls, TString* ts)
 */
 TString* luaX_newstring(LexState* ls, std::string_view str)
 {
-  return anchorstr(ls, luaS_newlstr(ls->L, str));
+  return luaX_newstring(ls, str, 0, str.size());
 }
 
 TString* luaX_newstring(LexState* ls, std::string_view str, size_t off, size_t len)
 {
-  return anchorstr(ls, luaS_newlstr(ls->L, str, off, len));
+  return anchorstr(ls, luaS_createstr(ls->L, str, off, len));
 }
 
 /*
@@ -221,8 +221,9 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source,
   ls->source = source;
   /* all three strings here ("_ENV", "break", "global") were fixed,
      so they cannot be collected */
-  ls->envn = luaS_newlstr(L, LUA_ENV->view()); /* get env string */
-  ls->brkn = luaS_newlstr(L, lit<"break">()->view()); /* get "break" string */
+  ls->envn = luaS_createstr(L, LUA_ENV->view(), 0, LUA_ENV->size()); /* get env string */
+  const InternalString* breakstr = lit<"break">();
+  ls->brkn = luaS_createstr(L, breakstr->view(), 0, breakstr->size()); /* get "break" string */
   /* initialize buffer */
   ls->buff->reset();
 }
@@ -725,7 +726,7 @@ static int llex(LexState* ls, Token* seminfo)
           save_and_next(ls);
         } while (lislalnum(ls->current));
         /* find or create string */
-        ts = luaS_newlstr(ls->L, ls->buff->view());
+        ts = luaS_createstr(ls->L, ls->buff->view(), 0, ls->buff->view().size());
         if (isreserved(ts)) /* reserved word? */
           return ts->extra - 1 + FIRST_RESERVED;
         else

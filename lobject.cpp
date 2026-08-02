@@ -715,7 +715,8 @@ void luaO_tostring(lua_State* L, TValue* obj)
 {
   char buff[LUA_N2SBUFFSZ];
   unsigned len = luaO_tostringbuff(obj, buff);
-  setsvalue(L, obj, luaS_newlstr(L, std::string_view{buff, len}));
+  std::string_view bytes{buff, len};
+  setsvalue(L, obj, luaS_createstr(L, bytes, 0, bytes.size()));
 }
 
 /*
