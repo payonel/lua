@@ -126,7 +126,7 @@ static const InternalString* txtToken(LexState* ls, int token)
     /* anchor the token text as an engine string (GC-safe across the
        push; counted bytes — the lexer no longer saves a NUL) */
     return luaO_pushfstring(ls->L, lit<"'%s'">(),
-                            FmtArgs().str(&luaX_newstring(ls, ls->buff->view())->data));
+                            FmtArgs().str(&luaX_newstring(ls, ls->buff->view(), 0, ls->buff->view().size())->data));
   default:
     return luaX_token2str(ls, token);
   }
@@ -182,11 +182,6 @@ static TString* anchorstr(LexState* ls, TString* ts)
 /*
 ** Creates a new string and anchors it in scanner's table.
 */
-TString* luaX_newstring(LexState* ls, std::string_view str)
-{
-  return luaX_newstring(ls, str, 0, str.size());
-}
-
 TString* luaX_newstring(LexState* ls, std::string_view str, size_t off, size_t len)
 {
   return anchorstr(ls, luaS_createstr(ls->L, str, off, len));
