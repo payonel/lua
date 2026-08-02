@@ -915,20 +915,17 @@ static const InternalString* varinfo(lua_State* L, StkId src)
 /*
 ** Raise a type error
 */
-static l_noret typeerror(lua_State* L, const TValue* o,
-                         const InternalString* op, const InternalString* extra)
+static l_noret typeerror(lua_State* L, const TValue* o, std::string_view op, const InternalString* extra)
 {
   const InternalString* t = luaT_objtypename(L, o);
-  luaG_runerror(L, lit<"attempt to %s a %s value%s">()->view(),
-                FmtArgs().str(op->view()).str(t->view()).str(extra->view()));
+  luaG_runerror(L, lit<"attempt to %s a %s value%s">()->view(), FmtArgs().str(op).str(t->view()).str(extra->view()));
 }
 
 /*
 ** Raise a type error with "standard" information about the faulty
 ** object 'o' (using 'varinfo').
 */
-l_noret luaG_typeerror(lua_State* L, const TValue* o,
-                       const InternalString* op, StkId src)
+l_noret luaG_typeerror(lua_State* L, const TValue* o, std::string_view op, StkId src)
 {
   typeerror(L, o, op, varinfo(L, src));
 }
@@ -944,13 +941,12 @@ l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
   const InternalString* name = nullptr; /* to avoid warnings */
   const InternalString* kind = funcnamefromcall(L, ci, &name);
   const InternalString* extra = kind ? formatvarinfo(L, kind, name) : varinfo(L, src);
-  typeerror(L, o, lit<"call">(), extra);
+  typeerror(L, o, lit<"call">()->view(), extra);
 }
 
-l_noret luaG_forerror(lua_State* L, const TValue* o, const InternalString* what)
+l_noret luaG_forerror(lua_State* L, const TValue* o, std::string_view what)
 {
-  luaG_runerror(L, lit<"bad 'for' %s (number expected, got %s)">()->view(),
-                FmtArgs().str(what->view()).str(luaT_objtypename(L, o)->view()));
+  luaG_runerror(L, lit<"bad 'for' %s (number expected, got %s)">()->view(), FmtArgs().str(what).str(luaT_objtypename(L, o)->view()));
 }
 
 l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2,
@@ -961,12 +957,10 @@ l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2,
     p1 = p2;
     src1 = src2;
   }
-  luaG_typeerror(L, p1, lit<"concatenate">(), src1);
+  luaG_typeerror(L, p1, lit<"concatenate">()->view(), src1);
 }
 
-l_noret luaG_opinterror(lua_State* L, const TValue* p1,
-                        const TValue* p2, const InternalString* msg,
-                        StkId src1, StkId src2)
+l_noret luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, std::string_view msg, StkId src1, StkId src2)
 {
   if (!(((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) /* first operand is wrong? */
   {

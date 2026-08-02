@@ -1083,7 +1083,7 @@ static void GCTM(lua_State* L)
     g->gcstp = oldgcstp;            /* restore state */
     if (l_unlikely(status != LUA_OK))
     { /* error while running __gc? */
-      luaE_warnerror(L, lit<"__gc">());
+      luaE_warnerror(L, lit<"__gc">()->view());
       L->top--; /* pops error object */
     }
   }

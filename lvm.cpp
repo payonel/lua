@@ -162,7 +162,7 @@ static int forlimit(lua_State* L, lua_Integer init, StkId limslot,
     /* not coercible to in integer */
     lua_Number flim;           /* try to convert to float */
     if (!tonumber(lim, &flim)) /* cannot convert to float? */
-      luaG_forerror(L, lim, lit<"limit">());
+      luaG_forerror(L, lim, lit<"limit">()->view());
     /* else 'flim' is a float out of integer bounds */
     if (((0) < (flim)))
     { /* if it is positive, it is too large */
@@ -233,11 +233,11 @@ static int forprep(lua_State* L, StkId ra)
     lua_Number limit;
     lua_Number step;
     if (l_unlikely(!tonumber(L, plimit, &limit)))
-      luaG_forerror(L, plimit, lit<"limit">());
+      luaG_forerror(L, plimit, lit<"limit">()->view());
     if (l_unlikely(!tonumber(L, pstep, &step)))
-      luaG_forerror(L, pstep, lit<"step">());
+      luaG_forerror(L, pstep, lit<"step">()->view());
     if (l_unlikely(!tonumber(L, pinit, &init)))
-      luaG_forerror(L, pinit, lit<"initial value">());
+      luaG_forerror(L, pinit, lit<"initial value">()->view());
     if (step == 0)
       luaG_runerror(L, lit<"'for' step is zero">()->view());
     if (((0) < (step)) ? ((limit) < (init))
@@ -293,7 +293,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
       assert(!((t)->tt_ == ctb(LUA_VTABLE)));
       tm = luaT_gettmbyobj(L, t, TM_INDEX);
       if (l_unlikely(notm(tm)))
-        luaG_typeerror(L, t, lit<"index">(), tsrc); /* no metamethod */
+        luaG_typeerror(L, t, lit<"index">()->view(), tsrc); /* no metamethod */
       /* else will try the metamethod */
     }
     else
@@ -367,7 +367,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
     { /* not a table; check metamethod */
       tm = luaT_gettmbyobj(L, t, TM_NEWINDEX);
       if (l_unlikely(notm(tm)))
-        luaG_typeerror(L, t, lit<"index">(), tsrc);
+        luaG_typeerror(L, t, lit<"index">()->view(), tsrc);
     }
     /* try the metamethod */
     if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TFUNCTION))
@@ -895,7 +895,7 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src)
   { /* try metamethod */
     tm = luaT_gettmbyobj(L, rb, TM_LEN);
     if (l_unlikely(notm(tm))) /* no metamethod? */
-      luaG_typeerror(L, rb, lit<"get length of">(), src);
+      luaG_typeerror(L, rb, lit<"get length of">()->view(), src);
     break;
   }
   }

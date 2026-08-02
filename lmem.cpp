@@ -73,8 +73,7 @@ static inline void* firsttry(global_State* g, void* block, size_t os, size_t ns)
 */
 constexpr int MINSIZEARRAY = 4;
 
-void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize,
-                    unsigned size_elems, int limit, const InternalString* what)
+void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize, unsigned size_elems, int limit, std::string_view what)
 {
   void* newblock;
   int size = *psize;
@@ -83,7 +82,7 @@ void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize,
   if (size >= limit / 2)
   {                                /* cannot double it? */
     if (l_unlikely(size >= limit)) /* cannot grow even a little? */
-      luaG_runerror(L, lit<"too many %s (limit is %d)">()->view(), FmtArgs().str(what->view()).num(limit));
+      luaG_runerror(L, lit<"too many %s (limit is %d)">()->view(), FmtArgs().str(what).num(limit));
     size = limit; /* still have at least one free place */
   }
   else

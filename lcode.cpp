@@ -229,7 +229,7 @@ void luaK_ret(FuncState* fs, int first, int nret)
     op = OP_RETURN;
     break;
   }
-  luaY_checklimit(fs, nret + 1, MAXARG_B, lit<"returns">());
+  luaY_checklimit(fs, nret + 1, MAXARG_B, lit<"returns">()->view());
   luaK_codeABC(fs, op, first, nret + 1, 0);
 }
 
@@ -355,7 +355,7 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
                     ? INT_MAX
                     : (int)(MAX_SIZET / sizeof(AbsLineInfo));
     f->abslineinfo = (AbsLineInfo*)luaM_growaux_(fs->ls->L, f->abslineinfo, fs->nabslineinfo,
-                                                 &f->sizeabslineinfo, sizeof(AbsLineInfo), limit, lit<"lines">());
+                                                 &f->sizeabslineinfo, sizeof(AbsLineInfo), limit, lit<"lines">()->view());
     f->abslineinfo[fs->nabslineinfo].pc = pc;
     f->abslineinfo[fs->nabslineinfo++].line = line;
     linedif = ABSLINEINFO; /* signal that there is absolute information */
@@ -365,7 +365,7 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(ls_byte));
   f->lineinfo = (ls_byte*)luaM_growaux_(fs->ls->L, f->lineinfo, pc,
-                                        &f->sizelineinfo, sizeof(ls_byte), limit, lit<"opcodes">());
+                                        &f->sizelineinfo, sizeof(ls_byte), limit, lit<"opcodes">()->view());
   f->lineinfo[pc] = ((ls_byte)(linedif));
   fs->previousline = line; /* last line saved */
 }
@@ -415,7 +415,7 @@ int luaK_code(FuncState* fs, Instruction i)
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(Instruction));
   f->code = (Instruction*)luaM_growaux_(fs->ls->L, f->code, fs->pc,
-                                        &f->sizecode, sizeof(Instruction), limit, lit<"opcodes">());
+                                        &f->sizecode, sizeof(Instruction), limit, lit<"opcodes">()->view());
   f->code[fs->pc++] = i;
   savelineinfo(fs, f, fs->ls->lastline);
   return fs->pc - 1; /* index of new instruction */
@@ -508,7 +508,7 @@ void luaK_checkstack(FuncState* fs, int n)
   int newstack = fs->freereg + n;
   if (newstack > fs->f->maxstacksize)
   {
-    luaY_checklimit(fs, newstack, MAX_FSTACK, lit<"registers">());
+    luaY_checklimit(fs, newstack, MAX_FSTACK, lit<"registers">()->view());
     fs->f->maxstacksize = ((lu_byte)(newstack));
   }
 }
@@ -584,7 +584,7 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
   int limit = ((size_t)MAXARG_Ax <= MAX_SIZET / sizeof(TValue))
                   ? MAXARG_Ax
                   : (int)(MAX_SIZET / sizeof(TValue));
-  f->k = (TValue*)luaM_growaux_(L, f->k, k, &f->sizek, sizeof(TValue), limit, lit<"constants">());
+  f->k = (TValue*)luaM_growaux_(L, f->k, k, &f->sizek, sizeof(TValue), limit, lit<"constants">()->view());
   while (oldsize < f->sizek)
     ((&f->k[oldsize++])->tt_ = LUA_VNIL);
   setobj(L, &f->k[k], v);
@@ -808,7 +808,7 @@ static void const2exp(TValue* v, expdesc* e)
 void luaK_setreturns(FuncState* fs, expdesc* e, int nresults)
 {
   Instruction* pc = &((fs)->f->code[(e)->info]);
-  luaY_checklimit(fs, nresults + 1, MAXARG_C, lit<"multiple results">());
+  luaY_checklimit(fs, nresults + 1, MAXARG_C, lit<"multiple results">()->view());
   if (e->k == VCALL) /* expression is an open function call? */
     ((*pc) = (((*pc) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(nresults + 1)) << POS_C) & MASK1(SIZE_C, POS_C))));
   else

@@ -36,26 +36,15 @@ static l_forceinline StkId upvalorigin(int uvidx)
   return UPVALORIGIN + (StkId)uvidx;
 }
 
-LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o,
-                                 const InternalString* opname, StkId src);
+LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o, std::string_view opname, StkId src);
 LUAI_FUNC l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src);
-LUAI_FUNC l_noret luaG_forerror(lua_State* L, const TValue* o,
-                                const InternalString* what);
-LUAI_FUNC l_noret luaG_concaterror(lua_State* L, const TValue* p1,
-                                   const TValue* p2,
-                                   StkId src1, StkId src2);
-LUAI_FUNC l_noret luaG_opinterror(lua_State* L, const TValue* p1,
-                                  const TValue* p2,
-                                  const InternalString* msg,
-                                  StkId src1, StkId src2);
-LUAI_FUNC l_noret luaG_tointerror(lua_State* L, const TValue* p1,
-                                  const TValue* p2,
-                                  StkId src1, StkId src2);
-LUAI_FUNC l_noret luaG_ordererror(lua_State* L, const TValue* p1,
-                                  const TValue* p2);
+LUAI_FUNC l_noret luaG_forerror(lua_State* L, const TValue* o, std::string_view what);
+LUAI_FUNC l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2);
+LUAI_FUNC l_noret luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, std::string_view msg, StkId src1, StkId src2);
+LUAI_FUNC l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2);
+LUAI_FUNC l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2);
 
-static l_forceinline l_noret luaG_forerror(lua_State* L, StkId idx,
-                                           const InternalString* what)
+static l_forceinline l_noret luaG_forerror(lua_State* L, StkId idx, std::string_view what)
 {
   TValue v = getslot(L, idx);
   luaG_forerror(L, &v, what);

@@ -173,11 +173,11 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
       if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((p2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
         luaG_tointerror(L, p1, p2, src1, src2);
       else
-        luaG_opinterror(L, p1, p2, lit<"perform bitwise operation on">(), src1, src2);
+        luaG_opinterror(L, p1, p2, lit<"perform bitwise operation on">()->view(), src1, src2);
     }
     /* calls never return, but to avoid warnings: */ /* FALLTHROUGH */
     default:
-      luaG_opinterror(L, p1, p2, lit<"perform arithmetic on">(), src1, src2);
+      luaG_opinterror(L, p1, p2, lit<"perform arithmetic on">()->view(), src1, src2);
     }
   }
 }

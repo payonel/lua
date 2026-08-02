@@ -66,19 +66,19 @@ static l_noret error_expected(LexState* ls, int token)
   luaX_syntaxerror(ls, luaO_pushfstring(ls->L, lit<"%s expected">()->view(), FmtArgs().str(luaX_token2str(ls, token)->view()))->view());
 }
 
-static l_noret errorlimit(FuncState* fs, int limit, const InternalString* what)
+static l_noret errorlimit(FuncState* fs, int limit, std::string_view what)
 {
   lua_State* L = fs->ls->L;
   const InternalString* msg;
   int line = fs->f->linedefined;
-  const InternalString* where = (line == 0)
-                          ? lit<"main function">()
-                          : luaO_pushfstring(L, lit<"function at line %d">()->view(), FmtArgs().num(line));
-  msg = luaO_pushfstring(L, lit<"too many %s (limit is %d) in %s">()->view(), FmtArgs().str(what->view()).num(limit).str(where->view()));
+  std::string_view where = (line == 0)
+                          ? lit<"main function">()->view()
+                          : luaO_pushfstring(L, lit<"function at line %d">()->view(), FmtArgs().num(line))->view();
+  msg = luaO_pushfstring(L, lit<"too many %s (limit is %d) in %s">()->view(), FmtArgs().str(what).num(limit).str(where));
   luaX_syntaxerror(fs->ls, msg->view());
 }
 
-void luaY_checklimit(FuncState* fs, int v, int l, const InternalString* what)
+void luaY_checklimit(FuncState* fs, int v, int l, std::string_view what)
 {
   if (l_unlikely(v > l))
     errorlimit(fs, l, what);
@@ -186,7 +186,7 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(LocVar));
   f->locvars = (LocVar*)luaM_growaux_(ls->L, f->locvars, fs->ndebugvars,
-      &f->sizelocvars, sizeof(LocVar), limit, lit<"local variables">());
+      &f->sizelocvars, sizeof(LocVar), limit, lit<"local variables">()->view());
   while (oldsize < f->sizelocvars)
     f->locvars[oldsize++].varname = nullptr;
   f->locvars[fs->ndebugvars].varname = varname;
@@ -209,7 +209,7 @@ static int new_varkind(LexState* ls, TString* name, lu_byte kind)
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(Vardesc));
   dyd->actvar.arr = (Vardesc*)luaM_growaux_(L, dyd->actvar.arr, dyd->actvar.n + 1,
-      &dyd->actvar.size, sizeof(Vardesc), limit, lit<"variable declarations">());
+      &dyd->actvar.size, sizeof(Vardesc), limit, lit<"variable declarations">()->view());
   var = &dyd->actvar.arr[dyd->actvar.n++];
   var->kind = kind; /* default */
   var->name = name;
@@ -357,7 +357,7 @@ static void adjustlocalvars(LexState* ls, int nvars)
     Vardesc* var = getlocalvardesc(fs, vidx);
     var->ridx = ((lu_byte)(reglevel++));
     var->pidx = registerlocalvar(ls, fs, var->name);
-    luaY_checklimit(fs, reglevel, MAXVARS, lit<"local variables">());
+    luaY_checklimit(fs, reglevel, MAXVARS, lit<"local variables">()->view());
   }
 }
 
@@ -396,12 +396,12 @@ static Upvaldesc* allocupvalue(FuncState* fs)
 {
   Proto* f = fs->f;
   int oldsize = f->sizeupvalues;
-  luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, lit<"upvalues">());
+  luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, lit<"upvalues">()->view());
   int limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc))
                   ? MAXUPVAL
                   : (int)(MAX_SIZET / sizeof(Upvaldesc));
   f->upvalues = (Upvaldesc*)luaM_growaux_(fs->ls->L, f->upvalues, fs->nups,
-      &f->sizeupvalues, sizeof(Upvaldesc), limit, lit<"upvalues">());
+      &f->sizeupvalues, sizeof(Upvaldesc), limit, lit<"upvalues">()->view());
   while (oldsize < f->sizeupvalues)
     f->upvalues[oldsize++].name = nullptr;
   return &f->upvalues[fs->nups++];
@@ -696,7 +696,7 @@ static int newlabelentry(LexState* ls, Labellist* l, TString* name,
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(Labeldesc));
   l->arr = (Labeldesc*)luaM_growaux_(ls->L, l->arr, n,
-      &l->size, sizeof(Labeldesc), limit, lit<"labels/gotos">());
+      &l->size, sizeof(Labeldesc), limit, lit<"labels/gotos">()->view());
   l->arr[n].name = name;
   l->arr[n].line = line;
   l->arr[n].nactvar = ls->fs->nactvar;
@@ -836,7 +836,7 @@ static Proto* addprototype(LexState* ls)
                     ? MAXARG_Bx
                     : (int)(MAX_SIZET / sizeof(Proto*));
     f->p = (Proto**)luaM_growaux_(L, f->p, fs->np,
-        &f->sizep, sizeof(Proto*), limit, lit<"functions">());
+        &f->sizep, sizeof(Proto*), limit, lit<"functions">()->view());
     while (oldsize < f->sizep)
       f->p[oldsize++] = nullptr;
   }
@@ -1124,7 +1124,7 @@ static void constructor(LexState* ls, expdesc* t)
     if (cc.v.k != VVOID)       /* is there a previous list item? */
       closelistfield(fs, &cc); /* close it */
     field(ls, &cc);
-    luaY_checklimit(fs, cc.tostore + cc.na + cc.nh, MAX_CNST, lit<"items in a constructor">());
+    luaY_checklimit(fs, cc.tostore + cc.na + cc.nh, MAX_CNST, lit<"items in a constructor">()->view());
   } while (testnext(ls, ',') || testnext(ls, ';'));
   check_match(ls, /*{*/ '}', '{' /*}*/, line);
   lastlistfield(fs, &cc);

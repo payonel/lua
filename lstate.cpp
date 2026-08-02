@@ -424,7 +424,7 @@ void luaE_warning(lua_State* L, std::string_view msg, int tocont)
 /*
 ** Generate a warning from an error message
 */
-void luaE_warnerror(lua_State* L, const InternalString* where)
+void luaE_warnerror(lua_State* L, std::string_view where)
 {
   StkId errobj = L->top - 1; /* error object */
   std::string_view msg = ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
@@ -432,7 +432,7 @@ void luaE_warnerror(lua_State* L, const InternalString* where)
                              : lit<"error object is not a string">()->view();
   /* produce warning "error in %s (%s)" (where, msg) */
   luaE_warning(L, lit<"error in ">()->view(), 1);
-  luaE_warning(L, where->view(), 1);
+  luaE_warning(L, where, 1);
   luaE_warning(L, lit<" (">()->view(), 1);
   luaE_warning(L, msg, 1);
   luaE_warning(L, lit<")">()->view(), 0);
