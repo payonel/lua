@@ -34,8 +34,7 @@ struct LoadState
 
 static l_noret error(LoadState* S, const InternalString* why)
 {
-  InternalString name(S->name);
-  luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(), FmtArgs().str(&name).str(why));
+  luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(), FmtArgs().str(S->name).str(why->view()));
   luaD_throw(S->L, LUA_ERRSYNTAX);
 }
 
@@ -370,7 +369,7 @@ static l_noret numerror(LoadState* S, const InternalString* what,
                         const InternalString* tname)
 {
   const InternalString* msg = luaO_pushfstring(S->L, lit<"%s %s mismatch">(),
-                                     FmtArgs().str(tname).str(what));
+                                     FmtArgs().str(tname->view()).str(what->view()));
   error(S, msg);
 }
 

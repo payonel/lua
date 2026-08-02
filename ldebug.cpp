@@ -886,7 +886,7 @@ static const InternalString* formatvarinfo(lua_State* L,
   if (kind == nullptr)
     return lit<"">(); /* no information */
   else
-    return luaO_pushfstring(L, lit<" (%s '%s')">(), FmtArgs().str(kind).str(name));
+    return luaO_pushfstring(L, lit<" (%s '%s')">(), FmtArgs().str(kind->view()).str(name->view()));
 }
 
 static const InternalString* varinfo(lua_State* L, StkId src)
@@ -920,7 +920,7 @@ static l_noret typeerror(lua_State* L, const TValue* o,
 {
   const InternalString* t = luaT_objtypename(L, o);
   luaG_runerror(L, lit<"attempt to %s a %s value%s">(),
-                FmtArgs().str(op).str(t).str(extra));
+                FmtArgs().str(op->view()).str(t->view()).str(extra->view()));
 }
 
 /*
@@ -950,7 +950,7 @@ l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
 l_noret luaG_forerror(lua_State* L, const TValue* o, const InternalString* what)
 {
   luaG_runerror(L, lit<"bad 'for' %s (number expected, got %s)">(),
-                FmtArgs().str(what).str(luaT_objtypename(L, o)));
+                FmtArgs().str(what->view()).str(luaT_objtypename(L, o)->view()));
 }
 
 l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2,
@@ -987,7 +987,7 @@ l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2,
   if (!luaV_tointegerns(p1, &temp, LUA_FLOORN2I))
     src2 = src1;
   luaG_runerror(L, lit<"number%s has no integer representation">(),
-                FmtArgs().str(varinfo(L, src2)));
+                FmtArgs().str(varinfo(L, src2)->view()));
 }
 
 l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
@@ -995,9 +995,9 @@ l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
   const InternalString* t1 = luaT_objtypename(L, p1);
   const InternalString* t2 = luaT_objtypename(L, p2);
   if (*t1 == *t2)
-    luaG_runerror(L, lit<"attempt to compare two %s values">(), FmtArgs().str(t1));
+    luaG_runerror(L, lit<"attempt to compare two %s values">(), FmtArgs().str(t1->view()));
   else
-    luaG_runerror(L, lit<"attempt to compare %s with %s">(), FmtArgs().str(t1).str(t2));
+    luaG_runerror(L, lit<"attempt to compare %s with %s">(), FmtArgs().str(t1->view()).str(t2->view()));
 }
 
 l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
@@ -1005,7 +1005,7 @@ l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
   const InternalString* globalname = lit<"?">(); /* default name if k == 0 */
   if (k > 0)
     kname(cl->p, k - 1, &globalname);
-  luaG_runerror(L, lit<"global '%s' already defined">(), FmtArgs().str(globalname));
+  luaG_runerror(L, lit<"global '%s' already defined">(), FmtArgs().str(globalname->view()));
 }
 
 /* add src:line information to 'msg' */
@@ -1013,13 +1013,13 @@ const InternalString* luaG_addinfo(lua_State* L, const InternalString* msg,
                                    TString* src, int line)
 {
   if (src == nullptr) /* no debug information? */
-    return luaO_pushfstring(L, lit<"?:?: %s">(), FmtArgs().str(msg));
+    return luaO_pushfstring(L, lit<"?:?: %s">(), FmtArgs().str(msg->view()));
   else
   {
     char buff[LUA_IDSIZE];
     luaO_chunkid(buff, src->data.view());
-    InternalString id{buff, strlen(buff)};
-    return luaO_pushfstring(L, lit<"%s:%d: %s">(), FmtArgs().str(&id).num(line).str(msg));
+    return luaO_pushfstring(L, lit<"%s:%d: %s">(),
+                            FmtArgs().str(std::string_view{buff, strlen(buff)}).num(line).str(msg->view()));
   }
 }
 

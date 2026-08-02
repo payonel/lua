@@ -160,7 +160,7 @@ static void checkclosemth(lua_State* L, StkId level)
     if (vname == nullptr)
       vname = lit<"?">();
     luaG_runerror(L, lit<"variable '%s' got a non-closable value">(),
-                  FmtArgs().str(vname));
+                  FmtArgs().str(vname->view()));
   }
 }
 

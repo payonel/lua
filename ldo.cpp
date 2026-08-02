@@ -1058,10 +1058,8 @@ static void checkmode(lua_State* L, std::string_view mode, std::string_view x)
 {
   if (mode.find((char) x.at(0)) == std::string_view::npos)
   {
-    const InternalString* attempt = lit<"attempt to load a %s chunk (mode is '%s')">();
-    InternalString xstr(x);
-    InternalString modestr(mode);
-    luaO_pushfstring(L, attempt, FmtArgs().str(&xstr).str(&modestr));
+    luaO_pushfstring(L, lit<"attempt to load a %s chunk (mode is '%s')">(),
+                     FmtArgs().str(x).str(mode));
     luaD_throw(L, LUA_ERRSYNTAX);
   }
 }

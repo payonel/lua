@@ -65,7 +65,7 @@ static l_noret error_expected(LexState* ls, int token)
 {
   luaX_syntaxerror(ls,
                    luaO_pushfstring(ls->L, lit<"%s expected">(),
-                                    FmtArgs().str(luaX_token2str(ls, token))));
+                                    FmtArgs().str(luaX_token2str(ls, token)->view())));
 }
 
 static l_noret errorlimit(FuncState* fs, int limit, const InternalString* what)
@@ -77,7 +77,7 @@ static l_noret errorlimit(FuncState* fs, int limit, const InternalString* what)
                           ? lit<"main function">()
                           : luaO_pushfstring(L, lit<"function at line %d">(), FmtArgs().num(line));
   msg = luaO_pushfstring(L, lit<"too many %s (limit is %d) in %s">(),
-                         FmtArgs().str(what).num(limit).str(where));
+                         FmtArgs().str(what->view()).num(limit).str(where->view()));
   luaX_syntaxerror(fs->ls, msg);
 }
 
@@ -141,8 +141,8 @@ static void check_match(LexState* ls, int what, int who, int where)
       luaX_syntaxerror(ls, luaO_pushfstring(ls->L,
                                             lit<"%s expected (to close %s at line %d)">(),
                                             FmtArgs()
-                                                .str(luaX_token2str(ls, what))
-                                                .str(luaX_token2str(ls, who))
+                                                .str(luaX_token2str(ls, what)->view())
+                                                .str(luaX_token2str(ls, who)->view())
                                                 .num(where)));
     }
   }
@@ -343,7 +343,7 @@ static void check_readonly(LexState* ls, expdesc* e)
   }
   if (varname)
     luaK_semerror(ls, lit<"attempt to assign to const variable '%s'">(),
-                  FmtArgs().str(&varname->data));
+                  FmtArgs().str(varname->data.view()));
 }
 
 /*
@@ -551,7 +551,7 @@ static void buildglobal(LexState* ls, TString* varname, expdesc* var)
   singlevaraux(fs, ls->envn, var, 1); /* get environment variable */
   if (var->k == VGLOBAL)
     luaK_semerror(ls, lit<"%s is global when accessing variable '%s'">(),
-                  FmtArgs().str(LUA_ENV).str(&varname->data));
+                  FmtArgs().str(LUA_ENV->view()).str(varname->data.view()));
   luaK_exp2anyregup(fs, var);  /* _ENV could be a constant */
   codestring(&key, varname);   /* key is variable name */
   luaK_indexed(fs, var, &key); /* 'var' represents _ENV[varname] */
@@ -572,7 +572,7 @@ static void buildvar(LexState* ls, TString* varname, expdesc* var)
     /* global by default in the scope of a global declaration? */
     if (info == -2)
       luaK_semerror(ls, lit<"variable '%s' not declared">(),
-                    FmtArgs().str(&varname->data));
+                    FmtArgs().str(varname->data.view()));
     buildglobal(ls, varname, var);
     if (info != -1 && ls->dyd->actvar.arr[info].kind == GDKCONST)
       var->ind.ro = 1; /* mark variable as read-only */
@@ -635,7 +635,7 @@ static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
   const InternalString* varname = (tsname != nullptr) ? &tsname->data : lit<"*">();
   luaK_semerror(ls,
                 lit<"<goto %s> at line %d jumps into the scope of '%s'">(),
-                FmtArgs().str(&gt->name->data).num(gt->line).str(varname)); /* raise the error */
+                FmtArgs().str(gt->name->data.view()).num(gt->line).str(varname->view())); /* raise the error */
 }
 
 /*
@@ -799,7 +799,7 @@ static l_noret undefgoto(LexState* ls, Labeldesc* gt)
   /* breaks are checked when created, cannot be undefined */
   assert(!eqstr(gt->name, ls->brkn));
   luaK_semerror(ls, lit<"no visible label '%s' for <goto> at line %d">(),
-                FmtArgs().str(&gt->name->data).num(gt->line));
+                FmtArgs().str(gt->name->data.view()).num(gt->line));
 }
 
 static void leaveblock(FuncState* fs)
@@ -1744,7 +1744,7 @@ static void checkrepeated(LexState* ls, TString* name)
   Labeldesc* lb = findlabel(ls, name, ls->fs->firstlabel);
   if (l_unlikely(lb != nullptr)) /* already defined? */
     luaK_semerror(ls, lit<"label '%s' already defined on line %d">(),
-                  FmtArgs().str(&name->data).num(lb->line)); /* error */
+                  FmtArgs().str(name->data.view()).num(lb->line)); /* error */
 }
 
 static void labelstat(LexState* ls, TString* name, int line)
@@ -1995,7 +1995,7 @@ static lu_byte getvarattribute(LexState* ls, lu_byte df)
     else if (attr == lit<"close">()->view())
       return RDKTOCLOSE; /* to-be-closed variable */
     else
-      luaK_semerror(ls, lit<"unknown attribute '%s'">(), FmtArgs().str(&ts->data));
+      luaK_semerror(ls, lit<"unknown attribute '%s'">(), FmtArgs().str(ts->data.view()));
   }
   return df; /* return default value */
 }

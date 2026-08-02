@@ -748,7 +748,7 @@ const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt)
         setslot(L, o, &v);
       }
       assert(((slottag(L, o) & NOVARIANT_MASK) == LUA_TSTRING) && "string expected");
-      args.str(&slottsval(L, o)->data);
+      args.str(slottsval(L, o)->data.view());
       break;
     }
     case 'c':

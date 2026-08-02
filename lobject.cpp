@@ -750,12 +750,12 @@ static void addnum2buff(BuffFS* buff, TValue* num)
 }
 
 
-FmtArgs& FmtArgs::str(const InternalString* s)
+FmtArgs& FmtArgs::str(std::string_view s)
 {
   assert(n < MAXFMTARGS);
-  assert(s != nullptr);
+  assert(s.data() != nullptr);
   arg[n].tag = 'S';
-  arg[n].is = s;
+  arg[n].s = s;
   n++;
   return *this;
 }
@@ -838,8 +838,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     case 's':
     {
       assert(argn < args.n && args.arg[argn].tag == 'S');
-      const InternalString* is = args.arg[argn++].is;
-      addstr2buff(&buff, is->view());
+      addstr2buff(&buff, args.arg[argn++].s);
       break;
     }
     case 'c':

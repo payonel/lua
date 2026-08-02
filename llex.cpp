@@ -105,7 +105,7 @@ const InternalString* luaX_token2str(LexState* ls, int token)
   {
     const InternalString* s = luaX_tokens[token - FIRST_RESERVED];
     if (token < TK_EOS) /* fixed format (symbols and reserved words)? */
-      return luaO_pushfstring(ls->L, lit<"'%s'">(), FmtArgs().str(s));
+      return luaO_pushfstring(ls->L, lit<"'%s'">(), FmtArgs().str(s->view()));
     else /* names, strings, and numerals */
       return s;
   }
@@ -120,7 +120,7 @@ static const InternalString* txtToken(LexState* ls, int token)
   case TK_FLT:
   case TK_INT:
     return luaO_pushfstring(ls->L, lit<"'%s'">(),
-                            FmtArgs().str(&luaX_newstring(ls, ls->buff->view(), 0, ls->buff->view().size())->data));
+                            FmtArgs().str(luaX_newstring(ls, ls->buff->view(), 0, ls->buff->view().size())->data.view()));
   default:
     return luaX_token2str(ls, token);
   }
@@ -130,7 +130,7 @@ static l_noret lexerror(LexState* ls, const InternalString* msg, int token)
 {
   msg = luaG_addinfo(ls->L, msg, ls->source, ls->linenumber);
   if (token)
-    luaO_pushfstring(ls->L, lit<"%s near %s">(), FmtArgs().str(msg).str(txtToken(ls, token)));
+    luaO_pushfstring(ls->L, lit<"%s near %s">(), FmtArgs().str(msg->view()).str(txtToken(ls, token)->view()));
   luaD_throw(ls->L, LUA_ERRSYNTAX);
 }
 
@@ -331,7 +331,7 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
       const InternalString* what = seminfo ? lit<"string">() : lit<"comment">();
       const InternalString* msg = luaO_pushfstring(ls->L,
                                          lit<"unfinished long %s (starting at line %d)">(),
-                                         FmtArgs().str(what).num(line));
+                                         FmtArgs().str(what->view()).num(line));
       lexerror(ls, msg, TK_EOS);
       break; /* to avoid warnings */
     }
