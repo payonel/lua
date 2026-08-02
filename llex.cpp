@@ -97,15 +97,15 @@ const InternalString* luaX_token2str(LexState* ls, int token)
   if (token < FIRST_RESERVED)
   { /* single-byte symbols? */
     if (lisprint(token))
-      return luaO_pushfstring(ls->L, lit<"'%c'">(), FmtArgs().chr(token));
+      return luaO_pushfstring(ls->L, lit<"'%c'">()->view(), FmtArgs().chr(token));
     else /* control character */
-      return luaO_pushfstring(ls->L, lit<"'<\\%d>'">(), FmtArgs().num(token));
+      return luaO_pushfstring(ls->L, lit<"'<\\%d>'">()->view(), FmtArgs().num(token));
   }
   else
   {
     const InternalString* s = luaX_tokens[token - FIRST_RESERVED];
     if (token < TK_EOS) /* fixed format (symbols and reserved words)? */
-      return luaO_pushfstring(ls->L, lit<"'%s'">(), FmtArgs().str(s->view()));
+      return luaO_pushfstring(ls->L, lit<"'%s'">()->view(), FmtArgs().str(s->view()));
     else /* names, strings, and numerals */
       return s;
   }
@@ -119,7 +119,7 @@ static const InternalString* txtToken(LexState* ls, int token)
   case TK_STRING:
   case TK_FLT:
   case TK_INT:
-    return luaO_pushfstring(ls->L, lit<"'%s'">(),
+    return luaO_pushfstring(ls->L, lit<"'%s'">()->view(),
                             FmtArgs().str(luaX_newstring(ls, ls->buff->view(), 0, ls->buff->view().size())->data.view()));
   default:
     return luaX_token2str(ls, token);
@@ -130,7 +130,7 @@ static l_noret lexerror(LexState* ls, const InternalString* msg, int token)
 {
   msg = luaG_addinfo(ls->L, msg, ls->source, ls->linenumber);
   if (token)
-    luaO_pushfstring(ls->L, lit<"%s near %s">(), FmtArgs().str(msg->view()).str(txtToken(ls, token)->view()));
+    luaO_pushfstring(ls->L, lit<"%s near %s">()->view(), FmtArgs().str(msg->view()).str(txtToken(ls, token)->view()));
   luaD_throw(ls->L, LUA_ERRSYNTAX);
 }
 
@@ -330,7 +330,7 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
     { /* error */
       const InternalString* what = seminfo ? lit<"string">() : lit<"comment">();
       const InternalString* msg = luaO_pushfstring(ls->L,
-                                         lit<"unfinished long %s (starting at line %d)">(),
+                                         lit<"unfinished long %s (starting at line %d)">()->view(),
                                          FmtArgs().str(what->view()).num(line));
       lexerror(ls, msg, TK_EOS);
       break; /* to avoid warnings */

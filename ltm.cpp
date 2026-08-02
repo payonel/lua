@@ -394,7 +394,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
     std::string_view bytes = lit<"n">()->view();
     if (luaH_getshortstr(h, luaS_createstr(L, bytes, 0, bytes.size()), &res) != LUA_VNUMINT ||
         ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
-      luaG_runerror(L, lit<"vararg table has no proper 'n'">());
+      luaG_runerror(L, lit<"vararg table has no proper 'n'">()->view());
     assert((&res)->tt_ == LUA_VNUMINT);
     return ((int)(ivalue(&res)));
   }

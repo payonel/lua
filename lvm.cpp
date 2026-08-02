@@ -203,7 +203,7 @@ static int forprep(lua_State* L, StkId ra)
     lua_Integer step = slotival(L, pstep);
     lua_Integer limit;
     if (step == 0)
-      luaG_runerror(L, lit<"'for' step is zero">());
+      luaG_runerror(L, lit<"'for' step is zero">()->view());
     if (forlimit(L, init, plimit, &limit, step))
       return 1; /* skip the loop */
     else
@@ -239,7 +239,7 @@ static int forprep(lua_State* L, StkId ra)
     if (l_unlikely(!tonumber(L, pinit, &init)))
       luaG_forerror(L, pinit, lit<"initial value">());
     if (step == 0)
-      luaG_runerror(L, lit<"'for' step is zero">());
+      luaG_runerror(L, lit<"'for' step is zero">()->view());
     if (((0) < (step)) ? ((limit) < (init))
                             : ((init) < (limit)))
       return 1; /* skip the loop */
@@ -327,7 +327,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
     }
     /* else repeat (tail call 'luaV_finishget') */
   }
-  luaG_runerror(L, lit<"'__index' chain too long; possible loop">());
+  luaG_runerror(L, lit<"'__index' chain too long; possible loop">()->view());
   return 0; /* to avoid warnings */
 }
 
@@ -390,7 +390,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
     }
     /* else 'return luaV_finishset(L, t, key, val, slot)' (loop) */
   }
-  luaG_runerror(L, lit<"'__newindex' chain too long; possible loop">());
+  luaG_runerror(L, lit<"'__newindex' chain too long; possible loop">()->view());
 }
 
 /*
@@ -842,7 +842,7 @@ void luaV_concat(lua_State* L, int total)
         if (l_unlikely(l >= MAX_SIZE - sizeof(TString) - tl))
         {
           L->top = top - total; /* pop strings to avoid wasting stack */
-          luaG_runerror(L, lit<"string length overflow">());
+          luaG_runerror(L, lit<"string length overflow">()->view());
         }
         tl += l;
       }
@@ -919,7 +919,7 @@ lua_Integer luaV_idiv(lua_State* L, lua_Integer m, lua_Integer n)
   if (l_unlikely(((lua_Unsigned)(n)) + 1u <= 1u))
   { /* special cases: -1 or 0 */
     if (n == 0)
-      luaG_runerror(L, lit<"attempt to divide by zero">());
+      luaG_runerror(L, lit<"attempt to divide by zero">()->view());
     return ((lua_Integer)(((lua_Unsigned)(0)) - ((lua_Unsigned)(m)))); /* n==-1; avoid overflow with 0x80000...//-1 */
   }
   else
@@ -941,7 +941,7 @@ lua_Integer luaV_mod(lua_State* L, lua_Integer m, lua_Integer n)
   if (l_unlikely(((lua_Unsigned)(n)) + 1u <= 1u))
   { /* special cases: -1 or 0 */
     if (n == 0)
-      luaG_runerror(L, lit<"attempt to perform 'n%%0'">());
+      luaG_runerror(L, lit<"attempt to perform 'n%%0'">()->view());
     return 0; /* m % -1 == 0; avoid overflow with 0x80000...%-1 */
   }
   else

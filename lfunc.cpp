@@ -159,7 +159,7 @@ static void checkclosemth(lua_State* L, StkId level)
     const InternalString* vname = luaG_findlocal(L, L->ci, idx, nullptr);
     if (vname == nullptr)
       vname = lit<"?">();
-    luaG_runerror(L, lit<"variable '%s' got a non-closable value">(),
+    luaG_runerror(L, lit<"variable '%s' got a non-closable value">()->view(),
                   FmtArgs().str(vname->view()));
   }
 }

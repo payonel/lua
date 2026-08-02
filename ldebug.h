@@ -75,9 +75,9 @@ static l_forceinline l_noret luaG_concaterror(lua_State* L, StkId p1, StkId p2)
 }
 
 LUAI_FUNC l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k);
-LUAI_FUNC l_noret luaG_runerror(lua_State* L, const InternalString* fmt,
+LUAI_FUNC l_noret luaG_runerror(lua_State* L, std::string_view fmt,
                                 const FmtArgs& args);
-LUAI_FUNC l_noret luaG_runerror(lua_State* L, const InternalString* fmt);
+LUAI_FUNC l_noret luaG_runerror(lua_State* L, std::string_view fmt);
 LUAI_FUNC const InternalString* luaG_addinfo(lua_State* L,
                                              const InternalString* msg,
                                              TString* src, int line);

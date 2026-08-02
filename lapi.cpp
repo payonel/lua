@@ -795,8 +795,7 @@ const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt)
       break;
     }
   }
-  InternalString f(fmt);
-  const InternalString* is = luaO_pushvfstring(L, &f, args);
+  const InternalString* is = luaO_pushvfstring(L, fmt, args);
   if (is == nullptr)
     luaD_throw(L, LUA_ERRMEM);
   ret = is;

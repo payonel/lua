@@ -115,7 +115,7 @@ void luaE_shrinkCI(lua_State* L)
 void luaE_checkcstack(lua_State* L)
 {
   if (getCcalls(L) == LUAI_MAXCCALLS)
-    luaG_runerror(L, lit<"C stack overflow">());
+    luaG_runerror(L, lit<"C stack overflow">()->view());
   else if (getCcalls(L) >= (LUAI_MAXCCALLS / 10 * 11))
     luaD_errerr(L); /* error while handling stack error */
 }

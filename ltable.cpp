@@ -378,7 +378,7 @@ static unsigned findindex(lua_State* L, Table* t, TValue* key,
   {
     int idx = nodegeneric(t, key, 1);
     if (l_unlikely(idx < 0))
-      luaG_runerror(L, lit<"invalid key to 'next'">()); /* key not found */
+      luaG_runerror(L, lit<"invalid key to 'next'">()->view()); /* key not found */
     i = ((unsigned int)(idx)); /* key index in hash table */
     /* hash elements are numbered after array ones */
     return (i + 1) + asize;
@@ -658,7 +658,7 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
     int i;
     int lsize = luaO_ceillog2(size);
     if (lsize > MAXHBITS || (1 << lsize) > MAXHSIZE)
-      luaG_runerror(L, lit<"table overflow">());
+      luaG_runerror(L, lit<"table overflow">()->view());
     size = twoto(lsize);
     t->node = ((Node*)(luaM_malloc_(L, ((size_t)(size)) * sizeof(Node), 0)));
     t->lastfree = 0;
@@ -773,7 +773,7 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
   unsigned oldasize = t->asize;
   Value* newarray;
   if (newasize > MAXASIZE)
-    luaG_runerror(L, lit<"table overflow">());
+    luaG_runerror(L, lit<"table overflow">()->view());
   /* create new hash part with appropriate size into 'newt' */
   newt.flags = 0;
   setnodevector(L, &newt, nhsize);
@@ -1258,7 +1258,7 @@ void luaH_finishset(lua_State* L, Table* t, const TValue* key,
     TValue aux;
     const TValue* actk = key; /* actual key to insert */
     if (l_unlikely((((key)->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
-      luaG_runerror(L, lit<"table index is nil">());
+      luaG_runerror(L, lit<"table index is nil">()->view());
     else if (((key)->tt_ == LUA_VNUMFLT))
     {
       lua_Number f = fltvalue(key);
@@ -1269,7 +1269,7 @@ void luaH_finishset(lua_State* L, Table* t, const TValue* key,
         actk = &aux; /* use the integer as the key */
       }
       else if (l_unlikely((!((f) == (f)))))
-        luaG_runerror(L, lit<"table index is NaN">());
+        luaG_runerror(L, lit<"table index is NaN">()->view());
     }
     luaH_newkey(L, t, actk, value);
   }

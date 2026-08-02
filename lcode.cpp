@@ -35,7 +35,7 @@ static inline int hasjumps(const expdesc* e)
 static int codesJ(FuncState* fs, OpCode o, int sj, int k);
 
 /* semantic error */
-l_noret luaK_semerror(LexState* ls, const InternalString* fmt,
+l_noret luaK_semerror(LexState* ls, std::string_view fmt,
                       const FmtArgs& args)
 {
   const InternalString* msg = luaO_pushvfstring(ls->L, fmt, args);
@@ -44,11 +44,6 @@ l_noret luaK_semerror(LexState* ls, const InternalString* fmt,
   ls->t.token = 0;               /* remove "near <token>" from final message */
   ls->linenumber = ls->lastline; /* back to line of last used token */
   luaX_syntaxerror(ls, msg);
-}
-
-l_noret luaK_semerror(LexState* ls, const InternalString* fmt)
-{
-  luaK_semerror(ls, fmt, FmtArgs());
 }
 
 /*

@@ -815,11 +815,11 @@ FmtArgs& FmtArgs::utf8(unsigned long u)
 }
 
 const InternalString* luaO_pushvfstring(lua_State* L,
-                                        const InternalString* fmt,
+                                        std::string_view fmt,
                                         const FmtArgs& args)
 {
   BuffFS buff;  /* holds last part of the result */
-  std::string_view f = fmt->view();
+  std::string_view f = fmt;
   size_t pos = 0;
   size_t e;
   int argn = 0;
@@ -913,7 +913,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
 }
 
 const InternalString* luaO_pushfstring(lua_State* L,
-                                       const InternalString* fmt,
+                                       std::string_view fmt,
                                        const FmtArgs& args)
 {
   const InternalString* msg = luaO_pushvfstring(L, fmt, args);
@@ -922,7 +922,7 @@ const InternalString* luaO_pushfstring(lua_State* L,
   return msg;
 }
 
-const InternalString* luaO_pushfstring(lua_State* L, const InternalString* fmt)
+const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt)
 {
   return luaO_pushfstring(L, fmt, FmtArgs());
 }
