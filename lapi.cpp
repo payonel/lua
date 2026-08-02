@@ -714,12 +714,10 @@ const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt)
   FmtArgs args;
   int n = 0;
   lua_lock(L);
-  InternalString f{fmt, 0, fmt.size()};
-  std::string_view fv = f.view();
   size_t e;
-  for (e = 0; (e = fv.find('%', e)) != std::string_view::npos; e += 2)
+  for (e = 0; (e = fmt.find('%', e)) != std::string_view::npos; e += 2)
   {
-    switch (sv_byteat(fv, e + 1))
+    switch (sv_byteat(fmt, e + 1))
     {
     case 's':
     case 'c':
@@ -735,10 +733,10 @@ const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt)
     }
   }
   api_checknelems(L, n);
-  for (e = 0; (e = fv.find('%', e)) != std::string_view::npos; e += 2)
+  for (e = 0; (e = fmt.find('%', e)) != std::string_view::npos; e += 2)
   {
     StkId slot = L->top - n + args.n;
-    switch (sv_byteat(fv, e + 1))
+    switch (sv_byteat(fmt, e + 1))
     {
     case 's':
     {
@@ -797,6 +795,7 @@ const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt)
       break;
     }
   }
+  InternalString f(fmt);
   const InternalString* is = luaO_pushvfstring(L, &f, args);
   if (is == nullptr)
     luaD_throw(L, LUA_ERRMEM);
@@ -1467,9 +1466,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   return ((int)(status));
 }
 
-int lua_loadi(lua_State* L, lua_Reader reader, void* data,
-                      const InternalString* chunkname,
-                      const InternalString* mode)
+int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::string_view chunkname, std::string_view mode)
 {
   ZIO z;
   TStatus status;
@@ -1499,13 +1496,10 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
                      const std::optional<HostString>& chunkname,
                      const std::optional<HostString>& mode)
 {
-  InternalString name = chunkname
-      ? InternalString{chunkname->to_utf8(), 0, chunkname->to_utf8().size()}
-      : InternalString{lit<"?">()->view(), 0, lit<"?">()->size()};
-  InternalString m = mode
-      ? InternalString{mode->to_utf8(), 0, mode->to_utf8().size()}
-      : InternalString{};
-  return lua_loadi(L, reader, data, &name, mode ? &m : nullptr);
+  std::string_view nullsv(nullptr, 0);
+  std::string_view name = chunkname.has_value() ? chunkname->to_utf8() : nullsv;
+  std::string_view m = mode.has_value() ? mode->to_utf8() : nullsv;
+  return lua_loadi(L, reader, data, name, m);
 }
 
 /*

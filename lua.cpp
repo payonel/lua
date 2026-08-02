@@ -205,12 +205,14 @@ static int dochunk(lua_State* L, int status)
 
 static int dofile(lua_State* L, const InternalString* name)
 {
-  return dochunk(L, luaL_loadfilei(L, name, nullptr));
+  std::string_view nullsv(nullptr, 0);
+  return dochunk(L, luaL_loadfilei(L, name ? name->view() : nullsv, nullsv));
 }
 
 static int dostring(lua_State* L, std::string_view s, const InternalString* name)
 {
-  return dochunk(L, luaL_loadbufferi(L, s, name, lit<"t">()));
+  std::string_view nullsv(nullptr, 0);
+  return dochunk(L, luaL_loadbufferi(L, s, name == nullptr ? nullsv : name->view(), lit<"t">()->view()));
 }
 
 /*
@@ -267,15 +269,16 @@ static int handle_script(lua_State* L, char** argv)
 {
   int status;
   const char* fname = argv[0];
+  std::string_view nullsv(nullptr, 0);
   if (std::string_view(fname) == lit<"-">()->view() && std::string_view(argv[-1]) != lit<"--">()->view())
     fname = nullptr; /* stdin */
   if (fname == nullptr)
-    status = luaL_loadfilei(L, nullptr, nullptr); /* stdin */
+    status = luaL_loadfilei(L, nullsv, nullsv); /* stdin */
   else
   {
     std::string_view fsv{fname};
-    InternalString scriptname{fsv, 0, fsv.size()};
-    status = luaL_loadfilei(L, &scriptname, nullptr);
+    InternalString scriptname(fsv);
+    status = luaL_loadfilei(L, fsv, nullsv);
   }
   if (status == LUA_OK)
   {
@@ -427,7 +430,7 @@ static int handle_luainit(lua_State* L)
   std::string init(einit);
   if (!init.empty() && init[0] == '@')
   {
-    InternalString fname{init, 1, init.size() - 1};
+    InternalString fname(init.substr(1));
     return dofile(L, &fname);
   }
   else
@@ -593,7 +596,7 @@ static int addreturn(lua_State* L)
   lua_pushvalue(L, -1);
   lua_pushfstringi(L, lit<"return %s;">()->view());
   std::string_view retline = lua_tolstring(L, -1);
-  int status = luaL_loadbufferi(L, retline, lit<"=stdin">(), lit<"t">());
+  int status = luaL_loadbufferi(L, retline, lit<"=stdin">()->view(), lit<"t">()->view());
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
   else
@@ -629,7 +632,7 @@ static int multiline(lua_State* L)
   checklocal(line);
   for (;;)
   {                                                  /* repeat until gets a complete statement */
-    int status = luaL_loadbufferi(L, line, lit<"=stdin">(), lit<"t">()); /* try it */
+    int status = luaL_loadbufferi(L, line, lit<"=stdin">()->view(), lit<"t">()->view()); /* try it */
     if (!incomplete(L, status) || !pushline(L, 0))
       return status;                  /* should not or cannot try to add continuation line */
     lua_remove(L, -2);                /* remove error message (from incomplete line) */

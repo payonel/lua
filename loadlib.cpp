@@ -334,7 +334,7 @@ static int searchpath(lua_State* L, std::string_view name,
       size_t sepmark = list.find(LUA_PATH_SEP->view(), pos); /* next separator */
       if (sepmark == std::string_view::npos)          /* separator not found? */
         sepmark = list.size();                        /* name goes until the end */
-      InternalString filename(list, pos, sepmark - pos);
+      InternalString filename(list.substr(pos, sepmark - pos));
       if (readable(filename.c_str()))
       {                                    /* does file exist and is readable? */
         lua_pushistringref(L, filename.view());  /* save and return name */
@@ -399,9 +399,9 @@ static int searcher_Lua(lua_State* L)
   std::string_view name = luaL_checklstring(L, 1);
   if (!findfile(L, name, lit<"path">(), LUA_DIRSEP->view()))
     return 1;
-  const InternalString* filename = lua_toistring(L, -1);
-  return checkload(L, (luaL_loadfilei(L, filename, nullptr) == LUA_OK),
-                   filename->view());
+  std::string_view nullsv(nullptr, 0);
+  std::string_view filename = lua_toistring(L, -1)->view();
+  return checkload(L, (luaL_loadfilei(L, filename, nullsv) == LUA_OK), filename);
 }
 
 /*
@@ -412,8 +412,7 @@ static int searcher_Lua(lua_State* L)
 ** fails, it also tries "luaopen_Y".) If there is no ignore mark,
 ** look for a function named "luaopen_modname".
 */
-static int loadfunc(lua_State* L, const InternalString* filename,
-                    std::string_view modname0)
+static int loadfunc(lua_State* L, const InternalString* filename, std::string_view modname0)
 {
   std::string_view modname = luaL_gsubi(L, modname0, lit<".">()->view(), LUA_OFSEP->view());
   size_t mark = modname.find(LUA_IGMARK->view());

@@ -1050,18 +1050,18 @@ struct SParser
   ZIO* z;
   ByteBuilder buff;
   Dyndata dyd;  /* dynamic structures used by the parser */
-  const InternalString* mode;
-  const InternalString* name;
+  std::string_view mode;
+  std::string_view name;
 };
 
-static void checkmode(lua_State* L, const InternalString* mode,
-                      const InternalString* x)
+static void checkmode(lua_State* L, std::string_view mode, std::string_view x)
 {
-  if (mode->view().find((char) x->byteAt(0)) == std::string_view::npos)
+  if (mode.find((char) x.at(0)) == std::string_view::npos)
   {
-    luaO_pushfstring(L,
-                     lit<"attempt to load a %s chunk (mode is '%s')">(),
-                     FmtArgs().str(x).str(mode));
+    const InternalString* attempt = lit<"attempt to load a %s chunk (mode is '%s')">();
+    InternalString xstr(x);
+    InternalString modestr(mode);
+    luaO_pushfstring(L, attempt, FmtArgs().str(&xstr).str(&modestr));
     luaD_throw(L, LUA_ERRSYNTAX);
   }
 }
@@ -1074,7 +1074,7 @@ static void f_parser(lua_State* L, void* ud)
 {
   LClosure* cl;
   struct SParser* p = ((struct SParser*)(ud));
-  const InternalString* mode = p->mode ? p->mode : lit<"bt">();
+  std::string_view mode = p->mode;
   int c;
   Table* anchor;
   StkId otop = (L->top); /* original top */
@@ -1087,15 +1087,15 @@ static void f_parser(lua_State* L, void* ud)
   if (c == LUA_SIGNATURE[0])
   {
     int fixed = 0;
-    if (mode->view().find('B') != std::string_view::npos)
+    if (mode.find('B') != std::string_view::npos)
       fixed = 1;
     else
-      checkmode(L, mode, lit<"binary">());
+      checkmode(L, mode, lit<"binary">()->view());
     cl = luaU_undump(L, p->z, anchor, p->name, fixed);
   }
   else
   {
-    checkmode(L, mode, lit<"text">());
+    checkmode(L, mode, lit<"text">()->view());
     cl = luaY_parser(L, p->z, anchor, &p->buff, &p->dyd, p->name, c);
   }
   L->top = (static_cast<StkId>(otop)); /* restore stack */
@@ -1121,15 +1121,14 @@ void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
   L->top--;
 }
 
-TStatus luaD_protectedparser(lua_State* L, ZIO* z, const InternalString* name,
-                             const InternalString* mode)
+TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::string_view name, std::string_view mode)
 {
   struct SParser p;
   TStatus status;
   incnny(L); /* cannot yield during parsing */
   p.z = z;
-  p.name = name;
-  p.mode = mode;
+  p.name = (name.data() != nullptr) ? name : lit<"?">()->view();
+  p.mode = (mode.data() != nullptr) ? mode : lit<"bt">()->view();
   p.dyd.actvar.arr = nullptr;
   p.dyd.actvar.size = 0;
   p.dyd.gt.arr = nullptr;

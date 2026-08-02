@@ -25,7 +25,7 @@ struct LoadState
 {
   lua_State* L;
   ZIO* Z;
-  const InternalString* name;
+  std::string_view name;
   Table* h;          /* list for string reuse */
   size_t offset;     /* current position relative to beginning of dump */
   lua_Unsigned nstr; /* number of strings in the list */
@@ -34,8 +34,8 @@ struct LoadState
 
 static l_noret error(LoadState* S, const InternalString* why)
 {
-  luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(),
-                   FmtArgs().str(S->name).str(why));
+  InternalString name(S->name);
+  luaO_pushfstring(S->L, lit<"%s: bad binary format (%s)">(), FmtArgs().str(&name).str(why));
   luaD_throw(S->L, LUA_ERRSYNTAX);
 }
 
@@ -404,20 +404,19 @@ static void checkHeader(LoadState* S)
 /*
 ** Load precompiled chunk.
 */
-LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor,
-                      const InternalString* name, int fixed)
+LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, std::string_view name, int fixed)
 {
   LoadState S;
   LClosure* cl;
-  InternalString plain;
-  int c0 = sv_byteat(name->view(), 0);
+  int c0 = sv_byteat(name, 0);
   if (c0 == '@' || c0 == '=')
   {
-    plain = InternalString{name->view(), 1, name->size() - 1};
-    name = &plain;
+    name = name.substr(1);
   }
   else if (c0 == LUA_SIGNATURE[0])
-    name = lit<"binary string">();
+  {
+    name = lit<"binary string">()->view();
+  }
   S.name = name;
   S.L = L;
   S.Z = Z;

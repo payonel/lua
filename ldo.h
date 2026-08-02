@@ -17,21 +17,15 @@ typedef void (*Pfunc)(lua_State* L, void* ud);
 
 LUAI_FUNC l_noret luaD_errerr(lua_State* L);
 LUAI_FUNC void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop);
-LUAI_FUNC TStatus luaD_protectedparser(lua_State* L, ZIO* z,
-                                       const InternalString* name,
-                                       const InternalString* mode);
-LUAI_FUNC void luaD_hook(lua_State* L, int event, int line,
-                         int fTransfer, int nTransfer);
+LUAI_FUNC TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::string_view name, std::string_view mode);
+LUAI_FUNC void luaD_hook(lua_State* L, int event, int line, int fTransfer, int nTransfer);
 LUAI_FUNC void luaD_hookcall(lua_State* L, CallInfo* ci);
-LUAI_FUNC int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
-                               int narg1, int delta);
+LUAI_FUNC int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func, int narg1, int delta);
 LUAI_FUNC CallInfo* luaD_precall(lua_State* L, StkId func, int nResults);
 LUAI_FUNC void luaD_call(lua_State* L, StkId func, int nResults);
 LUAI_FUNC void luaD_callnoyield(lua_State* L, StkId func, int nResults);
-LUAI_FUNC TStatus luaD_closeprotected(lua_State* L, StkId level,
-                                      TStatus status);
-LUAI_FUNC TStatus luaD_pcall(lua_State* L, Pfunc func, void* u,
-                             StkId oldtop, StkId ef);
+LUAI_FUNC TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status);
+LUAI_FUNC TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId oldtop, StkId ef);
 LUAI_FUNC void luaD_poscall(lua_State* L, CallInfo* ci, int nres);
 LUAI_FUNC int luaD_reallocstack(lua_State* L, int newsize, int raiseerror);
 LUAI_FUNC int luaD_growstack(lua_State* L, int n, int raiseerror);

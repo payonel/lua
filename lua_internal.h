@@ -9,9 +9,7 @@ int lua_islightcfunction(lua_State* L, int idx);
 
 const InternalString* lua_toistring(lua_State* L, int idx);
 
-int lua_loadi(lua_State* L, lua_Reader reader, void* dt,
-              const InternalString* chunkname,
-              const InternalString* mode);
+int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::string_view chunkname, std::string_view mode);
 
 int lua_reservebytes(lua_State* L, size_t sz);
 void lua_releasebytes(lua_State* L, size_t sz);
@@ -31,12 +29,8 @@ const InternalString* luaL_optistring(lua_State* L, int arg,
                                       const InternalString* def);
 const InternalString* luaL_toistring(lua_State* L, int idx);
 
-int luaL_loadbufferi(lua_State* L, std::string_view buff,
-                     const InternalString* name,
-                     const InternalString* mode);
-
-int luaL_loadfilei(lua_State* L, const InternalString* filename,
-                   const InternalString* mode);
+int luaL_loadbufferi(lua_State* L, std::string_view buff, std::string_view name, std::string_view mode);
+int luaL_loadfilei(lua_State* L, std::string_view filename, std::string_view mode);
 
 int lua_getfieldi(lua_State* L, int idx, std::string_view k);
 void lua_setfieldi(lua_State* L, int idx, std::string_view k);

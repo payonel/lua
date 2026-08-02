@@ -25,9 +25,7 @@ public:
   ~InternalString() = default;
 
   InternalString(const char* bytes, size_t len) : bytes_(bytes, len) {}
-
-  InternalString(std::string_view src, size_t off, size_t len)
-      : bytes_(src.data() + off, len) {}
+  InternalString(std::string_view src) : bytes_(src.data(), src.size()) {}
 
   explicit InternalString(const HostString& host) : bytes_(host.to_utf8()) {}
 

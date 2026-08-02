@@ -478,11 +478,11 @@ static int db_debug(lua_State* L)
     char buffer[250];
     fprintf(stderr, "%s", "lua_debug> ");
     fflush(stderr);
-    if (fgets(buffer, sizeof(buffer), stdin) == nullptr ||
-        std::string_view{buffer, strlen(buffer)} == lit<"cont\n">()->view())
+    if (fgets(buffer, sizeof(buffer), stdin) == nullptr || std::string_view(buffer) == lit<"cont\n">()->view())
+    {
       return 0;
-    if (luaL_loadbufferi(L, std::string_view{buffer, strlen(buffer)}, lit<"=(debug command)">(), lit<"t">()) ||
-        lua_pcall(L, 0, 0, 0))
+    }
+    if (luaL_loadbufferi(L, std::string_view(buffer), lit<"=(debug command)">()->view(), lit<"t">()->view()) || lua_pcall(L, 0, 0, 0))
     {
       fprintf(stderr, "%s\n", luaL_toistring(L, -1)->c_str());
       fflush(stderr);

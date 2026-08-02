@@ -388,9 +388,10 @@ static const InternalString* getMode(lua_State* L, int idx)
 
 static int luaB_loadfile(lua_State* L)
 {
-  const InternalString* fname =
-      lua_isnoneornil(L, 1) ? nullptr : luaL_checkistring(L, 1);
-  const InternalString* mode = getMode(L, 2);
+  std::string_view nullsv(nullptr, 0);
+  std::string_view fname = lua_isnoneornil(L, 1) ? nullsv : luaL_checkistring(L, 1)->view();
+  const InternalString* modestr = getMode(L, 2);
+  std::string_view mode = modestr ? modestr->view() : nullsv;
   int env = (!lua_isnone(L, 3) ? 3 : 0); /* 'env' index or 0 if no 'env' */
   int status = luaL_loadfilei(L, fname, mode);
   return load_aux(L, status, env);
@@ -428,18 +429,18 @@ static int luaB_load(lua_State* L)
   std::string_view s = lua_tolstring(L, 1);
   const InternalString* mode = getMode(L, 3);
   int env = (!lua_isnone(L, 4) ? 4 : 0); /* 'env' index or 0 if no 'env' */
+  std::string_view nullsv(nullptr, 0);
   if (s.data() != nullptr)
   {
-    const InternalString* chunkname =
-        luaL_optistring(L, 2, lua_toistring(L, 1));
-    status = luaL_loadbufferi(L, s, chunkname, mode);
+    const InternalString* chunkname = luaL_optistring(L, 2, lua_toistring(L, 1));
+    status = luaL_loadbufferi(L, s, chunkname == nullptr ? nullsv : chunkname->view(), mode == nullptr ? nullsv : mode->view());
   }
   else
   {                    /* loading from a reader function */
     int firstcall = 1; /* userdata for generic_reader */
     const InternalString* chunkname = luaL_optistring(L, 2, lit<"=(load)">());
     luaL_checktype(L, 1, LUA_TFUNCTION);
-    status = lua_loadi(L, generic_reader, &firstcall, chunkname, mode);
+    status = lua_loadi(L, generic_reader, &firstcall, chunkname == nullptr ? nullsv : chunkname->view(), mode == nullptr ? nullsv : mode->view());
   }
   return load_aux(L, status, env);
 }
@@ -455,10 +456,10 @@ static int dofilecont(lua_State* L, int d1, lua_KContext d2)
 
 static int luaB_dofile(lua_State* L)
 {
-  const InternalString* fname =
-      lua_isnoneornil(L, 1) ? nullptr : luaL_checkistring(L, 1);
+  std::string_view nullsv(nullptr, 0);
+  std::string_view fname = lua_isnoneornil(L, 1) ? nullsv : luaL_checkistring(L, 1)->view();
   lua_settop(L, 1);
-  if (l_unlikely(luaL_loadfilei(L, fname, nullptr) != LUA_OK))
+  if (l_unlikely(luaL_loadfilei(L, fname, nullsv) != LUA_OK))
     return lua_error(L);
   lua_callk(L, 0, LUA_MULTRET, 0, dofilecont);
   return dofilecont(L, 0, 0);
