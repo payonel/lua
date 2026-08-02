@@ -705,7 +705,7 @@ constexpr int MAXFMTARGS = 8;
 struct FmtArg
 {
   char tag;
-  std::string_view s; /* borrowed bytes; must stay valid until the format call consumes them */
+  std::string_view s;
   lua_Integer i;
   lua_Number n;
   const void* p;
@@ -716,7 +716,7 @@ struct FmtArgs
   int n = 0;
   FmtArg arg[MAXFMTARGS];
   FmtArgs& str(std::string_view s);
-  FmtArgs& str(std::string&&) = delete; /* reject views of dying std::strings */
+  FmtArgs& str(std::string&&) = delete;
   FmtArgs& chr(int c);
   FmtArgs& num(int d);
   FmtArgs& lint(lua_Integer i);

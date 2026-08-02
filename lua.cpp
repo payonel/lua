@@ -17,6 +17,7 @@
 #include "llimits.h"
 #include "lualib.h"
 #include "lua_internal.h"
+#include "os_api.h"
 
 constexpr char LUA_PROGNAME[] = "lua";
 
@@ -65,20 +66,23 @@ static void laction(int i)
 
 static void print_usage(const std::string& badoption)
 {
-  fprintf(stderr, "%s: ", progname.c_str());
-  fflush(stderr);
+  os_print_stderr(progname);
+  os_print_stderr(lit<": ">()->view());
   if (badoption.size() > 1 && (badoption[1] == 'e' || badoption[1] == 'l'))
   {
-    fprintf(stderr, "'%s' needs argument\n", badoption.c_str());
-    fflush(stderr);
+    os_print_stderr(lit<"'">()->view());
+    os_print_stderr(badoption);
+    os_print_stderr(lit<"' needs argument\n">()->view());
   }
   else
   {
-    fprintf(stderr, "unrecognized option '%s'\n", badoption.c_str());
-    fflush(stderr);
+    os_print_stderr(lit<"unrecognized option '">()->view());
+    os_print_stderr(badoption);
+    os_print_stderr(lit<"'\n">()->view());
   }
-  fprintf(stderr,
-      "usage: %s [options] [script [args]]\n"
+  os_print_stderr(lit<"usage: ">()->view());
+  os_print_stderr(progname);
+  os_print_stderr(lit<" [options] [script [args]]\n"
       "Available options are:\n"
       "  -e stat   execute string 'stat'\n"
       "  -i        enter interactive mode after executing 'script'\n"
@@ -88,9 +92,8 @@ static void print_usage(const std::string& badoption)
       "  -E        ignore environment variables\n"
       "  -W        turn warnings on\n"
       "  --        stop handling options\n"
-      "  -         stop handling options and execute stdin\n",
-      progname.c_str());
-  fflush(stderr);
+      "  -         stop handling options and execute stdin\n">()->view());
+  os_flush_stderr();
 }
 
 /*
@@ -101,11 +104,12 @@ static void l_message(const std::string& pname, const std::string& msg)
 {
   if (!pname.empty())
   {
-    fprintf(stderr, "%s: ", pname.c_str());
-    fflush(stderr);
+    os_print_stderr(pname);
+    os_print_stderr(lit<": ">()->view());
   }
-  fprintf(stderr, "%s\n", msg.c_str());
-  fflush(stderr);
+  os_print_stderr(msg);
+  os_print_stderr(lit<"\n">()->view());
+  os_flush_stderr();
 }
 
 /*
@@ -167,9 +171,9 @@ static int docall(lua_State* L, int narg, int nres)
 
 static void print_version(void)
 {
-  fwrite(LUA_COPYRIGHT.data(), sizeof(char), LUA_COPYRIGHT.size(), stdout);
-  fwrite("\n", sizeof(char), 1, stdout);
-  fflush(stdout);
+  os_print_stdout(LUA_COPYRIGHT);
+  os_print_stdout(lit<"\n">()->view());
+  os_flush_stdout();
 }
 
 /*
@@ -403,25 +407,13 @@ static int runargs(lua_State* L, char** argv, int n)
   return 1;
 }
 
-static char* (*l_getenv_raw)(const char* name);
+static bool l_noenv = false;
 
-/* Function to ignore environment variables, used by option -E */
-static char* no_getenv(const char*)
-{
-  return nullptr;
-}
-
-/*
-** Environment lookup. The host result is treated as internal bytes for
-** now (host/internal encoding split for getenv is a separate concern).
-*/
 static std::optional<InternalString> l_getenv(std::string_view name)
 {
-  InternalString n(name); /* own a NUL-terminated copy for the host call */
-  const char* v = l_getenv_raw(n.c_str());
-  if (v == nullptr)
+  if (l_noenv)
     return std::nullopt;
-  return InternalString(std::string_view{v});
+  return os_getenv(name);
 }
 
 static int handle_luainit(lua_State* L)
@@ -431,7 +423,7 @@ static int handle_luainit(lua_State* L)
   std::optional<InternalString> einit = l_getenv(namev);
   if (!einit.has_value())
   {
-    namev = LUA_INIT_VAR->view(); /* immortal lit bytes; no copy needed */
+    namev = LUA_INIT_VAR->view();
     einit = l_getenv(namev);      /* try alternative name */
   }
   if (!einit.has_value())
@@ -493,9 +485,9 @@ static char* lua_readline(char* buff, const char* prompt)
     return (*l_readline)(prompt); /* use it */
   else
   { /* emulate 'readline' over 'buff' */
-    fputs(prompt, stdout);
-    fflush(stdout);                          /* show prompt */
-    return fgets(buff, LUA_MAXINPUT, stdin); /* read line */
+    os_print_stdout(std::string_view{prompt});
+    os_flush_stdout();                       /* show prompt */
+    return os_readline(os_stdin(), std::span<char>{buff, LUA_MAXINPUT}) ? buff : nullptr; /* read line */
   }
 }
 
@@ -515,21 +507,20 @@ static void lua_freeline(char* line)
 
 /* try to load 'readline' dynamically */
 
-#include <dlfcn.h>
 
 static void lua_initreadline(lua_State* L)
 {
   std::optional<InternalString> erllib = l_getenv(std::string_view{LUA_RLLIB_VAR}); /* name of readline library */
   const char* rllib = erllib.has_value() ? erllib->c_str()
                                          : LUA_READLINELIB; /* default name */
-  void* lib = dlopen(rllib, RTLD_NOW | RTLD_LOCAL);
+  OsLib* lib = os_dlopen(std::string_view{rllib}, false);
   if (lib != nullptr)
   {
-    const char** name = ((const char**)(dlsym(lib, "rl_readline_name")));
+    const char** name = ((const char**)(os_dlsym(lib, lit<"rl_readline_name">()->view())));
     if (name != nullptr)
       *name = "lua";
-    l_readline = ((l_readlineT)(cast_func(dlsym(lib, "readline"))));
-    l_addhist = ((l_addhistT)(cast_func(dlsym(lib, "add_history"))));
+    l_readline = ((l_readlineT)(cast_func(os_dlsym(lib, lit<"readline">()->view()))));
+    l_addhist = ((l_addhistT)(cast_func(os_dlsym(lib, lit<"add_history">()->view()))));
     if (l_readline != nullptr) /* could load readline function? */
       return;               /* everything ok */
     /* else emit a warning */
@@ -623,9 +614,8 @@ static void checklocal(std::string_view line)
   if (line.compare(i, kw.size(), kw) == 0 &&      /* "local"? */
       (j >= line.size() || line[j] == ' ' || line[j] == '\t'))
   {
-    fprintf(stderr, "%s\n",
-            "warning: locals do not survive across lines in interactive mode");
-    fflush(stderr);
+    os_print_stderr(lit<"warning: locals do not survive across lines in interactive mode\n">()->view());
+    os_flush_stderr();
   }
 }
 
@@ -713,8 +703,8 @@ static void doREPL(lua_State* L)
       report(L, status);
   }
   lua_settop(L, 0); /* clear stack */
-  fwrite("\n", sizeof(char), 1, stdout);
-  fflush(stdout);
+  os_print_stdout(lit<"\n">()->view());
+  os_flush_stdout();
   progname = oldprogname;
 }
 
@@ -741,12 +731,10 @@ static int pmain(lua_State* L)
     print_version();
   if (args & has_E)
   {                        /* option '-E'? */
-    l_getenv_raw = &no_getenv; /* program will ignore environment variables */
+    l_noenv = true; /* program will ignore environment variables */
     lua_pushboolean(L, 1); /* signal for libraries to ignore env. vars. */
     lua_setfieldi(L, LUA_REGISTRYINDEX, lit<"LUA_NOENV">()->view());
   }
-  else
-    l_getenv_raw = &getenv;
   luai_openlibs(L);                      /* open standard libraries */
   createargtable(L, argv, argc, script); /* create table 'arg' */
   lua_gc(L, LUA_GCRESTART, 0, 0, 0);              /* start GC... */

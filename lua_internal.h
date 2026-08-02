@@ -73,7 +73,8 @@ const InternalString* lua_typenamei(lua_State* L, int tp);
 
 std::string_view lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff);
 
-int luaL_fileresulti(lua_State* L, int stat, std::string_view fname);
+int luaL_fileresulti(lua_State* L, int stat, std::string_view fname, int en);
+int luaL_execresulti(lua_State* L, int stat, int en);
 
 struct luaL_Buffer;
 void luaL_addgsubi(luaL_Buffer* b, std::string_view s,

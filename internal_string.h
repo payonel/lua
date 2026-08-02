@@ -70,14 +70,12 @@ public:
   }
   size_t hash() const noexcept { return hashBytes(bytes_.data(), bytes_.size()); }
 
-  /* immutable: returns a new InternalString owning a copy of the bytes */
   InternalString substr(size_t off, size_t len = std::string_view::npos) const
   {
     assert(off <= bytes_.size());
     return InternalString(std::string_view(bytes_).substr(off, len));
   }
 
-  /* immutable: returns a new InternalString owning this + o */
   InternalString concat(std::string_view o) const
   {
     std::string b;
@@ -177,8 +175,3 @@ private:
 };
 
 
-constexpr const char* operator""_os (const char* s, std::size_t n)
-{
-  (void)n;
-  return reinterpret_cast<const char*>(s);
-}

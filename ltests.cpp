@@ -2532,7 +2532,7 @@ static int coresume(lua_State* L)
 
 static int nonblock(lua_State* L)
 {
-  FILE* f = ((luaL_Stream*)(luaL_checkudata(L, 1, HostString(LUA_FILEHANDLE->view()))))->f;
+  FILE* f = reinterpret_cast<FILE*>(((luaL_Stream*)(luaL_checkudata(L, 1, HostString(LUA_FILEHANDLE->view()))))->f);
   int fd = fileno(f);
   int flags = fcntl(fd, F_GETFL, 0);
   flags |= O_NONBLOCK;

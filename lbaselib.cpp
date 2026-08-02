@@ -14,6 +14,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "os_api.h"
 
 #include "lauxlib.h"
 #include "llimits.h"
@@ -27,13 +28,12 @@ static int luaB_print(lua_State* L)
   { /* for each argument */
     const InternalString* s = luaL_toistring(L, i); /* convert it to string */
     if (i > 1)                                      /* not the first element? */
-      fwrite("\t", sizeof(char), 1, stdout);        /* add a tab before it */
-    std::string_view bytes = s->view();
-    fwrite(bytes.data(), sizeof(char), bytes.size(), stdout);
+      os_print_stdout(lit<"\t">()->view());          /* add a tab before it */
+    os_print_stdout(s->view());
     lua_pop(L, 1);                                  /* pop result */
   }
-  fwrite("\n", sizeof(char), 1, stdout);
-  fflush(stdout);
+  os_print_stdout(lit<"\n">()->view());
+  os_flush_stdout();
   return 0;
 }
 

@@ -19,6 +19,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "os_api.h"
 
 #include "lauxlib.h"
 #include "llimits.h"
@@ -309,9 +310,8 @@ int luaL_errori(lua_State* L, std::string_view fmt)
   return lua_error(L);
 }
 
-int luaL_fileresulti(lua_State* L, int stat, std::string_view fname)
+int luaL_fileresulti(lua_State* L, int stat, std::string_view fname, int en)
 {
-  int en = errno; /* calls to Lua API may change this value */
   if (stat)
   {
     lua_pushboolean(L, 1);
@@ -320,16 +320,16 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname)
   else
   {
     luaL_pushfail(L);
-    std::string_view msg = (en != 0) ? std::string_view{strerror(en)}
-                                     : lit<"(no extra info)">()->view();
+    InternalString errstr = (en != 0) ? os_strerror(en)
+                                      : InternalString(lit<"(no extra info)">()->view());
     if (fname.data() != nullptr)
     {
       lua_pushlstring(L, fname, 0, fname.size());
-      lua_pushlstring(L, msg, 0, msg.size());
+      lua_pushlstring(L, errstr.view(), 0, errstr.size());
       lua_pushfstringi(L, lit<"%s: %s">()->view());
     }
     else
-      lua_pushlstring(L, msg, 0, msg.size());
+      lua_pushlstring(L, errstr.view(), 0, errstr.size());
     lua_pushinteger(L, en);
     return 3;
   }
@@ -337,34 +337,28 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname)
 
 LUALIB_API int luaL_fileresult(lua_State* L, int stat, const std::optional<HostString>& fname)
 {
-  return luaL_fileresulti(L, stat, fname ? fname->to_utf8() : std::string_view{});
+  return luaL_fileresulti(L, stat, fname ? fname->to_utf8() : std::string_view{}, errno);
 }
-
-#include <sys/wait.h> /* waitpid macros to interpret 'pclose' return status */
 
 LUALIB_API int luaL_execresult(lua_State* L, int stat)
 {
-  if (stat != 0 && errno != 0) /* error with an 'errno'? */
-    return luaL_fileresult(L, 0, std::nullopt);
+  return luaL_execresulti(L, stat, errno);
+}
+
+int luaL_execresulti(lua_State* L, int stat, int en)
+{
+  if (stat != 0 && en != 0) /* error with an 'errno'? */
+    return luaL_fileresulti(L, 0, {}, en);
   else
   {
-    const InternalString* what = lit<"exit">(); /* type of termination */
-    /* interpret result */
-    if (WIFEXITED(stat))
-    {
-      stat = WEXITSTATUS(stat);
-    }
-    else if (WIFSIGNALED(stat))
-    {
-      stat = WTERMSIG(stat);
-      what = lit<"signal">();
-    }
-    if (what == lit<"exit">() && stat == 0) /* successful termination? */
+    OsExecStatus es = os_decode_exec(stat);
+    const InternalString* what = es.exited ? lit<"exit">() : lit<"signal">();
+    if (es.exited && es.code == 0) /* successful termination? */
       lua_pushboolean(L, 1);
     else
       luaL_pushfail(L);
-    lua_pushlstring(L, what->view(), 0, (what->view()).size());
-    lua_pushinteger(L, stat);
+    lua_pushistringref(L, what->view());
+    lua_pushinteger(L, es.code);
     return 3; /* return true/fail,what,code */
   }
 }
@@ -748,7 +742,7 @@ LUALIB_API void luaL_unref(lua_State* L, int t, int ref)
 struct LoadF
 {
   unsigned n;        /* number of pre-read characters */
-  FILE* f;           /* file being read */
+  OsFile* f;         /* file being read */
   char buff[BUFSIZ]; /* area for reading file */
 };
 
@@ -766,23 +760,22 @@ static std::string_view getF(lua_State*, void* ud)
     /* 'fread' can return > 0 *and* set the EOF flag. If next call to
        'getF' called 'fread', it might still wait for user input.
        The next check avoids this problem. */
-    if (feof(lf->f))
+    if (os_feof(lf->f))
       return {};
-    size_t n = fread(lf->buff, 1, sizeof(lf->buff), lf->f); /* read block */
+    size_t n = os_fread(lf->f, std::span<char>{lf->buff, sizeof(lf->buff)}); /* read block */
     return std::string_view{lf->buff, n};
   }
 }
 
-static int errfile(lua_State* L, std::string_view what, int fnameindex)
+static int errfile(lua_State* L, std::string_view what, int fnameindex, int err)
 {
-  int err = errno;
   std::string_view filename = lua_tolstring(L, fnameindex).substr(1);
   if (err != 0)
   {
     lua_pushlstring(L, what, 0, what.size());
     lua_pushlstring(L, filename, 0, filename.size());
-    std::string_view errmsg{strerror(err)};
-    lua_pushlstring(L, errmsg, 0, errmsg.size());
+    InternalString errmsg = os_strerror(err);
+    lua_pushlstring(L, errmsg.view(), 0, errmsg.size());
     lua_pushfstringi(L, lit<"cannot %s %s: %s">()->view());
   }
   else
@@ -801,11 +794,11 @@ static int errfile(lua_State* L, std::string_view what, int fnameindex)
 ** not), returns the first character anyway to force an error
 ** (as no chunk can start with 0xEF).
 */
-static int skipBOM(FILE* f)
+static int skipBOM(OsFile* f)
 {
-  int c = getc(f);                                     /* read first character */
-  if (c == 0xEF && getc(f) == 0xBB && getc(f) == 0xBF) /* correct BOM? */
-    return getc(f);                                    /* ignore BOM and return next char */
+  int c = os_getbyte(f);                                     /* read first character */
+  if (c == 0xEF && os_getbyte(f) == 0xBB && os_getbyte(f) == 0xBF) /* correct BOM? */
+    return os_getbyte(f);                                    /* ignore BOM and return next char */
   else                                                 /* no (valid) BOM */
     return c;                                          /* return first character */
 }
@@ -817,16 +810,16 @@ static int skipBOM(FILE* f)
 ** first "valid" character of the file (after the optional BOM and
 ** a first-line comment).
 */
-static int skipcomment(FILE* f, int* cp)
+static int skipcomment(OsFile* f, int* cp)
 {
   int c = *cp = skipBOM(f);
   if (c == '#')
   { /* first line is a comment (Unix exec. file)? */
     do
     { /* skip first line */
-      c = getc(f);
-    } while (c != EOF && c != '\n');
-    *cp = getc(f); /* next character after comment, if present */
+      c = os_getbyte(f);
+    } while (c != OS_EOF && c != '\n');
+    *cp = os_getbyte(f); /* next character after comment, if present */
     return 1;      /* there was a comment */
   }
   else
@@ -839,21 +832,20 @@ int luaL_loadfilei(lua_State* L, std::string_view filename, std::string_view mod
   int status, readstatus;
   int c;
   int fnameindex = lua_gettop(L) + 1; /* index of filename on the stack */
-  HostString filenameHstr = HostString::from_bytes(filename);
   const bool bNullname = filename.data() == nullptr;
   if (bNullname)
   {
     lua_pushistringref(L, lit<"=stdin">()->view());
-    lf.f = stdin;
+    lf.f = os_stdin();
   }
   else
   {
     lua_pushistringref(L, filename);
     lua_pushfstringi(L, lit<"@%s">()->view());
-    errno = 0;
-    lf.f = fopen(filenameHstr.to_os(), "r");
+    OsOpenResult o = os_fopen(filename, lit<"r">()->view());
+    lf.f = o.f;
     if (lf.f == nullptr)
-      return errfile(L, lit<"open">()->view(), fnameindex);
+      return errfile(L, lit<"open">()->view(), fnameindex, o.err);
   }
   lf.n = 0;
   if (skipcomment(lf.f, &c)) /* read initial portion */
@@ -863,24 +855,22 @@ int luaL_loadfilei(lua_State* L, std::string_view filename, std::string_view mod
     lf.n = 0; /* remove possible newline */
     if (!bNullname)
     { /* "real" file? */
-      errno = 0;
-      lf.f = freopen(filenameHstr.to_os(), "rb", lf.f); /* reopen in binary mode */
-      if (lf.f == nullptr)
-        return errfile(L, lit<"reopen">()->view(), fnameindex);
+      int rerr = os_freopen(lf.f, filename, lit<"rb">()->view()); /* reopen in binary mode */
+      if (rerr != 0)
+        return errfile(L, lit<"reopen">()->view(), fnameindex, rerr);
       skipcomment(lf.f, &c); /* re-read initial portion */
     }
   }
-  if (c != EOF)
+  if (c != OS_EOF)
     lf.buff[lf.n++] = ((char)(c)); /* 'c' is the first character */
   status = lua_loadi(L, getF, &lf, lua_toistring(L, -1)->view(), mode);
-  readstatus = ferror(lf.f);
-  errno = 0; /* no useful error number until here */
+  readstatus = os_ferror(lf.f) ? 1 : 0;
   if (!bNullname)
-    fclose(lf.f); /* close file (even in case of errors) */
+    os_fclose(lf.f); /* close file (even in case of errors) */
   if (readstatus)
   {
     lua_settop(L, fnameindex); /* ignore results from 'lua_load' */
-    return errfile(L, lit<"read">()->view(), fnameindex);
+    return errfile(L, lit<"read">()->view(), fnameindex, 0);
   }
   lua_remove(L, fnameindex);
   return status;
@@ -1166,11 +1156,13 @@ static void* luaL_alloc(void*, void* ptr, size_t, size_t nsize)
 */
 static int panic(lua_State* L)
 {
-  const char* msg = (lua_type(L, -1) == LUA_TSTRING)
-                        ? lua_toistring(L, -1)->c_str()
-                        : "error object is not a string";
-  fprintf(stderr, "PANIC: unprotected error in call to Lua API (%s)\n"_os, msg);
-  fflush(stderr);
+  const InternalString* msg = (lua_type(L, -1) == LUA_TSTRING)
+                                  ? lua_toistring(L, -1)
+                                  : lit<"error object is not a string">();
+  os_print_stderr(lit<"PANIC: unprotected error in call to Lua API (">()->view());
+  os_print_stderr(msg->view());
+  os_print_stderr(lit<")\n">()->view());
+  os_flush_stderr();
   return 0; /* return to Lua to abort */
 }
 
@@ -1215,15 +1207,14 @@ static void warnfoff(void* ud, const HostString& message, int tocont)
 static void warnfcont(void* ud, const HostString& message, int tocont)
 {
   lua_State* L = (lua_State*) ud;
-  std::string msg{message.to_utf8()};
-  fprintf(stderr, "%s", msg.c_str());
-  fflush(stderr);
+  os_print_stderr(message.to_utf8());
+  os_flush_stderr();
   if (tocont)                          /* not the last part? */
     lua_setwarnf(L, warnfcont, L);     /* to be continued */
   else
   {                                /* last part */
-    fprintf(stderr, "%s", "\n");   /* finish message with end-of-line */
-    fflush(stderr);
+    os_print_stderr(lit<"\n">()->view()); /* finish message with end-of-line */
+    os_flush_stderr();
     lua_setwarnf(L, warnfon, L);   /* next call is a new message */
   }
 }
@@ -1232,8 +1223,8 @@ static void warnfon(void* ud, const HostString& message, int tocont)
 {
   if (checkcontrol((lua_State*) ud, message, tocont)) /* control message? */
     return;                                           /* nothing else to be done */
-  fprintf(stderr, "%s", "Lua warning: "); /* start a new warning */
-  fflush(stderr);
+  os_print_stderr(lit<"Lua warning: ">()->view()); /* start a new warning */
+  os_flush_stderr();
   warnfcont(ud, message, tocont);         /* finish processing */
 }
 

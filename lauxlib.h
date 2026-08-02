@@ -11,6 +11,8 @@
 #include <stdio.h>
 
 #include "lua.h"
+
+struct OsFile;
 #include "luaconf.h"
 
 #include "internal_string.h"
@@ -214,7 +216,7 @@ inline const InternalString* const LUA_FILEHANDLE = lit<"FILE*">();
 
 struct luaL_Stream
 {
-  FILE* f;              /* stream (nullptr for incompletely created streams) */
+  OsFile* f;            /* stream (nullptr for incompletely created streams) */
   lua_CFunction closef; /* to close stream (nullptr for closed streams) */
 };
 

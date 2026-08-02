@@ -19,6 +19,7 @@
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lua_internal.h"
+#include "os_api.h"
 #include "lualib.h"
 
 
@@ -63,27 +64,19 @@ static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym);
 ** =========================================================================
 */
 
-#include <dlfcn.h>
-
 static void* lsys_load(lua_State* L, const char* path, int seeglb)
 {
-  void* lib = dlopen(path, RTLD_NOW | (seeglb ? RTLD_GLOBAL : RTLD_LOCAL));
+  OsLib* lib = os_dlopen(std::string_view{path}, seeglb != 0);
   if (l_unlikely(lib == nullptr))
-  {
-    std::string_view err{dlerror()};
-    lua_pushlstring(L, err, 0, err.size());
-  }
-  return lib;
+    lua_pushistring(L, os_dlerror());
+  return reinterpret_cast<void*>(lib);
 }
 
 static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym)
 {
-  lua_CFunction f = ((lua_CFunction)(cast_func(dlsym(lib, sym))));
+  lua_CFunction f = ((lua_CFunction)(cast_func(os_dlsym(reinterpret_cast<OsLib*>(lib), std::string_view{sym}))));
   if (l_unlikely(f == nullptr))
-  {
-    std::string_view err{dlerror()};
-    lua_pushlstring(L, err, 0, err.size());
-  }
+    lua_pushistring(L, os_dlerror());
   return f;
 }
 
@@ -127,14 +120,14 @@ static void setpath(lua_State* L, const InternalString* fieldname,
   lua_pushlstring(L, env, 0, env.size());
   lua_pushlstring(L, LUA_VERSUFFIX->view(), 0, LUA_VERSUFFIX->size());
   lua_pushfstringi(L, lit<"%s%s">()->view());
-  const char* epath = getenv(lua_toistring(L, -1)->c_str()); /* try versioned name */
-  if (epath == nullptr)                                      /* no versioned environment variable? */
-    epath = getenv(envname);                                 /* try unversioned name */
-  if (epath == nullptr || noenv(L)) /* no environment variable? */
+  std::optional<InternalString> epath = os_getenv(lua_toistring(L, -1)->view()); /* try versioned name */
+  if (!epath.has_value())                                    /* no versioned environment variable? */
+    epath = os_getenv(std::string_view{envname});            /* try unversioned name */
+  if (!epath.has_value() || noenv(L)) /* no environment variable? */
     lua_pushlstring(L, dft, 0, dft.size()); /* use default */
   else
   {
-    std::string_view path{epath};
+    std::string_view path = epath->view();
     size_t dftmark = path.find(lit<";;">()->view());
     if (dftmark == std::string_view::npos)
       lua_pushlstring(L, path, 0, path.size()); /* nothing to change */
@@ -189,7 +182,7 @@ static int lib_gc(lua_State* L)
   void** p = (void**) lua_touserdata(L, 1);
   if (*p)
   {
-    dlclose(*p);
+    os_dlclose(reinterpret_cast<OsLib*>(*p));
     *p = nullptr;
   }
   return 0;
@@ -286,12 +279,12 @@ static int ll_loadlib(lua_State* L)
 ** =======================================================
 */
 
-static int readable(const char* filename)
+static int readable(std::string_view filename)
 {
-  FILE* f = fopen(filename, "r"); /* try to open file */
-  if (f == nullptr)
-    return 0; /* open failed */
-  fclose(f);
+  OsOpenResult o = os_fopen(filename, lit<"r">()->view());
+  if (o.f == nullptr)
+    return 0;
+  os_fclose(o.f);
   return 1;
 }
 
@@ -334,10 +327,10 @@ static int searchpath(lua_State* L, std::string_view name,
       size_t sepmark = list.find(LUA_PATH_SEP->view(), pos); /* next separator */
       if (sepmark == std::string_view::npos)          /* separator not found? */
         sepmark = list.size();                        /* name goes until the end */
-      InternalString filename(list.substr(pos, sepmark - pos));
-      if (readable(filename.c_str()))
+      std::string_view filename = list.substr(pos, sepmark - pos);
+      if (readable(filename))
       {                                    /* does file exist and is readable? */
-        lua_pushistringref(L, filename.view());  /* save and return name */
+        lua_pushistringref(L, filename);  /* save and return name */
         return 1;
       }
       pos = sepmark + 1;

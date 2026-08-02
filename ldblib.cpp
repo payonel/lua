@@ -13,6 +13,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "os_api.h"
 
 #include "lauxlib.h"
 #include "llimits.h"
@@ -476,16 +477,17 @@ static int db_debug(lua_State* L)
   for (;;)
   {
     char buffer[250];
-    fprintf(stderr, "%s", "lua_debug> ");
-    fflush(stderr);
-    if (fgets(buffer, sizeof(buffer), stdin) == nullptr || std::string_view(buffer) == lit<"cont\n">()->view())
+    os_print_stderr(lit<"lua_debug> ">()->view());
+    os_flush_stderr();
+    if (!os_readline(os_stdin(), std::span<char>{buffer, sizeof(buffer)}) || std::string_view(buffer) == lit<"cont\n">()->view())
     {
       return 0;
     }
     if (luaL_loadbufferi(L, std::string_view(buffer), lit<"=(debug command)">()->view(), lit<"t">()->view()) || lua_pcall(L, 0, 0, 0))
     {
-      fprintf(stderr, "%s\n", luaL_toistring(L, -1)->c_str());
-      fflush(stderr);
+      os_print_stderr(luaL_toistring(L, -1)->view());
+      os_print_stderr(lit<"\n">()->view());
+      os_flush_stderr();
     }
     lua_settop(L, 0); /* remove eventual returns */
   }

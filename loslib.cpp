@@ -16,6 +16,7 @@
 
 #include "lauxlib.h"
 #include "lua_internal.h"
+#include "os_api.h"
 #include "llimits.h"
 #include "lualib.h"
 
@@ -52,31 +53,20 @@
 
 constexpr int LUA_TMPNAMBUFSIZE = 32;
 
-constexpr char LUA_TMPNAMTEMPLATE[] = "/tmp/lua_XXXXXX";
-
-static inline int lua_tmpnam(char* b)
-{
-  strcpy(b, LUA_TMPNAMTEMPLATE);
-  int e = mkstemp(b);
-  if (e != -1)
-    close(e);
-  return (e == -1);
-}
-
 /* }================================================================== */
 
 static int os_execute(lua_State* L)
 {
   int nocmd = lua_isnoneornil(L, 1);
-  const InternalString* cmd = nocmd ? nullptr : luaL_checkistring(L, 1);
-  int stat;
-  errno = 0;
-  stat = system(nocmd ? nullptr : cmd->c_str());
   if (!nocmd)
-    return luaL_execresult(L, stat);
+  {
+    const InternalString* cmd = luaL_checkistring(L, 1);
+    OsSystemResult r = os_system(cmd->view());
+    return luaL_execresulti(L, r.stat, r.err);
+  }
   else
   {
-    lua_pushboolean(L, stat); /* true if there is a shell */
+    lua_pushboolean(L, os_shell_available()); /* true if there is a shell */
     return 1;
   }
 }
@@ -84,37 +74,32 @@ static int os_execute(lua_State* L)
 static int os_remove(lua_State* L)
 {
   const InternalString* filename = luaL_checkistring(L, 1);
-  errno = 0;
-  return luaL_fileresulti(L, remove(filename->c_str()) == 0, filename->view());
+  OsResult r = os_remove(filename->view());
+  return luaL_fileresulti(L, r.ok, filename->view(), r.err);
 }
 
 static int os_rename(lua_State* L)
 {
   const InternalString* fromname = luaL_checkistring(L, 1);
   const InternalString* toname = luaL_checkistring(L, 2);
-  errno = 0;
-  return luaL_fileresulti(L, rename(fromname->c_str(), toname->c_str()) == 0, {});
+  OsResult r = os_rename(fromname->view(), toname->view());
+  return luaL_fileresulti(L, r.ok, {}, r.err);
 }
 
 static int os_tmpname(lua_State* L)
 {
-  char buff[LUA_TMPNAMBUFSIZE];
-  int err = lua_tmpnam(buff);
-  if (l_unlikely(err))
+  std::optional<InternalString> tname = os_tmpname();
+  if (l_unlikely(!tname.has_value()))
     return luaL_errori(L, lit<"unable to generate a unique filename">()->view());
-  std::string_view tname{buff};
-  lua_pushlstring(L, tname, 0, tname.size());
+  lua_pushistring(L, std::move(*tname));
   return 1;
 }
 
 static int os_getenv(lua_State* L)
 {
-  const char* v = getenv(luaL_checkistring(L, 1)->c_str());
-  if (v != nullptr)
-  {
-    std::string_view vsv{v};
-    lua_pushlstring(L, vsv, 0, vsv.size());
-  }
+  std::optional<InternalString> v = os_getenv(luaL_checkistring(L, 1)->view());
+  if (v.has_value())
+    lua_pushistring(L, std::move(*v));
   else
     lua_pushnil(L);
   return 1;
