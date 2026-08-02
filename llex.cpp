@@ -84,7 +84,8 @@ void luaX_init(lua_State* L)
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(e)));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
   {
-    TString* ts = luaS_new(L, luaX_tokens[i]);
+    std::string_view bytes = luaX_tokens[i]->view();
+    TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
     assert((ts->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(ts)));     /* reserved words are never collected */
     ts->extra = ((lu_byte)(i + 1)); /* reserved word */

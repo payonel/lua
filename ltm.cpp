@@ -42,7 +42,8 @@ void luaT_init(lua_State* L)
   int i;
   for (i = 0; i < TM_N; i++)
   {
-    G(L)->tmname[i] = luaS_new(L, luaT_eventname[i]);
+    std::string_view bytes = luaT_eventname[i]->view();
+    G(L)->tmname[i] = luaS_createstr(L, bytes, 0, bytes.size());
     assert((((G(L)->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(G(L)->tmname[i]))); /* never collect these names */
   }
@@ -98,7 +99,8 @@ const InternalString* luaT_objtypename(lua_State* L, const TValue* o)
   if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != nullptr) ||
       (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = uvalue(o)->metatable) != nullptr))
   {
-    const TValue* name = luaH_Hgetshortstr(mt, luaS_new(L, lit<"__name">()));
+    std::string_view bytes = lit<"__name">()->view();
+    const TValue* name = luaH_Hgetshortstr(mt, luaS_createstr(L, bytes, 0, bytes.size()));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
     {
       return &tsvalue(name)->data; /* use it as type name */
@@ -284,7 +286,8 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   setsloth(L, L->top, t);
   L->top++;
   luaH_resize(L, t, ((unsigned int)(n)), 1);
-  setsvalue(L, &key, luaS_new(L, lit<"n">())); /* key is "n" */
+  std::string_view bytes = lit<"n">()->view();
+  setsvalue(L, &key, luaS_createstr(L, bytes, 0, bytes.size())); /* key is "n" */
   setivalue(&value, n);                 /* value is n */
   /* No need to anchor the key: Due to the resize, the next operation
      cannot trigger a garbage collection */
@@ -388,7 +391,8 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   else
   {
     TValue res;
-    if (luaH_getshortstr(h, luaS_new(L, lit<"n">()), &res) != LUA_VNUMINT ||
+    std::string_view bytes = lit<"n">()->view();
+    if (luaH_getshortstr(h, luaS_createstr(L, bytes, 0, bytes.size()), &res) != LUA_VNUMINT ||
         ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
       luaG_runerror(L, lit<"vararg table has no proper 'n'">());
     assert((&res)->tt_ == LUA_VNUMINT);

@@ -2389,7 +2389,8 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, ByteBuilder* buff,
   luaD_anchorobj(L, anchor, const_cast<GCObject*>(static_cast<const GCObject*>(cl))); /* anchor it in scanner table */
   funcstate.f = cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
-  funcstate.f->source = luaS_new(L, name); /* create and anchor TString */
+  std::string_view bytes = name->view();
+  funcstate.f->source = luaS_createstr(L, bytes, 0, bytes.size()); /* create and anchor TString */
   luaC_objbarrier(L, funcstate.f, funcstate.f->source);
   lexstate.buff = buff;
   lexstate.dyd = dyd;

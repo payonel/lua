@@ -832,7 +832,8 @@ static int resume_error(lua_State* L, const InternalString* msg, int narg)
 {
   api_checkpop(L, narg);
   L->top -= narg;                           /* remove args from the stack */
-  setslots(L, L->top, luaS_new(L, msg)); /* push error message */
+  std::string_view bytes = msg->view();
+  setslots(L, L->top, luaS_createstr(L, bytes, 0, bytes.size())); /* push error message */
   api_incr_top(L);
   lua_unlock(L);
   return LUA_ERRRUN;

@@ -132,11 +132,6 @@ void luaS_remove(lua_State* L, TString* ts)
   }
 }
 
-TString* luaS_new(lua_State* L, const InternalString* str)
-{
-  return luaS_createstr(L, str->view(), 0, str->size());
-}
-
 Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
 {
   global_State* g = G(L);

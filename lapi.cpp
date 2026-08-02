@@ -649,12 +649,17 @@ LUA_API void lua_pushinteger(lua_State* L, lua_Integer n)
 ** 'len' == 0 (as 's' can be nullptr in that case), due to later use of
 ** 'memcmp' and 'memcpy'.
 */
-LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s,
-                                         size_t off, size_t len)
+LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s, size_t off, size_t len)
 {
   TString* ts;
   lua_lock(L);
-  ts = (len == 0) ? luaS_new(L, lit<"">()) : luaS_createstr(L, s, off, len);
+  if (len == 0)
+  {
+    s = lit<"">()->view();
+    off = 0;
+    len = s.size();
+  }
+  ts = luaS_createstr(L, s, off, len);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -681,7 +686,8 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
 void lua_pushistringref(lua_State* L, const InternalString* s)
 {
   lua_lock(L);
-  TString* ts = luaS_new(L, s);
+  std::string_view bytes = s->view();
+  TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
