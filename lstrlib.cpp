@@ -150,33 +150,36 @@ static int str_upper(lua_State* L)
 static int str_rep(lua_State* L)
 {
   const InternalString* s = luaL_checkistring(L, 1);
+  std::string_view sv = s->view();
   lua_Integer n = luaL_checkinteger(L, 2);
   const InternalString* sep = luaL_optistring(L, 3, lit<"">());
-  size_t len = s->size();
-  size_t lsep = sep->size();
-  if (n <= 0 || (len | lsep) == 0)
+  std::string_view sepsv = sep->view();
+  if (n <= 0 || (sv.size() | sepsv.size()) == 0)
+  {
     lua_pushistringref(L, lit<"">()->view()); /* no repetitions or both strings empty */
-  else if (l_unlikely(len > MAX_SIZE - lsep ||
-                      ((lua_Integer)(len + lsep)) > ((lua_Integer)(MAX_SIZE)) / n))
+  }
+  else if (l_unlikely(sv.size() > MAX_SIZE - sepsv.size() || ((lua_Integer)(sv.size() + sepsv.size())) > ((lua_Integer)(MAX_SIZE)) / n))
+  {
     return luaL_errori(L, lit<"resulting string too large">()->view());
+  }
   else
   {
-    size_t totallen = (((size_t)(n)) * (len + lsep)) - lsep;
+    size_t totallen = (((size_t)(n)) * (sv.size() + sepsv.size())) - sepsv.size();
     luaL_Buffer b;
     size_t off = luaL_buffinitsize(L, &b, totallen);
     std::span<char> p = luaL_buffarea(&b);
     size_t pos = off;
     while (n-- > 1)
     { /* first n-1 copies (followed by separator) */
-      memcpy(p.data() + pos, s->bytes(), len * sizeof(char));
-      pos += len;
-      if (lsep > 0)
+      memcpy(p.data() + pos, sv.data(), sv.size() * sizeof(char));
+      pos += sv.size();
+      if (sepsv.size() > 0)
       { /* empty 'memcpy' is not that cheap */
-        memcpy(p.data() + pos, sep->bytes(), lsep * sizeof(char));
-        pos += lsep;
+        memcpy(p.data() + pos, sepsv.data(), sepsv.size() * sizeof(char));
+        pos += sepsv.size();
       }
     }
-    memcpy(p.data() + pos, s->bytes(), len * sizeof(char)); /* last copy without separator */
+    memcpy(p.data() + pos, sv.data(), sv.size() * sizeof(char)); /* last copy without separator */
     luaL_pushresultsize(&b, totallen);
   }
   return 1;
@@ -649,9 +652,10 @@ static ptrdiff_t match_capture(MatchState* ms, ptrdiff_t s, int l)
   size_t len;
   l = check_capture(ms, l);
   len = ((size_t)(ms->capture[l].len));
+  std::string_view msv = ms->src->view();
   if ((size_t) (ms->src_end - s) >= len &&
-      memcmp(ms->src->bytes() + ms->capture[l].init,
-             ms->src->bytes() + s, len) == 0)
+      memcmp(msv.data() + ms->capture[l].init,
+             msv.data() + s, len) == 0)
     return s + ((ptrdiff_t)(len));
   else
     return NOMATCH;
@@ -1800,14 +1804,14 @@ static int str_format(lua_State* L)
       case 's':
       {
         const InternalString* s = luaL_toistring(L, arg);
-        size_t l = s->size();
+        std::string_view sv = s->view();
         if (formlen == 2) /* no modifiers? */
           luaL_addvalue(&b); /* keep entire string */
         else
         {
-          luaL_argchecki(L, memchr(s->bytes(), '\0', l) == nullptr, arg, lit<"string contains zeros">()->view());
+          luaL_argchecki(L, memchr(sv.data(), '\0', sv.size()) == nullptr, arg, lit<"string contains zeros">()->view());
           checkformat(L, formv, L_FMTFLAGSC->view(), 1);
-          if (formv.find('.') == std::string_view::npos && l >= 100)
+          if (formv.find('.') == std::string_view::npos && sv.size() >= 100)
           {
             /* no precision and string is too long to be formatted */
             luaL_addvalue(&b); /* keep entire string */
@@ -1816,11 +1820,11 @@ static int str_format(lua_State* L)
           { /* format the string into 'buff' */
             FormatSpec spec;
             scanformat(formv, &spec);
-            size_t blen = (spec.precision >= 0 && ((size_t)(spec.precision)) < l)
+            size_t blen = (spec.precision >= 0 && ((size_t)(spec.precision)) < sv.size())
                               ? ((size_t)(spec.precision)) /* truncate */
-                              : l;
+                              : sv.size();
             nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "",
-                            std::string_view{s->bytes(), blen}, false);
+                            std::string_view{sv.data(), blen}, false);
             lua_pop(L, 1); /* remove result from 'luaL_toistring' */
           }
         }

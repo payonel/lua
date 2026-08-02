@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstring>
 #include <span>
@@ -26,6 +27,11 @@ public:
 
   InternalString(const char* bytes, size_t len) : bytes_(bytes, len) {}
   InternalString(std::string_view src) : bytes_(src.data(), src.size()) {}
+  InternalString(std::string_view src, size_t off, size_t len)
+      : bytes_(src.data() + off, len)
+  {
+    assert(off <= src.size() && len <= src.size() - off);
+  }
 
   explicit InternalString(const HostString& host) : bytes_(host.to_utf8()) {}
 
@@ -40,8 +46,6 @@ public:
   int byteAt(size_t i) const { return static_cast<unsigned char>(bytes_[i]); }
 
   std::string_view view() const noexcept { return bytes_; }
-
-  const char* bytes() const noexcept { return bytes_.data(); }
 
   const char* c_str() const noexcept { return bytes_.c_str(); }
 
@@ -65,6 +69,22 @@ public:
     return h;
   }
   size_t hash() const noexcept { return hashBytes(bytes_.data(), bytes_.size()); }
+
+  /* immutable: returns a new InternalString owning a copy of the bytes */
+  InternalString substr(size_t off, size_t len = std::string_view::npos) const
+  {
+    assert(off <= bytes_.size());
+    return InternalString(std::string_view(bytes_).substr(off, len));
+  }
+
+  /* immutable: returns a new InternalString owning this + o */
+  InternalString concat(std::string_view o) const
+  {
+    std::string b;
+    b.reserve(bytes_.size() + o.size());
+    b.append(bytes_).append(o);
+    return InternalString(std::move(b));
+  }
 
 private:
   std::string bytes_;

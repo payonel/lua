@@ -28,7 +28,8 @@ static int luaB_print(lua_State* L)
     const InternalString* s = luaL_toistring(L, i); /* convert it to string */
     if (i > 1)                                      /* not the first element? */
       fwrite("\t", sizeof(char), 1, stdout);        /* add a tab before it */
-    fwrite(s->bytes(), sizeof(char), s->size(), stdout);
+    std::string_view bytes = s->view();
+    fwrite(bytes.data(), sizeof(char), bytes.size(), stdout);
     lua_pop(L, 1);                                  /* pop result */
   }
   fwrite("\n", sizeof(char), 1, stdout);

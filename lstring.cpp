@@ -101,7 +101,8 @@ TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t l
 TString* luaS_take(lua_State* L, InternalString&& str)
 {
   global_State* g = G(L);
-  size_t h = InternalString::hashBytes(str.bytes(), str.size());
+  std::string_view bytes = str.view();
+  size_t h = InternalString::hashBytes(bytes.data(), bytes.size());
   if (str.size() <= LUAI_MAXSHORTLEN)
   {
     global_State::InternKey key{str.view(), h};

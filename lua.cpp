@@ -20,7 +20,7 @@
 
 constexpr char LUA_PROGNAME[] = "lua";
 
-constexpr char LUA_INIT_VAR[] = "LUA_INIT";
+static const InternalString* const LUA_INIT_VAR = lit<"LUA_INIT">();
 
 /* Name of the environment variable with the name of the readline library */
 constexpr char LUA_RLLIB_VAR[] = "LUA_READLINELIB";
@@ -203,16 +203,14 @@ static int dochunk(lua_State* L, int status)
   return report(L, status);
 }
 
-static int dofile(lua_State* L, const InternalString* name)
+static int dofile(lua_State* L, std::string_view name)
 {
-  std::string_view nullsv(nullptr, 0);
-  return dochunk(L, luaL_loadfilei(L, name ? name->view() : nullsv, nullsv));
+  return dochunk(L, luaL_loadfilei(L, name, std::string_view{}));
 }
 
-static int dostring(lua_State* L, std::string_view s, const InternalString* name)
+static int dostring(lua_State* L, std::string_view s, std::string_view name)
 {
-  std::string_view nullsv(nullptr, 0);
-  return dochunk(L, luaL_loadbufferi(L, s, name == nullptr ? nullsv : name->view(), lit<"t">()->view()));
+  return dochunk(L, luaL_loadbufferi(L, s, name, lit<"t">()->view()));
 }
 
 /*
@@ -276,9 +274,7 @@ static int handle_script(lua_State* L, char** argv)
     status = luaL_loadfilei(L, nullsv, nullsv); /* stdin */
   else
   {
-    std::string_view fsv{fname};
-    InternalString scriptname(fsv);
-    status = luaL_loadfilei(L, fsv, nullsv);
+    status = luaL_loadfilei(L, std::string_view{fname}, nullsv);
   }
   if (status == LUA_OK)
   {
@@ -393,7 +389,7 @@ static int runargs(lua_State* L, char** argv, int n)
         extra = argv[i];
       }
       status = (option == 'e')
-                   ? dostring(L, extra, lit<"=(command line)">())
+                   ? dostring(L, extra, lit<"=(command line)">()->view())
                    : dolibrary(L, extra);
       if (status != LUA_OK)
         return 0;
@@ -407,7 +403,7 @@ static int runargs(lua_State* L, char** argv, int n)
   return 1;
 }
 
-static char* (*l_getenv)(const char* name);
+static char* (*l_getenv_raw)(const char* name);
 
 /* Function to ignore environment variables, used by option -E */
 static char* no_getenv(const char*)
@@ -415,28 +411,40 @@ static char* no_getenv(const char*)
   return nullptr;
 }
 
+/*
+** Environment lookup. The host result is treated as internal bytes for
+** now (host/internal encoding split for getenv is a separate concern).
+*/
+static std::optional<InternalString> l_getenv(std::string_view name)
+{
+  InternalString n(name); /* own a NUL-terminated copy for the host call */
+  const char* v = l_getenv_raw(n.c_str());
+  if (v == nullptr)
+    return std::nullopt;
+  return InternalString(std::string_view{v});
+}
+
 static int handle_luainit(lua_State* L)
 {
-  std::string name = LUA_INIT_VAR;
-  name.append(LUA_VERSUFFIX);
-  const char* einit = l_getenv(name.c_str());
-  if (einit == nullptr)
+  InternalString name = LUA_INIT_VAR->concat(LUA_VERSUFFIX->view());
+  std::string_view namev = name.view();
+  std::optional<InternalString> einit = l_getenv(namev);
+  if (!einit.has_value())
   {
-    name = LUA_INIT_VAR;
-    einit = l_getenv(name.c_str()); /* try alternative name */
+    namev = LUA_INIT_VAR->view(); /* immortal lit bytes; no copy needed */
+    einit = l_getenv(namev);      /* try alternative name */
   }
-  if (einit == nullptr)
+  if (!einit.has_value())
     return LUA_OK;
-  std::string init(einit);
-  if (!init.empty() && init[0] == '@')
+  if (!einit->empty() && einit->byteAt(0) == '@')
   {
-    InternalString fname(init.substr(1));
-    return dofile(L, &fname);
+    InternalString skipAt = einit->substr(1);
+    return dofile(L, skipAt.view());
   }
   else
   {
-    InternalString chunkname{std::string(lit<"=">()->view()) + name};
-    return dostring(L, init, &chunkname);
+    InternalString chunkname = lit<"=">()->concat(namev);
+    return dostring(L, einit->view(), chunkname.view());
   }
 }
 
@@ -511,9 +519,9 @@ static void lua_freeline(char* line)
 
 static void lua_initreadline(lua_State* L)
 {
-  const char* erllib = l_getenv(LUA_RLLIB_VAR); /* name of readline library */
-  const char* rllib = (erllib != nullptr) ? erllib
-                                          : LUA_READLINELIB; /* default name */
+  std::optional<InternalString> erllib = l_getenv(std::string_view{LUA_RLLIB_VAR}); /* name of readline library */
+  const char* rllib = erllib.has_value() ? erllib->c_str()
+                                         : LUA_READLINELIB; /* default name */
   void* lib = dlopen(rllib, RTLD_NOW | RTLD_LOCAL);
   if (lib != nullptr)
   {
@@ -733,12 +741,12 @@ static int pmain(lua_State* L)
     print_version();
   if (args & has_E)
   {                        /* option '-E'? */
-    l_getenv = &no_getenv; /* program will ignore environment variables */
+    l_getenv_raw = &no_getenv; /* program will ignore environment variables */
     lua_pushboolean(L, 1); /* signal for libraries to ignore env. vars. */
     lua_setfieldi(L, LUA_REGISTRYINDEX, lit<"LUA_NOENV">()->view());
   }
   else
-    l_getenv = &getenv;
+    l_getenv_raw = &getenv;
   luai_openlibs(L);                      /* open standard libraries */
   createargtable(L, argv, argc, script); /* create table 'arg' */
   lua_gc(L, LUA_GCRESTART, 0, 0, 0);              /* start GC... */
@@ -762,7 +770,7 @@ static int pmain(lua_State* L)
       doREPL(L); /* do read-eval-print loop */
     }
     else
-      dofile(L, nullptr); /* executes stdin as a file */
+      dofile(L, std::string_view{}); /* executes stdin as a file */
   }
   lua_pushboolean(L, 1); /* signal no errors */
   return 1;

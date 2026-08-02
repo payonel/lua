@@ -961,7 +961,8 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
     }
     else
     { /* add '...' before rest of name */
-      memcpy(out.data(), RETS->bytes(), RETS->size() * sizeof(char));
+      std::string_view bytes = RETS->view();
+      memcpy(out.data(), bytes.data(), bytes.size() * sizeof(char));
       pos += RETS->size();
       bufflen -= RETS->size();
       memcpy(out.data() + pos, source.data() + 1 + srclen - bufflen,
@@ -972,7 +973,8 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
   else
   {                                                 /* string; format as [string "source"] */
     size_t nl = source.find('\n');
-    memcpy(out.data(), PRE->bytes(), PRE->size() * sizeof(char)); /* add prefix */
+    std::string_view bytes = PRE->view();
+    memcpy(out.data(), bytes.data(), bytes.size() * sizeof(char)); /* add prefix */
     pos += PRE->size();
     bufflen -= PRE->size() + RETS->size() + POS->size() + 1; /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == std::string_view::npos)
@@ -988,10 +990,12 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
         srclen = bufflen;
       memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
       pos += srclen;
-      memcpy(out.data() + pos, RETS->bytes(), RETS->size() * sizeof(char));
+      bytes = RETS->view();
+      memcpy(out.data() + pos, bytes.data(), bytes.size() * sizeof(char));
       pos += RETS->size();
     }
-    memcpy(out.data() + pos, POS->bytes(), POS->size() * sizeof(char));
+    bytes = POS->view();
+    memcpy(out.data() + pos, bytes.data(), bytes.size() * sizeof(char));
     out[pos + POS->size()] = '\0';
   }
 }

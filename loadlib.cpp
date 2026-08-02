@@ -125,7 +125,7 @@ static void setpath(lua_State* L, const InternalString* fieldname,
 {
   std::string_view env{envname};
   lua_pushlstring(L, env, 0, env.size());
-  lua_pushlstring(L, LUA_VERSUFFIX, 0, (LUA_VERSUFFIX).size());
+  lua_pushlstring(L, LUA_VERSUFFIX->view(), 0, LUA_VERSUFFIX->size());
   lua_pushfstringi(L, lit<"%s%s">()->view());
   const char* epath = getenv(lua_toistring(L, -1)->c_str()); /* try versioned name */
   if (epath == nullptr)                                      /* no versioned environment variable? */
