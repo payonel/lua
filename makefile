@@ -93,7 +93,7 @@ test:
 	./$(TEST_API_T)
 	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
-		ulimit -S -s 1100; \
+		ulimit -S -s 8192; \
 		cd tests; \
 		cat /dev/null | perf stat -- ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 

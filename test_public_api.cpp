@@ -3325,6 +3325,172 @@ static void test_auxlib_restored()
   lua_close(L);
 }
 
+/* ============ number-to-string conversions (std::to_chars sites) ============ */
+
+static void test_num2str()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+
+  /* --- luaO_tostringbuff, integer branch (lobject.cpp) --- */
+  /* C-level coercion: lua_tolstring converts the number in place */
+  lua_pushinteger(L, 0);
+  CHECK(lua_tolstring(L, -1) == "0");
+  lua_pop(L, 1);
+  lua_pushinteger(L, 42);
+  CHECK(lua_tolstring(L, -1) == "42");
+  lua_pop(L, 1);
+  lua_pushinteger(L, -42);
+  CHECK(lua_tolstring(L, -1) == "-42");
+  lua_pop(L, 1);
+  lua_pushinteger(L, LUA_MAXINTEGER);
+  CHECK(lua_tolstring(L, -1) == "9223372036854775807");
+  lua_pop(L, 1);
+  lua_pushinteger(L, LUA_MININTEGER);
+  CHECK(lua_tolstring(L, -1) == "-9223372036854775808");
+  lua_pop(L, 1);
+  /* Lua-level tostring, incl. that the boundary constants agree */
+  CHECK(do_string(L, "return tostring(0), tostring(-7), "
+                     "tostring(math.maxinteger), tostring(math.mininteger)") ==
+        LUA_OK);
+  {
+    std::optional<HostString> a = lua_tostring(L, -4);
+    std::optional<HostString> b = lua_tostring(L, -3);
+    std::optional<HostString> c = lua_tostring(L, -2);
+    std::optional<HostString> d = lua_tostring(L, -1);
+    CHECK(a.has_value() && a->to_utf8() == "0");
+    CHECK(b.has_value() && b->to_utf8() == "-7");
+    CHECK(c.has_value() && c->to_utf8() == "9223372036854775807");
+    CHECK(d.has_value() && d->to_utf8() == "-9223372036854775808");
+  }
+  lua_pop(L, 4);
+
+  /* --- num2straux exponent digits: string.format("%a"/"%A") (lstrlib.cpp) --- */
+  /* exact %a mantissa formatting can vary; assert structure + round-trip */
+  CHECK(do_string(L,
+      "local vals = {1.0, 0.5, 2^-10, 1.5, 2^100, 2^-100, 1e300, 0.0}\n"
+      "for _, v in ipairs(vals) do\n"
+      "  local s = string.format('%a', v)\n"
+      "  if s:sub(1, 2) ~= '0x' then return false, 'prefix: ' .. s end\n"
+      "  if not s:find('p[+-]%d') then return false, 'exp: ' .. s end\n"
+      "  if tonumber(s) ~= v then return false, 'roundtrip: ' .. s end\n"
+      "end\n"
+      "return true, 'ok'") == LUA_OK);
+  CHECK(lua_toboolean(L, -2) == 1);
+  if (lua_toboolean(L, -2) != 1)
+  {
+    std::optional<HostString> why = lua_tostring(L, -1);
+    if (why.has_value())
+      std::printf("  %%a failure: %s\n", std::string(why->to_utf8()).c_str());
+  }
+  lua_pop(L, 2);
+  /* exponent sign and multi-digit exponents */
+  CHECK(do_string(L,
+      "return string.format('%a', 1.0), string.format('%a', 0.5),\n"
+      "       string.format('%a', 2^100), string.format('%a', 2^-100),\n"
+      "       string.format('%A', 0.5)") == LUA_OK);
+  {
+    std::optional<HostString> one = lua_tostring(L, -5);
+    std::optional<HostString> half = lua_tostring(L, -4);
+    std::optional<HostString> big = lua_tostring(L, -3);
+    std::optional<HostString> tiny = lua_tostring(L, -2);
+    std::optional<HostString> upper = lua_tostring(L, -1);
+    CHECK(one.has_value() &&
+          one->to_utf8().find("p+0") != std::string_view::npos);
+    CHECK(half.has_value() &&
+          half->to_utf8().find("p-1") != std::string_view::npos);
+    CHECK(big.has_value() &&
+          big->to_utf8().find("p+100") != std::string_view::npos);
+    CHECK(tiny.has_value() &&
+          tiny->to_utf8().find("p-100") != std::string_view::npos);
+    CHECK(upper.has_value() &&
+          upper->to_utf8().find("0X") != std::string_view::npos);
+    CHECK(upper.has_value() &&
+          upper->to_utf8().find("P-1") != std::string_view::npos);
+  }
+  lua_pop(L, 5);
+
+  /* --- %q escaping of control characters (lstrlib.cpp) --- */
+  /* control char NOT followed by a digit: short escape */
+  CHECK(do_string(L, "return string.format('%q', '\\1x')") == LUA_OK);
+  {
+    std::optional<HostString> q = lua_tostring(L, -1);
+    CHECK(q.has_value() && q->to_utf8() == "\"\\1x\"");
+  }
+  lua_pop(L, 1);
+  /* control char FOLLOWED by a digit: zero-padded 3-digit escape */
+  CHECK(do_string(L, "return string.format('%q', '\\1' .. '1')") == LUA_OK);
+  {
+    std::optional<HostString> q = lua_tostring(L, -1);
+    CHECK(q.has_value() && q->to_utf8() == "\"\\0011\"");
+  }
+  lua_pop(L, 1);
+  /* NUL followed by a digit gets the same padding */
+  CHECK(do_string(L, "return string.format('%q', '\\0' .. '7')") == LUA_OK);
+  {
+    std::optional<HostString> q = lua_tostring(L, -1);
+    CHECK(q.has_value() && q->to_utf8() == "\"\\0007\"");
+  }
+  lua_pop(L, 1);
+  /* %q output must round-trip through load */
+  CHECK(do_string(L,
+      "local s = '\\1' .. '1' .. '\\0' .. 'x\\n\"\\\\tail\\31' .. '9'\n"
+      "local chunk = 'return ' .. string.format('%q', s)\n"
+      "local f = assert(load(chunk))\n"
+      "return f() == s") == LUA_OK);
+  CHECK(lua_toboolean(L, -1) == 1);
+  lua_pop(L, 1);
+
+  /* --- integer branches of %q for numbers, plus %d (lstrlib.cpp) --- */
+  /* NOTE: the reviewed to_chars decimal branch lives in addliteral, the
+     %q number path (reached by %q, not %d); mininteger takes the 0x
+     branch above it. %d goes through formatint — covered as well. */
+  CHECK(do_string(L,
+      "return string.format('%q', 0), string.format('%q', -12345),\n"
+      "       string.format('%q', math.maxinteger),\n"
+      "       string.format('%q', math.mininteger)") == LUA_OK);
+  {
+    std::optional<HostString> z = lua_tostring(L, -4);
+    std::optional<HostString> neg = lua_tostring(L, -3);
+    std::optional<HostString> mx = lua_tostring(L, -2);
+    std::optional<HostString> mn = lua_tostring(L, -1);
+    CHECK(z.has_value() && z->to_utf8() == "0");
+    CHECK(neg.has_value() && neg->to_utf8() == "-12345");
+    CHECK(mx.has_value() && mx->to_utf8() == "9223372036854775807");
+    /* official 5.5 quotes mininteger in hex so it reloads exactly */
+    CHECK(mn.has_value() && mn->to_utf8() == "0x8000000000000000");
+  }
+  lua_pop(L, 4);
+  /* %q integers round-trip through load with exact identity */
+  CHECK(do_string(L,
+      "for _, n in ipairs({0, -12345, math.maxinteger, math.mininteger}) do\n"
+      "  local f = assert(load('return ' .. string.format('%q', n)))\n"
+      "  local r = f()\n"
+      "  if r ~= n or math.type(r) ~= 'integer' then return false end\n"
+      "end\n"
+      "return true") == LUA_OK);
+  CHECK(lua_toboolean(L, -1) == 1);
+  lua_pop(L, 1);
+  /* %d exact output */
+  CHECK(do_string(L,
+      "return string.format('%d', 0), string.format('%d', -5),\n"
+      "       string.format('%d', math.maxinteger),\n"
+      "       string.format('%d', math.mininteger)") == LUA_OK);
+  {
+    std::optional<HostString> z = lua_tostring(L, -4);
+    std::optional<HostString> neg = lua_tostring(L, -3);
+    std::optional<HostString> mx = lua_tostring(L, -2);
+    std::optional<HostString> mn = lua_tostring(L, -1);
+    CHECK(z.has_value() && z->to_utf8() == "0");
+    CHECK(neg.has_value() && neg->to_utf8() == "-5");
+    CHECK(mx.has_value() && mx->to_utf8() == "9223372036854775807");
+    CHECK(mn.has_value() && mn->to_utf8() == "-9223372036854775808");
+  }
+  lua_pop(L, 4);
+
+  lua_close(L);
+}
+
 /* ================= driver ================= */
 
 struct TestEntry
@@ -3364,6 +3530,7 @@ int main()
       {"thread_hooks", test_thread_hooks},
       {"io_handles", test_io_handles},
       {"auxlib_restored", test_auxlib_restored},
+      {"num2str", test_num2str},
   };
 
   for (const TestEntry& t : tests)
