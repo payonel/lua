@@ -2742,6 +2742,589 @@ static void test_auxlib_misc()
   }
 }
 
+/* ================= dump limits & upvalue survival (review #1) ================= */
+
+static void test_dump_limits()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+
+  /* NOTE (correction to the review premise): official 5.5 changed lua_dump.
+     In 5.4 dumping a non-Lua function returned a nonzero status; in 5.5 it
+     is an api_check violation ("Lua function expected") — an assert under
+     API checks, UB otherwise (verified against stock 5.5.1: it crashes in
+     luaU_dump). This fork asserts identically, so there is nothing legal
+     to test in-process for C functions. */
+
+  /* two closures sharing an upvalue */
+  CHECK(do_string(L,
+      "local x = 77\n"
+      "local function a() x = x + 1; return x end\n"
+      "local function b() return x end\n"
+      "return a, b") == LUA_OK);
+  int bidx = lua_gettop(L);
+  int aidx = bidx - 1;
+  CHECK(lua_upvalueid(L, aidx, 1) == lua_upvalueid(L, bidx, 1));
+
+  /* dump A and load it back */
+  DumpBuf d;
+  lua_pushvalue(L, aidx);
+  CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
+  lua_pop(L, 1);
+  CHECK(luaL_loadbufferx(L, d.bytes, HostString("=re"), HostString("b")) ==
+        LUA_OK);
+  int lidx = lua_gettop(L);
+
+  /* Official 5.5 (verified on stock 5.5.1): upvalue VALUES do not survive a
+     dump/load round-trip. The loaded closure's FIRST upvalue is set to the
+     global environment (regardless of its name); any others are nil. */
+  {
+    std::optional<HostString> uname = lua_getupvalue(L, lidx, 1);
+    CHECK(uname.has_value());
+    CHECK(lua_type(L, -1) == LUA_TTABLE); /* the globals table, not 77 */
+    lua_pushglobaltable(L);
+    CHECK(lua_rawequal(L, -1, -2) == 1);
+    lua_pop(L, 2);
+  }
+  /* sharing does not survive either: fresh upvalue, not A's */
+  CHECK(lua_upvalueid(L, lidx, 1) != lua_upvalueid(L, aidx, 1));
+  /* the original pair still shares */
+  CHECK(lua_upvalueid(L, aidx, 1) == lua_upvalueid(L, bidx, 1));
+  lua_pop(L, 1); /* loaded closure */
+
+  /* a closure with a second (non-first) upvalue: it loads back as nil */
+  CHECK(do_string(L,
+      "local u1, u2 = 10, 20\n"
+      "return function() return u1, u2 end") == LUA_OK);
+  DumpBuf d2;
+  CHECK(lua_dump(L, dump_writer, &d2, 0) == 0);
+  lua_pop(L, 1);
+  CHECK(luaL_loadbufferx(L, d2.bytes, HostString("=re2"), HostString("b")) ==
+        LUA_OK);
+  lidx = lua_gettop(L);
+  {
+    std::optional<HostString> u1 = lua_getupvalue(L, lidx, 1);
+    CHECK(u1.has_value());
+    CHECK(lua_type(L, -1) == LUA_TTABLE); /* first := globals */
+    lua_pop(L, 1);
+    std::optional<HostString> u2 = lua_getupvalue(L, lidx, 2);
+    CHECK(u2.has_value());
+    CHECK(lua_type(L, -1) == LUA_TNIL); /* others := nil */
+    lua_pop(L, 1);
+  }
+  lua_pop(L, 1);
+
+  /* strip=1: debug info is dropped — source becomes "=?" (verified on
+     stock 5.5.1), linedefined survives (it is not debug info) */
+  CHECK(do_string(L, "return function() return 1 end") == LUA_OK);
+  DumpBuf d3;
+  CHECK(lua_dump(L, dump_writer, &d3, 1) == 0);
+  lua_pop(L, 1);
+  CHECK(luaL_loadbufferx(L, d3.bytes, HostString("=s"), HostString("b")) ==
+        LUA_OK);
+  {
+    lua_Debug q{};
+    std::optional<lua_Debug> info = lua_getinfo(L, ">S", q);
+    CHECK(info.has_value());
+    if (info.has_value())
+    {
+      CHECK(info->source == "=?");
+      CHECK(info->linedefined == 1);
+    }
+  }
+
+  lua_pop(L, lua_gettop(L));
+  lua_close(L);
+}
+
+/* ====== C-function identity durability & representation (review #2/#3/#6) ====== */
+
+static void test_cfunction_identity()
+{
+  lua_State* L = new_state();
+
+  /* pushing the same C function twice yields equal identities */
+  lua_pushcfunction(L, cf_add);
+  lua_pushcfunction(L, cf_add);
+  const void* p0 = lua_topointer(L, -1);
+  CHECK(p0 != nullptr);
+  CHECK(lua_topointer(L, -1) == lua_topointer(L, -2));
+  CHECK(lua_tocfunction(L, -1) == cf_add);
+  CHECK(lua_tocfunction(L, -2) == cf_add);
+  lua_pop(L, 2);
+
+  /* light C function vs C closure representation (review #3).
+     Official 5.5: lua_pushcclosure with 0 upvalues pushes a LIGHT C
+     function (a value, not a collectable object); with upvalues it
+     creates a C closure (a fresh collectable object each time). */
+  lua_pushcclosure(L, cf_add, 0); /* light */
+  CHECK(lua_iscfunction(L, -1) == 1);
+  CHECK(lua_tocfunction(L, -1) == cf_add);
+  CHECK(lua_topointer(L, -1) == p0); /* address-derived, stable */
+  /* a light C function has no upvalues */
+  CHECK(!lua_getupvalue(L, -1, 1).has_value());
+
+  lua_pushinteger(L, 1);
+  lua_pushcclosure(L, cf_add, 1); /* closure #1 */
+  lua_pushinteger(L, 1);
+  lua_pushcclosure(L, cf_add, 1); /* closure #2 */
+  CHECK(lua_iscfunction(L, -1) == 1 && lua_iscfunction(L, -2) == 1);
+  /* same C function inside... */
+  CHECK(lua_tocfunction(L, -1) == cf_add);
+  CHECK(lua_tocfunction(L, -1) == lua_tocfunction(L, -2));
+  /* ...but each closure is a distinct object, and distinct from light */
+  CHECK(lua_topointer(L, -1) != lua_topointer(L, -2));
+  CHECK(lua_topointer(L, -1) != p0);
+  CHECK(lua_topointer(L, -2) != p0);
+  /* closure upvalue exists and its name is "" for C closures */
+  {
+    std::optional<HostString> un = lua_getupvalue(L, -1, 1);
+    CHECK(un.has_value());
+    if (un.has_value())
+      CHECK(un->to_utf8().empty());
+    lua_pop(L, 1);
+    CHECK(!lua_getupvalue(L, -1, 2).has_value()); /* only one upvalue */
+  }
+  lua_pop(L, 3);
+
+  /* durability (review #2): store the C function in the registry, as a
+     table key, in a metatable slot, and in a Lua-closure upvalue; then
+     force two full GC cycles and check identity from every location */
+  lua_pushcfunction(L, cf_add);
+  int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+  lua_createtable(L, 0, 1); /* t: cf as key */
+  lua_pushcfunction(L, cf_add);
+  lua_pushinteger(L, 1234);
+  lua_settable(L, -3);
+  int tidx = lua_gettop(L);
+
+  lua_createtable(L, 0, 0); /* obj with mt.__index = cf */
+  lua_createtable(L, 0, 1);
+  lua_pushcfunction(L, cf_add);
+  lua_setfield(L, -2, HostString("__index"));
+  lua_setmetatable(L, -2);
+  int oidx = lua_gettop(L);
+
+  CHECK(load_string(L, "local f = ... \nreturn function() return f end") ==
+        LUA_OK);
+  lua_pushcfunction(L, cf_add);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK); /* Lua closure capturing cf */
+  int cidx = lua_gettop(L);
+
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+
+  /* registry */
+  CHECK(lua_rawgeti(L, LUA_REGISTRYINDEX, ref) == LUA_TFUNCTION);
+  CHECK(lua_tocfunction(L, -1) == cf_add);
+  CHECK(lua_topointer(L, -1) == p0);
+  lua_pop(L, 1);
+  luaL_unref(L, LUA_REGISTRYINDEX, ref);
+
+  /* table key: same function must find the entry */
+  lua_pushcfunction(L, cf_add);
+  CHECK(lua_gettable(L, tidx) == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 1234);
+  lua_pop(L, 1);
+
+  /* metatable slot via __index dispatch */
+  CHECK(lua_getmetatable(L, oidx) == 1);
+  CHECK(lua_getfield(L, -1, HostString("__index")) == LUA_TFUNCTION);
+  CHECK(lua_tocfunction(L, -1) == cf_add);
+  CHECK(lua_topointer(L, -1) == p0);
+  lua_pop(L, 2);
+
+  /* Lua-closure upvalue */
+  {
+    std::optional<HostString> un = lua_getupvalue(L, cidx, 1);
+    CHECK(un.has_value());
+    CHECK(lua_tocfunction(L, -1) == cf_add);
+    CHECK(lua_topointer(L, -1) == p0);
+    lua_pop(L, 1);
+  }
+
+  lua_pop(L, 3); /* t, obj, closure */
+  lua_close(L);
+
+  /* multiple independent states (review #6) */
+  {
+    lua_State* La = new_state();
+    lua_State* Lb = new_state();
+    lua_pushcfunction(La, cf_add);
+    lua_setglobal(La, HostString("probe"));
+    lua_pushcfunction(Lb, cf_add);
+    lua_setglobal(Lb, HostString("probe"));
+    CHECK(lua_getglobal(La, HostString("probe")) == LUA_TFUNCTION);
+    CHECK(lua_getglobal(Lb, HostString("probe")) == LUA_TFUNCTION);
+    CHECK(lua_tocfunction(La, -1) == lua_tocfunction(Lb, -1));
+    /* light C function identity agrees across states */
+    CHECK(lua_topointer(La, -1) == lua_topointer(Lb, -1));
+    const void* pb = lua_topointer(Lb, -1);
+    lua_pop(La, 1);
+    /* closing one state must not disturb the other */
+    lua_close(La);
+    CHECK(lua_tocfunction(Lb, -1) == cf_add);
+    CHECK(lua_topointer(Lb, -1) == pb);
+    lua_pushinteger(Lb, 41);
+    lua_pushinteger(Lb, 1);
+    lua_pushcfunction(Lb, cf_add); /* still callable */
+    lua_rotate(Lb, -3, 1);
+    CHECK(lua_pcall(Lb, 2, 1, 0) == LUA_OK);
+    lua_pop(Lb, 2);
+    lua_close(Lb);
+  }
+}
+
+/* ============== continuation chain callk->pcallk->yieldk (review #4) ============== */
+
+static std::string g_klog;
+static void klog(const char* tag, lua_KContext ctx, int status)
+{
+  char buf[64];
+  std::snprintf(buf, sizeof buf, "%s(%lld,%d);", tag,
+                static_cast<long long>(ctx), status);
+  g_klog += buf;
+}
+
+static int k_chain_yield(lua_State* L, int status, lua_KContext ctx)
+{
+  klog("kY", ctx, status);
+  lua_pushinteger(L, 100);
+  return 1;
+}
+static int cf_chain_yielder(lua_State* L)
+{
+  return lua_yieldk(L, 0, 333, k_chain_yield);
+}
+
+static int k_chain_pcall(lua_State* L, int status, lua_KContext ctx)
+{
+  klog("kP", ctx, status);
+  (void)L;
+  return 1; /* pass through the inner result */
+}
+static int cf_chain_B(lua_State* L)
+{
+  lua_getglobal(L, HostString("innerchunk"));
+  return k_chain_pcall(L, lua_pcallk(L, 0, 1, 0, 222, k_chain_pcall), 222);
+}
+
+static int k_chain_call(lua_State* L, int status, lua_KContext ctx)
+{
+  klog("kA", ctx, status);
+  (void)L;
+  return 1;
+}
+static int cf_chain_A(lua_State* L)
+{
+  lua_getglobal(L, HostString("outerchunk"));
+  lua_callk(L, 0, 1, 111, k_chain_call);
+  return k_chain_call(L, LUA_OK, 111);
+}
+
+static void test_continuation_chain()
+{
+  lua_State* L = new_state();
+  lua_pushcfunction(L, cf_chain_yielder);
+  lua_setglobal(L, HostString("cyield"));
+  lua_pushcfunction(L, cf_chain_B);
+  lua_setglobal(L, HostString("B"));
+  CHECK(do_string(L, "function innerchunk() return cyield() end\n"
+                     "function outerchunk() return B() end") == LUA_OK);
+
+  lua_State* co = lua_newthread(L);
+  lua_pushcfunction(co, cf_chain_A);
+  g_klog.clear();
+  lua_ResumeResult rr = lua_resume(co, L, 0);
+  CHECK(rr.status == LUA_YIELD);
+  CHECK(g_klog.empty()); /* no continuation ran yet */
+
+  /* full GC cycles must not disturb pending continuations */
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+
+  rr = lua_resume(co, L, 0);
+  CHECK(rr.status == LUA_OK);
+  CHECK(rr.nres == 1);
+  /* verified against stock 5.5.1: innermost continuation first, each with
+     its own ctx, all with status LUA_YIELD (value 1) */
+  CHECK(g_klog == "kY(333,1);kP(222,1);kA(111,1);");
+  CHECK(lua_tointeger(co, -1) == 100);
+  lua_pop(L, 1); /* thread */
+  lua_close(L);
+}
+
+/* ================= per-thread hooks (review #5) ================= */
+
+static int g_hookA_hits = 0;
+static int g_hookB_hits = 0;
+static const lua_State* g_hookA_thread = nullptr;
+static const lua_State* g_hookB_thread = nullptr;
+static void hook_A(lua_State* L, lua_Debug*)
+{
+  g_hookA_hits++;
+  g_hookA_thread = L;
+}
+static void hook_B(lua_State* L, lua_Debug*)
+{
+  g_hookB_hits++;
+  g_hookB_thread = L;
+}
+
+static void test_thread_hooks()
+{
+  lua_State* L = new_state();
+
+  /* inheritance pinning: official 5.5 copies hook, mask, and count to a
+     new thread at creation (verified on stock 5.5.1: fn and mask both
+     inherited) */
+  lua_sethook(L, hook_A, LUA_MASKCALL | LUA_MASKLINE, 0);
+  lua_State* co = lua_newthread(L);
+  CHECK(lua_gethook(co) == hook_A);
+  CHECK(lua_gethookmask(co) == (LUA_MASKCALL | LUA_MASKLINE));
+
+  /* overriding the coroutine's hook must not touch the creator's */
+  lua_sethook(co, hook_B, LUA_MASKLINE, 0);
+  CHECK(lua_gethook(L) == hook_A);
+  CHECK(lua_gethook(co) == hook_B);
+  CHECK(lua_gethookmask(L) == (LUA_MASKCALL | LUA_MASKLINE));
+  CHECK(lua_gethookmask(co) == LUA_MASKLINE);
+
+  /* isolation: each hook fires only on its own thread */
+  g_hookA_hits = g_hookB_hits = 0;
+  g_hookA_thread = g_hookB_thread = nullptr;
+  CHECK(do_string(L, "local s = 0\nfor i = 1, 3 do s = s + i end\nreturn s") ==
+        LUA_OK);
+  lua_pop(L, 1);
+  CHECK(g_hookA_hits > 0);
+  CHECK(g_hookB_hits == 0);
+  CHECK(g_hookA_thread == L);
+
+  int a_after_main = g_hookA_hits;
+  CHECK(load_string(co, "local y = 0\n"
+                        "y = y + 1\n"
+                        "coroutine.yield(y)\n"
+                        "y = y + 1\n"
+                        "return y") == LUA_OK);
+  /* coroutine.yield needs the coroutine lib on this state */
+  luaL_requiref(co, HostString("coroutine"), luaopen_coroutine, 1);
+  lua_pop(co, 1);
+  lua_ResumeResult rr = lua_resume(co, L, 0);
+  CHECK(rr.status == LUA_YIELD);
+  CHECK(g_hookB_hits > 0);
+  CHECK(g_hookB_thread == co);
+  CHECK(g_hookA_hits == a_after_main); /* main hook untouched by co */
+
+  /* counts survive yield/resume: hook keeps firing after resume */
+  int b_at_yield = g_hookB_hits;
+  lua_pop(co, rr.nres);
+  rr = lua_resume(co, L, 0);
+  CHECK(rr.status == LUA_OK);
+  CHECK(g_hookB_hits > b_at_yield);
+  CHECK(g_hookA_hits == a_after_main);
+
+  /* clearing one thread's hook leaves the other's in place */
+  lua_sethook(co, nullptr, 0, 0);
+  CHECK(lua_gethook(co) == nullptr);
+  CHECK(lua_gethook(L) == hook_A);
+  lua_sethook(L, nullptr, 0, 0);
+
+  lua_close(L);
+}
+
+/* ================= io library handle semantics (review #7) ================= */
+
+static void test_io_handles()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+
+  /* default handle identity: io.output()/io.input() return the same
+     object every time, and they are the std handles */
+  CHECK(do_string(L, "return io.output() == io.output(), "
+                     "io.input() == io.input(), "
+                     "io.stdout == io.output(), io.stdin == io.input()") ==
+        LUA_OK);
+  CHECK(lua_toboolean(L, -4) == 1);
+  CHECK(lua_toboolean(L, -3) == 1);
+  CHECK(lua_toboolean(L, -2) == 1);
+  CHECK(lua_toboolean(L, -1) == 1);
+  lua_pop(L, 4);
+
+  /* tostring(file): "file (0x...)" open, "file (closed)" after close;
+     operating on a closed file raises "attempt to use a closed file" */
+  CHECK(do_string(L,
+      "local f = assert(io.open('/tmp/tpa_io_probe.txt', 'w'))\n"
+      "local open_str = tostring(f)\n"
+      "f:close()\n"
+      "local closed_str = tostring(f)\n"
+      "local ok, err = pcall(function() return f:write('x') end)\n"
+      "return open_str, closed_str, ok, tostring(err)") == LUA_OK);
+  {
+    std::optional<HostString> os_ = lua_tostring(L, -4);
+    CHECK(os_.has_value() && os_->to_utf8().substr(0, 6) == "file (");
+    CHECK(os_.has_value() &&
+          os_->to_utf8().find("closed") == std::string_view::npos);
+    std::optional<HostString> cs = lua_tostring(L, -3);
+    CHECK(cs.has_value() && cs->to_utf8() == "file (closed)");
+    CHECK(lua_toboolean(L, -2) == 0);
+    std::optional<HostString> err = lua_tostring(L, -1);
+    CHECK(err.has_value() && err->to_utf8().find(
+              "attempt to use a closed file") != std::string_view::npos);
+  }
+  lua_pop(L, 4);
+  std::remove("/tmp/tpa_io_probe.txt");
+
+  /* closing std handles is guarded: returns fail + "cannot close standard
+     file" and the handle stays usable */
+  CHECK(do_string(L,
+      "local ok, err = io.stdout:close()\n"
+      "local usable = pcall(function() return io.stdout:write('') end)\n"
+      "return ok, tostring(err), usable") == LUA_OK);
+  CHECK(lua_type(L, -3) == LUA_TNIL);
+  {
+    std::optional<HostString> err = lua_tostring(L, -2);
+    CHECK(err.has_value() && err->to_utf8().find(
+              "cannot close standard file") != std::string_view::npos);
+  }
+  CHECK(lua_toboolean(L, -1) == 1);
+  lua_pop(L, 3);
+
+  /* popen close returns the exec-result triple (verified on stock 5.5.1:
+     failure -> fail,"exit",code; success -> true,"exit",0) */
+  CHECK(do_string(L,
+      "local p = assert(io.popen('exit 3'))\n"
+      "local a, b, c = p:close()\n"
+      "local p2 = assert(io.popen('true'))\n"
+      "local a2, b2, c2 = p2:close()\n"
+      "return a, b, c, a2, b2, c2") == LUA_OK);
+  CHECK(lua_type(L, -6) == LUA_TNIL); /* fail */
+  {
+    std::optional<HostString> what = lua_tostring(L, -5);
+    CHECK(what.has_value() && what->to_utf8() == "exit");
+  }
+  CHECK(lua_tointeger(L, -4) == 3);
+  CHECK(lua_toboolean(L, -3) == 1); /* true */
+  {
+    std::optional<HostString> what2 = lua_tostring(L, -2);
+    CHECK(what2.has_value() && what2->to_utf8() == "exit");
+  }
+  CHECK(lua_tointeger(L, -1) == 0);
+  lua_pop(L, 6);
+
+  lua_close(L);
+}
+
+/* ============== restored luaL surface: newlib/opt/prepbuffspan (review #8) ============== */
+
+static bool g_opt_check_called = false;
+static lua_Integer opt_check_probe(lua_State* L, int n)
+{
+  g_opt_check_called = true;
+  return luaL_checkinteger(L, n);
+}
+
+static void test_auxlib_restored()
+{
+  lua_State* L = new_state();
+
+  /* luaL_newlib: registers a module table with the given functions */
+  {
+    static const luaL_Reg mod[] = {
+        {"add", cf_add},
+        {"probe", cf_raise},
+        {std::string_view{}, nullptr},
+    };
+    luaL_newlib(L, mod);
+    CHECK(lua_type(L, -1) == LUA_TTABLE);
+    /* exactly the registered functions, no extras */
+    int count = 0;
+    lua_pushnil(L);
+    while (lua_next(L, -2) != 0)
+    {
+      CHECK(lua_type(L, -1) == LUA_TFUNCTION);
+      count++;
+      lua_pop(L, 1);
+    }
+    CHECK(count == 2);
+    /* call through the table */
+    CHECK(lua_getfield(L, -1, HostString("add")) == LUA_TFUNCTION);
+    lua_pushinteger(L, 20);
+    lua_pushinteger(L, 22);
+    CHECK(lua_pcall(L, 2, 1, 0) == LUA_OK);
+    CHECK(lua_tointeger(L, -1) == 42);
+    lua_pop(L, 2);
+  }
+
+  /* luaL_newlibtable: presized empty table, nothing registered yet */
+  {
+    static const luaL_Reg mod[] = {
+        {"add", cf_add},
+        {std::string_view{}, nullptr},
+    };
+    luaL_newlibtable(L, mod);
+    CHECK(lua_type(L, -1) == LUA_TTABLE);
+    lua_pushnil(L);
+    CHECK(lua_next(L, -2) == 0); /* empty — presizing has no semantics */
+    luaL_setfuncs(L, mod, 0);    /* and it works as the setfuncs target */
+    CHECK(lua_getfield(L, -1, HostString("add")) == LUA_TFUNCTION);
+    lua_pop(L, 2);
+  }
+
+  /* luaL_opt: the check function must NOT run when the arg is none/nil
+     (laziness is the contract). Args: 1=nil, 2=nil, 3=55; a trailing
+     4th position is none. */
+  g_body = [](lua_State* Lb) -> int {
+    g_opt_check_called = false;
+    lua_Integer v = luaL_opt(Lb, opt_check_probe, 1, 7);
+    CHECK(v == 7);
+    CHECK(!g_opt_check_called); /* nil arg: check not invoked */
+    v = luaL_opt(Lb, opt_check_probe, 4, 7);
+    CHECK(v == 7);
+    CHECK(!g_opt_check_called); /* none (missing) arg: check not invoked */
+    v = luaL_opt(Lb, opt_check_probe, 3, 7);
+    CHECK(v == 55);
+    CHECK(g_opt_check_called); /* present arg: check invoked */
+    return 0;
+  };
+  lua_pushcfunction(L, cf_body);
+  lua_pushnil(L);
+  lua_pushnil(L);
+  lua_pushinteger(L, 55);
+  CHECK(lua_pcall(L, 3, 0, 0) == LUA_OK);
+
+  /* luaL_prepbuffspan: write through area/off, and re-prep after growth
+     must return a fresh valid pair */
+  {
+    luaL_Buffer B;
+    luaL_buffinit(L, &B);
+    luaL_BuffSpan s1 = luaL_prepbuffspan(&B, 3);
+    std::memcpy(s1.area.data() + s1.off, "abc", 3);
+    luaL_addsize(&B, 3);
+    /* force growth: a large second prep may reallocate; the returned pair
+       must be used instead of the stale one */
+    luaL_BuffSpan s2 = luaL_prepbuffspan(&B, 4096);
+    CHECK(s2.off == 3u); /* content written so far is preserved */
+    CHECK(s2.area.size() >= s2.off + 4096u);
+    std::memset(s2.area.data() + s2.off, 'x', 4096);
+    luaL_addsize(&B, 4096);
+    luaL_pushresult(&B);
+    std::optional<HostString> r = lua_tostring(L, -1);
+    CHECK(r.has_value());
+    if (r.has_value())
+    {
+      std::string_view v = r->to_utf8();
+      CHECK(v.size() == 3u + 4096u);
+      CHECK(v.substr(0, 3) == "abc");
+      CHECK(v[3] == 'x' && v[v.size() - 1] == 'x');
+    }
+    lua_pop(L, 1);
+  }
+
+  lua_close(L);
+}
+
 /* ================= driver ================= */
 
 struct TestEntry
@@ -2775,6 +3358,12 @@ int main()
       {"auxlib_load", test_auxlib_load},
       {"auxlib_refs_buffer", test_auxlib_refs_buffer},
       {"auxlib_misc", test_auxlib_misc},
+      {"dump_limits", test_dump_limits},
+      {"cfunction_identity", test_cfunction_identity},
+      {"continuation_chain", test_continuation_chain},
+      {"thread_hooks", test_thread_hooks},
+      {"io_handles", test_io_handles},
+      {"auxlib_restored", test_auxlib_restored},
   };
 
   for (const TestEntry& t : tests)
