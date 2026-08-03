@@ -36,12 +36,14 @@ std::optional<InternalString> os_getenv(std::string_view name)
   const char* v = getenv(n.c_str());
   if (v == nullptr)
     return std::nullopt;
-  return InternalString(std::string_view{v});
+  std::string_view svenv(v);
+  return InternalString(svenv);
 }
 
 InternalString os_strerror(int err)
 {
-  return InternalString(std::string_view{strerror(err)});
+  std::string_view sverr(strerror(err));
+  return InternalString(sverr);
 }
 
 int os_strcoll(std::string_view a, std::string_view b)
@@ -64,7 +66,8 @@ std::optional<InternalString> os_setlocale(int category,
     res = setlocale(category, nullptr);
   if (res == nullptr)
     return std::nullopt;
-  return InternalString(std::string_view{res});
+  std::string_view svres(res);
+  return InternalString(svres);
 }
 
 OsResult os_remove(std::string_view path)
@@ -91,7 +94,8 @@ std::optional<InternalString> os_tmpname()
   if (fd == -1)
     return std::nullopt;
   close(fd);
-  return InternalString(std::string_view{buff});
+  std::string_view svbuff(buff);
+  return InternalString(svbuff);
 }
 
 bool os_shell_available()
@@ -136,7 +140,8 @@ void os_dlclose(OsLib* lib)
 InternalString os_dlerror()
 {
   const char* e = dlerror();
-  return InternalString(std::string_view{e != nullptr ? e : "unknown dynamic-link error"});
+  std::string_view sve(e != nullptr ? e : "unknown dynamic-link error");
+  return InternalString(sve);
 }
 
 static FILE* asf(OsFile* f)

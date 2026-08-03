@@ -30,21 +30,6 @@ static size_t luaS_hash(const char* str, size_t l)
   return InternalString::hashBytes(str, l);
 }
 
-static TString* createstrobj(lua_State* L, const char* str, size_t l,
-                             size_t h)
-{
-  GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
-  assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
-  TString* ts = static_cast<TString*>(o);
-  ts->hash = ((unsigned int)(h));
-  ts->extra = 0;
-  new (&ts->data) InternalString();
-  if (l_unlikely(!luaM_reserve(L, l)))
-    luaD_throw(L, LUA_ERRMEM);
-  ts->data = InternalString(str, l);
-  return ts;
-}
-
 static TString* createstrobj(lua_State* L, InternalString&& str, size_t h)
 {
   GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
@@ -78,10 +63,10 @@ TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t l
   global_State* g = G(L);
   const char* s = str.data() + off;
   size_t l = len;
+  std::string_view sv(s, l);
   size_t h = luaS_hash(s, l);
   if (l <= LUAI_MAXSHORTLEN)
   {
-    std::string_view sv(s, l);
     global_State::InternKey key{sv, h};
     auto it = g->strt.find(key);
     if (it != g->strt.end())
@@ -91,11 +76,11 @@ TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t l
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    TString* ts = createstrobj(L, s, l, h);
+    TString* ts = createstrobj(L, InternalString(sv, 0, l), h);
     g->strt.emplace(global_State::InternKey{ts->data.view(), h}, ts);
     return ts;
   }
-  return createstrobj(L, s, l, h);
+  return createstrobj(L, InternalString(sv, 0, l), h);
 }
 
 TString* luaS_take(lua_State* L, InternalString&& str)

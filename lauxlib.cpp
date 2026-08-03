@@ -320,8 +320,7 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname, int en)
   else
   {
     luaL_pushfail(L);
-    InternalString errstr = (en != 0) ? os_strerror(en)
-                                      : InternalString(lit<"(no extra info)">()->view());
+    InternalString errstr = (en != 0) ? os_strerror(en) : InternalString(lit<"(no extra info)">()->view());
     if (fname.data() != nullptr)
     {
       lua_pushlstring(L, fname, 0, fname.size());

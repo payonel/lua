@@ -25,20 +25,16 @@ public:
   InternalString& operator=(InternalString&&) noexcept = default;
   ~InternalString() = default;
 
-  InternalString(const char* bytes, size_t len) : bytes_(bytes, len) {}
-  InternalString(std::string_view src) : bytes_(src.data(), src.size()) {}
+  InternalString(std::string) = delete;
+  InternalString(HostString) = delete;
+
   InternalString(std::string_view src, size_t off, size_t len)
-      : bytes_(src.data() + off, len)
   {
-    assert(off <= src.size() && len <= src.size() - off);
+    off = std::min(off, src.size());
+    len = std::min(len, src.size() - off);
+    bytes_ = src.substr(off, len);
   }
-
-  explicit InternalString(const HostString& host) : bytes_(host.to_utf8()) {}
-
-  explicit InternalString(std::string&& engineOwned) noexcept
-      : bytes_(std::move(engineOwned))
-  {
-  }
+  InternalString(std::string_view src) : InternalString(src, 0, src.size()) {}
 
   size_t size() const noexcept { return bytes_.size(); }
   bool empty() const noexcept { return bytes_.empty(); }
@@ -46,8 +42,6 @@ public:
   int byteAt(size_t i) const { return static_cast<unsigned char>(bytes_[i]); }
 
   std::string_view view() const noexcept { return bytes_; }
-
-  size_t capacity() const noexcept { return bytes_.capacity(); }
 
   bool operator==(const InternalString& o) const noexcept
   {
@@ -71,7 +65,7 @@ public:
   InternalString substr(size_t off, size_t len = std::string_view::npos) const
   {
     assert(off <= bytes_.size());
-    return InternalString(std::string_view(bytes_).substr(off, len));
+    return InternalString(std::string_view(bytes_), off, len);
   }
 
   InternalString concat(std::string_view o) const
@@ -79,7 +73,16 @@ public:
     std::string b;
     b.reserve(bytes_.size() + o.size());
     b.append(bytes_).append(o);
-    return InternalString(std::move(b));
+    InternalString is;
+    is.bytes_ = std::move(b);
+    return is;
+  }
+
+  static InternalString take(std::string&& s)
+  {
+    InternalString is;
+    is.bytes_ = std::move(s);
+    return is;
   }
 
 private:
@@ -104,7 +107,8 @@ struct LiteralBytes
 template <istr_detail::LiteralBytes S>
 const InternalString* lit()
 {
-  static const InternalString s(S.v, sizeof(S.v) - 1);
+  constexpr size_t len = sizeof(S.v) - 1;
+  static const InternalString s(std::string_view(S.v, len), 0, len);
   return &s;
 }
 
@@ -161,7 +165,7 @@ public:
   InternalString finish() noexcept
   {
     bytes_.resize(len_);
-    InternalString s(std::move(bytes_));
+    InternalString s = InternalString::take(std::move(bytes_));
     bytes_.clear();
     len_ = 0;
     return s;
