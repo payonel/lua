@@ -8,3 +8,5 @@ lua
 
 core.*
 tests/core.*
+
+test_public_api

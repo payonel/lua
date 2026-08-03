@@ -1043,7 +1043,7 @@ LUALIB_API void luaL_setfuncs(lua_State* L, const luaL_Reg* l, int nup)
         lua_pushvalue(L, -nup);
       lua_pushcclosure(L, l->func, nup); /* closure with those upvalues */
     }
-    lua_setfield(L, -(nup + 2), HostString{l->name});
+    lua_setfieldi(L, -(nup + 2), l->name);
   }
   lua_pop(L, nup); /* remove upvalues */
 }

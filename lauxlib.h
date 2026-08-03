@@ -10,6 +10,8 @@
 #include <cstddef>
 #include <stdio.h>
 
+#include <cassert>
+
 #include "lua.h"
 
 struct OsFile;
@@ -111,6 +113,28 @@ LUALIB_API HostString(luaL_gsub) (lua_State* L, const HostString& s,
 
 LUALIB_API void(luaL_setfuncs)(lua_State* L, const luaL_Reg* l, int nup);
 
+template <size_t N>
+void luaL_newlibtable(lua_State* L, const luaL_Reg (&l)[N])
+{
+  assert(l[N - 1].name.data() == nullptr && l[N - 1].func == nullptr);
+  lua_createtable(L, 0, ((int)(N - 1)));
+}
+
+template <size_t N>
+void luaL_newlib(lua_State* L, const luaL_Reg (&l)[N])
+{
+  luaL_checkversion(L);
+  luaL_newlibtable(L, l);
+  luaL_setfuncs(L, l, 0);
+}
+
+template <typename F, typename D>
+auto luaL_opt(lua_State* L, F f, int n, D d)
+{
+  return lua_isnoneornil(L, n) ? static_cast<decltype(f(L, n))>(d) : f(L, n);
+}
+
+
 LUALIB_API int(luaL_getsubtable)(lua_State* L, int idx, const HostString& fname);
 
 LUALIB_API void(luaL_traceback)(lua_State* L, lua_State* L1,
@@ -197,6 +221,18 @@ LUALIB_API void(luaL_pushresultsize)(luaL_Buffer* B, size_t sz);
 LUALIB_API size_t(luaL_buffinitsize) (lua_State* L, luaL_Buffer* B, size_t sz);
 
 LUALIB_API size_t luaL_prepbuffer(luaL_Buffer* B);
+
+struct luaL_BuffSpan
+{
+  std::span<char> area;
+  size_t off;
+};
+
+inline luaL_BuffSpan luaL_prepbuffspan(luaL_Buffer* B, size_t sz)
+{
+  size_t off = luaL_prepbuffsize(B, sz);
+  return {luaL_buffarea(B), off};
+}
 
 /* }====================================================== */
 

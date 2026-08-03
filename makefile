@@ -53,13 +53,17 @@ LUA_O         =$(OBJ_DIR)/lua.o
 CORE_T        =$(OBJ_DIR)/liblua.a
 LUA_T         =lua
 
-all: $(LUA_T)
+TEST_API_O    =$(OBJ_DIR)/test_public_api.o
+TEST_API_T    =test_public_api
+DEP_FILES    += $(TEST_API_O:.o=.d)
+
+all: $(LUA_T) $(TEST_API_T)
 
 include tests/libs/build.mk
 
 debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
-debug: $(LUA_T)
+debug: $(LUA_T) $(TEST_API_T)
 
 -include $(DEP_FILES)
 
@@ -70,9 +74,13 @@ $(CORE_T): $(OBJ_FILES)
 $(LUA_T): $(LUA_O) $(CORE_T) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES)
 	$(CXX) -o $@ $(LUA_O) $(CORE_T) $(LDFLAGS)
 
+$(TEST_API_T): $(TEST_API_O) $(CORE_T)
+	$(CXX) -o $@ $(TEST_API_O) $(CORE_T) $(LDFLAGS)
+
 clean:
 	$(RM) -r $(OBJ_DIR_BASE)
 	$(RM) $(LUA_T)
+	$(RM) $(TEST_API_T)
 	$(RM) $(TEST_BUILD_FILES)
 
 $(OBJ_DIR)/%.o: %.cpp | $(OBJ_DIR)
@@ -82,6 +90,7 @@ $(OBJ_DIR):
 	mkdir -p $@
 
 test:
+	./$(TEST_API_T)
 	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
 		ulimit -S -s 1100; \
