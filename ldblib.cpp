@@ -158,13 +158,12 @@ static int db_getinfo(lua_State* L)
   std::string_view options = luaL_optlstring(L, arg + 2, lit<"flnSrtu">()->view());
   checkstack(L, L1, 3);
   luaL_argchecki(L, sv_byteat(options, 0) != '>', arg + 2, lit<"invalid option '>'">()->view());
-  std::string optbuf;
+  ByteBuilder optbuf;
   if (lua_isfunction(L, arg + 1))
   {                                               /* info about a function? */
-    optbuf.reserve(options.size() + 1);           /* add '>' to 'options' */
-    optbuf.push_back('>');
+    optbuf.append('>');                           /* add '>' to 'options' */
     optbuf.append(options);
-    options = optbuf;
+    options = optbuf.view();
     lua_pushvalue(L, arg + 1);                    /* move function to 'L1' stack */
     lua_xmove(L, L1, 1);
   }

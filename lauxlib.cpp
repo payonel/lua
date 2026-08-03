@@ -999,9 +999,9 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
                                   : lua_typenamei(L, lua_type(L, idx))->view();
       if (lua_islightcfunction(L, idx))
       {
-        std::string fa = lua_funcaddressi(L, idx);
+        InternalString fa = lua_funcaddressi(L, idx);
         lua_pushlstring(L, kind, 0, kind.size());
-        lua_pushlstring(L, fa, 0, fa.size());
+        lua_pushlstring(L, fa.view(), 0, fa.size());
         lua_pushfstringi(L, lit<"%s: %s">()->view());
       }
       else

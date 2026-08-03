@@ -67,7 +67,7 @@ void luaL_tracebacki(lua_State* L, lua_State* L1,
                      std::string_view msg, int level);
 
 
-std::string lua_funcaddressi(lua_State* L, int idx);
+InternalString lua_funcaddressi(lua_State* L, int idx);
 
 const InternalString* lua_typenamei(lua_State* L, int tp);
 

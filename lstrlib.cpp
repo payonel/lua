@@ -1207,10 +1207,10 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
     }
     area[off + n++] = 'p';
     area[off + n++] = (e >= 0) ? '+' : '-';
-    std::string es = std::to_string(e >= 0 ? e : -e);
-    assert(n + es.size() < sz);
-    memcpy(area.data() + off + n, es.c_str(), es.size());
-    n += ((unsigned int)(es.size()));
+    std::to_chars_result eres = std::to_chars(
+        area.data() + off + n, area.data() + off + sz, e >= 0 ? e : -e);
+    assert(eres.ec == std::errc());
+    n += ((unsigned int)(eres.ptr - (area.data() + off + n)));
     assert(n < sz);
     return ((int)(n));
   }
@@ -1290,7 +1290,10 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
     }
     else if (iscntrl(c))
     {
-      std::string d = std::to_string(c);
+      char dbuf[4];
+      std::to_chars_result dres = std::to_chars(dbuf, dbuf + sizeof(dbuf), c);
+      assert(dres.ec == std::errc());
+      std::string_view d{dbuf, ((size_t)(dres.ptr - dbuf))};
       luaL_addchar(b, '\\');
       if (isdigit(istrbyte(s, i + 1)))
       {
@@ -1372,10 +1375,10 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
       }
       else
       {
-        std::string d = std::to_string(n);
-        assert(d.size() < MAX_ITEM);
-        memcpy(area.data() + off, d.c_str(), d.size());
-        nb = ((int)(d.size()));
+        std::to_chars_result dres = std::to_chars(
+            area.data() + off, area.data() + off + MAX_ITEM, n);
+        assert(dres.ec == std::errc());
+        nb = ((int)(dres.ptr - (area.data() + off)));
       }
     }
     luaL_addsize(b, ((unsigned int)(nb)));
@@ -1766,10 +1769,10 @@ static int str_format(lua_State* L)
         size_t blen;
         if (lua_islightcfunction(L, arg))
         {
-          std::string fa = lua_funcaddressi(L, arg);
+          InternalString fa = lua_funcaddressi(L, arg);
           blen = fa.size();
           assert(blen < sizeof(body));
-          memcpy(body, fa.data(), blen);
+          memcpy(body, fa.view().data(), blen);
         }
         else
         {

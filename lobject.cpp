@@ -648,10 +648,11 @@ unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff)
   assert(buff.size() >= LUA_N2SBUFFSZ);
   if (((obj)->tt_ == LUA_VNUMINT))
   {
-    std::string s = std::to_string(ivalue(obj));
-    assert(s.size() < LUA_N2SBUFFSZ);
-    memcpy(buff.data(), s.c_str(), s.size() + 1);
-    len = ((int)(s.size()));
+    std::to_chars_result res =
+        std::to_chars(buff.data(), buff.data() + buff.size() - 1, ivalue(obj));
+    assert(res.ec == std::errc());
+    *res.ptr = '\0';
+    len = ((int)(res.ptr - buff.data()));
   }
   else
   {

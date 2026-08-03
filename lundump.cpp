@@ -161,10 +161,10 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   }
   else
   {                                           /* large string */
-    std::string tmp;
-    tmp.resize(size + 1);
-    loadBlock(S, tmp.data(), ((size_t)(size + 1)) * sizeof((tmp.data())[0]));
-    std::string_view tmpsv{tmp.data(), size};
+    ByteBuilder tmp;
+    tmp.growTo(size + 1);
+    loadBlock(S, tmp.area().data(), ((size_t)(size + 1)) * sizeof(char));
+    std::string_view tmpsv{tmp.area().data(), size};
     *sl = ts = luaS_createstr(L, tmpsv, 0, tmpsv.size());
     luaC_objbarrier(L, p, ts);
   }

@@ -598,7 +598,7 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
   }
 }
 
-std::string lua_funcaddressi(lua_State* L, int idx)
+InternalString lua_funcaddressi(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
   assert((o.tt_ == LUA_VLCF));
@@ -607,7 +607,7 @@ std::string lua_funcaddressi(lua_State* L, int idx)
 
 HostString lua_funcaddress(lua_State* L, int idx)
 {
-  return HostString(std::string_view{lua_funcaddressi(L, idx)});
+  return HostString(lua_funcaddressi(L, idx).view());
 }
 
 const InternalString* lua_typenamei(lua_State*, int t)
