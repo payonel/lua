@@ -94,11 +94,11 @@ static void badexit(const char* fmt, const char* s1, const char* s2)
 
 static int tpanic(lua_State* L)
 {
-  const char* msg = (lua_type(L, -1) == LUA_TSTRING)
-                        ? lua_toistring(L, -1)->c_str()
-                        : "error object is not a string";
+  std::string msg = (lua_type(L, -1) == LUA_TSTRING)
+                        ? std::string(lua_toistring(L, -1)->view())
+                        : std::string("error object is not a string");
   return (badexit("PANIC: unprotected error in call to Lua API (%s)\n",
-                  msg, nullptr),
+                  msg.c_str(), nullptr),
           0); /* do not return to Lua */
 }
 
@@ -153,7 +153,7 @@ static void warnf(void* ud, const HostString& msg, int tocont)
     else
     {
       badexit("Unhandled warning in store mode: %s\naborting...\n",
-              lua_toistring(L, -1)->c_str(), buff);
+              std::string(lua_toistring(L, -1)->view()).c_str(), buff);
     }
     lua_lock(L);
     switch (mode)
@@ -352,14 +352,15 @@ static int testobjref1(global_State* g, GCObject* f, GCObject* t)
 
 static void printobj(global_State* g, GCObject* o)
 {
+  std::string tn(ttypename(((o->tt) & NOVARIANT_MASK))->view());
   printf("||%s(%p)-%c%c(%02X)||",
-         ttypename(((o->tt) & NOVARIANT_MASK))->c_str(), (void*) o,
+         tn.c_str(), (void*) o,
          isdead(g, o) ? 'd' : isblack(o) ? 'b'
                           : iswhite(o)   ? 'w'
                                          : 'g',
          "ns01oTt"[getage(o)], o -> marked);
   if (o->tt == LUA_VSTRING)
-    printf(" '%s'", static_cast<TString*>(o)->data.c_str());
+    printf(" '%s'", std::string(static_cast<TString*>(o)->data.view()).c_str());
 }
 
 static void lua_printvalue(TValue* v)
@@ -377,7 +378,7 @@ static void lua_printvalue(TValue* v)
   }
   case LUA_VSHRSTR:
     assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    printf("'%s'", tsvalue(v)->data.c_str());
+    printf("'%s'", std::string(tsvalue(v)->data.view()).c_str());
     break;
   case LUA_VFALSE:
     printf("%s", "false");
@@ -837,7 +838,8 @@ static std::string buildop(Proto* p, int pc)
   char* out = buff;
   Instruction i = p->code[pc];
   OpCode o = GET_OPCODE(i);
-  const char* name = opnames[o]->c_str();
+  std::string namebuf(opnames[o]->view());
+  const char* name = namebuf.c_str();
   int line = luaG_getfuncline(p, pc);
   int lineinfo = (p->lineinfo != nullptr) ? p->lineinfo[pc] : 0;
   if (lineinfo == ABSLINEINFO)
@@ -2118,22 +2120,22 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     }
     else if (inst == lit<"pushfstringI">()->view())
     {
-      const InternalString* fmt = lua_toistring(L, -2);
-      if (fmtnargs(fmt->c_str()) > 0)
+      std::string fmt(lua_toistring(L, -2)->view());
+      if (fmtnargs(fmt.c_str()) > 0)
         lua_pushinteger(L1, lua_tointeger(L, -1));
-      lua_pushfstring(L1, fmt->c_str());
+      lua_pushfstring(L1, fmt.c_str());
     }
     else if (inst == lit<"pushfstringS">()->view())
     {
-      const InternalString* fmt = lua_toistring(L, -2);
-      if (fmtnargs(fmt->c_str()) > 0)
+      std::string fmt(lua_toistring(L, -2)->view());
+      if (fmtnargs(fmt.c_str()) > 0)
         lua_pushstring(L1, lua_tostring(L, -1));
-      lua_pushfstring(L1, fmt->c_str());
+      lua_pushfstring(L1, fmt.c_str());
     }
     else if (inst == lit<"pushfstringP">()->view())
     {
-      const InternalString* fmt = lua_toistring(L, -2);
-      if (fmtnargs(fmt->c_str()) > 0)
+      std::string fmt(lua_toistring(L, -2)->view());
+      if (fmtnargs(fmt.c_str()) > 0)
       {
         if (lua_islightcfunction(L, -1))
         {
@@ -2145,7 +2147,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
           lua_pushlightuserdata(L1, const_cast<void*>(lua_topointer(L, -1)));
         }
       }
-      lua_pushfstring(L1, fmt->c_str());
+      lua_pushfstring(L1, fmt.c_str());
     }
     else if (inst == lit<"rawget">()->view())
     {

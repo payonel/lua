@@ -14,6 +14,14 @@ void os_flush_stderr();
 std::optional<InternalString> os_getenv(std::string_view name);
 InternalString os_strerror(int err);
 
+/* locale-aware comparison of two byte segments (neither may contain '\0') */
+int os_strcoll(std::string_view a, std::string_view b);
+
+/* set locale for 'category' (an LC_* value); nullopt queries the current
+** locale. Returns nullopt on failure. */
+std::optional<InternalString> os_setlocale(int category,
+                                           std::optional<std::string_view> locale);
+
 struct OsResult
 {
   bool ok;

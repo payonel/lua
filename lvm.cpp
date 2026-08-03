@@ -5,6 +5,7 @@
 */
 
 
+#include <algorithm>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -26,6 +27,7 @@
 #include "ltable.h"
 #include "ltm.h"
 #include "lvm.h"
+#include "os_api.h"
 
 /* limit for table tag-method chains (to avoid infinite loops) */
 constexpr int MAXTAGLOOP = 2000;
@@ -397,36 +399,30 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
 ** Compare two strings 'ts1' x 'ts2', returning an integer less-equal-
 ** -greater than zero if 'ts1' is less-equal-greater than 'ts2'.
 ** The code is a little tricky because it allows '\0' in the strings
-** and it uses 'strcoll' (to respect locales) for each segment
+** and it uses 'os_strcoll' (to respect locales) for each segment
 ** of the strings. Note that segments can compare equal but still
 ** have different lengths.
 */
 static int l_strcmp(const TString* ts1, const TString* ts2)
 {
-  size_t rl1 = ts1->data.size(); /* real length */
-  const char* s1 = ts1->data.c_str();
-  size_t rl2 = ts2->data.size();
-  const char* s2 = ts2->data.c_str();
+  std::string_view s1 = ts1->data.view();
+  std::string_view s2 = ts2->data.view();
   for (;;)
   { /* for each segment */
-    int temp = strcoll(s1, s2);
+    size_t zl1 = std::min(s1.find('\0'), s1.size()); /* index of first '\0' in 's1' */
+    size_t zl2 = std::min(s2.find('\0'), s2.size()); /* index of first '\0' in 's2' */
+    int temp = os_strcoll(s1.substr(0, zl1), s2.substr(0, zl2));
     if (temp != 0) /* not equal? */
       return temp; /* done */
     else
-    {                                /* strings are equal up to a '\0' */
-      size_t zl1 = strlen(s1);       /* index of first '\0' in 's1' */
-      size_t zl2 = strlen(s2);       /* index of first '\0' in 's2' */
-      if (zl2 == rl2)                /* 's2' is finished? */
-        return (zl1 == rl1) ? 0 : 1; /* check 's1' */
-      else if (zl1 == rl1)           /* 's1' is finished? */
-        return -1;                   /* 's1' is less than 's2' ('s2' is not finished) */
+    {                                          /* strings are equal up to a '\0' */
+      if (zl2 == s2.size())                    /* 's2' is finished? */
+        return (zl1 == s1.size()) ? 0 : 1;     /* check 's1' */
+      else if (zl1 == s1.size())               /* 's1' is finished? */
+        return -1; /* 's1' is less than 's2' ('s2' is not finished) */
       /* both strings longer than 'zl'; go on comparing after the '\0' */
-      zl1++;
-      zl2++;
-      s1 += zl1;
-      rl1 -= zl1;
-      s2 += zl2;
-      rl2 -= zl2;
+      s1.remove_prefix(zl1 + 1);
+      s2.remove_prefix(zl2 + 1);
     }
   }
 }

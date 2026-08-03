@@ -511,9 +511,9 @@ static void lua_freeline(char* line)
 static void lua_initreadline(lua_State* L)
 {
   std::optional<InternalString> erllib = l_getenv(std::string_view{LUA_RLLIB_VAR}); /* name of readline library */
-  const char* rllib = erllib.has_value() ? erllib->c_str()
-                                         : LUA_READLINELIB; /* default name */
-  OsLib* lib = os_dlopen(std::string_view{rllib}, false);
+  std::string_view rllib = erllib.has_value() ? erllib->view()
+                                              : std::string_view{LUA_READLINELIB}; /* default name */
+  OsLib* lib = os_dlopen(rllib, false);
   if (lib != nullptr)
   {
     const char** name = ((const char**)(os_dlsym(lib, lit<"rl_readline_name">()->view())));
@@ -526,7 +526,7 @@ static void lua_initreadline(lua_State* L)
     /* else emit a warning */
   }
   lua_warningi(L, lit<"unable to load readline library '">()->view(), 1);
-  lua_warning(L, rllib, 1);
+  lua_warningi(L, rllib, 1);
   lua_warningi(L, lit<"'">()->view(), 0);
 }
 

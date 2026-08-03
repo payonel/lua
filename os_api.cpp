@@ -1,9 +1,11 @@
 #include "os_api.h"
 
 #include <cerrno>
+#include <clocale>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <dlfcn.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -30,7 +32,7 @@ void os_flush_stderr()
 
 std::optional<InternalString> os_getenv(std::string_view name)
 {
-  InternalString n(name);
+  std::string n(name);
   const char* v = getenv(n.c_str());
   if (v == nullptr)
     return std::nullopt;
@@ -42,9 +44,32 @@ InternalString os_strerror(int err)
   return InternalString(std::string_view{strerror(err)});
 }
 
+int os_strcoll(std::string_view a, std::string_view b)
+{
+  std::string sa(a);
+  std::string sb(b);
+  return strcoll(sa.c_str(), sb.c_str());
+}
+
+std::optional<InternalString> os_setlocale(int category,
+                                           std::optional<std::string_view> locale)
+{
+  const char* res;
+  if (locale.has_value())
+  {
+    std::string l(*locale);
+    res = setlocale(category, l.c_str());
+  }
+  else
+    res = setlocale(category, nullptr);
+  if (res == nullptr)
+    return std::nullopt;
+  return InternalString(std::string_view{res});
+}
+
 OsResult os_remove(std::string_view path)
 {
-  InternalString p(path);
+  std::string p(path);
   errno = 0;
   bool ok = (remove(p.c_str()) == 0);
   return {ok, errno};
@@ -52,8 +77,8 @@ OsResult os_remove(std::string_view path)
 
 OsResult os_rename(std::string_view from, std::string_view to)
 {
-  InternalString f(from);
-  InternalString t(to);
+  std::string f(from);
+  std::string t(to);
   errno = 0;
   bool ok = (rename(f.c_str(), t.c_str()) == 0);
   return {ok, errno};
@@ -76,7 +101,7 @@ bool os_shell_available()
 
 OsSystemResult os_system(std::string_view cmd)
 {
-  InternalString c(cmd);
+  std::string c(cmd);
   errno = 0;
   int stat = system(c.c_str());
   return {stat, errno};
@@ -93,13 +118,13 @@ OsExecStatus os_decode_exec(int stat)
 
 OsLib* os_dlopen(std::string_view path, bool global)
 {
-  InternalString p(path);
+  std::string p(path);
   return reinterpret_cast<OsLib*>(dlopen(p.c_str(), RTLD_NOW | (global ? RTLD_GLOBAL : RTLD_LOCAL)));
 }
 
 void* os_dlsym(OsLib* lib, std::string_view sym)
 {
-  InternalString s(sym);
+  std::string s(sym);
   return dlsym(reinterpret_cast<void*>(lib), s.c_str());
 }
 
@@ -126,8 +151,8 @@ static OsFile* asof(FILE* f)
 
 OsOpenResult os_fopen(std::string_view path, std::string_view mode)
 {
-  InternalString p(path);
-  InternalString m(mode);
+  std::string p(path);
+  std::string m(mode);
   errno = 0;
   FILE* f = fopen(p.c_str(), m.c_str());
   return {asof(f), f == nullptr ? errno : 0};
@@ -135,8 +160,8 @@ OsOpenResult os_fopen(std::string_view path, std::string_view mode)
 
 OsOpenResult os_popen(std::string_view cmd, std::string_view mode)
 {
-  InternalString c(cmd);
-  InternalString m(mode);
+  std::string c(cmd);
+  std::string m(mode);
   errno = 0;
   FILE* f = popen(c.c_str(), m.c_str());
   return {asof(f), f == nullptr ? errno : 0};
@@ -151,8 +176,8 @@ OsOpenResult os_tmpfile()
 
 int os_freopen(OsFile* f, std::string_view path, std::string_view mode)
 {
-  InternalString p(path);
-  InternalString m(mode);
+  std::string p(path);
+  std::string m(mode);
   errno = 0;
   return (freopen(p.c_str(), m.c_str(), asf(f)) == nullptr) ? errno : 0;
 }

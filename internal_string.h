@@ -47,8 +47,6 @@ public:
 
   std::string_view view() const noexcept { return bytes_; }
 
-  const char* c_str() const noexcept { return bytes_.c_str(); }
-
   size_t capacity() const noexcept { return bytes_.capacity(); }
 
   bool operator==(const InternalString& o) const noexcept

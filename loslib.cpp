@@ -315,10 +315,11 @@ static int os_setlocale(lua_State* L)
   int nol = lua_isnoneornil(L, 1);
   const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
   int op = luaL_checkoption(L, 2, defcat, catnames);
-  const char* res = setlocale(cat[op], nol ? nullptr : l->c_str());
-  if (res != nullptr)
+  std::optional<InternalString> res = os_setlocale(
+      cat[op], nol ? std::nullopt : std::optional<std::string_view>(l->view()));
+  if (res.has_value())
   {
-    std::string_view rsv{res};
+    std::string_view rsv = res->view();
     lua_pushlstring(L, rsv, 0, rsv.size());
   }
   else

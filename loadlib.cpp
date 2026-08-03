@@ -48,14 +48,14 @@ static const InternalString* const LIB_FAIL = lit<"open">();
 ** Returns the library; in case of error, returns nullptr plus an
 ** error string in the stack.
 */
-static void* lsys_load(lua_State* L, const char* path, int seeglb);
+static void* lsys_load(lua_State* L, std::string_view path, int seeglb);
 
 /*
 ** Try to find a function named 'sym' in library 'lib'.
 ** Returns the function; in case of error, returns nullptr plus an
 ** error string in the stack.
 */
-static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym);
+static lua_CFunction lsys_sym(lua_State* L, void* lib, std::string_view sym);
 
 /*
 ** {========================================================================
@@ -64,17 +64,17 @@ static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym);
 ** =========================================================================
 */
 
-static void* lsys_load(lua_State* L, const char* path, int seeglb)
+static void* lsys_load(lua_State* L, std::string_view path, int seeglb)
 {
-  OsLib* lib = os_dlopen(std::string_view{path}, seeglb != 0);
+  OsLib* lib = os_dlopen(path, seeglb != 0);
   if (l_unlikely(lib == nullptr))
     lua_pushistring(L, os_dlerror());
   return reinterpret_cast<void*>(lib);
 }
 
-static lua_CFunction lsys_sym(lua_State* L, void* lib, const char* sym)
+static lua_CFunction lsys_sym(lua_State* L, void* lib, std::string_view sym)
 {
-  lua_CFunction f = ((lua_CFunction)(cast_func(os_dlsym(reinterpret_cast<OsLib*>(lib), std::string_view{sym}))));
+  lua_CFunction f = ((lua_CFunction)(cast_func(os_dlsym(reinterpret_cast<OsLib*>(lib), sym))));
   if (l_unlikely(f == nullptr))
     lua_pushistring(L, os_dlerror());
   return f;
@@ -237,7 +237,7 @@ static int lookforfunc(lua_State* L, const InternalString* path,
   void* reg = checkclib(L, path); /* check loaded C libraries */
   if (reg == nullptr)
   {                                          /* must load library? */
-    reg = lsys_load(L, path->c_str(), loadlibonly); /* global symbols if 'sym'=='*' */
+    reg = lsys_load(L, path->view(), loadlibonly); /* global symbols if 'sym'=='*' */
     if (reg == nullptr)
       return ERRLIB; /* unable to load library */
     addtoclib(L, path, reg);
@@ -249,7 +249,7 @@ static int lookforfunc(lua_State* L, const InternalString* path,
   }
   else
   {
-    lua_CFunction f = lsys_sym(L, reg, sym->c_str());
+    lua_CFunction f = lsys_sym(L, reg, sym->view());
     if (f == nullptr)
       return ERRFUNC;        /* unable to find function */
     lua_pushcfunction(L, f); /* else create new function */
