@@ -36,3 +36,8 @@ public:
 private:
   std::string str;
 };
+
+inline HostString operator""_hs(const char* s, size_t len)
+{
+  return HostString(std::string_view(s, len));
+}

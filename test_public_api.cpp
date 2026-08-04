@@ -99,7 +99,7 @@ static std::string_view byte_reader(lua_State*, void* ud)
 static int load_string(lua_State* L, std::string_view code)
 {
   StringReader r{code, false};
-  return lua_load(L, whole_reader, &r, HostString("=tpa"), std::nullopt);
+  return lua_load(L, whole_reader, &r, "=tpa"_hs, std::nullopt);
 }
 
 static int do_string(lua_State* L, std::string_view code)
@@ -895,7 +895,7 @@ static void test_push()
   }
 
   /* pushstring: value, and nullopt pushes nil (like NULL in C API) */
-  lua_pushstring(L, HostString("abc"));
+  lua_pushstring(L, "abc"_hs);
   CHECK(lua_tolstring(L, -1) == "abc");
   lua_pushstring(L, std::nullopt);
   CHECK(lua_isnil(L, -1) == 1);
@@ -1250,7 +1250,7 @@ static void test_load_dump()
   /* reader protocol: chunk delivered in 1-byte pieces */
   {
     ByteReader r{"return 6 * 7", 0};
-    CHECK(lua_load(L, byte_reader, &r, HostString("=bytes"), std::nullopt) == LUA_OK);
+    CHECK(lua_load(L, byte_reader, &r, "=bytes"_hs, std::nullopt) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 42);
     lua_pop(L, 1);
@@ -1274,14 +1274,14 @@ static void test_load_dump()
 
     /* reload in binary mode */
     StringReader r{std::string_view(d.bytes), false};
-    CHECK(lua_load(L, whole_reader, &r, HostString("=dumped"), HostString("b")) == LUA_OK);
+    CHECK(lua_load(L, whole_reader, &r, "=dumped"_hs, "b"_hs) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 21);
     lua_pop(L, 1);
 
     /* mode "t" rejects binary chunks */
     StringReader r2{std::string_view(d.bytes), false};
-    int lst = lua_load(L, whole_reader, &r2, HostString("=dumped"), HostString("t"));
+    int lst = lua_load(L, whole_reader, &r2, "=dumped"_hs, "t"_hs);
     CHECK(lst != LUA_OK);
     lua_pop(L, 1);
 
@@ -1292,7 +1292,7 @@ static void test_load_dump()
     lua_pop(L, 1);
     CHECK(!ds.bytes.empty() && ds.bytes.size() <= d.bytes.size());
     StringReader r3{std::string_view(ds.bytes), false};
-    CHECK(lua_load(L, whole_reader, &r3, std::nullopt, HostString("b")) == LUA_OK);
+    CHECK(lua_load(L, whole_reader, &r3, std::nullopt, "b"_hs) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 21);
     lua_pop(L, 1);
@@ -2037,7 +2037,7 @@ static void test_negative()
     bool jumped = false;
     try
     {
-      lua_pushstring(L, HostString("unprotected!"));
+      lua_pushstring(L, "unprotected!"_hs);
       lua_error(L);
     }
     catch (PanicJump&)
@@ -2088,7 +2088,7 @@ static void test_negative()
 
     lua_pushcfunction(L, cf_neg_concat);
     lua_createtable(L, 0, 0);
-    lua_pushstring(L, HostString("x"));
+    lua_pushstring(L, "x"_hs);
     CHECK(lua_pcall(L, 2, 1, 0) == LUA_ERRRUN);
     CHECK(top_msg_contains(L, "concatenate"));
 
@@ -2110,8 +2110,8 @@ static void test_negative()
 
     lua_pushcfunction(L, cf_neg_settable);
     lua_pushinteger(L, 5); /* not a table */
-    lua_pushstring(L, HostString("k"));
-    lua_pushstring(L, HostString("v"));
+    lua_pushstring(L, "k"_hs);
+    lua_pushstring(L, "v"_hs);
     CHECK(lua_pcall(L, 3, 0, 0) == LUA_ERRRUN);
     CHECK(top_msg_contains(L, "index"));
 
@@ -2175,15 +2175,15 @@ static void test_auxlib_checks()
     CHECK(luaL_optinteger(Lb, 1, 9) == 42); /* present arg wins */
     luaL_checktype(Lb, 1, LUA_TNUMBER);
     luaL_checkany(Lb, 1);
-    luaL_checkstack(Lb, 20, HostString("grow"));
-    luaL_argcheck(Lb, true, 1, HostString("unused"));
-    luaL_argexpected(Lb, true, 1, HostString("number"));
+    luaL_checkstack(Lb, 20, "grow"_hs);
+    luaL_argcheck(Lb, true, 1, "unused"_hs);
+    luaL_argexpected(Lb, true, 1, "number"_hs);
     return 0;
   };
   lua_pushcfunction(L, cf_body);
   lua_pushinteger(L, 42);
   lua_pushnumber(L, 2.5);
-  lua_pushstring(L, HostString("abc"));
+  lua_pushstring(L, "abc"_hs);
   lua_pushinteger(L, 7);
   CHECK(lua_pcall(L, 4, 0, 0) == LUA_OK);
 
@@ -2193,7 +2193,7 @@ static void test_auxlib_checks()
     return 0;
   };
   lua_pushcfunction(L, cf_body);
-  lua_pushstring(L, HostString("x"));
+  lua_pushstring(L, "x"_hs);
   CHECK(lua_pcall(L, 1, 0, 0) == LUA_ERRRUN);
   CHECK(top_msg_contains(L, "bad argument"));
 
@@ -2234,14 +2234,14 @@ static void test_auxlib_checks()
 
   /* argerror / typeerror / argcheck(false) */
   g_body = [](lua_State* Lb) -> int {
-    return luaL_argerror(Lb, 2, HostString("custom complaint"));
+    return luaL_argerror(Lb, 2, "custom complaint"_hs);
   };
   lua_pushcfunction(L, cf_body);
   CHECK(lua_pcall(L, 0, 0, 0) == LUA_ERRRUN);
   CHECK(top_msg_contains(L, "custom complaint"));
 
   g_body = [](lua_State* Lb) -> int {
-    return luaL_typeerror(Lb, 1, HostString("widget"));
+    return luaL_typeerror(Lb, 1, "widget"_hs);
   };
   lua_pushcfunction(L, cf_body);
   lua_pushinteger(L, 1);
@@ -2249,7 +2249,7 @@ static void test_auxlib_checks()
   CHECK(top_msg_contains(L, "widget expected"));
 
   g_body = [](lua_State* Lb) -> int {
-    luaL_argcheck(Lb, false, 1, HostString("must be positive"));
+    luaL_argcheck(Lb, false, 1, "must be positive"_hs);
     return 0;
   };
   lua_pushcfunction(L, cf_body);
@@ -2259,7 +2259,7 @@ static void test_auxlib_checks()
 
   /* checkstack failure raises (rather than returning 0) */
   g_body = [](lua_State* Lb) -> int {
-    luaL_checkstack(Lb, INT_MAX, HostString("boom"));
+    luaL_checkstack(Lb, INT_MAX, "boom"_hs);
     return 0;
   };
   lua_pushcfunction(L, cf_body);
@@ -2274,14 +2274,14 @@ static void test_auxlib_checks()
     return 0;
   };
   lua_pushcfunction(L, cf_body);
-  lua_pushstring(L, HostString("three"));
+  lua_pushstring(L, "three"_hs);
   CHECK(lua_pcall(L, 1, 0, 0) == LUA_OK);
 
   g_body = [](lua_State* Lb) -> int {
     return luaL_checkoption(Lb, 1, std::string_view{}, k_opts);
   };
   lua_pushcfunction(L, cf_body);
-  lua_pushstring(L, HostString("four"));
+  lua_pushstring(L, "four"_hs);
   CHECK(lua_pcall(L, 1, 0, 0) == LUA_ERRRUN);
   CHECK(top_msg_contains(L, "invalid option"));
 
@@ -2289,7 +2289,7 @@ static void test_auxlib_checks()
      when available (a C function has none, so the message is bare) */
   g_body = [](lua_State* Lb) -> int {
     lua_pushinteger(Lb, 7);
-    return luaL_error(Lb, HostString("oops %d"));
+    return luaL_error(Lb, "oops %d"_hs);
   };
   lua_pushcfunction(L, cf_body);
   CHECK(lua_pcall(L, 0, 0, 0) == LUA_ERRRUN);
@@ -2300,7 +2300,7 @@ static void test_auxlib_checks()
 
 static int cf_custom_tostring(lua_State* L)
 {
-  lua_pushstring(L, HostString("custom!"));
+  lua_pushstring(L, "custom!"_hs);
   return 1;
 }
 
@@ -2309,33 +2309,33 @@ static void test_auxlib_meta()
   lua_State* L = new_state();
 
   /* newmetatable: creates once, finds thereafter; sets __name */
-  CHECK(luaL_newmetatable(L, HostString("TPA.Widget")) == 1);
+  CHECK(luaL_newmetatable(L, "TPA.Widget"_hs) == 1);
   CHECK(lua_type(L, -1) == LUA_TTABLE);
-  CHECK(lua_getfield(L, -1, HostString("__name")) == LUA_TSTRING);
+  CHECK(lua_getfield(L, -1, "__name"_hs) == LUA_TSTRING);
   {
     std::optional<HostString> n = lua_tostring(L, -1);
     CHECK(n.has_value() && n->to_utf8() == "TPA.Widget");
   }
   lua_pop(L, 1);
-  CHECK(luaL_newmetatable(L, HostString("TPA.Widget")) == 0);
-  CHECK(luaL_getmetatable(L, HostString("TPA.Widget")) == LUA_TTABLE);
+  CHECK(luaL_newmetatable(L, "TPA.Widget"_hs) == 0);
+  CHECK(luaL_getmetatable(L, "TPA.Widget"_hs) == LUA_TTABLE);
   CHECK(lua_rawequal(L, -1, -2) == 1);
   CHECK(lua_rawequal(L, -1, -3) == 1);
   lua_pop(L, 3);
 
   /* setmetatable/testudata/checkudata */
   void* ud = lua_newuserdatauv(L, 8, 0);
-  luaL_setmetatable(L, HostString("TPA.Widget"));
-  CHECK(luaL_testudata(L, -1, HostString("TPA.Widget")) == ud);
-  CHECK(luaL_testudata(L, -1, HostString("TPA.Other")) == nullptr);
-  CHECK(luaL_checkudata(L, -1, HostString("TPA.Widget")) == ud);
+  luaL_setmetatable(L, "TPA.Widget"_hs);
+  CHECK(luaL_testudata(L, -1, "TPA.Widget"_hs) == ud);
+  CHECK(luaL_testudata(L, -1, "TPA.Other"_hs) == nullptr);
+  CHECK(luaL_checkudata(L, -1, "TPA.Widget"_hs) == ud);
   lua_createtable(L, 0, 0);
-  CHECK(luaL_testudata(L, -1, HostString("TPA.Widget")) == nullptr);
+  CHECK(luaL_testudata(L, -1, "TPA.Widget"_hs) == nullptr);
   lua_pop(L, 2);
 
   /* checkudata mismatch raises a type error */
   g_body = [](lua_State* Lb) -> int {
-    luaL_checkudata(Lb, 1, HostString("TPA.Missing"));
+    luaL_checkudata(Lb, 1, "TPA.Missing"_hs);
     return 0;
   };
   lua_pushcfunction(L, cf_body);
@@ -2347,30 +2347,30 @@ static void test_auxlib_meta()
   lua_createtable(L, 0, 0); /* the object */
   lua_createtable(L, 0, 2); /* its metatable */
   lua_pushcfunction(L, cf_custom_tostring);
-  lua_setfield(L, -2, HostString("__tostring"));
-  lua_pushstring(L, HostString("special"));
-  lua_setfield(L, -2, HostString("kind"));
+  lua_setfield(L, -2, "__tostring"_hs);
+  lua_pushstring(L, "special"_hs);
+  lua_setfield(L, -2, "kind"_hs);
   lua_setmetatable(L, -2);
   int obj = lua_gettop(L);
 
   int before = lua_gettop(L);
-  CHECK(luaL_getmetafield(L, obj, HostString("kind")) == LUA_TSTRING);
+  CHECK(luaL_getmetafield(L, obj, "kind"_hs) == LUA_TSTRING);
   {
     std::optional<HostString> k = lua_tostring(L, -1);
     CHECK(k.has_value() && k->to_utf8() == "special");
   }
   lua_pop(L, 1);
   /* absent field: returns LUA_TNIL and pushes nothing */
-  CHECK(luaL_getmetafield(L, obj, HostString("nope")) == LUA_TNIL);
+  CHECK(luaL_getmetafield(L, obj, "nope"_hs) == LUA_TNIL);
   CHECK(lua_gettop(L) == before);
 
-  CHECK(luaL_callmeta(L, obj, HostString("__tostring")) == 1);
+  CHECK(luaL_callmeta(L, obj, "__tostring"_hs) == 1);
   {
     std::optional<HostString> s = lua_tostring(L, -1);
     CHECK(s.has_value() && s->to_utf8() == "custom!");
   }
   lua_pop(L, 1);
-  CHECK(luaL_callmeta(L, obj, HostString("__nope")) == 0);
+  CHECK(luaL_callmeta(L, obj, "__nope"_hs) == 0);
   CHECK(lua_gettop(L) == obj);
 
   /* luaL_tolstring conversions (result is also pushed) */
@@ -2390,8 +2390,8 @@ static void test_auxlib_meta()
   lua_pop(L, 2);
   lua_createtable(L, 0, 0); /* __name (no __tostring): "Widget: 0x..." */
   lua_createtable(L, 0, 1);
-  lua_pushstring(L, HostString("Widget"));
-  lua_setfield(L, -2, HostString("__name"));
+  lua_pushstring(L, "Widget"_hs);
+  lua_setfield(L, -2, "__name"_hs);
   lua_setmetatable(L, -2);
   CHECK(luaL_tolstring(L, -1).to_utf8().substr(0, 8) == "Widget: ");
   lua_pop(L, 3);
@@ -2404,39 +2404,39 @@ static void test_auxlib_load()
   lua_State* L = new_state();
 
   /* loadstring + dostring */
-  CHECK(luaL_loadstring(L, HostString("return 6 * 7")) == LUA_OK);
+  CHECK(luaL_loadstring(L, "return 6 * 7"_hs) == LUA_OK);
   CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
   CHECK(lua_tointeger(L, -1) == 42);
   lua_pop(L, 1);
-  CHECK(luaL_loadstring(L, HostString("return +++")) == LUA_ERRSYNTAX);
+  CHECK(luaL_loadstring(L, "return +++"_hs) == LUA_ERRSYNTAX);
   lua_pop(L, 1);
-  CHECK(luaL_dostring(L, HostString("return 2 + 3")) == LUA_OK);
+  CHECK(luaL_dostring(L, "return 2 + 3"_hs) == LUA_OK);
   CHECK(lua_tointeger(L, -1) == 5);
   lua_pop(L, 1);
-  CHECK(luaL_dostring(L, HostString("error('dsfail')")) != LUA_OK);
+  CHECK(luaL_dostring(L, "error('dsfail')"_hs) != LUA_OK);
   CHECK(top_msg_contains(L, "dsfail"));
 
   /* loadbufferx: text mode, and mode enforcement against binary chunks */
-  CHECK(luaL_loadbufferx(L, "return 1", HostString("=lb"), HostString("t")) ==
+  CHECK(luaL_loadbufferx(L, "return 1", "=lb"_hs, "t"_hs) ==
         LUA_OK);
   lua_pop(L, 1);
   DumpBuf d;
-  CHECK(luaL_loadstring(L, HostString("return 99")) == LUA_OK);
+  CHECK(luaL_loadstring(L, "return 99"_hs) == LUA_OK);
   CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
   lua_pop(L, 1);
   CHECK(d.bytes.size() > 0);
   /* binary chunk loads in "b" mode... */
-  CHECK(luaL_loadbufferx(L, d.bytes, HostString("=bin"), HostString("b")) ==
+  CHECK(luaL_loadbufferx(L, d.bytes, "=bin"_hs, "b"_hs) ==
         LUA_OK);
   CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
   CHECK(lua_tointeger(L, -1) == 99);
   lua_pop(L, 1);
   /* ...but is rejected in "t" mode */
-  CHECK(luaL_loadbufferx(L, d.bytes, HostString("=bin"), HostString("t")) ==
+  CHECK(luaL_loadbufferx(L, d.bytes, "=bin"_hs, "t"_hs) ==
         LUA_ERRSYNTAX);
   CHECK(top_msg_contains(L, "binary chunk"));
   /* loadbuffer (no mode) accepts either */
-  CHECK(luaL_loadbuffer(L, "return 4", HostString("=lb2")) == LUA_OK);
+  CHECK(luaL_loadbuffer(L, "return 4", "=lb2"_hs) == LUA_OK);
   lua_pop(L, 1);
 
   /* loadfile/loadfilex/dofile against a real file */
@@ -2454,7 +2454,7 @@ static void test_auxlib_load()
   CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
   CHECK(lua_tointeger(L, -1) == 42);
   lua_pop(L, 1);
-  CHECK(luaL_loadfilex(L, HostString(path), HostString("t")) == LUA_OK);
+  CHECK(luaL_loadfilex(L, HostString(path), "t"_hs) == LUA_OK);
   lua_pop(L, 1);
   CHECK(luaL_dofile(L, HostString(path)) == LUA_OK);
   CHECK(lua_tointeger(L, -1) == 42);
@@ -2462,7 +2462,7 @@ static void test_auxlib_load()
   std::remove(path);
 
   /* missing file: LUA_ERRFILE with a "cannot open" message */
-  CHECK(luaL_loadfile(L, HostString("/tmp/tpa_no_such_file.lua")) ==
+  CHECK(luaL_loadfile(L, "/tmp/tpa_no_such_file.lua"_hs) ==
         LUA_ERRFILE);
   CHECK(top_msg_contains(L, "cannot open"));
 
@@ -2474,7 +2474,7 @@ static void test_auxlib_refs_buffer()
   lua_State* L = new_state();
 
   /* ref/unref against the registry */
-  lua_pushstring(L, HostString("payload"));
+  lua_pushstring(L, "payload"_hs);
   int r1 = luaL_ref(L, LUA_REGISTRYINDEX); /* pops the value */
   CHECK(r1 != LUA_REFNIL && r1 != LUA_NOREF);
   CHECK(lua_rawgeti(L, LUA_REGISTRYINDEX, r1) == LUA_TSTRING);
@@ -2500,7 +2500,7 @@ static void test_auxlib_refs_buffer()
     luaL_Buffer B;
     luaL_buffinit(L, &B);
     luaL_addchar(&B, 'a');
-    luaL_addstring(&B, HostString("bc"));
+    luaL_addstring(&B, "bc"_hs);
     luaL_addlstring(&B, "wxyz", 1, 2); /* "xy" */
     CHECK(luaL_bufflen(&B) == 5u);
     lua_pushinteger(L, 99);
@@ -2540,8 +2540,8 @@ static void test_auxlib_refs_buffer()
 
   /* gsub: plain textual replacement, result returned and pushed */
   {
-    HostString g = luaL_gsub(L, HostString("hello world"), HostString("o"),
-                             HostString("0"));
+    HostString g = luaL_gsub(L, "hello world"_hs, "o"_hs,
+                             "0"_hs);
     CHECK(g.to_utf8() == "hell0 w0rld");
     std::optional<HostString> s = lua_tostring(L, -1);
     CHECK(s.has_value() && s->to_utf8() == "hell0 w0rld");
@@ -2552,9 +2552,9 @@ static void test_auxlib_refs_buffer()
   {
     luaL_Buffer B;
     luaL_buffinit(L, &B);
-    luaL_addstring(&B, HostString("["));
-    luaL_addgsub(&B, HostString("a.b.c"), HostString("."), HostString("/"));
-    luaL_addstring(&B, HostString("]"));
+    luaL_addstring(&B, "["_hs);
+    luaL_addgsub(&B, "a.b.c"_hs, "."_hs, "/"_hs);
+    luaL_addstring(&B, "]"_hs);
     luaL_pushresult(&B);
     std::optional<HostString> s = lua_tostring(L, -1);
     CHECK(s.has_value() && s->to_utf8() == "[a/b/c]");
@@ -2617,10 +2617,10 @@ static void test_auxlib_misc()
     lua_createtable(Lb, 0, 0);
     lua_createtable(Lb, 0, 1);
     lua_pushcfunction(Lb, [](lua_State* Lm) -> int {
-      lua_pushstring(Lm, HostString("nan"));
+      lua_pushstring(Lm, "nan"_hs);
       return 1;
     });
-    lua_setfield(Lb, -2, HostString("__len"));
+    lua_setfield(Lb, -2, "__len"_hs);
     lua_setmetatable(Lb, -2);
     luaL_len(Lb, -1);
     return 0;
@@ -2637,7 +2637,7 @@ static void test_auxlib_misc()
   }
   lua_pop(L, 1);
   lua_pushcfunction(L, cf_push_where);
-  lua_setglobal(L, HostString("wherefn"));
+  lua_setglobal(L, "wherefn"_hs);
   CHECK(do_string(L, "return wherefn()") == LUA_OK);
   {
     std::optional<HostString> w = lua_tostring(L, -1);
@@ -2646,7 +2646,7 @@ static void test_auxlib_misc()
   lua_pop(L, 1);
 
   /* traceback */
-  luaL_traceback(L, L, HostString("MSG"), 0);
+  luaL_traceback(L, L, "MSG"_hs, 0);
   {
     std::optional<HostString> t = lua_tostring(L, -1);
     CHECK(t.has_value());
@@ -2659,9 +2659,9 @@ static void test_auxlib_misc()
   lua_pop(L, 1);
 
   /* getsubtable: creates then finds */
-  CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, HostString("TPA.SUB")) == 0);
+  CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, "TPA.SUB"_hs) == 0);
   CHECK(lua_type(L, -1) == LUA_TTABLE);
-  CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, HostString("TPA.SUB")) == 1);
+  CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, "TPA.SUB"_hs) == 1);
   CHECK(lua_rawequal(L, -1, -2) == 1);
   lua_pop(L, 2);
 
@@ -2676,11 +2676,11 @@ static void test_auxlib_misc()
     };
     luaL_setfuncs(L, regs, 1);
   }
-  CHECK(lua_getfield(L, -1, HostString("getup")) == LUA_TFUNCTION);
+  CHECK(lua_getfield(L, -1, "getup"_hs) == LUA_TFUNCTION);
   lua_call(L, 0, 1);
   CHECK(lua_tointeger(L, -1) == 123);
   lua_pop(L, 1);
-  CHECK(lua_getfield(L, -1, HostString("holder")) == LUA_TBOOLEAN);
+  CHECK(lua_getfield(L, -1, "holder"_hs) == LUA_TBOOLEAN);
   CHECK(lua_toboolean(L, -1) == 0);
   lua_pop(L, 2);
 
@@ -2689,7 +2689,7 @@ static void test_auxlib_misc()
   CHECK(lua_toboolean(L, -1) == 1);
   lua_pop(L, 1);
   errno = ENOENT;
-  CHECK(luaL_fileresult(L, 0, HostString("nofile.txt")) == 3);
+  CHECK(luaL_fileresult(L, 0, "nofile.txt"_hs) == 3);
   CHECK(lua_type(L, -3) == LUA_TNIL); /* fail */
   {
     std::optional<HostString> m = lua_tostring(L, -2);
@@ -2716,23 +2716,23 @@ static void test_auxlib_misc()
   {
     lua_State* L2 = luaL_newstate();
     CHECK(L2 != nullptr);
-    luaL_requiref(L2, HostString("string"), luaopen_string, 1);
+    luaL_requiref(L2, "string"_hs, luaopen_string, 1);
     CHECK(lua_type(L2, -1) == LUA_TTABLE); /* module left on the stack */
-    CHECK(lua_getglobal(L2, HostString("string")) == LUA_TTABLE);
+    CHECK(lua_getglobal(L2, "string"_hs) == LUA_TTABLE);
     CHECK(lua_rawequal(L2, -1, -2) == 1);
     lua_pop(L2, 1);
-    CHECK(luaL_getsubtable(L2, LUA_REGISTRYINDEX, HostString("_LOADED")) == 1);
-    CHECK(lua_getfield(L2, -1, HostString("string")) == LUA_TTABLE);
+    CHECK(luaL_getsubtable(L2, LUA_REGISTRYINDEX, "_LOADED"_hs) == 1);
+    CHECK(lua_getfield(L2, -1, "string"_hs) == LUA_TTABLE);
     CHECK(lua_rawequal(L2, -1, -3) == 1);
     lua_pop(L2, 3);
     /* glb=0: registered but no global */
-    luaL_requiref(L2, HostString("mathmod"), luaopen_math, 0);
+    luaL_requiref(L2, "mathmod"_hs, luaopen_math, 0);
     CHECK(lua_type(L2, -1) == LUA_TTABLE);
-    CHECK(lua_getglobal(L2, HostString("mathmod")) == LUA_TNIL);
+    CHECK(lua_getglobal(L2, "mathmod"_hs) == LUA_TNIL);
     lua_pop(L2, 2);
     /* the default luaL_newstate allocator and seed produce a working VM */
     luaL_openlibs(L2);
-    CHECK(luaL_dostring(L2, HostString("return tostring(6*7)")) == LUA_OK);
+    CHECK(luaL_dostring(L2, "return tostring(6*7)"_hs) == LUA_OK);
     {
       std::optional<HostString> s = lua_tostring(L2, -1);
       CHECK(s.has_value() && s->to_utf8() == "42");
@@ -2771,7 +2771,7 @@ static void test_dump_limits()
   lua_pushvalue(L, aidx);
   CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
   lua_pop(L, 1);
-  CHECK(luaL_loadbufferx(L, d.bytes, HostString("=re"), HostString("b")) ==
+  CHECK(luaL_loadbufferx(L, d.bytes, "=re"_hs, "b"_hs) ==
         LUA_OK);
   int lidx = lua_gettop(L);
 
@@ -2799,7 +2799,7 @@ static void test_dump_limits()
   DumpBuf d2;
   CHECK(lua_dump(L, dump_writer, &d2, 0) == 0);
   lua_pop(L, 1);
-  CHECK(luaL_loadbufferx(L, d2.bytes, HostString("=re2"), HostString("b")) ==
+  CHECK(luaL_loadbufferx(L, d2.bytes, "=re2"_hs, "b"_hs) ==
         LUA_OK);
   lidx = lua_gettop(L);
   {
@@ -2820,7 +2820,7 @@ static void test_dump_limits()
   DumpBuf d3;
   CHECK(lua_dump(L, dump_writer, &d3, 1) == 0);
   lua_pop(L, 1);
-  CHECK(luaL_loadbufferx(L, d3.bytes, HostString("=s"), HostString("b")) ==
+  CHECK(luaL_loadbufferx(L, d3.bytes, "=s"_hs, "b"_hs) ==
         LUA_OK);
   {
     lua_Debug q{};
@@ -2902,7 +2902,7 @@ static void test_cfunction_identity()
   lua_createtable(L, 0, 0); /* obj with mt.__index = cf */
   lua_createtable(L, 0, 1);
   lua_pushcfunction(L, cf_add);
-  lua_setfield(L, -2, HostString("__index"));
+  lua_setfield(L, -2, "__index"_hs);
   lua_setmetatable(L, -2);
   int oidx = lua_gettop(L);
 
@@ -2930,7 +2930,7 @@ static void test_cfunction_identity()
 
   /* metatable slot via __index dispatch */
   CHECK(lua_getmetatable(L, oidx) == 1);
-  CHECK(lua_getfield(L, -1, HostString("__index")) == LUA_TFUNCTION);
+  CHECK(lua_getfield(L, -1, "__index"_hs) == LUA_TFUNCTION);
   CHECK(lua_tocfunction(L, -1) == cf_add);
   CHECK(lua_topointer(L, -1) == p0);
   lua_pop(L, 2);
@@ -2952,11 +2952,11 @@ static void test_cfunction_identity()
     lua_State* La = new_state();
     lua_State* Lb = new_state();
     lua_pushcfunction(La, cf_add);
-    lua_setglobal(La, HostString("probe"));
+    lua_setglobal(La, "probe"_hs);
     lua_pushcfunction(Lb, cf_add);
-    lua_setglobal(Lb, HostString("probe"));
-    CHECK(lua_getglobal(La, HostString("probe")) == LUA_TFUNCTION);
-    CHECK(lua_getglobal(Lb, HostString("probe")) == LUA_TFUNCTION);
+    lua_setglobal(Lb, "probe"_hs);
+    CHECK(lua_getglobal(La, "probe"_hs) == LUA_TFUNCTION);
+    CHECK(lua_getglobal(Lb, "probe"_hs) == LUA_TFUNCTION);
     CHECK(lua_tocfunction(La, -1) == lua_tocfunction(Lb, -1));
     /* light C function identity agrees across states */
     CHECK(lua_topointer(La, -1) == lua_topointer(Lb, -1));
@@ -3006,7 +3006,7 @@ static int k_chain_pcall(lua_State* L, int status, lua_KContext ctx)
 }
 static int cf_chain_B(lua_State* L)
 {
-  lua_getglobal(L, HostString("innerchunk"));
+  lua_getglobal(L, "innerchunk"_hs);
   return k_chain_pcall(L, lua_pcallk(L, 0, 1, 0, 222, k_chain_pcall), 222);
 }
 
@@ -3018,7 +3018,7 @@ static int k_chain_call(lua_State* L, int status, lua_KContext ctx)
 }
 static int cf_chain_A(lua_State* L)
 {
-  lua_getglobal(L, HostString("outerchunk"));
+  lua_getglobal(L, "outerchunk"_hs);
   lua_callk(L, 0, 1, 111, k_chain_call);
   return k_chain_call(L, LUA_OK, 111);
 }
@@ -3027,9 +3027,9 @@ static void test_continuation_chain()
 {
   lua_State* L = new_state();
   lua_pushcfunction(L, cf_chain_yielder);
-  lua_setglobal(L, HostString("cyield"));
+  lua_setglobal(L, "cyield"_hs);
   lua_pushcfunction(L, cf_chain_B);
-  lua_setglobal(L, HostString("B"));
+  lua_setglobal(L, "B"_hs);
   CHECK(do_string(L, "function innerchunk() return cyield() end\n"
                      "function outerchunk() return B() end") == LUA_OK);
 
@@ -3108,7 +3108,7 @@ static void test_thread_hooks()
                         "y = y + 1\n"
                         "return y") == LUA_OK);
   /* coroutine.yield needs the coroutine lib on this state */
-  luaL_requiref(co, HostString("coroutine"), luaopen_coroutine, 1);
+  luaL_requiref(co, "coroutine"_hs, luaopen_coroutine, 1);
   lua_pop(co, 1);
   lua_ResumeResult rr = lua_resume(co, L, 0);
   CHECK(rr.status == LUA_YIELD);
@@ -3249,7 +3249,7 @@ static void test_auxlib_restored()
     }
     CHECK(count == 2);
     /* call through the table */
-    CHECK(lua_getfield(L, -1, HostString("add")) == LUA_TFUNCTION);
+    CHECK(lua_getfield(L, -1, "add"_hs) == LUA_TFUNCTION);
     lua_pushinteger(L, 20);
     lua_pushinteger(L, 22);
     CHECK(lua_pcall(L, 2, 1, 0) == LUA_OK);
@@ -3268,7 +3268,7 @@ static void test_auxlib_restored()
     lua_pushnil(L);
     CHECK(lua_next(L, -2) == 0); /* empty — presizing has no semantics */
     luaL_setfuncs(L, mod, 0);    /* and it works as the setfuncs target */
-    CHECK(lua_getfield(L, -1, HostString("add")) == LUA_TFUNCTION);
+    CHECK(lua_getfield(L, -1, "add"_hs) == LUA_TFUNCTION);
     lua_pop(L, 2);
   }
 
