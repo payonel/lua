@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <span>
 #include <string>
 
 #include "llimits.h"
@@ -212,17 +213,16 @@ constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
 struct Udata : GCObject
 {
   unsigned short nuvalue; /* number of user values */
-  size_t len;
   struct Table* metatable;
   GCObject* gclist;
   TValue* uv;
-  char* data;
+  std::span<char> data; /* user memory block; consumers serialize/deserialize at the call site */
 };
 
 /* get the address of the memory block inside 'Udata' */
 static l_forceinline char* getudatamem(Udata* u)
 {
-  return u->data;
+  return u->data.data();
 }
 
 static l_forceinline size_t udatadatasize(size_t len)

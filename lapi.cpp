@@ -516,7 +516,7 @@ LUA_API lua_Unsigned lua_rawlen(lua_State* L, int idx)
   case LUA_VSHRSTR:
     return (lua_Unsigned)tsslen(tsvalue(&o));
   case LUA_VUSERDATA:
-    return (lua_Unsigned)uvalue(&o)->len;
+    return (lua_Unsigned)uvalue(&o)->data.size();
   case LUA_VTABLE:
   {
     lua_Unsigned res;

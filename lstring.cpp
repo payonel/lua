@@ -128,11 +128,10 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   GCObject* o = luaC_newobj(L, LUA_VUSERDATA, sizeof(Udata));
   assert(o->tt == LUA_VUSERDATA);
   u = static_cast<Udata*>(o);
-  u->len = 0;
   u->nuvalue = 0;
   u->metatable = nullptr;
   u->uv = nullptr;
-  u->data = nullptr;
+  u->data = std::span<char>{};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
   TValue* uv = (TValue*)luaM_realloc_(L, nullptr, 0, (size_t)nuvalue * sizeof(TValue));
@@ -140,12 +139,13 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   {
     u->uv = uv;
     u->nuvalue = nuvalue;
-    u->data = (char*)luaM_realloc_(L, nullptr, 0, udatadatasize(s));
+    char* p = (char*)luaM_realloc_(L, nullptr, 0, udatadatasize(s));
+    if (p != nullptr)
+      u->data = std::span<char>{p, s};
   }
   g->gcstopem = oldgcstop;
-  if ((uv == nullptr && nuvalue > 0) || u->data == nullptr)
+  if ((uv == nullptr && nuvalue > 0) || u->data.data() == nullptr)
     luaD_throw(L, LUA_ERRMEM);
-  u->len = s;
   for (i = 0; i < nuvalue; i++)
     ((&u->uv[i])->tt_ = LUA_VNIL);
   return u;
