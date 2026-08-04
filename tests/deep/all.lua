@@ -22,6 +22,8 @@ local tests = {
   "hooks.lua",
   "closures.lua",
   "debuglib.lua",
+  "coroutines.lua",
+  "tbc.lua",
   "allocinfo.lua",
   "identity.lua",
   "warn.lua",
