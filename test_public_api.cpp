@@ -10,6 +10,7 @@
 
 #include <cerrno>
 #include <climits>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -720,12 +721,9 @@ static void test_access()
 
   /* topointer */
   CHECK(lua_topointer(L, 6) != nullptr);
-  /* Official 5.5: lua_topointer on a light C function returns a pointer
-     derived from the function address (lapi.c: LUA_VLCF case). This fork
-     returns NULL and offers lua_funcaddress instead — a silent behavioral
-     break for consumers using lua_topointer for function identity. This
-     CHECK encodes the official postcondition and FAILS until fixed. */
-  CHECK(lua_topointer(L, 7) != nullptr);
+  /* light C function: topointer returns the function address (official 5.5
+     behavior, lapi.c LUA_VLCF case) */
+  CHECK(lua_topointer(L, 7) == reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(cf_add)));
   lua_pushinteger(L, 1);
   lua_pushcclosure(L, cf_upvals, 1); /* C closure is collectable */
   CHECK(lua_topointer(L, -1) != nullptr);

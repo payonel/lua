@@ -96,6 +96,7 @@ test:
 		ulimit -S -s 8192; \
 		cd tests; \
 		cat /dev/null | perf stat -- ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
+	cd tests && ../$(LUA_T) deep/all.lua
 
 full:
 	make clean
