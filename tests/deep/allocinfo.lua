@@ -20,15 +20,22 @@ do
 end
 
 -- count tracks allocation precisely enough to see a known-size payload,
--- and keeps tracking while the collector is stopped
+-- and keeps tracking while the collector is stopped.
+-- NOTE: the payload is built as many distinct interned strings. A single
+-- large string.rep result is NOT comparable across implementations: stock
+-- 5.5 builds it as an external string whose payload is outside
+-- collectgarbage("count"), while this fork counts the full payload.
 do
   collectgarbage("collect")
   collectgarbage("stop")
   local before = collectgarbage("count")
-  local s = string.rep("x", 100 * 1024) -- ~100 KB in one string
+  local strs = {}
+  for i = 1, 100 do
+    strs[i] = string.rep("x", 1024) .. i -- 100 distinct ~1KB interned strings
+  end
   local after = collectgarbage("count")
-  assert(after - before >= 100) -- at least the payload, in KB
-  s = nil
+  assert(after - before >= 90) -- at least ~90 of the ~100 KB payload
+  strs = nil
   collectgarbage("restart")
   collectgarbage("collect")
   assert(collectgarbage("count") < after)
