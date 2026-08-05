@@ -163,7 +163,9 @@ static l_mem objsize(GCObject* o)
   {
     assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
-    res = sizeof(TString) + ts->data.size();
+    /* external payload is not GC memory; count the header only (stock
+       reports header-only sizes for external strings too) */
+    res = sizeof(TString) + (strisexternal(ts) ? 0 : ts->data.size());
     break;
   }
   case LUA_VUPVAL:
@@ -967,7 +969,8 @@ static void freeobj(lua_State* L, GCObject* o)
     assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
     luaS_remove(L, ts);
-    luaM_release(L, ts->data.size());
+    if (!strisexternal(ts)) /* external payload was never charged */
+      luaM_release(L, ts->data.size());
     ts->data.~InternalString();
     luaM_free_(L, (ts), (sizeof(TString)));
     break;

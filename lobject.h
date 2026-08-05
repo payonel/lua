@@ -184,10 +184,21 @@ constexpr lu_byte LUA_VLNGSTR = LUA_VSTRING;
 */
 struct TString : GCObject
 {
-  lu_byte extra;       /* reserved words for short strings; "has hash" for longs */
+  lu_byte extra;       /* reserved words for short strings; STREXTRA_EXTERNAL for external strings */
   unsigned int hash;
   InternalString data;
 };
+
+/* marker in 'extra' for external strings: payload memory is outside GC
+   accounting (matches stock 5.5 external strings built by luaL_Buffer).
+   Never conflicts with reserved-word marks, which only appear on short
+   interned strings; external strings are always long (> LUAI_MAXSHORTLEN). */
+constexpr lu_byte STREXTRA_EXTERNAL = 0xFF;
+
+static l_forceinline int strisexternal(const TString* ts)
+{
+  return ts->extra == STREXTRA_EXTERNAL;
+}
 
 static l_forceinline size_t tsslen(const TString* ts)
 {

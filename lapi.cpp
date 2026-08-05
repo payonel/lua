@@ -703,6 +703,18 @@ void lua_pushistring(lua_State* L, InternalString&& s)
   lua_unlock(L);
 }
 
+/* push built bytes as an external string: payload stays outside GC
+   accounting (stock 5.5 behavior for large luaL_Buffer results) */
+void lua_pushistringext(lua_State* L, InternalString&& s)
+{
+  lua_lock(L);
+  TString* ts = luaS_takeexternal(L, std::move(s));
+  setslots(L, L->top, ts);
+  api_incr_top(L);
+  luaC_checkGC(L);
+  lua_unlock(L);
+}
+
 LUA_API HostString lua_pushfstring(lua_State* L, const HostString& fmt)
 {
   return HostString(lua_pushfstringi(L, fmt.to_utf8())->view());

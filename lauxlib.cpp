@@ -642,7 +642,14 @@ LUALIB_API void luaL_pushresult(luaL_Buffer* B)
   B->reserved = 0;
   if (reserved != 0)
     lua_releasebytes(L, reserved);
-  lua_pushistring(L, B->bldr.finish());
+  /* mirror stock 5.5: a buffer that outgrew the static-buffer size would
+     have moved to a heap box there, and its result is adopted as an
+     external string whose payload is outside GC accounting. Content that
+     fits LUAL_BUFFERSIZE becomes a regular (accounted) string. */
+  if (reserved > LUAL_BUFFERSIZE)
+    lua_pushistringext(L, B->bldr.finish());
+  else
+    lua_pushistring(L, B->bldr.finish());
   lua_gc(L, LUA_GCSTEP, len, 0, 0);
 }
 

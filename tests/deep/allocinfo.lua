@@ -20,11 +20,8 @@ do
 end
 
 -- count tracks allocation precisely enough to see a known-size payload,
--- and keeps tracking while the collector is stopped.
--- NOTE: the payload is built as many distinct interned strings. A single
--- large string.rep result is NOT comparable across implementations: stock
--- 5.5 builds it as an external string whose payload is outside
--- collectgarbage("count"), while this fork counts the full payload.
+-- and keeps tracking while the collector is stopped. The payload is built
+-- as many distinct interned strings, which are fully accounted.
 do
   collectgarbage("collect")
   collectgarbage("stop")
@@ -39,6 +36,20 @@ do
   collectgarbage("restart")
   collectgarbage("collect")
   assert(collectgarbage("count") < after)
+end
+
+-- external strings: a large buffer-built string (string.rep result that
+-- outgrew the buffer) is adopted as an external string whose payload sits
+-- OUTSIDE collectgarbage("count") — only the header registers
+do
+  collectgarbage("collect")
+  local before = collectgarbage("count")
+  local s = string.rep("x", 1024 * 1024) -- 1MB, buffer-built
+  local after = collectgarbage("count")
+  assert(#s == 1024 * 1024)
+  assert(after - before < 16) -- header/noise only, nowhere near 1024 KB
+  s = nil
+  collectgarbage("collect")
 end
 
 -- stop/restart/isrunning round trip
