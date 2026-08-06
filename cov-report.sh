@@ -66,8 +66,17 @@ gcov_log="$REPORT_DIR/gcov.log"
 # Optional HTML report if gcovr is available.
 if command -v gcovr > /dev/null 2>&1; then
     mkdir -p "$HTML_DIR"
-    gcovr --root "$ROOT" --object-directory "$COV_DIR" --gcov-executable "$GCOV" \
-          --html-details "$HTML_DIR/index.html" > /dev/null
+    # Sources may be recorded under either the physical path or a symlinked
+    # form (e.g. /home/user -> /local/home/user): accept both.
+    ROOT_PHYS="$(readlink -f "$ROOT")"
+    HOME_PHYS="$(readlink -f "$HOME")"
+    ROOT_HOME="${ROOT_PHYS/#$HOME_PHYS/$HOME}"
+    gcovr --root "$ROOT" \
+          --filter "$ROOT/" --filter "$ROOT_PHYS/" --filter "$ROOT_HOME/" \
+          --gcov-executable "$GCOV" \
+          --html-details "$HTML_DIR/index.html" \
+          --html-title "lua coverage" \
+          "$COV_DIR" > /dev/null
     html_note="html report: $HTML_DIR/index.html"
 else
     html_note="(install gcovr for an html report)"
