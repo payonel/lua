@@ -5,6 +5,10 @@ ifeq ($(findstring debug,$(MAKECMDGOALS)),debug)
 VARIANT       = debug
 endif
 
+ifeq ($(findstring cov,$(MAKECMDGOALS)),cov)
+VARIANT       = cov
+endif
+
 TOP_DIR       = .
 OBJ_DIR_BASE  = ./obj
 OBJ_DIR       = $(OBJ_DIR_BASE)/$(VARIANT)
@@ -41,9 +45,12 @@ CWARNGCC= \
 # enable Linux goodies
 CXXFLAGS.release =-O2
 CXXFLAGS.debug   =-Og -g3 -ggdb
+CXXFLAGS.cov     =-O0 -g3 -ggdb --coverage
+
+LDFLAGS.cov   =--coverage
 
 CXXFLAGS      =-Wall $(CXXFLAGS.$(VARIANT)) $(TESTS) $(CWARNSCPP) $(CWARNGCC) -std=c++23 -fno-stack-protector -fno-common -march=native -MMD
-LDFLAGS       =-Wl,-E -lm -ldl -fuse-ld=lld
+LDFLAGS       =-Wl,-E -lm -ldl -fuse-ld=lld $(LDFLAGS.$(VARIANT))
 AR            =ar rc
 RANLIB        =ranlib
 RM            =rm -f
@@ -65,16 +72,30 @@ debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
 debug: $(LUA_T) $(TEST_API_T)
 
+cov: VARIANT=cov
+cov: $(LUA_T) $(TEST_API_T)
+	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
+	$(MAKE) test
+	./cov-report.sh
+
 -include $(DEP_FILES)
+
+# The lua/test_public_api filenames are shared by all variants: stamp the
+# active variant so switching variants forces a relink from the right objects.
+VARIANT_STAMP = $(OBJ_DIR_BASE)/variant-$(VARIANT).stamp
+$(VARIANT_STAMP):
+	mkdir -p $(OBJ_DIR_BASE)
+	$(RM) $(OBJ_DIR_BASE)/variant-*.stamp
+	touch $@
 
 $(CORE_T): $(OBJ_FILES)
 	$(AR) $@ $?
 	$(RANLIB) $@
 
-$(LUA_T): $(LUA_O) $(CORE_T) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES)
+$(LUA_T): $(LUA_O) $(CORE_T) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(LUA_O) $(CORE_T) $(LDFLAGS)
 
-$(TEST_API_T): $(TEST_API_O) $(CORE_T)
+$(TEST_API_T): $(TEST_API_O) $(CORE_T) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(TEST_API_O) $(CORE_T) $(LDFLAGS)
 
 clean:
@@ -82,6 +103,7 @@ clean:
 	$(RM) $(LUA_T)
 	$(RM) $(TEST_API_T)
 	$(RM) $(TEST_BUILD_FILES)
+	$(RM) $(TEST_DIR)/*.gcno $(TEST_DIR)/*.gcda
 
 $(OBJ_DIR)/%.o: %.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -MF $(OBJ_DIR)/$*.d -o $@ -c $<
@@ -109,4 +131,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: all debug clean test full
+.PHONY: all debug cov clean test full
