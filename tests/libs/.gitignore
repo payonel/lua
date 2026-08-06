@@ -3,3 +3,5 @@
 /lib2.so
 /lib21.so
 /lib2-v2.so
+*.gcno
+*.gcda
