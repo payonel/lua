@@ -7,6 +7,7 @@
 #pragma once
 
 #include "lua.h"
+#include "internal_string.h"
 
 /* version suffix for environment variable names */
 inline const InternalString* const LUA_VERSUFFIX = lit<"_5_5">();

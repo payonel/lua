@@ -18,7 +18,6 @@ struct OsFile;
 #include "luaconf.h"
 
 #include "internal_string.h"
-#include "lhack.h"
 
 /* global table */
 inline const InternalString* const LUA_GNAME = lit<"_G">();

@@ -232,7 +232,7 @@ static int dolibrary(lua_State* L, const std::string& arg)
   {                 /* no explicit name? */
     globname = arg; /* module name is equal to global name */
     modname = arg;
-    suffix = globname.find(LUA_IGMARK->view()); /* look for a suffix mark */
+    suffix = globname.find(LUA_IGMARK); /* look for a suffix mark */
   }
   else
   {

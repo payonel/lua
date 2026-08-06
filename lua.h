@@ -13,8 +13,6 @@
 #include <string>
 #include <string_view>
 
-#include "internal_string.h"
-
 inline constexpr int LUA_VERSION_MAJOR_N = 5;
 inline constexpr int LUA_VERSION_MINOR_N = 5;
 inline constexpr int LUA_VERSION_RELEASE_N = 1;
@@ -25,10 +23,10 @@ inline constexpr int LUA_VERSION_RELEASE_NUM = LUA_VERSION_NUM * 100 + LUA_VERSI
 inline constexpr std::string_view LUA_VERSION_MAJOR = "5";
 inline constexpr std::string_view LUA_VERSION_MINOR = "5";
 inline constexpr std::string_view LUA_VERSION_RELEASE = "1";
-inline const std::string_view LUA_VERSION = lit<"Lua 5.5">()->view();
-inline const std::string_view LUA_RELEASE = lit<"Lua 5.5.1">()->view();
+inline constexpr std::string_view LUA_VERSION = "Lua 5.5";
+inline constexpr std::string_view LUA_RELEASE = "Lua 5.5.1";
 inline constexpr std::string_view LUA_COPYRIGHT = "Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio";
-inline const std::string_view LUA_AUTHORS = lit<"R. Ierusalimschy, L. H. de Figueiredo, W. Celes">()->view();
+inline constexpr std::string_view LUA_AUTHORS = "R. Ierusalimschy, L. H. de Figueiredo, W. Celes";
 static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSION_RELEASE_N == 1,
               "update the version strings above (and LUA_VDIR in luaconf.h) to match the new numbers");
 
@@ -126,13 +124,6 @@ struct lua_Debug;
 ** Functions to be called by the debugger in specific events
 */
 typedef void (*lua_Hook)(lua_State* L, lua_Debug* ar);
-
-/*
-** generic extra include file
-*/
-#if defined(LUA_DEBUG)
-#include "ltests.h"
-#endif
 
 /*
 ** RCS ident string

@@ -49,9 +49,9 @@ constexpr int LUAI_IS32INT = ((UINT_MAX >> 30) >= 3);
 ** LUA_EXEC_DIR in a Windows path is replaced by the executable's
 ** directory.
 */
-static const InternalString* LUA_PATH_SEP = lit<";">();
-static const InternalString* LUA_PATH_MARK = lit<"?">();
-static const InternalString* LUA_EXEC_DIR = lit<"!">();
+inline constexpr std::string_view LUA_PATH_SEP = ";";
+inline constexpr std::string_view LUA_PATH_MARK = "?";
+inline constexpr std::string_view LUA_EXEC_DIR = "!";
 
 /*
 @@ LUA_PATH_DEFAULT is the default path that Lua uses to look for
@@ -63,13 +63,13 @@ static const InternalString* LUA_EXEC_DIR = lit<"!">();
 ** non-conventional directories.
 */
 
-static const InternalString* LUA_PATH_DEFAULT = lit<"/usr/local/share/lua/5.5/?.lua;/usr/local/share/lua/5.5/?/init.lua;/usr/local/lib/lua/5.5/?.lua;/usr/local/lib/lua/5.5/?/init.lua;./?.lua;./?/init.lua">();
-static const InternalString* LUA_CPATH_DEFAULT = lit<"/usr/local/lib/lua/5.5/?.so;/usr/local/lib/lua/5.5/loadall.so;./?.so">();
+inline constexpr std::string_view LUA_PATH_DEFAULT = "/usr/local/share/lua/5.5/?.lua;/usr/local/share/lua/5.5/?/init.lua;/usr/local/lib/lua/5.5/?.lua;/usr/local/lib/lua/5.5/?/init.lua;./?.lua;./?/init.lua";
+inline constexpr std::string_view LUA_CPATH_DEFAULT = "/usr/local/lib/lua/5.5/?.so;/usr/local/lib/lua/5.5/loadall.so;./?.so";
 
 /*
 ** LUA_DIRSEP is the directory separator (for submodules).
 */
-static const InternalString* LUA_DIRSEP = lit<"/">();
+inline constexpr std::string_view LUA_DIRSEP = "/";
 
 /*
 ** LUA_IGMARK is a mark to ignore all after it when building the
@@ -77,8 +77,8 @@ static const InternalString* LUA_DIRSEP = lit<"/">();
 ** Typically, the suffix after the mark is the module version,
 ** as in "mod-v1.2.so".
 */
-static const InternalString* LUA_IGMARK = lit<"-">();
-static const InternalString* CONFIG = lit<"/\n;\n?\n!\n-\n">();
+inline constexpr std::string_view LUA_IGMARK = "-";
+inline constexpr std::string_view CONFIG = "/\n;\n?\n!\n-\n";
 
 /* }================================================================== */
 

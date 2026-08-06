@@ -15,6 +15,15 @@
 
 #include "lua.h"
 
+/*
+** generic extra include file (debug instrumentation: memcontrol allocator,
+** lock checking, test library). Internal — must not leak into lua.h.
+*/
+#if defined(LUA_DEBUG)
+#include "ltests.h"
+#endif
+#include "lhack.h"
+
 static_assert(std::endian::native == std::endian::little,
               "this port supports little-endian hosts only");
 
