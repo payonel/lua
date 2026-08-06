@@ -64,16 +64,20 @@ TEST_API_O    =$(OBJ_DIR)/test_public_api.o
 TEST_API_T    =test_public_api
 DEP_FILES    += $(TEST_API_O:.o=.d)
 
-all: $(LUA_T) $(TEST_API_T)
+TEST_INT_O    =$(OBJ_DIR)/test_internal_api.o
+TEST_INT_T    =test_internal_api
+DEP_FILES    += $(TEST_INT_O:.o=.d)
+
+all: $(LUA_T) $(TEST_API_T) $(TEST_INT_T)
 
 include tests/libs/build.mk
 
 debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
-debug: $(LUA_T) $(TEST_API_T)
+debug: $(LUA_T) $(TEST_API_T) $(TEST_INT_T)
 
 cov: VARIANT=cov
-cov: $(LUA_T) $(TEST_API_T)
+cov: $(LUA_T) $(TEST_API_T) $(TEST_INT_T)
 	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
 	$(MAKE) test
 	./cov-report.sh
@@ -98,10 +102,14 @@ $(LUA_T): $(LUA_O) $(CORE_T) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES) $(VARIANT_STA
 $(TEST_API_T): $(TEST_API_O) $(CORE_T) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(TEST_API_O) $(CORE_T) $(LDFLAGS)
 
+$(TEST_INT_T): $(TEST_INT_O) $(CORE_T) $(VARIANT_STAMP)
+	$(CXX) -o $@ $(TEST_INT_O) $(CORE_T) $(LDFLAGS)
+
 clean:
 	$(RM) -r $(OBJ_DIR_BASE)
 	$(RM) $(LUA_T)
 	$(RM) $(TEST_API_T)
+	$(RM) $(TEST_INT_T)
 	$(RM) $(TEST_BUILD_FILES)
 	$(RM) $(TEST_DIR)/*.gcno $(TEST_DIR)/*.gcda
 
@@ -113,6 +121,7 @@ $(OBJ_DIR):
 
 test:
 	./$(TEST_API_T)
+	./$(TEST_INT_T)
 	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
 		ulimit -S -s 8192; \

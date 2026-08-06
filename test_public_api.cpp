@@ -19,12 +19,6 @@
 #include "lualib.h"
 #include "lauxlib.h"
 
-/* One exception to the consumer-header rule: lua_internal.h carries the
-   host-facing extensions (memory limits, lua_newuserdata, lua_resetthread)
-   that embedders naturally reach; they are tested at the bottom of this
-   file. */
-#include "lua_internal.h"
-
 /* ================= harness ================= */
 
 static int g_checks = 0;
@@ -3864,62 +3858,10 @@ static void test_selected_libs()
   lua_close(L);
 }
 
-/* ================= host-internal API (lua_internal.h) ================= */
-
-static void test_host_internal_api()
-{
-  lua_State* L = new_state();
-
-  /* lua_newuserdata: one uservalue by default */
-  {
-    void* p = lua_newuserdata(L, 32);
-    CHECK(p != nullptr);
-    CHECK(lua_type(L, -1) == LUA_TUSERDATA);
-    CHECK(lua_getiuservalue(L, -1, 1) == LUA_TNIL); /* has slot 1 */
-    lua_pop(L, 1);
-    CHECK(lua_getiuservalue(L, -1, 2) == LUA_TNONE); /* but not slot 2 */
-    lua_pop(L, 2);
-  }
-
-  /* memory limit: get/set round-trip, allocation keeps working under a
-     generous limit */
-  {
-    size_t orig = lua_getmemlimit(L);
-    lua_setmemlimit(L, 512u * 1024u * 1024u);
-    CHECK(lua_getmemlimit(L) == 512u * 1024u * 1024u);
-    CHECK(do_string(L, "local t = {} for i = 1, 1000 do t[i] = i end "
-                       "return #t") == LUA_OK);
-    CHECK(lua_tointeger(L, -1) == 1000);
-    lua_pop(L, 1);
-    lua_setmemlimit(L, orig);
-    CHECK(lua_getmemlimit(L) == orig);
-  }
-
-  /* lua_resetthread: a suspended coroutine returns to a pristine state */
-  {
-    lua_State* co = lua_newthread(L);
-    /* give the thread the coroutine lib so yield resolves */
-    luaL_openselectedlibs(co, LUA_GLIBK | LUA_COLIBK, 0);
-    CHECK(load_string(co, "coroutine.yield(1) return 2") == LUA_OK);
-    lua_ResumeResult rr = lua_resume(co, L, 0);
-    CHECK(rr.status == LUA_YIELD);
-    CHECK(lua_status(co) == LUA_YIELD);
-
-    CHECK(lua_resetthread(co) == LUA_OK);
-    CHECK(lua_status(co) == LUA_OK);
-    CHECK(lua_gettop(co) == 0);
-
-    /* the reset thread is reusable */
-    CHECK(load_string(co, "return 'reused'") == LUA_OK);
-    rr = lua_resume(co, L, 0);
-    CHECK(rr.status == LUA_OK);
-    CHECK(lua_tolstring(co, -1) == "reused");
-    lua_pop(L, 1); /* the thread */
-  }
-
-  CHECK(lua_gettop(L) == 0);
-  lua_close(L);
-}
+/* ================= host-internal API ================= */
+/* The host-facing extensions in lua_internal.h (memory limits,
+   lua_newuserdata, lua_resetthread) are tested in test_internal_api.cpp;
+   this file includes only the official consumer headers. */
 
 int main()
 {
@@ -3961,7 +3903,6 @@ int main()
       {"c_upvalue_indices", test_c_upvalue_indices},
       {"hook_yield", test_hook_yield},
       {"selected_libs", test_selected_libs},
-      {"host_internal_api", test_host_internal_api},
   };
 
   for (const TestEntry& t : tests)
