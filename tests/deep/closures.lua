@@ -102,6 +102,47 @@ do
   assert(debug.getupvalue(print, 1) == nil)
 end
 
+-- upvalues of C closures: gmatch iterators are C closures with upvalues;
+-- names are reported as "" (C upvalues have no names)
+do
+  local it = string.gmatch("hello world", "%a+")
+  local info = debug.getinfo(it, "u")
+  assert(info.nups > 0)                 -- it really is a C closure
+  local name, val = debug.getupvalue(it, 1)
+  assert(name == "")                    -- C upvalue: empty name
+  assert(debug.getupvalue(it, info.nups + 1) == nil) -- out of range
+  -- the iterator still works after inspection
+  assert(it() == "hello")
+  assert(it() == "world")
+end
+
+-- setupvalue on a C closure writes the upvalue (empty name returned);
+-- writing a collectable value exercises the C-closure write barrier
+do
+  local it = string.gmatch("abc", "%a")
+  local n = debug.getinfo(it, "u").nups
+  -- find an upvalue we can overwrite without breaking the iterator: use a
+  -- scratch closure instead of a live one
+  local scratch = string.gmatch("zzz", "z")
+  assert(debug.setupvalue(scratch, 1, {"fresh table"}) == "")
+  local _, v = debug.getupvalue(scratch, 1)
+  assert(type(v) == "table" and v[1] == "fresh table")
+  collectgarbage() -- barrier interaction: the new upvalue must survive GC
+  local _, v2 = debug.getupvalue(scratch, 1)
+  assert(type(v2) == "table" and v2[1] == "fresh table")
+  -- untouched iterator is unaffected
+  assert(it() == "a" and n > 0)
+end
+
+-- upvalueid works on C closures too: stable and distinct per closure
+do
+  local it1 = string.gmatch("x", "x")
+  local it2 = string.gmatch("x", "x")
+  local id1 = debug.upvalueid(it1, 1)
+  assert(id1 == debug.upvalueid(it1, 1)) -- stable
+  assert(id1 ~= debug.upvalueid(it2, 1)) -- distinct closures, distinct storage
+end
+
 -- nups via getinfo matches reality
 do
   local u1, u2 = 1, 2

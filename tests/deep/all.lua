@@ -20,6 +20,7 @@ end
 
 local tests = {
   "hooks.lua",
+  "hookyield.lua",
   "closures.lua",
   "debuglib.lua",
   "coroutines.lua",
@@ -28,6 +29,9 @@ local tests = {
   "allocinfo.lua",
   "identity.lua",
   "warn.lua",
+  "numbers.lua",
+  "loading.lua",
+  "sort.lua",
 }
 
 -- locate our own directory so the runner works from any cwd

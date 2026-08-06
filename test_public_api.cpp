@@ -19,6 +19,12 @@
 #include "lualib.h"
 #include "lauxlib.h"
 
+/* One exception to the consumer-header rule: lua_internal.h carries the
+   host-facing extensions (memory limits, lua_newuserdata, lua_resetthread)
+   that embedders naturally reach; they are tested at the bottom of this
+   file. */
+#include "lua_internal.h"
+
 /* ================= harness ================= */
 
 static int g_checks = 0;
@@ -3497,6 +3503,424 @@ struct TestEntry
   void (*fn)();
 };
 
+/* ================= string coercion and pushfstring ================= */
+
+static void test_string_coercion()
+{
+  lua_State* L = new_state();
+
+  /* lua_tolstring on a number converts the value in place */
+  lua_pushinteger(L, 42);
+  CHECK(lua_type(L, -1) == LUA_TNUMBER);
+  CHECK(lua_tolstring(L, -1) == "42");
+  CHECK(lua_type(L, -1) == LUA_TSTRING); /* converted in place */
+  lua_pop(L, 1);
+
+  lua_pushnumber(L, 2.5);
+  CHECK(lua_tolstring(L, -1) == "2.5");
+  CHECK(lua_type(L, -1) == LUA_TSTRING);
+  lua_pop(L, 1);
+
+  /* strings pass through untouched */
+  lua_pushliteral(L, "already");
+  CHECK(lua_tolstring(L, -1) == "already");
+  lua_pop(L, 1);
+
+  /* non-coercible values yield an empty view, stack untouched */
+  lua_pushboolean(L, 1);
+  CHECK(lua_tolstring(L, -1).empty());
+  CHECK(lua_type(L, -1) == LUA_TBOOLEAN);
+  lua_pop(L, 1);
+
+  /* lua_pushfstring: plain text, %% escape; result pushed and returned */
+  {
+    HostString r = lua_pushfstring(L, "hello there"_hs);
+    CHECK(lua_type(L, -1) == LUA_TSTRING);
+    CHECK(lua_tolstring(L, -1) == "hello there");
+    CHECK(r == "hello there");
+    lua_pop(L, 1);
+
+    lua_pushfstring(L, "50%% done"_hs);
+    CHECK(lua_tolstring(L, -1) == "50% done");
+    lua_pop(L, 1);
+
+    lua_pushfstring(L, ""_hs);
+    CHECK(lua_tolstring(L, -1).empty());
+    lua_pop(L, 1);
+  }
+
+  CHECK(lua_gettop(L) == 0);
+  lua_close(L);
+}
+
+/* ================= lua_funcaddress ================= */
+
+static void test_funcaddress()
+{
+  lua_State* L = new_state();
+
+  /* reports the address of a light C function; stable per function */
+  lua_pushcfunction(L, cf_add);
+  HostString a1 = lua_funcaddress(L, -1);
+  HostString a2 = lua_funcaddress(L, -1);
+  CHECK(!a1.to_utf8().empty());
+  CHECK(a1 == a2);
+
+  /* distinct functions report distinct addresses */
+  lua_pushcfunction(L, [](lua_State*) -> int { return 0; });
+  HostString a3 = lua_funcaddress(L, -1);
+  CHECK(!a3.to_utf8().empty());
+  CHECK(!(a1 == a3));
+  lua_pop(L, 2);
+
+  lua_close(L);
+}
+
+/* ================= arithmetic on floats via lua_arith ================= */
+
+static void test_arith_floats()
+{
+  lua_State* L = new_state();
+
+  /* floor division on floats stays float */
+  lua_pushnumber(L, 7.0);
+  lua_pushnumber(L, 2.0);
+  lua_arith(L, LUA_OPIDIV);
+  CHECK(lua_isinteger(L, -1) == 0);
+  CHECK(lua_tonumber(L, -1) == 3.0);
+  lua_pop(L, 1);
+
+  lua_pushnumber(L, -7.5);
+  lua_pushnumber(L, 2.0);
+  lua_arith(L, LUA_OPIDIV);
+  CHECK(lua_tonumber(L, -1) == -4.0);
+  lua_pop(L, 1);
+
+  /* float modulo */
+  lua_pushnumber(L, 7.5);
+  lua_pushnumber(L, 2.0);
+  lua_arith(L, LUA_OPMOD);
+  CHECK(lua_tonumber(L, -1) == 1.5);
+  lua_pop(L, 1);
+
+  /* mixed int/float promotes to float */
+  lua_pushinteger(L, 3);
+  lua_pushnumber(L, 0.5);
+  lua_arith(L, LUA_OPADD);
+  CHECK(lua_isinteger(L, -1) == 0);
+  CHECK(lua_tonumber(L, -1) == 3.5);
+  lua_pop(L, 1);
+
+  /* unary minus on a float */
+  lua_pushnumber(L, 2.5);
+  lua_arith(L, LUA_OPUNM);
+  CHECK(lua_tonumber(L, -1) == -2.5);
+  lua_pop(L, 1);
+
+  /* float operands that fit integers still float-divide */
+  lua_pushnumber(L, 1.0);
+  lua_pushnumber(L, 4.0);
+  lua_arith(L, LUA_OPDIV);
+  CHECK(lua_tonumber(L, -1) == 0.25);
+  lua_pop(L, 1);
+
+  CHECK(lua_gettop(L) == 0);
+  lua_close(L);
+}
+
+/* ================= fixed (in-place) binary chunks ================= */
+
+static void test_fixed_chunks()
+{
+  lua_State* L = new_state();
+  DumpBuf d; /* must outlive the loaded closure (destroyed after lua_close) */
+
+  CHECK(load_string(L, "local acc = 0\n"
+                       "for i = 1, 5 do acc = acc + i end\n"
+                       "return acc * 2") == LUA_OK);
+  CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
+  lua_pop(L, 1);
+  CHECK(!d.bytes.empty());
+
+  /* mode "B": the chunk's code stays in the caller's buffer */
+  StringReader r{std::string_view(d.bytes), false};
+  CHECK(lua_load(L, whole_reader, &r, "=fixed"_hs, "B"_hs) == LUA_OK);
+  CHECK(lua_type(L, -1) == LUA_TFUNCTION);
+
+  /* callable, repeatedly, and across a full GC cycle */
+  lua_pushvalue(L, -1);
+  lua_call(L, 0, 1);
+  CHECK(lua_tointeger(L, -1) == 30);
+  lua_pop(L, 1);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_call(L, 0, 1);
+  CHECK(lua_tointeger(L, -1) == 30);
+  lua_pop(L, 1);
+
+  /* a stripped dump loads fixed as well */
+  {
+    CHECK(load_string(L, "return 'fixed-stripped'") == LUA_OK);
+    DumpBuf ds;
+    CHECK(lua_dump(L, dump_writer, &ds, 1) == 0);
+    lua_pop(L, 1);
+    StringReader rs{std::string_view(ds.bytes), false};
+    CHECK(lua_load(L, whole_reader, &rs, std::nullopt, "B"_hs) == LUA_OK);
+    lua_call(L, 0, 1);
+    CHECK(lua_tolstring(L, -1) == "fixed-stripped");
+    lua_pop(L, 1);
+    lua_close(L); /* close before ds dies: fixed chunks reference it */
+    L = nullptr;
+  }
+  /* note: L closed above; d outlives it as required */
+}
+
+/* ================= userdata with uservalues across GC ================= */
+
+static void test_userdata_uservalues_gc()
+{
+  lua_State* L = new_state();
+
+  void* p = lua_newuserdatauv(L, 64, 3);
+  CHECK(p != nullptr);
+  CHECK(lua_type(L, -1) == LUA_TUSERDATA);
+  std::memset(p, 0xAB, 64);
+
+  /* uservalue 1: a table with content */
+  lua_createtable(L, 0, 1);
+  lua_pushinteger(L, 7);
+  lua_setfield(L, -2, "x"_hs);
+  CHECK(lua_setiuservalue(L, -2, 1) != 0);
+  /* uservalue 2: a string */
+  lua_pushliteral(L, "uv-two");
+  CHECK(lua_setiuservalue(L, -2, 2) != 0);
+  /* uservalue 3: a number */
+  lua_pushinteger(L, 12345);
+  CHECK(lua_setiuservalue(L, -2, 3) != 0);
+
+  /* anchor it and run full GC cycles: traversal must keep the uservalues */
+  lua_setfield(L, LUA_REGISTRYINDEX, "udgc_anchor"_hs);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+
+  CHECK(lua_getfield(L, LUA_REGISTRYINDEX, "udgc_anchor"_hs) == LUA_TUSERDATA);
+  CHECK(lua_touserdata(L, -1) == p);
+  CHECK(static_cast<unsigned char*>(p)[0] == 0xAB); /* payload intact */
+  CHECK(static_cast<unsigned char*>(p)[63] == 0xAB);
+
+  CHECK(lua_getiuservalue(L, -1, 1) == LUA_TTABLE);
+  CHECK(lua_getfield(L, -1, "x"_hs) == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 7);
+  lua_pop(L, 2);
+  CHECK(lua_getiuservalue(L, -1, 2) == LUA_TSTRING);
+  CHECK(lua_tolstring(L, -1) == "uv-two");
+  lua_pop(L, 1);
+  CHECK(lua_getiuservalue(L, -1, 3) == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 12345);
+  lua_pop(L, 1);
+
+  /* beyond the last uservalue: none */
+  CHECK(lua_getiuservalue(L, -1, 4) == LUA_TNONE);
+  lua_pop(L, 2);
+
+  /* unanchor and collect: no crash, memory reclaimed */
+  lua_pushnil(L);
+  lua_setfield(L, LUA_REGISTRYINDEX, "udgc_anchor"_hs);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+
+  CHECK(lua_gettop(L) == 0);
+  lua_close(L);
+}
+
+/* ================= upvalue pseudo-indices in C functions ================= */
+
+static int cf_read_upval_type(lua_State* L)
+{
+  /* a light C function has no upvalues: the slot reads as "none" */
+  lua_pushinteger(L, lua_type(L, lua_upvalueindex(1)));
+  return 1;
+}
+
+static int cf_counter(lua_State* L)
+{
+  /* a C closure that updates its own upvalue on every call */
+  lua_Integer n = lua_tointeger(L, lua_upvalueindex(1)) + 1;
+  lua_pushinteger(L, n);
+  lua_replace(L, lua_upvalueindex(1)); /* write back */
+  lua_pushinteger(L, n);
+  return 1;
+}
+
+static void test_c_upvalue_indices()
+{
+  lua_State* L = new_state();
+
+  /* light C function reading a nonexistent upvalue */
+  lua_pushcfunction(L, cf_read_upval_type);
+  lua_call(L, 0, 1);
+  CHECK(lua_tointeger(L, -1) == LUA_TNONE);
+  lua_pop(L, 1);
+
+  /* C closure keeping state in an upvalue it rewrites itself */
+  lua_pushinteger(L, 0);
+  lua_pushcclosure(L, cf_counter, 1);
+  for (lua_Integer expect = 1; expect <= 3; expect++)
+  {
+    lua_pushvalue(L, -1);
+    lua_call(L, 0, 1);
+    CHECK(lua_tointeger(L, -1) == expect);
+    lua_pop(L, 1);
+  }
+  lua_pop(L, 1);
+
+  /* reading past a C closure's last upvalue is "none" as well */
+  lua_pushinteger(L, 9);
+  lua_pushcclosure(L,
+                   [](lua_State* LL) -> int
+                   {
+                     lua_pushinteger(LL, lua_type(LL, lua_upvalueindex(2)));
+                     return 1;
+                   },
+                   1);
+  lua_call(L, 0, 1);
+  CHECK(lua_tointeger(L, -1) == LUA_TNONE);
+  lua_pop(L, 1);
+
+  CHECK(lua_gettop(L) == 0);
+  lua_close(L);
+}
+
+/* ================= yielding from a C hook ================= */
+
+static void yielding_count_hook(lua_State* L, lua_Debug* ar)
+{
+  if (ar->event == LUA_HOOKCOUNT)
+    lua_yield(L, 0); /* C hooks may suspend the running coroutine */
+}
+
+static void test_hook_yield()
+{
+  lua_State* L = new_state();
+  lua_State* co = lua_newthread(L);
+
+  lua_sethook(co, yielding_count_hook, LUA_MASKCOUNT, 25);
+  CHECK(lua_gethook(co) == yielding_count_hook);
+
+  CHECK(load_string(co, "local x = 0\n"
+                        "for i = 1, 200 do x = x + i end\n"
+                        "return x") == LUA_OK);
+
+  int yields = 0;
+  lua_ResumeResult rr = lua_resume(co, L, 0);
+  while (rr.status == LUA_YIELD)
+  {
+    CHECK(rr.nres == 0); /* hook yields carry no values */
+    yields++;
+    CHECK(yields < 10000);
+    rr = lua_resume(co, L, 0); /* continues the interrupted Lua code */
+  }
+  CHECK(rr.status == LUA_OK);
+  CHECK(yields > 0); /* the hook did actually suspend execution */
+  CHECK(rr.nres == 1);
+  CHECK(lua_tointeger(co, -1) == 20100); /* result unharmed by suspensions */
+
+  lua_pop(L, 1); /* the thread */
+  CHECK(lua_gettop(L) == 0);
+  lua_close(L);
+}
+
+/* ================= selective stdlib loading ================= */
+
+static void test_selected_libs()
+{
+  lua_State* L = new_state();
+
+  /* load base+package+math; preload (but do not load) table */
+  luaL_openselectedlibs(L, LUA_GLIBK | LUA_LOADLIBK | LUA_MATHLIBK,
+                        LUA_TABLIBK);
+
+  /* loaded libs are globals and work */
+  CHECK(do_string(L, "return math.floor(3.7)") == LUA_OK);
+  CHECK(lua_tointeger(L, -1) == 3);
+  lua_pop(L, 1);
+
+  /* unselected libs are absent */
+  CHECK(do_string(L, "return type(string), type(os), type(io)") == LUA_OK);
+  CHECK(lua_tolstring(L, -2) == "nil");
+  CHECK(lua_tolstring(L, -1) == "nil");
+  lua_pop(L, 3);
+
+  /* preloaded lib is not a global but require() finds it */
+  CHECK(do_string(L, "return type(table)") == LUA_OK);
+  CHECK(lua_tolstring(L, -1) == "nil");
+  lua_pop(L, 1);
+  CHECK(do_string(L, "local t = require('table')\n"
+                     "local a = {3, 1, 2}\n"
+                     "t.sort(a)\n"
+                     "return a[1], a[3]") == LUA_OK);
+  CHECK(lua_tointeger(L, -2) == 1);
+  CHECK(lua_tointeger(L, -1) == 3);
+  lua_pop(L, 2);
+
+  lua_close(L);
+}
+
+/* ================= host-internal API (lua_internal.h) ================= */
+
+static void test_host_internal_api()
+{
+  lua_State* L = new_state();
+
+  /* lua_newuserdata: one uservalue by default */
+  {
+    void* p = lua_newuserdata(L, 32);
+    CHECK(p != nullptr);
+    CHECK(lua_type(L, -1) == LUA_TUSERDATA);
+    CHECK(lua_getiuservalue(L, -1, 1) == LUA_TNIL); /* has slot 1 */
+    lua_pop(L, 1);
+    CHECK(lua_getiuservalue(L, -1, 2) == LUA_TNONE); /* but not slot 2 */
+    lua_pop(L, 2);
+  }
+
+  /* memory limit: get/set round-trip, allocation keeps working under a
+     generous limit */
+  {
+    size_t orig = lua_getmemlimit(L);
+    lua_setmemlimit(L, 512u * 1024u * 1024u);
+    CHECK(lua_getmemlimit(L) == 512u * 1024u * 1024u);
+    CHECK(do_string(L, "local t = {} for i = 1, 1000 do t[i] = i end "
+                       "return #t") == LUA_OK);
+    CHECK(lua_tointeger(L, -1) == 1000);
+    lua_pop(L, 1);
+    lua_setmemlimit(L, orig);
+    CHECK(lua_getmemlimit(L) == orig);
+  }
+
+  /* lua_resetthread: a suspended coroutine returns to a pristine state */
+  {
+    lua_State* co = lua_newthread(L);
+    /* give the thread the coroutine lib so yield resolves */
+    luaL_openselectedlibs(co, LUA_GLIBK | LUA_COLIBK, 0);
+    CHECK(load_string(co, "coroutine.yield(1) return 2") == LUA_OK);
+    lua_ResumeResult rr = lua_resume(co, L, 0);
+    CHECK(rr.status == LUA_YIELD);
+    CHECK(lua_status(co) == LUA_YIELD);
+
+    CHECK(lua_resetthread(co) == LUA_OK);
+    CHECK(lua_status(co) == LUA_OK);
+    CHECK(lua_gettop(co) == 0);
+
+    /* the reset thread is reusable */
+    CHECK(load_string(co, "return 'reused'") == LUA_OK);
+    rr = lua_resume(co, L, 0);
+    CHECK(rr.status == LUA_OK);
+    CHECK(lua_tolstring(co, -1) == "reused");
+    lua_pop(L, 1); /* the thread */
+  }
+
+  CHECK(lua_gettop(L) == 0);
+  lua_close(L);
+}
+
 int main()
 {
   const TestEntry tests[] = {
@@ -3529,6 +3953,15 @@ int main()
       {"io_handles", test_io_handles},
       {"auxlib_restored", test_auxlib_restored},
       {"num2str", test_num2str},
+      {"string_coercion", test_string_coercion},
+      {"funcaddress", test_funcaddress},
+      {"arith_floats", test_arith_floats},
+      {"fixed_chunks", test_fixed_chunks},
+      {"userdata_uservalues_gc", test_userdata_uservalues_gc},
+      {"c_upvalue_indices", test_c_upvalue_indices},
+      {"hook_yield", test_hook_yield},
+      {"selected_libs", test_selected_libs},
+      {"host_internal_api", test_host_internal_api},
   };
 
   for (const TestEntry& t : tests)
