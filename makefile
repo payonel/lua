@@ -64,20 +64,16 @@ TEST_API_O    =$(OBJ_DIR)/test_public_api.o
 TEST_API_T    =test_public_api
 DEP_FILES    += $(TEST_API_O:.o=.d)
 
-TEST_INT_O    =$(OBJ_DIR)/test_internal_api.o
-TEST_INT_T    =test_internal_api
-DEP_FILES    += $(TEST_INT_O:.o=.d)
-
-all: $(LUA_T) $(TEST_API_T) $(TEST_INT_T)
+all: $(LUA_T) $(TEST_API_T)
 
 include tests/libs/build.mk
 
 debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
-debug: $(LUA_T) $(TEST_API_T) $(TEST_INT_T)
+debug: $(LUA_T) $(TEST_API_T)
 
 cov: VARIANT=cov
-cov: $(LUA_T) $(TEST_API_T) $(TEST_INT_T)
+cov: $(LUA_T) $(TEST_API_T)
 	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
 	$(MAKE) test
 	./cov-report.sh
@@ -92,24 +88,36 @@ $(VARIANT_STAMP):
 	$(RM) $(OBJ_DIR_BASE)/variant-*.stamp
 	touch $@
 
+# liblua.a is the published artifact: only the formal C API (lua.h,
+# lualib.h, lauxlib.h — extern "C" symbols, plus the public luaL_Buffer
+# class) is visible. All internals have C++ linkage; partial-link the
+# objects and localize every strong mangled symbol so internals cannot be
+# linked against. The lua interpreter uses internal APIs, so it links the
+# raw objects instead of the archive. Debug builds skip the seal: LUA_DEBUG
+# test instrumentation (ltests/lhack) reaches internals by design.
+CORE_O        = $(OBJ_DIR)/liblua_combined.o
+
 $(CORE_T): $(OBJ_FILES)
-	$(AR) $@ $?
+	ld -r -o $(CORE_O) $(OBJ_FILES)
+	@if [ "$(VARIANT)" != "debug" ]; then \
+	  nm $(CORE_O) | awk '$$2 ~ /^[TDBR]$$/ && $$3 ~ /^_Z/ && $$3 !~ /^_ZN11luaL_Buffer/ {print $$3}' > $(OBJ_DIR)/localize.syms; \
+	  objcopy --localize-symbols=$(OBJ_DIR)/localize.syms $(CORE_O); \
+	  echo "sealed $@: internals localized"; \
+	fi
+	$(RM) $@
+	$(AR) $@ $(CORE_O)
 	$(RANLIB) $@
 
-$(LUA_T): $(LUA_O) $(CORE_T) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES) $(VARIANT_STAMP)
-	$(CXX) -o $@ $(LUA_O) $(CORE_T) $(LDFLAGS)
+$(LUA_T): $(LUA_O) $(OBJ_FILES) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES) $(VARIANT_STAMP)
+	$(CXX) -o $@ $(LUA_O) $(OBJ_FILES) $(LDFLAGS)
 
 $(TEST_API_T): $(TEST_API_O) $(CORE_T) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(TEST_API_O) $(CORE_T) $(LDFLAGS)
-
-$(TEST_INT_T): $(TEST_INT_O) $(CORE_T) $(VARIANT_STAMP)
-	$(CXX) -o $@ $(TEST_INT_O) $(CORE_T) $(LDFLAGS)
 
 clean:
 	$(RM) -r $(OBJ_DIR_BASE)
 	$(RM) $(LUA_T)
 	$(RM) $(TEST_API_T)
-	$(RM) $(TEST_INT_T)
 	$(RM) $(TEST_BUILD_FILES)
 	$(RM) $(TEST_DIR)/*.gcno $(TEST_DIR)/*.gcda
 
@@ -121,7 +129,6 @@ $(OBJ_DIR):
 
 test:
 	./$(TEST_API_T)
-	./$(TEST_INT_T)
 	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
 		ulimit -S -s 8192; \

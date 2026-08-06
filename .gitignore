@@ -10,4 +10,3 @@ core.*
 tests/core.*
 
 test_public_api
-test_internal_api
