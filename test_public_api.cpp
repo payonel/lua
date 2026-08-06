@@ -675,17 +675,17 @@ static void test_access()
   {
     std::optional<HostString> s = lua_tostring(L, 5);
     CHECK(s.has_value() && *s == "hello");
-    std::string_view sv = lua_tolstring(L, 5);
-    CHECK(sv == "hello");
+    auto sv = lua_tolstring(L, 5);
+    CHECK(sv.has_value() && *sv == "hello");
     /* number is converted in place */
     lua_pushinteger(L, 12);
-    std::string_view nv = lua_tolstring(L, -1);
-    CHECK(nv == "12");
+    auto nv = lua_tolstring(L, -1);
+    CHECK(nv.has_value() && *nv == "12");
     CHECK(lua_type(L, -1) == LUA_TSTRING);
     lua_pop(L, 1);
-    /* non-convertible yields a null view / nullopt */
-    std::string_view tv = lua_tolstring(L, 6);
-    CHECK(tv.data() == nullptr);
+    /* non-convertible yields nullopt */
+    auto tv = lua_tolstring(L, 6);
+    CHECK(!tv.has_value());
     CHECK(!lua_tostring(L, 6).has_value());
   }
 
@@ -875,14 +875,14 @@ static void test_push()
     std::string_view src = "hello world";
     std::string_view r = lua_pushlstring(L, src, 6, 5);
     CHECK(r == "world");
-    CHECK(lua_tolstring(L, -1) == "world");
+    CHECK(*lua_tolstring(L, -1) == "world");
     lua_pop(L, 1);
 
     std::string_view withnul("a\0b", 3);
     r = lua_pushlstring(L, withnul, 0, 3);
     CHECK(r.size() == 3);
     CHECK(lua_rawlen(L, -1) == 3u);
-    std::string_view back = lua_tolstring(L, -1);
+    std::string_view back = *lua_tolstring(L, -1);
     CHECK(back.size() == 3 && std::memcmp(back.data(), "a\0b", 3) == 0);
     lua_pop(L, 1);
 
@@ -2373,25 +2373,25 @@ static void test_auxlib_meta()
 
   /* luaL_tolstring conversions (result is also pushed) */
   lua_pushinteger(L, 12);
-  CHECK(luaL_tolstring(L, -1).to_utf8() == "12");
+  CHECK(luaL_tolstring(L, -1) == "12");
   lua_pop(L, 2);
   lua_pushboolean(L, 1);
-  CHECK(luaL_tolstring(L, -1).to_utf8() == "true");
+  CHECK(luaL_tolstring(L, -1) == "true");
   lua_pop(L, 2);
   lua_pushnil(L);
-  CHECK(luaL_tolstring(L, -1).to_utf8() == "nil");
+  CHECK(luaL_tolstring(L, -1) == "nil");
   lua_pop(L, 2);
-  CHECK(luaL_tolstring(L, obj).to_utf8() == "custom!"); /* via __tostring */
+  CHECK(luaL_tolstring(L, obj) == "custom!"); /* via __tostring */
   lua_pop(L, 1);
   lua_createtable(L, 0, 0); /* plain table: "table: 0x..." */
-  CHECK(luaL_tolstring(L, -1).to_utf8().substr(0, 7) == "table: ");
+  CHECK(luaL_tolstring(L, -1).substr(0, 7) == "table: ");
   lua_pop(L, 2);
   lua_createtable(L, 0, 0); /* __name (no __tostring): "Widget: 0x..." */
   lua_createtable(L, 0, 1);
   lua_pushstring(L, "Widget"_hs);
   lua_setfield(L, -2, "__name"_hs);
   lua_setmetatable(L, -2);
-  CHECK(luaL_tolstring(L, -1).to_utf8().substr(0, 8) == "Widget: ");
+  CHECK(luaL_tolstring(L, -1).substr(0, 8) == "Widget: ");
   lua_pop(L, 3);
 
   lua_close(L);
@@ -3520,9 +3520,9 @@ static void test_string_coercion()
   CHECK(lua_tolstring(L, -1) == "already");
   lua_pop(L, 1);
 
-  /* non-coercible values yield an empty view, stack untouched */
+  /* non-coercible values yield nullopt, stack untouched */
   lua_pushboolean(L, 1);
-  CHECK(lua_tolstring(L, -1).empty());
+  CHECK(!lua_tolstring(L, -1).has_value());
   CHECK(lua_type(L, -1) == LUA_TBOOLEAN);
   lua_pop(L, 1);
 
@@ -3539,7 +3539,7 @@ static void test_string_coercion()
     lua_pop(L, 1);
 
     lua_pushfstring(L, ""_hs);
-    CHECK(lua_tolstring(L, -1).empty());
+    CHECK(lua_tolstring(L, -1)->empty());
     lua_pop(L, 1);
   }
 

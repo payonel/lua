@@ -99,8 +99,8 @@ static int luaB_tonumber(lua_State* L)
     }
     else
     {
-      std::string_view s = lua_tolstring(L, 1);
-      if (s.data() != nullptr && lua_stringtonumber(L, s) == s.size() + 1)
+      auto s = lua_tolstring(L, 1);
+      if (s && lua_stringtonumber(L, *s) == s->size() + 1)
         return 1; /* successful conversion to number */
       /* else not a number */
       luaL_checkany(L, 1); /* (but there must be some parameter) */
@@ -111,7 +111,7 @@ static int luaB_tonumber(lua_State* L)
     lua_Integer n = 0; /* to avoid warnings */
     lua_Integer base = luaL_checkinteger(L, 2);
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
-    std::string_view s = lua_tolstring(L, 1);
+    std::string_view s = *lua_tolstring(L, 1);
     luaL_argchecki(L, 2 <= base && base <= 36, 2, lit<"base out of range">()->view());
     if (b_str2int(s, ((unsigned int)(base)), &n) == s.size())
     {
@@ -421,20 +421,20 @@ static std::string_view generic_reader(lua_State* L, void* ud)
     return {};
   else if (l_unlikely(!lua_isstring(L, -1)))
     luaL_errori(L, lit<"reader function must return a string">()->view());
-  return lua_tolstring(L, -1);
+  return *lua_tolstring(L, -1);
 }
 
 static int luaB_load(lua_State* L)
 {
   int status;
-  std::string_view s = lua_tolstring(L, 1);
+  auto s = lua_tolstring(L, 1);
   const InternalString* mode = getMode(L, 3);
   int env = (!lua_isnone(L, 4) ? 4 : 0); /* 'env' index or 0 if no 'env' */
   std::string_view nullsv(nullptr, 0);
-  if (s.data() != nullptr)
+  if (s)
   {
     const InternalString* chunkname = luaL_optistring(L, 2, lua_toistring(L, 1));
-    status = luaL_loadbufferi(L, s, chunkname == nullptr ? nullsv : chunkname->view(), mode == nullptr ? nullsv : mode->view());
+    status = luaL_loadbufferi(L, *s, chunkname == nullptr ? nullsv : chunkname->view(), mode == nullptr ? nullsv : mode->view());
   }
   else
   {                    /* loading from a reader function */
@@ -483,7 +483,7 @@ static int luaB_assert(lua_State* L)
 static int luaB_select(lua_State* L)
 {
   int n = lua_gettop(L);
-  if (lua_type(L, 1) == LUA_TSTRING && sv_byteat(lua_tolstring(L, 1), 0) == '#')
+  if (lua_type(L, 1) == LUA_TSTRING && sv_byteat(*lua_tolstring(L, 1), 0) == '#')
   {
     lua_pushinteger(L, n - 1);
     return 1;

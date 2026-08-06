@@ -533,7 +533,7 @@ LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& opt
   ar.i_ci = res->i_ci;
   if (what.find('S') != std::string_view::npos)
   {
-    ar.source = HostString(res->source);
+    ar.source = res->source;
     ar.short_src = HostString(res->short_src);
     ar.what = HostString(res->what);
     ar.linedefined = res->linedefined;

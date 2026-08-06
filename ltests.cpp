@@ -1009,7 +1009,7 @@ static int lua_printallstack(lua_State* L)
 static int get_limits(lua_State* L)
 {
   lua_createtable(L, 0, 5);
-  setnameval(L, lit<"IS32INT">(), LUAI_IS32INT);
+  setnameval(L, lit<"IS32INT">(), 1);
   setnameval(L, lit<"MAXARG_Ax">(), MAXARG_Ax);
   setnameval(L, lit<"MAXARG_Bx">(), MAXARG_Bx);
   setnameval(L, lit<"OFFSET_sBx">(), OFFSET_sBx);
@@ -2328,7 +2328,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     else if (inst == lit<"tostring">()->view())
     {
       int i = getindex_aux(L, L1, &sc);
-      if (lua_tolstring(L1, i).data() == nullptr) /* not convertible? */
+      if (!lua_tolstring(L1, i)) /* not convertible? */
         lua_pushnil(L1);
       else
       {
@@ -2416,7 +2416,7 @@ static int testC(lua_State* L)
 
 static int Cfunc(lua_State* L)
 {
-  std::string_view script = lua_tolstring(L, lua_upvalueindex(1));
+  std::string_view script = *lua_tolstring(L, lua_upvalueindex(1));
   return runC(L, L, script);
 }
 
@@ -2426,7 +2426,7 @@ static int Cfunck(lua_State* L, int status, lua_KContext ctx)
   lua_setglobal(L, HostString(lit<"status">()->view()));
   lua_pushinteger(L, ((lua_Integer)(ctx)));
   lua_setglobal(L, HostString(lit<"ctx">()->view()));
-  std::string_view script = lua_tolstring(L, ((int)(ctx)));
+  std::string_view script = *lua_tolstring(L, ((int)(ctx)));
   return runC(L, L, script);
 }
 

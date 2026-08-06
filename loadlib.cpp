@@ -24,6 +24,13 @@
 
 
 /* prefix for open functions in C libraries */
+inline constexpr std::string_view LUA_PATH_DEFAULT = "/usr/local/share/lua/5.5/?.lua;/usr/local/share/lua/5.5/?/init.lua;/usr/local/lib/lua/5.5/?.lua;/usr/local/lib/lua/5.5/?/init.lua;./?.lua;./?/init.lua";
+inline constexpr std::string_view LUA_CPATH_DEFAULT = "/usr/local/lib/lua/5.5/?.so;/usr/local/lib/lua/5.5/loadall.so;./?.so";
+inline constexpr std::string_view LUA_PATH_SEP = ";";
+inline constexpr std::string_view LUA_PATH_MARK = "?";
+inline constexpr std::string_view LUA_EXEC_DIR = "!";
+inline constexpr std::string_view LUA_DIRSEP = "/";
+inline constexpr std::string_view CONFIG = "/\n;\n?\n!\n-\n";
 
 /* separator for open functions in C libraries */
 static const InternalString* const LUA_OFSEP = lit<"_">();
@@ -337,7 +344,7 @@ static int searchpath(lua_State* L, std::string_view name,
     }
   }
   luaL_pushresult(&buff);                     /* push path to create error message */
-  pusherrornotfound(L, lua_tolstring(L, -1)); /* create error message */
+  pusherrornotfound(L, *lua_tolstring(L, -1)); /* create error message */
   return 0; /* not found */
 }
 
@@ -367,7 +374,7 @@ static int findfile(lua_State* L, std::string_view name,
     lua_pushlstring(L, pname->view(), 0, (pname->view()).size());
     luaL_errori(L, lit<"'package.%s' must be a string">()->view());
   }
-  std::string_view path = lua_tolstring(L, -1);
+  std::string_view path = *lua_tolstring(L, -1);
   return searchpath(L, name, path, lit<".">()->view(), dirsep);
 }
 

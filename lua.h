@@ -12,6 +12,8 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include "luaconf.h"
+#include "host_string.h"
 
 inline constexpr int LUA_VERSION_MAJOR_N = 5;
 inline constexpr int LUA_VERSION_MINOR_N = 5;
@@ -27,10 +29,7 @@ inline constexpr std::string_view LUA_VERSION = "Lua 5.5";
 inline constexpr std::string_view LUA_RELEASE = "Lua 5.5.1";
 inline constexpr std::string_view LUA_COPYRIGHT = "Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio";
 inline constexpr std::string_view LUA_AUTHORS = "R. Ierusalimschy, L. H. de Figueiredo, W. Celes";
-static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSION_RELEASE_N == 1,
-              "update the version strings above (and LUA_VDIR in luaconf.h) to match the new numbers");
-
-#include "luaconf.h"
+static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSION_RELEASE_N == 1, "update the version strings above (and LUA_VDIR in luaconf.h) to match the new numbers");
 
 /* mark for precompiled code ('<esc>Lua') */
 inline constexpr std::string_view LUA_SIGNATURE = "\x1bLua";
@@ -83,21 +82,14 @@ constexpr int LUA_RIDX_MAINTHREAD = 3;
 constexpr int LUA_RIDX_LAST = 3;
 
 typedef double lua_Number;
-
 typedef long long lua_Integer;
-
-/* unsigned integer type */
 typedef unsigned long long lua_Unsigned;
-
-/* type for continuation-function contexts */
 typedef ptrdiff_t lua_KContext;
 
 /*
 ** Type for C functions registered with Lua
 */
 typedef int (*lua_CFunction)(lua_State* L);
-
-#include "host_string.h"
 
 /*
 ** Type for continuation functions
@@ -171,7 +163,7 @@ LUA_API std::optional<lua_Number>(lua_tonumberx)(lua_State* L, int idx);
 LUA_API std::optional<lua_Integer>(lua_tointegerx)(lua_State* L, int idx);
 LUA_API int(lua_toboolean)(lua_State* L, int idx);
 
-LUA_API std::string_view(lua_tolstring) (lua_State* L, int idx);
+LUA_API std::optional<std::string_view>(lua_tolstring) (lua_State* L, int idx);
 
 LUA_API lua_Unsigned(lua_rawlen)(lua_State* L, int idx);
 LUA_API lua_CFunction(lua_tocfunction)(lua_State* L, int idx);
@@ -215,8 +207,7 @@ LUA_API int(lua_compare)(lua_State* L, int idx1, int idx2, int op);
 LUA_API void(lua_pushnil)(lua_State* L);
 LUA_API void(lua_pushnumber)(lua_State* L, lua_Number n);
 LUA_API void(lua_pushinteger)(lua_State* L, lua_Integer n);
-LUA_API std::string_view(lua_pushlstring) (lua_State* L, std::string_view s,
-                                           size_t off, size_t len);
+LUA_API std::string_view(lua_pushlstring) (lua_State* L, std::string_view s, size_t off, size_t len);
 LUA_API void(lua_pushstring) (lua_State* L, const std::optional<HostString>& s);
 LUA_API HostString(lua_pushfstring) (lua_State* L, const HostString& fmt);
 LUA_API void(lua_pushcclosure)(lua_State* L, lua_CFunction fn, int n);
@@ -339,7 +330,7 @@ LUA_API void(lua_len)(lua_State* L, int idx);
 
 constexpr int LUA_N2SBUFFSZ = 64;
 LUA_API std::optional<HostString>(lua_numbertocstring)(lua_State* L, int idx);
-LUA_API size_t(lua_stringtonumber)(lua_State* L, std::string_view s);
+LUA_API size_t(lua_stringtonumber)(lua_State* L, const HostString& s);
 
 struct lua_Allocator
 {
@@ -423,7 +414,7 @@ struct lua_Debug
   HostString name;
   HostString namewhat;        /* (n) 'global', 'local', 'field', 'method'; empty = no info */
   HostString what;            /* (S) 'Lua', 'C', 'main', 'tail' */
-  HostString source;          /* (S) */
+  std::string_view source;    /* (S) */
   int currentline;            /* (l) */
   int linedefined;            /* (S) */
   int lastlinedefined;        /* (S) */

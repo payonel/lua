@@ -25,6 +25,7 @@ static const InternalString* const LUA_INIT_VAR = lit<"LUA_INIT">();
 
 /* Name of the environment variable with the name of the readline library */
 constexpr char LUA_RLLIB_VAR[] = "LUA_READLINELIB";
+constexpr char LUA_READLINELIB[] = "libreadline.so";
 
 static lua_State* globalL = nullptr;
 
@@ -541,7 +542,7 @@ static std::string get_prompt(lua_State* L, int firstline)
     return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
   else
   { /* apply 'tostring' over the value */
-    std::string p{luaL_tolstring(L, -1).to_utf8()};
+    std::string p{luaL_tolstring(L, -1)};
     lua_remove(L, -2); /* remove original value */
     return p;
   }
@@ -559,7 +560,7 @@ static int incomplete(lua_State* L, int status)
 {
   if (status == LUA_ERRSYNTAX)
   {
-    std::string_view msgv = lua_tolstring(L, -1);
+    std::string_view msgv = *lua_tolstring(L, -1);
     if (msgv.ends_with(EOFMARK))
       return 1;
   }
@@ -594,7 +595,7 @@ static int addreturn(lua_State* L)
 {
   lua_pushvalue(L, -1);
   lua_pushfstringi(L, lit<"return %s;">()->view());
-  std::string_view retline = lua_tolstring(L, -1);
+  std::string_view retline = *lua_tolstring(L, -1);
   int status = luaL_loadbufferi(L, retline, lit<"=stdin">()->view(), lit<"t">()->view());
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
@@ -626,7 +627,7 @@ static void checklocal(std::string_view line)
 */
 static int multiline(lua_State* L)
 {
-  std::string_view line = lua_tolstring(L, 1); /* get first line */
+  std::string_view line = *lua_tolstring(L, 1); /* get first line */
   checklocal(line);
   for (;;)
   {                                                  /* repeat until gets a complete statement */
@@ -637,7 +638,7 @@ static int multiline(lua_State* L)
     lua_pushistringref(L, lit<"\n">()->view());         /* add newline... */
     lua_insert(L, -2);                /* ...between the two lines */
     lua_concat(L, 3);                 /* join them */
-    line = lua_tolstring(L, 1);       /* get what is has */
+    line = *lua_tolstring(L, 1);       /* get what is has */
   }
 }
 

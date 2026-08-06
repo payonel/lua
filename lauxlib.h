@@ -46,7 +46,7 @@ LUALIB_API void luaL_checkversion(lua_State* L);
 
 LUALIB_API int(luaL_getmetafield)(lua_State* L, int obj, const HostString& e);
 LUALIB_API int(luaL_callmeta)(lua_State* L, int obj, const HostString& e);
-LUALIB_API HostString(luaL_tolstring) (lua_State* L, int idx);
+LUALIB_API std::string_view(luaL_tolstring) (lua_State* L, int idx);
 LUALIB_API int(luaL_argerror)(lua_State* L, int arg, const HostString& extramsg);
 LUALIB_API int(luaL_typeerror)(lua_State* L, int arg, const HostString& tname);
 LUALIB_API std::string_view(luaL_checklstring) (lua_State* L, int arg);

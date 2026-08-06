@@ -209,7 +209,7 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
   }
   lua_pushlstring(L, fmt, pos, fmt.size() - pos);
   lua_pushfstringi(L, lit<"invalid conversion specifier '%%%s'">()->view());
-  luaL_argerrori(L, 1, lua_tolstring(L, -1));
+  luaL_argerrori(L, 1, *lua_tolstring(L, -1));
   return pos; /* to avoid warnings */
 }
 
