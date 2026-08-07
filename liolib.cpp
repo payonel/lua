@@ -657,9 +657,8 @@ static int f_write(lua_State* L)
 static int f_seek(lua_State* L)
 {
   static const std::string_view modenames[] = {lit<"set">()->view(), lit<"cur">()->view(), lit<"end">()->view()};
-  static const std::string_view defmode = lit<"cur">()->view();
   OsFile* f = tofile(L);
-  int op = luaL_checkoption(L, 2, defmode, modenames);
+  int op = luaL_checkoptioni(L, 2, lit<"cur">()->view(), modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
   long long offset = (long long) p3;
   luaL_argchecki(L, (lua_Integer) offset == p3, 3, lit<"not an integer in proper range">()->view());
@@ -677,7 +676,7 @@ static int f_setvbuf(lua_State* L)
 {
   static const std::string_view modenames[] = {lit<"no">()->view(), lit<"full">()->view(), lit<"line">()->view()};
   OsFile* f = tofile(L);
-  int op = luaL_checkoption(L, 2, {}, modenames);
+  int op = luaL_checkoptioni(L, 2, {}, modenames);
   lua_Integer sz = luaL_optinteger(L, 3, LUAL_BUFFERSIZE);
   int res = os_setvbuf(f, op, (size_t) sz);
   return luaL_fileresulti(L, res == 0, {}, res);
@@ -785,4 +784,9 @@ LUAMOD_API int luaopen_io(lua_State* L)
   createstdfile(L, os_stdout(), IO_OUTPUT->view(), lit<"stdout">());
   createstdfile(L, os_stderr(), "", lit<"stderr">());
   return 1;
+}
+
+char lua_getlocaledecpoint(void)
+{
+  return localeconv()->decimal_point[0];
 }

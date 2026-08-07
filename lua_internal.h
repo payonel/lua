@@ -2,6 +2,9 @@
 #pragma once
 
 #include "lua.h"
+#include "internal_string.h"
+
+static const std::string_view LUA_IGMARK = lit<"-">()->view();
 
 class InternalString;
 
@@ -26,8 +29,7 @@ int lua_resetthread(lua_State* L);
 
 
 const InternalString* luaL_checkistring(lua_State* L, int arg);
-const InternalString* luaL_optistring(lua_State* L, int arg,
-                                      const InternalString* def);
+const InternalString* luaL_optistring(lua_State* L, int arg, const InternalString* def);
 const InternalString* luaL_toistring(lua_State* L, int idx);
 
 int luaL_loadbufferi(lua_State* L, std::string_view buff, std::string_view name, std::string_view mode);
@@ -46,6 +48,8 @@ void lua_warningi(lua_State* L, std::string_view msg, int tocont);
 int luaL_errori(lua_State* L, std::string_view fmt);
 int luaL_argerrori(lua_State* L, int arg, std::string_view extramsg);
 int luaL_typeerrori(lua_State* L, int arg, std::string_view tname);
+int luaL_checkoptioni(lua_State* L, int arg, std::string_view def,
+                      std::span<const std::string_view> lst);
 void luaL_argchecki(lua_State* L, bool cond, int arg, std::string_view extramsg);
 void luaL_argexpectedi(lua_State* L, bool cond, int arg, std::string_view tname);
 
@@ -61,12 +65,8 @@ void* luaL_checkudatai(lua_State* L, int ud, std::string_view tname);
 int luaL_getmetatablei(lua_State* L, std::string_view tname);
 
 int luaL_getsubtablei(lua_State* L, int idx, std::string_view fname);
-void luaL_requirefi(lua_State* L, std::string_view modname,
-                    lua_CFunction openf, int glb);
-
-void luaL_tracebacki(lua_State* L, lua_State* L1,
-                     std::string_view msg, int level);
-
+void luaL_requirefi(lua_State* L, std::string_view modname, lua_CFunction openf, int glb);
+void luaL_tracebacki(lua_State* L, lua_State* L1, std::string_view msg, int level);
 
 InternalString lua_funcaddressi(lua_State* L, int idx);
 
@@ -78,10 +78,8 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname, int en);
 int luaL_execresulti(lua_State* L, int stat, int en);
 
 struct luaL_Buffer;
-void luaL_addgsubi(luaL_Buffer* b, std::string_view s,
-                   std::string_view p, std::string_view r);
-std::string_view luaL_gsubi(lua_State* L, std::string_view s,
-                            std::string_view p, std::string_view r);
+void luaL_addgsubi(luaL_Buffer* b, std::string_view s, std::string_view p, std::string_view r);
+std::string_view luaL_gsubi(lua_State* L, std::string_view s, std::string_view p, std::string_view r);
 
 struct InternalDebug
 {
@@ -105,9 +103,11 @@ struct InternalDebug
 };
 
 std::optional<InternalDebug> lua_getstacki(lua_State* L, int level);
-std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view options,
-                                          const InternalDebug& ar);
+std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view options, const InternalDebug& ar);
 const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n);
 const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n);
 const InternalString* lua_getupvaluei(lua_State* L, int funcindex, int n);
 const InternalString* lua_setupvaluei(lua_State* L, int funcindex, int n);
+
+char lua_getlocaledecpoint();
+

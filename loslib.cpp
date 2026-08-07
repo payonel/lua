@@ -311,10 +311,9 @@ static int os_setlocale(lua_State* L)
   static const std::string_view catnames[] = {
       lit<"all">()->view(), lit<"collate">()->view(), lit<"ctype">()->view(),
       lit<"monetary">()->view(), lit<"numeric">()->view(), lit<"time">()->view()};
-  static const std::string_view defcat = lit<"all">()->view();
   int nol = lua_isnoneornil(L, 1);
   const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
-  int op = luaL_checkoption(L, 2, defcat, catnames);
+  int op = luaL_checkoptioni(L, 2, lit<"all">()->view(), catnames);
   std::optional<InternalString> res = os_setlocale(
       cat[op], nol ? std::nullopt : std::optional<std::string_view>(l->view()));
   if (res.has_value())

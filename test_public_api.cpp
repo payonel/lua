@@ -2265,10 +2265,10 @@ static void test_auxlib_checks()
   CHECK(top_msg_contains(L, "stack overflow"));
 
   /* checkoption: match, default for absent arg, and rejection */
-  static constexpr std::string_view k_opts[] = {"one", "two", "three"};
+  static const HostString k_opts[] = {"one", "two", "three"};
   g_body = [](lua_State* Lb) -> int {
-    CHECK(luaL_checkoption(Lb, 1, std::string_view{}, k_opts) == 2);
-    CHECK(luaL_checkoption(Lb, 2, "two", k_opts) == 1); /* absent -> def */
+    CHECK(luaL_checkoption(Lb, 1, std::nullopt, k_opts) == 2);
+    CHECK(luaL_checkoption(Lb, 2, HostString("two"), k_opts) == 1); /* absent -> def */
     return 0;
   };
   lua_pushcfunction(L, cf_body);
@@ -2276,7 +2276,7 @@ static void test_auxlib_checks()
   CHECK(lua_pcall(L, 1, 0, 0) == LUA_OK);
 
   g_body = [](lua_State* Lb) -> int {
-    return luaL_checkoption(Lb, 1, std::string_view{}, k_opts);
+    return luaL_checkoption(Lb, 1, std::nullopt, k_opts);
   };
   lua_pushcfunction(L, cf_body);
   lua_pushstring(L, "four"_hs);

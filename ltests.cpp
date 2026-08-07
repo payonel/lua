@@ -1168,7 +1168,7 @@ static int gc_state(lua_State* L)
       GCSpropagate, GCSenteratomic, GCSatomic, GCSswpallgc, GCSswpfinobj,
       GCSswptobefnz, GCSswpend, GCScallfin, GCSpause, -1};
   static const std::string_view defstate = lit<"">()->view();
-  int option = states[luaL_checkoption(L, 1, defstate, statenames)];
+  int option = states[luaL_checkoptioni(L, 1, defstate, statenames)];
   global_State* g = G(L);
   if (option == -1)
   {

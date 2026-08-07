@@ -213,12 +213,11 @@ static int luaB_collectgarbage(lua_State* L)
   static const std::string_view opts[] = {
       lit<"stop">()->view(), lit<"restart">()->view(), lit<"collect">()->view(),
       lit<"count">()->view(), lit<"step">()->view(), lit<"isrunning">()->view(), lit<"generational">()->view(),
-      lit<"incremental">()->view(), lit<"param">()->view(), "setlimit", "getlimit"};
+      lit<"incremental">()->view(), lit<"param">()->view(), lit<"setlimit">()->view(), lit<"getlimit">()->view()};
   static const char optsnum[] = {LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
                                  LUA_GCCOUNT, LUA_GCSTEP, LUA_GCISRUNNING, LUA_GCGEN, LUA_GCINC,
                                  LUA_GCPARAM, 100, 101};
-  static const std::string_view defopt = lit<"collect">()->view();
-  int o = optsnum[luaL_checkoption(L, 1, defopt, opts)];
+  int o = optsnum[luaL_checkoptioni(L, 1, lit<"collect">()->view(), opts)];
   switch (o)
   {
   case 100:
@@ -271,7 +270,7 @@ static int luaB_collectgarbage(lua_State* L)
     static const char pnum[] = {
         LUA_GCPMINORMUL, LUA_GCPMAJORMINOR, LUA_GCPMINORMAJOR,
         LUA_GCPPAUSE, LUA_GCPSTEPMUL, LUA_GCPSTEPSIZE};
-    int p = pnum[luaL_checkoption(L, 2, {}, params)];
+    int p = pnum[luaL_checkoptioni(L, 2, {}, params)];
     lua_Integer value = luaL_optinteger(L, 3, -1);
     lua_pushinteger(L, lua_gc(L, o, 0, p, (int) value));
     return 1;

@@ -441,15 +441,30 @@ void* luaL_checkudatai(lua_State* L, int ud, std::string_view tname)
 ** =======================================================
 */
 
-LUALIB_API int luaL_checkoption(lua_State* L, int arg,
-                                std::string_view def,
-                                std::span<const std::string_view> lst)
+int luaL_checkoptioni(lua_State* L, int arg,
+                      std::string_view def,
+                      std::span<const std::string_view> lst)
 {
   std::string_view name = (def.data() != nullptr)
                               ? luaL_optlstring(L, arg, def)
                               : luaL_checklstring(L, arg);
   for (size_t i = 0; i < lst.size(); i++)
     if (name == lst[i])
+      return ((int)(i));
+  lua_pushlstring(L, name, 0, name.size());
+  const InternalString* msg = lua_pushfstringi(L, lit<"invalid option '%s'">()->view());
+  return luaL_argerrori(L, arg, msg->view());
+}
+
+LUALIB_API int luaL_checkoption(lua_State* L, int arg,
+                                const std::optional<HostString>& def,
+                                const std::span<const HostString>& lst)
+{
+  std::string_view name = def
+                              ? luaL_optlstring(L, arg, def->to_utf8())
+                              : luaL_checklstring(L, arg);
+  for (size_t i = 0; i < lst.size(); i++)
+    if (name == lst[i].to_utf8())
       return ((int)(i));
   lua_pushlstring(L, name, 0, name.size());
   const InternalString* msg = lua_pushfstringi(L, lit<"invalid option '%s'">()->view());
