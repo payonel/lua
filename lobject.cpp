@@ -27,6 +27,8 @@
 #include "lstring.h"
 #include "lvm.h"
 
+#include "lua_internal.h"
+
 /*
 ** Computes ceil(log2(x)), which is the smallest integer n such that
 ** x <= (1 << n).
