@@ -357,17 +357,17 @@ static int arith_unm(lua_State* L)
   return arith(L, LUA_OPUNM, lit<"__unm">()->view());
 }
 
-static const luaL_Reg stringmetamethods[] = {
-    {lit<"__add">()->view(), arith_add},
-    {lit<"__sub">()->view(), arith_sub},
-    {lit<"__mul">()->view(), arith_mul},
-    {lit<"__mod">()->view(), arith_mod},
-    {lit<"__pow">()->view(), arith_pow},
-    {lit<"__div">()->view(), arith_div},
-    {lit<"__idiv">()->view(), arith_idiv},
-    {lit<"__unm">()->view(), arith_unm},
-    {lit<"__index">()->view(), nullptr}, /* placeholder */
-    {{}, nullptr}};
+static const luaL_Regi stringmetamethods[] = {
+  {lit<"__add">()->view(), arith_add},
+  {lit<"__sub">()->view(), arith_sub},
+  {lit<"__mul">()->view(), arith_mul},
+  {lit<"__mod">()->view(), arith_mod},
+  {lit<"__pow">()->view(), arith_pow},
+  {lit<"__div">()->view(), arith_div},
+  {lit<"__idiv">()->view(), arith_idiv},
+  {lit<"__unm">()->view(), arith_unm},
+  {lit<"__index">()->view(), nullptr}
+}; /* placeholder */
 
 /* }====================================================== */
 
@@ -2394,31 +2394,31 @@ static int str_unpack(lua_State* L)
 
 /* }====================================================== */
 
-static const luaL_Reg strlib[] = {
-    {lit<"byte">()->view(), str_byte},
-    {lit<"char">()->view(), str_char},
-    {lit<"dump">()->view(), str_dump},
-    {lit<"find">()->view(), str_find},
-    {lit<"format">()->view(), str_format},
-    {lit<"gmatch">()->view(), gmatch},
-    {lit<"gsub">()->view(), str_gsub},
-    {lit<"len">()->view(), str_len},
-    {lit<"lower">()->view(), str_lower},
-    {lit<"match">()->view(), str_match},
-    {lit<"rep">()->view(), str_rep},
-    {lit<"reverse">()->view(), str_reverse},
-    {lit<"sub">()->view(), str_sub},
-    {lit<"upper">()->view(), str_upper},
-    {lit<"pack">()->view(), str_pack},
-    {lit<"packsize">()->view(), str_packsize},
-    {lit<"unpack">()->view(), str_unpack},
-    {{}, nullptr}};
+static const luaL_Regi strlib[] = {
+  {lit<"byte">()->view(), str_byte},
+  {lit<"char">()->view(), str_char},
+  {lit<"dump">()->view(), str_dump},
+  {lit<"find">()->view(), str_find},
+  {lit<"format">()->view(), str_format},
+  {lit<"gmatch">()->view(), gmatch},
+  {lit<"gsub">()->view(), str_gsub},
+  {lit<"len">()->view(), str_len},
+  {lit<"lower">()->view(), str_lower},
+  {lit<"match">()->view(), str_match},
+  {lit<"rep">()->view(), str_rep},
+  {lit<"reverse">()->view(), str_reverse},
+  {lit<"sub">()->view(), str_sub},
+  {lit<"upper">()->view(), str_upper},
+  {lit<"pack">()->view(), str_pack},
+  {lit<"packsize">()->view(), str_packsize},
+  {lit<"unpack">()->view(), str_unpack}
+};
 
 static void createmetatable(lua_State* L)
 {
   /* table to be metatable for strings */
   lua_createtable(L, 0, sizeof(stringmetamethods) / sizeof((stringmetamethods)[0]) - 1);
-  luaL_setfuncs(L, stringmetamethods, 0);
+  luaL_setfuncsi(L, stringmetamethods, 0);
   lua_pushistringref(L, lit<"">()->view());         /* dummy string */
   lua_pushvalue(L, -2);           /* copy table */
   lua_setmetatable(L, -2);        /* set table as metatable for strings */
@@ -2433,7 +2433,7 @@ static void createmetatable(lua_State* L)
 */
 LUAMOD_API int luaopen_string(lua_State* L)
 {
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(strlib) / sizeof((strlib)[0]) - 1), luaL_setfuncs(L, strlib, 0));
+  luaL_newlibi(L, strlib);
   createmetatable(L);
   return 1;
 }

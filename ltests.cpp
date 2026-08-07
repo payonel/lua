@@ -2544,7 +2544,7 @@ static int nonblock(lua_State* L)
 
 /* }====================================================== */
 
-static const struct luaL_Reg tests_funcs[] = {
+static const struct luaL_Regi tests_funcs[] = {
     {lit<"checkmemory">()->view(), lua_checkmemory},
     {lit<"closestate">()->view(), closestate},
     {lit<"d2s">()->view(), d2s},
@@ -2596,8 +2596,7 @@ static const struct luaL_Reg tests_funcs[] = {
     {lit<"upvalue">()->view(), upvalue},
     {lit<"externKstr">()->view(), externKstr},
     {lit<"externstr">()->view(), externstr},
-    {lit<"nonblock">()->view(), nonblock},
-    {{}, nullptr}};
+    {lit<"nonblock">()->view(), nonblock}};
 
 static void checkfinalmem(void)
 {
@@ -2624,7 +2623,7 @@ int luaB_opentests(lua_State* L)
   atexit(checkfinalmem);
   assert(f == debug_realloc && ud == &l_memcontrol);
   lua_setallocf(L, f, ud); /* exercise this function */
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(tests_funcs) / sizeof((tests_funcs)[0]) - 1), luaL_setfuncs(L, tests_funcs, 0));
+  luaL_newlibi(L, tests_funcs);
   return 1;
 }
 

@@ -298,19 +298,19 @@ static int iter_codes(lua_State* L)
 /* pattern to match a single UTF-8 character */
 #define UTF8PATT "[\0-\x7F\xC2-\xFD][\x80-\xBF]*"
 
-static const luaL_Reg funcs[] = {
-    {lit<"offset">()->view(), byteoffset},
-    {lit<"codepoint">()->view(), codepoint},
-    {lit<"char">()->view(), utfchar},
-    {lit<"len">()->view(), utflen},
-    {lit<"codes">()->view(), iter_codes},
-    /* placeholders */
-    {lit<"charpattern">()->view(), nullptr},
-    {{}, nullptr}};
+static const luaL_Regi funcs[] = {
+  {lit<"offset">()->view(), byteoffset},
+  {lit<"codepoint">()->view(), codepoint},
+  {lit<"char">()->view(), utfchar},
+  {lit<"len">()->view(), utflen},
+  {lit<"codes">()->view(), iter_codes},
+  /* placeholders */
+  {lit<"charpattern">()->view(), nullptr}
+};
 
 LUAMOD_API int luaopen_utf8(lua_State* L)
 {
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(funcs) / sizeof((funcs)[0]) - 1), luaL_setfuncs(L, funcs, 0));
+  luaL_newlibi(L, funcs);
   const std::string_view patt = lit<UTF8PATT>()->view();
   lua_pushlstring(L, patt, 0, patt.size());
   lua_setfieldi(L, -2, lit<"charpattern">()->view());

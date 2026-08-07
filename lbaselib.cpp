@@ -552,40 +552,40 @@ static int luaB_tostring(lua_State* L)
   return 1;
 }
 
-static const luaL_Reg base_funcs[] = {
-    {lit<"assert">()->view(), luaB_assert},
-    {lit<"collectgarbage">()->view(), luaB_collectgarbage},
-    {lit<"dofile">()->view(), luaB_dofile},
-    {lit<"error">()->view(), luaB_error},
-    {lit<"getmetatable">()->view(), luaB_getmetatable},
-    {lit<"ipairs">()->view(), luaB_ipairs},
-    {lit<"loadfile">()->view(), luaB_loadfile},
-    {lit<"load">()->view(), luaB_load},
-    {lit<"next">()->view(), luaB_next},
-    {lit<"pairs">()->view(), luaB_pairs},
-    {lit<"pcall">()->view(), luaB_pcall},
-    {lit<"print">()->view(), luaB_print},
-    {lit<"warn">()->view(), luaB_warn},
-    {lit<"rawequal">()->view(), luaB_rawequal},
-    {lit<"rawlen">()->view(), luaB_rawlen},
-    {lit<"rawget">()->view(), luaB_rawget},
-    {lit<"rawset">()->view(), luaB_rawset},
-    {lit<"select">()->view(), luaB_select},
-    {lit<"setmetatable">()->view(), luaB_setmetatable},
-    {lit<"tonumber">()->view(), luaB_tonumber},
-    {lit<"tostring">()->view(), luaB_tostring},
-    {lit<"type">()->view(), luaB_type},
-    {lit<"xpcall">()->view(), luaB_xpcall},
-    /* placeholders */
-    {LUA_GNAME->view(), nullptr},
-    {lit<"_VERSION">()->view(), nullptr},
-    {{}, nullptr}};
+static const luaL_Regi base_funcs[] = {
+  {lit<"assert">()->view(), luaB_assert},
+  {lit<"collectgarbage">()->view(), luaB_collectgarbage},
+  {lit<"dofile">()->view(), luaB_dofile},
+  {lit<"error">()->view(), luaB_error},
+  {lit<"getmetatable">()->view(), luaB_getmetatable},
+  {lit<"ipairs">()->view(), luaB_ipairs},
+  {lit<"loadfile">()->view(), luaB_loadfile},
+  {lit<"load">()->view(), luaB_load},
+  {lit<"next">()->view(), luaB_next},
+  {lit<"pairs">()->view(), luaB_pairs},
+  {lit<"pcall">()->view(), luaB_pcall},
+  {lit<"print">()->view(), luaB_print},
+  {lit<"warn">()->view(), luaB_warn},
+  {lit<"rawequal">()->view(), luaB_rawequal},
+  {lit<"rawlen">()->view(), luaB_rawlen},
+  {lit<"rawget">()->view(), luaB_rawget},
+  {lit<"rawset">()->view(), luaB_rawset},
+  {lit<"select">()->view(), luaB_select},
+  {lit<"setmetatable">()->view(), luaB_setmetatable},
+  {lit<"tonumber">()->view(), luaB_tonumber},
+  {lit<"tostring">()->view(), luaB_tostring},
+  {lit<"type">()->view(), luaB_type},
+  {lit<"xpcall">()->view(), luaB_xpcall},
+  /* placeholders */
+  {LUA_GNAME->view(), nullptr},
+  {lit<"_VERSION">()->view(), nullptr}
+};
 
 LUAMOD_API int luaopen_base(lua_State* L)
 {
   /* open lib into global table */
   lua_pushglobaltable(L);
-  luaL_setfuncs(L, base_funcs, 0);
+  luaL_setfuncsi(L, base_funcs, 0);
   /* set global _G */
   lua_pushvalue(L, -1);
   lua_setfieldi(L, -2, LUA_GNAME->view());

@@ -511,27 +511,27 @@ static int db_traceback(lua_State* L)
   return 1;
 }
 
-static const luaL_Reg dblib[] = {
-    {lit<"debug">()->view(), db_debug},
-    {lit<"getuservalue">()->view(), db_getuservalue},
-    {lit<"gethook">()->view(), db_gethook},
-    {lit<"getinfo">()->view(), db_getinfo},
-    {lit<"getlocal">()->view(), db_getlocal},
-    {lit<"getregistry">()->view(), db_getregistry},
-    {lit<"getmetatable">()->view(), db_getmetatable},
-    {lit<"getupvalue">()->view(), db_getupvalue},
-    {lit<"upvaluejoin">()->view(), db_upvaluejoin},
-    {lit<"upvalueid">()->view(), db_upvalueid},
-    {lit<"setuservalue">()->view(), db_setuservalue},
-    {lit<"sethook">()->view(), db_sethook},
-    {lit<"setlocal">()->view(), db_setlocal},
-    {lit<"setmetatable">()->view(), db_setmetatable},
-    {lit<"setupvalue">()->view(), db_setupvalue},
-    {lit<"traceback">()->view(), db_traceback},
-    {{}, nullptr}};
+static const luaL_Regi dblib[] = {
+  {lit<"debug">()->view(), db_debug},
+  {lit<"getuservalue">()->view(), db_getuservalue},
+  {lit<"gethook">()->view(), db_gethook},
+  {lit<"getinfo">()->view(), db_getinfo},
+  {lit<"getlocal">()->view(), db_getlocal},
+  {lit<"getregistry">()->view(), db_getregistry},
+  {lit<"getmetatable">()->view(), db_getmetatable},
+  {lit<"getupvalue">()->view(), db_getupvalue},
+  {lit<"upvaluejoin">()->view(), db_upvaluejoin},
+  {lit<"upvalueid">()->view(), db_upvalueid},
+  {lit<"setuservalue">()->view(), db_setuservalue},
+  {lit<"sethook">()->view(), db_sethook},
+  {lit<"setlocal">()->view(), db_setlocal},
+  {lit<"setmetatable">()->view(), db_setmetatable},
+  {lit<"setupvalue">()->view(), db_setupvalue},
+  {lit<"traceback">()->view(), db_traceback}
+};
 
 LUAMOD_API int luaopen_debug(lua_State* L)
 {
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(dblib) / sizeof((dblib)[0]) - 1), luaL_setfuncs(L, dblib, 0));
+  luaL_newlibi(L, dblib);
   return 1;
 }

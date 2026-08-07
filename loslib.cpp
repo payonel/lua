@@ -340,24 +340,24 @@ static int os_exit(lua_State* L)
   return 0;
 }
 
-static const luaL_Reg syslib[] = {
-    {lit<"clock">()->view(), os_clock},
-    {lit<"date">()->view(), os_date},
-    {lit<"difftime">()->view(), os_difftime},
-    {lit<"execute">()->view(), os_execute},
-    {lit<"exit">()->view(), os_exit},
-    {lit<"getenv">()->view(), os_getenv},
-    {lit<"remove">()->view(), os_remove},
-    {lit<"rename">()->view(), os_rename},
-    {lit<"setlocale">()->view(), os_setlocale},
-    {lit<"time">()->view(), os_time},
-    {lit<"tmpname">()->view(), os_tmpname},
-    {{}, nullptr}};
+static const luaL_Regi syslib[] = {
+  {lit<"clock">()->view(), os_clock},
+  {lit<"date">()->view(), os_date},
+  {lit<"difftime">()->view(), os_difftime},
+  {lit<"execute">()->view(), os_execute},
+  {lit<"exit">()->view(), os_exit},
+  {lit<"getenv">()->view(), os_getenv},
+  {lit<"remove">()->view(), os_remove},
+  {lit<"rename">()->view(), os_rename},
+  {lit<"setlocale">()->view(), os_setlocale},
+  {lit<"time">()->view(), os_time},
+  {lit<"tmpname">()->view(), os_tmpname}
+};
 
 /* }====================================================== */
 
 LUAMOD_API int luaopen_os(lua_State* L)
 {
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(syslib) / sizeof((syslib)[0]) - 1), luaL_setfuncs(L, syslib, 0));
+  luaL_newlibi(L, syslib);
   return 1;
 }

@@ -217,19 +217,19 @@ static int luaB_close(lua_State* L)
   }
 }
 
-static const luaL_Reg co_funcs[] = {
-    {lit<"create">()->view(), luaB_cocreate},
-    {lit<"resume">()->view(), luaB_coresume},
-    {lit<"running">()->view(), luaB_corunning},
-    {lit<"status">()->view(), luaB_costatus},
-    {lit<"wrap">()->view(), luaB_cowrap},
-    {lit<"yield">()->view(), luaB_yield},
-    {lit<"isyieldable">()->view(), luaB_yieldable},
-    {lit<"close">()->view(), luaB_close},
-    {{}, nullptr}};
+static const luaL_Regi co_funcs[] = {
+  {lit<"create">()->view(), luaB_cocreate},
+  {lit<"resume">()->view(), luaB_coresume},
+  {lit<"running">()->view(), luaB_corunning},
+  {lit<"status">()->view(), luaB_costatus},
+  {lit<"wrap">()->view(), luaB_cowrap},
+  {lit<"yield">()->view(), luaB_yield},
+  {lit<"isyieldable">()->view(), luaB_yieldable},
+  {lit<"close">()->view(), luaB_close}
+};
 
 LUAMOD_API int luaopen_coroutine(lua_State* L)
 {
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(co_funcs) / sizeof((co_funcs)[0]) - 1), luaL_setfuncs(L, co_funcs, 0));
+  luaL_newlibi(L, co_funcs);
   return 1;
 }

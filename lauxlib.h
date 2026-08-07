@@ -35,7 +35,7 @@ inline const InternalString* const LUA_PRELOAD_TABLE = lit<"_PRELOAD">();
 
 struct luaL_Reg
 {
-  std::string_view name;
+  HostString name;
   lua_CFunction func;
 };
 
@@ -110,22 +110,9 @@ LUALIB_API void(luaL_addgsub)(luaL_Buffer* b, const HostString& s,
 LUALIB_API HostString(luaL_gsub) (lua_State* L, const HostString& s,
                                   const HostString& p, const HostString& r);
 
-LUALIB_API void(luaL_setfuncs)(lua_State* L, const luaL_Reg* l, int nup);
+LUALIB_API void(luaL_setfuncs)(lua_State* L, const std::span<const luaL_Reg>& funcs, int nup);
 
-template <size_t N>
-void luaL_newlibtable(lua_State* L, const luaL_Reg (&l)[N])
-{
-  assert(l[N - 1].name.data() == nullptr && l[N - 1].func == nullptr);
-  lua_createtable(L, 0, ((int)(N - 1)));
-}
-
-template <size_t N>
-void luaL_newlib(lua_State* L, const luaL_Reg (&l)[N])
-{
-  luaL_checkversion(L);
-  luaL_newlibtable(L, l);
-  luaL_setfuncs(L, l, 0);
-}
+LUALIB_API void luaL_newlib(lua_State* L, const std::span<const luaL_Reg>& funcs);
 
 template <typename F, typename D>
 auto luaL_opt(lua_State* L, F f, int n, D d)

@@ -554,20 +554,20 @@ static int ll_require(lua_State* L)
 
 /* }====================================================== */
 
-static const luaL_Reg pk_funcs[] = {
-    {lit<"loadlib">()->view(), ll_loadlib},
-    {lit<"searchpath">()->view(), ll_searchpath},
-    /* placeholders */
-    {lit<"preload">()->view(), nullptr},
-    {lit<"cpath">()->view(), nullptr},
-    {lit<"path">()->view(), nullptr},
-    {lit<"searchers">()->view(), nullptr},
-    {lit<"loaded">()->view(), nullptr},
-    {{}, nullptr}};
+static const luaL_Regi pk_funcs[] = {
+  {lit<"loadlib">()->view(), ll_loadlib},
+  {lit<"searchpath">()->view(), ll_searchpath},
+  /* placeholders */
+  {lit<"preload">()->view(), nullptr},
+  {lit<"cpath">()->view(), nullptr},
+  {lit<"path">()->view(), nullptr},
+  {lit<"searchers">()->view(), nullptr},
+  {lit<"loaded">()->view(), nullptr}
+};
 
-static const luaL_Reg ll_funcs[] = {
-    {lit<"require">()->view(), ll_require},
-    {{}, nullptr}};
+static const luaL_Regi ll_funcs[] = {
+  {lit<"require">()->view(), ll_require}
+};
 
 static void createsearcherstable(lua_State* L)
 {
@@ -594,7 +594,7 @@ LUAMOD_API int luaopen_package(lua_State* L)
 {
   luaL_getsubtablei(L, LUA_REGISTRYINDEX, CLIBS->view()); /* create CLIBS table */
   lua_pop(L, 1);                                 /* will not use it now */
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(pk_funcs) / sizeof((pk_funcs)[0]) - 1), luaL_setfuncs(L, pk_funcs, 0));                      /* create 'package' table */
+  luaL_newlibi(L, pk_funcs);
   createsearcherstable(L);
   /* set paths */
   setpath(L, lit<"path">(), LUA_PATH_VAR, LUA_PATH_DEFAULT);
@@ -610,7 +610,7 @@ LUAMOD_API int luaopen_package(lua_State* L)
   lua_setfieldi(L, -2, lit<"preload">()->view());
   lua_pushglobaltable(L);
   lua_pushvalue(L, -2);          /* set 'package' as upvalue for next lib */
-  luaL_setfuncs(L, ll_funcs, 1); /* open lib into global table */
+  luaL_setfuncsi(L, ll_funcs, 1); /* open lib into global table */
   lua_pop(L, 1);                 /* pop global table */
   return 1;                      /* return 'package' table */
 }

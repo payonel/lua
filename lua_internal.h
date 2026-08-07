@@ -50,6 +50,16 @@ int luaL_argerrori(lua_State* L, int arg, std::string_view extramsg);
 int luaL_typeerrori(lua_State* L, int arg, std::string_view tname);
 int luaL_checkoptioni(lua_State* L, int arg, std::string_view def,
                       std::span<const std::string_view> lst);
+
+struct luaL_Regi
+{
+  std::string_view name;
+  lua_CFunction func;
+};
+
+void luaL_setfuncsi(lua_State* L, std::span<const luaL_Regi> funcs, int nup);
+void luaL_newlibi(lua_State* L, std::span<const luaL_Regi> funcs);
+
 void luaL_argchecki(lua_State* L, bool cond, int arg, std::string_view extramsg);
 void luaL_argexpectedi(lua_State* L, bool cond, int arg, std::string_view tname);
 

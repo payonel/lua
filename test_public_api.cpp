@@ -2670,7 +2670,6 @@ static void test_auxlib_misc()
     const luaL_Reg regs[] = {
         {"getup", cf_getup},
         {"holder", nullptr}, /* placeholder -> false */
-        {std::string_view{}, nullptr},
     };
     luaL_setfuncs(L, regs, 1);
   }
@@ -3232,7 +3231,6 @@ static void test_auxlib_restored()
     static const luaL_Reg mod[] = {
         {"add", cf_add},
         {"probe", cf_raise},
-        {std::string_view{}, nullptr},
     };
     luaL_newlib(L, mod);
     CHECK(lua_type(L, -1) == LUA_TTABLE);
@@ -3252,21 +3250,6 @@ static void test_auxlib_restored()
     lua_pushinteger(L, 22);
     CHECK(lua_pcall(L, 2, 1, 0) == LUA_OK);
     CHECK(lua_tointeger(L, -1) == 42);
-    lua_pop(L, 2);
-  }
-
-  /* luaL_newlibtable: presized empty table, nothing registered yet */
-  {
-    static const luaL_Reg mod[] = {
-        {"add", cf_add},
-        {std::string_view{}, nullptr},
-    };
-    luaL_newlibtable(L, mod);
-    CHECK(lua_type(L, -1) == LUA_TTABLE);
-    lua_pushnil(L);
-    CHECK(lua_next(L, -2) == 0); /* empty — presizing has no semantics */
-    luaL_setfuncs(L, mod, 0);    /* and it works as the setfuncs target */
-    CHECK(lua_getfield(L, -1, "add"_hs) == LUA_TFUNCTION);
     lua_pop(L, 2);
   }
 

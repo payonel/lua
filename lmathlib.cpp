@@ -468,10 +468,10 @@ static int math_randomseed(lua_State* L)
   return 2; /* return seeds */
 }
 
-static const luaL_Reg randfuncs[] = {
-    {lit<"random">()->view(), math_random},
-    {lit<"randomseed">()->view(), math_randomseed},
-    {{}, nullptr}};
+static const luaL_Regi randfuncs[] = {
+  {lit<"random">()->view(), math_random},
+  {lit<"randomseed">()->view(), math_randomseed}
+};
 
 /*
 ** Register the random functions and initialize their state.
@@ -481,7 +481,7 @@ static void setrandfunc(lua_State* L)
   RanState* state = (RanState*) lua_newuserdatauv(L, sizeof(RanState), 0);
   setseed(L, state->s, luaL_makeseed(L), 0); /* initialize with random seed */
   lua_pop(L, 2);                             /* remove pushed seeds */
-  luaL_setfuncs(L, randfuncs, 1);
+  luaL_setfuncsi(L, randfuncs, 1);
 }
 
 /* }================================================================== */
@@ -493,45 +493,45 @@ static void setrandfunc(lua_State* L)
 */
 /* }================================================================== */
 
-static const luaL_Reg mathlib[] = {
-    {lit<"abs">()->view(), math_abs},
-    {lit<"acos">()->view(), math_acos},
-    {lit<"asin">()->view(), math_asin},
-    {lit<"atan">()->view(), math_atan},
-    {lit<"ceil">()->view(), math_ceil},
-    {lit<"cos">()->view(), math_cos},
-    {lit<"deg">()->view(), math_deg},
-    {lit<"exp">()->view(), math_exp},
-    {lit<"tointeger">()->view(), math_toint},
-    {lit<"floor">()->view(), math_floor},
-    {lit<"fmod">()->view(), math_fmod},
-    {lit<"frexp">()->view(), math_frexp},
-    {lit<"ult">()->view(), math_ult},
-    {lit<"ldexp">()->view(), math_ldexp},
-    {lit<"log">()->view(), math_log},
-    {lit<"max">()->view(), math_max},
-    {lit<"min">()->view(), math_min},
-    {lit<"modf">()->view(), math_modf},
-    {lit<"rad">()->view(), math_rad},
-    {lit<"sin">()->view(), math_sin},
-    {lit<"sqrt">()->view(), math_sqrt},
-    {lit<"tan">()->view(), math_tan},
-    {lit<"type">()->view(), math_type},
-    /* placeholders */
-    {lit<"random">()->view(), nullptr},
-    {lit<"randomseed">()->view(), nullptr},
-    {lit<"pi">()->view(), nullptr},
-    {lit<"huge">()->view(), nullptr},
-    {lit<"maxinteger">()->view(), nullptr},
-    {lit<"mininteger">()->view(), nullptr},
-    {{}, nullptr}};
+static const luaL_Regi mathlib[] = {
+  {lit<"abs">()->view(), math_abs},
+  {lit<"acos">()->view(), math_acos},
+  {lit<"asin">()->view(), math_asin},
+  {lit<"atan">()->view(), math_atan},
+  {lit<"ceil">()->view(), math_ceil},
+  {lit<"cos">()->view(), math_cos},
+  {lit<"deg">()->view(), math_deg},
+  {lit<"exp">()->view(), math_exp},
+  {lit<"tointeger">()->view(), math_toint},
+  {lit<"floor">()->view(), math_floor},
+  {lit<"fmod">()->view(), math_fmod},
+  {lit<"frexp">()->view(), math_frexp},
+  {lit<"ult">()->view(), math_ult},
+  {lit<"ldexp">()->view(), math_ldexp},
+  {lit<"log">()->view(), math_log},
+  {lit<"max">()->view(), math_max},
+  {lit<"min">()->view(), math_min},
+  {lit<"modf">()->view(), math_modf},
+  {lit<"rad">()->view(), math_rad},
+  {lit<"sin">()->view(), math_sin},
+  {lit<"sqrt">()->view(), math_sqrt},
+  {lit<"tan">()->view(), math_tan},
+  {lit<"type">()->view(), math_type},
+  /* placeholders */
+  {lit<"random">()->view(), nullptr},
+  {lit<"randomseed">()->view(), nullptr},
+  {lit<"pi">()->view(), nullptr},
+  {lit<"huge">()->view(), nullptr},
+  {lit<"maxinteger">()->view(), nullptr},
+  {lit<"mininteger">()->view(), nullptr}
+};
 
 /*
 ** Open math library
 */
 LUAMOD_API int luaopen_math(lua_State* L)
 {
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(mathlib) / sizeof((mathlib)[0]) - 1), luaL_setfuncs(L, mathlib, 0));
+  luaL_newlibi(L, mathlib);
   lua_pushnumber(L, PI);
   lua_setfieldi(L, -2, lit<"pi">()->view());
   lua_pushnumber(L, (lua_Number) HUGE_VAL);

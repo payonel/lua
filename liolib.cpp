@@ -702,49 +702,49 @@ static int io_flush(lua_State* L)
 /*
 ** functions for 'io' library
 */
-static const luaL_Reg iolib[] = {
-    {lit<"close">()->view(), io_close},
-    {lit<"flush">()->view(), io_flush},
-    {lit<"input">()->view(), io_input},
-    {lit<"lines">()->view(), io_lines},
-    {lit<"open">()->view(), io_open},
-    {lit<"output">()->view(), io_output},
-    {lit<"popen">()->view(), io_popen},
-    {lit<"read">()->view(), io_read},
-    {lit<"tmpfile">()->view(), io_tmpfile},
-    {lit<"type">()->view(), io_type},
-    {lit<"write">()->view(), io_write},
-    {{}, nullptr}};
+static const luaL_Regi iolib[] = {
+  {lit<"close">()->view(), io_close},
+  {lit<"flush">()->view(), io_flush},
+  {lit<"input">()->view(), io_input},
+  {lit<"lines">()->view(), io_lines},
+  {lit<"open">()->view(), io_open},
+  {lit<"output">()->view(), io_output},
+  {lit<"popen">()->view(), io_popen},
+  {lit<"read">()->view(), io_read},
+  {lit<"tmpfile">()->view(), io_tmpfile},
+  {lit<"type">()->view(), io_type},
+  {lit<"write">()->view(), io_write}
+};
 
 /*
 ** methods for file handles
 */
-static const luaL_Reg meth[] = {
-    {lit<"read">()->view(), f_read},
-    {lit<"write">()->view(), f_write},
-    {lit<"lines">()->view(), f_lines},
-    {lit<"flush">()->view(), f_flush},
-    {lit<"seek">()->view(), f_seek},
-    {lit<"close">()->view(), f_close},
-    {lit<"setvbuf">()->view(), f_setvbuf},
-    {{}, nullptr}};
+static const luaL_Regi meth[] = {
+  {lit<"read">()->view(), f_read},
+  {lit<"write">()->view(), f_write},
+  {lit<"lines">()->view(), f_lines},
+  {lit<"flush">()->view(), f_flush},
+  {lit<"seek">()->view(), f_seek},
+  {lit<"close">()->view(), f_close},
+  {lit<"setvbuf">()->view(), f_setvbuf}
+};
 
 /*
 ** metamethods for file handles
 */
-static const luaL_Reg metameth[] = {
-    {lit<"__index">()->view(), nullptr}, /* placeholder */
-    {lit<"__gc">()->view(), f_gc},
-    {lit<"__close">()->view(), f_gc},
-    {lit<"__tostring">()->view(), f_tostring},
-    {{}, nullptr}};
+static const luaL_Regi metameth[] = {
+  {lit<"__index">()->view(), nullptr}, /* placeholder */
+  {lit<"__gc">()->view(), f_gc},
+  {lit<"__close">()->view(), f_gc},
+  {lit<"__tostring">()->view(), f_tostring}
+};
 
 static void createmeta(lua_State* L)
 {
   luaL_newmetatablei(L, LUA_FILEHANDLE->view()); /* metatable for file handles */
-  luaL_setfuncs(L, metameth, 0);        /* add metamethods to new metatable */
+  luaL_setfuncsi(L, metameth, 0);        /* add metamethods to new metatable */
   lua_createtable(L, 0, sizeof(meth) / sizeof((meth)[0]) - 1);            /* create method table */
-  luaL_setfuncs(L, meth, 0);            /* add file methods to method table */
+  luaL_setfuncsi(L, meth, 0);            /* add file methods to method table */
   lua_setfieldi(L, -2, lit<"__index">()->view());       /* metatable.__index = method table */
   lua_pop(L, 1);                        /* pop metatable */
 }
@@ -777,7 +777,7 @@ static void createstdfile(lua_State* L, OsFile* f, std::string_view k,
 
 LUAMOD_API int luaopen_io(lua_State* L)
 {
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(iolib) / sizeof((iolib)[0]) - 1), luaL_setfuncs(L, iolib, 0)); /* new module */
+  luaL_newlibi(L, iolib);
   createmeta(L);
   /* create (and set) default files */
   createstdfile(L, os_stdin(), IO_INPUT->view(), lit<"stdin">());

@@ -421,19 +421,19 @@ static int sort(lua_State* L)
 
 /* }====================================================== */
 
-static const luaL_Reg tab_funcs[] = {
-    {lit<"concat">()->view(), tconcat},
-    {lit<"create">()->view(), tcreate},
-    {lit<"insert">()->view(), tinsert},
-    {lit<"pack">()->view(), tpack},
-    {lit<"unpack">()->view(), tunpack},
-    {lit<"remove">()->view(), tremove},
-    {lit<"move">()->view(), tmove},
-    {lit<"sort">()->view(), sort},
-    {{}, nullptr}};
+static const luaL_Regi tab_funcs[] = {
+  {lit<"concat">()->view(), tconcat},
+  {lit<"create">()->view(), tcreate},
+  {lit<"insert">()->view(), tinsert},
+  {lit<"pack">()->view(), tpack},
+  {lit<"unpack">()->view(), tunpack},
+  {lit<"remove">()->view(), tremove},
+  {lit<"move">()->view(), tmove},
+  {lit<"sort">()->view(), sort}
+};
 
 LUAMOD_API int luaopen_table(lua_State* L)
 {
-  (luaL_checkversion(L), lua_createtable(L, 0, sizeof(tab_funcs) / sizeof((tab_funcs)[0]) - 1), luaL_setfuncs(L, tab_funcs, 0));
+  luaL_newlibi(L, tab_funcs);
   return 1;
 }

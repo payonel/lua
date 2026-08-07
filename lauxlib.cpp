@@ -1050,23 +1050,54 @@ LUALIB_API std::string_view luaL_tolstring(lua_State* L, int idx)
 ** function gets the 'nup' elements at the top as upvalues.
 ** Returns with only the table at the stack.
 */
-LUALIB_API void luaL_setfuncs(lua_State* L, const luaL_Reg* l, int nup)
+void luaL_setfuncsi(lua_State* L, std::span<const luaL_Regi> funcs, int nup)
 {
   luaL_checkstacki(L, nup, lit<"too many upvalues">()->view());
-  for (; l->name.data() != nullptr; l++)
-  {                      /* fill the table with given functions */
-    if (l->func == nullptr) /* placeholder? */
+  for (const auto& reg : funcs)
+  {
+    if (reg.func == nullptr) /* placeholder? */
       lua_pushboolean(L, 0);
     else
     {
-      int i;
-      for (i = 0; i < nup; i++) /* copy upvalues to the top */
+      for (int i = 0; i < nup; i++) /* copy upvalues to the top */
         lua_pushvalue(L, -nup);
-      lua_pushcclosure(L, l->func, nup); /* closure with those upvalues */
+      lua_pushcclosure(L, reg.func, nup); /* closure with those upvalues */
     }
-    lua_setfieldi(L, -(nup + 2), l->name);
+    lua_setfieldi(L, -(nup + 2), reg.name);
   }
   lua_pop(L, nup); /* remove upvalues */
+}
+
+void luaL_newlibi(lua_State* L, std::span<const luaL_Regi> funcs)
+{
+  luaL_checkversion(L);
+  lua_createtable(L, 0, (int)funcs.size());
+  luaL_setfuncsi(L, funcs, 0);
+}
+
+LUALIB_API void luaL_setfuncs(lua_State* L, const std::span<const luaL_Reg>& funcs, int nup)
+{
+  luaL_checkstacki(L, nup, lit<"too many upvalues">()->view());
+  for (const auto& reg : funcs)
+  {
+    if (reg.func == nullptr) /* placeholder? */
+      lua_pushboolean(L, 0);
+    else
+    {
+      for (int i = 0; i < nup; i++) /* copy upvalues to the top */
+        lua_pushvalue(L, -nup);
+      lua_pushcclosure(L, reg.func, nup); /* closure with those upvalues */
+    }
+    lua_setfieldi(L, -(nup + 2), reg.name.to_utf8());
+  }
+  lua_pop(L, nup); /* remove upvalues */
+}
+
+LUALIB_API void luaL_newlib(lua_State* L, const std::span<const luaL_Reg>& funcs)
+{
+  luaL_checkversion(L);
+  lua_createtable(L, 0, (int)funcs.size());
+  luaL_setfuncs(L, funcs, 0);
 }
 
 /*
