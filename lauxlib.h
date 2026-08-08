@@ -176,6 +176,28 @@ LUALIB_API void luaL_pushfail(lua_State* L);
 class ByteBuilder
 {
 public:
+  ByteBuilder() = default;
+  ByteBuilder(const ByteBuilder&) = delete;
+  ByteBuilder& operator=(const ByteBuilder&) = delete;
+  ByteBuilder(ByteBuilder&& o) noexcept : bytes_(o.bytes_), len_(o.len_)
+  {
+    o.bytes_ = {};
+    o.len_ = 0;
+  }
+  ByteBuilder& operator=(ByteBuilder&& o) noexcept
+  {
+    if (this != &o)
+    {
+      delete[] bytes_.data();
+      bytes_ = o.bytes_;
+      len_ = o.len_;
+      o.bytes_ = {};
+      o.len_ = 0;
+    }
+    return *this;
+  }
+  ~ByteBuilder() { delete[] bytes_.data(); }
+
   void append(char c)
   {
     size_t off = prep(1);
@@ -204,7 +226,7 @@ public:
 
   std::string_view view() const noexcept { return {bytes_.data(), len_}; }
 
-  std::span<char> area() noexcept { return {bytes_.data(), bytes_.size()}; }
+  std::span<char> area() noexcept { return bytes_; }
 
   size_t prep(size_t sz)
   {
@@ -216,17 +238,33 @@ public:
 
   size_t capacity() const noexcept { return bytes_.size(); }
 
-  void growTo(size_t cap) { bytes_.resize(cap); }
+  void growTo(size_t cap)
+  {
+    if (cap == bytes_.size())
+      return;
+    char* nb = (cap != 0) ? new char[cap] : nullptr;
+    size_t keep = (bytes_.size() < cap) ? bytes_.size() : cap;
+    if (keep > 0)
+      memcpy(nb, bytes_.data(), keep);
+    if (cap > keep)
+      memset(nb + keep, 0, cap - keep); /* match std::string::resize zero-fill */
+    delete[] bytes_.data();
+    bytes_ = {nb, cap};
+  }
 
   std::string release()
   {
-    bytes_.resize(len_);
+    std::string out;
+    if (len_ != 0)
+      out.assign(bytes_.data(), len_);
+    delete[] bytes_.data();
+    bytes_ = {};
     len_ = 0;
-    return std::move(bytes_);
+    return out;
   }
 
 private:
-  std::string bytes_;
+  std::span<char> bytes_;
   size_t len_ = 0;
 };
 
