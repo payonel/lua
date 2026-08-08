@@ -78,6 +78,8 @@ struct Token
   TString* ts;
 };
 
+class ByteBuilder;
+
 /* state of the scanner plus state of the parser when shared by all
    functions */
 struct LexState

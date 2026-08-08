@@ -9,15 +9,13 @@
 #include <stddef.h>
 #include <cstddef>
 #include <stdio.h>
-
 #include <cassert>
+#include <string.h>
 
 #include "lua.h"
 
 struct OsFile;
 #include "luaconf.h"
-
-#include "lua_internal.h"
 
 /* global table */
 inline constexpr std::string_view LUA_GNAME = "_G";
@@ -174,6 +172,63 @@ LUALIB_API void luaL_pushfail(lua_State* L);
 ** Generic Buffer manipulation
 ** =======================================================
 */
+
+class ByteBuilder
+{
+public:
+  void append(char c)
+  {
+    size_t off = prep(1);
+    bytes_[off] = c;
+    commit(1);
+  }
+  void append(std::string_view b)
+  {
+    append(b, 0, b.size());
+  }
+  void append(std::string_view b, size_t off, size_t n)
+  {
+    if (n > 0)
+    {
+      size_t at = prep(n);
+      memcpy(&bytes_[at], b.data() + off, n);
+      commit(n);
+    }
+  }
+
+  void reset() noexcept { len_ = 0; }
+
+  void drop(size_t k) { len_ -= k; }
+
+  size_t size() const noexcept { return len_; }
+
+  std::string_view view() const noexcept { return {bytes_.data(), len_}; }
+
+  std::span<char> area() noexcept { return {bytes_.data(), bytes_.size()}; }
+
+  size_t prep(size_t sz)
+  {
+    if (len_ + sz > bytes_.size())
+      growTo(len_ + sz);
+    return len_;
+  }
+  void commit(size_t sz) noexcept { len_ += sz; }
+
+  size_t capacity() const noexcept { return bytes_.size(); }
+
+  void growTo(size_t cap) { bytes_.resize(cap); }
+
+  std::string release()
+  {
+    bytes_.resize(len_);
+    len_ = 0;
+    return std::move(bytes_);
+  }
+
+private:
+  std::string bytes_;
+  size_t len_ = 0;
+};
 
 struct luaL_Buffer
 {

@@ -661,9 +661,9 @@ LUALIB_API void luaL_pushresult(luaL_Buffer* B)
      external string whose payload is outside GC accounting. Content that
      fits LUAL_BUFFERSIZE becomes a regular (accounted) string. */
   if (reserved > LUAL_BUFFERSIZE)
-    lua_pushistringext(L, B->bldr.finish());
+    lua_pushistringext(L, InternalString::take(B->bldr.release()));
   else
-    lua_pushistring(L, B->bldr.finish());
+    lua_pushistring(L, InternalString::take(B->bldr.release()));
   lua_gc(L, LUA_GCSTEP, len, 0, 0);
 }
 

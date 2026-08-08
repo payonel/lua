@@ -21,6 +21,8 @@
 #include "lundump.h"
 #include "lzio.h"
 
+#include "lauxlib.h"
+
 struct LoadState
 {
   lua_State* L;

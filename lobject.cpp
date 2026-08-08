@@ -28,6 +28,7 @@
 #include "lvm.h"
 
 #include "lua_internal.h"
+#include "lauxlib.h"
 
 /*
 ** Computes ceil(log2(x)), which is the smallest integer n such that
@@ -703,8 +704,8 @@ static void pushbuff(lua_State* L, void* ud)
 {
   BuffFS* buff = ((BuffFS*)(ud));
   if (buff->err == 2)
-    buff->bb.append(lit<"...">());
-  TString* ts = luaS_take(L, buff->bb.finish());
+    buff->bb.append(lit<"...">()->view());
+  TString* ts = luaS_take(L, InternalString::take(buff->bb.release()));
   setslots(L, L->top, ts);
   L->top++;
 }

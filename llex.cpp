@@ -24,6 +24,7 @@
 #include "lzio.h"
 
 #include "lhack.h"
+#include "lauxlib.h"
 
 static l_forceinline void next(LexState* ls)
 {

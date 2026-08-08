@@ -29,6 +29,7 @@
 #include "lzio.h"
 
 #include "lhack.h"
+#include "lauxlib.h"
 
 constexpr int errorstatus(TStatus s)
 {
