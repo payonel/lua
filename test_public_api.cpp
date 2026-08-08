@@ -1924,15 +1924,15 @@ static void test_libraries()
   }
 
   /* library name constants */
-  CHECK(LUA_COLIBNAME->view() == "coroutine");
-  CHECK(LUA_TABLIBNAME->view() == "table");
-  CHECK(LUA_IOLIBNAME->view() == "io");
-  CHECK(LUA_OSLIBNAME->view() == "os");
-  CHECK(LUA_STRLIBNAME->view() == "string");
-  CHECK(LUA_UTF8LIBNAME->view() == "utf8");
-  CHECK(LUA_MATHLIBNAME->view() == "math");
-  CHECK(LUA_DBLIBNAME->view() == "debug");
-  CHECK(LUA_LOADLIBNAME->view() == "package");
+  CHECK(LUA_COLIBNAME == "coroutine");
+  CHECK(LUA_TABLIBNAME == "table");
+  CHECK(LUA_IOLIBNAME == "io");
+  CHECK(LUA_OSLIBNAME == "os");
+  CHECK(LUA_STRLIBNAME == "string");
+  CHECK(LUA_UTF8LIBNAME == "utf8");
+  CHECK(LUA_MATHLIBNAME == "math");
+  CHECK(LUA_DBLIBNAME == "debug");
+  CHECK(LUA_LOADLIBNAME == "package");
 }
 
 /* ================= negative paths ================= */
@@ -2584,10 +2584,10 @@ static void test_auxlib_misc()
   /* header constants */
   CHECK(LUA_ERRFILE == LUA_ERRERR + 1);
   CHECK(LUA_NOREF == -2 && LUA_REFNIL == -1);
-  CHECK(LUA_GNAME->view() == "_G");
-  CHECK(LUA_LOADED_TABLE->view() == "_LOADED");
-  CHECK(LUA_PRELOAD_TABLE->view() == "_PRELOAD");
-  CHECK(LUA_FILEHANDLE->view() == "FILE*");
+  CHECK(LUA_GNAME == "_G");
+  CHECK(LUA_LOADED_TABLE == "_LOADED");
+  CHECK(LUA_PRELOAD_TABLE == "_PRELOAD");
+  CHECK(LUA_FILEHANDLE == "FILE*");
 
   /* pushfail pushes the failure value (nil) */
   luaL_pushfail(L);

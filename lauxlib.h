@@ -17,10 +17,10 @@
 struct OsFile;
 #include "luaconf.h"
 
-#include "internal_string.h"
+#include "lua_internal.h"
 
 /* global table */
-inline const InternalString* const LUA_GNAME = lit<"_G">();
+inline constexpr std::string_view LUA_GNAME = "_G";
 
 struct luaL_Buffer;
 
@@ -28,10 +28,10 @@ struct luaL_Buffer;
 constexpr int LUA_ERRFILE = (LUA_ERRERR + 1);
 
 /* key, in the registry, for table of loaded modules */
-inline const InternalString* const LUA_LOADED_TABLE = lit<"_LOADED">();
+inline constexpr std::string_view LUA_LOADED_TABLE = "_LOADED";
 
 /* key, in the registry, for table of preloaded loaders */
-inline const InternalString* const LUA_PRELOAD_TABLE = lit<"_PRELOAD">();
+inline constexpr std::string_view LUA_PRELOAD_TABLE = "_PRELOAD";
 
 struct luaL_Reg
 {
@@ -234,7 +234,7 @@ inline luaL_BuffSpan luaL_prepbuffspan(luaL_Buffer* B, size_t sz)
 ** after that initial structure).
 */
 
-inline const InternalString* const LUA_FILEHANDLE = lit<"FILE*">();
+inline constexpr std::string_view LUA_FILEHANDLE = "FILE*";
 
 struct luaL_Stream
 {

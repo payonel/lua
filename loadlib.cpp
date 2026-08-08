@@ -125,7 +125,7 @@ static void setpath(lua_State* L, const InternalString* fieldname,
 {
   std::string_view env{envname};
   lua_pushlstring(L, env, 0, env.size());
-  lua_pushlstring(L, LUA_VERSUFFIX->view(), 0, LUA_VERSUFFIX->size());
+  lua_pushlstring(L, LUA_VERSUFFIX, 0, LUA_VERSUFFIX.size());
   lua_pushfstringi(L, lit<"%s%s">()->view());
   std::optional<InternalString> epath = os_getenv(lua_toistring(L, -1)->view()); /* try versioned name */
   if (!epath.has_value())                                    /* no versioned environment variable? */
@@ -471,7 +471,7 @@ static int searcher_Croot(lua_State* L)
 static int searcher_preload(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
-  lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE->view());
+  lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
   if (lua_getfieldi(L, -1, name) == LUA_TNIL)
   { /* not found? */
     lua_pushlstring(L, name, 0, name.size());
@@ -525,7 +525,7 @@ static int ll_require(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
   lua_settop(L, 1); /* LOADED table will be at index 2 */
-  lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE->view());
+  lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
   lua_getfieldi(L, 2, name); /* LOADED[name] */
   if (lua_toboolean(L, -1)) /* is it there? */
     return 1;               /* package is already loaded */
@@ -603,10 +603,10 @@ LUAMOD_API int luaopen_package(lua_State* L)
   lua_pushlstring(L, CONFIG, 0, (CONFIG).size());
   lua_setfieldi(L, -2, lit<"config">()->view());
   /* set field 'loaded' */
-  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE->view());
+  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
   lua_setfieldi(L, -2, lit<"loaded">()->view());
   /* set field 'preload' */
-  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE->view());
+  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
   lua_setfieldi(L, -2, lit<"preload">()->view());
   lua_pushglobaltable(L);
   lua_pushvalue(L, -2);          /* set 'package' as upvalue for next lib */

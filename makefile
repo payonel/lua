@@ -133,7 +133,7 @@ test:
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
 		ulimit -S -s 8192; \
 		cd tests; \
-		cat /dev/null | perf stat -- ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
+		cat /dev/null | /usr/bin/time -v ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 	cd tests && ../$(LUA_T) deep/all.lua
 
 full:

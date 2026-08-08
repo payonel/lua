@@ -577,7 +577,7 @@ static const luaL_Regi base_funcs[] = {
   {lit<"type">()->view(), luaB_type},
   {lit<"xpcall">()->view(), luaB_xpcall},
   /* placeholders */
-  {LUA_GNAME->view(), nullptr},
+  {LUA_GNAME, nullptr},
   {lit<"_VERSION">()->view(), nullptr}
 };
 
@@ -588,7 +588,7 @@ LUAMOD_API int luaopen_base(lua_State* L)
   luaL_setfuncsi(L, base_funcs, 0);
   /* set global _G */
   lua_pushvalue(L, -1);
-  lua_setfieldi(L, -2, LUA_GNAME->view());
+  lua_setfieldi(L, -2, LUA_GNAME);
   /* set global _VERSION */
   lua_pushlstring(L, LUA_VERSION, 0, LUA_VERSION.size());
   lua_setfieldi(L, -2, lit<"_VERSION">()->view());

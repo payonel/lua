@@ -20,16 +20,16 @@
 ** respective constants LUA_<libname>K.)
 */
 static const luaL_Regi stdlibs[] = {
-  {LUA_GNAME->view(), luaopen_base},
-  {LUA_LOADLIBNAME->view(), luaopen_package},
-  {LUA_COLIBNAME->view(), luaopen_coroutine},
-  {LUA_DBLIBNAME->view(), luaopen_debug},
-  {LUA_IOLIBNAME->view(), luaopen_io},
-  {LUA_MATHLIBNAME->view(), luaopen_math},
-  {LUA_OSLIBNAME->view(), luaopen_os},
-  {LUA_STRLIBNAME->view(), luaopen_string},
-  {LUA_TABLIBNAME->view(), luaopen_table},
-  {LUA_UTF8LIBNAME->view(), luaopen_utf8}
+  {LUA_GNAME, luaopen_base},
+  {LUA_LOADLIBNAME, luaopen_package},
+  {LUA_COLIBNAME, luaopen_coroutine},
+  {LUA_DBLIBNAME, luaopen_debug},
+  {LUA_IOLIBNAME, luaopen_io},
+  {LUA_MATHLIBNAME, luaopen_math},
+  {LUA_OSLIBNAME, luaopen_os},
+  {LUA_STRLIBNAME, luaopen_string},
+  {LUA_TABLIBNAME, luaopen_table},
+  {LUA_UTF8LIBNAME, luaopen_utf8}
 };
 
 /*
@@ -38,7 +38,7 @@ static const luaL_Regi stdlibs[] = {
 LUALIB_API void luaL_openselectedlibs(lua_State* L, int load, int preload)
 {
   int mask = 1;
-  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE->view());
+  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
   for (const auto& lib : stdlibs)
   {
     if (load & mask)

@@ -419,7 +419,7 @@ static std::optional<InternalString> l_getenv(std::string_view name)
 
 static int handle_luainit(lua_State* L)
 {
-  InternalString name = LUA_INIT_VAR->concat(LUA_VERSUFFIX->view());
+  InternalString name = LUA_INIT_VAR->concat(LUA_VERSUFFIX);
   std::string_view namev = name.view();
   std::optional<InternalString> einit = l_getenv(namev);
   if (!einit.has_value())

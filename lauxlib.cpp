@@ -73,7 +73,7 @@ static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
 {
   int top = lua_gettop(L);
   lua_getinfoi(L, lit<"f">()->view(), *ar);
-  lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE->view());
+  lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
   luaL_checkstacki(L, 6, lit<"not enough stack">()->view()); /* slots for 'findfield' */
   if (findfield(L, top + 1, 2))
   {
@@ -588,7 +588,6 @@ LUALIB_API lua_Integer luaL_optinteger(lua_State* L, int arg,
 ** =======================================================
 */
 
-
 luaL_Buffer::~luaL_Buffer()
 {
   if (reserved != 0 && L != nullptr)
@@ -617,8 +616,8 @@ static size_t prepbuff(luaL_Buffer* B, size_t sz)
     size_t newsize = newbuffsize(B, sz);
     assert(newsize >= B->reserved);
     if (l_unlikely(!lua_reservebytes(B->L, newsize - B->reserved)))
-    {
-      lua_pushistringref(B->L, lit<"not enough memory">()->view());
+      {
+        lua_pushistringref(B->L, lit<"not enough memory">()->view());
       lua_error(B->L); /* raise a memory error */
     }
     B->reserved = newsize;
@@ -1139,7 +1138,7 @@ LUALIB_API void luaL_requiref(lua_State* L, const HostString& modname,
 void luaL_requirefi(lua_State* L, std::string_view modname,
                     lua_CFunction openf, int glb)
 {
-  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE->view());
+  luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
   lua_getfieldi(L, -1, modname); /* LOADED[modname] */
   if (!lua_toboolean(L, -1))
   {                /* package not already loaded? */

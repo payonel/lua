@@ -54,7 +54,7 @@ typedef luaL_Stream LStream;
 
 static inline LStream* tolstream(lua_State* L)
 {
-  return (LStream*)luaL_checkudatai(L, 1, LUA_FILEHANDLE->view());
+  return (LStream*)luaL_checkudatai(L, 1, LUA_FILEHANDLE);
 }
 
 static inline int isclosed(const LStream* p)
@@ -66,7 +66,7 @@ static int io_type(lua_State* L)
 {
   LStream* p;
   luaL_checkany(L, 1);
-  p = (LStream*) luaL_testudatai(L, 1, LUA_FILEHANDLE->view());
+  p = (LStream*) luaL_testudatai(L, 1, LUA_FILEHANDLE);
   if (p == nullptr)
     luaL_pushfail(L); /* not a file */
   else if (isclosed(p))
@@ -107,7 +107,7 @@ static LStream* newprefile(lua_State* L)
 {
   LStream* p = (LStream*) lua_newuserdatauv(L, sizeof(LStream), 0);
   p->closef = nullptr; /* mark file handle as 'closed' */
-  luaL_setmetatablei(L, LUA_FILEHANDLE->view());
+  luaL_setmetatablei(L, LUA_FILEHANDLE);
   return p;
 }
 
@@ -741,7 +741,7 @@ static const luaL_Regi metameth[] = {
 
 static void createmeta(lua_State* L)
 {
-  luaL_newmetatablei(L, LUA_FILEHANDLE->view()); /* metatable for file handles */
+  luaL_newmetatablei(L, LUA_FILEHANDLE); /* metatable for file handles */
   luaL_setfuncsi(L, metameth, 0);        /* add metamethods to new metatable */
   lua_createtable(L, 0, sizeof(meth) / sizeof((meth)[0]) - 1);            /* create method table */
   luaL_setfuncsi(L, meth, 0);            /* add file methods to method table */
