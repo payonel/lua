@@ -410,7 +410,7 @@ LUA_API int lua_compare(lua_State* L, int index1, int index2, int op)
   return i;
 }
 
-std::string_view lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff)
+std::optional<std::string_view> lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff)
 {
   TValue o = index2val(L, idx);
   if (((o.tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
@@ -419,16 +419,16 @@ std::string_view lua_numbertocstringi(lua_State* L, int idx, std::span<char> buf
     return std::string_view(buff.data(), len);
   }
   else
-    return std::string_view{};
+    return std::nullopt;
 }
 
 LUA_API std::optional<HostString> lua_numbertocstring(lua_State* L, int idx)
 {
   char buff[LUA_N2SBUFFSZ];
-  std::string_view s = lua_numbertocstringi(L, idx, buff);
-  if (s.data() == nullptr)
+  std::optional<std::string_view> s = lua_numbertocstringi(L, idx, buff);
+  if (!s.has_value())
     return std::nullopt;
-  return HostString(s);
+  return HostString(*s);
 }
 
 LUA_API size_t lua_stringtonumber(lua_State* L, const HostString& s)
@@ -1470,7 +1470,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   return ((int)(status));
 }
 
-int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::string_view chunkname, std::string_view mode)
+int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::optional<std::string_view> chunkname, std::optional<std::string_view> mode)
 {
   ZIO z;
   TStatus status;
@@ -1500,9 +1500,8 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
                      const std::optional<HostString>& chunkname,
                      const std::optional<HostString>& mode)
 {
-  std::string_view nullsv(nullptr, 0);
-  std::string_view name = chunkname.has_value() ? chunkname->to_utf8() : nullsv;
-  std::string_view m = mode.has_value() ? mode->to_utf8() : nullsv;
+  std::optional<std::string_view> name = chunkname.has_value() ? std::optional<std::string_view>(chunkname->to_utf8()) : std::nullopt;
+  std::optional<std::string_view> m = mode.has_value() ? std::optional<std::string_view>(mode->to_utf8()) : std::nullopt;
   return lua_loadi(L, reader, data, name, m);
 }
 

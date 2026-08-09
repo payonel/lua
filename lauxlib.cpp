@@ -146,19 +146,19 @@ static int lastlevel(lua_State* L)
 LUALIB_API void luaL_traceback(lua_State* L, lua_State* L1,
                                const std::optional<HostString>& msg, int level)
 {
-  luaL_tracebacki(L, L1, msg ? msg->to_utf8() : std::string_view{}, level);
+  luaL_tracebacki(L, L1, msg ? std::optional<std::string_view>(msg->to_utf8()) : std::nullopt, level);
 }
 
-void luaL_tracebacki(lua_State* L, lua_State* L1, std::string_view msg, int level)
+void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<std::string_view> msg, int level)
 {
   luaL_Buffer b;
   std::optional<InternalDebug> oar;
   int last = lastlevel(L1);
   int limit2show = (last - level > LEVELS1 + LEVELS2) ? LEVELS1 : -1;
   luaL_buffinit(L, &b);
-  if (msg.data() != nullptr)
+  if (msg.has_value())
   {
-    luaL_addlstring(&b, msg, 0, msg.size());
+    luaL_addlstring(&b, *msg, 0, msg->size());
     luaL_addchar(&b, '\n');
   }
   luaL_addlstring(&b, lit<"stack traceback:">()->view(), 0, lit<"stack traceback:">()->size());
@@ -310,7 +310,7 @@ int luaL_errori(lua_State* L, std::string_view fmt)
   return lua_error(L);
 }
 
-int luaL_fileresulti(lua_State* L, int stat, std::string_view fname, int en)
+int luaL_fileresulti(lua_State* L, int stat, std::optional<std::string_view> fname, int en)
 {
   if (stat)
   {
@@ -321,9 +321,9 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname, int en)
   {
     luaL_pushfail(L);
     InternalString errstr = (en != 0) ? os_strerror(en) : InternalString(lit<"(no extra info)">()->view());
-    if (fname.data() != nullptr)
+    if (fname.has_value())
     {
-      lua_pushlstring(L, fname, 0, fname.size());
+      lua_pushlstring(L, *fname, 0, fname->size());
       lua_pushlstring(L, errstr.view(), 0, errstr.size());
       lua_pushfstringi(L, lit<"%s: %s">()->view());
     }
@@ -336,7 +336,7 @@ int luaL_fileresulti(lua_State* L, int stat, std::string_view fname, int en)
 
 LUALIB_API int luaL_fileresult(lua_State* L, int stat, const std::optional<HostString>& fname)
 {
-  return luaL_fileresulti(L, stat, fname ? fname->to_utf8() : std::string_view{}, errno);
+  return luaL_fileresulti(L, stat, fname ? std::optional<std::string_view>(fname->to_utf8()) : std::nullopt, errno);
 }
 
 LUALIB_API int luaL_execresult(lua_State* L, int stat)
@@ -442,11 +442,11 @@ void* luaL_checkudatai(lua_State* L, int ud, std::string_view tname)
 */
 
 int luaL_checkoptioni(lua_State* L, int arg,
-                      std::string_view def,
+                      std::optional<std::string_view> def,
                       std::span<const std::string_view> lst)
 {
-  std::string_view name = (def.data() != nullptr)
-                              ? luaL_optlstring(L, arg, def)
+  std::string_view name = def.has_value()
+                              ? luaL_optlstring(L, arg, *def)
                               : luaL_checklstring(L, arg);
   for (size_t i = 0; i < lst.size(); i++)
     if (name == lst[i])
@@ -480,16 +480,16 @@ LUALIB_API int luaL_checkoption(lua_State* L, int arg,
 */
 LUALIB_API void luaL_checkstack(lua_State* L, int space, const std::optional<HostString>& msg)
 {
-  luaL_checkstacki(L, space, msg ? msg->to_utf8() : std::string_view{});
+  luaL_checkstacki(L, space, msg ? std::optional<std::string_view>(msg->to_utf8()) : std::nullopt);
 }
 
-void luaL_checkstacki(lua_State* L, int space, std::string_view msg)
+void luaL_checkstacki(lua_State* L, int space, std::optional<std::string_view> msg)
 {
   if (l_unlikely(!lua_checkstack(L, space)))
   {
-    if (msg.data() != nullptr && lua_checkstack(L, 1))
+    if (msg.has_value() && lua_checkstack(L, 1))
     {
-      lua_pushlstring(L, msg, 0, msg.size());
+      lua_pushlstring(L, *msg, 0, msg->size());
       luaL_errori(L, lit<"stack overflow (%s)">()->view());
     }
     else
@@ -539,6 +539,14 @@ const InternalString* luaL_optistring(lua_State* L, int arg,
 {
   if (lua_isnoneornil(L, arg))
     return def;
+  else
+    return luaL_checkistring(L, arg);
+}
+
+const InternalString* luaL_optistring(lua_State* L, int arg)
+{
+  if (lua_isnoneornil(L, arg))
+    return nullptr;
   else
     return luaL_checkistring(L, arg);
 }
@@ -805,7 +813,7 @@ struct LoadF
   char buff[BUFSIZ]; /* area for reading file */
 };
 
-static std::string_view getF(lua_State*, void* ud)
+static std::optional<std::string_view> getF(lua_State*, void* ud)
 {
   LoadF* lf = (LoadF*) ud;
   if (lf->n > 0)
@@ -820,8 +828,10 @@ static std::string_view getF(lua_State*, void* ud)
        'getF' called 'fread', it might still wait for user input.
        The next check avoids this problem. */
     if (os_feof(lf->f))
-      return {};
+      return std::nullopt;
     size_t n = os_fread(lf->f, std::span<char>{lf->buff, sizeof(lf->buff)}); /* read block */
+    if (n == 0)
+      return std::nullopt;
     return std::string_view{lf->buff, n};
   }
 }
@@ -885,13 +895,13 @@ static int skipcomment(OsFile* f, int* cp)
     return 0; /* no comment */
 }
 
-int luaL_loadfilei(lua_State* L, std::string_view filename, std::string_view mode)
+int luaL_loadfilei(lua_State* L, std::optional<std::string_view> filename, std::optional<std::string_view> mode)
 {
   LoadF lf;
   int status, readstatus;
   int c;
   int fnameindex = lua_gettop(L) + 1; /* index of filename on the stack */
-  const bool bNullname = filename.data() == nullptr;
+  const bool bNullname = !filename.has_value();
   if (bNullname)
   {
     lua_pushistringref(L, lit<"=stdin">()->view());
@@ -899,9 +909,9 @@ int luaL_loadfilei(lua_State* L, std::string_view filename, std::string_view mod
   }
   else
   {
-    lua_pushistringref(L, filename);
+    lua_pushistringref(L, *filename);
     lua_pushfstringi(L, lit<"@%s">()->view());
-    OsOpenResult o = os_fopen(filename, lit<"r">()->view());
+    OsOpenResult o = os_fopen(*filename, lit<"r">()->view());
     lf.f = o.f;
     if (lf.f == nullptr)
       return errfile(L, lit<"open">()->view(), fnameindex, o.err);
@@ -914,7 +924,7 @@ int luaL_loadfilei(lua_State* L, std::string_view filename, std::string_view mod
     lf.n = 0; /* remove possible newline */
     if (!bNullname)
     { /* "real" file? */
-      int rerr = os_freopen(lf.f, filename, lit<"rb">()->view()); /* reopen in binary mode */
+      int rerr = os_freopen(lf.f, *filename, lit<"rb">()->view()); /* reopen in binary mode */
       if (rerr != 0)
         return errfile(L, lit<"reopen">()->view(), fnameindex, rerr);
       skipcomment(lf.f, &c); /* re-read initial portion */
@@ -937,8 +947,8 @@ int luaL_loadfilei(lua_State* L, std::string_view filename, std::string_view mod
 
 LUALIB_API int luaL_loadfilex(lua_State* L, const std::optional<HostString>& filename, const std::optional<HostString>& mode)
 {
-  std::string_view fn = filename.has_value() ? filename->to_utf8() : std::string_view(nullptr, 0);
-  std::string_view m = mode.has_value() ? mode->to_utf8() : std::string_view(nullptr, 0);
+  std::optional<std::string_view> fn = filename.has_value() ? std::optional<std::string_view>(filename->to_utf8()) : std::nullopt;
+  std::optional<std::string_view> m = mode.has_value() ? std::optional<std::string_view>(mode->to_utf8()) : std::nullopt;
   return luaL_loadfilei(L, fn, m);
 }
 
@@ -947,15 +957,17 @@ struct LoadS
   std::string_view chunk;
 };
 
-static std::string_view getS(lua_State*, void* ud)
+static std::optional<std::string_view> getS(lua_State*, void* ud)
 {
   LoadS* ls = (LoadS*) ud;
+  if (ls->chunk.empty())
+    return std::nullopt;
   std::string_view chunk = ls->chunk;
   ls->chunk = {};
   return chunk;
 }
 
-int luaL_loadbufferi(lua_State* L, std::string_view buff, std::string_view name, std::string_view mode)
+int luaL_loadbufferi(lua_State* L, std::string_view buff, std::optional<std::string_view> name, std::optional<std::string_view> mode)
 {
   LoadS ls;
   ls.chunk = buff;
@@ -964,8 +976,9 @@ int luaL_loadbufferi(lua_State* L, std::string_view buff, std::string_view name,
 
 LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff, const std::optional<HostString>& name, const std::optional<HostString>& mode)
 {
-  std::string_view nullsv(nullptr, 0);
-  return luaL_loadbufferi(L, buff, name.has_value() ? name->to_utf8() : nullsv, mode.has_value() ? mode->to_utf8() : nullsv);
+  return luaL_loadbufferi(L, buff,
+                          name.has_value() ? std::optional<std::string_view>(name->to_utf8()) : std::nullopt,
+                          mode.has_value() ? std::optional<std::string_view>(mode->to_utf8()) : std::nullopt);
 }
 
 LUALIB_API int luaL_loadstring(lua_State* L, const HostString& s)
@@ -1037,7 +1050,7 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
     case LUA_TNUMBER:
     {
       char nbuff[LUA_N2SBUFFSZ];
-      std::string_view n = lua_numbertocstringi(L, idx, nbuff);
+      std::string_view n = *lua_numbertocstringi(L, idx, nbuff);
       lua_pushlstring(L, n, 0, n.size());
       break;
     }
@@ -1394,11 +1407,11 @@ LUALIB_API void luaL_checkversion(lua_State* L)
 
 LUALIB_API int luaL_loadfile(lua_State* L, const std::optional<HostString>& filename)
 {
-  std::string_view nullview(nullptr, 0);
+
   if (!filename)
-    return luaL_loadfilei(L, nullview, nullview);
+    return luaL_loadfilei(L, std::nullopt, std::nullopt);
   std::string_view sv = filename->to_utf8();
-  return luaL_loadfilei(L, sv, nullview);
+  return luaL_loadfilei(L, sv, std::nullopt);
 }
 
 LUALIB_API void luaL_argcheck(lua_State* L, bool cond, int arg, const HostString& extramsg)
@@ -1471,8 +1484,9 @@ int luaL_getmetatablei(lua_State* L, std::string_view tname)
 
 LUALIB_API int luaL_loadbuffer(lua_State* L, std::string_view buff, const std::optional<HostString>& name)
 {
-  std::string_view nullsv(nullptr, 0);
-  return luaL_loadbufferi(L, buff, name.has_value() ? name->to_utf8() : nullsv, nullsv);
+  return luaL_loadbufferi(L, buff,
+                          name.has_value() ? std::optional<std::string_view>(name->to_utf8()) : std::nullopt,
+                          std::nullopt);
 }
 
 LUALIB_API void luaL_pushfail(lua_State* L)

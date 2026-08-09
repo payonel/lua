@@ -377,7 +377,7 @@ static int load_aux(lua_State* L, int status, int envidx)
 
 static const InternalString* getMode(lua_State* L, int idx)
 {
-  const InternalString* mode = luaL_optistring(L, idx, nullptr);
+  const InternalString* mode = luaL_optistring(L, idx);
   if (mode != nullptr && mode->view().find('B') != std::string_view::npos)
   {
     /* Lua code cannot use fixed buffers */
@@ -388,10 +388,9 @@ static const InternalString* getMode(lua_State* L, int idx)
 
 static int luaB_loadfile(lua_State* L)
 {
-  std::string_view nullsv(nullptr, 0);
-  std::string_view fname = lua_isnoneornil(L, 1) ? nullsv : luaL_checkistring(L, 1)->view();
+  std::optional<std::string_view> fname = lua_isnoneornil(L, 1) ? std::nullopt : std::optional<std::string_view>(luaL_checkistring(L, 1)->view());
   const InternalString* modestr = getMode(L, 2);
-  std::string_view mode = modestr ? modestr->view() : nullsv;
+  std::optional<std::string_view> mode = modestr ? std::optional<std::string_view>(modestr->view()) : std::nullopt;
   int env = (!lua_isnone(L, 3) ? 3 : 0); /* 'env' index or 0 if no 'env' */
   int status = luaL_loadfilei(L, fname, mode);
   return load_aux(L, status, env);
@@ -406,7 +405,7 @@ static int luaB_loadfile(lua_State* L)
 /*
 ** Reader for generic 'load' function.
 */
-static std::string_view generic_reader(lua_State* L, void* ud)
+static std::optional<std::string_view> generic_reader(lua_State* L, void* ud)
 {
   int* firstcall = ((int*)(ud));
   luaL_checkstacki(L, 2, lit<"too many nested functions">()->view());
@@ -417,7 +416,7 @@ static std::string_view generic_reader(lua_State* L, void* ud)
   lua_pushvalue(L, 1); /* get function */
   lua_call(L, 0, 1);   /* call it */
   if (lua_isnil(L, -1))
-    return {};
+    return std::nullopt;
   else if (l_unlikely(!lua_isstring(L, -1)))
     luaL_errori(L, lit<"reader function must return a string">()->view());
   return *lua_tolstring(L, -1);
@@ -429,18 +428,20 @@ static int luaB_load(lua_State* L)
   auto s = lua_tolstring(L, 1);
   const InternalString* mode = getMode(L, 3);
   int env = (!lua_isnone(L, 4) ? 4 : 0); /* 'env' index or 0 if no 'env' */
-  std::string_view nullsv(nullptr, 0);
+  std::optional<std::string_view> optmode = (mode != nullptr) ? std::optional<std::string_view>(mode->view()) : std::nullopt;
   if (s)
   {
     const InternalString* chunkname = luaL_optistring(L, 2, lua_toistring(L, 1));
-    status = luaL_loadbufferi(L, *s, chunkname == nullptr ? nullsv : chunkname->view(), mode == nullptr ? nullsv : mode->view());
+    std::optional<std::string_view> optname = (chunkname != nullptr) ? std::optional<std::string_view>(chunkname->view()) : std::nullopt;
+    status = luaL_loadbufferi(L, *s, optname, optmode);
   }
   else
   {                    /* loading from a reader function */
     int firstcall = 1; /* userdata for generic_reader */
     const InternalString* chunkname = luaL_optistring(L, 2, lit<"=(load)">());
+    std::optional<std::string_view> optname = (chunkname != nullptr) ? std::optional<std::string_view>(chunkname->view()) : std::nullopt;
     luaL_checktype(L, 1, LUA_TFUNCTION);
-    status = lua_loadi(L, generic_reader, &firstcall, chunkname == nullptr ? nullsv : chunkname->view(), mode == nullptr ? nullsv : mode->view());
+    status = lua_loadi(L, generic_reader, &firstcall, optname, optmode);
   }
   return load_aux(L, status, env);
 }
@@ -456,10 +457,9 @@ static int dofilecont(lua_State* L, int d1, lua_KContext d2)
 
 static int luaB_dofile(lua_State* L)
 {
-  std::string_view nullsv(nullptr, 0);
-  std::string_view fname = lua_isnoneornil(L, 1) ? nullsv : luaL_checkistring(L, 1)->view();
+  std::optional<std::string_view> fname = lua_isnoneornil(L, 1) ? std::nullopt : std::optional<std::string_view>(luaL_checkistring(L, 1)->view());
   lua_settop(L, 1);
-  if (l_unlikely(luaL_loadfilei(L, fname, nullsv) != LUA_OK))
+  if (l_unlikely(luaL_loadfilei(L, fname, std::nullopt) != LUA_OK))
     return lua_error(L);
   lua_callk(L, 0, LUA_MULTRET, 0, dofilecont);
   return dofilecont(L, 0, 0);

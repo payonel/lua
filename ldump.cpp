@@ -38,9 +38,9 @@ static void dumpBlock(DumpState* D, const void* b, size_t size)
 {
   if (D->status == 0)
   { /* do not write anything after an error */
-    std::string_view block = (b != nullptr)
-        ? std::string_view{(const char*)(b), size}
-        : std::string_view{};
+    std::optional<std::string_view> block = (b != nullptr)
+        ? std::optional<std::string_view>(std::string_view{(const char*)(b), size})
+        : std::nullopt;
     lua_unlock(D->L);
     D->status = (*D->writer)(D->L, block, D->data);
     lua_lock(D->L);

@@ -204,9 +204,9 @@ static int dochunk(lua_State* L, int status)
   return report(L, status);
 }
 
-static int dofile(lua_State* L, std::string_view name)
+static int dofile(lua_State* L, std::optional<std::string_view> name)
 {
-  return dochunk(L, luaL_loadfilei(L, name, std::string_view{}));
+  return dochunk(L, luaL_loadfilei(L, name, std::nullopt));
 }
 
 static int dostring(lua_State* L, std::string_view s, std::string_view name)
@@ -268,14 +268,14 @@ static int handle_script(lua_State* L, char** argv)
 {
   int status;
   const char* fname = argv[0];
-  std::string_view nullsv(nullptr, 0);
+
   if (std::string_view(fname) == lit<"-">()->view() && std::string_view(argv[-1]) != lit<"--">()->view())
     fname = nullptr; /* stdin */
   if (fname == nullptr)
-    status = luaL_loadfilei(L, nullsv, nullsv); /* stdin */
+    status = luaL_loadfilei(L, std::nullopt, std::nullopt); /* stdin */
   else
   {
-    status = luaL_loadfilei(L, std::string_view{fname}, nullsv);
+    status = luaL_loadfilei(L, std::string_view{fname}, std::nullopt);
   }
   if (status == LUA_OK)
   {
@@ -755,7 +755,7 @@ static int pmain(lua_State* L)
       doREPL(L); /* do read-eval-print loop */
     }
     else
-      dofile(L, std::string_view{}); /* executes stdin as a file */
+      dofile(L, std::nullopt); /* executes stdin as a file */
   }
   lua_pushboolean(L, 1); /* signal no errors */
   return 1;

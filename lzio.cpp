@@ -19,11 +19,11 @@ int luaZ_fill(ZIO* z)
 {
   lua_State* L = z->L;
   lua_unlock(L);
-  std::string_view chunk = z->reader(L, z->data);
+  std::optional<std::string_view> chunk = z->reader(L, z->data);
   lua_lock(L);
-  if (chunk.empty())
+  if (!chunk.has_value() || chunk->empty())
     return EOZ;
-  z->chunk = chunk;
+  z->chunk = *chunk;
   z->pos = 1;
   return ((unsigned char)(z->chunk[0]));
 }

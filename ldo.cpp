@@ -914,7 +914,7 @@ LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
   }
   else if (L->status != LUA_YIELD) /* ended with errors? */
     return {resume_error(L, lit<"cannot resume dead coroutine">(), nargs), 1};
-  L->nCcalls = (from) ? getCcalls(from) : 0;
+  L->nCcalls = (from != nullptr) ? getCcalls(from) : 0;
   if (getCcalls(L) >= LUAI_MAXCCALLS)
     return {resume_error(L, lit<"C stack overflow">(), nargs), 1};
   L->nCcalls++;
@@ -1119,15 +1119,15 @@ void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
   L->top--;
 }
 
-TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::string_view name, std::string_view mode)
+TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<std::string_view> name, std::optional<std::string_view> mode)
 {
   struct SParser p;
   TStatus status;
   incnny(L); /* cannot yield during parsing */
   p.z = z;
   p.buff.attach(L);
-  p.name = (name.data() != nullptr) ? name : lit<"?">()->view();
-  p.mode = (mode.data() != nullptr) ? mode : lit<"bt">()->view();
+  p.name = name.value_or(lit<"?">()->view());
+  p.mode = mode.value_or(lit<"bt">()->view());
   p.dyd.actvar.arr = nullptr;
   p.dyd.actvar.size = 0;
   p.dyd.gt.arr = nullptr;

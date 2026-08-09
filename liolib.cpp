@@ -617,11 +617,11 @@ static int g_write(lua_State* L, OsFile* f, int arg)
     size_t len;
     size_t numbytes; /* bytes written in one call to 'fwrite' */
     char numbuff[LUA_N2SBUFFSZ];
-    std::string_view numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
-    if (numtxt.data() != nullptr)
+    std::optional<std::string_view> numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
+    if (numtxt.has_value())
     { /* did conversion work (value was a number)? */
-      s = numtxt.data();
-      len = numtxt.size();
+      s = numtxt->data();
+      len = numtxt->size();
     }
     else
     { /* must be a string */

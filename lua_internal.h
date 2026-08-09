@@ -12,7 +12,7 @@ int lua_islightcfunction(lua_State* L, int idx);
 
 const InternalString* lua_toistring(lua_State* L, int idx);
 
-int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::string_view chunkname, std::string_view mode);
+int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::optional<std::string_view> chunkname, std::optional<std::string_view> mode);
 
 int lua_reservebytes(lua_State* L, size_t sz);
 void lua_releasebytes(lua_State* L, size_t sz);
@@ -30,10 +30,11 @@ int lua_resetthread(lua_State* L);
 
 const InternalString* luaL_checkistring(lua_State* L, int arg);
 const InternalString* luaL_optistring(lua_State* L, int arg, const InternalString* def);
+const InternalString* luaL_optistring(lua_State* L, int arg);
 const InternalString* luaL_toistring(lua_State* L, int idx);
 
-int luaL_loadbufferi(lua_State* L, std::string_view buff, std::string_view name, std::string_view mode);
-int luaL_loadfilei(lua_State* L, std::string_view filename, std::string_view mode);
+int luaL_loadbufferi(lua_State* L, std::string_view buff, std::optional<std::string_view> name, std::optional<std::string_view> mode);
+int luaL_loadfilei(lua_State* L, std::optional<std::string_view> filename, std::optional<std::string_view> mode);
 
 int lua_getfieldi(lua_State* L, int idx, std::string_view k);
 void lua_setfieldi(lua_State* L, int idx, std::string_view k);
@@ -48,7 +49,7 @@ void lua_warningi(lua_State* L, std::string_view msg, int tocont);
 int luaL_errori(lua_State* L, std::string_view fmt);
 int luaL_argerrori(lua_State* L, int arg, std::string_view extramsg);
 int luaL_typeerrori(lua_State* L, int arg, std::string_view tname);
-int luaL_checkoptioni(lua_State* L, int arg, std::string_view def,
+int luaL_checkoptioni(lua_State* L, int arg, std::optional<std::string_view> def,
                       std::span<const std::string_view> lst);
 
 struct luaL_Regi
@@ -63,7 +64,7 @@ void luaL_newlibi(lua_State* L, std::span<const luaL_Regi> funcs);
 void luaL_argchecki(lua_State* L, bool cond, int arg, std::string_view extramsg);
 void luaL_argexpectedi(lua_State* L, bool cond, int arg, std::string_view tname);
 
-void luaL_checkstacki(lua_State* L, int space, std::string_view msg);
+void luaL_checkstacki(lua_State* L, int space, std::optional<std::string_view> msg);
 
 int luaL_getmetafieldi(lua_State* L, int obj, std::string_view event);
 int luaL_callmetai(lua_State* L, int obj, std::string_view event);
@@ -76,15 +77,15 @@ int luaL_getmetatablei(lua_State* L, std::string_view tname);
 
 int luaL_getsubtablei(lua_State* L, int idx, std::string_view fname);
 void luaL_requirefi(lua_State* L, std::string_view modname, lua_CFunction openf, int glb);
-void luaL_tracebacki(lua_State* L, lua_State* L1, std::string_view msg, int level);
+void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<std::string_view> msg, int level);
 
 InternalString lua_funcaddressi(lua_State* L, int idx);
 
 const InternalString* lua_typenamei(lua_State* L, int tp);
 
-std::string_view lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff);
+std::optional<std::string_view> lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff);
 
-int luaL_fileresulti(lua_State* L, int stat, std::string_view fname, int en);
+int luaL_fileresulti(lua_State* L, int stat, std::optional<std::string_view> fname, int en);
 int luaL_execresulti(lua_State* L, int stat, int en);
 
 struct luaL_Buffer;

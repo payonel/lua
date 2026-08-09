@@ -233,7 +233,7 @@ struct str_Writer
   luaL_Buffer B;
 };
 
-static int writer(lua_State* L, std::string_view b, void* ud)
+static int writer(lua_State* L, std::optional<std::string_view> b, void* ud)
 {
   struct str_Writer* state = (struct str_Writer*) ud;
   if (!state->init)
@@ -241,13 +241,13 @@ static int writer(lua_State* L, std::string_view b, void* ud)
     state->init = 1;
     luaL_buffinit(L, &state->B);
   }
-  if (b.data() == nullptr)
+  if (!b.has_value())
   {
     luaL_pushresult(&state->B); /* push result */
     lua_replace(L, 1);          /* move it to reserved slot */
   }
   else
-    luaL_addlstring(&state->B, b, 0, b.size());
+    luaL_addlstring(&state->B, *b, 0, b->size());
   return 0;
 }
 

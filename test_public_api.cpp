@@ -60,11 +60,11 @@ struct StringReader
   bool done;
 };
 
-static std::string_view whole_reader(lua_State*, void* ud)
+static std::optional<std::string_view> whole_reader(lua_State*, void* ud)
 {
   StringReader* r = static_cast<StringReader*>(ud);
   if (r->done)
-    return {};
+    return std::nullopt;
   r->done = true;
   return r->src;
 }
@@ -75,11 +75,11 @@ struct ByteReader
   size_t pos;
 };
 
-static std::string_view byte_reader(lua_State*, void* ud)
+static std::optional<std::string_view> byte_reader(lua_State*, void* ud)
 {
   ByteReader* r = static_cast<ByteReader*>(ud);
   if (r->pos >= r->src.size())
-    return {};
+    return std::nullopt;
   return r->src.substr(r->pos++, 1);
 }
 
@@ -217,21 +217,21 @@ struct DumpBuf
   bool empty_was_last = false;
 };
 
-static int dump_writer(lua_State*, std::string_view b, void* ud)
+static int dump_writer(lua_State*, std::optional<std::string_view> b, void* ud)
 {
   DumpBuf* d = static_cast<DumpBuf*>(ud);
-  if (b.empty())
+  if (!b.has_value() || b->empty())
   {
     d->empty_calls++;
     d->empty_was_last = true;
     return 0;
   }
   d->empty_was_last = false;
-  d->bytes.append(b.data(), b.size());
+  d->bytes.append(b->data(), b->size());
   return 0;
 }
 
-static int failing_writer(lua_State*, std::string_view, void* ud)
+static int failing_writer(lua_State*, std::optional<std::string_view>, void* ud)
 {
   int* n = static_cast<int*>(ud);
   (*n)++;
@@ -356,7 +356,7 @@ static int cf_probe(lua_State* L)
     lua_pop(L, 1);
 
     lua_pushinteger(L, 99);
-    std::optional<HostString> sname = lua_setlocal(L, &*ar1, 1);
+    std::optional<HostString> sname = lua_setlocal(L, *ar1, 1);
     CHECK(sname.has_value() && *sname == "xyz");
     CHECK(lua_gettop(L) == top);
 

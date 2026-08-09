@@ -314,23 +314,31 @@ static int db_setupvalue(lua_State* L)
 ** Check whether a given upvalue from a given closure exists and
 ** returns its index
 */
-static void* checkupval(lua_State* L, int argf, int argnup, int* pnup)
+struct UpvalRef
 {
   void* id;
-  int nup = (int) luaL_checkinteger(L, argnup); /* upvalue index */
-  luaL_checktype(L, argf, LUA_TFUNCTION);       /* closure */
-  id = lua_upvalueid(L, argf, nup);
-  if (pnup)
-  {
-    luaL_argchecki(L, id != nullptr, argnup, lit<"invalid upvalue index">()->view());
-    *pnup = nup;
-  }
-  return id;
+  int nup;
+};
+
+static UpvalRef checkupval(lua_State* L, int argf, int argnup)
+{
+  UpvalRef r;
+  r.nup = (int) luaL_checkinteger(L, argnup); /* upvalue index */
+  luaL_checktype(L, argf, LUA_TFUNCTION);     /* closure */
+  r.id = lua_upvalueid(L, argf, r.nup);
+  return r;
+}
+
+static UpvalRef checkupvalvalid(lua_State* L, int argf, int argnup)
+{
+  UpvalRef r = checkupval(L, argf, argnup);
+  luaL_argchecki(L, r.id != nullptr, argnup, lit<"invalid upvalue index">()->view());
+  return r;
 }
 
 static int db_upvalueid(lua_State* L)
 {
-  void* id = checkupval(L, 1, 2, nullptr);
+  void* id = checkupval(L, 1, 2).id;
   if (id != nullptr)
     lua_pushlightuserdata(L, id);
   else
@@ -340,9 +348,8 @@ static int db_upvalueid(lua_State* L)
 
 static int db_upvaluejoin(lua_State* L)
 {
-  int n1, n2;
-  checkupval(L, 1, 2, &n1);
-  checkupval(L, 3, 4, &n2);
+  int n1 = checkupvalvalid(L, 1, 2).nup;
+  int n2 = checkupvalvalid(L, 3, 4).nup;
   luaL_argchecki(L, !lua_iscfunction(L, 1), 1, lit<"Lua function expected">()->view());
   luaL_argchecki(L, !lua_iscfunction(L, 3), 3, lit<"Lua function expected">()->view());
   lua_upvaluejoin(L, 1, n1, 3, n2);

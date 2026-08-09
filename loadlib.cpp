@@ -388,9 +388,9 @@ static int searcher_Lua(lua_State* L)
   std::string_view name = luaL_checklstring(L, 1);
   if (!findfile(L, name, lit<"path">(), LUA_DIRSEP))
     return 1;
-  std::string_view nullsv(nullptr, 0);
+
   std::string_view filename = lua_toistring(L, -1)->view();
-  return checkload(L, (luaL_loadfilei(L, filename, nullsv) == LUA_OK), filename);
+  return checkload(L, (luaL_loadfilei(L, filename, std::nullopt) == LUA_OK), filename);
 }
 
 /*

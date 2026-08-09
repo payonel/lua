@@ -310,10 +310,10 @@ const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n
   return name;
 }
 
-LUA_API std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug* ar, int n)
+LUA_API std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug& ar, int n)
 {
   InternalDebug iar{};
-  iar.i_ci = ar->i_ci;
+  iar.i_ci = ar.i_ci;
   const InternalString* name = lua_setlocali(L, &iar, n);
   if (name == nullptr)
     return std::nullopt;

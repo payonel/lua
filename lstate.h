@@ -643,11 +643,6 @@ static l_forceinline const TValue* gfasttm(global_State* g, Table* mt, TMS e)
   return checknoTM(mt, e) ? nullptr : luaT_gettm(mt, e, g->tmname[e]);
 }
 
-static l_forceinline const TValue* fasttm(lua_State* l, Table* mt, TMS e)
-{
-  return gfasttm(G(l), mt, e);
-}
-
 LUAI_FUNC void luaE_checkcstack(lua_State* L);
 LUAI_FUNC void luaE_incCstack(lua_State* L);
 LUAI_FUNC void luaE_warning(lua_State* L, std::string_view msg, int tocont);

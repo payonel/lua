@@ -301,7 +301,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
     else
     {                                                 /* 't' is a table */
       Table* h = hvalue(t);
-      tm = fasttm(L, h->metatable, TM_INDEX); /* table's metamethod */
+      tm = gfasttm(L->l_G, h->metatable, TM_INDEX); /* table's metamethod */
       if (tm == nullptr)
       {                     /* no metamethod? */
         setslottag(L, val, LUA_VNIL); /* result is nil */
@@ -351,7 +351,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
     if (hres != HNOTATABLE)
     {                                            /* is 't' a table? */
       Table* h = hvalue(t);                      /* save 't' table */
-      tm = fasttm(L, h->metatable, TM_NEWINDEX); /* get metamethod */
+      tm = gfasttm(L->l_G, h->metatable, TM_NEWINDEX); /* get metamethod */
       if (tm == nullptr)
       {                                       /* no metamethod? */
         setsloth(L, L->top, h);          /* anchor 't' */
@@ -701,9 +701,9 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
         return 1;
       else if (L == nullptr)
         return 0;
-      tm = fasttm(L, u1->metatable, TM_EQ);
+      tm = gfasttm(L->l_G, u1->metatable, TM_EQ);
       if (tm == nullptr)
-        tm = fasttm(L, u2->metatable, TM_EQ);
+        tm = gfasttm(L->l_G, u2->metatable, TM_EQ);
       break; /* will try TM */
     }
     case LUA_VTABLE:
@@ -714,9 +714,9 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
         return 1;
       else if (L == nullptr)
         return 0;
-      tm = fasttm(L, h1->metatable, TM_EQ);
+      tm = gfasttm(L->l_G, h1->metatable, TM_EQ);
       if (tm == nullptr)
-        tm = fasttm(L, h2->metatable, TM_EQ);
+        tm = gfasttm(L->l_G, h2->metatable, TM_EQ);
       break; /* will try TM */
     }
     case LUA_VLCF:
@@ -859,7 +859,7 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src)
   case LUA_VTABLE:
   {
     Table* h = hvalue(rb);
-    tm = fasttm(L, h->metatable, TM_LEN);
+    tm = gfasttm(L->l_G, h->metatable, TM_LEN);
     if (tm)
       break;                                        /* metamethod? break switch to call it */
     setsloti(L, ra, ((lua_Integer)(luaH_getn(L, h)))); /* else primitive len */

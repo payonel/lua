@@ -56,16 +56,20 @@ static int tonumeral(const expdesc* e, TValue* v)
   switch (e->k)
   {
   case VKINT:
-    if (v)
-      setivalue(v, e->ival);
+    setivalue(v, e->ival);
     return 1;
   case VKFLT:
-    if (v)
-      setfltvalue(v, e->nval);
+    setfltvalue(v, e->nval);
     return 1;
   default:
     return 0;
   }
+}
+
+static int isnumeral(const expdesc* e)
+{
+  TValue junk;
+  return tonumeral(e, &junk);
 }
 
 /*
@@ -1756,7 +1760,7 @@ static void codebinNoK(FuncState* fs, BinOpr opr,
 static void codearith(FuncState* fs, BinOpr opr,
                       expdesc* e1, expdesc* e2, int flip, int line)
 {
-  if (tonumeral(e2, nullptr) && luaK_exp2K(fs, e2)) /* K operand? */
+  if (isnumeral(e2) && luaK_exp2K(fs, e2)) /* K operand? */
     codebinK(fs, opr, e1, e2, flip, line);
   else /* 'e2' is neither an immediate nor a K operand */
     codebinNoK(fs, opr, e1, e2, flip, line);
@@ -1771,7 +1775,7 @@ static void codecommutative(FuncState* fs, BinOpr op,
                             expdesc* e1, expdesc* e2, int line)
 {
   int flip = 0;
-  if (tonumeral(e1, nullptr))
+  if (isnumeral(e1))
   {                   /* is first operand a numeric constant? */
     swapexps(e1, e2); /* change order */
     flip = 1;
@@ -1934,7 +1938,7 @@ void luaK_infix(FuncState* fs, BinOpr op, expdesc* v)
   case OPR_SHL:
   case OPR_SHR:
   {
-    if (!tonumeral(v, nullptr))
+    if (!isnumeral(v))
       luaK_exp2anyreg(fs, v);
     /* else keep numeral, which may be folded or used as an immediate
        operand */
@@ -1943,7 +1947,7 @@ void luaK_infix(FuncState* fs, BinOpr op, expdesc* v)
   case OPR_EQ:
   case OPR_NE:
   {
-    if (!tonumeral(v, nullptr))
+    if (!isnumeral(v))
       exp2RK(fs, v);
     /* else keep numeral, which may be an immediate operand */
     break;

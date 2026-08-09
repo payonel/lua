@@ -96,9 +96,9 @@ typedef int (*lua_CFunction)(lua_State* L);
 */
 typedef int (*lua_KFunction)(lua_State* L, int status, lua_KContext ctx);
 
-typedef std::string_view (*lua_Reader)(lua_State* L, void* ud);
+typedef std::optional<std::string_view> (*lua_Reader)(lua_State* L, void* ud);
 
-typedef int (*lua_Writer)(lua_State* L, std::string_view b, void* ud);
+typedef int (*lua_Writer)(lua_State* L, std::optional<std::string_view> b, void* ud);
 
 /*
 ** Type for memory-allocation functions
@@ -434,7 +434,7 @@ LUA_API std::optional<lua_Debug>(lua_getstack)(lua_State* L, int level);
 LUA_API std::optional<lua_Debug>(lua_getinfo)(lua_State* L, const HostString& what,
                                               const lua_Debug& ar);
 LUA_API std::optional<HostString>(lua_getlocal) (lua_State* L, const lua_Debug* ar, int n);
-LUA_API std::optional<HostString>(lua_setlocal) (lua_State* L, const lua_Debug* ar, int n);
+LUA_API std::optional<HostString>(lua_setlocal) (lua_State* L, const lua_Debug& ar, int n);
 LUA_API std::optional<HostString>(lua_getupvalue) (lua_State* L, int funcindex, int n);
 LUA_API std::optional<HostString>(lua_setupvalue) (lua_State* L, int funcindex, int n);
 
