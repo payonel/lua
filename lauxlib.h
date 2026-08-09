@@ -214,8 +214,8 @@ private:
   size_t len_ = 0;
   lua_State* L_ = nullptr;
   // assigned in attach
-  lua_Alloc allocf_;
-  void* allocud_;
+  lua_Alloc allocf_ = nullptr;
+  void* allocud_ = nullptr;
 };
 
 struct luaL_Buffer

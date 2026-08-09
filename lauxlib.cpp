@@ -611,7 +611,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
 
 static size_t prepbuff(luaL_Buffer* B, size_t sz)
 {
-  if (B->bldr.size() + sz > B->bldr.capacity())
+  if (sz > B->bldr.capacity() - B->bldr.size())
   {
     size_t newsize = newbuffsize(B, sz);
     assert(newsize >= B->reserved);
@@ -1536,7 +1536,7 @@ std::span<char> ByteBuilder::area() noexcept { return bytes_; }
 /* reserve sz bytes after current content; capacity must already suffice */
 size_t ByteBuilder::prep(size_t sz) noexcept
 {
-  assert(len_ + sz <= bytes_.size());
+  assert(sz <= bytes_.size() - len_);
   (void) sz;
   return len_;
 }
@@ -1575,7 +1575,7 @@ std::string ByteBuilder::release()
 
 void ByteBuilder::ensure(size_t sz)
 {
-  if (len_ + sz > bytes_.size())
+  if (sz > bytes_.size() - len_)
     growTo(len_ + sz);
 }
 
