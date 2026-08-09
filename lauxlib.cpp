@@ -588,16 +588,64 @@ LUALIB_API lua_Integer luaL_optinteger(lua_State* L, int arg,
 ** =======================================================
 */
 
+static void bb_growTo(luaL_Buffer* B, size_t cap)
+{
+  if (cap == B->bytes.size())
+    return;
+  assert(B->L != nullptr);
+  global_State* g = G(B->L);
+  void* nb = g->frealloc(g->ud, B->bytes.data(), B->bytes.size(), cap);
+  if (l_unlikely(nb == nullptr && cap > 0))
+  {
+    lua_pushistringref(B->L, lit<"not enough memory">()->view());
+    lua_error(B->L); /* raise a memory error */
+  }
+  B->bytes = {static_cast<char*>(nb), cap};
+}
+
+static void bb_append(luaL_Buffer* B, std::string_view b, size_t off, size_t n)
+{
+  if (n > 0)
+  {
+    if (n > B->bytes.size() - B->used)
+      bb_growTo(B, B->used + n);
+    memcpy(&B->bytes[B->used], b.data() + off, n);
+    B->used += n;
+  }
+}
+
+static void bb_dealloc(luaL_Buffer* B) noexcept
+{
+  if (B->bytes.data() != nullptr)
+  {
+    global_State* g = G(B->L);
+    g->frealloc(g->ud, B->bytes.data(), B->bytes.size(), 0);
+    B->bytes = {};
+  }
+}
+
+static std::string bb_release(luaL_Buffer* B)
+{
+  std::string out;
+  if (B->used != 0)
+    out.assign(B->bytes.data(), B->used);
+  bb_dealloc(B);
+  B->used = 0;
+  return out;
+}
+
 luaL_Buffer::~luaL_Buffer()
 {
   if (reserved != 0 && L != nullptr)
     lua_releasebytes(L, reserved);
+
+  bb_dealloc(this);
 }
 
 static size_t newbuffsize(luaL_Buffer* B, size_t sz)
 {
-  size_t newsize = B->bldr.capacity();
-  size_t len = B->bldr.size();
+  size_t newsize = B->bytes.size();
+  size_t len = B->used;
   if (l_unlikely(sz >= MAX_SIZE - len))
     return ((size_t)(luaL_errori(B->L, lit<"resulting string too large">()->view())));
   if (newsize <= MAX_SIZE / 3 * 2) /* no overflow? */
@@ -611,7 +659,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
 
 static size_t prepbuff(luaL_Buffer* B, size_t sz)
 {
-  if (sz > B->bldr.capacity() - B->bldr.size())
+  if (sz > B->bytes.size() - B->used)
   {
     size_t newsize = newbuffsize(B, sz);
     assert(newsize >= B->reserved);
@@ -621,9 +669,11 @@ static size_t prepbuff(luaL_Buffer* B, size_t sz)
       lua_error(B->L); /* raise a memory error */
     }
     B->reserved = newsize;
-    B->bldr.growTo(newsize);
+    bb_growTo(B, newsize);
   }
-  return B->bldr.prep(sz);
+
+  assert(sz <= B->bytes.size() - B->used);
+  return B->used;
 }
 
 LUALIB_API size_t luaL_prepbuffsize(luaL_Buffer* B, size_t sz)
@@ -636,7 +686,7 @@ LUALIB_API void luaL_addlstring(luaL_Buffer* B, std::string_view s, size_t off, 
   if (l > 0)
   {
     prepbuff(B, l);
-    B->bldr.append(s, off, l);
+    bb_append(B, s, off, l);
   }
 }
 
@@ -653,7 +703,7 @@ LUALIB_API void luaL_pushresult(luaL_Buffer* B)
   B->reserved = 0;
   if (reserved != 0)
     lua_releasebytes(L, reserved);
-  lua_pushistring(L, InternalString::take(B->bldr.release()));
+  lua_pushistring(L, InternalString::take(bb_release(B)));
 }
 
 LUALIB_API void luaL_pushresultsize(luaL_Buffer* B, size_t sz)
@@ -667,15 +717,15 @@ LUALIB_API void luaL_addvalue(luaL_Buffer* B)
   lua_State* L = B->L;
   std::string_view s = *lua_tolstring(L, -1);
   prepbuff(B, s.size());
-  B->bldr.append(s, 0, s.size());
+  bb_append(B, s, 0, s.size());
   lua_pop(L, 1); /* pop string */
 }
 
 LUALIB_API void luaL_buffinit(lua_State* L, luaL_Buffer* B)
 {
+  assert(B->bytes.empty() || L == B->L);
   B->L = L;
-  B->bldr.attach(L);
-  B->bldr.reset();
+  B->used = 0;
 }
 
 LUALIB_API size_t luaL_buffinitsize(lua_State* L, luaL_Buffer* B, size_t sz)
@@ -1432,29 +1482,29 @@ LUALIB_API void luaL_pushfail(lua_State* L)
 
 LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf)
 {
-  return bf->bldr.size();
+  return bf->used;
 }
 
 LUALIB_API std::span<char> luaL_buffarea(luaL_Buffer* bf)
 {
-  return bf->bldr.area();
+  return bf->bytes;
 }
 
 LUALIB_API void luaL_addchar(luaL_Buffer* B, char c)
 {
   size_t off = luaL_prepbuffsize(B, 1);
-  B->bldr.area()[off] = c;
+  B->bytes[off] = c;
   luaL_addsize(B, 1);
 }
 
 LUALIB_API void luaL_addsize(luaL_Buffer* B, size_t s)
 {
-  B->bldr.commit(s);
+  B->used += s;
 }
 
 LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s)
 {
-  B->bldr.drop(s);
+  B->used -= s;
 }
 
 LUALIB_API size_t luaL_prepbuffer(luaL_Buffer* B)
@@ -1464,111 +1514,3 @@ LUALIB_API size_t luaL_prepbuffer(luaL_Buffer* B)
 
 /* }====================================================================== */
 
-void ByteBuilder::attach(lua_State* L)
-{
-  assert(bytes_.empty() || L == L_);
-  L_ = L;
-  lua_Allocator a = lua_getallocf(L);
-  this->allocf_ = a.f;
-  this->allocud_ = a.ud;
-}
-
-ByteBuilder& ByteBuilder::operator=(ByteBuilder&& o) noexcept
-{
-  if (this != &o)
-  {
-    dealloc();
-    bytes_ = o.bytes_;
-    len_ = o.len_;
-    L_ = o.L_;
-    allocf_ = o.allocf_;
-    allocud_ = o.allocud_;
-    o.bytes_ = {};
-    o.len_ = 0;
-  }
-  return *this;
-}
-ByteBuilder::~ByteBuilder()
-{
-  dealloc();
-}
-
-void ByteBuilder::append(char c)
-{
-  ensure(1);
-  bytes_[len_] = c;
-  commit(1);
-}
-void ByteBuilder::append(std::string_view b)
-{
-  append(b, 0, b.size());
-}
-
-void ByteBuilder::append(std::string_view b, size_t off, size_t n)
-{
-  if (n > 0)
-  {
-    ensure(n);
-    memcpy(&bytes_[len_], b.data() + off, n);
-    commit(n);
-  }
-}
-
-void ByteBuilder::reset() noexcept { len_ = 0; }
-
-void ByteBuilder::drop(size_t k) { len_ -= k; }
-
-size_t ByteBuilder::size() const noexcept { return len_; }
-
-std::string_view ByteBuilder::view() const noexcept { return {bytes_.data(), len_}; }
-
-std::span<char> ByteBuilder::area() noexcept { return bytes_; }
-
-size_t ByteBuilder::prep(size_t sz) noexcept
-{
-  assert(sz <= bytes_.size() - len_);
-  (void) sz;
-  return len_;
-}
-void ByteBuilder::commit(size_t sz) noexcept { len_ += sz; }
-
-size_t ByteBuilder::capacity() const noexcept { return bytes_.size(); }
-
-void ByteBuilder::growTo(size_t cap)
-{
-  if (cap == bytes_.size())
-    return;
-  assert(allocf_ != nullptr);
-  void* nb = allocf_(allocud_, bytes_.data(), bytes_.size(), cap);
-  if (l_unlikely(nb == nullptr && cap > 0))
-  {
-    lua_pushistringref(L_, lit<"not enough memory">()->view());
-    lua_error(L_); /* raise a memory error */
-  }
-  bytes_ = {static_cast<char*>(nb), cap};
-}
-
-std::string ByteBuilder::release()
-{
-  std::string out;
-  if (len_ != 0)
-    out.assign(bytes_.data(), len_);
-  dealloc();
-  len_ = 0;
-  return out;
-}
-
-void ByteBuilder::ensure(size_t sz)
-{
-  if (sz > bytes_.size() - len_)
-    growTo(len_ + sz);
-}
-
-void ByteBuilder::dealloc() noexcept
-{
-  if (bytes_.data() != nullptr)
-  {
-    allocf_(allocud_, bytes_.data(), bytes_.size(), 0);
-    bytes_ = {};
-  }
-}

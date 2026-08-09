@@ -173,43 +173,10 @@ LUALIB_API void luaL_pushfail(lua_State* L);
 ** =======================================================
 */
 
-class ByteBuilder
-{
-public:
-  ByteBuilder() = default;
-  ByteBuilder& operator=(ByteBuilder&& o) noexcept;
-  ~ByteBuilder();
-
-  void attach(lua_State* L);
-
-  void append(char c);
-  void append(std::string_view b);
-  void append(std::string_view b, size_t off, size_t n);
-  void reset() noexcept;
-  void drop(size_t k);
-  size_t size() const noexcept;
-  std::string_view view() const noexcept;
-  std::span<char> area() noexcept;
-  size_t prep(size_t sz) noexcept;
-  void commit(size_t sz) noexcept;
-  size_t capacity() const noexcept;
-  void growTo(size_t cap);
-  std::string release();
-
-private:
-  void ensure(size_t sz);
-  void dealloc() noexcept;
-
-  std::span<char> bytes_ = {};
-  size_t len_ = 0;
-  lua_State* L_ = nullptr;
-  lua_Alloc allocf_ = nullptr;
-  void* allocud_ = nullptr;
-};
-
 struct luaL_Buffer
 {
-  ByteBuilder bldr;
+  std::span<char> bytes = {};
+  size_t used = 0;
   size_t reserved = 0;
   lua_State* L = nullptr;
 
@@ -239,18 +206,6 @@ LUALIB_API void(luaL_pushresultsize)(luaL_Buffer* B, size_t sz);
 LUALIB_API size_t(luaL_buffinitsize) (lua_State* L, luaL_Buffer* B, size_t sz);
 
 LUALIB_API size_t luaL_prepbuffer(luaL_Buffer* B);
-
-struct luaL_BuffSpan
-{
-  std::span<char> area;
-  size_t off;
-};
-
-inline luaL_BuffSpan luaL_prepbuffspan(luaL_Buffer* B, size_t sz)
-{
-  size_t off = luaL_prepbuffsize(B, sz);
-  return {luaL_buffarea(B), off};
-}
 
 /* }====================================================== */
 

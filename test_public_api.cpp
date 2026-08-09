@@ -2895,6 +2895,18 @@ static void test_io_handles()
   lua_close(L);
 }
 
+struct luaL_BuffSpan
+{
+  std::span<char> area;
+  size_t off;
+};
+
+inline luaL_BuffSpan luaL_prepbuffspan(luaL_Buffer* B, size_t sz)
+{
+  size_t off = luaL_prepbuffsize(B, sz);
+  return {luaL_buffarea(B), off};
+}
+
 static bool g_opt_check_called = false;
 static lua_Integer opt_check_probe(lua_State* L, int n)
 {
