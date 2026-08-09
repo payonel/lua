@@ -90,7 +90,7 @@ static UpVal* newupval(lua_State* L, StkId level, UpVal** prev)
   assert(o->tt == LUA_VUPVAL);
   UpVal* uv = static_cast<UpVal*>(o);
   UpVal* next = *prev;
-  uv->owner = L;           /* current value lives in this thread's stack */
+  uv->owner = L;
   uv->stkid = level;
   uv->opennext = next;        /* link it to list of open upvalues */
   uv->previous = prev;
@@ -186,7 +186,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
     haserr = 0; /* no error object */
     break;
   default:                                  /* 'luaD_seterrorobj' will set top to level + 2 */
-    luaD_seterrorobj(L, status, level + 1); /* set error object after 'uv' */
+    luaD_seterrorobj(L, status, level + 1);
     errobj = getslot(L, level + 1);
     haserr = 1;
     break;
@@ -327,10 +327,6 @@ void luaF_freeproto(lua_State* L, Proto* f)
   luaM_free_(L, (f), sizeof(*(f)));
 }
 
-/*
-** Look for n-th local variable at line 'line' in function 'func'.
-** Returns nullptr if not found.
-*/
 const InternalString* luaF_getlocalname(const Proto* f, int local_number, int pc)
 {
   int i;

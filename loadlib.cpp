@@ -49,19 +49,8 @@ static const InternalString* const LIB_FAIL = lit<"open">();
 ** system-dependent functions
 */
 
-/*
-** load C library in file 'path'. If 'seeglb', load with all names in
-** the library global.
-** Returns the library; in case of error, returns nullptr plus an
-** error string in the stack.
-*/
 static void* lsys_load(lua_State* L, std::string_view path, int seeglb);
 
-/*
-** Try to find a function named 'sym' in library 'lib'.
-** Returns the function; in case of error, returns nullptr plus an
-** error string in the stack.
-*/
 static lua_CFunction lsys_sym(lua_State* L, void* lib, std::string_view sym);
 
 /*
@@ -331,7 +320,7 @@ static int searchpath(lua_State* L, std::string_view name,
     size_t pos = 0;
     while (pos < list.size())
     {
-      size_t sepmark = list.find(LUA_PATH_SEP, pos); /* next separator */
+      size_t sepmark = list.find(LUA_PATH_SEP, pos);
       if (sepmark == std::string_view::npos)          /* separator not found? */
         sepmark = list.size();                        /* name goes until the end */
       std::string_view filename = list.substr(pos, sepmark - pos);

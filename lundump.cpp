@@ -162,7 +162,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     luaC_objbarrier(L, p, ts);
   }
   else
-  {                                           /* large string */
+  {
     MBuffer tmp{L};
     tmp.growTo(size + 1);
     loadBlock(S, tmp.area().data(), ((size_t)(size + 1)) * sizeof(char));

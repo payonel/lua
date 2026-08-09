@@ -375,7 +375,7 @@ static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
 {
   size_t p = off;
   while (lisspace(sv_byteat(s, p)))
-    p++; /* skip leading spaces */
+    p++;
   int neg = 0;
   if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
   {
@@ -434,7 +434,7 @@ static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
     v = (magnitude > 0) ? ((lua_Number)(HUGE_VAL)) : 0.0;
   }
   else if (res.ec != std::errc())
-    return off; /* nothing recognized */
+    return off;
   *result = neg ? -v : v;
   return endp;
 }
@@ -490,7 +490,7 @@ static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
                                    : std::string_view::npos;
     size_t len = s.size() - off;
     if (ppoint == std::string_view::npos || len > L_MAXLENNUM)
-      return std::string_view::npos; /* string too long or no locale point; fail */
+      return std::string_view::npos;
     memcpy(buff, s.data() + off, len);
     buff[ppoint - off] = '.';
     endpos = l_str2dloc(std::string_view{buff, len}, 0, result, mode); /* try again */
@@ -560,7 +560,7 @@ size_t luaO_str2num(std::string_view s, TValue* o)
   else
     return 0; /* conversion failed */
   assert(e == s.size());
-  return e + 1; /* success; return string size plus one */
+  return e + 1;
 }
 
 int luaO_utf8esc(std::span<char> buff, l_uint32 x)
@@ -583,15 +583,6 @@ int luaO_utf8esc(std::span<char> buff, l_uint32 x)
   return n;
 }
 
-/*
-** The size of the buffer for the conversion of a number to a string
-** 'LUA_N2SBUFFSZ' must be enough to accommodate both the integer and
-** the float conversions.  For a long long int, this is 19 digits plus a
-** sign and a final '\0', adding to 21. For a long double, it can go to
-** a sign, the dot, an exponent letter, an exponent sign, 4 exponent
-** digits, the final '\0', plus the significant digits, which are
-** approximately the *_DIG attribute.
-*/
 static_assert(LUA_N2SBUFFSZ >= 20 + DBL_DIG, "invalid value for LUA_N2SBUFFSZ");
 
 /*
@@ -683,19 +674,12 @@ void luaO_tostring(lua_State* L, TValue* obj)
 ** ===================================================================
 */
 
-/*
-** Buffer for 'luaO_pushvfstring', mirroring stock 5.5: grown with raw
-** 'frealloc' and never raising while formatting — allocation failure
-** is deferred through 'err' and reported by 'pushbuff', which runs
-** protected. (This formats error messages, possibly during error
-** handling, so it cannot raise mid-format.)
-*/
 struct BuffFS
 {
   lua_State* L;
   std::span<char> b;
-  size_t blen; /* length of string in 'b' */
-  int err;     /* 1 = memory error, 2 = length overflow */
+  size_t blen;
+  int err;
 };
 
 static void initbuff(lua_State* L, BuffFS* buff)
@@ -716,17 +700,13 @@ static void freebuff(BuffFS* buff)
   }
 }
 
-/*
-** Push final result from 'luaO_pushvfstring'. This function may raise
-** errors creating the string, so it must run protected.
-*/
 static void pushbuff(lua_State* L, void* ud)
 {
   BuffFS* buff = ((BuffFS*)(ud));
   if (buff->err == 1)
-    luaD_throw(L, LUA_ERRMEM); /* memory error while formatting */
+    luaD_throw(L, LUA_ERRMEM);
   InternalString res{std::string_view{buff->b.data(), buff->blen}};
-  if (buff->err == 2) /* length overflow? mark the truncation */
+  if (buff->err == 2)
     res = res.concat(lit<"...">()->view());
   TString* ts = luaS_take(L, std::move(res));
   setslots(L, L->top, ts);
@@ -741,7 +721,7 @@ static const InternalString* clearbuff(BuffFS* buff)
     res = nullptr;                                          /* error message is on the top of the stack */
   else
   {
-    StkId s = L->top - 1; /* result string is on the top of the stack */
+    StkId s = L->top - 1;
     assert((slottag(L, s) & NOVARIANT_MASK) == LUA_TSTRING);
     res = &slottsval(L, s)->data;
   }
@@ -749,8 +729,7 @@ static const InternalString* clearbuff(BuffFS* buff)
   return res;
 }
 
-static void addstr2buff(BuffFS* buff, std::string_view str, size_t off,
-                        size_t slen)
+static void addstr2buff(BuffFS* buff, std::string_view str, size_t off, size_t slen)
 {
   if (buff->err) /* do nothing else after an error */
     return;
@@ -760,7 +739,7 @@ static void addstr2buff(BuffFS* buff, std::string_view str, size_t off,
     return;
   }
   if (buff->blen + slen > buff->b.size())
-  { /* grow with raw 'frealloc'; defer failure — cannot raise here */
+  {
     global_State* g = G(buff->L);
     size_t newsize = std::max<size_t>(buff->blen + slen, 256);
     void* nb = g->frealloc(g->ud, buff->b.data(), buff->b.size(), newsize);
@@ -1019,7 +998,7 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
     pos += PRE->size();
     bufflen -= PRE->size() + RETS->size() + POS->size() + 1; /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == std::string_view::npos)
-    { /* small one-line source? keep it */
+    {
       memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
       pos += srclen;
     }

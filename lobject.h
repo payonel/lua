@@ -184,15 +184,11 @@ constexpr lu_byte LUA_VLNGSTR = LUA_VSTRING;
 */
 struct TString : GCObject
 {
-  lu_byte extra;       /* reserved words for short strings; STREXTRA_EXTERNAL for external strings */
+  lu_byte extra;
   unsigned int hash;
   InternalString data;
 };
 
-/* marker in 'extra' for external strings: payload memory is outside GC
-   accounting (matches stock 5.5 external strings built by luaL_Buffer).
-   Never conflicts with reserved-word marks, which only appear on short
-   interned strings; external strings are always long (> LUAI_MAXSHORTLEN). */
 constexpr lu_byte STREXTRA_EXTERNAL = 0xFF;
 
 static l_forceinline int strisexternal(const TString* ts)
@@ -227,7 +223,7 @@ struct Udata : GCObject
   struct Table* metatable;
   GCObject* gclist;
   TValue* uv;
-  std::span<char> data; /* user memory block; consumers serialize/deserialize at the call site */
+  std::span<char> data;
 };
 
 /* get the address of the memory block inside 'Udata' */
@@ -408,10 +404,6 @@ constexpr size_t sizeLclosure(int n)
 
 constexpr lu_byte LUA_VTABLE = makevariant(LUA_TTABLE, 0);
 
-/*
-** Nodes for Hash tables: A pack of two TValue's (key-value pairs)
-** plus a 'next' field to link colliding entries.
-*/
 struct Node
 {
   TValue val;
@@ -585,12 +577,6 @@ static l_forceinline lua_CFunction keyfval(const Node* n)
 
 /* }================================================================== */
 
-/*
-** {==================================================================
-** Set functions — assign values into TValues
-** ===================================================================
-*/
-
 LUAI_FUNC int luaO_checkliveness(struct lua_State* L, const TValue* obj);
 
 static l_forceinline void checkliveness(struct lua_State* L, const TValue* obj)
@@ -690,14 +676,12 @@ static l_forceinline void setclCvalue(struct lua_State* L, TValue* obj, CClosure
 }
 
 
-/* copy a value into a node key */
 static l_forceinline void setnodekey(Node* node, const TValue* obj)
 {
   node->key_val = obj->value_;
   node->key_tt = obj->tt_;
 }
 
-/* copy a value from a node key */
 static l_forceinline void getnodekey(struct lua_State* L, TValue* obj, const Node* node)
 {
   obj->value_ = node->key_val;

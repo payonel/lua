@@ -243,10 +243,6 @@ static l_forceinline int gcrunning(global_State* g)
   return g->gcstp == 0;
 }
 
-/*
-** Does one step of collection when debt becomes zero.
-*/
-
 LUAI_FUNC void luaC_fix(lua_State* L, GCObject* o);
 LUAI_FUNC void luaC_freeallobjects(lua_State* L);
 LUAI_FUNC void luaC_step(lua_State* L);

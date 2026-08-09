@@ -15,10 +15,6 @@
 
 #include "lua.h"
 
-/*
-** generic extra include file (debug instrumentation: memcontrol allocator,
-** lock checking, test library). Internal — must not leak into lua.h.
-*/
 #if defined(LUA_DEBUG)
 #include "ltests.h"
 #endif
@@ -100,11 +96,6 @@ static inline unsigned int point2uint(lua_CFunction p)
 */
 typedef void (*voidf)(void);
 
-/*
-** Convert pointer-to-void* to pointer-to-function. This cast
-** is undefined according to ISO C, but POSIX assumes that it works.
-** (The '__extension__' in gnu compilers is only to avoid warnings.)
-*/
 static inline voidf cast_func(void* p)
 {
   return __extension__(voidf) p;

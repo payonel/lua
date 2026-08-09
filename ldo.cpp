@@ -327,7 +327,6 @@ void luaD_shrinkstack(lua_State* L)
     int nsize = (inuse > MAXSTACK / 2) ? MAXSTACK : inuse * 2;
     luaD_reallocstack(L, nsize, 0); /* ok if that fails */
   }
-  /* else don't change stack */
   luaE_shrinkCI(L); /* shrink CI list */
 }
 

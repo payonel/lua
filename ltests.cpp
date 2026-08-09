@@ -434,12 +434,6 @@ static void checkobjref(global_State* g, GCObject* f, GCObject* t)
   assert(testobjref(g, f, t));
 }
 
-/*
-** Version where 't' can be nullptr. In that case, it should not apply the
-** macro 'obj2gco' over the object. ('t' may have several types, so this
-** definition must be a macro.)  Most checks need this version, because
-** the check may run while an object is still being created.
-*/
 static inline void checkobjrefN(global_State* g, GCObject* f, GCObject* t)
 {
   if (t)
@@ -1831,13 +1825,6 @@ static void regcodes(lua_State* L)
 static int testC(lua_State* L);
 static int Cfunck(lua_State* L, int status, lua_KContext ctx);
 
-/*
-** arithmetic operation encoding for 'arith' instruction
-** LUA_OPIDIV  ->  ** LUA_OPSHL   -> <
-** LUA_OPSHR   -> >
-** LUA_OPUNM   -> _
-** LUA_OPBNOT  -> !
-*/
 static const std::string_view ops = lit<"+-*%^/\\&|~<>_!">()->view();
 
 static int runC(lua_State* L, lua_State* L1, std::string_view code)

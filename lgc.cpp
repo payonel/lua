@@ -48,7 +48,6 @@ static void reallymarkobject(global_State* g, GCObject* o);
 static void atomic(lua_State* L);
 static void entersweep(lua_State* L);
 
-/* erase all color bits then set only the current white bit */
 static inline void makewhite(global_State* g, GCObject* x)
 {
   x->marked = (lu_byte)((x->marked & ~maskcolors) | luaC_white(g));
@@ -71,13 +70,11 @@ static inline int keyiswhite(const Node* n)
   return (n->key_tt & BIT_ISCOLLECTABLE) && iswhite(gckey(n));
 }
 
-/* protected access to objects in values */
 static inline GCObject* gcvalueN(const TValue* o)
 {
   return (o->tt_ & BIT_ISCOLLECTABLE) ? gcvalue(o) : nullptr;
 }
 
-/* access to collectable objects in array part of tables */
 static inline GCObject* gcvalarr(Table* t, unsigned int i)
 {
   return (*getArrTag(t, i) & BIT_ISCOLLECTABLE) ? getArrVal(t, i)->ref : nullptr;
@@ -163,8 +160,6 @@ static l_mem objsize(GCObject* o)
   {
     assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
-    /* external payload is not GC memory; count the header only (stock
-       reports header-only sizes for external strings too) */
     res = sizeof(TString) + (strisexternal(ts) ? 0 : ts->data.size());
     break;
   }
@@ -700,11 +695,6 @@ static l_mem traverseudata(global_State* g, Udata* u)
   return 1 + u->nuvalue;
 }
 
-/*
-** Traverse a prototype. (While a prototype is being build, its
-** arrays can be larger than needed; the extra slots are filled with
-** nullptr, so the use of 'markobjectN')
-*/
 static l_mem traverseproto(global_State* g, Proto* f)
 {
   int i;
@@ -728,10 +718,6 @@ static l_mem traverseCclosure(global_State* g, CClosure* cl)
   return 1 + cl->nupvalues;
 }
 
-/*
-** Traverse a Lua closure, marking its prototype and its upvalues.
-** (Both can be nullptr while closure is being created.)
-*/
 static l_mem traverseLclosure(global_State* g, LClosure* cl)
 {
   int i;
@@ -969,7 +955,7 @@ static void freeobj(lua_State* L, GCObject* o)
     assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
     luaS_remove(L, ts);
-    if (!strisexternal(ts)) /* external payload was never charged */
+    if (!strisexternal(ts))
       luaM_release(L, ts->data.size());
     ts->data.~InternalString();
     luaM_free_(L, (ts), (sizeof(TString)));
@@ -981,13 +967,6 @@ static void freeobj(lua_State* L, GCObject* o)
   assert(gettotalbytes(G(L)) == newmem);
 }
 
-/*
-** sweep at most 'countin' elements from a list of GCObjects erasing dead
-** objects, where a dead object is one marked with the old (non current)
-** white; change all non-dead objects back to white (and new), preparing
-** for next collection cycle. Return where to continue the traversal or
-** nullptr if list is finished.
-*/
 static GCObject** sweeplist(lua_State* L, GCObject** p, l_mem countin)
 {
   global_State* g = G(L);
@@ -1115,13 +1094,6 @@ static GCObject** findlast(GCObject** p)
   return p;
 }
 
-/*
-** Move all unreachable objects (or 'all' objects) that need
-** finalization from list 'finobj' to list 'tobefnz' (to be finalized).
-** (Note that objects after 'finobjold1' cannot be white, so they
-** don't need to be traversed. In incremental mode, 'finobjold1' is nullptr,
-** so the whole list is traversed.)
-*/
 static void separatetobefnz(global_State* g, int all)
 {
   GCObject* curr;

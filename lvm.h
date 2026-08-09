@@ -96,7 +96,6 @@ static l_forceinline int tonumber(const TValue* o, lua_Number* nout)
   return luaV_tonumber_(o, nout);
 }
 
-/* convert to a float without string coercion */
 static l_forceinline int tonumberns(const TValue* o, lua_Number* nout)
 {
   if (o->tt_ == LUA_VNUMFLT)

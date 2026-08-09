@@ -796,7 +796,7 @@ static size_t lmemfind(std::string_view s1, size_t off1, size_t l1,
       if (memcmp(s1.data() + init, s2.data() + 1, l2) == 0)
         return init - 1;
       else
-      { /* correct 'l1' and 'p' to try again */
+      {
         l1 -= init - p;
         p = init;
       }
@@ -805,13 +805,6 @@ static size_t lmemfind(std::string_view s1, size_t off1, size_t l1,
   }
 }
 
-/*
-** get information about the i-th capture. If there are no captures
-** and 'i==0', return information about the whole match, which
-** is the range 's'..'e'. If the capture is a string, return
-** its length and put its start offset in '*cap'. If it is an integer
-** (a position), push it on the stack and return CAP_POSITION.
-*/
 static ptrdiff_t get_onecapture(MatchState* ms, int i, ptrdiff_t s,
                                 ptrdiff_t e, ptrdiff_t* cap)
 {
@@ -985,7 +978,7 @@ static int gmatch(lua_State* L)
   lua_settop(L, 2); /* keep strings on closure to avoid being collected */
   gm = (GMatchState*) lua_newuserdatauv(L, sizeof(GMatchState), 0);
   if (init > ls)   /* start after string's end? */
-    init = ls + 1; /* avoid overflows in 'src + init' */
+    init = ls + 1;
   prepstate(&gm->ms, L, s, p);
   gm->src = ((ptrdiff_t)(init));
   gm->p = 0;
@@ -1327,7 +1320,6 @@ static int quotefloat(lua_State* L, std::span<char> area, size_t off, lua_Number
   { /* format number as hexadecimal */
     int nb = lua_number2strx(L, area, off, MAX_ITEM,
                              lit<"%a">()->view(), n);
-    /* ensures that the numeral uses a dot as the radix character */
     if (memchr(area.data() + off, '.', ((unsigned int)(nb))) == nullptr)
     {                                                 /* no dot? */
       char point = ((char)(lua_getlocaledecpoint())); /* try locale point */
@@ -1828,7 +1820,7 @@ static int str_format(lua_State* L)
                               : sv.size();
             nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "",
                             std::string_view{sv.data(), blen}, false);
-            lua_pop(L, 1); /* remove result from 'luaL_toistring' */
+            lua_pop(L, 1);
           }
         }
         break;

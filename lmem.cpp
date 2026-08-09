@@ -18,23 +18,6 @@
 #include "lstate.h"
 
 /*
-** About the realloc function:
-** void *frealloc (void *ud, void *ptr, size_t osize, size_t nsize);
-** ('osize' is the old size, 'nsize' is the new size)
-**
-** - frealloc(ud, p, x, 0) frees the block 'p' and returns nullptr.
-** Particularly, frealloc(ud, nullptr, 0, 0) does nothing,
-** which is equivalent to free(nullptr) in ISO C.
-**
-** - frealloc(ud, nullptr, x, s) creates a new block of size 's'
-** (no matter 'x'). Returns nullptr if it cannot create the new block.
-**
-** - otherwise, frealloc(ud, b, x, y) reallocates the block 'b' from
-** size 'x' to size 'y'. Returns nullptr if it cannot reallocate the
-** block to the new size.
-*/
-
-/*
 ** Macro to call the allocation function.
 */
 static inline void* callfrealloc(global_State* g, void* block, size_t os, size_t ns)

@@ -1113,18 +1113,6 @@ int luaG_tracecall(lua_State* L)
   return 1; /* keep 'trap' on */
 }
 
-/*
-** Traces the execution of a Lua function. Called before the execution
-** of each opcode, when debug is on. 'L->oldpc' stores the last
-** instruction traced, to detect line changes. When entering a new
-** function, 'npci' will be zero and will test as a new line whatever
-** the value of 'oldpc'.  Some exceptional conditions may return to
-** a function without setting 'oldpc'. In that case, 'oldpc' may be
-** invalid; if so, use zero as a valid value. (A wrong but valid 'oldpc'
-** at most causes an extra call to a line hook.)
-** This function is not "Protected" when called, so it should correct
-** 'L->top' before calling anything that can run the GC.
-*/
 int luaG_traceexec(lua_State* L, int pc)
 {
   CallInfo* ci = L->ci;

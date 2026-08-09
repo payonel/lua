@@ -1474,7 +1474,6 @@ void luaK_self(FuncState* fs, expdesc* e, expdesc* key)
   e->k = VNONRELOC;               /* self expression has a fixed register */
   luaK_reserveregs(fs, 2);        /* method and 'self' produced by op_self */
   assert(key->k == VKSTR);
-  /* is method name in a valid K index? */
   if (luaK_exp2K(fs, key))
   {
     /* can use 'self' opcode */
@@ -1878,7 +1877,7 @@ static void codeeq(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
 */
 void luaK_prefix(FuncState* fs, UnOpr opr, expdesc* e, int line)
 {
-  static const expdesc ef = {VKINT, 0, 0, nullptr, 0, {0, 0, 0, 0}, {0, 0}, NO_JUMP, NO_JUMP}; /* fake 2nd operand */
+  static const expdesc ef = {VKINT, 0, 0, nullptr, 0, {0, 0, 0, 0}, {0, 0}, NO_JUMP, NO_JUMP};
   luaK_dischargevars(fs, e);
   switch (opr)
   {

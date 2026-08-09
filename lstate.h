@@ -21,49 +21,6 @@ struct CallInfo;
 #include "lhack.h"
 
 /*
-** Some notes about garbage-collected objects: All objects in Lua must
-** be kept somehow accessible until being freed, so all objects always
-** belong to one (and only one) of these lists, using field 'next' of
-** the 'CommonHeader' for the link:
-**
-** 'allgc': all objects not marked for finalization;
-** 'finobj': all objects marked for finalization;
-** 'tobefnz': all objects ready to be finalized;
-** 'fixedgc': all objects that are not to be collected (currently
-** only small strings, such as reserved words).
-**
-** For the generational collector, some of these lists have marks for
-** generations. Each mark points to the first element in the list for
-** that particular generation; that generation goes until the next mark.
-**
-** 'allgc' -> 'survival': new objects;
-** 'survival' -> 'old': objects that survived one collection;
-** 'old1' -> 'reallyold': objects that became old in last collection;
-** 'reallyold' -> nullptr: objects old for more than one cycle.
-**
-** 'finobj' -> 'finobjsur': new objects marked for finalization;
-** 'finobjsur' -> 'finobjold1': survived   """";
-** 'finobjold1' -> 'finobjrold': just old  """";
-** 'finobjrold' -> nullptr: really old       """".
-**
-** All lists can contain elements older than their main ages, due
-** to 'luaC_checkfinalizer' and 'udata2finalize', which move
-** objects between the normal lists and the "marked for finalization"
-** lists. Moreover, barriers can age young objects in young lists as
-** OLD0, which then become OLD1. However, a list never contains
-** elements younger than their main ages.
-**
-** The generational collector also uses a pointer 'firstold1', which
-** points to the first OLD1 object in the list. It is used to optimize
-** 'markold'. (Potentially OLD1 objects can be anywhere between 'allgc'
-** and 'reallyold', but often the list has no OLD1 objects or they are
-** after 'old1'.) Note the difference between it and 'old1':
-** 'firstold1': no OLD1 objects before this point; there can be all
-**   ages after it.
-** 'old1': no objects younger than OLD1 after this point.
-*/
-
-/*
 ** Moreover, there is another set of lists that control gray objects.
 ** These lists are linked by fields 'gclist'. (All objects that
 ** can become gray have such a field. The field is not the same
@@ -139,11 +96,9 @@ struct CallInfo
   StkId func;                       /* function index in the stack */
   StkId top;                        /* top for this function */
   struct CallInfo *previous, *next; /* dynamic call link */
-  /* only for Lua functions: */
   int savedpc;
   volatile l_signalT trap; /* function is tracing lines/counts */
   int nextraargs;          /* # of extra arguments in vararg functions */
-  /* only for C functions: */
   lua_KFunction k; /* continuation in case of yields */
   StkId old_errfunc;
   lua_KContext ctx; /* context info. in case of yields */
@@ -255,7 +210,7 @@ struct lua_State : GCObject
   UpVal* openupval;    /* list of open upvalues in this stack */
   StkId tbclist;
   StkId* tbc;
-  int ntbc;         /* number of elements in 'tbc' */
+  int ntbc;
   int sizetbc;
   GCObject* gclist;
   struct lua_State* twups;      /* list of threads with open upvalues */
@@ -566,13 +521,11 @@ static l_forceinline int getCcalls(const lua_State* L)
   return (int)(L->nCcalls & 0xffff);
 }
 
-/* increment the number of non-yieldable calls */
 static l_forceinline void incnny(lua_State* L)
 {
   L->nCcalls += 0x10000;
 }
 
-/* decrement the number of non-yieldable calls */
 static l_forceinline void decnny(lua_State* L)
 {
   L->nCcalls -= 0x10000;

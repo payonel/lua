@@ -173,14 +173,6 @@ LUALIB_API void luaL_pushfail(lua_State* L);
 ** =======================================================
 */
 
-/*
-** Byte buffer for the luaL_Buffer world, the analog of stock
-** lauxlib.c's box. Grows through the state's allocator with realloc
-** semantics; on allocation failure it raises a Lua memory error
-** internally (like stock 'resizebox'), so callers never check.
-** Must only be used from C-function contexts (raising uses the
-** public API and 'attach' queries 'lua_getallocf').
-*/
 class ByteBuilder
 {
 public:
@@ -188,7 +180,6 @@ public:
   ByteBuilder& operator=(ByteBuilder&& o) noexcept;
   ~ByteBuilder();
 
-  /* bind to a state; must happen before any content is added */
   void attach(lua_State* L);
 
   void append(char c);
@@ -202,7 +193,6 @@ public:
   size_t prep(size_t sz) noexcept;
   void commit(size_t sz) noexcept;
   size_t capacity() const noexcept;
-  /* resize to exactly 'cap'; raises a Lua memory error on failure */
   void growTo(size_t cap);
   std::string release();
 
@@ -213,7 +203,6 @@ private:
   std::span<char> bytes_ = {};
   size_t len_ = 0;
   lua_State* L_ = nullptr;
-  // assigned in attach
   lua_Alloc allocf_ = nullptr;
   void* allocud_ = nullptr;
 };
@@ -281,8 +270,8 @@ inline constexpr std::string_view LUA_FILEHANDLE = "FILE*";
 
 struct luaL_Stream
 {
-  OsFile* f;            /* stream (nullptr for incompletely created streams) */
-  lua_CFunction closef; /* to close stream (nullptr for closed streams) */
+  OsFile* f;
+  lua_CFunction closef;
 };
 
 /* }====================================================== */

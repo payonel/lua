@@ -430,17 +430,6 @@ static int newupvalue(FuncState* fs, TString* name, expdesc* v)
   return fs->nups - 1;
 }
 
-/*
-** Look for an active variable with the name 'n' in the
-** function 'fs'. If found, initialize 'var' with it and return
-** its expression kind; otherwise return -1. While searching,
-** var->info==-1 means that the preambular global declaration is
-** active (the default while there is no other global declaration);
-** var->info==-2 means there is no active collective declaration
-** (some previous global declaration but no collective declaration);
-** and var->info>=0 points to the inner-most (the first one found)
-** collective declaration, if there is one.
-*/
 static int searchvar(FuncState* fs, TString* n, expdesc* var)
 {
   int i;
@@ -1858,8 +1847,6 @@ static void forbody(LexState* ls, int base, int line, int nvars, int isgen)
   luaK_fixline(fs, line);
 }
 
-/* for-loop control variables are read only */
-
 static void fornum(LexState* ls, TString* varname, int line)
 {
   /* fornum -> NAME = exp,exp[,exp] forbody */
@@ -2139,7 +2126,6 @@ static void globalstat(LexState* ls)
     globalnames(ls, defkind);
   else
   {
-    /* use nullptr as name to represent '*' entries */
     new_varkind(ls, nullptr, defkind);
     fs->nactvar++; /* activate declaration */
   }

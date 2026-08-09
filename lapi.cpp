@@ -644,11 +644,6 @@ LUA_API void lua_pushinteger(lua_State* L, lua_Integer n)
   lua_unlock(L);
 }
 
-/*
-** Pushes on the stack a string with given length. Avoid using 's' when
-** 'len' == 0 (as 's' can be nullptr in that case), due to later use of
-** 'memcmp' and 'memcpy'.
-*/
 LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s, size_t off, size_t len)
 {
   TString* ts;
@@ -703,8 +698,6 @@ void lua_pushistring(lua_State* L, InternalString&& s)
   lua_unlock(L);
 }
 
-/* push built bytes as an external string: payload stays outside GC
-   accounting (stock 5.5 behavior for large luaL_Buffer results) */
 void lua_pushistringext(lua_State* L, InternalString&& s)
 {
   lua_lock(L);
@@ -1367,7 +1360,7 @@ LUA_API int lua_setiuservalue(lua_State* L, int idx, int n)
   assert(((o.tt_ == ctb(LUA_VUSERDATA))) && "full userdata expected");
   Udata* u = uvalue(&o);
   if (!((unsigned int)n - 1u < (unsigned int)u->nuvalue))
-    res = 0; /* 'n' not in [1, o's nuvalue] */
+    res = 0;
   else
   {
     TValue v = getslot(L, L->top - 1);

@@ -34,11 +34,6 @@ struct DumpState
 ** change the endianness of the result
 */
 
-/*
-** Dump the block of memory pointed by 'b' with given 'size'.
-** 'b' should not be nullptr, except for the last call signaling the end
-** of the dump.
-*/
 static void dumpBlock(DumpState* D, const void* b, size_t size)
 {
   if (D->status == 0)
@@ -123,15 +118,6 @@ static void dumpInteger(DumpState* D, lua_Integer x)
   dumpVarint(D, cx);
 }
 
-/*
-** Dump a String. First dump its "size":
-** size==0 is followed by an index and means "reuse saved string with
-** that index"; index==0 means nullptr.
-** size>=1 is followed by the string contents with real size==size-1 and
-** means that string, which will be saved with the next available index.
-** The real size does not include the ending '\0' (which is not dumped),
-** so adding 1 to it cannot overflow a size_t.
-*/
 static void dumpString(DumpState* D, TString* ts)
 {
   if (ts == nullptr)

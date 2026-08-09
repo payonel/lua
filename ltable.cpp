@@ -116,14 +116,8 @@ static inline int hashpointer(const Table* t, lua_CFunction p)
 }
 
 
-/*
-** Common hash part for tables with empty hash parts. That allows all
-** tables to have a hash part, avoiding an extra check ("is there a hash
-** part?") when indexing. Its sole node has an empty value and a key
-** (DEADKEY, nullptr) that is different from any valid TValue.
-*/
 static const Node dummynode_ = {
-    {{0, nullptr}, LUA_VEMPTY}, /* val (value and type) */
+    {{0, nullptr}, LUA_VEMPTY},
     LUA_TDEADKEY,
     0,
     {0, nullptr}

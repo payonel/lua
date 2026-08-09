@@ -42,10 +42,6 @@ static l_forceinline int testprop(int c, int p)
   return luai_ctype_[c + 1] & p;
 }
 
-/*
-** 'lislalpha' (Lua alphabetic) and 'lislalnum' (Lua alphanumeric) both
-** include '_'
-*/
 static l_forceinline int lislalpha(int c)
 {
   return testprop(c, MASK(ALPHABIT));
@@ -76,12 +72,6 @@ static l_forceinline int lisxdigit(int c)
   return testprop(c, MASK(XDIGITBIT));
 }
 
-/*
-** In ASCII, this 'ltolower' is correct for alphabetic characters and
-** for '.'. That is enough for Lua needs. (The assert ensures that
-** the character either is an upper-case letter or is unchanged by
-** the transformation, which holds for lower-case letters and '.'.)
-*/
 static l_forceinline int ltolower(int c)
 {
   assert(('A' <= c && c <= 'Z') || c == (c | ('A' ^ 'a')));

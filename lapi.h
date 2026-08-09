@@ -9,18 +9,12 @@
 #include "llimits.h"
 #include "lstate.h"
 
-/* Increments 'L->top', checking for stack overflows */
 static l_forceinline void api_incr_top(lua_State* L)
 {
   L->top++;
   assert((L->top <= L->ci->top) && "stack overflow");
 }
 
-/*
-** If a call returns too many multiple returns, the callee may not have
-** stack space to accommodate all results. In this case, this macro
-** increases its stack space ('L->ci->top').
-*/
 static l_forceinline void adjustresults(lua_State* L, int nres)
 {
   if (nres <= LUA_MULTRET && L->ci->top < L->top)

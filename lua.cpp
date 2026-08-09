@@ -97,10 +97,6 @@ static void print_usage(const std::string& badoption)
   os_flush_stderr();
 }
 
-/*
-** Prints an error message, adding the program name in front of it
-** (if present; empty = absent)
-*/
 static void l_message(const std::string& pname, const std::string& msg)
 {
   if (!pname.empty())
@@ -138,7 +134,7 @@ static int msghandler(lua_State* L)
   if (lua_isstring(L, 1))
     msg = lua_toistring(L, 1)->view();
   else
-  {                                          /* error object not a string */
+  {
     if (luaL_callmetai(L, 1, lit<"__tostring">()->view()) && /* does it have a metamethod */
         lua_type(L, -1) == LUA_TSTRING)      /* that produces a string? */
       return 1;                              /* that is the message */
@@ -513,7 +509,7 @@ static void lua_initreadline(lua_State* L)
 {
   std::optional<InternalString> erllib = l_getenv(std::string_view{LUA_RLLIB_VAR}); /* name of readline library */
   std::string_view rllib = erllib.has_value() ? erllib->view()
-                                              : std::string_view{LUA_READLINELIB}; /* default name */
+                                              : std::string_view{LUA_READLINELIB};
   OsLib* lib = os_dlopen(rllib, false);
   if (lib != nullptr)
   {

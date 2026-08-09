@@ -395,14 +395,6 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
   luaG_runerror(L, lit<"'__newindex' chain too long; possible loop">()->view());
 }
 
-/*
-** Compare two strings 'ts1' x 'ts2', returning an integer less-equal-
-** -greater than zero if 'ts1' is less-equal-greater than 'ts2'.
-** The code is a little tricky because it allows '\0' in the strings
-** and it uses 'os_strcoll' (to respect locales) for each segment
-** of the strings. Note that segments can compare equal but still
-** have different lengths.
-*/
 static int l_strcmp(const TString* ts1, const TString* ts2)
 {
   std::string_view s1 = ts1->data.view();
@@ -646,10 +638,6 @@ int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r)
     return lessequalothers(L, l, r);
 }
 
-/*
-** Main operation for equality of Lua values; return 't1 == t2'.
-** L == nullptr means raw equality (no metamethods)
-*/
 int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
 {
   const TValue* tm;
@@ -802,10 +790,6 @@ static void copy2buff(lua_State* L, StkId top, int n, std::span<char> buff)
   } while (--n > 0);
 }
 
-/*
-** Main operation for concatenation: concat 'total' values in the stack,
-** from 'L->top - total' up to 'L->top - 1'.
-*/
 void luaV_concat(lua_State* L, int total)
 {
   if (total == 1)
@@ -1238,10 +1222,6 @@ static l_forceinline int l_gei(lua_Integer a, lua_Integer b)
 ** the stack or hooks.)
 */
 
-/*
-** executed during Lua functions at points where the
-** function can yield.
-*/
 static inline void luai_threadyield(lua_State* L)
 {
   (void) L;
@@ -2656,7 +2636,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           ci->func -= delta;    /* restore 'func' (if vararg) */
           luaD_poscall(L, ci, n); /* finish caller */
           trap = ci->trap; /* 'luaD_poscall' can change hooks */
-          /* caller returns after the tail call (was 'goto ret') */
           if (ci->callstatus & CIST_FRESH)
             return; /* end this frame */
           ci = ci->previous; /* continue running caller in this frame */

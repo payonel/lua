@@ -38,18 +38,19 @@ do
   assert(collectgarbage("count") < after)
 end
 
--- external strings: a large buffer-built string (string.rep result that
--- outgrew the buffer) is adopted as an external string whose payload sits
--- OUTSIDE collectgarbage("count") — only the header registers
+-- a large buffer-built string (string.rep result) is fully accounted:
+-- its payload registers in collectgarbage("count") and is credited
+-- back when the string is collected
 do
   collectgarbage("collect")
   local before = collectgarbage("count")
   local s = string.rep("x", 1024 * 1024) -- 1MB, buffer-built
   local after = collectgarbage("count")
   assert(#s == 1024 * 1024)
-  assert(after - before < 16) -- header/noise only, nowhere near 1024 KB
+  assert(after - before >= 1024) -- the full 1024 KB payload is counted
   s = nil
   collectgarbage("collect")
+  assert(collectgarbage("count") - before < 16) -- payload credited back
 end
 
 -- stop/restart/isrunning round trip

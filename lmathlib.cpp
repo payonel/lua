@@ -281,23 +281,10 @@ static int math_type(lua_State* L)
 ** ===================================================================
 */
 
-/*
-** This code uses lots of shifts. ISO C does not allow shifts greater
-** than or equal to the width of the type being shifted, so some shifts
-** are written in convoluted ways to match that restriction.
-*/
-
 constexpr int FIGS = DBL_MANT_DIG;
 static_assert(FIGS <= 64, "there are only 64 random bits");
 
 /* try to find an integer type with at least 64 bits */
-
-/*
-** Standard implementation, using 64-bit integers.
-** If 'uint64_t' has more than 64 bits, the extra bits do not interfere
-** with the 64 initial bits, except in a right shift. Moreover, the
-** final result has to discard the extra bits.
-*/
 
 /* avoid using extra bits when needed */
 constexpr lua_Unsigned trim64(lua_Unsigned x)
@@ -352,21 +339,16 @@ static lua_Number I2d(uint64_t x)
   return res;
 }
 
-/* convert a 'uint64_t' to a 'lua_Unsigned' */
 constexpr lua_Unsigned I2UInt(lua_Integer x)
 {
   return trim64((lua_Unsigned)x);
 }
 
-/* convert a 'lua_Unsigned' to a 'uint64_t' */
 constexpr uint64_t Int2I(lua_Integer x)
 {
   return (uint64_t)x;
 }
 
-/*
-** A state uses four 'uint64_t' values.
-*/
 struct RanState
 {
   uint64_t s[4];

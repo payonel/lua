@@ -38,17 +38,12 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h, int e
   ts->hash = ((unsigned int)(h));
   ts->extra = external ? STREXTRA_EXTERNAL : 0;
   new (&ts->data) InternalString();
-  /* external strings keep their payload outside GC accounting (stock 5.5
-     builds large luaL_Buffer results as external strings) */
   if (!external && l_unlikely(!luaM_reserve(L, str.size())))
     luaD_throw(L, LUA_ERRMEM);
   ts->data = std::move(str);
   return ts;
 }
 
-/*
-** Initialize the string table
-*/
 void luaS_init(lua_State* L)
 {
   global_State* g = G(L);
@@ -108,12 +103,6 @@ TString* luaS_take(lua_State* L, InternalString&& str)
   return createstrobj(L, std::move(str), h, 0);
 }
 
-/*
-** Take ownership of built bytes as an external string: the payload stays
-** outside GC accounting, matching stock 5.5 strings adopted from a
-** luaL_Buffer box. Short strings fall back to the normal interned
-** (accounted) path, as stock copies short external candidates inline.
-*/
 TString* luaS_takeexternal(lua_State* L, InternalString&& str)
 {
   if (str.size() <= LUAI_MAXSHORTLEN)

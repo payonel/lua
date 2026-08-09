@@ -412,7 +412,7 @@ struct lua_Debug
 {
   int event;
   HostString name;
-  HostString namewhat;        /* (n) 'global', 'local', 'field', 'method'; empty = no info */
+  HostString namewhat;
   HostString what;            /* (S) 'Lua', 'C', 'main', 'tail' */
   std::string_view source;    /* (S) */
   int currentline;            /* (l) */

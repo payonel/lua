@@ -22,7 +22,6 @@
 #include "llimits.h"
 #include "lualib.h"
 
-/* Check whether 'mode' matches '[rwa]%+?[b]*' */
 static int l_checkmode(std::string_view mode)
 {
   if (mode.empty() || lit<"rwa">()->view().find(mode[0]) == std::string_view::npos)
@@ -445,7 +444,7 @@ static int read_number(lua_State* L, OsFile* f)
 static int test_eof(lua_State* L, OsFile* f)
 {
   int c = os_getbyte(f);
-  os_ungetbyte(f, c); /* no-op when c == OS_EOF */
+  os_ungetbyte(f, c);
   lua_pushistringref(L, lit<"">()->view());
   return (c != OS_EOF);
 }

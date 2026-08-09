@@ -621,7 +621,7 @@ static size_t prepbuff(luaL_Buffer* B, size_t sz)
       lua_error(B->L); /* raise a memory error */
     }
     B->reserved = newsize;
-    B->bldr.growTo(newsize); /* raises a memory error on failure */
+    B->bldr.growTo(newsize);
   }
   return B->bldr.prep(sz);
 }
@@ -653,7 +653,7 @@ LUALIB_API void luaL_pushresult(luaL_Buffer* B)
   B->reserved = 0;
   if (reserved != 0)
     lua_releasebytes(L, reserved);
-    lua_pushistring(L, InternalString::take(B->bldr.release()));
+  lua_pushistring(L, InternalString::take(B->bldr.release()));
 }
 
 LUALIB_API void luaL_pushresultsize(luaL_Buffer* B, size_t sz)
@@ -1524,7 +1524,6 @@ std::string_view ByteBuilder::view() const noexcept { return {bytes_.data(), len
 
 std::span<char> ByteBuilder::area() noexcept { return bytes_; }
 
-/* reserve sz bytes after current content; capacity must already suffice */
 size_t ByteBuilder::prep(size_t sz) noexcept
 {
   assert(sz <= bytes_.size() - len_);
@@ -1535,11 +1534,6 @@ void ByteBuilder::commit(size_t sz) noexcept { len_ += sz; }
 
 size_t ByteBuilder::capacity() const noexcept { return bytes_.size(); }
 
-/*
-** Resize through the state's allocator with realloc semantics,
-** mirroring 'resizebox' in stock lauxlib.c: on allocation failure,
-** raise a Lua memory error. Callers never check.
-*/
 void ByteBuilder::growTo(size_t cap)
 {
   if (cap == bytes_.size())
