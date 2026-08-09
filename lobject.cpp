@@ -762,7 +762,7 @@ static void addstr2buff(BuffFS* buff, std::string_view str, size_t off,
   if (buff->blen + slen > buff->b.size())
   { /* grow with raw 'frealloc'; defer failure — cannot raise here */
     global_State* g = G(buff->L);
-    size_t newsize = buff->blen + slen;
+    size_t newsize = std::max<size_t>(buff->blen + slen, 256);
     void* nb = g->frealloc(g->ud, buff->b.data(), buff->b.size(), newsize);
     if (l_unlikely(nb == nullptr))
     {
