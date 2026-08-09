@@ -1654,7 +1654,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         setsloth(L, ra, t);
         if (b != 0 || c != 0)
           luaH_resize(L, t, c, b); /* idem */
-        if (G(L)->GCdebt <= 0)
+        if (L->l_G->GCdebt <= 0)
         {
           ci->savedpc = pc;
           L->top = ra + 1;
@@ -2284,7 +2284,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         ci->savedpc = pc;
         luaV_concat(L, n);
         trap = ci->trap;
-        if (G(L)->GCdebt <= 0)
+        if (L->l_G->GCdebt <= 0)
         { /* 'luaV_concat' ensures correct top */
           ci->savedpc = pc;
           luaC_step(L);
@@ -2867,7 +2867,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         ci->savedpc = pc;
         L->top = ci->top;
         pushclosure(L, p, cl->upvals, base, ra);
-        if (G(L)->GCdebt <= 0)
+        if (L->l_G->GCdebt <= 0)
         {
           ci->savedpc = pc;
           L->top = ra + 1;

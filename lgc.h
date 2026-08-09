@@ -249,7 +249,7 @@ LUAI_FUNC void luaC_step(lua_State* L);
 
 static l_forceinline void luaC_checkGC(lua_State* L)
 {
-  if (G(L)->GCdebt <= 0)
+  if (L->l_G->GCdebt <= 0)
     luaC_step(L);
 }
 LUAI_FUNC void luaC_runtilstate(lua_State* L, int state, int fast);

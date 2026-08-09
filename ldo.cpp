@@ -71,7 +71,7 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
 {
   if (errcode == LUA_ERRMEM)
   {                                          /* memory error? */
-    setslots(L, oldtop, G(L)->memerrmsg); /* reuse preregistered msg. */
+    setslots(L, oldtop, L->l_G->memerrmsg); /* reuse preregistered msg. */
   }
   else
   {
@@ -91,7 +91,7 @@ l_noret luaD_throw(lua_State* L, TStatus errcode)
   }
   else
   { /* thread has no error handler */
-    global_State* g = G(L);
+    global_State* g = L->l_G;
     lua_State* mainth = mainthread(g);
     errcode = luaE_resetthread(L, errcode); /* close all upvalues */
     L->status = errcode;
@@ -208,13 +208,13 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   lua_Integer* newprim;
   GCObject** newref;
   lu_byte* newtag;
-  lu_byte oldgcstop = G(L)->gcstopem;
+  lu_byte oldgcstop = L->l_G->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
-  G(L)->gcstopem = 1; /* stop emergency collection */
+  L->l_G->gcstopem = 1; /* stop emergency collection */
   newprim = (lua_Integer*)luaM_realloc_(L, nullptr, 0, newn * sizeof(lua_Integer));
   newref = (GCObject**)luaM_realloc_(L, nullptr, 0, newn * sizeof(GCObject*));
   newtag = (lu_byte*)luaM_realloc_(L, nullptr, 0, newn * sizeof(lu_byte));
-  G(L)->gcstopem = oldgcstop; /* restore emergency collection */
+  L->l_G->gcstopem = oldgcstop; /* restore emergency collection */
   if (l_unlikely(newprim == nullptr || newref == nullptr || newtag == nullptr))
   {
     if (newprim != nullptr)
@@ -950,7 +950,7 @@ LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
   api_checkpop(L, nresults);
   if (l_unlikely(!yieldable(L)))
   {
-    if (L != mainthread(G(L)))
+    if (L != mainthread(L->l_G))
       luaG_runerror(L, lit<"attempt to yield across a C-call boundary">()->view());
     else
       luaG_runerror(L, lit<"attempt to yield from outside a coroutine">()->view());

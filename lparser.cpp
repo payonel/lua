@@ -898,7 +898,7 @@ static void close_func(LexState* ls)
   ((f->upvalues) = ((Upvaldesc*)(luaM_shrinkvector_(L, f->upvalues, &(f->sizeupvalues), fs->nups, sizeof(Upvaldesc)))));
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */
-  luaH_set(L, ls->h, &temp, &G(L)->nilvalue);
+  luaH_set(L, ls->h, &temp, &L->l_G->nilvalue);
   ls->fs = fs->prev;
   luaC_checkGC(L);
 }

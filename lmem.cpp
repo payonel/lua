@@ -112,7 +112,7 @@ l_noret luaM_toobig(lua_State* L)
 */
 void luaM_free_(lua_State* L, void* block, size_t osize)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   assert((osize == 0) == (block == nullptr));
   callfrealloc(g, block, osize, 0);
   g->GCdebt += ((l_mem)(osize));
@@ -125,7 +125,7 @@ void luaM_free_(lua_State* L, void* block, size_t osize)
 static void* tryagain(lua_State* L, void* block,
                       size_t osize, size_t nsize)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   if (cantryagain(g))
   {
     luaC_fullgc(L, 1);                           /* try to free some memory... */
@@ -141,7 +141,7 @@ static void* tryagain(lua_State* L, void* block,
 void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
 {
   void* newblock;
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   assert((osize == 0) == (block == nullptr));
   newblock = firsttry(g, block, osize, nsize);
   if (l_unlikely(newblock == nullptr && nsize > 0))
@@ -170,7 +170,7 @@ void* luaM_malloc_(lua_State* L, size_t size, int tag)
     return nullptr; /* that's all */
   else
   {
-    global_State* g = G(L);
+    global_State* g = L->l_G;
     void* newblock = firsttry(g, nullptr, ((size_t)(tag)), size);
     if (l_unlikely(newblock == nullptr))
     {
@@ -185,7 +185,7 @@ void* luaM_malloc_(lua_State* L, size_t size, int tag)
 
 int luaM_reserve(lua_State* L, size_t size)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   if (g->memlimit > 0 &&
       ((size_t)(gettotalbytes(g))) + size > g->memlimit)
   {
@@ -197,6 +197,6 @@ int luaM_reserve(lua_State* L, size_t size)
 
 void luaM_release(lua_State* L, size_t size)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   g->GCdebt += ((l_mem)(size));
 }

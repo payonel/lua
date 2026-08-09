@@ -715,7 +715,7 @@ static int nilK(FuncState* fs)
   TValue k;
   /* cannot use nil as key; instead use table itself */
   sethvalue(L, &k, fs->kcache);
-  return k2proto(fs, &k, &G(L)->nilvalue);
+  return k2proto(fs, &k, &L->l_G->nilvalue);
 }
 
 /*

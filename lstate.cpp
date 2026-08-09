@@ -214,7 +214,7 @@ static void init_registry(lua_State* L, global_State* g)
 */
 static void f_luaopen(lua_State* L, void*)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   stack_init(L, L); /* init stack */
   init_registry(L, g);
   luaS_init(L);
@@ -268,7 +268,7 @@ lu_mem luaE_threadsize(lua_State* L)
 
 static void close_state(lua_State* L)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   if (!completestate(g))    /* closing a partially built state? */
     luaC_freeallobjects(L); /* just collect its objects */
   else
@@ -279,7 +279,7 @@ static void close_state(lua_State* L)
     luaC_freeallobjects(L);            /* collect all objects */
     luai_userstateclose(L);
   }
-  G(L)->strt.~unordered_map();
+  L->l_G->strt.~unordered_map();
   freestack(L);
   assert(gettotalbytes(g) == sizeof(global_State));
   (*g->frealloc)(g->ud, g, sizeof(global_State), 0); /* free main block */
@@ -287,7 +287,7 @@ static void close_state(lua_State* L)
 
 LUA_API lua_State* lua_newthread(lua_State* L)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   GCObject* o;
   lua_State* L1;
   lua_lock(L);
@@ -410,15 +410,15 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
 LUA_API void lua_close(lua_State* L)
 {
   lua_lock(L);
-  L = mainthread(G(L)); /* only the main thread can be closed */
+  L = mainthread(L->l_G); /* only the main thread can be closed */
   close_state(L);
 }
 
 void luaE_warning(lua_State* L, std::string_view msg, int tocont)
 {
-  lua_WarnFunction wf = G(L)->warnf;
+  lua_WarnFunction wf = L->l_G->warnf;
   if (wf != nullptr)
-    wf(G(L)->ud_warn, HostString{msg}, tocont);
+    wf(L->l_G->ud_warn, HostString{msg}, tocont);
 }
 
 /*

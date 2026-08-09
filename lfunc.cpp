@@ -20,7 +20,7 @@
 
 CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   GCObject* o = luaC_newobj(L, LUA_VCCL, sizeof(CClosure));
   assert(o->tt == LUA_VCCL);
   CClosure* c = static_cast<CClosure*>(o);
@@ -39,7 +39,7 @@ CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 
 LClosure* luaF_newLclosure(lua_State* L, int nupvals)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   GCObject* o = luaC_newobj(L, LUA_VLCL, sizeof(LClosure));
   assert(o->tt == LUA_VLCL);
   LClosure* c = static_cast<LClosure*>(o);
@@ -99,8 +99,8 @@ static UpVal* newupval(lua_State* L, StkId level, UpVal** prev)
   *prev = uv;
   if (!isintwups(L))
   {                         /* thread not in list of threads with upvalues? */
-    L->twups = G(L)->twups; /* link it to the list */
-    G(L)->twups = L;
+    L->twups = L->l_G->twups; /* link it to the list */
+    L->l_G->twups = L;
   }
   return uv;
 }
@@ -116,7 +116,7 @@ UpVal* luaF_findupval(lua_State* L, StkId level)
   assert(isintwups(L) || L->openupval == nullptr);
   while ((p = *pp) != nullptr && uplevel(p) >= level)
   { /* search for it */
-    assert(!isdead(G(L), p));
+    assert(!isdead(L->l_G, p));
     if (uplevel(p) == level) /* corresponding upvalue? */
       return p;              /* return it */
     pp = &p->opennext;

@@ -18,7 +18,7 @@ struct Memcontrol
 
 LUA_API Memcontrol l_memcontrol;
 
-#define ismainthread(l)             ((l) == mainthread(G(l)))
+#define ismainthread(l)             ((l) == mainthread(l->l_G))
 #define _getlock(l)                 (*((uint64_t*)(lua_getextraspace(l))))
 #define _getplock(l)                (ismainthread(l) ? ((uint64_t*)(lua_getextraspace(l))) : ((uint64_t*)(*((void**)(lua_getextraspace(l))))))
 

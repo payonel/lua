@@ -59,7 +59,7 @@ static IndexAddr resolveindex(lua_State* L, int idx)
     StkId o = ci->func + idx;
     assert((((StkId)(idx)) <= ci->top - (ci->func + 1)) && "unacceptable index");
     if (o >= L->top)
-      return {0, &G(L)->nilvalue};
+      return {0, &L->l_G->nilvalue};
     else
       return {o, nullptr};
   }
@@ -69,7 +69,7 @@ static IndexAddr resolveindex(lua_State* L, int idx)
     return {L->top + idx, nullptr};
   }
   else if (idx == LUA_REGISTRYINDEX)
-    return {0, &G(L)->l_registry};
+    return {0, &L->l_G->l_registry};
   else
   { /* upvalues */
     idx = LUA_REGISTRYINDEX - idx;
@@ -78,12 +78,12 @@ static IndexAddr resolveindex(lua_State* L, int idx)
     { /* C closure? */
       CClosure* func = slotclCval(L, ci->func);
       return {0, (idx <= func->nupvalues) ? &func->upvalue[idx - 1]
-                                          : &G(L)->nilvalue};
+                                          : &L->l_G->nilvalue};
     }
     else
     { /* light C function or Lua function (through a hook)?) */
       assert((slottag(L, ci->func) == LUA_VLCF) && "caller not a C function");
-      return {0, &G(L)->nilvalue}; /* no upvalues */
+      return {0, &L->l_G->nilvalue}; /* no upvalues */
     }
   }
 }
@@ -97,7 +97,7 @@ static TValue index2val(lua_State* L, int idx)
 static int isvalidindex(lua_State* L, int idx)
 {
   IndexAddr a = resolveindex(L, idx);
-  return a.row != &G(L)->nilvalue;
+  return a.row != &L->l_G->nilvalue;
 }
 
 static void setindexval(lua_State* L, int idx, const TValue* v)
@@ -107,7 +107,7 @@ static void setindexval(lua_State* L, int idx, const TValue* v)
     setslot(L, a.slot, v);
   else
   {
-    assert((a.row != &G(L)->nilvalue) && "invalid index");
+    assert((a.row != &L->l_G->nilvalue) && "invalid index");
     setobj(L, a.row, v);
   }
 }
@@ -156,7 +156,7 @@ LUA_API void lua_xmove(lua_State* from, lua_State* to, int n)
     return;
   lua_lock(to);
   api_checkpop(from, n);
-  assert((G(from) == G(to)) && "moving among independent states");
+  assert((from->l_G == to->l_G) && "moving among independent states");
   assert((to->ci->top >= to->top + ((StkId)(n))) && "stack overflow");
   from->top -= n;
   for (i = 0; i < n; i++)
@@ -171,8 +171,8 @@ LUA_API lua_CFunction lua_atpanic(lua_State* L, lua_CFunction panicf)
 {
   lua_CFunction old;
   lua_lock(L);
-  old = G(L)->panic;
-  G(L)->panic = panicf;
+  old = L->l_G->panic;
+  L->l_G->panic = panicf;
   lua_unlock(L);
   return old;
 }
@@ -869,7 +869,7 @@ LUA_API int lua_pushthread(lua_State* L)
   setslotth(L, L->top, L);
   api_incr_top(L);
   lua_unlock(L);
-  return (mainthread(G(L)) == L);
+  return (mainthread(L->l_G) == L);
 }
 
 /*
@@ -910,7 +910,7 @@ static int auxgetstr(lua_State* L, const TValue* t, std::string_view k)
 */
 static void getGlobalTable(lua_State* L, TValue* gt)
 {
-  Table* registry = hvalue((&G(L)->l_registry));
+  Table* registry = hvalue((&L->l_G->l_registry));
   lu_byte tag = luaH_getint(registry, LUA_RIDX_GLOBALS, gt);
   (void) tag; /* avoid not-used warnings when checks are off */
   assert((((tag) & NOVARIANT_MASK) == LUA_TTABLE) && "global table must exist");
@@ -1094,7 +1094,7 @@ LUA_API int lua_getmetatable(lua_State* L, int objindex)
     mt = uvalue(&obj)->metatable;
     break;
   default:
-    mt = G(L)->mt[(obj.tt_ & NOVARIANT_MASK)];
+    mt = L->l_G->mt[(obj.tt_ & NOVARIANT_MASK)];
     break;
   }
   if (mt != nullptr)
@@ -1342,7 +1342,7 @@ LUA_API int lua_setmetatable(lua_State* L, int objindex)
   }
   default:
   {
-    G(L)->mt[(obj.tt_ & NOVARIANT_MASK)] = mt;
+    L->l_G->mt[(obj.tt_ & NOVARIANT_MASK)] = mt;
     break;
   }
   }
@@ -1531,7 +1531,7 @@ LUA_API int lua_status(lua_State* L)
 LUA_API int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
 {
   int res = 0;
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   if (g->gcstp & (GCSTPGC | GCSTPCLS)) /* internal stop? */
     return -1;                         /* all options are invalid when stopped */
   lua_lock(L);
@@ -1579,7 +1579,7 @@ LUA_API int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value
       newdebt = -MAX_LMEM; /* set debt to miminum value */
     luaE_setdebt(g, newdebt);
     {
-      if (G(L)->GCdebt <= 0)
+      if (L->l_G->GCdebt <= 0)
       {
         luaC_step(L);
         work = 1;
@@ -1633,7 +1633,7 @@ LUA_API int lua_error(lua_State* L)
   api_checkpop(L, 1);
   /* error object is the memory error message? */
   if (((errobj.tt_ & NOVARIANT_MASK) == LUA_TSTRING) &&
-      eqshrstr(tsvalue(&errobj), G(L)->memerrmsg))
+      eqshrstr(tsvalue(&errobj), L->l_G->memerrmsg))
     luaD_throw(L, LUA_ERRMEM); /* raise a memory error */
   else
     luaG_errormsg(L); /* raise a regular error */
@@ -1698,8 +1698,8 @@ LUA_API lua_Allocator lua_getallocf(lua_State* L)
 {
   lua_Allocator a;
   lua_lock(L);
-  a.f = G(L)->frealloc;
-  a.ud = G(L)->ud;
+  a.f = L->l_G->frealloc;
+  a.ud = L->l_G->ud;
   lua_unlock(L);
   return a;
 }
@@ -1707,26 +1707,26 @@ LUA_API lua_Allocator lua_getallocf(lua_State* L)
 LUA_API void lua_setallocf(lua_State* L, lua_Alloc f, void* ud)
 {
   lua_lock(L);
-  G(L)->ud = ud;
-  G(L)->frealloc = f;
+  L->l_G->ud = ud;
+  L->l_G->frealloc = f;
   lua_unlock(L);
 }
 
 void lua_setmemlimit(lua_State* L, size_t limit)
 {
-  G(L)->memlimit = limit;
+  L->l_G->memlimit = limit;
 }
 
 size_t lua_getmemlimit(lua_State* L)
 {
-  return G(L)->memlimit;
+  return L->l_G->memlimit;
 }
 
 void lua_setwarnf(lua_State* L, lua_WarnFunction f, void* ud)
 {
   lua_lock(L);
-  G(L)->ud_warn = ud;
-  G(L)->warnf = f;
+  L->l_G->ud_warn = ud;
+  L->l_G->warnf = f;
   lua_unlock(L);
 }
 

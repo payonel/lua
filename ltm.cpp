@@ -43,9 +43,9 @@ void luaT_init(lua_State* L)
   for (i = 0; i < TM_N; i++)
   {
     std::string_view bytes = luaT_eventname[i]->view();
-    G(L)->tmname[i] = luaS_createstr(L, bytes, 0, bytes.size());
-    assert((((G(L)->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
-    luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(G(L)->tmname[i]))); /* never collect these names */
+    L->l_G->tmname[i] = luaS_createstr(L, bytes, 0, bytes.size());
+    assert((((L->l_G->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
+    luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(L->l_G->tmname[i]))); /* never collect these names */
   }
 }
 
@@ -78,9 +78,9 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
     mt = uvalue(o)->metatable;
     break;
   default:
-    mt = G(L)->mt[(o->tt_ & NOVARIANT_MASK)];
+    mt = L->l_G->mt[(o->tt_ & NOVARIANT_MASK)];
   }
-  return (mt ? luaH_Hgetshortstr(mt, G(L)->tmname[event]) : &G(L)->nilvalue);
+  return (mt ? luaH_Hgetshortstr(mt, L->l_G->tmname[event]) : &L->l_G->nilvalue);
 }
 
 const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event)

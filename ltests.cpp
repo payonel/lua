@@ -774,7 +774,7 @@ static l_mem checklist(global_State* g, int maybedead, int tof,
 
 static int lua_checkmemory(lua_State* L)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   GCObject* o;
   int maybedead;
   l_mem totalin;     /* total of objects that are in gray lists */
@@ -1035,7 +1035,7 @@ static int mem_query(lua_State* L)
   else if (lua_isnumber(L, 1))
   {
     unsigned long limit = ((unsigned long)(luaL_checkinteger(L, 1)));
-    global_State* g = G(L);
+    global_State* g = L->l_G;
     if (limit == 0)
     {
       l_memcontrol.memlimit = ULONG_MAX;
@@ -1106,7 +1106,7 @@ static int gc_color(lua_State* L)
   {
     assert(o.tt_ & BIT_ISCOLLECTABLE);
     GCObject* obj = gcvalue(&o);
-    const InternalString* color = isdead(G(L), obj) ? lit<"dead">()
+    const InternalString* color = isdead(L->l_G, obj) ? lit<"dead">()
                                   : iswhite(obj)    ? lit<"white">()
                                   : isblack(obj)    ? lit<"black">()
                                                     : lit<"gray">();
@@ -1143,7 +1143,7 @@ static int gc_printobj(lua_State* L)
   {
     assert(o.tt_ & BIT_ISCOLLECTABLE);
     GCObject* obj = gcvalue(&o);
-    printobj(G(L), obj);
+    printobj(L->l_G, obj);
     printf("\n");
   }
   return 0;
@@ -1163,7 +1163,7 @@ static int gc_state(lua_State* L)
       GCSswptobefnz, GCSswpend, GCScallfin, GCSpause, -1};
   static const std::string_view defstate = lit<"">()->view();
   int option = states[luaL_checkoptioni(L, 1, defstate, statenames)];
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   if (option == -1)
   {
     lua_pushlstring(L, statenames[g->gcstate], 0, statenames[g->gcstate].size());
@@ -1192,7 +1192,7 @@ void luai_tracegctest(lua_State* L, int first)
     return;
   else
   {
-    global_State* g = G(L);
+    global_State* g = L->l_G;
     lua_unlock(L);
     g->gcstp = GCSTPGC;
     lua_checkstack(L, 10);
@@ -1325,7 +1325,7 @@ static int table_query(lua_State* L)
 
 static int gc_query(lua_State* L)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   const InternalString* kind = g->gckind == KGC_INC        ? lit<"inc">()
                                : g->gckind == KGC_GENMAJOR ? lit<"genmajor">()
                                                            : lit<"genminor">();
@@ -1355,7 +1355,7 @@ static int test_applyparam(lua_State* L)
 
 static int string_query(lua_State* L)
 {
-  auto& strt = G(L)->strt;
+  auto& strt = L->l_G->strt;
   int s = ((int)(luaL_optinteger(L, 1, 0))) - 1;
   if (s == -1)
   {

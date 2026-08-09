@@ -46,7 +46,7 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h, int e
 
 void luaS_init(lua_State* L)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   /* pre-create memory-error message */
   g->memerrmsg = luaS_createstr(L, MEMERRMSG->view(), 0, MEMERRMSG->size());
   assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
@@ -57,7 +57,7 @@ constexpr int LUAI_MAXSHORTLEN = 40;
 
 TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t len)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   const char* s = str.data() + off;
   size_t l = len;
   std::string_view sv(s, l);
@@ -82,7 +82,7 @@ TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t l
 
 TString* luaS_take(lua_State* L, InternalString&& str)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   std::string_view bytes = str.view();
   size_t h = InternalString::hashBytes(bytes.data(), bytes.size());
   if (str.size() <= LUAI_MAXSHORTLEN)
@@ -116,7 +116,7 @@ void luaS_remove(lua_State* L, TString* ts)
 {
   if (ts->data.size() <= LUAI_MAXSHORTLEN)
   {
-    global_State* g = G(L);
+    global_State* g = L->l_G;
     size_t h = ts->hash;
     auto it = g->strt.find(global_State::InternKey{ts->data.view(), h});
     if (it != g->strt.end() && it->second == ts)
@@ -126,7 +126,7 @@ void luaS_remove(lua_State* L, TString* ts)
 
 Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
 {
-  global_State* g = G(L);
+  global_State* g = L->l_G;
   Udata* u;
   int i;
   if (l_unlikely(s >= MAX_SIZE - sizeof(Udata)))

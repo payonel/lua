@@ -601,7 +601,7 @@ static void bb_growTo(luaL_Buffer* B, size_t cap)
   if (cap == B->bytes.size())
     return;
   assert(B->L != nullptr);
-  global_State* g = G(B->L);
+  global_State* g = B->L->l_G;
   void* nb = g->frealloc(g->ud, B->bytes.data(), B->bytes.size(), cap);
   if (l_unlikely(nb == nullptr && cap > 0))
   {
@@ -626,7 +626,7 @@ static void bb_dealloc(luaL_Buffer* B) noexcept
 {
   if (B->bytes.data() != nullptr)
   {
-    global_State* g = G(B->L);
+    global_State* g = B->L->l_G;
     g->frealloc(g->ud, B->bytes.data(), B->bytes.size(), 0);
     B->bytes = {};
   }

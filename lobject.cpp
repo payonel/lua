@@ -40,7 +40,7 @@ int luaO_checkliveness(lua_State* L, const TValue* obj)
   if (obj->tt_ & BIT_ISCOLLECTABLE)
   {
     assert((((obj)->tt_ & WITHVARIANT_MASK) == gcvalue(obj)->tt));
-    assert(L == nullptr || !isdead(G(L), gcvalue(obj)));
+    assert(L == nullptr || !isdead(L->l_G, gcvalue(obj)));
   }
   return 1;
 }
@@ -692,7 +692,7 @@ static void initbuff(lua_State* L, BuffFS* buff)
 
 static void freebuff(BuffFS* buff)
 {
-  global_State* g = G(buff->L);
+  global_State* g = buff->L->l_G;
   if (buff->b.data() != nullptr)
   {
     g->frealloc(g->ud, buff->b.data(), buff->b.size(), 0);
@@ -740,7 +740,7 @@ static void addstr2buff(BuffFS* buff, std::string_view str, size_t off, size_t s
   }
   if (buff->blen + slen > buff->b.size())
   {
-    global_State* g = G(buff->L);
+    global_State* g = buff->L->l_G;
     size_t newsize = std::max<size_t>(buff->blen + slen, 256);
     void* nb = g->frealloc(g->ud, buff->b.data(), buff->b.size(), newsize);
     if (l_unlikely(nb == nullptr))

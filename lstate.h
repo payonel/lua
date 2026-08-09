@@ -246,12 +246,6 @@ static l_forceinline lua_State* thvalue(const TValue* o)
   return static_cast<lua_State*>(o->value_.ref);
 }
 
-static l_forceinline global_State* G(lua_State* L)
-{
-  return L->l_G;
-}
-
-
 static l_forceinline lu_byte slottag(lua_State* L, StkId idx)
 {
   return L->stack.tag[idx];
