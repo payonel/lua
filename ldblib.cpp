@@ -159,6 +159,7 @@ static int db_getinfo(lua_State* L)
   checkstack(L, L1, 3);
   luaL_argchecki(L, sv_byteat(options, 0) != '>', arg + 2, lit<"invalid option '>'">()->view());
   ByteBuilder optbuf;
+  optbuf.attach(L);
   if (lua_isfunction(L, arg + 1))
   {                                               /* info about a function? */
     optbuf.append('>');                           /* add '>' to 'options' */

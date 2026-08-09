@@ -56,7 +56,7 @@ static l_noret lexerror(LexState* ls, std::string_view msg, int token);
 
 static void save(LexState* ls, int c)
 {
-  ByteBuilder* b = ls->buff;
+  MBuffer* b = ls->buff;
   if (b->size() + 1 > (MAX_SIZE / 3 * 2)) /* larger than MAX_SIZE/1.5 ? */
     lexerror(ls, lit<"lexical element too long">()->view(), 0);
   if (b->size() + 1 > b->capacity())
@@ -64,8 +64,6 @@ static void save(LexState* ls, int c)
     size_t newsize = b->capacity() + (b->capacity() >> 1);
     if (newsize < LUA_MINBUFFER)
       newsize = LUA_MINBUFFER;
-    if (l_unlikely(!luaM_reserve(ls->L, newsize - b->capacity())))
-      luaD_throw(ls->L, LUA_ERRMEM);
     b->growTo(newsize);
   }
   b->append(((char)(c)));

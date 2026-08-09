@@ -1049,7 +1049,7 @@ TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId old_top,
 struct SParser
 { /* data to 'f_parser' */
   ZIO* z;
-  ByteBuilder buff;
+  MBuffer buff;
   Dyndata dyd;  /* dynamic structures used by the parser */
   std::string_view mode;
   std::string_view name;
@@ -1126,6 +1126,7 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::string_view name, std::s
   TStatus status;
   incnny(L); /* cannot yield during parsing */
   p.z = z;
+  p.buff.attach(L);
   p.name = (name.data() != nullptr) ? name : lit<"?">()->view();
   p.mode = (mode.data() != nullptr) ? mode : lit<"bt">()->view();
   p.dyd.actvar.arr = nullptr;
@@ -1135,7 +1136,6 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::string_view name, std::s
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
   status = luaD_pcall(L, f_parser, &p, (L->top), L->errfunc);
-  luaM_release(L, p.buff.capacity());
   luaM_free_(L, (p.dyd.actvar.arr), (((size_t)(p.dyd.actvar.size))) * sizeof(*(p.dyd.actvar.arr)));
   luaM_free_(L, (p.dyd.gt.arr), (((size_t)(p.dyd.gt.size))) * sizeof(*(p.dyd.gt.arr)));
   luaM_free_(L, (p.dyd.label.arr), (((size_t)(p.dyd.label.size))) * sizeof(*(p.dyd.label.arr)));

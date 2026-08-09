@@ -683,17 +683,37 @@ void luaO_tostring(lua_State* L, TValue* obj)
 ** ===================================================================
 */
 
+/*
+** Buffer for 'luaO_pushvfstring', mirroring stock 5.5: grown with raw
+** 'frealloc' and never raising while formatting — allocation failure
+** is deferred through 'err' and reported by 'pushbuff', which runs
+** protected. (This formats error messages, possibly during error
+** handling, so it cannot raise mid-format.)
+*/
 struct BuffFS
 {
   lua_State* L;
-  ByteBuilder bb;
-  int err;
+  std::span<char> b;
+  size_t blen; /* length of string in 'b' */
+  int err;     /* 1 = memory error, 2 = length overflow */
 };
 
 static void initbuff(lua_State* L, BuffFS* buff)
 {
   buff->L = L;
+  buff->b = {};
+  buff->blen = 0;
   buff->err = 0;
+}
+
+static void freebuff(BuffFS* buff)
+{
+  global_State* g = G(buff->L);
+  if (buff->b.data() != nullptr)
+  {
+    g->frealloc(g->ud, buff->b.data(), buff->b.size(), 0);
+    buff->b = {};
+  }
 }
 
 /*
@@ -703,9 +723,12 @@ static void initbuff(lua_State* L, BuffFS* buff)
 static void pushbuff(lua_State* L, void* ud)
 {
   BuffFS* buff = ((BuffFS*)(ud));
-  if (buff->err == 2)
-    buff->bb.append(lit<"...">()->view());
-  TString* ts = luaS_take(L, InternalString::take(buff->bb.release()));
+  if (buff->err == 1)
+    luaD_throw(L, LUA_ERRMEM); /* memory error while formatting */
+  InternalString res{std::string_view{buff->b.data(), buff->blen}};
+  if (buff->err == 2) /* length overflow? mark the truncation */
+    res = res.concat(lit<"...">()->view());
+  TString* ts = luaS_take(L, std::move(res));
   setslots(L, L->top, ts);
   L->top++;
 }
@@ -722,6 +745,7 @@ static const InternalString* clearbuff(BuffFS* buff)
     assert((slottag(L, s) & NOVARIANT_MASK) == LUA_TSTRING);
     res = &slottsval(L, s)->data;
   }
+  freebuff(buff);
   return res;
 }
 
@@ -730,12 +754,25 @@ static void addstr2buff(BuffFS* buff, std::string_view str, size_t off,
 {
   if (buff->err) /* do nothing else after an error */
     return;
-  if (slen > (MAX_SIZE / 2) - buff->bb.size())
+  if (slen > (MAX_SIZE / 2) - buff->blen)
   {                /* overflow? */
     buff->err = 2;
     return;
   }
-  buff->bb.append(str, off, slen);
+  if (buff->blen + slen > buff->b.size())
+  { /* grow with raw 'frealloc'; defer failure — cannot raise here */
+    global_State* g = G(buff->L);
+    size_t newsize = buff->blen + slen;
+    void* nb = g->frealloc(g->ud, buff->b.data(), buff->b.size(), newsize);
+    if (l_unlikely(nb == nullptr))
+    {
+      buff->err = 1; /* memory error */
+      return;
+    }
+    buff->b = {static_cast<char*>(nb), newsize};
+  }
+  memcpy(buff->b.data() + buff->blen, str.data() + off, slen);
+  buff->blen += slen;
 }
 
 static void addstr2buff(BuffFS* buff, std::string_view str)

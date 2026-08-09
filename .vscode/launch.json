@@ -7,8 +7,8 @@
        "request": "launch",
        "program": "${workspaceFolder}/test_public_api",
       //  "program": "${workspaceFolder}/lua",
-       "args": ["-W", "-i"],
-       "cwd": "${workspaceFolder}",
+      //  "args": ["attrib.lua"],
+       "cwd": "${workspaceFolder}/",
        "MIMode": "gdb",
        "environment": [
         {"name": "LUA_INIT", "value": "warn('@allow')"}

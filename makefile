@@ -139,10 +139,10 @@ test:
 full:
 	make clean
 	make -j
-	make test > /tmp/lua-test-release.log 2>&1 && cat /tmp/lua-test-release.log
+	make test > /tmp/lua-test-release.log
 	make clean
 	make debug -j
-	make test > /tmp/lua-test-debug.log 2>&1 && cat /tmp/lua-test-debug.log
+	make test > /tmp/lua-test-debug.log
 	@echo ""; echo "total times:"; \
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'

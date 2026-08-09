@@ -78,7 +78,7 @@ struct Token
   TString* ts;
 };
 
-class ByteBuilder;
+class MBuffer;
 
 /* state of the scanner plus state of the parser when shared by all
    functions */
@@ -92,7 +92,7 @@ struct LexState
   struct FuncState* fs; /* current function (parser) */
   struct lua_State* L;
   ZIO* z;              /* input stream */
-  ByteBuilder* buff;   /* buffer for tokens */
+  MBuffer* buff;   /* buffer for tokens */
   Table* h;            /* to avoid collection/reuse strings */
   struct Dyndata* dyd; /* dynamic structures used by the parser */
   TString* source;     /* current source name */

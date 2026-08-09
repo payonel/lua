@@ -173,99 +173,49 @@ LUALIB_API void luaL_pushfail(lua_State* L);
 ** =======================================================
 */
 
+/*
+** Byte buffer for the luaL_Buffer world, the analog of stock
+** lauxlib.c's box. Grows through the state's allocator with realloc
+** semantics; on allocation failure it raises a Lua memory error
+** internally (like stock 'resizebox'), so callers never check.
+** Must only be used from C-function contexts (raising uses the
+** public API and 'attach' queries 'lua_getallocf').
+*/
 class ByteBuilder
 {
 public:
   ByteBuilder() = default;
-  ByteBuilder(const ByteBuilder&) = delete;
-  ByteBuilder& operator=(const ByteBuilder&) = delete;
-  ByteBuilder(ByteBuilder&& o) noexcept : bytes_(o.bytes_), len_(o.len_)
-  {
-    o.bytes_ = {};
-    o.len_ = 0;
-  }
-  ByteBuilder& operator=(ByteBuilder&& o) noexcept
-  {
-    if (this != &o)
-    {
-      delete[] bytes_.data();
-      bytes_ = o.bytes_;
-      len_ = o.len_;
-      o.bytes_ = {};
-      o.len_ = 0;
-    }
-    return *this;
-  }
-  ~ByteBuilder() { delete[] bytes_.data(); }
+  ByteBuilder& operator=(ByteBuilder&& o) noexcept;
+  ~ByteBuilder();
 
-  void append(char c)
-  {
-    size_t off = prep(1);
-    bytes_[off] = c;
-    commit(1);
-  }
-  void append(std::string_view b)
-  {
-    append(b, 0, b.size());
-  }
-  void append(std::string_view b, size_t off, size_t n)
-  {
-    if (n > 0)
-    {
-      size_t at = prep(n);
-      memcpy(&bytes_[at], b.data() + off, n);
-      commit(n);
-    }
-  }
+  /* bind to a state; must happen before any content is added */
+  void attach(lua_State* L);
 
-  void reset() noexcept { len_ = 0; }
-
-  void drop(size_t k) { len_ -= k; }
-
-  size_t size() const noexcept { return len_; }
-
-  std::string_view view() const noexcept { return {bytes_.data(), len_}; }
-
-  std::span<char> area() noexcept { return bytes_; }
-
-  size_t prep(size_t sz)
-  {
-    if (len_ + sz > bytes_.size())
-      growTo(len_ + sz);
-    return len_;
-  }
-  void commit(size_t sz) noexcept { len_ += sz; }
-
-  size_t capacity() const noexcept { return bytes_.size(); }
-
-  void growTo(size_t cap)
-  {
-    if (cap == bytes_.size())
-      return;
-    char* nb = (cap != 0) ? new char[cap] : nullptr;
-    size_t keep = (bytes_.size() < cap) ? bytes_.size() : cap;
-    if (keep > 0)
-      memcpy(nb, bytes_.data(), keep);
-    if (cap > keep)
-      memset(nb + keep, 0, cap - keep); /* match std::string::resize zero-fill */
-    delete[] bytes_.data();
-    bytes_ = {nb, cap};
-  }
-
-  std::string release()
-  {
-    std::string out;
-    if (len_ != 0)
-      out.assign(bytes_.data(), len_);
-    delete[] bytes_.data();
-    bytes_ = {};
-    len_ = 0;
-    return out;
-  }
+  void append(char c);
+  void append(std::string_view b);
+  void append(std::string_view b, size_t off, size_t n);
+  void reset() noexcept;
+  void drop(size_t k);
+  size_t size() const noexcept;
+  std::string_view view() const noexcept;
+  std::span<char> area() noexcept;
+  size_t prep(size_t sz) noexcept;
+  void commit(size_t sz) noexcept;
+  size_t capacity() const noexcept;
+  /* resize to exactly 'cap'; raises a Lua memory error on failure */
+  void growTo(size_t cap);
+  std::string release();
 
 private:
-  std::span<char> bytes_;
+  void ensure(size_t sz);
+  void dealloc() noexcept;
+
+  std::span<char> bytes_ = {};
   size_t len_ = 0;
+  lua_State* L_ = nullptr;
+  // assigned in attach
+  lua_Alloc allocf_;
+  void* allocud_;
 };
 
 struct luaL_Buffer

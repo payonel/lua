@@ -163,7 +163,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   }
   else
   {                                           /* large string */
-    ByteBuilder tmp;
+    MBuffer tmp{L};
     tmp.growTo(size + 1);
     loadBlock(S, tmp.area().data(), ((size_t)(size + 1)) * sizeof(char));
     std::string_view tmpsv{tmp.area().data(), size};

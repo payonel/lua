@@ -285,5 +285,3 @@ if not usertests then
   assert(open(fname, "w")):write(clocktime):close()
 end
 
-print("final OK !!!")
-

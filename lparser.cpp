@@ -2374,7 +2374,7 @@ static void mainfunc(LexState* ls, FuncState* fs)
   close_func(ls);
 }
 
-LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, ByteBuilder* buff, Dyndata* dyd, std::string_view name, int firstchar)
+LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, std::string_view name, int firstchar)
 {
   LexState lexstate;
   FuncState funcstate;
