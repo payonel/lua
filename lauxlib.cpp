@@ -534,19 +534,10 @@ const InternalString* luaL_checkistring(lua_State* L, int arg)
   return s;
 }
 
-const InternalString* luaL_optistring(lua_State* L, int arg,
-                                      const InternalString* def)
+const InternalString* luaL_optistring(lua_State* L, int arg, const InternalString* def)
 {
   if (lua_isnoneornil(L, arg))
     return def;
-  else
-    return luaL_checkistring(L, arg);
-}
-
-const InternalString* luaL_optistring(lua_State* L, int arg)
-{
-  if (lua_isnoneornil(L, arg))
-    return nullptr;
   else
     return luaL_checkistring(L, arg);
 }

@@ -519,8 +519,7 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view what,
   return ar;
 }
 
-LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options,
-                                             const lua_Debug& arin)
+LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options, const lua_Debug& arin)
 {
   std::string_view what = options.to_utf8();
   InternalDebug iar{};

@@ -377,7 +377,7 @@ static int load_aux(lua_State* L, int status, int envidx)
 
 static const InternalString* getMode(lua_State* L, int idx)
 {
-  const InternalString* mode = luaL_optistring(L, idx);
+  const InternalString* mode = luaL_optistring(L, idx, nullptr);
   if (mode != nullptr && mode->view().find('B') != std::string_view::npos)
   {
     /* Lua code cannot use fixed buffers */
