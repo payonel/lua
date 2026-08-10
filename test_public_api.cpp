@@ -3456,18 +3456,9 @@ static void test_selected_libs()
 }
 
 /*
-** Test: luaL_newmetatable + unconditional metamethod setup is resilient
-** to OOM.
-**
-** The old bug: callers guarded metamethod setup with
-**   if (luaL_newmetatable(...)) { add_metamethods(); }
-** If OOM struck during add_metamethods, the half-initialized metatable
-** persisted in the registry. On the next attempt, luaL_newmetatable
-** returned 0, the if-block was skipped, and metamethods were permanently
-** missing.
-**
-** The fix: callers must always set metamethods regardless of whether the
-** metatable is new or existing. This test verifies that pattern works.
+** If OOM strikes while populating a new metatable, the half-initialized
+** table persists in the registry; an 'if (luaL_newmetatable(...))' guard
+** then skips repopulation forever. Metamethod setup must be unconditional.
 */
 
 struct OomAllocState
@@ -3494,13 +3485,9 @@ static void* oom_alloc(void* ud, void* ptr, size_t osize, size_t nsize)
   return std::realloc(ptr, nsize);
 }
 
-/*
-** Simulates the CORRECT pattern: always set metamethods unconditionally.
-*/
 static int cf_setup_mt_always(lua_State* L)
 {
   luaL_newmetatable(L, "OOM.Always"_hs);
-  /* Always set metamethods, regardless of new or existing */
   lua_pushcfunction(L, [](lua_State* Ls) -> int {
     (void)Ls;
     return 0;
@@ -3529,10 +3516,6 @@ static int cf_setup_mt_always(lua_State* L)
   return 1;
 }
 
-/*
-** Simulates the OLD (buggy) pattern: only set metamethods if the table
-** is newly created.
-*/
 static int cf_setup_mt_guarded(lua_State* L)
 {
   if (luaL_newmetatable(L, "OOM.Guarded"_hs))
@@ -3568,7 +3551,7 @@ static int cf_setup_mt_guarded(lua_State* L)
 
 static void test_newmetatable_oom()
 {
-  /* Test 1: the CORRECT pattern (unconditional) recovers from OOM */
+  /* unconditional setup recovers from OOM */
   {
     OomAllocState oom_state{-1, false};
     lua_State* L = lua_newstate(oom_alloc, &oom_state, 0);
@@ -3593,7 +3576,6 @@ static void test_newmetatable_oom()
       }
       else if (status == LUA_OK)
       {
-        /* Verify all metamethods are present */
         CHECK(lua_getfield(L, -1, "__gc"_hs) != LUA_TNIL);
         lua_pop(L, 1);
         CHECK(lua_getfield(L, -1, "__close"_hs) != LUA_TNIL);
@@ -3612,11 +3594,11 @@ static void test_newmetatable_oom()
         lua_pop(L, 1);
       }
     }
-    CHECK(had_oom); /* ensure we actually hit OOM */
+    CHECK(had_oom);
     lua_close(L);
   }
 
-  /* Test 2: the OLD pattern (if-guarded) fails after OOM — proves the bug */
+  /* if-guarded setup loses metamethods after OOM */
   {
     OomAllocState oom_state{-1, false};
     lua_State* L = lua_newstate(oom_alloc, &oom_state, 0);
@@ -3652,7 +3634,6 @@ static void test_newmetatable_oom()
           lua_pushcfunction(L, cf_setup_mt_guarded);
           int st2 = lua_pcall(L, 0, 1, 0);
           CHECK(st2 == LUA_OK);
-          /* __tostring should be missing — the bug */
           int has_last = lua_getfield(L, -1, "__tostring"_hs);
           if (has_last == LUA_TNIL)
             bug_triggered = true;
@@ -3672,7 +3653,7 @@ static void test_newmetatable_oom()
         lua_pop(L, 1);
       }
     }
-    CHECK(bug_triggered); /* confirms the if-guarded pattern is broken */
+    CHECK(bug_triggered);
     lua_close(L);
   }
 }
