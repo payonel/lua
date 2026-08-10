@@ -32,6 +32,7 @@ local tests = {
   "numbers.lua",
   "loading.lua",
   "sort.lua",
+  "fmtscan.lua",
 }
 
 -- locate our own directory so the runner works from any cwd

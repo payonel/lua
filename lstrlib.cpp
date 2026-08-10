@@ -37,11 +37,6 @@
 */
 constexpr int LUA_MAXCAPTURES = 32;
 
-static inline int istrbyte(const InternalString* s, size_t i)
-{
-  return (i < s->size()) ? s->byteAt(i) : 0;
-}
-
 static int str_len(lua_State* L)
 {
   const InternalString* s = luaL_checkistring(L, 1);
@@ -1285,7 +1280,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
       assert(dres.ec == std::errc());
       std::string_view d{dbuf, ((size_t)(dres.ptr - dbuf))};
       luaL_addchar(b, '\\');
-      if (isdigit(istrbyte(s, i + 1)))
+      if (isdigit(sv_byteat(s->view(), i + 1)))
       {
         for (size_t j = d.size(); j < 3; j++)
           luaL_addchar(b, '0');
@@ -1691,7 +1686,7 @@ static int str_format(lua_State* L)
   {
     if (sf->byteAt(i) != L_ESC)
       luaL_addchar(&b, ((char)(sf->byteAt(i++))));
-    else if (istrbyte(sf, ++i) == L_ESC)
+    else if (sv_byteat(sf->view(), ++i) == L_ESC)
     {
       luaL_addchar(&b, ((char)(sf->byteAt(i)))); /* %% */
       i++;
@@ -1707,7 +1702,7 @@ static int str_format(lua_State* L)
         return luaL_argerrori(L, arg, lit<"no value">()->view());
       i = getformat(L, sf, i, form, &formlen);
       std::string_view formv{form, formlen};
-      switch (istrbyte(sf, i++))
+      switch (sv_byteat(sf->view(), i++))
       {
       case 'c':
       {
@@ -1872,7 +1867,7 @@ struct Header
 
 static inline int fmtbyte(const Header* h)
 {
-  return istrbyte(h->fmt, h->pos);
+  return sv_byteat(h->fmt->view(), h->pos);
 }
 
 /*
@@ -2053,7 +2048,7 @@ static KOption getdetails(Header* h, size_t totalsize,
   size_t align = *psize; /* usually, alignment follows size */
   if (opt == Kpaddalign)
   { /* 'X' gets alignment from following option */
-    if (fmtbyte(h) == '\0' || getoption(h, &align) == Kchar || align == 0)
+    if (fmtbyte(h) <= 0 || getoption(h, &align) == Kchar || align == 0)
       luaL_argerrori(h->L, 1, lit<"invalid next option for option 'X'">()->view());
   }
   if (align <= 1 || opt == Kchar) /* need no alignment? */
@@ -2130,7 +2125,7 @@ static int str_pack(lua_State* L)
   initheader(L, &h, fmt);
   lua_pushnil(L); /* mark to separate arguments from string buffer */
   luaL_buffinit(L, &b);
-  while (fmtbyte(&h) != '\0')
+  while (fmtbyte(&h) > 0)
   {
     unsigned ntoalign;
     size_t size;
@@ -2239,7 +2234,7 @@ static int str_packsize(lua_State* L)
   const InternalString* fmt = luaL_checkistring(L, 1); /* format string */
   size_t totalsize = 0; /* accumulate total size of result */
   initheader(L, &h, fmt);
-  while (fmtbyte(&h) != '\0')
+  while (fmtbyte(&h) > 0)
   {
     unsigned ntoalign;
     size_t size;
@@ -2305,7 +2300,7 @@ static int str_unpack(lua_State* L)
   int n = 0; /* number of results */
   luaL_argchecki(L, pos <= ld, 3, lit<"initial position out of string">()->view());
   initheader(L, &h, fmt);
-  while (fmtbyte(&h) != '\0')
+  while (fmtbyte(&h) > 0)
   {
     unsigned ntoalign;
     size_t size;
