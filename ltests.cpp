@@ -44,11 +44,12 @@ static inline TValue obj_at(lua_State* L, int k)
   return getslot(L, L->ci->func + (StkId)k);
 }
 
-static int fmtnargs(const char* fmt)
+static int fmtnargs(HostString fmt)
 {
   int n = 0;
   const char* e;
-  for (e = fmt; (e = strchr(e, '%')) != nullptr; e += 2)
+  std::string fmtstr(fmt.to_utf8());
+  for (e = fmtstr.c_str(); (e = strchr(e, '%')) != nullptr; e += 2)
   {
     switch (*(e + 1))
     {
@@ -174,7 +175,7 @@ static void warnf(void* ud, const HostString& msg, int tocont)
     { /* store */
       lua_unlock(L);
       luaL_checkstack(L, 1, HostString(lit<"warn stack space">()->view()));
-      lua_pushstring(L, buff);
+      lua_pushstring(L, HostString::from_bytes(std::string_view(buff)));
       lua_setglobal(L, HostString(lit<"_WARN">()->view())); /* assign message to global '_WARN' */
       lua_lock(L);
       break;
@@ -1467,11 +1468,8 @@ static int udataval(lua_State* L)
 static int doonnewstack(lua_State* L)
 {
   lua_State* L1 = lua_newthread(L);
-  size_t l;
   std::string_view sv1 = luaL_checklstring(L, 1);
-  const char* s = sv1.data();
-  l = sv1.size();
-  int status = luaL_loadbufferx(L1, std::string_view{s, l}, s, HostString(lit<"t">()->view()));
+  int status = luaL_loadbufferx(L1, sv1, HostString::from_bytes(sv1), HostString(lit<"t">()->view()));
   if (status == LUA_OK)
     status = lua_pcall(L1, 0, 0, 0);
   lua_pushinteger(L, status);
@@ -1550,13 +1548,10 @@ static int closestate(lua_State* L)
 static int doremote(lua_State* L)
 {
   lua_State* L1 = getstate(L);
-  size_t lcode;
   std::string_view codev = luaL_checklstring(L, 2);
-  const char* code = codev.data();
-  lcode = codev.size();
   int status;
   lua_settop(L1, 0);
-  status = luaL_loadbufferx(L1, std::string_view{code, lcode}, code, HostString(lit<"t">()->view()));
+  status = luaL_loadbufferx(L1, codev, HostString::from_bytes(codev), HostString(lit<"t">()->view()));
   if (status == LUA_OK)
     status = lua_pcall(L1, 0, LUA_MULTRET, 0);
   if (status != LUA_OK)
@@ -2107,22 +2102,22 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     }
     else if (inst == lit<"pushfstringI">()->view())
     {
-      std::string fmt(lua_toistring(L, -2)->view());
-      if (fmtnargs(fmt.c_str()) > 0)
+      HostString fmt = lua_tostring(L, -2).value();
+      if (fmtnargs(fmt) > 0)
         lua_pushinteger(L1, lua_tointeger(L, -1));
-      lua_pushfstring(L1, fmt.c_str());
+      lua_pushfstring(L1, fmt);
     }
     else if (inst == lit<"pushfstringS">()->view())
     {
-      std::string fmt(lua_toistring(L, -2)->view());
-      if (fmtnargs(fmt.c_str()) > 0)
+      HostString fmt = lua_tostring(L, -2).value();
+      if (fmtnargs(fmt) > 0)
         lua_pushstring(L1, lua_tostring(L, -1));
-      lua_pushfstring(L1, fmt.c_str());
+      lua_pushfstring(L1, fmt);
     }
     else if (inst == lit<"pushfstringP">()->view())
     {
-      std::string fmt(lua_toistring(L, -2)->view());
-      if (fmtnargs(fmt.c_str()) > 0)
+      HostString fmt = lua_tostring(L, -2).value();
+      if (fmtnargs(fmt) > 0)
       {
         if (lua_islightcfunction(L, -1))
         {
@@ -2134,7 +2129,7 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
           lua_pushlightuserdata(L1, const_cast<void*>(lua_topointer(L, -1)));
         }
       }
-      lua_pushfstring(L1, fmt.c_str());
+      lua_pushfstring(L1, fmt);
     }
     else if (inst == lit<"rawget">()->view())
     {

@@ -113,7 +113,7 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
   }
   else if (ar->what[0] != 'C')
   { /* for Lua functions, use <file:line> */
-    std::string_view ss{ar->short_src};
+    std::string_view ss = ar->short_src();
     lua_pushlstring(L, ss, 0, ss.size());
     lua_pushinteger(L, ar->linedefined);
     lua_pushfstringi(L, lit<"function <%s:%d>">()->view());
@@ -174,8 +174,8 @@ void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<std::string_view
     }
     else
     {
-      InternalDebug ar = *lua_getinfoi(L1, lit<"Slnt">()->view(), *oar);
-      std::string_view ss{ar.short_src};
+      InternalDebug ar = *lua_getinfoi(L1, lit<"Slnt">()->view(), oar.value());
+      std::string_view ss = ar.short_src();
       if (ar.currentline <= 0)
       {
         lua_pushlstring(L, ss, 0, ss.size());
@@ -220,7 +220,7 @@ int luaL_argerrori(lua_State* L, int arg, std::string_view extramsg)
     lua_pushlstring(L, extramsg, 0, extramsg.size());
     return luaL_errori(L, lit<"bad argument #%d (%s)">()->view());
   }
-  InternalDebug ar = *lua_getinfoi(L, lit<"nt">()->view(), *oar);
+  InternalDebug ar = *lua_getinfoi(L, lit<"nt">()->view(), oar.value());
   if (arg <= ar.extraargs) /* error in an extra argument? */
     argword = lit<"extra argument">();
   else
@@ -283,10 +283,10 @@ LUALIB_API void luaL_where(lua_State* L, int level)
   std::optional<InternalDebug> oar = lua_getstacki(L, level);
   if (oar)
   {                                                /* check function at level */
-    InternalDebug ar = *lua_getinfoi(L, lit<"Sl">()->view(), *oar); /* get info about it */
+    InternalDebug ar = *lua_getinfoi(L, lit<"Sl">()->view(), oar.value()); /* get info about it */
     if (ar.currentline > 0)
     { /* is there info? */
-      std::string_view ss{ar.short_src};
+      std::string_view ss = ar.short_src();
       lua_pushlstring(L, ss, 0, ss.size());
       lua_pushinteger(L, ar.currentline);
       lua_pushfstringi(L, lit<"%s:%d: ">()->view());

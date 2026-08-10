@@ -167,25 +167,24 @@ static int db_getinfo(lua_State* L)
   }
   else
   { /* stack level */
-    std::optional<InternalDebug> oar =
-        lua_getstacki(L1, (int) luaL_checkinteger(L, arg + 1));
+    std::optional<InternalDebug> oar = lua_getstacki(L1, (int) luaL_checkinteger(L, arg + 1));
     if (!oar)
     {
       luaL_pushfail(L); /* level out of range */
       return 1;
     }
-    ar = *oar;
+    ar = std::move(*oar);
   }
   std::optional<InternalDebug> res = lua_getinfoi(L1, options, ar);
   if (!res)
     return luaL_argerrori(L, arg + 2, lit<"invalid option">()->view());
-  ar = *res;
+  ar = std::move(*res);
   lua_newtable(L); /* table to collect results */
   if ((options.find('S') != std::string_view::npos))
   {
     lua_pushlstring(L, ar.source, 0, ar.source.size());
     lua_setfieldi(L, -2, lit<"source">()->view());
-    settabss(L, lit<"short_src">(), std::string_view{ar.short_src});
+    settabss(L, lit<"short_src">(), ar.short_src());
     settabsi(L, lit<"linedefined">(), ar.linedefined);
     settabsi(L, lit<"lastlinedefined">(), ar.lastlinedefined);
     settabss(L, lit<"what">(), ar.what);

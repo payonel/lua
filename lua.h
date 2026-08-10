@@ -408,6 +408,7 @@ constexpr int LUA_MASKRET = (1 << LUA_HOOKRET);
 constexpr int LUA_MASKLINE = (1 << LUA_HOOKLINE);
 constexpr int LUA_MASKCOUNT = (1 << LUA_HOOKCOUNT);
 
+struct CallInfo;
 struct lua_Debug
 {
   int event;
@@ -427,7 +428,7 @@ struct lua_Debug
   int ntransfer;              /* (r) number of transferred values */
   HostString short_src;       /* (S) */
   /* private part */
-  struct CallInfo* i_ci; /* active function */
+  CallInfo* i_ci; /* active function */
 };
 
 LUA_API std::optional<lua_Debug>(lua_getstack)(lua_State* L, int level);

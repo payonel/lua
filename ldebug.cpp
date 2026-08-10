@@ -340,7 +340,7 @@ static void funcinfo(InternalDebug* ar, Closure* cl)
     ar->lastlinedefined = p->lastlinedefined;
     ar->what = (ar->linedefined == 0) ? lit<"main">()->view() : lit<"Lua">()->view();
   }
-  luaO_chunkid(ar->short_src, ar->source);
+  luaO_chunkid(ar->short_src_out, ar->source);
 }
 
 static int nextline(const Proto* p, int currentline, int pc)
@@ -474,14 +474,12 @@ static int auxgetinfo(lua_State* L, std::string_view what, size_t wpos,
   return status;
 }
 
-std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view what,
-                                          const InternalDebug& arin)
+std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view what, const InternalDebug& ar)
 {
   int status;
   Closure* cl;
   CallInfo* ci;
   StkId func;
-  InternalDebug ar = arin;
   size_t wpos = 0;
   lua_lock(L);
   if (sv_byteat(what, 0) == '>')
@@ -505,7 +503,8 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view what,
   }
   else
     cl = nullptr;
-  status = auxgetinfo(L, what, wpos, &ar, cl, ci);
+  InternalDebug moredetail = ar;
+  status = auxgetinfo(L, what, wpos, &moredetail, cl, ci);
   if (what.find('f', wpos) != std::string_view::npos)
   {
     copyslot(L, L->top, func);
@@ -516,7 +515,7 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, std::string_view what,
   lua_unlock(L);
   if (!status)
     return std::nullopt; /* invalid option */
-  return ar;
+  return moredetail;
 }
 
 LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options, const lua_Debug& arin)
@@ -533,7 +532,7 @@ LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& opt
   if (what.find('S') != std::string_view::npos)
   {
     ar.source = res->source;
-    ar.short_src = HostString(res->short_src);
+    ar.short_src = HostString::from_bytes(res->short_src());
     ar.what = HostString(res->what);
     ar.linedefined = res->linedefined;
     ar.lastlinedefined = res->lastlinedefined;
@@ -1006,12 +1005,11 @@ const InternalString* luaG_addinfo(lua_State* L, std::string_view msg, TString* 
 {
   if (src == nullptr) /* no debug information? */
     return luaO_pushfstring(L, lit<"?:?: %s">()->view(), FmtArgs().str(msg));
-  else
-  {
-    char buff[LUA_IDSIZE];
-    luaO_chunkid(buff, src->data.view());
-    return luaO_pushfstring(L, lit<"%s:%d: %s">()->view(), FmtArgs().str(std::string_view{buff, strlen(buff)}).num(line).str(msg));
-  }
+
+  std::array<char, LUA_IDSIZE> bytes {};
+  luaO_chunkid(bytes, src->data.view());
+  std::string_view sv(bytes.data());
+  return luaO_pushfstring(L, lit<"%s:%d: %s">()->view(), FmtArgs().str(sv).num(line).str(msg));
 }
 
 l_noret luaG_errormsg(lua_State* L)

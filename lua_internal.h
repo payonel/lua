@@ -3,6 +3,7 @@
 
 #include "lua.h"
 #include "internal_string.h"
+#include <array>
 
 static const std::string_view LUA_IGMARK = lit<"-">()->view();
 
@@ -108,8 +109,13 @@ struct InternalDebug
   char istailcall = 0;
   int ftransfer = 0;
   int ntransfer = 0;
-  char short_src[LUA_IDSIZE] = {0};
-  struct CallInfo* i_ci = nullptr;
+  std::array<char, LUA_IDSIZE> short_src_out = {};
+  std::string_view short_src() const
+  {
+    size_t len = strnlen(short_src_out.data(), LUA_IDSIZE);
+    return std::string_view(short_src_out.data(), len);
+  }
+  CallInfo* i_ci = nullptr;
 };
 
 std::optional<InternalDebug> lua_getstacki(lua_State* L, int level);

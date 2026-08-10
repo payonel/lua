@@ -727,20 +727,13 @@ LUAI_FUNC lu_byte luaO_ceillog2(unsigned int x);
 LUAI_FUNC lu_byte luaO_codeparam(unsigned int p);
 LUAI_FUNC l_mem luaO_applyparam(lu_byte p, l_mem x);
 
-LUAI_FUNC int luaO_rawarith(lua_State* L, int op, const TValue* p1,
-                            const TValue* p2, TValue* res);
-LUAI_FUNC void luaO_arith(lua_State* L, int op, StkId p1, StkId p2,
-                          StkId res);
+LUAI_FUNC int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2, TValue* res);
+LUAI_FUNC void luaO_arith(lua_State* L, int op, StkId p1, StkId p2, StkId res);
 LUAI_FUNC size_t luaO_str2num(std::string_view s, TValue* o);
 LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
-LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L,
-                                                  std::string_view fmt,
-                                                  const FmtArgs& args);
-LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
-                                                 std::string_view fmt,
-                                                 const FmtArgs& args);
-LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L,
-                                                 std::string_view fmt);
+LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L, std::string_view fmt, const FmtArgs& args);
+LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt, const FmtArgs& args);
+LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt);
 LUAI_FUNC void luaO_chunkid(std::span<char> out, std::string_view source);

@@ -70,12 +70,7 @@ public:
 
   InternalString concat(std::string_view o) const
   {
-    std::string b;
-    b.reserve(bytes_.size() + o.size());
-    b.append(bytes_).append(o);
-    InternalString is;
-    is.bytes_ = std::move(b);
-    return is;
+    return InternalString::take(bytes_ + std::string(o));
   }
 
   static InternalString take(std::string&& s)

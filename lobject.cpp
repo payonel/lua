@@ -932,9 +932,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
   return clearbuff(&buff); /* empty buffer into a new string */
 }
 
-const InternalString* luaO_pushfstring(lua_State* L,
-                                       std::string_view fmt,
-                                       const FmtArgs& args)
+const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt, const FmtArgs& args)
 {
   const InternalString* msg = luaO_pushvfstring(L, fmt, args);
   if (msg == nullptr) /* error? */

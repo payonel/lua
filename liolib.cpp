@@ -350,7 +350,7 @@ struct RN
   OsFile* f;                    /* file being read */
   int c;                      /* current character (look ahead) */
   int n;                      /* number of elements in buffer 'buff' */
-  char buff[L_MAXLENNUM + 1]; /* +1 for ending '\0' */
+  std::array<char, L_MAXLENNUM + 1> buff; /* +1 for ending '\0' */
 };
 
 /*
@@ -432,7 +432,8 @@ static int read_number(lua_State* L, OsFile* f)
   os_ungetbyte(rn.f, rn.c); /* unread look-ahead char */
   os_funlockfile(rn.f);
   rn.buff[rn.n] = '\0'; /* finish string */
-  if (l_likely(lua_stringtonumber(L, rn.buff)))
+  std::string_view buffsv(rn.buff.data(), rn.n);
+  if (l_likely(lua_stringtonumber(L, HostString::from_bytes(buffsv))))
     return 1; /* ok, it is a valid number */
   else
   {                 /* invalid format */
