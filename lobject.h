@@ -734,6 +734,7 @@ LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
 LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L, std::string_view fmt, const FmtArgs& args);
+LUAI_FUNC int luaO_fmtargcount(std::string_view fmt);
 LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt, const FmtArgs& args);
 LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt);
 LUAI_FUNC void luaO_chunkid(std::span<char> out, std::string_view source);

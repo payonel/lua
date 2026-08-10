@@ -993,20 +993,18 @@ static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
   lua_State* L = ms->L;
   const InternalString* news = lua_toistring(L, 3);
   std::string_view nv = news->view();
-  size_t nb = 0;
-  size_t pc;
-  while ((pc = nv.find(L_ESC, nb)) != std::string_view::npos)
+  FmtScan sc{nv};
+  while (sc.next())
   {
-    luaL_addlstring(b, nv, nb, pc - nb);
-    pc++;                     /* skip ESC */
-    if (sv_byteat(nv, pc) == L_ESC) /* '%%' */
-      luaL_addchar(b, nv[pc]);
-    else if (sv_byteat(nv, pc) == '0') /* '%0' */
+    luaL_addlstring(b, nv, sc.litStart, sc.litEnd - sc.litStart);
+    if (sc.spec == L_ESC) /* '%%' */
+      luaL_addchar(b, ((char)(sc.spec)));
+    else if (sc.spec == '0') /* '%0' */
       luaL_addlstring(b, ms->src->view(), ((size_t)(s)), ((size_t)(e - s)));
-    else if (isdigit(sv_byteat(nv, pc)))
+    else if ('1' <= sc.spec && sc.spec <= '9')
     { /* '%n' */
       ptrdiff_t cap;
-      ptrdiff_t resl = get_onecapture(ms, nv[pc] - '1', s, e, &cap);
+      ptrdiff_t resl = get_onecapture(ms, sc.spec - '1', s, e, &cap);
       if (resl == CAP_POSITION)
         luaL_addvalue(b); /* add position to accumulated result */
       else
@@ -1017,9 +1015,8 @@ static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
       lua_pushinteger(L, L_ESC);
       luaL_errori(L, lit<"invalid use of '%c' in replacement string">()->view());
     }
-    nb = pc + 1;
   }
-  luaL_addlstring(b, nv, nb, nv.size() - nb);
+  luaL_addlstring(b, nv, sc.litStart, sc.litEnd - sc.litStart);
 }
 
 /*

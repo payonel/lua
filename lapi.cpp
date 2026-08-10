@@ -717,31 +717,14 @@ const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt)
 {
   const InternalString* ret;
   FmtArgs args;
-  int n = 0;
   lua_lock(L);
-  size_t e;
-  for (e = 0; (e = fmt.find('%', e)) != std::string_view::npos; e += 2)
-  {
-    switch (sv_byteat(fmt, e + 1))
-    {
-    case 's':
-    case 'c':
-    case 'd':
-    case 'I':
-    case 'f':
-    case 'p':
-    case 'U':
-      n++;
-      break;
-    default:
-      break;
-    }
-  }
+  int n = luaO_fmtargcount(fmt);
   api_checknelems(L, n);
-  for (e = 0; (e = fmt.find('%', e)) != std::string_view::npos; e += 2)
+  FmtScan sc{fmt};
+  while (sc.next())
   {
     StkId slot = L->top - n + args.n;
-    switch (sv_byteat(fmt, e + 1))
+    switch (sc.spec)
     {
     case 's':
     {

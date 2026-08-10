@@ -15,6 +15,31 @@ inline int sv_byteat(std::string_view s, size_t i)
   return (i < s.size()) ? ((unsigned char)(s[i])) : -1;
 }
 
+struct FmtScan
+{
+  std::string_view fmt;
+  size_t pos = 0;
+  size_t litStart = 0;
+  size_t litEnd = 0;
+  size_t escPos = 0;
+  int spec = -1;
+
+  bool next()
+  {
+    litStart = pos;
+    size_t e = fmt.find('%', pos);
+    if (e == std::string_view::npos)
+    {
+      litEnd = pos = fmt.size();
+      return false;
+    }
+    litEnd = escPos = e;
+    spec = sv_byteat(fmt, e + 1);
+    pos = (spec < 0) ? fmt.size() : e + 2;
+    return true;
+  }
+};
+
 class InternalString
 {
 public:

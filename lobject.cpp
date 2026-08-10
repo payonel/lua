@@ -840,20 +840,13 @@ const InternalString* luaO_pushvfstring(lua_State* L,
 {
   BuffFS buff;  /* holds last part of the result */
   std::string_view f = fmt;
-  size_t pos = 0;
-  size_t e;
   int argn = 0;
   initbuff(L, &buff);
-  while ((e = f.find('%', pos)) != std::string_view::npos)
+  FmtScan sc{f};
+  while (sc.next())
   {
-    addstr2buff(&buff, f, pos, e - pos); /* add 'fmt' up to '%' */
-    if (e + 1 >= f.size())
-    {
-      addstr2buff(&buff, "%");
-      pos = f.size();
-      break;
-    }
-    switch (f[e + 1])
+    addstr2buff(&buff, f, sc.litStart, sc.litEnd - sc.litStart);
+    switch (sc.spec)
     { /* conversion specifier */
     case 's':
     {
@@ -914,6 +907,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
                   ((size_t)(UTF8BUFFSZ - len)), ((unsigned int)(len)));
       break;
     }
+    case -1:
     case '%':
     {
       addstr2buff(&buff, lit<"%">()->view());
@@ -921,15 +915,38 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     }
     default:
     {
-      addstr2buff(&buff, f, e, 2); /* keep unknown format in the result */
+      addstr2buff(&buff, f, sc.escPos, 2); /* keep unknown format in the result */
       break;
     }
     }
-    pos = e + 2; /* skip '%' and the specifier */
   }
-  addstr2buff(&buff, f, pos, f.size() - pos); /* rest of 'fmt' */
+  addstr2buff(&buff, f, sc.litStart, sc.litEnd - sc.litStart); /* rest of 'fmt' */
   assert(argn == args.n);
   return clearbuff(&buff); /* empty buffer into a new string */
+}
+
+int luaO_fmtargcount(std::string_view fmt)
+{
+  int n = 0;
+  FmtScan sc{fmt};
+  while (sc.next())
+  {
+    switch (sc.spec)
+    {
+    case 's':
+    case 'c':
+    case 'd':
+    case 'I':
+    case 'f':
+    case 'p':
+    case 'U':
+      n++;
+      break;
+    default:
+      break;
+    }
+  }
+  return n;
 }
 
 const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt, const FmtArgs& args)

@@ -44,31 +44,6 @@ static inline TValue obj_at(lua_State* L, int k)
   return getslot(L, L->ci->func + (StkId)k);
 }
 
-static int fmtnargs(HostString fmt)
-{
-  int n = 0;
-  const char* e;
-  std::string fmtstr(fmt.to_utf8());
-  for (e = fmtstr.c_str(); (e = strchr(e, '%')) != nullptr; e += 2)
-  {
-    switch (*(e + 1))
-    {
-    case 's':
-    case 'c':
-    case 'd':
-    case 'I':
-    case 'f':
-    case 'p':
-    case 'U':
-      n++;
-      break;
-    default:
-      break;
-    }
-  }
-  return n;
-}
-
 static int runC(lua_State* L, lua_State* L1, std::string_view code);
 
 static void setnameval(lua_State* L, const InternalString* name, int val)
@@ -2103,21 +2078,21 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     else if (inst == lit<"pushfstringI">()->view())
     {
       HostString fmt = lua_tostring(L, -2).value();
-      if (fmtnargs(fmt) > 0)
+      if (luaO_fmtargcount(fmt.to_utf8()) > 0)
         lua_pushinteger(L1, lua_tointeger(L, -1));
       lua_pushfstring(L1, fmt);
     }
     else if (inst == lit<"pushfstringS">()->view())
     {
       HostString fmt = lua_tostring(L, -2).value();
-      if (fmtnargs(fmt) > 0)
+      if (luaO_fmtargcount(fmt.to_utf8()) > 0)
         lua_pushstring(L1, lua_tostring(L, -1));
       lua_pushfstring(L1, fmt);
     }
     else if (inst == lit<"pushfstringP">()->view())
     {
       HostString fmt = lua_tostring(L, -2).value();
-      if (fmtnargs(fmt) > 0)
+      if (luaO_fmtargcount(fmt.to_utf8()) > 0)
       {
         if (lua_islightcfunction(L, -1))
         {
