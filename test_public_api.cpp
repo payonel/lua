@@ -3455,6 +3455,228 @@ static void test_selected_libs()
   lua_close(L);
 }
 
+/*
+** Test: luaL_newmetatable + unconditional metamethod setup is resilient
+** to OOM.
+**
+** The old bug: callers guarded metamethod setup with
+**   if (luaL_newmetatable(...)) { add_metamethods(); }
+** If OOM struck during add_metamethods, the half-initialized metatable
+** persisted in the registry. On the next attempt, luaL_newmetatable
+** returned 0, the if-block was skipped, and metamethods were permanently
+** missing.
+**
+** The fix: callers must always set metamethods regardless of whether the
+** metatable is new or existing. This test verifies that pattern works.
+*/
+
+struct OomAllocState
+{
+  int allocs_remaining; /* -1 = unlimited; 0 = next alloc fails */
+  bool active;
+};
+
+static void* oom_alloc(void* ud, void* ptr, size_t osize, size_t nsize)
+{
+  OomAllocState* st = static_cast<OomAllocState*>(ud);
+  (void)osize;
+  if (nsize == 0)
+  {
+    std::free(ptr);
+    return nullptr;
+  }
+  if (st->active && st->allocs_remaining >= 0)
+  {
+    if (st->allocs_remaining == 0)
+      return nullptr; /* simulate OOM */
+    st->allocs_remaining--;
+  }
+  return std::realloc(ptr, nsize);
+}
+
+/*
+** Simulates the CORRECT pattern: always set metamethods unconditionally.
+*/
+static int cf_setup_mt_always(lua_State* L)
+{
+  luaL_newmetatable(L, "OOM.Always"_hs);
+  /* Always set metamethods, regardless of new or existing */
+  lua_pushcfunction(L, [](lua_State* Ls) -> int {
+    (void)Ls;
+    return 0;
+  });
+  lua_setfield(L, -2, "__gc"_hs);
+  lua_pushcfunction(L, [](lua_State* Ls) -> int {
+    (void)Ls;
+    return 0;
+  });
+  lua_setfield(L, -2, "__close"_hs);
+  lua_pushcfunction(L, [](lua_State* Ls) -> int {
+    (void)Ls;
+    return 0;
+  });
+  lua_setfield(L, -2, "__index"_hs);
+  lua_pushcfunction(L, [](lua_State* Ls) -> int {
+    (void)Ls;
+    return 0;
+  });
+  lua_setfield(L, -2, "__newindex"_hs);
+  lua_pushcfunction(L, [](lua_State* Ls) -> int {
+    (void)Ls;
+    return 0;
+  });
+  lua_setfield(L, -2, "__tostring"_hs);
+  return 1;
+}
+
+/*
+** Simulates the OLD (buggy) pattern: only set metamethods if the table
+** is newly created.
+*/
+static int cf_setup_mt_guarded(lua_State* L)
+{
+  if (luaL_newmetatable(L, "OOM.Guarded"_hs))
+  {
+    lua_pushcfunction(L, [](lua_State* Ls) -> int {
+      (void)Ls;
+      return 0;
+    });
+    lua_setfield(L, -2, "__gc"_hs);
+    lua_pushcfunction(L, [](lua_State* Ls) -> int {
+      (void)Ls;
+      return 0;
+    });
+    lua_setfield(L, -2, "__close"_hs);
+    lua_pushcfunction(L, [](lua_State* Ls) -> int {
+      (void)Ls;
+      return 0;
+    });
+    lua_setfield(L, -2, "__index"_hs);
+    lua_pushcfunction(L, [](lua_State* Ls) -> int {
+      (void)Ls;
+      return 0;
+    });
+    lua_setfield(L, -2, "__newindex"_hs);
+    lua_pushcfunction(L, [](lua_State* Ls) -> int {
+      (void)Ls;
+      return 0;
+    });
+    lua_setfield(L, -2, "__tostring"_hs);
+  }
+  return 1;
+}
+
+static void test_newmetatable_oom()
+{
+  /* Test 1: the CORRECT pattern (unconditional) recovers from OOM */
+  {
+    OomAllocState oom_state{-1, false};
+    lua_State* L = lua_newstate(oom_alloc, &oom_state, 0);
+    CHECK(L != nullptr);
+    luaL_openlibs(L);
+
+    bool had_oom = false;
+    for (int budget = 0; budget < 200; budget++)
+    {
+      oom_state.allocs_remaining = budget;
+      oom_state.active = true;
+
+      lua_pushcfunction(L, cf_setup_mt_always);
+      int status = lua_pcall(L, 0, 1, 0);
+
+      oom_state.active = false;
+
+      if (status == LUA_ERRMEM)
+      {
+        had_oom = true;
+        lua_pop(L, 1); /* pop error */
+      }
+      else if (status == LUA_OK)
+      {
+        /* Verify all metamethods are present */
+        CHECK(lua_getfield(L, -1, "__gc"_hs) != LUA_TNIL);
+        lua_pop(L, 1);
+        CHECK(lua_getfield(L, -1, "__close"_hs) != LUA_TNIL);
+        lua_pop(L, 1);
+        CHECK(lua_getfield(L, -1, "__index"_hs) != LUA_TNIL);
+        lua_pop(L, 1);
+        CHECK(lua_getfield(L, -1, "__newindex"_hs) != LUA_TNIL);
+        lua_pop(L, 1);
+        CHECK(lua_getfield(L, -1, "__tostring"_hs) != LUA_TNIL);
+        lua_pop(L, 1);
+        lua_pop(L, 1); /* pop metatable */
+        break;
+      }
+      else
+      {
+        lua_pop(L, 1);
+      }
+    }
+    CHECK(had_oom); /* ensure we actually hit OOM */
+    lua_close(L);
+  }
+
+  /* Test 2: the OLD pattern (if-guarded) fails after OOM — proves the bug */
+  {
+    OomAllocState oom_state{-1, false};
+    lua_State* L = lua_newstate(oom_alloc, &oom_state, 0);
+    CHECK(L != nullptr);
+    luaL_openlibs(L);
+
+    bool bug_triggered = false;
+    for (int budget = 0; budget < 200 && !bug_triggered; budget++)
+    {
+      /* Clear metatable from prior iteration */
+      lua_pushnil(L);
+      lua_setfield(L, LUA_REGISTRYINDEX, "OOM.Guarded"_hs);
+
+      oom_state.allocs_remaining = budget;
+      oom_state.active = true;
+
+      lua_pushcfunction(L, cf_setup_mt_guarded);
+      int status = lua_pcall(L, 0, 1, 0);
+
+      oom_state.active = false;
+
+      if (status == LUA_ERRMEM)
+      {
+        lua_pop(L, 1); /* pop error */
+
+        /* Check if metatable got stuck in registry */
+        int tt = lua_getfield(L, LUA_REGISTRYINDEX, "OOM.Guarded"_hs);
+        if (tt == LUA_TTABLE)
+        {
+          lua_pop(L, 1);
+          /* Retry with unlimited memory */
+          oom_state.allocs_remaining = -1;
+          lua_pushcfunction(L, cf_setup_mt_guarded);
+          int st2 = lua_pcall(L, 0, 1, 0);
+          CHECK(st2 == LUA_OK);
+          /* __tostring should be missing — the bug */
+          int has_last = lua_getfield(L, -1, "__tostring"_hs);
+          if (has_last == LUA_TNIL)
+            bug_triggered = true;
+          lua_pop(L, 2); /* pop field + metatable */
+        }
+        else
+        {
+          lua_pop(L, 1);
+        }
+      }
+      else if (status == LUA_OK)
+      {
+        lua_pop(L, 1);
+      }
+      else
+      {
+        lua_pop(L, 1);
+      }
+    }
+    CHECK(bug_triggered); /* confirms the if-guarded pattern is broken */
+    lua_close(L);
+  }
+}
+
 int main()
 {
   const TestEntry tests[] = {
@@ -3495,6 +3717,7 @@ int main()
       {"c_upvalue_indices", test_c_upvalue_indices},
       {"hook_yield", test_hook_yield},
       {"selected_libs", test_selected_libs},
+      {"newmetatable_oom", test_newmetatable_oom},
   };
 
   for (const TestEntry& t : tests)

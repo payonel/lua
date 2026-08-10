@@ -380,7 +380,7 @@ int luaL_newmetatablei(lua_State* L, std::string_view tname)
   if (luaL_getmetatablei(L, tname) != LUA_TNIL) /* name already in use? */
     return 0;                                  /* leave previous value on top, but return 0 */
   lua_pop(L, 1);
-  lua_createtable(L, 0, 4);
+  lua_createtable(L, 0, 2);
   lua_pushlstring(L, tname, 0, tname.size());
   lua_setfieldi(L, -2, lit<"__name">()->view()); /* metatable.__name = tname */
   lua_pushvalue(L, -1);

@@ -188,11 +188,9 @@ static void createlibstr(lua_State* L, void* plib)
 {
   void** p = (void**) lua_newuserdatauv(L, sizeof(void*), 0);
   *p = plib;
-  if (luaL_newmetatablei(L, lit<"_LOADLIB">()->view()))
-  {
-    lua_pushcfunction(L, lib_gc);
-    lua_setfieldi(L, -2, lit<"__gc">()->view());
-  }
+  luaL_newmetatablei(L, lit<"_LOADLIB">()->view());
+  lua_pushcfunction(L, lib_gc);
+  lua_setfieldi(L, -2, lit<"__gc">()->view());
   lua_setmetatable(L, -2);
 }
 
