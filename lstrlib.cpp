@@ -1472,7 +1472,7 @@ static void scanformat(std::string_view form, FormatSpec* spec)
 
 static int packformat(std::span<char> area, size_t off, unsigned maxitem,
                       const FormatSpec* spec,
-                      std::string_view prefix, std::string_view body,
+                      std::string_view prefix, byte_view body,
                       bool zeropadok)
 {
   size_t prefixlen = prefix.size();
@@ -1697,9 +1697,10 @@ static int str_format(lua_State* L)
         checkformat(L, formv, lt::minus_ch, 0);
         FormatSpec spec;
         scanformat(formv, &spec);
-        char c = ((char)((unsigned char)(luaL_checkinteger(L, arg))));
-        nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "",
-                        std::string_view{&c, 1}, false);
+        char buff[1] {};
+        buff[0] = ((char)((unsigned char)(luaL_checkinteger(L, arg))));
+        std::string_view body(buff, 1);
+        nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, lt::empty_str, body, false);
         break;
       }
       case 'd':
@@ -1765,8 +1766,9 @@ static int str_format(lua_State* L)
             blen = ((size_t)(res.ptr - body));
           }
         }
-        nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "",
-                        std::string_view{body, blen}, false);
+        std::string_view bodysv(body, MAX_ITEM);
+        byte_view bodybytes(bodysv, 0, blen);
+        nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, lt::empty_str, bodybytes, false);
         break;
       }
       case 'q':
@@ -1798,8 +1800,7 @@ static int str_format(lua_State* L)
             size_t blen = (spec.precision >= 0 && ((size_t)(spec.precision)) < sv.size())
                               ? ((size_t)(spec.precision)) /* truncate */
                               : sv.size();
-            nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, "",
-                            std::string_view{sv.data(), blen}, false);
+            nb = packformat(luaL_buffarea(&b), boff, maxitem, &spec, lt::empty_str, byte_view(sv, 0, blen), false);
             lua_pop(L, 1);
           }
         }

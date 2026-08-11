@@ -961,6 +961,12 @@ namespace lt
   constexpr std::string_view fmtflags_f_digits("-+#0 123456789.");
   constexpr std::string_view utf8patt = lit("[\0-\x7F\xC2-\xFD][\x80-\xBF]*");
 
+  constexpr std::string_view error_message_not_a_string("(error message not a string)");
+  constexpr std::string_view cannot_create_state_not_enough_memory("cannot create state: not enough memory");
+  constexpr std::string_view LUA_PROGNAME("lua");
+  constexpr std::string_view LUA_RLLIB_VAR("LUA_READLINELIB");
+  constexpr std::string_view LUA_READLINELIB("libreadline.so");
+
   // Multi-line string literals
   constexpr std::string_view lua_ident_str(
     "$LuaVersion: Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio $"

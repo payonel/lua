@@ -108,3 +108,27 @@ public:
 private:
   std::string bytes_;
 };
+
+struct byte_view
+{
+  // byte_view() = default;
+  // byte_view(const char* cstr)                              : sv(cstr),      offset(0),   length(sv.size()) {}
+  // byte_view(const char* zstr, size_t len)                  : sv(zstr, len), offset(0),   length(sv.size()) {}
+  byte_view(std::string_view view)                         : sv(view),      offset(0),   length(sv.size()) {}
+  byte_view(std::string_view view, size_t off, size_t len) : sv(view),      offset(off), length(len) {}
+
+  size_t size() const { return length; }
+  const char* data() const { return sv.data() + offset; }
+
+  byte_view substr(size_t off, size_t len) const
+  {
+    byte_view cp = *this;
+    cp.offset = offset + off;
+    cp.length = len;
+    return cp;
+  }
+
+  std::string_view sv {nullptr, 0};
+  size_t offset = 0;
+  size_t length = 0;
+};

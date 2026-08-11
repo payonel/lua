@@ -20,13 +20,9 @@
 #include "os_api.h"
 #include "literals.h"
 
-constexpr char LUA_PROGNAME[] = "lua";
-constexpr char LUA_RLLIB_VAR[] = "LUA_READLINELIB";
-constexpr char LUA_READLINELIB[] = "libreadline.so";
-
 static lua_State* globalL = nullptr;
 
-static std::string progname = LUA_PROGNAME;
+static std::string_view progname = lt::LUA_PROGNAME;
 
 /*
 ** Use 'sigaction' when available.
@@ -84,7 +80,7 @@ static void print_usage(const std::string& badoption)
   os_flush_stderr();
 }
 
-static void l_message(const std::string& pname, const std::string& msg)
+static void l_message(std::string_view pname, std::string_view msg)
 {
   if (!pname.empty())
   {
@@ -104,8 +100,7 @@ static int report(lua_State* L, int status)
 {
   if (status != LUA_OK)
   {
-    std::string msg = lua_isstring(L, -1) ? std::string(lua_tostring(L, -1)->to_utf8())
-                                          : std::string("(error message not a string)");
+    std::string_view msg = lua_isstring(L, -1) ? lua_toistring(L, -1)->view() : lt::error_message_not_a_string;
     l_message(progname, msg);
     lua_pop(L, 1); /* remove message */
   }
@@ -494,9 +489,8 @@ static void lua_freeline(char* line)
 
 static void lua_initreadline(lua_State* L)
 {
-  std::optional<InternalString> erllib = l_getenv(std::string_view{LUA_RLLIB_VAR}); /* name of readline library */
-  std::string_view rllib = erllib.has_value() ? erllib->view()
-                                              : std::string_view{LUA_READLINELIB};
+  std::optional<InternalString> erllib = l_getenv(lt::LUA_RLLIB_VAR); /* name of readline library */
+  std::string_view rllib = erllib.has_value() ? erllib->view() : lt::LUA_READLINELIB;
   OsLib* lib = os_dlopen(rllib, false);
   if (lib != nullptr)
   {
@@ -674,8 +668,8 @@ static void l_print(lua_State* L)
 static void doREPL(lua_State* L)
 {
   int status;
-  std::string oldprogname = progname;
-  progname = ""; /* no 'progname' on errors in interactive mode */
+  std::string_view oldprogname = progname;
+  progname = lt::empty_str; /* no 'progname' on errors in interactive mode */
   lua_initreadline(L);
   while ((status = loadline(L)) != -1)
   {
@@ -754,8 +748,8 @@ int main(int argc, char** argv)
   lua_State* L = luaL_newstate(); /* create state */
   if (L == nullptr)
   {
-    l_message(argv[0] != nullptr ? argv[0] : "",
-              "cannot create state: not enough memory");
+    std::string_view name(argv[0] != nullptr ? argv[0] : lt::empty_str);
+    l_message(name, lt::cannot_create_state_not_enough_memory);
     return EXIT_FAILURE;
   }
   lua_gc(L, LUA_GCSTOP, 0, 0, 0);          /* stop GC while building state */
