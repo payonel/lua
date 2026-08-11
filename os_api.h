@@ -12,12 +12,11 @@ void os_flush_stdout();
 void os_flush_stderr();
 
 std::optional<std::string_view> os_getenv(std::string_view name);
-InternalString os_strerror(int err);
+std::string_view os_strerror(int err);
 
 int os_strcoll(std::string_view a, std::string_view b);
 
-std::optional<InternalString> os_setlocale(int category,
-                                           std::optional<std::string_view> locale);
+std::optional<std::string_view> os_setlocale(int category, std::optional<std::string_view> locale);
 
 struct OsResult
 {

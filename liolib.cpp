@@ -159,16 +159,16 @@ static LStream* newfile(lua_State* L)
   return p;
 }
 
-static void opencheck(lua_State* L, const InternalString* fname, std::string_view mode)
+static void opencheck(lua_State* L, std::string_view fname, std::string_view mode)
 {
   LStream* p = newfile(L);
-  OsOpenResult o = os_fopen(fname->view(), mode);
+  OsOpenResult o = os_fopen(fname, mode);
   p->f = o.f;
   if (l_unlikely(p->f == nullptr))
   {
-    lua_pushistringref(L, fname->view());
-    InternalString errmsg = os_strerror(o.err);
-    lua_pushlstring(L, errmsg.view(), 0, errmsg.size());
+    lua_pushistringref(L, fname);
+    std::string_view errmsg = os_strerror(o.err);
+    lua_pushlstring(L, errmsg, 0, errmsg.size());
     luaL_errori(L, lt::cannot_open_file_s_s);
   }
 }
@@ -235,7 +235,7 @@ static int g_iofile(lua_State* L, std::string_view f, const char* mode)
   {
     if (lua_isstring(L, 1))
     {
-      const InternalString* filename = lua_toistring(L, 1);
+      std::string_view filename = lua_toistring(L, 1)->view();
       opencheck(L, filename, mode);
     }
     else
@@ -314,7 +314,7 @@ static int io_lines(lua_State* L)
   }
   else
   { /* open a new file */
-    const InternalString* filename = luaL_checkistring(L, 1);
+    std::string_view filename = luaL_checkistring(L, 1)->view();
     opencheck(L, filename, "r");
     lua_replace(L, 1); /* put file at index 1 */
     toclose = 1;       /* close it after iteration */

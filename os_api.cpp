@@ -40,10 +40,10 @@ std::optional<std::string_view> os_getenv(std::string_view name)
   return svenv;
 }
 
-InternalString os_strerror(int err)
+std::string_view os_strerror(int err)
 {
   std::string_view sverr(strerror(err));
-  return InternalString(sverr);
+  return sverr;
 }
 
 int os_strcoll(std::string_view a, std::string_view b)
@@ -53,8 +53,7 @@ int os_strcoll(std::string_view a, std::string_view b)
   return strcoll(sa.c_str(), sb.c_str());
 }
 
-std::optional<InternalString> os_setlocale(int category,
-                                           std::optional<std::string_view> locale)
+std::optional<std::string_view> os_setlocale(int category, std::optional<std::string_view> locale)
 {
   const char* res;
   if (locale.has_value())
@@ -67,7 +66,7 @@ std::optional<InternalString> os_setlocale(int category,
   if (res == nullptr)
     return std::nullopt;
   std::string_view svres(res);
-  return InternalString(svres);
+  return svres;
 }
 
 OsResult os_remove(std::string_view path)

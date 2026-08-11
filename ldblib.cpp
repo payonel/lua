@@ -284,8 +284,7 @@ static int auxupvalue(lua_State* L, int get)
 {
   int n = (int) luaL_checkinteger(L, 2); /* upvalue index */
   luaL_checktype(L, 1, LUA_TFUNCTION);   /* closure */
-  const InternalString* name =
-      get ? lua_getupvaluei(L, 1, n) : lua_setupvaluei(L, 1, n);
+  const InternalString* name = get ? lua_getupvaluei(L, 1, n) : lua_setupvaluei(L, 1, n);
   if (!name)
     return 0;
   lua_pushistringref(L, name->view());

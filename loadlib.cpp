@@ -149,11 +149,11 @@ static void setpath(lua_State* L, std::string_view fieldname, const char* envnam
 /*
 ** return registry.lt::_CLIBS[path]
 */
-static void* checkclib(lua_State* L, const InternalString* path)
+static void* checkclib(lua_State* L, std::string_view path)
 {
   void* plib;
   lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_CLIBS);
-  lua_getfieldi(L, -1, path->view());
+  lua_getfieldi(L, -1, path);
   plib = lua_touserdata(L, -1); /* plib = lt::_CLIBS[path] */
   lua_pop(L, 2);                /* pop lt::_CLIBS table and 'plib' */
   return plib;
@@ -185,11 +185,11 @@ static void createlibstr(lua_State* L, void* plib)
 ** Also create a reference to strlib, so that the library string will
 ** only be collected when registry.lt::_CLIBS is collected.
 */
-static void addtoclib(lua_State* L, const InternalString* path, void* plib)
+static void addtoclib(lua_State* L, std::string_view path, void* plib)
 {
   lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_CLIBS);
   lua_pushlightuserdata(L, plib);
-  lua_setfieldi(L, -2, path->view()); /* lt::_CLIBS[path] = plib */
+  lua_setfieldi(L, -2, path); /* lt::_CLIBS[path] = plib */
   createlibstr(L, plib);
   luaL_ref(L, -2); /* keep library string in lt::_CLIBS */
   lua_pop(L, 1);   /* pop lt::_CLIBS table */
@@ -210,14 +210,13 @@ constexpr int ERRFUNC = 2;
 ** Return 0 with 'true' or a function in the stack; in case of
 ** errors, return an error code with an error message in the stack.
 */
-static int lookforfunc(lua_State* L, const InternalString* path,
-                       const InternalString* sym)
+static int lookforfunc(lua_State* L, std::string_view path, std::string_view sym)
 {
-  int loadlibonly = (!sym->empty() && sym->byteAt(0) == '*');
+  int loadlibonly = (!sym.empty() && sym.at(0) == '*');
   void* reg = checkclib(L, path); /* check loaded C libraries */
   if (reg == nullptr)
   {                                          /* must load library? */
-    reg = lsys_load(L, path->view(), loadlibonly); /* global symbols if 'sym'=='*' */
+    reg = lsys_load(L, path, loadlibonly); /* global symbols if 'sym'=='*' */
     if (reg == nullptr)
       return ERRLIB; /* unable to load library */
     addtoclib(L, path, reg);
@@ -229,7 +228,7 @@ static int lookforfunc(lua_State* L, const InternalString* path,
   }
   else
   {
-    lua_CFunction f = lsys_sym(L, reg, sym->view());
+    lua_CFunction f = lsys_sym(L, reg, sym);
     if (f == nullptr)
       return ERRFUNC;        /* unable to find function */
     lua_pushcfunction(L, f); /* else create new function */
@@ -241,7 +240,7 @@ static int ll_loadlib(lua_State* L)
 {
   const InternalString* path = luaL_checkistring(L, 1);
   const InternalString* init = luaL_checkistring(L, 2);
-  int stat = lookforfunc(L, path, init);
+  int stat = lookforfunc(L, path->view(), init->view());
   if (l_likely(stat == 0)) /* no errors? */
     return 1;              /* return the loaded function */
   else
@@ -383,7 +382,7 @@ static int searcher_Lua(lua_State* L)
 ** fails, it also tries "luaopen_Y".) If there is no ignore mark,
 ** look for a function named "luaopen_modname".
 */
-static int loadfunc(lua_State* L, const InternalString* filename, std::string_view modname0)
+static int loadfunc(lua_State* L, std::string_view filename, std::string_view modname0)
 {
   std::string_view modname = luaL_gsubi(L, modname0, lt::dot, lt::underscore);
   size_t mark = modname.find(lt::minus_ch);
@@ -393,7 +392,7 @@ static int loadfunc(lua_State* L, const InternalString* filename, std::string_vi
     lua_pushlstring(L, modname, 0, mark);
     lua_pushfstringi(L, lt::luaopen_s);
     const InternalString* openfunc = lua_toistring(L, -1);
-    stat = lookforfunc(L, filename, openfunc);
+    stat = lookforfunc(L, filename, openfunc->view());
     if (stat != ERRFUNC)
       return stat;
     modname = modname.substr(mark + 1); /* else go ahead and try old-style name */
@@ -401,7 +400,7 @@ static int loadfunc(lua_State* L, const InternalString* filename, std::string_vi
   lua_pushlstring(L, modname, 0, modname.size());
   lua_pushfstringi(L, lt::luaopen_s);
   const InternalString* openfunc = lua_toistring(L, -1);
-  return lookforfunc(L, filename, openfunc);
+  return lookforfunc(L, filename, openfunc->view());
 }
 
 static int searcher_C(lua_State* L)
@@ -410,7 +409,7 @@ static int searcher_C(lua_State* L)
   if (!findfile(L, name, lt::cpath, LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
-  return checkload(L, (loadfunc(L, filename, name) == 0), filename->view());
+  return checkload(L, (loadfunc(L, filename->view(), name) == 0), filename->view());
 }
 
 static int searcher_Croot(lua_State* L)
@@ -423,7 +422,7 @@ static int searcher_Croot(lua_State* L)
   if (!findfile(L, name.substr(0, p), lt::cpath, LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
-  if ((stat = loadfunc(L, filename, name)) != 0)
+  if ((stat = loadfunc(L, filename->view(), name)) != 0)
   {
     if (stat != ERRFUNC)
       return checkload(L, 0, filename->view()); /* real error */

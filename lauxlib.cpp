@@ -320,15 +320,15 @@ int luaL_fileresulti(lua_State* L, int stat, std::optional<std::string_view> fna
   else
   {
     luaL_pushfail(L);
-    InternalString errstr = (en != 0) ? os_strerror(en) : InternalString(lt::no_extra_info);
+    std::string_view errstr = (en != 0) ? os_strerror(en) : lt::no_extra_info;
     if (fname.has_value())
     {
-      lua_pushlstring(L, *fname, 0, fname->size());
-      lua_pushlstring(L, errstr.view(), 0, errstr.size());
+      lua_pushlstring(L, fname.value(), 0, fname->size());
+      lua_pushlstring(L, errstr, 0, errstr.size());
       lua_pushfstringi(L, lt::fmt_s_colon_s);
     }
     else
-      lua_pushlstring(L, errstr.view(), 0, errstr.size());
+      lua_pushlstring(L, errstr, 0, errstr.size());
     lua_pushinteger(L, en);
     return 3;
   }
@@ -834,8 +834,8 @@ static int errfile(lua_State* L, std::string_view what, int fnameindex, int err)
   {
     lua_pushlstring(L, what, 0, what.size());
     lua_pushlstring(L, filename, 0, filename.size());
-    InternalString errmsg = os_strerror(err);
-    lua_pushlstring(L, errmsg.view(), 0, errmsg.size());
+    std::string_view errmsg = os_strerror(err);
+    lua_pushlstring(L, errmsg, 0, errmsg.size());
     lua_pushfstringi(L, lt::cannot_s_s_s);
   }
   else

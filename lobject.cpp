@@ -706,7 +706,7 @@ static void pushbuff(lua_State* L, void* ud)
   BuffFS* buff = ((BuffFS*)(ud));
   if (buff->err == 1)
     luaD_throw(L, LUA_ERRMEM);
-  InternalString res{std::string_view{buff->b.data(), buff->blen}};
+  InternalString res(std::string_view(buff->b.data(), buff->b.size()), 0, buff->blen);
   if (buff->err == 2)
     res = res.concat(lt::ellipsis);
   TString* ts = luaS_take(L, std::move(res));
@@ -956,11 +956,6 @@ const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt, const
   if (msg == nullptr) /* error? */
     luaD_throw(L, LUA_ERRMEM);
   return msg;
-}
-
-const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt)
-{
-  return luaO_pushfstring(L, fmt, FmtArgs());
 }
 
 /* }================================================================== */
