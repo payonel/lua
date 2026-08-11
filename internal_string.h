@@ -108,29 +108,3 @@ public:
 private:
   std::string bytes_;
 };
-
-
-namespace istr_detail
-{
-template <size_t N>
-struct LiteralBytes
-{
-  char v[N];
-  constexpr LiteralBytes(const char (&s)[N])
-  {
-    for (size_t i = 0; i < N; i++)
-      v[i] = s[i];
-  }
-};
-}
-
-template <istr_detail::LiteralBytes S>
-const InternalString* lit()
-{
-  constexpr size_t len = sizeof(S.v) - 1;
-  static const InternalString s(std::string_view(S.v, len), 0, len);
-  return &s;
-}
-
-
-

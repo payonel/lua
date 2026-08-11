@@ -25,6 +25,7 @@
 #include "llimits.h"
 #include "util_cast.h"
 #include "lstate.h"
+#include "literals.h"
 
 /*
 ** {======================================================
@@ -56,7 +57,7 @@ static int findfield(lua_State* L, int objidx, int level)
       else if (findfield(L, objidx, level - 1))
       { /* try recursively */
         /* stack: lib_name, lib_table, field_name (top) */
-        lua_pushistringref(L, lit<".">()->view()); /* place '.' between the two names */
+        lua_pushistringref(L, lt::dot); /* place '.' between the two names */
         lua_replace(L, -3);      /* (in the slot occupied by table) */
         lua_concat(L, 3);        /* lib_name.field_name */
         return 1;
@@ -73,13 +74,13 @@ static int findfield(lua_State* L, int objidx, int level)
 static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
 {
   int top = lua_gettop(L);
-  lua_getinfoi(L, lit<"f">()->view(), *ar);
+  lua_getinfoi(L, lt::f_char, *ar);
   lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
-  luaL_checkstacki(L, 6, lit<"not enough stack">()->view()); /* slots for 'findfield' */
+  luaL_checkstacki(L, 6, lt::not_enough_stack); /* slots for 'findfield' */
   if (findfield(L, top + 1, 2))
   {
     std::string_view name = *lua_tolstring(L, -1);
-    if (name.starts_with(lit<"_G.">()->view()))
+    if (name.starts_with(lt::_G_dot))
     {                                                    /* name start with '_G.'? */
       lua_pushlstring(L, name, 3, name.size() - 3);      /* push name without prefix */
       lua_remove(L, -2);                                 /* remove original name */
@@ -97,18 +98,18 @@ static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
 
 static void pushfuncname(lua_State* L, InternalDebug* ar)
 {
-  if (ar->namewhat.data() != nullptr)
+  if (ar->namewhat.has_value())
   {
-    lua_pushlstring(L, ar->namewhat, 0, ar->namewhat.size());
-    lua_pushlstring(L, ar->name, 0, ar->name.size());
-    lua_pushfstringi(L, lit<"%s '%s'">()->view()); /* use it */
+    lua_pushlstring(L, ar->namewhat.value(), 0, ar->namewhat->size());
+    lua_pushlstring(L, ar->name.value(), 0, ar->name->size());
+    lua_pushfstringi(L, lt::fmt_s_quoted_s); /* use it */
   }
   else if (ar->what[0] == 'm')                             /* main? */
-    lua_pushistringref(L, lit<"main chunk">()->view());
+    lua_pushistringref(L, lt::main_chunk);
   else if (pushglobalfuncname(L, ar))
   {                       /* try a global name */
     lua_pushvalue(L, -1);
-    lua_pushfstringi(L, lit<"function '%s'">()->view());
+    lua_pushfstringi(L, lt::function_s);
     lua_remove(L, -2); /* remove name */
   }
   else if (ar->what[0] != 'C')
@@ -116,10 +117,10 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
     std::string_view ss = ar->short_src();
     lua_pushlstring(L, ss, 0, ss.size());
     lua_pushinteger(L, ar->linedefined);
-    lua_pushfstringi(L, lit<"function <%s:%d>">()->view());
+    lua_pushfstringi(L, lt::function_s_d);
   }
   else /* nothing left... */
-    lua_pushistringref(L, lit<"?">()->view());
+    lua_pushistringref(L, lt::qmark);
 }
 
 static int lastlevel(lua_State* L)
@@ -161,37 +162,37 @@ void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<std::string_view
     luaL_addlstring(&b, *msg, 0, msg->size());
     luaL_addchar(&b, '\n');
   }
-  luaL_addlstring(&b, lit<"stack traceback:">()->view(), 0, lit<"stack traceback:">()->size());
+  luaL_addlstring(&b, lt::stack_traceback, 0, lt::stack_traceback.size());
   while ((oar = lua_getstacki(L1, level++)))
   {
     if (limit2show-- == 0)
     {                                     /* too many levels? */
       int n = last - level - LEVELS2 + 1; /* number of levels to skip */
       lua_pushinteger(L, n);
-      lua_pushfstringi(L, lit<"\n\t...\t(skipping %d levels)">()->view());
+      lua_pushfstringi(L, lt::n_t_t_skipping_d_levels);
       luaL_addvalue(&b); /* add warning about skip */
       level += n;        /* and skip to last levels */
     }
     else
     {
-      InternalDebug ar = *lua_getinfoi(L1, lit<"Slnt">()->view(), oar.value());
+      InternalDebug ar = *lua_getinfoi(L1, lt::Slnt_chars, oar.value());
       std::string_view ss = ar.short_src();
       if (ar.currentline <= 0)
       {
         lua_pushlstring(L, ss, 0, ss.size());
-        lua_pushfstringi(L, lit<"\n\t%s: in ">()->view());
+        lua_pushfstringi(L, lt::n_t_s_in);
       }
       else
       {
         lua_pushlstring(L, ss, 0, ss.size());
         lua_pushinteger(L, ar.currentline);
-        lua_pushfstringi(L, lit<"\n\t%s:%d: in ">()->view());
+        lua_pushfstringi(L, lt::n_t_s_d_in);
       }
       luaL_addvalue(&b);
       pushfuncname(L, &ar);
       luaL_addvalue(&b);
       if (ar.istailcall)
-        luaL_addlstring(&b, lit<"\n\t(...tail calls...)">()->view(), 0, lit<"\n\t(...tail calls...)">()->size());
+        luaL_addlstring(&b, lt::n_t_tail_calls, 0, lt::n_t_tail_calls.size());
     }
   }
   luaL_pushresult(&b);
@@ -212,41 +213,40 @@ LUALIB_API int luaL_argerror(lua_State* L, int arg, const HostString& extramsg)
 
 int luaL_argerrori(lua_State* L, int arg, std::string_view extramsg)
 {
-  const InternalString* argword;
+  std::string_view argword;
   std::optional<InternalDebug> oar = lua_getstacki(L, 0);
   if (!oar)
   { /* no stack frame? */
     lua_pushinteger(L, arg);
     lua_pushlstring(L, extramsg, 0, extramsg.size());
-    return luaL_errori(L, lit<"bad argument #%d (%s)">()->view());
+    return luaL_errori(L, lt::bad_argument_d_s);
   }
-  InternalDebug ar = *lua_getinfoi(L, lit<"nt">()->view(), oar.value());
+  InternalDebug ar = *lua_getinfoi(L, lt::nt, oar.value());
   if (arg <= ar.extraargs) /* error in an extra argument? */
-    argword = lit<"extra argument">();
+    argword = lt::extra_argument;
   else
   {
     arg -= ar.extraargs; /* do not count extra arguments */
-    if (ar.namewhat == lit<"method">()->view())
+    if (ar.namewhat == lt::method)
     {               /* colon syntax? */
       arg--;        /* do not count (extra) self argument */
       if (arg == 0)
       { /* error in self argument? */
-        lua_pushlstring(L, ar.name, 0, ar.name.size());
+        lua_pushlstring(L, ar.name.value(), 0, ar.name->size());
         lua_pushlstring(L, extramsg, 0, extramsg.size());
-        return luaL_errori(L, lit<"calling '%s' on bad self (%s)">()->view());
+        return luaL_errori(L, lt::calling_s_on_bad_self_s);
       }
       /* else go through; error in a regular argument */
     }
-    argword = lit<"argument">();
+    argword = lt::argument;
   }
-  if (ar.name.data() == nullptr)
-    ar.name = (pushglobalfuncname(L, &ar)) ? *lua_tolstring(L, -1)
-                                           : lit<"?">()->view();
-  lua_pushistringref(L, argword->view());
+  if (!ar.name.has_value())
+    ar.name = (pushglobalfuncname(L, &ar)) ? *lua_tolstring(L, -1) : lt::qmark;
+  lua_pushistringref(L, argword);
   lua_pushinteger(L, arg);
-  lua_pushlstring(L, ar.name, 0, ar.name.size());
+  lua_pushlstring(L, ar.name.value(), 0, ar.name->size());
   lua_pushlstring(L, extramsg, 0, extramsg.size());
-  return luaL_errori(L, lit<"bad %s #%d to '%s' (%s)">()->view());
+  return luaL_errori(L, lt::bad_s_d_to_s_s);
 }
 
 LUALIB_API int luaL_typeerror(lua_State* L, int arg, const HostString& tname)
@@ -257,21 +257,21 @@ LUALIB_API int luaL_typeerror(lua_State* L, int arg, const HostString& tname)
 int luaL_typeerrori(lua_State* L, int arg, std::string_view tname)
 {
   std::string_view typearg; /* name for the type of the actual argument */
-  if (luaL_getmetafieldi(L, arg, lit<"__name">()->view()) == LUA_TSTRING)
+  if (luaL_getmetafieldi(L, arg, lt::mm_name) == LUA_TSTRING)
     typearg = lua_toistring(L, -1)->view(); /* use the given type name */
   else if (lua_type(L, arg) == LUA_TLIGHTUSERDATA)
-    typearg = lit<"light userdata">()->view(); /* special name for messages */
+    typearg = lt::light_userdata; /* special name for messages */
   else
-    typearg = lua_typenamei(L, lua_type(L, arg))->view(); /* standard name */
+    typearg = lua_typenamei(L, lua_type(L, arg)); /* standard name */
   lua_pushlstring(L, tname, 0, tname.size());
   lua_pushlstring(L, typearg, 0, typearg.size());
-  const InternalString* msg = lua_pushfstringi(L, lit<"%s expected, got %s">()->view());
+  const InternalString* msg = lua_pushfstringi(L, lt::s_expected_got_s);
   return luaL_argerrori(L, arg, msg->view());
 }
 
 static void tag_error(lua_State* L, int arg, int tag)
 {
-  luaL_typeerrori(L, arg, lua_typenamei(L, tag)->view());
+  luaL_typeerrori(L, arg, lua_typenamei(L, tag));
 }
 
 /*
@@ -283,17 +283,17 @@ LUALIB_API void luaL_where(lua_State* L, int level)
   std::optional<InternalDebug> oar = lua_getstacki(L, level);
   if (oar)
   {                                                /* check function at level */
-    InternalDebug ar = *lua_getinfoi(L, lit<"Sl">()->view(), oar.value()); /* get info about it */
+    InternalDebug ar = *lua_getinfoi(L, lt::Sl_chars, oar.value()); /* get info about it */
     if (ar.currentline > 0)
     { /* is there info? */
       std::string_view ss = ar.short_src();
       lua_pushlstring(L, ss, 0, ss.size());
       lua_pushinteger(L, ar.currentline);
-      lua_pushfstringi(L, lit<"%s:%d: ">()->view());
+      lua_pushfstringi(L, lt::fmt_s_d_colon_sp);
       return;
     }
   }
-  lua_pushfstringi(L, lit<"">()->view()); /* else, no information available... */
+  lua_pushfstringi(L, lt::empty_str); /* else, no information available... */
 }
 
 LUALIB_API int luaL_error(lua_State* L, const HostString& fmt)
@@ -320,12 +320,12 @@ int luaL_fileresulti(lua_State* L, int stat, std::optional<std::string_view> fna
   else
   {
     luaL_pushfail(L);
-    InternalString errstr = (en != 0) ? os_strerror(en) : InternalString(lit<"(no extra info)">()->view());
+    InternalString errstr = (en != 0) ? os_strerror(en) : InternalString(lt::no_extra_info);
     if (fname.has_value())
     {
       lua_pushlstring(L, *fname, 0, fname->size());
       lua_pushlstring(L, errstr.view(), 0, errstr.size());
-      lua_pushfstringi(L, lit<"%s: %s">()->view());
+      lua_pushfstringi(L, lt::fmt_s_colon_s);
     }
     else
       lua_pushlstring(L, errstr.view(), 0, errstr.size());
@@ -351,12 +351,12 @@ int luaL_execresulti(lua_State* L, int stat, int en)
   else
   {
     OsExecStatus es = os_decode_exec(stat);
-    const InternalString* what = es.exited ? lit<"exit">() : lit<"signal">();
+    std::string_view what = es.exited ? lt::exit_kw : lt::signal_kw;
     if (es.exited && es.code == 0) /* successful termination? */
       lua_pushboolean(L, 1);
     else
       luaL_pushfail(L);
-    lua_pushistringref(L, what->view());
+    lua_pushistringref(L, what);
     lua_pushinteger(L, es.code);
     return 3; /* return true/fail,what,code */
   }
@@ -382,7 +382,7 @@ int luaL_newmetatablei(lua_State* L, std::string_view tname)
   lua_pop(L, 1);
   lua_createtable(L, 0, 2);
   lua_pushlstring(L, tname, 0, tname.size());
-  lua_setfieldi(L, -2, lit<"__name">()->view()); /* metatable.__name = tname */
+  lua_setfieldi(L, -2, lt::mm_name); /* metatable.__name = tname */
   lua_pushvalue(L, -1);
   lua_setfieldi(L, LUA_REGISTRYINDEX, tname); /* registry.name = metatable */
   return 1;
@@ -452,7 +452,7 @@ int luaL_checkoptioni(lua_State* L, int arg,
     if (name == lst[i])
       return ((int)(i));
   lua_pushlstring(L, name, 0, name.size());
-  const InternalString* msg = lua_pushfstringi(L, lit<"invalid option '%s'">()->view());
+  const InternalString* msg = lua_pushfstringi(L, lt::invalid_option_s);
   return luaL_argerrori(L, arg, msg->view());
 }
 
@@ -467,7 +467,7 @@ LUALIB_API int luaL_checkoption(lua_State* L, int arg,
     if (name == lst[i].to_utf8())
       return ((int)(i));
   lua_pushlstring(L, name, 0, name.size());
-  const InternalString* msg = lua_pushfstringi(L, lit<"invalid option '%s'">()->view());
+  const InternalString* msg = lua_pushfstringi(L, lt::invalid_option_s);
   return luaL_argerrori(L, arg, msg->view());
 }
 
@@ -490,10 +490,10 @@ void luaL_checkstacki(lua_State* L, int space, std::optional<std::string_view> m
     if (msg.has_value() && lua_checkstack(L, 1))
     {
       lua_pushlstring(L, *msg, 0, msg->size());
-      luaL_errori(L, lit<"stack overflow (%s)">()->view());
+      luaL_errori(L, lt::stack_overflow_s);
     }
     else
-      luaL_errori(L, lit<"stack overflow">()->view());
+      luaL_errori(L, lt::stack_overflow);
   }
 }
 
@@ -506,7 +506,7 @@ LUALIB_API void luaL_checktype(lua_State* L, int arg, int t)
 LUALIB_API void luaL_checkany(lua_State* L, int arg)
 {
   if (l_unlikely(lua_type(L, arg) == LUA_TNONE))
-    luaL_argerrori(L, arg, lit<"value expected">()->view());
+    luaL_argerrori(L, arg, lt::value_expected);
 }
 
 LUALIB_API std::string_view luaL_checklstring(lua_State* L, int arg)
@@ -558,7 +558,7 @@ LUALIB_API lua_Number luaL_optnumber(lua_State* L, int arg, lua_Number def)
 static void interror(lua_State* L, int arg)
 {
   if (lua_isnumber(L, arg))
-    luaL_argerrori(L, arg, lit<"number has no integer representation">()->view());
+    luaL_argerrori(L, arg, lt::number_has_no_integer_representation);
   else
     tag_error(L, arg, LUA_TNUMBER);
 }
@@ -596,7 +596,7 @@ static void bb_growTo(luaL_Buffer* B, size_t cap)
   void* nb = g->frealloc(g->ud, B->bytes.data(), B->bytes.size(), cap);
   if (l_unlikely(nb == nullptr && cap > 0))
   {
-    lua_pushistringref(B->L, lit<"not enough memory">()->view());
+    lua_pushistringref(B->L, lt::not_enough_memory);
     lua_error(B->L); /* raise a memory error */
   }
   B->bytes = {static_cast<char*>(nb), cap};
@@ -646,7 +646,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
   size_t newsize = B->bytes.size();
   size_t len = B->used;
   if (l_unlikely(sz >= MAX_SIZE - len))
-    return ((size_t)(luaL_errori(B->L, lit<"resulting string too large">()->view())));
+    return ((size_t)(luaL_errori(B->L, lt::resulting_string_too_large)));
   if (newsize <= MAX_SIZE / 3 * 2) /* no overflow? */
     newsize += (newsize >> 1);     /* new size *= 1.5 */
   if (newsize < len + sz)          /* not big enough? */
@@ -664,7 +664,7 @@ static size_t prepbuff(luaL_Buffer* B, size_t sz)
     assert(newsize >= B->reserved);
     if (l_unlikely(!lua_reservebytes(B->L, newsize - B->reserved)))
     {
-      lua_pushistringref(B->L, lit<"not enough memory">()->view());
+      lua_pushistringref(B->L, lt::not_enough_memory);
       lua_error(B->L); /* raise a memory error */
     }
     B->reserved = newsize;
@@ -836,13 +836,13 @@ static int errfile(lua_State* L, std::string_view what, int fnameindex, int err)
     lua_pushlstring(L, filename, 0, filename.size());
     InternalString errmsg = os_strerror(err);
     lua_pushlstring(L, errmsg.view(), 0, errmsg.size());
-    lua_pushfstringi(L, lit<"cannot %s %s: %s">()->view());
+    lua_pushfstringi(L, lt::cannot_s_s_s);
   }
   else
   {
     lua_pushlstring(L, what, 0, what.size());
     lua_pushlstring(L, filename, 0, filename.size());
-    lua_pushfstringi(L, lit<"cannot %s %s">()->view());
+    lua_pushfstringi(L, lt::cannot_s_s);
   }
   lua_remove(L, fnameindex);
   return LUA_ERRFILE;
@@ -895,17 +895,17 @@ int luaL_loadfilei(lua_State* L, std::optional<std::string_view> filename, std::
   const bool bNullname = !filename.has_value();
   if (bNullname)
   {
-    lua_pushistringref(L, lit<"=stdin">()->view());
+    lua_pushistringref(L, lt::stdin_1);
     lf.f = os_stdin();
   }
   else
   {
     lua_pushistringref(L, *filename);
-    lua_pushfstringi(L, lit<"@%s">()->view());
-    OsOpenResult o = os_fopen(*filename, lit<"r">()->view());
+    lua_pushfstringi(L, lt::fmt_at_s);
+    OsOpenResult o = os_fopen(*filename, lt::r_mode);
     lf.f = o.f;
     if (lf.f == nullptr)
-      return errfile(L, lit<"open">()->view(), fnameindex, o.err);
+      return errfile(L, lt::open_kw, fnameindex, o.err);
   }
   lf.n = 0;
   if (skipcomment(lf.f, &c)) /* read initial portion */
@@ -915,9 +915,9 @@ int luaL_loadfilei(lua_State* L, std::optional<std::string_view> filename, std::
     lf.n = 0; /* remove possible newline */
     if (!bNullname)
     { /* "real" file? */
-      int rerr = os_freopen(lf.f, *filename, lit<"rb">()->view()); /* reopen in binary mode */
+      int rerr = os_freopen(lf.f, *filename, lt::rb_mode); /* reopen in binary mode */
       if (rerr != 0)
-        return errfile(L, lit<"reopen">()->view(), fnameindex, rerr);
+        return errfile(L, lt::reopen, fnameindex, rerr);
       skipcomment(lf.f, &c); /* re-read initial portion */
     }
   }
@@ -930,7 +930,7 @@ int luaL_loadfilei(lua_State* L, std::optional<std::string_view> filename, std::
   if (readstatus)
   {
     lua_settop(L, fnameindex); /* ignore results from 'lua_load' */
-    return errfile(L, lit<"read">()->view(), fnameindex, 0);
+    return errfile(L, lt::read_kw, fnameindex, 0);
   }
   lua_remove(L, fnameindex);
   return status;
@@ -974,7 +974,7 @@ LUALIB_API int luaL_loadbufferx(lua_State* L, std::string_view buff, const std::
 
 LUALIB_API int luaL_loadstring(lua_State* L, const HostString& s)
 {
-  return luaL_loadbufferi(L, s.to_utf8(), s.to_utf8(), lit<"t">()->view());
+  return luaL_loadbufferi(L, s.to_utf8(), s.to_utf8(), lt::t_char);
 }
 
 /* }====================================================== */
@@ -1021,7 +1021,7 @@ LUALIB_API lua_Integer luaL_len(lua_State* L, int idx)
   lua_len(L, idx);
   std::optional<lua_Integer> l = lua_tointegerx(L, -1);
   if (l_unlikely(!l))
-    luaL_errori(L, lit<"object length is not an integer">()->view());
+    luaL_errori(L, lt::object_length_is_not_an_integer);
   lua_pop(L, 1); /* remove object */
   return *l;
 }
@@ -1029,10 +1029,10 @@ LUALIB_API lua_Integer luaL_len(lua_State* L, int idx)
 const InternalString* luaL_toistring(lua_State* L, int idx)
 {
   idx = lua_absindex(L, idx);
-  if (luaL_callmetai(L, idx, lit<"__tostring">()->view()))
+  if (luaL_callmetai(L, idx, lt::mm_tostring))
   { /* metafield? */
     if (!lua_isstring(L, -1))
-      luaL_errori(L, lit<"'__tostring' must return a string">()->view());
+      luaL_errori(L, lt::tostring_must_return_a_string);
   }
   else
   {
@@ -1049,29 +1049,29 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
       lua_pushvalue(L, idx);
       break;
     case LUA_TBOOLEAN:
-      lua_pushistringref(L, lua_toboolean(L, idx) ? lit<"true">()->view() : lit<"false">()->view());
+      lua_pushistringref(L, lua_toboolean(L, idx) ? lt::true_kw : lt::false_kw);
       break;
     case LUA_TNIL:
-      lua_pushistringref(L, lit<"nil">()->view());
+      lua_pushistringref(L, lt::nil);
       break;
     default:
     {
-      int tt = luaL_getmetafieldi(L, idx, lit<"__name">()->view()); /* try name */
+      int tt = luaL_getmetafieldi(L, idx, lt::mm_name); /* try name */
       std::string_view kind = (tt == LUA_TSTRING)
                                   ? *lua_tolstring(L, -1)
-                                  : lua_typenamei(L, lua_type(L, idx))->view();
+                                  : lua_typenamei(L, lua_type(L, idx));
       if (lua_islightcfunction(L, idx))
       {
         InternalString fa = lua_funcaddressi(L, idx);
         lua_pushlstring(L, kind, 0, kind.size());
         lua_pushlstring(L, fa.view(), 0, fa.size());
-        lua_pushfstringi(L, lit<"%s: %s">()->view());
+        lua_pushfstringi(L, lt::fmt_s_colon_s);
       }
       else
       {
         lua_pushlstring(L, kind, 0, kind.size());
         lua_pushvalue(L, idx);
-        lua_pushfstringi(L, lit<"%s: %p">()->view());
+        lua_pushfstringi(L, lt::fmt_s_colon_p);
       }
       if (tt != LUA_TNIL)
         lua_remove(L, -2); /* remove '__name' */
@@ -1094,7 +1094,7 @@ LUALIB_API std::string_view luaL_tolstring(lua_State* L, int idx)
 */
 void luaL_setfuncsi(lua_State* L, std::span<const luaL_Regi> funcs, int nup)
 {
-  luaL_checkstacki(L, nup, lit<"too many upvalues">()->view());
+  luaL_checkstacki(L, nup, lt::too_many_upvalues);
   for (const auto& reg : funcs)
   {
     if (reg.func == nullptr) /* placeholder? */
@@ -1119,7 +1119,7 @@ void luaL_newlibi(lua_State* L, std::span<const luaL_Regi> funcs)
 
 LUALIB_API void luaL_setfuncs(lua_State* L, const std::span<const luaL_Reg>& funcs, int nup)
 {
-  luaL_checkstacki(L, nup, lit<"too many upvalues">()->view());
+  luaL_checkstacki(L, nup, lt::too_many_upvalues);
   for (const auto& reg : funcs)
   {
     if (reg.func == nullptr) /* placeholder? */
@@ -1250,12 +1250,12 @@ static void* luaL_alloc(void*, void* ptr, size_t, size_t nsize)
 */
 static int panic(lua_State* L)
 {
-  const InternalString* msg = (lua_type(L, -1) == LUA_TSTRING)
-                                  ? lua_toistring(L, -1)
-                                  : lit<"error object is not a string">();
-  os_print_stderr(lit<"PANIC: unprotected error in call to Lua API (">()->view());
-  os_print_stderr(msg->view());
-  os_print_stderr(lit<")\n">()->view());
+  std::string_view msg = (lua_type(L, -1) == LUA_TSTRING)
+                                  ? lua_toistring(L, -1)->view()
+                                  : lt::error_object_is_not_a_string;
+  os_print_stderr(lt::PANIC_unprotected_error_in_call_to_Lua_API);
+  os_print_stderr(msg);
+  os_print_stderr(lt::n_2);
   os_flush_stderr();
   return 0; /* return to Lua to abort */
 }
@@ -1281,9 +1281,9 @@ static int checkcontrol(lua_State* L, const HostString& message, int tocont)
     return 0;
   else
   {
-    if (m.substr(1) == lit<"off">()->view())
+    if (m.substr(1) == lt::off_2)
       lua_setwarnf(L, warnfoff, L); /* turn warnings off */
-    else if (m.substr(1) == lit<"on">()->view())
+    else if (m.substr(1) == lt::on_2)
       lua_setwarnf(L, warnfon, L); /* turn warnings on */
     return 1;                      /* it was a control message */
   }
@@ -1307,7 +1307,7 @@ static void warnfcont(void* ud, const HostString& message, int tocont)
     lua_setwarnf(L, warnfcont, L);     /* to be continued */
   else
   {                                /* last part */
-    os_print_stderr(lit<"\n">()->view()); /* finish message with end-of-line */
+    os_print_stderr(lt::n_3); /* finish message with end-of-line */
     os_flush_stderr();
     lua_setwarnf(L, warnfon, L);   /* next call is a new message */
   }
@@ -1317,7 +1317,7 @@ static void warnfon(void* ud, const HostString& message, int tocont)
 {
   if (checkcontrol((lua_State*) ud, message, tocont)) /* control message? */
     return;                                           /* nothing else to be done */
-  os_print_stderr(lit<"Lua warning: ">()->view()); /* start a new warning */
+  os_print_stderr(lt::Lua_warning); /* start a new warning */
   os_flush_stderr();
   warnfcont(ud, message, tocont);         /* finish processing */
 }
@@ -1381,12 +1381,12 @@ LUALIB_API void luaL_checkversion_(lua_State* L, lua_Number ver, size_t sz)
 {
   lua_Number v = lua_version(L);
   if (sz != LUAL_NUMSIZES) /* check numeric types */
-    luaL_errori(L, lit<"core and library have incompatible numeric types">()->view());
+    luaL_errori(L, lt::core_and_library_have_incompatible_numeric_types);
   else if (v != ver)
   {
     lua_pushnumber(L, ver);
     lua_pushnumber(L, v);
-    luaL_errori(L, lit<"version mismatch: app. needs %f, Lua core provides %f">()->view());
+    luaL_errori(L, lt::version_mismatch_app_needs_f_Lua_core_provides_f);
   }
 }
 

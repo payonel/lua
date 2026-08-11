@@ -3,9 +3,8 @@
 
 #include "lua.h"
 #include "internal_string.h"
+#include "literals.h"
 #include <array>
-
-static const std::string_view LUA_IGMARK = lit<"-">()->view();
 
 class InternalString;
 
@@ -81,7 +80,7 @@ void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<std::string_view
 
 InternalString lua_funcaddressi(lua_State* L, int idx);
 
-const InternalString* lua_typenamei(lua_State* L, int tp);
+std::string_view lua_typenamei(lua_State* L, int tp);
 
 std::optional<std::string_view> lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff);
 
@@ -95,8 +94,8 @@ std::string_view luaL_gsubi(lua_State* L, std::string_view s, std::string_view p
 struct InternalDebug
 {
   int event = 0;
-  std::string_view name;
-  std::string_view namewhat;
+  std::optional<std::string_view> name;
+  std::optional<std::string_view> namewhat;
   std::string_view what;
   std::string_view source;
   int currentline = 0;

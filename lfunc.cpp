@@ -17,6 +17,7 @@
 #include "lmem.h"
 #include "lobject.h"
 #include "lstate.h"
+#include "literals.h"
 
 CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
@@ -156,11 +157,9 @@ static void checkclosemth(lua_State* L, StkId level)
   if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                            /* no metamethod? */
     int idx = ((int)(level - L->ci->func)); /* variable index */
-    const InternalString* vname = luaG_findlocal(L, L->ci, idx, nullptr);
-    if (vname == nullptr)
-      vname = lit<"?">();
-    luaG_runerror(L, lit<"variable '%s' got a non-closable value">()->view(),
-                  FmtArgs().str(vname->view()));
+    const InternalString* vname_i = luaG_findlocal(L, L->ci, idx, nullptr);
+    std::string_view vname = vname_i != nullptr ? vname_i->view() : lt::qmark;
+    luaG_runerror(L, lt::variable_s_got_a_non_closable_value, FmtArgs().str(vname));
   }
 }
 
@@ -207,7 +206,7 @@ void luaF_newtbcupval(lua_State* L, StkId level)
   int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(StkId))
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(StkId));
-  L->tbc = (StkId*)luaM_growaux_(L, L->tbc, L->ntbc, &L->sizetbc, sizeof(StkId), limit, lit<"to-be-closed variables">()->view());
+  L->tbc = (StkId*)luaM_growaux_(L, L->tbc, L->ntbc, &L->sizetbc, sizeof(StkId), limit, lt::to_be_closed_variables);
   L->tbc[L->ntbc++] = level;
   L->tbclist = level;
 }

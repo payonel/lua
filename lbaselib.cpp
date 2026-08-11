@@ -19,6 +19,7 @@
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
+#include "literals.h"
 
 static int luaB_print(lua_State* L)
 {
@@ -28,11 +29,11 @@ static int luaB_print(lua_State* L)
   { /* for each argument */
     const InternalString* s = luaL_toistring(L, i); /* convert it to string */
     if (i > 1)                                      /* not the first element? */
-      os_print_stdout(lit<"\t">()->view());          /* add a tab before it */
+      os_print_stdout(lt::t);          /* add a tab before it */
     os_print_stdout(s->view());
     lua_pop(L, 1);                                  /* pop result */
   }
-  os_print_stdout(lit<"\n">()->view());
+  os_print_stdout(lt::n_3);
   os_flush_stdout();
   return 0;
 }
@@ -57,7 +58,7 @@ static int luaB_warn(lua_State* L)
 
 static size_t b_str2int(std::string_view s, unsigned base, lua_Integer* pn)
 {
-  const std::string_view spacechars = lit<" \f\n\r\t\v">()->view();
+  const std::string_view spacechars = lt::whitespace_chars;
   lua_Unsigned n = 0;
   int neg = 0;
   size_t p = 0;
@@ -112,7 +113,7 @@ static int luaB_tonumber(lua_State* L)
     lua_Integer base = luaL_checkinteger(L, 2);
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
     std::string_view s = *lua_tolstring(L, 1);
-    luaL_argchecki(L, 2 <= base && base <= 36, 2, lit<"base out of range">()->view());
+    luaL_argchecki(L, 2 <= base && base <= 36, 2, lt::base_out_of_range);
     if (b_str2int(s, ((unsigned int)(base)), &n) == s.size())
     {
       lua_pushinteger(L, n);
@@ -144,7 +145,7 @@ static int luaB_getmetatable(lua_State* L)
     lua_pushnil(L);
     return 1; /* no metatable */
   }
-  luaL_getmetafieldi(L, 1, lit<"__metatable">()->view());
+  luaL_getmetafieldi(L, 1, lt::mm_metatable);
   return 1; /* returns either __metatable field (if present) or metatable */
 }
 
@@ -152,9 +153,9 @@ static int luaB_setmetatable(lua_State* L)
 {
   int t = lua_type(L, 2);
   luaL_checktype(L, 1, LUA_TTABLE);
-  luaL_argexpectedi(L, t == LUA_TNIL || t == LUA_TTABLE, 2, lit<"nil or table">()->view());
-  if (l_unlikely(luaL_getmetafieldi(L, 1, lit<"__metatable">()->view()) != LUA_TNIL))
-    return luaL_errori(L, lit<"cannot change a protected metatable">()->view());
+  luaL_argexpectedi(L, t == LUA_TNIL || t == LUA_TTABLE, 2, lt::nil_or_table);
+  if (l_unlikely(luaL_getmetafieldi(L, 1, lt::mm_metatable) != LUA_TNIL))
+    return luaL_errori(L, lt::cannot_change_a_protected_metatable);
   lua_settop(L, 2);
   lua_setmetatable(L, 1);
   return 1;
@@ -171,7 +172,7 @@ static int luaB_rawequal(lua_State* L)
 static int luaB_rawlen(lua_State* L)
 {
   int t = lua_type(L, 1);
-  luaL_argexpectedi(L, t == LUA_TTABLE || t == LUA_TSTRING, 1, lit<"table or string">()->view());
+  luaL_argexpectedi(L, t == LUA_TTABLE || t == LUA_TSTRING, 1, lt::table_or_string);
   lua_pushinteger(L, ((lua_Integer)(lua_rawlen(L, 1))));
   return 1;
 }
@@ -200,7 +201,7 @@ static int pushmode(lua_State* L, int oldmode)
   if (oldmode == -1)
     luaL_pushfail(L); /* invalid call to 'lua_gc' */
   else
-    lua_pushistringref(L, (oldmode == LUA_GCINC) ? lit<"incremental">()->view() : lit<"generational">()->view());
+    lua_pushistringref(L, (oldmode == LUA_GCINC) ? lt::incremental : lt::generational);
   return 1;
 }
 
@@ -211,13 +212,13 @@ static int pushmode(lua_State* L, int oldmode)
 static int luaB_collectgarbage(lua_State* L)
 {
   static const std::string_view opts[] = {
-      lit<"stop">()->view(), lit<"restart">()->view(), lit<"collect">()->view(),
-      lit<"count">()->view(), lit<"step">()->view(), lit<"isrunning">()->view(), lit<"generational">()->view(),
-      lit<"incremental">()->view(), lit<"param">()->view(), lit<"setlimit">()->view(), lit<"getlimit">()->view()};
+      lt::stop, lt::restart, lt::collect,
+      lt::count, lt::step, lt::isrunning, lt::generational,
+      lt::incremental, lt::param, lt::setlimit, lt::getlimit};
   static const char optsnum[] = {LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
                                  LUA_GCCOUNT, LUA_GCSTEP, LUA_GCISRUNNING, LUA_GCGEN, LUA_GCINC,
                                  LUA_GCPARAM, 100, 101};
-  int o = optsnum[luaL_checkoptioni(L, 1, lit<"collect">()->view(), opts)];
+  int o = optsnum[luaL_checkoptioni(L, 1, lt::collect, opts)];
   switch (o)
   {
   case 100:
@@ -265,8 +266,8 @@ static int luaB_collectgarbage(lua_State* L)
   case LUA_GCPARAM:
   {
     static const std::string_view params[] = {
-        lit<"minormul">()->view(), lit<"majorminor">()->view(), lit<"minormajor">()->view(),
-        lit<"pause">()->view(), lit<"stepmul">()->view(), lit<"stepsize">()->view()};
+        lt::minormul, lt::majorminor, lt::minormajor,
+        lt::pause, lt::stepmul, lt::stepsize};
     static const char pnum[] = {
         LUA_GCPMINORMUL, LUA_GCPMAJORMINOR, LUA_GCPMINORMAJOR,
         LUA_GCPPAUSE, LUA_GCPSTEPMUL, LUA_GCPSTEPSIZE};
@@ -290,8 +291,8 @@ static int luaB_collectgarbage(lua_State* L)
 static int luaB_type(lua_State* L)
 {
   int t = lua_type(L, 1);
-  luaL_argchecki(L, t != LUA_TNONE, 1, lit<"value expected">()->view());
-  lua_pushistringref(L, lua_typenamei(L, t)->view());
+  luaL_argchecki(L, t != LUA_TNONE, 1, lt::value_expected);
+  lua_pushistringref(L, lua_typenamei(L, t));
   return 1;
 }
 
@@ -316,7 +317,7 @@ static int pairscont(lua_State*, int, lua_KContext)
 static int luaB_pairs(lua_State* L)
 {
   luaL_checkany(L, 1);
-  if (luaL_getmetafieldi(L, 1, lit<"__pairs">()->view()) == LUA_TNIL)
+  if (luaL_getmetafieldi(L, 1, lt::mm_pairs) == LUA_TNIL)
   {                                  /* no metamethod? */
     lua_pushcfunction(L, luaB_next); /* will return generator and */
     lua_pushvalue(L, 1);             /* state */
@@ -381,7 +382,7 @@ static const InternalString* getMode(lua_State* L, int idx)
   if (mode != nullptr && mode->view().find('B') != std::string_view::npos)
   {
     /* Lua code cannot use fixed buffers */
-    luaL_argerrori(L, idx, lit<"invalid mode">()->view());
+    luaL_argerrori(L, idx, lt::invalid_mode);
   }
   return mode;
 }
@@ -408,7 +409,7 @@ static int luaB_loadfile(lua_State* L)
 static std::optional<std::string_view> generic_reader(lua_State* L, void* ud)
 {
   int* firstcall = ((int*)(ud));
-  luaL_checkstacki(L, 2, lit<"too many nested functions">()->view());
+  luaL_checkstacki(L, 2, lt::too_many_nested_functions);
   if (*firstcall)
     *firstcall = 0;
   else
@@ -418,7 +419,7 @@ static std::optional<std::string_view> generic_reader(lua_State* L, void* ud)
   if (lua_isnil(L, -1))
     return std::nullopt;
   else if (l_unlikely(!lua_isstring(L, -1)))
-    luaL_errori(L, lit<"reader function must return a string">()->view());
+    luaL_errori(L, lt::reader_function_must_return_a_string);
   return *lua_tolstring(L, -1);
 }
 
@@ -438,7 +439,7 @@ static int luaB_load(lua_State* L)
   else
   {                    /* loading from a reader function */
     int firstcall = 1; /* userdata for generic_reader */
-    const InternalString* chunkname = luaL_optistring(L, 2, lit<"=(load)">());
+    const InternalString* chunkname = luaL_optistring(L, 2, &lt::load_1_i);
     std::optional<std::string_view> optname = (chunkname != nullptr) ? std::optional<std::string_view>(chunkname->view()) : std::nullopt;
     luaL_checktype(L, 1, LUA_TFUNCTION);
     status = lua_loadi(L, generic_reader, &firstcall, optname, optmode);
@@ -473,7 +474,7 @@ static int luaB_assert(lua_State* L)
   {                                          /* error */
     luaL_checkany(L, 1);                     /* there must be a condition */
     lua_remove(L, 1);                        /* remove it */
-    lua_pushistringref(L, lit<"assertion failed!">()->view()); /* default message */
+    lua_pushistringref(L, lt::assertion_failed); /* default message */
     lua_settop(L, 1);                        /* leave only message (default if no other one) */
     return luaB_error(L);                    /* call 'error' */
   }
@@ -494,7 +495,7 @@ static int luaB_select(lua_State* L)
       i = n + i;
     else if (i > n)
       i = n;
-    luaL_argchecki(L, 1 <= i, 1, lit<"index out of range">()->view());
+    luaL_argchecki(L, 1 <= i, 1, lt::index_out_of_range);
     return n - (int) i;
   }
 }
@@ -553,32 +554,32 @@ static int luaB_tostring(lua_State* L)
 }
 
 static const luaL_Regi base_funcs[] = {
-  {lit<"assert">()->view(), luaB_assert},
-  {lit<"collectgarbage">()->view(), luaB_collectgarbage},
-  {lit<"dofile">()->view(), luaB_dofile},
-  {lit<"error">()->view(), luaB_error},
-  {lit<"getmetatable">()->view(), luaB_getmetatable},
-  {lit<"ipairs">()->view(), luaB_ipairs},
-  {lit<"loadfile">()->view(), luaB_loadfile},
-  {lit<"load">()->view(), luaB_load},
-  {lit<"next">()->view(), luaB_next},
-  {lit<"pairs">()->view(), luaB_pairs},
-  {lit<"pcall">()->view(), luaB_pcall},
-  {lit<"print">()->view(), luaB_print},
-  {lit<"warn">()->view(), luaB_warn},
-  {lit<"rawequal">()->view(), luaB_rawequal},
-  {lit<"rawlen">()->view(), luaB_rawlen},
-  {lit<"rawget">()->view(), luaB_rawget},
-  {lit<"rawset">()->view(), luaB_rawset},
-  {lit<"select">()->view(), luaB_select},
-  {lit<"setmetatable">()->view(), luaB_setmetatable},
-  {lit<"tonumber">()->view(), luaB_tonumber},
-  {lit<"tostring">()->view(), luaB_tostring},
-  {lit<"type">()->view(), luaB_type},
-  {lit<"xpcall">()->view(), luaB_xpcall},
+  {lt::assert, luaB_assert},
+  {lt::collectgarbage, luaB_collectgarbage},
+  {lt::dofile, luaB_dofile},
+  {lt::error_kw, luaB_error},
+  {lt::getmetatable, luaB_getmetatable},
+  {lt::ipairs, luaB_ipairs},
+  {lt::loadfile, luaB_loadfile},
+  {lt::load_2, luaB_load},
+  {lt::next_kw, luaB_next},
+  {lt::pairs, luaB_pairs},
+  {lt::pcall, luaB_pcall},
+  {lt::print, luaB_print},
+  {lt::warn, luaB_warn},
+  {lt::rawequal, luaB_rawequal},
+  {lt::rawlen, luaB_rawlen},
+  {lt::rawget, luaB_rawget},
+  {lt::rawset, luaB_rawset},
+  {lt::select, luaB_select},
+  {lt::setmetatable, luaB_setmetatable},
+  {lt::tonumber, luaB_tonumber},
+  {lt::tostring, luaB_tostring},
+  {lt::type, luaB_type},
+  {lt::xpcall, luaB_xpcall},
   /* placeholders */
   {LUA_GNAME, nullptr},
-  {lit<"_VERSION">()->view(), nullptr}
+  {lt::_VERSION, nullptr}
 };
 
 LUAMOD_API int luaopen_base(lua_State* L)
@@ -591,6 +592,6 @@ LUAMOD_API int luaopen_base(lua_State* L)
   lua_setfieldi(L, -2, LUA_GNAME);
   /* set global _VERSION */
   lua_pushlstring(L, LUA_VERSION, 0, LUA_VERSION.size());
-  lua_setfieldi(L, -2, lit<"_VERSION">()->view());
+  lua_setfieldi(L, -2, lt::_VERSION);
   return 1;
 }

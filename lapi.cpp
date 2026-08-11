@@ -27,11 +27,9 @@
 #include "lvm.h"
 
 #include "util_cast.h"
+#include "literals.h"
 
-const std::string_view lua_ident =
-    lit<"$LuaVersion: Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio $"
-        "$LuaAuthors: R. Ierusalimschy, L. H. de Figueiredo, W. Celes $">()
-        ->view();
+const std::string_view lua_ident = lt::lua_ident_str;
 
 /* test for pseudo index */
 constexpr int ispseudo(int i)
@@ -316,8 +314,8 @@ LUA_API HostString lua_typename(lua_State* L, int t)
 {
   (void) L;
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");
-  const InternalString* n = ttypename(t);
-  return HostString(n->view());
+  std::string_view n = ttypename(t);
+  return HostString(n);
 }
 
 LUA_API int lua_iscfunction(lua_State* L, int idx)
@@ -610,7 +608,7 @@ HostString lua_funcaddress(lua_State* L, int idx)
   return HostString(lua_funcaddressi(L, idx).view());
 }
 
-const InternalString* lua_typenamei(lua_State*, int t)
+std::string_view lua_typenamei(lua_State*, int t)
 {
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");
   return ttypename(t);
@@ -650,7 +648,7 @@ LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s, size_
   lua_lock(L);
   if (len == 0)
   {
-    s = lit<"">()->view();
+    s = lt::empty_str;
     off = 0;
     len = s.size();
   }
@@ -1662,7 +1660,7 @@ LUA_API void lua_concat(lua_State* L, int n)
   }
   else
   {                                                   /* nothing to concatenate */
-    setslots(L, L->top, luaS_createstr(L, lit<"">()->view(), 0, 0)); /* push empty string */
+    setslots(L, L->top, luaS_createstr(L, lt::empty_str, 0, 0)); /* push empty string */
     api_incr_top(L);
   }
   lua_unlock(L);
@@ -1770,7 +1768,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
       assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
       *owner = const_cast<GCObject*>(static_cast<const GCObject*>(f));
     }
-    return lit<"">();
+    return &lt::empty_str_i;
   }
   case LUA_VLCL:
   { /* Lua closure */
@@ -1786,7 +1784,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
       *owner = const_cast<GCObject*>(static_cast<const GCObject*>(f->upvals[n - 1]));
     }
     name = p->upvalues[n - 1].name;
-    return (name == nullptr) ? lit<"(no name)">() : &name->data;
+    return (name == nullptr) ? &lt::no_name_i : &name->data;
   }
   default:
     return nullptr; /* not a closure */

@@ -21,6 +21,7 @@
 #include "lua_internal.h"
 #include "os_api.h"
 #include "lualib.h"
+#include "literals.h"
 
 
 /* prefix for open functions in C libraries */
@@ -31,19 +32,6 @@ inline constexpr std::string_view LUA_PATH_MARK = "?";
 inline constexpr std::string_view LUA_EXEC_DIR = "!";
 inline constexpr std::string_view LUA_DIRSEP = "/";
 inline constexpr std::string_view CONFIG = "/\n;\n?\n!\n-\n";
-
-/* separator for open functions in C libraries */
-static const InternalString* const LUA_OFSEP = lit<"_">();
-
-/*
-** key for table in the registry that keeps handles
-** for all loaded C libraries
-*/
-static const InternalString* const CLIBS = lit<"_CLIBS">();
-
-static const InternalString* const LIB_FAIL = lit<"open">();
-
-/* cast void* to a Lua function */
 
 /*
 ** system-dependent functions
@@ -98,7 +86,7 @@ constexpr char LUA_CPATH_VAR[] = "LUA_CPATH";
 static int noenv(lua_State* L)
 {
   int b;
-  lua_getfieldi(L, LUA_REGISTRYINDEX, lit<"LUA_NOENV">()->view());
+  lua_getfieldi(L, LUA_REGISTRYINDEX, lt::LUA_NOENV);
   b = lua_toboolean(L, -1);
   lua_pop(L, 1); /* remove value */
   return b;
@@ -108,23 +96,21 @@ static int noenv(lua_State* L)
 ** Set a path. (If using the default path, assume it is a string
 ** literal in C and create it as an external string.)
 */
-static void setpath(lua_State* L, const InternalString* fieldname,
-                    const char* envname,
-                    std::string_view dft)
+static void setpath(lua_State* L, std::string_view fieldname, const char* envname, std::string_view dft)
 {
   std::string_view env{envname};
   lua_pushlstring(L, env, 0, env.size());
   lua_pushlstring(L, LUA_VERSUFFIX, 0, LUA_VERSUFFIX.size());
-  lua_pushfstringi(L, lit<"%s%s">()->view());
-  std::optional<InternalString> epath = os_getenv(lua_toistring(L, -1)->view()); /* try versioned name */
+  lua_pushfstringi(L, lt::fmt_ss);
+  std::optional<std::string_view> epath = os_getenv(lua_toistring(L, -1)->view()); /* try versioned name */
   if (!epath.has_value())                                    /* no versioned environment variable? */
     epath = os_getenv(std::string_view{envname});            /* try unversioned name */
   if (!epath.has_value() || noenv(L)) /* no environment variable? */
     lua_pushlstring(L, dft, 0, dft.size()); /* use default */
   else
   {
-    std::string_view path = epath->view();
-    size_t dftmark = path.find(lit<";;">()->view());
+    std::string_view path = epath.value();
+    size_t dftmark = path.find(lt::dsemicolon);
     if (dftmark == std::string_view::npos)
       lua_pushlstring(L, path, 0, path.size()); /* nothing to change */
     else
@@ -145,7 +131,7 @@ static void setpath(lua_State* L, const InternalString* fieldname,
       luaL_pushresult(&b);
     }
   }
-  lua_setfieldi(L, -3, fieldname->view()); /* package[fieldname] = path value */
+  lua_setfieldi(L, -3, fieldname); /* package[fieldname] = path value */
   lua_pop(L, 1);                  /* pop versioned variable name ('nver') */
 }
 
@@ -161,15 +147,15 @@ static void setpath(lua_State* L, const InternalString* fieldname,
 */
 
 /*
-** return registry.CLIBS[path]
+** return registry.lt::_CLIBS[path]
 */
 static void* checkclib(lua_State* L, const InternalString* path)
 {
   void* plib;
-  lua_getfieldi(L, LUA_REGISTRYINDEX, CLIBS->view());
+  lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_CLIBS);
   lua_getfieldi(L, -1, path->view());
-  plib = lua_touserdata(L, -1); /* plib = CLIBS[path] */
-  lua_pop(L, 2);                /* pop CLIBS table and 'plib' */
+  plib = lua_touserdata(L, -1); /* plib = lt::_CLIBS[path] */
+  lua_pop(L, 2);                /* pop lt::_CLIBS table and 'plib' */
   return plib;
 }
 
@@ -188,25 +174,25 @@ static void createlibstr(lua_State* L, void* plib)
 {
   void** p = (void**) lua_newuserdatauv(L, sizeof(void*), 0);
   *p = plib;
-  luaL_newmetatablei(L, lit<"_LOADLIB">()->view());
+  luaL_newmetatablei(L, lt::_LOADLIB);
   lua_pushcfunction(L, lib_gc);
-  lua_setfieldi(L, -2, lit<"__gc">()->view());
+  lua_setfieldi(L, -2, lt::mm_gc);
   lua_setmetatable(L, -2);
 }
 
 /*
-** registry.CLIBS[path] = plib          -- for queries.
+** registry.lt::_CLIBS[path] = plib          -- for queries.
 ** Also create a reference to strlib, so that the library string will
-** only be collected when registry.CLIBS is collected.
+** only be collected when registry.lt::_CLIBS is collected.
 */
 static void addtoclib(lua_State* L, const InternalString* path, void* plib)
 {
-  lua_getfieldi(L, LUA_REGISTRYINDEX, CLIBS->view());
+  lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_CLIBS);
   lua_pushlightuserdata(L, plib);
-  lua_setfieldi(L, -2, path->view()); /* CLIBS[path] = plib */
+  lua_setfieldi(L, -2, path->view()); /* lt::_CLIBS[path] = plib */
   createlibstr(L, plib);
-  luaL_ref(L, -2); /* keep library string in CLIBS */
-  lua_pop(L, 1);   /* pop CLIBS table */
+  luaL_ref(L, -2); /* keep library string in lt::_CLIBS */
+  lua_pop(L, 1);   /* pop lt::_CLIBS table */
 }
 
 /* error codes for 'lookforfunc' */
@@ -262,7 +248,7 @@ static int ll_loadlib(lua_State* L)
   { /* error; error message is on stack top */
     luaL_pushfail(L);
     lua_insert(L, -2);
-    lua_pushlstring(L, ((stat == ERRLIB) ? LIB_FAIL : lit<"init">())->view(), 0, (((stat == ERRLIB) ? LIB_FAIL : lit<"init">())->view()).size());
+    lua_pushlstring(L, ((stat == ERRLIB) ? lt::open_kw : lt::init), 0, (((stat == ERRLIB) ? lt::open_kw : lt::init)).size());
     return 3; /* return fail, error message, and where */
   }
 }
@@ -275,7 +261,7 @@ static int ll_loadlib(lua_State* L)
 
 static int readable(std::string_view filename)
 {
-  OsOpenResult o = os_fopen(filename, lit<"r">()->view());
+  OsOpenResult o = os_fopen(filename, lt::r_mode);
   if (o.f == nullptr)
     return 0;
   os_fclose(o.f);
@@ -292,9 +278,9 @@ static void pusherrornotfound(lua_State* L, std::string_view path)
 {
   luaL_Buffer b;
   luaL_buffinit(L, &b);
-  luaL_addlstring(&b, lit<"no file '">()->view(), 0, lit<"no file '">()->size());
-  luaL_addgsubi(&b, path, LUA_PATH_SEP, lit<"'\n\tno file '">()->view());
-  luaL_addlstring(&b, lit<"'">()->view(), 0, lit<"'">()->size());
+  luaL_addlstring(&b, lt::no_file, 0, lt::no_file.size());
+  luaL_addgsubi(&b, path, LUA_PATH_SEP, lt::n_tno_file);
+  luaL_addlstring(&b, lt::squote, 0, lt::squote.size());
   luaL_pushresult(&b);
 }
 
@@ -339,7 +325,7 @@ static int ll_searchpath(lua_State* L)
 {
   int found = searchpath(L, luaL_checklstring(L, 1),
                          luaL_checklstring(L, 2),
-                         luaL_optlstring(L, 3, lit<".">()->view()),
+                         luaL_optlstring(L, 3, lt::dot),
                          luaL_optlstring(L, 4, LUA_DIRSEP));
   if (found)
     return 1;
@@ -351,18 +337,16 @@ static int ll_searchpath(lua_State* L)
   }
 }
 
-static int findfile(lua_State* L, std::string_view name,
-                    const InternalString* pname,
-                    std::string_view dirsep)
+static int findfile(lua_State* L, std::string_view name, std::string_view pname, std::string_view dirsep)
 {
-  lua_getfieldi(L, lua_upvalueindex(1), pname->view());
+  lua_getfieldi(L, lua_upvalueindex(1), pname);
   if (l_unlikely(!lua_isstring(L, -1)))
   {
-    lua_pushlstring(L, pname->view(), 0, (pname->view()).size());
-    luaL_errori(L, lit<"'package.%s' must be a string">()->view());
+    lua_pushlstring(L, pname, 0, pname.size());
+    luaL_errori(L, lt::package_s_must_be_a_string);
   }
   std::string_view path = *lua_tolstring(L, -1);
-  return searchpath(L, name, path, lit<".">()->view(), dirsep);
+  return searchpath(L, name, path, lt::dot, dirsep);
 }
 
 static int checkload(lua_State* L, int stat, std::string_view filename)
@@ -377,14 +361,14 @@ static int checkload(lua_State* L, int stat, std::string_view filename)
     lua_pushvalue(L, 1);
     lua_pushlstring(L, filename, 0, filename.size());
     lua_pushvalue(L, -3);
-    return luaL_errori(L, lit<"error loading module '%s' from file '%s':\n\t%s">()->view());
+    return luaL_errori(L, lt::error_loading_module_s_from_file_s_n_t_s);
   }
 }
 
 static int searcher_Lua(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
-  if (!findfile(L, name, lit<"path">(), LUA_DIRSEP))
+  if (!findfile(L, name, lt::path, LUA_DIRSEP))
     return 1;
 
   std::string_view filename = lua_toistring(L, -1)->view();
@@ -401,13 +385,13 @@ static int searcher_Lua(lua_State* L)
 */
 static int loadfunc(lua_State* L, const InternalString* filename, std::string_view modname0)
 {
-  std::string_view modname = luaL_gsubi(L, modname0, lit<".">()->view(), LUA_OFSEP->view());
-  size_t mark = modname.find(LUA_IGMARK);
+  std::string_view modname = luaL_gsubi(L, modname0, lt::dot, lt::underscore);
+  size_t mark = modname.find(lt::minus_ch);
   if (mark != std::string_view::npos)
   {
     int stat;
     lua_pushlstring(L, modname, 0, mark);
-    lua_pushfstringi(L, lit<"luaopen_%s">()->view());
+    lua_pushfstringi(L, lt::luaopen_s);
     const InternalString* openfunc = lua_toistring(L, -1);
     stat = lookforfunc(L, filename, openfunc);
     if (stat != ERRFUNC)
@@ -415,7 +399,7 @@ static int loadfunc(lua_State* L, const InternalString* filename, std::string_vi
     modname = modname.substr(mark + 1); /* else go ahead and try old-style name */
   }
   lua_pushlstring(L, modname, 0, modname.size());
-  lua_pushfstringi(L, lit<"luaopen_%s">()->view());
+  lua_pushfstringi(L, lt::luaopen_s);
   const InternalString* openfunc = lua_toistring(L, -1);
   return lookforfunc(L, filename, openfunc);
 }
@@ -423,7 +407,7 @@ static int loadfunc(lua_State* L, const InternalString* filename, std::string_vi
 static int searcher_C(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
-  if (!findfile(L, name, lit<"cpath">(), LUA_DIRSEP))
+  if (!findfile(L, name, lt::cpath, LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
   return checkload(L, (loadfunc(L, filename, name) == 0), filename->view());
@@ -436,7 +420,7 @@ static int searcher_Croot(lua_State* L)
   int stat;
   if (p == std::string_view::npos)
     return 0; /* is root */
-  if (!findfile(L, name.substr(0, p), lit<"cpath">(), LUA_DIRSEP))
+  if (!findfile(L, name.substr(0, p), lt::cpath, LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
   if ((stat = loadfunc(L, filename, name)) != 0)
@@ -447,7 +431,7 @@ static int searcher_Croot(lua_State* L)
     { /* open function not found */
       lua_pushlstring(L, name, 0, name.size());
       lua_pushistringref(L, filename->view());
-      lua_pushfstringi(L, lit<"no module '%s' in file '%s'">()->view());
+      lua_pushfstringi(L, lt::no_module_s_in_file_s);
       return 1;
     }
   }
@@ -462,12 +446,12 @@ static int searcher_preload(lua_State* L)
   if (lua_getfieldi(L, -1, name) == LUA_TNIL)
   { /* not found? */
     lua_pushlstring(L, name, 0, name.size());
-    lua_pushfstringi(L, lit<"no field package.preload['%s']">()->view());
+    lua_pushfstringi(L, lt::no_field_package_preload_s);
     return 1;
   }
   else
   {
-    lua_pushistringref(L, lit<":preload:">()->view());
+    lua_pushistringref(L, lt::preload_1);
     return 2;
   }
 }
@@ -477,10 +461,10 @@ static void findloader(lua_State* L, std::string_view name)
   int i;
   luaL_Buffer msg; /* to build error message */
   /* push 'package.searchers' to index 3 in the stack */
-  if (l_unlikely(lua_getfieldi(L, lua_upvalueindex(1), lit<"searchers">()->view()) != LUA_TTABLE))
-    luaL_errori(L, lit<"'package.searchers' must be a table">()->view());
+  if (l_unlikely(lua_getfieldi(L, lua_upvalueindex(1), lt::searchers) != LUA_TTABLE))
+    luaL_errori(L, lt::package_searchers_must_be_a_table);
   luaL_buffinit(L, &msg);
-  luaL_addlstring(&msg, lit<"\n\t">()->view(), 0, lit<"\n\t">()->size()); /* error-message prefix for first message */
+  luaL_addlstring(&msg, lt::n_t, 0, lt::n_t.size()); /* error-message prefix for first message */
   /*  iterate over available searchers to find a loader */
   for (i = 1;; i++)
   {
@@ -491,7 +475,7 @@ static void findloader(lua_State* L, std::string_view name)
       luaL_pushresult(&msg); /* create error message */
       lua_pushlstring(L, name, 0, name.size());
       lua_pushvalue(L, -2);
-      luaL_errori(L, lit<"module '%s' not found:%s">()->view());
+      luaL_errori(L, lt::module_s_not_found_s);
     }
     lua_pushlstring(L, name, 0, name.size());
     lua_call(L, 1, 2);         /* call it */
@@ -501,7 +485,7 @@ static void findloader(lua_State* L, std::string_view name)
     {                               /* searcher returned error message? */
       lua_pop(L, 1);                /* remove extra return */
       luaL_addvalue(&msg);          /* concatenate error message */
-      luaL_addlstring(&msg, lit<"\n\t">()->view(), 0, lit<"\n\t">()->size()); /* prefix for next message */
+      luaL_addlstring(&msg, lt::n_t, 0, lt::n_t.size()); /* prefix for next message */
     }
     else             /* no error message */
       lua_pop(L, 2); /* remove both returns */
@@ -542,18 +526,18 @@ static int ll_require(lua_State* L)
 /* }====================================================== */
 
 static const luaL_Regi pk_funcs[] = {
-  {lit<"loadlib">()->view(), ll_loadlib},
-  {lit<"searchpath">()->view(), ll_searchpath},
+  {lt::loadlib, ll_loadlib},
+  {lt::searchpath, ll_searchpath},
   /* placeholders */
-  {lit<"preload">()->view(), nullptr},
-  {lit<"cpath">()->view(), nullptr},
-  {lit<"path">()->view(), nullptr},
-  {lit<"searchers">()->view(), nullptr},
-  {lit<"loaded">()->view(), nullptr}
+  {lt::preload_2, nullptr},
+  {lt::cpath, nullptr},
+  {lt::path, nullptr},
+  {lt::searchers, nullptr},
+  {lt::loaded, nullptr}
 };
 
 static const luaL_Regi ll_funcs[] = {
-  {lit<"require">()->view(), ll_require}
+  {lt::require, ll_require}
 };
 
 static void createsearcherstable(lua_State* L)
@@ -574,27 +558,27 @@ static void createsearcherstable(lua_State* L)
     lua_pushcclosure(L, searchers[i], 1);
     lua_rawseti(L, -2, i + 1);
   }
-  lua_setfieldi(L, -2, lit<"searchers">()->view()); /* put it in field 'searchers' */
+  lua_setfieldi(L, -2, lt::searchers); /* put it in field 'searchers' */
 }
 
 LUAMOD_API int luaopen_package(lua_State* L)
 {
-  luaL_getsubtablei(L, LUA_REGISTRYINDEX, CLIBS->view()); /* create CLIBS table */
+  luaL_getsubtablei(L, LUA_REGISTRYINDEX, lt::_CLIBS); /* create lt::_CLIBS table */
   lua_pop(L, 1);                                 /* will not use it now */
   luaL_newlibi(L, pk_funcs);
   createsearcherstable(L);
   /* set paths */
-  setpath(L, lit<"path">(), LUA_PATH_VAR, LUA_PATH_DEFAULT);
-  setpath(L, lit<"cpath">(), LUA_CPATH_VAR, LUA_CPATH_DEFAULT);
+  setpath(L, lt::path, LUA_PATH_VAR, LUA_PATH_DEFAULT);
+  setpath(L, lt::cpath, LUA_CPATH_VAR, LUA_CPATH_DEFAULT);
   /* store config information */
   lua_pushlstring(L, CONFIG, 0, (CONFIG).size());
-  lua_setfieldi(L, -2, lit<"config">()->view());
+  lua_setfieldi(L, -2, lt::config);
   /* set field 'loaded' */
   luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
-  lua_setfieldi(L, -2, lit<"loaded">()->view());
+  lua_setfieldi(L, -2, lt::loaded);
   /* set field 'preload' */
   luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
-  lua_setfieldi(L, -2, lit<"preload">()->view());
+  lua_setfieldi(L, -2, lt::preload_2);
   lua_pushglobaltable(L);
   lua_pushvalue(L, -2);          /* set 'package' as upvalue for next lib */
   luaL_setfuncsi(L, ll_funcs, 1); /* open lib into global table */

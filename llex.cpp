@@ -25,6 +25,7 @@
 
 #include "lhack.h"
 #include "lauxlib.h"
+#include "literals.h"
 
 static l_forceinline void next(LexState* ls)
 {
@@ -42,14 +43,14 @@ static inline int currIsNewline(const LexState* ls)
 }
 
 /* ORDER RESERVED */
-static const InternalString* const luaX_tokens[] = {
-    lit<"and">(), lit<"break">(), lit<"do">(), lit<"else">(), lit<"elseif">(),
-    lit<"end">(), lit<"false">(), lit<"for">(), lit<"function">(), lit<"global">(), lit<"goto">(), lit<"if">(),
-    lit<"in">(), lit<"local">(), lit<"nil">(), lit<"not">(), lit<"or">(), lit<"repeat">(),
-    lit<"return">(), lit<"then">(), lit<"true">(), lit<"until">(), lit<"while">(),
-    lit<"//">(), lit<"..">(), lit<"...">(), lit<"==">(), lit<">=">(), lit<"<=">(), lit<"~=">(),
-    lit<"<<">(), lit<">>">(), lit<"::">(), lit<"<eof>">(),
-    lit<"<number>">(), lit<"<integer>">(), lit<"<name>">(), lit<"<string>">()};
+static const std::string_view luaX_tokens[] = {
+    lt::and_kw, lt::break_kw, lt::do_kw, lt::else_kw, lt::elseif,
+    lt::end, lt::false_kw, lt::for_kw, lt::function, lt::global, lt::goto_kw, lt::if_kw,
+    lt::in, lt::local, lt::nil, lt::not_kw, lt::or_kw, lt::repeat,
+    lt::return_kw, lt::then, lt::true_kw, lt::until, lt::while_kw,
+    lt::idiv_op, lt::dotdot, lt::ellipsis, lt::eq_op, lt::ge_op, lt::le_op, lt::ne_op,
+    lt::shl_op, lt::shr_op, lt::dcolon, lt::eof,
+    lt::number_1, lt::integer_1, lt::name_1, lt::string_1};
 
 
 static l_noret lexerror(LexState* ls, std::string_view msg, int token);
@@ -58,7 +59,7 @@ static void save(LexState* ls, int c)
 {
   MBuffer* b = ls->buff;
   if (b->size() + 1 > (MAX_SIZE / 3 * 2)) /* larger than MAX_SIZE/1.5 ? */
-    lexerror(ls, lit<"lexical element too long">()->view(), 0);
+    lexerror(ls, lt::lexical_element_too_long, 0);
   if (b->size() + 1 > b->capacity())
   {
     size_t newsize = b->capacity() + (b->capacity() >> 1);
@@ -78,12 +79,12 @@ static inline void save_and_next(LexState* ls)
 void luaX_init(lua_State* L)
 {
   int i;
-  TString* e = luaS_createstr(L, LUA_ENV->view(), 0, LUA_ENV->size()); /* create env name */
+  TString* e = luaS_createstr(L, lt::_ENV, 0, lt::_ENV.size()); /* create env name */
   assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(e)));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
   {
-    std::string_view bytes = luaX_tokens[i]->view();
+    std::string_view bytes = luaX_tokens[i];
     TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
     assert((ts->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(ts)));     /* reserved words are never collected */
@@ -91,26 +92,26 @@ void luaX_init(lua_State* L)
   }
 }
 
-const InternalString* luaX_token2str(LexState* ls, int token)
+std::string_view luaX_token2str(LexState* ls, int token)
 {
   if (token < FIRST_RESERVED)
   { /* single-byte symbols? */
     if (lisprint(token))
-      return luaO_pushfstring(ls->L, lit<"'%c'">()->view(), FmtArgs().chr(token));
+      return luaO_pushfstring(ls->L, lt::fmt_quoted_c, FmtArgs().chr(token))->view();
     else /* control character */
-      return luaO_pushfstring(ls->L, lit<"'<\\%d>'">()->view(), FmtArgs().num(token));
+      return luaO_pushfstring(ls->L, lt::d, FmtArgs().num(token))->view();
   }
   else
   {
-    const InternalString* s = luaX_tokens[token - FIRST_RESERVED];
+    std::string_view s = luaX_tokens[token - FIRST_RESERVED];
     if (token < TK_EOS) /* fixed format (symbols and reserved words)? */
-      return luaO_pushfstring(ls->L, lit<"'%s'">()->view(), FmtArgs().str(s->view()));
+      return luaO_pushfstring(ls->L, lt::fmt_quoted_s, FmtArgs().str(s))->view();
     else /* names, strings, and numerals */
       return s;
   }
 }
 
-static const InternalString* txtToken(LexState* ls, int token)
+static std::string_view txtToken(LexState* ls, int token)
 {
   switch (token)
   {
@@ -118,8 +119,7 @@ static const InternalString* txtToken(LexState* ls, int token)
   case TK_STRING:
   case TK_FLT:
   case TK_INT:
-    return luaO_pushfstring(ls->L, lit<"'%s'">()->view(),
-                            FmtArgs().str(luaX_newstring(ls, ls->buff->view(), 0, ls->buff->view().size())->data.view()));
+    return luaO_pushfstring(ls->L, lt::fmt_quoted_s, FmtArgs().str(luaX_newstring(ls, ls->buff->view(), 0, ls->buff->view().size())->data.view()))->view();
   default:
     return luaX_token2str(ls, token);
   }
@@ -127,9 +127,9 @@ static const InternalString* txtToken(LexState* ls, int token)
 
 static l_noret lexerror(LexState* ls, std::string_view msg, int token)
 {
-  msg = luaG_addinfo(ls->L, msg, ls->source, ls->linenumber)->view();
+  msg = luaG_addinfo(ls->L, msg, ls->source, ls->linenumber);
   if (token)
-    luaO_pushfstring(ls->L, lit<"%s near %s">()->view(), FmtArgs().str(msg).str(txtToken(ls, token)->view()));
+    luaO_pushfstring(ls->L, lt::fmt_s_near_s, FmtArgs().str(msg).str(txtToken(ls, token)));
   luaD_throw(ls->L, LUA_ERRSYNTAX);
 }
 
@@ -187,11 +187,10 @@ static void inclinenumber(LexState* ls)
   if (currIsNewline(ls) && ls->current != old)
     next(ls); /* skip '\n\r' or '\r\n' */
   if (++ls->linenumber >= INT_MAX)
-    lexerror(ls, lit<"chunk has too many lines">()->view(), 0);
+    lexerror(ls, lt::chunk_has_too_many_lines, 0);
 }
 
-void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source,
-                   int firstchar)
+void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source, int firstchar)
 {
   ls->t.token = 0;
   ls->L = L;
@@ -204,9 +203,9 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source,
   ls->source = source;
   /* all three strings here ("_ENV", "break", "global") were fixed,
      so they cannot be collected */
-  ls->envn = luaS_createstr(L, LUA_ENV->view(), 0, LUA_ENV->size()); /* get env string */
-  const InternalString* breakstr = lit<"break">();
-  ls->brkn = luaS_createstr(L, breakstr->view(), 0, breakstr->size()); /* get "break" string */
+  ls->envn = luaS_createstr(L, lt::_ENV, 0, lt::_ENV.size()); /* get env string */
+  std::string_view breakstr = lt::break_kw;
+  ls->brkn = luaS_createstr(L, breakstr, 0, breakstr.size()); /* get "break" string */
   /* initialize buffer */
   ls->buff->reset();
 }
@@ -260,16 +259,16 @@ static int check_next2(LexState* ls, std::string_view set)
 static int read_numeral(LexState* ls, Token* seminfo)
 {
   TValue obj;
-  const InternalString* expo = lit<"Ee">();
+  std::string_view expo = lt::Ee_chars;
   int first = ls->current;
   assert(lisdigit(ls->current));
   save_and_next(ls);
-  if (first == '0' && check_next2(ls, lit<"xX">()->view())) /* hexadecimal? */
-    expo = lit<"Pp">();
+  if (first == '0' && check_next2(ls, lt::xX_chars)) /* hexadecimal? */
+    expo = lt::Pp_chars;
   for (;;)
   {
-    if (check_next2(ls, expo->view()))                     /* exponent mark? */
-      check_next2(ls, lit<"-+">()->view());                /* optional exponent sign */
+    if (check_next2(ls, expo))                     /* exponent mark? */
+      check_next2(ls, lt::fmt_flags_sign);                /* optional exponent sign */
     else if (lisxdigit(ls->current) || ls->current == '.') /* '%x|%.' */
       save_and_next(ls);
     else
@@ -278,7 +277,7 @@ static int read_numeral(LexState* ls, Token* seminfo)
   if (lislalpha(ls->current)) /* is numeral touching a letter? */
     save_and_next(ls);        /* force an error */
   if (luaO_str2num(ls->buff->view(), &obj) == 0) /* format error? */
-    lexerror(ls, lit<"malformed number">()->view(), TK_FLT);
+    lexerror(ls, lt::malformed_number, TK_FLT);
   if (((&obj)->tt_ == LUA_VNUMINT))
   {
     seminfo->i = ivalue(&obj);
@@ -327,10 +326,8 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
     {
     case EOZ:
     { /* error */
-      const InternalString* what = seminfo ? lit<"string">() : lit<"comment">();
-      const InternalString* msg = luaO_pushfstring(ls->L,
-                                         lit<"unfinished long %s (starting at line %d)">()->view(),
-                                         FmtArgs().str(what->view()).num(line));
+      std::string_view what = seminfo ? lt::string_3 : lt::comment;
+      const InternalString* msg = luaO_pushfstring(ls->L, lt::unfinished_long_s_starting_at_line_d, FmtArgs().str(what).num(line));
       lexerror(ls, msg->view(), TK_EOS);
       break; /* to avoid warnings */
     }
@@ -366,20 +363,20 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
   }
 }
 
-static void esccheck(LexState* ls, int c, const InternalString* msg)
+static void esccheck(LexState* ls, int c, std::string_view msg)
 {
   if (!c)
   {
     if (ls->current != EOZ)
       save_and_next(ls); /* add current to buffer for error message */
-    lexerror(ls, msg->view(), TK_STRING);
+    lexerror(ls, msg, TK_STRING);
   }
 }
 
 static int gethexa(LexState* ls)
 {
   save_and_next(ls);
-  esccheck(ls, lisxdigit(ls->current), lit<"hexadecimal digit expected">());
+  esccheck(ls, lisxdigit(ls->current), lt::hexadecimal_digit_expected);
   return luaO_hexavalue(ls->current);
 }
 
@@ -401,15 +398,15 @@ static l_uint32 readutf8esc(LexState* ls)
   l_uint32 r;
   int i = 4;         /* number of chars to be removed: start with #"\u{X" */
   save_and_next(ls); /* skip 'u' */
-  esccheck(ls, ls->current == '{', lit<"missing '{'">());
+  esccheck(ls, ls->current == '{', lt::missing_1);
   r = ((unsigned int)(gethexa(ls))); /* must have at least one digit */
   while (((void)(save_and_next(ls))), lisxdigit(ls->current))
   {
     i++;
-    esccheck(ls, r <= (0x7FFFFFFFu >> 4), lit<"UTF-8 value too large">());
+    esccheck(ls, r <= (0x7FFFFFFFu >> 4), lt::UTF_8_value_too_large);
     r = (r << 4) + luaO_hexavalue(ls->current);
   }
-  esccheck(ls, ls->current == '}', lit<"missing '}'">());
+  esccheck(ls, ls->current == '}', lt::missing_2);
   next(ls);                     /* skip '}' */
   ls->buff->drop((size_t)(i)); /* remove saved chars from buffer */
   return r;
@@ -432,7 +429,7 @@ static int readdecesc(LexState* ls)
     r = 10 * r + ls->current - '0';
     save_and_next(ls);
   }
-  esccheck(ls, r <= UCHAR_MAX, lit<"decimal escape too large">());
+  esccheck(ls, r <= UCHAR_MAX, lt::decimal_escape_too_large);
   ls->buff->drop((size_t)(i)); /* remove read digits from buffer */
   return r;
 }
@@ -445,11 +442,11 @@ static void read_string(LexState* ls, int del, Token* seminfo)
     switch (ls->current)
     {
     case EOZ:
-      lexerror(ls, lit<"unfinished string">()->view(), TK_EOS);
+      lexerror(ls, lt::unfinished_string, TK_EOS);
       break; /* to avoid warnings */
     case '\n':
     case '\r':
-      lexerror(ls, lit<"unfinished string">()->view(), TK_STRING);
+      lexerror(ls, lt::unfinished_string, TK_STRING);
       break; /* to avoid warnings */
     case '\\':
     {                    /* escape sequences */
@@ -535,7 +532,7 @@ static void read_string(LexState* ls, int del, Token* seminfo)
       }
       default:
       {
-        esccheck(ls, lisdigit(ls->current), lit<"invalid escape sequence">());
+        esccheck(ls, lisdigit(ls->current), lt::invalid_escape_sequence);
         int c = readdecesc(ls); /* digital escape '\ddd' */
         ls->buff->drop((size_t)(1)); /* remove '\\' */
         save(ls, c);
@@ -606,7 +603,7 @@ static int llex(LexState* ls, Token* seminfo)
         return TK_STRING;
       }
       else if (sep == 0) /* '[=...' missing second bracket? */
-        lexerror(ls, lit<"invalid long string delimiter">()->view(), TK_STRING);
+        lexerror(ls, lt::invalid_long_string_delimiter, TK_STRING);
       return '[';
     }
     case '=':

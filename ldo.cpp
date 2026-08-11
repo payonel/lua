@@ -30,6 +30,7 @@
 
 #include "lhack.h"
 #include "lauxlib.h"
+#include "literals.h"
 
 constexpr int errorstatus(TStatus s)
 {
@@ -163,8 +164,8 @@ constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
 /* raise a stack error while running the message handler */
 l_noret luaD_errerr(lua_State* L)
 {
-  const InternalString* errstr = lit<"error in error handling">();
-  TString* msg = luaS_createstr(L, errstr->view(), 0, errstr->size());
+  std::string_view errstr = lt::error_in_error_handling;
+  TString* msg = luaS_createstr(L, errstr, 0, errstr.size());
   setslots(L, L->top, msg);
   L->top++; /* assume EXTRA_STACK */
   luaD_throw(L, LUA_ERRERR);
@@ -282,7 +283,7 @@ int luaD_growstack(lua_State* L, int n, int raiseerror)
   /* add extra size to be able to handle the error message */
   luaD_reallocstack(L, ERRORSTACKSIZE, raiseerror);
   if (raiseerror)
-    luaG_runerror(L, lit<"stack overflow">()->view());
+    luaG_runerror(L, lt::stack_overflow);
   return 0;
 }
 
@@ -443,7 +444,7 @@ static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
   L->top++;                          /* stack space pre-allocated by the caller */
   setslot(L, func, tm);               /* metamethod is the new function to be called */
   if ((status & MAX_CCMT) == MAX_CCMT) /* is counter full? */
-    luaG_runerror(L, lit<"'__call' chain too long">()->view());
+    luaG_runerror(L, lt::call_chain_too_long);
   return status + (1u << CIST_CCMT); /* increment counter */
 }
 
@@ -828,12 +829,11 @@ static CallInfo* findpcall(lua_State* L)
 ** of the coroutine itself. (Such errors should not be handled by any
 ** coroutine error handler and should not kill the coroutine.)
 */
-static int resume_error(lua_State* L, const InternalString* msg, int narg)
+static int resume_error(lua_State* L, std::string_view msg, int narg)
 {
   api_checkpop(L, narg);
   L->top -= narg;                           /* remove args from the stack */
-  std::string_view bytes = msg->view();
-  setslots(L, L->top, luaS_createstr(L, bytes, 0, bytes.size())); /* push error message */
+  setslots(L, L->top, luaS_createstr(L, msg, 0, msg.size())); /* push error message */
   api_incr_top(L);
   lua_unlock(L);
   return LUA_ERRRUN;
@@ -908,15 +908,15 @@ LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
   if (L->status == LUA_OK)
   {                           /* may be starting a coroutine */
     if (L->ci != &L->base_ci) /* not in base level? */
-      return {resume_error(L, lit<"cannot resume non-suspended coroutine">(), nargs), 1};
+      return {resume_error(L, lt::cannot_resume_non_suspended_coroutine, nargs), 1};
     else if (((int)(L->top - (L->ci->func + 1))) == nargs) /* no function? */
-      return {resume_error(L, lit<"cannot resume dead coroutine">(), nargs), 1};
+      return {resume_error(L, lt::cannot_resume_dead_coroutine, nargs), 1};
   }
   else if (L->status != LUA_YIELD) /* ended with errors? */
-    return {resume_error(L, lit<"cannot resume dead coroutine">(), nargs), 1};
+    return {resume_error(L, lt::cannot_resume_dead_coroutine, nargs), 1};
   L->nCcalls = (from != nullptr) ? getCcalls(from) : 0;
   if (getCcalls(L) >= LUAI_MAXCCALLS)
-    return {resume_error(L, lit<"C stack overflow">(), nargs), 1};
+    return {resume_error(L, lt::C_stack_overflow, nargs), 1};
   L->nCcalls++;
   api_checkpop(L, (L->status == LUA_OK) ? nargs + 1 : nargs);
   status = luaD_rawrunprotected(L, resume, &nargs);
@@ -951,9 +951,9 @@ LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
   if (l_unlikely(!yieldable(L)))
   {
     if (L != mainthread(L->l_G))
-      luaG_runerror(L, lit<"attempt to yield across a C-call boundary">()->view());
+      luaG_runerror(L, lt::attempt_to_yield_across_a_C_call_boundary);
     else
-      luaG_runerror(L, lit<"attempt to yield from outside a coroutine">()->view());
+      luaG_runerror(L, lt::attempt_to_yield_from_outside_a_coroutine);
   }
   L->status = LUA_YIELD;
   ci->nyield = nresults; /* save number of results */
@@ -1058,7 +1058,7 @@ static void checkmode(lua_State* L, std::string_view mode, std::string_view x)
 {
   if (mode.find((char) x.at(0)) == std::string_view::npos)
   {
-    luaO_pushfstring(L, lit<"attempt to load a %s chunk (mode is '%s')">()->view(),
+    luaO_pushfstring(L, lt::attempt_to_load_a_s_chunk_mode_is_s,
                      FmtArgs().str(x).str(mode));
     luaD_throw(L, LUA_ERRSYNTAX);
   }
@@ -1088,12 +1088,12 @@ static void f_parser(lua_State* L, void* ud)
     if (mode.find('B') != std::string_view::npos)
       fixed = 1;
     else
-      checkmode(L, mode, lit<"binary">()->view());
+      checkmode(L, mode, lt::binary);
     cl = luaU_undump(L, p->z, anchor, p->name, fixed);
   }
   else
   {
-    checkmode(L, mode, lit<"text">()->view());
+    checkmode(L, mode, lt::text);
     cl = luaY_parser(L, p->z, anchor, &p->buff, &p->dyd, p->name, c);
   }
   L->top = (static_cast<StkId>(otop)); /* restore stack */
@@ -1126,8 +1126,8 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<std::string_vie
   incnny(L); /* cannot yield during parsing */
   p.z = z;
   p.buff.attach(L);
-  p.name = name.value_or(lit<"?">()->view());
-  p.mode = mode.value_or(lit<"bt">()->view());
+  p.name = name.value_or(lt::qmark);
+  p.mode = mode.value_or(lt::bt);
   p.dyd.actvar.arr = nullptr;
   p.dyd.actvar.size = 0;
   p.dyd.gt.arr = nullptr;

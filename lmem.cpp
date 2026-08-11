@@ -16,6 +16,7 @@
 #include "lmem.h"
 #include "lobject.h"
 #include "lstate.h"
+#include "literals.h"
 
 /*
 ** Macro to call the allocation function.
@@ -65,7 +66,7 @@ void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize, unsigned 
   if (size >= limit / 2)
   {                                /* cannot double it? */
     if (l_unlikely(size >= limit)) /* cannot grow even a little? */
-      luaG_runerror(L, lit<"too many %s (limit is %d)">()->view(), FmtArgs().str(what).num(limit));
+      luaG_runerror(L, lt::too_many_s_limit_is_d, FmtArgs().str(what).num(limit));
     size = limit; /* still have at least one free place */
   }
   else
@@ -104,7 +105,7 @@ void* luaM_shrinkvector_(lua_State* L, void* block, int* size,
 
 l_noret luaM_toobig(lua_State* L)
 {
-  luaG_runerror(L, lit<"memory allocation error: block too big">()->view());
+  luaG_runerror(L, lt::memory_allocation_error_block_too_big);
 }
 
 /*

@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include "lua_internal.h"
+#include "literals.h"
 
 constexpr lua_Number PI = (3.141592653589793238462643383279502884);
 
@@ -128,7 +129,7 @@ static int math_fmod(lua_State* L)
     lua_Integer d = lua_tointeger(L, 2);
     if ((lua_Unsigned) d + 1u <= 1u)
     { /* special cases: -1 or 0 */
-      luaL_argchecki(L, d != 0, 2, lit<"zero">()->view());
+      luaL_argchecki(L, d != 0, 2, lt::zero);
       lua_pushinteger(L, 0); /* avoid overflow with 0x80000... / -1 */
     }
     else
@@ -238,7 +239,7 @@ static int math_min(lua_State* L)
   int n = lua_gettop(L); /* number of arguments */
   int imin = 1;          /* index of current minimum value */
   int i;
-  luaL_argchecki(L, n >= 1, 1, lit<"value expected">()->view());
+  luaL_argchecki(L, n >= 1, 1, lt::value_expected);
   for (i = 2; i <= n; i++)
   {
     if (lua_compare(L, i, imin, LUA_OPLT))
@@ -253,7 +254,7 @@ static int math_max(lua_State* L)
   int n = lua_gettop(L); /* number of arguments */
   int imax = 1;          /* index of current maximum value */
   int i;
-  luaL_argchecki(L, n >= 1, 1, lit<"value expected">()->view());
+  luaL_argchecki(L, n >= 1, 1, lt::value_expected);
   for (i = 2; i <= n; i++)
   {
     if (lua_compare(L, imax, i, LUA_OPLT))
@@ -266,7 +267,7 @@ static int math_max(lua_State* L)
 static int math_type(lua_State* L)
 {
   if (lua_type(L, 1) == LUA_TNUMBER)
-    lua_pushistringref(L, (lua_isinteger(L, 1)) ? lit<"integer">()->view() : lit<"float">()->view());
+    lua_pushistringref(L, (lua_isinteger(L, 1)) ? lt::integer_2 : lt::float_kw);
   else
   {
     luaL_checkany(L, 1);
@@ -408,10 +409,10 @@ static int math_random(lua_State* L)
     break;
   }
   default:
-    return luaL_errori(L, lit<"wrong number of arguments">()->view());
+    return luaL_errori(L, lt::wrong_number_of_arguments);
   }
   /* random integer in the interval [low, up] */
-  luaL_argchecki(L, low <= up, 1, lit<"interval is empty">()->view());
+  luaL_argchecki(L, low <= up, 1, lt::interval_is_empty);
   /* project random integer into the interval [0, up - low] */
   p = project(I2UInt(rv), ((lua_Unsigned)(up)) - ((lua_Unsigned)(low)), state);
   lua_pushinteger(L, ((lua_Integer)(p + ((lua_Unsigned)(low)))));
@@ -451,8 +452,8 @@ static int math_randomseed(lua_State* L)
 }
 
 static const luaL_Regi randfuncs[] = {
-  {lit<"random">()->view(), math_random},
-  {lit<"randomseed">()->view(), math_randomseed}
+  {lt::random, math_random},
+  {lt::randomseed, math_randomseed}
 };
 
 /*
@@ -476,36 +477,36 @@ static void setrandfunc(lua_State* L)
 /* }================================================================== */
 
 static const luaL_Regi mathlib[] = {
-  {lit<"abs">()->view(), math_abs},
-  {lit<"acos">()->view(), math_acos},
-  {lit<"asin">()->view(), math_asin},
-  {lit<"atan">()->view(), math_atan},
-  {lit<"ceil">()->view(), math_ceil},
-  {lit<"cos">()->view(), math_cos},
-  {lit<"deg">()->view(), math_deg},
-  {lit<"exp">()->view(), math_exp},
-  {lit<"tointeger">()->view(), math_toint},
-  {lit<"floor">()->view(), math_floor},
-  {lit<"fmod">()->view(), math_fmod},
-  {lit<"frexp">()->view(), math_frexp},
-  {lit<"ult">()->view(), math_ult},
-  {lit<"ldexp">()->view(), math_ldexp},
-  {lit<"log">()->view(), math_log},
-  {lit<"max">()->view(), math_max},
-  {lit<"min">()->view(), math_min},
-  {lit<"modf">()->view(), math_modf},
-  {lit<"rad">()->view(), math_rad},
-  {lit<"sin">()->view(), math_sin},
-  {lit<"sqrt">()->view(), math_sqrt},
-  {lit<"tan">()->view(), math_tan},
-  {lit<"type">()->view(), math_type},
+  {lt::abs_kw, math_abs},
+  {lt::acos, math_acos},
+  {lt::asin, math_asin},
+  {lt::atan, math_atan},
+  {lt::ceil_kw, math_ceil},
+  {lt::cos_kw, math_cos},
+  {lt::deg, math_deg},
+  {lt::exp_kw, math_exp},
+  {lt::tointeger, math_toint},
+  {lt::floor_kw, math_floor},
+  {lt::fmod, math_fmod},
+  {lt::frexp, math_frexp},
+  {lt::ult, math_ult},
+  {lt::ldexp, math_ldexp},
+  {lt::log_kw, math_log},
+  {lt::max, math_max},
+  {lt::min, math_min},
+  {lt::modf, math_modf},
+  {lt::rad, math_rad},
+  {lt::sin_kw, math_sin},
+  {lt::sqrt_kw, math_sqrt},
+  {lt::tan_kw, math_tan},
+  {lt::type, math_type},
   /* placeholders */
-  {lit<"random">()->view(), nullptr},
-  {lit<"randomseed">()->view(), nullptr},
-  {lit<"pi">()->view(), nullptr},
-  {lit<"huge">()->view(), nullptr},
-  {lit<"maxinteger">()->view(), nullptr},
-  {lit<"mininteger">()->view(), nullptr}
+  {lt::random, nullptr},
+  {lt::randomseed, nullptr},
+  {lt::pi, nullptr},
+  {lt::huge, nullptr},
+  {lt::maxinteger, nullptr},
+  {lt::mininteger, nullptr}
 };
 
 /*
@@ -515,13 +516,13 @@ LUAMOD_API int luaopen_math(lua_State* L)
 {
   luaL_newlibi(L, mathlib);
   lua_pushnumber(L, PI);
-  lua_setfieldi(L, -2, lit<"pi">()->view());
+  lua_setfieldi(L, -2, lt::pi);
   lua_pushnumber(L, (lua_Number) HUGE_VAL);
-  lua_setfieldi(L, -2, lit<"huge">()->view());
+  lua_setfieldi(L, -2, lt::huge);
   lua_pushinteger(L, LUA_MAXINTEGER);
-  lua_setfieldi(L, -2, lit<"maxinteger">()->view());
+  lua_setfieldi(L, -2, lt::maxinteger);
   lua_pushinteger(L, LUA_MININTEGER);
-  lua_setfieldi(L, -2, lit<"mininteger">()->view());
+  lua_setfieldi(L, -2, lt::mininteger);
   setrandfunc(L);
   return 1;
 }

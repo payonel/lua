@@ -10,14 +10,13 @@
 
 #include "lobject.h"
 #include "lzio.h"
+#include "literals.h"
 
 /*
 ** Single-char tokens (terminal symbols) are represented by their own
 ** numeric code. Other tokens start at the following value.
 */
 constexpr int FIRST_RESERVED = (UCHAR_MAX + 1);
-
-inline const InternalString* const LUA_ENV = lit<"_ENV">();
 
 /*
  * WARNING: if you change the order of this enumeration,
@@ -107,4 +106,4 @@ LUAI_FUNC TString*              luaX_newstring(LexState* ls, std::string_view st
 LUAI_FUNC void                  luaX_next(LexState* ls);
 LUAI_FUNC int                   luaX_lookahead(LexState* ls);
 LUAI_FUNC l_noret               luaX_syntaxerror(LexState* ls, std::string_view s);
-LUAI_FUNC const InternalString* luaX_token2str(LexState* ls, int token);
+LUAI_FUNC std::string_view      luaX_token2str(LexState* ls, int token);

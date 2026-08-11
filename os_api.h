@@ -11,7 +11,7 @@ void os_print_stderr(std::string_view utf8);
 void os_flush_stdout();
 void os_flush_stderr();
 
-std::optional<InternalString> os_getenv(std::string_view name);
+std::optional<std::string_view> os_getenv(std::string_view name);
 InternalString os_strerror(int err);
 
 int os_strcoll(std::string_view a, std::string_view b);

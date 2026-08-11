@@ -22,6 +22,7 @@
 #include "lstring.h"
 #include "ltable.h"
 #include "ltm.h"
+#include "literals.h"
 
 static inline LX* fromstate(lua_State* L)
 {
@@ -115,7 +116,7 @@ void luaE_shrinkCI(lua_State* L)
 void luaE_checkcstack(lua_State* L)
 {
   if (getCcalls(L) == LUAI_MAXCCALLS)
-    luaG_runerror(L, lit<"C stack overflow">()->view());
+    luaG_runerror(L, lt::C_stack_overflow);
   else if (getCcalls(L) >= (LUAI_MAXCCALLS / 10 * 11))
     luaD_errerr(L); /* error while handling stack error */
 }
@@ -429,11 +430,11 @@ void luaE_warnerror(lua_State* L, std::string_view where)
   StkId errobj = L->top - 1; /* error object */
   std::string_view msg = ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
                              ? slottsval(L, errobj)->data.view()
-                             : lit<"error object is not a string">()->view();
+                             : lt::error_object_is_not_a_string;
   /* produce warning "error in %s (%s)" (where, msg) */
-  luaE_warning(L, lit<"error in ">()->view(), 1);
+  luaE_warning(L, lt::error_in, 1);
   luaE_warning(L, where, 1);
-  luaE_warning(L, lit<" (">()->view(), 1);
+  luaE_warning(L, lt::sp_lparen, 1);
   luaE_warning(L, msg, 1);
-  luaE_warning(L, lit<")">()->view(), 0);
+  luaE_warning(L, lt::rparen, 0);
 }

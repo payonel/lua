@@ -18,31 +18,29 @@
 #include "ltable.h"
 #include "ltm.h"
 #include "lvm.h"
+#include "literals.h"
 
-
-LUAI_DDEF const InternalString* const luaT_typenames_[LUA_TOTALTYPES] = {
-    lit<"no value">(),
-    lit<"nil">(), lit<"boolean">(), lit<"userdata">(), lit<"number">(),
-    lit<"string">(), lit<"table">(), lit<"function">(), lit<"userdata">(),
-    lit<"thread">(),
-    lit<"upvalue">(), lit<"proto">() /* these last cases are used for tests only */
+LUAI_DDEF const std::string_view luaT_typenames_[] = {
+    lt::no_value,
+    lt::nil, lt::boolean, lt::userdata, lt::number_2,
+    lt::string_3, lt::table, lt::function, lt::userdata,
+    lt::thread, lt::upvalue, lt::proto /* these last cases are used for tests only */
 };
 
 void luaT_init(lua_State* L)
 {
-  static const InternalString* const luaT_eventname[] = {/* ORDER TM */
-      lit<"__index">(), lit<"__newindex">(),
-      lit<"__gc">(), lit<"__mode">(), lit<"__len">(), lit<"__eq">(),
-      lit<"__add">(), lit<"__sub">(), lit<"__mul">(), lit<"__mod">(), lit<"__pow">(),
-      lit<"__div">(), lit<"__idiv">(),
-      lit<"__band">(), lit<"__bor">(), lit<"__bxor">(), lit<"__shl">(), lit<"__shr">(),
-      lit<"__unm">(), lit<"__bnot">(), lit<"__lt">(), lit<"__le">(),
-      lit<"__concat">(), lit<"__call">(), lit<"__close">()};
+  static std::string_view luaT_eventname[TM_N] = {/* ORDER TM */
+      lt::mm_index, lt::mm_newindex,
+      lt::mm_gc, lt::mm_mode, lt::mm_len, lt::mm_eq,
+      lt::mm_add, lt::mm_sub, lt::mm_mul, lt::mm_mod, lt::mm_pow,
+      lt::mm_div, lt::mm_idiv,
+      lt::mm_band, lt::mm_bor, lt::mm_bxor, lt::mm_shl, lt::mm_shr,
+      lt::mm_unm, lt::mm_bnot, lt::mm_lt, lt::mm_le,
+      lt::mm_concat, lt::mm_call, lt::mm_close};
   static_assert(sizeof(luaT_eventname) / sizeof(luaT_eventname[0]) == TM_N);
-  int i;
-  for (i = 0; i < TM_N; i++)
+  for (int i = 0; i < TM_N; i++)
   {
-    std::string_view bytes = luaT_eventname[i]->view();
+    std::string_view bytes = luaT_eventname[i];
     L->l_G->tmname[i] = luaS_createstr(L, bytes, 0, bytes.size());
     assert((((L->l_G->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(L->l_G->tmname[i]))); /* never collect these names */
@@ -93,17 +91,16 @@ const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event)
 ** Return the name of the type of an object. For tables and userdata
 ** with metatable, use their '__name' metafield, if present.
 */
-const InternalString* luaT_objtypename(lua_State* L, const TValue* o)
+std::string_view luaT_objtypename(lua_State* L, const TValue* o)
 {
   Table* mt;
   if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != nullptr) ||
       (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = uvalue(o)->metatable) != nullptr))
   {
-    std::string_view bytes = lit<"__name">()->view();
-    const TValue* name = luaH_Hgetshortstr(mt, luaS_createstr(L, bytes, 0, bytes.size()));
+    const TValue* name = luaH_Hgetshortstr(mt, luaS_createstr(L, lt::mm_name, 0, lt::mm_name.size()));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
     {
-      return &tsvalue(name)->data; /* use it as type name */
+      return tsvalue(name)->data.view(); /* use it as type name */
     }
   }
   return ttypename((o->tt_ & NOVARIANT_MASK)); /* else use standard type name */
@@ -173,11 +170,11 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
       if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((p2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
         luaG_tointerror(L, p1, p2, src1, src2);
       else
-        luaG_opinterror(L, p1, p2, lit<"perform bitwise operation on">()->view(), src1, src2);
+        luaG_opinterror(L, p1, p2, lt::perform_bitwise_operation_on, src1, src2);
     }
     /* calls never return, but to avoid warnings: */ /* FALLTHROUGH */
     default:
-      luaG_opinterror(L, p1, p2, lit<"perform arithmetic on">()->view(), src1, src2);
+      luaG_opinterror(L, p1, p2, lt::perform_arithmetic_on, src1, src2);
     }
   }
 }
@@ -286,7 +283,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   setsloth(L, L->top, t);
   L->top++;
   luaH_resize(L, t, ((unsigned int)(n)), 1);
-  std::string_view bytes = lit<"n">()->view();
+  std::string_view bytes = lt::n_char;
   setsvalue(L, &key, luaS_createstr(L, bytes, 0, bytes.size())); /* key is "n" */
   setivalue(&value, n);                 /* value is n */
   /* No need to anchor the key: Due to the resize, the next operation
@@ -391,10 +388,10 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   else
   {
     TValue res;
-    std::string_view bytes = lit<"n">()->view();
+    std::string_view bytes = lt::n_char;
     if (luaH_getshortstr(h, luaS_createstr(L, bytes, 0, bytes.size()), &res) != LUA_VNUMINT ||
         ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
-      luaG_runerror(L, lit<"vararg table has no proper 'n'">()->view());
+      luaG_runerror(L, lt::vararg_table_has_no_proper_n);
     assert((&res)->tt_ == LUA_VNUMINT);
     return ((int)(ivalue(&res)));
   }

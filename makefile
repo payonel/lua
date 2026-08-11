@@ -49,7 +49,7 @@ CXXFLAGS.cov     =-O0 -g3 -ggdb --coverage
 
 LDFLAGS.cov   =--coverage
 
-CXXFLAGS      =-Wall $(CXXFLAGS.$(VARIANT)) $(TESTS) $(CWARNSCPP) $(CWARNGCC) -std=c++23 -fno-stack-protector -fno-common -march=native -MMD
+CXXFLAGS      =-Wall $(CXXFLAGS.$(VARIANT)) $(TESTS) $(CWARNSCPP) $(CWARNGCC) -std=c++23 -fno-stack-protector -fno-common -march=native -MMD -fmax-errors=0
 LDFLAGS       =-Wl,-E -lm -ldl -fuse-ld=lld $(LDFLAGS.$(VARIANT))
 AR            =ar rc
 RANLIB        =ranlib

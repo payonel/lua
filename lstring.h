@@ -9,16 +9,8 @@
 #include "lgc.h"
 #include "lobject.h"
 #include "lstate.h"
+#include "literals.h"
 
-/*
-** Memory-allocation error message must be preallocated (it cannot
-** be created after memory is exhausted)
-*/
-inline const InternalString* const MEMERRMSG = lit<"not enough memory">();
-
-/*
-** test whether a string is a reserved word
-*/
 static l_forceinline int isreserved(const TString* s)
 {
   return s->extra > 0;

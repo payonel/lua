@@ -19,6 +19,7 @@
 #include "lstring.h"
 #include "ltable.h"
 #include "ltm.h"
+#include "literals.h"
 
 /*
 ** Maximum number of elements to sweep in each single step.
@@ -1068,7 +1069,7 @@ static void GCTM(lua_State* L)
     g->gcstp = oldgcstp;            /* restore state */
     if (l_unlikely(status != LUA_OK))
     { /* error while running __gc? */
-      luaE_warnerror(L, lit<"__gc">()->view());
+      luaE_warnerror(L, lt::mm_gc);
       L->top--; /* pops error object */
     }
   }

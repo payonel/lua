@@ -18,12 +18,7 @@
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
-
-/*
-** The hook table at registry[HOOKKEY] maps threads to their current
-** hook function.
-*/
-static const InternalString* const HOOKKEY = lit<"_HOOKKEY">();
+#include "literals.h"
 
 /*
 ** If L1 != L, L1 can be in any state, and therefore there are no
@@ -33,7 +28,7 @@ static const InternalString* const HOOKKEY = lit<"_HOOKKEY">();
 static void checkstack(lua_State* L, lua_State* L1, int n)
 {
   if (l_unlikely(L != L1 && !lua_checkstack(L1, n)))
-    luaL_errori(L, lit<"stack overflow">()->view());
+    luaL_errori(L, lt::stack_overflow);
 }
 
 static int db_getregistry(lua_State* L)
@@ -55,7 +50,7 @@ static int db_getmetatable(lua_State* L)
 static int db_setmetatable(lua_State* L)
 {
   int t = lua_type(L, 2);
-  luaL_argexpectedi(L, t == LUA_TNIL || t == LUA_TTABLE, 2, lit<"nil or table">()->view());
+  luaL_argexpectedi(L, t == LUA_TNIL || t == LUA_TTABLE, 2, lt::nil_or_table);
   lua_settop(L, 2);
   lua_setmetatable(L, 1);
   return 1; /* return 1st argument */
@@ -110,22 +105,22 @@ static lua_State* getthread(lua_State* L, int* arg)
 ** from 'lua_getinfo' into result table. Key is always a string;
 ** value can be a string, an int, or a boolean.
 */
-static void settabss(lua_State* L, const InternalString* k, std::string_view v)
+static void settabss(lua_State* L, std::string_view k, std::string_view v)
 {
   lua_pushlstring(L, v, 0, v.size());
-  lua_setfieldi(L, -2, k->view());
+  lua_setfieldi(L, -2, k);
 }
 
-static void settabsi(lua_State* L, const InternalString* k, int v)
+static void settabsi(lua_State* L, std::string_view k, int v)
 {
   lua_pushinteger(L, v);
-  lua_setfieldi(L, -2, k->view());
+  lua_setfieldi(L, -2, k);
 }
 
-static void settabsb(lua_State* L, const InternalString* k, int v)
+static void settabsb(lua_State* L, std::string_view k, int v)
 {
   lua_pushboolean(L, v);
-  lua_setfieldi(L, -2, k->view());
+  lua_setfieldi(L, -2, k);
 }
 
 /*
@@ -135,13 +130,13 @@ static void settabsb(lua_State* L, const InternalString* k, int v)
 ** 'lua_getinfo' on top of the result table so that it can call
 ** 'lua_setfield'.
 */
-static void treatstackoption(lua_State* L, lua_State* L1, const InternalString* fname)
+static void treatstackoption(lua_State* L, lua_State* L1, std::string_view fname)
 {
   if (L == L1)
     lua_rotate(L, -2, 1); /* exchange object and table */
   else
     lua_xmove(L1, L, 1);      /* move object to the "main" stack */
-  lua_setfieldi(L, -2, fname->view()); /* put object into table */
+  lua_setfieldi(L, -2, fname); /* put object into table */
 }
 
 /*
@@ -155,10 +150,10 @@ static int db_getinfo(lua_State* L)
   InternalDebug ar;
   int arg;
   lua_State* L1 = getthread(L, &arg);
-  std::string_view options = luaL_optlstring(L, arg + 2, lit<"flnSrtu">()->view());
-  InternalString funcOption = InternalString(lit<">">()->view()).concat(options);
+  std::string_view options = luaL_optlstring(L, arg + 2, lt::flnSrtu);
+  InternalString funcOption = InternalString(lt::gt_op).concat(options);
   checkstack(L, L1, 3);
-  luaL_argchecki(L, sv_byteat(options, 0) != '>', arg + 2, lit<"invalid option '>'">()->view());
+  luaL_argchecki(L, sv_byteat(options, 0) != '>', arg + 2, lt::invalid_option_2);
   if (lua_isfunction(L, arg + 1))
   {                                               /* info about a function? */
     options = funcOption.view();
@@ -177,46 +172,46 @@ static int db_getinfo(lua_State* L)
   }
   std::optional<InternalDebug> res = lua_getinfoi(L1, options, ar);
   if (!res)
-    return luaL_argerrori(L, arg + 2, lit<"invalid option">()->view());
+    return luaL_argerrori(L, arg + 2, lt::invalid_option_1);
   ar = std::move(*res);
   lua_newtable(L); /* table to collect results */
   if ((options.find('S') != std::string_view::npos))
   {
     lua_pushlstring(L, ar.source, 0, ar.source.size());
-    lua_setfieldi(L, -2, lit<"source">()->view());
-    settabss(L, lit<"short_src">(), ar.short_src());
-    settabsi(L, lit<"linedefined">(), ar.linedefined);
-    settabsi(L, lit<"lastlinedefined">(), ar.lastlinedefined);
-    settabss(L, lit<"what">(), ar.what);
+    lua_setfieldi(L, -2, lt::source);
+    settabss(L, lt::short_src, ar.short_src());
+    settabsi(L, lt::linedefined, ar.linedefined);
+    settabsi(L, lt::lastlinedefined, ar.lastlinedefined);
+    settabss(L, lt::what, ar.what);
   }
   if ((options.find('l') != std::string_view::npos))
-    settabsi(L, lit<"currentline">(), ar.currentline);
+    settabsi(L, lt::currentline, ar.currentline);
   if ((options.find('u') != std::string_view::npos))
   {
-    settabsi(L, lit<"nups">(), ar.nups);
-    settabsi(L, lit<"nparams">(), ar.nparams);
-    settabsb(L, lit<"isvararg">(), ar.isvararg);
+    settabsi(L, lt::nups, ar.nups);
+    settabsi(L, lt::nparams, ar.nparams);
+    settabsb(L, lt::isvararg, ar.isvararg);
   }
   if ((options.find('n') != std::string_view::npos))
   {
-    if (ar.name.data() != nullptr)
-      settabss(L, lit<"name">(), ar.name);
-    settabss(L, lit<"namewhat">(), ar.namewhat);
+    if (ar.name.has_value())
+      settabss(L, lt::name_2, ar.name.value());
+    settabss(L, lt::namewhat, ar.namewhat.value_or(lt::empty_str));
   }
   if ((options.find('r') != std::string_view::npos))
   {
-    settabsi(L, lit<"ftransfer">(), ar.ftransfer);
-    settabsi(L, lit<"ntransfer">(), ar.ntransfer);
+    settabsi(L, lt::ftransfer, ar.ftransfer);
+    settabsi(L, lt::ntransfer, ar.ntransfer);
   }
   if ((options.find('t') != std::string_view::npos))
   {
-    settabsb(L, lit<"istailcall">(), ar.istailcall);
-    settabsi(L, lit<"extraargs">(), ar.extraargs);
+    settabsb(L, lt::istailcall, ar.istailcall);
+    settabsi(L, lt::extraargs, ar.extraargs);
   }
   if ((options.find('L') != std::string_view::npos))
-    treatstackoption(L, L1, lit<"activelines">());
+    treatstackoption(L, L1, lt::activelines);
   if ((options.find('f') != std::string_view::npos))
-    treatstackoption(L, L1, lit<"func">());
+    treatstackoption(L, L1, lt::func);
   return 1; /* return table */
 }
 
@@ -240,7 +235,7 @@ static int db_getlocal(lua_State* L)
     int level = (int) luaL_checkinteger(L, arg + 1);
     std::optional<InternalDebug> ar = lua_getstacki(L1, level);
     if (l_unlikely(!ar)) /* out of range? */
-      return luaL_argerrori(L, arg + 1, lit<"level out of range">()->view());
+      return luaL_argerrori(L, arg + 1, lt::level_out_of_range);
     checkstack(L, L1, 1);
     const InternalString* name = lua_getlocali(L1, &*ar, nvar);
     if (name)
@@ -266,7 +261,7 @@ static int db_setlocal(lua_State* L)
   int nvar = (int) luaL_checkinteger(L, arg + 2);
   std::optional<InternalDebug> ar = lua_getstacki(L1, level);
   if (l_unlikely(!ar)) /* out of range? */
-    return luaL_argerrori(L, arg + 1, lit<"level out of range">()->view());
+    return luaL_argerrori(L, arg + 1, lt::level_out_of_range);
   luaL_checkany(L, arg + 3);
   lua_settop(L, arg + 3);
   checkstack(L, L1, 1);
@@ -331,7 +326,7 @@ static UpvalRef checkupval(lua_State* L, int argf, int argnup)
 static UpvalRef checkupvalvalid(lua_State* L, int argf, int argnup)
 {
   UpvalRef r = checkupval(L, argf, argnup);
-  luaL_argchecki(L, r.id != nullptr, argnup, lit<"invalid upvalue index">()->view());
+  luaL_argchecki(L, r.id != nullptr, argnup, lt::invalid_upvalue_index);
   return r;
 }
 
@@ -349,8 +344,8 @@ static int db_upvaluejoin(lua_State* L)
 {
   int n1 = checkupvalvalid(L, 1, 2).nup;
   int n2 = checkupvalvalid(L, 3, 4).nup;
-  luaL_argchecki(L, !lua_iscfunction(L, 1), 1, lit<"Lua function expected">()->view());
-  luaL_argchecki(L, !lua_iscfunction(L, 3), 3, lit<"Lua function expected">()->view());
+  luaL_argchecki(L, !lua_iscfunction(L, 1), 1, lt::Lua_function_expected);
+  luaL_argchecki(L, !lua_iscfunction(L, 3), 3, lt::Lua_function_expected);
   lua_upvaluejoin(L, 1, n1, 3, n2);
   return 0;
 }
@@ -361,21 +356,19 @@ static int db_upvaluejoin(lua_State* L)
 */
 static void hookf(lua_State* L, lua_Debug* ar)
 {
-  static const InternalString* const hooknames[] = {
-      lit<"call">(), lit<"return">(), lit<"line">(), lit<"count">(),
-      lit<"tail call">()};
-  lua_getfieldi(L, LUA_REGISTRYINDEX, HOOKKEY->view());
+  static const std::string_view hooknames[] = {lt::call, lt::return_kw, lt::line, lt::count,lt::tail_call};
+  lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_HOOKKEY);
   lua_pushthread(L);
   if (lua_rawget(L, -2) == LUA_TFUNCTION)
   {                                                /* is there a hook function? */
-    lua_pushistringref(L, hooknames[(int) ar->event]->view()); /* push event name */
+    lua_pushistringref(L, hooknames[(int) ar->event]); /* push event name */
     if (ar->currentline >= 0)
       lua_pushinteger(L, ar->currentline); /* push current line */
     else
       lua_pushnil(L);
     InternalDebug iar{};
     iar.i_ci = ar->i_ci;
-    assert(lua_getinfoi(L, lit<"lS">()->view(), iar).has_value());
+    assert(lua_getinfoi(L, lt::lS_chars, iar).has_value());
     lua_call(L, 2, 0); /* call hook function */
   }
 }
@@ -429,11 +422,11 @@ static int db_sethook(lua_State* L)
     func = hookf;
     mask = makemask(smask, count);
   }
-  if (!luaL_getsubtablei(L, LUA_REGISTRYINDEX, HOOKKEY->view()))
+  if (!luaL_getsubtablei(L, LUA_REGISTRYINDEX, lt::_HOOKKEY))
   {
     /* table just created; initialize it */
-    lua_pushistringref(L, lit<"k">()->view());
-    lua_setfieldi(L, -2, lit<"__mode">()->view()); /** hooktable.__mode = "k" */
+    lua_pushistringref(L, lt::k_char);
+    lua_setfieldi(L, -2, lt::mm_mode); /** hooktable.__mode = "k" */
     lua_pushvalue(L, -1);
     lua_setmetatable(L, -2); /* metatable(hooktable) = hooktable */
   }
@@ -459,10 +452,10 @@ static int db_gethook(lua_State* L)
     return 1;
   }
   else if (hook != hookf) /* external hook? */
-    lua_pushistringref(L, lit<"external hook">()->view());
+    lua_pushistringref(L, lt::external_hook);
   else
   { /* hook table must exist */
-    lua_getfieldi(L, LUA_REGISTRYINDEX, HOOKKEY->view());
+    lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_HOOKKEY);
     checkstack(L, L1, 1);
     lua_pushthread(L1);
     lua_xmove(L1, L, 1);
@@ -480,16 +473,16 @@ static int db_debug(lua_State* L)
   for (;;)
   {
     char buffer[250];
-    os_print_stderr(lit<"lua_debug> ">()->view());
+    os_print_stderr(lt::lua_debug);
     os_flush_stderr();
-    if (!os_readline(os_stdin(), std::span<char>{buffer, sizeof(buffer)}) || std::string_view(buffer) == lit<"cont\n">()->view())
+    if (!os_readline(os_stdin(), std::span<char>{buffer, sizeof(buffer)}) || std::string_view(buffer) == lt::cont_n)
     {
       return 0;
     }
-    if (luaL_loadbufferi(L, std::string_view(buffer), lit<"=(debug command)">()->view(), lit<"t">()->view()) || lua_pcall(L, 0, 0, 0))
+    if (luaL_loadbufferi(L, std::string_view(buffer), lt::debug_command, lt::t_char) || lua_pcall(L, 0, 0, 0))
     {
       os_print_stderr(luaL_toistring(L, -1)->view());
-      os_print_stderr(lit<"\n">()->view());
+      os_print_stderr(lt::n_3);
       os_flush_stderr();
     }
     lua_settop(L, 0); /* remove eventual returns */
@@ -516,22 +509,22 @@ static int db_traceback(lua_State* L)
 }
 
 static const luaL_Regi dblib[] = {
-  {lit<"debug">()->view(), db_debug},
-  {lit<"getuservalue">()->view(), db_getuservalue},
-  {lit<"gethook">()->view(), db_gethook},
-  {lit<"getinfo">()->view(), db_getinfo},
-  {lit<"getlocal">()->view(), db_getlocal},
-  {lit<"getregistry">()->view(), db_getregistry},
-  {lit<"getmetatable">()->view(), db_getmetatable},
-  {lit<"getupvalue">()->view(), db_getupvalue},
-  {lit<"upvaluejoin">()->view(), db_upvaluejoin},
-  {lit<"upvalueid">()->view(), db_upvalueid},
-  {lit<"setuservalue">()->view(), db_setuservalue},
-  {lit<"sethook">()->view(), db_sethook},
-  {lit<"setlocal">()->view(), db_setlocal},
-  {lit<"setmetatable">()->view(), db_setmetatable},
-  {lit<"setupvalue">()->view(), db_setupvalue},
-  {lit<"traceback">()->view(), db_traceback}
+  {lt::debug, db_debug},
+  {lt::getuservalue, db_getuservalue},
+  {lt::gethook, db_gethook},
+  {lt::getinfo, db_getinfo},
+  {lt::getlocal, db_getlocal},
+  {lt::getregistry, db_getregistry},
+  {lt::getmetatable, db_getmetatable},
+  {lt::getupvalue, db_getupvalue},
+  {lt::upvaluejoin, db_upvaluejoin},
+  {lt::upvalueid, db_upvalueid},
+  {lt::setuservalue, db_setuservalue},
+  {lt::sethook, db_sethook},
+  {lt::setlocal, db_setlocal},
+  {lt::setmetatable, db_setmetatable},
+  {lt::setupvalue, db_setupvalue},
+  {lt::traceback, db_traceback}
 };
 
 LUAMOD_API int luaopen_debug(lua_State* L)

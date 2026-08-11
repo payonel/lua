@@ -24,6 +24,7 @@
 #include "ltable.h"
 
 #include "lhack.h"
+#include "literals.h"
 
 /* maximum number of variable declarations per function (must be
    smaller than 250, due to the bytecode format) */
@@ -63,7 +64,7 @@ static void expr(LexState* ls, expdesc* v);
 
 static l_noret error_expected(LexState* ls, int token)
 {
-  luaX_syntaxerror(ls, luaO_pushfstring(ls->L, lit<"%s expected">()->view(), FmtArgs().str(luaX_token2str(ls, token)->view()))->view());
+  luaX_syntaxerror(ls, luaO_pushfstring(ls->L, lt::s_expected, FmtArgs().str(luaX_token2str(ls, token)))->view());
 }
 
 static l_noret errorlimit(FuncState* fs, int limit, std::string_view what)
@@ -72,9 +73,9 @@ static l_noret errorlimit(FuncState* fs, int limit, std::string_view what)
   const InternalString* msg;
   int line = fs->f->linedefined;
   std::string_view where = (line == 0)
-                          ? lit<"main function">()->view()
-                          : luaO_pushfstring(L, lit<"function at line %d">()->view(), FmtArgs().num(line))->view();
-  msg = luaO_pushfstring(L, lit<"too many %s (limit is %d) in %s">()->view(), FmtArgs().str(what).num(limit).str(where));
+                          ? lt::main_function
+                          : luaO_pushfstring(L, lt::function_at_line_d, FmtArgs().num(line))->view();
+  msg = luaO_pushfstring(L, lt::too_many_s_limit_is_d_in_s, FmtArgs().str(what).num(limit).str(where));
   luaX_syntaxerror(fs->ls, msg->view());
 }
 
@@ -116,10 +117,10 @@ static void checknext(LexState* ls, int c)
   luaX_next(ls);
 }
 
-static inline void check_condition(LexState* ls, int c, const InternalString* msg)
+static inline void check_condition(LexState* ls, int c, std::string_view msg)
 {
   if (!c)
-    luaX_syntaxerror(ls, msg->view());
+    luaX_syntaxerror(ls, msg);
 }
 
 /*
@@ -136,10 +137,10 @@ static void check_match(LexState* ls, int what, int who, int where)
     else
     {
       luaX_syntaxerror(ls, luaO_pushfstring(ls->L,
-                                            lit<"%s expected (to close %s at line %d)">()->view(),
+                                            lt::s_expected_to_close_s_at_line_d,
                                             FmtArgs()
-                                                .str(luaX_token2str(ls, what)->view())
-                                                .str(luaX_token2str(ls, who)->view())
+                                                .str(luaX_token2str(ls, what))
+                                                .str(luaX_token2str(ls, who))
                                                 .num(where))->view());
     }
   }
@@ -186,7 +187,7 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(LocVar));
   f->locvars = (LocVar*)luaM_growaux_(ls->L, f->locvars, fs->ndebugvars,
-      &f->sizelocvars, sizeof(LocVar), limit, lit<"local variables">()->view());
+      &f->sizelocvars, sizeof(LocVar), limit, lt::local_variables);
   while (oldsize < f->sizelocvars)
     f->locvars[oldsize++].varname = nullptr;
   f->locvars[fs->ndebugvars].varname = varname;
@@ -209,7 +210,7 @@ static int new_varkind(LexState* ls, TString* name, lu_byte kind)
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(Vardesc));
   dyd->actvar.arr = (Vardesc*)luaM_growaux_(L, dyd->actvar.arr, dyd->actvar.n + 1,
-      &dyd->actvar.size, sizeof(Vardesc), limit, lit<"variable declarations">()->view());
+      &dyd->actvar.size, sizeof(Vardesc), limit, lt::variable_declarations);
   var = &dyd->actvar.arr[dyd->actvar.n++];
   var->kind = kind; /* default */
   var->name = name;
@@ -339,7 +340,7 @@ static void check_readonly(LexState* ls, expdesc* e)
     return;                      /* integer index cannot be read-only */
   }
   if (varname)
-    luaK_semerror(ls, lit<"attempt to assign to const variable '%s'">()->view(),
+    luaK_semerror(ls, lt::attempt_to_assign_to_const_variable_s,
                   FmtArgs().str(varname->data.view()));
 }
 
@@ -357,7 +358,7 @@ static void adjustlocalvars(LexState* ls, int nvars)
     Vardesc* var = getlocalvardesc(fs, vidx);
     var->ridx = ((lu_byte)(reglevel++));
     var->pidx = registerlocalvar(ls, fs, var->name);
-    luaY_checklimit(fs, reglevel, MAXVARS, lit<"local variables">()->view());
+    luaY_checklimit(fs, reglevel, MAXVARS, lt::local_variables);
   }
 }
 
@@ -396,12 +397,12 @@ static Upvaldesc* allocupvalue(FuncState* fs)
 {
   Proto* f = fs->f;
   int oldsize = f->sizeupvalues;
-  luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, lit<"upvalues">()->view());
+  luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, lt::upvalues);
   int limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc))
                   ? MAXUPVAL
                   : (int)(MAX_SIZET / sizeof(Upvaldesc));
   f->upvalues = (Upvaldesc*)luaM_growaux_(fs->ls->L, f->upvalues, fs->nups,
-      &f->sizeupvalues, sizeof(Upvaldesc), limit, lit<"upvalues">()->view());
+      &f->sizeupvalues, sizeof(Upvaldesc), limit, lt::upvalues);
   while (oldsize < f->sizeupvalues)
     f->upvalues[oldsize++].name = nullptr;
   return &f->upvalues[fs->nups++];
@@ -536,8 +537,8 @@ static void buildglobal(LexState* ls, TString* varname, expdesc* var)
   init_exp(var, VGLOBAL, -1);         /* global by default */
   singlevaraux(fs, ls->envn, var, 1); /* get environment variable */
   if (var->k == VGLOBAL)
-    luaK_semerror(ls, lit<"%s is global when accessing variable '%s'">()->view(),
-                  FmtArgs().str(LUA_ENV->view()).str(varname->data.view()));
+    luaK_semerror(ls, lt::s_is_global_when_accessing_variable_s,
+                  FmtArgs().str(lt::_ENV).str(varname->data.view()));
   luaK_exp2anyregup(fs, var);  /* _ENV could be a constant */
   codestring(&key, varname);   /* key is variable name */
   luaK_indexed(fs, var, &key); /* 'var' represents _ENV[varname] */
@@ -557,7 +558,7 @@ static void buildvar(LexState* ls, TString* varname, expdesc* var)
     int info = var->info;
     /* global by default in the scope of a global declaration? */
     if (info == -2)
-      luaK_semerror(ls, lit<"variable '%s' not declared">()->view(),
+      luaK_semerror(ls, lt::variable_s_not_declared,
                     FmtArgs().str(varname->data.view()));
     buildglobal(ls, varname, var);
     if (info != -1 && ls->dyd->actvar.arr[info].kind == GDKCONST)
@@ -618,10 +619,8 @@ static inline void leavelevel(LexState* ls)
 static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
 {
   TString* tsname = getlocalvardesc(ls->fs, gt->nactvar)->name;
-  const InternalString* varname = (tsname != nullptr) ? &tsname->data : lit<"*">();
-  luaK_semerror(ls,
-                lit<"<goto %s> at line %d jumps into the scope of '%s'">()->view(),
-                FmtArgs().str(gt->name->data.view()).num(gt->line).str(varname->view())); /* raise the error */
+  std::string_view varname = (tsname != nullptr) ? tsname->data.view() : lt::star;
+  luaK_semerror(ls, lt::goto_s_at_line_d_jumps_into_the_scope_of_s, FmtArgs().str(gt->name->data.view()).num(gt->line).str(varname)); /* raise the error */
 }
 
 /*
@@ -685,7 +684,7 @@ static int newlabelentry(LexState* ls, Labellist* l, TString* name,
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(Labeldesc));
   l->arr = (Labeldesc*)luaM_growaux_(ls->L, l->arr, n,
-      &l->size, sizeof(Labeldesc), limit, lit<"labels/gotos">()->view());
+      &l->size, sizeof(Labeldesc), limit, lt::labels_gotos);
   l->arr[n].name = name;
   l->arr[n].line = line;
   l->arr[n].nactvar = ls->fs->nactvar;
@@ -784,7 +783,7 @@ static l_noret undefgoto(LexState* ls, Labeldesc* gt)
 {
   /* breaks are checked when created, cannot be undefined */
   assert(!eqstr(gt->name, ls->brkn));
-  luaK_semerror(ls, lit<"no visible label '%s' for <goto> at line %d">()->view(),
+  luaK_semerror(ls, lt::no_visible_label_s_for_goto_at_line_d,
                 FmtArgs().str(gt->name->data.view()).num(gt->line));
 }
 
@@ -825,7 +824,7 @@ static Proto* addprototype(LexState* ls)
                     ? MAXARG_Bx
                     : (int)(MAX_SIZET / sizeof(Proto*));
     f->p = (Proto**)luaM_growaux_(L, f->p, fs->np,
-        &f->sizep, sizeof(Proto*), limit, lit<"functions">()->view());
+        &f->sizep, sizeof(Proto*), limit, lt::functions);
     while (oldsize < f->sizep)
       f->p[oldsize++] = nullptr;
   }
@@ -1113,7 +1112,7 @@ static void constructor(LexState* ls, expdesc* t)
     if (cc.v.k != VVOID)       /* is there a previous list item? */
       closelistfield(fs, &cc); /* close it */
     field(ls, &cc);
-    luaY_checklimit(fs, cc.tostore + cc.na + cc.nh, MAX_CNST, lit<"items in a constructor">()->view());
+    luaY_checklimit(fs, cc.tostore + cc.na + cc.nh, MAX_CNST, lt::items_in_a_constructor);
   } while (testnext(ls, ',') || testnext(ls, ';'));
   check_match(ls, /*{*/ '}', '{' /*}*/, line);
   lastlistfield(fs, &cc);
@@ -1155,13 +1154,13 @@ static void parlist(LexState* ls)
           new_varkind(ls, str_checkname(ls), RDKVAVAR);
         else
         {
-          const InternalString* name = lit<"(vararg table)">();
-          new_localvar(ls, luaX_newstring(ls, name->view(), 0, name->size()));
+          std::string_view name = lt::vararg_table;
+          new_localvar(ls, luaX_newstring(ls, name, 0, name.size()));
         }
         break;
       }
       default:
-        luaX_syntaxerror(ls, lit<"<name> or '...' expected">()->view());
+        luaX_syntaxerror(ls, lt::name_or_expected);
       }
     } while (!varargk && testnext(ls, ','));
   }
@@ -1187,8 +1186,8 @@ static void body(LexState* ls, expdesc* e, int ismethod, int line)
   checknext(ls, '(');
   if (ismethod)
   {
-    const InternalString* self = lit<"self">();
-    new_localvar(ls, luaX_newstring(ls, self->view(), 0, self->size())); /* create 'self' parameter */
+    std::string_view self = lt::self;
+    new_localvar(ls, luaX_newstring(ls, self, 0, self.size())); /* create 'self' parameter */
     adjustlocalvars(ls, 1);
   }
   parlist(ls);
@@ -1249,7 +1248,7 @@ static void funcargs(LexState* ls, expdesc* f)
   }
   default:
   {
-    luaX_syntaxerror(ls, lit<"function arguments expected">()->view());
+    luaX_syntaxerror(ls, lt::function_arguments_expected);
     return; /* to avoid warnings */
   }
   }
@@ -1297,7 +1296,7 @@ static void primaryexp(LexState* ls, expdesc* v)
   }
   default:
   {
-    luaX_syntaxerror(ls, lit<"unexpected symbol">()->view());
+    luaX_syntaxerror(ls, lt::unexpected_symbol);
   }
   }
 }
@@ -1389,8 +1388,7 @@ static void simpleexp(LexState* ls, expdesc* v)
   case TK_DOTS:
   { /* vararg */
     FuncState* fs = ls->fs;
-    check_condition(ls, isvararg(fs->f),
-                    lit<"cannot use '...' outside a vararg function">());
+    check_condition(ls, isvararg(fs->f), lt::cannot_use_outside_a_vararg_function);
     init_exp(v, VVARARG, luaK_codeABC(fs, OP_VARARG, 0, fs->f->numparams, 1));
     break;
   }
@@ -1656,7 +1654,7 @@ static void storevartop(FuncState* fs, expdesc* var)
 static void restassign(LexState* ls, struct LHS_assign* lh, int nvars)
 {
   expdesc e;
-  check_condition(ls, vkisvar(lh->v.k), lit<"syntax error">());
+  check_condition(ls, vkisvar(lh->v.k), lt::syntax_error);
   check_readonly(ls, &lh->v);
   if (testnext(ls, ','))
   { /* restassign -> ',' suffixedexp restassign */
@@ -1715,7 +1713,7 @@ static void breakstat(LexState* ls, int line)
       break;
   }
   if (bl == nullptr)
-    luaX_syntaxerror(ls, lit<"break outside loop">()->view());
+    luaX_syntaxerror(ls, lt::break_outside_loop);
   bl->isloop = 2; /* signal that block has pending breaks */
   luaX_next(ls);  /* skip break */
   newgotoentry(ls, ls->brkn, line);
@@ -1729,7 +1727,7 @@ static void checkrepeated(LexState* ls, TString* name)
 {
   Labeldesc* lb = findlabel(ls, name, ls->fs->firstlabel);
   if (l_unlikely(lb != nullptr)) /* already defined? */
-    luaK_semerror(ls, lit<"label '%s' already defined on line %d">()->view(),
+    luaK_semerror(ls, lt::label_s_already_defined_on_line_d,
                   FmtArgs().str(name->data.view()).num(lb->line)); /* error */
 }
 
@@ -1813,7 +1811,7 @@ static void fixforjump(FuncState* fs, int pc, int dest, int back)
   if (back)
     offset = -offset;
   if (l_unlikely(offset > MAXARG_Bx))
-    luaX_syntaxerror(fs->ls, lit<"control structure too long">()->view());
+    luaX_syntaxerror(fs->ls, lt::control_structure_too_long);
   ((*jmp) = (((*jmp) & MASK0(SIZE_Bx, POS_Bx)) | ((((Instruction)(offset)) << POS_Bx) & MASK1(SIZE_Bx, POS_Bx))));
 }
 
@@ -1852,9 +1850,8 @@ static void fornum(LexState* ls, TString* varname, int line)
   /* fornum -> NAME = exp,exp[,exp] forbody */
   FuncState* fs = ls->fs;
   int base = fs->freereg;
-  const InternalString* forstate = lit<"(for state)">();
-  new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));
-  new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));
+  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));
+  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));
   new_varkind(ls, varname, RDKCONST);
   checknext(ls, '=');
   exp1(ls); /* initial value */
@@ -1880,10 +1877,9 @@ static void forlist(LexState* ls, TString* indexname)
   int line;
   int base = fs->freereg;
   /* create internal variables */
-  const InternalString* forstate = lit<"(for state)">();
-  new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));  /* iterator function */
-  new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));  /* state */
-  new_localvar(ls, luaX_newstring(ls, forstate->view(), 0, forstate->size()));  /* closing var. (after swap) */
+  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* iterator function */
+  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* state */
+  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* closing var. (after swap) */
   new_varkind(ls, indexname, RDKCONST);
   /* other declared variables */
   while (testnext(ls, ','))
@@ -1919,7 +1915,7 @@ static void forstat(LexState* ls, int line)
     forlist(ls, varname);
     break;
   default:
-    luaX_syntaxerror(ls, lit<"'=' or 'in' expected">()->view());
+    luaX_syntaxerror(ls, lt::or_in_expected);
   }
   check_match(ls, TK_END, TK_FOR, line);
   leaveblock(fs); /* loop scope ('break' jumps to this point) */
@@ -1974,12 +1970,12 @@ static lu_byte getvarattribute(LexState* ls, lu_byte df)
     TString* ts = str_checkname(ls);
     std::string_view attr = ts->data.view();
     checknext(ls, '>');
-    if (attr == lit<"const">()->view())
+    if (attr == lt::const_kw)
       return RDKCONST; /* read-only variable */
-    else if (attr == lit<"close">()->view())
+    else if (attr == lt::close_kw)
       return RDKTOCLOSE; /* to-be-closed variable */
     else
-      luaK_semerror(ls, lit<"unknown attribute '%s'">()->view(), FmtArgs().str(ts->data.view()));
+      luaK_semerror(ls, lt::unknown_attribute_s, FmtArgs().str(ts->data.view()));
   }
   return df; /* return default value */
 }
@@ -2013,7 +2009,7 @@ static void localstat(LexState* ls)
     if (kind == RDKTOCLOSE)
     {                    /* to-be-closed? */
       if (toclose != -1) /* one already present? */
-        luaK_semerror(ls, lit<"multiple to-be-closed variables in local list">()->view(), FmtArgs());
+        luaK_semerror(ls, lt::multiple_to_be_closed_variables_in_local_list, FmtArgs());
       toclose = fs->nactvar + nvars;
     }
     nvars++;
@@ -2048,7 +2044,7 @@ static lu_byte getglobalattribute(LexState* ls, lu_byte df)
   switch (kind)
   {
   case RDKTOCLOSE:
-    luaK_semerror(ls, lit<"global variables cannot be to-be-closed">()->view(), FmtArgs());
+    luaK_semerror(ls, lt::global_variables_cannot_be_to_be_closed, FmtArgs());
     return kind; /* to avoid warnings */
   case RDKCONST:
     return GDKCONST; /* adjust kind for global variable */
@@ -2198,7 +2194,7 @@ static void exprstat(LexState* ls)
   else
   { /* stat -> func */
     Instruction* inst;
-    check_condition(ls, v.v.k == VCALL, lit<"syntax error">());
+    check_condition(ls, v.v.k == VCALL, lt::syntax_error);
     inst = &((fs)->f->code[(&v.v)->info]);
     ((*inst) = (((*inst) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(1)) << POS_C) & MASK1(SIZE_C, POS_C)))); /* call statement uses no results */
   }

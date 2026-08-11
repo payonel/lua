@@ -19,6 +19,7 @@
 #include "os_api.h"
 #include "llimits.h"
 #include "lualib.h"
+#include "literals.h"
 
 /*
 ** {==================================================================
@@ -26,10 +27,6 @@
 ** options are grouped by length; group of length 2 start with '||'.
 ** ===================================================================
 */
-#define LUA_STRFTIMEOPTIONS "aAbBcCdDeFgGhHIjmMnprRStTuUVwWxXyYzZ%" \
-                            "||"                                    \
-                            "EcECExEXEyEY"                          \
-                            "OdOeOHOIOmOMOSOuOUOVOwOWOy" /* two-char options */
 /* }================================================================== */
 
 /*
@@ -90,14 +87,14 @@ static int os_tmpname(lua_State* L)
 {
   std::optional<InternalString> tname = os_tmpname();
   if (l_unlikely(!tname.has_value()))
-    return luaL_errori(L, lit<"unable to generate a unique filename">()->view());
+    return luaL_errori(L, lt::unable_to_generate_a_unique_filename);
   lua_pushistring(L, std::move(*tname));
   return 1;
 }
 
 static int os_getenv(lua_State* L)
 {
-  std::optional<InternalString> v = os_getenv(luaL_checkistring(L, 1)->view());
+  std::optional<std::string_view> v = os_getenv(luaL_checkistring(L, 1)->view());
   if (v.has_value())
     lua_pushistring(L, std::move(*v));
   else
@@ -138,15 +135,15 @@ static void setboolfield(lua_State* L, std::string_view key, int value)
 */
 static void setallfields(lua_State* L, struct tm* stm)
 {
-  setfield(L, lit<"year">()->view(), stm->tm_year, 1900);
-  setfield(L, lit<"month">()->view(), stm->tm_mon, 1);
-  setfield(L, lit<"day">()->view(), stm->tm_mday, 0);
-  setfield(L, lit<"hour">()->view(), stm->tm_hour, 0);
-  setfield(L, lit<"min">()->view(), stm->tm_min, 0);
-  setfield(L, lit<"sec">()->view(), stm->tm_sec, 0);
-  setfield(L, lit<"yday">()->view(), stm->tm_yday, 1);
-  setfield(L, lit<"wday">()->view(), stm->tm_wday, 1);
-  setboolfield(L, lit<"isdst">()->view(), stm->tm_isdst);
+  setfield(L, lt::year, stm->tm_year, 1900);
+  setfield(L, lt::month, stm->tm_mon, 1);
+  setfield(L, lt::day, stm->tm_mday, 0);
+  setfield(L, lt::hour, stm->tm_hour, 0);
+  setfield(L, lt::min, stm->tm_min, 0);
+  setfield(L, lt::sec, stm->tm_sec, 0);
+  setfield(L, lt::yday, stm->tm_yday, 1);
+  setfield(L, lt::wday, stm->tm_wday, 1);
+  setboolfield(L, lt::isdst, stm->tm_isdst);
 }
 
 static int getboolfield(lua_State* L, std::string_view key)
@@ -167,12 +164,12 @@ static int getfield(lua_State* L, std::string_view key, int d, int delta)
     if (l_unlikely(t != LUA_TNIL))
     { /* some other value? */
       lua_pushlstring(L, key, 0, key.size());
-      return luaL_errori(L, lit<"field '%s' is not an integer">()->view());
+      return luaL_errori(L, lt::field_s_is_not_an_integer);
     }
     else if (l_unlikely(d < 0))
     { /* absent field; no default? */
       lua_pushlstring(L, key, 0, key.size());
-      return luaL_errori(L, lit<"field '%s' missing in date table">()->view());
+      return luaL_errori(L, lt::field_s_missing_in_date_table);
     }
     res = d;
   }
@@ -181,7 +178,7 @@ static int getfield(lua_State* L, std::string_view key, int d, int delta)
     if (!(res >= 0 ? res - delta <= INT_MAX : INT_MIN + delta <= res))
     {
       lua_pushlstring(L, key, 0, key.size());
-      return luaL_errori(L, lit<"field '%s' is out-of-bound">()->view());
+      return luaL_errori(L, lt::field_s_is_out_of_bound);
     }
     res -= delta;
   }
@@ -192,7 +189,7 @@ static int getfield(lua_State* L, std::string_view key, int d, int delta)
 static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
                           std::span<char> buff, size_t boff)
 {
-  std::string_view option = lit<LUA_STRFTIMEOPTIONS>()->view();
+  std::string_view option = lt::strftime_options;
   size_t opos = 0;
   size_t convlen = fmt.size() - pos;
   unsigned oplen = 1; /* length of options being checked */
@@ -208,7 +205,7 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
     }
   }
   lua_pushlstring(L, fmt, pos, fmt.size() - pos);
-  lua_pushfstringi(L, lit<"invalid conversion specifier '%%%s'">()->view());
+  lua_pushfstringi(L, lt::invalid_conversion_specifier_s);
   luaL_argerrori(L, 1, *lua_tolstring(L, -1));
   return pos; /* to avoid warnings */
 }
@@ -216,7 +213,7 @@ static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
 static time_t l_checktime(lua_State* L, int arg)
 {
   lua_Integer t = luaL_checkinteger(L, arg);
-  luaL_argchecki(L, (time_t) t == t, arg, lit<"time out-of-bounds">()->view());
+  luaL_argchecki(L, (time_t) t == t, arg, lt::time_out_of_bounds);
   return (time_t) t;
 }
 
@@ -225,7 +222,7 @@ constexpr int SIZETIMEFMT = 250;
 
 static int os_date(lua_State* L)
 {
-  std::string_view sfmt = luaL_optlstring(L, 1, lit<"%c">()->view());
+  std::string_view sfmt = luaL_optlstring(L, 1, lt::fmt_c);
   size_t sp = 0;
   time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
   struct tm tmr, *stm;
@@ -237,7 +234,7 @@ static int os_date(lua_State* L)
   else
     stm = localtime_r(&t, &tmr);
   if (stm == nullptr) /* invalid date? */
-    return luaL_errori(L, lit<"date result cannot be represented in this installation">()->view());
+    return luaL_errori(L, lt::date_result_cannot_be_represented_in_this_installation);
   if (sfmt.size() - sp == 2 && sfmt[sp] == '*' && sfmt[sp + 1] == 't')
   {
     lua_createtable(L, 0, 9); /* 9 = number of fields */
@@ -278,18 +275,18 @@ static int os_time(lua_State* L)
     struct tm ts;
     luaL_checktype(L, 1, LUA_TTABLE);
     lua_settop(L, 1); /* make sure table is at the top */
-    ts.tm_year = getfield(L, lit<"year">()->view(), -1, 1900);
-    ts.tm_mon = getfield(L, lit<"month">()->view(), -1, 1);
-    ts.tm_mday = getfield(L, lit<"day">()->view(), -1, 0);
-    ts.tm_hour = getfield(L, lit<"hour">()->view(), 12, 0);
-    ts.tm_min = getfield(L, lit<"min">()->view(), 0, 0);
-    ts.tm_sec = getfield(L, lit<"sec">()->view(), 0, 0);
-    ts.tm_isdst = getboolfield(L, lit<"isdst">()->view());
+    ts.tm_year = getfield(L, lt::year, -1, 1900);
+    ts.tm_mon = getfield(L, lt::month, -1, 1);
+    ts.tm_mday = getfield(L, lt::day, -1, 0);
+    ts.tm_hour = getfield(L, lt::hour, 12, 0);
+    ts.tm_min = getfield(L, lt::min, 0, 0);
+    ts.tm_sec = getfield(L, lt::sec, 0, 0);
+    ts.tm_isdst = getboolfield(L, lt::isdst);
     t = mktime(&ts);
     setallfields(L, &ts); /* update fields with normalized values */
   }
   if (t != (time_t) (lua_Integer) t || t == (time_t) (-1))
-    return luaL_errori(L, lit<"time result cannot be represented in this installation">()->view());
+    return luaL_errori(L, lt::time_result_cannot_be_represented_in_this_installation);
   lua_pushinteger(L, (lua_Integer) t);
   return 1;
 }
@@ -309,11 +306,11 @@ static int os_setlocale(lua_State* L)
   static const int cat[] = {LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY,
                             LC_NUMERIC, LC_TIME};
   static const std::string_view catnames[] = {
-      lit<"all">()->view(), lit<"collate">()->view(), lit<"ctype">()->view(),
-      lit<"monetary">()->view(), lit<"numeric">()->view(), lit<"time">()->view()};
+      lt::all, lt::collate, lt::ctype,
+      lt::monetary, lt::numeric, lt::time_kw};
   int nol = lua_isnoneornil(L, 1);
   const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
-  int op = luaL_checkoptioni(L, 2, lit<"all">()->view(), catnames);
+  int op = luaL_checkoptioni(L, 2, lt::all, catnames);
   std::optional<InternalString> res = os_setlocale(
       cat[op], nol ? std::nullopt : std::optional<std::string_view>(l->view()));
   if (res.has_value())
@@ -341,17 +338,17 @@ static int os_exit(lua_State* L)
 }
 
 static const luaL_Regi syslib[] = {
-  {lit<"clock">()->view(), os_clock},
-  {lit<"date">()->view(), os_date},
-  {lit<"difftime">()->view(), os_difftime},
-  {lit<"execute">()->view(), os_execute},
-  {lit<"exit">()->view(), os_exit},
-  {lit<"getenv">()->view(), os_getenv},
-  {lit<"remove">()->view(), os_remove},
-  {lit<"rename">()->view(), os_rename},
-  {lit<"setlocale">()->view(), os_setlocale},
-  {lit<"time">()->view(), os_time},
-  {lit<"tmpname">()->view(), os_tmpname}
+  {lt::clock, os_clock},
+  {lt::date, os_date},
+  {lt::difftime, os_difftime},
+  {lt::execute, os_execute},
+  {lt::exit_kw, os_exit},
+  {lt::getenv, os_getenv},
+  {lt::remove_kw, os_remove},
+  {lt::rename_kw, os_rename},
+  {lt::setlocale, os_setlocale},
+  {lt::time_kw, os_time},
+  {lt::tmpname, os_tmpname}
 };
 
 /* }====================================================== */

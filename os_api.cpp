@@ -30,14 +30,14 @@ void os_flush_stderr()
   fflush(stderr);
 }
 
-std::optional<InternalString> os_getenv(std::string_view name)
+std::optional<std::string_view> os_getenv(std::string_view name)
 {
   std::string n(name);
   const char* v = getenv(n.c_str());
   if (v == nullptr)
     return std::nullopt;
   std::string_view svenv(v);
-  return InternalString(svenv);
+  return svenv;
 }
 
 InternalString os_strerror(int err)

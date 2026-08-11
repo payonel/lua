@@ -29,6 +29,7 @@
 
 #include "lua_internal.h"
 #include "lauxlib.h"
+#include "literals.h"
 
 /*
 ** Computes ceil(log2(x)), which is the smallest integer n such that
@@ -475,7 +476,7 @@ static size_t l_str2dloc(std::string_view s, size_t off, lua_Number* result,
 */
 static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
 {
-  size_t pmode = s.find_first_of(lit<".xXnN">()->view(), off); /* look for special chars */
+  size_t pmode = s.find_first_of(lt::xXnN_chars, off); /* look for special chars */
   int mode = (pmode != std::string_view::npos)
                  ? ltolower(((unsigned char)(s[pmode])))
                  : 0;
@@ -615,7 +616,7 @@ static int tostringbuffFloat(lua_Number n, char* buff)
     buff[len] = '\0';
   }
   if (std::string_view{buff, ((size_t)(len))}.find_first_not_of(
-          lit<"-0123456789">()->view()) == std::string_view::npos)
+          lt::digits_and_dash) == std::string_view::npos)
   {
     buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
@@ -707,7 +708,7 @@ static void pushbuff(lua_State* L, void* ud)
     luaD_throw(L, LUA_ERRMEM);
   InternalString res{std::string_view{buff->b.data(), buff->blen}};
   if (buff->err == 2)
-    res = res.concat(lit<"...">()->view());
+    res = res.concat(lt::ellipsis);
   TString* ts = luaS_take(L, std::move(res));
   setslots(L, L->top, ts);
   L->top++;
@@ -910,7 +911,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     case -1:
     case '%':
     {
-      addstr2buff(&buff, lit<"%">()->view());
+      addstr2buff(&buff, lt::percent_ch);
       break;
     }
     default:
@@ -964,10 +965,6 @@ const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt)
 
 /* }================================================================== */
 
-static const InternalString* const RETS = lit<"...">();
-static const InternalString* const PRE = lit<"[string \"">();
-static const InternalString* const POS = lit<"\"]">();
-
 void luaO_chunkid(std::span<char> out, std::string_view source)
 {
   assert(out.size() >= LUA_IDSIZE);
@@ -996,10 +993,10 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
     }
     else
     { /* add '...' before rest of name */
-      std::string_view bytes = RETS->view();
+      std::string_view bytes = lt::ellipsis;
       memcpy(out.data(), bytes.data(), bytes.size() * sizeof(char));
-      pos += RETS->size();
-      bufflen -= RETS->size();
+      pos += lt::ellipsis.size();
+      bufflen -= lt::ellipsis.size();
       memcpy(out.data() + pos, source.data() + 1 + srclen - bufflen,
              (bufflen - 1) * sizeof(char));
       out[pos + bufflen - 1] = '\0';
@@ -1008,10 +1005,10 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
   else
   {                                                 /* string; format as [string "source"] */
     size_t nl = source.find('\n');
-    std::string_view bytes = PRE->view();
+    std::string_view bytes = lt::string_2;
     memcpy(out.data(), bytes.data(), bytes.size() * sizeof(char)); /* add prefix */
-    pos += PRE->size();
-    bufflen -= PRE->size() + RETS->size() + POS->size() + 1; /* save space for prefix+suffix+'\0' */
+    pos += lt::string_2.size();
+    bufflen -= lt::string_2.size() + lt::ellipsis.size() + lt::backquote.size() + 1; /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == std::string_view::npos)
     {
       memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
@@ -1025,12 +1022,12 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
         srclen = bufflen;
       memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
       pos += srclen;
-      bytes = RETS->view();
+      bytes = lt::ellipsis;
       memcpy(out.data() + pos, bytes.data(), bytes.size() * sizeof(char));
-      pos += RETS->size();
+      pos += lt::ellipsis.size();
     }
-    bytes = POS->view();
+    bytes = lt::backquote;
     memcpy(out.data() + pos, bytes.data(), bytes.size() * sizeof(char));
-    out[pos + POS->size()] = '\0';
+    out[pos + lt::backquote.size()] = '\0';
   }
 }

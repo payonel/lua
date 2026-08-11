@@ -15,11 +15,12 @@
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lualib.h"
+#include "literals.h"
 
 static lua_State* getco(lua_State* L)
 {
   lua_State* co = lua_tothread(L, 1);
-  luaL_argexpectedi(L, co, 1, lit<"thread">()->view());
+  luaL_argexpectedi(L, co, 1, lt::thread);
   return co;
 }
 
@@ -31,7 +32,7 @@ static int auxresume(lua_State* L, lua_State* co, int narg)
 {
   if (l_unlikely(!lua_checkstack(co, narg)))
   {
-    lua_pushistringref(L, lit<"too many arguments to resume">()->view());
+    lua_pushistringref(L, lt::too_many_arguments_to_resume);
     return -1; /* error flag */
   }
   lua_xmove(L, co, narg);
@@ -42,7 +43,7 @@ static int auxresume(lua_State* L, lua_State* co, int narg)
     if (l_unlikely(!lua_checkstack(L, nres + 1)))
     {
       lua_pop(co, nres); /* remove results anyway */
-      lua_pushistringref(L, lit<"too many results to resume">()->view());
+      lua_pushistringref(L, lt::too_many_results_to_resume);
       return -1; /* error flag */
     }
     lua_xmove(co, L, nres); /* move yielded values */
@@ -126,8 +127,7 @@ constexpr int COS_DEAD = 1;
 constexpr int COS_YIELD = 2;
 constexpr int COS_NORM = 3;
 
-static const InternalString* const statname[] = {
-    lit<"running">(), lit<"dead">(), lit<"suspended">(), lit<"normal">()};
+static const std::string_view statname[] = {lt::running, lt::dead, lt::suspended, lt::normal_2};
 
 static int auxstatus(lua_State* L, lua_State* co)
 {
@@ -157,7 +157,7 @@ static int auxstatus(lua_State* L, lua_State* co)
 static int luaB_costatus(lua_State* L)
 {
   lua_State* co = getco(L);
-  lua_pushistringref(L, statname[auxstatus(L, co)]->view());
+  lua_pushistringref(L, statname[auxstatus(L, co)]);
   return 1;
 }
 
@@ -203,12 +203,12 @@ static int luaB_close(lua_State* L)
     }
   }
   case COS_NORM:
-    lua_pushistringref(L, statname[status]->view());
-    return luaL_errori(L, lit<"cannot close a %s coroutine">()->view());
+    lua_pushistringref(L, statname[status]);
+    return luaL_errori(L, lt::cannot_close_a_s_coroutine);
   case COS_RUN:
     lua_geti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD); /* get main */
     if (lua_tothread(L, -1) == co)
-      return luaL_errori(L, lit<"cannot close main thread">()->view());
+      return luaL_errori(L, lt::cannot_close_main_thread);
     lua_closethread(co, L);             /* close itself */
     /* previous call does not return */ /* FALLTHROUGH */
   default:
@@ -218,14 +218,14 @@ static int luaB_close(lua_State* L)
 }
 
 static const luaL_Regi co_funcs[] = {
-  {lit<"create">()->view(), luaB_cocreate},
-  {lit<"resume">()->view(), luaB_coresume},
-  {lit<"running">()->view(), luaB_corunning},
-  {lit<"status">()->view(), luaB_costatus},
-  {lit<"wrap">()->view(), luaB_cowrap},
-  {lit<"yield">()->view(), luaB_yield},
-  {lit<"isyieldable">()->view(), luaB_yieldable},
-  {lit<"close">()->view(), luaB_close}
+  {lt::create, luaB_cocreate},
+  {lt::resume, luaB_coresume},
+  {lt::running, luaB_corunning},
+  {lt::status, luaB_costatus},
+  {lt::wrap, luaB_cowrap},
+  {lt::yield, luaB_yield},
+  {lt::isyieldable, luaB_yieldable},
+  {lt::close_kw, luaB_close}
 };
 
 LUAMOD_API int luaopen_coroutine(lua_State* L)
