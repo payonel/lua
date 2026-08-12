@@ -10,6 +10,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "literals.h"
+
 void os_print_stdout(std::string_view utf8)
 {
   fwrite(utf8.data(), sizeof(char), utf8.size(), stdout);
@@ -139,7 +141,7 @@ void os_dlclose(OsLib* lib)
 InternalString os_dlerror()
 {
   const char* e = dlerror();
-  std::string_view sve(e != nullptr ? e : "unknown dynamic-link error");
+  std::string_view sve(e != nullptr ? std::string_view(e) : lt::unknown_dynamic_link_error);
   return InternalString(sve);
 }
 

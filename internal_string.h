@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <algorithm>
 
 #include "host_string.h"
 
@@ -116,9 +117,20 @@ struct byte_view
   // byte_view(const char* zstr, size_t len)                  : sv(zstr, len), offset(0),   length(sv.size()) {}
   byte_view(std::string_view view)                         : sv(view),      offset(0),   length(sv.size()) {}
   byte_view(std::string_view view, size_t off, size_t len) : sv(view),      offset(off), length(len) {}
+  byte_view(std::span<char> bytes)                         : sv(std::string_view(bytes.data(), bytes.size())), offset(0), length(bytes.size()) {}
 
   size_t size() const { return length; }
   const char* data() const { return sv.data() + offset; }
+
+  bool ends_with(char c)
+  {
+    return length > 0 && sv.size() >= length + offset && sv.at(offset + length - 1) == c;
+  }
+
+  std::string_view view() const
+  {
+    return sv;
+  }
 
   byte_view substr(size_t off, size_t len) const
   {
@@ -126,6 +138,12 @@ struct byte_view
     cp.offset = offset + off;
     cp.length = len;
     return cp;
+  }
+
+  static size_t copy(std::string_view from, std::span<char> to)
+  {
+    assert(from.size() <= to.size());
+    return std::copy_n(from.data(), from.size(), to.data()) - to.data();
   }
 
   std::string_view sv {nullptr, 0};

@@ -19,6 +19,7 @@
 #include "lua_internal.h"
 #include "os_api.h"
 #include "literals.h"
+#include "internal_string.h"
 
 static lua_State* globalL = nullptr;
 
@@ -425,9 +426,6 @@ static int handle_luainit(lua_State* L)
 ** ===================================================================
 */
 
-constexpr char LUA_PROMPT[] = "> ";
-constexpr char LUA_PROMPT2[] = ">> ";
-
 constexpr int LUA_MAXINPUT = 512;
 
 /*
@@ -458,16 +456,36 @@ static l_readlineT l_readline = nullptr;
 typedef void (*l_addhistT)(const char* string);
 static l_addhistT l_addhist = nullptr;
 
-static char* lua_readline(char* buff, const char* prompt)
+static bool lua_readline(std::span<char> buff, std::string_view prompt)
 {
   if (l_readline != nullptr)         /* is there a 'readline'? */
-    return (*l_readline)(prompt); /* use it */
-  else
-  { /* emulate 'readline' over 'buff' */
-    os_print_stdout(std::string_view{prompt});
-    os_flush_stdout();                       /* show prompt */
-    return os_readline(os_stdin(), std::span<char>{buff, LUA_MAXINPUT}) ? buff : nullptr; /* read line */
+  {
+    char* ret = (*l_readline)(prompt.data()); /* use it */
+    if (ret == nullptr)
+    {
+      return false;
+    }
+    std::string_view sv(ret);
+    byte_view::copy(sv, buff);
+    free(ret);
   }
+  else
+  {
+    os_print_stdout(prompt);
+    os_flush_stdout();                       /* show prompt */
+    if (!os_readline(os_stdin(), buff))
+    {
+      return false;
+    }
+  }
+
+  std::string_view sv(buff.data());
+  if (sv.ends_with('\n'))
+  {
+    buff[sv.size() - 1] = '\0';
+  }
+
+  return true;
 }
 
 static void lua_saveline(const char* line)
@@ -475,13 +493,6 @@ static void lua_saveline(const char* line)
   if (l_addhist != nullptr) /* is there an 'add_history'? */
     (*l_addhist)(line);  /* use it */
   /* else nothing to be done */
-}
-
-static void lua_freeline(char* line)
-{
-  if (l_readline != nullptr) /* is there a 'readline'? */
-    free(line);           /* free line created by it */
-  /* else 'lua_readline' used an automatic buffer; nothing to free */
 }
 
 /* try to load 'readline' dynamically */
@@ -513,16 +524,19 @@ static void lua_initreadline(lua_State* L)
 ** the string (or nil, if using the default value) on the stack, to keep
 ** it anchored.
 */
-static std::string get_prompt(lua_State* L, int firstline)
+static InternalString get_prompt(lua_State* L, int firstline)
 {
+  InternalString prompt;
   if (lua_getglobali(L, (firstline ? lt::_PROMPT : lt::_PROMPT2)) == LUA_TNIL)
-    return (firstline ? LUA_PROMPT : LUA_PROMPT2); /* use the default */
+  {
+    prompt = firstline ? lt::LUA_PROMPT : lt::LUA_PROMPT2; /* use the default */
+  }
   else
   { /* apply 'tostring' over the value */
-    std::string p{luaL_tolstring(L, -1)};
+    prompt = InternalString(luaL_tolstring(L, -1));
     lua_remove(L, -2); /* remove original value */
-    return p;
   }
+  return prompt;
 }
 
 /* mark in error messages for incomplete statements */
@@ -549,18 +563,15 @@ static int incomplete(lua_State* L, int status)
 */
 static int pushline(lua_State* L, int firstline)
 {
-  char buffer[LUA_MAXINPUT];
-  size_t l;
-  std::string prmt = get_prompt(L, firstline);
-  char* b = lua_readline(buffer, prmt.c_str());
+  char buffer[LUA_MAXINPUT] {};
+  std::span<char> buffspan(buffer, LUA_MAXINPUT);
+  InternalString prmt = get_prompt(L, firstline);
+  bool ready = lua_readline(buffspan, prmt.view());
   lua_pop(L, 1); /* remove prompt */
-  if (b == nullptr)
+  if (!ready)
     return 0; /* no input */
-  l = strlen(b);
-  if (l > 0 && b[l - 1] == '\n') /* line ends with newline? */
-    b[--l] = '\0';               /* remove it */
-  lua_pushlstring(L, std::string_view{b, l}, 0, l);
-  lua_freeline(b);
+  std::string_view buffview(buffer, LUA_MAXINPUT);
+  lua_pushlstring(L, buffview, 0, ::strnlen(buffer, LUA_MAXINPUT));
   return 1;
 }
 

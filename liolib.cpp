@@ -229,7 +229,7 @@ static OsFile* getiofile(lua_State* L, std::string_view findex)
   return p->f;
 }
 
-static int g_iofile(lua_State* L, std::string_view f, const char* mode)
+static int g_iofile(lua_State* L, std::string_view f, std::string_view mode)
 {
   if (!lua_isnoneornil(L, 1))
   {
@@ -252,12 +252,12 @@ static int g_iofile(lua_State* L, std::string_view f, const char* mode)
 
 static int io_input(lua_State* L)
 {
-  return g_iofile(L, lt::_IO_input, "r");
+  return g_iofile(L, lt::_IO_input, lt::r_mode);
 }
 
 static int io_output(lua_State* L)
 {
-  return g_iofile(L, lt::_IO_output, "w");
+  return g_iofile(L, lt::_IO_output, lt::w_mode);
 }
 
 static int io_readline(lua_State* L);
@@ -315,7 +315,7 @@ static int io_lines(lua_State* L)
   else
   { /* open a new file */
     std::string_view filename = luaL_checkistring(L, 1)->view();
-    opencheck(L, filename, "r");
+    opencheck(L, filename, lt::r_mode);
     lua_replace(L, 1); /* put file at index 1 */
     toclose = 1;       /* close it after iteration */
   }

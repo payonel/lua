@@ -1151,14 +1151,14 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
   /* if 'inf' or 'NaN', format it like '%g' */
   if (x != x)
   {
-    std::string_view r = std::signbit(x) ? lt::nan_1 : lt::nan_2;
+    std::string_view r = std::signbit(x) ? lt::minus_nan : lt::nan;
     assert(sz > r.size());
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
   }
   else if (x == (lua_Number) HUGE_VAL || x == -(lua_Number) HUGE_VAL)
   {
-    std::string_view r = (x < 0) ? lt::inf_1 : lt::inf_2;
+    std::string_view r = (x < 0) ? lt::minus_inf : lt::inf;
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
   }
@@ -1596,7 +1596,7 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
   bool zeropadok = true;
   if (std::isinf(n) || std::isnan(n))
   {
-    std::string_view r = std::isinf(n) ? "inf" : "nan";
+    std::string_view r = std::isinf(n) ? lt::inf : lt::nan;
     blen = r.size();
     memcpy(body, r.data(), blen);
     zeropadok = false;

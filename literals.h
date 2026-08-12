@@ -342,8 +342,8 @@ namespace lt
   constexpr std::string_view index_chain_too_long_possible_loop("'__index' chain too long; possible loop");
   constexpr std::string_view index_kw("index");
   constexpr std::string_view index_out_of_range("index out of range");
-  constexpr std::string_view inf_1("-inf");
-  constexpr std::string_view inf_2("inf");
+  constexpr std::string_view minus_inf("-inf");
+  constexpr std::string_view inf("inf");
   constexpr std::string_view init("init");
   constexpr std::string_view initial_position_is_a_continuation_byte("initial position is a continuation byte");
   constexpr std::string_view initial_position_out_of_bounds("initial position out of bounds");
@@ -555,8 +555,8 @@ namespace lt
   constexpr std::string_view name_2("name");
   constexpr std::string_view name_or_expected("<name> or '...' expected");
   constexpr std::string_view namewhat("namewhat");
-  constexpr std::string_view nan_1("-nan");
-  constexpr std::string_view nan_2("nan");
+  constexpr std::string_view minus_nan("-nan");
+  constexpr std::string_view nan("nan");
   constexpr std::string_view ne_op("~=");
   constexpr std::string_view needs_argument_n("' needs argument\n");
   constexpr std::string_view neg_hex_zero("-0x0p+0");
@@ -931,6 +931,7 @@ namespace lt
   constexpr std::string_view variable_s_not_declared("variable '%s' not declared");
   constexpr std::string_view version_mismatch("version mismatch");
   constexpr std::string_view version_mismatch_app_needs_f_Lua_core_provides_f("version mismatch: app. needs %f, Lua core provides %f");
+  constexpr std::string_view w_mode("w");
   constexpr std::string_view warn("warn");
   constexpr std::string_view warn_stack_space("warn stack space");
   constexpr std::string_view warning("warning");
@@ -966,6 +967,9 @@ namespace lt
   constexpr std::string_view LUA_PROGNAME("lua");
   constexpr std::string_view LUA_RLLIB_VAR("LUA_READLINELIB");
   constexpr std::string_view LUA_READLINELIB("libreadline.so");
+  constexpr std::string_view unknown_dynamic_link_error("unknown dynamic-link error");
+  constexpr std::string_view LUA_PROMPT("> ");
+  constexpr std::string_view LUA_PROMPT2(">> ");
 
   // Multi-line string literals
   constexpr std::string_view lua_ident_str(
