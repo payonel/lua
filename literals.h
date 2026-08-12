@@ -994,4 +994,14 @@ namespace lt
     "||"
     "EcECExEXEyEY"
     "OdOeOHOIOmOMOSOuOUOVOwOWOy");
+
+  constexpr std::string_view LUAC_DATA("\x19\x93\r\n\x1a\n");
+
+  /* prefix for open functions in C libraries */
+  constexpr std::string_view LUA_PATH_DEFAULT("/usr/local/share/lua/5.5/?.lua;/usr/local/share/lua/5.5/?/init.lua;/usr/local/lib/lua/5.5/?.lua;/usr/local/lib/lua/5.5/?/init.lua;./?.lua;./?/init.lua");
+  constexpr std::string_view LUA_CPATH_DEFAULT("/usr/local/lib/lua/5.5/?.so;/usr/local/lib/lua/5.5/loadall.so;./?.so");
+  constexpr std::string_view LUA_PATH_SEP(";");
+  constexpr std::string_view LUA_PATH_MARK("?");
+  constexpr std::string_view LUA_DIRSEP("/");
+  constexpr std::string_view CONFIG("/\n;\n?\n!\n-\n");
 }

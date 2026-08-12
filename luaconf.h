@@ -12,6 +12,7 @@
 #define LUALIB_API LUA_API
 #define LUAMOD_API extern "C"
 
+constexpr int LUA_MAXINPUT = 512;
 constexpr long long LUA_MAXINTEGER = LLONG_MAX;
 constexpr long long LUA_MININTEGER = LLONG_MIN;
 constexpr unsigned long long LUA_MAXUNSIGNED = ULLONG_MAX;

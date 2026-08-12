@@ -17,6 +17,8 @@
 #include "ltable.h"
 #include "lundump.h"
 
+#include "literals.h"
+
 struct DumpState
 {
   lua_State* L;
@@ -260,7 +262,7 @@ static void dumpHeader(DumpState* D)
   dumpBlock(D, LUA_SIGNATURE.data(), LUA_SIGNATURE.size());
   dumpByte(D, LUAC_VERSION);
   dumpByte(D, LUAC_FORMAT);
-  dumpBlock(D, LUAC_DATA.data(), LUAC_DATA.size());
+  dumpBlock(D, lt::LUAC_DATA.data(), lt::LUAC_DATA.size());
   { int i = LUAC_INT; dumpByte(D, sizeof(int)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
   { Instruction i = LUAC_INST; dumpByte(D, sizeof(Instruction)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
   { lua_Integer i = LUAC_INT; dumpByte(D, sizeof(lua_Integer)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };

@@ -360,7 +360,7 @@ static void loadFunction(LoadState* S, Proto* f)
 
 static void checkliteral(LoadState* S, std::string_view s, std::string_view msg)
 {
-  char buff[LUA_SIGNATURE.size() + LUAC_DATA.size()]; /* larger than both */
+  char buff[LUA_SIGNATURE.size() + lt::LUAC_DATA.size()]; /* larger than both */
   size_t len = s.size();
   loadBlock(S, buff, len * sizeof(buff[0]));
   if (memcmp(s.data(), buff, len) != 0)
@@ -393,7 +393,7 @@ static void checkHeader(LoadState* S)
     error(S, lt::version_mismatch);
   if (loadByte(S) != LUAC_FORMAT)
     error(S, lt::format_mismatch);
-  checkliteral(S, LUAC_DATA, lt::corrupted_chunk);
+  checkliteral(S, lt::LUAC_DATA, lt::corrupted_chunk);
   { int i; checknumsize(S, sizeof(i), lt::int_kw); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), lt::int_kw); };
   { Instruction i; checknumsize(S, sizeof(i), lt::instruction); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INST), lt::instruction); };
   { lua_Integer i; checknumsize(S, sizeof(i), lt::Lua_integer); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), lt::Lua_integer); };

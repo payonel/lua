@@ -807,6 +807,7 @@ struct LoadF
 static std::optional<std::string_view> getF(lua_State*, void* ud)
 {
   LoadF* lf = (LoadF*) ud;
+  byte_span span(lf->buff, BUFSIZ);
   if (lf->n > 0)
   {                          /* are there pre-read characters to be read? */
     size_t n = lf->n;        /* return them (chars already in buffer) */
@@ -820,7 +821,7 @@ static std::optional<std::string_view> getF(lua_State*, void* ud)
        The next check avoids this problem. */
     if (os_feof(lf->f))
       return std::nullopt;
-    size_t n = os_fread(lf->f, std::span<char>{lf->buff, sizeof(lf->buff)}); /* read block */
+    size_t n = os_fread(lf->f, span.span()); /* read block */
     if (n == 0)
       return std::nullopt;
     return std::string_view{lf->buff, n};

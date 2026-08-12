@@ -24,15 +24,6 @@
 #include "literals.h"
 
 
-/* prefix for open functions in C libraries */
-inline constexpr std::string_view LUA_PATH_DEFAULT = "/usr/local/share/lua/5.5/?.lua;/usr/local/share/lua/5.5/?/init.lua;/usr/local/lib/lua/5.5/?.lua;/usr/local/lib/lua/5.5/?/init.lua;./?.lua;./?/init.lua";
-inline constexpr std::string_view LUA_CPATH_DEFAULT = "/usr/local/lib/lua/5.5/?.so;/usr/local/lib/lua/5.5/loadall.so;./?.so";
-inline constexpr std::string_view LUA_PATH_SEP = ";";
-inline constexpr std::string_view LUA_PATH_MARK = "?";
-inline constexpr std::string_view LUA_EXEC_DIR = "!";
-inline constexpr std::string_view LUA_DIRSEP = "/";
-inline constexpr std::string_view CONFIG = "/\n;\n?\n!\n-\n";
-
 /*
 ** system-dependent functions
 */
@@ -120,12 +111,12 @@ static void setpath(lua_State* L, std::string_view fieldname, const char* envnam
       if (dftmark > 0)
       { /* is there a prefix before ';;'? */
         luaL_addlstring(&b, path, 0, dftmark); /* add it */
-        luaL_addchar(&b, LUA_PATH_SEP[0]);
+        luaL_addchar(&b, lt::LUA_PATH_SEP[0]);
       }
       luaL_addlstring(&b, dft, 0, dft.size()); /* add default */
       if (dftmark + 2 < path.size())
       { /* is there a suffix after ';;'? */
-        luaL_addchar(&b, LUA_PATH_SEP[0]);
+        luaL_addchar(&b, lt::LUA_PATH_SEP[0]);
         luaL_addlstring(&b, path, dftmark + 2, path.size() - (dftmark + 2));
       }
       luaL_pushresult(&b);
@@ -278,7 +269,7 @@ static void pusherrornotfound(lua_State* L, std::string_view path)
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   luaL_addlstring(&b, lt::no_file, 0, lt::no_file.size());
-  luaL_addgsubi(&b, path, LUA_PATH_SEP, lt::n_tno_file);
+  luaL_addgsubi(&b, path, lt::LUA_PATH_SEP, lt::n_tno_file);
   luaL_addlstring(&b, lt::squote, 0, lt::squote.size());
   luaL_pushresult(&b);
 }
@@ -296,14 +287,14 @@ static int searchpath(lua_State* L, std::string_view name,
   }
   luaL_buffinit(L, &buff);
   /* add path to the buffer, replacing marks ('?') with the file name */
-  luaL_addgsubi(&buff, path, LUA_PATH_MARK, name);
+  luaL_addgsubi(&buff, path, lt::LUA_PATH_MARK, name);
   {
     std::span<char> area = luaL_buffarea(&buff);
     std::string_view list{area.data(), luaL_bufflen(&buff)};
     size_t pos = 0;
     while (pos < list.size())
     {
-      size_t sepmark = list.find(LUA_PATH_SEP, pos);
+      size_t sepmark = list.find(lt::LUA_PATH_SEP, pos);
       if (sepmark == std::string_view::npos)          /* separator not found? */
         sepmark = list.size();                        /* name goes until the end */
       std::string_view filename = list.substr(pos, sepmark - pos);
@@ -325,7 +316,7 @@ static int ll_searchpath(lua_State* L)
   int found = searchpath(L, luaL_checklstring(L, 1),
                          luaL_checklstring(L, 2),
                          luaL_optlstring(L, 3, lt::dot),
-                         luaL_optlstring(L, 4, LUA_DIRSEP));
+                         luaL_optlstring(L, 4, lt::LUA_DIRSEP));
   if (found)
     return 1;
   else
@@ -367,7 +358,7 @@ static int checkload(lua_State* L, int stat, std::string_view filename)
 static int searcher_Lua(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
-  if (!findfile(L, name, lt::path, LUA_DIRSEP))
+  if (!findfile(L, name, lt::path, lt::LUA_DIRSEP))
     return 1;
 
   std::string_view filename = lua_toistring(L, -1)->view();
@@ -406,7 +397,7 @@ static int loadfunc(lua_State* L, std::string_view filename, std::string_view mo
 static int searcher_C(lua_State* L)
 {
   std::string_view name = luaL_checklstring(L, 1);
-  if (!findfile(L, name, lt::cpath, LUA_DIRSEP))
+  if (!findfile(L, name, lt::cpath, lt::LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
   return checkload(L, (loadfunc(L, filename->view(), name) == 0), filename->view());
@@ -419,7 +410,7 @@ static int searcher_Croot(lua_State* L)
   int stat;
   if (p == std::string_view::npos)
     return 0; /* is root */
-  if (!findfile(L, name.substr(0, p), lt::cpath, LUA_DIRSEP))
+  if (!findfile(L, name.substr(0, p), lt::cpath, lt::LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
   if ((stat = loadfunc(L, filename->view(), name)) != 0)
@@ -567,10 +558,10 @@ LUAMOD_API int luaopen_package(lua_State* L)
   luaL_newlibi(L, pk_funcs);
   createsearcherstable(L);
   /* set paths */
-  setpath(L, lt::path, LUA_PATH_VAR, LUA_PATH_DEFAULT);
-  setpath(L, lt::cpath, LUA_CPATH_VAR, LUA_CPATH_DEFAULT);
+  setpath(L, lt::path, LUA_PATH_VAR, lt::LUA_PATH_DEFAULT);
+  setpath(L, lt::cpath, LUA_CPATH_VAR, lt::LUA_CPATH_DEFAULT);
   /* store config information */
-  lua_pushlstring(L, CONFIG, 0, (CONFIG).size());
+  lua_pushlstring(L, lt::CONFIG, 0, lt::CONFIG.size());
   lua_setfieldi(L, -2, lt::config);
   /* set field 'loaded' */
   luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);

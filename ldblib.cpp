@@ -471,14 +471,15 @@ static int db_debug(lua_State* L)
 {
   for (;;)
   {
-    char buffer[250];
+    char buffer[LUA_MAXINPUT];
+    byte_span span(buffer, LUA_MAXINPUT);
     os_print_stderr(lt::lua_debug);
     os_flush_stderr();
-    if (!os_readline(os_stdin(), std::span<char>{buffer, sizeof(buffer)}) || std::string_view(buffer) == lt::cont_n)
+    if (!os_readline(os_stdin(), span.span()) || span.str_view().view() == lt::cont_n)
     {
       return 0;
     }
-    if (luaL_loadbufferi(L, std::string_view(buffer), lt::debug_command, lt::t_char) || lua_pcall(L, 0, 0, 0))
+    if (luaL_loadbufferi(L, span.str_view().view(), lt::debug_command, lt::t_char) || lua_pcall(L, 0, 0, 0))
     {
       os_print_stderr(luaL_toistring(L, -1)->view());
       os_print_stderr(lt::n_3);

@@ -13,8 +13,6 @@
 #include "lzio.h"
 
 /* data to catch conversion errors */
-inline constexpr std::string_view LUAC_DATA = "\x19\x93\r\n\x1a\n";
-
 inline constexpr int LUAC_INT = -0x5678;
 inline constexpr Instruction LUAC_INST = 0x12345678;
 inline constexpr lua_Number LUAC_NUM = -370.5;
