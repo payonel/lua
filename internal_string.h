@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "host_string.h"
+#include "bytes.h"
 
 inline int sv_byteat(std::string_view s, size_t i)
 {
@@ -110,87 +111,3 @@ private:
   std::string bytes_;
 };
 
-struct byte_view
-{
-  // byte_view() = default;
-  // byte_view(const char* cstr)                              : sv(cstr),      offset(0),   length(sv.size()) {}
-  // byte_view(const char* zstr, size_t len)                  : sv(zstr, len), offset(0),   length(sv.size()) {}
-  byte_view(std::string_view view)                         : sv(view),      offset(0),   length(sv.size()) {}
-  byte_view(std::string_view view, size_t off, size_t len) : sv(view),      offset(off), length(len) {}
-  byte_view(std::span<char> bytes)                         : sv(std::string_view(bytes.data(), bytes.size())), offset(0), length(bytes.size()) {}
-
-  size_t size() const { return length; }
-  const char* data() const { return sv.data() + offset; }
-
-  bool ends_with(char c)
-  {
-    return length > 0 && sv.size() >= length + offset && sv.at(offset + length - 1) == c;
-  }
-
-  std::string_view view() const
-  {
-    return sv.substr(offset, length);
-  }
-
-  byte_view substr(size_t off, size_t len) const
-  {
-    byte_view cp = *this;
-    cp.offset = offset + off;
-    cp.length = len;
-    return cp;
-  }
-
-  std::string_view sv {nullptr, 0};
-  size_t offset = 0;
-  size_t length = 0;
-};
-
-struct byte_span
-{
-  byte_span(std::span<char> bytes) : sp(bytes), offset(0), length(bytes.size()) {}
-  byte_span(char* rw, size_t len) : sp(rw, len), offset(0), length(sp.size()) {}
-
-  size_t size() const { return length; }
-  size_t capacity() const { return sp.size(); }
-  char* data() const { return sp.data() + offset; }
-
-  size_t apply(std::string_view from)
-  {
-    assert(from.size() <= length);
-    return std::copy_n(from.data(), from.size(), sp.data() + offset) - (sp.data() + offset);
-  }
-
-  byte_view view() const
-  {
-    return byte_view(std::string_view(sp.data(), sp.size()), offset, length);
-  }
-
-  byte_view str_view() const
-  {
-    assert(offset + length <= sp.size());
-    size_t n = ::strnlen(sp.data() + offset, length);
-    return byte_view(std::string_view(sp.data(), sp.size()), offset, n);
-  }
-
-  char& operator[] (size_t i)
-  {
-    return sp[offset + i];
-  }
-
-  std::span<char> span() const
-  {
-    return sp.subspan(offset, length);
-  }
-
-  byte_span subspan(size_t off, size_t len) const
-  {
-    byte_span cp = *this;
-    cp.offset = offset + off;
-    cp.length = len;
-    return cp;
-  }
-
-  std::span<char> sp;
-  size_t offset = 0;
-  size_t length = 0;
-};

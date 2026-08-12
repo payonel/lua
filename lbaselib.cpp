@@ -406,7 +406,7 @@ static int luaB_loadfile(lua_State* L)
 /*
 ** Reader for generic 'load' function.
 */
-static std::optional<std::string_view> generic_reader(lua_State* L, void* ud)
+static std::optional<byte_view> generic_reader(lua_State* L, void* ud)
 {
   int* firstcall = ((int*)(ud));
   luaL_checkstacki(L, 2, lt::too_many_nested_functions);

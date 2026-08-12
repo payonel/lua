@@ -398,25 +398,23 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
 
 static int l_strcmp(const TString* ts1, const TString* ts2)
 {
-  std::string_view s1 = ts1->data.view();
-  std::string_view s2 = ts2->data.view();
+  byte_view s1(ts1->data.view());
+  byte_view s2(ts2->data.view());
   for (;;)
-  { /* for each segment */
-    size_t zl1 = std::min(s1.find('\0'), s1.size()); /* index of first '\0' in 's1' */
-    size_t zl2 = std::min(s2.find('\0'), s2.size()); /* index of first '\0' in 's2' */
-    int temp = os_strcoll(s1.substr(0, zl1), s2.substr(0, zl2));
-    if (temp != 0) /* not equal? */
-      return temp; /* done */
-    else
-    {                                          /* strings are equal up to a '\0' */
-      if (zl2 == s2.size())                    /* 's2' is finished? */
-        return (zl1 == s1.size()) ? 0 : 1;     /* check 's1' */
-      else if (zl1 == s1.size())               /* 's1' is finished? */
-        return -1; /* 's1' is less than 's2' ('s2' is not finished) */
-      /* both strings longer than 'zl'; go on comparing after the '\0' */
-      s1.remove_prefix(zl1 + 1);
-      s2.remove_prefix(zl2 + 1);
-    }
+  {
+    size_t zl1 = s1.find('\0');
+    size_t zl2 = s2.find('\0');
+    if (zl1 == std::string_view::npos) zl1 = s1.size();
+    if (zl2 == std::string_view::npos) zl2 = s2.size();
+    int temp = os_strcoll(s1.substr(0, zl1).view(), s2.substr(0, zl2).view());
+    if (temp != 0)
+      return temp;
+    if (zl2 == s2.size())
+      return (zl1 == s1.size()) ? 0 : 1;
+    if (zl1 == s1.size())
+      return -1;
+    s1 = s1.substr(zl1 + 1);
+    s2 = s2.substr(zl2 + 1);
   }
 }
 

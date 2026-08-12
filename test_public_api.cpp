@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "lua.h"
 #include "lualib.h"
@@ -56,11 +58,11 @@ static lua_State* new_state()
 
 struct StringReader
 {
-  std::string_view src;
+  byte_view src;
   bool done;
 };
 
-static std::optional<std::string_view> whole_reader(lua_State*, void* ud)
+static std::optional<byte_view> whole_reader(lua_State*, void* ud)
 {
   StringReader* r = static_cast<StringReader*>(ud);
   if (r->done)
@@ -71,11 +73,11 @@ static std::optional<std::string_view> whole_reader(lua_State*, void* ud)
 
 struct ByteReader
 {
-  std::string_view src;
+  byte_view src;
   size_t pos;
 };
 
-static std::optional<std::string_view> byte_reader(lua_State*, void* ud)
+static std::optional<byte_view> byte_reader(lua_State*, void* ud)
 {
   ByteReader* r = static_cast<ByteReader*>(ud);
   if (r->pos >= r->src.size())
@@ -1131,7 +1133,8 @@ static void test_load_dump()
   lua_pop(L, 1);
 
   {
-    ByteReader r{"return 6 * 7", 0};
+    byte_view ro("return 6 * 7");
+    ByteReader r{ro, 0};
     CHECK(lua_load(L, byte_reader, &r, "=bytes"_hs, std::nullopt) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 42);
@@ -1345,6 +1348,211 @@ static void test_warnings()
   lua_setwarnf(L, nullptr, nullptr);
   lua_warning(L, "ignored", 0);
   CHECK(w.calls == 2);
+
+  lua_close(L);
+}
+
+/*
+** Exercises every branch of checkcontrol (lauxlib.cpp) through the
+** default warn functions installed by luaL_newstate. Warn output goes
+** to stderr, so capture it around each emission.
+*/
+static int g_stderr_saved = -1;
+static const char* const k_warncap_path = "/tmp/tpa_warncap.txt";
+
+static void stderr_capture_begin()
+{
+  fflush(stderr);
+  g_stderr_saved = dup(2);
+  int fd = open(k_warncap_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+  CHECK(fd >= 0);
+  dup2(fd, 2);
+  close(fd);
+}
+
+static std::string stderr_capture_end()
+{
+  fflush(stderr);
+  dup2(g_stderr_saved, 2);
+  close(g_stderr_saved);
+  g_stderr_saved = -1;
+  std::string out;
+  FILE* f = fopen(k_warncap_path, "rb");
+  CHECK(f != nullptr);
+  char buff[512];
+  size_t n;
+  while ((n = fread(buff, 1, sizeof(buff), f)) > 0)
+    out.append(buff, n);
+  fclose(f);
+  remove(k_warncap_path);
+  return out;
+}
+
+static std::string warn_and_capture(lua_State* L, const char* msg, int tocont)
+{
+  stderr_capture_begin();
+  lua_warning(L, msg, tocont);
+  return stderr_capture_end();
+}
+
+static void test_warn_control()
+{
+  lua_State* L = luaL_newstate(); /* installs warnfon by default */
+  CHECK(L != nullptr);
+
+  /* branch: m[0] != '@' — regular message, warnings on */
+  CHECK(warn_and_capture(L, "plain", 0) == "Lua warning: plain\n");
+
+  /* branch: m.empty() — not a control message */
+  CHECK(warn_and_capture(L, "", 0) == "Lua warning: \n");
+
+  /* branch: tocont — "@off" as first part of a continued message is
+     content, not control */
+  CHECK(warn_and_capture(L, "@off", 1) == "Lua warning: @off");
+  CHECK(warn_and_capture(L, "!", 0) == "!\n");
+  CHECK(warn_and_capture(L, "still-on", 0) == "Lua warning: still-on\n");
+
+  /* branch: unknown control — consumed, state unchanged */
+  CHECK(warn_and_capture(L, "@bogus", 0) == "");
+  CHECK(warn_and_capture(L, "after-bogus", 0) == "Lua warning: after-bogus\n");
+
+  /* branch: tail == "off" — turns warnings off */
+  CHECK(warn_and_capture(L, "@off", 0) == "");
+  CHECK(warn_and_capture(L, "hidden", 0) == "");
+
+  /* while off: empty and unknown-control messages stay silent */
+  CHECK(warn_and_capture(L, "", 0) == "");
+  CHECK(warn_and_capture(L, "@bogus", 0) == "");
+
+  /* branch: tail == "on" — reachable from warnfoff too */
+  CHECK(warn_and_capture(L, "@on", 0) == "");
+  CHECK(warn_and_capture(L, "visible", 0) == "Lua warning: visible\n");
+
+  lua_close(L);
+}
+
+/*
+** Reaches unmakemask (ldblib.cpp) through db_gethook: every mask bit
+** individually, combined, count-only, and the external-hook path.
+*/
+static void test_db_gethook_mask()
+{
+  lua_State* L = luaL_newstate();
+  CHECK(L != nullptr);
+  luaL_openlibs(L);
+
+  /* no hook: gethook fails before reaching unmakemask */
+  CHECK(do_string(L, "return debug.gethook()") == LUA_OK);
+  CHECK(lua_isnil(L, -1));
+  lua_settop(L, 0);
+
+  /* each mask character round-trips: sethook 'c'/'r'/'l' */
+  const char* masks[] = {"c", "r", "l", "crl"};
+  for (const char* m : masks)
+  {
+    lua_pushstring(L, m);
+    lua_setglobal(L, "m");
+    CHECK(do_string(L, "debug.sethook(function() end, m, 0)\n"
+                       "local f, mask, count = debug.gethook()\n"
+                       "return type(f), mask, count") == LUA_OK);
+    CHECK(lua_tolstring(L, -3) == "function");
+    CHECK(*lua_tolstring(L, -2) == std::string_view(m));
+    CHECK(lua_tointeger(L, -1) == 0);
+    lua_settop(L, 0);
+  }
+
+  /* count-only hook: mask has only LUA_MASKCOUNT, unmakemask emits "" */
+  CHECK(do_string(L, "debug.sethook(function() end, '', 7)\n"
+                     "local f, mask, count = debug.gethook()\n"
+                     "return type(f), mask, count") == LUA_OK);
+  CHECK(lua_tolstring(L, -3) == "function");
+  CHECK(*lua_tolstring(L, -2) == "");
+  CHECK(lua_tointeger(L, -1) == 7);
+  lua_settop(L, 0);
+
+  /* external C hook: db_gethook reports "external hook" and still
+     converts the mask through unmakemask */
+  lua_sethook(L, counting_hook, LUA_MASKCALL | LUA_MASKLINE, 0);
+  CHECK(do_string(L, "return debug.gethook()") == LUA_OK);
+  CHECK(lua_tolstring(L, -3) == "external hook");
+  CHECK(*lua_tolstring(L, -2) == "cl");
+  CHECK(lua_tointeger(L, -1) == 0);
+  lua_settop(L, 0);
+
+  /* mask with count: 'crl' plus count keeps count out of the string */
+  CHECK(do_string(L, "debug.sethook(function() end, 'crl', 3)\n"
+                     "local _, mask, count = debug.gethook()\n"
+                     "return mask, count") == LUA_OK);
+  CHECK(*lua_tolstring(L, -2) == "crl");
+  CHECK(lua_tointeger(L, -1) == 3);
+  lua_settop(L, 0);
+
+  lua_close(L);
+}
+
+/*
+** Covers db_debug (debug.debug REPL): executed line, load error,
+** runtime error, 'cont' exit, and EOF exit. Feeds stdin from a file
+** and captures the stderr prompt/error output.
+*/
+static int g_stdin_saved = -1;
+static const char* const k_dbgin_path = "/tmp/tpa_dbgin.txt";
+
+static void stdin_feed_begin(const char* content)
+{
+  FILE* f = fopen(k_dbgin_path, "wb");
+  CHECK(f != nullptr);
+  fwrite(content, 1, strlen(content), f);
+  fclose(f);
+  g_stdin_saved = dup(0);
+  int fd = open(k_dbgin_path, O_RDONLY);
+  CHECK(fd >= 0);
+  dup2(fd, 0);
+  close(fd);
+}
+
+static void stdin_feed_end()
+{
+  dup2(g_stdin_saved, 0);
+  close(g_stdin_saved);
+  g_stdin_saved = -1;
+  clearerr(stdin);
+  remove(k_dbgin_path);
+}
+
+static void test_db_debug()
+{
+  lua_State* L = luaL_newstate();
+  CHECK(L != nullptr);
+  luaL_openlibs(L);
+
+  /* one good line, one load error, one runtime error, then 'cont' */
+  stdin_feed_begin("x = 42\n"
+                   "this is not lua ((\n"
+                   "error('boom')\n"
+                   "cont\n");
+  stderr_capture_begin();
+  int st = do_string(L, "debug.debug(); return x");
+  std::string err = stderr_capture_end();
+  stdin_feed_end();
+  CHECK(st == LUA_OK);
+  CHECK(lua_tointeger(L, -1) == 42); /* good line executed */
+  lua_settop(L, 0);
+  CHECK(err.find("lua_debug> ") != std::string::npos);
+  CHECK(err.find("(debug command)") != std::string::npos); /* load error printed */
+  CHECK(err.find("boom") != std::string::npos);            /* runtime error printed */
+
+  /* EOF on stdin also exits the loop */
+  stdin_feed_begin("y = 7\n");
+  stderr_capture_begin();
+  st = do_string(L, "debug.debug(); return y");
+  std::string err2 = stderr_capture_end();
+  stdin_feed_end();
+  CHECK(st == LUA_OK);
+  CHECK(lua_tointeger(L, -1) == 7);
+  lua_settop(L, 0);
+  CHECK(err2.find("lua_debug> ") != std::string::npos);
+  CHECK(err2.find("boom") == std::string::npos); /* fresh session, no stale errors */
 
   lua_close(L);
 }
@@ -3673,6 +3881,9 @@ int main()
       {"load_dump", test_load_dump},
       {"coroutines", test_coroutines},
       {"warnings", test_warnings},
+      {"warn_control", test_warn_control},
+      {"db_gethook_mask", test_db_gethook_mask},
+      {"db_debug", test_db_debug},
       {"gc", test_gc},
       {"misc", test_misc},
       {"debug_api", test_debug_api},

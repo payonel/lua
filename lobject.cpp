@@ -486,16 +486,16 @@ static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
   if (endpos == std::string_view::npos)
   {
     char buff[L_MAXLENNUM + 1];
+    byte_span buffsp(buff, L_MAXLENNUM + 1);
     char point = ((char)(lua_getlocaledecpoint()));
-    size_t ppoint = (point != '.') ? s.find(point, off)
-                                   : std::string_view::npos;
+    size_t ppoint = (point != '.') ? s.find(point, off) : byte_view::npos;
     size_t len = s.size() - off;
-    if (ppoint == std::string_view::npos || len > L_MAXLENNUM)
-      return std::string_view::npos;
-    memcpy(buff, s.data() + off, len);
-    buff[ppoint - off] = '.';
-    endpos = l_str2dloc(std::string_view{buff, len}, 0, result, mode); /* try again */
-    if (endpos != std::string_view::npos)
+    if (ppoint == byte_view::npos || len > L_MAXLENNUM)
+      return byte_view::npos;
+    buffsp.apply(s.substr(off, len));
+    buffsp[ppoint - off] = '.';
+    endpos = l_str2dloc(buffsp.subspan(0, len).view().view(), 0, result, mode); /* try again */
+    if (endpos != byte_view::npos)
       endpos = off + endpos; /* make relative to 's' */
   }
   return endpos;
@@ -603,20 +603,18 @@ static int tostringbuffFloat(lua_Number n, char* buff)
   int len = ((int)(res.ptr - buff));
   buff[len] = '\0';
   lua_Number check;
-  std::from_chars(buff + (buff[0] == '-'), buff + len, check,
-                  std::chars_format::general); /* read it back */
+  std::from_chars(buff + (buff[0] == '-'), buff + len, check, std::chars_format::general); /* read it back */
   if (buff[0] == '-')
     check = -check;
   if (check != n)
   {
-    res = std::to_chars(buff, buff + LUA_N2SBUFFSZ - 3, n,
-                        std::chars_format::general, 17);
+    res = std::to_chars(buff, buff + LUA_N2SBUFFSZ - 3, n, std::chars_format::general, 17);
     assert(res.ec == std::errc());
     len = ((int)(res.ptr - buff));
     buff[len] = '\0';
   }
-  if (std::string_view{buff, ((size_t)(len))}.find_first_not_of(
-          lt::digits_and_dash) == std::string_view::npos)
+  byte_view buffsv(buff, LUA_N2SBUFFSZ);
+  if (buffsv.substr(0, ((size_t)(len))).find_first_not_of(lt::digits_and_dash) == std::string_view::npos)
   {
     buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
@@ -730,10 +728,11 @@ static const InternalString* clearbuff(BuffFS* buff)
   return res;
 }
 
-static void addstr2buff(BuffFS* buff, std::string_view str, size_t off, size_t slen)
+static void addstr2buff(BuffFS* buff, byte_view bv)
 {
   if (buff->err) /* do nothing else after an error */
     return;
+  size_t slen = bv.size();
   if (slen > (MAX_SIZE / 2) - buff->blen)
   {                /* overflow? */
     buff->err = 2;
@@ -751,13 +750,8 @@ static void addstr2buff(BuffFS* buff, std::string_view str, size_t off, size_t s
     }
     buff->b = {static_cast<char*>(nb), newsize};
   }
-  memcpy(buff->b.data() + buff->blen, str.data() + off, slen);
+  memcpy(buff->b.data() + buff->blen, bv.data(), slen);
   buff->blen += slen;
-}
-
-static void addstr2buff(BuffFS* buff, std::string_view str)
-{
-  addstr2buff(buff, str, 0, str.size());
 }
 
 /*
@@ -767,7 +761,7 @@ static void addnum2buff(BuffFS* buff, TValue* num)
 {
   char numbuff[LUA_N2SBUFFSZ];
   unsigned len = luaO_tostringbuff(num, numbuff);
-  addstr2buff(buff, std::string_view{numbuff, len});
+  addstr2buff(buff, byte_view(std::string_view(numbuff, LUA_N2SBUFFSZ), len));
 }
 
 
@@ -846,7 +840,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
   FmtScan sc{f};
   while (sc.next())
   {
-    addstr2buff(&buff, f, sc.litStart, sc.litEnd - sc.litStart);
+    addstr2buff(&buff, byte_view(f).substr(sc.litStart, sc.litEnd - sc.litStart));
     switch (sc.spec)
     { /* conversion specifier */
     case 's':
@@ -859,7 +853,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     { /* an 'int' as a character */
       assert(argn < args.n && args.arg[argn].tag == 'c');
       char c = ((char)(args.arg[argn++].i));
-      addstr2buff(&buff, std::string_view{&c, sizeof(char)});
+      addstr2buff(&buff, byte_view(std::string_view(&c, sizeof(char))));
       break;
     }
     case 'd':
@@ -896,7 +890,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       std::to_chars_result res =
           std::to_chars(bf + 2, bf + LUA_N2SBUFFSZ, ((uintptr_t)(p)), 16);
       assert(res.ec == std::errc());
-      addstr2buff(&buff, std::string_view{bf, ((size_t)(res.ptr - bf))});
+      addstr2buff(&buff, byte_view(std::string_view(bf, LUA_N2SBUFFSZ), ((size_t)(res.ptr - bf))));
       break;
     }
     case 'U':
@@ -904,8 +898,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       char bf[UTF8BUFFSZ];
       assert(argn < args.n && args.arg[argn].tag == 'U');
       int len = luaO_utf8esc(bf, ((l_uint32)(args.arg[argn++].i)));
-      addstr2buff(&buff, std::string_view{bf, UTF8BUFFSZ},
-                  ((size_t)(UTF8BUFFSZ - len)), ((unsigned int)(len)));
+      addstr2buff(&buff, byte_view(std::string_view(bf, UTF8BUFFSZ)).substr(UTF8BUFFSZ - len));
       break;
     }
     case -1:
@@ -916,12 +909,12 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     }
     default:
     {
-      addstr2buff(&buff, f, sc.escPos, 2); /* keep unknown format in the result */
+      addstr2buff(&buff, byte_view(f).substr(sc.escPos, 2)); /* keep unknown format in the result */
       break;
     }
     }
   }
-  addstr2buff(&buff, f, sc.litStart, sc.litEnd - sc.litStart); /* rest of 'fmt' */
+  addstr2buff(&buff, byte_view(f).substr(sc.litStart, sc.litEnd - sc.litStart)); /* rest of 'fmt' */
   assert(argn == args.n);
   return clearbuff(&buff); /* empty buffer into a new string */
 }

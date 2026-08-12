@@ -32,7 +32,7 @@ const InternalString* luaL_checkistring(lua_State* L, int arg);
 const InternalString* luaL_optistring(lua_State* L, int arg, const InternalString* def);
 const InternalString* luaL_toistring(lua_State* L, int idx);
 
-int luaL_loadbufferi(lua_State* L, std::string_view buff, std::optional<std::string_view> name, std::optional<std::string_view> mode);
+int luaL_loadbufferi(lua_State* L, byte_view buff, std::optional<std::string_view> name, std::optional<std::string_view> mode);
 int luaL_loadfilei(lua_State* L, std::optional<std::string_view> filename, std::optional<std::string_view> mode);
 
 int lua_getfieldi(lua_State* L, int idx, std::string_view k);

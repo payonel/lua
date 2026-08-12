@@ -418,8 +418,13 @@ LUA_API void lua_close(lua_State* L)
 void luaE_warning(lua_State* L, std::string_view msg, int tocont)
 {
   lua_WarnFunction wf = L->l_G->warnf;
+  void* ud = L->l_G->ud_warn;
   if (wf != nullptr)
-    wf(L->l_G->ud_warn, HostString{msg}, tocont);
+  {
+    lua_unlock(L);
+    wf(ud, HostString{msg}, tocont);
+    lua_lock(L);
+  }
 }
 
 /*

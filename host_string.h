@@ -2,7 +2,7 @@
 #pragma once
 
 #include <string>
-#include <string_view>
+#include "bytes.h"
 
 class HostString
 {

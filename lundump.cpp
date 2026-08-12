@@ -388,7 +388,8 @@ static void checknumformat(LoadState* S, int eq, std::string_view tname)
 static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
-  checkliteral(S, LUA_SIGNATURE.substr(1), lt::not_a_binary_chunk);
+  byte_view sig_tail = byte_view(LUA_SIGNATURE).substr(1);
+  checkliteral(S, sig_tail.view(), lt::not_a_binary_chunk);
   if (loadByte(S) != LUAC_VERSION)
     error(S, lt::version_mismatch);
   if (loadByte(S) != LUAC_FORMAT)
@@ -410,7 +411,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, std::string_view name
   int c0 = sv_byteat(name, 0);
   if (c0 == '@' || c0 == '=')
   {
-    name = name.substr(1);
+    name = byte_view(name).substr(1).view();
   }
   else if (c0 == LUA_SIGNATURE[0])
   {

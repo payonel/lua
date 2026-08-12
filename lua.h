@@ -96,7 +96,7 @@ typedef int (*lua_CFunction)(lua_State* L);
 */
 typedef int (*lua_KFunction)(lua_State* L, int status, lua_KContext ctx);
 
-typedef std::optional<std::string_view> (*lua_Reader)(lua_State* L, void* ud);
+typedef std::optional<byte_view> (*lua_Reader)(lua_State* L, void* ud);
 
 typedef int (*lua_Writer)(lua_State* L, std::optional<std::string_view> b, void* ud);
 

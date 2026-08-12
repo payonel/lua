@@ -297,10 +297,10 @@ static int searchpath(lua_State* L, std::string_view name,
       size_t sepmark = list.find(lt::LUA_PATH_SEP, pos);
       if (sepmark == std::string_view::npos)          /* separator not found? */
         sepmark = list.size();                        /* name goes until the end */
-      std::string_view filename = list.substr(pos, sepmark - pos);
-      if (readable(filename))
+      byte_view filename = byte_view(list).substr(pos, sepmark - pos);
+      if (readable(filename.view()))
       {                                    /* does file exist and is readable? */
-        lua_pushistringref(L, filename);  /* save and return name */
+        lua_pushistringref(L, filename.view());  /* save and return name */
         return 1;
       }
       pos = sepmark + 1;
@@ -386,7 +386,7 @@ static int loadfunc(lua_State* L, std::string_view filename, std::string_view mo
     stat = lookforfunc(L, filename, openfunc->view());
     if (stat != ERRFUNC)
       return stat;
-    modname = modname.substr(mark + 1); /* else go ahead and try old-style name */
+    modname = byte_view(modname).substr(mark + 1).view(); /* else go ahead and try old-style name */
   }
   lua_pushlstring(L, modname, 0, modname.size());
   lua_pushfstringi(L, lt::luaopen_s);
@@ -410,7 +410,8 @@ static int searcher_Croot(lua_State* L)
   int stat;
   if (p == std::string_view::npos)
     return 0; /* is root */
-  if (!findfile(L, name.substr(0, p), lt::cpath, lt::LUA_DIRSEP))
+  byte_view prefix(name, p);
+  if (!findfile(L, prefix.view(), lt::cpath, lt::LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
   if ((stat = loadfunc(L, filename->view(), name)) != 0)

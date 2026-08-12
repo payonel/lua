@@ -804,15 +804,14 @@ struct LoadF
   char buff[BUFSIZ]; /* area for reading file */
 };
 
-static std::optional<std::string_view> getF(lua_State*, void* ud)
+static std::optional<byte_view> getF(lua_State*, void* ud)
 {
   LoadF* lf = (LoadF*) ud;
   byte_span span(lf->buff, BUFSIZ);
   if (lf->n > 0)
   {                          /* are there pre-read characters to be read? */
-    size_t n = lf->n;        /* return them (chars already in buffer) */
+    span = span.subspan(0, lf->n); /* return them (chars already in buffer) */
     lf->n = 0;               /* no more pre-read characters */
-    return std::string_view{lf->buff, n};
   }
   else
   { /* read a block from file */
@@ -822,10 +821,11 @@ static std::optional<std::string_view> getF(lua_State*, void* ud)
     if (os_feof(lf->f))
       return std::nullopt;
     size_t n = os_fread(lf->f, span.span()); /* read block */
+    span = span.subspan(0, n);
     if (n == 0)
       return std::nullopt;
-    return std::string_view{lf->buff, n};
   }
+  return span.view();
 }
 
 static int errfile(lua_State* L, std::string_view what, int fnameindex, int err)
@@ -946,20 +946,20 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const std::optional<HostString>& fil
 
 struct LoadS
 {
-  std::string_view chunk;
+  byte_view chunk {lt::empty_str};
 };
 
-static std::optional<std::string_view> getS(lua_State*, void* ud)
+static std::optional<byte_view> getS(lua_State*, void* ud)
 {
   LoadS* ls = (LoadS*) ud;
   if (ls->chunk.empty())
     return std::nullopt;
-  std::string_view chunk = ls->chunk;
-  ls->chunk = {};
+  byte_view chunk = ls->chunk;
+  ls->chunk = byte_view(lt::empty_str);
   return chunk;
 }
 
-int luaL_loadbufferi(lua_State* L, std::string_view buff, std::optional<std::string_view> name, std::optional<std::string_view> mode)
+int luaL_loadbufferi(lua_State* L, byte_view buff, std::optional<std::string_view> name, std::optional<std::string_view> mode)
 {
   LoadS ls;
   ls.chunk = buff;
@@ -1282,9 +1282,10 @@ static int checkcontrol(lua_State* L, const HostString& message, int tocont)
     return 0;
   else
   {
-    if (m.substr(1) == lt::off_2)
+    byte_view tail = byte_view(m).substr(1);
+    if (tail == lt::off_2)
       lua_setwarnf(L, warnfoff, L); /* turn warnings off */
-    else if (m.substr(1) == lt::on_2)
+    else if (tail == lt::on_2)
       lua_setwarnf(L, warnfon, L); /* turn warnings on */
     return 1;                      /* it was a control message */
   }

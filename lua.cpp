@@ -477,10 +477,10 @@ static bool lua_readline(byte_span buff, std::string_view prompt)
     }
   }
 
-  std::string_view sv = buff.str_view().view();
-  if (sv.ends_with('\n'))
+  byte_view content = buff.str_view();
+  if (content.ends_with('\n'))
   {
-    buff[sv.size() - 1] = '\0';
+    buff[content.size() - 1] = '\0';
   }
 
   return true;
@@ -568,8 +568,8 @@ static int pushline(lua_State* L, int firstline)
   lua_pop(L, 1); /* remove prompt */
   if (!ready)
     return 0; /* no input */
-  std::string_view buffview = span.str_view().view();
-  lua_pushlstring(L, buffview, 0, buffview.size());
+  byte_view buffview = span.str_view();
+  lua_pushlstring(L, buffview.view(), 0, buffview.size());
   return 1;
 }
 

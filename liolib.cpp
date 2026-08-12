@@ -222,8 +222,8 @@ static OsFile* getiofile(lua_State* L, std::string_view findex)
   p = (LStream*) lua_touserdata(L, -1);
   if (l_unlikely(isclosed(p)))
   {
-    std::string_view name = findex.substr(lt::_IO_.size());
-    lua_pushlstring(L, name, 0, name.size());
+    byte_view name = byte_view(findex).substr(lt::_IO_.size());
+    lua_pushlstring(L, name.view(), 0, name.size());
     luaL_errori(L, lt::default_s_file_is_closed);
   }
   return p->f;
@@ -418,7 +418,7 @@ static int read_number(lua_State* L, OsFile* f)
       count = 1; /* count initial '0' as a valid digit */
   }
   count += readdigits(&rn, hex);   /* integral part */
-  if (test2(&rn, std::string_view{decp, 2}))
+  if (test2(&rn, std::string_view(decp, sizeof(decp))))
     count += readdigits(&rn, hex); /* fractional part */
   if (count > 0 && test2(&rn, (hex ? lt::pP_chars : lt::eE_chars)))
   {                     /* exponent mark? */
@@ -610,25 +610,15 @@ static int g_write(lua_State* L, OsFile* f, int arg)
   errno = 0;
   for (; nargs--; arg++)
   { /* for each argument */
-    const char* s;
-    size_t len;
     size_t numbytes; /* bytes written in one call to 'fwrite' */
     char numbuff[LUA_N2SBUFFSZ];
     std::optional<std::string_view> numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
-    if (numtxt.has_value())
-    { /* did conversion work (value was a number)? */
-      s = numtxt->data();
-      len = numtxt->size();
-    }
-    else
-    { /* must be a string */
-      std::string_view sv = luaL_checklstring(L, arg);
-      s = sv.data();
-      len = sv.size();
-    }
-    numbytes = os_fwrite(f, std::string_view{s, len});
+    byte_view bv = numtxt.has_value()
+      ? byte_view(std::string_view(numbuff, LUA_N2SBUFFSZ), numtxt->size())
+      : byte_view(luaL_checklstring(L, arg));
+    numbytes = os_fwrite(f, bv.view());
     totalbytes += numbytes;
-    if (numbytes < len)
+    if (numbytes < bv.size())
     { /* write error? */
       int n = luaL_fileresulti(L, 0, {}, errno);
       lua_pushinteger(L, ((lua_Integer)(totalbytes)));

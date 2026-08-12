@@ -122,7 +122,6 @@ static void warnf(void* ud, const HostString& msg, int tocont)
   strcat(buff, m.c_str()); /* add new message to current warning */
   if (!tocont)
   { /* message finished? */
-    lua_unlock(L);
     luaL_checkstack(L, 1, HostString(lt::warn_stack_space));
     lua_getglobal(L, HostString(lt::_WARN));
     if (!lua_toboolean(L, -1))
@@ -132,7 +131,6 @@ static void warnf(void* ud, const HostString& msg, int tocont)
       badexit("Unhandled warning in store mode: %s\naborting...\n",
               std::string(lua_toistring(L, -1)->view()).c_str(), buff);
     }
-    lua_lock(L);
     switch (mode)
     {
     case 0:
@@ -149,11 +147,9 @@ static void warnf(void* ud, const HostString& msg, int tocont)
     }
     case 2:
     { /* store */
-      lua_unlock(L);
       luaL_checkstack(L, 1, HostString(lt::warn_stack_space));
       lua_pushstring(L, HostString::from_bytes(std::string_view(buff)));
       lua_setglobal(L, HostString(lt::_WARN)); /* assign message to global '_WARN' */
-      lua_lock(L);
       break;
     }
     }

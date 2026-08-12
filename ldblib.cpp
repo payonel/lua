@@ -389,7 +389,7 @@ static int makemask(std::string_view smask, int count)
   return mask;
 }
 
-static size_t unmakemask(int mask, std::span<char> smask)
+static size_t unmakemask(int mask, byte_span smask)
 {
   size_t i = 0;
   if (mask & LUA_MASKCALL)
@@ -443,6 +443,7 @@ static int db_gethook(lua_State* L)
   int arg;
   lua_State* L1 = getthread(L, &arg);
   char buff[5];
+  byte_span buffsp(buff);
   int mask = lua_gethookmask(L1);
   lua_Hook hook = lua_gethook(L1);
   if (hook == nullptr)
@@ -461,8 +462,9 @@ static int db_gethook(lua_State* L)
     lua_rawget(L, -2); /* 1st result = hooktable[L1] */
     lua_remove(L, -2); /* remove hook table */
   }
-  size_t masklen = unmakemask(mask, buff);
-  lua_pushlstring(L, std::string_view{buff, masklen}, 0, masklen); /* 2nd result = mask */
+  size_t masklen = unmakemask(mask, buffsp);
+  byte_view maskview = buffsp.subspan(0, masklen).view();
+  lua_pushlstring(L, maskview.view(), 0, maskview.size()); /* 2nd result = mask */
   lua_pushinteger(L, lua_gethookcount(L1));  /* 3rd result = count */
   return 3;
 }
@@ -475,11 +477,12 @@ static int db_debug(lua_State* L)
     byte_span span(buffer, LUA_MAXINPUT);
     os_print_stderr(lt::lua_debug);
     os_flush_stderr();
-    if (!os_readline(os_stdin(), span.span()) || span.str_view().view() == lt::cont_n)
+    if (!os_readline(os_stdin(), span.span()) || span.str_view() == lt::cont_n)
     {
       return 0;
     }
-    if (luaL_loadbufferi(L, span.str_view().view(), lt::debug_command, lt::t_char) || lua_pcall(L, 0, 0, 0))
+    byte_view cmd = span.str_view();
+    if (luaL_loadbufferi(L, cmd, lt::debug_command, lt::t_char) || lua_pcall(L, 0, 0, 0))
     {
       os_print_stderr(luaL_toistring(L, -1)->view());
       os_print_stderr(lt::n_3);
