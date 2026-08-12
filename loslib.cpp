@@ -256,7 +256,7 @@ static int os_date(lua_State* L)
         size_t off = luaL_prepbuffsize(&b, SIZETIMEFMT);
         sp++; /* skip '%' */
         sp = checkoption(L, sfmt, sp, cc, 1);
-        reslen = strftime(luaL_buffarea(&b).data() + off, SIZETIMEFMT, cc, stm);
+        reslen = strftime(luaL_buffaddr(&b).data() + off, SIZETIMEFMT, cc, stm);
         luaL_addsize(&b, reslen);
       }
     }

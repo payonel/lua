@@ -79,6 +79,7 @@ LUALIB_API unsigned(luaL_makeseed)(lua_State* L);
 LUALIB_API lua_Integer(luaL_len)(lua_State* L, int idx);
 LUALIB_API HostString(luaL_gsub) (lua_State* L, const HostString& s, const HostString& p, const HostString& r);
 LUALIB_API void(luaL_setfuncs)(lua_State* L, const std::span<const luaL_Reg>& funcs, int nup);
+LUALIB_API void luaL_newlibtable(lua_State* L, const std::span<const luaL_Reg>& funcs);
 LUALIB_API void luaL_newlib(lua_State* L, const std::span<const luaL_Reg>& funcs);
 
 template <typename F, typename D>
@@ -136,7 +137,7 @@ struct luaL_Buffer
 };
 
 LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf);
-LUALIB_API std::span<char> luaL_buffarea(luaL_Buffer* bf);
+LUALIB_API std::span<char> luaL_buffaddr(luaL_Buffer* bf);
 LUALIB_API void luaL_addchar(luaL_Buffer* B, char c);
 LUALIB_API void luaL_addsize(luaL_Buffer* B, size_t s);
 LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s);

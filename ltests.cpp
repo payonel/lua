@@ -2083,8 +2083,8 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       {
         if (lua_islightcfunction(L, -1))
         {
-          HostString fa = lua_funcaddress(L, -1);
-          lua_pushstring(L1, fa);
+          InternalString fa = lua_funcaddressi(L, -1);
+          lua_pushistring(L1, std::move(fa));
         }
         else
         {
@@ -2256,8 +2256,8 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
       int idx = getindex_aux(L, L1, &sc);
       if (lua_islightcfunction(L1, idx))
       {
-        HostString fa = lua_funcaddress(L1, idx);
-        lua_pushstring(L1, fa);
+        InternalString fa = lua_funcaddressi(L1, idx);
+        lua_pushistring(L1, std::move(fa));
       }
       else
       {

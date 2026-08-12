@@ -454,7 +454,7 @@ static int read_line(lua_State* L, OsFile* f, int chop)
   do
   {                                   /* may need to read several chunks to get whole line */
     size_t off = luaL_prepbuffer(&b); /* preallocate buffer space */
-    std::span<char> buff = luaL_buffarea(&b);
+    std::span<char> buff = luaL_buffaddr(&b);
     unsigned i = 0;
     os_flockfile(f); /* no memory errors can happen inside the lock */
     while (i < LUAL_BUFFERSIZE && (c = os_getbyte(f)) != OS_EOF && c != '\n')
@@ -477,7 +477,7 @@ static void read_all(lua_State* L, OsFile* f)
   do
   { /* read file in chunks of LUAL_BUFFERSIZE bytes */
     size_t off = luaL_prepbuffer(&b);
-    nr = os_fread(f, std::span<char>{luaL_buffarea(&b).data() + off, LUAL_BUFFERSIZE});
+    nr = os_fread(f, std::span<char>{luaL_buffaddr(&b).data() + off, LUAL_BUFFERSIZE});
     luaL_addsize(&b, nr);
   } while (nr == LUAL_BUFFERSIZE);
   luaL_pushresult(&b); /* close buffer */
@@ -489,7 +489,7 @@ static int read_chars(lua_State* L, OsFile* f, size_t n)
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   size_t off = luaL_prepbuffsize(&b, n); /* prepare buffer to read whole block */
-  nr = os_fread(f, std::span<char>{luaL_buffarea(&b).data() + off, n}); /* try to read 'n' chars */
+  nr = os_fread(f, std::span<char>{luaL_buffaddr(&b).data() + off, n}); /* try to read 'n' chars */
   luaL_addsize(&b, nr);
   luaL_pushresult(&b); /* close buffer */
   return (nr > 0);     /* true iff read something */

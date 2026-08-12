@@ -603,11 +603,6 @@ InternalString lua_funcaddressi(lua_State* L, int idx)
   return util::func_to_string(fvalue(&o));
 }
 
-HostString lua_funcaddress(lua_State* L, int idx)
-{
-  return HostString(lua_funcaddressi(L, idx).view());
-}
-
 std::string_view lua_typenamei(lua_State*, int t)
 {
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");

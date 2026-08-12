@@ -289,7 +289,7 @@ static int searchpath(lua_State* L, std::string_view name,
   /* add path to the buffer, replacing marks ('?') with the file name */
   luaL_addgsubi(&buff, path, lt::LUA_PATH_MARK, name);
   {
-    std::span<char> area = luaL_buffarea(&buff);
+    std::span<char> area = luaL_buffaddr(&buff);
     std::string_view list{area.data(), luaL_bufflen(&buff)};
     size_t pos = 0;
     while (pos < list.size())

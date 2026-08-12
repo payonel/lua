@@ -1136,10 +1136,15 @@ LUALIB_API void luaL_setfuncs(lua_State* L, const std::span<const luaL_Reg>& fun
   lua_pop(L, nup); /* remove upvalues */
 }
 
+LUALIB_API void luaL_newlibtable(lua_State* L, const std::span<const luaL_Reg>& funcs)
+{
+  lua_createtable(L, 0, (int)funcs.size());
+}
+
 LUALIB_API void luaL_newlib(lua_State* L, const std::span<const luaL_Reg>& funcs)
 {
   luaL_checkversion(L);
-  lua_createtable(L, 0, (int)funcs.size());
+  luaL_newlibtable(L, funcs);
   luaL_setfuncs(L, funcs, 0);
 }
 
@@ -1492,7 +1497,7 @@ LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf)
   return bf->used;
 }
 
-LUALIB_API std::span<char> luaL_buffarea(luaL_Buffer* bf)
+LUALIB_API std::span<char> luaL_buffaddr(luaL_Buffer* bf)
 {
   return bf->bytes;
 }

@@ -171,8 +171,6 @@ LUA_API void*(lua_touserdata) (lua_State* L, int idx);
 LUA_API lua_State*(lua_tothread) (lua_State* L, int idx);
 LUA_API const void*(lua_topointer) (lua_State* L, int idx);
 
-LUA_API HostString lua_funcaddress(lua_State* L, int idx);
-
 /*
 ** Comparison and arithmetic functions
 */

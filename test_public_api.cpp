@@ -2477,7 +2477,7 @@ static void test_auxlib_refs_buffer()
     lua_pushinteger(L, 99);
     luaL_addvalue(&B);
     size_t off = luaL_prepbuffsize(&B, 3);
-    std::span<char> area = luaL_buffarea(&B);
+    std::span<char> area = luaL_buffaddr(&B);
     std::memcpy(area.data() + off, "!!!", 3);
     luaL_addsize(&B, 3);
     luaL_buffsub(&B, 1);
@@ -2490,7 +2490,7 @@ static void test_auxlib_refs_buffer()
   {
     luaL_Buffer B;
     size_t off = luaL_buffinitsize(L, &B, 4);
-    std::memcpy(luaL_buffarea(&B).data() + off, "ABCD", 4);
+    std::memcpy(luaL_buffaddr(&B).data() + off, "ABCD", 4);
     luaL_pushresultsize(&B, 4);
     std::optional<HostString> s = lua_tostring(L, -1);
     CHECK(s.has_value() && s->to_utf8() == "ABCD");
@@ -3112,7 +3112,7 @@ struct luaL_BuffSpan
 inline luaL_BuffSpan luaL_prepbuffspan(luaL_Buffer* B, size_t sz)
 {
   size_t off = luaL_prepbuffsize(B, sz);
-  return {luaL_buffarea(B), off};
+  return {luaL_buffaddr(B), off};
 }
 
 static bool g_opt_check_called = false;
@@ -3131,6 +3131,12 @@ static void test_auxlib_restored()
         {"add", cf_add},
         {"probe", cf_raise},
     };
+    luaL_newlibtable(L, mod);
+    CHECK(lua_type(L, -1) == LUA_TTABLE);
+    CHECK(lua_rawlen(L, -1) == 0); /* pre-sized but empty */
+    lua_pushnil(L);
+    CHECK(lua_next(L, -2) == 0); /* no entries registered */
+    lua_pop(L, 1);
     luaL_newlib(L, mod);
     CHECK(lua_type(L, -1) == LUA_TTABLE);
     int count = 0;
@@ -3389,25 +3395,6 @@ static void test_string_coercion()
   }
 
   CHECK(lua_gettop(L) == 0);
-  lua_close(L);
-}
-
-static void test_funcaddress()
-{
-  lua_State* L = new_state();
-
-  lua_pushcfunction(L, cf_add);
-  HostString a1 = lua_funcaddress(L, -1);
-  HostString a2 = lua_funcaddress(L, -1);
-  CHECK(!a1.to_utf8().empty());
-  CHECK(a1 == a2);
-
-  lua_pushcfunction(L, [](lua_State*) -> int { return 0; });
-  HostString a3 = lua_funcaddress(L, -1);
-  CHECK(!a3.to_utf8().empty());
-  CHECK(!(a1 == a3));
-  lua_pop(L, 2);
-
   lua_close(L);
 }
 
@@ -3902,7 +3889,6 @@ int main()
       {"auxlib_restored", test_auxlib_restored},
       {"num2str", test_num2str},
       {"string_coercion", test_string_coercion},
-      {"funcaddress", test_funcaddress},
       {"arith_floats", test_arith_floats},
       {"fixed_chunks", test_fixed_chunks},
       {"userdata_uservalues_gc", test_userdata_uservalues_gc},
