@@ -426,8 +426,6 @@ static int handle_luainit(lua_State* L)
 ** ===================================================================
 */
 
-constexpr int LUA_MAXINPUT = 512;
-
 /*
 ** lua_stdin_is_tty detects whether the standard input is a 'tty' (that
 ** is, whether we're running lua interactively).
@@ -456,7 +454,7 @@ static l_readlineT l_readline = nullptr;
 typedef void (*l_addhistT)(const char* string);
 static l_addhistT l_addhist = nullptr;
 
-static bool lua_readline(std::span<char> buff, std::string_view prompt)
+static bool lua_readline(byte_span buff, std::string_view prompt)
 {
   if (l_readline != nullptr)         /* is there a 'readline'? */
   {
@@ -466,20 +464,20 @@ static bool lua_readline(std::span<char> buff, std::string_view prompt)
       return false;
     }
     std::string_view sv(ret);
-    byte_view::copy(sv, buff);
+    buff.apply(sv);
     free(ret);
   }
   else
   {
     os_print_stdout(prompt);
     os_flush_stdout();                       /* show prompt */
-    if (!os_readline(os_stdin(), buff))
+    if (!os_readline(os_stdin(), buff.span()))
     {
       return false;
     }
   }
 
-  std::string_view sv(buff.data());
+  std::string_view sv = buff.str_view().view();
   if (sv.ends_with('\n'))
   {
     buff[sv.size() - 1] = '\0';
@@ -564,14 +562,14 @@ static int incomplete(lua_State* L, int status)
 static int pushline(lua_State* L, int firstline)
 {
   char buffer[LUA_MAXINPUT] {};
-  std::span<char> buffspan(buffer, LUA_MAXINPUT);
+  byte_span span(buffer, LUA_MAXINPUT);
   InternalString prmt = get_prompt(L, firstline);
-  bool ready = lua_readline(buffspan, prmt.view());
+  bool ready = lua_readline(span, prmt.view());
   lua_pop(L, 1); /* remove prompt */
   if (!ready)
     return 0; /* no input */
-  std::string_view buffview(buffer, LUA_MAXINPUT);
-  lua_pushlstring(L, buffview, 0, ::strnlen(buffer, LUA_MAXINPUT));
+  std::string_view buffview = span.str_view().view();
+  lua_pushlstring(L, buffview, 0, buffview.size());
   return 1;
 }
 
