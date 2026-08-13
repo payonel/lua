@@ -3887,24 +3887,18 @@ static void test_cfunc_stress_group1()
 
   /* Heavy pairs usage — pairs() pushes 'next' cfunc each call */
   int status = luaL_dostring(L, R"(
-    local t = {a=1, b=2, c=3, d=4, e=5}
-    local sum = 0
-    for i = 1, 400000 do
-      for k, v in pairs(t) do
-        sum = sum + v
-      end
+    local t = {}
+    for i = 1, 2000000 do
+      for k, v in pairs(t) do end
     end
   )"_hs);
   CHECK(status == LUA_OK);
 
   /* Heavy ipairs usage — ipairs() pushes iterator cfunc each call */
   status = luaL_dostring(L, R"(
-    local t = {10, 20, 30, 40, 50}
-    local sum = 0
-    for i = 1, 400000 do
-      for _, v in ipairs(t) do
-        sum = sum + v
-      end
+    local t = {}
+    for i = 1, 2000000 do
+      for _, v in ipairs(t) do end
     end
   )"_hs);
   CHECK(status == LUA_OK);
