@@ -42,6 +42,7 @@ struct Value
 {
   lua_Integer prim;
   struct GCObject* ref; /* collectable objects */
+  lua_CFunction cfunc;  /* C function pointer (for LUA_VLCF) */
 };
 
 /*
@@ -480,7 +481,13 @@ static l_forceinline void* pvalue(const TValue* o)
 static l_forceinline lua_CFunction fvalue(const TValue* o)
 {
   assert(o->tt_ == LUA_VLCF);
-  return reinterpret_cast<lua_CFunction>(o->value_.prim);
+  return o->value_.cfunc;
+}
+
+static l_forceinline lua_Integer fvalueid(const TValue* o)
+{
+  assert(o->tt_ == LUA_VLCF);
+  return o->value_.prim;
 }
 
 static l_forceinline GCObject* gcvalue(const TValue* o)
@@ -572,7 +579,13 @@ static l_forceinline void* keypval(const Node* n)
 static l_forceinline lua_CFunction keyfval(const Node* n)
 {
   assert(n->key_tt == LUA_VLCF);
-  return reinterpret_cast<lua_CFunction>(n->key_val.prim);
+  return n->key_val.cfunc;
+}
+
+static l_forceinline lua_Integer keyfvalid(const Node* n)
+{
+  assert(n->key_tt == LUA_VLCF);
+  return n->key_val.prim;
 }
 
 /* }================================================================== */
@@ -622,9 +635,10 @@ static l_forceinline void setpvalue(TValue* obj, void* x)
   obj->tt_ = LUA_VLIGHTUSERDATA;
 }
 
-static l_forceinline void setfvalue(TValue* obj, lua_CFunction x)
+static l_forceinline void setfvalue(TValue* obj, lua_Integer id, lua_CFunction f)
 {
-  obj->value_.prim = reinterpret_cast<lua_Integer>(x);
+  obj->value_.prim = id;
+  obj->value_.cfunc = f;
   obj->tt_ = LUA_VLCF;
 }
 

@@ -206,44 +206,27 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   size_t oldn = (size_t)(oldsize + EXTRA_STACK);
   size_t newn = (size_t)(newsize + EXTRA_STACK);
   size_t keep = (oldn < newn) ? oldn : newn;
-  lua_Integer* newprim;
-  GCObject** newref;
-  lu_byte* newtag;
+  TValue* newstk;
   lu_byte oldgcstop = L->l_G->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
   L->l_G->gcstopem = 1; /* stop emergency collection */
-  newprim = (lua_Integer*)luaM_realloc_(L, nullptr, 0, newn * sizeof(lua_Integer));
-  newref = (GCObject**)luaM_realloc_(L, nullptr, 0, newn * sizeof(GCObject*));
-  newtag = (lu_byte*)luaM_realloc_(L, nullptr, 0, newn * sizeof(lu_byte));
+  newstk = (TValue*)luaM_realloc_(L, nullptr, 0, newn * sizeof(TValue));
   L->l_G->gcstopem = oldgcstop; /* restore emergency collection */
-  if (l_unlikely(newprim == nullptr || newref == nullptr || newtag == nullptr))
+  if (l_unlikely(newstk == nullptr))
   {
-    if (newprim != nullptr)
-      luaM_free_(L, newprim, newn * sizeof(lua_Integer));
-    if (newref != nullptr)
-      luaM_free_(L, newref, newn * sizeof(GCObject*));
-    if (newtag != nullptr)
-      luaM_free_(L, newtag, newn * sizeof(lu_byte));
     correctstack(L);
     if (raiseerror)
       luaD_throw(L, LUA_ERRMEM);
     else
       return 0; /* do not raise an error */
   }
-  memcpy(newprim, L->stack.prim, keep * sizeof(lua_Integer));
-  memcpy(newref, L->stack.ref, keep * sizeof(GCObject*));
-  memcpy(newtag, L->stack.tag, keep * sizeof(lu_byte));
+  memcpy(newstk, L->stack, keep * sizeof(TValue));
   if (newn > keep)
   {
-    memset(newprim + keep, 0, (newn - keep) * sizeof(lua_Integer));
-    memset(newref + keep, 0, (newn - keep) * sizeof(GCObject*));
+    memset(newstk + keep, 0, (newn - keep) * sizeof(TValue));
   }
-  luaM_free_(L, L->stack.prim, oldn * sizeof(lua_Integer));
-  luaM_free_(L, L->stack.ref, oldn * sizeof(GCObject*));
-  luaM_free_(L, L->stack.tag, oldn * sizeof(lu_byte));
-  L->stack.prim = newprim;
-  L->stack.ref = newref;
-  L->stack.tag = newtag;
+  luaM_free_(L, L->stack, oldn * sizeof(TValue));
+  L->stack = newstk;
   correctstack(L);
   L->stack_last = newsize;
   for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)

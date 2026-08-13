@@ -720,7 +720,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
     }
     case LUA_VLCF:
       assert(t2->tt_ == LUA_VLCF);
-      return (fvalue(t1) == fvalue(t2));
+      return (fvalueid(t1) == fvalueid(t2));
     default: /* functions and threads */
       assert(t1->tt_ & BIT_ISCOLLECTABLE);
       assert(t2->tt_ & BIT_ISCOLLECTABLE);

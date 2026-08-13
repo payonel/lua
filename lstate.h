@@ -8,6 +8,7 @@
 
 #include <unordered_map>
 #include <string_view>
+#include <vector>
 
 #include "lua.h"
 
@@ -201,12 +202,7 @@ struct lua_State : GCObject
   struct global_State* l_G;
   CallInfo* ci;    /* call info for current function */
   StkId stack_last; /* end of stack (last element + 1) */
-  struct
-  {
-    lua_Integer* prim;
-    GCObject** ref;
-    lu_byte* tag;
-  } stack; /* stack base */
+  TValue* stack;    /* stack base */
   UpVal* openupval;    /* list of open upvalues in this stack */
   StkId tbclist;
   StkId* tbc;
@@ -248,255 +244,208 @@ static l_forceinline lua_State* thvalue(const TValue* o)
 
 static l_forceinline lu_byte slottag(lua_State* L, StkId idx)
 {
-  return L->stack.tag[idx];
+  return L->stack[idx].tt_;
 }
 
 static l_forceinline void setslottag(lua_State* L, StkId idx, lu_byte tt)
 {
-  L->stack.tag[idx] = tt;
+  L->stack[idx].tt_ = tt;
 }
 
 static l_forceinline TValue getslot(lua_State* L, StkId idx)
 {
-  TValue v;
-  v.value_.prim = L->stack.prim[idx];
-  v.value_.ref = L->stack.ref[idx];
-  v.tt_ = L->stack.tag[idx];
-  return v;
+  return L->stack[idx];
 }
 
 static l_forceinline void setslot(lua_State* L, StkId idx, const TValue* v)
 {
-  if (v->tt_ & BIT_ISCOLLECTABLE)
-  {
-    L->stack.ref[idx] = v->value_.ref;
-    L->stack.prim[idx] = 0;
-  }
-  else
-  {
-    L->stack.prim[idx] = v->value_.prim;
-    L->stack.ref[idx] = nullptr;
-  }
-  L->stack.tag[idx] = v->tt_;
+  L->stack[idx] = *v;
   checkliveness(L, v);
 }
 
 static l_forceinline void copyslot(lua_State* L, StkId dst, StkId src)
 {
-  TValue v = getslot(L, src);
-  setslot(L, dst, &v);
+  L->stack[dst] = L->stack[src];
 }
 
 static l_forceinline void copyslot(lua_State* to, StkId dst, lua_State* from, StkId src)
 {
-  TValue v = getslot(from, src);
-  setslot(to, dst, &v);
+  to->stack[dst] = from->stack[src];
 }
 
 static l_forceinline void setobj(lua_State* L, TValue* dst, StkId src)
 {
-  TValue v = getslot(L, src);
-  setobj(L, dst, &v);
+  *dst = L->stack[src];
+  checkliveness(L, dst);
 }
 
 static l_forceinline lua_Integer slotival(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return ivalue(&v);
+  return ivalue(&L->stack[idx]);
 }
 
 static l_forceinline lua_Number slotfltval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return fltvalue(&v);
+  return fltvalue(&L->stack[idx]);
 }
 
 static l_forceinline lua_Number slotnval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return nvalue(&v);
+  return nvalue(&L->stack[idx]);
 }
 
 static l_forceinline void* slotpval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return pvalue(&v);
+  return pvalue(&L->stack[idx]);
 }
 
 static l_forceinline lua_CFunction slotfval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return fvalue(&v);
+  return fvalue(&L->stack[idx]);
 }
 
 static l_forceinline GCObject* slotgcval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return gcvalue(&v);
+  return gcvalue(&L->stack[idx]);
 }
 
 static l_forceinline TString* slottsval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return tsvalue(&v);
+  return tsvalue(&L->stack[idx]);
 }
 
 static l_forceinline Table* slothval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return hvalue(&v);
+  return hvalue(&L->stack[idx]);
 }
 
 static l_forceinline Udata* slotuval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return uvalue(&v);
+  return uvalue(&L->stack[idx]);
 }
 
 static l_forceinline lua_State* slotthval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return thvalue(&v);
+  return thvalue(&L->stack[idx]);
 }
 
 static l_forceinline Closure* slotclval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return clvalue(&v);
+  return clvalue(&L->stack[idx]);
 }
 
 static l_forceinline LClosure* slotclLval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return clLvalue(&v);
+  return clLvalue(&L->stack[idx]);
 }
 
 static l_forceinline CClosure* slotclCval(lua_State* L, StkId idx)
 {
-  TValue v = getslot(L, idx);
-  return clCvalue(&v);
+  return clCvalue(&L->stack[idx]);
 }
 
 static l_forceinline void setslotnil(lua_State* L, StkId idx)
 {
-  L->stack.tag[idx] = LUA_VNIL;
-  L->stack.ref[idx] = nullptr;
+  L->stack[idx].tt_ = LUA_VNIL;
 }
 
 static l_forceinline void setslotempty(lua_State* L, StkId idx)
 {
-  L->stack.tag[idx] = LUA_VEMPTY;
-  L->stack.ref[idx] = nullptr;
+  L->stack[idx].tt_ = LUA_VEMPTY;
 }
 
 static l_forceinline void setslotbt(lua_State* L, StkId idx)
 {
-  L->stack.tag[idx] = LUA_VTRUE;
-  L->stack.ref[idx] = nullptr;
+  L->stack[idx].tt_ = LUA_VTRUE;
 }
 
 static l_forceinline void setslotbf(lua_State* L, StkId idx)
 {
-  L->stack.tag[idx] = LUA_VFALSE;
-  L->stack.ref[idx] = nullptr;
+  L->stack[idx].tt_ = LUA_VFALSE;
 }
 
 static l_forceinline void setsloti(lua_State* L, StkId idx, lua_Integer x)
 {
-  L->stack.prim[idx] = x;
-  L->stack.ref[idx] = nullptr;
-  L->stack.tag[idx] = LUA_VNUMINT;
+  L->stack[idx].value_.prim = x;
+  L->stack[idx].tt_ = LUA_VNUMINT;
 }
 
 static l_forceinline void setslotflt(lua_State* L, StkId idx, lua_Number x)
 {
-  L->stack.prim[idx] = std::bit_cast<lua_Integer>(x);
-  L->stack.ref[idx] = nullptr;
-  L->stack.tag[idx] = LUA_VNUMFLT;
+  L->stack[idx].value_.prim = std::bit_cast<lua_Integer>(x);
+  L->stack[idx].tt_ = LUA_VNUMFLT;
 }
 
 static l_forceinline void chgsloti(lua_State* L, StkId idx, lua_Integer x)
 {
-  assert(L->stack.tag[idx] == LUA_VNUMINT);
-  L->stack.prim[idx] = x;
+  assert(L->stack[idx].tt_ == LUA_VNUMINT);
+  L->stack[idx].value_.prim = x;
 }
 
 static l_forceinline void chgslotflt(lua_State* L, StkId idx, lua_Number x)
 {
-  assert(L->stack.tag[idx] == LUA_VNUMFLT);
-  L->stack.prim[idx] = std::bit_cast<lua_Integer>(x);
+  assert(L->stack[idx].tt_ == LUA_VNUMFLT);
+  L->stack[idx].value_.prim = std::bit_cast<lua_Integer>(x);
 }
 
 static l_forceinline void setslotp(lua_State* L, StkId idx, void* x)
 {
-  L->stack.prim[idx] = reinterpret_cast<lua_Integer>(x);
-  L->stack.ref[idx] = nullptr;
-  L->stack.tag[idx] = LUA_VLIGHTUSERDATA;
+  L->stack[idx].value_.prim = reinterpret_cast<lua_Integer>(x);
+  L->stack[idx].tt_ = LUA_VLIGHTUSERDATA;
 }
 
-static l_forceinline void setslotf(lua_State* L, StkId idx, lua_CFunction x)
+static l_forceinline void setslotf(lua_State* L, StkId idx, lua_Integer id, lua_CFunction f)
 {
-  L->stack.prim[idx] = reinterpret_cast<lua_Integer>(x);
-  L->stack.ref[idx] = nullptr;
-  L->stack.tag[idx] = LUA_VLCF;
+  L->stack[idx].value_.prim = id;
+  L->stack[idx].value_.cfunc = f;
+  L->stack[idx].tt_ = LUA_VLCF;
 }
 
 static l_forceinline void setslots(lua_State* L, StkId idx, TString* x)
 {
   assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
-  L->stack.ref[idx] = x;
-  L->stack.prim[idx] = 0;
-  L->stack.tag[idx] = ctb(x->tt);
-  TValue v = getslot(L, idx);
-  checkliveness(L, &v);
+  L->stack[idx].value_.ref = x;
+  L->stack[idx].tt_ = ctb(x->tt);
+  checkliveness(L, &L->stack[idx]);
 }
 
 static l_forceinline void setsloth(lua_State* L, StkId idx, Table* x)
 {
   assert(x->tt == LUA_VTABLE);
-  L->stack.ref[idx] = x;
-  L->stack.prim[idx] = 0;
-  L->stack.tag[idx] = ctb(x->tt);
-  TValue v = getslot(L, idx);
-  checkliveness(L, &v);
+  L->stack[idx].value_.ref = x;
+  L->stack[idx].tt_ = ctb(x->tt);
+  checkliveness(L, &L->stack[idx]);
 }
 
 static l_forceinline void setslotu(lua_State* L, StkId idx, Udata* x)
 {
   assert(x->tt == LUA_VUSERDATA);
-  L->stack.ref[idx] = x;
-  L->stack.prim[idx] = 0;
-  L->stack.tag[idx] = ctb(x->tt);
-  TValue v = getslot(L, idx);
-  checkliveness(L, &v);
+  L->stack[idx].value_.ref = x;
+  L->stack[idx].tt_ = ctb(x->tt);
+  checkliveness(L, &L->stack[idx]);
 }
 
 static l_forceinline void setslotclL(lua_State* L, StkId idx, LClosure* x)
 {
   assert(x->tt == LUA_VLCL);
-  L->stack.ref[idx] = x;
-  L->stack.prim[idx] = 0;
-  L->stack.tag[idx] = ctb(x->tt);
-  TValue v = getslot(L, idx);
-  checkliveness(L, &v);
+  L->stack[idx].value_.ref = x;
+  L->stack[idx].tt_ = ctb(x->tt);
+  checkliveness(L, &L->stack[idx]);
 }
 
 static l_forceinline void setslotclC(lua_State* L, StkId idx, CClosure* x)
 {
   assert(x->tt == LUA_VCCL);
-  L->stack.ref[idx] = x;
-  L->stack.prim[idx] = 0;
-  L->stack.tag[idx] = ctb(x->tt);
-  TValue v = getslot(L, idx);
-  checkliveness(L, &v);
+  L->stack[idx].value_.ref = x;
+  L->stack[idx].tt_ = ctb(x->tt);
+  checkliveness(L, &L->stack[idx]);
 }
 
 static l_forceinline void setslotth(lua_State* L, StkId idx, lua_State* x)
 {
   assert(x->tt == LUA_VTHREAD);
-  L->stack.ref[idx] = x;
-  L->stack.prim[idx] = 0;
-  L->stack.tag[idx] = ctb(x->tt);
+  L->stack[idx].value_.ref = x;
+  L->stack[idx].tt_ = ctb(x->tt);
   TValue v = getslot(L, idx);
   checkliveness(L, &v);
 }
@@ -601,6 +550,7 @@ struct global_State
   struct Table* mt[LUA_NUMTYPES];            /* metatables for basic types */
   lua_WarnFunction warnf;                    /* warning function */
   void* ud_warn;                             /* auxiliary data to 'warnf' */
+  std::vector<lua_CFunction> cfunc_registry; /* id → function pointer */
   LX mainth;                                 /* main thread of this state */
 };
 
@@ -612,6 +562,7 @@ struct global_State
 /* actual number of total memory allocated */
 
 LUAI_FUNC void luaE_setdebt(global_State* g, l_mem debt);
+LUAI_FUNC lua_Integer luaE_registercfunc(global_State* g, lua_CFunction f);
 LUAI_FUNC void luaE_freethread(lua_State* L, lua_State* L1);
 LUAI_FUNC lu_mem luaE_threadsize(lua_State* L);
 LUAI_FUNC CallInfo* luaE_extendCI(lua_State* L, int err);

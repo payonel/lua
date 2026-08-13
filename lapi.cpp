@@ -795,7 +795,8 @@ LUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
   lua_lock(L);
   if (n == 0)
   {
-    setslotf(L, L->top, fn);
+    lua_Integer id = luaE_registercfunc(L->l_G, fn);
+    setslotf(L, L->top, id, fn);
     api_incr_top(L);
   }
   else
