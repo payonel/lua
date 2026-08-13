@@ -4084,6 +4084,42 @@ static void test_cfunc_stress_group5()
   lua_close(L);
 }
 
+/*
+** Group 6: Full Lua test suite runtime (tests/all.lua).
+** Measures overall VM performance under realistic mixed workloads.
+*/
+static void test_cfunc_stress_group6()
+{
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+
+  /* Need to run from tests/ directory */
+  char oldcwd[1024];
+  getcwd(oldcwd, sizeof(oldcwd));
+  chdir("tests");
+
+  /* Set up environment like the lua binary does */
+  luaL_dostring(L, "_TMP='_1'; arg={[0]='../lua'}"_hs);
+
+  clock_t start = clock();
+
+  int status = luaL_dofile(L, "all.lua"_hs);
+  if (status != LUA_OK)
+  {
+    auto msg = lua_tostring(L, -1);
+    if (msg)
+      std::printf("  group6 ERROR: %s\n", std::string(msg->to_utf8()).c_str());
+    lua_pop(L, 1);
+  }
+
+  clock_t end = clock();
+  double ms = (double)(end - start) * 1000.0 / CLOCKS_PER_SEC;
+  std::printf("  group6 (full test suite): %.0f ms\n", ms);
+
+  chdir(oldcwd);
+  lua_close(L);
+}
+
 static void test_cfunc_stress()
 {
   std::printf("cfunc stress tests:\n");
@@ -4092,6 +4128,7 @@ static void test_cfunc_stress()
   test_cfunc_stress_group3();
   test_cfunc_stress_group4();
   test_cfunc_stress_group5();
+  test_cfunc_stress_group6();
 }
 
 int main()
