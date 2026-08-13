@@ -3873,36 +3873,80 @@ static int cf_add2(lua_State* L) { lua_pushinteger(L, lua_tointeger(L, 2) + 2); 
 static int cf_id(lua_State* L) { lua_pushvalue(L, 1); return 1; }
 
 /*
-** Group 1: High cfunc churn — push/pop same cfunc in tight loop.
-** Stresses the cost of slot overwrites (option A pays here).
-** Also interleaves non-cfunc writes to measure tag-check tax on all writes.
+** Group 1: Realistic cfunc-heavy Lua patterns.
+** Exercises: pairs/ipairs iteration, pcall with C handlers, table.sort
+** with C comparator, string.gmatch iterator, tostring metamethods.
+** These all push cfuncs internally on every call/iteration.
 */
 static void test_cfunc_stress_group1()
 {
   lua_State* L = luaL_newstate();
-  const int ITERS = 2000000;
+  luaL_openlibs(L);
 
   clock_t start = clock();
 
-  /* Push/pop same cfunc repeatedly */
-  for (int i = 0; i < ITERS; i++)
-  {
-    lua_pushcfunction(L, cf_noop);
-    lua_pop(L, 1);
-  }
+  /* Heavy pairs usage — pairs() pushes 'next' cfunc each call */
+  int status = luaL_dostring(L, R"(
+    local t = {a=1, b=2, c=3, d=4, e=5}
+    local sum = 0
+    for i = 1, 400000 do
+      for k, v in pairs(t) do
+        sum = sum + v
+      end
+    end
+  )"_hs);
+  CHECK(status == LUA_OK);
 
-  /* Interleave: push cfunc, overwrite with integer, repeat */
-  for (int i = 0; i < ITERS; i++)
-  {
-    lua_pushcfunction(L, cf_noop);
-    lua_pushinteger(L, i);
-    lua_replace(L, -2); /* overwrite cfunc slot with integer */
-    lua_pop(L, 1);
-  }
+  /* Heavy ipairs usage — ipairs() pushes iterator cfunc each call */
+  status = luaL_dostring(L, R"(
+    local t = {10, 20, 30, 40, 50}
+    local sum = 0
+    for i = 1, 400000 do
+      for _, v in ipairs(t) do
+        sum = sum + v
+      end
+    end
+  )"_hs);
+  CHECK(status == LUA_OK);
+
+  /* pcall with C function — pushes error handler cfunc */
+  status = luaL_dostring(L, R"(
+    local function work() return 1 + 2 end
+    for i = 1, 1000000 do
+      pcall(work)
+    end
+  )"_hs);
+  CHECK(status == LUA_OK);
+
+  /* table.sort with default comparator (uses C lt internally) */
+  status = luaL_dostring(L, R"(
+    for i = 1, 50000 do
+      local t = {5, 3, 8, 1, 9, 2, 7, 4, 6, 0}
+      table.sort(t)
+    end
+  )"_hs);
+  CHECK(status == LUA_OK);
+
+  /* string.gmatch — returns C iterator function */
+  status = luaL_dostring(L, R"(
+    local s = "the quick brown fox jumps over the lazy dog"
+    for i = 1, 200000 do
+      for w in s:gmatch("%a+") do end
+    end
+  )"_hs);
+  CHECK(status == LUA_OK);
+
+  /* tostring — calls C tostring metamethod on numbers */
+  status = luaL_dostring(L, R"(
+    for i = 1, 1000000 do
+      tostring(i)
+    end
+  )"_hs);
+  CHECK(status == LUA_OK);
 
   clock_t end = clock();
   double ms = (double)(end - start) * 1000.0 / CLOCKS_PER_SEC;
-  std::printf("  group1 (cfunc churn): %.1f ms\n", ms);
+  std::printf("  group1 (realistic cfunc patterns): %.0f ms\n", ms);
 
   CHECK(lua_gettop(L) == 0);
   lua_close(L);
