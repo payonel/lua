@@ -44,18 +44,6 @@ void luaE_setdebt(global_State* g, l_mem debt)
   g->GCdebt = debt;
 }
 
-lua_Integer luaE_registercfunc(global_State* g, lua_CFunction f)
-{
-  for (size_t i = 0; i < g->cfunc_registry.size(); i++)
-  {
-    if (g->cfunc_registry[i] == f)
-      return (lua_Integer)i;
-  }
-  lua_Integer id = (lua_Integer)g->cfunc_registry.size();
-  g->cfunc_registry.push_back(f);
-  return id;
-}
-
 CallInfo* luaE_extendCI(lua_State* L, int err)
 {
   CallInfo* ci;
@@ -277,7 +265,6 @@ static void close_state(lua_State* L)
     luai_userstateclose(L);
   }
   L->l_G->strt.~unordered_map();
-  L->l_G->cfunc_registry.~vector();
   freestack(L);
   assert(gettotalbytes(g) == sizeof(global_State));
   (*g->frealloc)(g->ud, g, sizeof(global_State), 0); /* free main block */
@@ -370,7 +357,6 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->seed = seed;
   g->gcstp = GCSTPGC; /* no GC while building state */
   new (&g->strt) decltype(g->strt)();
-  new (&g->cfunc_registry) decltype(g->cfunc_registry)();
   ((&g->l_registry)->tt_ = LUA_VNIL);
   g->panic = nullptr;
   g->gcstate = GCSpause;

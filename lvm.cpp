@@ -718,10 +718,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
         tm = gfasttm(L->l_G, h2->metatable, TM_EQ);
       break; /* will try TM */
     }
-    case LUA_VLCF:
-      assert(t2->tt_ == LUA_VLCF);
-      return (fvalueid(t1) == fvalueid(t2));
-    default: /* functions and threads */
+    default: /* functions, threads, and light C functions */
       assert(t1->tt_ & BIT_ISCOLLECTABLE);
       assert(t2->tt_ & BIT_ISCOLLECTABLE);
       return (gcvalue(t1) == gcvalue(t2));

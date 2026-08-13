@@ -590,6 +590,11 @@ static void checkrefs(global_State* g, GCObject* o)
     assert(!isgray(o)); /* strings are never gray */
     break;
   }
+  case LUA_VLCF:
+  {
+    assert(!isgray(o)); /* CFuncInfo has no refs, never gray */
+    break;
+  }
   default:
     assert(0);
   }

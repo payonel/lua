@@ -118,13 +118,13 @@ static inline int hashpointer(const Table* t, lua_CFunction p)
 
 
 static const Node dummynode_ = {
-    {{0, nullptr, nullptr}, LUA_VEMPTY},
+    {{0, nullptr}, LUA_VEMPTY},
     LUA_TDEADKEY,
     0,
-    {0, nullptr, nullptr}
+    {0, nullptr}
 };
 
-static const TValue absentkey = {{0, nullptr, nullptr}, LUA_VABSTKEY};
+static const TValue absentkey = {{0, nullptr}, LUA_VABSTKEY};
 
 /*
 ** Hash for integers. To allow a good hash, use the remainder operator
@@ -204,10 +204,6 @@ static int mainpositionTV(const Table* t, const TValue* key)
     void* p = pvalue(key);
     return hashpointer(t, p);
   }
-  case LUA_VLCF:
-  {
-    return hashint(t, fvalueid(key));
-  }
   default:
   {
     assert(key->tt_ & BIT_ISCOLLECTABLE);
@@ -279,9 +275,6 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     case LUA_VLIGHTUSERDATA:
       assert(k1->tt_ == LUA_VLIGHTUSERDATA);
       return pvalue(k1) == keypval(n2);
-    case LUA_VLCF:
-      assert(k1->tt_ == LUA_VLCF);
-      return fvalueid(k1) == keyfvalid(n2);
     case ctb(LUA_VLNGSTR):
     {
       return luaS_eqstr(tsvalue(k1),

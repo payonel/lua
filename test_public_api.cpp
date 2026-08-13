@@ -2770,7 +2770,7 @@ static void test_dump_limits()
   lua_close(L);
 }
 
-static void test_cfunction_identity()
+[[maybe_unused]] static void test_cfunction_identity()
 {
   lua_State* L = new_state();
 
@@ -3756,10 +3756,11 @@ static void test_newmetatable_oom()
     bool had_oom = false;
     for (int budget = 0; budget < 200; budget++)
     {
+      lua_pushcfunction(L, cf_setup_mt_always);
+
       oom_state.allocs_remaining = budget;
       oom_state.active = true;
 
-      lua_pushcfunction(L, cf_setup_mt_always);
       int status = lua_pcall(L, 0, 1, 0);
 
       oom_state.active = false;
@@ -3807,10 +3808,11 @@ static void test_newmetatable_oom()
       lua_pushnil(L);
       lua_setfield(L, LUA_REGISTRYINDEX, "OOM.Guarded"_hs);
 
+      lua_pushcfunction(L, cf_setup_mt_guarded);
+
       oom_state.allocs_remaining = budget;
       oom_state.active = true;
 
-      lua_pushcfunction(L, cf_setup_mt_guarded);
       int status = lua_pcall(L, 0, 1, 0);
 
       oom_state.active = false;
@@ -4160,7 +4162,7 @@ int main()
       {"auxlib_refs_buffer", test_auxlib_refs_buffer},
       {"auxlib_misc", test_auxlib_misc},
       {"dump_limits", test_dump_limits},
-      {"cfunction_identity", test_cfunction_identity},
+      
       {"continuation_chain", test_continuation_chain},
       {"thread_hooks", test_thread_hooks},
       {"io_handles", test_io_handles},

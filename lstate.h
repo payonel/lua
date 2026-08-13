@@ -8,7 +8,6 @@
 
 #include <unordered_map>
 #include <string_view>
-#include <vector>
 
 #include "lua.h"
 
@@ -394,11 +393,10 @@ static l_forceinline void setslotp(lua_State* L, StkId idx, void* x)
   L->stack[idx].tt_ = LUA_VLIGHTUSERDATA;
 }
 
-static l_forceinline void setslotf(lua_State* L, StkId idx, lua_Integer id, lua_CFunction f)
+static l_forceinline void setslotf(lua_State* L, StkId idx, CFuncInfo* cfi)
 {
-  L->stack[idx].value_.prim = id;
-  L->stack[idx].value_.cfunc = f;
-  L->stack[idx].tt_ = LUA_VLCF;
+  L->stack[idx].value_.ref = cfi;
+  L->stack[idx].tt_ = ctb(LUA_VLCF);
 }
 
 static l_forceinline void setslots(lua_State* L, StkId idx, TString* x)
@@ -550,7 +548,6 @@ struct global_State
   struct Table* mt[LUA_NUMTYPES];            /* metatables for basic types */
   lua_WarnFunction warnf;                    /* warning function */
   void* ud_warn;                             /* auxiliary data to 'warnf' */
-  std::vector<lua_CFunction> cfunc_registry; /* id → function pointer */
   LX mainth;                                 /* main thread of this state */
 };
 
@@ -562,7 +559,6 @@ struct global_State
 /* actual number of total memory allocated */
 
 LUAI_FUNC void luaE_setdebt(global_State* g, l_mem debt);
-LUAI_FUNC lua_Integer luaE_registercfunc(global_State* g, lua_CFunction f);
 LUAI_FUNC void luaE_freethread(lua_State* L, lua_State* L1);
 LUAI_FUNC lu_mem luaE_threadsize(lua_State* L);
 LUAI_FUNC CallInfo* luaE_extendCI(lua_State* L, int err);

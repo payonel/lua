@@ -19,6 +19,16 @@
 #include "lstate.h"
 #include "literals.h"
 
+CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<std::string> name)
+{
+  GCObject* o = luaC_newobj(L, LUA_VLCF, sizeof(CFuncInfo));
+  assert(o->tt == LUA_VLCF);
+  CFuncInfo* cfi = static_cast<CFuncInfo*>(o);
+  cfi->fptr = f;
+  new (&cfi->name) std::optional<std::string>(std::move(name));
+  return cfi;
+}
+
 CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
   global_State* g = L->l_G;

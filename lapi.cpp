@@ -80,7 +80,7 @@ static IndexAddr resolveindex(lua_State* L, int idx)
     }
     else
     { /* light C function or Lua function (through a hook)?) */
-      assert((slottag(L, ci->func) == LUA_VLCF) && "caller not a C function");
+      assert((slottag(L, ci->func) == ctb(LUA_VLCF)) && "caller not a C function");
       return {0, &L->l_G->nilvalue}; /* no upvalues */
     }
   }
@@ -321,13 +321,13 @@ LUA_API HostString lua_typename(lua_State* L, int t)
 LUA_API int lua_iscfunction(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
-  return ((o.tt_ == LUA_VLCF) || (o.tt_ == ctb(LUA_VCCL)));
+  return ((o.tt_ == ctb(LUA_VLCF)) || (o.tt_ == ctb(LUA_VCCL)));
 }
 
 int lua_islightcfunction(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
-  return (o.tt_ == LUA_VLCF);
+  return (o.tt_ == ctb(LUA_VLCF));
 }
 
 LUA_API int lua_isinteger(lua_State* L, int idx)
@@ -531,7 +531,7 @@ LUA_API lua_Unsigned lua_rawlen(lua_State* L, int idx)
 LUA_API lua_CFunction lua_tocfunction(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
-  if ((o.tt_ == LUA_VLCF))
+  if ((o.tt_ == ctb(LUA_VLCF)))
     return fvalue(&o);
   else if ((o.tt_ == ctb(LUA_VCCL)))
   {
@@ -599,7 +599,7 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
 InternalString lua_funcaddressi(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
-  assert((o.tt_ == LUA_VLCF));
+  assert((o.tt_ == ctb(LUA_VLCF)));
   return util::func_to_string(fvalue(&o));
 }
 
@@ -795,8 +795,8 @@ LUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
   lua_lock(L);
   if (n == 0)
   {
-    lua_Integer id = luaE_registercfunc(L->l_G, fn);
-    setslotf(L, L->top, id, fn);
+    CFuncInfo* cfi = luaF_newCFuncInfo(L, fn);
+    setslotf(L, L->top, cfi);
     api_incr_top(L);
   }
   else

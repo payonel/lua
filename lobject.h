@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <optional>
 #include <span>
 #include <string>
 
@@ -42,7 +43,6 @@ struct Value
 {
   lua_Integer prim;
   struct GCObject* ref; /* collectable objects */
-  lua_CFunction cfunc;  /* C function pointer (for LUA_VLCF) */
 };
 
 /*
@@ -395,6 +395,17 @@ constexpr size_t sizeLclosure(int n)
   return sizeof(LClosure) + sizeof(UpVal*) * (unsigned int)n;
 }
 
+/*
+** CFuncInfo: GC-managed identity for a C function.
+** Holds the callable and an optional name for serialization.
+** Consumer creates these at init time; shared across all uses of the same function.
+*/
+struct CFuncInfo : GCObject
+{
+  lua_CFunction fptr;
+  std::optional<std::string> name; /* for serialization; nullopt = not serializable */
+};
+
 /* }================================================================== */
 
 /*
@@ -480,14 +491,14 @@ static l_forceinline void* pvalue(const TValue* o)
 
 static l_forceinline lua_CFunction fvalue(const TValue* o)
 {
-  assert(o->tt_ == LUA_VLCF);
-  return o->value_.cfunc;
+  assert(o->tt_ == ctb(LUA_VLCF));
+  return static_cast<CFuncInfo*>(o->value_.ref)->fptr;
 }
 
-static l_forceinline lua_Integer fvalueid(const TValue* o)
+static l_forceinline CFuncInfo* fcfuncinfo(const TValue* o)
 {
-  assert(o->tt_ == LUA_VLCF);
-  return o->value_.prim;
+  assert(o->tt_ == ctb(LUA_VLCF));
+  return static_cast<CFuncInfo*>(o->value_.ref);
 }
 
 static l_forceinline GCObject* gcvalue(const TValue* o)
@@ -578,14 +589,14 @@ static l_forceinline void* keypval(const Node* n)
 
 static l_forceinline lua_CFunction keyfval(const Node* n)
 {
-  assert(n->key_tt == LUA_VLCF);
-  return n->key_val.cfunc;
+  assert(n->key_tt == ctb(LUA_VLCF));
+  return static_cast<CFuncInfo*>(n->key_val.ref)->fptr;
 }
 
-static l_forceinline lua_Integer keyfvalid(const Node* n)
+static l_forceinline CFuncInfo* keycfuncinfo(const Node* n)
 {
-  assert(n->key_tt == LUA_VLCF);
-  return n->key_val.prim;
+  assert(n->key_tt == ctb(LUA_VLCF));
+  return static_cast<CFuncInfo*>(n->key_val.ref);
 }
 
 /* }================================================================== */
@@ -635,11 +646,10 @@ static l_forceinline void setpvalue(TValue* obj, void* x)
   obj->tt_ = LUA_VLIGHTUSERDATA;
 }
 
-static l_forceinline void setfvalue(TValue* obj, lua_Integer id, lua_CFunction f)
+static l_forceinline void setfvalue(TValue* obj, CFuncInfo* cfi)
 {
-  obj->value_.prim = id;
-  obj->value_.cfunc = f;
-  obj->tt_ = LUA_VLCF;
+  obj->value_.ref = cfi;
+  obj->tt_ = ctb(LUA_VLCF);
 }
 
 static l_forceinline void setgcovalue(struct lua_State* L, TValue* obj, GCObject* x)

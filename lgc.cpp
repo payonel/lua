@@ -169,6 +169,11 @@ static l_mem objsize(GCObject* o)
     res = sizeof(UpVal);
     break;
   }
+  case LUA_VLCF:
+  {
+    res = sizeof(CFuncInfo);
+    break;
+  }
   default:
     res = 0;
     assert(0);
@@ -367,6 +372,11 @@ static void reallymarkobject(global_State* g, GCObject* o)
   case LUA_VSHRSTR:
   {
     set2black(o); /* nothing to visit */
+    break;
+  }
+  case LUA_VLCF:
+  {
+    set2black(o); /* CFuncInfo has no internal GC refs */
     break;
   }
   case LUA_VUPVAL:
@@ -960,6 +970,13 @@ static void freeobj(lua_State* L, GCObject* o)
       luaM_release(L, ts->data.size());
     ts->data.~InternalString();
     luaM_free_(L, (ts), (sizeof(TString)));
+    break;
+  }
+  case LUA_VLCF:
+  {
+    CFuncInfo* cfi = static_cast<CFuncInfo*>(o);
+    cfi->name.~optional();
+    luaM_free_(L, (o), sizeof(CFuncInfo));
     break;
   }
   default:
