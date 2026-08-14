@@ -43,17 +43,17 @@ char locale_radixpoint()
   return localeconv()->decimal_point[0];
 }
 
-std::optional<std::string_view> locale_setlocale(int category, std::optional<std::string_view> locale)
+std::optional<byte_view> locale_setlocale(int category, std::optional<byte_view> locale)
 {
   const char* res;
   if (locale.has_value())
   {
-    std::string l(*locale);
+    std::string l(locale->data(), locale->size());
     res = setlocale(category, l.c_str());
   }
   else
     res = setlocale(category, nullptr);
   if (res == nullptr)
     return std::nullopt;
-  return std::string_view(res);
+  return byte_view(res);
 }

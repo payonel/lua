@@ -57,7 +57,7 @@ static inline void* firsttry(global_State* g, void* block, size_t os, size_t ns)
 */
 constexpr int MINSIZEARRAY = 4;
 
-void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize, unsigned size_elems, int limit, std::string_view what)
+void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize, unsigned size_elems, int limit, byte_view what)
 {
   void* newblock;
   int size = *psize;

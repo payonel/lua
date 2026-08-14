@@ -108,7 +108,7 @@ LUAI_FUNC void luaK_settablesize(FuncState* fs, int pc,
                                  int ra, int asize, int hsize);
 LUAI_FUNC void luaK_setlist(FuncState* fs, int base, int nelems, int tostore);
 LUAI_FUNC void luaK_finish(FuncState* fs);
-LUAI_FUNC l_noret luaK_semerror(LexState* ls, std::string_view fmt, const FmtArgs& args);
+LUAI_FUNC l_noret luaK_semerror(LexState* ls, byte_view fmt, const FmtArgs& args);
 
 static inline int luaK_codeABC(FuncState* fs, OpCode o, int a, int b, int c)
 {

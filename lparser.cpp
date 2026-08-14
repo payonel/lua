@@ -67,19 +67,19 @@ static l_noret error_expected(LexState* ls, int token)
   luaX_syntaxerror(ls, luaO_pushfstring(ls->L, lt::s_expected, FmtArgs().str(luaX_token2str(ls, token)))->view());
 }
 
-static l_noret errorlimit(FuncState* fs, int limit, std::string_view what)
+static l_noret errorlimit(FuncState* fs, int limit, byte_view what)
 {
   lua_State* L = fs->ls->L;
   const InternalString* msg;
   int line = fs->f->linedefined;
-  std::string_view where = (line == 0)
+  byte_view where = (line == 0)
                           ? lt::main_function
                           : luaO_pushfstring(L, lt::function_at_line_d, FmtArgs().num(line))->view();
   msg = luaO_pushfstring(L, lt::too_many_s_limit_is_d_in_s, FmtArgs().str(what).num(limit).str(where));
   luaX_syntaxerror(fs->ls, msg->view());
 }
 
-void luaY_checklimit(FuncState* fs, int v, int l, std::string_view what)
+void luaY_checklimit(FuncState* fs, int v, int l, byte_view what)
 {
   if (l_unlikely(v > l))
     errorlimit(fs, l, what);
@@ -117,7 +117,7 @@ static void checknext(LexState* ls, int c)
   luaX_next(ls);
 }
 
-static inline void check_condition(LexState* ls, int c, std::string_view msg)
+static inline void check_condition(LexState* ls, int c, byte_view msg)
 {
   if (!c)
     luaX_syntaxerror(ls, msg);
@@ -619,7 +619,7 @@ static inline void leavelevel(LexState* ls)
 static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
 {
   TString* tsname = getlocalvardesc(ls->fs, gt->nactvar)->name;
-  std::string_view varname = (tsname != nullptr) ? tsname->data.view() : lt::star;
+  byte_view varname = (tsname != nullptr) ? tsname->data.view() : lt::star;
   luaK_semerror(ls, lt::goto_s_at_line_d_jumps_into_the_scope_of_s, FmtArgs().str(gt->name->data.view()).num(gt->line).str(varname)); /* raise the error */
 }
 
@@ -1154,7 +1154,7 @@ static void parlist(LexState* ls)
           new_varkind(ls, str_checkname(ls), RDKVAVAR);
         else
         {
-          std::string_view name = lt::vararg_table;
+          byte_view name = lt::vararg_table;
           new_localvar(ls, luaX_newstring(ls, name, 0, name.size()));
         }
         break;
@@ -1186,7 +1186,7 @@ static void body(LexState* ls, expdesc* e, int ismethod, int line)
   checknext(ls, '(');
   if (ismethod)
   {
-    std::string_view self = lt::self;
+    byte_view self = lt::self;
     new_localvar(ls, luaX_newstring(ls, self, 0, self.size())); /* create 'self' parameter */
     adjustlocalvars(ls, 1);
   }
@@ -1968,7 +1968,7 @@ static lu_byte getvarattribute(LexState* ls, lu_byte df)
   if (testnext(ls, '<'))
   {
     TString* ts = str_checkname(ls);
-    std::string_view attr = ts->data.view();
+    byte_view attr = ts->data.view();
     checknext(ls, '>');
     if (attr == lt::const_kw)
       return RDKCONST; /* read-only variable */
@@ -2356,7 +2356,7 @@ static void mainfunc(LexState* ls, FuncState* fs)
   close_func(ls);
 }
 
-LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, std::string_view name, int firstchar)
+LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, byte_view name, int firstchar)
 {
   LexState lexstate;
   FuncState funcstate;

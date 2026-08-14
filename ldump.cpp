@@ -40,8 +40,8 @@ static void dumpBlock(DumpState* D, const void* b, size_t size)
 {
   if (D->status == 0)
   { /* do not write anything after an error */
-    std::optional<std::string_view> block = (b != nullptr)
-        ? std::optional<std::string_view>(std::string_view{(const char*)(b), size})
+    std::optional<byte_view> block = (b != nullptr)
+        ? std::optional<byte_view>(byte_view{(const char*)(b), size})
         : std::nullopt;
     lua_unlock(D->L);
     D->status = (*D->writer)(D->L, block, D->data);
@@ -140,7 +140,7 @@ static void dumpString(DumpState* D, TString* ts)
     {                    /* must write and save the string */
       TValue key, value; /* to save the string in the hash */
       size_t size;
-      std::string_view sv = ts->data.view();
+      byte_view sv = ts->data.view();
       size = sv.size();
       const char* s = sv.data();
       dumpSize(D, size + 1);

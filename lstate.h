@@ -7,7 +7,6 @@
 #pragma once
 
 #include <unordered_map>
-#include <string_view>
 
 #include "lua.h"
 
@@ -500,7 +499,7 @@ struct global_State
   l_mem GCmajorminor; /* auxiliary counter to control major-minor shifts */
   struct InternKey
   {
-    std::string_view sv;
+    byte_view sv;
     size_t h;
   };
   struct InternHash
@@ -586,6 +585,6 @@ static l_forceinline const TValue* gfasttm(global_State* g, Table* mt, TMS e)
 
 LUAI_FUNC void luaE_checkcstack(lua_State* L);
 LUAI_FUNC void luaE_incCstack(lua_State* L);
-LUAI_FUNC void luaE_warning(lua_State* L, std::string_view msg, int tocont);
-LUAI_FUNC void luaE_warnerror(lua_State* L, std::string_view where);
+LUAI_FUNC void luaE_warning(lua_State* L, byte_view msg, int tocont);
+LUAI_FUNC void luaE_warnerror(lua_State* L, byte_view where);
 LUAI_FUNC TStatus luaE_resetthread(lua_State* L, TStatus status);

@@ -23,7 +23,7 @@
 
 static lua_State* globalL = nullptr;
 
-static std::string_view progname = lt::LUA_PROGNAME;
+static byte_view progname = lt::LUA_PROGNAME;
 
 /*
 ** Use 'sigaction' when available.
@@ -59,7 +59,7 @@ static void laction(int i)
   lua_sethook(globalL, lstop, flag, 1);
 }
 
-static void print_usage(const std::string& badoption)
+static void print_usage(byte_view badoption)
 {
   os_print_stderr(progname);
   os_print_stderr(lt::colon_sp);
@@ -81,7 +81,7 @@ static void print_usage(const std::string& badoption)
   os_flush_stderr();
 }
 
-static void l_message(std::string_view pname, std::string_view msg)
+static void l_message(byte_view pname, byte_view msg)
 {
   if (!pname.empty())
   {
@@ -101,7 +101,7 @@ static int report(lua_State* L, int status)
 {
   if (status != LUA_OK)
   {
-    std::string_view msg = lua_isstring(L, -1) ? lua_toistring(L, -1)->view() : lt::error_message_not_a_string;
+    byte_view msg = lua_isstring(L, -1) ? lua_toistring(L, -1)->view() : lt::error_message_not_a_string;
     l_message(progname, msg);
     lua_pop(L, 1); /* remove message */
   }
@@ -113,7 +113,7 @@ static int report(lua_State* L, int status)
 */
 static int msghandler(lua_State* L)
 {
-  std::string_view msg;
+  byte_view msg;
   if (lua_isstring(L, 1))
     msg = lua_toistring(L, 1)->view();
   else
@@ -173,7 +173,7 @@ static void createargtable(lua_State* L, char** argv, int argc, int script)
   lua_createtable(L, narg, script + 1);
   for (i = 0; i < argc; i++)
   {
-    std::string_view arg{argv[i]};
+    byte_view arg{argv[i]};
     lua_pushlstring(L, arg, 0, arg.size());
     lua_rawseti(L, -2, i - script);
   }
@@ -187,12 +187,12 @@ static int dochunk(lua_State* L, int status)
   return report(L, status);
 }
 
-static int dofile(lua_State* L, std::optional<std::string_view> name)
+static int dofile(lua_State* L, std::optional<byte_view> name)
 {
   return dochunk(L, luaL_loadfilei(L, name, std::nullopt));
 }
 
-static int dostring(lua_State* L, std::string_view s, std::string_view name)
+static int dostring(lua_State* L, byte_view s, byte_view name)
 {
   return dochunk(L, luaL_loadbufferi(L, s, name, lt::t_char));
 }
@@ -205,22 +205,22 @@ static int dostring(lua_State* L, std::string_view s, std::string_view name)
 static int dolibrary(lua_State* L, const std::string& arg)
 {
   int status;
-  std::string globname, modname;
+  byte_view globname(arg.data(), arg.size());
+  byte_view modname = globname;
   size_t suffix = std::string::npos;
   size_t eq = arg.find('=');
   if (eq == std::string::npos)
   {                 /* no explicit name? */
-    globname = arg; /* module name is equal to global name */
-    modname = arg;
+    /* module name is equal to global name */
     suffix = globname.find(lt::minus_ch); /* look for a suffix mark */
   }
   else
   {
-    globname = arg.substr(0, eq); /* global name ends here */
-    modname = arg.substr(eq + 1); /* module name starts after the '=' */
+    globname = globname.substr(0, eq); /* global name ends here */
+    modname = modname.substr(eq + 1); /* module name starts after the '=' */
   }
   lua_getglobali(L, lt::require);
-  lua_pushlstring(L, modname, 0, (modname).size());
+  lua_pushlstring(L, modname, 0, modname.size());
   status = docall(L, 1, 1); /* call 'require(modname)' */
   if (status == LUA_OK)
   {
@@ -252,13 +252,13 @@ static int handle_script(lua_State* L, char** argv)
   int status;
   const char* fname = argv[0];
 
-  if (std::string_view(fname) == lt::minus_ch && std::string_view(argv[-1]) != lt::dashes)
+  if (byte_view(fname) == lt::minus_ch && byte_view(argv[-1]) != lt::dashes)
     fname = nullptr; /* stdin */
   if (fname == nullptr)
     status = luaL_loadfilei(L, std::nullopt, std::nullopt); /* stdin */
   else
   {
-    status = luaL_loadfilei(L, std::string_view{fname}, std::nullopt);
+    status = luaL_loadfilei(L, byte_view{fname}, std::nullopt);
   }
   if (status == LUA_OK)
   {
@@ -373,7 +373,7 @@ static int runargs(lua_State* L, char** argv, int n)
         extra = argv[i];
       }
       status = (option == 'e')
-                   ? dostring(L, extra, lt::command_line)
+                   ? dostring(L, byte_view(extra.c_str()), lt::command_line)
                    : dolibrary(L, extra);
       if (status != LUA_OK)
         return 0;
@@ -389,7 +389,7 @@ static int runargs(lua_State* L, char** argv, int n)
 
 static bool l_noenv = false;
 
-static std::optional<std::string_view> l_getenv(std::string_view name)
+static std::optional<byte_view> l_getenv(byte_view name)
 {
   if (l_noenv)
     return std::nullopt;
@@ -399,7 +399,7 @@ static std::optional<std::string_view> l_getenv(std::string_view name)
 static int handle_luainit(lua_State* L)
 {
   InternalString name = InternalString(lt::LUA_INIT).concat(LUA_VERSUFFIX);
-  std::string_view namev = name.view();
+  byte_view namev = name.view();
   std::optional<InternalString> einit = l_getenv(namev);
   if (!einit.has_value())
   {
@@ -454,7 +454,7 @@ static l_readlineT l_readline = nullptr;
 typedef void (*l_addhistT)(const char* string);
 static l_addhistT l_addhist = nullptr;
 
-static bool lua_readline(byte_span buff, std::string_view prompt)
+static bool lua_readline(byte_span buff, byte_view prompt)
 {
   if (l_readline != nullptr)         /* is there a 'readline'? */
   {
@@ -463,7 +463,7 @@ static bool lua_readline(byte_span buff, std::string_view prompt)
     {
       return false;
     }
-    std::string_view sv(ret);
+    byte_view sv(ret);
     buff.apply(sv);
     free(ret);
   }
@@ -471,7 +471,7 @@ static bool lua_readline(byte_span buff, std::string_view prompt)
   {
     os_print_stdout(prompt);
     os_flush_stdout();                       /* show prompt */
-    if (!os_readline(os_stdin(), buff.span()))
+    if (!os_readline(os_stdin(), buff))
     {
       return false;
     }
@@ -499,7 +499,7 @@ static void lua_saveline(const char* line)
 static void lua_initreadline(lua_State* L)
 {
   std::optional<InternalString> erllib = l_getenv(lt::LUA_RLLIB_VAR); /* name of readline library */
-  std::string_view rllib = erllib.has_value() ? erllib->view() : lt::LUA_READLINELIB;
+  byte_view rllib = erllib.has_value() ? erllib->view() : lt::LUA_READLINELIB;
   OsLib* lib = os_dlopen(rllib, false);
   if (lib != nullptr)
   {
@@ -538,7 +538,7 @@ static InternalString get_prompt(lua_State* L, int firstline)
 }
 
 /* mark in error messages for incomplete statements */
-const std::string_view EOFMARK = lt::eof;
+const byte_view EOFMARK = lt::eof;
 
 /*
 ** Check whether 'status' signals a syntax error and the error
@@ -549,7 +549,7 @@ static int incomplete(lua_State* L, int status)
 {
   if (status == LUA_ERRSYNTAX)
   {
-    std::string_view msgv = *lua_tolstring(L, -1);
+    byte_view msgv = *lua_tolstring(L, -1);
     if (msgv.ends_with(EOFMARK))
       return 1;
   }
@@ -569,7 +569,7 @@ static int pushline(lua_State* L, int firstline)
   if (!ready)
     return 0; /* no input */
   byte_view buffview = span.str_view();
-  lua_pushlstring(L, buffview.view(), 0, buffview.size());
+  lua_pushlstring(L, buffview, 0, buffview.size());
   return 1;
 }
 
@@ -581,7 +581,7 @@ static int addreturn(lua_State* L)
 {
   lua_pushvalue(L, -1);
   lua_pushfstringi(L, lt::return_s);
-  std::string_view retline = *lua_tolstring(L, -1);
+  byte_view retline = *lua_tolstring(L, -1);
   int status = luaL_loadbufferi(L, retline, lt::stdin_1, lt::t_char);
   if (status == LUA_OK)
     lua_remove(L, -2); /* remove modified line */
@@ -590,12 +590,12 @@ static int addreturn(lua_State* L)
   return status;
 }
 
-static void checklocal(std::string_view line)
+static void checklocal(byte_view line)
 {
-  static const std::string_view kw = lt::local;
-  static const std::string_view space = lt::sp_tab;
+  static const byte_view kw = lt::local;
+  static const byte_view space = lt::sp_tab;
   size_t i = line.find_first_not_of(space); /* skip spaces */
-  if (i == std::string_view::npos)
+  if (i == byte_view::npos)
     return;
   size_t j = i + kw.size();
   if (line.compare(i, kw.size(), kw) == 0 &&      /* "local"? */
@@ -613,7 +613,7 @@ static void checklocal(std::string_view line)
 */
 static int multiline(lua_State* L)
 {
-  std::string_view line = *lua_tolstring(L, 1); /* get first line */
+  byte_view line = *lua_tolstring(L, 1); /* get first line */
   checklocal(line);
   for (;;)
   {                                                  /* repeat until gets a complete statement */
@@ -642,7 +642,7 @@ static int loadline(lua_State* L)
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
-  std::string line{lua_tostring(L, 1)->to_utf8()};
+  std::string line{lua_tostring(L, 1)->to_utf8().data()};
   if (!line.empty())            /* non empty? */
     lua_saveline(line.c_str()); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */
@@ -664,8 +664,8 @@ static void l_print(lua_State* L)
     if (lua_pcall(L, n, 0, 0) != LUA_OK)
     {
       lua_pushvalue(L, -1);
-      const InternalString* m = lua_pushfstringi(L, lt::error_calling_print_s);
-      l_message(progname, std::string(m->view()));
+      byte_view m = lua_pushfstringi(L, lt::error_calling_print_s)->view();
+      l_message(progname, m);
     }
   }
 }
@@ -677,7 +677,7 @@ static void l_print(lua_State* L)
 static void doREPL(lua_State* L)
 {
   int status;
-  std::string_view oldprogname = progname;
+  byte_view oldprogname = progname;
   progname = lt::empty_str; /* no 'progname' on errors in interactive mode */
   lua_initreadline(L);
   while ((status = loadline(L)) != -1)
@@ -757,7 +757,7 @@ int main(int argc, char** argv)
   lua_State* L = luaL_newstate(); /* create state */
   if (L == nullptr)
   {
-    std::string_view name(argv[0] != nullptr ? argv[0] : lt::empty_str);
+    byte_view name(argv[0] != nullptr ? argv[0] : lt::empty_str);
     l_message(name, lt::cannot_create_state_not_enough_memory);
     return EXIT_FAILURE;
   }

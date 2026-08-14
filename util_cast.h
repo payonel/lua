@@ -20,8 +20,9 @@ namespace util
   inline InternalString func_to_string(lua_CFunction_t pf)
   {
     char buf[20] = { '0', 'x' };
+    byte_span bufsp(buf, sizeof(buf));
     std::to_chars_result res = std::to_chars(buf + 2, buf + sizeof(buf), reinterpret_cast<uintptr_t>(pf), 16);
-    std::string_view svbuff(buf, ((size_t)(res.ptr - buf)));
+    byte_view svbuff(bufsp.data(), res.ptr - buf);
     return InternalString(svbuff);
   }
   

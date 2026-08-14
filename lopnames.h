@@ -11,7 +11,7 @@
 
 /* ORDER OP */
 
-static const std::string_view opnames[] =
+static const byte_view opnames[] =
 {
   lt::MOVE,
   lt::LOADI,

@@ -404,9 +404,9 @@ static int l_strcmp(const TString* ts1, const TString* ts2)
   {
     size_t zl1 = s1.find('\0');
     size_t zl2 = s2.find('\0');
-    if (zl1 == std::string_view::npos) zl1 = s1.size();
-    if (zl2 == std::string_view::npos) zl2 = s2.size();
-    int temp = os_strcoll(s1.substr(0, zl1).view(), s2.substr(0, zl2).view());
+    if (zl1 == byte_view::npos) zl1 = s1.size();
+    if (zl2 == byte_view::npos) zl2 = s2.size();
+    int temp = os_strcoll(s1.substr(0, zl1), s2.substr(0, zl2));
     if (temp != 0)
       return temp;
     if (zl2 == s2.size())
@@ -780,7 +780,7 @@ static void copy2buff(lua_State* L, StkId top, int n, std::span<char> buff)
     StkId v = top - n;
     assert((slottag(L, v) & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = slottsval(L, v);
-    std::string_view s = st->data.view();
+    byte_view s = st->data.view();
     memcpy(buff.data() + tl, s.data(), s.size() * sizeof(char));
     tl += s.size();
   } while (--n > 0);
@@ -826,14 +826,14 @@ void luaV_concat(lua_State* L, int total)
       {
         char buff[40];
         copy2buff(L, top, n, buff);
-        std::string_view buffstr{buff, tl};
+        byte_view buffstr{buff, tl};
         ts = luaS_createstr(L, buffstr, 0, buffstr.size());
       }
       else
       {
         char* buff = ((char*)(luaM_malloc_(L, ((size_t)(tl)) * sizeof(char), 0)));
         copy2buff(L, top, n, std::span<char>{buff, tl});
-        std::string_view buffstr{buff, tl};
+        byte_view buffstr{buff, tl};
         ts = luaS_createstr(L, buffstr, 0, buffstr.size());
         luaM_free_(L, (buff), (tl) * sizeof(*(buff)));
       }

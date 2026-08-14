@@ -9,13 +9,15 @@ class HostString
 public:
   HostString() = default;
 
-  HostString(std::string_view s) : str(s) {}
-
   HostString(const char* s) : str(s) {}
-
-  std::string_view to_utf8() const noexcept
+  HostString(byte_view bytes)
   {
-    return std::string_view(str.data(), str.size());
+    *this = HostString::from_bytes(bytes);
+  }
+
+  byte_view to_utf8() const noexcept
+  {
+    return byte_view(str.data(), str.size());
   }
 
   const char* to_os() const noexcept
@@ -23,11 +25,11 @@ public:
     return str.c_str();
   }
 
-  static HostString from_bytes(std::string_view bytes)
+  static HostString from_bytes(byte_view bytes)
   {
-    HostString hs;
-    hs.str = bytes;
-    return hs;
+    HostString s;
+    s.str = std::string(bytes.data(), bytes.size());
+    return s;
   }
 
   bool operator==(const char* s) const noexcept { return str == s; }
@@ -39,5 +41,5 @@ private:
 
 inline HostString operator""_hs(const char* s, size_t len)
 {
-  return HostString(std::string_view(s, len));
+  return HostString(byte_view(s, len));
 }

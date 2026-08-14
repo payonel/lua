@@ -42,7 +42,7 @@ static inline int currIsNewline(const LexState* ls)
 }
 
 /* ORDER RESERVED */
-static const std::string_view luaX_tokens[] = {
+static const byte_view luaX_tokens[] = {
     lt::and_kw, lt::break_kw, lt::do_kw, lt::else_kw, lt::elseif,
     lt::end, lt::false_kw, lt::for_kw, lt::function, lt::global, lt::goto_kw, lt::if_kw,
     lt::in, lt::local, lt::nil, lt::not_kw, lt::or_kw, lt::repeat,
@@ -52,7 +52,7 @@ static const std::string_view luaX_tokens[] = {
     lt::number_1, lt::integer_1, lt::name_1, lt::string_1};
 
 
-static l_noret lexerror(LexState* ls, std::string_view msg, int token);
+static l_noret lexerror(LexState* ls, byte_view msg, int token);
 
 static void save(LexState* ls, int c)
 {
@@ -83,7 +83,7 @@ void luaX_init(lua_State* L)
   luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(e)));                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
   {
-    std::string_view bytes = luaX_tokens[i];
+    byte_view bytes = luaX_tokens[i];
     TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
     assert((ts->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(ts)));     /* reserved words are never collected */
@@ -91,7 +91,7 @@ void luaX_init(lua_State* L)
   }
 }
 
-std::string_view luaX_token2str(LexState* ls, int token)
+byte_view luaX_token2str(LexState* ls, int token)
 {
   if (token < FIRST_RESERVED)
   { /* single-byte symbols? */
@@ -102,7 +102,7 @@ std::string_view luaX_token2str(LexState* ls, int token)
   }
   else
   {
-    std::string_view s = luaX_tokens[token - FIRST_RESERVED];
+    byte_view s = luaX_tokens[token - FIRST_RESERVED];
     if (token < TK_EOS) /* fixed format (symbols and reserved words)? */
       return luaO_pushfstring(ls->L, lt::fmt_quoted_s, FmtArgs().str(s))->view();
     else /* names, strings, and numerals */
@@ -110,7 +110,7 @@ std::string_view luaX_token2str(LexState* ls, int token)
   }
 }
 
-static std::string_view txtToken(LexState* ls, int token)
+static byte_view txtToken(LexState* ls, int token)
 {
   switch (token)
   {
@@ -124,7 +124,7 @@ static std::string_view txtToken(LexState* ls, int token)
   }
 }
 
-static l_noret lexerror(LexState* ls, std::string_view msg, int token)
+static l_noret lexerror(LexState* ls, byte_view msg, int token)
 {
   msg = luaG_addinfo(ls->L, msg, ls->source, ls->linenumber);
   if (token)
@@ -132,7 +132,7 @@ static l_noret lexerror(LexState* ls, std::string_view msg, int token)
   luaD_throw(ls->L, LUA_ERRSYNTAX);
 }
 
-l_noret luaX_syntaxerror(LexState* ls, std::string_view msg)
+l_noret luaX_syntaxerror(LexState* ls, byte_view msg)
 {
   lexerror(ls, msg, ls->t.token);
 }
@@ -169,7 +169,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
 /*
 ** Creates a new string and anchors it in scanner's table.
 */
-TString* luaX_newstring(LexState* ls, std::string_view str, size_t off, size_t len)
+TString* luaX_newstring(LexState* ls, byte_view str, size_t off, size_t len)
 {
   return anchorstr(ls, luaS_createstr(ls->L, str, off, len));
 }
@@ -203,7 +203,7 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source, int firs
   /* all three strings here ("_ENV", "break", "global") were fixed,
      so they cannot be collected */
   ls->envn = luaS_createstr(L, lt::_ENV, 0, lt::_ENV.size()); /* get env string */
-  std::string_view breakstr = lt::break_kw;
+  byte_view breakstr = lt::break_kw;
   ls->brkn = luaS_createstr(L, breakstr, 0, breakstr.size()); /* get "break" string */
   /* initialize buffer */
   ls->buff->reset();
@@ -230,7 +230,7 @@ static int check_next1(LexState* ls, int c)
 ** Check whether current char is in set 'set' (with two chars) and
 ** saves it
 */
-static int check_next2(LexState* ls, std::string_view set)
+static int check_next2(LexState* ls, byte_view set)
 {
   assert(set.size() == 2);
   if (ls->current == set[0] || ls->current == set[1])
@@ -258,7 +258,7 @@ static int check_next2(LexState* ls, std::string_view set)
 static int read_numeral(LexState* ls, Token* seminfo)
 {
   TValue obj;
-  std::string_view expo = lt::Ee_chars;
+  byte_view expo = lt::Ee_chars;
   int first = ls->current;
   assert(lisdigit(ls->current));
   save_and_next(ls);
@@ -325,7 +325,7 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
     {
     case EOZ:
     { /* error */
-      std::string_view what = seminfo ? lt::string_3 : lt::comment;
+      byte_view what = seminfo ? lt::string_3 : lt::comment;
       const InternalString* msg = luaO_pushfstring(ls->L, lt::unfinished_long_s_starting_at_line_d, FmtArgs().str(what).num(line));
       lexerror(ls, msg->view(), TK_EOS);
       break; /* to avoid warnings */
@@ -362,7 +362,7 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
   }
 }
 
-static void esccheck(LexState* ls, int c, std::string_view msg)
+static void esccheck(LexState* ls, int c, byte_view msg)
 {
   if (!c)
   {

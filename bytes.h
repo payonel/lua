@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string_view>
+#include <string>
 #include <span>
 #include <string.h>
 #include <algorithm>
@@ -10,34 +11,53 @@ struct byte_view
 {
   static constexpr size_t npos = size_t(-1);
 
-  byte_view() = delete;
-  byte_view(std::string_view view, size_t len = byte_view::npos)
-    : sv(view)
+  constexpr byte_view()
+    : sv("", 0)
     , offset(0)
-    , length(len == byte_view::npos ? sv.size() : len)
-  {
-  }
+    , length(0)
+  {}
 
-  byte_view(std::span<char> bytes, size_t len = byte_view::npos)
-    : sv(std::string_view(bytes.data(), bytes.size()))
+  constexpr byte_view(const char* bytes)
+    : sv(bytes)
+    , offset(0)
+    , length(sv.size())
+  {}
+
+  constexpr byte_view(const char* bytes, size_t len)
+    : sv(bytes, len)
+    , offset(0)
+    , length(len)
+  {}
+
+  constexpr explicit byte_view(std::span<char> bytes, size_t len = byte_view::npos)
+    : sv(bytes.data(), bytes.size())
     , offset(0)
     , length(len == byte_view::npos ? bytes.size() : len)
   {}
 
   constexpr size_t size() const { return length; }
   constexpr const char* data() const { return sv.data() + offset; }
-  constexpr std::string_view view() const { return std::string_view(sv.data() + offset, length); }
 
-  constexpr bool empty() const { return view().empty(); }
+  constexpr bool empty() const { return length == 0; }
 
   constexpr bool ends_with(char c) const
   {
     return view().ends_with(c);
   }
 
-  constexpr size_t find_first_not_of(std::string_view chars, size_t pos = 0) const
+  constexpr bool ends_with(byte_view s) const
   {
-    return sv.substr(offset, length).find_first_not_of(chars, pos);
+    return view().ends_with(s.view());
+  }
+
+  constexpr size_t find_first_not_of(byte_view chars, size_t pos = 0) const
+  {
+    return view().find_first_not_of(chars.view(), pos);
+  }
+
+  constexpr size_t find_first_of(byte_view chars, size_t pos = 0) const
+  {
+    return view().find_first_of(chars.view(), pos);
   }
 
   constexpr bool operator==(byte_view other) const
@@ -45,22 +65,21 @@ struct byte_view
     return view() == other.view();
   }
 
-  constexpr bool operator==(std::string_view other) const
-  {
-    return view() == other;
-  }
-
   constexpr char operator[] (size_t i) const
   {
-    assert(i < length);
-    return sv[offset + i];
+    return sv.data()[offset + i];
+  }
+
+  constexpr bool starts_with(byte_view s) const
+  {
+    return view().starts_with(s.view());
   }
 
   constexpr byte_view substr(size_t off, size_t len = byte_view::npos) const
   {
-    byte_view cp = *this;
+    assert(off <= length);
+    byte_view cp { sv.data(), std::min<size_t>(len, length - off) };
     cp.offset = offset + off;
-    cp.length = std::min<size_t>(len, length - off);
     return cp;
   }
 
@@ -69,40 +88,55 @@ struct byte_view
     return view().find(c, pos);
   }
 
+  constexpr size_t find(byte_view s, size_t pos = 0) const
+  {
+    return view().find(s.view(), pos);
+  }
+
+  constexpr int compare(size_t pos, size_t count, byte_view s) const
+  {
+    return view().compare(pos, count, s.view());
+  }
+
   std::string_view sv {nullptr, 0};
   size_t offset = 0;
   size_t length = 0;
+
+private:
+  constexpr std::string_view view() const
+  {
+    return std::string_view(sv.data() + offset, length);
+  }
 };
 
 struct byte_span
 {
-  byte_span(std::span<char> bytes, size_t len = byte_view::npos)
+  constexpr byte_span(std::span<char> bytes, size_t len = byte_view::npos)
     : sp(bytes)
     , offset(0)
     , length(len == byte_view::npos ? bytes.size() : len)
   {}
-  byte_span(char* rw, size_t len) : sp(rw, len), offset(0), length(sp.size()) {}
+  constexpr byte_span(char* rw, size_t len) : sp(rw, len), offset(0), length(sp.size()) {}
 
-  size_t size() const { return length; }
-  size_t capacity() const { return sp.size(); }
-  char* data() const { return sp.data() + offset; }
+  constexpr size_t size() const { return length; }
+  constexpr char* data() const { return sp.data() + offset; }
 
-  inline size_t apply(std::string_view from)
+  constexpr size_t apply(byte_view from)
   {
     assert(from.size() <= length);
-    return std::copy_n(from.data(), from.size(), sp.data() + offset) - (sp.data() + offset);
+    return std::copy_n(from.data(), from.size(), data()) - data();
   }
 
-  byte_view view() const
+  constexpr byte_view view() const
   {
-    return byte_view(std::string_view(sp.data(), sp.size())).substr(offset, length);
+    return byte_view(sp.data() + offset, length);
   }
 
-  byte_view str_view() const
+  constexpr byte_view str_view() const
   {
     assert(offset + length <= sp.size());
-    size_t n = ::strnlen(sp.data() + offset, length);
-    return byte_view(std::string_view(sp.data(), sp.size())).substr(offset, n);
+    size_t n = std::string_view(sp.data() + offset, length).find('\0');
+    return byte_view(sp.data() + offset, n == byte_view::npos ? length : n);
   }
 
   constexpr char& operator[] (size_t i)
@@ -111,13 +145,9 @@ struct byte_span
     return sp[offset + i];
   }
 
-  constexpr std::span<char> span() const
+  constexpr byte_span subspan(size_t off, size_t len = byte_view::npos) const
   {
-    return sp.subspan(offset, length);
-  }
-
-  byte_span subspan(size_t off, size_t len = byte_view::npos) const
-  {
+    assert(off <= length);
     byte_span cp = *this;
     cp.offset = offset + off;
     cp.length = std::min<size_t>(len, length - off);

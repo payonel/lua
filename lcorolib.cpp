@@ -128,7 +128,7 @@ constexpr int COS_DEAD = 1;
 constexpr int COS_YIELD = 2;
 constexpr int COS_NORM = 3;
 
-static const std::string_view statname[] = {lt::running, lt::dead, lt::suspended, lt::normal_2};
+static const byte_view statname[] = {lt::running, lt::dead, lt::suspended, lt::normal_2};
 
 static int auxstatus(lua_State* L, lua_State* co)
 {

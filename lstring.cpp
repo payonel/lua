@@ -55,12 +55,12 @@ void luaS_init(lua_State* L)
 
 constexpr int LUAI_MAXSHORTLEN = 40;
 
-TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t len)
+TString* luaS_createstr(lua_State* L, byte_view str, size_t off, size_t len)
 {
   global_State* g = L->l_G;
   const char* s = str.data() + off;
   size_t l = len;
-  std::string_view sv(s, l);
+  byte_view sv(s, l);
   size_t h = luaS_hash(s, l);
   if (l <= LUAI_MAXSHORTLEN)
   {
@@ -83,7 +83,7 @@ TString* luaS_createstr(lua_State* L, std::string_view str, size_t off, size_t l
 TString* luaS_take(lua_State* L, InternalString&& str)
 {
   global_State* g = L->l_G;
-  std::string_view bytes = str.view();
+  byte_view bytes = str.view();
   size_t h = InternalString::hashBytes(bytes.data(), bytes.size());
   if (str.size() <= LUAI_MAXSHORTLEN)
   {
@@ -107,7 +107,7 @@ TString* luaS_takeexternal(lua_State* L, InternalString&& str)
 {
   if (str.size() <= LUAI_MAXSHORTLEN)
     return luaS_take(L, std::move(str));
-  std::string_view bytes = str.view();
+  byte_view bytes = str.view();
   size_t h = InternalString::hashBytes(bytes.data(), bytes.size());
   return createstrobj(L, std::move(str), h, 1);
 }

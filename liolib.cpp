@@ -24,18 +24,18 @@
 #include "lualib.h"
 #include "literals.h"
 
-static int l_checkmode(std::string_view mode)
+static int l_checkmode(byte_view mode)
 {
-  if (mode.empty() || lt::rwa_modes.find(mode[0]) == std::string_view::npos)
+  if (mode.empty() || lt::rwa_modes.find(mode[0]) == byte_view::npos)
     return 0;
   size_t i = 1;
   if (i < mode.size() && mode[i] == '+') /* skip if char is '+' */
     i++;
-  return mode.find_first_not_of(lt::b_char, i) == std::string_view::npos;
+  return mode.find_first_not_of(lt::b_char, i) == byte_view::npos;
 }
 
 /* By default, Lua accepts only "r" or "w" as valid modes */
-static inline int l_checkmodep(std::string_view m)
+static inline int l_checkmodep(byte_view m)
 {
   return m.size() == 1 && (m[0] == 'r' || m[0] == 'w');
 }
@@ -160,7 +160,7 @@ static LStream* newfile(lua_State* L)
   return p;
 }
 
-static void opencheck(lua_State* L, std::string_view fname, std::string_view mode)
+static void opencheck(lua_State* L, byte_view fname, byte_view mode)
 {
   LStream* p = newfile(L);
   OsOpenResult o = os_fopen(fname, mode);
@@ -168,7 +168,7 @@ static void opencheck(lua_State* L, std::string_view fname, std::string_view mod
   if (l_unlikely(p->f == nullptr))
   {
     lua_pushistringref(L, fname);
-    std::string_view errmsg = os_strerror(o.err);
+    byte_view errmsg = os_strerror(o.err);
     lua_pushlstring(L, errmsg, 0, errmsg.size());
     luaL_errori(L, lt::cannot_open_file_s_s);
   }
@@ -216,7 +216,7 @@ static int io_tmpfile(lua_State* L)
   return (p->f == nullptr) ? luaL_fileresulti(L, 0, {}, o.err) : 1;
 }
 
-static OsFile* getiofile(lua_State* L, std::string_view findex)
+static OsFile* getiofile(lua_State* L, byte_view findex)
 {
   LStream* p;
   lua_getfieldi(L, LUA_REGISTRYINDEX, findex);
@@ -224,19 +224,19 @@ static OsFile* getiofile(lua_State* L, std::string_view findex)
   if (l_unlikely(isclosed(p)))
   {
     byte_view name = byte_view(findex).substr(lt::_IO_.size());
-    lua_pushlstring(L, name.view(), 0, name.size());
+    lua_pushlstring(L, name, 0, name.size());
     luaL_errori(L, lt::default_s_file_is_closed);
   }
   return p->f;
 }
 
-static int g_iofile(lua_State* L, std::string_view f, std::string_view mode)
+static int g_iofile(lua_State* L, byte_view f, byte_view mode)
 {
   if (!lua_isnoneornil(L, 1))
   {
     if (lua_isstring(L, 1))
     {
-      std::string_view filename = lua_toistring(L, 1)->view();
+      byte_view filename = lua_toistring(L, 1)->view();
       opencheck(L, filename, mode);
     }
     else
@@ -315,7 +315,7 @@ static int io_lines(lua_State* L)
   }
   else
   { /* open a new file */
-    std::string_view filename = luaL_checkistring(L, 1)->view();
+    byte_view filename = luaL_checkistring(L, 1)->view();
     opencheck(L, filename, lt::r_mode);
     lua_replace(L, 1); /* put file at index 1 */
     toclose = 1;       /* close it after iteration */
@@ -371,7 +371,7 @@ static int nextc(RN* rn)
 /*
 ** Accept current char if it is in 'set' (of size 2)
 */
-static int test2(RN* rn, std::string_view set)
+static int test2(RN* rn, byte_view set)
 {
   if (rn->c == set[0] || rn->c == set[1])
     return nextc(rn);
@@ -419,7 +419,7 @@ static int read_number(lua_State* L, OsFile* f)
       count = 1; /* count initial '0' as a valid digit */
   }
   count += readdigits(&rn, hex);   /* integral part */
-  if (test2(&rn, std::string_view(decp, sizeof(decp))))
+  if (test2(&rn, byte_view(decp, sizeof(decp))))
     count += readdigits(&rn, hex); /* fractional part */
   if (count > 0 && test2(&rn, (hex ? lt::pP_chars : lt::eE_chars)))
   {                     /* exponent mark? */
@@ -429,7 +429,7 @@ static int read_number(lua_State* L, OsFile* f)
   os_ungetbyte(rn.f, rn.c); /* unread look-ahead char */
   os_funlockfile(rn.f);
   rn.buff[rn.n] = '\0'; /* finish string */
-  std::string_view buffsv(rn.buff.data(), rn.n);
+  byte_view buffsv(rn.buff.data(), rn.n);
   if (l_likely(lua_stringtonumber(L, HostString::from_bytes(buffsv))))
     return 1; /* ok, it is a valid number */
   else
@@ -613,11 +613,11 @@ static int g_write(lua_State* L, OsFile* f, int arg)
   { /* for each argument */
     size_t numbytes; /* bytes written in one call to 'fwrite' */
     char numbuff[LUA_N2SBUFFSZ];
-    std::optional<std::string_view> numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
+    std::optional<byte_view> numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
     byte_view bv = numtxt.has_value()
-      ? byte_view(std::string_view(numbuff, LUA_N2SBUFFSZ), numtxt->size())
+      ? byte_view(numbuff, LUA_N2SBUFFSZ).substr(0, numtxt->size())
       : byte_view(luaL_checklstring(L, arg));
-    numbytes = os_fwrite(f, bv.view());
+    numbytes = os_fwrite(f, bv);
     totalbytes += numbytes;
     if (numbytes < bv.size())
     { /* write error? */
@@ -643,7 +643,7 @@ static int f_write(lua_State* L)
 
 static int f_seek(lua_State* L)
 {
-  static const std::string_view modenames[] = {lt::set, lt::cur, lt::end};
+  static const byte_view modenames[] = {lt::set, lt::cur, lt::end};
   OsFile* f = tofile(L);
   int op = luaL_checkoptioni(L, 2, lt::cur, modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
@@ -661,7 +661,7 @@ static int f_seek(lua_State* L)
 
 static int f_setvbuf(lua_State* L)
 {
-  static const std::string_view modenames[] = {lt::no, lt::full, lt::line};
+  static const byte_view modenames[] = {lt::no, lt::full, lt::line};
   OsFile* f = tofile(L);
   int op = luaL_checkoptioni(L, 2, {}, modenames);
   lua_Integer sz = luaL_optinteger(L, 3, LUAL_BUFFERSIZE);
@@ -771,8 +771,8 @@ static int io_noclose(lua_State* L)
   return 2;
 }
 
-static void createstdfile(lua_State* L, OsFile* f, std::string_view k,
-                          const std::string_view fname)
+static void createstdfile(lua_State* L, OsFile* f, byte_view k,
+                          const byte_view fname)
 {
   LStream* p = newprefile(L);
   p->f = f;

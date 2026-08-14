@@ -164,7 +164,7 @@ constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
 /* raise a stack error while running the message handler */
 l_noret luaD_errerr(lua_State* L)
 {
-  std::string_view errstr = lt::error_in_error_handling;
+  byte_view errstr = lt::error_in_error_handling;
   TString* msg = luaS_createstr(L, errstr, 0, errstr.size());
   setslots(L, L->top, msg);
   L->top++; /* assume EXTRA_STACK */
@@ -812,7 +812,7 @@ static CallInfo* findpcall(lua_State* L)
 ** of the coroutine itself. (Such errors should not be handled by any
 ** coroutine error handler and should not kill the coroutine.)
 */
-static int resume_error(lua_State* L, std::string_view msg, int narg)
+static int resume_error(lua_State* L, byte_view msg, int narg)
 {
   api_checkpop(L, narg);
   L->top -= narg;                           /* remove args from the stack */
@@ -1033,13 +1033,13 @@ struct SParser
   ZIO* z;
   MBuffer buff;
   Dyndata dyd;  /* dynamic structures used by the parser */
-  std::string_view mode;
-  std::string_view name;
+  byte_view mode;
+  byte_view name;
 };
 
-static void checkmode(lua_State* L, std::string_view mode, std::string_view x)
+static void checkmode(lua_State* L, byte_view mode, byte_view x)
 {
-  if (mode.find((char) x.at(0)) == std::string_view::npos)
+  if (mode.find((char) x[0]) == byte_view::npos)
   {
     luaO_pushfstring(L, lt::attempt_to_load_a_s_chunk_mode_is_s,
                      FmtArgs().str(x).str(mode));
@@ -1055,7 +1055,7 @@ static void f_parser(lua_State* L, void* ud)
 {
   LClosure* cl;
   struct SParser* p = ((struct SParser*)(ud));
-  std::string_view mode = p->mode;
+  byte_view mode = p->mode;
   int c;
   Table* anchor;
   StkId otop = (L->top); /* original top */
@@ -1068,7 +1068,7 @@ static void f_parser(lua_State* L, void* ud)
   if (c == LUA_SIGNATURE[0])
   {
     int fixed = 0;
-    if (mode.find('B') != std::string_view::npos)
+    if (mode.find('B') != byte_view::npos)
       fixed = 1;
     else
       checkmode(L, mode, lt::binary);
@@ -1102,7 +1102,7 @@ void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
   L->top--;
 }
 
-TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<std::string_view> name, std::optional<std::string_view> mode)
+TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name, std::optional<byte_view> mode)
 {
   struct SParser p;
   TStatus status;

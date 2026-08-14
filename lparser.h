@@ -191,6 +191,6 @@ struct FuncState
 };
 
 LUAI_FUNC lu_byte luaY_nvarstack(FuncState* fs);
-LUAI_FUNC void luaY_checklimit(FuncState* fs, int v, int l, std::string_view what);
+LUAI_FUNC void luaY_checklimit(FuncState* fs, int v, int l, byte_view what);
 class MBuffer;
-LUAI_FUNC LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, std::string_view name, int firstchar);
+LUAI_FUNC LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, byte_view name, int firstchar);

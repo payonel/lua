@@ -20,7 +20,7 @@
 #include "lvm.h"
 #include "literals.h"
 
-LUAI_DDEF const std::string_view luaT_typenames_[] = {
+LUAI_DDEF const byte_view luaT_typenames_[] = {
     lt::no_value,
     lt::nil, lt::boolean, lt::userdata, lt::number_2,
     lt::string_3, lt::table, lt::function, lt::userdata,
@@ -29,7 +29,7 @@ LUAI_DDEF const std::string_view luaT_typenames_[] = {
 
 void luaT_init(lua_State* L)
 {
-  static std::string_view luaT_eventname[TM_N] = {/* ORDER TM */
+  static byte_view luaT_eventname[TM_N] = {/* ORDER TM */
       lt::mm_index, lt::mm_newindex,
       lt::mm_gc, lt::mm_mode, lt::mm_len, lt::mm_eq,
       lt::mm_add, lt::mm_sub, lt::mm_mul, lt::mm_mod, lt::mm_pow,
@@ -40,7 +40,7 @@ void luaT_init(lua_State* L)
   static_assert(sizeof(luaT_eventname) / sizeof(luaT_eventname[0]) == TM_N);
   for (int i = 0; i < TM_N; i++)
   {
-    std::string_view bytes = luaT_eventname[i];
+    byte_view bytes = luaT_eventname[i];
     L->l_G->tmname[i] = luaS_createstr(L, bytes, 0, bytes.size());
     assert((((L->l_G->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(L->l_G->tmname[i]))); /* never collect these names */
@@ -91,7 +91,7 @@ const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event)
 ** Return the name of the type of an object. For tables and userdata
 ** with metatable, use their '__name' metafield, if present.
 */
-std::string_view luaT_objtypename(lua_State* L, const TValue* o)
+byte_view luaT_objtypename(lua_State* L, const TValue* o)
 {
   Table* mt;
   if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != nullptr) ||
@@ -283,7 +283,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   setsloth(L, L->top, t);
   L->top++;
   luaH_resize(L, t, ((unsigned int)(n)), 1);
-  std::string_view bytes = lt::n_char;
+  byte_view bytes = lt::n_char;
   setsvalue(L, &key, luaS_createstr(L, bytes, 0, bytes.size())); /* key is "n" */
   setivalue(&value, n);                 /* value is n */
   /* No need to anchor the key: Due to the resize, the next operation
@@ -388,7 +388,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   else
   {
     TValue res;
-    std::string_view bytes = lt::n_char;
+    byte_view bytes = lt::n_char;
     if (luaH_getshortstr(h, luaS_createstr(L, bytes, 0, bytes.size()), &res) != LUA_VNUMINT ||
         ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
       luaG_runerror(L, lt::vararg_table_has_no_proper_n);

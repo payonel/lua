@@ -6,20 +6,19 @@
 #include <cstring>
 #include <span>
 #include <string>
-#include <string_view>
 #include <algorithm>
 
 #include "host_string.h"
 #include "bytes.h"
 
-inline int sv_byteat(std::string_view s, size_t i)
+inline int sv_byteat(byte_view s, size_t i)
 {
   return (i < s.size()) ? ((unsigned char)(s[i])) : -1;
 }
 
 struct FmtScan
 {
-  std::string_view fmt;
+  byte_view fmt;
   size_t pos = 0;
   size_t litStart = 0;
   size_t litEnd = 0;
@@ -30,7 +29,7 @@ struct FmtScan
   {
     litStart = pos;
     size_t e = fmt.find('%', pos);
-    if (e == std::string_view::npos)
+    if (e == byte_view::npos)
     {
       litEnd = pos = fmt.size();
       return false;
@@ -55,20 +54,21 @@ public:
   InternalString(std::string) = delete;
   InternalString(HostString) = delete;
 
-  InternalString(std::string_view src, size_t off, size_t len)
+  InternalString(byte_view src, size_t off, size_t len)
   {
     off = std::min(off, src.size());
     len = std::min(len, src.size() - off);
-    bytes_ = src.substr(off, len);
+    byte_view sub = src.substr(off, len);
+    bytes_ = std::string(sub.data(), sub.size());
   }
-  InternalString(std::string_view src) : InternalString(src, 0, src.size()) {}
+  InternalString(byte_view src) : InternalString(src, 0, src.size()) {}
 
   size_t size() const noexcept { return bytes_.size(); }
   bool empty() const noexcept { return bytes_.empty(); }
 
   int byteAt(size_t i) const { return static_cast<unsigned char>(bytes_[i]); }
 
-  std::string_view view() const noexcept { return bytes_; }
+  byte_view view() const noexcept { return byte_view(bytes_.data(), bytes_.size()); }
 
   bool operator==(const InternalString& o) const noexcept
   {
@@ -89,15 +89,16 @@ public:
   }
   size_t hash() const noexcept { return hashBytes(bytes_.data(), bytes_.size()); }
 
-  InternalString substr(size_t off, size_t len = std::string_view::npos) const
+  InternalString substr(size_t off, size_t len = byte_view::npos) const
   {
     assert(off <= bytes_.size());
-    return InternalString(std::string_view(bytes_), off, len);
+    byte_view sv(bytes_.data(), bytes_.size());
+    return InternalString(sv, off, len);
   }
 
-  InternalString concat(std::string_view o) const
+  InternalString concat(byte_view o) const
   {
-    return InternalString::take(bytes_ + std::string(o));
+    return InternalString::take(bytes_ + std::string(o.data(), o.size()));
   }
 
   static InternalString take(std::string&& s)

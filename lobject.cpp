@@ -277,7 +277,7 @@ lu_byte luaO_hexavalue(int c)
     return ((lu_byte)((ltolower(c) - 'a') + 10));
 }
 
-static int isneg(std::string_view s, size_t* off)
+static int isneg(byte_view s, size_t* off)
 {
   if (sv_byteat(s, *off) == '-')
   {
@@ -304,7 +304,7 @@ constexpr int MAXSIGDIG = 30;
 ** convert a hexadecimal numeric string to a number, following
 ** C99 specification for 'strtod'
 */
-static lua_Number lua_strx2number(std::string_view s, size_t off, size_t* endpos)
+static lua_Number lua_strx2number(byte_view s, size_t off, size_t* endpos)
 {
   int dot = '.';
   lua_Number r = 0.0; /* result (accumulator) */
@@ -372,7 +372,7 @@ static lua_Number lua_strx2number(std::string_view s, size_t off, size_t* endpos
 /* maximum length of a numeral to be converted to a number */
 static constexpr int L_MAXLENNUM = 200;
 
-static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
+static size_t str2dec(byte_view s, size_t off, lua_Number* result)
 {
   size_t p = off;
   while (lisspace(sv_byteat(s, p)))
@@ -440,7 +440,7 @@ static size_t str2dec(std::string_view s, size_t off, lua_Number* result)
   return endp;
 }
 
-static size_t l_str2dloc(std::string_view s, size_t off, lua_Number* result,
+static size_t l_str2dloc(byte_view s, size_t off, lua_Number* result,
                          int mode)
 {
   size_t endpos;
@@ -448,17 +448,17 @@ static size_t l_str2dloc(std::string_view s, size_t off, lua_Number* result,
   {
     *result = lua_strx2number(s, off, &endpos);
     if (endpos == off)
-      return std::string_view::npos; /* nothing recognized? */
+      return byte_view::npos; /* nothing recognized? */
   }
   else
   {
     endpos = str2dec(s, off, result);
     if (endpos == off)
-      return std::string_view::npos; /* nothing recognized? */
+      return byte_view::npos; /* nothing recognized? */
   }
   while (lisspace(sv_byteat(s, endpos)))
     endpos++; /* skip trailing spaces */
-  return (endpos == s.size()) ? endpos : std::string_view::npos;
+  return (endpos == s.size()) ? endpos : byte_view::npos;
 }
 
 /*
@@ -474,16 +474,16 @@ static size_t l_str2dloc(std::string_view s, size_t off, lua_Number* result,
 ** - 'x' means a hexadecimal numeral
 ** - '.' just optimizes the search for the common case (no special chars)
 */
-static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
+static size_t l_str2d(byte_view s, size_t off, lua_Number* result)
 {
   size_t pmode = s.find_first_of(lt::xXnN_chars, off); /* look for special chars */
-  int mode = (pmode != std::string_view::npos)
+  int mode = (pmode != byte_view::npos)
                  ? ltolower(((unsigned char)(s[pmode])))
                  : 0;
   if (mode == 'n') /* reject 'inf' and 'nan' */
-    return std::string_view::npos;
+    return byte_view::npos;
   size_t endpos = l_str2dloc(s, off, result, mode); /* try to convert */
-  if (endpos == std::string_view::npos)
+  if (endpos == byte_view::npos)
   {
     char buff[L_MAXLENNUM + 1];
     byte_span buffsp(buff, L_MAXLENNUM + 1);
@@ -494,7 +494,7 @@ static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
       return byte_view::npos;
     buffsp.apply(s.substr(off, len));
     buffsp[ppoint - off] = '.';
-    endpos = l_str2dloc(buffsp.subspan(0, len).view().view(), 0, result, mode); /* try again */
+    endpos = l_str2dloc(buffsp.subspan(0, len).view(), 0, result, mode); /* try again */
     if (endpos != byte_view::npos)
       endpos = off + endpos; /* make relative to 's' */
   }
@@ -504,7 +504,7 @@ static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
 constexpr lua_Unsigned MAXBY10 = ((lua_Unsigned)(LUA_MAXINTEGER / 10));
 constexpr int MAXLASTD = ((int)(LUA_MAXINTEGER % 10));
 
-static size_t l_str2int(std::string_view s, size_t off, lua_Integer* result)
+static size_t l_str2int(byte_view s, size_t off, lua_Integer* result)
 {
   lua_Unsigned a = 0;
   int empty = 1;
@@ -529,7 +529,7 @@ static size_t l_str2int(std::string_view s, size_t off, lua_Integer* result)
     {
       int d = s[p] - '0';
       if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + neg)) /* overflow? */
-        return std::string_view::npos;                            /* do not accept it (as integer) */
+        return byte_view::npos;                            /* do not accept it (as integer) */
       a = a * 10 + ((unsigned int)(d));
       empty = 0;
     }
@@ -537,7 +537,7 @@ static size_t l_str2int(std::string_view s, size_t off, lua_Integer* result)
   while (lisspace(sv_byteat(s, p)))
     p++; /* skip trailing spaces */
   if (empty || p != s.size())
-    return std::string_view::npos; /* something wrong in the numeral */
+    return byte_view::npos; /* something wrong in the numeral */
   else
   {
     *result = ((lua_Integer)((neg) ? 0u - a : a));
@@ -545,16 +545,16 @@ static size_t l_str2int(std::string_view s, size_t off, lua_Integer* result)
   }
 }
 
-size_t luaO_str2num(std::string_view s, TValue* o)
+size_t luaO_str2num(byte_view s, TValue* o)
 {
   lua_Integer i;
   lua_Number n;
   size_t e;
-  if ((e = l_str2int(s, 0, &i)) != std::string_view::npos)
+  if ((e = l_str2int(s, 0, &i)) != byte_view::npos)
   { /* try as an integer */
     setivalue(o, i);
   }
-  else if ((e = l_str2d(s, 0, &n)) != std::string_view::npos)
+  else if ((e = l_str2d(s, 0, &n)) != byte_view::npos)
   { /* else try as a float */
     setfltvalue(o, n);
   }
@@ -614,7 +614,7 @@ static int tostringbuffFloat(lua_Number n, char* buff)
     buff[len] = '\0';
   }
   byte_view buffsv(buff, LUA_N2SBUFFSZ);
-  if (buffsv.substr(0, ((size_t)(len))).find_first_not_of(lt::digits_and_dash) == std::string_view::npos)
+  if (buffsv.substr(0, ((size_t)(len))).find_first_not_of(lt::digits_and_dash) == byte_view::npos)
   {
     buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
@@ -663,7 +663,7 @@ void luaO_tostring(lua_State* L, TValue* obj)
 {
   char buff[LUA_N2SBUFFSZ];
   unsigned len = luaO_tostringbuff(obj, buff);
-  std::string_view bytes{buff, len};
+  byte_view bytes{buff, len};
   setsvalue(L, obj, luaS_createstr(L, bytes, 0, bytes.size()));
 }
 
@@ -704,7 +704,7 @@ static void pushbuff(lua_State* L, void* ud)
   BuffFS* buff = ((BuffFS*)(ud));
   if (buff->err == 1)
     luaD_throw(L, LUA_ERRMEM);
-  InternalString res(std::string_view(buff->b.data(), buff->b.size()), 0, buff->blen);
+  InternalString res(byte_view(buff->b.data(), buff->b.size()), 0, buff->blen);
   if (buff->err == 2)
     res = res.concat(lt::ellipsis);
   TString* ts = luaS_take(L, std::move(res));
@@ -761,11 +761,11 @@ static void addnum2buff(BuffFS* buff, TValue* num)
 {
   char numbuff[LUA_N2SBUFFSZ];
   unsigned len = luaO_tostringbuff(num, numbuff);
-  addstr2buff(buff, byte_view(std::string_view(numbuff, LUA_N2SBUFFSZ), len));
+  addstr2buff(buff, byte_view(numbuff, LUA_N2SBUFFSZ).substr(0, len));
 }
 
 
-FmtArgs& FmtArgs::str(std::string_view s)
+FmtArgs& FmtArgs::str(byte_view s)
 {
   assert(n < MAXFMTARGS);
   assert(s.data() != nullptr);
@@ -830,11 +830,11 @@ FmtArgs& FmtArgs::utf8(unsigned long u)
 }
 
 const InternalString* luaO_pushvfstring(lua_State* L,
-                                        std::string_view fmt,
+                                        byte_view fmt,
                                         const FmtArgs& args)
 {
   BuffFS buff;  /* holds last part of the result */
-  std::string_view f = fmt;
+  byte_view f = fmt;
   int argn = 0;
   initbuff(L, &buff);
   FmtScan sc{f};
@@ -853,7 +853,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     { /* an 'int' as a character */
       assert(argn < args.n && args.arg[argn].tag == 'c');
       char c = ((char)(args.arg[argn++].i));
-      addstr2buff(&buff, byte_view(std::string_view(&c, sizeof(char))));
+      addstr2buff(&buff, byte_view(byte_view(&c, sizeof(char))));
       break;
     }
     case 'd':
@@ -890,7 +890,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       std::to_chars_result res =
           std::to_chars(bf + 2, bf + LUA_N2SBUFFSZ, ((uintptr_t)(p)), 16);
       assert(res.ec == std::errc());
-      addstr2buff(&buff, byte_view(std::string_view(bf, LUA_N2SBUFFSZ), ((size_t)(res.ptr - bf))));
+      addstr2buff(&buff, byte_view(bf, LUA_N2SBUFFSZ).substr(0, ((size_t)(res.ptr - bf))));
       break;
     }
     case 'U':
@@ -898,7 +898,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       char bf[UTF8BUFFSZ];
       assert(argn < args.n && args.arg[argn].tag == 'U');
       int len = luaO_utf8esc(bf, ((l_uint32)(args.arg[argn++].i)));
-      addstr2buff(&buff, byte_view(std::string_view(bf, UTF8BUFFSZ)).substr(UTF8BUFFSZ - len));
+      addstr2buff(&buff, byte_view(byte_view(bf, UTF8BUFFSZ)).substr(UTF8BUFFSZ - len));
       break;
     }
     case -1:
@@ -919,7 +919,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
   return clearbuff(&buff); /* empty buffer into a new string */
 }
 
-int luaO_fmtargcount(std::string_view fmt)
+int luaO_fmtargcount(byte_view fmt)
 {
   int n = 0;
   FmtScan sc{fmt};
@@ -943,7 +943,7 @@ int luaO_fmtargcount(std::string_view fmt)
   return n;
 }
 
-const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt, const FmtArgs& args)
+const InternalString* luaO_pushfstring(lua_State* L, byte_view fmt, const FmtArgs& args)
 {
   const InternalString* msg = luaO_pushvfstring(L, fmt, args);
   if (msg == nullptr) /* error? */
@@ -953,7 +953,7 @@ const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt, const
 
 /* }================================================================== */
 
-void luaO_chunkid(std::span<char> out, std::string_view source)
+void luaO_chunkid(std::span<char> out, byte_view source)
 {
   assert(out.size() >= LUA_IDSIZE);
   size_t srclen = source.size();
@@ -981,7 +981,7 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
     }
     else
     { /* add '...' before rest of name */
-      std::string_view bytes = lt::ellipsis;
+      byte_view bytes = lt::ellipsis;
       memcpy(out.data(), bytes.data(), bytes.size() * sizeof(char));
       pos += lt::ellipsis.size();
       bufflen -= lt::ellipsis.size();
@@ -993,18 +993,18 @@ void luaO_chunkid(std::span<char> out, std::string_view source)
   else
   {                                                 /* string; format as [string "source"] */
     size_t nl = source.find('\n');
-    std::string_view bytes = lt::string_2;
+    byte_view bytes = lt::string_2;
     memcpy(out.data(), bytes.data(), bytes.size() * sizeof(char)); /* add prefix */
     pos += lt::string_2.size();
     bufflen -= lt::string_2.size() + lt::ellipsis.size() + lt::backquote.size() + 1; /* save space for prefix+suffix+'\0' */
-    if (srclen < bufflen && nl == std::string_view::npos)
+    if (srclen < bufflen && nl == byte_view::npos)
     {
       memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
       pos += srclen;
     }
     else
     {
-      if (nl != std::string_view::npos)
+      if (nl != byte_view::npos)
         srclen = nl; /* stop at first newline */
       if (srclen > bufflen)
         srclen = bufflen;

@@ -404,7 +404,7 @@ constexpr size_t sizeLclosure(int n)
 struct CFuncInfo : GCObject
 {
   lua_CFunction fptr;
-  std::optional<std::string> name; /* for serialization; nullopt = not serializable */
+  std::optional<InternalString> name; /* for serialization; nullopt = not serializable */
 
   /* Default ctor: static/fixed CFuncInfo (not GC-managed) */
   CFuncInfo()
@@ -417,7 +417,7 @@ struct CFuncInfo : GCObject
   CFuncInfo(HostString n, lua_CFunction f)
     : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
     , fptr(f)
-    , name(std::string(n.to_utf8()))
+    , name(n.to_utf8())
   {}
 };
 
@@ -739,7 +739,7 @@ constexpr int MAXFMTARGS = 8;
 struct FmtArg
 {
   char tag;
-  std::string_view s;
+  byte_view s;
   lua_Integer i;
   lua_Number n;
   const void* p;
@@ -749,7 +749,7 @@ struct FmtArgs
 {
   int n = 0;
   FmtArg arg[MAXFMTARGS];
-  FmtArgs& str(std::string_view s);
+  FmtArgs& str(byte_view s);
   FmtArgs& str(std::string&&) = delete;
   FmtArgs& chr(int c);
   FmtArgs& num(int d);
@@ -768,11 +768,11 @@ LUAI_FUNC l_mem luaO_applyparam(lu_byte p, l_mem x);
 
 LUAI_FUNC int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2, TValue* res);
 LUAI_FUNC void luaO_arith(lua_State* L, int op, StkId p1, StkId p2, StkId res);
-LUAI_FUNC size_t luaO_str2num(std::string_view s, TValue* o);
+LUAI_FUNC size_t luaO_str2num(byte_view s, TValue* o);
 LUAI_FUNC unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff);
 LUAI_FUNC lu_byte luaO_hexavalue(int c);
 LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
-LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L, std::string_view fmt, const FmtArgs& args);
-LUAI_FUNC int luaO_fmtargcount(std::string_view fmt);
-LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, std::string_view fmt, const FmtArgs& args);
-LUAI_FUNC void luaO_chunkid(std::span<char> out, std::string_view source);
+LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
+LUAI_FUNC int luaO_fmtargcount(byte_view fmt);
+LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
+LUAI_FUNC void luaO_chunkid(std::span<char> out, byte_view source);

@@ -399,7 +399,7 @@ LUA_API void lua_close(lua_State* L)
   close_state(L);
 }
 
-void luaE_warning(lua_State* L, std::string_view msg, int tocont)
+void luaE_warning(lua_State* L, byte_view msg, int tocont)
 {
   lua_WarnFunction wf = L->l_G->warnf;
   void* ud = L->l_G->ud_warn;
@@ -414,10 +414,10 @@ void luaE_warning(lua_State* L, std::string_view msg, int tocont)
 /*
 ** Generate a warning from an error message
 */
-void luaE_warnerror(lua_State* L, std::string_view where)
+void luaE_warnerror(lua_State* L, byte_view where)
 {
   StkId errobj = L->top - 1; /* error object */
-  std::string_view msg = ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
+  byte_view msg = ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
                              ? slottsval(L, errobj)->data.view()
                              : lt::error_object_is_not_a_string;
   /* produce warning "error in %s (%s)" (where, msg) */

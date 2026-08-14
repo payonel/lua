@@ -147,10 +147,10 @@ static int str_upper(lua_State* L)
 static int str_rep(lua_State* L)
 {
   const InternalString* s = luaL_checkistring(L, 1);
-  std::string_view sv = s->view();
+  byte_view sv = s->view();
   lua_Integer n = luaL_checkinteger(L, 2);
   const InternalString* sep = luaL_optistring(L, 3, &lt::empty_str_i);
-  std::string_view sepsv = sep->view();
+  byte_view sepsv = sep->view();
   if (n <= 0 || (sv.size() | sepsv.size()) == 0)
   {
     lua_pushistringref(L, lt::empty_str); /* no repetitions or both strings empty */
@@ -230,7 +230,7 @@ struct str_Writer
   luaL_Buffer B;
 };
 
-static int writer(lua_State* L, std::optional<std::string_view> b, void* ud)
+static int writer(lua_State* L, std::optional<byte_view> b, void* ud)
 {
   struct str_Writer* state = (struct str_Writer*) ud;
   if (!state->init)
@@ -288,14 +288,14 @@ static int tonum(lua_State* L, int arg)
 ** doesn't work, the only other option would be for the second
 ** operand to have a different metamethod.
 */
-static void trymt(lua_State* L, std::string_view mtkey, std::string_view opname)
+static void trymt(lua_State* L, byte_view mtkey, byte_view opname)
 {
   lua_settop(L, 2); /* back to the original arguments */
   if (l_unlikely(lua_type(L, 2) == LUA_TSTRING ||
                  !luaL_getmetafield(L, 2, HostString{mtkey})))
   {
-    std::string_view t1 = lua_typenamei(L, lua_type(L, -2));
-    std::string_view t2 = lua_typenamei(L, lua_type(L, -1));
+    byte_view t1 = lua_typenamei(L, lua_type(L, -2));
+    byte_view t2 = lua_typenamei(L, lua_type(L, -1));
     lua_pushlstring(L, opname, 0, opname.size());
     lua_pushlstring(L, t1, 0, t1.size());
     lua_pushlstring(L, t2, 0, t2.size());
@@ -305,14 +305,14 @@ static void trymt(lua_State* L, std::string_view mtkey, std::string_view opname)
   lua_call(L, 2, 1); /* call metamethod */
 }
 
-static int arith(lua_State* L, int op, std::string_view mtname)
+static int arith(lua_State* L, int op, byte_view mtname)
 {
   if (tonum(L, 1) && tonum(L, 2))
     lua_arith(L, op); /* result will be on the top */
   else
   {
     byte_view opname = byte_view(mtname).substr(2);
-    trymt(L, mtname, opname.view());
+    trymt(L, mtname, opname);
   }
   return 1;
 }
@@ -629,7 +629,7 @@ static ptrdiff_t match_capture(MatchState* ms, ptrdiff_t s, int l)
   size_t len;
   l = check_capture(ms, l);
   len = ((size_t)(ms->capture[l].len));
-  std::string_view msv = ms->src->view();
+  byte_view msv = ms->src->view();
   if ((size_t) (ms->src_end - s) >= len &&
       memcmp(msv.data() + ms->capture[l].init,
              msv.data() + s, len) == 0)
@@ -752,13 +752,13 @@ static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
   return s;
 }
 
-static size_t lmemfind(std::string_view s1, size_t off1, size_t l1,
-                       std::string_view s2, size_t l2)
+static size_t lmemfind(byte_view s1, size_t off1, size_t l1,
+                       byte_view s2, size_t l2)
 {
   if (l2 == 0)
     return off1; /* empty strings are everywhere */
   else if (l2 > l1)
-    return std::string_view::npos; /* avoids a negative 'l1' */
+    return byte_view::npos; /* avoids a negative 'l1' */
   else
   {
     size_t p = off1;
@@ -767,7 +767,7 @@ static size_t lmemfind(std::string_view s1, size_t off1, size_t l1,
     while (l1 > 0)
     {
       size_t init = s1.find(s2[0], p);
-      if (init == std::string_view::npos || init >= p + l1)
+      if (init == byte_view::npos || init >= p + l1)
         break;
       init++; /* 1st char is already checked */
       if (memcmp(s1.data() + init, s2.data() + 1, l2) == 0)
@@ -778,7 +778,7 @@ static size_t lmemfind(std::string_view s1, size_t off1, size_t l1,
         p = init;
       }
     }
-    return std::string_view::npos; /* not found */
+    return byte_view::npos; /* not found */
   }
 }
 
@@ -831,9 +831,9 @@ static int push_captures(MatchState* ms, ptrdiff_t s, ptrdiff_t e)
 }
 
 /* check whether pattern has no special characters */
-static int nospecials(std::string_view p)
+static int nospecials(byte_view p)
 {
-  return p.find_first_of(lt::pattern_specials) == std::string_view::npos;
+  return p.find_first_of(lt::pattern_specials) == byte_view::npos;
 }
 
 static void prepstate(MatchState* ms, lua_State* L,
@@ -873,7 +873,7 @@ static int str_find_aux(lua_State* L, int find)
   {
     /* do a plain search */
     size_t pos = lmemfind(s->view(), init, ls - init, p->view(), lp);
-    if (pos != std::string_view::npos)
+    if (pos != byte_view::npos)
     {
       lua_pushinteger(L, ((lua_Integer)(pos)) + 1);
       lua_pushinteger(L, ((lua_Integer)(pos + lp)));
@@ -969,7 +969,7 @@ static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
 {
   lua_State* L = ms->L;
   const InternalString* news = lua_toistring(L, 3);
-  std::string_view nv = news->view();
+  byte_view nv = news->view();
   FmtScan sc{nv};
   while (sc.next())
   {
@@ -1133,20 +1133,20 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
   /* if 'inf' or 'NaN', format it like '%g' */
   if (x != x)
   {
-    std::string_view r = std::signbit(x) ? lt::minus_nan : lt::nan;
+    byte_view r = std::signbit(x) ? lt::minus_nan : lt::nan;
     assert(sz > r.size());
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
   }
   else if (x == (lua_Number) HUGE_VAL || x == -(lua_Number) HUGE_VAL)
   {
-    std::string_view r = (x < 0) ? lt::minus_inf : lt::inf;
+    byte_view r = (x < 0) ? lt::minus_inf : lt::inf;
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
   }
   else if (x == 0)
   {
-    std::string_view r = std::signbit(x) ? lt::neg_hex_zero : lt::hex_zero;
+    byte_view r = std::signbit(x) ? lt::neg_hex_zero : lt::hex_zero;
     memcpy(area.data() + off, r.data(), r.size());
     return ((int)(r.size()));
   }
@@ -1184,7 +1184,7 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
 }
 
 static int lua_number2strx(lua_State* L, std::span<char> area, size_t off,
-                           unsigned sz, std::string_view fmt, lua_Number x)
+                           unsigned sz, byte_view fmt, lua_Number x)
 {
   int n = num2straux(area, off, sz, x);
   if (fmt[1] == 'A')
@@ -1249,7 +1249,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
       char dbuf[4];
       std::to_chars_result dres = std::to_chars(dbuf, dbuf + sizeof(dbuf), c);
       assert(dres.ec == std::errc());
-      std::string_view d{dbuf, ((size_t)(dres.ptr - dbuf))};
+      byte_view d{dbuf, ((size_t)(dres.ptr - dbuf))};
       luaL_addchar(b, '\\');
       if (isdigit(sv_byteat(s->view(), i + 1)))
       {
@@ -1272,7 +1272,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
 */
 static int quotefloat(lua_State* L, std::span<char> area, size_t off, lua_Number n)
 {
-  std::string_view s;        /* for the fixed representations */
+  byte_view s;        /* for the fixed representations */
   if (n == (lua_Number) HUGE_VAL) /* inf? */
     s = lt::huge_exp;
   else if (n == -(lua_Number) HUGE_VAL) /* -inf? */
@@ -1352,7 +1352,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
   }
 }
 
-static size_t get2digits(std::string_view s, size_t p)
+static size_t get2digits(byte_view s, size_t p)
 {
   if (isdigit(sv_byteat(s, p)))
   {
@@ -1369,11 +1369,11 @@ static size_t get2digits(std::string_view s, size_t p)
 ** be a valid conversion specifier. 'flags' are the accepted flags;
 ** 'precision' signals whether to accept a precision.
 */
-static void checkformat(lua_State* L, std::string_view form,
-                        std::string_view flags, int precision)
+static void checkformat(lua_State* L, byte_view form,
+                        byte_view flags, int precision)
 {
   size_t p = 1;                              /* skip '%' */
-  while (p < form.size() && flags.find(form[p]) != std::string_view::npos)
+  while (p < form.size() && flags.find(form[p]) != byte_view::npos)
     p++;                                     /* skip flags */
   if (sv_byteat(form, p) != '0')
   {                            /* a width cannot start with '0' */
@@ -1395,10 +1395,10 @@ static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
                         std::span<char> form, size_t* formlen)
 {
   /* spans flags, width, and precision ('0' is included as a flag) */
-  std::string_view sv = sf->view();
-  std::string_view fset = lt::fmtflags_f_digits;
+  byte_view sv = sf->view();
+  byte_view fset = lt::fmtflags_f_digits;
   size_t len = 0;
-  while (i + len < sv.size() && fset.find(sv[i + len]) != std::string_view::npos)
+  while (i + len < sv.size() && fset.find(sv[i + len]) != byte_view::npos)
     len++;
   len++; /* adds following character (should be the specifier) */
   /* still needs space for '%', '\0', plus a length modifier */
@@ -1423,7 +1423,7 @@ struct FormatSpec
   char conv;
 };
 
-static void scanformat(std::string_view form, FormatSpec* spec)
+static void scanformat(byte_view form, FormatSpec* spec)
 {
   size_t p = 1; /* skip '%' */
   *spec = FormatSpec{};
@@ -1493,9 +1493,9 @@ static int packformat(std::span<char> area, size_t off, unsigned maxitem,
   return ((int)(total));
 }
 
-static int formatint(lua_State* L, int arg, std::string_view form,
+static int formatint(lua_State* L, int arg, byte_view form,
                      std::span<char> area, size_t off,
-                     unsigned maxitem, std::string_view flags)
+                     unsigned maxitem, byte_view flags)
 {
   lua_Integer n = luaL_checkinteger(L, arg);
   checkformat(L, form, flags, 1);
@@ -1552,11 +1552,11 @@ static int formatint(lua_State* L, int arg, std::string_view form,
     prefix[prefixlen++] = spec.conv;
   }
   return packformat(area, off, maxitem, &spec,
-                    byte_view(std::string_view(prefix, sizeof(prefix)), prefixlen),
-                    byte_view(std::string_view(body, MAX_ITEM), blen), spec.precision < 0);
+                    byte_view(prefix, sizeof(prefix)).substr(0, prefixlen),
+                    byte_view(body, MAX_ITEM).substr(0, blen), spec.precision < 0);
 }
 
-static int formatfloat(lua_State* L, int arg, std::string_view form,
+static int formatfloat(lua_State* L, int arg, byte_view form,
                        std::span<char> area, size_t off, unsigned maxitem)
 {
   lua_Number n = luaL_checknumber(L, arg);
@@ -1578,7 +1578,7 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
   bool zeropadok = true;
   if (std::isinf(n) || std::isnan(n))
   {
-    std::string_view r = std::isinf(n) ? lt::inf : lt::nan;
+    byte_view r = std::isinf(n) ? lt::inf : lt::nan;
     blen = r.size();
     memcpy(body, r.data(), blen);
     zeropadok = false;
@@ -1639,8 +1639,8 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
       body[i] = ((char)(locale_toupper(((unsigned char)(body[i])))));
   }
   return packformat(area, off, maxitem, &spec,
-                    byte_view(std::string_view(prefix, sizeof(prefix)), prefixlen),
-                    byte_view(std::string_view(body, MAX_ITEMF), blen), zeropadok);
+                    byte_view(prefix, sizeof(prefix)).substr(0, prefixlen),
+                    byte_view(body, MAX_ITEMF).substr(0, blen), zeropadok);
 }
 
 static int str_format(lua_State* L)
@@ -1671,7 +1671,7 @@ static int str_format(lua_State* L)
       if (++arg > top)
         return luaL_argerrori(L, arg, lt::no_value);
       i = getformat(L, sf, i, form, &formlen);
-      std::string_view formv{form, formlen};
+      byte_view formv{form, formlen};
       switch (sv_byteat(sf->view(), i++))
       {
       case 'c':
@@ -1681,7 +1681,7 @@ static int str_format(lua_State* L)
         scanformat(formv, &spec);
         char buff[1] {};
         buff[0] = ((char)((unsigned char)(luaL_checkinteger(L, arg))));
-        std::string_view body(buff, 1);
+        byte_view body(buff, 1);
         nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, body, false);
         break;
       }
@@ -1734,7 +1734,7 @@ static int str_format(lua_State* L)
           const void* p = lua_topointer(L, arg);
           if (p == nullptr)
           {
-            const std::string_view nullrep = lt::null;
+            const byte_view nullrep = lt::null;
             blen = nullrep.size();
             memcpy(body, nullrep.data(), blen);
           }
@@ -1748,8 +1748,8 @@ static int str_format(lua_State* L)
             blen = ((size_t)(res.ptr - body));
           }
         }
-        std::string_view bodysv(body, MAX_ITEM);
-        byte_view bodybytes(bodysv, blen);
+        byte_view bodysv(body, MAX_ITEM);
+        byte_view bodybytes = bodysv.substr(0, blen);
         nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, bodybytes, false);
         break;
       }
@@ -1763,14 +1763,14 @@ static int str_format(lua_State* L)
       case 's':
       {
         const InternalString* s = luaL_toistring(L, arg);
-        std::string_view sv = s->view();
+        byte_view sv = s->view();
         if (formlen == 2) /* no modifiers? */
           luaL_addvalue(&b); /* keep entire string */
         else
         {
           luaL_argchecki(L, memchr(sv.data(), '\0', sv.size()) == nullptr, arg, lt::string_contains_zeros);
           checkformat(L, formv, lt::minus_ch, 1);
-          if (formv.find('.') == std::string_view::npos && sv.size() >= 100)
+          if (formv.find('.') == byte_view::npos && sv.size() >= 100)
           {
             /* no precision and string is too long to be formatted */
             luaL_addvalue(&b); /* keep entire string */
@@ -1782,7 +1782,7 @@ static int str_format(lua_State* L)
             size_t blen = (spec.precision >= 0 && ((size_t)(spec.precision)) < sv.size())
                               ? ((size_t)(spec.precision)) /* truncate */
                               : sv.size();
-            nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, byte_view(sv, blen), false);
+            nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, sv.substr(0, blen), false);
             lua_pop(L, 1);
           }
         }
@@ -2153,7 +2153,7 @@ static int str_pack(lua_State* L)
     }
     case Kchar:
     { /* fixed-size string */
-      std::string_view s = luaL_checklstring(L, arg);
+      byte_view s = luaL_checklstring(L, arg);
       size_t len = s.size();
       luaL_argchecki(L, len <= size, arg, lt::string_longer_than_given_size);
       luaL_addlstring(&b, s, 0, len); /* add string */
@@ -2168,7 +2168,7 @@ static int str_pack(lua_State* L)
     }
     case Kstring:
     { /* strings with length count */
-      std::string_view s = luaL_checklstring(L, arg);
+      byte_view s = luaL_checklstring(L, arg);
       size_t len = s.size();
       luaL_argchecki(L, size >= sizeof(lua_Unsigned) || len < ((lua_Unsigned) 1 << (size * NB)), arg, lt::string_length_does_not_fit_in_given_size);
       /* pack length */
@@ -2179,9 +2179,9 @@ static int str_pack(lua_State* L)
     }
     case Kzstr:
     { /* zero-terminated string */
-      std::string_view s = luaL_checklstring(L, arg);
+      byte_view s = luaL_checklstring(L, arg);
       size_t len = s.size();
-      luaL_argchecki(L, s.find('\0') == std::string_view::npos, arg, lt::string_contains_zeros);
+      luaL_argchecki(L, s.find('\0') == byte_view::npos, arg, lt::string_contains_zeros);
       luaL_addlstring(&b, s, 0, len);
       luaL_addchar(&b, '\0'); /* add zero at the end */
       totalsize += len + 1;
@@ -2227,7 +2227,7 @@ static int str_packsize(lua_State* L)
 ** it must check the unread bytes to see whether they do not cause an
 ** overflow.
 */
-static lua_Integer unpackint(lua_State* L, std::string_view data, size_t off,
+static lua_Integer unpackint(lua_State* L, byte_view data, size_t off,
                              int islittle, int size, int issigned)
 {
   lua_Unsigned res = 0;
@@ -2265,7 +2265,7 @@ static int str_unpack(lua_State* L)
 {
   Header h;
   const InternalString* fmt = luaL_checkistring(L, 1);
-  std::string_view data = luaL_checklstring(L, 2);
+  byte_view data = luaL_checklstring(L, 2);
   size_t ld = data.size();
   size_t pos = posrelatI(luaL_optinteger(L, 3, 1), ld) - 1;
   int n = 0; /* number of results */
@@ -2329,7 +2329,7 @@ static int str_unpack(lua_State* L)
     case Kzstr:
     {
       size_t zend = data.find('\0', pos);
-      luaL_argchecki(L, zend != std::string_view::npos, 2, lt::unfinished_string_for_format_z);
+      luaL_argchecki(L, zend != byte_view::npos, 2, lt::unfinished_string_for_format_z);
       size_t len = zend - pos;
       lua_pushlstring(L, data, pos, len);
       pos += len + 1; /* skip string plus final '\0' */

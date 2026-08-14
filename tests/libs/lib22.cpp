@@ -16,7 +16,7 @@ static int id (lua_State *L) {
 
 static int newstr (lua_State *L) {
   size_t len;
-  std::string_view sv = luaL_checklstring(L, 1);
+  byte_view sv = luaL_checklstring(L, 1);
   const char *str = sv.data();
   len = sv.size();
   void *ud;
@@ -27,7 +27,7 @@ static int newstr (lua_State *L) {
     lua_error(L);
   }
   memcpy(buf, str, len + 1);
-  lua_pushlstring(L, std::string_view{buf, len}, 0, len);
+  lua_pushlstring(L, byte_view{buf, len}, 0, len);
   allocf(ud, buf, len + 1, 0);
   return 1;
 }

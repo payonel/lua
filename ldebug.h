@@ -35,15 +35,15 @@ static l_forceinline StkId upvalorigin(int uvidx)
   return UPVALORIGIN + (StkId)uvidx;
 }
 
-LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o, std::string_view opname, StkId src);
+LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o, byte_view opname, StkId src);
 LUAI_FUNC l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src);
-LUAI_FUNC l_noret luaG_forerror(lua_State* L, const TValue* o, std::string_view what);
+LUAI_FUNC l_noret luaG_forerror(lua_State* L, const TValue* o, byte_view what);
 LUAI_FUNC l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2);
-LUAI_FUNC l_noret luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, std::string_view msg, StkId src1, StkId src2);
+LUAI_FUNC l_noret luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, byte_view msg, StkId src1, StkId src2);
 LUAI_FUNC l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2);
 LUAI_FUNC l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2);
 
-static l_forceinline l_noret luaG_forerror(lua_State* L, StkId idx, std::string_view what)
+static l_forceinline l_noret luaG_forerror(lua_State* L, StkId idx, byte_view what)
 {
   TValue v = getslot(L, idx);
   luaG_forerror(L, &v, what);
@@ -63,9 +63,9 @@ static l_forceinline l_noret luaG_concaterror(lua_State* L, StkId p1, StkId p2)
 }
 
 LUAI_FUNC l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k);
-LUAI_FUNC l_noret luaG_runerror(lua_State* L, std::string_view fmt, const FmtArgs& args);
-LUAI_FUNC l_noret luaG_runerror(lua_State* L, std::string_view fmt);
-LUAI_FUNC std::string_view luaG_addinfo(lua_State* L, std::string_view msg, TString* src, int line);
+LUAI_FUNC l_noret luaG_runerror(lua_State* L, byte_view fmt, const FmtArgs& args);
+LUAI_FUNC l_noret luaG_runerror(lua_State* L, byte_view fmt);
+LUAI_FUNC byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line);
 LUAI_FUNC l_noret luaG_errormsg(lua_State* L);
 LUAI_FUNC int luaG_traceexec(lua_State* L, int pc);
 LUAI_FUNC int luaG_tracecall(lua_State* L);

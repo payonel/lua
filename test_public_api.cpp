@@ -86,13 +86,13 @@ static std::optional<byte_view> byte_reader(lua_State*, void* ud)
   return r->src.substr(r->pos++, 1);
 }
 
-static int load_string(lua_State* L, std::string_view code)
+static int load_string(lua_State* L, byte_view code)
 {
   StringReader r{code, false};
   return lua_load(L, whole_reader, &r, "=tpa"_hs, std::nullopt);
 }
 
-static int do_string(lua_State* L, std::string_view code)
+static int do_string(lua_State* L, byte_view code)
 {
   int st = load_string(L, code);
   if (st != LUA_OK)
@@ -134,10 +134,10 @@ static int cf_msgh(lua_State* L)
   std::optional<HostString> msg = lua_tostring(L, 1);
   if (msg.has_value())
   {
-    std::string_view v = msg->to_utf8();
+    byte_view v = msg->to_utf8();
     s.append(v.data(), v.size());
   }
-  lua_pushstring(L, HostString(std::string_view(s)));
+  lua_pushstring(L, HostString(byte_view(s.c_str())));
   return 1;
 }
 
@@ -218,9 +218,14 @@ struct DumpBuf
   std::string bytes;
   int empty_calls = 0;
   bool empty_was_last = false;
+
+  byte_view view() const
+  {
+    return byte_view(bytes.data(), bytes.size());
+  }
 };
 
-static int dump_writer(lua_State*, std::optional<std::string_view> b, void* ud)
+static int dump_writer(lua_State*, std::optional<byte_view> b, void* ud)
 {
   DumpBuf* d = static_cast<DumpBuf*>(ud);
   if (!b.has_value() || b->empty())
@@ -234,7 +239,7 @@ static int dump_writer(lua_State*, std::optional<std::string_view> b, void* ud)
   return 0;
 }
 
-static int failing_writer(lua_State*, std::optional<std::string_view>, void* ud)
+static int failing_writer(lua_State*, std::optional<byte_view>, void* ud)
 {
   int* n = static_cast<int*>(ud);
   (*n)++;
@@ -253,7 +258,7 @@ static void warn_collect(void* ud, const HostString& msg, int tocont)
   WarnLog* w = static_cast<WarnLog*>(ud);
   w->calls++;
   w->last_tocont = tocont;
-  std::string_view v = msg.to_utf8();
+  byte_view v = msg.to_utf8();
   w->text.append(v.data(), v.size());
 }
 
@@ -411,7 +416,7 @@ static void test_version_and_constants()
         LUA_TLIGHTUSERDATA == 2 && LUA_TNUMBER == 3 && LUA_TSTRING == 4 &&
         LUA_TTABLE == 5 && LUA_TFUNCTION == 6 && LUA_TUSERDATA == 7 &&
         LUA_TTHREAD == 8);
-  CHECK(LUA_SIGNATURE == std::string_view("\x1bLua", 4));
+  CHECK(LUA_SIGNATURE == byte_view("\x1bLua", 4));
   CHECK(!lua_ident.empty());
   CHECK(lua_upvalueindex(1) == LUA_REGISTRYINDEX - 1);
   CHECK(lua_upvalueindex(2) == LUA_REGISTRYINDEX - 2);
@@ -792,21 +797,21 @@ static void test_push()
   lua_State* L = new_state();
 
   {
-    std::string_view src = "hello world";
-    std::string_view r = lua_pushlstring(L, src, 6, 5);
+    byte_view src = "hello world";
+    byte_view r = lua_pushlstring(L, src, 6, 5);
     CHECK(r == "world");
     CHECK(*lua_tolstring(L, -1) == "world");
     lua_pop(L, 1);
 
-    std::string_view withnul("a\0b", 3);
+    byte_view withnul("a\0b", 3);
     r = lua_pushlstring(L, withnul, 0, 3);
     CHECK(r.size() == 3);
     CHECK(lua_rawlen(L, -1) == 3u);
-    std::string_view back = *lua_tolstring(L, -1);
+    byte_view back = *lua_tolstring(L, -1);
     CHECK(back.size() == 3 && std::memcmp(back.data(), "a\0b", 3) == 0);
     lua_pop(L, 1);
 
-    r = lua_pushlstring(L, std::string_view(), 0, 0);
+    r = lua_pushlstring(L, byte_view(), 0, 0);
     CHECK(r.empty());
     CHECK(lua_rawlen(L, -1) == 0u);
     lua_pop(L, 1);
@@ -1057,7 +1062,7 @@ static void test_call()
     std::optional<HostString> msg = lua_tostring(L, -1);
     CHECK(msg.has_value());
     if (msg.has_value())
-      CHECK(msg->to_utf8().find("tpa:2") != std::string_view::npos);
+      CHECK(msg->to_utf8().find("tpa:2") != byte_view::npos);
   }
   lua_pop(L, 1);
 
@@ -1153,16 +1158,15 @@ static void test_load_dump()
     CHECK(lua_type(L, -1) == LUA_TFUNCTION);
     lua_pop(L, 1);
 
-    CHECK(d.bytes.size() >= 4 &&
-          std::string_view(d.bytes).substr(0, 4) == LUA_SIGNATURE);
+    CHECK(d.bytes.size() >= 4 && d.view().substr(0, 4) == LUA_SIGNATURE);
 
-    StringReader r{std::string_view(d.bytes), false};
+    StringReader r{d.view(), false};
     CHECK(lua_load(L, whole_reader, &r, "=dumped"_hs, "b"_hs) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 21);
     lua_pop(L, 1);
 
-    StringReader r2{std::string_view(d.bytes), false};
+    StringReader r2{d.view(), false};
     int lst = lua_load(L, whole_reader, &r2, "=dumped"_hs, "t"_hs);
     CHECK(lst != LUA_OK);
     lua_pop(L, 1);
@@ -1172,7 +1176,7 @@ static void test_load_dump()
     CHECK(lua_dump(L, dump_writer, &ds, 1) == 0);
     lua_pop(L, 1);
     CHECK(!ds.bytes.empty() && ds.bytes.size() <= d.bytes.size());
-    StringReader r3{std::string_view(ds.bytes), false};
+    StringReader r3{byte_view(ds.view()), false};
     CHECK(lua_load(L, whole_reader, &r3, std::nullopt, "b"_hs) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 21);
@@ -1230,7 +1234,7 @@ static void test_coroutines()
       std::optional<HostString> msg = lua_tostring(L1, -1);
       CHECK(msg.has_value());
       if (msg.has_value())
-        CHECK(msg->to_utf8().find("dead coroutine") != std::string_view::npos);
+        CHECK(msg->to_utf8().find("dead coroutine") != byte_view::npos);
     }
     lua_pop(L, 1); /* thread */
   }
@@ -1299,7 +1303,7 @@ static void test_coroutines()
       std::optional<HostString> msg = lua_tostring(L1, -1);
       CHECK(msg.has_value());
       if (msg.has_value())
-        CHECK(msg->to_utf8().find("cofail") != std::string_view::npos);
+        CHECK(msg->to_utf8().find("cofail") != byte_view::npos);
     }
     CHECK(lua_status(L1) == LUA_ERRRUN);
     lua_settop(L1, 0);
@@ -1457,7 +1461,7 @@ static void test_db_gethook_mask()
                        "local f, mask, count = debug.gethook()\n"
                        "return type(f), mask, count") == LUA_OK);
     CHECK(lua_tolstring(L, -3) == "function");
-    CHECK(*lua_tolstring(L, -2) == std::string_view(m));
+    CHECK(*lua_tolstring(L, -2) == byte_view(m));
     CHECK(lua_tointeger(L, -1) == 0);
     lua_settop(L, 0);
   }
@@ -1964,10 +1968,10 @@ static void test_libraries()
   CHECK(LUA_LOADLIBNAME == "package");
 }
 
-static bool top_msg_contains(lua_State* L, std::string_view what)
+static bool top_msg_contains(lua_State* L, byte_view what)
 {
   std::optional<HostString> m = lua_tostring(L, -1);
-  bool ok = m.has_value() && m->to_utf8().find(what) != std::string_view::npos;
+  bool ok = m.has_value() && m->to_utf8().find(what) != byte_view::npos;
   lua_pop(L, 1);
   return ok;
 }
@@ -1980,7 +1984,7 @@ static int cf_panic_record(lua_State* L)
 {
   std::optional<HostString> m = lua_tostring(L, -1);
   if (m.has_value())
-    g_panic_msg = std::string(m->to_utf8());
+    g_panic_msg = std::string(m->to_utf8().data());
   throw PanicJump{};
 }
 
@@ -2406,12 +2410,12 @@ static void test_auxlib_load()
   CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
   lua_pop(L, 1);
   CHECK(d.bytes.size() > 0);
-  CHECK(luaL_loadbufferx(L, d.bytes, "=bin"_hs, "b"_hs) ==
+  CHECK(luaL_loadbufferx(L, d.view(), "=bin"_hs, "b"_hs) ==
         LUA_OK);
   CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
   CHECK(lua_tointeger(L, -1) == 99);
   lua_pop(L, 1);
-  CHECK(luaL_loadbufferx(L, d.bytes, "=bin"_hs, "t"_hs) ==
+  CHECK(luaL_loadbufferx(L, d.view(), "=bin"_hs, "t"_hs) ==
         LUA_ERRSYNTAX);
   CHECK(top_msg_contains(L, "binary chunk"));
   CHECK(luaL_loadbuffer(L, "return 4", "=lb2"_hs) == LUA_OK);
@@ -2613,8 +2617,8 @@ static void test_auxlib_misc()
     CHECK(t.has_value());
     if (t.has_value())
     {
-      CHECK(t->to_utf8().find("MSG") != std::string_view::npos);
-      CHECK(t->to_utf8().find("stack traceback") != std::string_view::npos);
+      CHECK(t->to_utf8().find("MSG") != byte_view::npos);
+      CHECK(t->to_utf8().find("stack traceback") != byte_view::npos);
     }
   }
   lua_pop(L, 1);
@@ -2651,7 +2655,7 @@ static void test_auxlib_misc()
   {
     std::optional<HostString> m = lua_tostring(L, -2);
     CHECK(m.has_value() &&
-          m->to_utf8().find("nofile.txt") != std::string_view::npos);
+          m->to_utf8().find("nofile.txt") != byte_view::npos);
   }
   CHECK(lua_tointeger(L, -1) == ENOENT);
   lua_pop(L, 3);
@@ -2713,8 +2717,7 @@ static void test_dump_limits()
   lua_pushvalue(L, aidx);
   CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
   lua_pop(L, 1);
-  CHECK(luaL_loadbufferx(L, d.bytes, "=re"_hs, "b"_hs) ==
-        LUA_OK);
+  CHECK(luaL_loadbufferx(L, d.view(), "=re"_hs, "b"_hs) == LUA_OK);
   int lidx = lua_gettop(L);
 
   {
@@ -2735,8 +2738,7 @@ static void test_dump_limits()
   DumpBuf d2;
   CHECK(lua_dump(L, dump_writer, &d2, 0) == 0);
   lua_pop(L, 1);
-  CHECK(luaL_loadbufferx(L, d2.bytes, "=re2"_hs, "b"_hs) ==
-        LUA_OK);
+  CHECK(luaL_loadbufferx(L, d2.view(), "=re2"_hs, "b"_hs) == LUA_OK);
   lidx = lua_gettop(L);
   {
     std::optional<HostString> u1 = lua_getupvalue(L, lidx, 1);
@@ -2754,7 +2756,7 @@ static void test_dump_limits()
   DumpBuf d3;
   CHECK(lua_dump(L, dump_writer, &d3, 1) == 0);
   lua_pop(L, 1);
-  CHECK(luaL_loadbufferx(L, d3.bytes, "=s"_hs, "b"_hs) ==
+  CHECK(luaL_loadbufferx(L, d3.view(), "=s"_hs, "b"_hs) ==
         LUA_OK);
   {
     lua_Debug q{};
@@ -3057,13 +3059,13 @@ static void test_io_handles()
     std::optional<HostString> os_ = lua_tostring(L, -4);
     CHECK(os_.has_value() && os_->to_utf8().substr(0, 6) == "file (");
     CHECK(os_.has_value() &&
-          os_->to_utf8().find("closed") == std::string_view::npos);
+          os_->to_utf8().find("closed") == byte_view::npos);
     std::optional<HostString> cs = lua_tostring(L, -3);
     CHECK(cs.has_value() && cs->to_utf8() == "file (closed)");
     CHECK(lua_toboolean(L, -2) == 0);
     std::optional<HostString> err = lua_tostring(L, -1);
     CHECK(err.has_value() && err->to_utf8().find(
-              "attempt to use a closed file") != std::string_view::npos);
+              "attempt to use a closed file") != byte_view::npos);
   }
   lua_pop(L, 4);
   std::remove("/tmp/tpa_io_probe.txt");
@@ -3076,7 +3078,7 @@ static void test_io_handles()
   {
     std::optional<HostString> err = lua_tostring(L, -2);
     CHECK(err.has_value() && err->to_utf8().find(
-              "cannot close standard file") != std::string_view::npos);
+              "cannot close standard file") != byte_view::npos);
   }
   CHECK(lua_toboolean(L, -1) == 1);
   lua_pop(L, 3);
@@ -3192,7 +3194,7 @@ static void test_auxlib_restored()
     CHECK(r.has_value());
     if (r.has_value())
     {
-      std::string_view v = r->to_utf8();
+      byte_view v = r->to_utf8();
       CHECK(v.size() == 3u + 4096u);
       CHECK(v.substr(0, 3) == "abc");
       CHECK(v[3] == 'x' && v[v.size() - 1] == 'x');
@@ -3252,7 +3254,7 @@ static void test_num2str()
   {
     std::optional<HostString> why = lua_tostring(L, -1);
     if (why.has_value())
-      std::printf("  %%a failure: %s\n", std::string(why->to_utf8()).c_str());
+      std::printf("  %%a failure: %s\n", std::string(why->to_utf8().data()).c_str());
   }
   lua_pop(L, 2);
   CHECK(do_string(L,
@@ -3266,17 +3268,17 @@ static void test_num2str()
     std::optional<HostString> tiny = lua_tostring(L, -2);
     std::optional<HostString> upper = lua_tostring(L, -1);
     CHECK(one.has_value() &&
-          one->to_utf8().find("p+0") != std::string_view::npos);
+          one->to_utf8().find("p+0") != byte_view::npos);
     CHECK(half.has_value() &&
-          half->to_utf8().find("p-1") != std::string_view::npos);
+          half->to_utf8().find("p-1") != byte_view::npos);
     CHECK(big.has_value() &&
-          big->to_utf8().find("p+100") != std::string_view::npos);
+          big->to_utf8().find("p+100") != byte_view::npos);
     CHECK(tiny.has_value() &&
-          tiny->to_utf8().find("p-100") != std::string_view::npos);
+          tiny->to_utf8().find("p-100") != byte_view::npos);
     CHECK(upper.has_value() &&
-          upper->to_utf8().find("0X") != std::string_view::npos);
+          upper->to_utf8().find("0X") != byte_view::npos);
     CHECK(upper.has_value() &&
-          upper->to_utf8().find("P-1") != std::string_view::npos);
+          upper->to_utf8().find("P-1") != byte_view::npos);
   }
   lua_pop(L, 5);
 
@@ -3456,7 +3458,7 @@ static void test_fixed_chunks()
   lua_pop(L, 1);
   CHECK(!d.bytes.empty());
 
-  StringReader r{std::string_view(d.bytes), false};
+  StringReader r{d.view(), false};
   CHECK(lua_load(L, whole_reader, &r, "=fixed"_hs, "B"_hs) == LUA_OK);
   CHECK(lua_type(L, -1) == LUA_TFUNCTION);
 
@@ -3474,7 +3476,7 @@ static void test_fixed_chunks()
     DumpBuf ds;
     CHECK(lua_dump(L, dump_writer, &ds, 1) == 0);
     lua_pop(L, 1);
-    StringReader rs{std::string_view(ds.bytes), false};
+    StringReader rs{ds.view(), false};
     CHECK(lua_load(L, whole_reader, &rs, std::nullopt, "B"_hs) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tolstring(L, -1) == "fixed-stripped");
@@ -4158,7 +4160,7 @@ static void test_cfunc_stress_group6()
   {
     auto msg = lua_tostring(L, -1);
     if (msg)
-      std::printf("  group6 ERROR: %s\n", std::string(msg->to_utf8()).c_str());
+      std::printf("  group6 ERROR: %s\n", std::string(msg->to_utf8().data()).c_str());
     lua_pop(L, 1);
   }
 

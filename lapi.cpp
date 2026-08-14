@@ -29,7 +29,7 @@
 #include "util_cast.h"
 #include "literals.h"
 
-const std::string_view lua_ident = lt::lua_ident_str;
+const byte_view lua_ident = lt::lua_ident_str;
 
 /* test for pseudo index */
 constexpr int ispseudo(int i)
@@ -314,7 +314,7 @@ LUA_API HostString lua_typename(lua_State* L, int t)
 {
   (void) L;
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");
-  std::string_view n = ttypename(t);
+  byte_view n = ttypename(t);
   return HostString(n);
 }
 
@@ -408,13 +408,13 @@ LUA_API int lua_compare(lua_State* L, int index1, int index2, int op)
   return i;
 }
 
-std::optional<std::string_view> lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff)
+std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff)
 {
   TValue o = index2val(L, idx);
   if (((o.tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
   {
     unsigned len = luaO_tostringbuff(&o, buff);
-    return std::string_view(buff.data(), len);
+    return byte_view(buff.data(), len);
   }
   else
     return std::nullopt;
@@ -423,7 +423,7 @@ std::optional<std::string_view> lua_numbertocstringi(lua_State* L, int idx, std:
 LUA_API std::optional<HostString> lua_numbertocstring(lua_State* L, int idx)
 {
   char buff[LUA_N2SBUFFSZ];
-  std::optional<std::string_view> s = lua_numbertocstringi(L, idx, buff);
+  std::optional<byte_view> s = lua_numbertocstringi(L, idx, buff);
   if (!s.has_value())
     return std::nullopt;
   return HostString(*s);
@@ -465,7 +465,7 @@ LUA_API int lua_toboolean(lua_State* L, int idx)
   return !((o.tt_ == LUA_VFALSE) || ((o.tt_ & NOVARIANT_MASK) == LUA_TNIL));
 }
 
-LUA_API std::optional<std::string_view> lua_tolstring(lua_State* L, int idx)
+LUA_API std::optional<byte_view> lua_tolstring(lua_State* L, int idx)
 {
   lua_lock(L);
   TValue o = index2val(L, idx);
@@ -603,7 +603,7 @@ InternalString lua_funcaddressi(lua_State* L, int idx)
   return util::func_to_string(fvalue(&o));
 }
 
-std::string_view lua_typenamei(lua_State*, int t)
+byte_view lua_typenamei(lua_State*, int t)
 {
   assert((LUA_TNONE <= t && t < LUA_NUMTYPES) && "invalid type");
   return ttypename(t);
@@ -637,7 +637,7 @@ LUA_API void lua_pushinteger(lua_State* L, lua_Integer n)
   lua_unlock(L);
 }
 
-LUA_API std::string_view lua_pushlstring(lua_State* L, std::string_view s, size_t off, size_t len)
+LUA_API byte_view lua_pushlstring(lua_State* L, byte_view s, size_t off, size_t len)
 {
   TString* ts;
   lua_lock(L);
@@ -663,7 +663,7 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
     return;
   }
   lua_lock(L);
-  std::string_view bytes = s->to_utf8();
+  byte_view bytes = s->to_utf8();
   TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
   setslots(L, L->top, ts);
   api_incr_top(L);
@@ -671,7 +671,7 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
   lua_unlock(L);
 }
 
-void lua_pushistringref(lua_State* L, std::string_view bytes)
+void lua_pushistringref(lua_State* L, byte_view bytes)
 {
   lua_lock(L);
   TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
@@ -706,7 +706,7 @@ LUA_API HostString lua_pushfstring(lua_State* L, const HostString& fmt)
   return HostString(lua_pushfstringi(L, fmt.to_utf8())->view());
 }
 
-const InternalString* lua_pushfstringi(lua_State* L, std::string_view fmt)
+const InternalString* lua_pushfstringi(lua_State* L, byte_view fmt)
 {
   const InternalString* ret;
   FmtArgs args;
@@ -853,7 +853,7 @@ LUA_API int lua_pushthread(lua_State* L)
 ** get functions (Lua -> stack)
 */
 
-static int auxgetstr(lua_State* L, const TValue* t, std::string_view k)
+static int auxgetstr(lua_State* L, const TValue* t, byte_view k)
 {
   lu_byte tag;
   TValue res;
@@ -898,7 +898,7 @@ LUA_API int lua_getglobal(lua_State* L, const HostString& name)
   return lua_getglobali(L, name.to_utf8());
 }
 
-int lua_getglobali(lua_State* L, std::string_view name)
+int lua_getglobali(lua_State* L, byte_view name)
 {
   TValue gt;
   lua_lock(L);
@@ -1113,7 +1113,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
 /*
 ** t[k] = value at the top of the stack (where 'k' is a string)
 */
-static void auxsetstr(lua_State* L, const TValue* t, std::string_view k)
+static void auxsetstr(lua_State* L, const TValue* t, byte_view k)
 {
   int hres;
   TString* str = luaS_createstr(L, k, 0, k.size());
@@ -1148,7 +1148,7 @@ LUA_API void lua_setglobal(lua_State* L, const HostString& name)
   lua_setglobali(L, name.to_utf8());
 }
 
-void lua_setglobali(lua_State* L, std::string_view name)
+void lua_setglobali(lua_State* L, byte_view name)
 {
   TValue gt;
   lua_lock(L); /* unlock done in 'auxsetstr' */
@@ -1185,14 +1185,14 @@ LUA_API void lua_setfield(lua_State* L, int idx, const HostString& k)
   auxsetstr(L, &t, k.to_utf8());
 }
 
-int lua_getfieldi(lua_State* L, int idx, std::string_view k)
+int lua_getfieldi(lua_State* L, int idx, byte_view k)
 {
   lua_lock(L);
   TValue t = index2val(L, idx);
   return auxgetstr(L, &t, k);
 }
 
-void lua_setfieldi(lua_State* L, int idx, std::string_view k)
+void lua_setfieldi(lua_State* L, int idx, byte_view k)
 {
   lua_lock(L); /* unlock done in 'auxsetstr' */
   TValue t = index2val(L, idx);
@@ -1447,7 +1447,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   return ((int)(status));
 }
 
-int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::optional<std::string_view> chunkname, std::optional<std::string_view> mode)
+int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::optional<byte_view> chunkname, std::optional<byte_view> mode)
 {
   ZIO z;
   TStatus status;
@@ -1477,8 +1477,8 @@ LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
                      const std::optional<HostString>& chunkname,
                      const std::optional<HostString>& mode)
 {
-  std::optional<std::string_view> name = chunkname.has_value() ? std::optional<std::string_view>(chunkname->to_utf8()) : std::nullopt;
-  std::optional<std::string_view> m = mode.has_value() ? std::optional<std::string_view>(mode->to_utf8()) : std::nullopt;
+  std::optional<byte_view> name = chunkname.has_value() ? std::optional<byte_view>(chunkname->to_utf8()) : std::nullopt;
+  std::optional<byte_view> m = mode.has_value() ? std::optional<byte_view>(mode->to_utf8()) : std::nullopt;
   return lua_loadi(L, reader, data, name, m);
 }
 
@@ -1712,7 +1712,7 @@ void lua_warning(lua_State* L, const HostString& msg, int tocont)
   lua_warningi(L, msg.to_utf8(), tocont);
 }
 
-void lua_warningi(lua_State* L, std::string_view msg, int tocont)
+void lua_warningi(lua_State* L, byte_view msg, int tocont)
 {
   lua_lock(L);
   luaE_warning(L, msg, tocont);
@@ -1952,7 +1952,7 @@ LUA_API CFuncInfo* lua_createcfuncinfo(lua_State* L, lua_CFunction fn, std::opti
 {
   CFuncInfo* cfi = luaF_newCFuncInfo(L, fn);
   if (name.has_value())
-    cfi->name = std::string(name->to_utf8());
+    cfi->name = name->to_utf8();
   return cfi;
 }
 

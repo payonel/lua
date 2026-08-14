@@ -18,16 +18,16 @@ struct OsFile;
 #include "luaconf.h"
 
 /* global table */
-inline constexpr std::string_view LUA_GNAME = "_G";
+inline constexpr byte_view LUA_GNAME = "_G";
 
 /* extra error code for 'luaL_loadfilex' */
 constexpr int LUA_ERRFILE = (LUA_ERRERR + 1);
 
 /* key, in the registry, for table of loaded modules */
-inline constexpr std::string_view LUA_LOADED_TABLE = "_LOADED";
+inline constexpr byte_view LUA_LOADED_TABLE = "_LOADED";
 
 /* key, in the registry, for table of preloaded loaders */
-inline constexpr std::string_view LUA_PRELOAD_TABLE = "_PRELOAD";
+inline constexpr byte_view LUA_PRELOAD_TABLE = "_PRELOAD";
 
 struct luaL_Reg
 {
@@ -42,11 +42,11 @@ LUALIB_API void luaL_checkversion(lua_State* L);
 
 LUALIB_API int(luaL_getmetafield)(lua_State* L, int obj, const HostString& e);
 LUALIB_API int(luaL_callmeta)(lua_State* L, int obj, const HostString& e);
-LUALIB_API std::string_view(luaL_tolstring) (lua_State* L, int idx);
+LUALIB_API byte_view(luaL_tolstring) (lua_State* L, int idx);
 LUALIB_API int(luaL_argerror)(lua_State* L, int arg, const HostString& extramsg);
 LUALIB_API int(luaL_typeerror)(lua_State* L, int arg, const HostString& tname);
-LUALIB_API std::string_view(luaL_checklstring) (lua_State* L, int arg);
-LUALIB_API std::string_view(luaL_optlstring) (lua_State* L, int arg, std::string_view def);
+LUALIB_API byte_view(luaL_checklstring) (lua_State* L, int arg);
+LUALIB_API byte_view(luaL_optlstring) (lua_State* L, int arg, byte_view def);
 LUALIB_API lua_Number(luaL_checknumber)(lua_State* L, int arg);
 LUALIB_API lua_Number(luaL_optnumber)(lua_State* L, int arg, lua_Number def);
 LUALIB_API lua_Integer(luaL_checkinteger)(lua_State* L, int arg);
@@ -72,7 +72,7 @@ LUALIB_API int(luaL_ref)(lua_State* L, int t);
 LUALIB_API void(luaL_unref)(lua_State* L, int t, int ref);
 LUALIB_API int(luaL_loadfilex)(lua_State* L, const std::optional<HostString>& filename, const std::optional<HostString>& mode);
 LUALIB_API int luaL_loadfile(lua_State* L, const std::optional<HostString>& filename);
-LUALIB_API int(luaL_loadbufferx)(lua_State* L, std::string_view buff, const std::optional<HostString>& name, const std::optional<HostString>& mode);
+LUALIB_API int(luaL_loadbufferx)(lua_State* L, byte_view buff, const std::optional<HostString>& name, const std::optional<HostString>& mode);
 LUALIB_API int(luaL_loadstring)(lua_State* L, const HostString& s);
 LUALIB_API lua_State*(luaL_newstate) (void);
 LUALIB_API unsigned(luaL_makeseed)(lua_State* L);
@@ -106,7 +106,7 @@ LUALIB_API HostString luaL_typename(lua_State* L, int idx);
 LUALIB_API int luaL_dofile(lua_State* L, const std::optional<HostString>& filename);
 LUALIB_API int luaL_dostring(lua_State* L, const HostString& str);
 LUALIB_API int luaL_getmetatable(lua_State* L, const HostString& tname);
-LUALIB_API int luaL_loadbuffer(lua_State* L, std::string_view buff, const std::optional<HostString>& name);
+LUALIB_API int luaL_loadbuffer(lua_State* L, byte_view buff, const std::optional<HostString>& name);
 
 /*
 ** Perform arithmetic operations on lua_Integer values with wrap-around
@@ -143,7 +143,7 @@ LUALIB_API void luaL_addsize(luaL_Buffer* B, size_t s);
 LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s);
 LUALIB_API void(luaL_buffinit)(lua_State* L, luaL_Buffer* B);
 LUALIB_API size_t(luaL_prepbuffsize) (luaL_Buffer* B, size_t sz);
-LUALIB_API void(luaL_addlstring)(luaL_Buffer* B, std::string_view s, size_t off, size_t l);
+LUALIB_API void(luaL_addlstring)(luaL_Buffer* B, byte_view s, size_t off, size_t l);
 LUALIB_API void(luaL_addstring)(luaL_Buffer* B, const HostString& s);
 LUALIB_API void(luaL_addvalue)(luaL_Buffer* B);
 LUALIB_API void(luaL_pushresult)(luaL_Buffer* B);
@@ -166,7 +166,7 @@ LUALIB_API void(luaL_addgsub)(luaL_Buffer* b, const HostString& s, const HostStr
 ** after that initial structure).
 */
 
-inline constexpr std::string_view LUA_FILEHANDLE = "FILE*";
+inline constexpr byte_view LUA_FILEHANDLE = "FILE*";
 
 struct luaL_Stream
 {

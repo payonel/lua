@@ -11,7 +11,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include "luaconf.h"
 #include "host_string.h"
 
@@ -22,17 +21,17 @@ inline constexpr int LUA_VERSION_RELEASE_N = 1;
 inline constexpr int LUA_VERSION_NUM = LUA_VERSION_MAJOR_N * 100 + LUA_VERSION_MINOR_N;
 inline constexpr int LUA_VERSION_RELEASE_NUM = LUA_VERSION_NUM * 100 + LUA_VERSION_RELEASE_N;
 
-inline constexpr std::string_view LUA_VERSION_MAJOR = "5";
-inline constexpr std::string_view LUA_VERSION_MINOR = "5";
-inline constexpr std::string_view LUA_VERSION_RELEASE = "1";
-inline constexpr std::string_view LUA_VERSION = "Lua 5.5";
-inline constexpr std::string_view LUA_RELEASE = "Lua 5.5.1";
-inline constexpr std::string_view LUA_COPYRIGHT = "Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio";
-inline constexpr std::string_view LUA_AUTHORS = "R. Ierusalimschy, L. H. de Figueiredo, W. Celes";
+inline constexpr byte_view LUA_VERSION_MAJOR("5");
+inline constexpr byte_view LUA_VERSION_MINOR("5");
+inline constexpr byte_view LUA_VERSION_RELEASE("1");
+inline constexpr byte_view LUA_VERSION("Lua 5.5");
+inline constexpr byte_view LUA_RELEASE("Lua 5.5.1");
+inline constexpr byte_view LUA_COPYRIGHT("Lua 5.5.1  Copyright (C) 1994-2026 Lua.org, PUC-Rio");
+inline constexpr byte_view LUA_AUTHORS("R. Ierusalimschy, L. H. de Figueiredo, W. Celes");
 static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSION_RELEASE_N == 1, "update the version strings above (and LUA_VDIR in luaconf.h) to match the new numbers");
 
 /* mark for precompiled code ('<esc>Lua') */
-inline constexpr std::string_view LUA_SIGNATURE = "\x1bLua";
+inline constexpr byte_view LUA_SIGNATURE("\x1bLua");
 
 /* option for multiple returns in 'lua_pcall' and 'lua_call' */
 constexpr int LUA_MULTRET = (-1);
@@ -99,7 +98,7 @@ typedef int (*lua_KFunction)(lua_State* L, int status, lua_KContext ctx);
 
 typedef std::optional<byte_view> (*lua_Reader)(lua_State* L, void* ud);
 
-typedef int (*lua_Writer)(lua_State* L, std::optional<std::string_view> b, void* ud);
+typedef int (*lua_Writer)(lua_State* L, std::optional<byte_view> b, void* ud);
 
 /*
 ** Type for memory-allocation functions
@@ -121,7 +120,7 @@ typedef void (*lua_Hook)(lua_State* L, lua_Debug* ar);
 /*
 ** RCS ident string
 */
-extern const std::string_view lua_ident;
+extern const byte_view lua_ident;
 
 /*
 ** state manipulation
@@ -164,7 +163,7 @@ LUA_API std::optional<lua_Number>(lua_tonumberx)(lua_State* L, int idx);
 LUA_API std::optional<lua_Integer>(lua_tointegerx)(lua_State* L, int idx);
 LUA_API int(lua_toboolean)(lua_State* L, int idx);
 
-LUA_API std::optional<std::string_view>(lua_tolstring) (lua_State* L, int idx);
+LUA_API std::optional<byte_view>(lua_tolstring) (lua_State* L, int idx);
 
 LUA_API lua_Unsigned(lua_rawlen)(lua_State* L, int idx);
 LUA_API lua_CFunction(lua_tocfunction)(lua_State* L, int idx);
@@ -206,7 +205,7 @@ LUA_API int(lua_compare)(lua_State* L, int idx1, int idx2, int op);
 LUA_API void(lua_pushnil)(lua_State* L);
 LUA_API void(lua_pushnumber)(lua_State* L, lua_Number n);
 LUA_API void(lua_pushinteger)(lua_State* L, lua_Integer n);
-LUA_API std::string_view(lua_pushlstring) (lua_State* L, std::string_view s, size_t off, size_t len);
+LUA_API byte_view(lua_pushlstring) (lua_State* L, byte_view s, size_t off, size_t len);
 LUA_API void(lua_pushstring) (lua_State* L, const std::optional<HostString>& s);
 LUA_API HostString(lua_pushfstring) (lua_State* L, const HostString& fmt);
 LUA_API void(lua_pushcclosure)(lua_State* L, lua_CFunction fn, int n);
@@ -416,7 +415,7 @@ struct lua_Debug
   HostString name;
   HostString namewhat;
   HostString what;            /* (S) 'Lua', 'C', 'main', 'tail' */
-  std::string_view source;    /* (S) */
+  byte_view source;    /* (S) */
   int currentline;            /* (l) */
   int linedefined;            /* (S) */
   int lastlinedefined;        /* (S) */

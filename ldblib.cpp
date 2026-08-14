@@ -106,19 +106,19 @@ static lua_State* getthread(lua_State* L, int* arg)
 ** from 'lua_getinfo' into result table. Key is always a string;
 ** value can be a string, an int, or a boolean.
 */
-static void settabss(lua_State* L, std::string_view k, std::string_view v)
+static void settabss(lua_State* L, byte_view k, byte_view v)
 {
   lua_pushlstring(L, v, 0, v.size());
   lua_setfieldi(L, -2, k);
 }
 
-static void settabsi(lua_State* L, std::string_view k, int v)
+static void settabsi(lua_State* L, byte_view k, int v)
 {
   lua_pushinteger(L, v);
   lua_setfieldi(L, -2, k);
 }
 
-static void settabsb(lua_State* L, std::string_view k, int v)
+static void settabsb(lua_State* L, byte_view k, int v)
 {
   lua_pushboolean(L, v);
   lua_setfieldi(L, -2, k);
@@ -131,7 +131,7 @@ static void settabsb(lua_State* L, std::string_view k, int v)
 ** 'lua_getinfo' on top of the result table so that it can call
 ** 'lua_setfield'.
 */
-static void treatstackoption(lua_State* L, lua_State* L1, std::string_view fname)
+static void treatstackoption(lua_State* L, lua_State* L1, byte_view fname)
 {
   if (L == L1)
     lua_rotate(L, -2, 1); /* exchange object and table */
@@ -151,7 +151,7 @@ static int db_getinfo(lua_State* L)
   InternalDebug ar;
   int arg;
   lua_State* L1 = getthread(L, &arg);
-  std::string_view options = luaL_optlstring(L, arg + 2, lt::flnSrtu);
+  byte_view options = luaL_optlstring(L, arg + 2, lt::flnSrtu);
   InternalString funcOption = InternalString(lt::gt_op).concat(options);
   checkstack(L, L1, 3);
   luaL_argchecki(L, sv_byteat(options, 0) != '>', arg + 2, lt::invalid_option_2);
@@ -176,7 +176,7 @@ static int db_getinfo(lua_State* L)
     return luaL_argerrori(L, arg + 2, lt::invalid_option_1);
   ar = std::move(*res);
   lua_newtable(L); /* table to collect results */
-  if ((options.find('S') != std::string_view::npos))
+  if ((options.find('S') != byte_view::npos))
   {
     lua_pushlstring(L, ar.source, 0, ar.source.size());
     lua_setfieldi(L, -2, lt::source);
@@ -185,33 +185,33 @@ static int db_getinfo(lua_State* L)
     settabsi(L, lt::lastlinedefined, ar.lastlinedefined);
     settabss(L, lt::what, ar.what);
   }
-  if ((options.find('l') != std::string_view::npos))
+  if ((options.find('l') != byte_view::npos))
     settabsi(L, lt::currentline, ar.currentline);
-  if ((options.find('u') != std::string_view::npos))
+  if ((options.find('u') != byte_view::npos))
   {
     settabsi(L, lt::nups, ar.nups);
     settabsi(L, lt::nparams, ar.nparams);
     settabsb(L, lt::isvararg, ar.isvararg);
   }
-  if ((options.find('n') != std::string_view::npos))
+  if ((options.find('n') != byte_view::npos))
   {
     if (ar.name.has_value())
       settabss(L, lt::name_2, ar.name.value());
     settabss(L, lt::namewhat, ar.namewhat.value_or(lt::empty_str));
   }
-  if ((options.find('r') != std::string_view::npos))
+  if ((options.find('r') != byte_view::npos))
   {
     settabsi(L, lt::ftransfer, ar.ftransfer);
     settabsi(L, lt::ntransfer, ar.ntransfer);
   }
-  if ((options.find('t') != std::string_view::npos))
+  if ((options.find('t') != byte_view::npos))
   {
     settabsb(L, lt::istailcall, ar.istailcall);
     settabsi(L, lt::extraargs, ar.extraargs);
   }
-  if ((options.find('L') != std::string_view::npos))
+  if ((options.find('L') != byte_view::npos))
     treatstackoption(L, L1, lt::activelines);
-  if ((options.find('f') != std::string_view::npos))
+  if ((options.find('f') != byte_view::npos))
     treatstackoption(L, L1, lt::func);
   return 1; /* return table */
 }
@@ -356,7 +356,7 @@ static int db_upvaluejoin(lua_State* L)
 */
 static void hookf(lua_State* L, lua_Debug* ar)
 {
-  static const std::string_view hooknames[] = {lt::call, lt::return_kw, lt::line, lt::count,lt::tail_call};
+  static const byte_view hooknames[] = {lt::call, lt::return_kw, lt::line, lt::count,lt::tail_call};
   lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_HOOKKEY);
   lua_pushthread(L);
   if (lua_rawget(L, -2) == LUA_TFUNCTION)
@@ -376,14 +376,14 @@ static void hookf(lua_State* L, lua_Debug* ar)
 /*
 ** Convert a string mask (for 'sethook') into a bit mask
 */
-static int makemask(std::string_view smask, int count)
+static int makemask(byte_view smask, int count)
 {
   int mask = 0;
-  if (smask.find('c') != std::string_view::npos)
+  if (smask.find('c') != byte_view::npos)
     mask |= LUA_MASKCALL;
-  if (smask.find('r') != std::string_view::npos)
+  if (smask.find('r') != byte_view::npos)
     mask |= LUA_MASKRET;
-  if (smask.find('l') != std::string_view::npos)
+  if (smask.find('l') != byte_view::npos)
     mask |= LUA_MASKLINE;
   if (count > 0)
     mask |= LUA_MASKCOUNT;
@@ -416,7 +416,7 @@ static int db_sethook(lua_State* L)
   }
   else
   {
-    std::string_view smask = luaL_checklstring(L, arg + 2);
+    byte_view smask = luaL_checklstring(L, arg + 2);
     luaL_checktype(L, arg + 1, LUA_TFUNCTION);
     count = (int) luaL_optinteger(L, arg + 3, 0);
     func = hookf;
@@ -465,7 +465,7 @@ static int db_gethook(lua_State* L)
   }
   size_t masklen = unmakemask(mask, buffsp);
   byte_view maskview = buffsp.subspan(0, masklen).view();
-  lua_pushlstring(L, maskview.view(), 0, maskview.size()); /* 2nd result = mask */
+  lua_pushlstring(L, maskview, 0, maskview.size()); /* 2nd result = mask */
   lua_pushinteger(L, lua_gethookcount(L1));  /* 3rd result = count */
   return 3;
 }
@@ -478,7 +478,7 @@ static int db_debug(lua_State* L)
     byte_span span(buffer, LUA_MAXINPUT);
     os_print_stderr(lt::lua_debug);
     os_flush_stderr();
-    if (!os_readline(os_stdin(), span.span()) || span.str_view() == lt::cont_n)
+    if (!os_readline(os_stdin(), span) || span.str_view() == lt::cont_n)
     {
       return 0;
     }

@@ -56,7 +56,7 @@ public:
 
   size_t capacity() const noexcept { return bytes_.size(); }
 
-  std::string_view view() const noexcept { return {bytes_.data(), len_}; }
+  byte_view view() const noexcept { return {bytes_.data(), len_}; }
 
   std::span<char> area() noexcept { return bytes_; }
 

@@ -57,13 +57,13 @@ static int luaB_warn(lua_State* L)
   return 0;
 }
 
-static size_t b_str2int(std::string_view s, unsigned base, lua_Integer* pn)
+static size_t b_str2int(byte_view s, unsigned base, lua_Integer* pn)
 {
-  const std::string_view spacechars = lt::whitespace_chars;
+  const byte_view spacechars = lt::whitespace_chars;
   lua_Unsigned n = 0;
   int neg = 0;
   size_t p = 0;
-  while (p < s.size() && spacechars.find(s[p]) != std::string_view::npos)
+  while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
     p++; /* skip initial spaces */
   if (sv_byteat(s, p) == '-')
   {
@@ -73,18 +73,18 @@ static size_t b_str2int(std::string_view s, unsigned base, lua_Integer* pn)
   else if (sv_byteat(s, p) == '+')
     p++;
   if (!isalnum(sv_byteat(s, p))) /* no digit? */
-    return std::string_view::npos;
+    return byte_view::npos;
   do
   {
     unsigned digit = ((unsigned int)(isdigit(sv_byteat(s, p))
                                    ? s[p] - '0'
                                    : (toupper(sv_byteat(s, p)) - 'A') + 10));
     if (digit >= base)
-      return std::string_view::npos; /* invalid numeral */
+      return byte_view::npos; /* invalid numeral */
     n = n * base + digit;
     p++;
   } while (isalnum(sv_byteat(s, p)));
-  while (p < s.size() && spacechars.find(s[p]) != std::string_view::npos)
+  while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
     p++; /* skip trailing spaces */
   *pn = (lua_Integer) ((neg) ? (0u - n) : n);
   return p;
@@ -113,7 +113,7 @@ static int luaB_tonumber(lua_State* L)
     lua_Integer n = 0; /* to avoid warnings */
     lua_Integer base = luaL_checkinteger(L, 2);
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
-    std::string_view s = *lua_tolstring(L, 1);
+    byte_view s = *lua_tolstring(L, 1);
     luaL_argchecki(L, 2 <= base && base <= 36, 2, lt::base_out_of_range);
     if (b_str2int(s, ((unsigned int)(base)), &n) == s.size())
     {
@@ -212,7 +212,7 @@ static int pushmode(lua_State* L, int oldmode)
 
 static int luaB_collectgarbage(lua_State* L)
 {
-  static const std::string_view opts[] = {
+  static const byte_view opts[] = {
       lt::stop, lt::restart, lt::collect,
       lt::count, lt::step, lt::isrunning, lt::generational,
       lt::incremental, lt::param, lt::setlimit, lt::getlimit};
@@ -266,7 +266,7 @@ static int luaB_collectgarbage(lua_State* L)
   }
   case LUA_GCPARAM:
   {
-    static const std::string_view params[] = {
+    static const byte_view params[] = {
         lt::minormul, lt::majorminor, lt::minormajor,
         lt::pause, lt::stepmul, lt::stepsize};
     static const char pnum[] = {
@@ -384,7 +384,7 @@ static int load_aux(lua_State* L, int status, int envidx)
 static const InternalString* getMode(lua_State* L, int idx)
 {
   const InternalString* mode = luaL_optistring(L, idx, nullptr);
-  if (mode != nullptr && mode->view().find('B') != std::string_view::npos)
+  if (mode != nullptr && mode->view().find('B') != byte_view::npos)
   {
     /* Lua code cannot use fixed buffers */
     luaL_argerrori(L, idx, lt::invalid_mode);
@@ -394,9 +394,9 @@ static const InternalString* getMode(lua_State* L, int idx)
 
 static int luaB_loadfile(lua_State* L)
 {
-  std::optional<std::string_view> fname = lua_isnoneornil(L, 1) ? std::nullopt : std::optional<std::string_view>(luaL_checkistring(L, 1)->view());
+  std::optional<byte_view> fname = lua_isnoneornil(L, 1) ? std::nullopt : std::optional<byte_view>(luaL_checkistring(L, 1)->view());
   const InternalString* modestr = getMode(L, 2);
-  std::optional<std::string_view> mode = modestr ? std::optional<std::string_view>(modestr->view()) : std::nullopt;
+  std::optional<byte_view> mode = modestr ? std::optional<byte_view>(modestr->view()) : std::nullopt;
   int env = (!lua_isnone(L, 3) ? 3 : 0); /* 'env' index or 0 if no 'env' */
   int status = luaL_loadfilei(L, fname, mode);
   return load_aux(L, status, env);
@@ -434,18 +434,18 @@ static int luaB_load(lua_State* L)
   auto s = lua_tolstring(L, 1);
   const InternalString* mode = getMode(L, 3);
   int env = (!lua_isnone(L, 4) ? 4 : 0); /* 'env' index or 0 if no 'env' */
-  std::optional<std::string_view> optmode = (mode != nullptr) ? std::optional<std::string_view>(mode->view()) : std::nullopt;
+  std::optional<byte_view> optmode = (mode != nullptr) ? std::optional<byte_view>(mode->view()) : std::nullopt;
   if (s)
   {
     const InternalString* chunkname = luaL_optistring(L, 2, lua_toistring(L, 1));
-    std::optional<std::string_view> optname = (chunkname != nullptr) ? std::optional<std::string_view>(chunkname->view()) : std::nullopt;
+    std::optional<byte_view> optname = (chunkname != nullptr) ? std::optional<byte_view>(chunkname->view()) : std::nullopt;
     status = luaL_loadbufferi(L, *s, optname, optmode);
   }
   else
   {                    /* loading from a reader function */
     int firstcall = 1; /* userdata for generic_reader */
     const InternalString* chunkname = luaL_optistring(L, 2, &lt::load_1_i);
-    std::optional<std::string_view> optname = (chunkname != nullptr) ? std::optional<std::string_view>(chunkname->view()) : std::nullopt;
+    std::optional<byte_view> optname = (chunkname != nullptr) ? std::optional<byte_view>(chunkname->view()) : std::nullopt;
     luaL_checktype(L, 1, LUA_TFUNCTION);
     status = lua_loadi(L, generic_reader, &firstcall, optname, optmode);
   }
@@ -463,7 +463,7 @@ static int dofilecont(lua_State* L, int d1, lua_KContext d2)
 
 static int luaB_dofile(lua_State* L)
 {
-  std::optional<std::string_view> fname = lua_isnoneornil(L, 1) ? std::nullopt : std::optional<std::string_view>(luaL_checkistring(L, 1)->view());
+  std::optional<byte_view> fname = lua_isnoneornil(L, 1) ? std::nullopt : std::optional<byte_view>(luaL_checkistring(L, 1)->view());
   lua_settop(L, 1);
   if (l_unlikely(luaL_loadfilei(L, fname, std::nullopt) != LUA_OK))
     return lua_error(L);

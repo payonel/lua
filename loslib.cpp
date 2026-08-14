@@ -95,7 +95,7 @@ static int os_tmpname(lua_State* L)
 
 static int os_getenv(lua_State* L)
 {
-  std::optional<std::string_view> v = os_getenv(luaL_checkistring(L, 1)->view());
+  std::optional<byte_view> v = os_getenv(luaL_checkistring(L, 1)->view());
   if (v.has_value())
     lua_pushistring(L, std::move(*v));
   else
@@ -117,13 +117,13 @@ static int os_clock(lua_State* L)
 ** =======================================================
 */
 
-static void setfield(lua_State* L, std::string_view key, int value, int delta)
+static void setfield(lua_State* L, byte_view key, int value, int delta)
 {
   lua_pushinteger(L, (lua_Integer) value + delta);
   lua_setfieldi(L, -2, key);
 }
 
-static void setboolfield(lua_State* L, std::string_view key, int value)
+static void setboolfield(lua_State* L, byte_view key, int value)
 {
   if (value < 0) /* undefined? */
     return;      /* does not set field */
@@ -147,7 +147,7 @@ static void setallfields(lua_State* L, struct tm* stm)
   setboolfield(L, lt::isdst, stm->tm_isdst);
 }
 
-static int getboolfield(lua_State* L, std::string_view key)
+static int getboolfield(lua_State* L, byte_view key)
 {
   int res;
   res = (lua_getfieldi(L, -1, key) == LUA_TNIL) ? -1 : lua_toboolean(L, -1);
@@ -155,7 +155,7 @@ static int getboolfield(lua_State* L, std::string_view key)
   return res;
 }
 
-static int getfield(lua_State* L, std::string_view key, int d, int delta)
+static int getfield(lua_State* L, byte_view key, int d, int delta)
 {
   int t = lua_getfieldi(L, -1, key); /* get field and its type */
   std::optional<lua_Integer> ores = lua_tointegerx(L, -1);
@@ -187,10 +187,10 @@ static int getfield(lua_State* L, std::string_view key, int d, int delta)
   return (int) res;
 }
 
-static size_t checkoption(lua_State* L, std::string_view fmt, size_t pos,
+static size_t checkoption(lua_State* L, byte_view fmt, size_t pos,
                           std::span<char> buff, size_t boff)
 {
-  std::string_view option = lt::strftime_options;
+  byte_view option = lt::strftime_options;
   size_t opos = 0;
   size_t convlen = fmt.size() - pos;
   unsigned oplen = 1; /* length of options being checked */
@@ -223,7 +223,7 @@ constexpr int SIZETIMEFMT = 250;
 
 static int os_date(lua_State* L)
 {
-  std::string_view sfmt = luaL_optlstring(L, 1, lt::fmt_c);
+  byte_view sfmt = luaL_optlstring(L, 1, lt::fmt_c);
   size_t sp = 0;
   time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
   struct tm tmr, *stm;
@@ -306,13 +306,13 @@ static int os_setlocale(lua_State* L)
 {
   static const int cat[] = {LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY,
                             LC_NUMERIC, LC_TIME};
-  static const std::string_view catnames[] = {
+  static const byte_view catnames[] = {
       lt::all, lt::collate, lt::ctype,
       lt::monetary, lt::numeric, lt::time_kw};
   int nol = lua_isnoneornil(L, 1);
   const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
   int op = luaL_checkoptioni(L, 2, lt::all, catnames);
-  std::optional<std::string_view> res = locale_setlocale(cat[op], nol ? std::nullopt : std::optional<std::string_view>(l->view()));
+  std::optional<byte_view> res = locale_setlocale(cat[op], nol ? std::nullopt : std::optional<byte_view>(l->view()));
   if (res.has_value())
   {
     lua_pushlstring(L, res.value(), 0, res->size());

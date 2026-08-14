@@ -664,9 +664,9 @@ static int getmode(global_State* g, Table* h)
     return 0; /* ignore non-string modes */
   else
   {
-    std::string_view smode = tsvalue(mode)->data.view();
-    bool weakkey = smode.find('k') != std::string_view::npos;
-    bool weakvalue = smode.find('v') != std::string_view::npos;
+    byte_view smode = tsvalue(mode)->data.view();
+    bool weakkey = smode.find('k') != byte_view::npos;
+    bool weakvalue = smode.find('v') != byte_view::npos;
     return (((int)(weakkey)) << 1) | ((int)(weakvalue));
   }
 }

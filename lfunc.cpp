@@ -168,7 +168,7 @@ static void checkclosemth(lua_State* L, StkId level)
   {                                            /* no metamethod? */
     int idx = ((int)(level - L->ci->func)); /* variable index */
     const InternalString* vname_i = luaG_findlocal(L, L->ci, idx, nullptr);
-    std::string_view vname = vname_i != nullptr ? vname_i->view() : lt::qmark;
+    byte_view vname = vname_i != nullptr ? vname_i->view() : lt::qmark;
     luaG_runerror(L, lt::variable_s_got_a_non_closable_value, FmtArgs().str(vname));
   }
 }

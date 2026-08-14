@@ -28,14 +28,14 @@ struct LoadState
 {
   lua_State* L;
   ZIO* Z;
-  std::string_view name;
+  byte_view name;
   Table* h;          /* list for string reuse */
   size_t offset;     /* current position relative to beginning of dump */
   lua_Unsigned nstr; /* number of strings in the list */
   lu_byte fixed;     /* dump is fixed in memory */
 };
 
-static l_noret error(LoadState* S, std::string_view why)
+static l_noret error(LoadState* S, byte_view why)
 {
   luaO_pushfstring(S->L, lt::s_bad_binary_format_s, FmtArgs().str(S->name).str(why));
   luaD_throw(S->L, LUA_ERRSYNTAX);
@@ -158,7 +158,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   {
     char buff[41];
     loadBlock(S, buff, ((size_t)(size + 1)) * sizeof((buff)[0]));          /* load string into buffer */
-    std::string_view buffstr{buff, size};
+    byte_view buffstr{buff, size};
     *sl = ts = luaS_createstr(L, buffstr, 0, buffstr.size()); /* create string */
     luaC_objbarrier(L, p, ts);
   }
@@ -167,7 +167,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     MBuffer tmp{L};
     tmp.growTo(size + 1);
     loadBlock(S, tmp.area().data(), ((size_t)(size + 1)) * sizeof(char));
-    std::string_view tmpsv{tmp.area().data(), size};
+    byte_view tmpsv{tmp.area().data(), size};
     *sl = ts = luaS_createstr(L, tmpsv, 0, tmpsv.size());
     luaC_objbarrier(L, p, ts);
   }
@@ -358,7 +358,7 @@ static void loadFunction(LoadState* S, Proto* f)
   loadDebug(S, f);
 }
 
-static void checkliteral(LoadState* S, std::string_view s, std::string_view msg)
+static void checkliteral(LoadState* S, byte_view s, byte_view msg)
 {
   char buff[LUA_SIGNATURE.size() + lt::LUAC_DATA.size()]; /* larger than both */
   size_t len = s.size();
@@ -367,19 +367,19 @@ static void checkliteral(LoadState* S, std::string_view s, std::string_view msg)
     error(S, msg);
 }
 
-static l_noret numerror(LoadState* S, std::string_view what, std::string_view tname)
+static l_noret numerror(LoadState* S, byte_view what, byte_view tname)
 {
-  std::string_view msg = luaO_pushfstring(S->L, lt::s_s_mismatch, FmtArgs().str(tname).str(what))->view();
+  byte_view msg = luaO_pushfstring(S->L, lt::s_s_mismatch, FmtArgs().str(tname).str(what))->view();
   error(S, msg);
 }
 
-static void checknumsize(LoadState* S, int size, std::string_view tname)
+static void checknumsize(LoadState* S, int size, byte_view tname)
 {
   if (size != loadByte(S))
     numerror(S, lt::size, tname);
 }
 
-static void checknumformat(LoadState* S, int eq, std::string_view tname)
+static void checknumformat(LoadState* S, int eq, byte_view tname)
 {
   if (!eq)
     numerror(S, lt::format, tname);
@@ -389,7 +389,7 @@ static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
   byte_view sig_tail = byte_view(LUA_SIGNATURE).substr(1);
-  checkliteral(S, sig_tail.view(), lt::not_a_binary_chunk);
+  checkliteral(S, sig_tail, lt::not_a_binary_chunk);
   if (loadByte(S) != LUAC_VERSION)
     error(S, lt::version_mismatch);
   if (loadByte(S) != LUAC_FORMAT)
@@ -404,14 +404,14 @@ static void checkHeader(LoadState* S)
 /*
 ** Load precompiled chunk.
 */
-LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, std::string_view name, int fixed)
+LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int fixed)
 {
   LoadState S;
   LClosure* cl;
   int c0 = sv_byteat(name, 0);
   if (c0 == '@' || c0 == '=')
   {
-    name = byte_view(name).substr(1).view();
+    name = byte_view(name).substr(1);
   }
   else if (c0 == LUA_SIGNATURE[0])
   {

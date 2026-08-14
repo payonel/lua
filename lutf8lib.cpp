@@ -315,7 +315,7 @@ static const luaL_RegCFI funcs[] = {
 LUAMOD_API int luaopen_utf8(lua_State* L)
 {
   luaL_newlibcfi(L, funcs);
-  const std::string_view patt = lt::utf8patt;
+  const byte_view patt = lt::utf8patt;
   lua_pushlstring(L, patt, 0, patt.size());
   lua_setfieldi(L, -2, lt::charpattern);
   return 1;
