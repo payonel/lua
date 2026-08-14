@@ -2246,7 +2246,8 @@ static int runC(lua_State* L, lua_State* L1, std::string_view code)
     }
     else if (inst == lt::tocfunction)
     {
-      lua_pushcfunction(L1, lua_tocfunction(L1, getindex_aux(L, L1, &sc)));
+      /* copy the function value directly to preserve identity */
+      lua_pushvalue(L1, getindex_aux(L, L1, &sc));
     }
     else if (inst == lt::tointeger)
     {
