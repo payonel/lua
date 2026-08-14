@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include "lua_internal.h"
+#include "lobject.h"
 #include "literals.h"
 
 constexpr lua_Number PI = (3.141592653589793238462643383279502884);
@@ -453,7 +454,7 @@ static int math_randomseed(lua_State* L)
 
 static const luaL_Regi randfuncs[] = {
   {lt::random, math_random},
-  {lt::randomseed, math_randomseed}
+  {lt::randomseed, math_randomseed},
 };
 
 /*
@@ -476,37 +477,60 @@ static void setrandfunc(lua_State* L)
 */
 /* }================================================================== */
 
-static const luaL_Regi mathlib[] = {
-  {lt::abs_kw, math_abs},
-  {lt::acos, math_acos},
-  {lt::asin, math_asin},
-  {lt::atan, math_atan},
-  {lt::ceil_kw, math_ceil},
-  {lt::cos_kw, math_cos},
-  {lt::deg, math_deg},
-  {lt::exp_kw, math_exp},
-  {lt::tointeger, math_toint},
-  {lt::floor_kw, math_floor},
-  {lt::fmod, math_fmod},
-  {lt::frexp, math_frexp},
-  {lt::ult, math_ult},
-  {lt::ldexp, math_ldexp},
-  {lt::log_kw, math_log},
-  {lt::max, math_max},
-  {lt::min, math_min},
-  {lt::modf, math_modf},
-  {lt::rad, math_rad},
-  {lt::sin_kw, math_sin},
-  {lt::sqrt_kw, math_sqrt},
-  {lt::tan_kw, math_tan},
-  {lt::type, math_type},
-  /* placeholders */
+static CFuncInfo cfi_math_abs("abs"_hs, math_abs);
+static CFuncInfo cfi_math_acos("acos"_hs, math_acos);
+static CFuncInfo cfi_math_asin("asin"_hs, math_asin);
+static CFuncInfo cfi_math_atan("atan"_hs, math_atan);
+static CFuncInfo cfi_math_ceil("ceil"_hs, math_ceil);
+static CFuncInfo cfi_math_cos("cos"_hs, math_cos);
+static CFuncInfo cfi_math_deg("deg"_hs, math_deg);
+static CFuncInfo cfi_math_exp("exp"_hs, math_exp);
+static CFuncInfo cfi_math_toint("tointeger"_hs, math_toint);
+static CFuncInfo cfi_math_floor("floor"_hs, math_floor);
+static CFuncInfo cfi_math_fmod("fmod"_hs, math_fmod);
+static CFuncInfo cfi_math_frexp("frexp"_hs, math_frexp);
+static CFuncInfo cfi_math_ult("ult"_hs, math_ult);
+static CFuncInfo cfi_math_ldexp("ldexp"_hs, math_ldexp);
+static CFuncInfo cfi_math_log("log"_hs, math_log);
+static CFuncInfo cfi_math_max("max"_hs, math_max);
+static CFuncInfo cfi_math_min("min"_hs, math_min);
+static CFuncInfo cfi_math_modf("modf"_hs, math_modf);
+static CFuncInfo cfi_math_rad("rad"_hs, math_rad);
+static CFuncInfo cfi_math_sin("sin"_hs, math_sin);
+static CFuncInfo cfi_math_sqrt("sqrt"_hs, math_sqrt);
+static CFuncInfo cfi_math_tan("tan"_hs, math_tan);
+static CFuncInfo cfi_math_type("type"_hs, math_type);
+
+static const luaL_RegCFI mathlib[] = {
+  {lt::abs_kw, &cfi_math_abs},
+  {lt::acos, &cfi_math_acos},
+  {lt::asin, &cfi_math_asin},
+  {lt::atan, &cfi_math_atan},
+  {lt::ceil_kw, &cfi_math_ceil},
+  {lt::cos_kw, &cfi_math_cos},
+  {lt::deg, &cfi_math_deg},
+  {lt::exp_kw, &cfi_math_exp},
+  {lt::tointeger, &cfi_math_toint},
+  {lt::floor_kw, &cfi_math_floor},
+  {lt::fmod, &cfi_math_fmod},
+  {lt::frexp, &cfi_math_frexp},
+  {lt::ult, &cfi_math_ult},
+  {lt::ldexp, &cfi_math_ldexp},
+  {lt::log_kw, &cfi_math_log},
+  {lt::max, &cfi_math_max},
+  {lt::min, &cfi_math_min},
+  {lt::modf, &cfi_math_modf},
+  {lt::rad, &cfi_math_rad},
+  {lt::sin_kw, &cfi_math_sin},
+  {lt::sqrt_kw, &cfi_math_sqrt},
+  {lt::tan_kw, &cfi_math_tan},
+  {lt::type, &cfi_math_type},
   {lt::random, nullptr},
   {lt::randomseed, nullptr},
   {lt::pi, nullptr},
   {lt::huge, nullptr},
   {lt::maxinteger, nullptr},
-  {lt::mininteger, nullptr}
+  {lt::mininteger, nullptr},
 };
 
 /*
@@ -514,7 +538,7 @@ static const luaL_Regi mathlib[] = {
 */
 LUAMOD_API int luaopen_math(lua_State* L)
 {
-  luaL_newlibi(L, mathlib);
+  luaL_newlibcfi(L, mathlib);
   lua_pushnumber(L, PI);
   lua_setfieldi(L, -2, lt::pi);
   lua_pushnumber(L, (lua_Number) HUGE_VAL);

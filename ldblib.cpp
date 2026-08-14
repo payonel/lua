@@ -13,6 +13,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "lobject.h"
 #include "os_api.h"
 
 #include "lauxlib.h"
@@ -511,27 +512,44 @@ static int db_traceback(lua_State* L)
   return 1;
 }
 
-static const luaL_Regi dblib[] = {
-  {lt::debug, db_debug},
-  {lt::getuservalue, db_getuservalue},
-  {lt::gethook, db_gethook},
-  {lt::getinfo, db_getinfo},
-  {lt::getlocal, db_getlocal},
-  {lt::getregistry, db_getregistry},
-  {lt::getmetatable, db_getmetatable},
-  {lt::getupvalue, db_getupvalue},
-  {lt::upvaluejoin, db_upvaluejoin},
-  {lt::upvalueid, db_upvalueid},
-  {lt::setuservalue, db_setuservalue},
-  {lt::sethook, db_sethook},
-  {lt::setlocal, db_setlocal},
-  {lt::setmetatable, db_setmetatable},
-  {lt::setupvalue, db_setupvalue},
-  {lt::traceback, db_traceback}
+static CFuncInfo cfi_db_debug("debug"_hs, db_debug);
+static CFuncInfo cfi_db_getuservalue("getuservalue"_hs, db_getuservalue);
+static CFuncInfo cfi_db_gethook("gethook"_hs, db_gethook);
+static CFuncInfo cfi_db_getinfo("getinfo"_hs, db_getinfo);
+static CFuncInfo cfi_db_getlocal("getlocal"_hs, db_getlocal);
+static CFuncInfo cfi_db_getregistry("getregistry"_hs, db_getregistry);
+static CFuncInfo cfi_db_getmetatable("getmetatable"_hs, db_getmetatable);
+static CFuncInfo cfi_db_getupvalue("getupvalue"_hs, db_getupvalue);
+static CFuncInfo cfi_db_upvaluejoin("upvaluejoin"_hs, db_upvaluejoin);
+static CFuncInfo cfi_db_upvalueid("upvalueid"_hs, db_upvalueid);
+static CFuncInfo cfi_db_setuservalue("setuservalue"_hs, db_setuservalue);
+static CFuncInfo cfi_db_sethook("sethook"_hs, db_sethook);
+static CFuncInfo cfi_db_setlocal("setlocal"_hs, db_setlocal);
+static CFuncInfo cfi_db_setmetatable("setmetatable"_hs, db_setmetatable);
+static CFuncInfo cfi_db_setupvalue("setupvalue"_hs, db_setupvalue);
+static CFuncInfo cfi_db_traceback("traceback"_hs, db_traceback);
+
+static const luaL_RegCFI dblib[] = {
+  {lt::debug, &cfi_db_debug},
+  {lt::getuservalue, &cfi_db_getuservalue},
+  {lt::gethook, &cfi_db_gethook},
+  {lt::getinfo, &cfi_db_getinfo},
+  {lt::getlocal, &cfi_db_getlocal},
+  {lt::getregistry, &cfi_db_getregistry},
+  {lt::getmetatable, &cfi_db_getmetatable},
+  {lt::getupvalue, &cfi_db_getupvalue},
+  {lt::upvaluejoin, &cfi_db_upvaluejoin},
+  {lt::upvalueid, &cfi_db_upvalueid},
+  {lt::setuservalue, &cfi_db_setuservalue},
+  {lt::sethook, &cfi_db_sethook},
+  {lt::setlocal, &cfi_db_setlocal},
+  {lt::setmetatable, &cfi_db_setmetatable},
+  {lt::setupvalue, &cfi_db_setupvalue},
+  {lt::traceback, &cfi_db_traceback},
 };
 
 LUAMOD_API int luaopen_debug(lua_State* L)
 {
-  luaL_newlibi(L, dblib);
+  luaL_newlibcfi(L, dblib);
   return 1;
 }

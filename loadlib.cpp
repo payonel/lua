@@ -19,6 +19,7 @@
 #include "lauxlib.h"
 #include "llimits.h"
 #include "lua_internal.h"
+#include "lobject.h"
 #include "os_api.h"
 #include "lualib.h"
 #include "literals.h"
@@ -165,8 +166,9 @@ static void createlibstr(lua_State* L, void* plib)
 {
   void** p = (void**) lua_newuserdatauv(L, sizeof(void*), 0);
   *p = plib;
+  static CFuncInfo cfi_lib_gc("loadlib.__gc"_hs, lib_gc);
   luaL_newmetatablei(L, lt::_LOADLIB);
-  lua_pushcfunction(L, lib_gc);
+  lua_pushcfuncinfo(L, &cfi_lib_gc);
   lua_setfieldi(L, -2, lt::mm_gc);
   lua_setmetatable(L, -2);
 }
@@ -516,19 +518,21 @@ static int ll_require(lua_State* L)
 
 /* }====================================================== */
 
-static const luaL_Regi pk_funcs[] = {
-  {lt::loadlib, ll_loadlib},
-  {lt::searchpath, ll_searchpath},
-  /* placeholders */
+static CFuncInfo cfi_ll_loadlib("loadlib"_hs, ll_loadlib);
+static CFuncInfo cfi_ll_searchpath("searchpath"_hs, ll_searchpath);
+
+static const luaL_RegCFI pk_funcs[] = {
+  {lt::loadlib, &cfi_ll_loadlib},
+  {lt::searchpath, &cfi_ll_searchpath},
   {lt::preload_2, nullptr},
   {lt::cpath, nullptr},
   {lt::path, nullptr},
   {lt::searchers, nullptr},
-  {lt::loaded, nullptr}
+  {lt::loaded, nullptr},
 };
 
 static const luaL_Regi ll_funcs[] = {
-  {lt::require, ll_require}
+  {lt::require, ll_require},
 };
 
 static void createsearcherstable(lua_State* L)
@@ -556,7 +560,7 @@ LUAMOD_API int luaopen_package(lua_State* L)
 {
   luaL_getsubtablei(L, LUA_REGISTRYINDEX, lt::_CLIBS); /* create lt::_CLIBS table */
   lua_pop(L, 1);                                 /* will not use it now */
-  luaL_newlibi(L, pk_funcs);
+  luaL_newlibcfi(L, pk_funcs);
   createsearcherstable(L);
   /* set paths */
   setpath(L, lt::path, LUA_PATH_VAR, lt::LUA_PATH_DEFAULT);

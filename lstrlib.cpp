@@ -23,6 +23,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "lobject.h"
 
 #include "internal_string.h"
 #include "lauxlib.h"
@@ -356,16 +357,25 @@ static int arith_unm(lua_State* L)
   return arith(L, LUA_OPUNM, lt::mm_unm);
 }
 
-static const luaL_Regi stringmetamethods[] = {
-  {lt::mm_add, arith_add},
-  {lt::mm_sub, arith_sub},
-  {lt::mm_mul, arith_mul},
-  {lt::mm_mod, arith_mod},
-  {lt::mm_pow, arith_pow},
-  {lt::mm_div, arith_div},
-  {lt::mm_idiv, arith_idiv},
-  {lt::mm_unm, arith_unm},
-  {lt::mm_index, nullptr}
+static CFuncInfo cfi_arith_add("mm_add"_hs, arith_add);
+static CFuncInfo cfi_arith_sub("mm_sub"_hs, arith_sub);
+static CFuncInfo cfi_arith_mul("mm_mul"_hs, arith_mul);
+static CFuncInfo cfi_arith_mod("mm_mod"_hs, arith_mod);
+static CFuncInfo cfi_arith_pow("mm_pow"_hs, arith_pow);
+static CFuncInfo cfi_arith_div("mm_div"_hs, arith_div);
+static CFuncInfo cfi_arith_idiv("mm_idiv"_hs, arith_idiv);
+static CFuncInfo cfi_arith_unm("mm_unm"_hs, arith_unm);
+
+static const luaL_RegCFI stringmetamethods[] = {
+  {lt::mm_add, &cfi_arith_add},
+  {lt::mm_sub, &cfi_arith_sub},
+  {lt::mm_mul, &cfi_arith_mul},
+  {lt::mm_mod, &cfi_arith_mod},
+  {lt::mm_pow, &cfi_arith_pow},
+  {lt::mm_div, &cfi_arith_div},
+  {lt::mm_idiv, &cfi_arith_idiv},
+  {lt::mm_unm, &cfi_arith_unm},
+  {lt::mm_index, nullptr},
 }; /* placeholder */
 
 /* }====================================================== */
@@ -2370,31 +2380,49 @@ static int str_unpack(lua_State* L)
 
 /* }====================================================== */
 
-static const luaL_Regi strlib[] = {
-  {lt::byte, str_byte},
-  {lt::char_kw, str_char},
-  {lt::dump, str_dump},
-  {lt::find, str_find},
-  {lt::format, str_format},
-  {lt::gmatch, gmatch},
-  {lt::gsub, str_gsub},
-  {lt::len, str_len},
-  {lt::lower, str_lower},
-  {lt::match, str_match},
-  {lt::rep, str_rep},
-  {lt::reverse, str_reverse},
-  {lt::sub, str_sub},
-  {lt::upper, str_upper},
-  {lt::pack, str_pack},
-  {lt::packsize, str_packsize},
-  {lt::unpack, str_unpack}
+static CFuncInfo cfi_str_byte("byte"_hs, str_byte);
+static CFuncInfo cfi_str_char("char"_hs, str_char);
+static CFuncInfo cfi_str_dump("dump"_hs, str_dump);
+static CFuncInfo cfi_str_find("find"_hs, str_find);
+static CFuncInfo cfi_str_format("format"_hs, str_format);
+static CFuncInfo cfi_gmatch("gmatch"_hs, gmatch);
+static CFuncInfo cfi_str_gsub("gsub"_hs, str_gsub);
+static CFuncInfo cfi_str_len("len"_hs, str_len);
+static CFuncInfo cfi_str_lower("lower"_hs, str_lower);
+static CFuncInfo cfi_str_match("match"_hs, str_match);
+static CFuncInfo cfi_str_rep("rep"_hs, str_rep);
+static CFuncInfo cfi_str_reverse("reverse"_hs, str_reverse);
+static CFuncInfo cfi_str_sub("sub"_hs, str_sub);
+static CFuncInfo cfi_str_upper("upper"_hs, str_upper);
+static CFuncInfo cfi_str_pack("pack"_hs, str_pack);
+static CFuncInfo cfi_str_packsize("packsize"_hs, str_packsize);
+static CFuncInfo cfi_str_unpack("unpack"_hs, str_unpack);
+
+static const luaL_RegCFI strlib[] = {
+  {lt::byte, &cfi_str_byte},
+  {lt::char_kw, &cfi_str_char},
+  {lt::dump, &cfi_str_dump},
+  {lt::find, &cfi_str_find},
+  {lt::format, &cfi_str_format},
+  {lt::gmatch, &cfi_gmatch},
+  {lt::gsub, &cfi_str_gsub},
+  {lt::len, &cfi_str_len},
+  {lt::lower, &cfi_str_lower},
+  {lt::match, &cfi_str_match},
+  {lt::rep, &cfi_str_rep},
+  {lt::reverse, &cfi_str_reverse},
+  {lt::sub, &cfi_str_sub},
+  {lt::upper, &cfi_str_upper},
+  {lt::pack, &cfi_str_pack},
+  {lt::packsize, &cfi_str_packsize},
+  {lt::unpack, &cfi_str_unpack},
 };
 
 static void createmetatable(lua_State* L)
 {
   /* table to be metatable for strings */
   lua_createtable(L, 0, sizeof(stringmetamethods) / sizeof((stringmetamethods)[0]) - 1);
-  luaL_setfuncsi(L, stringmetamethods, 0);
+  luaL_setfuncscfi(L, stringmetamethods);
   lua_pushistringref(L, lt::empty_str);         /* dummy string */
   lua_pushvalue(L, -2);           /* copy table */
   lua_setmetatable(L, -2);        /* set table as metatable for strings */
@@ -2409,7 +2437,7 @@ static void createmetatable(lua_State* L)
 */
 LUAMOD_API int luaopen_string(lua_State* L)
 {
-  luaL_newlibi(L, strlib);
+  luaL_newlibcfi(L, strlib);
   createmetatable(L);
   return 1;
 }

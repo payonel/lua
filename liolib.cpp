@@ -16,6 +16,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "lobject.h"
 #include "os_api.h"
 
 #include "lauxlib.h"
@@ -688,49 +689,72 @@ static int io_flush(lua_State* L)
 /*
 ** functions for 'io' library
 */
-static const luaL_Regi iolib[] = {
-  {lt::close_kw, io_close},
-  {lt::flush, io_flush},
-  {lt::input, io_input},
-  {lt::lines, io_lines},
-  {lt::open_kw, io_open},
-  {lt::output, io_output},
-  {lt::popen, io_popen},
-  {lt::read_kw, io_read},
-  {lt::tmpfile, io_tmpfile},
-  {lt::type, io_type},
-  {lt::write_kw, io_write}
+static CFuncInfo cfi_io_close("close"_hs, io_close);
+static CFuncInfo cfi_io_flush("flush"_hs, io_flush);
+static CFuncInfo cfi_io_input("input"_hs, io_input);
+static CFuncInfo cfi_io_lines("lines"_hs, io_lines);
+static CFuncInfo cfi_io_open("open"_hs, io_open);
+static CFuncInfo cfi_io_output("output"_hs, io_output);
+static CFuncInfo cfi_io_popen("popen"_hs, io_popen);
+static CFuncInfo cfi_io_read("read"_hs, io_read);
+static CFuncInfo cfi_io_tmpfile("tmpfile"_hs, io_tmpfile);
+static CFuncInfo cfi_io_type("type"_hs, io_type);
+static CFuncInfo cfi_io_write("write"_hs, io_write);
+
+static const luaL_RegCFI iolib[] = {
+  {lt::close_kw, &cfi_io_close},
+  {lt::flush, &cfi_io_flush},
+  {lt::input, &cfi_io_input},
+  {lt::lines, &cfi_io_lines},
+  {lt::open_kw, &cfi_io_open},
+  {lt::output, &cfi_io_output},
+  {lt::popen, &cfi_io_popen},
+  {lt::read_kw, &cfi_io_read},
+  {lt::tmpfile, &cfi_io_tmpfile},
+  {lt::type, &cfi_io_type},
+  {lt::write_kw, &cfi_io_write},
 };
 
 /*
 ** methods for file handles
 */
-static const luaL_Regi meth[] = {
-  {lt::read_kw, f_read},
-  {lt::write_kw, f_write},
-  {lt::lines, f_lines},
-  {lt::flush, f_flush},
-  {lt::seek, f_seek},
-  {lt::close_kw, f_close},
-  {lt::setvbuf, f_setvbuf}
+static CFuncInfo cfi_f_read("read"_hs, f_read);
+static CFuncInfo cfi_f_write("write"_hs, f_write);
+static CFuncInfo cfi_f_lines("lines"_hs, f_lines);
+static CFuncInfo cfi_f_flush("flush"_hs, f_flush);
+static CFuncInfo cfi_f_seek("seek"_hs, f_seek);
+static CFuncInfo cfi_f_close("close"_hs, f_close);
+static CFuncInfo cfi_f_setvbuf("setvbuf"_hs, f_setvbuf);
+
+static const luaL_RegCFI meth[] = {
+  {lt::read_kw, &cfi_f_read},
+  {lt::write_kw, &cfi_f_write},
+  {lt::lines, &cfi_f_lines},
+  {lt::flush, &cfi_f_flush},
+  {lt::seek, &cfi_f_seek},
+  {lt::close_kw, &cfi_f_close},
+  {lt::setvbuf, &cfi_f_setvbuf},
 };
 
 /*
 ** metamethods for file handles
 */
-static const luaL_Regi metameth[] = {
-  {lt::mm_index, nullptr}, /* placeholder */
-  {lt::mm_gc, f_gc},
-  {lt::mm_close, f_gc},
-  {lt::mm_tostring, f_tostring}
+static CFuncInfo cfi_f_gc("mm_gc"_hs, f_gc);
+static CFuncInfo cfi_f_tostring("mm_tostring"_hs, f_tostring);
+
+static const luaL_RegCFI metameth[] = {
+  {lt::mm_index, nullptr},
+  {lt::mm_gc, &cfi_f_gc},
+  {lt::mm_close, &cfi_f_gc},
+  {lt::mm_tostring, &cfi_f_tostring},
 };
 
 static void createmeta(lua_State* L)
 {
   luaL_newmetatablei(L, LUA_FILEHANDLE); /* metatable for file handles */
-  luaL_setfuncsi(L, metameth, 0);        /* add metamethods to new metatable */
+  luaL_setfuncscfi(L, metameth);        /* add metamethods to new metatable */
   lua_createtable(L, 0, sizeof(meth) / sizeof((meth)[0]) - 1);            /* create method table */
-  luaL_setfuncsi(L, meth, 0);            /* add file methods to method table */
+  luaL_setfuncscfi(L, meth);            /* add file methods to method table */
   lua_setfieldi(L, -2, lt::mm_index);       /* metatable.__index = method table */
   lua_pop(L, 1);                        /* pop metatable */
 }
@@ -763,7 +787,7 @@ static void createstdfile(lua_State* L, OsFile* f, std::string_view k,
 
 LUAMOD_API int luaopen_io(lua_State* L)
 {
-  luaL_newlibi(L, iolib);
+  luaL_newlibcfi(L, iolib);
   createmeta(L);
   /* create (and set) default files */
   createstdfile(L, os_stdin(), lt::_IO_input, lt::stdin_2);

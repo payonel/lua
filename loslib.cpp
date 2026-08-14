@@ -16,6 +16,7 @@
 
 #include "lauxlib.h"
 #include "lua_internal.h"
+#include "lobject.h"
 #include "os_api.h"
 #include "llimits.h"
 #include "lualib.h"
@@ -335,24 +336,36 @@ static int os_exit(lua_State* L)
   return 0;
 }
 
-static const luaL_Regi syslib[] = {
-  {lt::clock, os_clock},
-  {lt::date, os_date},
-  {lt::difftime, os_difftime},
-  {lt::execute, os_execute},
-  {lt::exit_kw, os_exit},
-  {lt::getenv, os_getenv},
-  {lt::remove_kw, os_remove},
-  {lt::rename_kw, os_rename},
-  {lt::setlocale, os_setlocale},
-  {lt::time_kw, os_time},
-  {lt::tmpname, os_tmpname}
+static CFuncInfo cfi_os_clock("clock"_hs, os_clock);
+static CFuncInfo cfi_os_date("date"_hs, os_date);
+static CFuncInfo cfi_os_difftime("difftime"_hs, os_difftime);
+static CFuncInfo cfi_os_execute("execute"_hs, os_execute);
+static CFuncInfo cfi_os_exit("exit"_hs, os_exit);
+static CFuncInfo cfi_os_getenv("getenv"_hs, os_getenv);
+static CFuncInfo cfi_os_remove("remove"_hs, os_remove);
+static CFuncInfo cfi_os_rename("rename"_hs, os_rename);
+static CFuncInfo cfi_os_setlocale("setlocale"_hs, os_setlocale);
+static CFuncInfo cfi_os_time("time"_hs, os_time);
+static CFuncInfo cfi_os_tmpname("tmpname"_hs, os_tmpname);
+
+static const luaL_RegCFI syslib[] = {
+  {lt::clock, &cfi_os_clock},
+  {lt::date, &cfi_os_date},
+  {lt::difftime, &cfi_os_difftime},
+  {lt::execute, &cfi_os_execute},
+  {lt::exit_kw, &cfi_os_exit},
+  {lt::getenv, &cfi_os_getenv},
+  {lt::remove_kw, &cfi_os_remove},
+  {lt::rename_kw, &cfi_os_rename},
+  {lt::setlocale, &cfi_os_setlocale},
+  {lt::time_kw, &cfi_os_time},
+  {lt::tmpname, &cfi_os_tmpname},
 };
 
 /* }====================================================== */
 
 LUAMOD_API int luaopen_os(lua_State* L)
 {
-  luaL_newlibi(L, syslib);
+  luaL_newlibcfi(L, syslib);
   return 1;
 }

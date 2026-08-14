@@ -16,6 +16,7 @@
 #include "llimits.h"
 #include "lualib.h"
 #include "lua_internal.h"
+#include "lobject.h"
 #include "literals.h"
 
 /*
@@ -422,19 +423,28 @@ static int sort(lua_State* L)
 
 /* }====================================================== */
 
-static const luaL_Regi tab_funcs[] = {
-  {lt::concat, tconcat},
-  {lt::create, tcreate},
-  {lt::insert, tinsert},
-  {lt::pack, tpack},
-  {lt::unpack, tunpack},
-  {lt::remove_kw, tremove},
-  {lt::move, tmove},
-  {lt::sort, sort}
+static CFuncInfo cfi_tconcat("concat"_hs, tconcat);
+static CFuncInfo cfi_tcreate("create"_hs, tcreate);
+static CFuncInfo cfi_tinsert("insert"_hs, tinsert);
+static CFuncInfo cfi_tpack("pack"_hs, tpack);
+static CFuncInfo cfi_tunpack("unpack"_hs, tunpack);
+static CFuncInfo cfi_tremove("remove"_hs, tremove);
+static CFuncInfo cfi_tmove("move"_hs, tmove);
+static CFuncInfo cfi_sort("sort"_hs, sort);
+
+static const luaL_RegCFI tab_funcs[] = {
+  {lt::concat, &cfi_tconcat},
+  {lt::create, &cfi_tcreate},
+  {lt::insert, &cfi_tinsert},
+  {lt::pack, &cfi_tpack},
+  {lt::unpack, &cfi_tunpack},
+  {lt::remove_kw, &cfi_tremove},
+  {lt::move, &cfi_tmove},
+  {lt::sort, &cfi_sort},
 };
 
 LUAMOD_API int luaopen_table(lua_State* L)
 {
-  luaL_newlibi(L, tab_funcs);
+  luaL_newlibcfi(L, tab_funcs);
   return 1;
 }

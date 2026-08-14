@@ -13,6 +13,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "lobject.h"
 
 #include "internal_string.h"
 #include "lauxlib.h"
@@ -286,27 +287,34 @@ static int iter_auxlax(lua_State* L)
 static int iter_codes(lua_State* L)
 {
   int lax = lua_toboolean(L, 2);
+  static CFuncInfo cfi_iter_auxlax("utf8.codes_lax"_hs, iter_auxlax);
+  static CFuncInfo cfi_iter_auxstrict("utf8.codes_strict"_hs, iter_auxstrict);
   const InternalString* s = luaL_checkistring(L, 1);
   luaL_argchecki(L, !iscontat(s, 0), 1, lt::invalid_UTF_8_code);
-  lua_pushcfunction(L, lax ? iter_auxlax : iter_auxstrict);
+  lua_pushcfuncinfo(L, lax ? &cfi_iter_auxlax : &cfi_iter_auxstrict);
   lua_pushvalue(L, 1);
   lua_pushinteger(L, 0);
   return 3;
 }
 
-static const luaL_Regi funcs[] = {
-  {lt::offset, byteoffset},
-  {lt::codepoint, codepoint},
-  {lt::char_kw, utfchar},
-  {lt::len, utflen},
-  {lt::codes, iter_codes},
-  /* placeholders */
-  {lt::charpattern, nullptr}
+static CFuncInfo cfi_byteoffset("offset"_hs, byteoffset);
+static CFuncInfo cfi_codepoint("codepoint"_hs, codepoint);
+static CFuncInfo cfi_utfchar("char"_hs, utfchar);
+static CFuncInfo cfi_utflen("len"_hs, utflen);
+static CFuncInfo cfi_iter_codes("codes"_hs, iter_codes);
+
+static const luaL_RegCFI funcs[] = {
+  {lt::offset, &cfi_byteoffset},
+  {lt::codepoint, &cfi_codepoint},
+  {lt::char_kw, &cfi_utfchar},
+  {lt::len, &cfi_utflen},
+  {lt::codes, &cfi_iter_codes},
+  {lt::charpattern, nullptr},
 };
 
 LUAMOD_API int luaopen_utf8(lua_State* L)
 {
-  luaL_newlibi(L, funcs);
+  luaL_newlibcfi(L, funcs);
   const std::string_view patt = lt::utf8patt;
   lua_pushlstring(L, patt, 0, patt.size());
   lua_setfieldi(L, -2, lt::charpattern);

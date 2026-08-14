@@ -11,6 +11,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "lobject.h"
 
 #include "lauxlib.h"
 #include "llimits.h"
@@ -217,19 +218,28 @@ static int luaB_close(lua_State* L)
   }
 }
 
-static const luaL_Regi co_funcs[] = {
-  {lt::create, luaB_cocreate},
-  {lt::resume, luaB_coresume},
-  {lt::running, luaB_corunning},
-  {lt::status, luaB_costatus},
-  {lt::wrap, luaB_cowrap},
-  {lt::yield, luaB_yield},
-  {lt::isyieldable, luaB_yieldable},
-  {lt::close_kw, luaB_close}
+static CFuncInfo cfi_luaB_cocreate("create"_hs, luaB_cocreate);
+static CFuncInfo cfi_luaB_coresume("resume"_hs, luaB_coresume);
+static CFuncInfo cfi_luaB_corunning("running"_hs, luaB_corunning);
+static CFuncInfo cfi_luaB_costatus("status"_hs, luaB_costatus);
+static CFuncInfo cfi_luaB_cowrap("wrap"_hs, luaB_cowrap);
+static CFuncInfo cfi_luaB_yield("yield"_hs, luaB_yield);
+static CFuncInfo cfi_luaB_yieldable("isyieldable"_hs, luaB_yieldable);
+static CFuncInfo cfi_luaB_close("close"_hs, luaB_close);
+
+static const luaL_RegCFI co_funcs[] = {
+  {lt::create, &cfi_luaB_cocreate},
+  {lt::resume, &cfi_luaB_coresume},
+  {lt::running, &cfi_luaB_corunning},
+  {lt::status, &cfi_luaB_costatus},
+  {lt::wrap, &cfi_luaB_cowrap},
+  {lt::yield, &cfi_luaB_yield},
+  {lt::isyieldable, &cfi_luaB_yieldable},
+  {lt::close_kw, &cfi_luaB_close},
 };
 
 LUAMOD_API int luaopen_coroutine(lua_State* L)
 {
-  luaL_newlibi(L, co_funcs);
+  luaL_newlibcfi(L, co_funcs);
   return 1;
 }
