@@ -408,14 +408,14 @@ struct CFuncInfo : GCObject
 
   /* Default ctor: static/fixed CFuncInfo (not GC-managed) */
   CFuncInfo()
-    : GCObject{nullptr, LUA_VLCF, 0}
+    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
     , fptr(nullptr)
     , name(std::nullopt)
   {}
 
   /* Named ctor: static/fixed CFuncInfo with function and name */
   CFuncInfo(HostString n, lua_CFunction f)
-    : GCObject{nullptr, LUA_VLCF, 0}
+    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
     , fptr(f)
     , name(std::string(n.to_utf8()))
   {}

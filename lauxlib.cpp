@@ -19,6 +19,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "lobject.h"
 #include "os_api.h"
 
 #include "lauxlib.h"
@@ -1116,6 +1117,25 @@ void luaL_newlibi(lua_State* L, std::span<const luaL_Regi> funcs)
   luaL_checkversion(L);
   lua_createtable(L, 0, (int)funcs.size());
   luaL_setfuncsi(L, funcs, 0);
+}
+
+void luaL_setfuncscfi(lua_State* L, std::span<const luaL_RegCFI> funcs)
+{
+  for (const auto& reg : funcs)
+  {
+    if (reg.cfi == nullptr)
+      lua_pushboolean(L, 0);
+    else
+      lua_pushcfuncinfo(L, reg.cfi);
+    lua_setfieldi(L, -2, reg.name);
+  }
+}
+
+void luaL_newlibcfi(lua_State* L, std::span<const luaL_RegCFI> funcs)
+{
+  luaL_checkversion(L);
+  lua_createtable(L, 0, (int)funcs.size());
+  luaL_setfuncscfi(L, funcs);
 }
 
 LUALIB_API void luaL_setfuncs(lua_State* L, const std::span<const luaL_Reg>& funcs, int nup)

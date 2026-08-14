@@ -57,8 +57,16 @@ struct luaL_Regi
   lua_CFunction func;
 };
 
+struct luaL_RegCFI
+{
+  std::string_view name;
+  CFuncInfo* cfi;
+};
+
 void luaL_setfuncsi(lua_State* L, std::span<const luaL_Regi> funcs, int nup);
 void luaL_newlibi(lua_State* L, std::span<const luaL_Regi> funcs);
+void luaL_setfuncscfi(lua_State* L, std::span<const luaL_RegCFI> funcs);
+void luaL_newlibcfi(lua_State* L, std::span<const luaL_RegCFI> funcs);
 
 void luaL_argchecki(lua_State* L, bool cond, int arg, std::string_view extramsg);
 void luaL_argexpectedi(lua_State* L, bool cond, int arg, std::string_view tname);

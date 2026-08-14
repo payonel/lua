@@ -558,30 +558,53 @@ static int luaB_tostring(lua_State* L)
   return 1;
 }
 
-static const luaL_Regi base_funcs[] = {
-  {lt::assert, luaB_assert},
-  {lt::collectgarbage, luaB_collectgarbage},
-  {lt::dofile, luaB_dofile},
-  {lt::error_kw, luaB_error},
-  {lt::getmetatable, luaB_getmetatable},
-  {lt::ipairs, luaB_ipairs},
-  {lt::loadfile, luaB_loadfile},
-  {lt::load_2, luaB_load},
-  {lt::next_kw, luaB_next},
-  {lt::pairs, luaB_pairs},
-  {lt::pcall, luaB_pcall},
-  {lt::print, luaB_print},
-  {lt::warn, luaB_warn},
-  {lt::rawequal, luaB_rawequal},
-  {lt::rawlen, luaB_rawlen},
-  {lt::rawget, luaB_rawget},
-  {lt::rawset, luaB_rawset},
-  {lt::select, luaB_select},
-  {lt::setmetatable, luaB_setmetatable},
-  {lt::tonumber, luaB_tonumber},
-  {lt::tostring, luaB_tostring},
-  {lt::type, luaB_type},
-  {lt::xpcall, luaB_xpcall},
+static CFuncInfo cfi_assert("assert"_hs, luaB_assert);
+static CFuncInfo cfi_collectgarbage("collectgarbage"_hs, luaB_collectgarbage);
+static CFuncInfo cfi_dofile("dofile"_hs, luaB_dofile);
+static CFuncInfo cfi_error("error"_hs, luaB_error);
+static CFuncInfo cfi_getmetatable("getmetatable"_hs, luaB_getmetatable);
+static CFuncInfo cfi_ipairs("ipairs"_hs, luaB_ipairs);
+static CFuncInfo cfi_loadfile("loadfile"_hs, luaB_loadfile);
+static CFuncInfo cfi_load("load"_hs, luaB_load);
+static CFuncInfo cfi_pairs("pairs"_hs, luaB_pairs);
+static CFuncInfo cfi_pcall("pcall"_hs, luaB_pcall);
+static CFuncInfo cfi_print("print"_hs, luaB_print);
+static CFuncInfo cfi_warn("warn"_hs, luaB_warn);
+static CFuncInfo cfi_rawequal("rawequal"_hs, luaB_rawequal);
+static CFuncInfo cfi_rawlen("rawlen"_hs, luaB_rawlen);
+static CFuncInfo cfi_rawget("rawget"_hs, luaB_rawget);
+static CFuncInfo cfi_rawset("rawset"_hs, luaB_rawset);
+static CFuncInfo cfi_select("select"_hs, luaB_select);
+static CFuncInfo cfi_setmetatable("setmetatable"_hs, luaB_setmetatable);
+static CFuncInfo cfi_tonumber("tonumber"_hs, luaB_tonumber);
+static CFuncInfo cfi_tostring("tostring"_hs, luaB_tostring);
+static CFuncInfo cfi_type("type"_hs, luaB_type);
+static CFuncInfo cfi_xpcall("xpcall"_hs, luaB_xpcall);
+
+static const luaL_RegCFI base_funcs[] = {
+  {lt::assert, &cfi_assert},
+  {lt::collectgarbage, &cfi_collectgarbage},
+  {lt::dofile, &cfi_dofile},
+  {lt::error_kw, &cfi_error},
+  {lt::getmetatable, &cfi_getmetatable},
+  {lt::ipairs, &cfi_ipairs},
+  {lt::loadfile, &cfi_loadfile},
+  {lt::load_2, &cfi_load},
+  {lt::next_kw, &cfi_next},
+  {lt::pairs, &cfi_pairs},
+  {lt::pcall, &cfi_pcall},
+  {lt::print, &cfi_print},
+  {lt::warn, &cfi_warn},
+  {lt::rawequal, &cfi_rawequal},
+  {lt::rawlen, &cfi_rawlen},
+  {lt::rawget, &cfi_rawget},
+  {lt::rawset, &cfi_rawset},
+  {lt::select, &cfi_select},
+  {lt::setmetatable, &cfi_setmetatable},
+  {lt::tonumber, &cfi_tonumber},
+  {lt::tostring, &cfi_tostring},
+  {lt::type, &cfi_type},
+  {lt::xpcall, &cfi_xpcall},
   /* placeholders */
   {LUA_GNAME, nullptr},
   {lt::_VERSION, nullptr}
@@ -591,7 +614,7 @@ LUAMOD_API int luaopen_base(lua_State* L)
 {
   /* open lib into global table */
   lua_pushglobaltable(L);
-  luaL_setfuncsi(L, base_funcs, 0);
+  luaL_setfuncscfi(L, base_funcs);
   /* set global _G */
   lua_pushvalue(L, -1);
   lua_setfieldi(L, -2, LUA_GNAME);
