@@ -14,6 +14,7 @@
 #include "lua.h"
 
 #include "lua_internal.h"
+#include "lobject.h"
 #include "os_api.h"
 
 #include "lauxlib.h"
@@ -314,12 +315,14 @@ static int pairscont(lua_State*, int, lua_KContext)
   return 4; /* __pairs did all the work, just return its results */
 }
 
+static CFuncInfo cfi_next("next"_hs, luaB_next);
+
 static int luaB_pairs(lua_State* L)
 {
   luaL_checkany(L, 1);
   if (luaL_getmetafieldi(L, 1, lt::mm_pairs) == LUA_TNIL)
   {                                  /* no metamethod? */
-    lua_pushcfunction(L, luaB_next); /* will return generator and */
+    lua_pushcfuncinfo(L, &cfi_next); /* will return generator and */
     lua_pushvalue(L, 1);             /* state */
     lua_pushnil(L);                  /* initial value */
     lua_pushnil(L);                  /* to-be-closed object */
@@ -347,10 +350,12 @@ static int ipairsaux(lua_State* L)
 ** 'ipairs' function. Returns 'ipairsaux', given "table", 0.
 ** (The given "table" may not be a table.)
 */
+static CFuncInfo cfi_ipairsaux("ipairs_aux"_hs, ipairsaux);
+
 static int luaB_ipairs(lua_State* L)
 {
   luaL_checkany(L, 1);
-  lua_pushcfunction(L, ipairsaux); /* iteration function */
+  lua_pushcfuncinfo(L, &cfi_ipairsaux); /* iteration function */
   lua_pushvalue(L, 1);             /* state */
   lua_pushinteger(L, 0);           /* initial value */
   return 3;

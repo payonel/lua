@@ -54,6 +54,7 @@ constexpr int LUA_ERRMEM = 4;
 constexpr int LUA_ERRERR = 5;
 
 struct lua_State;
+struct CFuncInfo;
 
 /*
 ** basic types
@@ -209,6 +210,8 @@ LUA_API std::string_view(lua_pushlstring) (lua_State* L, std::string_view s, siz
 LUA_API void(lua_pushstring) (lua_State* L, const std::optional<HostString>& s);
 LUA_API HostString(lua_pushfstring) (lua_State* L, const HostString& fmt);
 LUA_API void(lua_pushcclosure)(lua_State* L, lua_CFunction fn, int n);
+LUA_API CFuncInfo*(lua_createcfuncinfo)(lua_State* L, lua_CFunction fn, std::optional<HostString> name = std::nullopt);
+LUA_API void(lua_pushcfuncinfo)(lua_State* L, CFuncInfo* cfi);
 LUA_API void(lua_pushboolean)(lua_State* L, int b);
 LUA_API void(lua_pushlightuserdata)(lua_State* L, void* p);
 LUA_API int(lua_pushthread)(lua_State* L);

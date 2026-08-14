@@ -795,7 +795,7 @@ LUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
   lua_lock(L);
   if (n == 0)
   {
-    CFuncInfo* cfi = luaF_newCFuncInfo(L, fn);
+    CFuncInfo* cfi = lua_createcfuncinfo(L, fn);
     setslotf(L, L->top, cfi);
     api_incr_top(L);
   }
@@ -1946,6 +1946,22 @@ LUA_API void lua_newtable(lua_State* L)
 LUA_API void lua_pushcfunction(lua_State* L, lua_CFunction f)
 {
   lua_pushcclosure(L, f, 0);
+}
+
+LUA_API CFuncInfo* lua_createcfuncinfo(lua_State* L, lua_CFunction fn, std::optional<HostString> name)
+{
+  CFuncInfo* cfi = luaF_newCFuncInfo(L, fn);
+  if (name.has_value())
+    cfi->name = std::string(name->to_utf8());
+  return cfi;
+}
+
+LUA_API void lua_pushcfuncinfo(lua_State* L, CFuncInfo* cfi)
+{
+  lua_lock(L);
+  setslotf(L, L->top, cfi);
+  api_incr_top(L);
+  lua_unlock(L);
 }
 
 LUA_API void lua_register(lua_State* L, const HostString& name, lua_CFunction f)

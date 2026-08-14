@@ -396,14 +396,29 @@ constexpr size_t sizeLclosure(int n)
 }
 
 /*
-** CFuncInfo: GC-managed identity for a C function.
-** Holds the callable and an optional name for serialization.
-** Consumer creates these at init time; shared across all uses of the same function.
+** CFuncInfo: identity for a C function.
+** Can be static (not GC-managed) or lua-allocated (GC-managed).
+** Static: created at compile-time, pushed without BIT_ISCOLLECTABLE.
+** Dynamic: created via lua_createcfuncinfo, pushed with BIT_ISCOLLECTABLE.
 */
 struct CFuncInfo : GCObject
 {
   lua_CFunction fptr;
   std::optional<std::string> name; /* for serialization; nullopt = not serializable */
+
+  /* Default ctor: static/fixed CFuncInfo (not GC-managed) */
+  CFuncInfo()
+    : GCObject{nullptr, LUA_VLCF, 0}
+    , fptr(nullptr)
+    , name(std::nullopt)
+  {}
+
+  /* Named ctor: static/fixed CFuncInfo with function and name */
+  CFuncInfo(HostString n, lua_CFunction f)
+    : GCObject{nullptr, LUA_VLCF, 0}
+    , fptr(f)
+    , name(std::string(n.to_utf8()))
+  {}
 };
 
 /* }================================================================== */
