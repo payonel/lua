@@ -13,6 +13,7 @@
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
+#include "lobject.h"
 
 static int g_checks = 0;
 static int g_failures = 0;
@@ -3947,33 +3948,34 @@ static void test_cfunc_stress_group1()
 }
 
 /*
-** Group 2: Many unique cfuncs registered, most become dead quickly.
-** Tests registry growth and whether dead entries get reclaimed.
+** Group 2: Many cfuncs pushed and called in a tight loop.
+** Uses pre-created static CFuncInfos (realistic: library functions reused).
 */
+static CFuncInfo cfi_unique0("unique0"_hs, cf_unique<0>);
+static CFuncInfo cfi_unique1("unique1"_hs, cf_unique<1>);
+static CFuncInfo cfi_unique2("unique2"_hs, cf_unique<2>);
+static CFuncInfo cfi_unique3("unique3"_hs, cf_unique<3>);
+static CFuncInfo cfi_unique4("unique4"_hs, cf_unique<4>);
+static CFuncInfo cfi_unique5("unique5"_hs, cf_unique<5>);
+static CFuncInfo cfi_unique6("unique6"_hs, cf_unique<6>);
+static CFuncInfo cfi_unique7("unique7"_hs, cf_unique<7>);
+
+static CFuncInfo* g2_funcs[] = {
+  &cfi_unique0, &cfi_unique1, &cfi_unique2, &cfi_unique3,
+  &cfi_unique4, &cfi_unique5, &cfi_unique6, &cfi_unique7,
+};
+
 static void test_cfunc_stress_group2()
 {
   lua_State* L = luaL_newstate();
   const int ITERS = 500000;
-
-  /* Array of distinct function pointers */
-  static lua_CFunction funcs[] = {
-    cf_unique<0>, cf_unique<1>, cf_unique<2>, cf_unique<3>,
-    cf_unique<4>, cf_unique<5>, cf_unique<6>, cf_unique<7>,
-    cf_unique<8>, cf_unique<9>, cf_unique<10>, cf_unique<11>,
-    cf_unique<12>, cf_unique<13>, cf_unique<14>, cf_unique<15>,
-    cf_unique<16>, cf_unique<17>, cf_unique<18>, cf_unique<19>,
-    cf_unique<20>, cf_unique<21>, cf_unique<22>, cf_unique<23>,
-    cf_unique<24>, cf_unique<25>, cf_unique<26>, cf_unique<27>,
-    cf_unique<28>, cf_unique<29>, cf_unique<30>, cf_unique<31>,
-  };
-  constexpr int NFUNCS = sizeof(funcs) / sizeof(funcs[0]);
+  constexpr int NFUNCS = sizeof(g2_funcs) / sizeof(g2_funcs[0]);
 
   clock_t start = clock();
 
-  /* Push many distinct cfuncs, use briefly, discard */
   for (int i = 0; i < ITERS; i++)
   {
-    lua_pushcfunction(L, funcs[i % NFUNCS]);
+    lua_pushcfuncinfo(L, g2_funcs[i % NFUNCS]);
     lua_pushinteger(L, 42);
     lua_call(L, 1, 1);
     lua_pop(L, 1);
@@ -3981,7 +3983,7 @@ static void test_cfunc_stress_group2()
 
   clock_t end = clock();
   double ms = (double)(end - start) * 1000.0 / CLOCKS_PER_SEC;
-  std::printf("  group2 (many unique cfuncs): %.1f ms\n", ms);
+  std::printf("  group2 (many cfuncs called): %.1f ms\n", ms);
 
   CHECK(lua_gettop(L) == 0);
   lua_close(L);
@@ -3991,13 +3993,16 @@ static void test_cfunc_stress_group2()
 ** Group 3: Deep call stacks mixing cfunc and Lua calls.
 ** Measures overhead on function call/return paths.
 */
+static int cf_recurse(lua_State* L);
+static CFuncInfo cfi_recurse("recurse"_hs, cf_recurse);
+
 static int cf_recurse(lua_State* L)
 {
   int depth = (int)lua_tointeger(L, 1);
   if (depth <= 0)
     return 0;
   lua_checkstack(L, 5);
-  lua_pushcfunction(L, cf_recurse);
+  lua_pushcfuncinfo(L, &cfi_recurse);
   lua_pushinteger(L, depth - 1);
   lua_call(L, 1, 0);
   return 0;
@@ -4013,7 +4018,7 @@ static void test_cfunc_stress_group3()
 
   for (int i = 0; i < ITERS; i++)
   {
-    lua_pushcfunction(L, cf_recurse);
+    lua_pushcfuncinfo(L, &cfi_recurse);
     lua_pushinteger(L, DEPTH);
     lua_call(L, 1, 0);
   }
@@ -4030,6 +4035,11 @@ static void test_cfunc_stress_group3()
 ** Group 4: Large tables full of cfunc values, iterated and overwritten.
 ** Stresses table slot writes with cfunc values.
 */
+static CFuncInfo cfi_noop("noop"_hs, cf_noop);
+static CFuncInfo cfi_add1("add1"_hs, cf_add1);
+static CFuncInfo cfi_add2("add2"_hs, cf_add2);
+static CFuncInfo cfi_id("id"_hs, cf_id);
+
 static void test_cfunc_stress_group4()
 {
   lua_State* L = luaL_newstate();
@@ -4037,11 +4047,11 @@ static void test_cfunc_stress_group4()
   const int TABLE_SIZE = 1000;
   const int ITERS = 2000;
 
-  static lua_CFunction tab_funcs[] = {
-    cf_noop, cf_add1, cf_add2, cf_id,
-    cf_unique<0>, cf_unique<1>, cf_unique<2>, cf_unique<3>,
+  static CFuncInfo* tab_cfis[] = {
+    &cfi_noop, &cfi_add1, &cfi_add2, &cfi_id,
+    &cfi_unique0, &cfi_unique1, &cfi_unique2, &cfi_unique3,
   };
-  constexpr int NTAB = sizeof(tab_funcs) / sizeof(tab_funcs[0]);
+  constexpr int NTAB = sizeof(tab_cfis) / sizeof(tab_cfis[0]);
 
   clock_t start = clock();
 
@@ -4053,7 +4063,7 @@ static void test_cfunc_stress_group4()
     /* Fill table with cfuncs */
     for (int i = 1; i <= TABLE_SIZE; i++)
     {
-      lua_pushcfunction(L, tab_funcs[i % NTAB]);
+      lua_pushcfuncinfo(L, tab_cfis[i % NTAB]);
       lua_rawseti(L, tidx, i);
     }
     /* Overwrite with integers */
@@ -4086,12 +4096,12 @@ static void test_cfunc_stress_group5()
   const int SLOTS_PER_THREAD = 200;
   const int GC_CYCLES = 100;
 
-  static lua_CFunction gc_funcs[] = {
-    cf_noop, cf_add1, cf_add2, cf_id,
-    cf_unique<0>, cf_unique<1>, cf_unique<2>, cf_unique<3>,
-    cf_unique<4>, cf_unique<5>, cf_unique<6>, cf_unique<7>,
+  static CFuncInfo* gc_cfis[] = {
+    &cfi_noop, &cfi_add1, &cfi_add2, &cfi_id,
+    &cfi_unique0, &cfi_unique1, &cfi_unique2, &cfi_unique3,
+    &cfi_unique4, &cfi_unique5, &cfi_unique6, &cfi_unique7,
   };
-  constexpr int NGF = sizeof(gc_funcs) / sizeof(gc_funcs[0]);
+  constexpr int NGF = sizeof(gc_cfis) / sizeof(gc_cfis[0]);
 
   clock_t start = clock();
 
@@ -4104,7 +4114,7 @@ static void test_cfunc_stress_group5()
     lua_checkstack(T, SLOTS_PER_THREAD + 5);
     for (int s = 0; s < SLOTS_PER_THREAD; s++)
     {
-      lua_pushcfunction(T, gc_funcs[s % NGF]);
+      lua_pushcfuncinfo(T, gc_cfis[s % NGF]);
     }
   }
 
