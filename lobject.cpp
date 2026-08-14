@@ -7,7 +7,6 @@
 
 #include <charconv>
 #include <float.h>
-#include <locale.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +21,7 @@
 #include "lmem.h"
 #include "lobject.h"
 #include "lgc.h"
+#include "locale_util.h"
 #include "lstate.h"
 #include "util_cast.h"
 #include "lstring.h"
@@ -487,7 +487,7 @@ static size_t l_str2d(std::string_view s, size_t off, lua_Number* result)
   {
     char buff[L_MAXLENNUM + 1];
     byte_span buffsp(buff, L_MAXLENNUM + 1);
-    char point = ((char)(lua_getlocaledecpoint()));
+    char point = locale_radixpoint();
     size_t ppoint = (point != '.') ? s.find(point, off) : byte_view::npos;
     size_t len = s.size() - off;
     if (ppoint == byte_view::npos || len > L_MAXLENNUM)
@@ -620,7 +620,7 @@ static int tostringbuffFloat(lua_Number n, char* buff)
     buff[len++] = '0'; /* adds '.0' to result */
   }
   {
-    char point = ((char)(lua_getlocaledecpoint()));
+    char point = locale_radixpoint();
     if (point != '.')
     {
       char* pdot = strchr(buff, '.');

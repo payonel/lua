@@ -1,7 +1,6 @@
 #include "os_api.h"
 
 #include <cerrno>
-#include <clocale>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -53,22 +52,6 @@ int os_strcoll(std::string_view a, std::string_view b)
   std::string sa(a);
   std::string sb(b);
   return strcoll(sa.c_str(), sb.c_str());
-}
-
-std::optional<std::string_view> os_setlocale(int category, std::optional<std::string_view> locale)
-{
-  const char* res;
-  if (locale.has_value())
-  {
-    std::string l(*locale);
-    res = setlocale(category, l.c_str());
-  }
-  else
-    res = setlocale(category, nullptr);
-  if (res == nullptr)
-    return std::nullopt;
-  std::string_view svres(res);
-  return svres;
 }
 
 OsResult os_remove(std::string_view path)

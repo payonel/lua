@@ -13,7 +13,6 @@
 #include <ctype.h>
 #include <float.h>
 #include <limits.h>
-#include <locale.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -28,6 +27,7 @@
 #include "internal_string.h"
 #include "lauxlib.h"
 #include "llimits.h"
+#include "locale_util.h"
 #include "lualib.h"
 #include "util_cast.h"
 #include "literals.h"
@@ -121,7 +121,7 @@ static int str_lower(lua_State* L)
   size_t off = luaL_buffinitsize(L, &b, l);
   std::span<char> p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
-    p[off + i] = ((char)(tolower(s->byteAt(i))));
+    p[off + i] = ((char)(locale_tolower(s->byteAt(i))));
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -135,7 +135,7 @@ static int str_upper(lua_State* L)
   size_t off = luaL_buffinitsize(L, &b, l);
   std::span<char> p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
-    p[off + i] = ((char)(toupper(s->byteAt(i))));
+    p[off + i] = ((char)(locale_toupper(s->byteAt(i))));
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -479,45 +479,14 @@ static ptrdiff_t classend(MatchState* ms, ptrdiff_t p)
 static int match_class(int c, int cl)
 {
   int res;
-  switch (tolower(cl))
-  {
-  case 'a':
-    res = isalpha(c);
-    break;
-  case 'c':
-    res = iscntrl(c);
-    break;
-  case 'd':
-    res = isdigit(c);
-    break;
-  case 'g':
-    res = isgraph(c);
-    break;
-  case 'l':
-    res = islower(c);
-    break;
-  case 'p':
-    res = ispunct(c);
-    break;
-  case 's':
-    res = isspace(c);
-    break;
-  case 'u':
-    res = isupper(c);
-    break;
-  case 'w':
-    res = isalnum(c);
-    break;
-  case 'x':
-    res = isxdigit(c);
-    break;
-  case 'z':
-    res = (c == 0);
-    break; /* deprecated option */
-  default:
-    return (cl == c);
-  }
-  return (islower(cl) ? res : !res);
+  int lower = locale_tolower(cl);
+  if (lower == 'z')
+    res = (c == 0); /* deprecated option */
+  else
+    res = locale_matchclass(c, lower);
+  if (res == 0 && lower == cl)
+    return (cl == c); /* not a known class and lowercase — literal match */
+  return (locale_islower(cl) ? res : !res);
 }
 
 static int matchbracketclass(MatchState* ms, int c, ptrdiff_t p,
@@ -1197,7 +1166,7 @@ static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number 
     e -= L_NBFD;                                      /* this digit goes before the radix point */
     if (m > 0)
     {                                      /* more digits? */
-      area[off + n++] = ((char)(lua_getlocaledecpoint())); /* add radix point */
+      area[off + n++] = locale_radixpoint(); /* add radix point */
       do
       { /* add as many digits as needed */
         m = adddigit(area, off + n++, m * 16);
@@ -1222,7 +1191,7 @@ static int lua_number2strx(lua_State* L, std::span<char> area, size_t off,
   {
     int i;
     for (i = 0; i < n; i++)
-      area[off + i] = ((char)(toupper(((unsigned char)(area[off + i])))));
+      area[off + i] = ((char)(locale_toupper(((unsigned char)(area[off + i])))));
   }
   else if (l_unlikely(fmt[1] != 'a'))
     return luaL_errori(L, lt::modifiers_for_format_a_A_not_implemented);
@@ -1275,7 +1244,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
       luaL_addchar(b, '\\');
       luaL_addchar(b, ((char)(c)));
     }
-    else if (iscntrl(c))
+    else if (locale_matchclass(c, 'c'))
     {
       char dbuf[4];
       std::to_chars_result dres = std::to_chars(dbuf, dbuf + sizeof(dbuf), c);
@@ -1315,7 +1284,7 @@ static int quotefloat(lua_State* L, std::span<char> area, size_t off, lua_Number
     int nb = lua_number2strx(L, area, off, MAX_ITEM, lt::fmt_a, n);
     if (memchr(area.data() + off, '.', ((unsigned int)(nb))) == nullptr)
     {                                                 /* no dot? */
-      char point = ((char)(lua_getlocaledecpoint())); /* try locale point */
+      char point = locale_radixpoint(); /* try locale point */
       char* ppoint = (char*) memchr(area.data() + off, point, ((unsigned int)(nb)));
       if (ppoint)
         *ppoint = '.'; /* change it to a dot */
@@ -1546,7 +1515,7 @@ static int formatint(lua_State* L, int arg, std::string_view form,
   if (spec.conv == 'X')
   {
     for (size_t i = 0; i < ndigits; i++)
-      digits[i] = ((char)(toupper(((unsigned char)(digits[i])))));
+      digits[i] = ((char)(locale_toupper(((unsigned char)(digits[i])))));
   }
   char body[MAX_ITEM];
   size_t blen = 0;
@@ -1594,7 +1563,7 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
   checkformat(L, form, lt::fmtflags_f, 1);
   FormatSpec spec;
   scanformat(form, &spec);
-  char lower = ((char)(tolower(((unsigned char)(spec.conv)))));
+  char lower = ((char)(locale_tolower(((unsigned char)(spec.conv)))));
   int precision = (spec.precision >= 0) ? spec.precision : 6;
   char prefix[1];
   size_t prefixlen = 0;
@@ -1667,7 +1636,7 @@ static int formatfloat(lua_State* L, int arg, std::string_view form,
   if (spec.conv == 'E' || spec.conv == 'G')
   {
     for (size_t i = 0; i < blen; i++)
-      body[i] = ((char)(toupper(((unsigned char)(body[i])))));
+      body[i] = ((char)(locale_toupper(((unsigned char)(body[i])))));
   }
   return packformat(area, off, maxitem, &spec,
                     byte_view(std::string_view(prefix, sizeof(prefix)), prefixlen),

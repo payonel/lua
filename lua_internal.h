@@ -132,5 +132,3 @@ const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n
 const InternalString* lua_getupvaluei(lua_State* L, int funcindex, int n);
 const InternalString* lua_setupvaluei(lua_State* L, int funcindex, int n);
 
-char lua_getlocaledecpoint();
-

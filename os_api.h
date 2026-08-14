@@ -16,8 +16,6 @@ std::string_view os_strerror(int err);
 
 int os_strcoll(std::string_view a, std::string_view b);
 
-std::optional<std::string_view> os_setlocale(int category, std::optional<std::string_view> locale);
-
 struct OsResult
 {
   bool ok;

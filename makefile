@@ -16,7 +16,7 @@ OBJ_DIR       = $(OBJ_DIR_BASE)/$(VARIANT)
 OBJ_NAMES     = lapi.o lauxlib.o lbaselib.o lcode.o lcorolib.o lctype.o ldblib.o ldebug.o ldo.o ldump.o lfunc.o lgc.o
 OBJ_NAMES    += linit.o liolib.o llex.o lmathlib.o lmem.o loadlib.o lobject.o lopcodes.o loslib.o lparser.o lstate.o
 OBJ_NAMES    += lstring.o lstrlib.o ltable.o ltablib.o ltests.o ltm.o lundump.o lutf8lib.o lvm.o lzio.o
-OBJ_NAMES    += util_cast.o os_api.o
+OBJ_NAMES    += util_cast.o os_api.o locale_util.o
 OBJ_FILES     = $(addprefix $(OBJ_DIR)/, $(OBJ_NAMES))
 
 DEP_FILES     = $(OBJ_FILES:.o=.d)

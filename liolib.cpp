@@ -8,7 +8,6 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +20,7 @@
 
 #include "lauxlib.h"
 #include "llimits.h"
+#include "locale_util.h"
 #include "lualib.h"
 #include "literals.h"
 
@@ -403,7 +403,7 @@ static int read_number(lua_State* L, OsFile* f)
   char decp[2];
   rn.f = f;
   rn.n = 0;
-  decp[0] = ((char)(lua_getlocaledecpoint())); /* get decimal point from locale */
+  decp[0] = locale_radixpoint(); /* get decimal point from locale */
   decp[1] = '.';                               /* always accept a dot */
   os_flockfile(rn.f);
   do
@@ -796,7 +796,3 @@ LUAMOD_API int luaopen_io(lua_State* L)
   return 1;
 }
 
-char lua_getlocaledecpoint(void)
-{
-  return localeconv()->decimal_point[0];
-}

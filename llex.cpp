@@ -5,7 +5,6 @@
 */
 
 
-#include <locale.h>
 #include <string.h>
 
 #include "lua.h"
