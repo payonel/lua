@@ -42,7 +42,7 @@ LUA_API Memcontrol l_memcontrol;
 
 #define luai_tracegc(L, f)  luai_tracegctest(L, f)
 
-#define luaL_newstate() luai_newstate()
+#define _lua_newstate(f,ud,seed) ((void)f, luai_newstate())
 #define luai_openlibs(L) luai_openlibstest(L)
 
 #else
@@ -71,6 +71,8 @@ LUA_API Memcontrol l_memcontrol;
 
 #define luai_openlibs(L) luaL_openselectedlibs(L, ~0, 0)
 #define luai_tracegc(L, f) ((void) 0)
+
+#define _lua_newstate(f,ud,seed) lua_newstate(f,ud,seed)
 
 #endif
 

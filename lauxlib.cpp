@@ -1395,7 +1395,7 @@ LUALIB_API unsigned int luaL_makeseed(lua_State*)
 */
 LUALIB_API lua_State*(luaL_newstate) (void)
 {
-  lua_State* L = lua_newstate(luaL_alloc, nullptr, luaL_makeseed(nullptr));
+  lua_State* L = _lua_newstate(luaL_alloc, nullptr, luaL_makeseed(nullptr));
   if (l_likely(L))
   {
     lua_atpanic(L, &panic);
