@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "lua.h"
 
@@ -21,9 +22,20 @@
 /*
 ** Macro to call the allocation function.
 */
-static inline void* callfrealloc(global_State* g, void* block, size_t os, size_t ns)
+void* luaM_rawrealloc(global_State* g, void* block, size_t os, size_t ns, int tag)
 {
-  return (*g->frealloc)(g->ud, block, os, ns);
+  if (ns == 0)
+  {
+    if (block != nullptr)
+    {
+      (*g->frealloc)(g->ud, os, 0, tag);
+      free(block);
+    }
+    return nullptr;
+  }
+  if (l_unlikely(!(*g->frealloc)(g->ud, os, ns, tag)))
+    return nullptr;
+  return realloc(block, ns);
 }
 
 /*
@@ -39,9 +51,9 @@ static inline int cantryagain(global_State* g)
   return completestate(g) && !g->gcstopem;
 }
 
-static inline void* firsttry(global_State* g, void* block, size_t os, size_t ns)
+static inline void* firsttry(global_State* g, void* block, size_t os, size_t ns, int tag)
 {
-  return callfrealloc(g, block, os, ns);
+  return luaM_rawrealloc(g, block, os, ns, tag);
 }
 
 /*
@@ -111,11 +123,11 @@ l_noret luaM_toobig(lua_State* L)
 /*
 ** Free memory
 */
-void luaM_free_(lua_State* L, void* block, size_t osize)
+void luaM_free_(lua_State* L, void* block, size_t osize, int tag)
 {
   global_State* g = L->l_G;
   assert((osize == 0) == (block == nullptr));
-  callfrealloc(g, block, osize, 0);
+  luaM_rawrealloc(g, block, osize, 0, tag);
   g->GCdebt += ((l_mem)(osize));
 }
 
@@ -124,13 +136,13 @@ void luaM_free_(lua_State* L, void* block, size_t osize)
 ** collection to free some memory and then try the allocation again.
 */
 static void* tryagain(lua_State* L, void* block,
-                      size_t osize, size_t nsize)
+                      size_t osize, size_t nsize, int tag)
 {
   global_State* g = L->l_G;
   if (cantryagain(g))
   {
-    luaC_fullgc(L, 1);                           /* try to free some memory... */
-    return callfrealloc(g, block, osize, nsize); /* try again */
+    luaC_fullgc(L, 1);                                     /* try to free some memory... */
+    return luaM_rawrealloc(g, block, osize, nsize, tag); /* try again */
   }
   else
     return nullptr; /* cannot run an emergency collection */
@@ -144,10 +156,10 @@ void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
   void* newblock;
   global_State* g = L->l_G;
   assert((osize == 0) == (block == nullptr));
-  newblock = firsttry(g, block, osize, nsize);
+  newblock = firsttry(g, block, osize, nsize, 0);
   if (l_unlikely(newblock == nullptr && nsize > 0))
   {
-    newblock = tryagain(L, block, osize, nsize);
+    newblock = tryagain(L, block, osize, nsize, 0);
     if (newblock == nullptr) /* still no memory? */
       return nullptr;        /* do not update 'GCdebt' */
   }
@@ -172,10 +184,10 @@ void* luaM_malloc_(lua_State* L, size_t size, int tag)
   else
   {
     global_State* g = L->l_G;
-    void* newblock = firsttry(g, nullptr, ((size_t)(tag)), size);
+    void* newblock = firsttry(g, nullptr, 0, size, tag);
     if (l_unlikely(newblock == nullptr))
     {
-      newblock = tryagain(L, nullptr, ((size_t)(tag)), size);
+      newblock = tryagain(L, nullptr, 0, size, tag);
       if (newblock == nullptr)
         luaD_throw(L, LUA_ERRMEM);
     }

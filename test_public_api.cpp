@@ -37,17 +37,11 @@ struct AllocStats
   unsigned long calls = 0;
 };
 
-static void* counting_alloc(void* ud, void* ptr, size_t osize, size_t nsize)
+static int counting_alloc(void* ud, size_t, size_t, int)
 {
-  (void)osize;
   if (ud != nullptr)
     static_cast<AllocStats*>(ud)->calls++;
-  if (nsize == 0)
-  {
-    std::free(ptr);
-    return nullptr;
-  }
-  return std::realloc(ptr, nsize);
+  return 1;
 }
 
 static AllocStats g_alloc_stats;
@@ -2089,31 +2083,23 @@ static int cf_panic_record(lua_State* L)
   throw PanicJump{};
 }
 
-static void* null_alloc(void*, void* ptr, size_t, size_t nsize)
+static int null_alloc(void*, size_t, size_t, int)
 {
-  if (nsize == 0)
-  {
-    std::free(ptr);
-    return nullptr;
-  }
-  return nullptr;
+  return 0;
 }
 
 struct DenyAlloc
 {
   bool deny = false;
 };
-static void* deny_alloc(void* ud, void* ptr, size_t osize, size_t nsize)
+static int deny_alloc(void* ud, size_t osize, size_t nsize, int)
 {
   DenyAlloc* d = static_cast<DenyAlloc*>(ud);
   if (nsize == 0)
-  {
-    std::free(ptr);
-    return nullptr;
-  }
-  if (d->deny && (ptr == nullptr || nsize > osize))
-    return nullptr;
-  return std::realloc(ptr, nsize);
+    return 1;
+  if (d->deny && nsize > osize)
+    return 0;
+  return 1;
 }
 
 static int cf_neg_arith(lua_State* L)
@@ -4020,22 +4006,18 @@ struct OomAllocState
   bool active;
 };
 
-static void* oom_alloc(void* ud, void* ptr, size_t osize, size_t nsize)
+static int oom_alloc(void* ud, size_t, size_t nsize, int)
 {
   OomAllocState* st = static_cast<OomAllocState*>(ud);
-  (void)osize;
   if (nsize == 0)
-  {
-    std::free(ptr);
-    return nullptr;
-  }
+    return 1;
   if (st->active && st->allocs_remaining >= 0)
   {
     if (st->allocs_remaining == 0)
-      return nullptr; /* simulate OOM */
+      return 0; /* simulate OOM */
     st->allocs_remaining--;
   }
-  return std::realloc(ptr, nsize);
+  return 1;
 }
 
 static int cf_setup_mt_always(lua_State* L)

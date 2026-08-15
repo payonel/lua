@@ -103,7 +103,7 @@ typedef int (*lua_Writer)(lua_State* L, std::optional<byte_view> b, void* ud);
 /*
 ** Type for memory-allocation functions
 */
-typedef void* (*lua_Alloc)(void* ud, void* ptr, size_t osize, size_t nsize);
+typedef int (*lua_Alloc)(void* ud, size_t osize, size_t nsize, int tag);
 
 typedef void (*lua_WarnFunction)(void* ud, const HostString& msg, int tocont);
 

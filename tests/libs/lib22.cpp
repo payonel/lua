@@ -1,6 +1,7 @@
 /* implementation for lib2-v2 */
 
 #include <string.h>
+#include <stdlib.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -19,16 +20,14 @@ static int newstr (lua_State *L) {
   byte_view sv = luaL_checklstring(L, 1);
   const char *str = sv.data();
   len = sv.size();
-  void *ud;
-  lua_Allocator a = lua_getallocf(L); lua_Alloc allocf = a.f; ud = a.ud;
-  char *buf = (char*)allocf(ud, NULL, 0, len + 1);
+  char *buf = (char*)malloc(len + 1);
   if (buf == NULL) {
     lua_pushliteral(L, "not enough memory");
     lua_error(L);
   }
   memcpy(buf, str, len + 1);
   lua_pushlstring(L, byte_view{buf, len}, 0, len);
-  allocf(ud, buf, len + 1, 0);
+  free(buf);
   return 1;
 }
 

@@ -26,6 +26,7 @@
 #include "llimits.h"
 #include "util_cast.h"
 #include "lstate.h"
+#include "lmem.h"
 #include "literals.h"
 
 /*
@@ -593,7 +594,7 @@ static void bb_growTo(luaL_Buffer* B, size_t cap)
     return;
   assert(B->L != nullptr);
   global_State* g = B->L->l_G;
-  void* nb = g->frealloc(g->ud, B->bytes.data(), B->bytes.size(), cap);
+  void* nb = luaM_rawrealloc(g, B->bytes.data(), B->bytes.size(), cap, 0);
   if (l_unlikely(nb == nullptr && cap > 0))
   {
     lua_pushistringref(B->L, lt::not_enough_memory);
@@ -618,7 +619,7 @@ static void bb_dealloc(luaL_Buffer* B) noexcept
   if (B->bytes.data() != nullptr)
   {
     global_State* g = B->L->l_G;
-    g->frealloc(g->ud, B->bytes.data(), B->bytes.size(), 0);
+    luaM_rawrealloc(g, B->bytes.data(), B->bytes.size(), 0, 0);
     B->bytes = {};
   }
 }
@@ -1258,15 +1259,9 @@ LUALIB_API HostString luaL_gsub(lua_State* L, const HostString& s, const HostStr
   return HostString(luaL_gsubi(L, s.to_utf8(), p.to_utf8(), r.to_utf8()));
 }
 
-static void* luaL_alloc(void*, void* ptr, size_t, size_t nsize)
+static int luaL_alloc(void*, size_t, size_t, int)
 {
-  if (nsize == 0)
-  {
-    free(ptr);
-    return nullptr;
-  }
-  else
-    return realloc(ptr, nsize);
+  return 1;
 }
 
 /*

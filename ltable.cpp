@@ -870,7 +870,7 @@ void luaH_free(lua_State* L, Table* t)
 {
   freehash(L, t);
   resizearray(L, t, t->asize, 0);
-  luaM_free_(L, (t), sizeof(*(t)));
+  luaM_free_(L, (t), sizeof(*(t)), t->tt & NOVARIANT_MASK);
 }
 
 static int getfreepos(Table* t)

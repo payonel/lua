@@ -7,6 +7,7 @@
 
 #include <new>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "lua.h"
@@ -267,7 +268,8 @@ static void close_state(lua_State* L)
   L->l_G->strt.~StringTable();
   freestack(L);
   assert(gettotalbytes(g) == sizeof(global_State));
-  (*g->frealloc)(g->ud, g, sizeof(global_State), 0); /* free main block */
+  (*g->frealloc)(g->ud, sizeof(global_State), 0, LUA_TTHREAD); /* free main block */
+  free(g);
 }
 
 LUA_API lua_State* lua_newthread(lua_State* L)
@@ -304,7 +306,7 @@ void luaE_freethread(lua_State* L, lua_State* L1)
   assert(L1->openupval == nullptr);
   luai_userstatefree(L, L1);
   freestack(L1);
-  luaM_free_(L, (l), sizeof(*(l)));
+  luaM_free_(L, (l), sizeof(*(l)), LUA_TTHREAD);
 }
 
 TStatus luaE_resetthread(lua_State* L, TStatus status)
@@ -337,7 +339,9 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
 {
   int i;
   lua_State* L;
-  global_State* g = ((global_State*)((*f)(ud, nullptr, LUA_TTHREAD, sizeof(global_State))));
+  if (!(*f)(ud, 0, sizeof(global_State), LUA_TTHREAD))
+    return nullptr;
+  global_State* g = ((global_State*)(malloc(sizeof(global_State))));
   if (g == nullptr)
     return nullptr;
   L = &g->mainth.l;

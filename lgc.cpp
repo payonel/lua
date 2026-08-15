@@ -933,14 +933,14 @@ static void freeobj(lua_State* L, GCObject* o)
   {
     LClosure* cl = static_cast<LClosure*>(o);
     luaM_free_(L, (cl->upvals), ((size_t)cl->nupvalues) * sizeof(UpVal*));
-    luaM_free_(L, (cl), sizeof(LClosure));
+    luaM_free_(L, (cl), sizeof(LClosure), o->tt & NOVARIANT_MASK);
     break;
   }
   case LUA_VCCL:
   {
     CClosure* cl = static_cast<CClosure*>(o);
     luaM_free_(L, (cl->upvalue), ((size_t)cl->nupvalues) * sizeof(TValue));
-    luaM_free_(L, (cl), sizeof(CClosure));
+    luaM_free_(L, (cl), sizeof(CClosure), o->tt & NOVARIANT_MASK);
     break;
   }
   case LUA_VTABLE:
@@ -958,7 +958,7 @@ static void freeobj(lua_State* L, GCObject* o)
       luaM_free_(L, (u->data.data()), udatadatasize(u->data.size()));
       u->data = {};
     }
-    luaM_free_(L, (o), sizeof(Udata));
+    luaM_free_(L, (o), sizeof(Udata), o->tt & NOVARIANT_MASK);
     break;
   }
   case LUA_VSHRSTR:
@@ -969,14 +969,14 @@ static void freeobj(lua_State* L, GCObject* o)
     if (!strisexternal(ts))
       luaM_release(L, ts->data.size());
     ts->data.~InternalString();
-    luaM_free_(L, (ts), (sizeof(TString)));
+    luaM_free_(L, (ts), (sizeof(TString)), o->tt & NOVARIANT_MASK);
     break;
   }
   case LUA_VLCF:
   {
     CFuncInfo* cfi = static_cast<CFuncInfo*>(o);
     cfi->name.~optional();
-    luaM_free_(L, (o), sizeof(CFuncInfo));
+    luaM_free_(L, (o), sizeof(CFuncInfo), o->tt & NOVARIANT_MASK);
     break;
   }
   default:

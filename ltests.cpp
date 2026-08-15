@@ -181,131 +181,48 @@ static void warnf(void* ud, const HostString& msg, int tocont)
 ** =======================================================================
 */
 
-constexpr int MARK = 0x55; /* 01010101 (a nice pattern) */
-
-struct memHeader;
-struct memHeader
-{
-  alignas(std::max_align_t) struct
-  {
-    size_t size;
-    int type;
-    memHeader* next;
-    memHeader* prev;
-  } d;
-};
-
-static memHeader dbg_list_head = {};
-
-static void dbg_link(memHeader* block)
-{
-  block->d.next = dbg_list_head.d.next;
-  block->d.prev = &dbg_list_head;
-  if (dbg_list_head.d.next) dbg_list_head.d.next->d.prev = block;
-  dbg_list_head.d.next = block;
-}
-
-static void dbg_unlink(memHeader* block)
-{
-  if (block->d.prev) block->d.prev->d.next = block->d.next;
-  if (block->d.next) block->d.next->d.prev = block->d.prev;
-}
-
-/* full memory check */
-constexpr int MARKSIZE = 16; /* size of marks after each block */
-
 Memcontrol l_memcontrol =
     {0, 0UL, 0UL, 0UL, 0UL, (~0UL), {0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL}};
 
-static void freeblock(Memcontrol* mc, memHeader* block)
-{
-  if (block)
-  {
-    size_t size = block->d.size;
-    int i;
-    for (i = 0; i < MARKSIZE; i++) /* check marks after block */
-      assert(*(((char*)(block + 1)) + size + i) == MARK);
-    mc->objcount[block->d.type]--;
-    dbg_unlink(block);
-    memset(block, -MARK, sizeof(memHeader) + size + MARKSIZE); /* erase block */
-    free(block);                                         /* actually free block */
-    mc->numblocks--;                                     /* update counts */
-    mc->total -= size;
-  }
-}
-
-static void* debug_realloc(void* ud, void* b, size_t oldsize, size_t size)
+static int debug_realloc(void* ud, size_t oldsize, size_t nsize, int tag)
 {
   Memcontrol* mc = ((Memcontrol*)(ud));
-  memHeader* block = ((memHeader*)(b));
-  int type;
+  int type = (((size_t)(tag)) < LUA_NUMTYPES) ? tag : 0;
   if (mc->memlimit == 0)
   {                                   /* first time? */
     char* limit = getenv("MEMLIMIT"); /* initialize memory limit */
     mc->memlimit = limit ? strtoul(limit, nullptr, 10) : ULONG_MAX;
   }
-  if (block == nullptr)
+  if (nsize == 0)
   {
-    type = (oldsize < LUA_NUMTYPES) ? ((int)(oldsize)) : 0;
-    oldsize = 0;
-  }
-  else
-  {
-    block--; /* go to real header */
-    type = block->d.type;
-    assert(oldsize == block->d.size);
-  }
-  if (size == 0)
-  {
-    freeblock(mc, block);
-    return nullptr;
+    mc->objcount[type]--;
+    mc->numblocks--;
+    mc->total -= oldsize;
+    return 1;
   }
   if (mc->failnext)
   {
     mc->failnext = 0;
-    return nullptr; /* fake a single memory allocation error */
+    return 0; /* fake a single memory allocation error */
   }
-  if (mc->countlimit != ~0UL && size != oldsize)
+  if (mc->countlimit != ~0UL && nsize != oldsize)
   { /* count limit in use? */
     if (mc->countlimit == 0)
-      return nullptr; /* fake a memory allocation error */
+      return 0; /* fake a memory allocation error */
     mc->countlimit--;
   }
-  if (size > oldsize && mc->total + size - oldsize > mc->memlimit)
-    return nullptr; /* fake a memory allocation error */
-  else
+  if (nsize > oldsize && mc->total + nsize - oldsize > mc->memlimit)
+    return 0; /* fake a memory allocation error */
+  if (oldsize == 0)
   {
-    memHeader* newblock;
-    int i;
-    size_t commonsize = (oldsize < size) ? oldsize : size;
-    size_t realsize = sizeof(memHeader) + size + MARKSIZE;
-    if (realsize < size)
-      return nullptr;                                 /* arithmetic overflow! */
-    newblock = ((memHeader*)(malloc(realsize))); /* alloc a new block */
-    if (newblock == nullptr)
-      return nullptr; /* really out of memory? */
-    if (block)
-    {
-      memcpy(newblock + 1, block + 1, commonsize); /* copy old contents */
-      freeblock(mc, block);                        /* erase (and check) old copy */
-    }
-    /* initialize new part of the block with something weird */
-    memset(((char*)(newblock + 1)) + commonsize, -MARK, size - commonsize);
-    /* initialize marks after block */
-    for (i = 0; i < MARKSIZE; i++)
-      *(((char*)(newblock + 1)) + size + i) = MARK;
-    newblock->d.size = size;
-    newblock->d.type = type;
-    newblock->d.next = nullptr;
-    newblock->d.prev = nullptr;
-    dbg_link(newblock);
-    mc->total += size;
-    if (mc->total > mc->maxmem)
-      mc->maxmem = mc->total;
     mc->numblocks++;
     mc->objcount[type]++;
-    return newblock + 1;
   }
+  mc->total -= oldsize;
+  mc->total += nsize;
+  if (mc->total > mc->maxmem)
+    mc->maxmem = mc->total;
+  return 1;
 }
 
 /* }====================================================================== */
@@ -2573,9 +2490,6 @@ static void checkfinalmem(void)
   if (l_memcontrol.numblocks != 0) {
     fprintf(stderr, "[checkfinalmem] numblocks=%lu total=%lu\n",
             l_memcontrol.numblocks, l_memcontrol.total);
-    for (memHeader* h = dbg_list_head.d.next; h != nullptr; h = h->d.next)
-      fprintf(stderr, "  LEAKED: ptr=%p size=%zu type=%d\n",
-              (void*)(h + 1), h->d.size, h->d.type);
   }
   assert(l_memcontrol.numblocks == 0);
   assert(l_memcontrol.total == 0);
