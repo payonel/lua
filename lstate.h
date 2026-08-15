@@ -497,8 +497,6 @@ struct global_State
   size_t memlimit;
   l_mem GCmarked;     /* number of objects marked in a GC cycle */
   l_mem GCmajorminor; /* auxiliary counter to control major-minor shifts */
-  /* string intern table: open chaining through TString::hnext.
-     (Java: TString[] buckets + next references) */
   struct StringTable
   {
     std::vector<TString*> buckets;

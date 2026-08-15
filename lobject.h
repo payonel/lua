@@ -186,9 +186,9 @@ constexpr lu_byte LUA_VLNGSTR = LUA_VSTRING;
 struct TString : GCObject
 {
   lu_byte extra;
-  lu_byte hashed;  /* true if 'hash' is valid (long strings hash lazily) */
+  lu_byte hashed;
   unsigned int hash;
-  TString* hnext;  /* intern-table chain (short strings only) */
+  TString* hnext;
   InternalString data;
 };
 

@@ -30,10 +30,6 @@ LUAI_FUNC TString* luaS_createstr(lua_State* L, byte_view str, size_t off, size_
 LUAI_FUNC TString* luaS_take(lua_State* L, InternalString&& str);
 LUAI_FUNC TString* luaS_takeexternal(lua_State* L, InternalString&& str);
 
-/*
-** String hash, computed lazily for long strings (short strings hash at
-** creation for interning).
-*/
 static l_forceinline unsigned int luaS_gethash(TString* ts)
 {
   if (l_unlikely(!ts->hashed))

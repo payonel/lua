@@ -151,7 +151,6 @@ LUALIB_API size_t(luaL_buffinitsize) (lua_State* L, luaL_Buffer* B, size_t sz);
 LUALIB_API size_t luaL_prepbuffer(luaL_Buffer* B);
 LUALIB_API void(luaL_addgsub)(luaL_Buffer* b, const HostString& s, const HostString& p, const HostString& r);
 
-/* append one char; grows the buffer only when full */
 inline void luaL_addchar(luaL_Buffer* B, char c)
 {
   if (B->used >= B->bytes.size()) [[unlikely]]

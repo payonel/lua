@@ -30,10 +30,6 @@ static size_t luaS_hash(const char* str, size_t l)
   return InternalString::hashBytes(str, l);
 }
 
-/*
-** Computes and caches the hash of a string whose creation deferred it
-** (long strings). Slow path of luaS_gethash (lstring.h).
-*/
 void luaS_forcehash(TString* ts)
 {
   byte_view bytes = ts->data.view();
@@ -41,7 +37,6 @@ void luaS_forcehash(TString* ts)
   ts->hashed = 1;
 }
 
-/* hashed != 0: hash was computed at creation (short/interned strings) */
 static TString* createstrobj(lua_State* L, InternalString&& str, size_t h,
                              int hashed, int external)
 {
@@ -58,13 +53,6 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h,
   ts->data = std::move(str);
   return ts;
 }
-
-/*
-** {==================================================================
-** String intern table: power-of-2 bucket array, open chaining through
-** TString::hnext. (Java: TString[] buckets + next references.)
-** ===================================================================
-*/
 
 #if !defined(MINSTRTABSIZE)
 #define MINSTRTABSIZE 128
@@ -96,12 +84,12 @@ static TString* internfind(global_State* g, byte_view sv, size_t h)
 
 static void internresize(global_State* g, size_t newsize)
 {
-  assert((newsize & (newsize - 1)) == 0); /* power of 2 */
+  assert((newsize & (newsize - 1)) == 0);
   std::vector<TString*> nb(newsize, nullptr);
   for (TString* ts : g->strt.buckets)
   {
     while (ts != nullptr)
-    { /* relink each chain entry into its new bucket */
+    {
       TString* next = ts->hnext;
       size_t i = ts->hash & (newsize - 1);
       ts->hnext = nb[i];
@@ -115,12 +103,10 @@ static void internresize(global_State* g, size_t newsize)
 static void interninsert(global_State* g, TString* ts)
 {
   auto& st = g->strt;
-  if (st.count >= st.buckets.size()) /* load factor 1: grow */
+  if (st.count >= st.buckets.size())
     internresize(g, st.buckets.empty() ? MINSTRTABSIZE : st.buckets.size() * 2);
   size_t i = ts->hash & (st.buckets.size() - 1);
 #if defined(LUA_DEBUG)
-  /* the one-TString-per-content invariant: no content-equal entry may
-     already be chained (live or dead — internfind returns both) */
   for (TString* c = st.buckets[i]; c != nullptr; c = c->hnext)
     assert(!(c->hash == ts->hash && c->data == ts->data));
 #endif
@@ -128,8 +114,6 @@ static void interninsert(global_State* g, TString* ts)
   st.buckets[i] = ts;
   st.count++;
 }
-
-/* }================================================================== */
 
 void luaS_init(lua_State* L)
 {
@@ -162,7 +146,7 @@ TString* luaS_createstr(lua_State* L, byte_view str, size_t off, size_t len)
     interninsert(g, ts);
     return ts;
   }
-  return createstrobj(L, InternalString(sv, 0, l), 0, 0, 0); /* hash lazily */
+  return createstrobj(L, InternalString(sv, 0, l), 0, 0, 0);
 }
 
 TString* luaS_take(lua_State* L, InternalString&& str)
@@ -183,14 +167,14 @@ TString* luaS_take(lua_State* L, InternalString&& str)
     interninsert(g, ts);
     return ts;
   }
-  return createstrobj(L, std::move(str), 0, 0, 0); /* hash lazily */
+  return createstrobj(L, std::move(str), 0, 0, 0);
 }
 
 TString* luaS_takeexternal(lua_State* L, InternalString&& str)
 {
   if (str.size() <= LUAI_MAXSHORTLEN)
     return luaS_take(L, std::move(str));
-  return createstrobj(L, std::move(str), 0, 0, 1); /* hash lazily */
+  return createstrobj(L, std::move(str), 0, 0, 1);
 }
 
 void luaS_remove(lua_State* L, TString* ts)

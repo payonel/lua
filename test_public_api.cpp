@@ -3655,20 +3655,6 @@ static void test_selected_libs()
   lua_close(L);
 }
 
-/*
-** ================================================================
-** String intern table robustness.
-**
-** The interner must guarantee: at most ONE live TString per short
-** string content (eqshrstr is pointer equality and lapi relies on it).
-** lua_topointer exposes the TString pointer, so identity is directly
-** observable through the public API. Under the debug allocator, freed
-** blocks are poisoned, so any use-after-free in a bucket chain walk
-** (a failed unlink in luaS_remove) crashes deterministically.
-** ================================================================
-*/
-
-/* max length of an interned (short) string; must match lstring.cpp */
 constexpr int TPA_MAXSHORTLEN = 40;
 
 static const void* push_and_ptr(lua_State* L, const std::string& s)
@@ -3677,31 +3663,26 @@ static const void* push_and_ptr(lua_State* L, const std::string& s)
   return lua_topointer(L, -1);
 }
 
-/* identity: equal short content from ANY construction path = same TString */
 static void test_intern_identity()
 {
   lua_State* L = new_state();
   luaL_openlibs(L);
 
-  /* same content via pushlstring twice */
   const void* p1 = push_and_ptr(L, "intern-me");
   const void* p2 = push_and_ptr(L, "intern-me");
   CHECK(p1 != nullptr && p1 == p2);
   lua_pop(L, 2);
 
-  /* via concat */
   lua_pushliteral(L, "intern");
   lua_pushliteral(L, "-me");
   lua_concat(L, 2);
   CHECK(lua_topointer(L, -1) == p1);
   lua_pop(L, 1);
 
-  /* via string.format */
   CHECK(do_string(L, "return string.format('%s-%s', 'intern', 'me')") == LUA_OK);
   CHECK(lua_topointer(L, -1) == p1);
   lua_pop(L, 1);
 
-  /* via luaL_Buffer char-by-char (exercises luaS_take path) */
   {
     luaL_Buffer B;
     luaL_buffinit(L, &B);
@@ -3712,12 +3693,10 @@ static void test_intern_identity()
     lua_pop(L, 1);
   }
 
-  /* via load-time constant */
   CHECK(do_string(L, "return 'intern-me'") == LUA_OK);
   CHECK(lua_topointer(L, -1) == p1);
   lua_pop(L, 1);
 
-  /* embedded NULs are part of identity */
   const void* pn1 = push_and_ptr(L, std::string("a\0b", 3));
   const void* pn2 = push_and_ptr(L, std::string("a\0b", 3));
   const void* pn3 = push_and_ptr(L, std::string("a\0c", 3));
@@ -3725,31 +3704,25 @@ static void test_intern_identity()
   CHECK(pn1 != pn3);
   lua_pop(L, 3);
 
-  /* boundary: len 40 interned, len 41 not (two objects, still equal) */
   std::string s40(40, 'x'), s41(41, 'x');
   const void* q1 = push_and_ptr(L, s40);
   const void* q2 = push_and_ptr(L, s40);
   CHECK(q1 == q2);
   const void* r1 = push_and_ptr(L, s41);
   const void* r2 = push_and_ptr(L, s41);
-  CHECK(r1 != r2);                    /* long strings are not interned */
-  CHECK(lua_rawequal(L, -1, -2) == 1); /* but still compare equal */
+  CHECK(r1 != r2);
+  CHECK(lua_rawequal(L, -1, -2) == 1);
   lua_pop(L, 4);
 
   lua_close(L);
 }
 
-/*
-** Resize stress: force the table through many doublings while
-** verifying (a) old entries survive every relink, (b) no duplicate
-** TString is ever created for content seen before.
-*/
 static void test_intern_resize_stress()
 {
   lua_State* L = new_state();
 
   constexpr int N = 20000;
-  lua_createtable(L, 0, N); /* ptrs[i] = topointer of string i */
+  lua_createtable(L, 0, N);
   int tab = lua_gettop(L);
 
   char buf[32];
@@ -3757,10 +3730,9 @@ static void test_intern_resize_stress()
   {
     int len = std::snprintf(buf, sizeof buf, "k%d", i);
     lua_pushlstring(L, byte_view(buf, ((size_t)(len))), 0, ((size_t)(len)));
-    lua_rawseti(L, tab, i + 1); /* anchor so nothing is collected */
+    lua_rawseti(L, tab, i + 1);
   }
-  /* every re-creation must return the anchored TString, across all the
-     resizes triggered while inserting the rest */
+
   for (int i = 0; i < N; i++)
   {
     int len = std::snprintf(buf, sizeof buf, "k%d", i);
@@ -3775,17 +3747,9 @@ static void test_intern_resize_stress()
   lua_close(L);
 }
 
-/*
-** Hash collisions: brute-force pairs of DISTINCT short strings with the
-** SAME full hash (they share a bucket at every table size), then attack
-** the chain: insert both, remove in each order via GC, re-create, and
-** verify identity throughout. This walks the exact compare in
-** internfind (hash equal AND content equal) and the unlink in
-** luaS_remove with a content-equal-hash neighbor present.
-*/
 static void test_intern_collisions()
 {
-  /* find colliding pairs using the same hash the interner uses */
+
   struct Pair { std::string a, b; };
   std::vector<Pair> pairs;
   {
@@ -3807,7 +3771,7 @@ static void test_intern_collisions()
       }
     }
   }
-  CHECK(pairs.size() == 4); /* 32-bit hash: birthday hit well before 2M */
+  CHECK(pairs.size() == 4);
 
   for (const Pair& pr : pairs)
   {
@@ -3816,29 +3780,25 @@ static void test_intern_collisions()
 
     lua_State* L = new_state();
 
-    /* both live: distinct TStrings, correct contents */
     const void* pa = push_and_ptr(L, pr.a);
     const void* pb = push_and_ptr(L, pr.b);
     CHECK(pa != pb);
     CHECK(lua_rawequal(L, -1, -2) == 0);
-    CHECK(push_and_ptr(L, pr.a) == pa); /* find a with b in same chain */
-    CHECK(push_and_ptr(L, pr.b) == pb); /* find b with a in same chain */
+    CHECK(push_and_ptr(L, pr.a) == pa);
+    CHECK(push_and_ptr(L, pr.b) == pb);
     lua_pop(L, 4);
 
-    /* drop A only; keep B anchored; collect; the unlink of A must not
-       disturb B, and a re-created A must be a fresh intern */
     lua_pushlstring(L, byte_view(pr.b.data(), pr.b.size()), 0, pr.b.size());
-    lua_setglobal(L, "anchorB"); /* B stays alive */
+    lua_setglobal(L, "anchorB");
     lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
-    lua_gc(L, LUA_GCCOLLECT, 0, 0, 0); /* A is gone from the chain */
+    lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
 
-    CHECK(push_and_ptr(L, pr.b) == pb); /* chain walk still finds B */
-    const void* pa2 = push_and_ptr(L, pr.a); /* fresh A into same chain */
+    CHECK(push_and_ptr(L, pr.b) == pb);
+    const void* pa2 = push_and_ptr(L, pr.a);
     CHECK(pa2 != nullptr);
     CHECK(push_and_ptr(L, pr.a) == pa2);
     lua_pop(L, 3);
 
-    /* now the reverse order: drop B, keep A */
     lua_pushlstring(L, byte_view(pr.a.data(), pr.a.size()), 0, pr.a.size());
     lua_setglobal(L, "anchorA");
     lua_pushnil(L);
@@ -3848,19 +3808,13 @@ static void test_intern_collisions()
 
     const void* pa3 = push_and_ptr(L, pr.a);
     CHECK(pa3 != nullptr);
-    CHECK(push_and_ptr(L, pr.b) != nullptr); /* fresh B ok */
+    CHECK(push_and_ptr(L, pr.b) != nullptr);
     lua_pop(L, 2);
 
     lua_close(L);
   }
 }
 
-/*
-** GC churn: interleave creation, dropping, full and STEPPED collection
-** so intern removal runs against sweeps in progress; verify identity of
-** survivors after every wave. Under the debug allocator a stale hnext
-** would walk poisoned memory and crash here.
-*/
 static void test_intern_gc_churn()
 {
   lua_State* L = new_state();
@@ -3869,7 +3823,7 @@ static void test_intern_gc_churn()
   constexpr int PER_WAVE = 400;
   char buf[48];
 
-  lua_createtable(L, 0, 0); /* survivors[name] = pointer-as-lightud */
+  lua_createtable(L, 0, 0);
   int keep = lua_gettop(L);
 
   for (int w = 0; w < WAVES; w++)
@@ -3879,19 +3833,18 @@ static void test_intern_gc_churn()
       int len = std::snprintf(buf, sizeof buf, "w%d_%d", w, i);
       lua_pushlstring(L, byte_view(buf, ((size_t)(len))), 0, ((size_t)(len)));
       if (i % 2 == 0)
-      { /* keep even ones: survivors[s] = true */
+      {
         lua_pushboolean(L, 1);
         lua_settable(L, keep);
       }
       else
-        lua_pop(L, 1); /* odd ones become garbage */
+        lua_pop(L, 1);
     }
     if (w % 3 == 0)
       lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
     else
-      lua_gc(L, LUA_GCSTEP, 50, 0, 0); /* leave sweeps half-done */
+      lua_gc(L, LUA_GCSTEP, 50, 0, 0);
 
-    /* every survivor so far must still be found by content */
     for (int i = 0; i < PER_WAVE; i += 2)
     {
       int len = std::snprintf(buf, sizeof buf, "w%d_%d", w, i);
@@ -3902,7 +3855,6 @@ static void test_intern_gc_churn()
     }
   }
 
-  /* drop everything and collect: exercises mass removal */
   lua_pop(L, 1);
   lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
   lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
@@ -3912,11 +3864,6 @@ static void test_intern_gc_churn()
   lua_close(L);
 }
 
-/*
-** Long strings as table keys: hashed lazily, compared by content.
-** Content-equal long strings are DIFFERENT objects but must reach the
-** same table slot.
-*/
 static void test_intern_long_keys()
 {
   lua_State* L = new_state();
@@ -3927,20 +3874,18 @@ static void test_intern_long_keys()
   for (int len : {TPA_MAXSHORTLEN, TPA_MAXSHORTLEN + 1, 100, 5000})
   {
     std::string s(((size_t)(len)), 'q');
-    s.back() = ((char)('0' + (len % 10))); /* distinct contents */
+    s.back() = ((char)('0' + (len % 10)));
 
     lua_pushlstring(L, byte_view(s.data(), s.size()), 0, s.size());
     lua_pushinteger(L, len);
     lua_settable(L, tab);
 
-    /* fresh content-equal object must find the same slot */
     lua_pushlstring(L, byte_view(s.data(), s.size()), 0, s.size());
     CHECK(lua_gettable(L, tab) == LUA_TNUMBER);
     CHECK(lua_tointeger(L, -1) == len);
     lua_pop(L, 1);
   }
 
-  /* embedded NUL in a long key */
   std::string nl(100, 'z');
   nl[50] = '\0';
   lua_pushlstring(L, byte_view(nl.data(), nl.size()), 0, nl.size());
@@ -3950,14 +3895,11 @@ static void test_intern_long_keys()
   CHECK(lua_gettable(L, tab) == LUA_TSTRING);
   lua_pop(L, 1);
 
-  /* a long key inserted BEFORE its hash is ever computed elsewhere,
-     then queried via a different content-equal object (both start
-     unhashed: insert hashes one, lookup hashes the other) */
   std::string big(3000, 'B');
   lua_pushlstring(L, byte_view(big.data(), big.size()), 0, big.size());
   lua_pushinteger(L, 777);
   lua_settable(L, tab);
-  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0); /* churn between insert and probe */
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
   lua_pushlstring(L, byte_view(big.data(), big.size()), 0, big.size());
   CHECK(lua_gettable(L, tab) == LUA_TNUMBER);
   CHECK(lua_tointeger(L, -1) == 777);
@@ -3966,9 +3908,6 @@ static void test_intern_long_keys()
   lua_pop(L, 1);
   lua_close(L);
 }
-
-/*
-** ================================================================ */
 
 /*
 ** If OOM strikes while populating a new metatable, the half-initialized
