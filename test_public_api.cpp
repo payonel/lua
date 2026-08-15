@@ -1124,6 +1124,105 @@ static void test_call()
   lua_close(L);
 }
 
+static int cf_raise_table(lua_State* L)
+{
+  lua_newtable(L);
+  lua_pushinteger(L, 7);
+  lua_setfield(L, -2, "code");
+  return lua_error(L);
+}
+
+static int cf_luaL_error_plain(lua_State* L)
+{
+  return luaL_error(L, "plain fail"_hs);
+}
+
+static int cf_deep_pcall(lua_State* L)
+{
+  lua_Integer n = lua_tointeger(L, 1);
+  if (n <= 0)
+  {
+    lua_pushliteral(L, "bottom");
+    return lua_error(L);
+  }
+  lua_pushcfunction(L, cf_deep_pcall);
+  lua_pushinteger(L, n - 1);
+  int st = lua_pcall(L, 1, 0, 0);
+  CHECK(st == LUA_ERRRUN);
+  return lua_error(L);
+}
+
+static void test_error_handling()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+
+  lua_pushcfunction(L, cf_raise_table);
+  int st = lua_pcall(L, 0, 0, 0);
+  CHECK(st == LUA_ERRRUN);
+  CHECK(lua_type(L, -1) == LUA_TTABLE);
+  CHECK(lua_getfield(L, -1, "code") == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 7);
+  lua_pop(L, 2);
+
+  lua_pushcfunction(L, cf_luaL_error_plain);
+  st = lua_pcall(L, 0, 0, 0);
+  CHECK(st == LUA_ERRRUN);
+  {
+    std::optional<HostString> msg = lua_tostring(L, -1);
+    CHECK(msg.has_value());
+    if (msg.has_value())
+      CHECK(msg->to_utf8().find("plain fail") != byte_view::npos);
+  }
+  lua_pop(L, 1);
+
+  int base = lua_gettop(L);
+  for (int i = 0; i < 1000; i++)
+  {
+    lua_pushcfunction(L, cf_raise);
+    CHECK(lua_pcall(L, 0, 0, 0) == LUA_ERRRUN);
+    lua_pop(L, 1);
+  }
+  CHECK(lua_gettop(L) == base);
+  lua_pushcfunction(L, cf_add);
+  lua_pushinteger(L, 2);
+  lua_pushinteger(L, 3);
+  CHECK(lua_pcall(L, 2, 1, 0) == LUA_OK);
+  CHECK(lua_tointeger(L, -1) == 5);
+  lua_pop(L, 1);
+
+  lua_pushcfunction(L, cf_deep_pcall);
+  lua_pushinteger(L, 40);
+  st = lua_pcall(L, 1, 0, 0);
+  CHECK(st == LUA_ERRRUN);
+  {
+    std::optional<HostString> msg = lua_tostring(L, -1);
+    CHECK(msg.has_value() && *msg == "bottom");
+  }
+  lua_pop(L, 1);
+
+  {
+    lua_State* co = lua_newthread(L);
+    CHECK(load_string(co,
+                      "local x <close> = setmetatable({}, {__close=function() "
+                      "_G.closed = (_G.closed or 0) + 1 end})\n"
+                      "error('boom')\n") == LUA_OK);
+    lua_ResumeResult rr = lua_resume(co, L, 0);
+    CHECK(rr.status == LUA_ERRRUN);
+    lua_getglobal(L, "closed");
+    CHECK(lua_isnil(L, -1));
+    lua_pop(L, 1);
+    int cst = lua_closethread(co, L);
+    CHECK(cst == LUA_ERRRUN);
+    lua_getglobal(L, "closed");
+    CHECK(lua_tointeger(L, -1) == 1);
+    lua_pop(L, 1);
+    lua_pop(L, 1);
+  }
+
+  lua_close(L);
+}
+
 static void test_load_dump()
 {
   lua_State* L = new_state();
@@ -4451,6 +4550,7 @@ int main()
       {"push", test_push},
       {"get_set", test_get_set},
       {"call", test_call},
+      {"error_handling", test_error_handling},
       {"load_dump", test_load_dump},
       {"coroutines", test_coroutines},
       {"warnings", test_warnings},

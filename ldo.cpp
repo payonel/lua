@@ -4,8 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -47,8 +45,14 @@ constexpr int errorstatus(TStatus s)
 struct lua_longjmp
 {
   struct lua_longjmp* previous;
-  jmp_buf b;
+  int level;
   volatile TStatus status; /* error code */
+};
+
+struct LuaError
+{
+  TStatus status;
+  int level;
 };
 
 static void LUAI_TRY(lua_State* L, lua_longjmp* c, Pfunc f, void* ud)
@@ -57,10 +61,11 @@ static void LUAI_TRY(lua_State* L, lua_longjmp* c, Pfunc f, void* ud)
   {
     f(L, ud); /* call function protected */
   }
-  catch (lua_longjmp* c1)
+  catch (LuaError& e)
   {              /* Lua error */
-    if (c1 != c) /* not the correct level? */
+    if (e.level != c->level) /* not the correct level? */
       throw;     /* rethrow to upper level */
+    c->status = e.status;
   }
   catch (...)
   {                 /* non-Lua exception */
@@ -86,9 +91,8 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
 l_noret luaD_throw(lua_State* L, TStatus errcode)
 {
   if (L->errorJmp)
-  {                                /* thread has an error handler? */
-    L->errorJmp->status = errcode; /* set status */
-    throw L->errorJmp;    /* jump to it */
+  {                       /* thread has an error handler? */
+    throw LuaError{errcode, L->errorJmp->level}; /* jump to it */
   }
   else
   { /* thread has no error handler */
@@ -131,6 +135,7 @@ TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
   lua_longjmp lj;
   lj.status = LUA_OK;
   lj.previous = L->errorJmp; /* chain new error handler */
+  lj.level = (lj.previous != nullptr) ? lj.previous->level + 1 : 1;
   L->errorJmp = &lj;
   LUAI_TRY(L, &lj, f, ud);   /* call 'f' catching errors */
   L->errorJmp = lj.previous; /* restore old error handler */

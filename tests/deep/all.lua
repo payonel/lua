@@ -25,6 +25,7 @@ local tests = {
   "debuglib.lua",
   "coroutines.lua",
   "tbc.lua",
+  "errors.lua",
   "metamethods.lua",
   "allocinfo.lua",
   "identity.lua",
