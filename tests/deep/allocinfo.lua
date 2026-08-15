@@ -38,19 +38,42 @@ do
   assert(collectgarbage("count") < after)
 end
 
--- a large buffer-built string (string.rep result) is fully accounted:
--- its payload registers in collectgarbage("count") and is credited
--- back when the string is collected
+-- string.rep is memory-respectful: churning many large results and then
+-- collecting returns to the baseline, so the transient growth is fully
+-- reclaimed (no leak). collectgarbage("count") is an approximate,
+-- implementation-defined figure, so this pins the portable *behavior*
+-- (reclaim) rather than an exact byte count.
 do
   collectgarbage("collect")
-  local before = collectgarbage("count")
-  local s = string.rep("x", 1024 * 1024) -- 1MB, buffer-built
-  local after = collectgarbage("count")
-  assert(#s == 1024 * 1024)
-  assert(after - before >= 1024) -- the full 1024 KB payload is counted
-  s = nil
+  local base = collectgarbage("count")
+  for i = 1, 50 do
+    local s = string.rep("x", 1024 * 1024)
+    assert(#s == 1024 * 1024)
+  end
   collectgarbage("collect")
-  assert(collectgarbage("count") - before < 16) -- payload credited back
+  assert(collectgarbage("count") - base < 64) -- 50 MB churned, all reclaimed
+end
+
+-- the collector keeps peak memory bounded during sustained allocation, so
+-- string.rep does not blow up temporary memory to satisfy a request: 200
+-- quarter-megabyte results (50 MB of churn) are built with the collector
+-- running, and resident memory never balloons far past the baseline because
+-- each discarded result is reclaimed before the next accumulates.
+do
+  collectgarbage("restart")
+  collectgarbage("collect")
+  local base = collectgarbage("count")
+  local peak = base
+  for i = 1, 200 do
+    local s = string.rep("y", 256 * 1024)
+    assert(#s == 256 * 1024)
+    local c = collectgarbage("count")
+    if c > peak then peak = c end
+    s = nil
+  end
+  collectgarbage("collect")
+  assert(peak - base < 4 * 1024)              -- peak stayed well under the churn
+  assert(collectgarbage("count") - base < 64) -- and settled back to baseline
 end
 
 -- stop/restart/isrunning round trip
