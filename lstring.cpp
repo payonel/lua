@@ -70,6 +70,15 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h,
 #define MINSTRTABSIZE 128
 #endif
 
+/*
+** Find an interned string by content. Deliberately returns DEAD
+** (unmarked, not-yet-swept) strings too: the caller resurrects them
+** via changewhite. Skipping dead entries here would create a duplicate
+** TString while the dead twin is still chained, transiently breaking
+** the one-TString-per-short-content invariant that eqshrstr (pointer
+** equality) relies on. Chain memory is always valid: freeobj unlinks
+** a string (luaS_remove) before freeing it.
+*/
 static TString* internfind(global_State* g, byte_view sv, size_t h)
 {
   const auto& buckets = g->strt.buckets;
@@ -109,6 +118,12 @@ static void interninsert(global_State* g, TString* ts)
   if (st.count >= st.buckets.size()) /* load factor 1: grow */
     internresize(g, st.buckets.empty() ? MINSTRTABSIZE : st.buckets.size() * 2);
   size_t i = ts->hash & (st.buckets.size() - 1);
+#if defined(LUA_DEBUG)
+  /* the one-TString-per-content invariant: no content-equal entry may
+     already be chained (live or dead — internfind returns both) */
+  for (TString* c = st.buckets[i]; c != nullptr; c = c->hnext)
+    assert(!(c->hash == ts->hash && c->data == ts->data));
+#endif
   ts->hnext = st.buckets[i];
   st.buckets[i] = ts;
   st.count++;
