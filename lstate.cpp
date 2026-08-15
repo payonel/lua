@@ -264,7 +264,7 @@ static void close_state(lua_State* L)
     luaC_freeallobjects(L);            /* collect all objects */
     luai_userstateclose(L);
   }
-  L->l_G->strt.~unordered_map();
+  L->l_G->strt.~StringTable();
   freestack(L);
   assert(gettotalbytes(g) == sizeof(global_State));
   (*g->frealloc)(g->ud, g, sizeof(global_State), 0); /* free main block */

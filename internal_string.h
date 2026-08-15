@@ -83,8 +83,8 @@ public:
   static size_t hashBytes(const char* str, size_t l) noexcept
   {
     unsigned int h = 0x5bd1e995 ^ ((unsigned int)(l));
-    for (; l > 0; l--)
-      h ^= ((h << 5) + (h >> 2) + ((unsigned char)(str[l - 1])));
+    for (size_t i = 0; i < l; i++)
+      h ^= ((h << 5) + (h >> 2) + ((unsigned char)(str[i])));
     return h;
   }
   size_t hash() const noexcept { return hashBytes(bytes_.data(), bytes_.size()); }

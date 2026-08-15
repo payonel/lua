@@ -1220,7 +1220,7 @@ static int hash_query(lua_State* L)
     TValue o = obj_at(L, 1);
     assert((o.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
     ts = tsvalue(&o);
-    lua_pushinteger(L, ((int)(ts->hash)));
+    lua_pushinteger(L, ((int)(luaS_gethash(ts))));
   }
   else
   {
@@ -1352,16 +1352,16 @@ static int string_query(lua_State* L)
   int s = ((int)(luaL_optinteger(L, 1, 0))) - 1;
   if (s == -1)
   {
-    lua_pushinteger(L, ((int)(strt.bucket_count())));
-    lua_pushinteger(L, ((int)(strt.size())));
+    lua_pushinteger(L, ((int)(strt.buckets.size())));
+    lua_pushinteger(L, ((int)(strt.count)));
     return 2;
   }
-  else if (s < ((int)(strt.bucket_count())))
+  else if (s < ((int)(strt.buckets.size())))
   {
     int n = 0;
-    for (auto it = strt.begin(((size_t)(s))); it != strt.end(((size_t)(s))); ++it)
+    for (TString* ts = strt.buckets[((size_t)(s))]; ts != nullptr; ts = ts->hnext)
     {
-      setslots(L, L->top, it->second);
+      setslots(L, L->top, ts);
       api_incr_top(L);
       n++;
     }

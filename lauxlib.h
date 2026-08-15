@@ -138,7 +138,6 @@ struct luaL_Buffer
 
 LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf);
 LUALIB_API std::span<char> luaL_buffaddr(luaL_Buffer* bf);
-LUALIB_API void luaL_addchar(luaL_Buffer* B, char c);
 LUALIB_API void luaL_addsize(luaL_Buffer* B, size_t s);
 LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s);
 LUALIB_API void(luaL_buffinit)(lua_State* L, luaL_Buffer* B);
@@ -151,6 +150,14 @@ LUALIB_API void(luaL_pushresultsize)(luaL_Buffer* B, size_t sz);
 LUALIB_API size_t(luaL_buffinitsize) (lua_State* L, luaL_Buffer* B, size_t sz);
 LUALIB_API size_t luaL_prepbuffer(luaL_Buffer* B);
 LUALIB_API void(luaL_addgsub)(luaL_Buffer* b, const HostString& s, const HostString& p, const HostString& r);
+
+/* append one char; grows the buffer only when full */
+inline void luaL_addchar(luaL_Buffer* B, char c)
+{
+  if (B->used >= B->bytes.size()) [[unlikely]]
+    (void)luaL_prepbuffsize(B, 1);
+  B->bytes[B->used++] = c;
+}
 
 /* }====================================================== */
 

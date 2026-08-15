@@ -1521,13 +1521,6 @@ LUALIB_API std::span<char> luaL_buffaddr(luaL_Buffer* bf)
   return bf->bytes;
 }
 
-LUALIB_API void luaL_addchar(luaL_Buffer* B, char c)
-{
-  size_t off = luaL_prepbuffsize(B, 1);
-  B->bytes[off] = c;
-  luaL_addsize(B, 1);
-}
-
 LUALIB_API void luaL_addsize(luaL_Buffer* B, size_t s)
 {
   B->used += s;

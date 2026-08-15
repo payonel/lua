@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <unordered_map>
+#include <vector>
 
 #include "lua.h"
 
@@ -497,21 +497,14 @@ struct global_State
   size_t memlimit;
   l_mem GCmarked;     /* number of objects marked in a GC cycle */
   l_mem GCmajorminor; /* auxiliary counter to control major-minor shifts */
-  struct InternKey
+  /* string intern table: open chaining through TString::hnext.
+     (Java: TString[] buckets + next references) */
+  struct StringTable
   {
-    byte_view sv;
-    size_t h;
+    std::vector<TString*> buckets;
+    size_t count = 0;
   };
-  struct InternHash
-  {
-    size_t operator()(const InternKey& k) const { return k.h; }
-  };
-  struct InternEq
-  {
-    bool operator()(const InternKey& a, const InternKey& b) const
-    { return a.sv == b.sv; }
-  };
-  std::unordered_map<InternKey, TString*, InternHash, InternEq> strt;
+  StringTable strt;
   TValue l_registry;
   TValue nilvalue;   /* a nil value */
   unsigned int seed; /* randomized seed for hashes */

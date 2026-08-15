@@ -97,9 +97,9 @@ static inline int hashmod(const Table* t, lua_Unsigned n)
   return ((int)(n % ((sizenode(t) - 1u) | 1u)));
 }
 
-static inline int hashstr(const Table* t, const TString* str)
+static inline int hashstr(const Table* t, TString* str)
 {
-  return hashpow2(t, str->hash);
+  return hashpow2(t, luaS_gethash(str));
 }
 static inline int hashboolean(const Table* t, int p)
 {

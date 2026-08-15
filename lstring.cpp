@@ -30,12 +30,27 @@ static size_t luaS_hash(const char* str, size_t l)
   return InternalString::hashBytes(str, l);
 }
 
-static TString* createstrobj(lua_State* L, InternalString&& str, size_t h, int external)
+/*
+** Computes and caches the hash of a string whose creation deferred it
+** (long strings). Slow path of luaS_gethash (lstring.h).
+*/
+void luaS_forcehash(TString* ts)
+{
+  byte_view bytes = ts->data.view();
+  ts->hash = ((unsigned int)(InternalString::hashBytes(bytes.data(), bytes.size())));
+  ts->hashed = 1;
+}
+
+/* hashed != 0: hash was computed at creation (short/interned strings) */
+static TString* createstrobj(lua_State* L, InternalString&& str, size_t h,
+                             int hashed, int external)
 {
   GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
   assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
   TString* ts = static_cast<TString*>(o);
   ts->hash = ((unsigned int)(h));
+  ts->hashed = ((lu_byte)(hashed));
+  ts->hnext = nullptr;
   ts->extra = external ? STREXTRA_EXTERNAL : 0;
   new (&ts->data) InternalString();
   if (!external && l_unlikely(!luaM_reserve(L, str.size())))
@@ -43,6 +58,63 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h, int e
   ts->data = std::move(str);
   return ts;
 }
+
+/*
+** {==================================================================
+** String intern table: power-of-2 bucket array, open chaining through
+** TString::hnext. (Java: TString[] buckets + next references.)
+** ===================================================================
+*/
+
+#if !defined(MINSTRTABSIZE)
+#define MINSTRTABSIZE 128
+#endif
+
+static TString* internfind(global_State* g, byte_view sv, size_t h)
+{
+  const auto& buckets = g->strt.buckets;
+  if (buckets.empty())
+    return nullptr;
+  TString* ts = buckets[h & (buckets.size() - 1)];
+  while (ts != nullptr)
+  {
+    if (ts->hash == ((unsigned int)(h)) && ts->data.view() == sv)
+      return ts;
+    ts = ts->hnext;
+  }
+  return nullptr;
+}
+
+static void internresize(global_State* g, size_t newsize)
+{
+  assert((newsize & (newsize - 1)) == 0); /* power of 2 */
+  std::vector<TString*> nb(newsize, nullptr);
+  for (TString* ts : g->strt.buckets)
+  {
+    while (ts != nullptr)
+    { /* relink each chain entry into its new bucket */
+      TString* next = ts->hnext;
+      size_t i = ts->hash & (newsize - 1);
+      ts->hnext = nb[i];
+      nb[i] = ts;
+      ts = next;
+    }
+  }
+  g->strt.buckets.swap(nb);
+}
+
+static void interninsert(global_State* g, TString* ts)
+{
+  auto& st = g->strt;
+  if (st.count >= st.buckets.size()) /* load factor 1: grow */
+    internresize(g, st.buckets.empty() ? MINSTRTABSIZE : st.buckets.size() * 2);
+  size_t i = ts->hash & (st.buckets.size() - 1);
+  ts->hnext = st.buckets[i];
+  st.buckets[i] = ts;
+  st.count++;
+}
+
+/* }================================================================== */
 
 void luaS_init(lua_State* L)
 {
@@ -61,55 +133,49 @@ TString* luaS_createstr(lua_State* L, byte_view str, size_t off, size_t len)
   const char* s = str.data() + off;
   size_t l = len;
   byte_view sv(s, l);
-  size_t h = luaS_hash(s, l);
   if (l <= LUAI_MAXSHORTLEN)
   {
-    global_State::InternKey key{sv, h};
-    auto it = g->strt.find(key);
-    if (it != g->strt.end())
+    size_t h = luaS_hash(s, l);
+    TString* ts = internfind(g, sv, h);
+    if (ts != nullptr)
     {
-      TString* ts = it->second;
       if (isdead(g, ts))
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    TString* ts = createstrobj(L, InternalString(sv, 0, l), h, 0);
-    g->strt.emplace(global_State::InternKey{ts->data.view(), h}, ts);
+    ts = createstrobj(L, InternalString(sv, 0, l), h, 1, 0);
+    interninsert(g, ts);
     return ts;
   }
-  return createstrobj(L, InternalString(sv, 0, l), h, 0);
+  return createstrobj(L, InternalString(sv, 0, l), 0, 0, 0); /* hash lazily */
 }
 
 TString* luaS_take(lua_State* L, InternalString&& str)
 {
   global_State* g = L->l_G;
-  byte_view bytes = str.view();
-  size_t h = InternalString::hashBytes(bytes.data(), bytes.size());
   if (str.size() <= LUAI_MAXSHORTLEN)
   {
-    global_State::InternKey key{str.view(), h};
-    auto it = g->strt.find(key);
-    if (it != g->strt.end())
+    byte_view bytes = str.view();
+    size_t h = InternalString::hashBytes(bytes.data(), bytes.size());
+    TString* ts = internfind(g, bytes, h);
+    if (ts != nullptr)
     {
-      TString* ts = it->second;
       if (isdead(g, ts))
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    TString* ts = createstrobj(L, std::move(str), h, 0);
-    g->strt.emplace(global_State::InternKey{ts->data.view(), h}, ts);
+    ts = createstrobj(L, std::move(str), h, 1, 0);
+    interninsert(g, ts);
     return ts;
   }
-  return createstrobj(L, std::move(str), h, 0);
+  return createstrobj(L, std::move(str), 0, 0, 0); /* hash lazily */
 }
 
 TString* luaS_takeexternal(lua_State* L, InternalString&& str)
 {
   if (str.size() <= LUAI_MAXSHORTLEN)
     return luaS_take(L, std::move(str));
-  byte_view bytes = str.view();
-  size_t h = InternalString::hashBytes(bytes.data(), bytes.size());
-  return createstrobj(L, std::move(str), h, 1);
+  return createstrobj(L, std::move(str), 0, 0, 1); /* hash lazily */
 }
 
 void luaS_remove(lua_State* L, TString* ts)
@@ -117,10 +183,20 @@ void luaS_remove(lua_State* L, TString* ts)
   if (ts->data.size() <= LUAI_MAXSHORTLEN)
   {
     global_State* g = L->l_G;
-    size_t h = ts->hash;
-    auto it = g->strt.find(global_State::InternKey{ts->data.view(), h});
-    if (it != g->strt.end() && it->second == ts)
-      g->strt.erase(it);
+    auto& st = g->strt;
+    if (st.buckets.empty())
+      return;
+    TString** p = &st.buckets[ts->hash & (st.buckets.size() - 1)];
+    while (*p != nullptr)
+    {
+      if (*p == ts)
+      {
+        *p = ts->hnext;
+        st.count--;
+        return;
+      }
+      p = &(*p)->hnext;
+    }
   }
 }
 
