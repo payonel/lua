@@ -29,9 +29,11 @@ LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
 // type allocators
 struct TValue;
+struct Value;
 struct UpVal;
 struct CallInfo;
 LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<Value> luaM_alloc_Value_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<char> luaM_alloc_char_span(lua_State* L, size_t count);
 LUAI_FUNC CallInfo* luaM_alloc_CallInfo(lua_State* L);

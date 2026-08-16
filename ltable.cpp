@@ -571,56 +571,55 @@ static void numusehash(const Table* t, Counters* ct)
 ** Convert an "abstract size" (number of slots in an array) to
 ** "concrete size" (number of bytes in the array).
 */
-static size_t concretesize(unsigned int size)
-{
-  if (size == 0)
-    return 0;
-  else /* space for the two arrays plus an unsigned in between */
-    return size * (sizeof(Value) + 1) + sizeof(unsigned);
-}
-
 /*
 ** Resize the array part of a table. If new size is equal to the old,
-** do nothing. Else, if new size is zero, free the old array. (It must
-** be present, as the sizes are different.) Otherwise, allocate a new
-** array, move the common elements to new proper position, and then
-** frees the old array.
-** We could reallocate the array, but we still would need to move the
-** elements to their new position, so the copy implicit in realloc is a
-** waste. Moreover, most allocators will move the array anyway when the
-** new size is double the old one (the most common case).
+** do nothing. Else, if new size is zero, free the old arrays. Otherwise,
+** allocate the new value and tag arrays, move the common elements to
+** their new position, and then free the old arrays.
 */
 static Value* resizearray(lua_State* L, Table* t,
                           unsigned oldasize,
-                          unsigned newasize)
+                          unsigned newasize,
+                          lu_byte** newtags)
 {
   if (oldasize == newasize)
-    return t->array; /* nothing to be done */
+  {
+    *newtags = t->tags; /* nothing to be done */
+    return t->array;
+  }
   else if (newasize == 0)
-  {                                              /* erasing array? */
-    Value* op = t->array - oldasize;             /* original array's real address */
-    luaM_free_(L, (op), (concretesize(oldasize))); /* free it */
+  { /* erasing array? */
+    luaM_free_(L, (t->array), ((size_t)(oldasize)) * sizeof(Value));
+    luaM_free_(L, (t->tags), ((size_t)(oldasize)) * sizeof(char));
+    *newtags = nullptr;
     return nullptr;
   }
   else
   {
-    size_t newasizeb = concretesize(newasize);
-    Value* np = ((Value*)((((lu_byte*)(luaM_realloc_(L, nullptr, ((size_t)(0)) * sizeof(lu_byte), ((size_t)(newasizeb)) * sizeof(lu_byte)))))));
-    if (np == nullptr) /* allocation error? */
+    Value* nv = luaM_alloc_Value_span(L, newasize).data();
+    if (nv == nullptr) /* allocation error? */
+    {
+      *newtags = nullptr;
       return nullptr;
-    np += newasize; /* shift pointer to the end of value segment */
+    }
+    lu_byte* nt = (lu_byte*)luaM_alloc_char_span(L, newasize).data();
+    if (nt == nullptr) /* allocation error? */
+    {
+      luaM_free_(L, (nv), ((size_t)(newasize)) * sizeof(Value));
+      *newtags = nullptr;
+      return nullptr;
+    }
     if (oldasize > 0)
     {
-      /* move common elements to new position */
-      size_t oldasizeb = concretesize(oldasize);
-      Value* op = t->array; /* original array */
+      /* move common elements to new arrays */
       unsigned tomove = (oldasize < newasize) ? oldasize : newasize;
-      size_t tomoveb = (oldasize < newasize) ? oldasizeb : newasizeb;
-      assert(tomoveb > 0);
-      memcpy(np - tomove, op - tomove, tomoveb);
-      luaM_free_(L, (op - oldasize), (oldasizeb)); /* free old block */
+      memcpy(nv, t->array, ((size_t)(tomove)) * sizeof(Value));
+      memcpy(nt, t->tags, ((size_t)(tomove)) * sizeof(char));
+      luaM_free_(L, (t->array), ((size_t)(oldasize)) * sizeof(Value));
+      luaM_free_(L, (t->tags), ((size_t)(oldasize)) * sizeof(char));
     }
-    return np;
+    *newtags = nt;
+    return nv;
   }
 }
 
@@ -759,6 +758,7 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
   Table newt; /* to keep the new hash part */
   unsigned oldasize = t->asize;
   Value* newarray;
+  lu_byte* newtags;
   if (newasize > MAXASIZE)
     luaG_runerror(L, lt::table_overflow);
   /* create new hash part with appropriate size into 'newt' */
@@ -772,7 +772,7 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
     exchangehashpart(t, &newt); /* restore old hash (in case of errors) */
   }
   /* allocate new array */
-  newarray = resizearray(L, t, oldasize, newasize);
+  newarray = resizearray(L, t, oldasize, newasize, &newtags);
   if (l_unlikely(newarray == nullptr && newasize > 0))
   {                     /* allocation failed? */
     freehash(L, &newt); /* release new hash part */
@@ -781,9 +781,10 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
   /* allocation ok; initialize new part of the array */
   exchangehashpart(t, &newt); /* 't' has the new hash ('newt' has the old) */
   t->array = newarray;        /* set new array part */
+  t->tags = newtags;
   t->asize = newasize;
   if (newarray != nullptr)
-    *lenhint(t) = newasize / 2u; /* set an initial hint */
+    t->lenhint = newasize / 2u; /* set an initial hint */
   clearNewSlice(t, oldasize, newasize);
   /* re-insert elements from old hash part into new parts */
   reinserthash(L, &newt, t); /* 'newt' now has the old hash */
@@ -850,14 +851,17 @@ Table* luaH_new(lua_State* L)
   t->metatable = nullptr;
   t->flags = maskflags; /* table has no metamethod fields */
   t->array = nullptr;
+  t->tags = nullptr;
   t->asize = 0;
+  t->lenhint = 0;
   setnodevector(L, t, 0);
   return t;
 }
 
 lu_mem luaH_size(Table* t)
 {
-  lu_mem sz = ((lu_mem)(sizeof(Table))) + concretesize(t->asize);
+  lu_mem sz = ((lu_mem)(sizeof(Table)))
+            + ((lu_mem)(t->asize)) * (sizeof(Value) + sizeof(char));
   if (!isdummy(t))
     sz += sizehash(t);
   return sz;
@@ -868,8 +872,9 @@ lu_mem luaH_size(Table* t)
 */
 void luaH_free(lua_State* L, Table* t)
 {
+  lu_byte* newtags;
   freehash(L, t);
-  resizearray(L, t, t->asize, 0);
+  resizearray(L, t, t->asize, 0, &newtags);
   luaM_free_(L, (t), sizeof(*(t)), t->tt & NOVARIANT_MASK);
 }
 
@@ -1377,7 +1382,7 @@ static unsigned int binsearch(Table* array, unsigned int i, unsigned int j)
 static lua_Unsigned newhint(Table* t, unsigned hint)
 {
   assert(hint <= t->asize);
-  *lenhint(t) = hint;
+  t->lenhint = hint;
   return hint;
 }
 
@@ -1398,7 +1403,7 @@ lua_Unsigned luaH_getn(lua_State* L, Table* t)
   if (asize > 0)
   { /* is there an array part? */
     const unsigned maxvicinity = 4;
-    unsigned limit = *lenhint(t); /* start with the hint */
+    unsigned limit = t->lenhint; /* start with the hint */
     if (limit == 0)
       limit = 1; /* make limit a valid index in the array */
     if (arraykeyisempty(t, limit))
@@ -1433,7 +1438,7 @@ lua_Unsigned luaH_getn(lua_State* L, Table* t)
     }
     /* last element non empty; set a hint to speed up finding that again */
     /* (keys in the hash part cannot be hints) */
-    *lenhint(t) = asize;
+    t->lenhint = asize;
   }
   /* no array part or t[asize] is not empty; check the hash part */
   assert(asize == 0 || !arraykeyisempty(t, asize));

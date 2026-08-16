@@ -1197,7 +1197,7 @@ static int table_query(lua_State* L)
   {
     lua_pushinteger(L, ((lua_Integer)(asize)));
     lua_pushinteger(L, ((lua_Integer)(allocsizenode(t))));
-    lua_pushinteger(L, ((lua_Integer)(asize > 0 ? *lenhint(t) : 0)));
+    lua_pushinteger(L, ((lua_Integer)(asize > 0 ? t->lenhint : 0)));
     return 3;
   }
   else if (((unsigned int)(i)) < asize)

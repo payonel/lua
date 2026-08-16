@@ -221,6 +221,12 @@ LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(lua_State* L, size_t count)
   return std::span<TValue>(stk, stk == nullptr ? 0 : count);
 }
 
+LUAI_FUNC std::span<Value> luaM_alloc_Value_span(lua_State* L, size_t count)
+{
+  Value* p = (Value*)luaM_realloc_(L, nullptr, 0, count * sizeof(Value));
+  return std::span<Value>(p, p == nullptr ? 0 : count);
+}
+
 LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(lua_State* L, size_t count)
 {
   UpVal** p = (UpVal**)luaM_realloc_(L, nullptr, 0, count * sizeof(UpVal*));

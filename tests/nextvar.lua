@@ -181,11 +181,11 @@ for _, sa in ipairs(sizes) do    -- 'sa' is size of the array part
     collectgarbage("stop")
     f()    -- call once to ensure stack space
     -- make sure table is not resized after being created
-    if sa == 0 or sh == 0 then
-      T.alloccount(2);  -- header + array or hash part
-    else
-      T.alloccount(3);  -- header + array part + hash part
-    end
+    -- array part now takes two allocations (values + tags)
+    local n = 1                    -- table header
+    if sa > 0 then n = n + 2 end   -- array part: values + tags
+    if sh > 0 then n = n + 1 end   -- hash part
+    T.alloccount(n)
     local t = f()
     T.alloccount();
     collectgarbage("restart")

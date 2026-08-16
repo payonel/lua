@@ -78,42 +78,23 @@ constexpr int HFIRSTNODE = 3;
 */
 
 /*
-** The array part of a table is represented by an inverted array of
-** values followed by an array of tags, to avoid wasting space with
-** padding. In between them there is an unsigned int, explained later.
-** The 'array' pointer points between the two arrays, so that values are
-** indexed with negative indices and tags with non-negative indices.
-
-             Values                              Tags
-  --------------------------------------------------------
-  ...  |   Value 1     |   Value 0     |unsigned|0|1|...
-  --------------------------------------------------------
-                                       ^ t->array
-
-** All accesses to 't->array' should be through the macros 'getArrTag'
+** The array part of a table is two separate, forward-indexed arrays: a
+** 'Value' array ('t->array') and a parallel tag array ('t->tags'). The
+** length hint for #t lives in the 'lenhint' field of the Table.
+** All accesses to the arrays should be through the macros 'getArrTag'
 ** and 'getArrVal'.
 */
 
 /* Computes the address of the tag for the abstract C-index 'k' */
 static l_forceinline lu_byte* getArrTag(const Table* t, lua_Unsigned k)
 {
-  return (lu_byte*)t->array + sizeof(unsigned) + k;
+  return t->tags + k;
 }
 
 /* Computes the address of the value for the abstract C-index 'k' */
 static l_forceinline Value* getArrVal(const Table* t, lua_Unsigned k)
 {
-  return t->array - 1 - k;
-}
-
-/*
-** The unsigned between the two arrays is used as a hint for #t;
-** see luaH_getn. It is stored there to avoid wasting space in
-** the structure Table for tables with no array part.
-*/
-static l_forceinline unsigned* lenhint(const Table* t)
-{
-  return (unsigned*)t->array;
+  return t->array + k;
 }
 
 /*

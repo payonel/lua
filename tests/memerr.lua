@@ -130,7 +130,7 @@ do  -- vararg tables
   local b = testamem("vararg table", function ()
     return pack(10, 20, 30, 40, "hello")
   end)
-  assert(b.aloc == 3)   -- new table uses three memory blocks
+  assert(b.aloc == 4)   -- new table uses four memory blocks (header + values + tags + hash)
   -- table optimized away
   local function sel (n, ...arg) return arg[n] + arg.n end
   local b = testamem("optimized vararg table",

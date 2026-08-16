@@ -1797,6 +1797,66 @@ static void test_zero_size_userdata()
   lua_close(L);
 }
 
+struct SizeDeny
+{
+  size_t deny_size;
+};
+static bool size_deny_alloc(void* ud, size_t, size_t nsize, int)
+{
+  SizeDeny* d = static_cast<SizeDeny*>(ud);
+  if (nsize == 0)
+    return true;
+  if (d->deny_size != 0 && nsize == d->deny_size)
+    return false;
+  return true;
+}
+
+static int cf_make_arraytable(lua_State* L)
+{
+  lua_createtable(L, 300, 0);
+  return 1;
+}
+
+static void test_oom_between_array_allocs()
+{
+  SizeDeny sd{0};
+  lua_State* L = lua_newstate(size_deny_alloc, &sd, 0);
+  CHECK(L != nullptr);
+  luaL_openselectedlibs(L, LUA_GLIBK, 0);
+
+  lua_pushcfunction(L, cf_make_arraytable);
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  CHECK(lua_rawlen(L, -1) == 0);
+  lua_settop(L, 0);
+
+  sd.deny_size = 300;
+  lua_pushcfunction(L, cf_make_arraytable);
+  int st = lua_pcall(L, 0, 1, 0);
+  sd.deny_size = 0;
+  CHECK(st == LUA_ERRMEM);
+  lua_settop(L, 0);
+
+  lua_newtable(L);
+  lua_pushinteger(L, 42);
+  lua_rawseti(L, -2, 1);
+  CHECK(lua_rawgeti(L, -1, 1) == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 42);
+  lua_pop(L, 2);
+
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+
+  CHECK(do_string(L, "local t = {} for i = 1, 300 do t[i] = i end return #t") == LUA_OK);
+  CHECK(lua_tointeger(L, -1) == 300);
+  lua_settop(L, 0);
+
+  lua_pushcfunction(L, cf_make_arraytable);
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  lua_settop(L, 0);
+
+  lua_close(L);
+}
+
 static void test_misc()
 {
   lua_State* L = new_state();
@@ -4631,6 +4691,7 @@ int main()
       {"db_debug", test_db_debug},
       {"gc", test_gc},
       {"zero_size_userdata", test_zero_size_userdata},
+      {"oom_between_array_allocs", test_oom_between_array_allocs},
       {"misc", test_misc},
       {"debug_api", test_debug_api},
       {"libraries", test_libraries},
