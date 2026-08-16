@@ -213,3 +213,27 @@ void luaM_release(lua_State* L, size_t size)
   global_State* g = L->l_G;
   g->GCdebt += ((l_mem)(size));
 }
+
+// type allocators
+LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(lua_State* L, size_t count)
+{
+  TValue* stk = (TValue*)luaM_realloc_(L, nullptr, 0, count * sizeof(TValue));
+  return std::span<TValue>(stk, stk == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(lua_State* L, size_t count)
+{
+  UpVal** p = (UpVal**)luaM_realloc_(L, nullptr, 0, count * sizeof(UpVal*));
+  return std::span<UpVal*>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<char> luaM_alloc_char_span(lua_State* L, size_t count)
+{
+  char* p = (char*)luaM_realloc_(L, nullptr, 0, count);
+  return std::span<char>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC CallInfo* luaM_alloc_CallInfo(lua_State* L)
+{
+  return (CallInfo*)luaM_realloc_(L, nullptr, 0, sizeof(CallInfo));
+}

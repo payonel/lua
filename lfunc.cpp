@@ -39,7 +39,7 @@ CClosure* luaF_newCclosure(lua_State* L, int nupvals)
   c->upvalue = nullptr;
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
-  TValue* upvalue = (TValue*)luaM_realloc_(L, nullptr, 0, (size_t)(unsigned)nupvals * sizeof(TValue));
+  TValue* upvalue = luaM_alloc_TValue_span(L, nupvals).data();
   g->gcstopem = oldgcstop;
   if (upvalue == nullptr && nupvals > 0)
     luaD_throw(L, LUA_ERRMEM);
@@ -59,7 +59,7 @@ LClosure* luaF_newLclosure(lua_State* L, int nupvals)
   c->upvals = nullptr;
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
-  UpVal** upvals = (UpVal**)luaM_realloc_(L, nullptr, 0, (size_t)(unsigned)nupvals * sizeof(UpVal*));
+  UpVal** upvals = luaM_alloc_UpVal_ptr_span(L, nupvals).data();
   g->gcstopem = oldgcstop;
   if (upvals == nullptr && nupvals > 0)
     luaD_throw(L, LUA_ERRMEM);

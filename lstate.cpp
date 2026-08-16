@@ -48,7 +48,7 @@ void luaE_setdebt(global_State* g, l_mem debt)
 CallInfo* luaE_extendCI(lua_State* L, int err)
 {
   CallInfo* ci;
-  ci = (((CallInfo*)(luaM_realloc_(L, nullptr, ((size_t)(0)) * sizeof(CallInfo), ((size_t)(1)) * sizeof(CallInfo)))));
+  ci = luaM_alloc_CallInfo(L);
   if (l_unlikely(ci == nullptr))
   { /* allocation failed? */
     if (err)
@@ -145,7 +145,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 {
   int i;
   size_t nslots = (size_t)(BASIC_STACK_SIZE + EXTRA_STACK);
-  TValue* stk = (TValue*)luaM_realloc_(L, nullptr, 0, nslots * sizeof(TValue));
+  TValue* stk = luaM_alloc_TValue_span(L, nslots).data();
   if (l_unlikely(stk == nullptr))
   {
     luaD_throw(L, LUA_ERRMEM);

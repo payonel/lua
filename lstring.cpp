@@ -215,12 +215,12 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   u->data = std::span<char>{};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
-  TValue* uv = (TValue*)luaM_realloc_(L, nullptr, 0, (size_t)nuvalue * sizeof(TValue));
+  TValue* uv = luaM_alloc_TValue_span(L, nuvalue).data();
   if (uv != nullptr || nuvalue == 0)
   {
     u->uv = uv;
     u->nuvalue = nuvalue;
-    char* p = (char*)luaM_realloc_(L, nullptr, 0, udatadatasize(s));
+    char* p = luaM_alloc_char_span(L, udatadatasize(s)).data();
     if (p != nullptr)
       u->data = std::span<char>{p, s};
   }

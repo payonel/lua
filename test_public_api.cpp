@@ -37,11 +37,11 @@ struct AllocStats
   unsigned long calls = 0;
 };
 
-static int counting_alloc(void* ud, size_t, size_t, int)
+static bool counting_alloc(void* ud, size_t, size_t, int)
 {
   if (ud != nullptr)
     static_cast<AllocStats*>(ud)->calls++;
-  return 1;
+  return true;
 }
 
 static AllocStats g_alloc_stats;
@@ -2083,23 +2083,23 @@ static int cf_panic_record(lua_State* L)
   throw PanicJump{};
 }
 
-static int null_alloc(void*, size_t, size_t, int)
+static bool null_alloc(void*, size_t, size_t, int)
 {
-  return 0;
+  return false;
 }
 
 struct DenyAlloc
 {
   bool deny = false;
 };
-static int deny_alloc(void* ud, size_t osize, size_t nsize, int)
+static bool deny_alloc(void* ud, size_t osize, size_t nsize, int)
 {
   DenyAlloc* d = static_cast<DenyAlloc*>(ud);
   if (nsize == 0)
-    return 1;
+    return true;
   if (d->deny && nsize > osize)
-    return 0;
-  return 1;
+    return false;
+  return true;
 }
 
 static int cf_neg_arith(lua_State* L)
@@ -4006,18 +4006,18 @@ struct OomAllocState
   bool active;
 };
 
-static int oom_alloc(void* ud, size_t, size_t nsize, int)
+static bool oom_alloc(void* ud, size_t, size_t nsize, int)
 {
   OomAllocState* st = static_cast<OomAllocState*>(ud);
   if (nsize == 0)
-    return 1;
+    return true;
   if (st->active && st->allocs_remaining >= 0)
   {
     if (st->allocs_remaining == 0)
-      return 0; /* simulate OOM */
+      return false; /* simulate OOM */
     st->allocs_remaining--;
   }
-  return 1;
+  return true;
 }
 
 static int cf_setup_mt_always(lua_State* L)

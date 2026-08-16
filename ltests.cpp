@@ -184,7 +184,7 @@ static void warnf(void* ud, const HostString& msg, int tocont)
 Memcontrol l_memcontrol =
     {0, 0UL, 0UL, 0UL, 0UL, (~0UL), {0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL}};
 
-static int debug_realloc(void* ud, size_t oldsize, size_t nsize, int tag)
+static bool debug_realloc(void* ud, size_t oldsize, size_t nsize, int tag)
 {
   Memcontrol* mc = ((Memcontrol*)(ud));
   int type = (((size_t)(tag)) < LUA_NUMTYPES) ? tag : 0;
@@ -198,21 +198,21 @@ static int debug_realloc(void* ud, size_t oldsize, size_t nsize, int tag)
     mc->objcount[type]--;
     mc->numblocks--;
     mc->total -= oldsize;
-    return 1;
+    return true;
   }
   if (mc->failnext)
   {
     mc->failnext = 0;
-    return 0; /* fake a single memory allocation error */
+    return false; /* fake a single memory allocation error */
   }
   if (mc->countlimit != ~0UL && nsize != oldsize)
   { /* count limit in use? */
     if (mc->countlimit == 0)
-      return 0; /* fake a memory allocation error */
+      return false; /* fake a memory allocation error */
     mc->countlimit--;
   }
   if (nsize > oldsize && mc->total + nsize - oldsize > mc->memlimit)
-    return 0; /* fake a memory allocation error */
+    return false; /* fake a memory allocation error */
   if (oldsize == 0)
   {
     mc->numblocks++;
@@ -222,7 +222,7 @@ static int debug_realloc(void* ud, size_t oldsize, size_t nsize, int tag)
   mc->total += nsize;
   if (mc->total > mc->maxmem)
     mc->maxmem = mc->total;
-  return 1;
+  return true;
 }
 
 /* }====================================================================== */

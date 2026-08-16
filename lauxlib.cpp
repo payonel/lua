@@ -1259,9 +1259,9 @@ LUALIB_API HostString luaL_gsub(lua_State* L, const HostString& s, const HostStr
   return HostString(luaL_gsubi(L, s.to_utf8(), p.to_utf8(), r.to_utf8()));
 }
 
-static int luaL_alloc(void*, size_t, size_t, int)
+static bool luaL_alloc(void*, size_t, size_t, int)
 {
-  return 1;
+  return true;
 }
 
 /*

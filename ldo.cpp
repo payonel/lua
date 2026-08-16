@@ -211,11 +211,10 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   size_t oldn = (size_t)(oldsize + EXTRA_STACK);
   size_t newn = (size_t)(newsize + EXTRA_STACK);
   size_t keep = (oldn < newn) ? oldn : newn;
-  TValue* newstk;
   lu_byte oldgcstop = L->l_G->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
   L->l_G->gcstopem = 1; /* stop emergency collection */
-  newstk = (TValue*)luaM_realloc_(L, nullptr, 0, newn * sizeof(TValue));
+  TValue* newstk = luaM_alloc_TValue_span(L, newn).data();
   L->l_G->gcstopem = oldgcstop; /* restore emergency collection */
   if (l_unlikely(newstk == nullptr))
   {
