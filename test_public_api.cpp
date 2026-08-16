@@ -1707,6 +1707,96 @@ static void test_gc()
   lua_close(L);
 }
 
+static int g_zud_gc = 0;
+static int cf_zud_gc(lua_State*)
+{
+  g_zud_gc++;
+  return 0;
+}
+
+static void test_zero_size_userdata()
+{
+  lua_State* L = new_state();
+
+  void* a = lua_newuserdatauv(L, 0, 0);
+  int ai = lua_gettop(L);
+  void* b = lua_newuserdatauv(L, 0, 0);
+  int bi = lua_gettop(L);
+  CHECK(a != nullptr);
+  CHECK(b != nullptr);
+  CHECK(a != b);
+  CHECK(lua_touserdata(L, ai) == a);
+  CHECK(lua_touserdata(L, bi) == b);
+  CHECK(lua_rawlen(L, ai) == 0);
+  CHECK(lua_rawlen(L, bi) == 0);
+  CHECK(lua_topointer(L, ai) != nullptr);
+  CHECK(lua_topointer(L, ai) != lua_topointer(L, bi));
+  CHECK(lua_rawequal(L, ai, ai) == 1);
+  CHECK(lua_rawequal(L, ai, bi) == 0);
+
+  lua_newtable(L);
+  int t = lua_gettop(L);
+  lua_pushvalue(L, ai);
+  lua_pushinteger(L, 111);
+  lua_settable(L, t);
+  lua_pushvalue(L, bi);
+  lua_pushinteger(L, 222);
+  lua_settable(L, t);
+  lua_pushvalue(L, ai);
+  CHECK(lua_gettable(L, t) == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 111);
+  lua_pop(L, 1);
+  lua_pushvalue(L, bi);
+  CHECK(lua_gettable(L, t) == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 222);
+  lua_pop(L, 1);
+
+  lua_settop(L, 0);
+
+  luaL_newmetatable(L, "ZUD"_hs);
+  lua_pop(L, 1);
+  void* c = lua_newuserdatauv(L, 0, 0);
+  CHECK(c != nullptr);
+  luaL_setmetatable(L, "ZUD"_hs);
+  CHECK(luaL_testudata(L, -1, "ZUD"_hs) == c);
+  CHECK(luaL_testudata(L, -1, "ZUD.other"_hs) == nullptr);
+  lua_settop(L, 0);
+
+  void* d = lua_newuserdatauv(L, 0, 2);
+  int di = lua_gettop(L);
+  CHECK(d != nullptr);
+  CHECK(lua_rawlen(L, di) == 0);
+  lua_newtable(L);
+  lua_pushinteger(L, 7);
+  lua_setfield(L, -2, "marker");
+  CHECK(lua_setiuservalue(L, di, 1) != 0);
+  lua_pushinteger(L, 99);
+  CHECK(lua_setiuservalue(L, di, 2) != 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  CHECK(lua_getiuservalue(L, di, 1) == LUA_TTABLE);
+  CHECK(lua_getfield(L, -1, "marker") == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 7);
+  lua_pop(L, 2);
+  CHECK(lua_getiuservalue(L, di, 2) == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 99);
+  lua_pop(L, 1);
+  lua_settop(L, 0);
+
+  g_zud_gc = 0;
+  lua_newuserdatauv(L, 0, 0);
+  lua_newtable(L);
+  lua_pushcfunction(L, cf_zud_gc);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  lua_pop(L, 1);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  CHECK(g_zud_gc == 1);
+
+  lua_close(L);
+}
+
 static void test_misc()
 {
   lua_State* L = new_state();
@@ -4540,6 +4630,7 @@ int main()
       {"db_gethook_mask", test_db_gethook_mask},
       {"db_debug", test_db_debug},
       {"gc", test_gc},
+      {"zero_size_userdata", test_zero_size_userdata},
       {"misc", test_misc},
       {"debug_api", test_debug_api},
       {"libraries", test_libraries},

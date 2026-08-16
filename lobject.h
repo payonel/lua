@@ -220,24 +220,21 @@ constexpr lu_byte LUA_VLIGHTUSERDATA = makevariant(LUA_TLIGHTUSERDATA, 0);
 
 constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
 
+struct Table;
 struct Udata : GCObject
 {
-  unsigned short nuvalue; /* number of user values */
-  struct Table* metatable;
+  Table* metatable;
   GCObject* gclist;
   TValue* uv;
   std::span<char> data;
+  unsigned short nuvalue; /* number of user values */
+  bool zb;
 };
 
 /* get the address of the memory block inside 'Udata' */
 static l_forceinline char* getudatamem(Udata* u)
 {
   return u->data.data();
-}
-
-static l_forceinline size_t udatadatasize(size_t len)
-{
-  return len == 0 ? 1 : len;
 }
 
 /* }================================================================== */

@@ -143,8 +143,7 @@ static l_mem objsize(GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    res = sizeof(Udata) + (lu_mem)u->nuvalue * sizeof(TValue)
-        + (u->data.data() != nullptr ? udatadatasize(u->data.size()) : 0);
+    res = sizeof(Udata) + (lu_mem)u->nuvalue * sizeof(TValue) + u->data.size();
     break;
   }
   case LUA_VPROTO:
@@ -955,7 +954,7 @@ static void freeobj(lua_State* L, GCObject* o)
     luaM_free_(L, (u->uv), ((size_t)u->nuvalue) * sizeof(TValue));
     if (u->data.data() != nullptr)
     {
-      luaM_free_(L, (u->data.data()), udatadatasize(u->data.size()));
+      luaM_free_(L, (u->data.data()), u->data.size());
       u->data = {};
     }
     luaM_free_(L, (o), sizeof(Udata), o->tt & NOVARIANT_MASK);

@@ -212,6 +212,7 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   u->nuvalue = 0;
   u->metatable = nullptr;
   u->uv = nullptr;
+  u->zb = s == 0;
   u->data = std::span<char>{};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
@@ -220,9 +221,7 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   {
     u->uv = uv;
     u->nuvalue = nuvalue;
-    char* p = luaM_alloc_char_span(L, udatadatasize(s)).data();
-    if (p != nullptr)
-      u->data = std::span<char>{p, s};
+    u->data = luaM_alloc_char_span(L, s == 0 ? 1 : s); // zb udata is still an allocation
   }
   g->gcstopem = oldgcstop;
   if ((uv == nullptr && nuvalue > 0) || u->data.data() == nullptr)
