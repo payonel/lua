@@ -894,7 +894,7 @@ static void close_func(LexState* ls)
   f->code = luaM_safeshrink_Instruction_span(L, f->code, fs->pc);
   f->lineinfo = luaM_safeshrink_ls_byte_span(L, f->lineinfo, fs->pc);
   f->abslineinfo = luaM_safeshrink_AbsLineInfo_span(L, f->abslineinfo, fs->nabslineinfo);
-  f->k = luaM_safeshrink_TValue_span(L, f->k, fs->nk);
+  luaM_vecshrink(L, f->k, fs->nk);
   f->p = luaM_safeshrink_Proto_ptr_span(L, f->p, fs->np);
   f->locvars = luaM_safeshrink_LocVar_span(L, f->locvars, fs->ndebugvars);
   f->upvalues = luaM_safeshrink_Upvaldesc_span(L, f->upvalues, fs->nups);

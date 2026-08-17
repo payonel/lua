@@ -580,14 +580,11 @@ static void freeexps(FuncState* fs, expdesc* e1, expdesc* e2)
 static int addk(FuncState* fs, Proto* f, TValue* v)
 {
   lua_State* L = fs->ls->L;
-  int oldsize = (int)f->k.size();
   int k = fs->nk;
   int limit = ((size_t)MAXARG_Ax <= MAX_SIZET / sizeof(TValue))
                   ? MAXARG_Ax
                   : (int)(MAX_SIZET / sizeof(TValue));
-  f->k = luaM_safegrow_TValue_span(L, f->k, k, limit, lt::constants);
-  while (oldsize < (int)f->k.size())
-    (f->k[oldsize++].tt_ = LUA_VNIL);
+  luaM_vecgrow(L, f->k, k, limit, lt::constants);
   setobj(L, &f->k[k], v);
   fs->nk++;
   luaC_barrier(L, f, v);

@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 #include <span>
+#include <vector>
 
 #include "llimits.h"
 #include "lua.h"
@@ -19,6 +20,48 @@ struct global_State;
 /* not to be called directly */
 LUAI_FUNC int luaM_reserve(lua_State* L, size_t size);
 LUAI_FUNC void luaM_release(lua_State* L, size_t size);
+
+LUAI_FUNC int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte_view what);
+LUAI_FUNC void luaM_account_(lua_State* L, size_t osize, size_t nsize);
+
+template <typename T>
+inline void luaM_vecgrow(lua_State* L, std::vector<T>& v, int nelems, int limit, byte_view what)
+{
+  int size = (int)v.size();
+  int newsize = luaM_growsize_(L, size, nelems, limit, what);
+  if (newsize == size)
+    return;
+  luaM_account_(L, (size_t)size * sizeof(T), (size_t)newsize * sizeof(T));
+  v.resize((size_t)newsize);
+}
+
+template <typename T>
+inline void luaM_vecshrink(lua_State* L, std::vector<T>& v, int final_n)
+{
+  luaM_account_(L, v.size() * sizeof(T), (size_t)final_n * sizeof(T));
+  if (final_n == 0)
+    v = {};
+  else
+    v.resize((size_t)final_n);
+}
+
+template <typename T>
+inline void luaM_vecalloc(lua_State* L, std::vector<T>& v, size_t count)
+{
+  if (count == 0)
+    return;
+  if (count + 1 > MAX_SIZET / sizeof(T))
+    luaM_toobig(L);
+  luaM_account_(L, 0, count * sizeof(T));
+  v.resize(count);
+}
+
+template <typename T>
+inline void luaM_vecfree(lua_State* L, std::vector<T>& v)
+{
+  luaM_account_(L, v.size() * sizeof(T), 0);
+  v = {};
+}
 
 // type allocators
 struct TValue;

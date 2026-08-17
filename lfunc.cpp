@@ -7,6 +7,7 @@
 
 
 #include <stddef.h>
+#include <new>
 
 #include "lua.h"
 
@@ -274,7 +275,7 @@ Proto* luaF_newproto(lua_State* L)
 {
   Proto* f = luaM_malloc_Proto(L);
   luaC_link(L, f, LUA_VPROTO);
-  f->k = {};
+  new (&f->k) std::vector<TValue>();
   f->p = {};
   f->code = {};
   f->lineinfo = {};
@@ -315,7 +316,7 @@ void luaF_freeproto(lua_State* L, Proto* f)
     luaM_free_AbsLineInfo_span(L, f->abslineinfo);
   }
   luaM_free_Proto_ptr_span(L, f->p);
-  luaM_free_TValue_span(L, f->k);
+  luaM_vecfree(L, f->k);
   luaM_free_LocVar_span(L, f->locvars);
   luaM_free_Upvaldesc_span(L, f->upvalues);
   luaM_free_Proto(L, f);

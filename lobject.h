@@ -9,6 +9,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <vector>
 
 #include "llimits.h"
 #include "internal_string.h"
@@ -310,7 +311,7 @@ struct Proto : GCObject
   lu_byte maxstacksize; /* number of registers needed by this function */
   int linedefined;          /* debug information  */
   int lastlinedefined;      /* debug information  */
-  std::span<TValue> k;                /* constants used by the function */
+  std::vector<TValue> k;                /* constants used by the function */
   std::span<Instruction> code;        /* opcodes */
   std::span<Proto*> p;         /* functions defined inside the function */
   std::span<Upvaldesc> upvalues;      /* upvalue information */

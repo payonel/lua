@@ -78,12 +78,10 @@ static inline void* firsttry(global_State* g, void* block, size_t os, size_t ns,
 */
 constexpr int MINSIZEARRAY = 4;
 
-void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize, unsigned size_elems, int limit, byte_view what)
+LUAI_FUNC int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte_view what)
 {
-  void* newblock;
-  int size = *psize;
-  if (nelems + 1 <= size) /* does one extra element still fit? */
-    return block;         /* nothing to be done */
+  if (nelems + 1 <= size)
+    return size;
   if (size >= limit / 2)
   {                                /* cannot double it? */
     if (l_unlikely(size >= limit)) /* cannot grow even a little? */
@@ -97,9 +95,17 @@ void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize, unsigned 
       size = MINSIZEARRAY; /* minimum size */
   }
   assert(nelems + 1 <= size && size <= limit);
+  return size;
+}
+
+void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize, unsigned size_elems, int limit, byte_view what)
+{
+  int size = luaM_growsize_(L, *psize, nelems, limit, what);
+  if (size == *psize) /* nothing to be done? */
+    return block;
   /* 'limit' ensures that multiplication will not overflow */
-  newblock = luaM_saferealloc_(L, block, ((size_t)(*psize)) * size_elems,
-                               ((size_t)(size)) * size_elems);
+  void* newblock = luaM_saferealloc_(L, block, ((size_t)(*psize)) * size_elems,
+                                     ((size_t)(size)) * size_elems);
   *psize = size; /* update only when everything else is OK */
   return newblock;
 }
@@ -221,6 +227,32 @@ void luaM_release(lua_State* L, size_t size)
 {
   global_State* g = L->l_G;
   g->GCdebt += ((l_mem)(size));
+}
+
+LUAI_FUNC void luaM_account_(lua_State* L, size_t osize, size_t nsize)
+{
+  global_State* g = L->l_G;
+  if (nsize == 0)
+  {
+    if (osize != 0)
+      (*g->frealloc)(g->ud, osize, 0, 0);
+    g->GCdebt += ((l_mem)(osize));
+    return;
+  }
+  if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, 0)))
+  {
+    if (cantryagain(g))
+    {
+      luaC_fullgc(L, 1);
+      if ((*g->frealloc)(g->ud, osize, nsize, 0))
+      {
+        g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
+        return;
+      }
+    }
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
 }
 
 // type allocators

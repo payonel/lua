@@ -631,7 +631,7 @@ static int findsetreg(const Proto* p, int lastpc, int reg)
 */
 static std::optional<byte_view> kname(const Proto* p, int index, const InternalString** name)
 {
-  TValue* kvalue = &p->k[index];
+  const TValue* kvalue = &p->k[index];
   if ((((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
   {
     *name = &tsvalue(kvalue)->data;
