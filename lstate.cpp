@@ -275,14 +275,13 @@ static void close_state(lua_State* L)
 LUA_API lua_State* lua_newthread(lua_State* L)
 {
   global_State* g = L->l_G;
-  GCObject* o;
   lua_State* L1;
   lua_lock(L);
   luaC_checkGC(L);
   /* create new thread */
-  o = luaC_newobjdt(L, LUA_TTHREAD, sizeof(LX));
-  assert(o->tt == LUA_VTHREAD);
-  L1 = static_cast<lua_State*>(o);
+  LX* lx = luaM_malloc_LX(L);
+  L1 = &lx->l;
+  luaC_link(L, L1, LUA_TTHREAD);
   /* anchor it on L stack */
   setslotth(L, L->top, L1);
   api_incr_top(L);

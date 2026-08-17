@@ -74,7 +74,24 @@ LUAI_FUNC std::span<AbsLineInfo> luaM_malloc_AbsLineInfo_span(lua_State* L, size
 LUAI_FUNC std::span<LocVar> luaM_malloc_LocVar_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<char> luaM_malloc_char_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<Node> luaM_malloc_Node_span(lua_State* L, size_t count);
-LUAI_FUNC GCObject* luaM_malloc_gcobject(lua_State* L, size_t size, int tag);
+
+// typed GC-object allocators (throwing, fixed-size per type)
+struct TString;
+struct Udata;
+struct Table;
+struct CClosure;
+struct LClosure;
+struct CFuncInfo;
+struct LX;
+LUAI_FUNC TString* luaM_malloc_TString(lua_State* L);
+LUAI_FUNC Udata* luaM_malloc_Udata(lua_State* L);
+LUAI_FUNC Table* luaM_malloc_Table(lua_State* L);
+LUAI_FUNC CClosure* luaM_malloc_CClosure(lua_State* L);
+LUAI_FUNC LClosure* luaM_malloc_LClosure(lua_State* L);
+LUAI_FUNC CFuncInfo* luaM_malloc_CFuncInfo(lua_State* L);
+LUAI_FUNC UpVal* luaM_malloc_UpVal(lua_State* L);
+LUAI_FUNC Proto* luaM_malloc_Proto(lua_State* L);
+LUAI_FUNC LX* luaM_malloc_LX(lua_State* L);
 
 // typed raw (g-based) char realloc
 LUAI_FUNC std::span<char> luaM_rawrealloc_char_span(global_State* g, std::span<char> block, size_t count);

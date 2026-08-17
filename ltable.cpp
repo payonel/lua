@@ -845,9 +845,8 @@ static void rehash(lua_State* L, Table* t, const TValue* ek)
 
 Table* luaH_new(lua_State* L)
 {
-  GCObject* o = luaC_newobj(L, LUA_VTABLE, sizeof(Table));
-  assert(o->tt == LUA_VTABLE);
-  Table* t = static_cast<Table*>(o);
+  Table* t = luaM_malloc_Table(L);
+  luaC_link(L, t, LUA_VTABLE);
   t->metatable = nullptr;
   t->flags = maskflags; /* table has no metamethod fields */
   t->array = nullptr;

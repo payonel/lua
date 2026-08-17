@@ -321,26 +321,17 @@ void luaC_fix(lua_State* L, GCObject* o)
 }
 
 /*
-** create a new collectable object (with given type, size, and offset)
-** and link it to 'allgc' list.
+** link an already-allocated collectable object (of given type) into
+** the 'allgc' list.
 */
-GCObject* luaC_newobjdt(lua_State* L, lu_byte tt, size_t sz)
+GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt)
 {
   global_State* g = L->l_G;
-  GCObject* o = luaM_malloc_gcobject(L, sz, tt & NOVARIANT_MASK);
   o->marked = luaC_white(g);
   o->tt = tt;
   o->next = g->allgc;
   g->allgc = o;
   return o;
-}
-
-/*
-** create a new collectable object with no offset.
-*/
-GCObject* luaC_newobj(lua_State* L, lu_byte tt, size_t sz)
-{
-  return luaC_newobjdt(L, tt, sz);
 }
 
 /* }====================================================== */

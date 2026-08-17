@@ -40,9 +40,8 @@ void luaS_forcehash(TString* ts)
 static TString* createstrobj(lua_State* L, InternalString&& str, size_t h,
                              int hashed, int external)
 {
-  GCObject* o = luaC_newobj(L, LUA_VSTRING, sizeof(TString));
-  assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
-  TString* ts = static_cast<TString*>(o);
+  TString* ts = luaM_malloc_TString(L);
+  luaC_link(L, ts, LUA_VSTRING);
   ts->hash = ((unsigned int)(h));
   ts->hashed = ((lu_byte)(hashed));
   ts->hnext = nullptr;
@@ -206,9 +205,8 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   int i;
   if (l_unlikely(s >= MAX_SIZE - sizeof(Udata)))
     luaM_toobig(L);
-  GCObject* o = luaC_newobj(L, LUA_VUSERDATA, sizeof(Udata));
-  assert(o->tt == LUA_VUSERDATA);
-  u = static_cast<Udata*>(o);
+  u = luaM_malloc_Udata(L);
+  luaC_link(L, u, LUA_VUSERDATA);
   u->nuvalue = 0;
   u->metatable = nullptr;
   u->uv = nullptr;

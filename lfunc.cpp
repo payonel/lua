@@ -21,9 +21,8 @@
 
 CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<std::string> name)
 {
-  GCObject* o = luaC_newobj(L, LUA_VLCF, sizeof(CFuncInfo));
-  assert(o->tt == LUA_VLCF);
-  CFuncInfo* cfi = static_cast<CFuncInfo*>(o);
+  CFuncInfo* cfi = luaM_malloc_CFuncInfo(L);
+  luaC_link(L, cfi, LUA_VLCF);
   cfi->fptr = f;
   new (&cfi->name) std::optional<std::string>(std::move(name));
   return cfi;
@@ -32,9 +31,8 @@ CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<std::s
 CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 {
   global_State* g = L->l_G;
-  GCObject* o = luaC_newobj(L, LUA_VCCL, sizeof(CClosure));
-  assert(o->tt == LUA_VCCL);
-  CClosure* c = static_cast<CClosure*>(o);
+  CClosure* c = luaM_malloc_CClosure(L);
+  luaC_link(L, c, LUA_VCCL);
   c->nupvalues = 0;
   c->upvalue = nullptr;
   lu_byte oldgcstop = g->gcstopem;
@@ -51,9 +49,8 @@ CClosure* luaF_newCclosure(lua_State* L, int nupvals)
 LClosure* luaF_newLclosure(lua_State* L, int nupvals)
 {
   global_State* g = L->l_G;
-  GCObject* o = luaC_newobj(L, LUA_VLCL, sizeof(LClosure));
-  assert(o->tt == LUA_VLCL);
-  LClosure* c = static_cast<LClosure*>(o);
+  LClosure* c = luaM_malloc_LClosure(L);
+  luaC_link(L, c, LUA_VLCL);
   c->p = nullptr;
   c->nupvalues = 0;
   c->upvals = nullptr;
@@ -78,9 +75,8 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
   int i;
   for (i = 0; i < cl->nupvalues; i++)
   {
-    GCObject* o = luaC_newobj(L, LUA_VUPVAL, sizeof(UpVal));
-    assert(o->tt == LUA_VUPVAL);
-    UpVal* uv = static_cast<UpVal*>(o);
+    UpVal* uv = luaM_malloc_UpVal(L);
+    luaC_link(L, uv, LUA_VUPVAL);
     uv->opennext = nullptr;
     uv->previous = nullptr;
     uv->owner = nullptr;
@@ -97,9 +93,8 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
 **/
 static UpVal* newupval(lua_State* L, StkId level, UpVal** prev)
 {
-  GCObject* o = luaC_newobj(L, LUA_VUPVAL, sizeof(UpVal));
-  assert(o->tt == LUA_VUPVAL);
-  UpVal* uv = static_cast<UpVal*>(o);
+  UpVal* uv = luaM_malloc_UpVal(L);
+  luaC_link(L, uv, LUA_VUPVAL);
   UpVal* next = *prev;
   uv->owner = L;
   uv->stkid = level;
@@ -283,9 +278,8 @@ StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy)
 
 Proto* luaF_newproto(lua_State* L)
 {
-  GCObject* o = luaC_newobj(L, LUA_VPROTO, sizeof(Proto));
-  assert(o->tt == LUA_VPROTO);
-  Proto* f = static_cast<Proto*>(o);
+  Proto* f = luaM_malloc_Proto(L);
+  luaC_link(L, f, LUA_VPROTO);
   f->k = nullptr;
   f->sizek = 0;
   f->p = nullptr;

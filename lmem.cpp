@@ -451,9 +451,49 @@ LUAI_FUNC std::span<Node> luaM_malloc_Node_span(lua_State* L, size_t count)
   return std::span<Node>(p, p == nullptr ? 0 : count);
 }
 
-LUAI_FUNC GCObject* luaM_malloc_gcobject(lua_State* L, size_t size, int tag)
+LUAI_FUNC TString* luaM_malloc_TString(lua_State* L)
 {
-  return (GCObject*)luaM_malloc_(L, size, tag);
+  return (TString*)luaM_malloc_(L, sizeof(TString), LUA_VSTRING & NOVARIANT_MASK);
+}
+
+LUAI_FUNC Udata* luaM_malloc_Udata(lua_State* L)
+{
+  return (Udata*)luaM_malloc_(L, sizeof(Udata), LUA_VUSERDATA & NOVARIANT_MASK);
+}
+
+LUAI_FUNC Table* luaM_malloc_Table(lua_State* L)
+{
+  return (Table*)luaM_malloc_(L, sizeof(Table), LUA_VTABLE & NOVARIANT_MASK);
+}
+
+LUAI_FUNC CClosure* luaM_malloc_CClosure(lua_State* L)
+{
+  return (CClosure*)luaM_malloc_(L, sizeof(CClosure), LUA_VCCL & NOVARIANT_MASK);
+}
+
+LUAI_FUNC LClosure* luaM_malloc_LClosure(lua_State* L)
+{
+  return (LClosure*)luaM_malloc_(L, sizeof(LClosure), LUA_VLCL & NOVARIANT_MASK);
+}
+
+LUAI_FUNC CFuncInfo* luaM_malloc_CFuncInfo(lua_State* L)
+{
+  return (CFuncInfo*)luaM_malloc_(L, sizeof(CFuncInfo), LUA_VLCF & NOVARIANT_MASK);
+}
+
+LUAI_FUNC UpVal* luaM_malloc_UpVal(lua_State* L)
+{
+  return (UpVal*)luaM_malloc_(L, sizeof(UpVal), LUA_VUPVAL & NOVARIANT_MASK);
+}
+
+LUAI_FUNC Proto* luaM_malloc_Proto(lua_State* L)
+{
+  return (Proto*)luaM_malloc_(L, sizeof(Proto), LUA_VPROTO & NOVARIANT_MASK);
+}
+
+LUAI_FUNC LX* luaM_malloc_LX(lua_State* L)
+{
+  return (LX*)luaM_malloc_(L, sizeof(LX), LUA_TTHREAD & NOVARIANT_MASK);
 }
 
 // typed raw (g-based) char realloc
