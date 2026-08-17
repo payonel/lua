@@ -355,10 +355,7 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
   int pc = fs->pc - 1; /* last instruction coded */
   if (abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS)
   {
-    int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(AbsLineInfo))
-                    ? INT_MAX
-                    : (int)(MAX_SIZET / sizeof(AbsLineInfo));
-    f->abslineinfo = luaM_safegrow_AbsLineInfo_span(fs->ls->L, f->abslineinfo, fs->nabslineinfo, limit, lt::lines);
+    f->abslineinfo = luaM_safegrow_AbsLineInfo_span(fs->ls->L, f->abslineinfo, fs->nabslineinfo);
     f->abslineinfo[fs->nabslineinfo].pc = pc;
     f->abslineinfo[fs->nabslineinfo++].line = line;
     linedif = ABSLINEINFO; /* signal that there is absolute information */
