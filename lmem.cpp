@@ -644,11 +644,11 @@ LUAI_FUNC std::span<StkId> luaM_alloc_StkId_span(global_State* g, lua_State* L, 
   return nb;
 }
 
-LUAI_FUNC std::span<StkId> luaM_safegrow_StkId_span(lua_State* L, std::span<StkId> block, int nelems, int limit, byte_view what)
+LUAI_FUNC std::span<StkId> luaM_safegrow_StkId_span(lua_State* L, std::span<StkId> block, size_t nelems)
 {
-  int size = (int)block.size();
-  int newsize = luaM_growsize_(L, size, nelems, limit, what);
-  if (newsize == size)
+  constexpr size_t limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(StkId)) ? (size_t)INT_MAX : (MAX_SIZET / sizeof(StkId));
+  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::to_be_closed_variables);
+  if (newsize == block.size())
     return block;
   return luaM_alloc_StkId_span(L->l_G, L, block, (size_t)newsize, true);
 }

@@ -204,11 +204,8 @@ void luaF_newtbcupval(lua_State* L, StkId level)
   if ((slottag(L, level) == LUA_VFALSE) || ((slottag(L, level) & NOVARIANT_MASK) == LUA_TNIL))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
-  int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(StkId))
-                  ? INT_MAX
-                  : (int)(MAX_SIZET / sizeof(StkId));
   {
-    L->tbc = luaM_safegrow_StkId_span(L, L->tbc, L->ntbc, limit, lt::to_be_closed_variables);
+    L->tbc = luaM_safegrow_StkId_span(L, L->tbc, L->ntbc);
   }
   L->tbc[L->ntbc++] = level;
   L->tbclist = level;
