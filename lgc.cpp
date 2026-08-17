@@ -905,7 +905,7 @@ static void freeupval(lua_State* L, UpVal* uv)
 {
   if (upisopen(uv))
     luaF_unlinkupval(uv);
-  luaM_free_(L, (uv), sizeof(*(uv)));
+  luaM_free_UpVal(L, uv);
 }
 
 static void freeobj(lua_State* L, GCObject* o)
@@ -922,15 +922,15 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VLCL:
   {
     LClosure* cl = static_cast<LClosure*>(o);
-    luaM_free_(L, (cl->upvals), ((size_t)cl->nupvalues) * sizeof(UpVal*));
-    luaM_free_(L, (cl), sizeof(LClosure), o->tt & NOVARIANT_MASK);
+    luaM_free_UpVal_ptr_span(L, std::span<UpVal*>(cl->upvals, cl->nupvalues));
+    luaM_free_LClosure(L, cl);
     break;
   }
   case LUA_VCCL:
   {
     CClosure* cl = static_cast<CClosure*>(o);
-    luaM_free_(L, (cl->upvalue), ((size_t)cl->nupvalues) * sizeof(TValue));
-    luaM_free_(L, (cl), sizeof(CClosure), o->tt & NOVARIANT_MASK);
+    luaM_free_TValue_span(L, std::span<TValue>(cl->upvalue, cl->nupvalues));
+    luaM_free_CClosure(L, cl);
     break;
   }
   case LUA_VTABLE:
@@ -942,13 +942,13 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    luaM_free_(L, (u->uv), ((size_t)u->nuvalue) * sizeof(TValue));
+    luaM_free_TValue_span(L, std::span<TValue>(u->uv, u->nuvalue));
     if (u->data.data() != nullptr)
     {
-      luaM_free_(L, (u->data.data()), u->data.size());
+      luaM_free_char_span(L, u->data);
       u->data = {};
     }
-    luaM_free_(L, (o), sizeof(Udata), o->tt & NOVARIANT_MASK);
+    luaM_free_Udata(L, u);
     break;
   }
   case LUA_VSHRSTR:
@@ -959,14 +959,14 @@ static void freeobj(lua_State* L, GCObject* o)
     if (!strisexternal(ts))
       luaM_release(L, ts->data.size());
     ts->data.~InternalString();
-    luaM_free_(L, (ts), (sizeof(TString)), o->tt & NOVARIANT_MASK);
+    luaM_free_TString(L, ts);
     break;
   }
   case LUA_VLCF:
   {
     CFuncInfo* cfi = static_cast<CFuncInfo*>(o);
     cfi->name.~optional();
-    luaM_free_(L, (o), sizeof(CFuncInfo), o->tt & NOVARIANT_MASK);
+    luaM_free_CFuncInfo(L, cfi);
     break;
   }
   default:

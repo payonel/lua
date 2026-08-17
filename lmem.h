@@ -17,7 +17,6 @@ LUAI_FUNC l_noret luaM_toobig(lua_State* L);
 struct global_State;
 
 /* not to be called directly */
-LUAI_FUNC void luaM_free_(lua_State* L, void* block, size_t osize, int tag = 0);
 LUAI_FUNC int luaM_reserve(lua_State* L, size_t size);
 LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
@@ -95,4 +94,32 @@ LUAI_FUNC LX* luaM_malloc_LX(lua_State* L);
 
 // typed raw (g-based) char realloc
 LUAI_FUNC std::span<char> luaM_rawrealloc_char_span(global_State* g, std::span<char> block, size_t count);
+
+// typed span frees
+LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block);
+LUAI_FUNC void luaM_free_Value_span(lua_State* L, std::span<Value> block);
+LUAI_FUNC void luaM_free_UpVal_ptr_span(lua_State* L, std::span<UpVal*> block);
+LUAI_FUNC void luaM_free_char_span(lua_State* L, std::span<char> block);
+LUAI_FUNC void luaM_free_Instruction_span(lua_State* L, std::span<Instruction> block);
+LUAI_FUNC void luaM_free_ls_byte_span(lua_State* L, std::span<ls_byte> block);
+LUAI_FUNC void luaM_free_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block);
+LUAI_FUNC void luaM_free_Proto_ptr_span(lua_State* L, std::span<Proto*> block);
+LUAI_FUNC void luaM_free_LocVar_span(lua_State* L, std::span<LocVar> block);
+LUAI_FUNC void luaM_free_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block);
+LUAI_FUNC void luaM_free_Node_span(lua_State* L, std::span<Node> block);
+LUAI_FUNC void luaM_free_StkId_span(lua_State* L, std::span<StkId> block);
+LUAI_FUNC void luaM_free_Vardesc_span(lua_State* L, std::span<Vardesc> block);
+LUAI_FUNC void luaM_free_Labeldesc_span(lua_State* L, std::span<Labeldesc> block);
+
+// typed object frees
+LUAI_FUNC void luaM_free_UpVal(lua_State* L, UpVal* p);
+LUAI_FUNC void luaM_free_LClosure(lua_State* L, LClosure* p);
+LUAI_FUNC void luaM_free_CClosure(lua_State* L, CClosure* p);
+LUAI_FUNC void luaM_free_Udata(lua_State* L, Udata* p);
+LUAI_FUNC void luaM_free_TString(lua_State* L, TString* p);
+LUAI_FUNC void luaM_free_CFuncInfo(lua_State* L, CFuncInfo* p);
+LUAI_FUNC void luaM_free_Proto(lua_State* L, Proto* p);
+LUAI_FUNC void luaM_free_Table(lua_State* L, Table* p);
+LUAI_FUNC void luaM_free_LX(lua_State* L, LX* p);
+LUAI_FUNC void luaM_free_CallInfo(lua_State* L, CallInfo* p);
 

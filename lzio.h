@@ -23,7 +23,7 @@ public:
   ~MBuffer()
   {
     if (bytes_.data() != nullptr)
-      luaM_free_(L_, bytes_.data(), bytes_.size());
+      luaM_free_char_span(L_, bytes_);
   }
 
   void attach(lua_State* L) noexcept

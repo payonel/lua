@@ -1169,7 +1169,7 @@ static int resetCI(lua_State* L)
   {
     CallInfo* tofree = ci->next;
     ci->next = ci->next->next;
-    luaM_free_(L, (tofree), sizeof(*(tofree)));
+    luaM_free_CallInfo(L, tofree);
     L->nci--;
   }
   return 0;

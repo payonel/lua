@@ -229,7 +229,7 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   {
     memset(newstk + keep, 0, (newn - keep) * sizeof(TValue));
   }
-  luaM_free_(L, L->stack, oldn * sizeof(TValue));
+  luaM_free_TValue_span(L, std::span<TValue>(L->stack, oldn));
   L->stack = newstk;
   correctstack(L);
   L->stack_last = newsize;
@@ -1122,9 +1122,9 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
   status = luaD_pcall(L, f_parser, &p, (L->top), L->errfunc);
-  luaM_free_(L, (p.dyd.actvar.arr), (((size_t)(p.dyd.actvar.size))) * sizeof(*(p.dyd.actvar.arr)));
-  luaM_free_(L, (p.dyd.gt.arr), (((size_t)(p.dyd.gt.size))) * sizeof(*(p.dyd.gt.arr)));
-  luaM_free_(L, (p.dyd.label.arr), (((size_t)(p.dyd.label.size))) * sizeof(*(p.dyd.label.arr)));
+  luaM_free_Vardesc_span(L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size));
+  luaM_free_Labeldesc_span(L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size));
+  luaM_free_Labeldesc_span(L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size));
   decnny(L);
   return status;
 }

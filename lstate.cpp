@@ -76,7 +76,7 @@ static void freeCI(lua_State* L)
   while ((ci = next) != nullptr)
   {
     next = ci->next;
-    luaM_free_(L, (ci), sizeof(*(ci)));
+    luaM_free_CallInfo(L, ci);
     L->nci--;
   }
 }
@@ -96,7 +96,7 @@ void luaE_shrinkCI(lua_State* L)
     CallInfo* next2 = next->next; /* next's next */
     ci->next = next2;             /* remove next from the list */
     L->nci--;
-    luaM_free_(L, (next), sizeof(*(next))); /* free next */
+    luaM_free_CallInfo(L, next); /* free next */
     if (next2 == nullptr)
       break; /* no more elements */
     else
@@ -163,7 +163,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
-  luaM_free_(L, (L->tbc), (((size_t)(L->sizetbc))) * sizeof(*(L->tbc)));
+  luaM_free_StkId_span(L, std::span<StkId>(L->tbc, L->sizetbc));
   L->tbc = nullptr;
   L->ntbc = L->sizetbc = 0;
   if (L->stack == nullptr)
@@ -173,7 +173,7 @@ static void freestack(lua_State* L)
   assert(L->nci == 0);
   {
     size_t nslots = (size_t)(stacksize(L) + EXTRA_STACK);
-    luaM_free_(L, L->stack, nslots * sizeof(TValue));
+    luaM_free_TValue_span(L, std::span<TValue>(L->stack, nslots));
   }
 }
 
@@ -305,7 +305,7 @@ void luaE_freethread(lua_State* L, lua_State* L1)
   assert(L1->openupval == nullptr);
   luai_userstatefree(L, L1);
   freestack(L1);
-  luaM_free_(L, (l), sizeof(*(l)), LUA_TTHREAD);
+  luaM_free_LX(L, l);
 }
 
 TStatus luaE_resetthread(lua_State* L, TStatus status)

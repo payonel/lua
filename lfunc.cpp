@@ -323,15 +323,15 @@ void luaF_freeproto(lua_State* L, Proto* f)
 {
   if (!(f->flag & PF_FIXED))
   {
-    luaM_free_(L, (f->code), (((size_t)(f->sizecode))) * sizeof(*(f->code)));
-    luaM_free_(L, (f->lineinfo), (((size_t)(f->sizelineinfo))) * sizeof(*(f->lineinfo)));
-    luaM_free_(L, (f->abslineinfo), (((size_t)(f->sizeabslineinfo))) * sizeof(*(f->abslineinfo)));
+    luaM_free_Instruction_span(L, std::span<Instruction>(f->code, f->sizecode));
+    luaM_free_ls_byte_span(L, std::span<ls_byte>(f->lineinfo, f->sizelineinfo));
+    luaM_free_AbsLineInfo_span(L, std::span<AbsLineInfo>(f->abslineinfo, f->sizeabslineinfo));
   }
-  luaM_free_(L, (f->p), (((size_t)(f->sizep))) * sizeof(*(f->p)));
-  luaM_free_(L, (f->k), (((size_t)(f->sizek))) * sizeof(*(f->k)));
-  luaM_free_(L, (f->locvars), (((size_t)(f->sizelocvars))) * sizeof(*(f->locvars)));
-  luaM_free_(L, (f->upvalues), (((size_t)(f->sizeupvalues))) * sizeof(*(f->upvalues)));
-  luaM_free_(L, (f), sizeof(*(f)));
+  luaM_free_Proto_ptr_span(L, std::span<Proto*>(f->p, f->sizep));
+  luaM_free_TValue_span(L, std::span<TValue>(f->k, f->sizek));
+  luaM_free_LocVar_span(L, std::span<LocVar>(f->locvars, f->sizelocvars));
+  luaM_free_Upvaldesc_span(L, std::span<Upvaldesc>(f->upvalues, f->sizeupvalues));
+  luaM_free_Proto(L, f);
 }
 
 const InternalString* luaF_getlocalname(const Proto* f, int local_number, int pc)

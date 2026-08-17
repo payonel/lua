@@ -414,7 +414,7 @@ static void freehash(lua_State* L, Table* t)
 {
   if (!isdummy(t))
   {
-    luaM_free_(L, (t->node), (sizehash(t)));
+    luaM_free_Node_span(L, std::span<Node>(t->node, sizenode(t)));
   }
 }
 
@@ -589,8 +589,8 @@ static Value* resizearray(lua_State* L, Table* t,
   }
   else if (newasize == 0)
   { /* erasing array? */
-    luaM_free_(L, (t->array), ((size_t)(oldasize)) * sizeof(Value));
-    luaM_free_(L, (t->tags), ((size_t)(oldasize)) * sizeof(char));
+    luaM_free_Value_span(L, std::span<Value>(t->array, oldasize));
+    luaM_free_char_span(L, std::span<char>((char*)t->tags, oldasize));
     *newtags = nullptr;
     return nullptr;
   }
@@ -605,7 +605,7 @@ static Value* resizearray(lua_State* L, Table* t,
     lu_byte* nt = (lu_byte*)luaM_alloc_char_span(L, newasize).data();
     if (nt == nullptr) /* allocation error? */
     {
-      luaM_free_(L, (nv), ((size_t)(newasize)) * sizeof(Value));
+      luaM_free_Value_span(L, std::span<Value>(nv, newasize));
       *newtags = nullptr;
       return nullptr;
     }
@@ -615,8 +615,8 @@ static Value* resizearray(lua_State* L, Table* t,
       unsigned tomove = (oldasize < newasize) ? oldasize : newasize;
       memcpy(nv, t->array, ((size_t)(tomove)) * sizeof(Value));
       memcpy(nt, t->tags, ((size_t)(tomove)) * sizeof(char));
-      luaM_free_(L, (t->array), ((size_t)(oldasize)) * sizeof(Value));
-      luaM_free_(L, (t->tags), ((size_t)(oldasize)) * sizeof(char));
+      luaM_free_Value_span(L, std::span<Value>(t->array, oldasize));
+      luaM_free_char_span(L, std::span<char>((char*)t->tags, oldasize));
     }
     *newtags = nt;
     return nv;
@@ -874,7 +874,7 @@ void luaH_free(lua_State* L, Table* t)
   lu_byte* newtags;
   freehash(L, t);
   resizearray(L, t, t->asize, 0, &newtags);
-  luaM_free_(L, (t), sizeof(*(t)), t->tt & NOVARIANT_MASK);
+  luaM_free_Table(L, t);
 }
 
 static int getfreepos(Table* t)

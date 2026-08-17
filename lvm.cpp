@@ -835,7 +835,7 @@ void luaV_concat(lua_State* L, int total)
         copy2buff(L, top, n, std::span<char>{buff, tl});
         byte_view buffstr{buff, tl};
         ts = luaS_createstr(L, buffstr, 0, buffstr.size());
-        luaM_free_(L, (buff), (tl) * sizeof(*(buff)));
+        luaM_free_char_span(L, std::span<char>(buff, tl));
       }
       setslots(L, top - n, ts); /* create result */
     }

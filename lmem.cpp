@@ -26,6 +26,7 @@ LUAI_FUNC void* luaM_growaux_(lua_State* L, void* block, int nelems, int* size, 
 LUAI_FUNC void* luaM_shrinkvector_(lua_State* L, void* block, int* nelem, int final_n, unsigned size_elem);
 LUAI_FUNC void* luaM_rawrealloc(global_State* g, void* block, size_t osize, size_t nsize, int tag);
 LUAI_FUNC void* luaM_malloc_(lua_State* L, size_t size, int tag);
+LUAI_FUNC void luaM_free_(lua_State* L, void* block, size_t osize, int tag);
 
 /*
 ** Macro to call the allocation function.
@@ -501,4 +502,126 @@ LUAI_FUNC std::span<char> luaM_rawrealloc_char_span(global_State* g, std::span<c
 {
   char* p = (char*)luaM_rawrealloc(g, block.data(), block.size(), count, 0);
   return std::span<char>(p, p == nullptr ? 0 : count);
+}
+
+// typed span frees
+LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(TValue), 0);
+}
+
+LUAI_FUNC void luaM_free_Value_span(lua_State* L, std::span<Value> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(Value), 0);
+}
+
+LUAI_FUNC void luaM_free_UpVal_ptr_span(lua_State* L, std::span<UpVal*> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(UpVal*), 0);
+}
+
+LUAI_FUNC void luaM_free_char_span(lua_State* L, std::span<char> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(char), 0);
+}
+
+LUAI_FUNC void luaM_free_Instruction_span(lua_State* L, std::span<Instruction> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(Instruction), 0);
+}
+
+LUAI_FUNC void luaM_free_ls_byte_span(lua_State* L, std::span<ls_byte> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(ls_byte), 0);
+}
+
+LUAI_FUNC void luaM_free_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(AbsLineInfo), 0);
+}
+
+LUAI_FUNC void luaM_free_Proto_ptr_span(lua_State* L, std::span<Proto*> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(Proto*), 0);
+}
+
+LUAI_FUNC void luaM_free_LocVar_span(lua_State* L, std::span<LocVar> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(LocVar), 0);
+}
+
+LUAI_FUNC void luaM_free_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(Upvaldesc), 0);
+}
+
+LUAI_FUNC void luaM_free_Node_span(lua_State* L, std::span<Node> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(Node), 0);
+}
+
+LUAI_FUNC void luaM_free_StkId_span(lua_State* L, std::span<StkId> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(StkId), 0);
+}
+
+LUAI_FUNC void luaM_free_Vardesc_span(lua_State* L, std::span<Vardesc> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(Vardesc), 0);
+}
+
+LUAI_FUNC void luaM_free_Labeldesc_span(lua_State* L, std::span<Labeldesc> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(Labeldesc), 0);
+}
+
+// typed object frees
+LUAI_FUNC void luaM_free_UpVal(lua_State* L, UpVal* p)
+{
+  luaM_free_(L, p, sizeof(UpVal), 0);
+}
+
+LUAI_FUNC void luaM_free_LClosure(lua_State* L, LClosure* p)
+{
+  luaM_free_(L, p, sizeof(LClosure), LUA_VLCL & NOVARIANT_MASK);
+}
+
+LUAI_FUNC void luaM_free_CClosure(lua_State* L, CClosure* p)
+{
+  luaM_free_(L, p, sizeof(CClosure), LUA_VCCL & NOVARIANT_MASK);
+}
+
+LUAI_FUNC void luaM_free_Udata(lua_State* L, Udata* p)
+{
+  luaM_free_(L, p, sizeof(Udata), LUA_VUSERDATA & NOVARIANT_MASK);
+}
+
+LUAI_FUNC void luaM_free_TString(lua_State* L, TString* p)
+{
+  luaM_free_(L, p, sizeof(TString), LUA_VSTRING & NOVARIANT_MASK);
+}
+
+LUAI_FUNC void luaM_free_CFuncInfo(lua_State* L, CFuncInfo* p)
+{
+  luaM_free_(L, p, sizeof(CFuncInfo), LUA_VLCF & NOVARIANT_MASK);
+}
+
+LUAI_FUNC void luaM_free_Proto(lua_State* L, Proto* p)
+{
+  luaM_free_(L, p, sizeof(Proto), 0);
+}
+
+LUAI_FUNC void luaM_free_Table(lua_State* L, Table* p)
+{
+  luaM_free_(L, p, sizeof(Table), LUA_VTABLE & NOVARIANT_MASK);
+}
+
+LUAI_FUNC void luaM_free_LX(lua_State* L, LX* p)
+{
+  luaM_free_(L, p, sizeof(LX), LUA_TTHREAD);
+}
+
+LUAI_FUNC void luaM_free_CallInfo(lua_State* L, CallInfo* p)
+{
+  luaM_free_(L, p, sizeof(CallInfo), 0);
 }
