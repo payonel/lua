@@ -672,11 +672,8 @@ static int newlabelentry(LexState* ls, Labellist* l, TString* name,
                          int line, int pc)
 {
   int n = l->n;
-  int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(Labeldesc))
-                  ? SHRT_MAX
-                  : (int)(MAX_SIZET / sizeof(Labeldesc));
   {
-    auto s = luaM_safegrow_Labeldesc_span(ls->L, std::span<Labeldesc>(l->arr, l->size), n, limit, lt::labels_gotos);
+    auto s = luaM_safegrow_Labeldesc_span(ls->L, std::span<Labeldesc>(l->arr, l->size), n);
     l->arr = s.data();
     l->size = (int)s.size();
   }

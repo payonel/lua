@@ -464,11 +464,11 @@ LUAI_FUNC std::span<Labeldesc> luaM_alloc_Labeldesc_span(global_State* g, lua_St
   return nb;
 }
 
-LUAI_FUNC std::span<Labeldesc> luaM_safegrow_Labeldesc_span(lua_State* L, std::span<Labeldesc> block, int nelems, int limit, byte_view what)
+LUAI_FUNC std::span<Labeldesc> luaM_safegrow_Labeldesc_span(lua_State* L, std::span<Labeldesc> block, size_t nelems)
 {
-  int size = (int)block.size();
-  int newsize = luaM_growsize_(L, size, nelems, limit, what);
-  if (newsize == size)
+  constexpr size_t limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(Labeldesc)) ? (size_t)SHRT_MAX : (MAX_SIZET / sizeof(Labeldesc));
+  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::labels_gotos);
+  if (newsize == block.size())
     return block;
   return luaM_alloc_Labeldesc_span(L->l_G, L, block, (size_t)newsize, true);
 }
