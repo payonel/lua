@@ -200,7 +200,7 @@ struct lua_State : GCObject
   struct global_State* l_G;
   CallInfo* ci;    /* call info for current function */
   StkId stack_last; /* end of stack (last element + 1) */
-  std::span<TValue> stack;    /* stack base */
+  std::vector<TValue> stack;    /* stack base */
   UpVal* openupval;    /* list of open upvalues in this stack */
   StkId tbclist;
   std::vector<StkId> tbc;

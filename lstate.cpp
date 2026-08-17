@@ -143,18 +143,9 @@ static void resetCI(lua_State* L)
 
 static void stack_init(lua_State* L1, lua_State* L)
 {
-  int i;
   size_t nslots = (size_t)(BASIC_STACK_SIZE + EXTRA_STACK);
-  std::span<TValue> stk = luaM_alloc_TValue_span(L, nslots);
-  if (l_unlikely(stk.data() == nullptr))
-  {
-    luaD_throw(L, LUA_ERRMEM);
-  }
-  memset(stk.data(), 0, nslots * sizeof(TValue));
-  L1->stack = stk;
+  luaM_vecalloc(L, L1->stack, nslots);
   L1->tbclist = 0;
-  for (i = 0; i < BASIC_STACK_SIZE + EXTRA_STACK; i++)
-    setslottag(L1, i, LUA_VNIL); /* erase new stack */
   L1->stack_last = BASIC_STACK_SIZE;
   /* initialize first ci */
   resetCI(L1);
@@ -171,7 +162,7 @@ static void freestack(lua_State* L)
   freeCI(L);
   assert(L->nci == 0);
   {
-    luaM_free_TValue_span(L, L->stack);
+    luaM_vecfree(L, L->stack);
   }
 }
 
@@ -219,7 +210,7 @@ static void f_luaopen(lua_State* L, void*)
 static void preinit_thread(lua_State* L, global_State* g)
 {
   L->l_G = g;
-  L->stack = {};
+  new (&L->stack) std::vector<TValue>();
   L->tbclist = 0;
   new (&L->tbc) std::vector<StkId>();
   L->ntbc = 0;

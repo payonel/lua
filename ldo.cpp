@@ -207,16 +207,14 @@ static void correctstack(lua_State* L)
 int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
 {
   int oldsize = stacksize(L);
-  int i;
   size_t oldn = (size_t)(oldsize + EXTRA_STACK);
   size_t newn = (size_t)(newsize + EXTRA_STACK);
-  size_t keep = (oldn < newn) ? oldn : newn;
   lu_byte oldgcstop = L->l_G->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
   L->l_G->gcstopem = 1; /* stop emergency collection */
-  std::span<TValue> newstk = luaM_alloc_TValue_span(L, newn);
+  int ok = luaM_accounttry_(L, 0, newn * sizeof(TValue));
   L->l_G->gcstopem = oldgcstop; /* restore emergency collection */
-  if (l_unlikely(newstk.data() == nullptr))
+  if (l_unlikely(!ok))
   {
     correctstack(L);
     if (raiseerror)
@@ -224,17 +222,10 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
     else
       return 0; /* do not raise an error */
   }
-  memcpy(newstk.data(), L->stack.data(), keep * sizeof(TValue));
-  if (newn > keep)
-  {
-    memset(newstk.data() + keep, 0, (newn - keep) * sizeof(TValue));
-  }
-  luaM_free_TValue_span(L, L->stack);
-  L->stack = newstk;
+  luaM_account_(L, oldn * sizeof(TValue), 0);
+  L->stack.resize(newn);
   correctstack(L);
   L->stack_last = newsize;
-  for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
-    setslottag(L, i, LUA_VNIL); /* erase new segment */
   return 1;
 }
 
