@@ -60,9 +60,20 @@ static inline int cantryagain(global_State* g)
   return completestate(g) && !g->gcstopem;
 }
 
-static inline void* firsttry(global_State* g, void* block, size_t os, size_t ns, int tag)
+static int luaM_permit_(lua_State* L, size_t osize, size_t nsize, int tag)
 {
-  return luaM_rawrealloc(g, block, os, ns, tag);
+  global_State* g = L->l_G;
+  if (osize == 0 && nsize == 0)
+    return 1;
+  if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, tag)))
+  {
+    if (!cantryagain(g))
+      return 0;
+    luaC_fullgc(L, 1); /* try to free some memory... */
+    if (!(*g->frealloc)(g->ud, osize, nsize, tag))
+      return 0;
+  }
+  return 1;
 }
 
 /*
@@ -147,38 +158,34 @@ void luaM_free_(lua_State* L, void* block, size_t osize, int tag)
 }
 
 /*
-** In case of allocation fail, this function will do an emergency
-** collection to free some memory and then try the allocation again.
-*/
-static void* tryagain(lua_State* L, void* block,
-                      size_t osize, size_t nsize, int tag)
-{
-  global_State* g = L->l_G;
-  if (cantryagain(g))
-  {
-    luaC_fullgc(L, 1);                                     /* try to free some memory... */
-    return luaM_rawrealloc(g, block, osize, nsize, tag); /* try again */
-  }
-  else
-    return nullptr; /* cannot run an emergency collection */
-}
-
-/*
 ** Generic allocation routine.
 */
 void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
 {
-  void* newblock;
   global_State* g = L->l_G;
   assert((osize == 0) == (block == nullptr));
-  newblock = firsttry(g, block, osize, nsize, 0);
-  if (l_unlikely(newblock == nullptr && nsize > 0))
+  if (l_unlikely(!luaM_permit_(L, osize, nsize, 0)))
+    return nullptr; /* denied; do not update 'GCdebt' */
+  void* newblock;
+  if (nsize == 0)
   {
-    newblock = tryagain(L, block, osize, nsize, 0);
-    if (newblock == nullptr) /* still no memory? */
-      return nullptr;        /* do not update 'GCdebt' */
+    free(block);
+    newblock = nullptr;
   }
-  assert((nsize == 0) == (newblock == nullptr));
+  else
+  {
+    newblock = realloc(block, nsize);
+    if (l_unlikely(newblock == nullptr))
+    { /* physical allocation failed after being permitted */
+      if (cantryagain(g))
+      {
+        luaC_fullgc(L, 1);
+        newblock = realloc(block, nsize);
+      }
+      if (newblock == nullptr)
+        return nullptr; /* do not update 'GCdebt' */
+    }
+  }
   g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
   return newblock;
 }
@@ -199,10 +206,16 @@ void* luaM_malloc_(lua_State* L, size_t size, int tag)
   else
   {
     global_State* g = L->l_G;
-    void* newblock = firsttry(g, nullptr, 0, size, tag);
+    if (l_unlikely(!luaM_permit_(L, 0, size, tag)))
+      luaD_throw(L, LUA_ERRMEM);
+    void* newblock = realloc(nullptr, size);
     if (l_unlikely(newblock == nullptr))
-    {
-      newblock = tryagain(L, nullptr, 0, size, tag);
+    { /* physical allocation failed after being permitted */
+      if (cantryagain(g))
+      {
+        luaC_fullgc(L, 1);
+        newblock = realloc(nullptr, size);
+      }
       if (newblock == nullptr)
         luaD_throw(L, LUA_ERRMEM);
     }
@@ -231,23 +244,9 @@ void luaM_release(lua_State* L, size_t size)
 
 LUAI_FUNC int luaM_accounttry_(lua_State* L, size_t osize, size_t nsize)
 {
-  global_State* g = L->l_G;
-  if (nsize == 0)
-  {
-    if (osize != 0)
-      (*g->frealloc)(g->ud, osize, 0, 0);
-    g->GCdebt += ((l_mem)(osize));
-    return 1;
-  }
-  if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, 0)))
-  {
-    if (!cantryagain(g))
-      return 0;
-    luaC_fullgc(L, 1);
-    if (!(*g->frealloc)(g->ud, osize, nsize, 0))
-      return 0;
-  }
-  g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
+  if (l_unlikely(!luaM_permit_(L, osize, nsize, 0)))
+    return 0;
+  L->l_G->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
   return 1;
 }
 
