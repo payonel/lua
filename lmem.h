@@ -41,9 +41,14 @@ inline void luaM_vecshrink(lua_State* L, std::vector<T>& v, int final_n)
 {
   luaM_account_(L, v.size() * sizeof(T), (size_t)final_n * sizeof(T));
   if (final_n == 0)
+  {
     v = {};
+  }
   else
+  {
     v.resize((size_t)final_n);
+    v.shrink_to_fit();
+  }
 }
 
 template <typename T>
