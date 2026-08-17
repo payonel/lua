@@ -265,7 +265,7 @@ static void loadUpvalues(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->upvalues = luaM_malloc_Upvaldesc_span(S->L, (size_t)n);
+  f->upvalues = luaM_alloc_Upvaldesc_span(S->L->l_G, S->L, {}, (size_t)n, true);
   for (i = 0; i < n; i++) /* make array valid for GC */
     f->upvalues[i].name = nullptr;
   for (i = 0; i < n; i++)
