@@ -335,7 +335,7 @@ static inline unsigned arrayindex(lua_Integer k)
 */
 static inline unsigned ikeyinarray(const Table* t, lua_Integer k)
 {
-  return checkrange(k, t->asize);
+  return checkrange(k, (unsigned)t->array.size());
 }
 
 /*
@@ -374,7 +374,7 @@ static unsigned findindex(lua_State* L, Table* t, TValue* key,
 
 int luaH_next(lua_State* L, Table* t, StkId key)
 {
-  unsigned int asize = t->asize;
+  unsigned int asize = (unsigned int)t->array.size();
   TValue keyv = getslot(L, key);
   unsigned int i = findindex(L, t, &keyv, asize); /* find original key */
   for (; i < asize; i++)
@@ -515,7 +515,7 @@ static void numusearray(const Table* t, Counters* ct)
   unsigned int ttlg;     /* 2^lg */
   unsigned int ause = 0; /* summation of 'nums' */
   unsigned int i = 1;    /* index to traverse all array keys */
-  unsigned int asize = t->asize;
+  unsigned int asize = (unsigned int)t->array.size();
   /* traverse each slice */
   for (lg = 0, ttlg = 1; lg <= MAXABITS; lg++, ttlg *= 2)
   {
@@ -577,10 +577,10 @@ static void numusehash(const Table* t, Counters* ct)
 ** allocate the new value and tag arrays, move the common elements to
 ** their new position, and then free the old arrays.
 */
-static Value* resizearray(lua_State* L, Table* t,
+static std::span<Value> resizearray(lua_State* L, Table* t,
                           unsigned oldasize,
                           unsigned newasize,
-                          lu_byte** newtags)
+                          std::span<lu_byte>* newtags)
 {
   if (oldasize == newasize)
   {
@@ -589,34 +589,35 @@ static Value* resizearray(lua_State* L, Table* t,
   }
   else if (newasize == 0)
   { /* erasing array? */
-    luaM_free_Value_span(L, std::span<Value>(t->array, oldasize));
-    luaM_free_char_span(L, std::span<char>((char*)t->tags, oldasize));
-    *newtags = nullptr;
-    return nullptr;
+    luaM_free_Value_span(L, t->array);
+    luaM_free_char_span(L, std::span<char>((char*)t->tags.data(), t->tags.size()));
+    *newtags = {};
+    return {};
   }
   else
   {
-    Value* nv = luaM_alloc_Value_span(L, newasize).data();
-    if (nv == nullptr) /* allocation error? */
+    std::span<Value> nv = luaM_alloc_Value_span(L, newasize);
+    if (nv.data() == nullptr) /* allocation error? */
     {
-      *newtags = nullptr;
-      return nullptr;
+      *newtags = {};
+      return {};
     }
-    lu_byte* nt = (lu_byte*)luaM_alloc_char_span(L, newasize).data();
-    if (nt == nullptr) /* allocation error? */
+    std::span<char> ntc = luaM_alloc_char_span(L, newasize);
+    if (ntc.data() == nullptr) /* allocation error? */
     {
-      luaM_free_Value_span(L, std::span<Value>(nv, newasize));
-      *newtags = nullptr;
-      return nullptr;
+      luaM_free_Value_span(L, nv);
+      *newtags = {};
+      return {};
     }
+    std::span<lu_byte> nt((lu_byte*)ntc.data(), ntc.size());
     if (oldasize > 0)
     {
       /* move common elements to new arrays */
       unsigned tomove = (oldasize < newasize) ? oldasize : newasize;
-      memcpy(nv, t->array, ((size_t)(tomove)) * sizeof(Value));
-      memcpy(nt, t->tags, ((size_t)(tomove)) * sizeof(char));
-      luaM_free_Value_span(L, std::span<Value>(t->array, oldasize));
-      luaM_free_char_span(L, std::span<char>((char*)t->tags, oldasize));
+      memcpy(nv.data(), t->array.data(), ((size_t)(tomove)) * sizeof(Value));
+      memcpy(nt.data(), t->tags.data(), ((size_t)(tomove)) * sizeof(char));
+      luaM_free_Value_span(L, t->array);
+      luaM_free_char_span(L, std::span<char>((char*)t->tags.data(), t->tags.size()));
     }
     *newtags = nt;
     return nv;
@@ -751,9 +752,9 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
                  unsigned nhsize)
 {
   Table newt; /* to keep the new hash part */
-  unsigned oldasize = t->asize;
-  Value* newarray;
-  lu_byte* newtags;
+  unsigned oldasize = (unsigned)t->array.size();
+  std::span<Value> newarray;
+  std::span<lu_byte> newtags;
   if (newasize > MAXASIZE)
     luaG_runerror(L, lt::table_overflow);
   /* create new hash part with appropriate size into 'newt' */
@@ -768,7 +769,7 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
   }
   /* allocate new array */
   newarray = resizearray(L, t, oldasize, newasize, &newtags);
-  if (l_unlikely(newarray == nullptr && newasize > 0))
+  if (l_unlikely(newarray.data() == nullptr && newasize > 0))
   {                     /* allocation failed? */
     freehash(L, &newt); /* release new hash part */
     luaD_throw(L, LUA_ERRMEM);      /* raise error (with array unchanged) */
@@ -777,8 +778,7 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
   exchangehashpart(t, &newt); /* 't' has the new hash ('newt' has the old) */
   t->array = newarray;        /* set new array part */
   t->tags = newtags;
-  t->asize = newasize;
-  if (newarray != nullptr)
+  if (newarray.data() != nullptr)
     t->lenhint = newasize / 2u; /* set an initial hint */
   clearNewSlice(t, oldasize, newasize);
   /* re-insert elements from old hash part into new parts */
@@ -815,7 +815,7 @@ static void rehash(lua_State* L, Table* t, const TValue* ek)
   if (ct.na == 0)
   {
     /* no new keys to enter array part; keep it with the same size */
-    asize = t->asize;
+    asize = (unsigned)t->array.size();
   }
   else
   {                            /* compute best size for array part */
@@ -844,9 +844,8 @@ Table* luaH_new(lua_State* L)
   luaC_link(L, t, LUA_VTABLE);
   t->metatable = nullptr;
   t->flags = maskflags; /* table has no metamethod fields */
-  t->array = nullptr;
-  t->tags = nullptr;
-  t->asize = 0;
+  t->array = {};
+  t->tags = {};
   t->lenhint = 0;
   setnodevector(L, t, 0);
   return t;
@@ -855,7 +854,7 @@ Table* luaH_new(lua_State* L)
 lu_mem luaH_size(Table* t)
 {
   lu_mem sz = ((lu_mem)(sizeof(Table)))
-            + ((lu_mem)(t->asize)) * (sizeof(Value) + sizeof(char));
+            + ((lu_mem)(t->array.size())) * (sizeof(Value) + sizeof(char));
   if (!isdummy(t))
     sz += sizehash(t);
   return sz;
@@ -866,9 +865,9 @@ lu_mem luaH_size(Table* t)
 */
 void luaH_free(lua_State* L, Table* t)
 {
-  lu_byte* newtags;
+  std::span<lu_byte> newtags;
   freehash(L, t);
-  resizearray(L, t, t->asize, 0, &newtags);
+  resizearray(L, t, (unsigned)t->array.size(), 0, &newtags);
   luaM_free_Table(L, t);
 }
 
@@ -1148,7 +1147,7 @@ static int psetint(Table* t, lua_Integer key, TValue* val)
 {
   int hres;
   lua_Unsigned u = (lua_Unsigned)key - 1u;
-  if (u < t->asize)
+  if (u < t->array.size())
   {
     lu_byte* tag = getArrTag(t, u);
     if (checknoTM(t->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
@@ -1375,7 +1374,7 @@ static unsigned int binsearch(Table* array, unsigned int i, unsigned int j)
 /* return a border, saving it as a hint for next call */
 static lua_Unsigned newhint(Table* t, unsigned hint)
 {
-  assert(hint <= t->asize);
+  assert(hint <= t->array.size());
   t->lenhint = hint;
   return hint;
 }
@@ -1393,7 +1392,7 @@ static lua_Unsigned newhint(Table* t, unsigned hint)
 */
 lua_Unsigned luaH_getn(lua_State* L, Table* t)
 {
-  unsigned asize = t->asize;
+  unsigned asize = (unsigned)t->array.size();
   if (asize > 0)
   { /* is there an array part? */
     const unsigned maxvicinity = 4;

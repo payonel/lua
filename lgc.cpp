@@ -528,7 +528,7 @@ static void traverseweakvalue(global_State* g, Table* h)
   Node *n, *limit = gnodelast(h);
   /* if there is array part, assume it may have white values (it is not
      worth traversing it now just to check) */
-  int hasclears = (h->asize > 0);
+  int hasclears = (h->array.size() > 0);
   for (n = gnode(h, 0); n < limit; n++)
   {                       /* traverse hash part */
     if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
@@ -557,7 +557,7 @@ static void traverseweakvalue(global_State* g, Table* h)
 */
 static int traversearray(global_State* g, Table* h)
 {
-  unsigned asize = h->asize;
+  unsigned asize = (unsigned)h->array.size();
   int marked = 0; /* true if some object is marked in this traversal */
   unsigned i;
   for (i = 0; i < asize; i++)
@@ -682,7 +682,7 @@ static l_mem traversetable(global_State* g, Table* h)
       linkgclist_((h), &(h)->gclist, &(g->allweak)); /* must clear collected entries */
     break;
   }
-  return ((l_mem)(1 + 2 * sizenode(h) + h->asize));
+  return ((l_mem)(1 + 2 * sizenode(h) + (unsigned)h->array.size()));
 }
 
 static l_mem traverseudata(global_State* g, Udata* u)
@@ -884,7 +884,7 @@ static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
     Table* h = static_cast<Table*>(l);
     Node *n, *limit = gnodelast(h);
     unsigned int i;
-    unsigned int asize = h->asize;
+    unsigned int asize = (unsigned int)h->array.size();
     for (i = 0; i < asize; i++)
     {
       GCObject* o = gcvalarr(h, i);

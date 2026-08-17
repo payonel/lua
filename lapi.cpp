@@ -953,7 +953,7 @@ LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
   {
     Table* h = hvalue(&t);
     lua_Unsigned u = (lua_Unsigned)n - 1u;
-    if (u < h->asize)
+    if (u < h->array.size())
     {
       tag = *getArrTag(h, u);
       if ((tag & NOVARIANT_MASK) != LUA_TNIL)
@@ -1018,7 +1018,7 @@ LUA_API int lua_rawgeti(lua_State* L, int idx, lua_Integer n)
   {
     TValue res;
     lua_Unsigned u = (lua_Unsigned)n - 1u;
-    if (u < t->asize)
+    if (u < t->array.size())
     {
       tag = *getArrTag(t, u);
       if ((tag & NOVARIANT_MASK) != LUA_TNIL)
@@ -1215,7 +1215,7 @@ LUA_API void lua_seti(lua_State* L, int idx, lua_Integer n)
   {
     Table* h = hvalue(&t);
     lua_Unsigned u = (lua_Unsigned)n - 1u;
-    if (u < h->asize)
+    if (u < h->array.size())
     {
       lu_byte* tag = getArrTag(h, u);
       if (checknoTM(h->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)

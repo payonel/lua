@@ -359,7 +359,7 @@ static void checkvalref(global_State* g, GCObject* f, const TValue* t)
 static void checktable(global_State* g, Table* h)
 {
   unsigned int i;
-  unsigned int asize = h->asize;
+  unsigned int asize = (unsigned int)h->array.size();
   Node *n, *limit = gnode(h, sizenode(h));
   assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   GCObject* hgc = const_cast<GCObject*>(static_cast<const GCObject*>(h));
@@ -1192,7 +1192,7 @@ static int table_query(lua_State* L)
   luaL_checktype(L, 1, LUA_TTABLE);
   TValue o = obj_at(L, 1);
   t = hvalue(&o);
-  asize = t->asize;
+  asize = (unsigned)t->array.size();
   if (i == -1)
   {
     lua_pushinteger(L, ((lua_Integer)(asize)));

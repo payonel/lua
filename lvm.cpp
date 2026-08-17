@@ -1390,7 +1390,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           {
             Table* h = slothval(L, rb);
             lua_Unsigned u = (lua_Unsigned)slotival(L, rc) - 1u;
-            if (u < h->asize)
+            if (u < h->array.size())
             {
               tag = *getArrTag(h, u);
               if ((tag & NOVARIANT_MASK) != LUA_TNIL)
@@ -1433,7 +1433,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           Table* h = slothval(L, rb);
           lua_Unsigned u = (lua_Unsigned)c - 1u;
-          if (u < h->asize)
+          if (u < h->array.size())
           {
             tag = *getArrTag(h, u);
             if ((tag & NOVARIANT_MASK) != LUA_TNIL)
@@ -1523,7 +1523,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           {
             Table* h = slothval(L, t);
             lua_Unsigned u = (lua_Unsigned)slotival(L, rb) - 1u;
-            if (u < h->asize)
+            if (u < h->array.size())
             {
               lu_byte* tag = getArrTag(h, u);
               if (checknoTM(h->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
@@ -1575,7 +1575,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         {
           Table* h = slothval(L, t);
           lua_Unsigned u = (lua_Unsigned)b - 1u;
-          if (u < h->asize)
+          if (u < h->array.size())
           {
             lu_byte* tag = getArrTag(h, u);
             if (checknoTM(h->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
@@ -2839,7 +2839,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           pc++;
         }
         /* when 'n' is known, table should have proper size */
-        if (last > h->asize)
+        if (last > h->array.size())
         { /* needs more space? */
           /* fixed-size sets should have space preallocated */
           assert(GETARG_vB(i) == 0);
