@@ -1122,9 +1122,9 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
   status = luaD_pcall(L, f_parser, &p, (L->top), L->errfunc);
-  luaM_free_Vardesc_span(L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size));
-  luaM_free_Labeldesc_span(L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size));
-  luaM_free_Labeldesc_span(L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size));
+  luaM_alloc_Vardesc_span(L->l_G, L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size), 0, false);
+  luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size), 0, false);
+  luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);
   decnny(L);
   return status;
 }

@@ -377,11 +377,39 @@ LUAI_FUNC std::span<LocVar> luaM_safegrow_LocVar_span(lua_State* L, std::span<Lo
   return std::span<LocVar>(p, (size_t)size);
 }
 
+LUAI_FUNC std::span<Vardesc> luaM_alloc_Vardesc_span(global_State* g, lua_State* L, std::span<Vardesc> block, size_t count, bool bthrow)
+{
+  if (count > 0 && count + 1 > MAX_SIZET / sizeof(Vardesc))
+    luaM_toobig(L);
+  std::span<Vardesc> nb{};
+  size_t osz = block.size() * sizeof(Vardesc);
+  size_t nsz = count * sizeof(Vardesc);
+  if (luaM_permit_(g, L, osz, nsz, 0))
+  {
+    if (count > 0)
+    {
+      nb = std::span<Vardesc>(new Vardesc[count], count); // throws bad_alloc, never null
+      if (!block.empty())
+        ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Vardesc));
+    }
+    delete [] block.data(); // free old block on success (no-op when null)
+    if (L) // raw (g-only) path must not touch GCdebt
+      g->GCdebt -= static_cast<l_mem>(nsz) - static_cast<l_mem>(osz);
+  }
+  else if (l_unlikely(count > 0 && bthrow && L))
+  {
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  return nb;
+}
+
 LUAI_FUNC std::span<Vardesc> luaM_safegrow_Vardesc_span(lua_State* L, std::span<Vardesc> block, int nelems, int limit, byte_view what)
 {
   int size = (int)block.size();
-  Vardesc* p = (Vardesc*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(Vardesc), limit, what);
-  return std::span<Vardesc>(p, (size_t)size);
+  int newsize = luaM_growsize_(L, size, nelems, limit, what);
+  if (newsize == size)
+    return block;
+  return luaM_alloc_Vardesc_span(L->l_G, L, block, (size_t)newsize, true);
 }
 
 LUAI_FUNC std::span<Upvaldesc> luaM_safegrow_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block, int nelems, int limit, byte_view what)
@@ -391,11 +419,39 @@ LUAI_FUNC std::span<Upvaldesc> luaM_safegrow_Upvaldesc_span(lua_State* L, std::s
   return std::span<Upvaldesc>(p, (size_t)size);
 }
 
+LUAI_FUNC std::span<Labeldesc> luaM_alloc_Labeldesc_span(global_State* g, lua_State* L, std::span<Labeldesc> block, size_t count, bool bthrow)
+{
+  if (count > 0 && count + 1 > MAX_SIZET / sizeof(Labeldesc))
+    luaM_toobig(L);
+  std::span<Labeldesc> nb{};
+  size_t osz = block.size() * sizeof(Labeldesc);
+  size_t nsz = count * sizeof(Labeldesc);
+  if (luaM_permit_(g, L, osz, nsz, 0))
+  {
+    if (count > 0)
+    {
+      nb = std::span<Labeldesc>(new Labeldesc[count], count); // throws bad_alloc, never null
+      if (!block.empty())
+        ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Labeldesc));
+    }
+    delete [] block.data(); // free old block on success (no-op when null)
+    if (L) // raw (g-only) path must not touch GCdebt
+      g->GCdebt -= static_cast<l_mem>(nsz) - static_cast<l_mem>(osz);
+  }
+  else if (l_unlikely(count > 0 && bthrow && L))
+  {
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  return nb;
+}
+
 LUAI_FUNC std::span<Labeldesc> luaM_safegrow_Labeldesc_span(lua_State* L, std::span<Labeldesc> block, int nelems, int limit, byte_view what)
 {
   int size = (int)block.size();
-  Labeldesc* p = (Labeldesc*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(Labeldesc), limit, what);
-  return std::span<Labeldesc>(p, (size_t)size);
+  int newsize = luaM_growsize_(L, size, nelems, limit, what);
+  if (newsize == size)
+    return block;
+  return luaM_alloc_Labeldesc_span(L->l_G, L, block, (size_t)newsize, true);
 }
 
 LUAI_FUNC std::span<Proto*> luaM_safegrow_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int nelems, int limit, byte_view what)
@@ -682,16 +738,6 @@ LUAI_FUNC void luaM_free_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block
 LUAI_FUNC void luaM_free_Node_span(lua_State* L, std::span<Node> block)
 {
   luaM_free_(L, block.data(), block.size() * sizeof(Node), 0);
-}
-
-LUAI_FUNC void luaM_free_Vardesc_span(lua_State* L, std::span<Vardesc> block)
-{
-  luaM_free_(L, block.data(), block.size() * sizeof(Vardesc), 0);
-}
-
-LUAI_FUNC void luaM_free_Labeldesc_span(lua_State* L, std::span<Labeldesc> block)
-{
-  luaM_free_(L, block.data(), block.size() * sizeof(Labeldesc), 0);
 }
 
 // typed object frees

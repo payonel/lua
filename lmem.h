@@ -45,6 +45,8 @@ struct AbsLineInfo;
 typedef l_uint32 Instruction;
 typedef size_t StkId;
 LUAI_FUNC std::span<StkId> luaM_alloc_StkId_span(global_State* g, lua_State* L, std::span<StkId> block, size_t count, bool bthrow);
+LUAI_FUNC std::span<Vardesc> luaM_alloc_Vardesc_span(global_State* g, lua_State* L, std::span<Vardesc> block, size_t count, bool bthrow);
+LUAI_FUNC std::span<Labeldesc> luaM_alloc_Labeldesc_span(global_State* g, lua_State* L, std::span<Labeldesc> block, size_t count, bool bthrow);
 
 LUAI_FUNC std::span<LocVar> luaM_safegrow_LocVar_span(lua_State* L, std::span<LocVar> block, int nelems, int limit, byte_view what);
 LUAI_FUNC std::span<Vardesc> luaM_safegrow_Vardesc_span(lua_State* L, std::span<Vardesc> block, int nelems, int limit, byte_view what);
@@ -104,8 +106,6 @@ LUAI_FUNC void luaM_free_Proto_ptr_span(lua_State* L, std::span<Proto*> block);
 LUAI_FUNC void luaM_free_LocVar_span(lua_State* L, std::span<LocVar> block);
 LUAI_FUNC void luaM_free_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block);
 LUAI_FUNC void luaM_free_Node_span(lua_State* L, std::span<Node> block);
-LUAI_FUNC void luaM_free_Vardesc_span(lua_State* L, std::span<Vardesc> block);
-LUAI_FUNC void luaM_free_Labeldesc_span(lua_State* L, std::span<Labeldesc> block);
 
 // typed object frees
 LUAI_FUNC void luaM_free_UpVal(lua_State* L, UpVal* p);
