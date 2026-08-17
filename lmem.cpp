@@ -306,12 +306,26 @@ LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(lua_State* L, size_t count
   return std::span<UpVal*>(p, p == nullptr ? 0 : count);
 }
 
-LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(lua_State* L, size_t count)
+LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(global_State* g, lua_State* L, std::span<lu_byte> block, size_t count, bool bthrow)
 {
-  if (count == 0)
-    return {};
-  lu_byte* p = (lu_byte*)luaM_realloc_(L, nullptr, 0, count * sizeof(lu_byte));
-  return std::span<lu_byte>(p, p == nullptr ? 0 : count);
+  std::span<lu_byte> nb{};
+  if (luaM_permit_(g, L, block.size(), count, 0))
+  {
+    if (count > 0)
+    {
+      nb = std::span<lu_byte>(new lu_byte[count], count); // throws bad_alloc, never null
+      if (!block.empty())
+        ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()));
+    }
+    delete [] block.data(); // free old block on success (no-op when null)
+    if (L) // raw (g-only) path must not touch GCdebt
+      g->GCdebt -= static_cast<l_mem>(count) - static_cast<l_mem>(block.size());
+  }
+  else if (l_unlikely(count > 0 && bthrow && L))
+  {
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  return nb;
 }
 
 LUAI_FUNC CallInfo* luaM_alloc_CallInfo(lua_State* L)
@@ -579,11 +593,6 @@ LUAI_FUNC void luaM_free_Value_span(lua_State* L, std::span<Value> block)
 LUAI_FUNC void luaM_free_UpVal_ptr_span(lua_State* L, std::span<UpVal*> block)
 {
   luaM_free_(L, block.data(), block.size() * sizeof(UpVal*), 0);
-}
-
-LUAI_FUNC void luaM_free_lu_byte_span(lua_State* L, std::span<lu_byte> block)
-{
-  luaM_free_(L, block.data(), block.size() * sizeof(lu_byte), 0);
 }
 
 LUAI_FUNC void luaM_free_Instruction_span(lua_State* L, std::span<Instruction> block)
