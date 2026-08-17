@@ -145,12 +145,12 @@ static void stack_init(lua_State* L1, lua_State* L)
 {
   int i;
   size_t nslots = (size_t)(BASIC_STACK_SIZE + EXTRA_STACK);
-  TValue* stk = luaM_alloc_TValue_span(L, nslots).data();
-  if (l_unlikely(stk == nullptr))
+  std::span<TValue> stk = luaM_alloc_TValue_span(L, nslots);
+  if (l_unlikely(stk.data() == nullptr))
   {
     luaD_throw(L, LUA_ERRMEM);
   }
-  memset(stk, 0, nslots * sizeof(TValue));
+  memset(stk.data(), 0, nslots * sizeof(TValue));
   L1->stack = stk;
   L1->tbclist = 0;
   for (i = 0; i < BASIC_STACK_SIZE + EXTRA_STACK; i++)
@@ -166,14 +166,13 @@ static void freestack(lua_State* L)
   luaM_free_StkId_span(L, L->tbc);
   L->tbc = {};
   L->ntbc = 0;
-  if (L->stack == nullptr)
+  if (L->stack.data() == nullptr)
     return;            /* stack not completely built yet */
   L->ci = &L->base_ci; /* free the entire 'ci' list */
   freeCI(L);
   assert(L->nci == 0);
   {
-    size_t nslots = (size_t)(stacksize(L) + EXTRA_STACK);
-    luaM_free_TValue_span(L, std::span<TValue>(L->stack, nslots));
+    luaM_free_TValue_span(L, L->stack);
   }
 }
 
@@ -221,7 +220,7 @@ static void f_luaopen(lua_State* L, void*)
 static void preinit_thread(lua_State* L, global_State* g)
 {
   L->l_G = g;
-  L->stack = nullptr;
+  L->stack = {};
   L->tbclist = 0;
   L->tbc = {};
   L->ntbc = 0;
@@ -245,7 +244,7 @@ static void preinit_thread(lua_State* L, global_State* g)
 lu_mem luaE_threadsize(lua_State* L)
 {
   lu_mem sz = ((lu_mem)(sizeof(LX))) + ((unsigned int)(L->nci)) * sizeof(CallInfo);
-  if (L->stack != nullptr)
+  if (L->stack.data() != nullptr)
     sz += ((unsigned int)(stacksize(L) + EXTRA_STACK)) * sizeof(TValue);
   sz += ((unsigned int)(L->tbc.size())) * sizeof(StkId);
   return sz;

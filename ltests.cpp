@@ -462,7 +462,7 @@ static void check_stack(global_State* g, lua_State* L1)
   CallInfo* ci;
   UpVal* uv;
   assert(!isdead(g, L1));
-  if (L1->stack == nullptr)
+  if (L1->stack.data() == nullptr)
   { /* incomplete thread? */
     assert(L1->openupval == nullptr && L1->ci == nullptr);
     return;
