@@ -202,11 +202,8 @@ static int new_varkind(LexState* ls, TString* name, lu_byte kind)
   FuncState* fs = ls->fs;
   Dyndata* dyd = ls->dyd;
   Vardesc* var;
-  int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(Vardesc))
-                  ? SHRT_MAX
-                  : (int)(MAX_SIZET / sizeof(Vardesc));
   {
-    auto s = luaM_safegrow_Vardesc_span(L, std::span<Vardesc>(dyd->actvar.arr, dyd->actvar.size), dyd->actvar.n + 1, limit, lt::variable_declarations);
+    auto s = luaM_safegrow_Vardesc_span(L, std::span<Vardesc>(dyd->actvar.arr, dyd->actvar.size), dyd->actvar.n + 1);
     dyd->actvar.arr = s.data();
     dyd->actvar.size = (int)s.size();
   }
