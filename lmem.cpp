@@ -644,14 +644,30 @@ LUAI_FUNC std::span<LocVar> luaM_malloc_LocVar_span(lua_State* L, size_t count)
   return std::span<LocVar>(p, p == nullptr ? 0 : count);
 }
 
-LUAI_FUNC std::span<Node> luaM_malloc_Node_span(lua_State* L, size_t count)
+LUAI_FUNC std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, std::span<Node> block, size_t count, bool bthrow)
 {
-  if (count == 0)
-    return {};
-  if (count + 1 > MAX_SIZET / sizeof(Node))
+  if (count > 0 && count + 1 > MAX_SIZET / sizeof(Node))
     luaM_toobig(L);
-  Node* p = (Node*)luaM_malloc_(L, count * sizeof(Node), 0);
-  return std::span<Node>(p, p == nullptr ? 0 : count);
+  std::span<Node> nb{};
+  size_t osz = block.size() * sizeof(Node);
+  size_t nsz = count * sizeof(Node);
+  if (luaM_permit_(g, L, osz, nsz, 0))
+  {
+    if (count > 0)
+    {
+      nb = std::span<Node>(new Node[count], count); // throws bad_alloc, never null
+      if (!block.empty())
+        ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Node));
+    }
+    delete [] block.data(); // free old block on success (no-op when null)
+    if (L) // raw (g-only) path must not touch GCdebt
+      g->GCdebt -= static_cast<l_mem>(nsz) - static_cast<l_mem>(osz);
+  }
+  else if (l_unlikely(count > 0 && bthrow && L))
+  {
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  return nb;
 }
 
 LUAI_FUNC TString* luaM_malloc_TString(lua_State* L)
@@ -733,11 +749,6 @@ LUAI_FUNC void luaM_free_LocVar_span(lua_State* L, std::span<LocVar> block)
 LUAI_FUNC void luaM_free_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block)
 {
   luaM_free_(L, block.data(), block.size() * sizeof(Upvaldesc), 0);
-}
-
-LUAI_FUNC void luaM_free_Node_span(lua_State* L, std::span<Node> block)
-{
-  luaM_free_(L, block.data(), block.size() * sizeof(Node), 0);
 }
 
 // typed object frees

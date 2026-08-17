@@ -77,7 +77,7 @@ LUAI_FUNC std::span<Upvaldesc> luaM_malloc_Upvaldesc_span(lua_State* L, size_t c
 LUAI_FUNC std::span<ls_byte> luaM_malloc_ls_byte_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<AbsLineInfo> luaM_malloc_AbsLineInfo_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<LocVar> luaM_malloc_LocVar_span(lua_State* L, size_t count);
-LUAI_FUNC std::span<Node> luaM_malloc_Node_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, std::span<Node> block, size_t count, bool bthrow);
 
 // typed GC-object allocators (throwing, fixed-size per type)
 struct TString;
@@ -105,7 +105,6 @@ LUAI_FUNC void luaM_free_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> b
 LUAI_FUNC void luaM_free_Proto_ptr_span(lua_State* L, std::span<Proto*> block);
 LUAI_FUNC void luaM_free_LocVar_span(lua_State* L, std::span<LocVar> block);
 LUAI_FUNC void luaM_free_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block);
-LUAI_FUNC void luaM_free_Node_span(lua_State* L, std::span<Node> block);
 
 // typed object frees
 LUAI_FUNC void luaM_free_UpVal(lua_State* L, UpVal* p);

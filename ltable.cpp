@@ -414,7 +414,7 @@ static void freehash(lua_State* L, Table* t)
 {
   if (!isdummy(t))
   {
-    luaM_free_Node_span(L, t->node);
+    luaM_alloc_Node_span(L->l_G, L, t->node, 0, false);
   }
 }
 
@@ -645,7 +645,7 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
     if (lsize > MAXHBITS || (1 << lsize) > MAXHSIZE)
       luaG_runerror(L, lt::table_overflow);
     size = twoto(lsize);
-    t->node = luaM_malloc_Node_span(L, (size_t)size);
+    t->node = luaM_alloc_Node_span(L->l_G, L, {}, (size_t)size, true);
     t->lastfree = 0;
     if (lsize >= LIMFORLAST)
     {
