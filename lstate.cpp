@@ -163,7 +163,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
-  luaM_free_StkId_span(L, L->tbc);
+  luaM_alloc_StkId_span(L->l_G, L, L->tbc, 0, false);
   L->tbc = {};
   L->ntbc = 0;
   if (L->stack.data() == nullptr)

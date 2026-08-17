@@ -433,11 +433,39 @@ LUAI_FUNC std::span<TValue> luaM_safegrow_TValue_span(lua_State* L, std::span<TV
   return std::span<TValue>(p, (size_t)size);
 }
 
+LUAI_FUNC std::span<StkId> luaM_alloc_StkId_span(global_State* g, lua_State* L, std::span<StkId> block, size_t count, bool bthrow)
+{
+  if (count > 0 && count + 1 > MAX_SIZET / sizeof(StkId))
+    luaM_toobig(L);
+  std::span<StkId> nb{};
+  size_t osz = block.size() * sizeof(StkId);
+  size_t nsz = count * sizeof(StkId);
+  if (luaM_permit_(g, L, osz, nsz, 0))
+  {
+    if (count > 0)
+    {
+      nb = std::span<StkId>(new StkId[count], count); // throws bad_alloc, never null
+      if (!block.empty())
+        ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(StkId));
+    }
+    delete [] block.data(); // free old block on success (no-op when null)
+    if (L) // raw (g-only) path must not touch GCdebt
+      g->GCdebt -= static_cast<l_mem>(nsz) - static_cast<l_mem>(osz);
+  }
+  else if (l_unlikely(count > 0 && bthrow && L))
+  {
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  return nb;
+}
+
 LUAI_FUNC std::span<StkId> luaM_safegrow_StkId_span(lua_State* L, std::span<StkId> block, int nelems, int limit, byte_view what)
 {
   int size = (int)block.size();
-  StkId* p = (StkId*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(StkId), limit, what);
-  return std::span<StkId>(p, (size_t)size);
+  int newsize = luaM_growsize_(L, size, nelems, limit, what);
+  if (newsize == size)
+    return block;
+  return luaM_alloc_StkId_span(L->l_G, L, block, (size_t)newsize, true);
 }
 
 LUAI_FUNC std::span<Instruction> luaM_safeshrink_Instruction_span(lua_State* L, std::span<Instruction> block, int final_n)
@@ -654,11 +682,6 @@ LUAI_FUNC void luaM_free_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block
 LUAI_FUNC void luaM_free_Node_span(lua_State* L, std::span<Node> block)
 {
   luaM_free_(L, block.data(), block.size() * sizeof(Node), 0);
-}
-
-LUAI_FUNC void luaM_free_StkId_span(lua_State* L, std::span<StkId> block)
-{
-  luaM_free_(L, block.data(), block.size() * sizeof(StkId), 0);
 }
 
 LUAI_FUNC void luaM_free_Vardesc_span(lua_State* L, std::span<Vardesc> block)
