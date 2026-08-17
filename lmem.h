@@ -31,6 +31,7 @@ LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<Value> luaM_alloc_Value_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<char> luaM_alloc_char_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<char> luaM_saferealloc_char_span(lua_State* L, std::span<char> block, size_t count);
 LUAI_FUNC CallInfo* luaM_alloc_CallInfo(lua_State* L);
 
@@ -103,6 +104,7 @@ LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block);
 LUAI_FUNC void luaM_free_Value_span(lua_State* L, std::span<Value> block);
 LUAI_FUNC void luaM_free_UpVal_ptr_span(lua_State* L, std::span<UpVal*> block);
 LUAI_FUNC void luaM_free_char_span(lua_State* L, std::span<char> block);
+LUAI_FUNC void luaM_free_lu_byte_span(lua_State* L, std::span<lu_byte> block);
 LUAI_FUNC void luaM_free_Instruction_span(lua_State* L, std::span<Instruction> block);
 LUAI_FUNC void luaM_free_ls_byte_span(lua_State* L, std::span<ls_byte> block);
 LUAI_FUNC void luaM_free_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block);

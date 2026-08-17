@@ -831,11 +831,10 @@ void luaV_concat(lua_State* L, int total)
       }
       else
       {
-        char* buff = luaM_malloc_char_span(L, (size_t)tl).data();
-        copy2buff(L, top, n, std::span<char>{buff, tl});
-        byte_view buffstr{buff, tl};
-        ts = luaS_createstr(L, buffstr, 0, buffstr.size());
-        luaM_free_char_span(L, std::span<char>(buff, tl));
+        std::span<char> buff = luaM_malloc_char_span(L, tl);
+        copy2buff(L, top, n, buff);
+        ts = luaS_createstr(L, byte_view(buff), 0, buff.size());
+        luaM_free_char_span(L, buff);
       }
       setslots(L, top - n, ts); /* create result */
     }

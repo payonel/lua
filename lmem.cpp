@@ -275,6 +275,14 @@ LUAI_FUNC std::span<char> luaM_alloc_char_span(lua_State* L, size_t count)
   return std::span<char>(p, p == nullptr ? 0 : count);
 }
 
+LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(lua_State* L, size_t count)
+{
+  if (count == 0)
+    return {};
+  lu_byte* p = (lu_byte*)luaM_realloc_(L, nullptr, 0, count * sizeof(lu_byte));
+  return std::span<lu_byte>(p, p == nullptr ? 0 : count);
+}
+
 LUAI_FUNC std::span<char> luaM_saferealloc_char_span(lua_State* L, std::span<char> block, size_t count)
 {
   char* p = (char*)luaM_saferealloc_(L, block.data(), block.size(), count);
@@ -574,6 +582,11 @@ LUAI_FUNC void luaM_free_UpVal_ptr_span(lua_State* L, std::span<UpVal*> block)
 LUAI_FUNC void luaM_free_char_span(lua_State* L, std::span<char> block)
 {
   luaM_free_(L, block.data(), block.size() * sizeof(char), 0);
+}
+
+LUAI_FUNC void luaM_free_lu_byte_span(lua_State* L, std::span<lu_byte> block)
+{
+  luaM_free_(L, block.data(), block.size() * sizeof(lu_byte), 0);
 }
 
 LUAI_FUNC void luaM_free_Instruction_span(lua_State* L, std::span<Instruction> block)

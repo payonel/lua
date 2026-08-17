@@ -590,7 +590,7 @@ static std::span<Value> resizearray(lua_State* L, Table* t,
   else if (newasize == 0)
   { /* erasing array? */
     luaM_free_Value_span(L, t->array);
-    luaM_free_char_span(L, std::span<char>((char*)t->tags.data(), t->tags.size()));
+    luaM_free_lu_byte_span(L, t->tags);
     *newtags = {};
     return {};
   }
@@ -602,22 +602,21 @@ static std::span<Value> resizearray(lua_State* L, Table* t,
       *newtags = {};
       return {};
     }
-    std::span<char> ntc = luaM_alloc_char_span(L, newasize);
-    if (ntc.data() == nullptr) /* allocation error? */
+    std::span<lu_byte> nt = luaM_alloc_lu_byte_span(L, newasize);
+    if (nt.data() == nullptr) /* allocation error? */
     {
       luaM_free_Value_span(L, nv);
       *newtags = {};
       return {};
     }
-    std::span<lu_byte> nt((lu_byte*)ntc.data(), ntc.size());
     if (oldasize > 0)
     {
       /* move common elements to new arrays */
       unsigned tomove = (oldasize < newasize) ? oldasize : newasize;
       memcpy(nv.data(), t->array.data(), ((size_t)(tomove)) * sizeof(Value));
-      memcpy(nt.data(), t->tags.data(), ((size_t)(tomove)) * sizeof(char));
+      memcpy(nt.data(), t->tags.data(), ((size_t)(tomove)) * sizeof(lu_byte));
       luaM_free_Value_span(L, t->array);
-      luaM_free_char_span(L, std::span<char>((char*)t->tags.data(), t->tags.size()));
+      luaM_free_lu_byte_span(L, t->tags);
     }
     *newtags = nt;
     return nv;
