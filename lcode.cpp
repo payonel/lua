@@ -364,10 +364,7 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
     linedif = ABSLINEINFO; /* signal that there is absolute information */
     fs->iwthabs = 1;       /* restart counter */
   }
-  int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(ls_byte))
-                  ? INT_MAX
-                  : (int)(MAX_SIZET / sizeof(ls_byte));
-  f->lineinfo = luaM_safegrow_ls_byte_span(fs->ls->L, f->lineinfo, pc, limit, lt::opcodes);
+  f->lineinfo = luaM_safegrow_ls_byte_span(fs->ls->L, f->lineinfo, pc);
   f->lineinfo[pc] = ((ls_byte)(linedif));
   fs->previousline = line; /* last line saved */
 }

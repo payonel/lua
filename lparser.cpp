@@ -889,7 +889,7 @@ static void close_func(LexState* ls)
   assert(fs->bl == nullptr);
   luaK_finish(fs);
   f->code = luaM_alloc_Instruction_span(L->l_G, L, f->code, (size_t)fs->pc, true);
-  f->lineinfo = luaM_safeshrink_ls_byte_span(L, f->lineinfo, fs->pc);
+  f->lineinfo = luaM_alloc_ls_byte_span(L->l_G, L, f->lineinfo, (size_t)fs->pc, true);
   f->abslineinfo = luaM_safeshrink_AbsLineInfo_span(L, f->abslineinfo, fs->nabslineinfo);
   f->k = luaM_alloc_TValue_span(L->l_G, L, f->k, (size_t)fs->nk, true);
   f->p = luaM_safeshrink_Proto_ptr_span(L, f->p, fs->np);
