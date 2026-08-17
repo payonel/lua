@@ -203,9 +203,8 @@ struct lua_State : GCObject
   TValue* stack;    /* stack base */
   UpVal* openupval;    /* list of open upvalues in this stack */
   StkId tbclist;
-  StkId* tbc;
+  std::span<StkId> tbc;
   int ntbc;
-  int sizetbc;
   GCObject* gclist;
   struct lua_State* twups;      /* list of threads with open upvalues */
   struct lua_longjmp* errorJmp; /* current error recover point */

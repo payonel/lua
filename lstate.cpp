@@ -163,9 +163,9 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
-  luaM_free_StkId_span(L, std::span<StkId>(L->tbc, L->sizetbc));
-  L->tbc = nullptr;
-  L->ntbc = L->sizetbc = 0;
+  luaM_free_StkId_span(L, L->tbc);
+  L->tbc = {};
+  L->ntbc = 0;
   if (L->stack == nullptr)
     return;            /* stack not completely built yet */
   L->ci = &L->base_ci; /* free the entire 'ci' list */
@@ -223,9 +223,8 @@ static void preinit_thread(lua_State* L, global_State* g)
   L->l_G = g;
   L->stack = nullptr;
   L->tbclist = 0;
-  L->tbc = nullptr;
+  L->tbc = {};
   L->ntbc = 0;
-  L->sizetbc = 0;
   L->ci = nullptr;
   L->nci = 0;
   L->twups = L; /* thread has no upvalues */
@@ -248,7 +247,7 @@ lu_mem luaE_threadsize(lua_State* L)
   lu_mem sz = ((lu_mem)(sizeof(LX))) + ((unsigned int)(L->nci)) * sizeof(CallInfo);
   if (L->stack != nullptr)
     sz += ((unsigned int)(stacksize(L) + EXTRA_STACK)) * sizeof(TValue);
-  sz += ((unsigned int)(L->sizetbc)) * sizeof(StkId);
+  sz += ((unsigned int)(L->tbc.size())) * sizeof(StkId);
   return sz;
 }
 
