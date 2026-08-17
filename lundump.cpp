@@ -200,7 +200,9 @@ static void loadConstants(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  luaM_vecalloc_TValue(S->L, f->k, (size_t)n);
+  f->k = luaM_malloc_TValue_span(S->L, (size_t)n);
+  for (i = 0; i < n; i++)
+    (f->k[i].tt_ = LUA_VNIL);
   for (i = 0; i < n; i++)
   {
     TValue* o = &f->k[i];
@@ -242,7 +244,9 @@ static void loadProtos(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  luaM_vecalloc_Proto_ptr(S->L, f->p, (size_t)n);
+  f->p = luaM_malloc_Proto_ptr_span(S->L, (size_t)n);
+  for (i = 0; i < n; i++)
+    f->p[i] = nullptr;
   for (i = 0; i < n; i++)
   {
     f->p[i] = luaF_newproto(S->L);
@@ -261,7 +265,9 @@ static void loadUpvalues(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  luaM_vecalloc_Upvaldesc(S->L, f->upvalues, (size_t)n);
+  f->upvalues = luaM_malloc_Upvaldesc_span(S->L, (size_t)n);
+  for (i = 0; i < n; i++) /* make array valid for GC */
+    f->upvalues[i].name = nullptr;
   for (i = 0; i < n; i++)
   { /* following calls can raise errors */
     f->upvalues[i].instack = loadByte(S);
@@ -298,7 +304,9 @@ static void loadDebug(LoadState* S, Proto* f)
     }
   }
   n = loadInt(S);
-  luaM_vecalloc_LocVar(S->L, f->locvars, (size_t)n);
+  f->locvars = luaM_malloc_LocVar_span(S->L, (size_t)n);
+  for (i = 0; i < n; i++)
+    f->locvars[i].varname = nullptr;
   for (i = 0; i < n; i++)
   {
     loadString(S, f, &f->locvars[i].varname);

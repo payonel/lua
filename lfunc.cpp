@@ -275,16 +275,16 @@ Proto* luaF_newproto(lua_State* L)
 {
   Proto* f = luaM_malloc_Proto(L);
   luaC_link(L, f, LUA_VPROTO);
-  new (&f->k) std::vector<TValue>();
-  new (&f->p) std::vector<Proto*>();
+  f->k = {};
+  f->p = {};
   f->code = {};
   f->lineinfo = {};
   f->abslineinfo = {};
-  new (&f->upvalues) std::vector<Upvaldesc>();
+  f->upvalues = {};
   f->numparams = 0;
   f->flag = 0;
   f->maxstacksize = 0;
-  new (&f->locvars) std::vector<LocVar>();
+  f->locvars = {};
   f->linedefined = 0;
   f->lastlinedefined = 0;
   f->source = nullptr;
@@ -315,10 +315,10 @@ void luaF_freeproto(lua_State* L, Proto* f)
     luaM_free_ls_byte_span(L, f->lineinfo);
     luaM_free_AbsLineInfo_span(L, f->abslineinfo);
   }
-  luaM_vecfree_Proto_ptr(L, f->p);
-  luaM_vecfree_TValue(L, f->k);
-  luaM_vecfree_LocVar(L, f->locvars);
-  luaM_vecfree_Upvaldesc(L, f->upvalues);
+  luaM_free_Proto_ptr_span(L, f->p);
+  luaM_free_TValue_span(L, f->k);
+  luaM_free_LocVar_span(L, f->locvars);
+  luaM_free_Upvaldesc_span(L, f->upvalues);
   luaM_free_Proto(L, f);
 }
 

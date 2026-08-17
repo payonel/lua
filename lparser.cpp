@@ -182,10 +182,13 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
                               TString* varname)
 {
   Proto* f = fs->f;
+  int oldsize = (int)f->locvars.size();
   int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(LocVar))
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(LocVar));
-  luaM_vecgrow_LocVar(ls->L, f->locvars, fs->ndebugvars, limit, lt::local_variables);
+  f->locvars = luaM_safegrow_LocVar_span(ls->L, f->locvars, fs->ndebugvars, limit, lt::local_variables);
+  while (oldsize < (int)f->locvars.size())
+    f->locvars[oldsize++].varname = nullptr;
   f->locvars[fs->ndebugvars].varname = varname;
   f->locvars[fs->ndebugvars].startpc = fs->pc;
   luaC_objbarrier(ls->L, f, varname);
@@ -395,11 +398,14 @@ static int searchupvalue(FuncState* fs, TString* name)
 static Upvaldesc* allocupvalue(FuncState* fs)
 {
   Proto* f = fs->f;
+  int oldsize = (int)f->upvalues.size();
   luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, lt::upvalues);
   int limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc))
                   ? MAXUPVAL
                   : (int)(MAX_SIZET / sizeof(Upvaldesc));
-  luaM_vecgrow_Upvaldesc(fs->ls->L, f->upvalues, fs->nups, limit, lt::upvalues);
+  f->upvalues = luaM_safegrow_Upvaldesc_span(fs->ls->L, f->upvalues, fs->nups, limit, lt::upvalues);
+  while (oldsize < (int)f->upvalues.size())
+    f->upvalues[oldsize++].name = nullptr;
   return &f->upvalues[fs->nups++];
 }
 
@@ -817,10 +823,13 @@ static Proto* addprototype(LexState* ls)
   Proto* f = fs->f; /* prototype of current function */
   if (fs->np >= (int)f->p.size())
   {
+    int oldsize = (int)f->p.size();
     int limit = ((size_t)MAXARG_Bx <= MAX_SIZET / sizeof(Proto*))
                     ? MAXARG_Bx
                     : (int)(MAX_SIZET / sizeof(Proto*));
-    luaM_vecgrow_Proto_ptr(L, f->p, fs->np, limit, lt::functions);
+    f->p = luaM_safegrow_Proto_ptr_span(L, f->p, fs->np, limit, lt::functions);
+    while (oldsize < (int)f->p.size())
+      f->p[oldsize++] = nullptr;
   }
   f->p[fs->np++] = clp = luaF_newproto(L);
   luaC_objbarrier(L, f, clp);
@@ -885,10 +894,10 @@ static void close_func(LexState* ls)
   f->code = luaM_safeshrink_Instruction_span(L, f->code, fs->pc);
   f->lineinfo = luaM_safeshrink_ls_byte_span(L, f->lineinfo, fs->pc);
   f->abslineinfo = luaM_safeshrink_AbsLineInfo_span(L, f->abslineinfo, fs->nabslineinfo);
-  luaM_vecshrink_TValue(L, f->k, fs->nk);
-  luaM_vecshrink_Proto_ptr(L, f->p, fs->np);
-  luaM_vecshrink_LocVar(L, f->locvars, fs->ndebugvars);
-  luaM_vecshrink_Upvaldesc(L, f->upvalues, fs->nups);
+  f->k = luaM_safeshrink_TValue_span(L, f->k, fs->nk);
+  f->p = luaM_safeshrink_Proto_ptr_span(L, f->p, fs->np);
+  f->locvars = luaM_safeshrink_LocVar_span(L, f->locvars, fs->ndebugvars);
+  f->upvalues = luaM_safeshrink_Upvaldesc_span(L, f->upvalues, fs->nups);
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */
   luaH_set(L, ls->h, &temp, &L->l_G->nilvalue);
