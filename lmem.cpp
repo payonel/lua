@@ -20,6 +20,8 @@
 #include "lstate.h"
 #include "literals.h"
 
+#include "lopcodes.h"
+
 LUAI_FUNC void* luaM_realloc_(lua_State* L, void* block, size_t oldsize, size_t size);
 LUAI_FUNC void* luaM_rawrealloc(global_State* g, void* block, size_t osize, size_t nsize, int tag);
 LUAI_FUNC void* luaM_malloc_(lua_State* L, size_t size, int tag);
@@ -606,11 +608,11 @@ LUAI_FUNC std::span<Instruction> luaM_safegrow_Instruction_span(lua_State* L, st
   return luaM_alloc_Instruction_span(L->l_G, L, block, (size_t)newsize, true);
 }
 
-LUAI_FUNC std::span<TValue> luaM_safegrow_TValue_span(lua_State* L, std::span<TValue> block, int nelems, int limit, byte_view what)
+LUAI_FUNC std::span<TValue> luaM_safegrow_TValue_span(lua_State* L, std::span<TValue> block, size_t nelems)
 {
-  int size = (int)block.size();
-  int newsize = luaM_growsize_(L, size, nelems, limit, what);
-  if (newsize == size)
+  constexpr size_t limit = ((size_t)MAXARG_Ax <= MAX_SIZET / sizeof(TValue)) ? (size_t)MAXARG_Ax : (MAX_SIZET / sizeof(TValue));
+  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::constants);
+  if (newsize == block.size())
     return block;
   return luaM_alloc_TValue_span(L->l_G, L, block, (size_t)newsize, true);
 }
@@ -663,11 +665,6 @@ LUAI_FUNC std::span<ls_byte> luaM_safeshrink_ls_byte_span(lua_State* L, std::spa
 LUAI_FUNC std::span<AbsLineInfo> luaM_safeshrink_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block, int final_n)
 {
   return luaM_alloc_AbsLineInfo_span(L->l_G, L, block, (size_t)final_n, true);
-}
-
-LUAI_FUNC std::span<TValue> luaM_safeshrink_TValue_span(lua_State* L, std::span<TValue> block, int final_n)
-{
-  return luaM_alloc_TValue_span(L->l_G, L, block, (size_t)final_n, true);
 }
 
 LUAI_FUNC std::span<Proto*> luaM_safeshrink_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int final_n)
