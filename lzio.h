@@ -37,8 +37,7 @@ public:
     if (cap == bytes_.size())
       return;
     assert(L_ != nullptr);
-    void* nb = luaM_saferealloc_(L_, bytes_.data(), bytes_.size(), cap);
-    bytes_ = {static_cast<char*>(nb), cap};
+    bytes_ = luaM_saferealloc_char_span(L_, bytes_, cap);
   }
 
   void append(char c)

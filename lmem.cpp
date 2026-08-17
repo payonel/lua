@@ -16,8 +16,14 @@
 #include "lgc.h"
 #include "lmem.h"
 #include "lobject.h"
+#include "lparser.h"
 #include "lstate.h"
 #include "literals.h"
+
+LUAI_FUNC void* luaM_realloc_(lua_State* L, void* block, size_t oldsize, size_t size);
+LUAI_FUNC void* luaM_saferealloc_(lua_State* L, void* block, size_t oldsize, size_t size);
+LUAI_FUNC void* luaM_growaux_(lua_State* L, void* block, int nelems, int* size, unsigned size_elem, int limit, byte_view what);
+LUAI_FUNC void* luaM_shrinkvector_(lua_State* L, void* block, int* nelem, int final_n, unsigned size_elem);
 
 /*
 ** Macro to call the allocation function.
@@ -239,7 +245,133 @@ LUAI_FUNC std::span<char> luaM_alloc_char_span(lua_State* L, size_t count)
   return std::span<char>(p, p == nullptr ? 0 : count);
 }
 
+LUAI_FUNC std::span<char> luaM_saferealloc_char_span(lua_State* L, std::span<char> block, size_t count)
+{
+  char* p = (char*)luaM_saferealloc_(L, block.data(), block.size(), count);
+  return std::span<char>(p, p == nullptr ? 0 : count);
+}
+
 LUAI_FUNC CallInfo* luaM_alloc_CallInfo(lua_State* L)
 {
   return (CallInfo*)luaM_realloc_(L, nullptr, 0, sizeof(CallInfo));
+}
+
+// typed grow/shrink span allocators
+LUAI_FUNC std::span<LocVar> luaM_safegrow_LocVar_span(lua_State* L, std::span<LocVar> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  LocVar* p = (LocVar*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(LocVar), limit, what);
+  return std::span<LocVar>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<Vardesc> luaM_safegrow_Vardesc_span(lua_State* L, std::span<Vardesc> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  Vardesc* p = (Vardesc*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(Vardesc), limit, what);
+  return std::span<Vardesc>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<Upvaldesc> luaM_safegrow_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  Upvaldesc* p = (Upvaldesc*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(Upvaldesc), limit, what);
+  return std::span<Upvaldesc>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<Labeldesc> luaM_safegrow_Labeldesc_span(lua_State* L, std::span<Labeldesc> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  Labeldesc* p = (Labeldesc*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(Labeldesc), limit, what);
+  return std::span<Labeldesc>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<Proto*> luaM_safegrow_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  Proto** p = (Proto**)luaM_growaux_(L, block.data(), nelems, &size, sizeof(Proto*), limit, what);
+  return std::span<Proto*>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<AbsLineInfo> luaM_safegrow_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  AbsLineInfo* p = (AbsLineInfo*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(AbsLineInfo), limit, what);
+  return std::span<AbsLineInfo>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<ls_byte> luaM_safegrow_ls_byte_span(lua_State* L, std::span<ls_byte> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  ls_byte* p = (ls_byte*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(ls_byte), limit, what);
+  return std::span<ls_byte>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<Instruction> luaM_safegrow_Instruction_span(lua_State* L, std::span<Instruction> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  Instruction* p = (Instruction*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(Instruction), limit, what);
+  return std::span<Instruction>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<TValue> luaM_safegrow_TValue_span(lua_State* L, std::span<TValue> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  TValue* p = (TValue*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(TValue), limit, what);
+  return std::span<TValue>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<StkId> luaM_safegrow_StkId_span(lua_State* L, std::span<StkId> block, int nelems, int limit, byte_view what)
+{
+  int size = (int)block.size();
+  StkId* p = (StkId*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(StkId), limit, what);
+  return std::span<StkId>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<Instruction> luaM_safeshrink_Instruction_span(lua_State* L, std::span<Instruction> block, int final_n)
+{
+  int size = (int)block.size();
+  Instruction* p = (Instruction*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(Instruction));
+  return std::span<Instruction>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<ls_byte> luaM_safeshrink_ls_byte_span(lua_State* L, std::span<ls_byte> block, int final_n)
+{
+  int size = (int)block.size();
+  ls_byte* p = (ls_byte*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(ls_byte));
+  return std::span<ls_byte>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<AbsLineInfo> luaM_safeshrink_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block, int final_n)
+{
+  int size = (int)block.size();
+  AbsLineInfo* p = (AbsLineInfo*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(AbsLineInfo));
+  return std::span<AbsLineInfo>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<TValue> luaM_safeshrink_TValue_span(lua_State* L, std::span<TValue> block, int final_n)
+{
+  int size = (int)block.size();
+  TValue* p = (TValue*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(TValue));
+  return std::span<TValue>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<Proto*> luaM_safeshrink_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int final_n)
+{
+  int size = (int)block.size();
+  Proto** p = (Proto**)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(Proto*));
+  return std::span<Proto*>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<LocVar> luaM_safeshrink_LocVar_span(lua_State* L, std::span<LocVar> block, int final_n)
+{
+  int size = (int)block.size();
+  LocVar* p = (LocVar*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(LocVar));
+  return std::span<LocVar>(p, (size_t)size);
+}
+
+LUAI_FUNC std::span<Upvaldesc> luaM_safeshrink_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block, int final_n)
+{
+  int size = (int)block.size();
+  Upvaldesc* p = (Upvaldesc*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(Upvaldesc));
+  return std::span<Upvaldesc>(p, (size_t)size);
 }

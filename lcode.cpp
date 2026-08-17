@@ -358,8 +358,11 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
     int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(AbsLineInfo))
                     ? INT_MAX
                     : (int)(MAX_SIZET / sizeof(AbsLineInfo));
-    f->abslineinfo = (AbsLineInfo*)luaM_growaux_(fs->ls->L, f->abslineinfo, fs->nabslineinfo,
-                                                 &f->sizeabslineinfo, sizeof(AbsLineInfo), limit, lt::lines);
+    {
+      auto s = luaM_safegrow_AbsLineInfo_span(fs->ls->L, std::span<AbsLineInfo>(f->abslineinfo, f->sizeabslineinfo), fs->nabslineinfo, limit, lt::lines);
+      f->abslineinfo = s.data();
+      f->sizeabslineinfo = (int)s.size();
+    }
     f->abslineinfo[fs->nabslineinfo].pc = pc;
     f->abslineinfo[fs->nabslineinfo++].line = line;
     linedif = ABSLINEINFO; /* signal that there is absolute information */
@@ -368,8 +371,11 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
   int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(ls_byte))
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(ls_byte));
-  f->lineinfo = (ls_byte*)luaM_growaux_(fs->ls->L, f->lineinfo, pc,
-                                        &f->sizelineinfo, sizeof(ls_byte), limit, lt::opcodes);
+  {
+    auto s = luaM_safegrow_ls_byte_span(fs->ls->L, std::span<ls_byte>(f->lineinfo, f->sizelineinfo), pc, limit, lt::opcodes);
+    f->lineinfo = s.data();
+    f->sizelineinfo = (int)s.size();
+  }
   f->lineinfo[pc] = ((ls_byte)(linedif));
   fs->previousline = line; /* last line saved */
 }
@@ -418,8 +424,11 @@ int luaK_code(FuncState* fs, Instruction i)
   int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(Instruction))
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(Instruction));
-  f->code = (Instruction*)luaM_growaux_(fs->ls->L, f->code, fs->pc,
-                                        &f->sizecode, sizeof(Instruction), limit, lt::opcodes);
+  {
+    auto s = luaM_safegrow_Instruction_span(fs->ls->L, std::span<Instruction>(f->code, f->sizecode), fs->pc, limit, lt::opcodes);
+    f->code = s.data();
+    f->sizecode = (int)s.size();
+  }
   f->code[fs->pc++] = i;
   savelineinfo(fs, f, fs->ls->lastline);
   return fs->pc - 1; /* index of new instruction */
@@ -588,7 +597,11 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
   int limit = ((size_t)MAXARG_Ax <= MAX_SIZET / sizeof(TValue))
                   ? MAXARG_Ax
                   : (int)(MAX_SIZET / sizeof(TValue));
-  f->k = (TValue*)luaM_growaux_(L, f->k, k, &f->sizek, sizeof(TValue), limit, lt::constants);
+  {
+    auto s = luaM_safegrow_TValue_span(L, std::span<TValue>(f->k, f->sizek), k, limit, lt::constants);
+    f->k = s.data();
+    f->sizek = (int)s.size();
+  }
   while (oldsize < f->sizek)
     ((&f->k[oldsize++])->tt_ = LUA_VNIL);
   setobj(L, &f->k[k], v);
