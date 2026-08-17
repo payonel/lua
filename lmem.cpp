@@ -23,29 +23,7 @@
 #include "lopcodes.h"
 #include "lfunc.h"
 
-LUAI_FUNC void* luaM_realloc_(lua_State* L, void* block, size_t oldsize, size_t size);
-LUAI_FUNC void* luaM_rawrealloc(global_State* g, void* block, size_t osize, size_t nsize, int tag);
 LUAI_FUNC void* luaM_malloc_(lua_State* L, size_t size, int tag);
-LUAI_FUNC void luaM_free_(lua_State* L, void* block, size_t osize, int tag);
-
-/*
-** Macro to call the allocation function.
-*/
-void* luaM_rawrealloc(global_State* g, void* block, size_t os, size_t ns, int tag)
-{
-  if (ns == 0)
-  {
-    if (block != nullptr)
-    {
-      (*g->frealloc)(g->ud, os, 0, tag);
-      free(block);
-    }
-    return nullptr;
-  }
-  if (l_unlikely(!(*g->frealloc)(g->ud, os, ns, tag)))
-    return nullptr;
-  return realloc(block, ns);
-}
 
 /*
 ** When an allocation fails, it will try again after an emergency
@@ -67,7 +45,7 @@ static int luaM_permit_(global_State* g, lua_State* L, size_t osize, size_t nsiz
   if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, tag)))
   {
     if (!L)
-      return 0; /* raw (g-only) path cannot run emergency GC: deny, like luaM_rawrealloc */
+      return 0;
     if (!cantryagain(g))
       return 0;
     luaC_fullgc(L, 1); /* try to free some memory... */
@@ -97,6 +75,21 @@ LUAI_FUNC std::span<char> luaM_alloc_char_span(global_State* g, lua_State* L, st
     luaD_throw(L, LUA_ERRMEM);
   }
   return nb;
+}
+
+static inline void free_debt(lua_State* L, size_t size, int tag)
+{
+  global_State* g = L->l_G;
+  (*g->frealloc)(g->ud, size, 0, tag);
+  g->GCdebt += (l_mem)size;
+}
+
+static inline void take_debt(lua_State* L, size_t size, int tag)
+{
+  global_State* g = L->l_G;
+  if (l_unlikely(!luaM_permit_(g, L, 0, size, tag)))
+    luaD_throw(L, LUA_ERRMEM);
+  g->GCdebt -= (l_mem)size;
 }
 
 /*
@@ -137,50 +130,6 @@ LUAI_FUNC int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte
 l_noret luaM_toobig(lua_State* L)
 {
   luaG_runerror(L, lt::memory_allocation_error_block_too_big);
-}
-
-/*
-** Free memory
-*/
-void luaM_free_(lua_State* L, void* block, size_t osize, int tag)
-{
-  global_State* g = L->l_G;
-  assert((osize == 0) == (block == nullptr));
-  luaM_rawrealloc(g, block, osize, 0, tag);
-  g->GCdebt += ((l_mem)(osize));
-}
-
-/*
-** Generic allocation routine.
-*/
-void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
-{
-  global_State* g = L->l_G;
-  assert((osize == 0) == (block == nullptr));
-  if (l_unlikely(!luaM_permit_(g, L, osize, nsize, 0)))
-    return nullptr; /* denied; do not update 'GCdebt' */
-  void* newblock;
-  if (nsize == 0)
-  {
-    free(block);
-    newblock = nullptr;
-  }
-  else
-  {
-    newblock = realloc(block, nsize);
-    if (l_unlikely(newblock == nullptr))
-    { /* physical allocation failed after being permitted */
-      if (cantryagain(g))
-      {
-        luaC_fullgc(L, 1);
-        newblock = realloc(block, nsize);
-      }
-      if (newblock == nullptr)
-        return nullptr; /* do not update 'GCdebt' */
-    }
-  }
-  g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
-  return newblock;
 }
 
 void* luaM_malloc_(lua_State* L, size_t size, int tag)
@@ -329,7 +278,11 @@ LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(global_State* g, lua_State*
 
 LUAI_FUNC CallInfo* luaM_alloc_CallInfo(lua_State* L)
 {
-  return (CallInfo*)luaM_realloc_(L, nullptr, 0, sizeof(CallInfo));
+  global_State* g = L->l_G;
+  if (l_unlikely(!luaM_permit_(g, L, 0, sizeof(CallInfo), 0)))
+    return nullptr; /* denied; do not update 'GCdebt' */
+  g->GCdebt -= (l_mem)sizeof(CallInfo);
+  return new CallInfo;
 }
 
 // typed grow/shrink span allocators
@@ -682,7 +635,8 @@ LUAI_FUNC std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, st
 
 LUAI_FUNC TString* luaM_malloc_TString(lua_State* L)
 {
-  return (TString*)luaM_malloc_(L, sizeof(TString), LUA_VSTRING & NOVARIANT_MASK);
+  take_debt(L, sizeof(TString), LUA_VSTRING & NOVARIANT_MASK);
+  return new TString;
 }
 
 LUAI_FUNC Udata* luaM_malloc_Udata(lua_State* L)
@@ -725,54 +679,62 @@ LUAI_FUNC LX* luaM_malloc_LX(lua_State* L)
   return (LX*)luaM_malloc_(L, sizeof(LX), LUA_TTHREAD & NOVARIANT_MASK);
 }
 
-// typed span frees
-// typed object frees
 LUAI_FUNC void luaM_free_UpVal(lua_State* L, UpVal* p)
 {
-  luaM_free_(L, p, sizeof(UpVal), 0);
+  if (p != nullptr) free_debt(L, sizeof(UpVal), 0);
+  ::free(p);
 }
 
 LUAI_FUNC void luaM_free_LClosure(lua_State* L, LClosure* p)
 {
-  luaM_free_(L, p, sizeof(LClosure), LUA_VLCL & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, sizeof(LClosure), LUA_VLCL & NOVARIANT_MASK);
+  ::free(p);
 }
 
 LUAI_FUNC void luaM_free_CClosure(lua_State* L, CClosure* p)
 {
-  luaM_free_(L, p, sizeof(CClosure), LUA_VCCL & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, sizeof(CClosure), LUA_VCCL & NOVARIANT_MASK);
+  ::free(p);
 }
 
 LUAI_FUNC void luaM_free_Udata(lua_State* L, Udata* p)
 {
-  luaM_free_(L, p, sizeof(Udata), LUA_VUSERDATA & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, sizeof(Udata), LUA_VUSERDATA & NOVARIANT_MASK);
+  ::free(p);
 }
 
 LUAI_FUNC void luaM_free_TString(lua_State* L, TString* p)
 {
-  luaM_free_(L, p, sizeof(TString), LUA_VSTRING & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, sizeof(TString), LUA_VSTRING & NOVARIANT_MASK);
+  delete p;
 }
 
 LUAI_FUNC void luaM_free_CFuncInfo(lua_State* L, CFuncInfo* p)
 {
-  luaM_free_(L, p, sizeof(CFuncInfo), LUA_VLCF & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, sizeof(CFuncInfo), LUA_VLCF & NOVARIANT_MASK);
+  ::free(p);
 }
 
 LUAI_FUNC void luaM_free_Proto(lua_State* L, Proto* p)
 {
-  luaM_free_(L, p, sizeof(Proto), 0);
+  if (p != nullptr) free_debt(L, sizeof(Proto), 0);
+  ::free(p);
 }
 
 LUAI_FUNC void luaM_free_Table(lua_State* L, Table* p)
 {
-  luaM_free_(L, p, sizeof(Table), LUA_VTABLE & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, sizeof(Table), LUA_VTABLE & NOVARIANT_MASK);
+  ::free(p);
 }
 
 LUAI_FUNC void luaM_free_LX(lua_State* L, LX* p)
 {
-  luaM_free_(L, p, sizeof(LX), LUA_TTHREAD);
+  if (p != nullptr) free_debt(L, sizeof(LX), LUA_TTHREAD);
+  ::free(p);
 }
 
 LUAI_FUNC void luaM_free_CallInfo(lua_State* L, CallInfo* p)
 {
-  luaM_free_(L, p, sizeof(CallInfo), 0);
+  if (p != nullptr) free_debt(L, sizeof(CallInfo), 0);
+  delete p;
 }

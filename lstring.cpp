@@ -46,7 +46,6 @@ static TString* createstrobj(lua_State* L, InternalString&& str, size_t h,
   ts->hashed = ((lu_byte)(hashed));
   ts->hnext = nullptr;
   ts->extra = external ? STREXTRA_EXTERNAL : 0;
-  new (&ts->data) InternalString();
   if (!external && l_unlikely(!luaM_reserve(L, str.size())))
     luaD_throw(L, LUA_ERRMEM);
   ts->data = std::move(str);

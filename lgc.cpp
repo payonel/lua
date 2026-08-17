@@ -958,7 +958,6 @@ static void freeobj(lua_State* L, GCObject* o)
     luaS_remove(L, ts);
     if (!strisexternal(ts))
       luaM_release(L, ts->data.size());
-    ts->data.~InternalString();
     luaM_free_TString(L, ts);
     break;
   }
