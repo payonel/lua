@@ -282,12 +282,30 @@ void luaM_release(lua_State* L, size_t size)
 }
 
 // type allocators
-LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(lua_State* L, size_t count)
+LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L, std::span<TValue> block, size_t count, bool bthrow)
 {
-  if (count == 0)
-    return {};
-  TValue* stk = (TValue*)luaM_realloc_(L, nullptr, 0, count * sizeof(TValue));
-  return std::span<TValue>(stk, stk == nullptr ? 0 : count);
+  if (count > 0 && count + 1 > MAX_SIZET / sizeof(TValue))
+    luaM_toobig(L);
+  std::span<TValue> nb{};
+  size_t osz = block.size() * sizeof(TValue);
+  size_t nsz = count * sizeof(TValue);
+  if (luaM_permit_(g, L, osz, nsz, 0))
+  {
+    if (count > 0)
+    {
+      nb = std::span<TValue>(new TValue[count], count); // throws bad_alloc, never null
+      if (!block.empty())
+        ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(TValue));
+    }
+    delete [] block.data(); // free old block on success (no-op when null)
+    if (L) // raw (g-only) path must not touch GCdebt
+      g->GCdebt -= static_cast<l_mem>(nsz) - static_cast<l_mem>(osz);
+  }
+  else if (l_unlikely(count > 0 && bthrow && L))
+  {
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  return nb;
 }
 
 LUAI_FUNC std::span<Value> luaM_alloc_Value_span(global_State* g, lua_State* L, std::span<Value> block, size_t count, bool bthrow)
@@ -649,8 +667,10 @@ LUAI_FUNC std::span<Instruction> luaM_safegrow_Instruction_span(lua_State* L, st
 LUAI_FUNC std::span<TValue> luaM_safegrow_TValue_span(lua_State* L, std::span<TValue> block, int nelems, int limit, byte_view what)
 {
   int size = (int)block.size();
-  TValue* p = (TValue*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(TValue), limit, what);
-  return std::span<TValue>(p, (size_t)size);
+  int newsize = luaM_growsize_(L, size, nelems, limit, what);
+  if (newsize == size)
+    return block;
+  return luaM_alloc_TValue_span(L->l_G, L, block, (size_t)newsize, true);
 }
 
 LUAI_FUNC std::span<StkId> luaM_alloc_StkId_span(global_State* g, lua_State* L, std::span<StkId> block, size_t count, bool bthrow)
@@ -705,9 +725,7 @@ LUAI_FUNC std::span<AbsLineInfo> luaM_safeshrink_AbsLineInfo_span(lua_State* L, 
 
 LUAI_FUNC std::span<TValue> luaM_safeshrink_TValue_span(lua_State* L, std::span<TValue> block, int final_n)
 {
-  int size = (int)block.size();
-  TValue* p = (TValue*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(TValue));
-  return std::span<TValue>(p, (size_t)size);
+  return luaM_alloc_TValue_span(L->l_G, L, block, (size_t)final_n, true);
 }
 
 LUAI_FUNC std::span<Proto*> luaM_safeshrink_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int final_n)
@@ -726,16 +744,6 @@ LUAI_FUNC std::span<Upvaldesc> luaM_safeshrink_Upvaldesc_span(lua_State* L, std:
 }
 
 // typed fresh (throwing) allocators
-LUAI_FUNC std::span<TValue> luaM_malloc_TValue_span(lua_State* L, size_t count)
-{
-  if (count == 0)
-    return {};
-  if (count + 1 > MAX_SIZET / sizeof(TValue))
-    luaM_toobig(L);
-  TValue* p = (TValue*)luaM_malloc_(L, count * sizeof(TValue), 0);
-  return std::span<TValue>(p, p == nullptr ? 0 : count);
-}
-
 LUAI_FUNC std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, std::span<Node> block, size_t count, bool bthrow)
 {
   if (count > 0 && count + 1 > MAX_SIZET / sizeof(Node))
@@ -808,11 +816,6 @@ LUAI_FUNC LX* luaM_malloc_LX(lua_State* L)
 }
 
 // typed span frees
-LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block)
-{
-  luaM_free_(L, block.data(), block.size() * sizeof(TValue), 0);
-}
-
 // typed object frees
 LUAI_FUNC void luaM_free_UpVal(lua_State* L, UpVal* p)
 {

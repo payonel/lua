@@ -929,7 +929,7 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VCCL:
   {
     CClosure* cl = static_cast<CClosure*>(o);
-    luaM_free_TValue_span(L, cl->upvalue);
+    luaM_alloc_TValue_span(L->l_G, L, cl->upvalue, 0, false);
     luaM_free_CClosure(L, cl);
     break;
   }
@@ -942,7 +942,7 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    luaM_free_TValue_span(L, u->uv);
+    luaM_alloc_TValue_span(L->l_G, L, u->uv, 0, false);
     if (u->data.data() != nullptr)
     {
       (void)luaM_alloc_char_span(L->l_G, L, u->data, 0, false);

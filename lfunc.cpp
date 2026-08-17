@@ -36,7 +36,7 @@ CClosure* luaF_newCclosure(lua_State* L, int nupvals)
   c->upvalue = {};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
-  std::span<TValue> upvalue = luaM_alloc_TValue_span(L, nupvals);
+  std::span<TValue> upvalue = luaM_alloc_TValue_span(L->l_G, L, {}, nupvals, false);
   g->gcstopem = oldgcstop;
   if (upvalue.data() == nullptr && nupvals > 0)
     luaD_throw(L, LUA_ERRMEM);
@@ -315,7 +315,7 @@ void luaF_freeproto(lua_State* L, Proto* f)
     luaM_alloc_AbsLineInfo_span(L->l_G, L, f->abslineinfo, 0, false);
   }
   luaM_alloc_Proto_ptr_span(L->l_G, L, f->p, 0, false);
-  luaM_free_TValue_span(L, f->k);
+  luaM_alloc_TValue_span(L->l_G, L, f->k, 0, false);
   luaM_alloc_LocVar_span(L->l_G, L, f->locvars, 0, false);
   luaM_alloc_Upvaldesc_span(L->l_G, L, f->upvalues, 0, false);
   luaM_free_Proto(L, f);

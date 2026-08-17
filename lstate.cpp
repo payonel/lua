@@ -145,7 +145,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 {
   int i;
   size_t nslots = (size_t)(BASIC_STACK_SIZE + EXTRA_STACK);
-  std::span<TValue> stk = luaM_alloc_TValue_span(L, nslots);
+  std::span<TValue> stk = luaM_alloc_TValue_span(L->l_G, L, {}, nslots, false);
   if (l_unlikely(stk.data() == nullptr))
   {
     luaD_throw(L, LUA_ERRMEM);
@@ -172,7 +172,7 @@ static void freestack(lua_State* L)
   freeCI(L);
   assert(L->nci == 0);
   {
-    luaM_free_TValue_span(L, L->stack);
+    luaM_alloc_TValue_span(L->l_G, L, L->stack, 0, false);
   }
 }
 

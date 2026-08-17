@@ -200,7 +200,7 @@ static void loadConstants(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->k = luaM_malloc_TValue_span(S->L, (size_t)n);
+  f->k = luaM_alloc_TValue_span(S->L->l_G, S->L, {}, (size_t)n, true);
   for (i = 0; i < n; i++)
     (f->k[i].tt_ = LUA_VNIL);
   for (i = 0; i < n; i++)

@@ -29,7 +29,7 @@ struct TValue;
 struct Value;
 struct UpVal;
 struct CallInfo;
-LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L, std::span<TValue> block, size_t count, bool bthrow);
 LUAI_FUNC std::span<Value> luaM_alloc_Value_span(global_State* g, lua_State* L, std::span<Value> block, size_t count, bool bthrow);
 LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(global_State* g, lua_State* L, std::span<UpVal*> block, size_t count, bool bthrow);
 LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(global_State* g, lua_State* L, std::span<lu_byte> block, size_t count, bool bthrow);
@@ -76,7 +76,6 @@ LUAI_FUNC std::span<Upvaldesc> luaM_safeshrink_Upvaldesc_span(lua_State* L, std:
 // typed fresh (throwing) allocators
 struct Node;
 struct GCObject;
-LUAI_FUNC std::span<TValue> luaM_malloc_TValue_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, std::span<Node> block, size_t count, bool bthrow);
 
 // typed GC-object allocators (throwing, fixed-size per type)
@@ -98,7 +97,6 @@ LUAI_FUNC Proto* luaM_malloc_Proto(lua_State* L);
 LUAI_FUNC LX* luaM_malloc_LX(lua_State* L);
 
 // typed span frees
-LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block);
 
 // typed object frees
 LUAI_FUNC void luaM_free_UpVal(lua_State* L, UpVal* p);

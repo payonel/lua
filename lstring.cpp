@@ -213,7 +213,7 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   u->data = std::span<char>{};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
-  std::span<TValue> uv = luaM_alloc_TValue_span(L, nuvalue);
+  std::span<TValue> uv = luaM_alloc_TValue_span(L->l_G, L, {}, nuvalue, false);
   if (uv.data() != nullptr || nuvalue == 0)
   {
     u->uv = uv;
