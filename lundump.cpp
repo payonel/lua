@@ -411,7 +411,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int f
   cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
   loadFunction(&S, cl->p);
-  if (cl->nupvalues != (int)cl->p->upvalues.size())
+  if (cl->upvals.size() != cl->p->upvalues.size())
     error(&S, lt::corrupted_chunk);
   return cl;
 }

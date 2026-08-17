@@ -75,7 +75,7 @@ static IndexAddr resolveindex(lua_State* L, int idx)
     if (slottag(L, ci->func) == ctb(LUA_VCCL))
     { /* C closure? */
       CClosure* func = slotclCval(L, ci->func);
-      return {0, (idx <= func->nupvalues) ? &func->upvalue[idx - 1]
+      return {0, (idx <= (int)func->upvalue.size()) ? &func->upvalue[idx - 1]
                                           : &L->l_G->nilvalue};
     }
     else
@@ -1462,7 +1462,7 @@ int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::optional<byte_vi
   {                                            /* no errors? */
     StkId s = L->top - 1;
     LClosure* f = slotclLval(L, s); /* get new function */
-    if (f->nupvalues >= 1)
+    if (f->upvals.size() >= 1)
     { /* does it have an upvalue? */
       /* get global table from registry */
       TValue gt;
@@ -1759,7 +1759,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
   case LUA_VCCL:
   { /* C closure */
     CClosure* f = clCvalue(fi);
-    if (!(((unsigned int)(n)) - 1u < ((unsigned int)(f->nupvalues))))
+    if (!(((unsigned int)(n)) - 1u < ((unsigned int)(f->upvalue.size()))))
       return nullptr; /* 'n' not in [1, f->nupvalues] */
     *addr = {&f->upvalue[n - 1], nullptr};
     if (owner)
@@ -1875,7 +1875,7 @@ LUA_API void* lua_upvalueid(lua_State* L, int fidx, int n)
   case LUA_VCCL:
   { /* C closure */
     CClosure* f = clCvalue(&fi);
-    if (1 <= n && n <= f->nupvalues)
+    if (1 <= n && n <= (int)f->upvalue.size())
       return &f->upvalue[n - 1];
     /* else */
   } /* FALLTHROUGH */

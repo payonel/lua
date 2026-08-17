@@ -361,14 +361,13 @@ struct UpVal : GCObject
 
 struct Closure : GCObject
 {
-  lu_byte nupvalues;
   GCObject* gclist;
 };
 
 struct CClosure : Closure
 {
   lua_CFunction f;
-  TValue* upvalue;
+  std::span<TValue> upvalue;
 };
 
 constexpr size_t sizeCclosure(int n)
@@ -379,7 +378,7 @@ constexpr size_t sizeCclosure(int n)
 struct LClosure : Closure
 {
   struct Proto* p;
-  UpVal** upvals;
+  std::span<UpVal*> upvals;
 };
 
 constexpr size_t sizeLclosure(int n)

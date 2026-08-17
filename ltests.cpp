@@ -417,7 +417,7 @@ static void checkCclosure(global_State* g, CClosure* cl)
   assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   GCObject* clgc = const_cast<GCObject*>(static_cast<const GCObject*>(cl));
   int i;
-  for (i = 0; i < cl->nupvalues; i++)
+  for (i = 0; i < (int)cl->upvalue.size(); i++)
     checkvalref(g, clgc, &cl->upvalue[i]);
 }
 
@@ -427,7 +427,7 @@ static void checkLclosure(global_State* g, LClosure* cl)
   GCObject* clgc = const_cast<GCObject*>(static_cast<const GCObject*>(cl));
   int i;
   checkobjrefN(g, clgc, cl->p);
-  for (i = 0; i < cl->nupvalues; i++)
+  for (i = 0; i < (int)cl->upvals.size(); i++)
   {
     UpVal* uv = cl->upvals[i];
     if (uv)

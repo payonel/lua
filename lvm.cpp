@@ -2862,7 +2862,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         Proto* p = cl->p->p[GETARG_Bx(i)];
         ci->savedpc = pc;
         L->top = ci->top;
-        pushclosure(L, p, cl->upvals, base, ra);
+        pushclosure(L, p, cl->upvals.data(), base, ra);
         if (L->l_G->GCdebt <= 0)
         {
           ci->savedpc = pc;

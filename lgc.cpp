@@ -131,13 +131,13 @@ static l_mem objsize(GCObject* o)
   case LUA_VLCL:
   {
     LClosure* cl = static_cast<LClosure*>(o);
-    res = sizeLclosure(cl->nupvalues);
+    res = sizeLclosure((int)cl->upvals.size());
     break;
   }
   case LUA_VCCL:
   {
     CClosure* cl = static_cast<CClosure*>(o);
-    res = sizeCclosure(cl->nupvalues);
+    res = sizeCclosure((int)cl->upvalue.size());
     break;
   }
   case LUA_VUSERDATA:
@@ -714,21 +714,21 @@ static l_mem traverseproto(global_State* g, Proto* f)
 static l_mem traverseCclosure(global_State* g, CClosure* cl)
 {
   int i;
-  for (i = 0; i < cl->nupvalues; i++) /* mark its upvalues */
+  for (i = 0; i < (int)cl->upvalue.size(); i++) /* mark its upvalues */
     markvalue(g, &cl->upvalue[i]);
-  return 1 + cl->nupvalues;
+  return 1 + (int)cl->upvalue.size();
 }
 
 static l_mem traverseLclosure(global_State* g, LClosure* cl)
 {
   int i;
   markobjectN(g, cl->p); /* mark its prototype */
-  for (i = 0; i < cl->nupvalues; i++)
+  for (i = 0; i < (int)cl->upvals.size(); i++)
   { /* visit its upvalues */
     UpVal* uv = cl->upvals[i];
     markobjectN(g, uv); /* mark upvalue */
   }
-  return 1 + cl->nupvalues;
+  return 1 + (int)cl->upvals.size();
 }
 
 /*
@@ -922,14 +922,14 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VLCL:
   {
     LClosure* cl = static_cast<LClosure*>(o);
-    luaM_free_UpVal_ptr_span(L, std::span<UpVal*>(cl->upvals, cl->nupvalues));
+    luaM_free_UpVal_ptr_span(L, cl->upvals);
     luaM_free_LClosure(L, cl);
     break;
   }
   case LUA_VCCL:
   {
     CClosure* cl = static_cast<CClosure*>(o);
-    luaM_free_TValue_span(L, std::span<TValue>(cl->upvalue, cl->nupvalues));
+    luaM_free_TValue_span(L, cl->upvalue);
     luaM_free_CClosure(L, cl);
     break;
   }
