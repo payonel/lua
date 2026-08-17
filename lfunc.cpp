@@ -209,7 +209,7 @@ void luaF_newtbcupval(lua_State* L, StkId level)
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(StkId));
   {
-    L->tbc = luaM_safegrow_StkId_span(L, L->tbc, L->ntbc, limit, lt::to_be_closed_variables);
+    luaM_vecgrow(L, L->tbc, L->ntbc, limit, lt::to_be_closed_variables);
   }
   L->tbc[L->ntbc++] = level;
   L->tbclist = level;

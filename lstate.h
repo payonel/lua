@@ -203,7 +203,7 @@ struct lua_State : GCObject
   std::span<TValue> stack;    /* stack base */
   UpVal* openupval;    /* list of open upvalues in this stack */
   StkId tbclist;
-  std::span<StkId> tbc;
+  std::vector<StkId> tbc;
   int ntbc;
   GCObject* gclist;
   struct lua_State* twups;      /* list of threads with open upvalues */

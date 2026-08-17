@@ -163,8 +163,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
-  luaM_free_StkId_span(L, L->tbc);
-  L->tbc = {};
+  luaM_vecfree(L, L->tbc);
   L->ntbc = 0;
   if (L->stack.data() == nullptr)
     return;            /* stack not completely built yet */
@@ -222,7 +221,7 @@ static void preinit_thread(lua_State* L, global_State* g)
   L->l_G = g;
   L->stack = {};
   L->tbclist = 0;
-  L->tbc = {};
+  new (&L->tbc) std::vector<StkId>();
   L->ntbc = 0;
   L->ci = nullptr;
   L->nci = 0;
