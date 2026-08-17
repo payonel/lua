@@ -694,7 +694,8 @@ static void freebuff(BuffFS* buff)
   global_State* g = buff->L->l_G;
   if (buff->b.data() != nullptr)
   {
-    buff->b = luaM_rawrealloc_char_span(g, buff->b, 0);
+    luaM_rawfree_char_span(g, buff->b);
+    buff->b = {};
   }
 }
 

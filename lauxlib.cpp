@@ -619,7 +619,8 @@ static void bb_dealloc(luaL_Buffer* B) noexcept
   if (B->bytes.data() != nullptr)
   {
     global_State* g = B->L->l_G;
-    B->bytes = luaM_rawrealloc_char_span(g, B->bytes, 0);
+    luaM_rawfree_char_span(g, B->bytes);
+    B->bytes = {};
   }
 }
 

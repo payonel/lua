@@ -94,6 +94,7 @@ LUAI_FUNC LX* luaM_malloc_LX(lua_State* L);
 
 // typed raw (g-based) char realloc
 LUAI_FUNC std::span<char> luaM_rawrealloc_char_span(global_State* g, std::span<char> block, size_t count);
+LUAI_FUNC void luaM_rawfree_char_span(global_State* g, std::span<char> block);
 
 // typed span frees
 LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block);
