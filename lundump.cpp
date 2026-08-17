@@ -185,14 +185,12 @@ static void loadCode(LoadState* S, Proto* f)
   loadAlign(S, sizeof(f->code[0]));
   if (S->fixed)
   {
-    f->code = ((Instruction*)(getaddr_(S, ((size_t)(n)) * sizeof(Instruction))));
-    f->sizecode = n;
+    f->code = std::span<Instruction>((Instruction*)(getaddr_(S, ((size_t)(n)) * sizeof(Instruction))), (size_t)n);
   }
   else
   {
-    f->code = luaM_malloc_Instruction_span(S->L, (size_t)n).data();
-    f->sizecode = n;
-    loadBlock(S, f->code, ((size_t)(n)) * sizeof((f->code)[0]));
+    f->code = luaM_malloc_Instruction_span(S->L, (size_t)n);
+    loadBlock(S, f->code.data(), ((size_t)(n)) * sizeof((f->code)[0]));
   }
 }
 
@@ -202,8 +200,7 @@ static void loadConstants(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->k = luaM_malloc_TValue_span(S->L, (size_t)n).data();
-  f->sizek = n;
+  f->k = luaM_malloc_TValue_span(S->L, (size_t)n);
   for (i = 0; i < n; i++)
     (f->k[i].tt_ = LUA_VNIL);
   for (i = 0; i < n; i++)
@@ -247,8 +244,7 @@ static void loadProtos(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->p = luaM_malloc_Proto_ptr_span(S->L, (size_t)n).data();
-  f->sizep = n;
+  f->p = luaM_malloc_Proto_ptr_span(S->L, (size_t)n);
   for (i = 0; i < n; i++)
     f->p[i] = nullptr;
   for (i = 0; i < n; i++)
@@ -269,8 +265,7 @@ static void loadUpvalues(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->upvalues = luaM_malloc_Upvaldesc_span(S->L, (size_t)n).data();
-  f->sizeupvalues = n;
+  f->upvalues = luaM_malloc_Upvaldesc_span(S->L, (size_t)n);
   for (i = 0; i < n; i++) /* make array valid for GC */
     f->upvalues[i].name = nullptr;
   for (i = 0; i < n; i++)
@@ -287,14 +282,12 @@ static void loadDebug(LoadState* S, Proto* f)
   int n = loadInt(S);
   if (S->fixed)
   {
-    f->lineinfo = ((ls_byte*)(getaddr_(S, ((size_t)(n)) * sizeof(ls_byte))));
-    f->sizelineinfo = n;
+    f->lineinfo = std::span<ls_byte>((ls_byte*)(getaddr_(S, ((size_t)(n)) * sizeof(ls_byte))), (size_t)n);
   }
   else
   {
-    f->lineinfo = luaM_malloc_ls_byte_span(S->L, (size_t)n).data();
-    f->sizelineinfo = n;
-    loadBlock(S, f->lineinfo, ((size_t)(n)) * sizeof((f->lineinfo)[0]));
+    f->lineinfo = luaM_malloc_ls_byte_span(S->L, (size_t)n);
+    loadBlock(S, f->lineinfo.data(), ((size_t)(n)) * sizeof((f->lineinfo)[0]));
   }
   n = loadInt(S);
   if (n > 0)
@@ -302,19 +295,16 @@ static void loadDebug(LoadState* S, Proto* f)
     loadAlign(S, sizeof(int));
     if (S->fixed)
     {
-      f->abslineinfo = ((AbsLineInfo*)(getaddr_(S, ((size_t)(n)) * sizeof(AbsLineInfo))));
-      f->sizeabslineinfo = n;
+      f->abslineinfo = std::span<AbsLineInfo>((AbsLineInfo*)(getaddr_(S, ((size_t)(n)) * sizeof(AbsLineInfo))), (size_t)n);
     }
     else
     {
-      f->abslineinfo = luaM_malloc_AbsLineInfo_span(S->L, (size_t)n).data();
-      f->sizeabslineinfo = n;
-      loadBlock(S, f->abslineinfo, ((size_t)(n)) * sizeof((f->abslineinfo)[0]));
+      f->abslineinfo = luaM_malloc_AbsLineInfo_span(S->L, (size_t)n);
+      loadBlock(S, f->abslineinfo.data(), ((size_t)(n)) * sizeof((f->abslineinfo)[0]));
     }
   }
   n = loadInt(S);
-  f->locvars = luaM_malloc_LocVar_span(S->L, (size_t)n).data();
-  f->sizelocvars = n;
+  f->locvars = luaM_malloc_LocVar_span(S->L, (size_t)n);
   for (i = 0; i < n; i++)
     f->locvars[i].varname = nullptr;
   for (i = 0; i < n; i++)
@@ -325,7 +315,7 @@ static void loadDebug(LoadState* S, Proto* f)
   }
   n = loadInt(S);
   if (n != 0)            /* does it have debug information? */
-    n = f->sizeupvalues; /* must be this many */
+    n = (int)f->upvalues.size(); /* must be this many */
   for (i = 0; i < n; i++)
     loadString(S, f, &f->upvalues[i].name);
 }
@@ -421,7 +411,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int f
   cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
   loadFunction(&S, cl->p);
-  if (cl->nupvalues != cl->p->sizeupvalues)
+  if (cl->nupvalues != (int)cl->p->upvalues.size())
     error(&S, lt::corrupted_chunk);
   return cl;
 }

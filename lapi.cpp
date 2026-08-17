@@ -1774,7 +1774,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
     LClosure* f = clLvalue(fi);
     TString* name;
     Proto* p = f->p;
-    if (!(((unsigned int)(n)) - 1u < ((unsigned int)(p->sizeupvalues))))
+    if (!(((unsigned int)(n)) - 1u < ((unsigned int)(p->upvalues.size()))))
       return nullptr; /* 'n' not in [1, p->sizeupvalues] */
     *addr = {nullptr, f->upvals[n - 1]};
     if (owner)
@@ -1857,7 +1857,7 @@ static UpVal** getupvalref(lua_State* L, int fidx, int n, LClosure** pf)
   f = clLvalue(&fi);
   if (pf)
     *pf = f;
-  if (1 <= n && n <= f->p->sizeupvalues)
+  if (1 <= n && n <= (int)f->p->upvalues.size())
     return &f->upvals[n - 1]; /* get its upvalue pointer */
   else
     return (UpVal**) &nullup;

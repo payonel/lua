@@ -65,7 +65,7 @@ static int currentpc(lua_State* L, CallInfo* ci)
 */
 static int getbaseline(const Proto* f, int pc, int* basepc)
 {
-  if (f->sizeabslineinfo == 0 || pc < f->abslineinfo[0].pc)
+  if (f->abslineinfo.size() == 0 || pc < f->abslineinfo[0].pc)
   {
     *basepc = -1; /* start from the beginning */
     return f->linedefined;
@@ -75,8 +75,8 @@ static int getbaseline(const Proto* f, int pc, int* basepc)
     int i = pc / MAXIWTHABS - 1; /* get an estimate */
     /* estimate must be a lower bound of the correct base */
     assert(i < 0 ||
-               (i < f->sizeabslineinfo && f->abslineinfo[i].pc <= pc));
-    while (i + 1 < f->sizeabslineinfo && pc >= f->abslineinfo[i + 1].pc)
+               (i < (int)f->abslineinfo.size() && f->abslineinfo[i].pc <= pc));
+    while (i + 1 < (int)f->abslineinfo.size() && pc >= f->abslineinfo[i + 1].pc)
       i++; /* low estimate; adjust it */
     *basepc = f->abslineinfo[i].pc;
     return f->abslineinfo[i].line;
@@ -90,7 +90,7 @@ static int getbaseline(const Proto* f, int pc, int* basepc)
 */
 int luaG_getfuncline(const Proto* f, int pc)
 {
-  if (f->lineinfo == nullptr) /* no debug information? */
+  if (f->lineinfo.data() == nullptr) /* no debug information? */
     return -1;
   else
   {
@@ -199,7 +199,7 @@ LUA_API std::optional<lua_Debug> lua_getstack(lua_State* L, int level)
 
 static const InternalString* upvalname(const Proto* p, int uv)
 {
-  assert(uv < p->sizeupvalues);
+  assert(uv < (int)p->upvalues.size());
   TString* s = p->upvalues[uv].name;
   if (s == nullptr)
     return &lt::qmark_i;
@@ -360,7 +360,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
     Table* t = luaH_new(L);      /* new table to store active lines */
     setsloth(L, L->top, t); /* push it on stack */
     api_incr_top(L);
-    if (p->lineinfo != nullptr)
+    if (p->lineinfo.data() != nullptr)
     { /* proto with debug information? */
       int i;
       TValue v;
@@ -373,7 +373,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
         currentline = nextline(p, currentline, 0);
         i = 1; /* skip first instruction (OP_VARARGPREP) */
       }
-      for (; i < p->sizelineinfo; i++)
+      for (; i < (int)p->lineinfo.size(); i++)
       {                                            /* for each instruction */
         currentline = nextline(p, currentline, i); /* get its line */
         luaH_setint(L, t, currentline, &v);        /* table[line] = true */
@@ -1050,7 +1050,7 @@ l_noret luaG_runerror(lua_State* L, byte_view fmt)
 */
 static int changedline(const Proto* p, int oldpc, int newpc)
 {
-  if (p->lineinfo == nullptr) /* no debug information? */
+  if (p->lineinfo.data() == nullptr) /* no debug information? */
     return 0;
   if (newpc - oldpc < MAXIWTHABS / 2)
   {                /* not too far apart? */
@@ -1124,7 +1124,7 @@ int luaG_traceexec(lua_State* L, int pc)
   if (mask & LUA_MASKLINE)
   {
     /* 'L->oldpc' may be invalid; use zero in this case */
-    int oldpc = (L->oldpc < p->sizecode) ? L->oldpc : 0;
+    int oldpc = (L->oldpc < (int)p->code.size()) ? L->oldpc : 0;
     int npci = pc - 1;
     if (npci <= oldpc || /* call hook when jump back (loop), */
         changedline(p, oldpc, npci))

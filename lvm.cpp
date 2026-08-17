@@ -970,8 +970,8 @@ lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y)
 static void pushclosure(lua_State* L, Proto* p, UpVal** encup, StkId base,
                         StkId ra)
 {
-  int nup = p->sizeupvalues;
-  Upvaldesc* uv = p->upvalues;
+  int nup = (int)p->upvalues.size();
+  Upvaldesc* uv = p->upvalues.data();
   int i;
   LClosure* ncl = luaF_newLclosure(L, nup);
   ncl->p = p;
@@ -993,7 +993,7 @@ void luaV_finishOp(lua_State* L)
 {
   CallInfo* ci = L->ci;
   StkId base = ci->func + 1;
-  const Instruction* code = ci_func(L, ci)->p->code;
+  const Instruction* code = ci_func(L, ci)->p->code.data();
   Instruction inst = code[ci->savedpc - 1]; /* interrupted instruction */
   OpCode op = GET_OPCODE(inst);
   switch (op)
@@ -1233,8 +1233,8 @@ static l_forceinline void frameentry(lua_State* L, CallInfo* ci,
                                      StkId* base, int* trap)
 {
   *cl = ci_func(L, ci);
-  *k = (*cl)->p->k;
-  *code = (*cl)->p->code;
+  *k = (*cl)->p->k.data();
+  *code = (*cl)->p->code.data();
   *pc = ci->savedpc;
   if (l_unlikely(*trap))
     *trap = luaG_tracecall(L);

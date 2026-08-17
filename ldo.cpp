@@ -1085,7 +1085,7 @@ static void f_parser(lua_State* L, void* ud)
   }
   L->top = (static_cast<StkId>(otop)); /* restore stack */
   setslotclL(L, L->top++, cl); /* push closure */
-  assert(cl->nupvalues == cl->p->sizeupvalues);
+  assert(cl->nupvalues == (int)cl->p->upvalues.size());
   luaF_initupvals(L, cl);
 }
 

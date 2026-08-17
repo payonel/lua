@@ -156,10 +156,10 @@ static void dumpString(DumpState* D, TString* ts)
 
 static void dumpCode(DumpState* D, const Proto* f)
 {
-  dumpInt(D, f->sizecode);
+  dumpInt(D, (int)f->code.size());
   dumpAlign(D, sizeof(f->code[0]));
-  assert(f->code != nullptr);
-  dumpBlock(D, f->code, (((unsigned int)(f->sizecode))) * sizeof((f->code)[0]));
+  assert(f->code.data() != nullptr);
+  dumpBlock(D, f->code.data(), (((unsigned int)(f->code.size()))) * sizeof((f->code)[0]));
 }
 
 static void dumpFunction(DumpState* D, const Proto* f);
@@ -167,7 +167,7 @@ static void dumpFunction(DumpState* D, const Proto* f);
 static void dumpConstants(DumpState* D, const Proto* f)
 {
   int i;
-  int n = f->sizek;
+  int n = (int)f->k.size();
   dumpInt(D, n);
   for (i = 0; i < n; i++)
   {
@@ -195,7 +195,7 @@ static void dumpConstants(DumpState* D, const Proto* f)
 static void dumpProtos(DumpState* D, const Proto* f)
 {
   int i;
-  int n = f->sizep;
+  int n = (int)f->p.size();
   dumpInt(D, n);
   for (i = 0; i < n; i++)
     dumpFunction(D, f->p[i]);
@@ -203,7 +203,7 @@ static void dumpProtos(DumpState* D, const Proto* f)
 
 static void dumpUpvalues(DumpState* D, const Proto* f)
 {
-  int i, n = f->sizeupvalues;
+  int i, n = (int)f->upvalues.size();
   dumpInt(D, n);
   for (i = 0; i < n; i++)
   {
@@ -216,19 +216,19 @@ static void dumpUpvalues(DumpState* D, const Proto* f)
 static void dumpDebug(DumpState* D, const Proto* f)
 {
   int i, n;
-  n = (D->strip) ? 0 : f->sizelineinfo;
+  n = (D->strip) ? 0 : (int)f->lineinfo.size();
   dumpInt(D, n);
-  if (f->lineinfo != nullptr)
-    dumpBlock(D, f->lineinfo, (((unsigned int)(n))) * sizeof((f->lineinfo)[0]));
-  n = (D->strip) ? 0 : f->sizeabslineinfo;
+  if (f->lineinfo.data() != nullptr)
+    dumpBlock(D, f->lineinfo.data(), (((unsigned int)(n))) * sizeof((f->lineinfo)[0]));
+  n = (D->strip) ? 0 : (int)f->abslineinfo.size();
   dumpInt(D, n);
   if (n > 0)
   {
     /* 'abslineinfo' is an array of structures of int's */
     dumpAlign(D, sizeof(int));
-    dumpBlock(D, f->abslineinfo, (((unsigned int)(n))) * sizeof((f->abslineinfo)[0]));
+    dumpBlock(D, f->abslineinfo.data(), (((unsigned int)(n))) * sizeof((f->abslineinfo)[0]));
   }
-  n = (D->strip) ? 0 : f->sizelocvars;
+  n = (D->strip) ? 0 : (int)f->locvars.size();
   dumpInt(D, n);
   for (i = 0; i < n; i++)
   {
@@ -236,7 +236,7 @@ static void dumpDebug(DumpState* D, const Proto* f)
     dumpInt(D, f->locvars[i].startpc);
     dumpInt(D, f->locvars[i].endpc);
   }
-  n = (D->strip) ? 0 : f->sizeupvalues;
+  n = (D->strip) ? 0 : (int)f->upvalues.size();
   dumpInt(D, n);
   for (i = 0; i < n; i++)
     dumpString(D, f->upvalues[i].name);
@@ -287,7 +287,7 @@ int luaU_dump(lua_State* L, const Proto* f, lua_Writer w, void* data,
   D.status = 0;
   D.nstr = 0;
   dumpHeader(&D);
-  dumpByte(&D, f->sizeupvalues);
+  dumpByte(&D, (int)f->upvalues.size());
   dumpFunction(&D, f);
   dumpBlock(&D, nullptr, 0); /* signal end of dump */
   return D.status;

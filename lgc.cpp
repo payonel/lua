@@ -700,15 +700,15 @@ static l_mem traverseproto(global_State* g, Proto* f)
 {
   int i;
   markobjectN(g, f->source);
-  for (i = 0; i < f->sizek; i++) /* mark literals */
+  for (i = 0; i < (int)f->k.size(); i++) /* mark literals */
     markvalue(g, &f->k[i]);
-  for (i = 0; i < f->sizeupvalues; i++) /* mark upvalue names */
+  for (i = 0; i < (int)f->upvalues.size(); i++) /* mark upvalue names */
     markobjectN(g, f->upvalues[i].name);
-  for (i = 0; i < f->sizep; i++) /* mark nested protos */
+  for (i = 0; i < (int)f->p.size(); i++) /* mark nested protos */
     markobjectN(g, f->p[i]);
-  for (i = 0; i < f->sizelocvars; i++) /* mark local-variable names */
+  for (i = 0; i < (int)f->locvars.size(); i++) /* mark local-variable names */
     markobjectN(g, f->locvars[i].varname);
-  return 1 + f->sizek + f->sizeupvalues + f->sizep + f->sizelocvars;
+  return 1 + (int)f->k.size() + (int)f->upvalues.size() + (int)f->p.size() + (int)f->locvars.size();
 }
 
 static l_mem traverseCclosure(global_State* g, CClosure* cl)

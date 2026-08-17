@@ -182,16 +182,12 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
                               TString* varname)
 {
   Proto* f = fs->f;
-  int oldsize = f->sizelocvars;
+  int oldsize = (int)f->locvars.size();
   int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(LocVar))
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(LocVar));
-  {
-    auto s = luaM_safegrow_LocVar_span(ls->L, std::span<LocVar>(f->locvars, f->sizelocvars), fs->ndebugvars, limit, lt::local_variables);
-    f->locvars = s.data();
-    f->sizelocvars = (int)s.size();
-  }
-  while (oldsize < f->sizelocvars)
+  f->locvars = luaM_safegrow_LocVar_span(ls->L, f->locvars, fs->ndebugvars, limit, lt::local_variables);
+  while (oldsize < (int)f->locvars.size())
     f->locvars[oldsize++].varname = nullptr;
   f->locvars[fs->ndebugvars].varname = varname;
   f->locvars[fs->ndebugvars].startpc = fs->pc;
@@ -390,7 +386,7 @@ static void removevars(FuncState* fs, int tolevel)
 static int searchupvalue(FuncState* fs, TString* name)
 {
   int i;
-  Upvaldesc* up = fs->f->upvalues;
+  Upvaldesc* up = fs->f->upvalues.data();
   for (i = 0; i < fs->nups; i++)
   {
     if (eqstr(up[i].name, name))
@@ -402,17 +398,13 @@ static int searchupvalue(FuncState* fs, TString* name)
 static Upvaldesc* allocupvalue(FuncState* fs)
 {
   Proto* f = fs->f;
-  int oldsize = f->sizeupvalues;
+  int oldsize = (int)f->upvalues.size();
   luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, lt::upvalues);
   int limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc))
                   ? MAXUPVAL
                   : (int)(MAX_SIZET / sizeof(Upvaldesc));
-  {
-    auto s = luaM_safegrow_Upvaldesc_span(fs->ls->L, std::span<Upvaldesc>(f->upvalues, f->sizeupvalues), fs->nups, limit, lt::upvalues);
-    f->upvalues = s.data();
-    f->sizeupvalues = (int)s.size();
-  }
-  while (oldsize < f->sizeupvalues)
+  f->upvalues = luaM_safegrow_Upvaldesc_span(fs->ls->L, f->upvalues, fs->nups, limit, lt::upvalues);
+  while (oldsize < (int)f->upvalues.size())
     f->upvalues[oldsize++].name = nullptr;
   return &f->upvalues[fs->nups++];
 }
@@ -829,18 +821,14 @@ static Proto* addprototype(LexState* ls)
   lua_State* L = ls->L;
   FuncState* fs = ls->fs;
   Proto* f = fs->f; /* prototype of current function */
-  if (fs->np >= f->sizep)
+  if (fs->np >= (int)f->p.size())
   {
-    int oldsize = f->sizep;
+    int oldsize = (int)f->p.size();
     int limit = ((size_t)MAXARG_Bx <= MAX_SIZET / sizeof(Proto*))
                     ? MAXARG_Bx
                     : (int)(MAX_SIZET / sizeof(Proto*));
-    {
-      auto s = luaM_safegrow_Proto_ptr_span(L, std::span<Proto*>(f->p, f->sizep), fs->np, limit, lt::functions);
-      f->p = s.data();
-      f->sizep = (int)s.size();
-    }
-    while (oldsize < f->sizep)
+    f->p = luaM_safegrow_Proto_ptr_span(L, f->p, fs->np, limit, lt::functions);
+    while (oldsize < (int)f->p.size())
       f->p[oldsize++] = nullptr;
   }
   f->p[fs->np++] = clp = luaF_newproto(L);
@@ -903,41 +891,13 @@ static void close_func(LexState* ls)
   leaveblock(fs);
   assert(fs->bl == nullptr);
   luaK_finish(fs);
-  {
-    auto s = luaM_safeshrink_Instruction_span(L, std::span<Instruction>(f->code, f->sizecode), fs->pc);
-    f->code = s.data();
-    f->sizecode = (int)s.size();
-  }
-  {
-    auto s = luaM_safeshrink_ls_byte_span(L, std::span<ls_byte>(f->lineinfo, f->sizelineinfo), fs->pc);
-    f->lineinfo = s.data();
-    f->sizelineinfo = (int)s.size();
-  }
-  {
-    auto s = luaM_safeshrink_AbsLineInfo_span(L, std::span<AbsLineInfo>(f->abslineinfo, f->sizeabslineinfo), fs->nabslineinfo);
-    f->abslineinfo = s.data();
-    f->sizeabslineinfo = (int)s.size();
-  }
-  {
-    auto s = luaM_safeshrink_TValue_span(L, std::span<TValue>(f->k, f->sizek), fs->nk);
-    f->k = s.data();
-    f->sizek = (int)s.size();
-  }
-  {
-    auto s = luaM_safeshrink_Proto_ptr_span(L, std::span<Proto*>(f->p, f->sizep), fs->np);
-    f->p = s.data();
-    f->sizep = (int)s.size();
-  }
-  {
-    auto s = luaM_safeshrink_LocVar_span(L, std::span<LocVar>(f->locvars, f->sizelocvars), fs->ndebugvars);
-    f->locvars = s.data();
-    f->sizelocvars = (int)s.size();
-  }
-  {
-    auto s = luaM_safeshrink_Upvaldesc_span(L, std::span<Upvaldesc>(f->upvalues, f->sizeupvalues), fs->nups);
-    f->upvalues = s.data();
-    f->sizeupvalues = (int)s.size();
-  }
+  f->code = luaM_safeshrink_Instruction_span(L, f->code, fs->pc);
+  f->lineinfo = luaM_safeshrink_ls_byte_span(L, f->lineinfo, fs->pc);
+  f->abslineinfo = luaM_safeshrink_AbsLineInfo_span(L, f->abslineinfo, fs->nabslineinfo);
+  f->k = luaM_safeshrink_TValue_span(L, f->k, fs->nk);
+  f->p = luaM_safeshrink_Proto_ptr_span(L, f->p, fs->np);
+  f->locvars = luaM_safeshrink_LocVar_span(L, f->locvars, fs->ndebugvars);
+  f->upvalues = luaM_safeshrink_Upvaldesc_span(L, f->upvalues, fs->nups);
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */
   luaH_set(L, ls->h, &temp, &L->l_G->nilvalue);
