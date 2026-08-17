@@ -20,8 +20,6 @@ struct global_State;
 LUAI_FUNC int luaM_reserve(lua_State* L, size_t size);
 LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
-LUAI_FUNC int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte_view what);
-
 LUAI_FUNC std::span<char> luaM_alloc_char_span(global_State* g, lua_State* L, std::span<char> block, size_t count, bool bthrow);
 
 // type allocators

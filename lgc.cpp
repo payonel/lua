@@ -964,7 +964,6 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VLCF:
   {
     CFuncInfo* cfi = static_cast<CFuncInfo*>(o);
-    cfi->name.~optional();
     luaM_free_CFuncInfo(L, cfi);
     break;
   }
