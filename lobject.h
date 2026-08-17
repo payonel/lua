@@ -433,8 +433,8 @@ struct Node
 struct Table : GCObject
 {
   lu_byte flags;      /* 1<<p means tagmethod(p) is not present */
-  std::span<Value> array; /* array part: values, forward-indexed */
-  std::span<lu_byte> tags; /* array part: tags, forward-indexed */
+  std::vector<Value> array; /* array part: values, forward-indexed */
+  std::vector<lu_byte> tags; /* array part: tags, forward-indexed */
   std::span<Node> node;
   int lastfree;
   unsigned lenhint;   /* hint for #t; see luaH_getn */

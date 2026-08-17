@@ -88,13 +88,13 @@ constexpr int HFIRSTNODE = 3;
 /* Computes the address of the tag for the abstract C-index 'k' */
 static l_forceinline lu_byte* getArrTag(const Table* t, lua_Unsigned k)
 {
-  return t->tags.data() + k;
+  return const_cast<lu_byte*>(t->tags.data()) + k;
 }
 
 /* Computes the address of the value for the abstract C-index 'k' */
 static l_forceinline Value* getArrVal(const Table* t, lua_Unsigned k)
 {
-  return t->array.data() + k;
+  return const_cast<Value*>(t->array.data()) + k;
 }
 
 /*

@@ -22,6 +22,7 @@ LUAI_FUNC int luaM_reserve(lua_State* L, size_t size);
 LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
 LUAI_FUNC int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte_view what);
+LUAI_FUNC int luaM_accounttry_(lua_State* L, size_t osize, size_t nsize);
 LUAI_FUNC void luaM_account_(lua_State* L, size_t osize, size_t nsize);
 
 template <typename T>

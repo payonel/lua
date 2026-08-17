@@ -229,7 +229,7 @@ void luaM_release(lua_State* L, size_t size)
   g->GCdebt += ((l_mem)(size));
 }
 
-LUAI_FUNC void luaM_account_(lua_State* L, size_t osize, size_t nsize)
+LUAI_FUNC int luaM_accounttry_(lua_State* L, size_t osize, size_t nsize)
 {
   global_State* g = L->l_G;
   if (nsize == 0)
@@ -237,22 +237,24 @@ LUAI_FUNC void luaM_account_(lua_State* L, size_t osize, size_t nsize)
     if (osize != 0)
       (*g->frealloc)(g->ud, osize, 0, 0);
     g->GCdebt += ((l_mem)(osize));
-    return;
+    return 1;
   }
   if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, 0)))
   {
-    if (cantryagain(g))
-    {
-      luaC_fullgc(L, 1);
-      if ((*g->frealloc)(g->ud, osize, nsize, 0))
-      {
-        g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
-        return;
-      }
-    }
-    luaD_throw(L, LUA_ERRMEM);
+    if (!cantryagain(g))
+      return 0;
+    luaC_fullgc(L, 1);
+    if (!(*g->frealloc)(g->ud, osize, nsize, 0))
+      return 0;
   }
   g->GCdebt -= ((l_mem)(nsize)) - ((l_mem)(osize));
+  return 1;
+}
+
+LUAI_FUNC void luaM_account_(lua_State* L, size_t osize, size_t nsize)
+{
+  if (l_unlikely(!luaM_accounttry_(L, osize, nsize)))
+    luaD_throw(L, LUA_ERRMEM);
 }
 
 // type allocators
