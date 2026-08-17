@@ -21,8 +21,6 @@
 #include <limits.h>
 #include <math.h>
 #include <string.h>
-#include <new>
-#include <utility>
 
 #include "lua.h"
 
@@ -579,47 +577,50 @@ static void numusehash(const Table* t, Counters* ct)
 ** allocate the new value and tag arrays, move the common elements to
 ** their new position, and then free the old arrays.
 */
-static bool resizearray(lua_State* L, Table* t,
+static std::span<Value> resizearray(lua_State* L, Table* t,
                           unsigned oldasize,
-                          unsigned newasize)
+                          unsigned newasize,
+                          std::span<lu_byte>* newtags)
 {
   if (oldasize == newasize)
   {
-    return true; /* nothing to be done */
+    *newtags = t->tags; /* nothing to be done */
+    return t->array;
   }
   else if (newasize == 0)
   { /* erasing array? */
-    luaM_account_(L, ((size_t)(oldasize)) * sizeof(Value), 0);
-    luaM_account_(L, ((size_t)(oldasize)) * sizeof(lu_byte), 0);
-    t->array = {};
-    t->tags = {};
-    return true;
+    luaM_free_Value_span(L, t->array);
+    luaM_free_char_span(L, std::span<char>((char*)t->tags.data(), t->tags.size()));
+    *newtags = {};
+    return {};
   }
   else
   {
-    std::vector<Value> nv;
-    std::vector<lu_byte> nt;
-    if (!luaM_accounttry_(L, 0, ((size_t)(newasize)) * sizeof(Value))) /* allocation error? */
-      return false;
-    nv.resize(newasize);
-    if (!luaM_accounttry_(L, 0, ((size_t)(newasize)) * sizeof(lu_byte))) /* allocation error? */
+    std::span<Value> nv = luaM_alloc_Value_span(L, newasize);
+    if (nv.data() == nullptr) /* allocation error? */
     {
-      luaM_account_(L, ((size_t)(newasize)) * sizeof(Value), 0);
-      return false;
+      *newtags = {};
+      return {};
     }
-    nt.resize(newasize);
+    std::span<char> ntc = luaM_alloc_char_span(L, newasize);
+    if (ntc.data() == nullptr) /* allocation error? */
+    {
+      luaM_free_Value_span(L, nv);
+      *newtags = {};
+      return {};
+    }
+    std::span<lu_byte> nt((lu_byte*)ntc.data(), ntc.size());
     if (oldasize > 0)
     {
       /* move common elements to new arrays */
       unsigned tomove = (oldasize < newasize) ? oldasize : newasize;
       memcpy(nv.data(), t->array.data(), ((size_t)(tomove)) * sizeof(Value));
-      memcpy(nt.data(), t->tags.data(), ((size_t)(tomove)) * sizeof(lu_byte));
-      luaM_account_(L, ((size_t)(oldasize)) * sizeof(Value), 0);
-      luaM_account_(L, ((size_t)(oldasize)) * sizeof(lu_byte), 0);
+      memcpy(nt.data(), t->tags.data(), ((size_t)(tomove)) * sizeof(char));
+      luaM_free_Value_span(L, t->array);
+      luaM_free_char_span(L, std::span<char>((char*)t->tags.data(), t->tags.size()));
     }
-    t->array = std::move(nv);
-    t->tags = std::move(nt);
-    return true;
+    *newtags = nt;
+    return nv;
   }
 }
 
@@ -752,6 +753,8 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
 {
   Table newt; /* to keep the new hash part */
   unsigned oldasize = (unsigned)t->array.size();
+  std::span<Value> newarray;
+  std::span<lu_byte> newtags;
   if (newasize > MAXASIZE)
     luaG_runerror(L, lt::table_overflow);
   /* create new hash part with appropriate size into 'newt' */
@@ -765,14 +768,17 @@ void luaH_resize(lua_State* L, Table* t, unsigned newasize,
     exchangehashpart(t, &newt); /* restore old hash (in case of errors) */
   }
   /* allocate new array */
-  if (l_unlikely(!resizearray(L, t, oldasize, newasize)))
+  newarray = resizearray(L, t, oldasize, newasize, &newtags);
+  if (l_unlikely(newarray.data() == nullptr && newasize > 0))
   {                     /* allocation failed? */
     freehash(L, &newt); /* release new hash part */
     luaD_throw(L, LUA_ERRMEM);      /* raise error (with array unchanged) */
   }
   /* allocation ok; initialize new part of the array */
   exchangehashpart(t, &newt); /* 't' has the new hash ('newt' has the old) */
-  if (newasize != 0)
+  t->array = newarray;        /* set new array part */
+  t->tags = newtags;
+  if (newarray.data() != nullptr)
     t->lenhint = newasize / 2u; /* set an initial hint */
   clearNewSlice(t, oldasize, newasize);
   /* re-insert elements from old hash part into new parts */
@@ -838,8 +844,8 @@ Table* luaH_new(lua_State* L)
   luaC_link(L, t, LUA_VTABLE);
   t->metatable = nullptr;
   t->flags = maskflags; /* table has no metamethod fields */
-  new (&t->array) std::vector<Value>();
-  new (&t->tags) std::vector<lu_byte>();
+  t->array = {};
+  t->tags = {};
   t->lenhint = 0;
   setnodevector(L, t, 0);
   return t;
@@ -859,9 +865,9 @@ lu_mem luaH_size(Table* t)
 */
 void luaH_free(lua_State* L, Table* t)
 {
+  std::span<lu_byte> newtags;
   freehash(L, t);
-  luaM_vecfree_Value(L, t->array);
-  luaM_vecfree_lu_byte(L, t->tags);
+  resizearray(L, t, (unsigned)t->array.size(), 0, &newtags);
   luaM_free_Table(L, t);
 }
 
