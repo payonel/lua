@@ -389,7 +389,7 @@ static void checkudata(global_State* g, Udata* u)
   assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   GCObject* hgc = const_cast<GCObject*>(static_cast<const GCObject*>(u));
   checkobjrefN(g, hgc, u->metatable);
-  for (i = 0; i < u->nuvalue; i++)
+  for (i = 0; i < (int)u->uv.size(); i++)
     checkvalref(g, hgc, &u->uv[i]);
 }
 
@@ -605,7 +605,7 @@ static l_mem checkgraylist(global_State* g, GCObject* o)
       o = static_cast<Proto*>(o)->gclist;
       break;
     case LUA_VUSERDATA:
-      assert(static_cast<Udata*>(o)->nuvalue > 0);
+      assert(static_cast<Udata*>(o)->uv.size() > 0);
       assert(o->tt == LUA_VUSERDATA);
       o = static_cast<Udata*>(o)->gclist;
       break;

@@ -225,9 +225,8 @@ struct Udata : GCObject
 {
   Table* metatable;
   GCObject* gclist;
-  TValue* uv;
+  std::span<TValue> uv;
   std::span<char> data;
-  unsigned short nuvalue; /* number of user values */
   bool zb;
 };
 

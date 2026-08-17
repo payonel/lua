@@ -1094,7 +1094,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
   TValue o = index2val(L, idx);
   assert(((o.tt_ == ctb(LUA_VUSERDATA))) && "full userdata expected");
   Udata* u = uvalue(&o);
-  if (n <= 0 || n > u->nuvalue)
+  if (n <= 0 || n > (int)u->uv.size())
   {
     setslottag(L, L->top, LUA_VNIL);
     t = LUA_TNONE;
@@ -1339,7 +1339,7 @@ LUA_API int lua_setiuservalue(lua_State* L, int idx, int n)
   TValue o = index2val(L, idx);
   assert(((o.tt_ == ctb(LUA_VUSERDATA))) && "full userdata expected");
   Udata* u = uvalue(&o);
-  if (!((unsigned int)n - 1u < (unsigned int)u->nuvalue))
+  if (!((unsigned int)n - 1u < (unsigned int)u->uv.size()))
     res = 0;
   else
   {

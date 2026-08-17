@@ -207,22 +207,20 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
     luaM_toobig(L);
   u = luaM_malloc_Udata(L);
   luaC_link(L, u, LUA_VUSERDATA);
-  u->nuvalue = 0;
   u->metatable = nullptr;
-  u->uv = nullptr;
+  u->uv = {};
   u->zb = s == 0;
   u->data = std::span<char>{};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
-  TValue* uv = luaM_alloc_TValue_span(L, nuvalue).data();
-  if (uv != nullptr || nuvalue == 0)
+  std::span<TValue> uv = luaM_alloc_TValue_span(L, nuvalue);
+  if (uv.data() != nullptr || nuvalue == 0)
   {
     u->uv = uv;
-    u->nuvalue = nuvalue;
     u->data = luaM_alloc_char_span(L, s == 0 ? 1 : s); // zb udata is still an allocation
   }
   g->gcstopem = oldgcstop;
-  if ((uv == nullptr && nuvalue > 0) || u->data.data() == nullptr)
+  if ((uv.data() == nullptr && nuvalue > 0) || u->data.data() == nullptr)
     luaD_throw(L, LUA_ERRMEM);
   for (i = 0; i < nuvalue; i++)
     (u->uv[i].tt_ = LUA_VNIL);

@@ -143,7 +143,7 @@ static l_mem objsize(GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    res = sizeof(Udata) + (lu_mem)u->nuvalue * sizeof(TValue) + u->data.size();
+    res = sizeof(Udata) + (lu_mem)u->uv.size() * sizeof(TValue) + u->data.size();
     break;
   }
   case LUA_VPROTO:
@@ -197,7 +197,7 @@ static GCObject** getgclist(GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    assert(u->nuvalue > 0);
+    assert(u->uv.size() > 0);
     return &u->gclist;
   }
   default:
@@ -383,7 +383,7 @@ static void reallymarkobject(global_State* g, GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    if (u->nuvalue == 0)
+    if (u->uv.size() == 0)
     {                               /* no user values? */
       markobjectN(g, u->metatable); /* mark its metatable */
       set2black(u);                 /* nothing else to mark */
@@ -689,11 +689,11 @@ static l_mem traverseudata(global_State* g, Udata* u)
 {
   int i;
   markobjectN(g, u->metatable); /* mark its metatable */
-  for (i = 0; i < u->nuvalue; i++)
+  for (i = 0; i < (int)u->uv.size(); i++)
     markvalue(g, &u->uv[i]);
   assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(u)));
-  return 1 + u->nuvalue;
+  return 1 + (int)u->uv.size();
 }
 
 static l_mem traverseproto(global_State* g, Proto* f)
@@ -942,7 +942,7 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    luaM_free_TValue_span(L, std::span<TValue>(u->uv, u->nuvalue));
+    luaM_free_TValue_span(L, u->uv);
     if (u->data.data() != nullptr)
     {
       luaM_free_char_span(L, u->data);
