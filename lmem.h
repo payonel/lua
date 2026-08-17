@@ -8,7 +8,6 @@
 
 #include <stddef.h>
 #include <span>
-#include <vector>
 
 #include "llimits.h"
 #include "lua.h"
@@ -22,8 +21,6 @@ LUAI_FUNC int luaM_reserve(lua_State* L, size_t size);
 LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
 LUAI_FUNC int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte_view what);
-LUAI_FUNC int luaM_accounttry_(lua_State* L, size_t osize, size_t nsize);
-LUAI_FUNC void luaM_account_(lua_State* L, size_t osize, size_t nsize);
 
 // type allocators
 struct TValue;
@@ -128,31 +125,3 @@ LUAI_FUNC void luaM_free_Proto(lua_State* L, Proto* p);
 LUAI_FUNC void luaM_free_Table(lua_State* L, Table* p);
 LUAI_FUNC void luaM_free_LX(lua_State* L, LX* p);
 LUAI_FUNC void luaM_free_CallInfo(lua_State* L, CallInfo* p);
-
-
-// typed std::vector helpers (owning, resizable fields)
-LUAI_FUNC void luaM_vecgrow_TValue(lua_State* L, std::vector<TValue>& v, int nelems, int limit, byte_view what);
-LUAI_FUNC void luaM_vecshrink_TValue(lua_State* L, std::vector<TValue>& v, int final_n);
-LUAI_FUNC void luaM_vecalloc_TValue(lua_State* L, std::vector<TValue>& v, size_t count);
-LUAI_FUNC void luaM_vecfree_TValue(lua_State* L, std::vector<TValue>& v);
-
-LUAI_FUNC void luaM_vecgrow_Proto_ptr(lua_State* L, std::vector<Proto*>& v, int nelems, int limit, byte_view what);
-LUAI_FUNC void luaM_vecshrink_Proto_ptr(lua_State* L, std::vector<Proto*>& v, int final_n);
-LUAI_FUNC void luaM_vecalloc_Proto_ptr(lua_State* L, std::vector<Proto*>& v, size_t count);
-LUAI_FUNC void luaM_vecfree_Proto_ptr(lua_State* L, std::vector<Proto*>& v);
-
-LUAI_FUNC void luaM_vecgrow_LocVar(lua_State* L, std::vector<LocVar>& v, int nelems, int limit, byte_view what);
-LUAI_FUNC void luaM_vecshrink_LocVar(lua_State* L, std::vector<LocVar>& v, int final_n);
-LUAI_FUNC void luaM_vecalloc_LocVar(lua_State* L, std::vector<LocVar>& v, size_t count);
-LUAI_FUNC void luaM_vecfree_LocVar(lua_State* L, std::vector<LocVar>& v);
-
-LUAI_FUNC void luaM_vecgrow_Upvaldesc(lua_State* L, std::vector<Upvaldesc>& v, int nelems, int limit, byte_view what);
-LUAI_FUNC void luaM_vecshrink_Upvaldesc(lua_State* L, std::vector<Upvaldesc>& v, int final_n);
-LUAI_FUNC void luaM_vecalloc_Upvaldesc(lua_State* L, std::vector<Upvaldesc>& v, size_t count);
-LUAI_FUNC void luaM_vecfree_Upvaldesc(lua_State* L, std::vector<Upvaldesc>& v);
-
-LUAI_FUNC void luaM_vecgrow_StkId(lua_State* L, std::vector<StkId>& v, int nelems, int limit, byte_view what);
-LUAI_FUNC void luaM_vecfree_StkId(lua_State* L, std::vector<StkId>& v);
-
-LUAI_FUNC void luaM_vecfree_Value(lua_State* L, std::vector<Value>& v);
-LUAI_FUNC void luaM_vecfree_lu_byte(lua_State* L, std::vector<lu_byte>& v);

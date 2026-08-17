@@ -9,7 +9,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <vector>
 
 #include "llimits.h"
 #include "internal_string.h"
