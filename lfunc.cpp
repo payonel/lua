@@ -314,7 +314,7 @@ void luaF_freeproto(lua_State* L, Proto* f)
     luaM_free_ls_byte_span(L, f->lineinfo);
     luaM_free_AbsLineInfo_span(L, f->abslineinfo);
   }
-  luaM_free_Proto_ptr_span(L, f->p);
+  luaM_alloc_Proto_ptr_span(L->l_G, L, f->p, 0, false);
   luaM_free_TValue_span(L, f->k);
   luaM_free_LocVar_span(L, f->locvars);
   luaM_free_Upvaldesc_span(L, f->upvalues);

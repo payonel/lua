@@ -244,7 +244,7 @@ static void loadProtos(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->p = luaM_malloc_Proto_ptr_span(S->L, (size_t)n);
+  f->p = luaM_alloc_Proto_ptr_span(S->L->l_G, S->L, {}, (size_t)n, true);
   for (i = 0; i < n; i++)
     f->p[i] = nullptr;
   for (i = 0; i < n; i++)
