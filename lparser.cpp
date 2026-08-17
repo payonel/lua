@@ -185,7 +185,7 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
   int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(LocVar))
                   ? SHRT_MAX
                   : (int)(MAX_SIZET / sizeof(LocVar));
-  luaM_vecgrow(ls->L, f->locvars, fs->ndebugvars, limit, lt::local_variables);
+  luaM_vecgrow_LocVar(ls->L, f->locvars, fs->ndebugvars, limit, lt::local_variables);
   f->locvars[fs->ndebugvars].varname = varname;
   f->locvars[fs->ndebugvars].startpc = fs->pc;
   luaC_objbarrier(ls->L, f, varname);
@@ -399,7 +399,7 @@ static Upvaldesc* allocupvalue(FuncState* fs)
   int limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc))
                   ? MAXUPVAL
                   : (int)(MAX_SIZET / sizeof(Upvaldesc));
-  luaM_vecgrow(fs->ls->L, f->upvalues, fs->nups, limit, lt::upvalues);
+  luaM_vecgrow_Upvaldesc(fs->ls->L, f->upvalues, fs->nups, limit, lt::upvalues);
   return &f->upvalues[fs->nups++];
 }
 
@@ -820,7 +820,7 @@ static Proto* addprototype(LexState* ls)
     int limit = ((size_t)MAXARG_Bx <= MAX_SIZET / sizeof(Proto*))
                     ? MAXARG_Bx
                     : (int)(MAX_SIZET / sizeof(Proto*));
-    luaM_vecgrow(L, f->p, fs->np, limit, lt::functions);
+    luaM_vecgrow_Proto_ptr(L, f->p, fs->np, limit, lt::functions);
   }
   f->p[fs->np++] = clp = luaF_newproto(L);
   luaC_objbarrier(L, f, clp);
@@ -885,10 +885,10 @@ static void close_func(LexState* ls)
   f->code = luaM_safeshrink_Instruction_span(L, f->code, fs->pc);
   f->lineinfo = luaM_safeshrink_ls_byte_span(L, f->lineinfo, fs->pc);
   f->abslineinfo = luaM_safeshrink_AbsLineInfo_span(L, f->abslineinfo, fs->nabslineinfo);
-  luaM_vecshrink(L, f->k, fs->nk);
-  luaM_vecshrink(L, f->p, fs->np);
-  luaM_vecshrink(L, f->locvars, fs->ndebugvars);
-  luaM_vecshrink(L, f->upvalues, fs->nups);
+  luaM_vecshrink_TValue(L, f->k, fs->nk);
+  luaM_vecshrink_Proto_ptr(L, f->p, fs->np);
+  luaM_vecshrink_LocVar(L, f->locvars, fs->ndebugvars);
+  luaM_vecshrink_Upvaldesc(L, f->upvalues, fs->nups);
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */
   luaH_set(L, ls->h, &temp, &L->l_G->nilvalue);

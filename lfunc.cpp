@@ -209,7 +209,7 @@ void luaF_newtbcupval(lua_State* L, StkId level)
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(StkId));
   {
-    luaM_vecgrow(L, L->tbc, L->ntbc, limit, lt::to_be_closed_variables);
+    luaM_vecgrow_StkId(L, L->tbc, L->ntbc, limit, lt::to_be_closed_variables);
   }
   L->tbc[L->ntbc++] = level;
   L->tbclist = level;
@@ -315,10 +315,10 @@ void luaF_freeproto(lua_State* L, Proto* f)
     luaM_free_ls_byte_span(L, f->lineinfo);
     luaM_free_AbsLineInfo_span(L, f->abslineinfo);
   }
-  luaM_vecfree(L, f->p);
-  luaM_vecfree(L, f->k);
-  luaM_vecfree(L, f->locvars);
-  luaM_vecfree(L, f->upvalues);
+  luaM_vecfree_Proto_ptr(L, f->p);
+  luaM_vecfree_TValue(L, f->k);
+  luaM_vecfree_LocVar(L, f->locvars);
+  luaM_vecfree_Upvaldesc(L, f->upvalues);
   luaM_free_Proto(L, f);
 }
 

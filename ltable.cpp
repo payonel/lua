@@ -860,8 +860,8 @@ lu_mem luaH_size(Table* t)
 void luaH_free(lua_State* L, Table* t)
 {
   freehash(L, t);
-  luaM_vecfree(L, t->array);
-  luaM_vecfree(L, t->tags);
+  luaM_vecfree_Value(L, t->array);
+  luaM_vecfree_lu_byte(L, t->tags);
   luaM_free_Table(L, t);
 }
 

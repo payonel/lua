@@ -200,7 +200,7 @@ static void loadConstants(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  luaM_vecalloc(S->L, f->k, (size_t)n);
+  luaM_vecalloc_TValue(S->L, f->k, (size_t)n);
   for (i = 0; i < n; i++)
   {
     TValue* o = &f->k[i];
@@ -242,7 +242,7 @@ static void loadProtos(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  luaM_vecalloc(S->L, f->p, (size_t)n);
+  luaM_vecalloc_Proto_ptr(S->L, f->p, (size_t)n);
   for (i = 0; i < n; i++)
   {
     f->p[i] = luaF_newproto(S->L);
@@ -261,7 +261,7 @@ static void loadUpvalues(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  luaM_vecalloc(S->L, f->upvalues, (size_t)n);
+  luaM_vecalloc_Upvaldesc(S->L, f->upvalues, (size_t)n);
   for (i = 0; i < n; i++)
   { /* following calls can raise errors */
     f->upvalues[i].instack = loadByte(S);
@@ -298,7 +298,7 @@ static void loadDebug(LoadState* S, Proto* f)
     }
   }
   n = loadInt(S);
-  luaM_vecalloc(S->L, f->locvars, (size_t)n);
+  luaM_vecalloc_LocVar(S->L, f->locvars, (size_t)n);
   for (i = 0; i < n; i++)
   {
     loadString(S, f, &f->locvars[i].varname);

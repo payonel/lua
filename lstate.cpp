@@ -144,7 +144,7 @@ static void resetCI(lua_State* L)
 static void stack_init(lua_State* L1, lua_State* L)
 {
   size_t nslots = (size_t)(BASIC_STACK_SIZE + EXTRA_STACK);
-  luaM_vecalloc(L, L1->stack, nslots);
+  luaM_vecalloc_TValue(L, L1->stack, nslots);
   L1->tbclist = 0;
   L1->stack_last = BASIC_STACK_SIZE;
   /* initialize first ci */
@@ -154,7 +154,7 @@ static void stack_init(lua_State* L1, lua_State* L)
 
 static void freestack(lua_State* L)
 {
-  luaM_vecfree(L, L->tbc);
+  luaM_vecfree_StkId(L, L->tbc);
   L->ntbc = 0;
   if (L->stack.data() == nullptr)
     return;            /* stack not completely built yet */
@@ -162,7 +162,7 @@ static void freestack(lua_State* L)
   freeCI(L);
   assert(L->nci == 0);
   {
-    luaM_vecfree(L, L->stack);
+    luaM_vecfree_TValue(L, L->stack);
   }
 }
 

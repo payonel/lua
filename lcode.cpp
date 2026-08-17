@@ -584,7 +584,7 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
   int limit = ((size_t)MAXARG_Ax <= MAX_SIZET / sizeof(TValue))
                   ? MAXARG_Ax
                   : (int)(MAX_SIZET / sizeof(TValue));
-  luaM_vecgrow(L, f->k, k, limit, lt::constants);
+  luaM_vecgrow_TValue(L, f->k, k, limit, lt::constants);
   setobj(L, &f->k[k], v);
   fs->nk++;
   luaC_barrier(L, f, v);
