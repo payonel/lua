@@ -310,7 +310,7 @@ void luaF_freeproto(lua_State* L, Proto* f)
 {
   if (!(f->flag & PF_FIXED))
   {
-    luaM_free_Instruction_span(L, f->code);
+    luaM_alloc_Instruction_span(L->l_G, L, f->code, 0, false);
     luaM_free_ls_byte_span(L, f->lineinfo);
     luaM_free_AbsLineInfo_span(L, f->abslineinfo);
   }

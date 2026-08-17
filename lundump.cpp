@@ -189,7 +189,7 @@ static void loadCode(LoadState* S, Proto* f)
   }
   else
   {
-    f->code = luaM_malloc_Instruction_span(S->L, (size_t)n);
+    f->code = luaM_alloc_Instruction_span(S->L->l_G, S->L, {}, (size_t)n, true);
     loadBlock(S, f->code.data(), ((size_t)(n)) * sizeof((f->code)[0]));
   }
 }
