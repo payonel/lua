@@ -299,7 +299,7 @@ static void loadDebug(LoadState* S, Proto* f)
     }
     else
     {
-      f->abslineinfo = luaM_malloc_AbsLineInfo_span(S->L, (size_t)n);
+      f->abslineinfo = luaM_alloc_AbsLineInfo_span(S->L->l_G, S->L, {}, (size_t)n, true);
       loadBlock(S, f->abslineinfo.data(), ((size_t)(n)) * sizeof((f->abslineinfo)[0]));
     }
   }
