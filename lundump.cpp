@@ -304,7 +304,7 @@ static void loadDebug(LoadState* S, Proto* f)
     }
   }
   n = loadInt(S);
-  f->locvars = luaM_malloc_LocVar_span(S->L, (size_t)n);
+  f->locvars = luaM_alloc_LocVar_span(S->L->l_G, S->L, {}, (size_t)n, true);
   for (i = 0; i < n; i++)
     f->locvars[i].varname = nullptr;
   for (i = 0; i < n; i++)

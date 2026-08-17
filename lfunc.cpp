@@ -316,7 +316,7 @@ void luaF_freeproto(lua_State* L, Proto* f)
   }
   luaM_alloc_Proto_ptr_span(L->l_G, L, f->p, 0, false);
   luaM_free_TValue_span(L, f->k);
-  luaM_free_LocVar_span(L, f->locvars);
+  luaM_alloc_LocVar_span(L->l_G, L, f->locvars, 0, false);
   luaM_free_Upvaldesc_span(L, f->upvalues);
   luaM_free_Proto(L, f);
 }
