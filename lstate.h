@@ -192,12 +192,13 @@ static l_forceinline lu_byte getoah(const CallInfo* ci)
 /*
 ** 'per thread' state
 */
+struct global_State;
 struct lua_State : GCObject
 {
   lu_byte allowhook;
   TStatus status;
   StkId top; /* first free slot in the stack */
-  struct global_State* l_G;
+  global_State* l_G;
   CallInfo* ci;    /* call info for current function */
   StkId stack_last; /* end of stack (last element + 1) */
   std::span<TValue> stack;    /* stack base */

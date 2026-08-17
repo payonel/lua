@@ -76,6 +76,45 @@ static int luaM_permit_(lua_State* L, size_t osize, size_t nsize, int tag)
   return 1;
 }
 
+static int luaM_permit_(global_State* g, lua_State* L, size_t osize, size_t nsize, int tag)
+{
+  if (osize == 0 && nsize == 0)
+    return 1;
+  if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, tag)))
+  {
+    if (!L)
+      return 0; /* raw (g-only) path cannot run emergency GC: deny, like luaM_rawrealloc */
+    if (!cantryagain(g))
+      return 0;
+    luaC_fullgc(L, 1); /* try to free some memory... */
+    if (!(*g->frealloc)(g->ud, osize, nsize, tag))
+      return 0;
+  }
+  return 1;
+}
+
+LUAI_FUNC std::span<char> luaM_alloc_char_span(global_State* g, lua_State* L, std::span<char> block, size_t count, bool bthrow)
+{
+  std::span<char> nb{};
+  if (luaM_permit_(g, L, block.size(), count, 0))
+  {
+    if (count > 0)
+    {
+      nb = std::span<char>(new char[count], count); // throws bad_alloc, never null
+      if (!block.empty())
+        ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()));
+    }
+    delete [] block.data(); // free old block on success (no-op when null)
+    if (L) // raw (g-only) path must not touch GCdebt
+      g->GCdebt -= static_cast<l_mem>(count) - static_cast<l_mem>(block.size());
+  }
+  else if (l_unlikely(count > 0 && bthrow && L))
+  {
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  return nb;
+}
+
 /*
 ** {==================================================================
 ** Functions to allocate/deallocate arrays for the Parser
@@ -267,26 +306,12 @@ LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(lua_State* L, size_t count
   return std::span<UpVal*>(p, p == nullptr ? 0 : count);
 }
 
-LUAI_FUNC std::span<char> luaM_alloc_char_span(lua_State* L, size_t count)
-{
-  if (count == 0)
-    return {};
-  char* p = (char*)luaM_realloc_(L, nullptr, 0, count);
-  return std::span<char>(p, p == nullptr ? 0 : count);
-}
-
 LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(lua_State* L, size_t count)
 {
   if (count == 0)
     return {};
   lu_byte* p = (lu_byte*)luaM_realloc_(L, nullptr, 0, count * sizeof(lu_byte));
   return std::span<lu_byte>(p, p == nullptr ? 0 : count);
-}
-
-LUAI_FUNC std::span<char> luaM_saferealloc_char_span(lua_State* L, std::span<char> block, size_t count)
-{
-  char* p = (char*)luaM_saferealloc_(L, block.data(), block.size(), count);
-  return std::span<char>(p, p == nullptr ? 0 : count);
 }
 
 LUAI_FUNC CallInfo* luaM_alloc_CallInfo(lua_State* L)
@@ -485,16 +510,6 @@ LUAI_FUNC std::span<LocVar> luaM_malloc_LocVar_span(lua_State* L, size_t count)
   return std::span<LocVar>(p, p == nullptr ? 0 : count);
 }
 
-LUAI_FUNC std::span<char> luaM_malloc_char_span(lua_State* L, size_t count)
-{
-  if (count == 0)
-    return {};
-  if (count + 1 > MAX_SIZET / sizeof(char))
-    luaM_toobig(L);
-  char* p = (char*)luaM_malloc_(L, count * sizeof(char), 0);
-  return std::span<char>(p, p == nullptr ? 0 : count);
-}
-
 LUAI_FUNC std::span<Node> luaM_malloc_Node_span(lua_State* L, size_t count)
 {
   if (count == 0)
@@ -550,19 +565,6 @@ LUAI_FUNC LX* luaM_malloc_LX(lua_State* L)
   return (LX*)luaM_malloc_(L, sizeof(LX), LUA_TTHREAD & NOVARIANT_MASK);
 }
 
-// typed raw (g-based) char realloc
-LUAI_FUNC std::span<char> luaM_rawrealloc_char_span(global_State* g, std::span<char> block, size_t count)
-{
-  char* p = (char*)luaM_rawrealloc(g, block.data(), block.size(), count, 0);
-  return std::span<char>(p, p == nullptr ? 0 : count);
-}
-
-LUAI_FUNC void luaM_rawfree_char_span(global_State* g, std::span<char> block)
-{
-  if (block.data() != nullptr)
-    luaM_rawrealloc(g, block.data(), block.size(), 0, 0);
-}
-
 // typed span frees
 LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block)
 {
@@ -577,11 +579,6 @@ LUAI_FUNC void luaM_free_Value_span(lua_State* L, std::span<Value> block)
 LUAI_FUNC void luaM_free_UpVal_ptr_span(lua_State* L, std::span<UpVal*> block)
 {
   luaM_free_(L, block.data(), block.size() * sizeof(UpVal*), 0);
-}
-
-LUAI_FUNC void luaM_free_char_span(lua_State* L, std::span<char> block)
-{
-  luaM_free_(L, block.data(), block.size() * sizeof(char), 0);
 }
 
 LUAI_FUNC void luaM_free_lu_byte_span(lua_State* L, std::span<lu_byte> block)

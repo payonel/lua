@@ -81,3 +81,18 @@ const void* luaZ_getaddr(ZIO* z, size_t n)
   z->pos += n; /* consume these bytes */
   return res;
 }
+
+//
+void MBuffer::growTo(size_t cap)
+{
+  if (cap == bytes_.size())
+    return;
+  assert(L_ != nullptr);
+  bytes_ = luaM_alloc_char_span(L_->l_G, L_, bytes_, cap, true);
+}
+
+MBuffer::~MBuffer()
+{
+  if (bytes_.data() != nullptr)
+    luaM_alloc_char_span(L_->l_G, L_, bytes_, 0, false);
+}

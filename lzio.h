@@ -20,11 +20,7 @@ public:
   explicit MBuffer(lua_State* L) noexcept : L_(L) {}
   MBuffer(const MBuffer&) = delete;
   MBuffer& operator=(const MBuffer&) = delete;
-  ~MBuffer()
-  {
-    if (bytes_.data() != nullptr)
-      luaM_free_char_span(L_, bytes_);
-  }
+  ~MBuffer();
 
   void attach(lua_State* L) noexcept
   {
@@ -32,13 +28,7 @@ public:
     L_ = L;
   }
 
-  void growTo(size_t cap)
-  {
-    if (cap == bytes_.size())
-      return;
-    assert(L_ != nullptr);
-    bytes_ = luaM_saferealloc_char_span(L_, bytes_, cap);
-  }
+  void growTo(size_t cap);
 
   void append(char c)
   {

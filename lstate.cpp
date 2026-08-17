@@ -267,7 +267,7 @@ static void close_state(lua_State* L)
   freestack(L);
   assert(gettotalbytes(g) == sizeof(global_State));
   (*g->frealloc)(g->ud, sizeof(global_State), 0, LUA_TTHREAD); /* free main block */
-  free(g);
+  delete[] reinterpret_cast<char*>(g);
 }
 
 LUA_API lua_State* lua_newthread(lua_State* L)
@@ -338,7 +338,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   lua_State* L;
   if (!(*f)(ud, 0, sizeof(global_State), LUA_TTHREAD))
     return nullptr;
-  global_State* g = ((global_State*)(malloc(sizeof(global_State))));
+  global_State* g = reinterpret_cast<global_State*>(new char[sizeof(global_State)]);
   if (g == nullptr)
     return nullptr;
   L = &g->mainth.l;

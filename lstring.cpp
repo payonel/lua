@@ -217,7 +217,8 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   if (uv.data() != nullptr || nuvalue == 0)
   {
     u->uv = uv;
-    u->data = luaM_alloc_char_span(L, s == 0 ? 1 : s); // zb udata is still an allocation
+    u->data = luaM_alloc_char_span(L->l_G, L, {}, s == 0 ? 1 : s, false);
+
   }
   g->gcstopem = oldgcstop;
   if ((uv.data() == nullptr && nuvalue > 0) || u->data.data() == nullptr)

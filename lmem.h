@@ -22,6 +22,8 @@ LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
 LUAI_FUNC int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte_view what);
 
+LUAI_FUNC std::span<char> luaM_alloc_char_span(global_State* g, lua_State* L, std::span<char> block, size_t count, bool bthrow);
+
 // type allocators
 struct TValue;
 struct Value;
@@ -30,9 +32,7 @@ struct CallInfo;
 LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<Value> luaM_alloc_Value_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(lua_State* L, size_t count);
-LUAI_FUNC std::span<char> luaM_alloc_char_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(lua_State* L, size_t count);
-LUAI_FUNC std::span<char> luaM_saferealloc_char_span(lua_State* L, std::span<char> block, size_t count);
 LUAI_FUNC CallInfo* luaM_alloc_CallInfo(lua_State* L);
 
 // typed grow/shrink span allocators
@@ -74,7 +74,6 @@ LUAI_FUNC std::span<Upvaldesc> luaM_malloc_Upvaldesc_span(lua_State* L, size_t c
 LUAI_FUNC std::span<ls_byte> luaM_malloc_ls_byte_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<AbsLineInfo> luaM_malloc_AbsLineInfo_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<LocVar> luaM_malloc_LocVar_span(lua_State* L, size_t count);
-LUAI_FUNC std::span<char> luaM_malloc_char_span(lua_State* L, size_t count);
 LUAI_FUNC std::span<Node> luaM_malloc_Node_span(lua_State* L, size_t count);
 
 // typed GC-object allocators (throwing, fixed-size per type)
@@ -95,15 +94,10 @@ LUAI_FUNC UpVal* luaM_malloc_UpVal(lua_State* L);
 LUAI_FUNC Proto* luaM_malloc_Proto(lua_State* L);
 LUAI_FUNC LX* luaM_malloc_LX(lua_State* L);
 
-// typed raw (g-based) char realloc
-LUAI_FUNC std::span<char> luaM_rawrealloc_char_span(global_State* g, std::span<char> block, size_t count);
-LUAI_FUNC void luaM_rawfree_char_span(global_State* g, std::span<char> block);
-
 // typed span frees
 LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block);
 LUAI_FUNC void luaM_free_Value_span(lua_State* L, std::span<Value> block);
 LUAI_FUNC void luaM_free_UpVal_ptr_span(lua_State* L, std::span<UpVal*> block);
-LUAI_FUNC void luaM_free_char_span(lua_State* L, std::span<char> block);
 LUAI_FUNC void luaM_free_lu_byte_span(lua_State* L, std::span<lu_byte> block);
 LUAI_FUNC void luaM_free_Instruction_span(lua_State* L, std::span<Instruction> block);
 LUAI_FUNC void luaM_free_ls_byte_span(lua_State* L, std::span<ls_byte> block);
