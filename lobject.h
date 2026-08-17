@@ -313,11 +313,11 @@ struct Proto : GCObject
   int lastlinedefined;      /* debug information  */
   std::vector<TValue> k;                /* constants used by the function */
   std::span<Instruction> code;        /* opcodes */
-  std::span<Proto*> p;         /* functions defined inside the function */
-  std::span<Upvaldesc> upvalues;      /* upvalue information */
+  std::vector<Proto*> p;         /* functions defined inside the function */
+  std::vector<Upvaldesc> upvalues;      /* upvalue information */
   std::span<ls_byte> lineinfo;        /* information about source lines (debug information) */
   std::span<AbsLineInfo> abslineinfo; /* idem */
-  std::span<LocVar> locvars;          /* information about local variables (debug information) */
+  std::vector<LocVar> locvars;          /* information about local variables (debug information) */
   TString* source;          /* used for debug information */
   GCObject* gclist;
 };
