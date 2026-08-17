@@ -413,10 +413,7 @@ int luaK_code(FuncState* fs, Instruction i)
 {
   Proto* f = fs->f;
   /* put new instruction in code array */
-  int limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(Instruction))
-                  ? INT_MAX
-                  : (int)(MAX_SIZET / sizeof(Instruction));
-  f->code = luaM_safegrow_Instruction_span(fs->ls->L, f->code, fs->pc, limit, lt::opcodes);
+  f->code = luaM_safegrow_Instruction_span(fs->ls->L, f->code, fs->pc);
   f->code[fs->pc++] = i;
   savelineinfo(fs, f, fs->ls->lastline);
   return fs->pc - 1; /* index of new instruction */
