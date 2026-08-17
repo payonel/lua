@@ -21,9 +21,6 @@
 #include "literals.h"
 
 LUAI_FUNC void* luaM_realloc_(lua_State* L, void* block, size_t oldsize, size_t size);
-LUAI_FUNC void* luaM_saferealloc_(lua_State* L, void* block, size_t oldsize, size_t size);
-LUAI_FUNC void* luaM_growaux_(lua_State* L, void* block, int nelems, int* size, unsigned size_elem, int limit, byte_view what);
-LUAI_FUNC void* luaM_shrinkvector_(lua_State* L, void* block, int* nelem, int final_n, unsigned size_elem);
 LUAI_FUNC void* luaM_rawrealloc(global_State* g, void* block, size_t osize, size_t nsize, int tag);
 LUAI_FUNC void* luaM_malloc_(lua_State* L, size_t size, int tag);
 LUAI_FUNC void luaM_free_(lua_State* L, void* block, size_t osize, int tag);
@@ -58,22 +55,6 @@ void* luaM_rawrealloc(global_State* g, void* block, size_t os, size_t ns, int ta
 static inline int cantryagain(global_State* g)
 {
   return completestate(g) && !g->gcstopem;
-}
-
-static int luaM_permit_(lua_State* L, size_t osize, size_t nsize, int tag)
-{
-  global_State* g = L->l_G;
-  if (osize == 0 && nsize == 0)
-    return 1;
-  if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, tag)))
-  {
-    if (!cantryagain(g))
-      return 0;
-    luaC_fullgc(L, 1); /* try to free some memory... */
-    if (!(*g->frealloc)(g->ud, osize, nsize, tag))
-      return 0;
-  }
-  return 1;
 }
 
 static int luaM_permit_(global_State* g, lua_State* L, size_t osize, size_t nsize, int tag)
@@ -148,36 +129,6 @@ LUAI_FUNC int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte
   return size;
 }
 
-void* luaM_growaux_(lua_State* L, void* block, int nelems, int* psize, unsigned size_elems, int limit, byte_view what)
-{
-  int size = luaM_growsize_(L, *psize, nelems, limit, what);
-  if (size == *psize) /* nothing to be done? */
-    return block;
-  /* 'limit' ensures that multiplication will not overflow */
-  void* newblock = luaM_saferealloc_(L, block, ((size_t)(*psize)) * size_elems,
-                                     ((size_t)(size)) * size_elems);
-  *psize = size; /* update only when everything else is OK */
-  return newblock;
-}
-
-/*
-** In prototypes, the size of the array is also its number of
-** elements (to save memory). So, if it cannot shrink an array
-** to its number of elements, the only option is to raise an
-** error.
-*/
-void* luaM_shrinkvector_(lua_State* L, void* block, int* size,
-                         int final_n, unsigned size_elem)
-{
-  void* newblock;
-  size_t oldsize = ((size_t)(*size)) * size_elem;
-  size_t newsize = ((size_t)(final_n)) * size_elem;
-  assert(newsize <= oldsize);
-  newblock = luaM_saferealloc_(L, block, oldsize, newsize);
-  *size = final_n;
-  return newblock;
-}
-
 /* }================================================================== */
 
 l_noret luaM_toobig(lua_State* L)
@@ -203,7 +154,7 @@ void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
 {
   global_State* g = L->l_G;
   assert((osize == 0) == (block == nullptr));
-  if (l_unlikely(!luaM_permit_(L, osize, nsize, 0)))
+  if (l_unlikely(!luaM_permit_(g, L, osize, nsize, 0)))
     return nullptr; /* denied; do not update 'GCdebt' */
   void* newblock;
   if (nsize == 0)
@@ -229,15 +180,6 @@ void* luaM_realloc_(lua_State* L, void* block, size_t osize, size_t nsize)
   return newblock;
 }
 
-void* luaM_saferealloc_(lua_State* L, void* block, size_t osize,
-                        size_t nsize)
-{
-  void* newblock = luaM_realloc_(L, block, osize, nsize);
-  if (l_unlikely(newblock == nullptr && nsize > 0)) /* allocation failed? */
-    luaD_throw(L, LUA_ERRMEM);
-  return newblock;
-}
-
 void* luaM_malloc_(lua_State* L, size_t size, int tag)
 {
   if (size == 0)
@@ -245,7 +187,7 @@ void* luaM_malloc_(lua_State* L, size_t size, int tag)
   else
   {
     global_State* g = L->l_G;
-    if (l_unlikely(!luaM_permit_(L, 0, size, tag)))
+    if (l_unlikely(!luaM_permit_(g, L, 0, size, tag)))
       luaD_throw(L, LUA_ERRMEM);
     void* newblock = realloc(nullptr, size);
     if (l_unlikely(newblock == nullptr))
