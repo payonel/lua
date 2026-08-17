@@ -397,10 +397,7 @@ static Upvaldesc* allocupvalue(FuncState* fs)
   Proto* f = fs->f;
   int oldsize = (int)f->upvalues.size();
   luaY_checklimit(fs, fs->nups + 1, MAXUPVAL, lt::upvalues);
-  int limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc))
-                  ? MAXUPVAL
-                  : (int)(MAX_SIZET / sizeof(Upvaldesc));
-  f->upvalues = luaM_safegrow_Upvaldesc_span(fs->ls->L, f->upvalues, fs->nups, limit, lt::upvalues);
+  f->upvalues = luaM_safegrow_Upvaldesc_span(fs->ls->L, f->upvalues, fs->nups);
   while (oldsize < (int)f->upvalues.size())
     f->upvalues[oldsize++].name = nullptr;
   return &f->upvalues[fs->nups++];
@@ -891,7 +888,7 @@ static void close_func(LexState* ls)
   f->k = luaM_alloc_TValue_span(L->l_G, L, f->k, (size_t)fs->nk, true);
   f->p = luaM_alloc_Proto_ptr_span(L->l_G, L, f->p, (size_t)fs->np, true);
   f->locvars = luaM_alloc_LocVar_span(L->l_G, L, f->locvars, (size_t)fs->ndebugvars, true);
-  f->upvalues = luaM_safeshrink_Upvaldesc_span(L, f->upvalues, fs->nups);
+  f->upvalues = luaM_alloc_Upvaldesc_span(L->l_G, L, f->upvalues, (size_t)fs->nups, true);
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */
   luaH_set(L, ls->h, &temp, &L->l_G->nilvalue);
