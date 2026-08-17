@@ -200,10 +200,10 @@ struct lua_State : GCObject
   struct global_State* l_G;
   CallInfo* ci;    /* call info for current function */
   StkId stack_last; /* end of stack (last element + 1) */
-  std::vector<TValue> stack;    /* stack base */
+  std::span<TValue> stack;    /* stack base */
   UpVal* openupval;    /* list of open upvalues in this stack */
   StkId tbclist;
-  std::vector<StkId> tbc;
+  std::span<StkId> tbc;
   int ntbc;
   GCObject* gclist;
   struct lua_State* twups;      /* list of threads with open upvalues */

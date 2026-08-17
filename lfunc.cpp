@@ -7,7 +7,6 @@
 
 
 #include <stddef.h>
-#include <new>
 
 #include "lua.h"
 
@@ -209,7 +208,7 @@ void luaF_newtbcupval(lua_State* L, StkId level)
                   ? INT_MAX
                   : (int)(MAX_SIZET / sizeof(StkId));
   {
-    luaM_vecgrow_StkId(L, L->tbc, L->ntbc, limit, lt::to_be_closed_variables);
+    L->tbc = luaM_safegrow_StkId_span(L, L->tbc, L->ntbc, limit, lt::to_be_closed_variables);
   }
   L->tbc[L->ntbc++] = level;
   L->tbclist = level;
