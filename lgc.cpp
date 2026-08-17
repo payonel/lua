@@ -233,7 +233,7 @@ static void linkgclist_(GCObject* o, GCObject** pnext, GCObject** list)
 */
 static void clearkey(Node* n)
 {
-  assert(((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
+  assert(((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL));
   if (((n)->key_tt & BIT_ISCOLLECTABLE))
     ((n)->key_tt = LUA_TDEADKEY); /* unused key; remove it */
 }
@@ -531,7 +531,7 @@ static void traverseweakvalue(global_State* g, Table* h)
   int hasclears = (h->asize > 0);
   for (n = gnode(h, 0); n < limit; n++)
   {                       /* traverse hash part */
-    if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
+    if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
       clearkey(n);        /* clear its key */
     else
     {
@@ -596,15 +596,15 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
   for (i = 0; i < nsize; i++)
   {
     Node* n = inv ? gnode(h, nsize - 1 - i) : gnode(h, i);
-    if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
+    if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
       clearkey(n);        /* clear its key */
     else if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? gckey(n) : nullptr)))
     {                          /* key is not marked (yet)? */
       hasclears = 1;           /* table must be cleared */
-      if ((((&(n)->val))->tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(&n->val))) /* value not marked yet? */
+      if ((n->val.tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(&n->val))) /* value not marked yet? */
         hasww = 1;             /* white-white entry */
     }
-    else if ((((&(n)->val))->tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(&n->val)))
+    else if ((n->val.tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(&n->val)))
     { /* value not marked yet? */
       marked = 1;
       reallymarkobject(g, gcvalue(&n->val)); /* mark it now */
@@ -631,7 +631,7 @@ static void traversestrongtable(global_State* g, Table* h)
   traversearray(g, h);
   for (n = gnode(h, 0); n < limit; n++)
   {                       /* traverse hash part */
-    if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
+    if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
       clearkey(n);        /* clear its key */
     else
     {
@@ -865,8 +865,8 @@ static void clearbykeys(global_State* g, GCObject* l)
     for (n = gnode(h, 0); n < limit; n++)
     {
       if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? gckey(n) : nullptr))) /* unmarked key? */
-        (((&(n)->val))->tt_ = LUA_VEMPTY);         /* remove entry */
-      if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))        /* is entry empty? */
+        (n->val.tt_ = LUA_VEMPTY);         /* remove entry */
+      if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))        /* is entry empty? */
         clearkey(n);               /* clear its key */
     }
   }
@@ -894,8 +894,8 @@ static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
     for (n = gnode(h, 0); n < limit; n++)
     {
       if (iscleared(g, gcvalueN((&(n)->val)))) /* unmarked value? */
-        (((&(n)->val))->tt_ = LUA_VEMPTY);                 /* remove entry */
-      if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))                /* is entry empty? */
+        (n->val.tt_ = LUA_VEMPTY);                 /* remove entry */
+      if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))                /* is entry empty? */
         clearkey(n);                       /* clear its key */
     }
   }

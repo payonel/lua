@@ -225,6 +225,6 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   if ((uv == nullptr && nuvalue > 0) || u->data.data() == nullptr)
     luaD_throw(L, LUA_ERRMEM);
   for (i = 0; i < nuvalue; i++)
-    ((&u->uv[i])->tt_ = LUA_VNIL);
+    (u->uv[i].tt_ = LUA_VNIL);
   return u;
 }

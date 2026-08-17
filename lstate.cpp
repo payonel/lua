@@ -188,7 +188,7 @@ static void init_registry(lua_State* L, global_State* g)
   sethvalue(L, &g->l_registry, registry);
   luaH_resize(L, registry, LUA_RIDX_LAST, 0);
   /* registry[1] = false */
-  ((&aux)->tt_ = LUA_VFALSE);
+  (aux.tt_ = LUA_VFALSE);
   luaH_setint(L, registry, 1, &aux);
   /* registry[LUA_RIDX_MAINTHREAD] = L */
   setthvalue(L, &aux, L);
@@ -210,7 +210,7 @@ static void f_luaopen(lua_State* L, void*)
   luaT_init(L);
   luaX_init(L);
   g->gcstp = 0;              /* allow gc */
-  ((&g->nilvalue)->tt_ = LUA_VNIL); /* now state is complete */
+  (g->nilvalue.tt_ = LUA_VNIL); /* now state is complete */
   luai_userstateopen(L);
 }
 
@@ -360,7 +360,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->seed = seed;
   g->gcstp = GCSTPGC; /* no GC while building state */
   new (&g->strt) decltype(g->strt)();
-  ((&g->l_registry)->tt_ = LUA_VNIL);
+  (g->l_registry.tt_ = LUA_VNIL);
   g->panic = nullptr;
   g->gcstate = GCSpause;
   g->gckind = KGC_INC;

@@ -364,7 +364,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
     { /* proto with debug information? */
       int i;
       TValue v;
-      ((&v)->tt_ = LUA_VTRUE);     /* boolean 'true' to be the value of all indices */
+      (v.tt_ = LUA_VTRUE);     /* boolean 'true' to be the value of all indices */
       if (!(isvararg(p))) /* regular function? */
         i = 0;            /* consider all instructions */
       else

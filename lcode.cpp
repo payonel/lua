@@ -603,7 +603,7 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
     f->sizek = (int)s.size();
   }
   while (oldsize < f->sizek)
-    ((&f->k[oldsize++])->tt_ = LUA_VNIL);
+    (f->k[oldsize++].tt_ = LUA_VNIL);
   setobj(L, &f->k[k], v);
   fs->nk++;
   luaC_barrier(L, f, v);
@@ -705,7 +705,7 @@ static int luaK_numberK(FuncState* fs, lua_Number r)
 static int boolF(FuncState* fs)
 {
   TValue o;
-  ((&o)->tt_ = LUA_VFALSE);
+  (o.tt_ = LUA_VFALSE);
   return k2proto(fs, &o, &o); /* use boolean itself as key */
 }
 
@@ -715,7 +715,7 @@ static int boolF(FuncState* fs)
 static int boolT(FuncState* fs)
 {
   TValue o;
-  ((&o)->tt_ = LUA_VTRUE);
+  (o.tt_ = LUA_VTRUE);
   return k2proto(fs, &o, &o); /* use boolean itself as key */
 }
 
@@ -1426,7 +1426,7 @@ static void codenot(FuncState* fs, expdesc* e)
 static int isKstr(FuncState* fs, expdesc* e)
 {
   return (e->k == VK && !hasjumps(e) && e->info <= MAXINDEXRK &&
-          (((&fs->f->k[e->info])->tt_ & NOVARIANT_MASK) == LUA_TSTRING));
+          ((fs->f->k[e->info].tt_ & NOVARIANT_MASK) == LUA_TSTRING));
 }
 
 /*
@@ -1603,15 +1603,15 @@ static int constfolding(FuncState* fs, int op, expdesc* e1,
   if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(op, &v1, &v2))
     return 0;                                   /* non-numeric operands or not safe to fold */
   luaO_rawarith(fs->ls->L, op, &v1, &v2, &res); /* does operation */
-  if (((&res)->tt_ == LUA_VNUMINT))
+  if ((res.tt_ == LUA_VNUMINT))
   {
     e1->k = VKINT;
-    assert((&res)->tt_ == LUA_VNUMINT);
+    assert(res.tt_ == LUA_VNUMINT);
     e1->ival = ivalue(&res);
   }
   else
   { /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
-    assert((&res)->tt_ == LUA_VNUMFLT);
+    assert(res.tt_ == LUA_VNUMFLT);
     lua_Number n = fltvalue(&res);
     if ((!((n) == (n))) || n == 0)
       return 0;

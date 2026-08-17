@@ -372,7 +372,7 @@ static void checktable(global_State* g, Table* h)
   }
   for (n = gnode(h, 0); n < limit; n++)
   {
-    if (!((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+    if (!((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
     {
       TValue k;
       getnodekey(mainthread(g), &k, n);
@@ -698,10 +698,10 @@ static int lua_checkmemory(lua_State* L)
   if (keepinvariant(g))
   {
     assert(!iswhite(mainthread(g)));
-    assert((&g->l_registry)->tt_ & BIT_ISCOLLECTABLE);
+    assert(g->l_registry.tt_ & BIT_ISCOLLECTABLE);
     assert(!iswhite(gcvalue(&g->l_registry)));
   }
-  assert((&g->l_registry)->tt_ & BIT_ISCOLLECTABLE);
+  assert(g->l_registry.tt_ & BIT_ISCOLLECTABLE);
   assert(!isdead(g, gcvalue(&g->l_registry)));
   assert(g->sweepgc == nullptr || issweepphase(g));
   totalin = checkgrays(g);
@@ -1218,19 +1218,19 @@ static int table_query(lua_State* L)
   {
     TValue k;
     getnodekey(L, &k, gnode(t, i));
-    if (!((((&(gnode(t, i))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL) ||
-        (((&k)->tt_ & NOVARIANT_MASK) == LUA_TNIL) ||
-        (((&k)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
+    if (!((gnode(t, i)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL) ||
+        ((k.tt_ & NOVARIANT_MASK) == LUA_TNIL) ||
+        ((k.tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
     {
       pushobject(L, &k);
     }
     else
       lua_pushliteral(L, HostString(lt::undef));
-    if (!((((&(gnode(t, i))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+    if (!((gnode(t, i)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
       pushobject(L, (&(gnode(t, i))->val));
     else
       lua_pushnil(L);
-    lua_pushinteger(L, ((&t->node[i])->next));
+    lua_pushinteger(L, (t->node[i].next));
   }
   return 3;
 }

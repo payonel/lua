@@ -277,15 +277,15 @@ static int read_numeral(LexState* ls, Token* seminfo)
     save_and_next(ls);        /* force an error */
   if (luaO_str2num(ls->buff->view(), &obj) == 0) /* format error? */
     lexerror(ls, lt::malformed_number, TK_FLT);
-  if (((&obj)->tt_ == LUA_VNUMINT))
+  if ((obj.tt_ == LUA_VNUMINT))
   {
     seminfo->i = ivalue(&obj);
     return TK_INT;
   }
   else
   {
-    assert(((&obj)->tt_ == LUA_VNUMFLT));
-    assert((&obj)->tt_ == LUA_VNUMFLT);
+    assert((obj.tt_ == LUA_VNUMFLT));
+    assert(obj.tt_ == LUA_VNUMFLT);
     seminfo->r = fltvalue(&obj);
     return TK_FLT;
   }

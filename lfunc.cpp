@@ -81,7 +81,7 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
     uv->previous = nullptr;
     uv->owner = nullptr;
     uv->stkid = 0;
-    ((&uv->value)->tt_ = LUA_VNIL);
+    (uv->value.tt_ = LUA_VNIL);
     cl->upvals[i] = uv;
     luaC_objbarrier(L, cl, uv);
   }

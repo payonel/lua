@@ -391,7 +391,7 @@ int luaH_next(lua_State* L, Table* t, StkId key)
   }
   for (i -= asize; i < sizenode(t); i++)
   { /* hash part */
-    if (!((((&(gnode(t, i))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+    if (!((gnode(t, i)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
     { /* a non-empty entry? */
       Node* n = gnode(t, i);
       TValue nk;
@@ -552,7 +552,7 @@ static void numusehash(const Table* t, Counters* ct)
   while (i--)
   {
     Node* n = &t->node[i];
-    if (((((&(n)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+    if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
     {
       assert(!((n)->key_tt == LUA_TNIL)); /* entry was deleted; key cannot be nil */
       ct->deleted = 1;
@@ -659,7 +659,7 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
       Node* n = gnode(t, i);
       ((n)->next) = 0;
       ((n)->key_tt = LUA_TNIL);
-      (((&(n)->val))->tt_ = LUA_VEMPTY);
+      (n->val.tt_ = LUA_VEMPTY);
     }
   }
 }
@@ -674,7 +674,7 @@ static void reinserthash(lua_State* L, Table* ot, Table* t)
   for (j = 0; j < size; j++)
   {
     Node* old = gnode(ot, j);
-    if (!((((&(old)->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+    if (!((old->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
     {
       /* doesn't need barrier/invalidate cache, as entry was
          already present in the table */
@@ -914,7 +914,7 @@ static int insertkey(Table* t, const TValue* key, TValue* value)
   int mp = mainpositionTV(t, key);
   /* table cannot already contain the key */
   assert(nodegeneric(t, key, 0) < 0);
-  if (!((((&(gnode(t, mp))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL) || isdummy(t))
+  if (!((gnode(t, mp)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL) || isdummy(t))
   { /* main position is taken? */
     int f = getfreepos(t); /* get a free place */
     if (f < 0)             /* cannot find a free place? */
@@ -933,7 +933,7 @@ static int insertkey(Table* t, const TValue* key, TValue* value)
         (gnode(t, f)->next) += mp - f; /* correct 'next' */
         (gnode(t, mp)->next) = 0;      /* now 'mp' is free */
       }
-      (((&(gnode(t, mp))->val))->tt_ = LUA_VEMPTY);
+      (gnode(t, mp)->val.tt_ = LUA_VEMPTY);
     }
     else
     { /* colliding node is in its own main position */
@@ -947,7 +947,7 @@ static int insertkey(Table* t, const TValue* key, TValue* value)
     }
   }
   setnodekey(gnode(t, mp), key);
-  assert(((((&(gnode(t, mp))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL));
+  assert(((gnode(t, mp)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL));
   setobj(((lua_State*)(0)), (&(gnode(t, mp))->val), value);
   return 1;
 }
@@ -1123,7 +1123,7 @@ static int retpsetcode(int idx)
 
 static int finishnodeset(Table* t, int idx, TValue* val)
 {
-  if (idx >= 0 && !((((&(gnode(t, idx))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (idx >= 0 && !((gnode(t, idx)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {
     setobj(((lua_State*) nullptr), (&(gnode(t, idx))->val), val);
     return HOK; /* success */
@@ -1180,7 +1180,7 @@ static int psetint(Table* t, lua_Integer key, TValue* val)
 int luaH_psetshortstr(Table* t, TString* key, TValue* val)
 {
   int idx = nodeshortstr(t, key);
-  if (idx >= 0 && !((((&(gnode(t, idx))->val))->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (idx >= 0 && !((gnode(t, idx)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                                        /* key already has a value? (all too common) */
     setobj(((lua_State*) nullptr), (&(gnode(t, idx))->val), val); /* update it */
     return HOK;                                            /* done */

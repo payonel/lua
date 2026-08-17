@@ -392,7 +392,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
     if (luaH_getshortstr(h, luaS_createstr(L, bytes, 0, bytes.size()), &res) != LUA_VNUMINT ||
         ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
       luaG_runerror(L, lt::vararg_table_has_no_proper_n);
-    assert((&res)->tt_ == LUA_VNUMINT);
+    assert(res.tt_ == LUA_VNUMINT);
     return ((int)(ivalue(&res)));
   }
 }
