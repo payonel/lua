@@ -286,7 +286,7 @@ static void loadDebug(LoadState* S, Proto* f)
   }
   else
   {
-    f->lineinfo = luaM_malloc_ls_byte_span(S->L, (size_t)n);
+    f->lineinfo = luaM_alloc_ls_byte_span(S->L->l_G, S->L, {}, (size_t)n, true);
     loadBlock(S, f->lineinfo.data(), ((size_t)(n)) * sizeof((f->lineinfo)[0]));
   }
   n = loadInt(S);

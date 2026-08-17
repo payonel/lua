@@ -552,11 +552,35 @@ LUAI_FUNC std::span<AbsLineInfo> luaM_safegrow_AbsLineInfo_span(lua_State* L, st
   return std::span<AbsLineInfo>(p, (size_t)size);
 }
 
+LUAI_FUNC std::span<ls_byte> luaM_alloc_ls_byte_span(global_State* g, lua_State* L, std::span<ls_byte> block, size_t count, bool bthrow)
+{
+  std::span<ls_byte> nb{};
+  if (luaM_permit_(g, L, block.size(), count, 0))
+  {
+    if (count > 0)
+    {
+      nb = std::span<ls_byte>(new ls_byte[count], count); // throws bad_alloc, never null
+      if (!block.empty())
+        ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()));
+    }
+    delete [] block.data(); // free old block on success (no-op when null)
+    if (L) // raw (g-only) path must not touch GCdebt
+      g->GCdebt -= static_cast<l_mem>(count) - static_cast<l_mem>(block.size());
+  }
+  else if (l_unlikely(count > 0 && bthrow && L))
+  {
+    luaD_throw(L, LUA_ERRMEM);
+  }
+  return nb;
+}
+
 LUAI_FUNC std::span<ls_byte> luaM_safegrow_ls_byte_span(lua_State* L, std::span<ls_byte> block, int nelems, int limit, byte_view what)
 {
   int size = (int)block.size();
-  ls_byte* p = (ls_byte*)luaM_growaux_(L, block.data(), nelems, &size, sizeof(ls_byte), limit, what);
-  return std::span<ls_byte>(p, (size_t)size);
+  int newsize = luaM_growsize_(L, size, nelems, limit, what);
+  if (newsize == size)
+    return block;
+  return luaM_alloc_ls_byte_span(L->l_G, L, block, (size_t)newsize, true);
 }
 
 LUAI_FUNC std::span<Instruction> luaM_alloc_Instruction_span(global_State* g, lua_State* L, std::span<Instruction> block, size_t count, bool bthrow)
@@ -643,9 +667,7 @@ LUAI_FUNC std::span<Instruction> luaM_safeshrink_Instruction_span(lua_State* L, 
 
 LUAI_FUNC std::span<ls_byte> luaM_safeshrink_ls_byte_span(lua_State* L, std::span<ls_byte> block, int final_n)
 {
-  int size = (int)block.size();
-  ls_byte* p = (ls_byte*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(ls_byte));
-  return std::span<ls_byte>(p, (size_t)size);
+  return luaM_alloc_ls_byte_span(L->l_G, L, block, (size_t)final_n, true);
 }
 
 LUAI_FUNC std::span<AbsLineInfo> luaM_safeshrink_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block, int final_n)
@@ -686,16 +708,6 @@ LUAI_FUNC std::span<TValue> luaM_malloc_TValue_span(lua_State* L, size_t count)
     luaM_toobig(L);
   TValue* p = (TValue*)luaM_malloc_(L, count * sizeof(TValue), 0);
   return std::span<TValue>(p, p == nullptr ? 0 : count);
-}
-
-LUAI_FUNC std::span<ls_byte> luaM_malloc_ls_byte_span(lua_State* L, size_t count)
-{
-  if (count == 0)
-    return {};
-  if (count + 1 > MAX_SIZET / sizeof(ls_byte))
-    luaM_toobig(L);
-  ls_byte* p = (ls_byte*)luaM_malloc_(L, count * sizeof(ls_byte), 0);
-  return std::span<ls_byte>(p, p == nullptr ? 0 : count);
 }
 
 LUAI_FUNC std::span<AbsLineInfo> luaM_malloc_AbsLineInfo_span(lua_State* L, size_t count)
@@ -783,11 +795,6 @@ LUAI_FUNC LX* luaM_malloc_LX(lua_State* L)
 LUAI_FUNC void luaM_free_TValue_span(lua_State* L, std::span<TValue> block)
 {
   luaM_free_(L, block.data(), block.size() * sizeof(TValue), 0);
-}
-
-LUAI_FUNC void luaM_free_ls_byte_span(lua_State* L, std::span<ls_byte> block)
-{
-  luaM_free_(L, block.data(), block.size() * sizeof(ls_byte), 0);
 }
 
 LUAI_FUNC void luaM_free_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block)
