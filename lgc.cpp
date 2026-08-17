@@ -922,7 +922,7 @@ static void freeobj(lua_State* L, GCObject* o)
   case LUA_VLCL:
   {
     LClosure* cl = static_cast<LClosure*>(o);
-    luaM_free_UpVal_ptr_span(L, cl->upvals);
+    luaM_alloc_UpVal_ptr_span(L->l_G, L, cl->upvals, 0, false);
     luaM_free_LClosure(L, cl);
     break;
   }

@@ -53,7 +53,7 @@ LClosure* luaF_newLclosure(lua_State* L, int nupvals)
   c->upvals = {};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
-  std::span<UpVal*> upvals = luaM_alloc_UpVal_ptr_span(L, nupvals);
+  std::span<UpVal*> upvals = luaM_alloc_UpVal_ptr_span(L->l_G, L, {}, nupvals, false);
   g->gcstopem = oldgcstop;
   if (upvals.data() == nullptr && nupvals > 0)
     luaD_throw(L, LUA_ERRMEM);
