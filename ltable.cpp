@@ -646,7 +646,7 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
     if (lsize > MAXHBITS || (1 << lsize) > MAXHSIZE)
       luaG_runerror(L, lt::table_overflow);
     size = twoto(lsize);
-    t->node = ((Node*)(luaM_malloc_(L, ((size_t)(size)) * sizeof(Node), 0)));
+    t->node = luaM_malloc_Node_span(L, (size_t)size).data();
     t->lastfree = 0;
     t->lsizenode = ((lu_byte)(lsize));
     if (lsize >= LIMFORLAST)

@@ -327,7 +327,7 @@ void luaC_fix(lua_State* L, GCObject* o)
 GCObject* luaC_newobjdt(lua_State* L, lu_byte tt, size_t sz)
 {
   global_State* g = L->l_G;
-  GCObject* o = ((GCObject*)(luaM_malloc_(L, (sz), ((tt) & NOVARIANT_MASK))));
+  GCObject* o = luaM_malloc_gcobject(L, sz, tt & NOVARIANT_MASK);
   o->marked = luaC_white(g);
   o->tt = tt;
   o->next = g->allgc;

@@ -24,6 +24,8 @@ LUAI_FUNC void* luaM_realloc_(lua_State* L, void* block, size_t oldsize, size_t 
 LUAI_FUNC void* luaM_saferealloc_(lua_State* L, void* block, size_t oldsize, size_t size);
 LUAI_FUNC void* luaM_growaux_(lua_State* L, void* block, int nelems, int* size, unsigned size_elem, int limit, byte_view what);
 LUAI_FUNC void* luaM_shrinkvector_(lua_State* L, void* block, int* nelem, int final_n, unsigned size_elem);
+LUAI_FUNC void* luaM_rawrealloc(global_State* g, void* block, size_t osize, size_t nsize, int tag);
+LUAI_FUNC void* luaM_malloc_(lua_State* L, size_t size, int tag);
 
 /*
 ** Macro to call the allocation function.
@@ -374,4 +376,89 @@ LUAI_FUNC std::span<Upvaldesc> luaM_safeshrink_Upvaldesc_span(lua_State* L, std:
   int size = (int)block.size();
   Upvaldesc* p = (Upvaldesc*)luaM_shrinkvector_(L, block.data(), &size, final_n, sizeof(Upvaldesc));
   return std::span<Upvaldesc>(p, (size_t)size);
+}
+
+// typed fresh (throwing) allocators
+LUAI_FUNC std::span<Instruction> luaM_malloc_Instruction_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(Instruction))
+    luaM_toobig(L);
+  Instruction* p = (Instruction*)luaM_malloc_(L, count * sizeof(Instruction), 0);
+  return std::span<Instruction>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<TValue> luaM_malloc_TValue_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(TValue))
+    luaM_toobig(L);
+  TValue* p = (TValue*)luaM_malloc_(L, count * sizeof(TValue), 0);
+  return std::span<TValue>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<Proto*> luaM_malloc_Proto_ptr_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(Proto*))
+    luaM_toobig(L);
+  Proto** p = (Proto**)luaM_malloc_(L, count * sizeof(Proto*), 0);
+  return std::span<Proto*>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<Upvaldesc> luaM_malloc_Upvaldesc_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(Upvaldesc))
+    luaM_toobig(L);
+  Upvaldesc* p = (Upvaldesc*)luaM_malloc_(L, count * sizeof(Upvaldesc), 0);
+  return std::span<Upvaldesc>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<ls_byte> luaM_malloc_ls_byte_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(ls_byte))
+    luaM_toobig(L);
+  ls_byte* p = (ls_byte*)luaM_malloc_(L, count * sizeof(ls_byte), 0);
+  return std::span<ls_byte>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<AbsLineInfo> luaM_malloc_AbsLineInfo_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(AbsLineInfo))
+    luaM_toobig(L);
+  AbsLineInfo* p = (AbsLineInfo*)luaM_malloc_(L, count * sizeof(AbsLineInfo), 0);
+  return std::span<AbsLineInfo>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<LocVar> luaM_malloc_LocVar_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(LocVar))
+    luaM_toobig(L);
+  LocVar* p = (LocVar*)luaM_malloc_(L, count * sizeof(LocVar), 0);
+  return std::span<LocVar>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<char> luaM_malloc_char_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(char))
+    luaM_toobig(L);
+  char* p = (char*)luaM_malloc_(L, count * sizeof(char), 0);
+  return std::span<char>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC std::span<Node> luaM_malloc_Node_span(lua_State* L, size_t count)
+{
+  if (count + 1 > MAX_SIZET / sizeof(Node))
+    luaM_toobig(L);
+  Node* p = (Node*)luaM_malloc_(L, count * sizeof(Node), 0);
+  return std::span<Node>(p, p == nullptr ? 0 : count);
+}
+
+LUAI_FUNC GCObject* luaM_malloc_gcobject(lua_State* L, size_t size, int tag)
+{
+  return (GCObject*)luaM_malloc_(L, size, tag);
+}
+
+// typed raw (g-based) char realloc
+LUAI_FUNC std::span<char> luaM_rawrealloc_char_span(global_State* g, std::span<char> block, size_t count)
+{
+  char* p = (char*)luaM_rawrealloc(g, block.data(), block.size(), count, 0);
+  return std::span<char>(p, p == nullptr ? 0 : count);
 }

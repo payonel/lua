@@ -190,9 +190,7 @@ static void loadCode(LoadState* S, Proto* f)
   }
   else
   {
-    if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(Instruction))
-      luaM_toobig(S->L);
-    f->code = (Instruction*)luaM_malloc_(S->L, (size_t)n * sizeof(Instruction), 0);
+    f->code = luaM_malloc_Instruction_span(S->L, (size_t)n).data();
     f->sizecode = n;
     loadBlock(S, f->code, ((size_t)(n)) * sizeof((f->code)[0]));
   }
@@ -204,7 +202,7 @@ static void loadConstants(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->k = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(TValue))) ? luaM_toobig(S->L) : ((void)(0))), ((TValue*)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(TValue), 0))));
+  f->k = luaM_malloc_TValue_span(S->L, (size_t)n).data();
   f->sizek = n;
   for (i = 0; i < n; i++)
     ((&f->k[i])->tt_ = LUA_VNIL);
@@ -249,7 +247,7 @@ static void loadProtos(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->p = (((sizeof(n) >= sizeof(size_t) && ((size_t)((n))) + 1 > MAX_SIZET / (sizeof(Proto*))) ? luaM_toobig(S->L) : ((void)(0))), ((Proto**)(luaM_malloc_(S->L, ((size_t)(n)) * sizeof(Proto*), 0))));
+  f->p = luaM_malloc_Proto_ptr_span(S->L, (size_t)n).data();
   f->sizep = n;
   for (i = 0; i < n; i++)
     f->p[i] = nullptr;
@@ -271,9 +269,7 @@ static void loadUpvalues(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(Upvaldesc))
-    luaM_toobig(S->L);
-  f->upvalues = (Upvaldesc*)luaM_malloc_(S->L, (size_t)n * sizeof(Upvaldesc), 0);
+  f->upvalues = luaM_malloc_Upvaldesc_span(S->L, (size_t)n).data();
   f->sizeupvalues = n;
   for (i = 0; i < n; i++) /* make array valid for GC */
     f->upvalues[i].name = nullptr;
@@ -296,9 +292,7 @@ static void loadDebug(LoadState* S, Proto* f)
   }
   else
   {
-    if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(ls_byte))
-      luaM_toobig(S->L);
-    f->lineinfo = (ls_byte*)luaM_malloc_(S->L, (size_t)n * sizeof(ls_byte), 0);
+    f->lineinfo = luaM_malloc_ls_byte_span(S->L, (size_t)n).data();
     f->sizelineinfo = n;
     loadBlock(S, f->lineinfo, ((size_t)(n)) * sizeof((f->lineinfo)[0]));
   }
@@ -313,17 +307,13 @@ static void loadDebug(LoadState* S, Proto* f)
     }
     else
     {
-      if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(AbsLineInfo))
-        luaM_toobig(S->L);
-      f->abslineinfo = (AbsLineInfo*)luaM_malloc_(S->L, (size_t)n * sizeof(AbsLineInfo), 0);
+      f->abslineinfo = luaM_malloc_AbsLineInfo_span(S->L, (size_t)n).data();
       f->sizeabslineinfo = n;
       loadBlock(S, f->abslineinfo, ((size_t)(n)) * sizeof((f->abslineinfo)[0]));
     }
   }
   n = loadInt(S);
-  if (sizeof(n) >= sizeof(size_t) && (size_t)n + 1 > MAX_SIZET / sizeof(LocVar))
-    luaM_toobig(S->L);
-  f->locvars = (LocVar*)luaM_malloc_(S->L, (size_t)n * sizeof(LocVar), 0);
+  f->locvars = luaM_malloc_LocVar_span(S->L, (size_t)n).data();
   f->sizelocvars = n;
   for (i = 0; i < n; i++)
     f->locvars[i].varname = nullptr;

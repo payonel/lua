@@ -831,7 +831,7 @@ void luaV_concat(lua_State* L, int total)
       }
       else
       {
-        char* buff = ((char*)(luaM_malloc_(L, ((size_t)(tl)) * sizeof(char), 0)));
+        char* buff = luaM_malloc_char_span(L, (size_t)tl).data();
         copy2buff(L, top, n, std::span<char>{buff, tl});
         byte_view buffstr{buff, tl};
         ts = luaS_createstr(L, buffstr, 0, buffstr.size());

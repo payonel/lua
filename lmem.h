@@ -15,11 +15,9 @@
 LUAI_FUNC l_noret luaM_toobig(lua_State* L);
 
 struct global_State;
-LUAI_FUNC void* luaM_rawrealloc(global_State* g, void* block, size_t osize, size_t nsize, int tag);
 
 /* not to be called directly */
 LUAI_FUNC void luaM_free_(lua_State* L, void* block, size_t osize, int tag = 0);
-LUAI_FUNC void* luaM_malloc_(lua_State* L, size_t size, int tag);
 LUAI_FUNC int luaM_reserve(lua_State* L, size_t size);
 LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
@@ -63,4 +61,21 @@ LUAI_FUNC std::span<TValue> luaM_safeshrink_TValue_span(lua_State* L, std::span<
 LUAI_FUNC std::span<Proto*> luaM_safeshrink_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int final_n);
 LUAI_FUNC std::span<LocVar> luaM_safeshrink_LocVar_span(lua_State* L, std::span<LocVar> block, int final_n);
 LUAI_FUNC std::span<Upvaldesc> luaM_safeshrink_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block, int final_n);
+
+// typed fresh (throwing) allocators
+struct Node;
+struct GCObject;
+LUAI_FUNC std::span<Instruction> luaM_malloc_Instruction_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<TValue> luaM_malloc_TValue_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<Proto*> luaM_malloc_Proto_ptr_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<Upvaldesc> luaM_malloc_Upvaldesc_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<ls_byte> luaM_malloc_ls_byte_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<AbsLineInfo> luaM_malloc_AbsLineInfo_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<LocVar> luaM_malloc_LocVar_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<char> luaM_malloc_char_span(lua_State* L, size_t count);
+LUAI_FUNC std::span<Node> luaM_malloc_Node_span(lua_State* L, size_t count);
+LUAI_FUNC GCObject* luaM_malloc_gcobject(lua_State* L, size_t size, int tag);
+
+// typed raw (g-based) char realloc
+LUAI_FUNC std::span<char> luaM_rawrealloc_char_span(global_State* g, std::span<char> block, size_t count);
 

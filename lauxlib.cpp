@@ -594,13 +594,13 @@ static void bb_growTo(luaL_Buffer* B, size_t cap)
     return;
   assert(B->L != nullptr);
   global_State* g = B->L->l_G;
-  void* nb = luaM_rawrealloc(g, B->bytes.data(), B->bytes.size(), cap, 0);
-  if (l_unlikely(nb == nullptr && cap > 0))
+  std::span<char> nb = luaM_rawrealloc_char_span(g, B->bytes, cap);
+  if (l_unlikely(nb.data() == nullptr && cap > 0))
   {
     lua_pushistringref(B->L, lt::not_enough_memory);
     lua_error(B->L); /* raise a memory error */
   }
-  B->bytes = {static_cast<char*>(nb), cap};
+  B->bytes = nb;
 }
 
 static void bb_append(luaL_Buffer* B, byte_view b, size_t off, size_t n)
@@ -619,8 +619,7 @@ static void bb_dealloc(luaL_Buffer* B) noexcept
   if (B->bytes.data() != nullptr)
   {
     global_State* g = B->L->l_G;
-    luaM_rawrealloc(g, B->bytes.data(), B->bytes.size(), 0, 0);
-    B->bytes = {};
+    B->bytes = luaM_rawrealloc_char_span(g, B->bytes, 0);
   }
 }
 

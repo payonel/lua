@@ -694,8 +694,7 @@ static void freebuff(BuffFS* buff)
   global_State* g = buff->L->l_G;
   if (buff->b.data() != nullptr)
   {
-    luaM_rawrealloc(g, buff->b.data(), buff->b.size(), 0, 0);
-    buff->b = {};
+    buff->b = luaM_rawrealloc_char_span(g, buff->b, 0);
   }
 }
 
@@ -742,13 +741,13 @@ static void addstr2buff(BuffFS* buff, byte_view bv)
   {
     global_State* g = buff->L->l_G;
     size_t newsize = std::max<size_t>(buff->blen + slen, 256);
-    void* nb = luaM_rawrealloc(g, buff->b.data(), buff->b.size(), newsize, 0);
-    if (l_unlikely(nb == nullptr))
+    std::span<char> nb = luaM_rawrealloc_char_span(g, buff->b, newsize);
+    if (l_unlikely(nb.data() == nullptr))
     {
       buff->err = 1; /* memory error */
       return;
     }
-    buff->b = {static_cast<char*>(nb), newsize};
+    buff->b = nb;
   }
   memcpy(buff->b.data() + buff->blen, bv.data(), slen);
   buff->blen += slen;
