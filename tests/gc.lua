@@ -634,7 +634,7 @@ if T then
   print("emergency collections")
   collectgarbage()
   collectgarbage()
-  T.totalmem(T.totalmem() + 450)
+  T.totalmem(T.totalmem() + 200)
   for i=1,200 do local a = {} end
   T.totalmem(0)
   collectgarbage()
