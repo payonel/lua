@@ -441,11 +441,10 @@ struct Node
 struct Table : GCObject
 {
   lu_byte flags;      /* 1<<p means tagmethod(p) is not present */
-  lu_byte lsizenode;  /* log2 of number of slots of 'node' array */
   unsigned int asize; /* number of slots in 'array' array */
   Value* array;       /* array part: values, forward-indexed */
   lu_byte* tags;      /* array part: tags, forward-indexed */
-  Node* node;
+  std::span<Node> node;
   int lastfree;
   unsigned lenhint;   /* hint for #t; see luaH_getn */
   struct Table* metatable;
@@ -476,7 +475,7 @@ constexpr unsigned int twoto(int x)
 }
 static l_forceinline unsigned int sizenode(const Table* t)
 {
-  return twoto(t->lsizenode);
+  return (unsigned int)t->node.size();
 }
 
 

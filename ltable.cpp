@@ -45,7 +45,7 @@ constexpr int LIMFORLAST = 3; /* log2 of real limit (8) */
 
 static inline int haslastfree(const Table* t)
 {
-  return t->lsizenode >= LIMFORLAST;
+  return t->node.size() >= twoto(LIMFORLAST);
 }
 
 /*
@@ -414,7 +414,7 @@ static void freehash(lua_State* L, Table* t)
 {
   if (!isdummy(t))
   {
-    luaM_free_Node_span(L, std::span<Node>(t->node, sizenode(t)));
+    luaM_free_Node_span(L, t->node);
   }
 }
 
@@ -634,9 +634,8 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
 {
   if (size == 0)
   {                                   /* no elements to hash part? */
-    t->node = ((Node*)(&dummynode_)); /* use common 'dummynode' */
+    t->node = std::span<Node>((Node*)(&dummynode_), 1); /* use common 'dummynode' */
     t->lastfree = 0;
-    t->lsizenode = 0;
     setdummy(t); /* signal that it is using dummy node */
   }
   else
@@ -646,9 +645,8 @@ static void setnodevector(lua_State* L, Table* t, unsigned size)
     if (lsize > MAXHBITS || (1 << lsize) > MAXHSIZE)
       luaG_runerror(L, lt::table_overflow);
     size = twoto(lsize);
-    t->node = luaM_malloc_Node_span(L, (size_t)size).data();
+    t->node = luaM_malloc_Node_span(L, (size_t)size);
     t->lastfree = 0;
-    t->lsizenode = ((lu_byte)(lsize));
     if (lsize >= LIMFORLAST)
     {
       t->lastfree = ((int)(size)); /* all positions are free */
@@ -692,15 +690,12 @@ static void reinserthash(lua_State* L, Table* ot, Table* t)
 */
 static void exchangehashpart(Table* t1, Table* t2)
 {
-  lu_byte lsizenode = t1->lsizenode;
-  Node* node = t1->node;
+  std::span<Node> node = t1->node;
   int lastfree = t1->lastfree;
   int bitdummy1 = t1->flags & BITDUMMY;
-  t1->lsizenode = t2->lsizenode;
   t1->node = t2->node;
   t1->lastfree = t2->lastfree;
   t1->flags = ((lu_byte)((t1->flags & NOTBITDUMMY) | (t2->flags & BITDUMMY)));
-  t2->lsizenode = lsizenode;
   t2->node = node;
   t2->lastfree = lastfree;
   t2->flags = ((lu_byte)((t2->flags & NOTBITDUMMY) | bitdummy1));
