@@ -498,11 +498,11 @@ LUAI_FUNC std::span<Proto*> luaM_alloc_Proto_ptr_span(global_State* g, lua_State
   return nb;
 }
 
-LUAI_FUNC std::span<Proto*> luaM_safegrow_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int nelems, int limit, byte_view what)
+LUAI_FUNC std::span<Proto*> luaM_safegrow_Proto_ptr_span(lua_State* L, std::span<Proto*> block, size_t nelems)
 {
-  int size = (int)block.size();
-  int newsize = luaM_growsize_(L, size, nelems, limit, what);
-  if (newsize == size)
+  constexpr size_t limit = ((size_t)MAXARG_Bx <= MAX_SIZET / sizeof(Proto*)) ? (size_t)MAXARG_Bx : (MAX_SIZET / sizeof(Proto*));
+  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::functions);
+  if (newsize == block.size())
     return block;
   return luaM_alloc_Proto_ptr_span(L->l_G, L, block, (size_t)newsize, true);
 }
@@ -650,11 +650,6 @@ LUAI_FUNC std::span<StkId> luaM_safegrow_StkId_span(lua_State* L, std::span<StkI
   if (newsize == size)
     return block;
   return luaM_alloc_StkId_span(L->l_G, L, block, (size_t)newsize, true);
-}
-
-LUAI_FUNC std::span<Proto*> luaM_safeshrink_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int final_n)
-{
-  return luaM_alloc_Proto_ptr_span(L->l_G, L, block, (size_t)final_n, true);
 }
 
 LUAI_FUNC std::span<Upvaldesc> luaM_safeshrink_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block, int final_n)

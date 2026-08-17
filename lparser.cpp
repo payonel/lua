@@ -821,10 +821,7 @@ static Proto* addprototype(LexState* ls)
   if (fs->np >= (int)f->p.size())
   {
     int oldsize = (int)f->p.size();
-    int limit = ((size_t)MAXARG_Bx <= MAX_SIZET / sizeof(Proto*))
-                    ? MAXARG_Bx
-                    : (int)(MAX_SIZET / sizeof(Proto*));
-    f->p = luaM_safegrow_Proto_ptr_span(L, f->p, fs->np, limit, lt::functions);
+    f->p = luaM_safegrow_Proto_ptr_span(L, f->p, fs->np);
     while (oldsize < (int)f->p.size())
       f->p[oldsize++] = nullptr;
   }
@@ -892,7 +889,7 @@ static void close_func(LexState* ls)
   f->lineinfo = luaM_alloc_ls_byte_span(L->l_G, L, f->lineinfo, (size_t)fs->pc, true);
   f->abslineinfo = luaM_alloc_AbsLineInfo_span(L->l_G, L, f->abslineinfo, (size_t)fs->nabslineinfo, true);
   f->k = luaM_alloc_TValue_span(L->l_G, L, f->k, (size_t)fs->nk, true);
-  f->p = luaM_safeshrink_Proto_ptr_span(L, f->p, fs->np);
+  f->p = luaM_alloc_Proto_ptr_span(L->l_G, L, f->p, (size_t)fs->np, true);
   f->locvars = luaM_alloc_LocVar_span(L->l_G, L, f->locvars, (size_t)fs->ndebugvars, true);
   f->upvalues = luaM_safeshrink_Upvaldesc_span(L, f->upvalues, fs->nups);
   /* remove kcache table from scanner table ("weigh" its anchor) */
