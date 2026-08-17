@@ -183,10 +183,7 @@ static short registerlocalvar(LexState* ls, FuncState* fs,
 {
   Proto* f = fs->f;
   int oldsize = (int)f->locvars.size();
-  int limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(LocVar))
-                  ? SHRT_MAX
-                  : (int)(MAX_SIZET / sizeof(LocVar));
-  f->locvars = luaM_safegrow_LocVar_span(ls->L, f->locvars, fs->ndebugvars, limit, lt::local_variables);
+  f->locvars = luaM_safegrow_LocVar_span(ls->L, f->locvars, fs->ndebugvars);
   while (oldsize < (int)f->locvars.size())
     f->locvars[oldsize++].varname = nullptr;
   f->locvars[fs->ndebugvars].varname = varname;
@@ -896,7 +893,7 @@ static void close_func(LexState* ls)
   f->abslineinfo = luaM_safeshrink_AbsLineInfo_span(L, f->abslineinfo, fs->nabslineinfo);
   f->k = luaM_alloc_TValue_span(L->l_G, L, f->k, (size_t)fs->nk, true);
   f->p = luaM_safeshrink_Proto_ptr_span(L, f->p, fs->np);
-  f->locvars = luaM_safeshrink_LocVar_span(L, f->locvars, fs->ndebugvars);
+  f->locvars = luaM_alloc_LocVar_span(L->l_G, L, f->locvars, (size_t)fs->ndebugvars, true);
   f->upvalues = luaM_safeshrink_Upvaldesc_span(L, f->upvalues, fs->nups);
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */

@@ -358,11 +358,11 @@ LUAI_FUNC std::span<LocVar> luaM_alloc_LocVar_span(global_State* g, lua_State* L
   return nb;
 }
 
-LUAI_FUNC std::span<LocVar> luaM_safegrow_LocVar_span(lua_State* L, std::span<LocVar> block, int nelems, int limit, byte_view what)
+LUAI_FUNC std::span<LocVar> luaM_safegrow_LocVar_span(lua_State* L, std::span<LocVar> block, size_t nelems)
 {
-  int size = (int)block.size();
-  int newsize = luaM_growsize_(L, size, nelems, limit, what);
-  if (newsize == size)
+  constexpr size_t limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(LocVar)) ? (size_t)SHRT_MAX : (MAX_SIZET / sizeof(LocVar));
+  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::local_variables);
+  if (newsize == block.size())
     return block;
   return luaM_alloc_LocVar_span(L->l_G, L, block, (size_t)newsize, true);
 }
@@ -670,11 +670,6 @@ LUAI_FUNC std::span<AbsLineInfo> luaM_safeshrink_AbsLineInfo_span(lua_State* L, 
 LUAI_FUNC std::span<Proto*> luaM_safeshrink_Proto_ptr_span(lua_State* L, std::span<Proto*> block, int final_n)
 {
   return luaM_alloc_Proto_ptr_span(L->l_G, L, block, (size_t)final_n, true);
-}
-
-LUAI_FUNC std::span<LocVar> luaM_safeshrink_LocVar_span(lua_State* L, std::span<LocVar> block, int final_n)
-{
-  return luaM_alloc_LocVar_span(L->l_G, L, block, (size_t)final_n, true);
 }
 
 LUAI_FUNC std::span<Upvaldesc> luaM_safeshrink_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block, int final_n)
