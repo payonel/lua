@@ -5,20 +5,13 @@
 */
 
 
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-#include "lua.h"
-
-#include "ldebug.h"
-#include "ldo.h"
-#include "lgc.h"
 #include "lmem.h"
-#include "lobject.h"
-#include "lparser.h"
 #include "lstate.h"
 #include "literals.h"
+#include "lgc.h"
+#include "ldo.h"
+#include "ldebug.h"
+#include "lparser.h"
 
 #include "lopcodes.h"
 #include "lfunc.h"
