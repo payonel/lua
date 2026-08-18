@@ -491,7 +491,7 @@ static l_forceinline lua_Number nvalue(const TValue* o)
 static l_forceinline void* pvalue(const TValue* o)
 {
   assert(o->tt_ == LUA_VLIGHTUSERDATA);
-  return reinterpret_cast<void*>(o->value_.prim);
+  return static_cast<void*>(o->value_.ref);
 }
 
 static l_forceinline lua_CFunction fvalue(const TValue* o)
@@ -589,7 +589,7 @@ static l_forceinline lua_Number keyfltval(const Node* n)
 static l_forceinline void* keypval(const Node* n)
 {
   assert(n->key_tt == LUA_VLIGHTUSERDATA);
-  return reinterpret_cast<void*>(n->key_val.prim);
+  return static_cast<void*>(n->key_val.ref);
 }
 
 static l_forceinline lua_CFunction keyfval(const Node* n)
@@ -647,7 +647,7 @@ static l_forceinline void chgivalue(TValue* obj, lua_Integer x)
 
 static l_forceinline void setpvalue(TValue* obj, void* x)
 {
-  obj->value_.prim = reinterpret_cast<lua_Integer>(x);
+  obj->value_.ref = static_cast<GCObject*>(x);
   obj->tt_ = LUA_VLIGHTUSERDATA;
 }
 

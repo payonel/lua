@@ -388,7 +388,7 @@ static l_forceinline void chgslotflt(lua_State* L, StkId idx, lua_Number x)
 
 static l_forceinline void setslotp(lua_State* L, StkId idx, void* x)
 {
-  L->stack[idx].value_.prim = reinterpret_cast<lua_Integer>(x);
+  L->stack[idx].value_.ref = static_cast<GCObject*>(x);
   L->stack[idx].tt_ = LUA_VLIGHTUSERDATA;
 }
 
