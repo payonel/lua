@@ -198,9 +198,9 @@ static size_t checkoption(lua_State* L, byte_view fmt, size_t pos,
   {
     if (option[opos] == '|') /* next block? */
       oplen++;               /* will check options with next length (+1) */
-    else if (memcmp(fmt.data() + pos, option.data() + opos, oplen) == 0)
+    else if (fmt.substr(pos, oplen).equals(option.substr(opos, oplen)))
     {
-      memcpy(buff.data() + boff, fmt.data() + pos, oplen);
+      byte_span(buff).copy_from(boff, fmt.substr(pos, oplen));
       buff[boff + oplen] = '\0';
       return pos + oplen; /* return next item */
     }
@@ -257,7 +257,7 @@ static int os_date(lua_State* L)
         size_t off = luaL_prepbuffsize(&b, SIZETIMEFMT);
         sp++; /* skip '%' */
         sp = checkoption(L, sfmt, sp, cc, 1);
-        reslen = strftime(luaL_buffaddr(&b).data() + off, SIZETIMEFMT, cc, stm);
+        reslen = strftime(luaL_buffaddr(&b).subspan(off, SIZETIMEFMT).data(), SIZETIMEFMT, cc, stm);
         luaL_addsize(&b, reslen);
       }
     }

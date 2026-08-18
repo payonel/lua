@@ -781,7 +781,7 @@ static void copy2buff(lua_State* L, StkId top, int n, std::span<char> buff)
     assert((slottag(L, v) & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = slottsval(L, v);
     byte_view s = st->data.view();
-    memcpy(buff.data() + tl, s.data(), s.size() * sizeof(char));
+    byte_span(buff).copy_from(tl, s);
     tl += s.size();
   } while (--n > 0);
 }

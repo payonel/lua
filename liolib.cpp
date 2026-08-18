@@ -478,7 +478,7 @@ static void read_all(lua_State* L, OsFile* f)
   do
   { /* read file in chunks of LUAL_BUFFERSIZE bytes */
     size_t off = luaL_prepbuffer(&b);
-    nr = os_fread(f, std::span<char>{luaL_buffaddr(&b).data() + off, LUAL_BUFFERSIZE});
+    nr = os_fread(f, luaL_buffaddr(&b).subspan(off, LUAL_BUFFERSIZE));
     luaL_addsize(&b, nr);
   } while (nr == LUAL_BUFFERSIZE);
   luaL_pushresult(&b); /* close buffer */
@@ -490,7 +490,7 @@ static int read_chars(lua_State* L, OsFile* f, size_t n)
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   size_t off = luaL_prepbuffsize(&b, n); /* prepare buffer to read whole block */
-  nr = os_fread(f, std::span<char>{luaL_buffaddr(&b).data() + off, n}); /* try to read 'n' chars */
+  nr = os_fread(f, luaL_buffaddr(&b).subspan(off, n)); /* try to read 'n' chars */
   luaL_addsize(&b, nr);
   luaL_pushresult(&b); /* close buffer */
   return (nr > 0);     /* true iff read something */

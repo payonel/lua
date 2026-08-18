@@ -36,14 +36,14 @@ static bool luaM_permit_(global_State* g, lua_State* L, size_t osize, size_t nsi
   if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, tag)))
   {
     if (!L)
-      return 0;
+      return false;
     if (!cantryagain(g))
-      return 0;
+      return false;
     luaC_fullgc(L, 1); /* try to free some memory... */
     if (!(*g->frealloc)(g->ud, osize, nsize, tag))
-      return 0;
+      return false;
   }
-  return 1;
+  return true;
 }
 
 static inline bool _alloc_span_request(global_State* g, lua_State* L, size_t oldCount, size_t newCount, size_t esize, bool bthrow)

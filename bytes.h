@@ -6,6 +6,9 @@
 #include <string.h>
 #include <algorithm>
 #include <assert.h>
+#include <cstddef>
+#include <charconv>
+#include <system_error>
 
 struct byte_view
 {
@@ -98,6 +101,25 @@ struct byte_view
     return view().compare(pos, count, s.view());
   }
 
+  bool equals(byte_view other) const
+  {
+    return view() == other.view();
+  }
+
+  struct parse_result
+  {
+    size_t next;
+    std::errc ec;
+    double result;
+  };
+
+  parse_result parse_number(size_t off, std::chars_format fmt) const
+  {
+    double out {};
+    std::from_chars_result r = std::from_chars(data() + off, data() + length, out, fmt);
+    return { ((size_t)(r.ptr - data())), r.ec, out };
+  }
+
   std::string_view sv {nullptr, 0};
   size_t offset = 0;
   size_t length = 0;
@@ -127,9 +149,64 @@ struct byte_span
     return std::copy_n(from.data(), from.size(), data()) - data();
   }
 
+  void copy_from(size_t off, byte_view src)
+  {
+    assert(off + src.size() <= length);
+    memcpy(data() + off, src.data(), src.size());
+  }
+
+  void fill(size_t off, size_t n, std::byte v)
+  {
+    assert(off + n <= length);
+    memset(data() + off, std::to_integer<int>(v), n);
+  }
+
+  void move_from(size_t off, byte_view src)
+  {
+    assert(off + src.size() <= length);
+    memmove(data() + off, src.data(), src.size());
+  }
+
+  template <typename... Args> void write_number(Args&&...) = delete;
+
+  size_t write_number(double value, std::chars_format fmt, int precision)
+  {
+    std::to_chars_result r = std::to_chars(data(), data() + length, value, fmt, precision);
+    assert(r.ec == std::errc());
+    return ((size_t)(r.ptr - data()));
+  }
+
+  size_t write_number(long long value)
+  {
+    std::to_chars_result r = std::to_chars(data(), data() + length, value);
+    assert(r.ec == std::errc());
+    return ((size_t)(r.ptr - data()));
+  }
+
+  size_t write_number(unsigned long value, int base)
+  {
+    std::to_chars_result r = std::to_chars(data(), data() + length, value, base);
+    assert(r.ec == std::errc());
+    return ((size_t)(r.ptr - data()));
+  }
+
+  size_t write_number(int value)
+  {
+    std::to_chars_result r = std::to_chars(data(), data() + length, value);
+    assert(r.ec == std::errc());
+    return ((size_t)(r.ptr - data()));
+  }
+
+  size_t write_number(unsigned long long value, int base)
+  {
+    std::to_chars_result r = std::to_chars(data(), data() + length, value, base);
+    assert(r.ec == std::errc());
+    return ((size_t)(r.ptr - data()));
+  }
+
   constexpr byte_view view() const
   {
-    return byte_view(sp.data() + offset, length);
+    return byte_view(sp.data(), length).substr(offset);
   }
 
   constexpr byte_view str_view() const

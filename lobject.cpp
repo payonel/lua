@@ -385,11 +385,9 @@ static size_t str2dec(byte_view s, size_t off, lua_Number* result)
   }
   if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
     return off;
-  lua_Number v;
-  std::from_chars_result res =
-      std::from_chars(s.data() + p, s.data() + s.size(), v,
-                      std::chars_format::general);
-  size_t endp = ((size_t)(res.ptr - s.data()));
+  byte_view::parse_result res = s.parse_number(p, std::chars_format::general);
+  lua_Number v = res.result;
+  size_t endp = res.next;
   if (res.ec == std::errc::result_out_of_range)
   {
     long e10 = 0;
@@ -597,21 +595,17 @@ static_assert(LUA_N2SBUFFSZ >= 20 + DBL_DIG, "invalid value for LUA_N2SBUFFSZ");
 */
 static int tostringbuffFloat(lua_Number n, char* buff)
 {
-  std::to_chars_result res = std::to_chars(
-      buff, buff + LUA_N2SBUFFSZ - 3, n, std::chars_format::general, 15);
-  assert(res.ec == std::errc());
-  int len = ((int)(res.ptr - buff));
-  buff[len] = '\0';
-  lua_Number check;
-  std::from_chars(buff + (buff[0] == '-'), buff + len, check, std::chars_format::general); /* read it back */
+  byte_span bs(buff, LUA_N2SBUFFSZ);
+  int len = ((int)(bs.subspan(0, LUA_N2SBUFFSZ - 3).write_number(n, std::chars_format::general, 15)));
+  bs[((size_t)(len))] = '\0';
+  byte_view::parse_result ret = bs.view().substr(0, ((size_t)(len))).parse_number((buff[0] == '-') ? 1u : 0u, std::chars_format::general); /* read it back */
+  lua_Number check = ret.result;
   if (buff[0] == '-')
     check = -check;
   if (check != n)
   {
-    res = std::to_chars(buff, buff + LUA_N2SBUFFSZ - 3, n, std::chars_format::general, 17);
-    assert(res.ec == std::errc());
-    len = ((int)(res.ptr - buff));
-    buff[len] = '\0';
+    len = ((int)(bs.subspan(0, LUA_N2SBUFFSZ - 3).write_number(n, std::chars_format::general, 17)));
+    bs[((size_t)(len))] = '\0';
   }
   byte_view buffsv(buff, LUA_N2SBUFFSZ);
   if (buffsv.substr(0, ((size_t)(len))).find_first_not_of(lt::digits_and_dash) == byte_view::npos)
@@ -641,11 +635,9 @@ unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff)
   assert(buff.size() >= LUA_N2SBUFFSZ);
   if (((obj)->tt_ == LUA_VNUMINT))
   {
-    std::to_chars_result res =
-        std::to_chars(buff.data(), buff.data() + buff.size() - 1, ivalue(obj));
-    assert(res.ec == std::errc());
-    *res.ptr = '\0';
-    len = ((int)(res.ptr - buff.data()));
+    byte_span bs(buff);
+    len = ((int)(bs.subspan(0, bs.size() - 1).write_number(ivalue(obj))));
+    bs[((size_t)(len))] = '\0';
   }
   else
   {
@@ -750,7 +742,7 @@ static void addstr2buff(BuffFS* buff, byte_view bv)
     }
     buff->b = nb;
   }
-  memcpy(buff->b.data() + buff->blen, bv.data(), slen);
+  byte_span(buff->b).copy_from(buff->blen, bv);
   buff->blen += slen;
 }
 
@@ -883,14 +875,13 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     case 'p':
     {
       char bf[LUA_N2SBUFFSZ];
+      byte_span bfp(bf, LUA_N2SBUFFSZ);
       assert(argn < args.n && args.arg[argn].tag == 'p');
       const void* p = args.arg[argn++].p;
-      bf[0] = '0';
-      bf[1] = 'x';
-      std::to_chars_result res =
-          std::to_chars(bf + 2, bf + LUA_N2SBUFFSZ, ((uintptr_t)(p)), 16);
-      assert(res.ec == std::errc());
-      addstr2buff(&buff, byte_view(bf, LUA_N2SBUFFSZ).substr(0, ((size_t)(res.ptr - bf))));
+      bfp[0] = '0';
+      bfp[1] = 'x';
+      size_t bfn = 2 + bfp.subspan(2).write_number(((uintptr_t)(p)), 16);
+      addstr2buff(&buff, bfp.view().substr(0, bfn));
       break;
     }
     case 'U':
@@ -963,12 +954,12 @@ void luaO_chunkid(std::span<char> out, byte_view source)
   {                        /* 'literal' source */
     if (srclen <= bufflen) /* small enough? */
     {
-      memcpy(out.data(), source.data() + 1, (srclen - 1) * sizeof(char));
+      byte_span(out).copy_from(0, source.substr(1, srclen - 1));
       out[srclen - 1] = '\0';
     }
     else
     { /* truncate it */
-      memcpy(out.data(), source.data() + 1, (bufflen - 1) * sizeof(char));
+      byte_span(out).copy_from(0, source.substr(1, bufflen - 1));
       out[bufflen - 1] = '\0';
     }
   }
@@ -976,17 +967,16 @@ void luaO_chunkid(std::span<char> out, byte_view source)
   {                        /* file name */
     if (srclen <= bufflen) /* small enough? */
     {
-      memcpy(out.data(), source.data() + 1, (srclen - 1) * sizeof(char));
+      byte_span(out).copy_from(0, source.substr(1, srclen - 1));
       out[srclen - 1] = '\0';
     }
     else
     { /* add '...' before rest of name */
       byte_view bytes = lt::ellipsis;
-      memcpy(out.data(), bytes.data(), bytes.size() * sizeof(char));
+      byte_span(out).copy_from(0, bytes);
       pos += lt::ellipsis.size();
       bufflen -= lt::ellipsis.size();
-      memcpy(out.data() + pos, source.data() + 1 + srclen - bufflen,
-             (bufflen - 1) * sizeof(char));
+      byte_span(out).copy_from(pos, source.substr(1 + srclen - bufflen, bufflen - 1));
       out[pos + bufflen - 1] = '\0';
     }
   }
@@ -994,12 +984,12 @@ void luaO_chunkid(std::span<char> out, byte_view source)
   {                                                 /* string; format as [string "source"] */
     size_t nl = source.find('\n');
     byte_view bytes = lt::string_2;
-    memcpy(out.data(), bytes.data(), bytes.size() * sizeof(char)); /* add prefix */
+    byte_span(out).copy_from(0, bytes); /* add prefix */
     pos += lt::string_2.size();
     bufflen -= lt::string_2.size() + lt::ellipsis.size() + lt::backquote.size() + 1; /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == byte_view::npos)
     {
-      memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
+      byte_span(out).copy_from(pos, source.substr(0, srclen));
       pos += srclen;
     }
     else
@@ -1008,14 +998,14 @@ void luaO_chunkid(std::span<char> out, byte_view source)
         srclen = nl; /* stop at first newline */
       if (srclen > bufflen)
         srclen = bufflen;
-      memcpy(out.data() + pos, source.data(), srclen * sizeof(char));
+      byte_span(out).copy_from(pos, source.substr(0, srclen));
       pos += srclen;
       bytes = lt::ellipsis;
-      memcpy(out.data() + pos, bytes.data(), bytes.size() * sizeof(char));
+      byte_span(out).copy_from(pos, bytes);
       pos += lt::ellipsis.size();
     }
     bytes = lt::backquote;
-    memcpy(out.data() + pos, bytes.data(), bytes.size() * sizeof(char));
+    byte_span(out).copy_from(pos, bytes);
     out[pos + lt::backquote.size()] = '\0';
   }
 }

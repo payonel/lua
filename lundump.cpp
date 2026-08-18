@@ -343,7 +343,7 @@ static void checkliteral(LoadState* S, byte_view s, byte_view msg)
   char buff[LUA_SIGNATURE.size() + lt::LUAC_DATA.size()]; /* larger than both */
   size_t len = s.size();
   loadBlock(S, buff, len * sizeof(buff[0]));
-  if (memcmp(s.data(), buff, len) != 0)
+  if (!s.equals(byte_view(buff, len)))
     error(S, msg);
 }
 

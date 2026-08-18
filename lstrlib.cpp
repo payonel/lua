@@ -164,19 +164,19 @@ static int str_rep(lua_State* L)
     size_t totallen = (((size_t)(n)) * (sv.size() + sepsv.size())) - sepsv.size();
     luaL_Buffer b;
     size_t off = luaL_buffinitsize(L, &b, totallen);
-    std::span<char> p = luaL_buffaddr(&b);
+    byte_span p = byte_span(luaL_buffaddr(&b));
     size_t pos = off;
     while (n-- > 1)
     { /* first n-1 copies (followed by separator) */
-      memcpy(p.data() + pos, sv.data(), sv.size() * sizeof(char));
+      p.copy_from(pos, sv);
       pos += sv.size();
       if (sepsv.size() > 0)
       { /* empty 'memcpy' is not that cheap */
-        memcpy(p.data() + pos, sepsv.data(), sepsv.size() * sizeof(char));
+        p.copy_from(pos, sepsv);
         pos += sepsv.size();
       }
     }
-    memcpy(p.data() + pos, sv.data(), sv.size() * sizeof(char)); /* last copy without separator */
+    p.copy_from(pos, sv); /* last copy without separator */
     luaL_pushresultsize(&b, totallen);
   }
   return 1;
@@ -626,14 +626,12 @@ static ptrdiff_t end_capture(MatchState* ms, ptrdiff_t s,
 
 static ptrdiff_t match_capture(MatchState* ms, ptrdiff_t s, int l)
 {
-  size_t len;
   l = check_capture(ms, l);
-  len = ((size_t)(ms->capture[l].len));
+  ptrdiff_t len = ms->capture[l].len;
   byte_view msv = ms->src->view();
-  if ((size_t) (ms->src_end - s) >= len &&
-      memcmp(msv.data() + ms->capture[l].init,
-             msv.data() + s, len) == 0)
-    return s + ((ptrdiff_t)(len));
+  if ((ms->src_end - s) >= len &&
+      msv.substr(ms->capture[l].init, len).equals(msv.substr(s, len)))
+    return s + len;
   else
     return NOMATCH;
 }
@@ -770,7 +768,7 @@ static size_t lmemfind(byte_view s1, size_t off1, size_t l1,
       if (init == byte_view::npos || init >= p + l1)
         break;
       init++; /* 1st char is already checked */
-      if (memcmp(s1.data() + init, s2.data() + 1, l2) == 0)
+      if (s1.substr(init, l2).equals(s2.substr(1, l2)))
         return init - 1;
       else
       {
@@ -1120,7 +1118,7 @@ constexpr int L_NBFD = ((DBL_MANT_DIG - 1) % 4 + 1);
 /*
 ** Add integer part of 'x' to buffer and return new 'x'
 */
-static lua_Number adddigit(std::span<char> buff, size_t n, lua_Number x)
+static lua_Number adddigit(byte_span buff, size_t n, lua_Number x)
 {
   lua_Number dd = floor(x); /* get integer part from 'x' */
   int d = (int) dd;
@@ -1128,73 +1126,71 @@ static lua_Number adddigit(std::span<char> buff, size_t n, lua_Number x)
   return x - dd;                                        /* return what is left */
 }
 
-static int num2straux(std::span<char> area, size_t off, unsigned sz, lua_Number x)
+static size_t num2straux(std::span<char> area, size_t off, size_t sz, lua_Number x)
 {
+  byte_span item = byte_span(area).subspan(off, sz);
   /* if 'inf' or 'NaN', format it like '%g' */
   if (x != x)
   {
     byte_view r = std::signbit(x) ? lt::minus_nan : lt::nan;
     assert(sz > r.size());
-    memcpy(area.data() + off, r.data(), r.size());
-    return ((int)(r.size()));
+    item.copy_from(0, r);
+    return r.size();
   }
   else if (x == (lua_Number) HUGE_VAL || x == -(lua_Number) HUGE_VAL)
   {
     byte_view r = (x < 0) ? lt::minus_inf : lt::inf;
-    memcpy(area.data() + off, r.data(), r.size());
-    return ((int)(r.size()));
+    item.copy_from(0, r);
+    return r.size();
   }
   else if (x == 0)
   {
     byte_view r = std::signbit(x) ? lt::neg_hex_zero : lt::hex_zero;
-    memcpy(area.data() + off, r.data(), r.size());
-    return ((int)(r.size()));
+    item.copy_from(0, r);
+    return r.size();
   }
   else
   {
     int e;
     lua_Number m = frexp(x, &e); /* 'x' fraction and exponent */
-    unsigned n = 0;                        /* character count */
+    size_t n = 0;                        /* character count */
     if (m < 0)
     {                        /* is number negative? */
-      area[off + n++] = '-'; /* add sign */
+      item[n++] = '-'; /* add sign */
       m = -m;                /* make it positive */
     }
-    area[off + n++] = '0';
-    area[off + n++] = 'x';                            /* add "0x" */
-    m = adddigit(area, off + n++, m * (1 << L_NBFD)); /* add first digit */
+    item[n++] = '0';
+    item[n++] = 'x';                            /* add "0x" */
+    m = adddigit(item, n++, m * (1 << L_NBFD)); /* add first digit */
     e -= L_NBFD;                                      /* this digit goes before the radix point */
     if (m > 0)
     {                                      /* more digits? */
-      area[off + n++] = locale_radixpoint(); /* add radix point */
+      item[n++] = locale_radixpoint(); /* add radix point */
       do
       { /* add as many digits as needed */
-        m = adddigit(area, off + n++, m * 16);
+        m = adddigit(item, n++, m * 16);
       } while (m > 0);
     }
-    area[off + n++] = 'p';
-    area[off + n++] = (e >= 0) ? '+' : '-';
-    std::to_chars_result eres = std::to_chars(
-        area.data() + off + n, area.data() + off + sz, e >= 0 ? e : -e);
-    assert(eres.ec == std::errc());
-    n += ((unsigned int)(eres.ptr - (area.data() + off + n)));
+    item[n++] = 'p';
+    item[n++] = (e >= 0) ? '+' : '-';
+    n += item.subspan(n).write_number(e >= 0 ? e : -e);
     assert(n < sz);
-    return ((int)(n));
+    return n;
   }
 }
 
-static int lua_number2strx(lua_State* L, std::span<char> area, size_t off,
-                           unsigned sz, byte_view fmt, lua_Number x)
+static size_t lua_number2strx(lua_State* L, std::span<char> area, size_t off, size_t sz, byte_view fmt, lua_Number x)
 {
-  int n = num2straux(area, off, sz, x);
+  size_t n = num2straux(area, off, sz, x);
   if (fmt[1] == 'A')
   {
-    int i;
-    for (i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
       area[off + i] = ((char)(locale_toupper(((unsigned char)(area[off + i])))));
   }
   else if (l_unlikely(fmt[1] != 'a'))
+  {
     return luaL_errori(L, lt::modifiers_for_format_a_A_not_implemented);
+  }
   return n;
 }
 
@@ -1247,9 +1243,8 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
     else if (locale_matchclass(c, 'c'))
     {
       char dbuf[4];
-      std::to_chars_result dres = std::to_chars(dbuf, dbuf + sizeof(dbuf), c);
-      assert(dres.ec == std::errc());
-      byte_view d{dbuf, ((size_t)(dres.ptr - dbuf))};
+      byte_span dbufp(dbuf, sizeof(dbuf));
+      byte_view d = dbufp.view().substr(0, dbufp.write_number(c));
       luaL_addchar(b, '\\');
       if (isdigit(sv_byteat(s->view(), i + 1)))
       {
@@ -1270,7 +1265,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
 ** (to preserve precision); inf, -inf, and NaN are handled separately.
 ** (NaN cannot be expressed as a numeral, so we write '(0/0)' for it.)
 */
-static int quotefloat(lua_State* L, std::span<char> area, size_t off, lua_Number n)
+static size_t quotefloat(lua_State* L, std::span<char> area, size_t off, lua_Number n)
 {
   byte_view s;        /* for the fixed representations */
   if (n == (lua_Number) HUGE_VAL) /* inf? */
@@ -1281,22 +1276,23 @@ static int quotefloat(lua_State* L, std::span<char> area, size_t off, lua_Number
     s = lt::n0_0;
   else
   { /* format number as hexadecimal */
-    int nb = lua_number2strx(L, area, off, MAX_ITEM, lt::fmt_a, n);
-    if (memchr(area.data() + off, '.', ((unsigned int)(nb))) == nullptr)
+    size_t nb = lua_number2strx(L, area, off, MAX_ITEM, lt::fmt_a, n);
+    byte_span region = byte_span(area).subspan(off, nb);
+    if (region.view().find('.') == byte_view::npos)
     {                                                 /* no dot? */
       char point = locale_radixpoint(); /* try locale point */
-      char* ppoint = (char*) memchr(area.data() + off, point, ((unsigned int)(nb)));
-      if (ppoint)
-        *ppoint = '.'; /* change it to a dot */
+      size_t ppos = region.view().find(point);
+      if (ppos != byte_view::npos)
+        region[ppos] = '.'; /* change it to a dot */
     }
     return nb;
   }
   /* for the fixed representations */
   size_t l = s.size();
   assert(l < MAX_ITEM);
-  memcpy(area.data() + off, s.data(), l);
+  byte_span(area).copy_from(off, s);
   area[off + l] = '\0';
-  return ((int)(l));
+  return l;
 }
 
 static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
@@ -1312,30 +1308,25 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
   {
     size_t off = luaL_prepbuffsize(b, MAX_ITEM);
     std::span<char> area = luaL_buffaddr(b);
-    int nb;
+    size_t nb;
     if (!lua_isinteger(L, arg)) /* float? */
       nb = quotefloat(L, area, off, lua_tonumber(L, arg));
     else
     { /* integers */
       lua_Integer n = lua_tointeger(L, arg);
+      byte_span item = byte_span(area).subspan(off, MAX_ITEM);
       if (n == LUA_MININTEGER)
       {
-        area[off] = '0';
-        area[off + 1] = 'x';
-        std::to_chars_result res = std::to_chars(
-            area.data() + off + 2, area.data() + off + MAX_ITEM, ((lua_Unsigned)(n)), 16);
-        assert(res.ec == std::errc());
-        nb = ((int)(res.ptr - (area.data() + off)));
+        item[0] = '0';
+        item[1] = 'x';
+        nb = 2 + item.subspan(2).write_number(((lua_Unsigned)(n)), 16);
       }
       else
       {
-        std::to_chars_result dres = std::to_chars(
-            area.data() + off, area.data() + off + MAX_ITEM, n);
-        assert(dres.ec == std::errc());
-        nb = ((int)(dres.ptr - (area.data() + off)));
+        nb = item.write_number(n);
       }
     }
-    luaL_addsize(b, ((unsigned int)(nb)));
+    luaL_addsize(b, nb);
     break;
   }
   case LUA_TNIL:
@@ -1405,7 +1396,7 @@ static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
   if (len >= MAX_FORMAT - 10)
     luaL_errori(L, lt::invalid_format_too_long);
   form[0] = '%';
-  memcpy(form.data() + 1, sv.data() + i, len * sizeof(char));
+  byte_span(form).copy_from(1, sv.substr(i, len));
   form[1 + len] = '\0';
   *formlen = 1 + len;
   return i + len - 1;
@@ -1452,7 +1443,7 @@ static void scanformat(byte_view form, FormatSpec* spec)
   spec->conv = form[form.size() - 1];
 }
 
-static int packformat(std::span<char> area, size_t off, unsigned maxitem,
+static size_t packformat(std::span<char> area, size_t off, size_t maxitem,
                       const FormatSpec* spec,
                       byte_view prefix, byte_view body,
                       bool zeropadok)
@@ -1468,34 +1459,34 @@ static int packformat(std::span<char> area, size_t off, unsigned maxitem,
   (void) maxitem;
   if (spec->left)
   {
-    memcpy(area.data() + pos, prefix.data(), prefixlen);
+    byte_span(area).copy_from(pos, prefix);
     pos += prefixlen;
-    memcpy(area.data() + pos, body.data(), bodylen);
+    byte_span(area).copy_from(pos, body);
     pos += bodylen;
-    memset(area.data() + pos, ' ', pad);
+    byte_span(area).fill(pos, pad, std::byte{' '});
   }
   else if (spec->zero && zeropadok)
   {
-    memcpy(area.data() + pos, prefix.data(), prefixlen);
+    byte_span(area).copy_from(pos, prefix);
     pos += prefixlen;
-    memset(area.data() + pos, '0', pad);
+    byte_span(area).fill(pos, pad, std::byte{'0'});
     pos += pad;
-    memcpy(area.data() + pos, body.data(), bodylen);
+    byte_span(area).copy_from(pos, body);
   }
   else
   {
-    memset(area.data() + pos, ' ', pad);
+    byte_span(area).fill(pos, pad, std::byte{' '});
     pos += pad;
-    memcpy(area.data() + pos, prefix.data(), prefixlen);
+    byte_span(area).copy_from(pos, prefix);
     pos += prefixlen;
-    memcpy(area.data() + pos, body.data(), bodylen);
+    byte_span(area).copy_from(pos, body);
   }
-  return ((int)(total));
+  return total;
 }
 
-static int formatint(lua_State* L, int arg, byte_view form,
+static size_t formatint(lua_State* L, int arg, byte_view form,
                      std::span<char> area, size_t off,
-                     unsigned maxitem, byte_view flags)
+                     size_t maxitem, byte_view flags)
 {
   lua_Integer n = luaL_checkinteger(L, arg);
   checkformat(L, form, flags, 1);
@@ -1509,15 +1500,15 @@ static int formatint(lua_State* L, int arg, byte_view form,
                              ? 0ULL - ((unsigned long long)(n))
                              : ((unsigned long long)(n));
   char digits[24];
-  std::to_chars_result res = std::to_chars(digits, digits + sizeof(digits), u, base);
-  assert(res.ec == std::errc());
-  size_t ndigits = ((size_t)(res.ptr - digits));
+  byte_span digitsp(digits, sizeof(digits));
+  size_t ndigits = digitsp.write_number(u, base);
   if (spec.conv == 'X')
   {
     for (size_t i = 0; i < ndigits; i++)
-      digits[i] = ((char)(locale_toupper(((unsigned char)(digits[i])))));
+      digitsp[i] = ((char)(locale_toupper(((unsigned char)(digitsp[i])))));
   }
   char body[MAX_ITEM];
+  byte_span bodyp(body, sizeof(body));
   size_t blen = 0;
   if (u == 0 && spec.precision == 0)
     ;
@@ -1525,14 +1516,14 @@ static int formatint(lua_State* L, int arg, byte_view form,
   {
     size_t mindigits = (spec.precision >= 0) ? ((size_t)(spec.precision)) : 1;
     while (blen + ndigits < mindigits)
-      body[blen++] = '0';
-    memcpy(body + blen, digits, ndigits);
+      bodyp[blen++] = '0';
+    bodyp.copy_from(blen, digitsp.view().substr(0, ndigits));
     blen += ndigits;
   }
-  if (spec.alt && spec.conv == 'o' && (blen == 0 || body[0] != '0'))
+  if (spec.alt && spec.conv == 'o' && (blen == 0 || bodyp[0] != '0'))
   {
-    memmove(body + 1, body, blen);
-    body[0] = '0';
+    bodyp.move_from(1, bodyp.view().substr(0, blen));
+    bodyp[0] = '0';
     blen++;
   }
   char prefix[2];
@@ -1553,11 +1544,10 @@ static int formatint(lua_State* L, int arg, byte_view form,
   }
   return packformat(area, off, maxitem, &spec,
                     byte_view(prefix, sizeof(prefix)).substr(0, prefixlen),
-                    byte_view(body, MAX_ITEM).substr(0, blen), spec.precision < 0);
+                    bodyp.view().substr(0, blen), spec.precision < 0);
 }
 
-static int formatfloat(lua_State* L, int arg, byte_view form,
-                       std::span<char> area, size_t off, unsigned maxitem)
+static size_t formatfloat(lua_State* L, int arg, byte_view form, std::span<char> area, size_t off, size_t maxitem)
 {
   lua_Number n = luaL_checknumber(L, arg);
   checkformat(L, form, lt::fmtflags_f, 1);
@@ -1574,13 +1564,14 @@ static int formatfloat(lua_State* L, int arg, byte_view form,
   else if (spec.space)
     prefix[prefixlen++] = ' ';
   char body[MAX_ITEMF];
+  byte_span bodyp(body, sizeof(body));
   size_t blen;
   bool zeropadok = true;
   if (std::isinf(n) || std::isnan(n))
   {
     byte_view r = std::isinf(n) ? lt::inf : lt::nan;
     blen = r.size();
-    memcpy(body, r.data(), blen);
+    bodyp.copy_from(0, r);
     zeropadok = false;
   }
   else
@@ -1590,24 +1581,21 @@ static int formatfloat(lua_State* L, int arg, byte_view form,
                                             : std::chars_format::general;
     if (lower == 'g' && precision == 0)
       precision = 1;
-    std::to_chars_result res = std::to_chars(body, body + sizeof(body),
-                                             std::fabs(n), cf, precision);
-    assert(res.ec == std::errc());
-    blen = ((size_t)(res.ptr - body));
+    blen = bodyp.write_number(std::fabs(n), cf, precision);
     if (spec.alt)
     {
       size_t epos = 0;
       bool haspoint = false;
-      while (epos < blen && body[epos] != 'e')
+      while (epos < blen && bodyp[epos] != 'e')
       {
-        if (body[epos] == '.')
+        if (bodyp[epos] == '.')
           haspoint = true;
         epos++;
       }
       if (!haspoint)
       {
-        memmove(body + epos + 1, body + epos, blen - epos);
-        body[epos++] = '.';
+        bodyp.move_from(epos + 1, bodyp.view().substr(epos, blen - epos));
+        bodyp[epos++] = '.';
         blen++;
       }
       if (lower == 'g')
@@ -1616,9 +1604,9 @@ static int formatfloat(lua_State* L, int arg, byte_view form,
         bool seennonzero = false;
         for (size_t i = 0; i < epos; i++)
         {
-          if (isdigit(((unsigned char)(body[i]))))
+          if (isdigit(((unsigned char)(bodyp[i]))))
           {
-            if (body[i] != '0')
+            if (bodyp[i] != '0')
               seennonzero = true;
             if (seennonzero)
               sig++;
@@ -1627,8 +1615,8 @@ static int formatfloat(lua_State* L, int arg, byte_view form,
         if (sig == 0)
           sig = 1;
         size_t zeros = (((size_t)(precision)) > sig) ? precision - sig : 0;
-        memmove(body + epos + zeros, body + epos, blen - epos);
-        memset(body + epos, '0', zeros);
+        bodyp.move_from(epos + zeros, bodyp.view().substr(epos, blen - epos));
+        bodyp.fill(epos, zeros, std::byte{'0'});
         blen += zeros;
       }
     }
@@ -1636,11 +1624,11 @@ static int formatfloat(lua_State* L, int arg, byte_view form,
   if (spec.conv == 'E' || spec.conv == 'G')
   {
     for (size_t i = 0; i < blen; i++)
-      body[i] = ((char)(locale_toupper(((unsigned char)(body[i])))));
+      bodyp[i] = ((char)(locale_toupper(((unsigned char)(bodyp[i])))));
   }
   return packformat(area, off, maxitem, &spec,
                     byte_view(prefix, sizeof(prefix)).substr(0, prefixlen),
-                    byte_view(body, MAX_ITEMF).substr(0, blen), zeropadok);
+                    bodyp.view().substr(0, blen), zeropadok);
 }
 
 static int str_format(lua_State* L)
@@ -1665,9 +1653,9 @@ static int str_format(lua_State* L)
     {                                              /* format item */
       char form[MAX_FORMAT];                        /* to store the format ('%...') */
       size_t formlen;
-      unsigned maxitem = MAX_ITEM;                  /* maximum length for the result */
+      size_t maxitem = MAX_ITEM;                  /* maximum length for the result */
       size_t boff = luaL_prepbuffsize(&b, maxitem); /* to put result */
-      int nb = 0;                                   /* number of bytes in result */
+      size_t nb = 0;                                   /* number of bytes in result */
       if (++arg > top)
         return luaL_argerrori(L, arg, lt::no_value);
       i = getformat(L, sf, i, form, &formlen);
@@ -1700,8 +1688,7 @@ static int str_format(lua_State* L)
       case 'a':
       case 'A':
         checkformat(L, formv, lt::fmtflags_f, 1);
-        nb = lua_number2strx(L, luaL_buffaddr(&b), boff, maxitem, formv,
-                             luaL_checknumber(L, arg));
+        nb = lua_number2strx(L, luaL_buffaddr(&b), boff, maxitem, formv, luaL_checknumber(L, arg));
         break;
       case 'f':
         maxitem = MAX_ITEMF; /* extra space for '%f' */
@@ -1721,13 +1708,14 @@ static int str_format(lua_State* L)
         FormatSpec spec;
         scanformat(formv, &spec);
         char body[MAX_ITEM];
+        byte_span bodyp(body, sizeof(body));
         size_t blen;
         if (lua_islightcfunction(L, arg))
         {
           InternalString fa = lua_funcaddressi(L, arg);
           blen = fa.size();
           assert(blen < sizeof(body));
-          memcpy(body, fa.view().data(), blen);
+          bodyp.copy_from(0, fa.view());
         }
         else
         {
@@ -1736,20 +1724,16 @@ static int str_format(lua_State* L)
           {
             const byte_view nullrep = lt::null;
             blen = nullrep.size();
-            memcpy(body, nullrep.data(), blen);
+            bodyp.copy_from(0, nullrep);
           }
           else
           {
-            body[0] = '0';
-            body[1] = 'x';
-            std::to_chars_result res = std::to_chars(
-                body + 2, body + sizeof(body), ((uintptr_t)(p)), 16);
-            assert(res.ec == std::errc());
-            blen = ((size_t)(res.ptr - body));
+            bodyp[0] = '0';
+            bodyp[1] = 'x';
+            blen = 2 + bodyp.subspan(2).write_number(((uintptr_t)(p)), 16);
           }
         }
-        byte_view bodysv(body, MAX_ITEM);
-        byte_view bodybytes = bodysv.substr(0, blen);
+        byte_view bodybytes = bodyp.view().substr(0, blen);
         nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, bodybytes, false);
         break;
       }
@@ -1768,7 +1752,7 @@ static int str_format(lua_State* L)
           luaL_addvalue(&b); /* keep entire string */
         else
         {
-          luaL_argchecki(L, memchr(sv.data(), '\0', sv.size()) == nullptr, arg, lt::string_contains_zeros);
+          luaL_argchecki(L, sv.find('\0') == byte_view::npos, arg, lt::string_contains_zeros);
           checkformat(L, formv, lt::minus_ch, 1);
           if (formv.find('.') == byte_view::npos && sv.size() >= 100)
           {
@@ -1794,8 +1778,8 @@ static int str_format(lua_State* L)
         return luaL_errori(L, lt::invalid_conversion_s_to_format);
       }
       }
-      assert(((unsigned int)(nb)) < maxitem);
-      luaL_addsize(&b, ((unsigned int)(nb)));
+      assert(nb < maxitem);
+      luaL_addsize(&b, nb);
     }
   }
   luaL_pushresult(&b);
@@ -1833,7 +1817,7 @@ struct Header
   const InternalString* fmt; /* format string */
   size_t pos;
   int islittle;
-  unsigned maxalign;
+  size_t maxalign;
 };
 
 static inline int fmtbyte(const Header* h)
@@ -1888,16 +1872,16 @@ static size_t getnum(Header* h, size_t df)
 ** Read an integer numeral and raises an error if it is larger
 ** than the maximum size of integers.
 */
-static unsigned getnumlimit(Header* h, size_t df)
+static size_t getnumlimit(Header* h, size_t df)
 {
   size_t sz = getnum(h, df);
   if (l_unlikely((sz - 1u) >= MAXINTSIZE))
   {
     lua_pushinteger(h->L, ((lua_Integer)(sz)));
     lua_pushinteger(h->L, MAXINTSIZE);
-    return ((unsigned int)(luaL_errori(h->L, lt::integral_size_d_out_of_limits_1_d)));
+    return ((size_t)(luaL_errori(h->L, lt::integral_size_d_out_of_limits_1_d)));
   }
-  return ((unsigned int)(sz));
+  return sz;
 }
 
 /*
@@ -2013,7 +1997,7 @@ static KOption getoption(Header* h, size_t* size)
 ** despite its size.
 */
 static KOption getdetails(Header* h, size_t totalsize,
-                          size_t* psize, unsigned* ntoalign)
+                          size_t* psize, size_t* ntoalign)
 {
   KOption opt = getoption(h, psize);
   size_t align = *psize; /* usually, alignment follows size */
@@ -2036,8 +2020,8 @@ static KOption getdetails(Header* h, size_t totalsize,
     else
     {
       /* 'szmoda' = totalsize % align */
-      unsigned szmoda = ((unsigned int)(totalsize & (align - 1)));
-      *ntoalign = ((unsigned int)((align - szmoda) & (align - 1)));
+      size_t szmoda = totalsize & (align - 1);
+      *ntoalign = (align - szmoda) & (align - 1);
     }
   }
   return opt;
@@ -2050,11 +2034,11 @@ static KOption getdetails(Header* h, size_t totalsize,
 ** bytes if necessary (by default they would be zeros).
 */
 static void packint(luaL_Buffer* b, lua_Unsigned n,
-                    int islittle, unsigned size, int neg)
+                    int islittle, size_t size, int neg)
 {
   size_t off = luaL_prepbuffsize(b, size);
   std::span<char> buff = luaL_buffaddr(b);
-  unsigned i;
+  size_t i;
   buff[off + (islittle ? 0 : size - 1)] = (char) (n & MC); /* first byte */
   for (i = 1; i < size; i++)
   {
@@ -2073,16 +2057,15 @@ static void packint(luaL_Buffer* b, lua_Unsigned n,
 ** Copy 'size' bytes from 'src' to 'dest', correcting endianness if
 ** given 'islittle' is different from native endianness.
 */
-static void copywithendian(char* dest, const char* src,
-                           unsigned size, int islittle)
+static void copywithendian(byte_span dest, byte_view src, int islittle)
 {
+  size_t size = src.size();
   if (islittle == nativeendian_little)
-    memcpy(dest, src, size);
+    dest.copy_from(0, src);
   else
   {
-    dest += size - 1;
-    while (size-- != 0)
-      *(dest--) = *(src++);
+    for (size_t i = 0; i < size; i++)
+      dest[i] = src[size - 1 - i];
   }
 }
 
@@ -2098,7 +2081,7 @@ static int str_pack(lua_State* L)
   luaL_buffinit(L, &b);
   while (fmtbyte(&h) > 0)
   {
-    unsigned ntoalign;
+    size_t ntoalign;
     size_t size;
     KOption opt = getdetails(&h, totalsize, &size, &ntoalign);
     luaL_argchecki(L, size + ntoalign <= MAX_SIZE - totalsize, arg, lt::result_too_long);
@@ -2116,7 +2099,7 @@ static int str_pack(lua_State* L)
         lua_Integer lim = (lua_Integer) 1 << ((size * NB) - 1);
         luaL_argchecki(L, -lim <= n && n < lim, arg, lt::integer_overflow);
       }
-      packint(&b, (lua_Unsigned) n, h.islittle, ((unsigned int)(size)), (n < 0));
+      packint(&b, (lua_Unsigned) n, h.islittle, size, (n < 0));
       break;
     }
     case Kuint:
@@ -2124,14 +2107,14 @@ static int str_pack(lua_State* L)
       lua_Integer n = luaL_checkinteger(L, arg);
       if (size < SZINT) /* need overflow check? */
         luaL_argchecki(L, (lua_Unsigned) n < ((lua_Unsigned) 1 << (size * NB)), arg, lt::unsigned_overflow);
-      packint(&b, (lua_Unsigned) n, h.islittle, ((unsigned int)(size)), 0);
+      packint(&b, (lua_Unsigned) n, h.islittle, size, 0);
       break;
     }
     case Kfloat:
     {                                             /* C float */
       float f = (float) luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      copywithendian(luaL_buffaddr(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
+      copywithendian(byte_span(luaL_buffaddr(&b)).subspan(off, sizeof(f)), byte_view((const char*) &f, sizeof(f)), h.islittle);
       luaL_addsize(&b, size);
       break;
     }
@@ -2139,7 +2122,7 @@ static int str_pack(lua_State* L)
     {                                          /* Lua float */
       lua_Number f = luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      copywithendian(luaL_buffaddr(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
+      copywithendian(byte_span(luaL_buffaddr(&b)).subspan(off, sizeof(f)), byte_view((const char*) &f, sizeof(f)), h.islittle);
       luaL_addsize(&b, size);
       break;
     }
@@ -2147,7 +2130,7 @@ static int str_pack(lua_State* L)
     {                                               /* C double */
       double f = (double) luaL_checknumber(L, arg); /* get argument */
       size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      copywithendian(luaL_buffaddr(&b).data() + off, (char*) &f, sizeof(f), h.islittle);
+      copywithendian(byte_span(luaL_buffaddr(&b)).subspan(off, sizeof(f)), byte_view((const char*) &f, sizeof(f)), h.islittle);
       luaL_addsize(&b, size);
       break;
     }
@@ -2161,7 +2144,7 @@ static int str_pack(lua_State* L)
       {                            /* does it need padding? */
         size_t psize = size - len; /* pad size */
         size_t off = luaL_prepbuffsize(&b, psize);
-        memset(luaL_buffaddr(&b).data() + off, LUAL_PACKPADBYTE, psize);
+        byte_span(luaL_buffaddr(&b)).fill(off, psize, std::byte{LUAL_PACKPADBYTE});
         luaL_addsize(&b, psize);
       }
       break;
@@ -2172,7 +2155,7 @@ static int str_pack(lua_State* L)
       size_t len = s.size();
       luaL_argchecki(L, size >= sizeof(lua_Unsigned) || len < ((lua_Unsigned) 1 << (size * NB)), arg, lt::string_length_does_not_fit_in_given_size);
       /* pack length */
-      packint(&b, (lua_Unsigned) len, h.islittle, ((unsigned int)(size)), 0);
+      packint(&b, (lua_Unsigned) len, h.islittle, size, 0);
       luaL_addlstring(&b, s, 0, len);
       totalsize += len;
       break;
@@ -2207,7 +2190,7 @@ static int str_packsize(lua_State* L)
   initheader(L, &h, fmt);
   while (fmtbyte(&h) > 0)
   {
-    unsigned ntoalign;
+    size_t ntoalign;
     size_t size;
     KOption opt = getdetails(&h, totalsize, &size, &ntoalign);
     luaL_argchecki(L, opt != Kstring && opt != Kzstr, 1, lt::variable_length_format);
@@ -2273,7 +2256,7 @@ static int str_unpack(lua_State* L)
   initheader(L, &h, fmt);
   while (fmtbyte(&h) > 0)
   {
-    unsigned ntoalign;
+    size_t ntoalign;
     size_t size;
     KOption opt = getdetails(&h, pos, &size, &ntoalign);
     luaL_argchecki(L, ntoalign + size <= ld - pos, 2, lt::data_string_too_short);
@@ -2294,21 +2277,21 @@ static int str_unpack(lua_State* L)
     case Kfloat:
     {
       float f;
-      copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
+      copywithendian(byte_span((char*) &f, sizeof(f)), data.substr(pos, sizeof(f)), h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
     }
     case Knumber:
     {
       lua_Number f;
-      copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
+      copywithendian(byte_span((char*) &f, sizeof(f)), data.substr(pos, sizeof(f)), h.islittle);
       lua_pushnumber(L, f);
       break;
     }
     case Kdouble:
     {
       double f;
-      copywithendian((char*) &f, data.data() + pos, sizeof(f), h.islittle);
+      copywithendian(byte_span((char*) &f, sizeof(f)), data.substr(pos, sizeof(f)), h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
     }

@@ -609,7 +609,7 @@ static void bb_append(luaL_Buffer* B, byte_view b, size_t off, size_t n)
   {
     if (n > B->bytes.size() - B->used)
       bb_growTo(B, B->used + n);
-    memcpy(&B->bytes[B->used], b.data() + off, n);
+    byte_span(B->bytes).copy_from(B->used, b.substr(off, n));
     B->used += n;
   }
 }

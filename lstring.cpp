@@ -127,9 +127,9 @@ constexpr int LUAI_MAXSHORTLEN = 40;
 TString* luaS_createstr(lua_State* L, byte_view str, size_t off, size_t len)
 {
   global_State* g = L->l_G;
-  const char* s = str.data() + off;
+  byte_view sv = str.substr(off, len);
+  const char* s = sv.data();
   size_t l = len;
-  byte_view sv(s, l);
   if (l <= LUAI_MAXSHORTLEN)
   {
     size_t h = luaS_hash(s, l);
