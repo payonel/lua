@@ -613,8 +613,10 @@ static std::span<Value> resizearray(lua_State* L, Table* t,
     {
       /* move common elements to new arrays */
       unsigned tomove = (oldasize < newasize) ? oldasize : newasize;
-      memcpy(nv.data(), t->array.data(), ((size_t)(tomove)) * sizeof(Value));
-      memcpy(nt.data(), t->tags.data(), ((size_t)(tomove)) * sizeof(lu_byte));
+      for (unsigned mi = 0; mi < tomove; mi++)
+        nv[mi] = t->array[mi];
+      for (unsigned mi = 0; mi < tomove; mi++)
+        nt[mi] = t->tags[mi];
       luaM_alloc_Value_span(L->l_G, L, t->array, 0, false);
       luaM_alloc_lu_byte_span(L->l_G, L, t->tags, 0, false);
     }

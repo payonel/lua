@@ -76,7 +76,8 @@ LUAI_FUNC std::span<char> luaM_alloc_char_span(global_State* g, lua_State* L, st
   {
     nb = std::span<char>(new char[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(char));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -164,7 +165,8 @@ LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L
   {
     nb = std::span<TValue>(new TValue[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(TValue));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -178,7 +180,8 @@ LUAI_FUNC std::span<Value> luaM_alloc_Value_span(global_State* g, lua_State* L, 
   {
     nb = std::span<Value>(new Value[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Value));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -192,7 +195,8 @@ LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(global_State* g, lua_State
   {
     nb = std::span<UpVal*>(new UpVal*[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(UpVal*));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -206,7 +210,8 @@ LUAI_FUNC std::span<lu_byte> luaM_alloc_lu_byte_span(global_State* g, lua_State*
   {
     nb = std::span<lu_byte>(new lu_byte[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(lu_byte));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -230,7 +235,8 @@ LUAI_FUNC std::span<LocVar> luaM_alloc_LocVar_span(global_State* g, lua_State* L
   {
     nb = std::span<LocVar>(new LocVar[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(LocVar));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -253,7 +259,8 @@ LUAI_FUNC std::span<Vardesc> luaM_alloc_Vardesc_span(global_State* g, lua_State*
   {
     nb = std::span<Vardesc>(new Vardesc[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Vardesc));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -276,7 +283,8 @@ LUAI_FUNC std::span<Upvaldesc> luaM_alloc_Upvaldesc_span(global_State* g, lua_St
   {
     nb = std::span<Upvaldesc>(new Upvaldesc[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Upvaldesc));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -299,7 +307,8 @@ LUAI_FUNC std::span<Labeldesc> luaM_alloc_Labeldesc_span(global_State* g, lua_St
   {
     nb = std::span<Labeldesc>(new Labeldesc[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Labeldesc));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -322,7 +331,8 @@ LUAI_FUNC std::span<Proto*> luaM_alloc_Proto_ptr_span(global_State* g, lua_State
   {
     nb = std::span<Proto*>(new Proto*[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Proto*));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -345,7 +355,8 @@ LUAI_FUNC std::span<AbsLineInfo> luaM_alloc_AbsLineInfo_span(global_State* g, lu
   {
     nb = std::span<AbsLineInfo>(new AbsLineInfo[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(AbsLineInfo));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -368,7 +379,8 @@ LUAI_FUNC std::span<ls_byte> luaM_alloc_ls_byte_span(global_State* g, lua_State*
   {
     nb = std::span<ls_byte>(new ls_byte[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(ls_byte));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -391,7 +403,8 @@ LUAI_FUNC std::span<Instruction> luaM_alloc_Instruction_span(global_State* g, lu
   {
     nb = std::span<Instruction>(new Instruction[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Instruction));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -423,7 +436,8 @@ LUAI_FUNC std::span<StkId> luaM_alloc_StkId_span(global_State* g, lua_State* L, 
   {
     nb = std::span<StkId>(new StkId[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(StkId));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;
@@ -447,7 +461,8 @@ LUAI_FUNC std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, st
   {
     nb = std::span<Node>(new Node[count], count);
     if (!block.empty())
-      ::memcpy(nb.data(), block.data(), std::min<size_t>(count, block.size()) * sizeof(Node));
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
   }
   delete [] block.data();
   return nb;

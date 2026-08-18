@@ -224,11 +224,8 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
     else
       return 0; /* do not raise an error */
   }
-  memcpy(newstk.data(), L->stack.data(), keep * sizeof(TValue));
-  if (newn > keep)
-  {
-    memset(newstk.data() + keep, 0, (newn - keep) * sizeof(TValue));
-  }
+  for (size_t si = 0; si < keep; si++)
+    newstk[si] = L->stack[si];
   luaM_alloc_TValue_span(L->l_G, L, L->stack, 0, false);
   L->stack = newstk;
   correctstack(L);

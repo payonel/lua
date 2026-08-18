@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <chrono>
 
 /*
 ** This file uses only the official API of Lua.
@@ -1345,35 +1346,26 @@ static void warnfon(void* ud, const HostString& message, int tocont)
 
 /*
 ** A function to compute an unsigned int with some level of
-** randomness. Rely on Address Space Layout Randomization (if present)
-** and the current time.
-*/
-#include <time.h>
-
-/* Size for the buffer, in bytes */
-constexpr size_t BUFSEEDB = (sizeof(void*) + sizeof(time_t));
-
-/* Size for the buffer in int's, rounded up */
-constexpr size_t BUFSEED = ((BUFSEEDB + sizeof(int) - 1) / sizeof(int));
-
-/*
-** Copy the contents of variable 'v' into the buffer pointed by 'b'.
-** (The '&b[0]' disguises 'b' to fix an absurd warning from clang.)
+** randomness. Relies on the current time.
 */
 
 static unsigned int luai_makeseed(void)
 {
-  unsigned int buff[BUFSEED];
-  unsigned int res;
-  unsigned int i;
-  time_t t = time(nullptr);
-  char* b = (char*) buff;
-  (memcpy(&(b)[0], &(b), sizeof(b)), (b) += sizeof(b)); /* local variable's address */
-  (memcpy(&(b)[0], &(t), sizeof(t)), (b) += sizeof(t)); /* time */
-  /* fill (rare but possible) remain of the buffer with zeros */
-  memset(b, 0, sizeof(buff) - BUFSEEDB);
-  res = buff[0];
-  for (i = 1; i < BUFSEED; i++)
+  unsigned long long nanos =
+    (unsigned long long) std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+  unsigned long long millis =
+    (unsigned long long) std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch())
+      .count();
+  unsigned int buff[4];
+  buff[0] = (unsigned int) (nanos & 0xFFFFFFFFu);
+  buff[1] = (unsigned int) ((nanos >> 32) & 0xFFFFFFFFu);
+  buff[2] = (unsigned int) (millis & 0xFFFFFFFFu);
+  buff[3] = (unsigned int) ((millis >> 32) & 0xFFFFFFFFu);
+  unsigned int res = buff[0];
+  for (unsigned int i = 1; i < 4; i++)
     res ^= (res >> 3) + (res << 7) + buff[i];
   return res;
 }

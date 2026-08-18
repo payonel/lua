@@ -150,7 +150,6 @@ static void stack_init(lua_State* L1, lua_State* L)
   {
     luaD_throw(L, LUA_ERRMEM);
   }
-  memset(stk.data(), 0, nslots * sizeof(TValue));
   L1->stack = stk;
   L1->tbclist = 0;
   for (i = 0; i < BASIC_STACK_SIZE + EXTRA_STACK; i++)
