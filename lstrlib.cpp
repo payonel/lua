@@ -1800,6 +1800,8 @@ constexpr char LUAL_PACKPADBYTE = 0x00;
 /* maximum size for the binary representation of an integer */
 constexpr int MAXINTSIZE = 16;
 
+constexpr size_t PACK_MAXALIGN = 16;
+
 /* number of bits in a character */
 constexpr int NB = CHAR_BIT;
 
@@ -1901,7 +1903,6 @@ static void initheader(lua_State* L, Header* h, const InternalString* fmt)
 */
 static KOption getoption(Header* h, size_t* size)
 {
-  constexpr size_t maxalign = alignof(std::max_align_t);
   int opt = fmtbyte(h);
   h->pos++;
   *size = 0; /* default */
@@ -1977,7 +1978,7 @@ static KOption getoption(Header* h, size_t* size)
     break;
   case '!':
   {
-    h->maxalign = getnumlimit(h, maxalign);
+    h->maxalign = getnumlimit(h, PACK_MAXALIGN);
     break;
   }
   default:
