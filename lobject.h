@@ -42,7 +42,7 @@ constexpr lu_byte makevariant(int t, int v)
 struct Value
 {
   lua_Integer prim;
-  struct GCObject* ref; /* collectable objects */
+  struct GCObject* ref; /* collectable objects; also light userdata (in Java, ref becomes Object) */
 };
 
 /*

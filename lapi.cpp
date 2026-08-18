@@ -585,7 +585,7 @@ LUA_API const void* lua_topointer(lua_State* L, int idx)
   switch ((o.tt_ & WITHVARIANT_MASK))
   {
   case LUA_VLCF:
-    return reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(fvalue(&o)));
+    return o.value_.ref;
   case LUA_VUSERDATA:
   case LUA_VLIGHTUSERDATA:
     return touserdata(&o);

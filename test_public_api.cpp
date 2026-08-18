@@ -656,7 +656,11 @@ static void test_access()
   CHECK(lua_tothread(L, 6) == nullptr);
 
   CHECK(lua_topointer(L, 6) != nullptr);
-  CHECK(lua_topointer(L, 7) == reinterpret_cast<const void*>(reinterpret_cast<std::uintptr_t>(cf_add)));
+  CHECK(lua_topointer(L, 7) != nullptr);
+  CHECK(lua_topointer(L, 7) == lua_topointer(L, 7));
+  lua_pushcfunction(L, cf_raise);
+  CHECK(lua_topointer(L, -1) != lua_topointer(L, 7));
+  lua_pop(L, 1);
   lua_pushinteger(L, 1);
   lua_pushcclosure(L, cf_upvals, 1);
   CHECK(lua_topointer(L, -1) != nullptr);
