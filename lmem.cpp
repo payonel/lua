@@ -31,12 +31,12 @@
 ** 'gcstopem' is true, because then the interpreter is in the middle of
 ** a collection step.
 */
-static inline int cantryagain(global_State* g)
+static inline bool cantryagain(global_State* g)
 {
   return completestate(g) && !g->gcstopem;
 }
 
-static int luaM_permit_(global_State* g, lua_State* L, size_t osize, size_t nsize, int tag)
+static bool luaM_permit_(global_State* g, lua_State* L, size_t osize, size_t nsize, int tag)
 {
   if (osize == 0 && nsize == 0)
     return 1;
@@ -115,16 +115,16 @@ static inline void take_debt(lua_State* L, size_t size, int tag)
 ** reallocating to size 1, then 2, and then 4. All these arrays
 ** will be reallocated to exact sizes or erased when parsing ends.
 */
-constexpr int MINSIZEARRAY = 4;
+constexpr size_t MINSIZEARRAY = 4;
 
-static inline int luaM_growsize_(lua_State* L, int size, int nelems, int limit, byte_view what)
+static inline size_t luaM_growsize_(lua_State* L, size_t size, size_t nelems, size_t limit, byte_view what)
 {
   if (nelems + 1 <= size)
     return size;
   if (size >= limit / 2)
   {                                /* cannot double it? */
     if (l_unlikely(size >= limit)) /* cannot grow even a little? */
-      luaG_runerror(L, lt::too_many_s_limit_is_d, FmtArgs().str(what).num(limit));
+      luaG_runerror(L, lt::too_many_s_limit_is_d, FmtArgs().str(what).num((int)limit));
     size = limit; /* still have at least one free place */
   }
   else
@@ -144,16 +144,16 @@ l_noret luaM_toobig(lua_State* L)
   luaG_runerror(L, lt::memory_allocation_error_block_too_big);
 }
 
-int luaM_reserve(lua_State* L, size_t size)
+bool luaM_reserve(lua_State* L, size_t size)
 {
   global_State* g = L->l_G;
   if (g->memlimit > 0 &&
-      ((size_t)(gettotalbytes(g))) + size > g->memlimit)
+      ((gettotalbytes(g))) + size > g->memlimit)
   {
-    return 0;
+    return false;
   }
   g->GCdebt -= ((l_mem)(size));
-  return 1;
+  return true;
 }
 
 void luaM_release(lua_State* L, size_t size)
@@ -245,11 +245,11 @@ LUAI_FUNC std::span<LocVar> luaM_alloc_LocVar_span(global_State* g, lua_State* L
 
 LUAI_FUNC std::span<LocVar> luaM_safegrow_LocVar_span(lua_State* L, std::span<LocVar> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(LocVar)) ? (size_t)SHRT_MAX : (MAX_SIZET / sizeof(LocVar));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::local_variables);
+  constexpr size_t limit = (SHRT_MAX <= MAX_SIZET / sizeof(LocVar)) ? SHRT_MAX : (MAX_SIZET / sizeof(LocVar));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::local_variables);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_LocVar_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_LocVar_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<Vardesc> luaM_alloc_Vardesc_span(global_State* g, lua_State* L, std::span<Vardesc> block, size_t count, bool bthrow)
@@ -268,11 +268,11 @@ LUAI_FUNC std::span<Vardesc> luaM_alloc_Vardesc_span(global_State* g, lua_State*
 
 LUAI_FUNC std::span<Vardesc> luaM_safegrow_Vardesc_span(lua_State* L, std::span<Vardesc> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(Vardesc)) ? (size_t)SHRT_MAX : (MAX_SIZET / sizeof(Vardesc));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::variable_declarations);
+  constexpr size_t limit = (SHRT_MAX <= MAX_SIZET / sizeof(Vardesc)) ? SHRT_MAX : (MAX_SIZET / sizeof(Vardesc));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::variable_declarations);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_Vardesc_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_Vardesc_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<Upvaldesc> luaM_alloc_Upvaldesc_span(global_State* g, lua_State* L, std::span<Upvaldesc> block, size_t count, bool bthrow)
@@ -291,11 +291,11 @@ LUAI_FUNC std::span<Upvaldesc> luaM_alloc_Upvaldesc_span(global_State* g, lua_St
 
 LUAI_FUNC std::span<Upvaldesc> luaM_safegrow_Upvaldesc_span(lua_State* L, std::span<Upvaldesc> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc)) ? (size_t)MAXUPVAL : (MAX_SIZET / sizeof(Upvaldesc));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::upvalues);
+  constexpr size_t limit = (MAXUPVAL <= MAX_SIZET / sizeof(Upvaldesc)) ? MAXUPVAL : (MAX_SIZET / sizeof(Upvaldesc));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::upvalues);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_Upvaldesc_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_Upvaldesc_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<Labeldesc> luaM_alloc_Labeldesc_span(global_State* g, lua_State* L, std::span<Labeldesc> block, size_t count, bool bthrow)
@@ -314,11 +314,11 @@ LUAI_FUNC std::span<Labeldesc> luaM_alloc_Labeldesc_span(global_State* g, lua_St
 
 LUAI_FUNC std::span<Labeldesc> luaM_safegrow_Labeldesc_span(lua_State* L, std::span<Labeldesc> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)SHRT_MAX <= MAX_SIZET / sizeof(Labeldesc)) ? (size_t)SHRT_MAX : (MAX_SIZET / sizeof(Labeldesc));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::labels_gotos);
+  constexpr size_t limit = (SHRT_MAX <= MAX_SIZET / sizeof(Labeldesc)) ? SHRT_MAX : (MAX_SIZET / sizeof(Labeldesc));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::labels_gotos);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_Labeldesc_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_Labeldesc_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<Proto*> luaM_alloc_Proto_ptr_span(global_State* g, lua_State* L, std::span<Proto*> block, size_t count, bool bthrow)
@@ -337,11 +337,11 @@ LUAI_FUNC std::span<Proto*> luaM_alloc_Proto_ptr_span(global_State* g, lua_State
 
 LUAI_FUNC std::span<Proto*> luaM_safegrow_Proto_ptr_span(lua_State* L, std::span<Proto*> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)MAXARG_Bx <= MAX_SIZET / sizeof(Proto*)) ? (size_t)MAXARG_Bx : (MAX_SIZET / sizeof(Proto*));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::functions);
+  constexpr size_t limit = (MAXARG_Bx <= MAX_SIZET / sizeof(Proto*)) ? MAXARG_Bx : (MAX_SIZET / sizeof(Proto*));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::functions);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_Proto_ptr_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_Proto_ptr_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<AbsLineInfo> luaM_alloc_AbsLineInfo_span(global_State* g, lua_State* L, std::span<AbsLineInfo> block, size_t count, bool bthrow)
@@ -360,11 +360,11 @@ LUAI_FUNC std::span<AbsLineInfo> luaM_alloc_AbsLineInfo_span(global_State* g, lu
 
 LUAI_FUNC std::span<AbsLineInfo> luaM_safegrow_AbsLineInfo_span(lua_State* L, std::span<AbsLineInfo> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(AbsLineInfo)) ? (size_t)INT_MAX : (MAX_SIZET / sizeof(AbsLineInfo));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::lines);
+  constexpr size_t limit = (INT_MAX <= MAX_SIZET / sizeof(AbsLineInfo)) ? INT_MAX : (MAX_SIZET / sizeof(AbsLineInfo));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::lines);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_AbsLineInfo_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_AbsLineInfo_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<ls_byte> luaM_alloc_ls_byte_span(global_State* g, lua_State* L, std::span<ls_byte> block, size_t count, bool bthrow)
@@ -383,11 +383,11 @@ LUAI_FUNC std::span<ls_byte> luaM_alloc_ls_byte_span(global_State* g, lua_State*
 
 LUAI_FUNC std::span<ls_byte> luaM_safegrow_ls_byte_span(lua_State* L, std::span<ls_byte> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(ls_byte)) ? (size_t)INT_MAX : (MAX_SIZET / sizeof(ls_byte));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::opcodes);
+  constexpr size_t limit = (INT_MAX <= MAX_SIZET / sizeof(ls_byte)) ? INT_MAX : (MAX_SIZET / sizeof(ls_byte));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::opcodes);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_ls_byte_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_ls_byte_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<Instruction> luaM_alloc_Instruction_span(global_State* g, lua_State* L, std::span<Instruction> block, size_t count, bool bthrow)
@@ -406,20 +406,20 @@ LUAI_FUNC std::span<Instruction> luaM_alloc_Instruction_span(global_State* g, lu
 
 LUAI_FUNC std::span<Instruction> luaM_safegrow_Instruction_span(lua_State* L, std::span<Instruction> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(Instruction)) ? (size_t)INT_MAX : (MAX_SIZET / sizeof(Instruction));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::opcodes);
+  constexpr size_t limit = (INT_MAX <= MAX_SIZET / sizeof(Instruction)) ? INT_MAX : (MAX_SIZET / sizeof(Instruction));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::opcodes);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_Instruction_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_Instruction_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<TValue> luaM_safegrow_TValue_span(lua_State* L, std::span<TValue> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)MAXARG_Ax <= MAX_SIZET / sizeof(TValue)) ? (size_t)MAXARG_Ax : (MAX_SIZET / sizeof(TValue));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::constants);
+  constexpr size_t limit = (MAXARG_Ax <= MAX_SIZET / sizeof(TValue)) ? MAXARG_Ax : (MAX_SIZET / sizeof(TValue));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::constants);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_TValue_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_TValue_span(L->l_G, L, block, newsize, true);
 }
 
 LUAI_FUNC std::span<StkId> luaM_alloc_StkId_span(global_State* g, lua_State* L, std::span<StkId> block, size_t count, bool bthrow)
@@ -438,11 +438,11 @@ LUAI_FUNC std::span<StkId> luaM_alloc_StkId_span(global_State* g, lua_State* L, 
 
 LUAI_FUNC std::span<StkId> luaM_safegrow_StkId_span(lua_State* L, std::span<StkId> block, size_t nelems)
 {
-  constexpr size_t limit = ((size_t)INT_MAX <= MAX_SIZET / sizeof(StkId)) ? (size_t)INT_MAX : (MAX_SIZET / sizeof(StkId));
-  size_t newsize = luaM_growsize_(L, (int)block.size(), (int)nelems, limit, lt::to_be_closed_variables);
+  constexpr size_t limit = (INT_MAX <= MAX_SIZET / sizeof(StkId)) ? INT_MAX : (MAX_SIZET / sizeof(StkId));
+  size_t newsize = luaM_growsize_(L, block.size(), nelems, limit, lt::to_be_closed_variables);
   if (newsize == block.size())
     return block;
-  return luaM_alloc_StkId_span(L->l_G, L, block, (size_t)newsize, true);
+  return luaM_alloc_StkId_span(L->l_G, L, block, newsize, true);
 }
 
 // typed fresh (throwing) allocators
