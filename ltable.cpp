@@ -216,7 +216,7 @@ static int mainpositionTV(const Table* t, const TValue* key)
 static inline int mainpositionfromnode(const Table* t, int nd)
 {
   TValue key;
-  getnodekey(((lua_State*)(nullptr)), &key, gnode(t, nd));
+  getnodekey(nullptr, &key, gnode(t, nd));
   return mainpositionTV(t, &key);
 }
 
@@ -941,7 +941,7 @@ static int insertkey(Table* t, const TValue* key, TValue* value)
   }
   setnodekey(gnode(t, mp), key);
   assert(((gnode(t, mp)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL));
-  setobj(((lua_State*)(0)), (&(gnode(t, mp))->val), value);
+  setobj(nullptr, (&(gnode(t, mp))->val), value);
   return 1;
 }
 
@@ -1014,7 +1014,7 @@ static lu_byte finishnodeget(const TValue* val, TValue* res)
 {
   if (!(((val)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {
-    setobj(((lua_State*) nullptr), res, val);
+    setobj(nullptr, res, val);
   }
   return ((val)->tt_ & WITHVARIANT_MASK);
 }
@@ -1118,7 +1118,7 @@ static int finishnodeset(Table* t, int idx, TValue* val)
 {
   if (idx >= 0 && !((gnode(t, idx)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {
-    setobj(((lua_State*) nullptr), (&(gnode(t, idx))->val), val);
+    setobj(nullptr, (&(gnode(t, idx))->val), val);
     return HOK; /* success */
   }
   else
@@ -1131,7 +1131,7 @@ static int rawfinishnodeset(Table* t, int idx, TValue* val)
     return 0; /* no slot with that key */
   else
   {
-    setobj(((lua_State*) nullptr), (&(gnode(t, idx))->val), val);
+    setobj(nullptr, (&(gnode(t, idx))->val), val);
     return 1; /* success */
   }
 }
@@ -1175,7 +1175,7 @@ int luaH_psetshortstr(Table* t, TString* key, TValue* val)
   int idx = nodeshortstr(t, key);
   if (idx >= 0 && !((gnode(t, idx)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                                        /* key already has a value? (all too common) */
-    setobj(((lua_State*) nullptr), (&(gnode(t, idx))->val), val); /* update it */
+    setobj(nullptr, (&(gnode(t, idx))->val), val); /* update it */
     return HOK;                                            /* done */
   }
   else if (checknoTM(t->metatable, TM_NEWINDEX))
@@ -1186,7 +1186,7 @@ int luaH_psetshortstr(Table* t, TString* key, TValue* val)
         !(isblack(t) && iswhite(key)))
     {            /* and don't need barrier? */
       TValue tk; /* key as a TValue */
-      setsvalue(((lua_State*)(nullptr)), &tk, key);
+      setsvalue(nullptr, &tk, key);
       if (insertkey(t, &tk, val))
       { /* insert key, if there is space */
         invalidateTMcache(t);

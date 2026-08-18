@@ -1400,7 +1400,7 @@ struct CallS
 
 static void f_call(lua_State* L, void* ud)
 {
-  struct CallS* c = ((struct CallS*)(ud));
+  struct CallS* c = static_cast<struct CallS*>(ud);
   luaD_callnoyield(L, c->func, c->nresults);
 }
 

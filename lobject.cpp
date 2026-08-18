@@ -693,7 +693,7 @@ static void freebuff(BuffFS* buff)
 
 static void pushbuff(lua_State* L, void* ud)
 {
-  BuffFS* buff = ((BuffFS*)(ud));
+  BuffFS* buff = static_cast<BuffFS*>(ud);
   if (buff->err == 1)
     luaD_throw(L, LUA_ERRMEM);
   InternalString res(byte_view(buff->b.data(), buff->b.size()), 0, buff->blen);

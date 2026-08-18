@@ -413,7 +413,7 @@ static int luaB_loadfile(lua_State* L)
 */
 static std::optional<byte_view> generic_reader(lua_State* L, void* ud)
 {
-  int* firstcall = ((int*)(ud));
+  int* firstcall = static_cast<int*>(ud);
   luaL_checkstacki(L, 2, lt::too_many_nested_functions);
   if (*firstcall)
     *firstcall = 0;

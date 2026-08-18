@@ -232,7 +232,7 @@ struct str_Writer
 
 static int writer(lua_State* L, std::optional<byte_view> b, void* ud)
 {
-  struct str_Writer* state = (struct str_Writer*) ud;
+  struct str_Writer* state = static_cast<struct str_Writer*>(ud);
   if (!state->init)
   {
     state->init = 1;
@@ -927,7 +927,7 @@ struct GMatchState
 
 static int gmatch_aux(lua_State* L)
 {
-  GMatchState* gm = (GMatchState*) lua_touserdata(L, lua_upvalueindex(3));
+  GMatchState* gm = static_cast<GMatchState*>(lua_touserdata(L, lua_upvalueindex(3)));
   ptrdiff_t src;
   gm->ms.L = L;
   for (src = gm->src; src <= gm->ms.src_end; src++)
@@ -951,7 +951,7 @@ static int gmatch(lua_State* L)
   size_t init = posrelatI(luaL_optinteger(L, 3, 1), ls) - 1;
   GMatchState* gm;
   lua_settop(L, 2); /* keep strings on closure to avoid being collected */
-  gm = (GMatchState*) lua_newuserdatauv(L, sizeof(GMatchState), 0);
+  gm = static_cast<GMatchState*>(lua_newuserdatauv(L, sizeof(GMatchState), 0));
   if (init > ls)   /* start after string's end? */
     init = ls + 1;
   prepstate(&gm->ms, L, s, p);

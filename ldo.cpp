@@ -835,7 +835,7 @@ static int resume_error(lua_State* L, byte_view msg, int narg)
 */
 static void resume(lua_State* L, void* ud)
 {
-  int n = *(((int*)(ud)));     /* number of arguments */
+  int n = *(static_cast<int*>(ud));     /* number of arguments */
   StkId firstArg = L->top - n; /* first argument */
   CallInfo* ci = L->ci;
   if (L->status == LUA_OK)                  /* starting a coroutine? */
@@ -975,7 +975,7 @@ struct CloseP
 */
 static void closepaux(lua_State* L, void* ud)
 {
-  struct CloseP* pcl = ((struct CloseP*)(ud));
+  struct CloseP* pcl = static_cast<struct CloseP*>(ud);
   luaF_close(L, pcl->level, pcl->status, 0);
 }
 
@@ -1058,7 +1058,7 @@ static void checkmode(lua_State* L, byte_view mode, byte_view x)
 static void f_parser(lua_State* L, void* ud)
 {
   LClosure* cl;
-  struct SParser* p = ((struct SParser*)(ud));
+  struct SParser* p = static_cast<struct SParser*>(ud);
   byte_view mode = p->mode;
   int c;
   Table* anchor;

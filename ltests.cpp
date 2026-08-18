@@ -112,7 +112,7 @@ static void warnf(void* ud, const HostString& msg, int tocont)
   byte_view m = to_view(mstr);
   byte_span buffsp(buff, sizeof(buff));
 
-  lua_State* L = ((lua_State*)(ud));
+  lua_State* L = static_cast<lua_State*>(ud);
   static int onoff = 0;
   static int mode = 0; /* start in normal mode */
   static int lasttocont = 0;
@@ -186,7 +186,7 @@ Memcontrol l_memcontrol =
 
 static bool debug_realloc(void* ud, size_t oldsize, size_t nsize, int tag)
 {
-  Memcontrol* mc = ((Memcontrol*)(ud));
+  Memcontrol* mc = static_cast<Memcontrol*>(ud);
   int type = (((size_t)(tag)) < LUA_NUMTYPES) ? tag : 0;
   if (mc->memlimit == 0)
   {                                   /* first time? */
@@ -262,7 +262,7 @@ static void printobj(global_State* g, GCObject* o)
 {
   std::string tn  = to_string(ttypename(o->tt & NOVARIANT_MASK));
   printf("||%s(%p)-%c%c(%02X)||",
-         tn.c_str(), (void*) o,
+         tn.c_str(), static_cast<void*>(o),
          isdead(g, o) ? 'd' : isblack(o) ? 'b'
                           : iswhite(o)   ? 'w'
                                          : 'g',
@@ -1355,7 +1355,7 @@ static int newuserdata(lua_State* L)
 {
   size_t size = ((size_t)(luaL_optinteger(L, 1, 0)));
   int nuv = ((int)(luaL_optinteger(L, 2, 0)));
-  char* p = ((char*)(lua_newuserdatauv(L, size, nuv)));
+  char* p = static_cast<char*>(lua_newuserdatauv(L, size, nuv));
   while (size--)
     *p++ = '\0';
   return 1;
@@ -1427,7 +1427,7 @@ static int newstate(lua_State* L)
 
 static lua_State* getstate(lua_State* L)
 {
-  lua_State* L1 = ((lua_State*)(lua_touserdata(L, 1)));
+  lua_State* L1 = static_cast<lua_State*>(lua_touserdata(L, 1));
   luaL_argcheck(L, L1 != nullptr, 1, HostString(lt::state_expected));
   return L1;
 }
@@ -1502,7 +1502,7 @@ static int panicback(lua_State* L)
   struct Aux* b;
   lua_checkstack(L, 1);                          /* open space for 'Aux' struct */
   lua_getfield(L, LUA_REGISTRYINDEX, HostString(lt::_jmpbuf)); /* get 'Aux' struct */
-  b = (struct Aux*) lua_touserdata(L, -1);
+  b = static_cast<struct Aux*>(lua_touserdata(L, -1));
   lua_pop(L, 1);               /* remove 'Aux' struct */
   byte_view  panicsv(b->paniccode.data(), b->paniccode.size());
   runC(b->L, L, panicsv); /* run optional panic code */

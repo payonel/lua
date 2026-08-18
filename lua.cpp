@@ -704,7 +704,7 @@ static void doREPL(lua_State* L)
 static int pmain(lua_State* L)
 {
   int argc = (int) lua_tointeger(L, 1);
-  char** argv = (char**) lua_touserdata(L, 2);
+  char** argv = static_cast<char**>(lua_touserdata(L, 2));
   int script;
   int args = collectargs(argv, &script);
   int optlim = (script > 0) ? script : argc; /* first argv not an option */

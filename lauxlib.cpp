@@ -807,7 +807,7 @@ struct LoadF
 
 static std::optional<byte_view> getF(lua_State*, void* ud)
 {
-  LoadF* lf = (LoadF*) ud;
+  LoadF* lf = static_cast<LoadF*>(ud);
   byte_span span(lf->buff, BUFSIZ);
   if (lf->n > 0)
   {                          /* are there pre-read characters to be read? */
@@ -952,7 +952,7 @@ struct LoadS
 
 static std::optional<byte_view> getS(lua_State*, void* ud)
 {
-  LoadS* ls = (LoadS*) ud;
+  LoadS* ls = static_cast<LoadS*>(ud);
   if (ls->chunk.empty())
     return std::nullopt;
   byte_view chunk = ls->chunk;
@@ -1312,7 +1312,7 @@ static int checkcontrol(lua_State* L, const HostString& message, int tocont)
 
 static void warnfoff(void* ud, const HostString& message, int tocont)
 {
-  checkcontrol((lua_State*) ud, message, tocont);
+  checkcontrol(static_cast<lua_State*>(ud), message, tocont);
 }
 
 /*
@@ -1321,7 +1321,7 @@ static void warnfoff(void* ud, const HostString& message, int tocont)
 */
 static void warnfcont(void* ud, const HostString& message, int tocont)
 {
-  lua_State* L = (lua_State*) ud;
+  lua_State* L = static_cast<lua_State*>(ud);
   os_print_stderr(message.to_utf8());
   os_flush_stderr();
   if (tocont)                          /* not the last part? */
@@ -1336,7 +1336,7 @@ static void warnfcont(void* ud, const HostString& message, int tocont)
 
 static void warnfon(void* ud, const HostString& message, int tocont)
 {
-  if (checkcontrol((lua_State*) ud, message, tocont)) /* control message? */
+  if (checkcontrol(static_cast<lua_State*>(ud), message, tocont)) /* control message? */
     return;                                           /* nothing else to be done */
   os_print_stderr(lt::Lua_warning); /* start a new warning */
   os_flush_stderr();
