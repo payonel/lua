@@ -43,7 +43,7 @@ void luaT_init(lua_State* L)
     byte_view bytes = luaT_eventname[i];
     L->l_G->tmname[i] = luaS_createstr(L, bytes, 0, bytes.size());
     assert((((L->l_G->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
-    luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(L->l_G->tmname[i]))); /* never collect these names */
+    luaC_fix(L, L->l_G->tmname[i]); /* never collect these names */
   }
 }
 

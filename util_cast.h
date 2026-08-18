@@ -33,8 +33,4 @@ namespace util
 
   inline constexpr void* remove_const_cast(const void* val) { return const_cast<void*>(val); }
   inline constexpr char* remove_const_cast(const char* val) { return const_cast<char*>(val); }
-
-  template <typename T> T* mem_cast(T*) = delete;
-
-  inline constexpr void* mem_cast(const char* val) { return static_cast<void*>(const_cast<char*>(val)); }
 };

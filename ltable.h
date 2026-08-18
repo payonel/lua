@@ -86,15 +86,25 @@ constexpr int HFIRSTNODE = 3;
 */
 
 /* Computes the address of the tag for the abstract C-index 'k' */
-static l_forceinline lu_byte* getArrTag(const Table* t, lua_Unsigned k)
+static l_forceinline const lu_byte* getArrTag(const Table* t, lua_Unsigned k)
 {
-  return const_cast<lu_byte*>(t->tags.data()) + k;
+  return t->tags.data() + k;
+}
+
+static l_forceinline lu_byte* getArrTag(Table* t, lua_Unsigned k)
+{
+  return t->tags.data() + k;
 }
 
 /* Computes the address of the value for the abstract C-index 'k' */
-static l_forceinline Value* getArrVal(const Table* t, lua_Unsigned k)
+static l_forceinline const Value* getArrVal(const Table* t, lua_Unsigned k)
 {
-  return const_cast<Value*>(t->array.data()) + k;
+  return t->array.data() + k;
+}
+
+static l_forceinline Value* getArrVal(Table* t, lua_Unsigned k)
+{
+  return t->array.data() + k;
 }
 
 /*
@@ -106,7 +116,7 @@ static l_forceinline void arr2obj(const Table* h, lua_Unsigned k, TValue* val)
   val->value_ = *getArrVal(h, k);
 }
 
-static l_forceinline void obj2arr(const Table* h, lua_Unsigned k, const TValue* val)
+static l_forceinline void obj2arr(Table* h, lua_Unsigned k, const TValue* val)
 {
   *getArrTag(h, k) = val->tt_;
   *getArrVal(h, k) = val->value_;
@@ -123,7 +133,7 @@ static l_forceinline void farr2val(const Table* h, lua_Unsigned k, lu_byte tag, 
   res->value_ = *getArrVal(h, k);
 }
 
-static l_forceinline void fval2arr(const Table* h, lua_Unsigned k, lu_byte* tag, const TValue* val)
+static l_forceinline void fval2arr(Table* h, lua_Unsigned k, lu_byte* tag, const TValue* val)
 {
   *tag = val->tt_;
   *getArrVal(h, k) = val->value_;

@@ -245,13 +245,13 @@ static void clearkey(Node* n)
 ** other objects: if really collected, cannot keep them; for objects
 ** being finalized, keep them in keys, but not in values
 */
-static int iscleared(global_State* g, const GCObject* o)
+static int iscleared(global_State* g, GCObject* o)
 {
   if (o == nullptr)
     return 0; /* non-collectable value */
   else if (((o->tt) & NOVARIANT_MASK) == LUA_TSTRING)
   {
-    markobject(g, const_cast<GCObject*>(o));
+    markobject(g, o);
     return 0;
   }
   else
@@ -548,7 +548,7 @@ static void traverseweakvalue(global_State* g, Table* h)
   else
   {
     assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-    genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(h)));
+    genlink(g, h);
   }
 }
 
@@ -620,7 +620,7 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
   else
   {
     assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-    genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(h))); /* check whether collector still needs to see it */
+    genlink(g, h); /* check whether collector still needs to see it */
   }
   return marked;
 }
@@ -641,7 +641,7 @@ static void traversestrongtable(global_State* g, Table* h)
     }
   }
   assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(h)));
+  genlink(g, h);
 }
 
 /*
@@ -692,7 +692,7 @@ static l_mem traverseudata(global_State* g, Udata* u)
   for (i = 0; i < (int)u->uv.size(); i++)
     markvalue(g, &u->uv[i]);
   assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  genlink(g, const_cast<GCObject*>(static_cast<const GCObject*>(u)));
+  genlink(g, u);
   return 1 + (int)u->uv.size();
 }
 
@@ -1646,7 +1646,7 @@ void luaC_freeallobjects(lua_State* L)
   assert(g->finobj == nullptr);
   callallpendingfinalizers(L);
   assert((mainthread(g)->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  deletelist(L, g->allgc, const_cast<GCObject*>(static_cast<const GCObject*>(mainthread(g))));
+  deletelist(L, g->allgc, mainthread(g));
   assert(g->finobj == nullptr);   /* no new finalizers */
   deletelist(L, g->fixedgc, nullptr); /* collect fixed objects */
 }

@@ -1251,7 +1251,7 @@ static void aux_rawset(lua_State* L, int idx, TValue* key, int n)
   luaH_set(L, t, key, &val);
   invalidateTMcache(t);
   assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(t)), &val);
+  luaC_barrierback(L, t, &val);
   L->top -= n;
   lua_unlock(L);
 }
@@ -1278,7 +1278,7 @@ LUA_API void lua_rawseti(lua_State* L, int idx, lua_Integer n)
   TValue val = getslot(L, L->top - 1);
   luaH_setint(L, t, n, &val);
   assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(t)), &val);
+  luaC_barrierback(L, t, &val);
   L->top--;
   lua_unlock(L);
 }
@@ -1765,7 +1765,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
     if (owner)
     {
       assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-      *owner = const_cast<GCObject*>(static_cast<const GCObject*>(f));
+      *owner = f;
     }
     return &lt::empty_str_i;
   }
@@ -1780,7 +1780,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
     if (owner)
     {
       assert((f->upvals[n - 1]->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-      *owner = const_cast<GCObject*>(static_cast<const GCObject*>(f->upvals[n - 1]));
+      *owner = f->upvals[n - 1];
     }
     name = p->upvalues[n - 1].name;
     return (name == nullptr) ? &lt::no_name_i : &name->data;

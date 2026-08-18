@@ -362,7 +362,7 @@ static void checktable(global_State* g, Table* h)
   unsigned int asize = (unsigned int)h->array.size();
   Node *n, *limit = gnode(h, sizenode(h));
   assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  GCObject* hgc = const_cast<GCObject*>(static_cast<const GCObject*>(h));
+  GCObject* hgc = h;
   checkobjrefN(g, hgc, h->metatable);
   for (i = 0; i < asize; i++)
   {
@@ -387,7 +387,7 @@ static void checkudata(global_State* g, Udata* u)
 {
   int i;
   assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  GCObject* hgc = const_cast<GCObject*>(static_cast<const GCObject*>(u));
+  GCObject* hgc = u;
   checkobjrefN(g, hgc, u->metatable);
   for (i = 0; i < (int)u->uv.size(); i++)
     checkvalref(g, hgc, &u->uv[i]);
@@ -397,7 +397,7 @@ static void checkproto(global_State* g, Proto* f)
 {
   int i;
   assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  GCObject* fgc = const_cast<GCObject*>(static_cast<const GCObject*>(f));
+  GCObject* fgc = f;
   checkobjrefN(g, fgc, f->source);
   for (i = 0; i < (int)f->k.size(); i++)
   {
@@ -415,7 +415,7 @@ static void checkproto(global_State* g, Proto* f)
 static void checkCclosure(global_State* g, CClosure* cl)
 {
   assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  GCObject* clgc = const_cast<GCObject*>(static_cast<const GCObject*>(cl));
+  GCObject* clgc = cl;
   int i;
   for (i = 0; i < (int)cl->upvalue.size(); i++)
     checkvalref(g, clgc, &cl->upvalue[i]);
@@ -424,7 +424,7 @@ static void checkCclosure(global_State* g, CClosure* cl)
 static void checkLclosure(global_State* g, LClosure* cl)
 {
   assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  GCObject* clgc = const_cast<GCObject*>(static_cast<const GCObject*>(cl));
+  GCObject* clgc = cl;
   int i;
   checkobjrefN(g, clgc, cl->p);
   for (i = 0; i < (int)cl->upvals.size(); i++)
@@ -437,7 +437,7 @@ static void checkLclosure(global_State* g, LClosure* cl)
       {
         assert((uv->tt & NOVARIANT_MASK) >= LUA_TSTRING);
         TValue uvv = upvalgetval(uv);
-        checkvalref(g, const_cast<GCObject*>(static_cast<const GCObject*>(uv)), &uvv);
+        checkvalref(g, uv, &uvv);
       }
     }
   }

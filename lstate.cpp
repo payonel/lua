@@ -263,11 +263,10 @@ static void close_state(lua_State* L)
     luaC_freeallobjects(L);            /* collect all objects */
     luai_userstateclose(L);
   }
-  L->l_G->strt.~StringTable();
   freestack(L);
   assert(gettotalbytes(g) == sizeof(global_State));
   (*g->frealloc)(g->ud, sizeof(global_State), 0, LUA_TTHREAD); /* free main block */
-  delete[] reinterpret_cast<char*>(g);
+  delete g;
 }
 
 LUA_API lua_State* lua_newthread(lua_State* L)
@@ -338,7 +337,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   lua_State* L;
   if (!(*f)(ud, 0, sizeof(global_State), LUA_TTHREAD))
     return nullptr;
-  global_State* g = reinterpret_cast<global_State*>(new char[sizeof(global_State)]);
+  global_State* g = new global_State();
   if (g == nullptr)
     return nullptr;
   L = &g->mainth.l;
@@ -348,7 +347,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   L->marked = luaC_white(g);
   preinit_thread(L, g);
   assert((L->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  g->allgc = const_cast<GCObject*>(static_cast<const GCObject*>(L)); /* by now, only object is the main thread */
+  g->allgc = L; /* by now, only object is the main thread */
   L->next = nullptr;
   incnny(L); /* main thread is always non yieldable */
   g->frealloc = f;
@@ -357,7 +356,6 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->ud_warn = nullptr;
   g->seed = seed;
   g->gcstp = GCSTPGC; /* no GC while building state */
-  new (&g->strt) decltype(g->strt)();
   (g->l_registry.tt_ = LUA_VNIL);
   g->panic = nullptr;
   g->gcstate = GCSpause;

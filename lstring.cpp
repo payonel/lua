@@ -119,7 +119,7 @@ void luaS_init(lua_State* L)
   /* pre-create memory-error message */
   g->memerrmsg = luaS_createstr(L, lt::not_enough_memory, 0, lt::not_enough_memory.size());
   assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  luaC_fix(L, const_cast<GCObject*>(static_cast<const GCObject*>(g->memerrmsg))); /* it should never be collected */
+  luaC_fix(L, g->memerrmsg); /* it should never be collected */
 }
 
 constexpr int LUAI_MAXSHORTLEN = 40;

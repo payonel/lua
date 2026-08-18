@@ -361,7 +361,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
         L->top--;
         invalidateTMcache(h);
         assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-        luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(h)), val);
+        luaC_barrierback(L, h, val);
         return;
       }
       /* else will try the metamethod */
@@ -2851,7 +2851,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           obj2arr(h, last - 1, &vv);
           last--;
           assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-          luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(h)), &vv);
+          luaC_barrierback(L, h, &vv);
         }
         break;
       }

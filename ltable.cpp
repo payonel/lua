@@ -974,7 +974,7 @@ static void luaH_newkey(lua_State* L, Table* t, const TValue* key,
       newcheckedkey(t, key, value); /* insert key in grown table */
     }
     assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-    luaC_barrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(t)), key);
+    luaC_barrierback(L, t, key);
   }
 }
 

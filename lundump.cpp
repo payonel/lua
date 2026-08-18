@@ -176,7 +176,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   setsvalue(L, &sv, ts);
   luaH_setint(L, S->h, ((lua_Integer)(S->nstr)), &sv);
   assert((S->h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  luaC_objbarrierback(L, const_cast<GCObject*>(static_cast<const GCObject*>(S->h)), ts);
+  luaC_objbarrierback(L, S->h, ts);
 }
 
 static void loadCode(LoadState* S, Proto* f)
@@ -407,7 +407,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int f
   S.nstr = 0;
   cl = luaF_newLclosure(L, loadByte(&S));
   assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  luaD_anchorobj(L, anchor, const_cast<GCObject*>(static_cast<const GCObject*>(cl)));
+  luaD_anchorobj(L, anchor, cl);
   cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
   loadFunction(&S, cl->p);
