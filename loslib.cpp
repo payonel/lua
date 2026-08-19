@@ -16,6 +16,7 @@
 #include "lauxlib.h"
 #include "lua_internal.h"
 #include "lobject.h"
+#include "lstate.h"
 #include "locale_util.h"
 #include "os_api.h"
 #include "llimits.h"
@@ -302,6 +303,8 @@ static int os_difftime(lua_State* L)
 
 /* }====================================================== */
 
+constexpr size_t LOCALE_NAME_MAXLEN = 8;
+
 static int os_setlocale(lua_State* L)
 {
   static const int cat[] = {LC_ALL, LC_COLLATE, LC_CTYPE, LC_MONETARY,
@@ -312,9 +315,13 @@ static int os_setlocale(lua_State* L)
   int nol = lua_isnoneornil(L, 1);
   const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
   int op = luaL_checkoptioni(L, 2, lt::all, catnames);
-  std::optional<byte_view> res = locale_setlocale(cat[op], nol ? std::nullopt : std::optional<byte_view>(l->view()));
+  std::optional<byte_view> res;
+  if (nol || l->view().size() <= LOCALE_NAME_MAXLEN)
+    res = locale_setlocale(cat[op], nol ? std::nullopt : std::optional<byte_view>(l->view()));
   if (res.has_value())
   {
+    if (!nol)
+      L->l_G->locale_name.assign(res->data(), res->size());
     lua_pushlstring(L, res.value(), 0, res->size());
   }
   else

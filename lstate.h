@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "lua.h"
@@ -538,6 +539,7 @@ struct global_State
   struct Table* mt[LUA_NUMTYPES];            /* metatables for basic types */
   lua_WarnFunction warnf;                    /* warning function */
   void* ud_warn;                             /* auxiliary data to 'warnf' */
+  std::string locale_name;
   LX mainth;                                 /* main thread of this state */
 };
 
