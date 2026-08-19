@@ -1848,19 +1848,17 @@ LUA_API std::optional<HostString> lua_setupvalue(lua_State* L, int funcindex, in
   return HostString(name->view());
 }
 
-static UpVal** getupvalref(lua_State* L, int fidx, int n, LClosure** pf)
+static UpVal* getupval(lua_State* L, int fidx, int n, LClosure** pf)
 {
-  static const UpVal* const nullup = nullptr;
-  LClosure* f;
   TValue fi = index2val(L, fidx);
   assert(((fi.tt_ == ctb(LUA_VLCL))) && "Lua function expected");
-  f = clLvalue(&fi);
+  LClosure* f = clLvalue(&fi);
   if (pf)
     *pf = f;
   if (1 <= n && n <= (int)f->p->upvalues.size())
-    return &f->upvals[n - 1]; /* get its upvalue pointer */
+    return f->upvals[n - 1]; /* get its upvalue */
   else
-    return const_cast<UpVal**>(&nullup);
+    return nullptr;
 }
 
 LUA_API void* lua_upvalueid(lua_State* L, int fidx, int n)
@@ -1870,7 +1868,7 @@ LUA_API void* lua_upvalueid(lua_State* L, int fidx, int n)
   {
   case LUA_VLCL:
   { /* lua closure */
-    return *getupvalref(L, fidx, n, nullptr);
+    return getupval(L, fidx, n, nullptr);
   }
   case LUA_VCCL:
   { /* C closure */
@@ -1893,11 +1891,11 @@ LUA_API void lua_upvaluejoin(lua_State* L, int fidx1, int n1,
                              int fidx2, int n2)
 {
   LClosure* f1;
-  UpVal** up1 = getupvalref(L, fidx1, n1, &f1);
-  UpVal** up2 = getupvalref(L, fidx2, n2, nullptr);
-  assert((*up1 != nullptr && *up2 != nullptr) && "invalid upvalue index");
-  *up1 = *up2;
-  luaC_objbarrier(L, f1, *up1);
+  UpVal* uv1 = getupval(L, fidx1, n1, &f1);
+  UpVal* uv2 = getupval(L, fidx2, n2, nullptr);
+  assert((uv1 != nullptr && uv2 != nullptr) && "invalid upvalue index");
+  f1->upvals[n1 - 1] = uv2;
+  luaC_objbarrier(L, f1, uv2);
 }
 
 
