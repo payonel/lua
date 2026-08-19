@@ -224,6 +224,7 @@ struct lua_State : GCObject
     int ftransfer; /* offset of first value transferred */
     int ntransfer; /* number of values transferred */
   } transferinfo;
+  void* extra;
 };
 
 static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
@@ -478,15 +479,6 @@ static l_forceinline int stacksize(const lua_State* th)
 }
 
 /*
-** thread state + extra space
-*/
-struct LX
-{
-  lua_State l;
-  void* extra;
-};
-
-/*
 ** 'global state', shared by all threads of this state
 */
 struct global_State
@@ -540,7 +532,7 @@ struct global_State
   lua_WarnFunction warnf;                    /* warning function */
   void* ud_warn;                             /* auxiliary data to 'warnf' */
   std::string locale_name;
-  LX mainth;                                 /* main thread of this state */
+  lua_State mainth;                          /* main thread of this state */
 };
 
 /*
@@ -557,7 +549,7 @@ LUAI_FUNC CallInfo* luaE_extendCI(lua_State* L, int err);
 LUAI_FUNC void luaE_shrinkCI(lua_State* L);
 static l_forceinline lua_State* mainthread(global_State* g)
 {
-  return &g->mainth.l;
+  return &g->mainth;
 }
 
 static l_forceinline int completestate(global_State* g)

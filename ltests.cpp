@@ -2207,7 +2207,7 @@ static int runC(lua_State* L, lua_State* L1, byte_view code)
       else
       {
         const void* p = lua_topointer(L1, idx);
-        lua_pushlightuserdata(L1, util::remove_const_cast(p));
+        lua_pushlightuserdata(L1, const_cast<void*>(p));
       }
     }
     else if (inst == lt::touserdata)

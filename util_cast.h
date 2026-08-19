@@ -28,9 +28,4 @@ namespace util
   
   inline constexpr void* as_userdata(long long val) { return reinterpret_cast<void*>(static_cast<uintptr_t>(val)); } 
   inline constexpr void* as_userdata(int val) { return reinterpret_cast<void*>(static_cast<uintptr_t>(val)); } 
-
-  template <typename T> T* remove_const_cast(const T*) = delete;
-
-  inline constexpr void* remove_const_cast(const void* val) { return const_cast<void*>(val); }
-  inline constexpr char* remove_const_cast(const char* val) { return const_cast<char*>(val); }
 };

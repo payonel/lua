@@ -25,11 +25,6 @@
 #include "ltm.h"
 #include "literals.h"
 
-static inline LX* fromstate(lua_State* L)
-{
-  return (LX*)L;
-}
-
 /*
 ** set GCdebt to a new value keeping the real number of allocated
 ** objects (GCtotalobjs - GCdebt) invariant and avoiding overflows in
@@ -242,7 +237,7 @@ static void preinit_thread(lua_State* L, global_State* g)
 
 lu_mem luaE_threadsize(lua_State* L)
 {
-  lu_mem sz = ((lu_mem)(sizeof(LX))) + ((unsigned int)(L->nci)) * sizeof(CallInfo);
+  lu_mem sz = ((lu_mem)(sizeof(lua_State))) + ((unsigned int)(L->nci)) * sizeof(CallInfo);
   if (L->stack.data() != nullptr)
     sz += ((unsigned int)(stacksize(L) + EXTRA_STACK)) * sizeof(TValue);
   sz += ((unsigned int)(L->tbc.size())) * sizeof(StkId);
@@ -275,8 +270,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   lua_lock(L);
   luaC_checkGC(L);
   /* create new thread */
-  LX* lx = luaM_malloc_LX(L);
-  L1 = &lx->l;
+  L1 = luaM_malloc_lua_State(L);
   luaC_link(L, L1, LUA_TTHREAD);
   /* anchor it on L stack */
   setslotth(L, L->top, L1);
@@ -287,7 +281,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   L1->hook = L->hook;
   resethookcount(L1);
   /* initialize L1 extra space */
-  *((void**)(lua_getextraspace(L1))) = lua_getextraspace(mainthread(g));
+  L1->extra = &mainthread(g)->extra;
   luai_userstatethread(L, L1);
   stack_init(L1, L); /* init stack */
   lua_unlock(L);
@@ -296,12 +290,11 @@ LUA_API lua_State* lua_newthread(lua_State* L)
 
 void luaE_freethread(lua_State* L, lua_State* L1)
 {
-  LX* l = fromstate(L1);
   luaF_closeupval(L1, 0); /* close all upvalues */
   assert(L1->openupval == nullptr);
   luai_userstatefree(L, L1);
   freestack(L1);
-  luaM_free_LX(L, l);
+  luaM_free_lua_State(L, L1);
 }
 
 TStatus luaE_resetthread(lua_State* L, TStatus status)
@@ -339,8 +332,8 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   global_State* g = new global_State();
   if (g == nullptr)
     return nullptr;
-  L = &g->mainth.l;
-  g->mainth.extra = nullptr;
+  L = &g->mainth;
+  L->extra = nullptr;
   L->tt = LUA_VTHREAD;
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);

@@ -516,10 +516,10 @@ LUAI_FUNC Proto* luaM_malloc_Proto(lua_State* L)
   return new Proto;
 }
 
-LUAI_FUNC LX* luaM_malloc_LX(lua_State* L)
+LUAI_FUNC lua_State* luaM_malloc_lua_State(lua_State* L)
 {
-  take_debt(L, sizeof(LX), LUA_TTHREAD & NOVARIANT_MASK);
-  return new LX;
+  take_debt(L, sizeof(lua_State), LUA_TTHREAD & NOVARIANT_MASK);
+  return new lua_State;
 }
 
 LUAI_FUNC void luaM_free_UpVal(lua_State* L, UpVal* p)
@@ -570,9 +570,9 @@ LUAI_FUNC void luaM_free_Table(lua_State* L, Table* p)
   delete p;
 }
 
-LUAI_FUNC void luaM_free_LX(lua_State* L, LX* p)
+LUAI_FUNC void luaM_free_lua_State(lua_State* L, lua_State* p)
 {
-  if (p != nullptr) free_debt(L, sizeof(LX), LUA_TTHREAD);
+  if (p != nullptr) free_debt(L, sizeof(lua_State), LUA_TTHREAD);
   delete p;
 }
 

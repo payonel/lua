@@ -1038,7 +1038,7 @@ LUA_API int lua_rawgetp(lua_State* L, int idx, const void* p)
   TValue k;
   lua_lock(L);
   t = gettable(L, idx);
-  setpvalue(&k, util::remove_const_cast(p));
+  setpvalue(&k, const_cast<void*>(p));
   TValue res;
   lu_byte tag = luaH_get(t, &k, &res);
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
@@ -1265,7 +1265,7 @@ LUA_API void lua_rawset(lua_State* L, int idx)
 LUA_API void lua_rawsetp(lua_State* L, int idx, const void* p)
 {
   TValue k;
-  setpvalue(&k, util::remove_const_cast(p));
+  setpvalue(&k, const_cast<void*>(p));
   aux_rawset(L, idx, &k, 1);
 }
 
@@ -1923,7 +1923,7 @@ LUA_API int lua_yield(lua_State* L, int nresults)
 
 LUA_API void* lua_getextraspace(lua_State* L)
 {
-  return (void*)((char*)L + sizeof(lua_State));
+  return &L->extra;
 }
 
 LUA_API lua_Number lua_tonumber(lua_State* L, int idx)
