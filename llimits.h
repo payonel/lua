@@ -91,17 +91,6 @@ static inline unsigned int point2uint(lua_CFunction p)
 /* ptrdiff_t to lua_Integer */
 
 /*
-** Special type equivalent to '(void*)' for functions (to suppress some
-** warnings when converting function pointers)
-*/
-typedef void (*voidf)(void);
-
-static inline voidf cast_func(void* p)
-{
-  return __extension__(voidf) p;
-}
-
-/*
 ** non-return type
 */
 #define l_noret void __attribute__((noreturn))

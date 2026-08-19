@@ -1860,7 +1860,7 @@ static UpVal** getupvalref(lua_State* L, int fidx, int n, LClosure** pf)
   if (1 <= n && n <= (int)f->p->upvalues.size())
     return &f->upvals[n - 1]; /* get its upvalue pointer */
   else
-    return (UpVal**) &nullup;
+    return const_cast<UpVal**>(&nullup);
 }
 
 LUA_API void* lua_upvalueid(lua_State* L, int fidx, int n)

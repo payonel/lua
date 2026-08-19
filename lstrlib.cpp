@@ -6,6 +6,7 @@
 
 
 
+#include <array>
 #include <bit>
 
 #include <charconv>
@@ -2070,6 +2071,21 @@ static void copywithendian(byte_span dest, byte_view src, int islittle)
   }
 }
 
+template <typename T> static void packfloat(luaL_Buffer* b, T f, int islittle)
+{
+  std::array<char, sizeof(T)> bytes = std::bit_cast<std::array<char, sizeof(T)>>(f);
+  size_t off = luaL_prepbuffsize(b, sizeof(T));
+  copywithendian(byte_span(luaL_buffaddr(b)).subspan(off, sizeof(T)), byte_view(bytes.data(), sizeof(T)), islittle);
+  luaL_addsize(b, sizeof(T));
+}
+
+template <typename T> static T unpackfloat(byte_view data, size_t pos, int islittle)
+{
+  std::array<char, sizeof(T)> bytes;
+  copywithendian(byte_span(bytes.data(), sizeof(T)), data.substr(pos, sizeof(T)), islittle);
+  return std::bit_cast<T>(bytes);
+}
+
 static int str_pack(lua_State* L)
 {
   luaL_Buffer b;
@@ -2114,25 +2130,19 @@ static int str_pack(lua_State* L)
     case Kfloat:
     {                                             /* C float */
       float f = (float) luaL_checknumber(L, arg); /* get argument */
-      size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      copywithendian(byte_span(luaL_buffaddr(&b)).subspan(off, sizeof(f)), byte_view((const char*) &f, sizeof(f)), h.islittle);
-      luaL_addsize(&b, size);
+      packfloat(&b, f, h.islittle);
       break;
     }
     case Knumber:
     {                                          /* Lua float */
       lua_Number f = luaL_checknumber(L, arg); /* get argument */
-      size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      copywithendian(byte_span(luaL_buffaddr(&b)).subspan(off, sizeof(f)), byte_view((const char*) &f, sizeof(f)), h.islittle);
-      luaL_addsize(&b, size);
+      packfloat(&b, f, h.islittle);
       break;
     }
     case Kdouble:
     {                                               /* C double */
       double f = (double) luaL_checknumber(L, arg); /* get argument */
-      size_t off = luaL_prepbuffsize(&b, sizeof(f));
-      copywithendian(byte_span(luaL_buffaddr(&b)).subspan(off, sizeof(f)), byte_view((const char*) &f, sizeof(f)), h.islittle);
-      luaL_addsize(&b, size);
+      packfloat(&b, f, h.islittle);
       break;
     }
     case Kchar:
@@ -2277,22 +2287,19 @@ static int str_unpack(lua_State* L)
     }
     case Kfloat:
     {
-      float f;
-      copywithendian(byte_span((char*) &f, sizeof(f)), data.substr(pos, sizeof(f)), h.islittle);
+      float f = unpackfloat<float>(data, pos, h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
     }
     case Knumber:
     {
-      lua_Number f;
-      copywithendian(byte_span((char*) &f, sizeof(f)), data.substr(pos, sizeof(f)), h.islittle);
+      lua_Number f = unpackfloat<lua_Number>(data, pos, h.islittle);
       lua_pushnumber(L, f);
       break;
     }
     case Kdouble:
     {
-      double f;
-      copywithendian(byte_span((char*) &f, sizeof(f)), data.substr(pos, sizeof(f)), h.islittle);
+      double f = unpackfloat<double>(data, pos, h.islittle);
       lua_pushnumber(L, (lua_Number) f);
       break;
     }

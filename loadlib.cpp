@@ -50,7 +50,7 @@ static void* lsys_load(lua_State* L, byte_view path, int seeglb)
 
 static lua_CFunction lsys_sym(lua_State* L, void* lib, byte_view sym)
 {
-  lua_CFunction f = ((lua_CFunction)(cast_func(os_dlsym(reinterpret_cast<OsLib*>(lib), sym))));
+  lua_CFunction f = reinterpret_cast<lua_CFunction>(os_dlsym(reinterpret_cast<OsLib*>(lib), sym));
   if (l_unlikely(f == nullptr))
     lua_pushistring(L, os_dlerror());
   return f;

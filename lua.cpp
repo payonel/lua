@@ -503,11 +503,11 @@ static void lua_initreadline(lua_State* L)
   OsLib* lib = os_dlopen(rllib, false);
   if (lib != nullptr)
   {
-    const char** name = ((const char**)(os_dlsym(lib, lt::rl_readline_name)));
+    const char** name = static_cast<const char**>(os_dlsym(lib, lt::rl_readline_name));
     if (name != nullptr)
       *name = "lua";
-    l_readline = ((l_readlineT)(cast_func(os_dlsym(lib, lt::readline))));
-    l_addhist = ((l_addhistT)(cast_func(os_dlsym(lib, lt::add_history))));
+    l_readline = reinterpret_cast<l_readlineT>(os_dlsym(lib, lt::readline));
+    l_addhist = reinterpret_cast<l_addhistT>(os_dlsym(lib, lt::add_history));
     if (l_readline != nullptr) /* could load readline function? */
       return;               /* everything ok */
     /* else emit a warning */
