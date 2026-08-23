@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <string>
 
 #include "lua.h"
 
@@ -562,7 +561,7 @@ size_t luaO_str2num(byte_view s, TValue* o)
   return e + 1;
 }
 
-int luaO_utf8esc(std::span<char> buff, l_uint32 x)
+int luaO_utf8esc(byte_span buff, l_uint32 x)
 {
   int n = 1; /* number of bytes put in buffer (backwards) */
   assert(x <= 0x7FFFFFFFu);
@@ -667,7 +666,7 @@ void luaO_tostring(lua_State* L, TValue* obj)
 struct BuffFS
 {
   lua_State* L;
-  std::span<char> b;
+  byte_span b;
   size_t blen;
   int err;
 };
@@ -733,7 +732,7 @@ static void addstr2buff(BuffFS* buff, byte_view bv)
   {
     global_State* g = buff->L->l_G;
     size_t newsize = std::max<size_t>(buff->blen + slen, 256);
-    std::span<char> nb = luaM_alloc_char_span(g, nullptr, buff->b, newsize, false);
+    byte_span nb = luaM_alloc_char_span(g, nullptr, buff->b, newsize, false);
     if (l_unlikely(nb.data() == nullptr))
     {
       buff->err = 1; /* memory error */
@@ -886,10 +885,11 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     }
     case 'U':
     {
-      char bf[UTF8BUFFSZ];
       assert(argn < args.n && args.arg[argn].tag == 'U');
-      int len = luaO_utf8esc(bf, ((l_uint32)(args.arg[argn++].i)));
-      addstr2buff(&buff, byte_view(byte_view(bf, UTF8BUFFSZ)).substr(UTF8BUFFSZ - len));
+      char bf[UTF8BUFFSZ];
+      byte_span bfsp(bf);
+      int len = luaO_utf8esc(bfsp, ((l_uint32)(args.arg[argn++].i)));
+      addstr2buff(&buff, bfsp.subspan(UTF8BUFFSZ - len).view());
       break;
     }
     case -1:
@@ -944,7 +944,7 @@ const InternalString* luaO_pushfstring(lua_State* L, byte_view fmt, const FmtArg
 
 /* }================================================================== */
 
-void luaO_chunkid(std::span<char> out, byte_view source)
+void luaO_chunkid(byte_span out, byte_view source)
 {
   assert(out.size() >= LUA_IDSIZE);
   size_t srclen = source.size();

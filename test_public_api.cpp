@@ -2723,7 +2723,7 @@ static void test_auxlib_refs_buffer()
     lua_pushinteger(L, 99);
     luaL_addvalue(&B);
     size_t off = luaL_prepbuffsize(&B, 3);
-    std::span<char> area = luaL_buffaddr(&B);
+    byte_span area = luaL_buffaddr(&B);
     std::memcpy(area.data() + off, "!!!", 3);
     luaL_addsize(&B, 3);
     luaL_buffsub(&B, 1);
@@ -3349,7 +3349,7 @@ static void test_io_handles()
 
 struct luaL_BuffSpan
 {
-  std::span<char> area;
+  byte_span area;
   size_t off;
 };
 

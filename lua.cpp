@@ -202,14 +202,13 @@ static int dostring(lua_State* L, byte_view s, byte_view name)
 ** If there is no explicit modname and globname contains a '-', cut
 ** the suffix after '-' (the "version") to make the global name.
 */
-static int dolibrary(lua_State* L, const std::string& arg)
+static int dolibrary(lua_State* L, byte_view globname)
 {
   int status;
-  byte_view globname(arg.data(), arg.size());
   byte_view modname = globname;
-  size_t suffix = std::string::npos;
-  size_t eq = arg.find('=');
-  if (eq == std::string::npos)
+  size_t suffix = byte_view::npos;
+  size_t eq = globname.find('=');
+  if (eq == byte_view::npos)
   {                 /* no explicit name? */
     /* module name is equal to global name */
     suffix = globname.find(lt::minus_ch); /* look for a suffix mark */
@@ -224,7 +223,7 @@ static int dolibrary(lua_State* L, const std::string& arg)
   status = docall(L, 1, 1); /* call 'require(modname)' */
   if (status == LUA_OK)
   {
-    if (suffix != std::string::npos)         /* is there a suffix mark? */
+    if (suffix != byte_view::npos)         /* is there a suffix mark? */
       globname = globname.substr(0, suffix); /* remove suffix from global name */
     lua_setglobali(L, globname);  /* globname = require(modname) */
   }
@@ -364,17 +363,16 @@ static int runargs(lua_State* L, char** argv, int n)
     case 'l':
     {
       int status;
-      std::string arg(argv[i]);
-      std::string extra = arg.substr(2); /* both options need an argument */
+      HostString arg(argv[i]);
+      byte_view argsv = arg.to_utf8();
+      byte_view extra = argsv.substr(2); /* both options need an argument */
       if (extra.empty())
       {
         i++; /* try next 'argv' */
         assert(argv[i] != nullptr);
         extra = argv[i];
       }
-      status = (option == 'e')
-                   ? dostring(L, byte_view(extra.c_str()), lt::command_line)
-                   : dolibrary(L, extra);
+      status = (option == 'e') ? dostring(L, extra, lt::command_line) : dolibrary(L, extra);
       if (status != LUA_OK)
         return 0;
       break;
@@ -486,10 +484,10 @@ static bool lua_readline(byte_span buff, byte_view prompt)
   return true;
 }
 
-static void lua_saveline(const char* line)
+static void lua_saveline(byte_view line)
 {
   if (l_addhist != nullptr) /* is there an 'add_history'? */
-    (*l_addhist)(line);  /* use it */
+    (*l_addhist)(std::string(line.data(), line.size()).c_str());  /* use it */
   /* else nothing to be done */
 }
 
@@ -642,9 +640,9 @@ static int loadline(lua_State* L)
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
-  std::string line{lua_tostring(L, 1)->to_utf8().data()};
+  byte_view line = lua_tostring(L, 1)->to_utf8();
   if (!line.empty())            /* non empty? */
-    lua_saveline(line.c_str()); /* keep history */
+    lua_saveline(line); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */
   assert(lua_gettop(L) == 1);
   return status;

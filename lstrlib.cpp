@@ -106,7 +106,7 @@ static int str_reverse(lua_State* L)
   const InternalString* s = luaL_checkistring(L, 1);
   size_t l = s->size();
   size_t off = luaL_buffinitsize(L, &b, l);
-  std::span<char> p = luaL_buffaddr(&b);
+  byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
     p[off + i] = ((char)(s->byteAt(l - i - 1)));
   luaL_pushresultsize(&b, l);
@@ -120,7 +120,7 @@ static int str_lower(lua_State* L)
   const InternalString* s = luaL_checkistring(L, 1);
   size_t l = s->size();
   size_t off = luaL_buffinitsize(L, &b, l);
-  std::span<char> p = luaL_buffaddr(&b);
+  byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
     p[off + i] = ((char)(locale_tolower(s->byteAt(i))));
   luaL_pushresultsize(&b, l);
@@ -134,7 +134,7 @@ static int str_upper(lua_State* L)
   const InternalString* s = luaL_checkistring(L, 1);
   size_t l = s->size();
   size_t off = luaL_buffinitsize(L, &b, l);
-  std::span<char> p = luaL_buffaddr(&b);
+  byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
     p[off + i] = ((char)(locale_toupper(s->byteAt(i))));
   luaL_pushresultsize(&b, l);
@@ -208,7 +208,7 @@ static int str_char(lua_State* L)
   int i;
   luaL_Buffer b;
   size_t off = luaL_buffinitsize(L, &b, ((unsigned int)(n)));
-  std::span<char> p = luaL_buffaddr(&b);
+  byte_span p = luaL_buffaddr(&b);
   for (i = 1; i <= n; i++)
   {
     lua_Unsigned c = (lua_Unsigned) luaL_checkinteger(L, i);
@@ -1127,7 +1127,7 @@ static lua_Number adddigit(byte_span buff, size_t n, lua_Number x)
   return x - dd;                                        /* return what is left */
 }
 
-static size_t num2straux(std::span<char> area, size_t off, size_t sz, lua_Number x)
+static size_t num2straux(byte_span area, size_t off, size_t sz, lua_Number x)
 {
   byte_span item = byte_span(area).subspan(off, sz);
   /* if 'inf' or 'NaN', format it like '%g' */
@@ -1180,7 +1180,7 @@ static size_t num2straux(std::span<char> area, size_t off, size_t sz, lua_Number
   }
 }
 
-static size_t lua_number2strx(lua_State* L, std::span<char> area, size_t off, size_t sz, byte_view fmt, lua_Number x)
+static size_t lua_number2strx(lua_State* L, byte_span area, size_t off, size_t sz, byte_view fmt, lua_Number x)
 {
   size_t n = num2straux(area, off, sz, x);
   if (fmt[1] == 'A')
@@ -1266,7 +1266,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
 ** (to preserve precision); inf, -inf, and NaN are handled separately.
 ** (NaN cannot be expressed as a numeral, so we write '(0/0)' for it.)
 */
-static size_t quotefloat(lua_State* L, std::span<char> area, size_t off, lua_Number n)
+static size_t quotefloat(lua_State* L, byte_span area, size_t off, lua_Number n)
 {
   byte_view s;        /* for the fixed representations */
   if (n == (lua_Number) HUGE_VAL) /* inf? */
@@ -1308,7 +1308,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
   case LUA_TNUMBER:
   {
     size_t off = luaL_prepbuffsize(b, MAX_ITEM);
-    std::span<char> area = luaL_buffaddr(b);
+    byte_span area = luaL_buffaddr(b);
     size_t nb;
     if (!lua_isinteger(L, arg)) /* float? */
       nb = quotefloat(L, area, off, lua_tonumber(L, arg));
@@ -1384,7 +1384,7 @@ static void checkformat(lua_State* L, byte_view form,
 }
 
 static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
-                        std::span<char> form, size_t* formlen)
+                        byte_span form, size_t* formlen)
 {
   /* spans flags, width, and precision ('0' is included as a flag) */
   byte_view sv = sf->view();
@@ -1444,7 +1444,7 @@ static void scanformat(byte_view form, FormatSpec* spec)
   spec->conv = form[form.size() - 1];
 }
 
-static size_t packformat(std::span<char> area, size_t off, size_t maxitem,
+static size_t packformat(byte_span area, size_t off, size_t maxitem,
                       const FormatSpec* spec,
                       byte_view prefix, byte_view body,
                       bool zeropadok)
@@ -1486,7 +1486,7 @@ static size_t packformat(std::span<char> area, size_t off, size_t maxitem,
 }
 
 static size_t formatint(lua_State* L, int arg, byte_view form,
-                     std::span<char> area, size_t off,
+                     byte_span area, size_t off,
                      size_t maxitem, byte_view flags)
 {
   lua_Integer n = luaL_checkinteger(L, arg);
@@ -1548,7 +1548,7 @@ static size_t formatint(lua_State* L, int arg, byte_view form,
                     bodyp.view().substr(0, blen), spec.precision < 0);
 }
 
-static size_t formatfloat(lua_State* L, int arg, byte_view form, std::span<char> area, size_t off, size_t maxitem)
+static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area, size_t off, size_t maxitem)
 {
   lua_Number n = luaL_checknumber(L, arg);
   checkformat(L, form, lt::fmtflags_f, 1);
@@ -1653,13 +1653,14 @@ static int str_format(lua_State* L)
     else
     {                                              /* format item */
       char form[MAX_FORMAT];                        /* to store the format ('%...') */
+      byte_span formsp(form);
       size_t formlen;
       size_t maxitem = MAX_ITEM;                  /* maximum length for the result */
       size_t boff = luaL_prepbuffsize(&b, maxitem); /* to put result */
       size_t nb = 0;                                   /* number of bytes in result */
       if (++arg > top)
         return luaL_argerrori(L, arg, lt::no_value);
-      i = getformat(L, sf, i, form, &formlen);
+      i = getformat(L, sf, i, formsp, &formlen);
       byte_view formv{form, formlen};
       switch (sv_byteat(sf->view(), i++))
       {
@@ -2039,7 +2040,7 @@ static void packint(luaL_Buffer* b, lua_Unsigned n,
                     int islittle, size_t size, int neg)
 {
   size_t off = luaL_prepbuffsize(b, size);
-  std::span<char> buff = luaL_buffaddr(b);
+  byte_span buff = luaL_buffaddr(b);
   size_t i;
   buff[off + (islittle ? 0 : size - 1)] = (char) (n & MC); /* first byte */
   for (i = 1; i < size; i++)

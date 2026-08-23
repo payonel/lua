@@ -414,7 +414,8 @@ static l_uint32 readutf8esc(LexState* ls)
 static void utf8esc(LexState* ls)
 {
   char buff[UTF8BUFFSZ];
-  int n = luaO_utf8esc(buff, readutf8esc(ls));
+  byte_span buffsp(buff);
+  int n = luaO_utf8esc(buffsp, readutf8esc(ls));
   for (; n > 0; n--) /* add 'buff' to string */
     save(ls, buff[UTF8BUFFSZ - n]);
 }

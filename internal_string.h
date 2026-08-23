@@ -101,6 +101,7 @@ public:
     return InternalString::take(bytes_ + std::string(o.data(), o.size()));
   }
 
+private:
   static InternalString take(std::string&& s)
   {
     InternalString is;
@@ -108,7 +109,6 @@ public:
     return is;
   }
 
-private:
   std::string bytes_;
 };
 

@@ -772,7 +772,7 @@ static int tostring(lua_State* L, StkId idx)
 }
 
 /* copy strings in stack from top - n up to top - 1 to buffer */
-static void copy2buff(lua_State* L, StkId top, int n, std::span<char> buff)
+static void copy2buff(lua_State* L, StkId top, int n, byte_span buff)
 {
   size_t tl = 0; /* size already copied */
   do
@@ -825,13 +825,13 @@ void luaV_concat(lua_State* L, int total)
       if (tl <= 40)
       {
         char buff[40];
-        copy2buff(L, top, n, buff);
-        byte_view buffstr{buff, tl};
-        ts = luaS_createstr(L, buffstr, 0, buffstr.size());
+        byte_span buffsp(buff);
+        copy2buff(L, top, n, buffsp);
+        ts = luaS_createstr(L, buffsp.subspan(0, tl).view(), 0, tl);
       }
       else
       {
-        std::span<char> buff = luaM_alloc_char_span(L->l_G, L, {}, tl, true);
+        byte_span buff = luaM_alloc_char_span(L->l_G, L, {}, tl, true);
         copy2buff(L, top, n, buff);
         ts = luaS_createstr(L, byte_view(buff), 0, buff.size());
         luaM_alloc_char_span(L->l_G, L, buff, 0, false);

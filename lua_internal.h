@@ -122,6 +122,10 @@ struct InternalDebug
     size_t len = strnlen(short_src_out.data(), LUA_IDSIZE);
     return byte_view(short_src_out.data(), len);
   }
+  constexpr byte_span short_src_span()
+  {
+    return byte_span(short_src_out.data(), short_src_out.size());
+  }
   CallInfo* i_ci = nullptr;
 };
 

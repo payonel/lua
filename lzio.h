@@ -47,10 +47,10 @@ public:
 
   byte_view view() const noexcept { return {bytes_.data(), len_}; }
 
-  std::span<char> area() noexcept { return bytes_; }
+  byte_span area() noexcept { return bytes_; }
 
 private:
-  std::span<char> bytes_;
+  byte_span bytes_;
   size_t len_ = 0;
   lua_State* L_ = nullptr;
 };

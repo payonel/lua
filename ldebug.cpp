@@ -335,7 +335,7 @@ static void funcinfo(InternalDebug* ar, Closure* cl)
     ar->lastlinedefined = p->lastlinedefined;
     ar->what = (ar->linedefined == 0) ? lt::main : lt::Lua;
   }
-  luaO_chunkid(ar->short_src_out, ar->source);
+  luaO_chunkid(ar->short_src_span(), ar->source);
 }
 
 static int nextline(const Proto* p, int currentline, int pc)
@@ -990,7 +990,8 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
   if (src == nullptr) /* no debug information? */
     return luaO_pushfstring(L, lt::fmt_unknown_loc_s, FmtArgs().str(msg))->view();
 
-  std::array<char, LUA_IDSIZE> bytes {};
+  std::array<char, LUA_IDSIZE> bytesa {};
+  byte_span bytes(bytesa.data(), bytesa.size());
   luaO_chunkid(bytes, src->data.view());
   byte_view sv(bytes.data());
   return luaO_pushfstring(L, lt::fmt_s_d_s, FmtArgs().str(sv).num(line).str(msg))->view();

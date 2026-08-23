@@ -595,7 +595,7 @@ static void bb_growTo(luaL_Buffer* B, size_t cap)
     return;
   assert(B->L != nullptr);
   global_State* g = B->L->l_G;
-  std::span<char> nb = luaM_alloc_char_span(g, nullptr, B->bytes, cap, false);
+  byte_span nb = luaM_alloc_char_span(g, nullptr, B->bytes, cap, false);
   if (l_unlikely(nb.data() == nullptr && cap > 0))
   {
     lua_pushistringref(B->L, lt::not_enough_memory);
@@ -617,7 +617,7 @@ static void bb_append(luaL_Buffer* B, byte_view b, size_t off, size_t n)
 
 static void bb_dealloc(luaL_Buffer* B) noexcept
 {
-  if (B->bytes.data() != nullptr)
+  if (!B->bytes.empty())
   {
     global_State* g = B->L->l_G;
     luaM_alloc_char_span(g, nullptr, B->bytes, 0, false);
@@ -625,11 +625,13 @@ static void bb_dealloc(luaL_Buffer* B) noexcept
   }
 }
 
-static std::string bb_release(luaL_Buffer* B)
+static InternalString bb_release(luaL_Buffer* B)
 {
-  std::string out;
+  InternalString out;
   if (B->used != 0)
-    out.assign(B->bytes.data(), B->used);
+  {
+    out = InternalString(byte_view(B->bytes, B->used));
+  }
   bb_dealloc(B);
   B->used = 0;
   return out;
@@ -704,7 +706,7 @@ LUALIB_API void luaL_pushresult(luaL_Buffer* B)
   B->reserved = 0;
   if (reserved != 0)
     lua_releasebytes(L, reserved);
-  lua_pushistring(L, InternalString::take(bb_release(B)));
+  lua_pushistring(L, bb_release(B));
 }
 
 LUALIB_API void luaL_pushresultsize(luaL_Buffer* B, size_t sz)
@@ -1504,7 +1506,7 @@ LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf)
   return bf->used;
 }
 
-LUALIB_API std::span<char> luaL_buffaddr(luaL_Buffer* bf)
+LUALIB_API byte_span luaL_buffaddr(luaL_Buffer* bf)
 {
   return bf->bytes;
 }

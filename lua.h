@@ -10,7 +10,6 @@
 #include <stddef.h>
 #include <optional>
 #include <span>
-#include <string>
 #include "luaconf.h"
 #include "host_string.h"
 

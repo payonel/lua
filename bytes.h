@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string_view>
-#include <string>
 #include <span>
 #include <string.h>
 #include <algorithm>
@@ -10,6 +9,7 @@
 #include <charconv>
 #include <system_error>
 
+struct byte_span;
 struct byte_view
 {
   static constexpr size_t npos = size_t(-1);
@@ -32,11 +32,7 @@ struct byte_view
     , length(len)
   {}
 
-  constexpr explicit byte_view(std::span<char> bytes, size_t len = byte_view::npos)
-    : sv(bytes.data(), bytes.size())
-    , offset(0)
-    , length(len == byte_view::npos ? bytes.size() : len)
-  {}
+  constexpr explicit byte_view(const byte_span& bytes, size_t len = byte_view::npos);
 
   constexpr size_t size() const { return length; }
   constexpr const char* data() const { return sv.data() + offset; }
@@ -138,12 +134,12 @@ private:
 
 struct byte_span
 {
-  constexpr byte_span(std::span<char> bytes, size_t len = byte_view::npos)
-    : sp(bytes)
-    , offset(0)
-    , length(len == byte_view::npos ? bytes.size() : len)
-  {}
+  constexpr byte_span() = default;
+
   constexpr byte_span(char* rw, size_t len) : sp(rw, len), offset(0), length(sp.size()) {}
+
+  template <size_t N>
+  constexpr byte_span(char (&arr)[N]) : sp(arr, N), offset(0), length(N) {}
 
   constexpr size_t size() const { return length; }
   constexpr char* data() const { return sp.data() + offset; }
@@ -211,7 +207,7 @@ struct byte_span
 
   constexpr byte_view view() const
   {
-    return byte_view(sp.data(), length).substr(offset);
+    return byte_view(data(), length);
   }
 
   constexpr byte_view str_view() const
@@ -236,7 +232,15 @@ struct byte_span
     return cp;
   }
 
+  constexpr bool empty() const { return length == 0; }
+
   std::span<char> sp;
   size_t offset = 0;
   size_t length = 0;
 };
+
+constexpr byte_view::byte_view(const byte_span& bytes, size_t len)
+  : sv(bytes.data(), bytes.size())
+  , offset(0)
+  , length(len == byte_view::npos ? bytes.size() : len)
+{}

@@ -40,7 +40,7 @@ struct Table;
 struct CClosure;
 struct LClosure;
 struct CFuncInfo;
-LUAI_FUNC std::span<char> luaM_alloc_char_span(global_State* g, lua_State* L, std::span<char> block, size_t count, bool bthrow);
+LUAI_FUNC byte_span luaM_alloc_char_span(global_State* g, lua_State* L, byte_span block, size_t count, bool bthrow);
 LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L, std::span<TValue> block, size_t count, bool bthrow);
 LUAI_FUNC std::span<Value> luaM_alloc_Value_span(global_State* g, lua_State* L, std::span<Value> block, size_t count, bool bthrow);
 LUAI_FUNC std::span<UpVal*> luaM_alloc_UpVal_ptr_span(global_State* g, lua_State* L, std::span<UpVal*> block, size_t count, bool bthrow);

@@ -2,7 +2,6 @@
 
 #include <cctype>
 #include <clocale>
-#include <string>
 
 int locale_matchclass(int c, int cls)
 {

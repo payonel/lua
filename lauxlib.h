@@ -125,7 +125,7 @@ LUALIB_API void luaL_pushfail(lua_State* L);
 
 struct luaL_Buffer
 {
-  std::span<char> bytes = {};
+  byte_span bytes = {};
   size_t used = 0;
   size_t reserved = 0;
   lua_State* L = nullptr;
@@ -137,7 +137,7 @@ struct luaL_Buffer
 };
 
 LUALIB_API size_t luaL_bufflen(const luaL_Buffer* bf);
-LUALIB_API std::span<char> luaL_buffaddr(luaL_Buffer* bf);
+LUALIB_API byte_span luaL_buffaddr(luaL_Buffer* bf);
 LUALIB_API void luaL_addsize(luaL_Buffer* B, size_t s);
 LUALIB_API void luaL_buffsub(luaL_Buffer* B, size_t s);
 LUALIB_API void(luaL_buffinit)(lua_State* L, luaL_Buffer* B);

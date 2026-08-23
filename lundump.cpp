@@ -7,7 +7,6 @@
 
 #include <limits.h>
 #include <string.h>
-#include <string>
 
 #include "lua.h"
 

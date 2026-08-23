@@ -8,7 +8,6 @@
 
 #include <optional>
 #include <span>
-#include <string>
 
 #include "llimits.h"
 #include "internal_string.h"
@@ -227,7 +226,7 @@ struct Udata : GCObject
   Table* metatable;
   GCObject* gclist;
   std::span<TValue> uv;
-  std::span<char> data;
+  byte_span data;
   bool zb;
 };
 
@@ -752,7 +751,7 @@ struct FmtArgs
 
 /* }================================================================== */
 
-LUAI_FUNC int luaO_utf8esc(std::span<char> buff, l_uint32 x);
+LUAI_FUNC int luaO_utf8esc(byte_span buff, l_uint32 x);
 LUAI_FUNC lu_byte luaO_ceillog2(unsigned int x);
 LUAI_FUNC lu_byte luaO_codeparam(unsigned int p);
 LUAI_FUNC l_mem luaO_applyparam(lu_byte p, l_mem x);
@@ -766,4 +765,4 @@ LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
 LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
 LUAI_FUNC int luaO_fmtargcount(byte_view fmt);
 LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
-LUAI_FUNC void luaO_chunkid(std::span<char> out, byte_view source);
+LUAI_FUNC void luaO_chunkid(byte_span out, byte_view source);

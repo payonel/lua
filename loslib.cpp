@@ -189,7 +189,7 @@ static int getfield(lua_State* L, byte_view key, int d, int delta)
 }
 
 static size_t checkoption(lua_State* L, byte_view fmt, size_t pos,
-                          std::span<char> buff, size_t boff)
+                          byte_span buff, size_t boff)
 {
   byte_view option = lt::strftime_options;
   size_t opos = 0;
@@ -245,6 +245,7 @@ static int os_date(lua_State* L)
   else
   {
     char cc[4]; /* buffer for individual conversion specifiers */
+    byte_span ccsp(cc);
     luaL_Buffer b;
     cc[0] = '%';
     luaL_buffinit(L, &b);
@@ -257,7 +258,7 @@ static int os_date(lua_State* L)
         size_t reslen;
         size_t off = luaL_prepbuffsize(&b, SIZETIMEFMT);
         sp++; /* skip '%' */
-        sp = checkoption(L, sfmt, sp, cc, 1);
+        sp = checkoption(L, sfmt, sp, ccsp, 1);
         reslen = strftime(luaL_buffaddr(&b).subspan(off, SIZETIMEFMT).data(), SIZETIMEFMT, cc, stm);
         luaL_addsize(&b, reslen);
       }
@@ -321,7 +322,7 @@ static int os_setlocale(lua_State* L)
   if (res.has_value())
   {
     if (!nol)
-      L->l_G->locale_name.assign(res->data(), res->size());
+      L->l_G->locale_name = InternalString(res.value());
     lua_pushlstring(L, res.value(), 0, res->size());
   }
   else

@@ -57,7 +57,7 @@ constexpr int CLOSEKTOP = (LUA_ERRERR + 1);
 
 LUAI_FUNC Proto* luaF_newproto(lua_State* L);
 LUAI_FUNC CClosure* luaF_newCclosure(lua_State* L, int nupvals);
-LUAI_FUNC CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<std::string> name = std::nullopt);
+LUAI_FUNC CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<byte_view> name = std::nullopt);
 LUAI_FUNC LClosure* luaF_newLclosure(lua_State* L, int nupvals);
 LUAI_FUNC void luaF_initupvals(lua_State* L, LClosure* cl);
 LUAI_FUNC UpVal* luaF_findupval(lua_State* L, StkId level);

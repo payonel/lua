@@ -208,7 +208,7 @@ Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
   u->metatable = nullptr;
   u->uv = {};
   u->zb = s == 0;
-  u->data = std::span<char>{};
+  u->data = byte_span{};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
   std::span<TValue> uv = luaM_alloc_TValue_span(L->l_G, L, {}, nuvalue, false);

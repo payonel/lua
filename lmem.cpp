@@ -68,13 +68,13 @@ static inline bool _alloc_span_request(global_State* g, lua_State* L, size_t old
   return true;
 }
 
-LUAI_FUNC std::span<char> luaM_alloc_char_span(global_State* g, lua_State* L, std::span<char> block, size_t count, bool bthrow)
+LUAI_FUNC byte_span luaM_alloc_char_span(global_State* g, lua_State* L, byte_span block, size_t count, bool bthrow)
 {
   if (l_unlikely(!_alloc_span_request(g, L, block.size(), count, sizeof(char), bthrow))) return {};
-  std::span<char> nb{};
+  byte_span nb{};
   if (count > 0)
   {
-    nb = std::span<char>(new char[count], count);
+    nb = byte_span(new char[count], count);
     if (!block.empty())
       for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
         nb[ci] = block[ci];
