@@ -25,9 +25,9 @@ int luaS_eqstr(TString* a, TString* b)
   return (a == b) || (a->data == b->data);
 }
 
-static size_t luaS_hash(const char* str, size_t l)
+static size_t luaS_hash(byte_view str)
 {
-  return InternalString::hashBytes(str, l);
+  return InternalString::hashBytes(str.data(), str.size());
 }
 
 void luaS_forcehash(TString* ts)
@@ -128,11 +128,10 @@ TString* luaS_createstr(lua_State* L, byte_view str, size_t off, size_t len)
 {
   global_State* g = L->l_G;
   byte_view sv = str.substr(off, len);
-  const char* s = sv.data();
   size_t l = len;
   if (l <= LUAI_MAXSHORTLEN)
   {
-    size_t h = luaS_hash(s, l);
+    size_t h = luaS_hash(sv);
     TString* ts = internfind(g, sv, h);
     if (ts != nullptr)
     {

@@ -90,7 +90,7 @@ InternalString lua_funcaddressi(lua_State* L, int idx);
 
 byte_view lua_typenamei(lua_State* L, int tp);
 
-std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff);
+std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, byte_span buff);
 
 int luaL_fileresulti(lua_State* L, int stat, std::optional<byte_view> fname, int en);
 int luaL_execresulti(lua_State* L, int stat, int en);

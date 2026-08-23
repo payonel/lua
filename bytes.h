@@ -78,6 +78,11 @@ struct byte_view
     return view().starts_with(s.view());
   }
 
+  constexpr bool starts_with(char c) const
+  {
+    return view().starts_with(c);
+  }
+
   constexpr byte_view substr(size_t off, size_t len = byte_view::npos) const
   {
     assert(off <= length);

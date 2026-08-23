@@ -4638,8 +4638,10 @@ static void test_cfunc_stress_group6()
 
   /* Need to run from tests/ directory */
   char oldcwd[1024];
-  getcwd(oldcwd, sizeof(oldcwd));
-  chdir("tests");
+  if (!getcwd(oldcwd, sizeof(oldcwd)))
+    oldcwd[0] = '\0';
+  if (chdir("tests") != 0)
+    { /* ignore: best-effort chdir for test setup */ }
 
   /* Set up environment like the lua binary does */
   luaL_dostring(L, "_TMP='_1'; arg={[0]='../lua'}"_hs);
@@ -4659,7 +4661,8 @@ static void test_cfunc_stress_group6()
   double ms = (double)(end - start) * 1000.0 / CLOCKS_PER_SEC;
   std::printf("  group6 (full test suite): %.0f ms\n", ms);
 
-  chdir(oldcwd);
+  if (chdir(oldcwd) != 0)
+    { /* ignore: best-effort restore of original directory */ }
   lua_close(L);
 }
 

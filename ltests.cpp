@@ -282,7 +282,8 @@ static void lua_printvalue(TValue* v)
   case LUA_VNUMFLT:
   {
     char buff[LUA_N2SBUFFSZ];
-    unsigned len = luaO_tostringbuff(v, buff);
+    byte_span buffspan(buff);
+    size_t len = luaO_tostringbuff(v, buffspan);
     buff[len] = '\0';
     printf("%s", buff);
     break;

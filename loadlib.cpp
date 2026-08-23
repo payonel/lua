@@ -88,15 +88,14 @@ static int noenv(lua_State* L)
 ** Set a path. (If using the default path, assume it is a string
 ** literal in C and create it as an external string.)
 */
-static void setpath(lua_State* L, byte_view fieldname, const char* envname, byte_view dft)
+static void setpath(lua_State* L, byte_view fieldname, byte_view envname, byte_view dft)
 {
-  byte_view env{envname};
-  lua_pushlstring(L, env, 0, env.size());
+  lua_pushlstring(L, envname, 0, envname.size());
   lua_pushlstring(L, LUA_VERSUFFIX, 0, LUA_VERSUFFIX.size());
   lua_pushfstringi(L, lt::fmt_ss);
   std::optional<byte_view> epath = os_getenv(lua_toistring(L, -1)->view()); /* try versioned name */
   if (!epath.has_value())                                    /* no versioned environment variable? */
-    epath = os_getenv(byte_view{envname});            /* try unversioned name */
+    epath = os_getenv(envname);            /* try unversioned name */
   if (!epath.has_value() || noenv(L)) /* no environment variable? */
     lua_pushlstring(L, dft, 0, dft.size()); /* use default */
   else

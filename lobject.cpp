@@ -593,22 +593,20 @@ static_assert(LUA_N2SBUFFSZ >= 20 + DBL_DIG, "invalid value for LUA_N2SBUFFSZ");
 ** like an integer (without a decimal point or an exponent), add ".0" to
 ** its end.
 */
-static int tostringbuffFloat(lua_Number n, char* buff)
+static size_t tostringbuffFloat(lua_Number n, byte_span buff)
 {
-  byte_span bs(buff, LUA_N2SBUFFSZ);
-  int len = ((int)(bs.subspan(0, LUA_N2SBUFFSZ - 3).write_number(n, std::chars_format::general, 15)));
-  bs[((size_t)(len))] = '\0';
-  byte_view::parse_result ret = bs.view().substr(0, ((size_t)(len))).parse_number((buff[0] == '-') ? 1u : 0u, std::chars_format::general); /* read it back */
+  size_t len = buff.subspan(0, LUA_N2SBUFFSZ - 3).write_number(n, std::chars_format::general, 15);
+  buff[len] = '\0';
+  byte_view::parse_result ret = buff.subspan(0, len).view().parse_number(buff.view().starts_with('-') ? 1u : 0u, std::chars_format::general);
   lua_Number check = ret.result;
   if (buff[0] == '-')
     check = -check;
   if (check != n)
   {
-    len = ((int)(bs.subspan(0, LUA_N2SBUFFSZ - 3).write_number(n, std::chars_format::general, 17)));
-    bs[((size_t)(len))] = '\0';
+    len = buff.subspan(0, LUA_N2SBUFFSZ - 3).write_number(n, std::chars_format::general, 17);
+    buff[len] = '\0';
   }
-  byte_view buffsv(buff, LUA_N2SBUFFSZ);
-  if (buffsv.substr(0, ((size_t)(len))).find_first_not_of(lt::digits_and_dash) == byte_view::npos)
+  if (buff.subspan(0, len).view().find_first_not_of(lt::digits_and_dash) == byte_view::npos)
   {
     buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
@@ -617,9 +615,9 @@ static int tostringbuffFloat(lua_Number n, char* buff)
     char point = locale_radixpoint();
     if (point != '.')
     {
-      char* pdot = strchr(buff, '.');
-      if (pdot != nullptr)
-        *pdot = point;
+      size_t dotpos = buff.subspan(0, len).view().find('.');
+      if (dotpos != byte_view::npos)
+        buff[dotpos] = point;
     }
   }
   return len;
@@ -628,24 +626,24 @@ static int tostringbuffFloat(lua_Number n, char* buff)
 /*
 ** Convert a number object to a string, adding it to a buffer.
 */
-unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff)
+size_t luaO_tostringbuff(const TValue* obj, byte_span buff)
 {
-  int len;
-  assert((((obj)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER));
+  size_t len;
+  assert((obj->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
   assert(buff.size() >= LUA_N2SBUFFSZ);
-  if (((obj)->tt_ == LUA_VNUMINT))
+  if (obj->tt_ == LUA_VNUMINT)
   {
     byte_span bs(buff);
-    len = ((int)(bs.subspan(0, bs.size() - 1).write_number(ivalue(obj))));
-    bs[((size_t)(len))] = '\0';
+    len = bs.subspan(0, bs.size() - 1).write_number(ivalue(obj));
+    bs[len] = '\0';
   }
   else
   {
     assert(obj->tt_ == LUA_VNUMFLT);
-    len = tostringbuffFloat(fltvalue(obj), buff.data());
+    len = tostringbuffFloat(fltvalue(obj), buff);
   }
   assert(len < LUA_N2SBUFFSZ);
-  return ((unsigned int)(len));
+  return len;
 }
 
 /*
@@ -654,7 +652,8 @@ unsigned luaO_tostringbuff(const TValue* obj, std::span<char> buff)
 void luaO_tostring(lua_State* L, TValue* obj)
 {
   char buff[LUA_N2SBUFFSZ];
-  unsigned len = luaO_tostringbuff(obj, buff);
+  byte_span buffspan(buff);
+  size_t len = luaO_tostringbuff(obj, buffspan);
   byte_view bytes{buff, len};
   setsvalue(L, obj, luaS_createstr(L, bytes, 0, bytes.size()));
 }
@@ -752,7 +751,8 @@ static void addstr2buff(BuffFS* buff, byte_view bv)
 static void addnum2buff(BuffFS* buff, TValue* num)
 {
   char numbuff[LUA_N2SBUFFSZ];
-  unsigned len = luaO_tostringbuff(num, numbuff);
+  byte_span numspan(numbuff);
+  size_t len = luaO_tostringbuff(num, numspan);
   addstr2buff(buff, byte_view(numbuff, LUA_N2SBUFFSZ).substr(0, len));
 }
 

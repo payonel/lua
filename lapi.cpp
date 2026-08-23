@@ -408,12 +408,12 @@ LUA_API int lua_compare(lua_State* L, int index1, int index2, int op)
   return i;
 }
 
-std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, std::span<char> buff)
+std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, byte_span buff)
 {
   TValue o = index2val(L, idx);
   if (((o.tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
   {
-    unsigned len = luaO_tostringbuff(&o, buff);
+    size_t len = luaO_tostringbuff(&o, buff);
     return byte_view(buff.data(), len);
   }
   else
@@ -423,7 +423,8 @@ std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, std::span<c
 LUA_API std::optional<HostString> lua_numbertocstring(lua_State* L, int idx)
 {
   char buff[LUA_N2SBUFFSZ];
-  std::optional<byte_view> s = lua_numbertocstringi(L, idx, buff);
+  byte_span buffsp(buff);
+  std::optional<byte_view> s = lua_numbertocstringi(L, idx, buffsp);
   if (!s.has_value())
     return std::nullopt;
   return HostString(*s);

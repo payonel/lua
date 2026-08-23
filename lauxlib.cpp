@@ -1044,7 +1044,8 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
     case LUA_TNUMBER:
     {
       char nbuff[LUA_N2SBUFFSZ];
-      byte_view n = *lua_numbertocstringi(L, idx, nbuff);
+      byte_span buffsp(nbuff);
+      byte_view n = *lua_numbertocstringi(L, idx, buffsp);
       lua_pushlstring(L, n, 0, n.size());
       break;
     }

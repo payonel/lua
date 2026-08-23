@@ -613,7 +613,8 @@ static int g_write(lua_State* L, OsFile* f, int arg)
   { /* for each argument */
     size_t numbytes; /* bytes written in one call to 'fwrite' */
     char numbuff[LUA_N2SBUFFSZ];
-    std::optional<byte_view> numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
+    byte_span buff(numbuff);
+    std::optional<byte_view> numtxt = lua_numbertocstringi(L, arg, buff); /* try as a number */
     byte_view bv = numtxt.has_value()
       ? byte_view(numbuff, LUA_N2SBUFFSZ).substr(0, numtxt->size())
       : byte_view(luaL_checklstring(L, arg));
