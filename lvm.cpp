@@ -833,7 +833,7 @@ void luaV_concat(lua_State* L, int total)
       {
         byte_span buff = luaM_alloc_char_span(L->l_G, L, {}, tl, true);
         copy2buff(L, top, n, buff);
-        ts = luaS_createstr(L, byte_view(buff), 0, buff.size());
+        ts = luaS_createstr(L, buff.view(), 0, buff.size());
         luaM_alloc_char_span(L->l_G, L, buff, 0, false);
       }
       setslots(L, top - n, ts); /* create result */

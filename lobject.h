@@ -385,25 +385,17 @@ constexpr size_t sizeLclosure(int n)
   return sizeof(LClosure) + sizeof(UpVal*) * (unsigned int)n;
 }
 
-/*
-** CFuncInfo: identity for a C function.
-** Can be static (not GC-managed) or lua-allocated (GC-managed).
-** Static: created at compile-time, pushed without BIT_ISCOLLECTABLE.
-** Dynamic: created via lua_createcfuncinfo, pushed with BIT_ISCOLLECTABLE.
-*/
 struct CFuncInfo : GCObject
 {
   lua_CFunction fptr;
-  std::optional<InternalString> name; /* for serialization; nullopt = not serializable */
+  std::optional<InternalString> name;
 
-  /* Default ctor: static/fixed CFuncInfo (not GC-managed) */
   CFuncInfo()
     : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
     , fptr(nullptr)
     , name(std::nullopt)
   {}
 
-  /* Named ctor: static/fixed CFuncInfo with function and name */
   CFuncInfo(HostString n, lua_CFunction f)
     : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
     , fptr(f)

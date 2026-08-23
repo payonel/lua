@@ -630,7 +630,7 @@ static InternalString bb_release(luaL_Buffer* B)
   InternalString out;
   if (B->used != 0)
   {
-    out = InternalString(byte_view(B->bytes, B->used));
+    out = InternalString(B->bytes.subspan(0, B->used).view());
   }
   bb_dealloc(B);
   B->used = 0;
