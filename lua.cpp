@@ -559,14 +559,13 @@ static int incomplete(lua_State* L, int status)
 */
 static int pushline(lua_State* L, int firstline)
 {
-  char buffer[LUA_MAXINPUT] {};
-  byte_span span(buffer, LUA_MAXINPUT);
+  byte_span buffer(LUA_MAXINPUT);
   InternalString prmt = get_prompt(L, firstline);
-  bool ready = lua_readline(span, prmt.view());
+  bool ready = lua_readline(buffer, prmt.view());
   lua_pop(L, 1); /* remove prompt */
   if (!ready)
     return 0; /* no input */
-  byte_view buffview = span.str_view();
+  byte_view buffview = buffer.str_view();
   lua_pushlstring(L, buffview, 0, buffview.size());
   return 1;
 }

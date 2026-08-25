@@ -117,7 +117,7 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
   }
   else if (ar->what[0] != 'C')
   { /* for Lua functions, use <file:line> */
-    byte_view ss = ar->short_src();
+    byte_view ss = ar->short_src_out.str_view();
     lua_pushlstring(L, ss, 0, ss.size());
     lua_pushinteger(L, ar->linedefined);
     lua_pushfstringi(L, lt::function_s_d);
@@ -179,7 +179,7 @@ void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<byte_view> msg, 
     else
     {
       InternalDebug ar = *lua_getinfoi(L1, lt::Slnt_chars, oar.value());
-      byte_view ss = ar.short_src();
+      byte_view ss = ar.short_src_out.str_view();
       if (ar.currentline <= 0)
       {
         lua_pushlstring(L, ss, 0, ss.size());
@@ -288,7 +288,7 @@ LUALIB_API void luaL_where(lua_State* L, int level)
     InternalDebug ar = *lua_getinfoi(L, lt::Sl_chars, oar.value()); /* get info about it */
     if (ar.currentline > 0)
     { /* is there info? */
-      byte_view ss = ar.short_src();
+      byte_view ss = ar.short_src_out.str_view();
       lua_pushlstring(L, ss, 0, ss.size());
       lua_pushinteger(L, ar.currentline);
       lua_pushfstringi(L, lt::fmt_s_d_colon_sp);
@@ -604,14 +604,14 @@ static void bb_growTo(luaL_Buffer* B, size_t cap)
   B->bytes = nb;
 }
 
-static void bb_append(luaL_Buffer* B, byte_view b, size_t off, size_t n)
+static void bb_append(luaL_Buffer* B, byte_view b)
 {
-  if (n > 0)
+  if (!b.empty())
   {
-    if (n > B->bytes.size() - B->used)
-      bb_growTo(B, B->used + n);
-    byte_span(B->bytes).copy_from(B->used, b.substr(off, n));
-    B->used += n;
+    if (b.size() > B->bytes.size() - B->used)
+      bb_growTo(B, B->used + b.size());
+    B->bytes.copy_from(b, B->used);
+    B->used += b.size();
   }
 }
 
@@ -630,7 +630,7 @@ static InternalString bb_release(luaL_Buffer* B)
   InternalString out;
   if (B->used != 0)
   {
-    out = InternalString(B->bytes.subspan(0, B->used).view());
+    out = InternalString(B->bytes.view().substr(0, B->used));
   }
   bb_dealloc(B);
   B->used = 0;
@@ -684,12 +684,12 @@ LUALIB_API size_t luaL_prepbuffsize(luaL_Buffer* B, size_t sz)
   return prepbuff(B, sz);
 }
 
-LUALIB_API void luaL_addlstring(luaL_Buffer* B, byte_view s, size_t off, size_t l)
+LUALIB_API void luaL_addlstring(luaL_Buffer* B, byte_view s, size_t pos, size_t l)
 {
   if (l > 0)
   {
     prepbuff(B, l);
-    bb_append(B, s, off, l);
+    bb_append(B, s.substr(pos, l));
   }
 }
 
@@ -720,7 +720,7 @@ LUALIB_API void luaL_addvalue(luaL_Buffer* B)
   lua_State* L = B->L;
   byte_view s = *lua_tolstring(L, -1);
   prepbuff(B, s.size());
-  bb_append(B, s, 0, s.size());
+  bb_append(B, s);
   lua_pop(L, 1); /* pop string */
 }
 
@@ -805,31 +805,30 @@ struct LoadF
 {
   unsigned n;        /* number of pre-read characters */
   OsFile* f;         /* file being read */
-  char buff[BUFSIZ]; /* area for reading file */
+  byte_span buff = byte_span(BUFSIZ); /* area for reading file */
 };
 
 static std::optional<byte_view> getF(lua_State*, void* ud)
 {
   LoadF* lf = static_cast<LoadF*>(ud);
-  byte_span span(lf->buff, BUFSIZ);
   if (lf->n > 0)
   {                          /* are there pre-read characters to be read? */
-    span = span.subspan(0, lf->n); /* return them (chars already in buffer) */
+    unsigned len = lf->n;
     lf->n = 0;               /* no more pre-read characters */
+    return lf->buff.view().substr(0, len); /* return them (chars already in buffer) */
   }
-  else
-  { /* read a block from file */
-    /* 'fread' can return > 0 *and* set the EOF flag. If next call to
-       'getF' called 'fread', it might still wait for user input.
-       The next check avoids this problem. */
-    if (os_feof(lf->f))
-      return std::nullopt;
-    size_t n = os_fread(lf->f, span); /* read block */
-    span = span.subspan(0, n);
-    if (n == 0)
-      return std::nullopt;
-  }
-  return span.view();
+
+  /* read a block from file */
+  /* 'fread' can return > 0 *and* set the EOF flag. If next call to
+      'getF' called 'fread', it might still wait for user input.
+      The next check avoids this problem. */
+  if (os_feof(lf->f))
+    return std::nullopt;
+  size_t n = os_fread(lf->f, lf->buff, 0, lf->buff.size()); /* read block */
+  if (n == 0)
+    return std::nullopt;
+
+  return lf->buff.view().substr(0, n);
 }
 
 static int errfile(lua_State* L, byte_view what, int fnameindex, int err)
@@ -1045,9 +1044,8 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
     {
     case LUA_TNUMBER:
     {
-      char nbuff[LUA_N2SBUFFSZ];
-      byte_span buffsp(nbuff);
-      byte_view n = *lua_numbertocstringi(L, idx, buffsp);
+      byte_span buff(LUA_N2SBUFFSZ);
+      byte_view n = *lua_numbertocstringi(L, idx, buff);
       lua_pushlstring(L, n, 0, n.size());
       break;
     }

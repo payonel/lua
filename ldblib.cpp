@@ -180,7 +180,7 @@ static int db_getinfo(lua_State* L)
   {
     lua_pushlstring(L, ar.source, 0, ar.source.size());
     lua_setfieldi(L, -2, lt::source);
-    settabss(L, lt::short_src, ar.short_src());
+    settabss(L, lt::short_src, ar.short_src_out.str_view());
     settabsi(L, lt::linedefined, ar.linedefined);
     settabsi(L, lt::lastlinedefined, ar.lastlinedefined);
     settabss(L, lt::what, ar.what);
@@ -443,8 +443,7 @@ static int db_gethook(lua_State* L)
 {
   int arg;
   lua_State* L1 = getthread(L, &arg);
-  char buff[5];
-  byte_span buffsp(buff);
+  byte_span buff(5);
   int mask = lua_gethookmask(L1);
   lua_Hook hook = lua_gethook(L1);
   if (hook == nullptr)
@@ -463,8 +462,8 @@ static int db_gethook(lua_State* L)
     lua_rawget(L, -2); /* 1st result = hooktable[L1] */
     lua_remove(L, -2); /* remove hook table */
   }
-  size_t masklen = unmakemask(mask, buffsp);
-  byte_view maskview = buffsp.subspan(0, masklen).view();
+  size_t masklen = unmakemask(mask, buff);
+  byte_view maskview = buff.view().substr(0, masklen);
   lua_pushlstring(L, maskview, 0, maskview.size()); /* 2nd result = mask */
   lua_pushinteger(L, lua_gethookcount(L1));  /* 3rd result = count */
   return 3;
@@ -474,15 +473,14 @@ static int db_debug(lua_State* L)
 {
   for (;;)
   {
-    char buffer[LUA_MAXINPUT];
-    byte_span span(buffer, LUA_MAXINPUT);
+    byte_span buffer(LUA_MAXINPUT);
     os_print_stderr(lt::lua_debug);
     os_flush_stderr();
-    if (!os_readline(os_stdin(), span) || span.str_view() == lt::cont_n)
+    if (!os_readline(os_stdin(), buffer) || buffer.str_view() == lt::cont_n)
     {
       return 0;
     }
-    byte_view cmd = span.str_view();
+    byte_view cmd = buffer.str_view();
     if (luaL_loadbufferi(L, cmd, lt::debug_command, lt::t_char) || lua_pcall(L, 0, 0, 0))
     {
       os_print_stderr(luaL_toistring(L, -1)->view());

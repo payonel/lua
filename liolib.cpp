@@ -472,15 +472,17 @@ static int read_line(lua_State* L, OsFile* f, int chop)
 
 static void read_all(lua_State* L, OsFile* f)
 {
-  size_t nr;
+  size_t nr, want;
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   do
-  { /* read file in chunks of LUAL_BUFFERSIZE bytes */
+  { /* read file in chunks, growing the buffer as needed */
     size_t off = luaL_prepbuffer(&b);
-    nr = os_fread(f, luaL_buffaddr(&b).subspan(off, LUAL_BUFFERSIZE));
+    byte_span area = luaL_buffaddr(&b);
+    want = area.size() - off;
+    nr = os_fread(f, area, off, want);
     luaL_addsize(&b, nr);
-  } while (nr == LUAL_BUFFERSIZE);
+  } while (nr == want); /* buffer was filled completely: more may remain */
   luaL_pushresult(&b); /* close buffer */
 }
 
@@ -490,7 +492,7 @@ static int read_chars(lua_State* L, OsFile* f, size_t n)
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   size_t off = luaL_prepbuffsize(&b, n); /* prepare buffer to read whole block */
-  nr = os_fread(f, luaL_buffaddr(&b).subspan(off, n)); /* try to read 'n' chars */
+  nr = os_fread(f, luaL_buffaddr(&b), off, n); /* try to read 'n' chars */
   luaL_addsize(&b, nr);
   luaL_pushresult(&b); /* close buffer */
   return (nr > 0);     /* true iff read something */
@@ -612,11 +614,10 @@ static int g_write(lua_State* L, OsFile* f, int arg)
   for (; nargs--; arg++)
   { /* for each argument */
     size_t numbytes; /* bytes written in one call to 'fwrite' */
-    char numbuff[LUA_N2SBUFFSZ];
-    byte_span buff(numbuff);
-    std::optional<byte_view> numtxt = lua_numbertocstringi(L, arg, buff); /* try as a number */
+    byte_span numbuff(LUA_N2SBUFFSZ);
+    std::optional<byte_view> numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
     byte_view bv = numtxt.has_value()
-      ? byte_view(numbuff, LUA_N2SBUFFSZ).substr(0, numtxt->size())
+      ? numbuff.view().substr(0, numtxt->size())
       : byte_view(luaL_checklstring(L, arg));
     numbytes = os_fwrite(f, bv);
     totalbytes += numbytes;

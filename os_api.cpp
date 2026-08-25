@@ -186,9 +186,10 @@ OsFile* os_stderr()
   return asof(stderr);
 }
 
-size_t os_fread(OsFile* f, byte_span out)
+size_t os_fread(OsFile* f, byte_span out, size_t off, size_t n)
 {
-  return fread(out.data(), 1, out.size(), asf(f));
+  assert(off + n <= out.size());
+  return fread(out.data() + off, 1, n, asf(f));
 }
 
 size_t os_fwrite(OsFile* f, byte_view bytes)

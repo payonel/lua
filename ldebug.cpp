@@ -335,7 +335,8 @@ static void funcinfo(InternalDebug* ar, Closure* cl)
     ar->lastlinedefined = p->lastlinedefined;
     ar->what = (ar->linedefined == 0) ? lt::main : lt::Lua;
   }
-  luaO_chunkid(ar->short_src_span(), ar->source);
+  ar->short_src_out = byte_span(LUA_IDSIZE);
+  luaO_chunkid(ar->short_src_out, ar->source);
 }
 
 static int nextline(const Proto* p, int currentline, int pc)
@@ -526,7 +527,7 @@ LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& opt
   if (what.find('S') != byte_view::npos)
   {
     ar.source = res->source;
-    ar.short_src = HostString::from_bytes(res->short_src());
+    ar.short_src = HostString::from_bytes(res->short_src_out.str_view());
     ar.what = HostString(res->what);
     ar.linedefined = res->linedefined;
     ar.lastlinedefined = res->lastlinedefined;
@@ -990,10 +991,9 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
   if (src == nullptr) /* no debug information? */
     return luaO_pushfstring(L, lt::fmt_unknown_loc_s, FmtArgs().str(msg))->view();
 
-  std::array<char, LUA_IDSIZE> bytesa {};
-  byte_span bytes(bytesa.data(), bytesa.size());
+  byte_span bytes(LUA_IDSIZE);
   luaO_chunkid(bytes, src->data.view());
-  byte_view sv(bytes.data());
+  byte_view sv = bytes.str_view();
   return luaO_pushfstring(L, lt::fmt_s_d_s, FmtArgs().str(sv).num(line).str(msg))->view();
 }
 
@@ -1012,7 +1012,7 @@ l_noret luaG_errormsg(lua_State* L)
   { /* error object is nil? */
     /* change it to a proper message */
     byte_view errstr = lt::no_error_object;
-    setslots(L, L->top - 1, luaS_createstr(L, errstr, 0, errstr.size()));
+    setslots(L, L->top - 1, luaS_createstr(L, errstr));
   }
   luaD_throw(L, LUA_ERRRUN);
 }

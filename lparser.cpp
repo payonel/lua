@@ -2355,7 +2355,7 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndat
   luaD_anchorobj(L, anchor, cl); /* anchor it in scanner table */
   funcstate.f = cl->p = luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
-  funcstate.f->source = luaS_createstr(L, name, 0, name.size()); /* create and anchor TString */
+  funcstate.f->source = luaS_createstr(L, name); /* create and anchor TString */
   luaC_objbarrier(L, funcstate.f, funcstate.f->source);
   lexstate.buff = buff;
   lexstate.dyd = dyd;

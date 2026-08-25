@@ -116,16 +116,7 @@ struct InternalDebug
   char istailcall = 0;
   int ftransfer = 0;
   int ntransfer = 0;
-  std::array<char, LUA_IDSIZE> short_src_out = {};
-  byte_view short_src() const
-  {
-    size_t len = strnlen(short_src_out.data(), LUA_IDSIZE);
-    return byte_view(short_src_out.data(), len);
-  }
-  constexpr byte_span short_src_span()
-  {
-    return byte_span(short_src_out.data(), short_src_out.size());
-  }
+  byte_span short_src_out; /* lazily allocated by funcinfo() when the 'S' option is requested */
   CallInfo* i_ci = nullptr;
 };
 

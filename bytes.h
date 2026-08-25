@@ -8,6 +8,9 @@
 #include <cstddef>
 #include <charconv>
 #include <system_error>
+#include <memory>
+#include <type_traits>
+#include <array>
 
 struct byte_view
 {
@@ -78,13 +81,9 @@ struct byte_view
     return view().starts_with(c);
   }
 
-  constexpr byte_view substr(size_t off, size_t len = byte_view::npos) const
+  constexpr byte_view substr(size_t pos, size_t len = byte_view::npos) const
   {
-    return byte_view(sv.substr(off, len));
-    // assert(off <= length);
-    // byte_view cp { sv.data(), std::min<size_t>(len, length - off) };
-    // cp.offset = offset + off;
-    // return cp;
+    return byte_view(sv.substr(pos, len));
   }
 
   constexpr size_t find(char c, size_t pos = 0) const
@@ -114,104 +113,178 @@ struct byte_view
     double result;
   };
 
-  parse_result parse_number(size_t off, std::chars_format fmt) const
+  parse_result parse_number(size_t pos, std::chars_format fmt) const
   {
     double out {};
-    std::from_chars_result r = std::from_chars(data() + off, data() + size(), out, fmt);
+    std::from_chars_result r = std::from_chars(data() + pos, data() + size(), out, fmt);
     return { ((size_t)(r.ptr - data())), r.ec, out };
   }
 
+  double toDouble(size_t pos = 0) const
+  {
+    double result {};
+    memcpy(reinterpret_cast<void*>(&result), sv.data() + pos, sizeof(double));
+    return result;
+  }
+
+  float toFloat(size_t pos = 0) const
+  {
+    float result {};
+    memcpy(reinterpret_cast<void*>(&result), sv.data() + pos, sizeof(float));
+    return result;
+  }
+
+  static byte_view from_double(const double& f)
+  {
+    return byte_view(std::string_view(reinterpret_cast<const char*>(&f), sizeof(double)));
+  }
+
+  static byte_view from_float(const float& f)
+  {
+    return byte_view(std::string_view(reinterpret_cast<const char*>(&f), sizeof(float)));
+  }
+
   std::string_view sv {nullptr, 0};
-  // size_t offset = 0;
-  // size_t length = 0;
 
 private:
   constexpr std::string_view view() const
   {
-    return sv; // std::string_view(sv.data() + offset, length);
+    return sv;
   }
 };
 
 struct byte_span
 {
-  constexpr byte_span() = default;
+  byte_span() = default;
 
-  constexpr byte_span(char* rw, size_t len) : sp(rw, len)/*, offset(0), length(sp.size())*/ {}
-
-  template <size_t N>
-  constexpr byte_span(char (&arr)[N]) : sp(arr, N)/*, offset(0), length(N)*/ {}
-
-  constexpr size_t size() const { return sp.size() /* + offset */; }
-  constexpr char* data() const { return sp.data() /* + offset */; }
-
-  constexpr size_t apply(byte_view from)
+  explicit byte_span(size_t n)
   {
-    assert(from.size() <= size());
-    return std::copy_n(from.data(), from.size(), data()) - data();
+    char* raw = new char[sizeof(size_t) + n]();
+    memcpy(raw, &n, sizeof(size_t));
+    storage = std::shared_ptr<char>(raw + sizeof(size_t), [raw](char*) { delete[] raw; });
   }
 
-  void copy_from(size_t off, byte_view src)
+  explicit byte_span(byte_view view) : byte_span(view.size()) { apply(view); }
+
+  byte_span(const byte_span&) = default;
+  byte_span& operator=(const byte_span&) = default;
+  byte_span(byte_span&&) = default;
+  byte_span& operator=(byte_span&&) = default;
+
+  byte_span(char* rw, size_t len) = delete;
+  template <size_t N> constexpr byte_span(char (&arr)[N]) = delete;
+
+  size_t size() const
   {
-    assert(off + src.size() <= size());
-    memcpy(data() + off, src.data(), src.size());
+    if (!storage)
+      return 0;
+    size_t n;
+    memcpy(&n, storage.get() - sizeof(size_t), sizeof(size_t));
+    return n;
   }
 
-  void fill(size_t off, size_t n, std::byte v)
+  char* data() const { return storage.get(); }
+
+  size_t apply(byte_view from, size_t pos = 0)
   {
-    assert(off + n <= size());
-    memset(data() + off, std::to_integer<int>(v), n);
+    assert(from.size() + pos <= size());
+    return std::copy_n(from.data(), from.size(), data() + pos) - data();
   }
 
-  void move_from(size_t off, byte_view src)
+  void copy_from(byte_view src, size_t pos = 0)
   {
-    assert(off + src.size() <= size());
-    memmove(data() + off, src.data(), src.size());
+    assert(pos + src.size() <= size());
+    memcpy(data() + pos, src.data(), src.size());
+  }
+
+  void fill(std::byte v, size_t pos = 0, size_t len = byte_view::npos)
+  {
+    size_t s = size();
+    assert(pos <= s);
+    len = std::min(len, s - pos);
+    memset(data() + pos, static_cast<char>(v), len);
+  }
+
+  void move_from(byte_view src, size_t pos = 0)
+  {
+    assert(pos + src.size() <= size());
+    memmove(data() + pos, src.data(), src.size());
+  }
+
+  byte_span reverse(size_t pos = 0, size_t len = byte_view::npos)
+  {
+    size_t s = size();
+    assert(pos <= s);
+    len = std::min(len, s - pos);
+    char* p = data();
+    for (size_t i = 0; i < len / 2; ++i)
+    {
+      size_t ei = pos + len - 1 - i;
+      char tmp = p[ei];
+      p[ei] = p[i + pos];
+      p[i + pos] = tmp;
+    }
+    return *this;
   }
 
   template <typename... Args> void write_number(Args&&...) = delete;
 
-  size_t write_number(double value, std::chars_format fmt, int precision)
+private:
+  template <typename T>
+  size_t write_number_impl(T value, int base, size_t pos, bool prefix)
   {
-    std::to_chars_result r = std::to_chars(data(), data() + size(), value, fmt, precision);
+    assert(pos < size());
+    size_t start = pos;
+    if (prefix)
+    {
+      assert(base == 16);
+      assert(pos + 2 < size());
+      data()[pos] = '0';
+      data()[pos + 1] = 'x';
+      start = pos + 2;
+    }
+    std::to_chars_result r = std::to_chars(data() + start, data() + size() - 1, value, base);
     assert(r.ec == std::errc());
-    return ((size_t)(r.ptr - data()));
+    *r.ptr = '\0';
+    return ((size_t)(r.ptr - data())) - pos;
   }
 
-  size_t write_number(long long value)
+public:
+  size_t write_number(double value, std::chars_format fmt, int precision, size_t pos = 0)
   {
-    std::to_chars_result r = std::to_chars(data(), data() + size(), value);
+    assert(pos < size());
+    std::to_chars_result r = std::to_chars(data() + pos, data() + size() - 1, value, fmt, precision);
     assert(r.ec == std::errc());
-    return ((size_t)(r.ptr - data()));
+    *r.ptr = '\0';
+    return ((size_t)(r.ptr - data())) - pos;
   }
 
-  size_t write_number(unsigned long value, int base)
+  size_t write_number(long long value, int base = 10, size_t pos = 0)
   {
-    std::to_chars_result r = std::to_chars(data(), data() + size(), value, base);
-    assert(r.ec == std::errc());
-    return ((size_t)(r.ptr - data()));
+    return write_number_impl(value, base, pos, false);
   }
 
-  size_t write_number(int value)
+  size_t write_number(int value, int base = 10, size_t pos = 0)
   {
-    std::to_chars_result r = std::to_chars(data(), data() + size(), value);
-    assert(r.ec == std::errc());
-    return ((size_t)(r.ptr - data()));
+    return write_number_impl(value, base, pos, false);
   }
 
-  size_t write_number(unsigned long long value, int base)
+  size_t write_number(unsigned long value, int base = 10, size_t pos = 0, bool prefix = false)
   {
-    std::to_chars_result r = std::to_chars(data(), data() + size(), value, base);
-    assert(r.ec == std::errc());
-    return ((size_t)(r.ptr - data()));
+    return write_number_impl(value, base, pos, prefix);
   }
 
-  constexpr byte_view view() const
+  size_t write_number(unsigned long long value, int base = 10, size_t pos = 0, bool prefix = false)
   {
-    return byte_view(std::string_view(sp.data(), sp.size()));
-    // return byte_view(data(), length);
+    return write_number_impl(value, base, pos, prefix);
   }
 
-  constexpr byte_view str_view() const
+  byte_view view() const
+  {
+    return byte_view(std::string_view(data(), size()));
+  }
+
+  byte_view str_view() const
   {
     byte_view sv = view();
     size_t n = sv.find('\0');
@@ -219,29 +292,14 @@ struct byte_span
     return sv;
   }
 
-  constexpr char& operator[] (size_t i)
+  char& operator[] (size_t i)
   {
-    assert(i < sp.size());
-    return sp[i];
-    // assert(i < length);
-    // return sp[offset + i];
+    assert(i < size());
+    return data()[i];
   }
 
-  constexpr byte_span subspan(size_t off, size_t len = byte_view::npos) const
-  {
-    byte_span cp;
-    cp.sp = sp.subspan(off, len);
-    // assert(off <= length);
-    // byte_span cp = *this;
-    // cp.offset = offset + off;
-    // cp.length = std::min<size_t>(len, length - off);
-    return cp;
-  }
+  bool empty() const { return size() == 0; }
 
-  constexpr bool empty() const { return sp.empty(); }
-  // constexpr bool empty() const { return length == 0; }
-
-  std::span<char> sp;
-  // size_t offset = 0;
-  // size_t length = 0;
+  private:
+  std::shared_ptr<char> storage; /* points past the size_t length header; null when empty */
 };

@@ -158,7 +158,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     char buff[41];
     loadBlock(S, buff, ((size_t)(size + 1)) * sizeof((buff)[0]));          /* load string into buffer */
     byte_view buffstr{buff, size};
-    *sl = ts = luaS_createstr(L, buffstr, 0, buffstr.size()); /* create string */
+    *sl = ts = luaS_createstr(L, buffstr); /* create string */
     luaC_objbarrier(L, p, ts);
   }
   else
@@ -167,7 +167,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     tmp.growTo(size + 1);
     loadBlock(S, tmp.area().data(), ((size_t)(size + 1)) * sizeof(char));
     byte_view tmpsv{tmp.area().data(), size};
-    *sl = ts = luaS_createstr(L, tmpsv, 0, tmpsv.size());
+    *sl = ts = luaS_createstr(L, tmpsv);
     luaC_objbarrier(L, p, ts);
   }
   /* add string to list of saved strings */

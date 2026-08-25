@@ -26,7 +26,7 @@ LUAI_FUNC void     luaS_init(lua_State* L);
 LUAI_FUNC void     luaS_remove(lua_State* L, TString* ts);
 LUAI_FUNC void     luaS_forcehash(TString* ts);
 LUAI_FUNC Udata*   luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue);
-LUAI_FUNC TString* luaS_createstr(lua_State* L, byte_view str, size_t off, size_t len);
+LUAI_FUNC TString* luaS_createstr(lua_State* L, byte_view str);
 LUAI_FUNC TString* luaS_take(lua_State* L, InternalString&& str);
 LUAI_FUNC TString* luaS_takeexternal(lua_State* L, InternalString&& str);
 

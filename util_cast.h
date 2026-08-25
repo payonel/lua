@@ -19,11 +19,9 @@ namespace util
 
   inline InternalString func_to_string(lua_CFunction_t pf)
   {
-    char buf[20] = { '0', 'x' };
-    byte_span bufsp(buf, sizeof(buf));
-    std::to_chars_result res = std::to_chars(buf + 2, buf + sizeof(buf), reinterpret_cast<uintptr_t>(pf), 16);
-    byte_view svbuff(bufsp.data(), res.ptr - buf);
-    return InternalString(svbuff);
+    byte_span buf(20);
+    size_t n = buf.write_number(reinterpret_cast<uintptr_t>(pf), 16, 0ul, true);
+    return InternalString(buf.view().substr(0, n));
   }
   
   inline constexpr void* as_userdata(long long val) { return reinterpret_cast<void*>(static_cast<uintptr_t>(val)); } 

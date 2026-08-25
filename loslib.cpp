@@ -188,8 +188,7 @@ static int getfield(lua_State* L, byte_view key, int d, int delta)
   return (int) res;
 }
 
-static size_t checkoption(lua_State* L, byte_view fmt, size_t pos,
-                          byte_span buff, size_t boff)
+static size_t checkoption(lua_State* L, byte_view fmt, size_t pos, byte_span buff, size_t boff)
 {
   byte_view option = lt::strftime_options;
   size_t opos = 0;
@@ -201,7 +200,7 @@ static size_t checkoption(lua_State* L, byte_view fmt, size_t pos,
       oplen++;               /* will check options with next length (+1) */
     else if (fmt.substr(pos, oplen).equals(option.substr(opos, oplen)))
     {
-      byte_span(buff).copy_from(boff, fmt.substr(pos, oplen));
+      byte_span(buff).copy_from(fmt.substr(pos, oplen), boff);
       buff[boff + oplen] = '\0';
       return pos + oplen; /* return next item */
     }
@@ -244,8 +243,7 @@ static int os_date(lua_State* L)
   }
   else
   {
-    char cc[4]; /* buffer for individual conversion specifiers */
-    byte_span ccsp(cc);
+    byte_span cc(4); /* buffer for individual conversion specifiers */
     luaL_Buffer b;
     cc[0] = '%';
     luaL_buffinit(L, &b);
@@ -258,8 +256,9 @@ static int os_date(lua_State* L)
         size_t reslen;
         size_t off = luaL_prepbuffsize(&b, SIZETIMEFMT);
         sp++; /* skip '%' */
-        sp = checkoption(L, sfmt, sp, ccsp, 1);
-        reslen = strftime(luaL_buffaddr(&b).subspan(off, SIZETIMEFMT).data(), SIZETIMEFMT, cc, stm);
+        sp = checkoption(L, sfmt, sp, cc, 1);
+        byte_span buff = luaL_buffaddr(&b);
+        reslen = strftime(buff.data() + off, buff.size() - off, cc.data(), stm);
         luaL_addsize(&b, reslen);
       }
     }

@@ -78,13 +78,13 @@ static inline void save_and_next(LexState* ls)
 void luaX_init(lua_State* L)
 {
   int i;
-  TString* e = luaS_createstr(L, lt::_ENV, 0, lt::_ENV.size()); /* create env name */
+  TString* e = luaS_createstr(L, lt::_ENV); /* create env name */
   assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, e);                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
   {
     byte_view bytes = luaX_tokens[i];
-    TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
+    TString* ts = luaS_createstr(L, bytes);
     assert((ts->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, ts);     /* reserved words are never collected */
     ts->extra = ((lu_byte)(i + 1)); /* reserved word */
@@ -171,7 +171,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
 */
 TString* luaX_newstring(LexState* ls, byte_view str, size_t off, size_t len)
 {
-  return anchorstr(ls, luaS_createstr(ls->L, str, off, len));
+  return anchorstr(ls, luaS_createstr(ls->L, str.substr(off, len)));
 }
 
 /*
@@ -202,9 +202,9 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source, int firs
   ls->source = source;
   /* all three strings here ("_ENV", "break", "global") were fixed,
      so they cannot be collected */
-  ls->envn = luaS_createstr(L, lt::_ENV, 0, lt::_ENV.size()); /* get env string */
+  ls->envn = luaS_createstr(L, lt::_ENV); /* get env string */
   byte_view breakstr = lt::break_kw;
-  ls->brkn = luaS_createstr(L, breakstr, 0, breakstr.size()); /* get "break" string */
+  ls->brkn = luaS_createstr(L, breakstr); /* get "break" string */
   /* initialize buffer */
   ls->buff->reset();
 }
@@ -413,9 +413,8 @@ static l_uint32 readutf8esc(LexState* ls)
 
 static void utf8esc(LexState* ls)
 {
-  char buff[UTF8BUFFSZ];
-  byte_span buffsp(buff);
-  int n = luaO_utf8esc(buffsp, readutf8esc(ls));
+  byte_span buff(UTF8BUFFSZ);
+  int n = luaO_utf8esc(buff, readutf8esc(ls));
   for (; n > 0; n--) /* add 'buff' to string */
     save(ls, buff[UTF8BUFFSZ - n]);
 }
@@ -706,7 +705,7 @@ static int llex(LexState* ls, Token* seminfo)
           save_and_next(ls);
         } while (lislalnum(ls->current));
         /* find or create string */
-        ts = luaS_createstr(ls->L, ls->buff->view(), 0, ls->buff->view().size());
+        ts = luaS_createstr(ls->L, ls->buff->view());
         if (isreserved(ts)) /* reserved word? */
           return ts->extra - 1 + FIRST_RESERVED;
         else

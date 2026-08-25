@@ -422,9 +422,8 @@ std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, byte_span b
 
 LUA_API std::optional<HostString> lua_numbertocstring(lua_State* L, int idx)
 {
-  char buff[LUA_N2SBUFFSZ];
-  byte_span buffsp(buff);
-  std::optional<byte_view> s = lua_numbertocstringi(L, idx, buffsp);
+  byte_span buff(LUA_N2SBUFFSZ);
+  std::optional<byte_view> s = lua_numbertocstringi(L, idx, buff);
   if (!s.has_value())
     return std::nullopt;
   return HostString(*s);
@@ -651,7 +650,7 @@ LUA_API byte_view lua_pushlstring(lua_State* L, byte_view s, size_t off, size_t 
     off = 0;
     len = s.size();
   }
-  ts = luaS_createstr(L, s, off, len);
+  ts = luaS_createstr(L, s.substr(off, len));
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -668,7 +667,7 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
   }
   lua_lock(L);
   byte_view bytes = s->to_utf8();
-  TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
+  TString* ts = luaS_createstr(L, bytes);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -678,7 +677,7 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
 void lua_pushistringref(lua_State* L, byte_view bytes)
 {
   lua_lock(L);
-  TString* ts = luaS_createstr(L, bytes, 0, bytes.size());
+  TString* ts = luaS_createstr(L, bytes);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -861,7 +860,7 @@ static int auxgetstr(lua_State* L, const TValue* t, byte_view k)
 {
   lu_byte tag;
   TValue res;
-  TString* str = luaS_createstr(L, k, 0, k.size());
+  TString* str = luaS_createstr(L, k);
   if (t->tt_ != ctb(LUA_VTABLE))
     tag = LUA_VNOTABLE;
   else
@@ -1120,7 +1119,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
 static void auxsetstr(lua_State* L, const TValue* t, byte_view k)
 {
   int hres;
-  TString* str = luaS_createstr(L, k, 0, k.size());
+  TString* str = luaS_createstr(L, k);
   api_checkpop(L, 1);
   if (t->tt_ != ctb(LUA_VTABLE))
     hres = HNOTATABLE;
@@ -1660,7 +1659,7 @@ LUA_API void lua_concat(lua_State* L, int n)
   }
   else
   {                                                   /* nothing to concatenate */
-    setslots(L, L->top, luaS_createstr(L, lt::empty_str, 0, 0)); /* push empty string */
+    setslots(L, L->top, luaS_createstr(L, lt::empty_str)); /* push empty string */
     api_incr_top(L);
   }
   lua_unlock(L);

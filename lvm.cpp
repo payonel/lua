@@ -781,7 +781,7 @@ static void copy2buff(lua_State* L, StkId top, int n, byte_span buff)
     assert((slottag(L, v) & NOVARIANT_MASK) == LUA_TSTRING);
     TString* st = slottsval(L, v);
     byte_view s = st->data.view();
-    byte_span(buff).copy_from(tl, s);
+    buff.copy_from(s, tl);
     tl += s.size();
   } while (--n > 0);
 }
@@ -824,16 +824,15 @@ void luaV_concat(lua_State* L, int total)
       }
       if (tl <= 40)
       {
-        char buff[40];
-        byte_span buffsp(buff);
-        copy2buff(L, top, n, buffsp);
-        ts = luaS_createstr(L, buffsp.subspan(0, tl).view(), 0, tl);
+        byte_span buff(tl);
+        copy2buff(L, top, n, buff);
+        ts = luaS_createstr(L, buff.view());
       }
       else
       {
         byte_span buff = luaM_alloc_char_span(L->l_G, L, {}, tl, true);
         copy2buff(L, top, n, buff);
-        ts = luaS_createstr(L, buff.view(), 0, buff.size());
+        ts = luaS_createstr(L, buff.view());
         luaM_alloc_char_span(L->l_G, L, buff, 0, false);
       }
       setslots(L, top - n, ts); /* create result */

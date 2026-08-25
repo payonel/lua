@@ -482,16 +482,15 @@ static size_t l_str2d(byte_view s, size_t off, lua_Number* result)
   size_t endpos = l_str2dloc(s, off, result, mode); /* try to convert */
   if (endpos == byte_view::npos)
   {
-    char buff[L_MAXLENNUM + 1];
-    byte_span buffsp(buff, L_MAXLENNUM + 1);
+    byte_span buff(L_MAXLENNUM + 1);
     char point = locale_radixpoint();
     size_t ppoint = (point != '.') ? s.find(point, off) : byte_view::npos;
     size_t len = s.size() - off;
     if (ppoint == byte_view::npos || len > L_MAXLENNUM)
       return byte_view::npos;
-    buffsp.apply(s.substr(off, len));
-    buffsp[ppoint - off] = '.';
-    endpos = l_str2dloc(buffsp.subspan(0, len).view(), 0, result, mode); /* try again */
+    buff.apply(s.substr(off, len));
+    buff[ppoint - off] = '.';
+    endpos = l_str2dloc(buff.view().substr(0, len), 0, result, mode); /* try again */
     if (endpos != byte_view::npos)
       endpos = off + endpos; /* make relative to 's' */
   }
@@ -594,30 +593,32 @@ static_assert(LUA_N2SBUFFSZ >= 20 + DBL_DIG, "invalid value for LUA_N2SBUFFSZ");
 */
 static size_t tostringbuffFloat(lua_Number n, byte_span buff)
 {
-  size_t len = buff.subspan(0, LUA_N2SBUFFSZ - 3).write_number(n, std::chars_format::general, 15);
-  buff[len] = '\0';
-  byte_view::parse_result ret = buff.subspan(0, len).view().parse_number(buff.view().starts_with('-') ? 1u : 0u, std::chars_format::general);
+  size_t len = buff.write_number(n, std::chars_format::general, 15);
+  byte_view view = buff.view().substr(0, len);
+  bool bneg = buff.view().starts_with('-');
+  byte_view::parse_result ret = view.parse_number(bneg ? 1u : 0u, std::chars_format::general);
   lua_Number check = ret.result;
-  if (buff[0] == '-')
+  if (bneg)
+  {
     check = -check;
+  }
   if (check != n)
   {
-    len = buff.subspan(0, LUA_N2SBUFFSZ - 3).write_number(n, std::chars_format::general, 17);
-    buff[len] = '\0';
+    len = buff.write_number(n, std::chars_format::general, 17);
+    view = buff.view().substr(0, len); /* refresh: len just changed */
   }
-  if (buff.subspan(0, len).view().find_first_not_of(lt::digits_and_dash) == byte_view::npos)
+  if (view.find_first_not_of(lt::digits_and_dash) == byte_view::npos)
   {
     buff[len++] = '.';
     buff[len++] = '0'; /* adds '.0' to result */
   }
+  char point = locale_radixpoint();
+  if (point != '.')
   {
-    char point = locale_radixpoint();
-    if (point != '.')
-    {
-      size_t dotpos = buff.subspan(0, len).view().find('.');
-      if (dotpos != byte_view::npos)
-        buff[dotpos] = point;
-    }
+    view = buff.view().substr(0, len); // update as len could move
+    size_t dotpos = view.find('.');
+    if (dotpos != byte_view::npos)
+      buff[dotpos] = point;
   }
   return len;
 }
@@ -633,8 +634,7 @@ size_t luaO_tostringbuff(const TValue* obj, byte_span buff)
   if (obj->tt_ == LUA_VNUMINT)
   {
     byte_span bs(buff);
-    len = bs.subspan(0, bs.size() - 1).write_number(ivalue(obj));
-    bs[len] = '\0';
+    len = bs.write_number(ivalue(obj));
   }
   else
   {
@@ -650,11 +650,10 @@ size_t luaO_tostringbuff(const TValue* obj, byte_span buff)
 */
 void luaO_tostring(lua_State* L, TValue* obj)
 {
-  char buff[LUA_N2SBUFFSZ];
-  byte_span buffspan(buff);
-  size_t len = luaO_tostringbuff(obj, buffspan);
-  byte_view bytes{buff, len};
-  setsvalue(L, obj, luaS_createstr(L, bytes, 0, bytes.size()));
+  byte_span buff(LUA_N2SBUFFSZ);
+  size_t len = luaO_tostringbuff(obj, buff);
+  byte_view bytes = buff.view().substr(0, len);
+  setsvalue(L, obj, luaS_createstr(L, bytes));
 }
 
 /*
@@ -740,7 +739,7 @@ static void addstr2buff(BuffFS* buff, byte_view bv)
     }
     buff->b = nb;
   }
-  byte_span(buff->b).copy_from(buff->blen, bv);
+  byte_span(buff->b).copy_from(bv, buff->blen);
   buff->blen += slen;
 }
 
@@ -749,10 +748,9 @@ static void addstr2buff(BuffFS* buff, byte_view bv)
 */
 static void addnum2buff(BuffFS* buff, TValue* num)
 {
-  char numbuff[LUA_N2SBUFFSZ];
-  byte_span numspan(numbuff);
-  size_t len = luaO_tostringbuff(num, numspan);
-  addstr2buff(buff, byte_view(numbuff, LUA_N2SBUFFSZ).substr(0, len));
+  byte_span numbuff(LUA_N2SBUFFSZ);
+  size_t len = luaO_tostringbuff(num, numbuff);
+  addstr2buff(buff, numbuff.view().substr(0, len));
 }
 
 
@@ -873,23 +871,19 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     }
     case 'p':
     {
-      char bf[LUA_N2SBUFFSZ];
-      byte_span bfp(bf, LUA_N2SBUFFSZ);
+      byte_span bf(LUA_N2SBUFFSZ);
       assert(argn < args.n && args.arg[argn].tag == 'p');
       const void* p = args.arg[argn++].p;
-      bfp[0] = '0';
-      bfp[1] = 'x';
-      size_t bfn = 2 + bfp.subspan(2).write_number(((uintptr_t)(p)), 16);
-      addstr2buff(&buff, bfp.view().substr(0, bfn));
+      size_t bfn = bf.write_number(((uintptr_t)(p)), 16, size_t(0), true);
+      addstr2buff(&buff, bf.view().substr(0, bfn));
       break;
     }
     case 'U':
     {
       assert(argn < args.n && args.arg[argn].tag == 'U');
-      char bf[UTF8BUFFSZ];
-      byte_span bfsp(bf);
-      int len = luaO_utf8esc(bfsp, ((l_uint32)(args.arg[argn++].i)));
-      addstr2buff(&buff, bfsp.subspan(UTF8BUFFSZ - len).view());
+      byte_span bf(UTF8BUFFSZ);
+      int len = luaO_utf8esc(bf, ((l_uint32)(args.arg[argn++].i)));
+      addstr2buff(&buff, bf.view().substr(UTF8BUFFSZ - len));
       break;
     }
     case -1:
@@ -954,12 +948,12 @@ void luaO_chunkid(byte_span out, byte_view source)
   {                        /* 'literal' source */
     if (srclen <= bufflen) /* small enough? */
     {
-      byte_span(out).copy_from(0, source.substr(1, srclen - 1));
+      byte_span(out).copy_from(source.substr(1, srclen - 1));
       out[srclen - 1] = '\0';
     }
     else
     { /* truncate it */
-      byte_span(out).copy_from(0, source.substr(1, bufflen - 1));
+      byte_span(out).copy_from(source.substr(1, bufflen - 1));
       out[bufflen - 1] = '\0';
     }
   }
@@ -967,16 +961,16 @@ void luaO_chunkid(byte_span out, byte_view source)
   {                        /* file name */
     if (srclen <= bufflen) /* small enough? */
     {
-      byte_span(out).copy_from(0, source.substr(1, srclen - 1));
+      byte_span(out).copy_from(source.substr(1, srclen - 1));
       out[srclen - 1] = '\0';
     }
     else
     { /* add '...' before rest of name */
       byte_view bytes = lt::ellipsis;
-      byte_span(out).copy_from(0, bytes);
+      byte_span(out).copy_from( bytes);
       pos += lt::ellipsis.size();
       bufflen -= lt::ellipsis.size();
-      byte_span(out).copy_from(pos, source.substr(1 + srclen - bufflen, bufflen - 1));
+      byte_span(out).copy_from(source.substr(1 + srclen - bufflen, bufflen - 1), pos);
       out[pos + bufflen - 1] = '\0';
     }
   }
@@ -984,12 +978,12 @@ void luaO_chunkid(byte_span out, byte_view source)
   {                                                 /* string; format as [string "source"] */
     size_t nl = source.find('\n');
     byte_view bytes = lt::string_2;
-    byte_span(out).copy_from(0, bytes); /* add prefix */
+    byte_span(out).copy_from(bytes); /* add prefix */
     pos += lt::string_2.size();
     bufflen -= lt::string_2.size() + lt::ellipsis.size() + lt::backquote.size() + 1; /* save space for prefix+suffix+'\0' */
     if (srclen < bufflen && nl == byte_view::npos)
     {
-      byte_span(out).copy_from(pos, source.substr(0, srclen));
+      byte_span(out).copy_from(source.substr(0, srclen), pos);
       pos += srclen;
     }
     else
@@ -998,14 +992,14 @@ void luaO_chunkid(byte_span out, byte_view source)
         srclen = nl; /* stop at first newline */
       if (srclen > bufflen)
         srclen = bufflen;
-      byte_span(out).copy_from(pos, source.substr(0, srclen));
+      byte_span(out).copy_from(source.substr(0, srclen), pos);
       pos += srclen;
       bytes = lt::ellipsis;
-      byte_span(out).copy_from(pos, bytes);
+      byte_span(out).copy_from(bytes, pos);
       pos += lt::ellipsis.size();
     }
     bytes = lt::backquote;
-    byte_span(out).copy_from(pos, bytes);
+    byte_span(out).copy_from(bytes,pos);
     out[pos + lt::backquote.size()] = '\0';
   }
 }

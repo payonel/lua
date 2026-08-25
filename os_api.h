@@ -59,7 +59,7 @@ int os_freopen(OsFile* f, byte_view path, byte_view mode);
 OsFile* os_stdin();
 OsFile* os_stdout();
 OsFile* os_stderr();
-size_t os_fread(OsFile* f, byte_span out);
+size_t os_fread(OsFile* f, byte_span out, size_t off, size_t n);
 size_t os_fwrite(OsFile* f, byte_view bytes);
 int os_getbyte(OsFile* f);
 void os_ungetbyte(OsFile* f, int c);

@@ -117,33 +117,32 @@ void luaS_init(lua_State* L)
 {
   global_State* g = L->l_G;
   /* pre-create memory-error message */
-  g->memerrmsg = luaS_createstr(L, lt::not_enough_memory, 0, lt::not_enough_memory.size());
+  g->memerrmsg = luaS_createstr(L, lt::not_enough_memory);
   assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, g->memerrmsg); /* it should never be collected */
 }
 
 constexpr int LUAI_MAXSHORTLEN = 40;
 
-TString* luaS_createstr(lua_State* L, byte_view str, size_t off, size_t len)
+TString* luaS_createstr(lua_State* L, byte_view str)
 {
   global_State* g = L->l_G;
-  byte_view sv = str.substr(off, len);
-  size_t l = len;
+  size_t l = str.size();
   if (l <= LUAI_MAXSHORTLEN)
   {
-    size_t h = luaS_hash(sv);
-    TString* ts = internfind(g, sv, h);
+    size_t h = luaS_hash(str);
+    TString* ts = internfind(g, str, h);
     if (ts != nullptr)
     {
       if (isdead(g, ts))
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    ts = createstrobj(L, InternalString(sv, 0, l), h, 1, 0);
+    ts = createstrobj(L, InternalString(str, 0, l), h, 1, 0);
     interninsert(g, ts);
     return ts;
   }
-  return createstrobj(L, InternalString(sv, 0, l), 0, 0, 0);
+  return createstrobj(L, InternalString(str, 0, l), 0, 0, 0);
 }
 
 TString* luaS_take(lua_State* L, InternalString&& str)

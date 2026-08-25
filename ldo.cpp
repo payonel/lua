@@ -170,7 +170,7 @@ constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
 l_noret luaD_errerr(lua_State* L)
 {
   byte_view errstr = lt::error_in_error_handling;
-  TString* msg = luaS_createstr(L, errstr, 0, errstr.size());
+  TString* msg = luaS_createstr(L, errstr);
   setslots(L, L->top, msg);
   L->top++; /* assume EXTRA_STACK */
   luaD_throw(L, LUA_ERRERR);
@@ -817,7 +817,7 @@ static int resume_error(lua_State* L, byte_view msg, int narg)
 {
   api_checkpop(L, narg);
   L->top -= narg;                           /* remove args from the stack */
-  setslots(L, L->top, luaS_createstr(L, msg, 0, msg.size())); /* push error message */
+  setslots(L, L->top, luaS_createstr(L, msg)); /* push error message */
   api_incr_top(L);
   lua_unlock(L);
   return LUA_ERRRUN;

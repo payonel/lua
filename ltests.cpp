@@ -106,11 +106,10 @@ static int tpanic(lua_State* L)
 */
 static void warnf(void* ud, const HostString& msg, int tocont)
 {
-  static char buff[200] = ""; /* should be enough for tests... */
+  static byte_span buffsp(200); /* should be enough for tests... */
 
   std::string mstr = to_string(msg.to_utf8());
   byte_view m = to_view(mstr);
-  byte_span buffsp(buff, sizeof(buff));
 
   lua_State* L = static_cast<lua_State*>(ud);
   static int onoff = 0;
@@ -118,8 +117,8 @@ static void warnf(void* ud, const HostString& msg, int tocont)
   static int lasttocont = 0;
   if (!lasttocont && !tocont && !m.empty() && m[0] == '@')
   { /* control message? */
-    if (buff[0] != '\0')
-      badexit("Control warning during warning: %s\naborting...\n", mstr.c_str(), buff);
+    if (buffsp[0] != '\0')
+      badexit("Control warning during warning: %s\naborting...\n", mstr.c_str(), buffsp.data());
     if (m == lt::off_1)
       onoff = 0;
     else if (m == lt::on_1)
@@ -135,9 +134,11 @@ static void warnf(void* ud, const HostString& msg, int tocont)
     return;
   }
   lasttocont = tocont;
-  if (m.size() >= sizeof(buff) - strlen(buff))
-    badexit("warnf-buffer overflow (%s)\n", mstr.c_str(), buff);
-  strcat(buff, mstr.c_str()); /* add new message to current warning */
+  size_t used = buffsp.str_view().size();
+  if (m.size() >= buffsp.size() - used)
+    badexit("warnf-buffer overflow (%s)\n", mstr.c_str(), buffsp.data());
+  buffsp.copy_from(m, used); /* add new message to current warning */
+  buffsp[used + m.size()] = '\0';
   if (!tocont)
   { /* message finished? */
     luaL_checkstack(L, 1, HostString(lt::warn_stack_space));
@@ -147,20 +148,20 @@ static void warnf(void* ud, const HostString& msg, int tocont)
     else
     {
       std::string warning = to_string(lua_toistring(L, -1)->view());
-      badexit("Unhandled warning in store mode: %s\naborting...\n", warning.c_str(), buff);
+      badexit("Unhandled warning in store mode: %s\naborting...\n", warning.c_str(), buffsp.data());
     }
     switch (mode)
     {
     case 0:
-    {                              /* normal */
-      if (buff[0] != '#' && onoff) /* unexpected warning? */
+    {                                /* normal */
+      if (buffsp[0] != '#' && onoff) /* unexpected warning? */
         badexit("Unexpected warning in test mode: %s\naborting...\n",
-                buff, nullptr);
+                buffsp.data(), nullptr);
     } /* FALLTHROUGH */
     case 1:
     { /* allow */
       if (onoff)
-        fprintf(stderr, "Lua warning: %s\n", buff); /* print warning */
+        fprintf(stderr, "Lua warning: %s\n", buffsp.data()); /* print warning */
       break;
     }
     case 2:
@@ -171,7 +172,7 @@ static void warnf(void* ud, const HostString& msg, int tocont)
       break;
     }
     }
-    buff[0] = '\0'; /* prepare buffer for next warning */
+    buffsp[0] = '\0'; /* prepare buffer for next warning */
   }
 }
 
@@ -281,11 +282,10 @@ static void lua_printvalue(TValue* v)
   case LUA_VNUMINT:
   case LUA_VNUMFLT:
   {
-    char buff[LUA_N2SBUFFSZ];
-    byte_span buffspan(buff);
-    size_t len = luaO_tostringbuff(v, buffspan);
+    byte_span buff(LUA_N2SBUFFSZ);
+    size_t len = luaO_tostringbuff(v, buff);
     buff[len] = '\0';
-    printf("%s", buff);
+    printf("%s", buff.data());
     break;
   }
   case LUA_VSHRSTR:
