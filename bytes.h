@@ -153,16 +153,24 @@ private:
   }
 };
 
+struct byte_owner : std::span<char>
+{
+  byte_owner() : std::span<char>() {}
+  byte_owner(size_t s) : std::span<char>(new char[s](), s) {}
+  byte_owner(byte_owner&&) = delete;
+  byte_owner(const byte_owner&) = delete;
+  void operator=(byte_owner&&) = delete;
+  void operator=(const byte_owner&) = delete;
+  ~byte_owner()
+  {
+    delete [] data();
+  }
+};
+
 struct byte_span
 {
-  byte_span() = default;
-
-  explicit byte_span(size_t n)
-  {
-    char* raw = new char[sizeof(size_t) + n]();
-    memcpy(raw, &n, sizeof(size_t));
-    storage = std::shared_ptr<char>(raw + sizeof(size_t), [raw](char*) { delete[] raw; });
-  }
+  explicit byte_span(size_t n) { storage = std::make_shared<byte_owner>(n); }
+  byte_span()                  { storage = std::make_shared<byte_owner>(); } /* storage stays null: data() == nullptr, size() == 0 */
 
   explicit byte_span(byte_view view) : byte_span(view.size()) { apply(view); }
 
@@ -174,16 +182,8 @@ struct byte_span
   byte_span(char* rw, size_t len) = delete;
   template <size_t N> constexpr byte_span(char (&arr)[N]) = delete;
 
-  size_t size() const
-  {
-    if (!storage)
-      return 0;
-    size_t n;
-    memcpy(&n, storage.get() - sizeof(size_t), sizeof(size_t));
-    return n;
-  }
-
-  char* data() const { return storage.get(); }
+  size_t size() const { return storage->size(); }
+  char* data() const { return storage->data(); }
 
   size_t apply(byte_view from, size_t pos = 0)
   {
@@ -301,5 +301,5 @@ public:
   bool empty() const { return size() == 0; }
 
   private:
-  std::shared_ptr<char> storage; /* points past the size_t length header; null when empty */
+  std::shared_ptr<byte_owner> storage;
 };

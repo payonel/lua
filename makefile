@@ -62,7 +62,7 @@ LUA_T         =lua
 
 TEST_API_O    =$(OBJ_DIR)/test_public_api.o
 TEST_API_T    =test_public_api
-DEP_FILES    += $(TEST_API_O:.o=.d)
+DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d)
 
 all: $(LUA_T) $(TEST_API_T)
 
