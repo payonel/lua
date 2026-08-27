@@ -1147,7 +1147,7 @@ static int hash_query(lua_State* L)
     Table* t;
     luaL_checktype(L, 2, LUA_TTABLE);
     t = hvalue(&o2);
-    lua_pushinteger(L, ((lua_Integer)(luaH_mainposition(t, &o))));
+    lua_pushinteger(L, ((lua_Integer)(t->luaH_mainposition(&o))));
   }
   return 1;
 }

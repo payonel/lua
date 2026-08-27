@@ -147,7 +147,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
 {
   lua_State* L = ls->L;
   TValue oldts;
-  int tag = luaH_getstr(ls->h, ts, &oldts);
+  int tag = ls->h->luaH_getstr(ts, &oldts);
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))     /* string already present? */
   {
     assert((oldts.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
@@ -158,7 +158,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
     StkId stv = L->top++; /* reserve stack space for string */
     setslots(L, stv, ts);         /* push (anchor) the string on the stack */
     TValue sv = getslot(L, stv);
-    luaH_set(L, ls->h, &sv, &sv);  /* t[string] = string */
+    ls->h->luaH_set(L, &sv, &sv);  /* t[string] = string */
     /* table is not a metatable, so it does not need to invalidate cache */
     luaC_checkGC(L);
     L->top--; /* remove string from stack */

@@ -130,7 +130,7 @@ static void dumpString(DumpState* D, TString* ts)
   else
   {
     TValue idx;
-    int tag = luaH_getstr(D->h, ts, &idx);
+    int tag = D->h->luaH_getstr(ts, &idx);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     {                                         /* string already saved? */
       dumpVarint(D, 0);                       /* reuse a saved string */
@@ -148,7 +148,7 @@ static void dumpString(DumpState* D, TString* ts)
       D->nstr++;                             /* one more saved string */
       setsvalue(D->L, &key, ts);             /* the string is the key */
       setivalue(&value, ((lua_Integer)(D->nstr))); /* its index is the value */
-      luaH_set(D->L, D->h, &key, &value);    /* h[ts] = nstr */
+      D->h->luaH_set(D->L, &key, &value);    /* h[ts] = nstr */
       /* integer value does not need barrier */
     }
   }
@@ -276,7 +276,7 @@ int luaU_dump(lua_State* L, const Proto* f, lua_Writer w, void* data,
               int strip)
 {
   DumpState D;
-  D.h = luaH_new(L);             /* aux. table to keep strings already dumped */
+  D.h = Table::luaH_new(L);             /* aux. table to keep strings already dumped */
   setsloth(L, L->top, D.h); /* anchor it */
   L->top++;
   D.L = L;

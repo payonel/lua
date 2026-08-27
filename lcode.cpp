@@ -590,7 +590,7 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
 {
   TValue val;
   Proto* f = fs->f;
-  int tag = luaH_get(fs->kcache, key, &val); /* query scanner table */
+  int tag = fs->kcache->luaH_get(key, &val); /* query scanner table */
   if (!((tag & NOVARIANT_MASK) == LUA_TNIL))
   { /* is there an index there? */
     int k = ((int)(ivalue(&val)));
@@ -604,7 +604,7 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
     /* cache it for reuse; numerical value does not need GC barrier;
        table is not a metatable, so it does not need to invalidate cache */
     setivalue(&val, k);
-    luaH_set(fs->ls->L, fs->kcache, key, &val);
+    fs->kcache->luaH_set(fs->ls->L, key, &val);
     return k;
   }
 }

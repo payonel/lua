@@ -125,7 +125,7 @@ static l_mem objsize(GCObject* o)
   {
   case LUA_VTABLE:
   {
-    res = luaH_size(static_cast<Table*>(o));
+    res = static_cast<Table*>(o)->luaH_size();
     break;
   }
   case LUA_VLCL:
@@ -934,7 +934,7 @@ static void freeobj(lua_State* L, GCObject* o)
     break;
   }
   case LUA_VTABLE:
-    luaH_free(L, static_cast<Table*>(o));
+    static_cast<Table*>(o)->luaH_free(L);
     break;
   case LUA_VTHREAD:
     luaE_freethread(L, static_cast<lua_State*>(o));

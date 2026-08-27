@@ -522,7 +522,7 @@ LUA_API lua_Unsigned lua_rawlen(lua_State* L, int idx)
   {
     lua_Unsigned res;
     lua_lock(L);
-    res = luaH_getn(L, hvalue(&o));
+    res = hvalue(&o)->luaH_getn(L);
     lua_unlock(L);
     return res;
   }
@@ -865,7 +865,7 @@ static int auxgetstr(lua_State* L, const TValue* t, byte_view k)
     tag = LUA_VNOTABLE;
   else
   {
-    tag = luaH_getstr(hvalue(t), str, &res);
+    tag = hvalue(t)->luaH_getstr(str, &res);
   }
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
   {
@@ -891,7 +891,7 @@ static int auxgetstr(lua_State* L, const TValue* t, byte_view k)
 static void getGlobalTable(lua_State* L, TValue* gt)
 {
   Table* registry = hvalue((&L->l_G->l_registry));
-  lu_byte tag = luaH_getint(registry, LUA_RIDX_GLOBALS, gt);
+  lu_byte tag = registry->luaH_getint(LUA_RIDX_GLOBALS, gt);
   (void) tag; /* avoid not-used warnings when checks are off */
   assert((((tag) & NOVARIANT_MASK) == LUA_TTABLE) && "global table must exist");
 }
@@ -921,7 +921,7 @@ LUA_API int lua_gettable(lua_State* L, int idx)
   {
     TValue key = getslot(L, L->top - 1);
     TValue res;
-    tag = luaH_get(hvalue(&t), &key, &res);
+    tag = hvalue(&t)->luaH_get(&key, &res);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
       setslot(L, L->top - 1, &res);
   }
@@ -960,7 +960,7 @@ LUA_API int lua_geti(lua_State* L, int idx, lua_Integer n)
         farr2val(h, u, tag, &res);
     }
     else
-      tag = luaH_getint(h, n, &res);
+      tag = h->luaH_getint(n, &res);
   }
   if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
   {
@@ -1001,7 +1001,7 @@ LUA_API int lua_rawget(lua_State* L, int idx)
   {
     TValue key = getslot(L, L->top - 1);
     TValue res;
-    tag = luaH_get(t, &key, &res);
+    tag = t->luaH_get(&key, &res);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
       setslot(L, L->top - 1, &res);
   }
@@ -1025,7 +1025,7 @@ LUA_API int lua_rawgeti(lua_State* L, int idx, lua_Integer n)
         farr2val(t, u, tag, &res);
     }
     else
-      tag = luaH_getint(t, n, &res);
+      tag = t->luaH_getint(n, &res);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
       setslot(L, L->top, &res);
   }
@@ -1040,7 +1040,7 @@ LUA_API int lua_rawgetp(lua_State* L, int idx, const void* p)
   t = gettable(L, idx);
   setpvalue(&k, const_cast<void*>(p));
   TValue res;
-  lu_byte tag = luaH_get(t, &k, &res);
+  lu_byte tag = t->luaH_get(&k, &res);
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     setslot(L, L->top, &res);
   return finishrawget(L, tag);
@@ -1050,11 +1050,11 @@ LUA_API void lua_createtable(lua_State* L, int narray, int nrec)
 {
   Table* t;
   lua_lock(L);
-  t = luaH_new(L);
+  t = Table::luaH_new(L);
   setsloth(L, L->top, t);
   api_incr_top(L);
   if (narray > 0 || nrec > 0)
-    luaH_resize(L, t, ((unsigned int)(narray)), ((unsigned int)(nrec)));
+    t->luaH_resize(L, ((unsigned int)(narray)), ((unsigned int)(nrec)));
   luaC_checkGC(L);
   lua_unlock(L);
 }
@@ -1126,7 +1126,7 @@ static void auxsetstr(lua_State* L, const TValue* t, byte_view k)
   else
   {
     TValue val = getslot(L, L->top - 1);
-    hres = luaH_psetstr(hvalue(t), str, &val);
+    hres = hvalue(t)->luaH_psetstr(str, &val);
   }
   if (hres == HOK)
   {
@@ -1171,7 +1171,7 @@ LUA_API void lua_settable(lua_State* L, int idx)
     hres = HNOTATABLE;
   else
   {
-    hres = luaH_pset(hvalue(&t), &key, &val);
+    hres = hvalue(&t)->luaH_pset(&key, &val);
   }
   if (hres == HOK)
     luaV_finishfastset(L, &t, &val);
@@ -1227,7 +1227,7 @@ LUA_API void lua_seti(lua_State* L, int idx, lua_Integer n)
         hres = ~(int)u;
     }
     else
-      hres = luaH_psetint(h, n, &val);
+      hres = h->luaH_psetint(n, &val);
   }
   if (hres == HOK)
     luaV_finishfastset(L, &t, &val);
@@ -1248,7 +1248,7 @@ static void aux_rawset(lua_State* L, int idx, TValue* key, int n)
   api_checkpop(L, n);
   t = gettable(L, idx);
   TValue val = getslot(L, L->top - 1);
-  luaH_set(L, t, key, &val);
+  t->luaH_set(L, key, &val);
   invalidateTMcache(t);
   assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_barrierback(L, t, &val);
@@ -1276,7 +1276,7 @@ LUA_API void lua_rawseti(lua_State* L, int idx, lua_Integer n)
   api_checkpop(L, 1);
   t = gettable(L, idx);
   TValue val = getslot(L, L->top - 1);
-  luaH_setint(L, t, n, &val);
+  t->luaH_setint(L, n, &val);
   assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_barrierback(L, t, &val);
   L->top--;
@@ -1628,7 +1628,7 @@ LUA_API int lua_next(lua_State* L, int idx)
   lua_lock(L);
   api_checkpop(L, 1);
   t = gettable(L, idx);
-  more = luaH_next(L, t, L->top - 1);
+  more = t->luaH_next(L, L->top - 1);
   if (more)
     api_incr_top(L);
   else          /* no more elements */

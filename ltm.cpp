@@ -53,7 +53,7 @@ void luaT_init(lua_State* L)
 */
 const TValue* luaT_gettm(Table* events, TMS event, TString* ename)
 {
-  const TValue* tm = luaH_Hgetshortstr(events, ename);
+  const TValue* tm = events->luaH_Hgetshortstr(ename);
   assert(event <= TM_EQ);
   if (notm(tm))
   {                                          /* no tag method? */
@@ -78,7 +78,7 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
   default:
     mt = L->l_G->mt[(o->tt_ & NOVARIANT_MASK)];
   }
-  return (mt ? luaH_Hgetshortstr(mt, L->l_G->tmname[event]) : &L->l_G->nilvalue);
+  return (mt ? mt->luaH_Hgetshortstr(L->l_G->tmname[event]) : &L->l_G->nilvalue);
 }
 
 const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event)
@@ -97,7 +97,7 @@ byte_view luaT_objtypename(lua_State* L, const TValue* o)
   if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != nullptr) ||
       (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = uvalue(o)->metatable) != nullptr))
   {
-    const TValue* name = luaH_Hgetshortstr(mt, luaS_createstr(L, lt::mm_name));
+    const TValue* name = mt->luaH_Hgetshortstr(luaS_createstr(L, lt::mm_name));
     if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
     {
       return tsvalue(name)->data.view(); /* use it as type name */
@@ -279,20 +279,20 @@ static void createvarargtab(lua_State* L, StkId f, int n)
 {
   int i;
   TValue key, value;
-  Table* t = luaH_new(L);
+  Table* t = Table::luaH_new(L);
   setsloth(L, L->top, t);
   L->top++;
-  luaH_resize(L, t, ((unsigned int)(n)), 1);
+  t->luaH_resize(L, ((unsigned int)(n)), 1);
   byte_view bytes = lt::n_char;
   setsvalue(L, &key, luaS_createstr(L, bytes)); /* key is "n" */
   setivalue(&value, n);                 /* value is n */
   /* No need to anchor the key: Due to the resize, the next operation
      cannot trigger a garbage collection */
-  luaH_set(L, t, &key, &value); /* t.n = n */
+  t->luaH_set(L, &key, &value); /* t.n = n */
   for (i = 0; i < n; i++)
   {
     TValue v = getslot(L, f + i);
-    luaH_setint(L, t, i + 1, &v);
+    t->luaH_setint(L, i + 1, &v);
   }
   luaC_checkGC(L);
 }
@@ -389,7 +389,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
   {
     TValue res;
     byte_view bytes = lt::n_char;
-    if (luaH_getshortstr(h, luaS_createstr(L, bytes), &res) != LUA_VNUMINT ||
+    if (h->luaH_getshortstr(luaS_createstr(L, bytes), &res) != LUA_VNUMINT ||
         ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
       luaG_runerror(L, lt::vararg_table_has_no_proper_n);
     assert(res.tt_ == LUA_VNUMINT);
@@ -432,7 +432,7 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
     for (i = 0; i < touse; i++)
     {
       TValue res;
-      lu_byte tag = luaH_getint(h, i + 1, &res);
+      lu_byte tag = h->luaH_getint(i + 1, &res);
       if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         setslottag(L, where + i, LUA_VNIL);
       else

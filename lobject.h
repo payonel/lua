@@ -421,6 +421,8 @@ struct Node
   Value key_val;    /* key value */
 };
 
+struct Counters;
+
 struct Table : GCObject
 {
   lu_byte flags;      /* 1<<p means tagmethod(p) is not present */
@@ -431,6 +433,78 @@ struct Table : GCObject
   unsigned lenhint;   /* hint for #t; see luaH_getn */
   struct Table* metatable;
   GCObject* gclist;
+
+  static Table* luaH_new(lua_State* L);
+
+  lu_byte luaH_get(const TValue* key, TValue* res);
+  lu_byte luaH_getshortstr(TString* key, TValue* res);
+  lu_byte luaH_getstr(TString* key, TValue* res);
+  lu_byte luaH_getint(lua_Integer key, TValue* res);
+  const TValue* luaH_Hgetshortstr(TString* key);
+
+  int luaH_psetint(lua_Integer key, TValue* val);
+  int luaH_psetshortstr(TString* key, TValue* val);
+  int luaH_psetstr(TString* key, TValue* val);
+  int luaH_pset(const TValue* key, TValue* val);
+
+  void luaH_setint(lua_State* L, lua_Integer key, TValue* value);
+  void luaH_set(lua_State* L, const TValue* key, TValue* value);
+
+  void luaH_finishset(lua_State* L, const TValue* key, TValue* value, int hres);
+  void luaH_resize(lua_State* L, unsigned nasize, unsigned nhsize);
+  void luaH_resizearray(lua_State* L, unsigned nasize);
+  lu_mem luaH_size();
+  void luaH_free(lua_State* L);
+  int luaH_next(lua_State* L, StkId key);
+  lua_Unsigned luaH_getn(lua_State* L);
+
+#if defined(LUA_DEBUG)
+  int luaH_mainposition(const TValue* key) const;
+#endif
+
+  friend void reinserthash(lua_State* L, Table* ot, Table* t);
+
+private:
+  int haslastfree() const;
+  int hashpow2(lua_Unsigned n) const;
+  int hashmod(lua_Unsigned n) const;
+  int hashstr(TString* str) const;
+  int hashboolean(int p) const;
+  int hashpointer(const void* p) const;
+  int hashpointer(lua_CFunction p) const;
+  int hashint(lua_Integer i) const;
+  int mainpositionTV(const TValue* key) const;
+  int mainpositionfromnode(int nd) const;
+  int nodegeneric(const TValue* key, int deadok);
+  const TValue* getgeneric(const TValue* key, int deadok);
+  unsigned ikeyinarray(lua_Integer k) const;
+  unsigned keyinarray(const TValue* key);
+  unsigned findindex(lua_State* L, TValue* key, unsigned asize);
+  size_t sizehash();
+  void freehash(lua_State* L);
+  int insertkey(const TValue* key, TValue* value);
+  void newcheckedkey(const TValue* key, TValue* value);
+  void reinsertOldSlice(unsigned oldasize, unsigned newasize);
+  void clearNewSlice(unsigned oldasize, unsigned newasize);
+  void rehash(lua_State* L, const TValue* ek);
+  int getfreepos();
+  void luaH_newkey(lua_State* L, const TValue* key, TValue* value);
+  int nodeintfromhash(lua_Integer key);
+  const TValue* getintfromhash(lua_Integer key);
+  int hashkeyisempty(lua_Unsigned key);
+  int nodeshortstr(TString* key);
+  const TValue* Hgetstr(TString* key);
+  int finishnodeset(int idx, TValue* val);
+  int rawfinishnodeset(int idx, TValue* val);
+  int psetint(lua_Integer key, TValue* val);
+  lua_Unsigned hash_search(lua_State* L, unsigned asize);
+  unsigned int binsearch(unsigned int i, unsigned int j);
+  lua_Unsigned newhint(unsigned hint);
+  int arraykeyisempty(unsigned key) const;
+  void numusearray(Counters* ct) const;
+  void numusehash(Counters* ct) const;
+  std::span<Value> resizearray(lua_State* L, unsigned oldasize, unsigned newasize, std::span<lu_byte>* newtags);
+  void setnodevector(lua_State* L, unsigned size);
 };
 
 /*

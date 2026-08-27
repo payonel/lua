@@ -321,7 +321,7 @@ lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
       tag = LUA_VNOTABLE;
     else
     {
-      tag = luaH_get(hvalue(t), key, &res);
+      tag = hvalue(t)->luaH_get(key, &res);
     }
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     {
@@ -357,7 +357,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
       {                                       /* no metamethod? */
         setsloth(L, L->top, h);          /* anchor 't' */
         L->top++;                           /* assume EXTRA_STACK */
-        luaH_finishset(L, h, key, val, hres); /* set new value */
+        h->luaH_finishset(L, key, val, hres); /* set new value */
         L->top--;
         invalidateTMcache(h);
         assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
@@ -384,7 +384,7 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
       hres = HNOTATABLE;
     else
     {
-      hres = luaH_pset(hvalue(t), key, val);
+      hres = hvalue(t)->luaH_pset(key, val);
     }
     if (hres == HOK)
     {
@@ -856,7 +856,7 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src)
     tm = gfasttm(L->l_G, h->metatable, TM_LEN);
     if (tm)
       break;                                        /* metamethod? break switch to call it */
-    setsloti(L, ra, ((lua_Integer)(luaH_getn(L, h)))); /* else primitive len */
+    setsloti(L, ra, ((lua_Integer)(h->luaH_getn(L)))); /* else primitive len */
     return;
   }
   case LUA_VSHRSTR:
@@ -1360,7 +1360,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           tag = LUA_VNOTABLE;
         else
         {
-          tag = luaH_getshortstr(hvalue(&upval), key, &res);
+          tag = hvalue(&upval)->luaH_getshortstr(key, &res);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
@@ -1395,7 +1395,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
                 farr2val(h, u, tag, &res);
             }
             else
-              tag = luaH_getint(h, slotival(L, rc), &res);
+              tag = h->luaH_getint(slotival(L, rc), &res);
           }
         }
         else if (slottag(L, rb) != ctb(LUA_VTABLE))
@@ -1403,7 +1403,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else
         {
           TValue rcv = getslot(L, rc);
-          tag = luaH_get(slothval(L, rb), &rcv, &res);
+          tag = slothval(L, rb)->luaH_get(&rcv, &res);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
@@ -1438,7 +1438,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
               farr2val(h, u, tag, &res);
           }
           else
-            tag = luaH_getint(h, c, &res);
+            tag = h->luaH_getint(c, &res);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
@@ -1467,7 +1467,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           tag = LUA_VNOTABLE;
         else
         {
-          tag = luaH_getshortstr(slothval(L, rb), key, &res);
+          tag = slothval(L, rb)->luaH_getshortstr(key, &res);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
@@ -1493,7 +1493,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           hres = HNOTATABLE;
         else
         {
-          hres = luaH_psetshortstr(hvalue(&upval), key, &rc);
+          hres = hvalue(&upval)->luaH_psetshortstr(key, &rc);
         }
         if (hres == HOK)
           luaV_finishfastset(L, &upval, &rc);
@@ -1533,7 +1533,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
                 hres = ~(int)u;
             }
             else
-              hres = luaH_psetint(h, slotival(L, rb), &rc);
+              hres = h->luaH_psetint(slotival(L, rb), &rc);
           }
         }
         else
@@ -1544,7 +1544,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           else
           {
             TValue rbv = getslot(L, rb);
-            hres = luaH_pset(slothval(L, t), &rbv, &rc);
+            hres = slothval(L, t)->luaH_pset(&rbv, &rc);
           }
         }
         if (hres == HOK)
@@ -1585,7 +1585,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
               hres = ~(int)u;
           }
           else
-            hres = luaH_psetint(h, b, &rc);
+            hres = h->luaH_psetint(b, &rc);
         }
         if (hres == HOK)
           luaV_finishfastset(L, ra, &rc);
@@ -1614,7 +1614,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           hres = HNOTATABLE;
         else
         {
-          hres = luaH_psetshortstr(slothval(L, t), key, &rc);
+          hres = slothval(L, t)->luaH_psetshortstr(key, &rc);
         }
         if (hres == HOK)
           luaV_finishfastset(L, ra, &rc);
@@ -1644,10 +1644,10 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         pc++;              /* skip extra argument */
         L->top = ra + 1; /* correct top in case of emergency GC */
-        t = luaH_new(L);   /* memory allocation */
+        t = Table::luaH_new(L);   /* memory allocation */
         setsloth(L, ra, t);
         if (b != 0 || c != 0)
-          luaH_resize(L, t, c, b); /* idem */
+          t->luaH_resize(L, c, b); /* idem */
         if (L->l_G->GCdebt <= 0)
         {
           ci->savedpc = pc;
@@ -1672,7 +1672,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           tag = LUA_VNOTABLE;
         else
         {
-          tag = luaH_getshortstr(slothval(L, rb), key, &res);
+          tag = slothval(L, rb)->luaH_getshortstr(key, &res);
         }
         if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
         {
@@ -2841,7 +2841,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         { /* needs more space? */
           /* fixed-size sets should have space preallocated */
           assert(GETARG_vB(i) == 0);
-          luaH_resizearray(L, h, last); /* preallocate it at once */
+          h->luaH_resizearray(L, last); /* preallocate it at once */
         }
         for (; n > 0; n--)
         {

@@ -1061,7 +1061,7 @@ static void f_parser(lua_State* L, void* ud)
   Table* anchor;
   StkId otop = (L->top); /* original top */
   luaD_checkstack(L, 2);
-  anchor = luaH_new(L);               /* create the anchor table */
+  anchor = Table::luaH_new(L);               /* create the anchor table */
   setsloth(L, L->top++, anchor); /* anchor the anchor table */
   c = (p->z->pos < p->z->chunk.size())
           ? ((unsigned char)(p->z->chunk[p->z->pos++]))
@@ -1097,7 +1097,7 @@ void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
   setgcovalue(L, &v, obj);
   setslot(L, L->top, &v); /* temporary anchor in the stack */
   L->top++;
-  luaH_set(L, anchor, &v, &v);
+  anchor->luaH_set(L, &v, &v);
   /* Because this is a new key, luaH_set will call the GC barrier, so
      we don't need to call the barrier again here */
   L->top--;

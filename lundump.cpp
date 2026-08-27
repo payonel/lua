@@ -146,7 +146,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
       assert(*sl == nullptr); /* must be prefilled */
       return;
     }
-    if ((luaH_getint(S->h, ((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
+    if ((S->h->luaH_getint(((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
       error(S, lt::invalid_string_index);
     assert((stv.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
     *sl = ts = tsvalue(&stv); /* get its value */
@@ -173,7 +173,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
   /* add string to list of saved strings */
   S->nstr++;
   setsvalue(L, &sv, ts);
-  luaH_setint(L, S->h, ((lua_Integer)(S->nstr)), &sv);
+  S->h->luaH_setint(L, ((lua_Integer)(S->nstr)), &sv);
   assert((S->h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_objbarrierback(L, S->h, ts);
 }

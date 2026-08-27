@@ -358,7 +358,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
   {
     const Proto* p = static_cast<LClosure*>(f)->p;
     int currentline = p->linedefined;
-    Table* t = luaH_new(L);      /* new table to store active lines */
+    Table* t = Table::luaH_new(L);      /* new table to store active lines */
     setsloth(L, L->top, t); /* push it on stack */
     api_incr_top(L);
     if (p->lineinfo.data() != nullptr)
@@ -377,7 +377,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
       for (; i < (int)p->lineinfo.size(); i++)
       {                                            /* for each instruction */
         currentline = nextline(p, currentline, i); /* get its line */
-        luaH_setint(L, t, currentline, &v);        /* table[line] = true */
+        t->luaH_setint(L, currentline, &v);        /* table[line] = true */
       }
     }
   }

@@ -860,7 +860,7 @@ static void open_func(LexState* ls, FuncState* fs, BlockCnt* bl)
   f->source = ls->source;
   luaC_objbarrier(L, f, f->source);
   f->maxstacksize = 2;                           /* registers 0/1 are always valid */
-  fs->kcache = luaH_new(L);                      /* create table for function */
+  fs->kcache = Table::luaH_new(L);                      /* create table for function */
   assert((fs->kcache->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaD_anchorobj(L, ls->h, fs->kcache); /* anchor it */
   enterblock(fs, bl, 0);
@@ -885,7 +885,7 @@ static void close_func(LexState* ls)
   f->upvalues = luaM_alloc_Upvaldesc_span(L->l_G, L, f->upvalues, (size_t)fs->nups, true);
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */
-  luaH_set(L, ls->h, &temp, &L->l_G->nilvalue);
+  ls->h->luaH_set(L, &temp, &L->l_G->nilvalue);
   ls->fs = fs->prev;
   luaC_checkGC(L);
 }
