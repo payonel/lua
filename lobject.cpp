@@ -653,7 +653,7 @@ void luaO_tostring(lua_State* L, TValue* obj)
   byte_span buff(LUA_N2SBUFFSZ);
   size_t len = luaO_tostringbuff(obj, buff);
   byte_view bytes = buff.view().substr(0, len);
-  setsvalue(L, obj, luaS_createstr(L, bytes));
+  setsvalue(L, obj, TString::luaS_createstr(L, bytes));
 }
 
 /*
@@ -696,7 +696,7 @@ static void pushbuff(lua_State* L, void* ud)
   InternalString res(byte_view(buff->b.data(), buff->b.size()), 0, buff->blen);
   if (buff->err == 2)
     res = res.concat(lt::ellipsis);
-  TString* ts = luaS_take(L, std::move(res));
+  TString* ts = TString::luaS_take(L, std::move(res));
   setslots(L, L->top, ts);
   L->top++;
 }

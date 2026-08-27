@@ -816,7 +816,7 @@ static Proto* addprototype(LexState* ls)
     while (oldsize < (int)f->p.size())
       f->p[oldsize++] = nullptr;
   }
-  f->p[fs->np++] = clp = luaF_newproto(L);
+  f->p[fs->np++] = clp = Proto::luaF_newproto(L);
   luaC_objbarrier(L, f, clp);
   return clp;
 }
@@ -2350,12 +2350,12 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndat
   FuncState funcstate;
   LClosure* cl;
   lexstate.h = anchor;                    /* table for scanner */
-  cl = luaF_newLclosure(L, 1);            /* create main closure */
+  cl = LClosure::luaF_newLclosure(L, 1);            /* create main closure */
   assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaD_anchorobj(L, anchor, cl); /* anchor it in scanner table */
-  funcstate.f = cl->p = luaF_newproto(L);
+  funcstate.f = cl->p = Proto::luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
-  funcstate.f->source = luaS_createstr(L, name); /* create and anchor TString */
+  funcstate.f->source = TString::luaS_createstr(L, name); /* create and anchor TString */
   luaC_objbarrier(L, funcstate.f, funcstate.f->source);
   lexstate.buff = buff;
   lexstate.dyd = dyd;

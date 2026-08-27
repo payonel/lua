@@ -650,7 +650,7 @@ LUA_API byte_view lua_pushlstring(lua_State* L, byte_view s, size_t off, size_t 
     off = 0;
     len = s.size();
   }
-  ts = luaS_createstr(L, s.substr(off, len));
+  ts = TString::luaS_createstr(L, s.substr(off, len));
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -667,7 +667,7 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
   }
   lua_lock(L);
   byte_view bytes = s->to_utf8();
-  TString* ts = luaS_createstr(L, bytes);
+  TString* ts = TString::luaS_createstr(L, bytes);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -677,7 +677,7 @@ LUA_API void lua_pushstring(lua_State* L, const std::optional<HostString>& s)
 void lua_pushistringref(lua_State* L, byte_view bytes)
 {
   lua_lock(L);
-  TString* ts = luaS_createstr(L, bytes);
+  TString* ts = TString::luaS_createstr(L, bytes);
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -687,7 +687,7 @@ void lua_pushistringref(lua_State* L, byte_view bytes)
 void lua_pushistring(lua_State* L, InternalString&& s)
 {
   lua_lock(L);
-  TString* ts = luaS_take(L, std::move(s));
+  TString* ts = TString::luaS_take(L, std::move(s));
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -697,7 +697,7 @@ void lua_pushistring(lua_State* L, InternalString&& s)
 void lua_pushistringext(lua_State* L, InternalString&& s)
 {
   lua_lock(L);
-  TString* ts = luaS_takeexternal(L, std::move(s));
+  TString* ts = TString::luaS_takeexternal(L, std::move(s));
   setslots(L, L->top, ts);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -808,7 +808,7 @@ LUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
     CClosure* cl;
     api_checkpop(L, n);
     assert((n <= MAXUPVAL) && "upvalue index too large");
-    cl = luaF_newCclosure(L, n);
+    cl = CClosure::luaF_newCclosure(L, n);
     cl->f = fn;
     for (i = 0; i < n; i++)
     {
@@ -860,7 +860,7 @@ static int auxgetstr(lua_State* L, const TValue* t, byte_view k)
 {
   lu_byte tag;
   TValue res;
-  TString* str = luaS_createstr(L, k);
+  TString* str = TString::luaS_createstr(L, k);
   if (t->tt_ != ctb(LUA_VTABLE))
     tag = LUA_VNOTABLE;
   else
@@ -1119,7 +1119,7 @@ LUA_API int lua_getiuservalue(lua_State* L, int idx, int n)
 static void auxsetstr(lua_State* L, const TValue* t, byte_view k)
 {
   int hres;
-  TString* str = luaS_createstr(L, k);
+  TString* str = TString::luaS_createstr(L, k);
   api_checkpop(L, 1);
   if (t->tt_ != ctb(LUA_VTABLE))
     hres = HNOTATABLE;
@@ -1659,7 +1659,7 @@ LUA_API void lua_concat(lua_State* L, int n)
   }
   else
   {                                                   /* nothing to concatenate */
-    setslots(L, L->top, luaS_createstr(L, lt::empty_str)); /* push empty string */
+    setslots(L, L->top, TString::luaS_createstr(L, lt::empty_str)); /* push empty string */
     api_incr_top(L);
   }
   lua_unlock(L);
@@ -1737,7 +1737,7 @@ LUA_API void* lua_newuserdatauv(lua_State* L, size_t size, int nuvalue)
   Udata* u;
   lua_lock(L);
   assert((0 <= nuvalue && nuvalue < SHRT_MAX) && "invalid value");
-  u = luaS_newudata(L, size, ((unsigned short)(nuvalue)));
+  u = Udata::luaS_newudata(L, size, ((unsigned short)(nuvalue)));
   setslotu(L, L->top, u);
   api_incr_top(L);
   luaC_checkGC(L);
@@ -1951,7 +1951,7 @@ LUA_API void lua_pushcfunction(lua_State* L, lua_CFunction f)
 
 LUA_API CFuncInfo* lua_createcfuncinfo(lua_State* L, lua_CFunction fn, std::optional<HostString> name)
 {
-  CFuncInfo* cfi = luaF_newCFuncInfo(L, fn);
+  CFuncInfo* cfi = CFuncInfo::luaF_newCFuncInfo(L, fn);
   if (name.has_value())
     cfi->name = name->to_utf8();
   return cfi;

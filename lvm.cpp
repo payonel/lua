@@ -826,13 +826,13 @@ void luaV_concat(lua_State* L, int total)
       {
         byte_span buff(tl);
         copy2buff(L, top, n, buff);
-        ts = luaS_createstr(L, buff.view());
+        ts = TString::luaS_createstr(L, buff.view());
       }
       else
       {
         byte_span buff = luaM_alloc_char_span(L->l_G, L, {}, tl, true);
         copy2buff(L, top, n, buff);
-        ts = luaS_createstr(L, buff.view());
+        ts = TString::luaS_createstr(L, buff.view());
         luaM_alloc_char_span(L->l_G, L, buff, 0, false);
       }
       setslots(L, top - n, ts); /* create result */
@@ -971,13 +971,13 @@ static void pushclosure(lua_State* L, Proto* p, UpVal** encup, StkId base,
   int nup = (int)p->upvalues.size();
   Upvaldesc* uv = p->upvalues.data();
   int i;
-  LClosure* ncl = luaF_newLclosure(L, nup);
+  LClosure* ncl = LClosure::luaF_newLclosure(L, nup);
   ncl->p = p;
   setslotclL(L, ra, ncl); /* anchor new closure in stack */
   for (i = 0; i < nup; i++)
   {                    /* fill in its upvalues */
     if (uv[i].instack) /* upvalue refers to local variable? */
-      ncl->upvals[i] = luaF_findupval(L, base + uv[i].idx);
+      ncl->upvals[i] = UpVal::luaF_findupval(L, base + uv[i].idx);
     else /* get upvalue from enclosing function */
       ncl->upvals[i] = encup[uv[i].idx];
     luaC_objbarrier(L, ncl, ncl->upvals[i]);

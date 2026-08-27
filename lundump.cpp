@@ -158,7 +158,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     char buff[41];
     loadBlock(S, buff, ((size_t)(size + 1)) * sizeof((buff)[0]));          /* load string into buffer */
     byte_view buffstr{buff, size};
-    *sl = ts = luaS_createstr(L, buffstr); /* create string */
+    *sl = ts = TString::luaS_createstr(L, buffstr); /* create string */
     luaC_objbarrier(L, p, ts);
   }
   else
@@ -167,7 +167,7 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     tmp.growTo(size + 1);
     loadBlock(S, tmp.area().data(), ((size_t)(size + 1)) * sizeof(char));
     byte_view tmpsv{tmp.area().data(), size};
-    *sl = ts = luaS_createstr(L, tmpsv);
+    *sl = ts = TString::luaS_createstr(L, tmpsv);
     luaC_objbarrier(L, p, ts);
   }
   /* add string to list of saved strings */
@@ -248,7 +248,7 @@ static void loadProtos(LoadState* S, Proto* f)
     f->p[i] = nullptr;
   for (i = 0; i < n; i++)
   {
-    f->p[i] = luaF_newproto(S->L);
+    f->p[i] = Proto::luaF_newproto(S->L);
     luaC_objbarrier(S->L, f, f->p[i]);
     loadFunction(S, f->p[i]);
   }
@@ -404,10 +404,10 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int f
   checkHeader(&S);
   S.h = anchor;
   S.nstr = 0;
-  cl = luaF_newLclosure(L, loadByte(&S));
+  cl = LClosure::luaF_newLclosure(L, loadByte(&S));
   assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaD_anchorobj(L, anchor, cl);
-  cl->p = luaF_newproto(L);
+  cl->p = Proto::luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);
   loadFunction(&S, cl->p);
   if (cl->upvals.size() != cl->p->upvalues.size())

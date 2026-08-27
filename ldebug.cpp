@@ -232,7 +232,7 @@ const InternalString* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* p
     if (n < 0) /* access to vararg values? */
       return findvararg(L, ci, n, pos);
     else
-      name = luaF_getlocalname(ci_func(L, ci)->p, n, currentpc(L, ci));
+      name = ci_func(L, ci)->p->luaF_getlocalname(n, currentpc(L, ci));
   }
   if (name == nullptr)
   { /* no 'standard' name? */
@@ -261,7 +261,7 @@ const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n
     else /* consider live variables at function start (parameters) */
     {
       StkId fv = L->top - 1;
-      name = luaF_getlocalname(slotclLval(L, fv)->p, n, 0);
+      name = slotclLval(L, fv)->p->luaF_getlocalname(n, 0);
     }
   }
   else
@@ -648,7 +648,7 @@ static std::optional<byte_view> kname(const Proto* p, int index, const InternalS
 static std::optional<byte_view> basicgetobjname(const Proto* p, int* ppc, int reg, const InternalString** name)
 {
   int pc = *ppc;
-  *name = luaF_getlocalname(p, reg + 1, pc);
+  *name = p->luaF_getlocalname(reg + 1, pc);
   if (*name) /* is a local? */
     return lt::local;
   /* else try symbolic execution */
@@ -1012,7 +1012,7 @@ l_noret luaG_errormsg(lua_State* L)
   { /* error object is nil? */
     /* change it to a proper message */
     byte_view errstr = lt::no_error_object;
-    setslots(L, L->top - 1, luaS_createstr(L, errstr));
+    setslots(L, L->top - 1, TString::luaS_createstr(L, errstr));
   }
   luaD_throw(L, LUA_ERRRUN);
 }

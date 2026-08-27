@@ -190,6 +190,17 @@ struct TString : GCObject
   unsigned int hash;
   TString* hnext;
   InternalString data;
+
+  static TString* luaS_createstr(lua_State* L, byte_view str);
+  static TString* luaS_take(lua_State* L, InternalString&& str);
+  static TString* luaS_takeexternal(lua_State* L, InternalString&& str);
+
+  void luaS_remove(lua_State* L);
+  void luaS_forcehash();
+
+private:
+  static TString* createstrobj(lua_State* L, InternalString&& str, size_t h,
+                                int hashed, int external);
 };
 
 constexpr lu_byte STREXTRA_EXTERNAL = 0xFF;
@@ -228,6 +239,8 @@ struct Udata : GCObject
   std::span<TValue> uv;
   byte_span data;
   bool zb;
+
+  static Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue);
 };
 
 /* get the address of the memory block inside 'Udata' */
@@ -319,6 +332,12 @@ struct Proto : GCObject
   std::span<LocVar> locvars;          /* information about local variables (debug information) */
   TString* source;          /* used for debug information */
   GCObject* gclist;
+
+  static Proto* luaF_newproto(lua_State* L);
+
+  lu_mem luaF_protosize();
+  void luaF_freeproto(lua_State* L);
+  const InternalString* luaF_getlocalname(int local_number, int pc) const;
 };
 
 static l_forceinline int isvararg(const Proto* p)
@@ -356,6 +375,12 @@ struct UpVal : GCObject
   struct lua_State* owner;
   StkId stkid;
   TValue value;
+
+  static UpVal* luaF_findupval(lua_State* L, StkId level);
+  void luaF_unlinkupval();
+
+private:
+  static UpVal* newupval(lua_State* L, StkId level, UpVal** prev);
 };
 
 struct Closure : GCObject
@@ -367,6 +392,8 @@ struct CClosure : Closure
 {
   lua_CFunction f;
   std::span<TValue> upvalue;
+
+  static CClosure* luaF_newCclosure(lua_State* L, int nupvals);
 };
 
 constexpr size_t sizeCclosure(int n)
@@ -378,6 +405,9 @@ struct LClosure : Closure
 {
   struct Proto* p;
   std::span<UpVal*> upvals;
+
+  static LClosure* luaF_newLclosure(lua_State* L, int nupvals);
+  void luaF_initupvals(lua_State* L);
 };
 
 constexpr size_t sizeLclosure(int n)
@@ -401,6 +431,9 @@ struct CFuncInfo : GCObject
     , fptr(f)
     , name(n.to_utf8())
   {}
+
+  static CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f,
+                                       std::optional<byte_view> name = std::nullopt);
 };
 
 /* }================================================================== */

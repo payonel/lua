@@ -872,7 +872,7 @@ static int listlocals(lua_State* L)
                 1, HostString(lt::Lua_function_expected));
   TValue o = obj_at(L, 1);
   p = getproto(&o);
-  while ((name = luaF_getlocalname(p, ++i, pc)) != nullptr)
+  while ((name = p->luaF_getlocalname(++i, pc)) != nullptr)
     lua_pushlstring(L, name->view(), 0, name->size());
   return i - 1;
 }

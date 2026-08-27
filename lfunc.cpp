@@ -19,7 +19,7 @@
 #include "lstate.h"
 #include "literals.h"
 
-CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<byte_view> name)
+CFuncInfo* CFuncInfo::luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<byte_view> name)
 {
   CFuncInfo* cfi = luaM_malloc_CFuncInfo(L);
   luaC_link(L, cfi, LUA_VLCF);
@@ -29,7 +29,7 @@ CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<byte_v
   return cfi;
 }
 
-CClosure* luaF_newCclosure(lua_State* L, int nupvals)
+CClosure* CClosure::luaF_newCclosure(lua_State* L, int nupvals)
 {
   global_State* g = L->l_G;
   CClosure* c = luaM_malloc_CClosure(L);
@@ -45,7 +45,7 @@ CClosure* luaF_newCclosure(lua_State* L, int nupvals)
   return c;
 }
 
-LClosure* luaF_newLclosure(lua_State* L, int nupvals)
+LClosure* LClosure::luaF_newLclosure(lua_State* L, int nupvals)
 {
   global_State* g = L->l_G;
   LClosure* c = luaM_malloc_LClosure(L);
@@ -67,10 +67,9 @@ LClosure* luaF_newLclosure(lua_State* L, int nupvals)
 /*
 ** fill a closure with new closed upvalues
 */
-void luaF_initupvals(lua_State* L, LClosure* cl)
+void LClosure::luaF_initupvals(lua_State* L)
 {
-  int i;
-  for (i = 0; i < (int)cl->upvals.size(); i++)
+  for (size_t i = 0; i < upvals.size(); i++)
   {
     UpVal* uv = luaM_malloc_UpVal(L);
     luaC_link(L, uv, LUA_VUPVAL);
@@ -79,8 +78,8 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
     uv->owner = nullptr;
     uv->stkid = 0;
     (uv->value.tt_ = LUA_VNIL);
-    cl->upvals[i] = uv;
-    luaC_objbarrier(L, cl, uv);
+    upvals[i] = uv;
+    luaC_objbarrier(L, this, uv);
   }
 }
 
@@ -88,7 +87,7 @@ void luaF_initupvals(lua_State* L, LClosure* cl)
 ** Create a new upvalue at the given level, and link it to the list of
 ** open upvalues of 'L' after entry 'prev'.
 **/
-static UpVal* newupval(lua_State* L, StkId level, UpVal** prev)
+UpVal* UpVal::newupval(lua_State* L, StkId level, UpVal** prev)
 {
   UpVal* uv = luaM_malloc_UpVal(L);
   luaC_link(L, uv, LUA_VUPVAL);
@@ -112,7 +111,7 @@ static UpVal* newupval(lua_State* L, StkId level, UpVal** prev)
 ** Find and reuse, or create if it does not exist, an upvalue
 ** at the given level.
 */
-UpVal* luaF_findupval(lua_State* L, StkId level)
+UpVal* UpVal::luaF_findupval(lua_State* L, StkId level)
 {
   UpVal** pp = &L->openupval;
   UpVal* p;
@@ -125,7 +124,7 @@ UpVal* luaF_findupval(lua_State* L, StkId level)
     pp = &p->opennext;
   }
   /* not found: create a new upvalue after 'pp' */
-  return newupval(L, level, pp);
+  return UpVal::newupval(L, level, pp);
 }
 
 /*
@@ -212,12 +211,12 @@ void luaF_newtbcupval(lua_State* L, StkId level)
   L->tbclist = level;
 }
 
-void luaF_unlinkupval(UpVal* uv)
+void UpVal::luaF_unlinkupval()
 {
-  assert(upisopen(uv));
-  *uv->previous = uv->opennext;
-  if (uv->opennext)
-    uv->opennext->previous = uv->previous;
+  assert(upisopen(this));
+  *previous = opennext;
+  if (opennext)
+    opennext->previous = previous;
 }
 
 /*
@@ -230,7 +229,7 @@ void luaF_closeupval(lua_State* L, StkId level)
   {
     TValue* slot = &uv->value; /* new position for value */
     assert(uplevel(uv) < L->top);
-    luaF_unlinkupval(uv);       /* remove upvalue from 'openupval' list */
+    uv->luaF_unlinkupval();       /* remove upvalue from 'openupval' list */
     setobj(L, slot, uv->stkid); /* move value to upvalue slot */
     uv->previous = nullptr;
     uv->opennext = nullptr;
@@ -268,7 +267,7 @@ StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy)
   return level;
 }
 
-Proto* luaF_newproto(lua_State* L)
+Proto* Proto::luaF_newproto(lua_State* L)
 {
   Proto* f = luaM_malloc_Proto(L);
   luaC_link(L, f, LUA_VPROTO);
@@ -288,47 +287,46 @@ Proto* luaF_newproto(lua_State* L)
   return f;
 }
 
-lu_mem luaF_protosize(Proto* p)
+lu_mem Proto::luaF_protosize()
 {
   lu_mem sz = (lu_mem)sizeof(Proto)
-              + (unsigned int)p->p.size() * sizeof(Proto*)
-              + (unsigned int)p->k.size() * sizeof(TValue)
-              + (unsigned int)p->locvars.size() * sizeof(LocVar)
-              + (unsigned int)p->upvalues.size() * sizeof(Upvaldesc);
-  if (!(p->flag & PF_FIXED))
+              + p.size() * sizeof(Proto*)
+              + k.size() * sizeof(TValue)
+              + locvars.size() * sizeof(LocVar)
+              + upvalues.size() * sizeof(Upvaldesc);
+  if (!(flag & PF_FIXED))
   {
-    sz += ((unsigned int)(p->code.size())) * sizeof(Instruction);
-    sz += ((unsigned int)(p->lineinfo.size())) * sizeof(lu_byte);
-    sz += ((unsigned int)(p->abslineinfo.size())) * sizeof(AbsLineInfo);
+    sz += code.size() * sizeof(Instruction);
+    sz += lineinfo.size() * sizeof(lu_byte);
+    sz += abslineinfo.size() * sizeof(AbsLineInfo);
   }
   return sz;
 }
 
-void luaF_freeproto(lua_State* L, Proto* f)
+void Proto::luaF_freeproto(lua_State* L)
 {
-  if (!(f->flag & PF_FIXED))
+  if (!(flag & PF_FIXED))
   {
-    luaM_alloc_Instruction_span(L->l_G, L, f->code, 0, false);
-    luaM_alloc_ls_byte_span(L->l_G, L, f->lineinfo, 0, false);
-    luaM_alloc_AbsLineInfo_span(L->l_G, L, f->abslineinfo, 0, false);
+    luaM_alloc_Instruction_span(L->l_G, L, code, 0, false);
+    luaM_alloc_ls_byte_span(L->l_G, L, lineinfo, 0, false);
+    luaM_alloc_AbsLineInfo_span(L->l_G, L, abslineinfo, 0, false);
   }
-  luaM_alloc_Proto_ptr_span(L->l_G, L, f->p, 0, false);
-  luaM_alloc_TValue_span(L->l_G, L, f->k, 0, false);
-  luaM_alloc_LocVar_span(L->l_G, L, f->locvars, 0, false);
-  luaM_alloc_Upvaldesc_span(L->l_G, L, f->upvalues, 0, false);
-  luaM_free_Proto(L, f);
+  luaM_alloc_Proto_ptr_span(L->l_G, L, p, 0, false);
+  luaM_alloc_TValue_span(L->l_G, L, k, 0, false);
+  luaM_alloc_LocVar_span(L->l_G, L, locvars, 0, false);
+  luaM_alloc_Upvaldesc_span(L->l_G, L, upvalues, 0, false);
+  luaM_free_Proto(L, this);
 }
 
-const InternalString* luaF_getlocalname(const Proto* f, int local_number, int pc)
+const InternalString* Proto::luaF_getlocalname(int local_number, int pc) const
 {
-  int i;
-  for (i = 0; i < (int)f->locvars.size() && f->locvars[i].startpc <= pc; i++)
+  for (size_t i = 0; i < locvars.size() && locvars[i].startpc <= pc; i++)
   {
-    if (pc < f->locvars[i].endpc)
+    if (pc < locvars[i].endpc)
     { /* is variable active? */
       local_number--;
       if (local_number == 0)
-        return &f->locvars[i].varname->data;
+        return &locvars[i].varname->data;
     }
   }
   return nullptr; /* not found */

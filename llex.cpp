@@ -78,13 +78,13 @@ static inline void save_and_next(LexState* ls)
 void luaX_init(lua_State* L)
 {
   int i;
-  TString* e = luaS_createstr(L, lt::_ENV); /* create env name */
+  TString* e = TString::luaS_createstr(L, lt::_ENV); /* create env name */
   assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_fix(L, e);                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
   {
     byte_view bytes = luaX_tokens[i];
-    TString* ts = luaS_createstr(L, bytes);
+    TString* ts = TString::luaS_createstr(L, bytes);
     assert((ts->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     luaC_fix(L, ts);     /* reserved words are never collected */
     ts->extra = ((lu_byte)(i + 1)); /* reserved word */
@@ -171,7 +171,7 @@ static TString* anchorstr(LexState* ls, TString* ts)
 */
 TString* luaX_newstring(LexState* ls, byte_view str, size_t off, size_t len)
 {
-  return anchorstr(ls, luaS_createstr(ls->L, str.substr(off, len)));
+  return anchorstr(ls, TString::luaS_createstr(ls->L, str.substr(off, len)));
 }
 
 /*
@@ -202,9 +202,9 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source, int firs
   ls->source = source;
   /* all three strings here ("_ENV", "break", "global") were fixed,
      so they cannot be collected */
-  ls->envn = luaS_createstr(L, lt::_ENV); /* get env string */
+  ls->envn = TString::luaS_createstr(L, lt::_ENV); /* get env string */
   byte_view breakstr = lt::break_kw;
-  ls->brkn = luaS_createstr(L, breakstr); /* get "break" string */
+  ls->brkn = TString::luaS_createstr(L, breakstr); /* get "break" string */
   /* initialize buffer */
   ls->buff->reset();
 }
@@ -705,7 +705,7 @@ static int llex(LexState* ls, Token* seminfo)
           save_and_next(ls);
         } while (lislalnum(ls->current));
         /* find or create string */
-        ts = luaS_createstr(ls->L, ls->buff->view());
+        ts = TString::luaS_createstr(ls->L, ls->buff->view());
         if (isreserved(ts)) /* reserved word? */
           return ts->extra - 1 + FIRST_RESERVED;
         else

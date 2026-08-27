@@ -148,7 +148,7 @@ static l_mem objsize(GCObject* o)
   }
   case LUA_VPROTO:
   {
-    res = luaF_protosize(static_cast<Proto*>(o));
+    res = static_cast<Proto*>(o)->luaF_protosize();
     break;
   }
   case LUA_VTHREAD:
@@ -904,7 +904,7 @@ static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
 static void freeupval(lua_State* L, UpVal* uv)
 {
   if (upisopen(uv))
-    luaF_unlinkupval(uv);
+    uv->luaF_unlinkupval();
   luaM_free_UpVal(L, uv);
 }
 
@@ -914,7 +914,7 @@ static void freeobj(lua_State* L, GCObject* o)
   switch (o->tt)
   {
   case LUA_VPROTO:
-    luaF_freeproto(L, static_cast<Proto*>(o));
+    static_cast<Proto*>(o)->luaF_freeproto(L);
     break;
   case LUA_VUPVAL:
     freeupval(L, static_cast<UpVal*>(o));
@@ -955,7 +955,7 @@ static void freeobj(lua_State* L, GCObject* o)
   {
     assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
-    luaS_remove(L, ts);
+    ts->luaS_remove(L);
     if (!strisexternal(ts))
       luaM_release(L, ts->data.size());
     luaM_free_TString(L, ts);

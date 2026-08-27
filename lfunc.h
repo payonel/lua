@@ -55,16 +55,6 @@ constexpr int MAXMISS = 10;
 /* special status to close upvalues preserving the top of the stack */
 constexpr int CLOSEKTOP = (LUA_ERRERR + 1);
 
-LUAI_FUNC Proto* luaF_newproto(lua_State* L);
-LUAI_FUNC CClosure* luaF_newCclosure(lua_State* L, int nupvals);
-LUAI_FUNC CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<byte_view> name = std::nullopt);
-LUAI_FUNC LClosure* luaF_newLclosure(lua_State* L, int nupvals);
-LUAI_FUNC void luaF_initupvals(lua_State* L, LClosure* cl);
-LUAI_FUNC UpVal* luaF_findupval(lua_State* L, StkId level);
 LUAI_FUNC void luaF_newtbcupval(lua_State* L, StkId level);
 LUAI_FUNC void luaF_closeupval(lua_State* L, StkId level);
 LUAI_FUNC StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy);
-LUAI_FUNC void luaF_unlinkupval(UpVal* uv);
-LUAI_FUNC lu_mem luaF_protosize(Proto* p);
-LUAI_FUNC void luaF_freeproto(lua_State* L, Proto* f);
-LUAI_FUNC const InternalString* luaF_getlocalname(const Proto* func, int local_number, int pc);
