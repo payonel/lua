@@ -51,27 +51,34 @@ struct Value
 ** an actual value plus a tag with its type.
 */
 
+struct TValue;
+static l_forceinline TValue getobj(const TValue* o);
+static l_forceinline void copyobj(TValue* dst, const TValue* src);
+
 struct TValue
 {
   Value value_;
   lu_byte tt_;
   TValue() = default;
   constexpr TValue(Value v, lu_byte t) : value_(v), tt_(t) {}
-  TValue(const TValue&) = delete;
-  TValue& operator=(const TValue&) = delete;
   TValue(TValue&&) = default;
   TValue& operator=(TValue&&) = default;
+
+private:
+  TValue(const TValue&) = default;
+  TValue& operator=(const TValue&) = default;
+  friend TValue getobj(const TValue* o);
+  friend void copyobj(TValue* dst, const TValue* src);
 };
 
 static l_forceinline TValue getobj(const TValue* o)
 {
-  return TValue(o->value_, o->tt_);
+  return *o;
 }
 
 static l_forceinline void copyobj(TValue* dst, const TValue* src)
 {
-  dst->value_ = src->value_;
-  dst->tt_ = src->tt_;
+  *dst = *src;
 }
 
 
