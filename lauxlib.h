@@ -14,7 +14,10 @@
 
 #include "lua.h"
 
+namespace lua::platform
+{
 struct OsFile;
+}
 #include "luaconf.h"
 
 /* global table */

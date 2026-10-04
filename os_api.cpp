@@ -12,6 +12,9 @@
 
 #include "literals.h"
 
+namespace lua::platform
+{
+
 void os_print_stdout(byte_view utf8)
 {
   fwrite(utf8.data(), sizeof(char), utf8.size(), stdout);
@@ -370,4 +373,6 @@ void os_flockfile(OsFile* f)
 void os_funlockfile(OsFile* f)
 {
   funlockfile(asf(f));
+}
+
 }

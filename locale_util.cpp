@@ -3,6 +3,9 @@
 #include <cctype>
 #include <clocale>
 
+namespace lua::platform
+{
+
 int locale_matchclass(int c, int cls)
 {
   switch (cls)
@@ -80,4 +83,6 @@ std::optional<byte_view> locale_setlocale(int category, std::optional<byte_view>
   if (res == nullptr)
     return std::nullopt;
   return byte_view(res);
+}
+
 }

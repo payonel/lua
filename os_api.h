@@ -5,6 +5,9 @@
 
 #include "internal_string.h"
 
+namespace lua::platform
+{
+
 void os_print_stdout(byte_view utf8);
 void os_print_stderr(byte_view utf8);
 void os_flush_stdout();
@@ -99,3 +102,5 @@ int os_fclose(OsFile* f);
 OsSystemResult os_pclose(OsFile* f);
 void os_flockfile(OsFile* f);
 void os_funlockfile(OsFile* f);
+
+}
