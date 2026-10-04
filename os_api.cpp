@@ -55,10 +55,90 @@ int os_strcoll(byte_view a, byte_view b)
   return strcoll(sa.c_str(), sb.c_str());
 }
 
-size_t os_strftime(byte_span out, size_t off, byte_view fmt, const struct tm* stm)
+static_assert(sizeof(time_t) == sizeof(long long), "time_t must hold every Lua time value");
+
+static struct tm totm(const OsDate& d)
+{
+  struct tm r = {};
+  r.tm_year = d.year;
+  r.tm_mon = d.month;
+  r.tm_mday = d.day;
+  r.tm_hour = d.hour;
+  r.tm_min = d.min;
+  r.tm_sec = d.sec;
+  r.tm_yday = d.yday;
+  r.tm_wday = d.wday;
+  r.tm_isdst = d.isdst;
+  r.tm_gmtoff = d.gmtoff;
+  r.tm_zone = d.zone.has_value() ? d.zone->data() : nullptr;
+  return r;
+}
+
+static OsDate fromtm(const struct tm& r)
+{
+  OsDate d;
+  d.year = r.tm_year;
+  d.month = r.tm_mon;
+  d.day = r.tm_mday;
+  d.hour = r.tm_hour;
+  d.min = r.tm_min;
+  d.sec = r.tm_sec;
+  d.yday = r.tm_yday;
+  d.wday = r.tm_wday;
+  d.isdst = r.tm_isdst;
+  d.gmtoff = r.tm_gmtoff;
+  d.zone = (r.tm_zone != nullptr) ? std::optional<byte_view>(byte_view(r.tm_zone)) : std::nullopt;
+  return d;
+}
+
+double os_cpuclock()
+{
+  return ((double) clock()) / (double) CLOCKS_PER_SEC;
+}
+
+long long os_now()
+{
+  return time(nullptr);
+}
+
+std::optional<OsDate> os_gmtime(long long t)
+{
+  time_t tt = t;
+  struct tm r;
+  if (gmtime_r(&tt, &r) == nullptr)
+    return std::nullopt;
+  return fromtm(r);
+}
+
+std::optional<OsDate> os_localtime(long long t)
+{
+  time_t tt = t;
+  struct tm r;
+  if (localtime_r(&tt, &r) == nullptr)
+    return std::nullopt;
+  return fromtm(r);
+}
+
+std::optional<long long> os_mktime(OsDate* d)
+{
+  struct tm r = totm(*d);
+  time_t t = mktime(&r);
+  *d = fromtm(r);
+  if (t == (time_t) (-1))
+    return std::nullopt;
+  return t;
+}
+
+double os_timediff(long long t1, long long t2)
+{
+  return difftime(t1, t2);
+}
+
+size_t os_strftime(byte_span out, size_t off, byte_view fmt, const OsDate& d)
 {
   std::string f(fmt.data(), fmt.size());
-  return strftime(out.data() + off, out.size() - off, f.c_str(), stm);
+  struct tm r = totm(d);
+  return strftime(out.data() + off, out.size() - off, f.c_str(), &r);
 }
 
 OsResult os_remove(byte_view path)

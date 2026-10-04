@@ -15,8 +15,27 @@ byte_view os_strerror(int err);
 
 int os_strcoll(byte_view a, byte_view b);
 
-struct tm;
-size_t os_strftime(byte_span out, size_t off, byte_view fmt, const struct tm* stm);
+struct OsDate
+{
+  int year;
+  int month;
+  int day;
+  int hour;
+  int min;
+  int sec;
+  int yday;
+  int wday;
+  int isdst;
+  long long gmtoff;
+  std::optional<byte_view> zone;
+};
+double os_cpuclock();
+long long os_now();
+std::optional<OsDate> os_gmtime(long long t);
+std::optional<OsDate> os_localtime(long long t);
+std::optional<long long> os_mktime(OsDate* d);
+double os_timediff(long long t1, long long t2);
+size_t os_strftime(byte_span out, size_t off, byte_view fmt, const OsDate& d);
 
 struct OsResult
 {

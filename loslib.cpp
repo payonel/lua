@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "lua.h"
 
@@ -106,7 +105,7 @@ static int os_getenv(lua_State* L)
 
 static int os_clock(lua_State* L)
 {
-  lua_pushnumber(L, ((lua_Number) clock()) / (lua_Number) CLOCKS_PER_SEC);
+  lua_pushnumber(L, os_cpuclock());
   return 1;
 }
 
@@ -135,17 +134,17 @@ static void setboolfield(lua_State* L, byte_view key, int value)
 /*
 ** Set all fields from structure 'tm' in the table on top of the stack
 */
-static void setallfields(lua_State* L, struct tm* stm)
+static void setallfields(lua_State* L, const OsDate* stm)
 {
-  setfield(L, lt::year, stm->tm_year, 1900);
-  setfield(L, lt::month, stm->tm_mon, 1);
-  setfield(L, lt::day, stm->tm_mday, 0);
-  setfield(L, lt::hour, stm->tm_hour, 0);
-  setfield(L, lt::min, stm->tm_min, 0);
-  setfield(L, lt::sec, stm->tm_sec, 0);
-  setfield(L, lt::yday, stm->tm_yday, 1);
-  setfield(L, lt::wday, stm->tm_wday, 1);
-  setboolfield(L, lt::isdst, stm->tm_isdst);
+  setfield(L, lt::year, stm->year, 1900);
+  setfield(L, lt::month, stm->month, 1);
+  setfield(L, lt::day, stm->day, 0);
+  setfield(L, lt::hour, stm->hour, 0);
+  setfield(L, lt::min, stm->min, 0);
+  setfield(L, lt::sec, stm->sec, 0);
+  setfield(L, lt::yday, stm->yday, 1);
+  setfield(L, lt::wday, stm->wday, 1);
+  setboolfield(L, lt::isdst, stm->isdst);
 }
 
 static int getboolfield(lua_State* L, byte_view key)
@@ -211,11 +210,9 @@ static size_t checkoption(lua_State* L, byte_view fmt, size_t pos, byte_span buf
   return pos; /* to avoid warnings */
 }
 
-static time_t l_checktime(lua_State* L, int arg)
+static lua_Integer l_checktime(lua_State* L, int arg)
 {
-  lua_Integer t = luaL_checkinteger(L, arg);
-  luaL_argchecki(L, (time_t) t == t, arg, lt::time_out_of_bounds);
-  return (time_t) t;
+  return luaL_checkinteger(L, arg);
 }
 
 /* maximum size for an individual 'strftime' item */
@@ -225,21 +222,21 @@ static int os_date(lua_State* L)
 {
   byte_view sfmt = luaL_optlstring(L, 1, lt::fmt_c);
   size_t sp = 0;
-  time_t t = (lua_isnoneornil(L, (2)) ? (time(nullptr)) : l_checktime(L, (2)));
-  struct tm tmr, *stm;
+  lua_Integer t = (lua_isnoneornil(L, (2)) ? (os_now()) : l_checktime(L, (2)));
+  std::optional<OsDate> stm;
   if (sv_byteat(sfmt, sp) == '!')
   { /* UTC? */
-    stm = gmtime_r(&t, &tmr);
+    stm = os_gmtime(t);
     sp++; /* skip '!' */
   }
   else
-    stm = localtime_r(&t, &tmr);
-  if (stm == nullptr) /* invalid date? */
+    stm = os_localtime(t);
+  if (!stm.has_value()) /* invalid date? */
     return luaL_errori(L, lt::date_result_cannot_be_represented_in_this_installation);
   if (sfmt.size() - sp == 2 && sfmt[sp] == '*' && sfmt[sp + 1] == 't')
   {
     lua_createtable(L, 0, 9); /* 9 = number of fields */
-    setallfields(L, stm);
+    setallfields(L, &*stm);
   }
   else
   {
@@ -258,7 +255,7 @@ static int os_date(lua_State* L)
         sp++; /* skip '%' */
         sp = checkoption(L, sfmt, sp, cc, 1);
         byte_span buff = luaL_buffaddr(&b);
-        reslen = os_strftime(buff, off, cc.str_view(), stm);
+        reslen = os_strftime(buff, off, cc.str_view(), *stm);
         luaL_addsize(&b, reslen);
       }
     }
@@ -269,35 +266,35 @@ static int os_date(lua_State* L)
 
 static int os_time(lua_State* L)
 {
-  time_t t;
+  std::optional<lua_Integer> t;
   if (lua_isnoneornil(L, 1)) /* called without args? */
-    t = time(nullptr);          /* get current time */
+    t = os_now();          /* get current time */
   else
   {
-    struct tm ts;
+    OsDate ts = {};
     luaL_checktype(L, 1, LUA_TTABLE);
     lua_settop(L, 1); /* make sure table is at the top */
-    ts.tm_year = getfield(L, lt::year, -1, 1900);
-    ts.tm_mon = getfield(L, lt::month, -1, 1);
-    ts.tm_mday = getfield(L, lt::day, -1, 0);
-    ts.tm_hour = getfield(L, lt::hour, 12, 0);
-    ts.tm_min = getfield(L, lt::min, 0, 0);
-    ts.tm_sec = getfield(L, lt::sec, 0, 0);
-    ts.tm_isdst = getboolfield(L, lt::isdst);
-    t = mktime(&ts);
+    ts.year = getfield(L, lt::year, -1, 1900);
+    ts.month = getfield(L, lt::month, -1, 1);
+    ts.day = getfield(L, lt::day, -1, 0);
+    ts.hour = getfield(L, lt::hour, 12, 0);
+    ts.min = getfield(L, lt::min, 0, 0);
+    ts.sec = getfield(L, lt::sec, 0, 0);
+    ts.isdst = getboolfield(L, lt::isdst);
+    t = os_mktime(&ts);
     setallfields(L, &ts); /* update fields with normalized values */
   }
-  if (t != (time_t) (lua_Integer) t || t == (time_t) (-1))
+  if (!t.has_value())
     return luaL_errori(L, lt::time_result_cannot_be_represented_in_this_installation);
-  lua_pushinteger(L, (lua_Integer) t);
+  lua_pushinteger(L, *t);
   return 1;
 }
 
 static int os_difftime(lua_State* L)
 {
-  time_t t1 = l_checktime(L, 1);
-  time_t t2 = l_checktime(L, 2);
-  lua_pushnumber(L, (lua_Number) difftime(t1, t2));
+  lua_Integer t1 = l_checktime(L, 1);
+  lua_Integer t2 = l_checktime(L, 2);
+  lua_pushnumber(L, os_timediff(t1, t2));
   return 1;
 }
 
