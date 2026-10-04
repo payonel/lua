@@ -189,19 +189,20 @@ static void fixjump(FuncState* fs, int pc, int dest)
 /*
 ** Concatenate jump-list 'l2' into jump-list 'l1'
 */
-void luaK_concat(FuncState* fs, int* l1, int l2)
+int luaK_concat(FuncState* fs, int l1, int l2)
 {
   if (l2 == NO_JUMP)
-    return;                /* nothing to concatenate? */
-  else if (*l1 == NO_JUMP) /* no original list? */
-    *l1 = l2;              /* 'l1' points to 'l2' */
+    return l1;                /* nothing to concatenate? */
+  else if (l1 == NO_JUMP) /* no original list? */
+    return l2;              /* 'l1' points to 'l2' */
   else
   {
-    int list = *l1;
+    int list = l1;
     int next;
     while ((next = getjump(fs, list)) != NO_JUMP) /* find last element */
       list = next;
     fixjump(fs, list, l2); /* last element links to 'l2' */
+    return l1;
   }
 }
 
@@ -1041,7 +1042,7 @@ static void exp2reg(FuncState* fs, expdesc* e, int reg)
 {
   discharge2reg(fs, e, reg);
   if (e->k == VJMP)                    /* expression itself is a test? */
-    luaK_concat(fs, &e->t, e->info); /* put this jump in 't' list */
+    e->t = luaK_concat(fs, e->t, e->info); /* put this jump in 't' list */
   if (hasjumps(e))
   {
     int final;         /* position after whole expression */
@@ -1305,7 +1306,7 @@ void luaK_goiftrue(FuncState* fs, expdesc* e)
     break;
   }
   }
-  luaK_concat(fs, &e->f, pc); /* insert new jump in false list */
+  e->f = luaK_concat(fs, e->f, pc); /* insert new jump in false list */
   luaK_patchtohere(fs, e->t); /* true list jumps to here (to go through) */
   e->t = NO_JUMP;
 }
@@ -1336,7 +1337,7 @@ static void luaK_goiffalse(FuncState* fs, expdesc* e)
     break;
   }
   }
-  luaK_concat(fs, &e->t, pc); /* insert new jump in 't' list */
+  e->t = luaK_concat(fs, e->t, pc); /* insert new jump in 't' list */
   luaK_patchtohere(fs, e->f); /* false list jumps to here (to go through) */
   e->f = NO_JUMP;
 }
@@ -1429,18 +1430,24 @@ static int isSCint(expdesc* e)
 ** Check whether expression 'e' is a literal integer or float in
 ** proper range to fit in a register (sB or sC).
 */
-static int isSCnumber(expdesc* e, int* pi, int* isfloat)
+struct SCImm
+{
+  int im;
+  int isfloat;
+};
+
+static int isSCnumber(expdesc* e, SCImm* sc)
 {
   IntResult i;
   if (e->k == VKINT)
     i.v = e->ival;
   else if (e->k == VKFLT && luaV_flttointeger(e->nval, &i, F2Ieq))
-    *isfloat = 1;
+    sc->isfloat = 1;
   else
     return 0; /* not a number */
   if (!hasjumps(e) && fitsC(i.v))
   {
-    *pi = int2sC(((int)(i.v)));
+    sc->im = int2sC(((int)(i.v)));
     return 1;
   }
   else
@@ -1795,21 +1802,20 @@ static void codebitwise(FuncState* fs, BinOpr opr,
 static void codeorder(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
 {
   int r1, r2;
-  int im;
-  int isfloat = 0;
+  SCImm sc = {0, 0};
   OpCode op;
-  if (isSCnumber(e2, &im, &isfloat))
+  if (isSCnumber(e2, &sc))
   {
     /* use immediate operand */
     r1 = luaK_exp2anyreg(fs, e1);
-    r2 = im;
+    r2 = sc.im;
     op = binopr2op(opr, OPR_LT, OP_LTI);
   }
-  else if (isSCnumber(e1, &im, &isfloat))
+  else if (isSCnumber(e1, &sc))
   {
     /* transform (A < B) to (B > A) and (A <= B) to (B >= A) */
     r1 = luaK_exp2anyreg(fs, e2);
-    r2 = im;
+    r2 = sc.im;
     op = binopr2op(opr, OPR_LT, OP_GTI);
   }
   else
@@ -1819,7 +1825,7 @@ static void codeorder(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
     op = binopr2op(opr, OPR_LT, OP_LT);
   }
   freeexps(fs, e1, e2);
-  e1->info = condjump(fs, op, r1, r2, isfloat, 1);
+  e1->info = condjump(fs, op, r1, r2, sc.isfloat, 1);
   e1->k = VJMP;
 }
 
@@ -1830,8 +1836,7 @@ static void codeorder(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
 static void codeeq(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
 {
   int r1, r2;
-  int im;
-  int isfloat = 0; /* not needed here, but kept for symmetry */
+  SCImm sc = {0, 0}; /* not needed here, but kept for symmetry */
   OpCode op;
   if (e1->k != VNONRELOC)
   {
@@ -1839,10 +1844,10 @@ static void codeeq(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
     swapexps(e1, e2);
   }
   r1 = luaK_exp2anyreg(fs, e1); /* 1st expression must be in register */
-  if (isSCnumber(e2, &im, &isfloat))
+  if (isSCnumber(e2, &sc))
   {
     op = OP_EQI;
-    r2 = im; /* immediate operand */
+    r2 = sc.im; /* immediate operand */
   }
   else if (exp2RK(fs, e2))
   { /* 2nd expression is constant? */
@@ -1855,7 +1860,7 @@ static void codeeq(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
     r2 = luaK_exp2anyreg(fs, e2);
   }
   freeexps(fs, e1, e2);
-  e1->info = condjump(fs, op, r1, r2, isfloat, (opr == OPR_EQ));
+  e1->info = condjump(fs, op, r1, r2, sc.isfloat, (opr == OPR_EQ));
   e1->k = VJMP;
 }
 
@@ -1940,8 +1945,8 @@ void luaK_infix(FuncState* fs, BinOpr op, expdesc* v)
   case OPR_GT:
   case OPR_GE:
   {
-    int dummy, dummy2;
-    if (!isSCnumber(v, &dummy, &dummy2))
+    SCImm dummy = {0, 0};
+    if (!isSCnumber(v, &dummy))
       luaK_exp2anyreg(fs, v);
     /* else keep numeral, which may be an immediate operand */
     break;
@@ -1989,14 +1994,14 @@ void luaK_posfix(FuncState* fs, BinOpr opr,
   case OPR_AND:
   {
     assert(e1->t == NO_JUMP); /* list closed by 'luaK_infix' */
-    luaK_concat(fs, &e2->f, e1->f);
+    e2->f = luaK_concat(fs, e2->f, e1->f);
     *e1 = *e2;
     break;
   }
   case OPR_OR:
   {
     assert(e1->f == NO_JUMP); /* list closed by 'luaK_infix' */
-    luaK_concat(fs, &e2->t, e1->t);
+    e2->t = luaK_concat(fs, e2->t, e1->t);
     *e1 = *e2;
     break;
   }

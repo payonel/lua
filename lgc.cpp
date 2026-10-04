@@ -1244,9 +1244,14 @@ static void sweep2old(lua_State* L, GCObject* p)
 ** here.  They will all be advanced in 'correctgraylist'. That function
 ** will also remove objects turned white here from any gray list.
 */
-static GCObject* sweepgen(lua_State* L, global_State* g, GCObject* p,
-                           GCObject* limit, bool setfirstold1,
-                           l_mem* paddedold)
+struct GenSweep
+{
+  GCObject* last;
+  l_mem addedold;
+};
+
+static GenSweep sweepgen(lua_State* L, global_State* g, GCObject* p,
+                           GCObject* limit, bool setfirstold1)
 {
   static const lu_byte nextage[] = {
       G_SURVIVAL, /* from G_NEW */
@@ -1290,8 +1295,7 @@ static GCObject* sweepgen(lua_State* L, global_State* g, GCObject* p,
       p = curr; /* go to next element */
     }
   }
-  *paddedold += addedold;
-  return p;
+  return {p, addedold};
 }
 
 /*
@@ -1439,22 +1443,26 @@ static void youngcollection(lua_State* L, global_State* g)
 
   /* sweep nursery and get a pointer to its last live element */
   g->gcstate = GCSswpallgc;
-  psurvival = sweepgen(L, g, &g->allgc, g->survival, true, &addedold1);
+  GenSweep gs = sweepgen(L, g, &g->allgc, g->survival, true);
+  psurvival = gs.last;
+  addedold1 += gs.addedold;
   /* sweep 'survival' */
-  sweepgen(L, g, psurvival, g->old1, true, &addedold1);
+  addedold1 += sweepgen(L, g, psurvival, g->old1, true).addedold;
   g->reallyold = g->old1;
   g->old1 = psurvival->next;   /* 'survival' survivals are old now */
   g->survival = g->allgc.next; /* all news are survivals */
 
   /* repeat for 'finobj' lists */
-  psurvival = sweepgen(L, g, &g->finobj, g->finobjsur, false, &addedold1);
+  gs = sweepgen(L, g, &g->finobj, g->finobjsur, false);
+  psurvival = gs.last;
+  addedold1 += gs.addedold;
   /* sweep 'survival' */
-  sweepgen(L, g, psurvival, g->finobjold1, false, &addedold1);
+  addedold1 += sweepgen(L, g, psurvival, g->finobjold1, false).addedold;
   g->finobjrold = g->finobjold1;
   g->finobjold1 = psurvival->next; /* 'survival' survivals are old now */
   g->finobjsur = g->finobj.next;   /* all news are survivals */
 
-  sweepgen(L, g, &g->tobefnz, nullptr, false, &addedold1);
+  addedold1 += sweepgen(L, g, &g->tobefnz, nullptr, false).addedold;
 
   /* keep total number of added old1 bytes */
   g->GCmarked = marked + addedold1;

@@ -1225,20 +1225,6 @@ static inline void luai_threadyield(lua_State* L)
 
 /* 'c' is the limit of live values in the stack */
 
-static l_forceinline void frameentry(lua_State* L, CallInfo* ci,
-                                     LClosure** cl, TValue** k,
-                                     const Instruction** code, int* pc,
-                                     StkId* base, int* trap)
-{
-  *cl = ci_func(L, ci);
-  *k = (*cl)->p->k.data();
-  *code = (*cl)->p->code.data();
-  *pc = ci->savedpc;
-  if (l_unlikely(*trap))
-    *trap = luaG_tracecall(L);
-  *base = ci->func + 1;
-}
-
 void luaV_execute(lua_State* L, CallInfo* ci)
 {
   LClosure* cl;
@@ -1248,7 +1234,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
   int pc;
   int trap;
   trap = L->hookmask;
-  frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
+  cl = ci_func(L, ci);
+  k = cl->p->k.data();
+  code = cl->p->code.data();
+  pc = ci->savedpc;
+  if (l_unlikely(trap))
+    trap = luaG_tracecall(L);
+  base = ci->func + 1;
   /* main loop of interpreter */
   for (;;)
   {
@@ -2597,7 +2589,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         { /* Lua call: run function in this same C frame */
           ci = newci;
           trap = L->hookmask;
-          frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
+          cl = ci_func(L, ci);
+          k = cl->p->k.data();
+          code = cl->p->code.data();
+          pc = ci->savedpc;
+          if (l_unlikely(trap))
+            trap = luaG_tracecall(L);
+          base = ci->func + 1;
         }
         break;
       }
@@ -2623,7 +2621,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if ((n = luaD_pretailcall(L, ci, ra, b, delta)) < 0) /* Lua function? */
         {
           trap = L->hookmask;
-          frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
+          cl = ci_func(L, ci);
+          k = cl->p->k.data();
+          code = cl->p->code.data();
+          pc = ci->savedpc;
+          if (l_unlikely(trap))
+            trap = luaG_tracecall(L);
+          base = ci->func + 1;
         }
         else
         {                         /* C function? */
@@ -2633,7 +2637,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           if (ci->callstatus & CIST_FRESH)
             return; /* end this frame */
           ci = ci->previous; /* continue running caller in this frame */
-          frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
+          cl = ci_func(L, ci);
+          k = cl->p->k.data();
+          code = cl->p->code.data();
+          pc = ci->savedpc;
+          if (l_unlikely(trap))
+            trap = luaG_tracecall(L);
+          base = ci->func + 1;
         }
         break;
       }
@@ -2662,7 +2672,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
+        cl = ci_func(L, ci);
+        k = cl->p->k.data();
+        code = cl->p->code.data();
+        pc = ci->savedpc;
+        if (l_unlikely(trap))
+          trap = luaG_tracecall(L);
+        base = ci->func + 1;
         break;
       }
       case OP_RETURN0:
@@ -2686,7 +2702,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
+        cl = ci_func(L, ci);
+        k = cl->p->k.data();
+        code = cl->p->code.data();
+        pc = ci->savedpc;
+        if (l_unlikely(trap))
+          trap = luaG_tracecall(L);
+        base = ci->func + 1;
         break;
       }
       case OP_RETURN1:
@@ -2718,7 +2740,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (ci->callstatus & CIST_FRESH)
           return; /* end this frame */
         ci = ci->previous; /* continue running caller in this frame */
-        frameentry(L, ci, &cl, &k, &code, &pc, &base, &trap);
+        cl = ci_func(L, ci);
+        k = cl->p->k.data();
+        code = cl->p->code.data();
+        pc = ci->savedpc;
+        if (l_unlikely(trap))
+          trap = luaG_tracecall(L);
+        base = ci->func + 1;
         break;
       }
       case OP_FORLOOP:

@@ -276,17 +276,32 @@ lu_byte luaO_hexavalue(int c)
     return ((lu_byte)((ltolower(c) - 'a') + 10));
 }
 
-static int isneg(byte_view s, size_t* off)
+struct Sign
 {
-  if (sv_byteat(s, *off) == '-')
-  {
-    (*off)++;
-    return 1;
-  }
-  else if (sv_byteat(s, *off) == '+')
-    (*off)++;
-  return 0;
+  int neg;
+  size_t off;
+};
+
+static Sign isneg(byte_view s, size_t off)
+{
+  if (sv_byteat(s, off) == '-')
+    return {1, off + 1};
+  else if (sv_byteat(s, off) == '+')
+    return {0, off + 1};
+  return {0, off};
 }
+
+struct NumParse
+{
+  size_t end;
+  lua_Number value;
+};
+
+struct IntParse
+{
+  size_t end;
+  lua_Integer value;
+};
 
 /*
 ** {==================================================================
@@ -303,7 +318,7 @@ constexpr int MAXSIGDIG = 30;
 ** convert a hexadecimal numeric string to a number, following
 ** C99 specification for 'strtod'
 */
-static lua_Number lua_strx2number(byte_view s, size_t off, size_t* endpos)
+static NumParse lua_strx2number(byte_view s, size_t off)
 {
   int dot = '.';
   lua_Number r = 0.0; /* result (accumulator) */
@@ -313,12 +328,14 @@ static lua_Number lua_strx2number(byte_view s, size_t off, size_t* endpos)
   int neg;                      /* 1 if number is negative */
   int hasdot = 0;               /* true after seen a dot */
   size_t p = off;
-  *endpos = off;                /* nothing is valid yet */
+  size_t endpos = off;                /* nothing is valid yet */
   while (lisspace(sv_byteat(s, p)))
     p++;                                                    /* skip initial spaces */
-  neg = isneg(s, &p);                                       /* check sign */
+  Sign sign = isneg(s, p);                                       /* check sign */
+  neg = sign.neg;
+  p = sign.off;
   if (!(sv_byteat(s, p) == '0' && (sv_byteat(s, p + 1) == 'x' || sv_byteat(s, p + 1) == 'X'))) /* check '0x' */
-    return 0.0;                                   /* invalid format (no '0x') */
+    return {endpos, 0.0};                                   /* invalid format (no '0x') */
   for (p += 2;; p++)
   { /* skip '0x' and read numeral */
     if (sv_byteat(s, p) == dot)
@@ -343,27 +360,29 @@ static lua_Number lua_strx2number(byte_view s, size_t off, size_t* endpos)
       break; /* neither a dot nor a digit */
   }
   if (nosigdig + sigdig == 0) /* no digits? */
-    return 0.0;     /* invalid format */
-  *endpos = p;                /* valid up to here */
+    return {endpos, 0.0};     /* invalid format */
+  endpos = p;                /* valid up to here */
   e *= 4;                     /* each digit multiplies/divides value by 2^4 */
   if (sv_byteat(s, p) == 'p' || sv_byteat(s, p) == 'P')
   {                     /* exponent part? */
     int exp1 = 0;       /* exponent value */
     int neg1;           /* exponent sign */
     p++;                /* skip 'p' */
-    neg1 = isneg(s, &p); /* sign */
+    Sign sign1 = isneg(s, p); /* sign */
+    neg1 = sign1.neg;
+    p = sign1.off;
     if (!lisdigit(sv_byteat(s, p)))
-      return 0.0;          /* invalid; must have at least one digit */
+      return {endpos, 0.0};          /* invalid; must have at least one digit */
     while (lisdigit(sv_byteat(s, p))) /* read exponent */
       exp1 = exp1 * 10 + s[p++] - '0';
     if (neg1)
       exp1 = -exp1;
     e += exp1;
-    *endpos = p; /* valid up to here */
+    endpos = p; /* valid up to here */
   }
   if (neg)
     r = -r;
-  return ldexp(r, e);
+  return {endpos, ldexp(r, e)};
 }
 
 /* }====================================================== */
@@ -371,7 +390,7 @@ static lua_Number lua_strx2number(byte_view s, size_t off, size_t* endpos)
 /* maximum length of a numeral to be converted to a number */
 static constexpr int L_MAXLENNUM = 200;
 
-static size_t str2dec(byte_view s, size_t off, lua_Number* result)
+static NumParse str2dec(byte_view s, size_t off)
 {
   size_t p = off;
   while (lisspace(sv_byteat(s, p)))
@@ -383,7 +402,7 @@ static size_t str2dec(byte_view s, size_t off, lua_Number* result)
     p++;
   }
   if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
-    return off;
+    return {off, 0.0};
   byte_view::parse_result res = s.parse_number(p, std::chars_format::general);
   lua_Number v = res.result;
   size_t endp = res.next;
@@ -432,30 +451,18 @@ static size_t str2dec(byte_view s, size_t off, lua_Number* result)
     v = (magnitude > 0) ? ((lua_Number)(HUGE_VAL)) : 0.0;
   }
   else if (res.ec != std::errc())
-    return off;
-  *result = neg ? -v : v;
-  return endp;
+    return {off, 0.0};
+  return {endp, neg ? -v : v};
 }
 
-static size_t l_str2dloc(byte_view s, size_t off, lua_Number* result,
-                         int mode)
+static NumParse l_str2dloc(byte_view s, size_t off, int mode)
 {
-  size_t endpos;
-  if (mode == 'x')
-  {
-    *result = lua_strx2number(s, off, &endpos);
-    if (endpos == off)
-      return byte_view::npos; /* nothing recognized? */
-  }
-  else
-  {
-    endpos = str2dec(s, off, result);
-    if (endpos == off)
-      return byte_view::npos; /* nothing recognized? */
-  }
-  while (lisspace(sv_byteat(s, endpos)))
-    endpos++; /* skip trailing spaces */
-  return (endpos == s.size()) ? endpos : byte_view::npos;
+  NumParse r = (mode == 'x') ? lua_strx2number(s, off) : str2dec(s, off);
+  if (r.end == off)
+    return {byte_view::npos, r.value}; /* nothing recognized? */
+  while (lisspace(sv_byteat(s, r.end)))
+    r.end++; /* skip trailing spaces */
+  return {(r.end == s.size()) ? r.end : byte_view::npos, r.value};
 }
 
 /*
@@ -471,36 +478,36 @@ static size_t l_str2dloc(byte_view s, size_t off, lua_Number* result,
 ** - 'x' means a hexadecimal numeral
 ** - '.' just optimizes the search for the common case (no special chars)
 */
-static size_t l_str2d(byte_view s, size_t off, lua_Number* result)
+static NumParse l_str2d(byte_view s, size_t off)
 {
   size_t pmode = s.find_first_of(lt::xXnN_chars, off); /* look for special chars */
   int mode = (pmode != byte_view::npos)
                  ? ltolower(((unsigned char)(s[pmode])))
                  : 0;
   if (mode == 'n') /* reject 'inf' and 'nan' */
-    return byte_view::npos;
-  size_t endpos = l_str2dloc(s, off, result, mode); /* try to convert */
-  if (endpos == byte_view::npos)
+    return {byte_view::npos, 0.0};
+  NumParse r = l_str2dloc(s, off, mode); /* try to convert */
+  if (r.end == byte_view::npos)
   {
     byte_span buff(L_MAXLENNUM + 1);
     char point = locale_radixpoint();
     size_t ppoint = (point != '.') ? s.find(point, off) : byte_view::npos;
     size_t len = s.size() - off;
     if (ppoint == byte_view::npos || len > L_MAXLENNUM)
-      return byte_view::npos;
+      return {byte_view::npos, r.value};
     buff.apply(s.substr(off, len));
     buff[ppoint - off] = '.';
-    endpos = l_str2dloc(buff.view().substr(0, len), 0, result, mode); /* try again */
-    if (endpos != byte_view::npos)
-      endpos = off + endpos; /* make relative to 's' */
+    r = l_str2dloc(buff.view().substr(0, len), 0, mode); /* try again */
+    if (r.end != byte_view::npos)
+      r.end = off + r.end; /* make relative to 's' */
   }
-  return endpos;
+  return r;
 }
 
 constexpr lua_Unsigned MAXBY10 = ((lua_Unsigned)(LUA_MAXINTEGER / 10));
 constexpr int MAXLASTD = ((int)(LUA_MAXINTEGER % 10));
 
-static size_t l_str2int(byte_view s, size_t off, lua_Integer* result)
+static IntParse l_str2int(byte_view s, size_t off)
 {
   lua_Unsigned a = 0;
   int empty = 1;
@@ -508,7 +515,9 @@ static size_t l_str2int(byte_view s, size_t off, lua_Integer* result)
   size_t p = off;
   while (lisspace(sv_byteat(s, p)))
     p++; /* skip initial spaces */
-  neg = isneg(s, &p);
+  Sign sign = isneg(s, p);
+  neg = sign.neg;
+  p = sign.off;
   if (sv_byteat(s, p) == '0' &&
       (sv_byteat(s, p + 1) == 'x' || sv_byteat(s, p + 1) == 'X'))
   {         /* hex? */
@@ -525,7 +534,7 @@ static size_t l_str2int(byte_view s, size_t off, lua_Integer* result)
     {
       int d = s[p] - '0';
       if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + neg)) /* overflow? */
-        return byte_view::npos;                            /* do not accept it (as integer) */
+        return {byte_view::npos, 0};                            /* do not accept it (as integer) */
       a = a * 10 + ((unsigned int)(d));
       empty = 0;
     }
@@ -533,29 +542,27 @@ static size_t l_str2int(byte_view s, size_t off, lua_Integer* result)
   while (lisspace(sv_byteat(s, p)))
     p++; /* skip trailing spaces */
   if (empty || p != s.size())
-    return byte_view::npos; /* something wrong in the numeral */
+    return {byte_view::npos, 0}; /* something wrong in the numeral */
   else
-  {
-    *result = ((lua_Integer)((neg) ? 0u - a : a));
-    return p;
-  }
+    return {p, ((lua_Integer)((neg) ? 0u - a : a))};
 }
 
 size_t luaO_str2num(byte_view s, TValue* o)
 {
-  lua_Integer i;
-  lua_Number n;
-  size_t e;
-  if ((e = l_str2int(s, 0, &i)) != byte_view::npos)
+  IntParse i = l_str2int(s, 0);
+  size_t e = i.end;
+  if (e != byte_view::npos)
   { /* try as an integer */
-    setivalue(o, i);
-  }
-  else if ((e = l_str2d(s, 0, &n)) != byte_view::npos)
-  { /* else try as a float */
-    setfltvalue(o, n);
+    setivalue(o, i.value);
   }
   else
-    return 0; /* conversion failed */
+  { /* else try as a float */
+    NumParse n = l_str2d(s, 0);
+    e = n.end;
+    if (e == byte_view::npos)
+      return 0; /* conversion failed */
+    setfltvalue(o, n.value);
+  }
   assert(e == s.size());
   return e + 1;
 }

@@ -41,7 +41,13 @@ static InternalString tmplainname[] = {
     lt::concat, lt::call, lt::close_kw};
 static_assert(sizeof(tmplainname) / sizeof(tmplainname[0]) == TM_N, "tmplainname must cover every metamethod (ORDER TM)");
 
-static std::optional<byte_view> funcnamefromcall(lua_State* L, CallInfo* ci, const InternalString** name);
+struct VarName
+{
+  std::optional<byte_view> kind;
+  const InternalString* name;
+};
+
+static VarName funcnamefromcall(lua_State* L, CallInfo* ci);
 
 static int currentpc(lua_State* L, CallInfo* ci)
 {
@@ -63,12 +69,17 @@ static int currentpc(lua_State* L, CallInfo* ci)
 ** value for MAXIWTHABS or smaller. (Previous releases use a little
 ** smaller value.)
 */
-static int getbaseline(const Proto* f, int pc, int* basepc)
+struct BaseLine
+{
+  int pc;
+  int line;
+};
+
+static BaseLine getbaseline(const Proto* f, int pc)
 {
   if (f->abslineinfo.size() == 0 || pc < f->abslineinfo[0].pc)
   {
-    *basepc = -1; /* start from the beginning */
-    return f->linedefined;
+    return {-1, f->linedefined}; /* start from the beginning */
   }
   else
   {
@@ -78,8 +89,7 @@ static int getbaseline(const Proto* f, int pc, int* basepc)
                (i < (int)f->abslineinfo.size() && f->abslineinfo[i].pc <= pc));
     while (i + 1 < (int)f->abslineinfo.size() && pc >= f->abslineinfo[i + 1].pc)
       i++; /* low estimate; adjust it */
-    *basepc = f->abslineinfo[i].pc;
-    return f->abslineinfo[i].line;
+    return {f->abslineinfo[i].pc, f->abslineinfo[i].line};
   }
 }
 
@@ -94,8 +104,9 @@ int luaG_getfuncline(const Proto* f, int pc)
     return -1;
   else
   {
-    int basepc;
-    int baseline = getbaseline(f, pc, &basepc);
+    BaseLine base = getbaseline(f, pc);
+    int basepc = base.pc;
+    int baseline = base.line;
     while (basepc++ < pc)
     { /* walk until given instruction */
       assert(f->lineinfo[basepc] != ABSLINEINFO);
@@ -207,7 +218,7 @@ static const InternalString* upvalname(const Proto* p, int uv)
     return &s->data;
 }
 
-static const InternalString* findvararg(lua_State* L, CallInfo* ci, int n, StkId* pos)
+static LocalSlot findvararg(lua_State* L, CallInfo* ci, int n)
 {
   StkId fv = ci->func;
   LClosure* cl = slotclLval(L, fv);
@@ -216,21 +227,20 @@ static const InternalString* findvararg(lua_State* L, CallInfo* ci, int n, StkId
     int nextra = ci->nextraargs;
     if (n >= -nextra)
     { /* 'n' is negative */
-      *pos = ci->func - nextra - (n + 1);
-      return &lt::vararg_i; /* generic name for any vararg */
+      return {&lt::vararg_i, ci->func - nextra - (n + 1)}; /* generic name for any vararg */
     }
   }
-  return nullptr; /* no such vararg */
+  return {nullptr, 0}; /* no such vararg */
 }
 
-const InternalString* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* pos)
+LocalSlot luaG_findlocal(lua_State* L, CallInfo* ci, int n)
 {
   StkId base = ci->func + 1;
   const InternalString* name = nullptr;
   if (isLua(ci))
   {
     if (n < 0) /* access to vararg values? */
-      return findvararg(L, ci, n, pos);
+      return findvararg(L, ci, n);
     else
       name = ci_func(L, ci)->p->luaF_getlocalname(n, currentpc(L, ci));
   }
@@ -243,11 +253,9 @@ const InternalString* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* p
       name = isLua(ci) ? &lt::temporary_i : &lt::C_temporary_i;
     }
     else
-      return nullptr; /* no name */
+      return {nullptr, 0}; /* no name */
   }
-  if (pos)
-    *pos = base + (n - 1);
-  return name;
+  return {name, base + (n - 1)};
 }
 
 const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n)
@@ -266,11 +274,11 @@ const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n
   }
   else
   {                   /* active function; get information through 'ar' */
-    StkId pos = 0; /* to avoid warnings */
-    name = luaG_findlocal(L, ar->i_ci, n, &pos);
+    LocalSlot local = luaG_findlocal(L, ar->i_ci, n);
+    name = local.name;
     if (name)
     {
-      copyslot(L, L->top, pos);
+      copyslot(L, L->top, local.pos);
       api_incr_top(L);
     }
   }
@@ -291,14 +299,14 @@ LUA_API std::optional<HostString> lua_getlocal(lua_State* L, const lua_Debug* ar
 
 const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n)
 {
-  StkId pos = 0; /* to avoid warnings */
   const InternalString* name;
   lua_lock(L);
-  name = luaG_findlocal(L, ar->i_ci, n, &pos);
+  LocalSlot local = luaG_findlocal(L, ar->i_ci, n);
+  name = local.name;
   if (name)
   {
     api_checkpop(L, 1);
-    copyslot(L, pos, L->top - 1);
+    copyslot(L, local.pos, L->top - 1);
     L->top--; /* pop value */
   }
   lua_unlock(L);
@@ -383,13 +391,13 @@ static void collectvalidlines(lua_State* L, Closure* f)
   }
 }
 
-static std::optional<byte_view> getfuncname(lua_State* L, CallInfo* ci, const InternalString** name)
+static VarName getfuncname(lua_State* L, CallInfo* ci)
 {
   /* calling function is a known function? */
   if (ci != nullptr && !(ci->callstatus & CIST_TAIL))
-    return funcnamefromcall(L, ci->previous, name);
+    return funcnamefromcall(L, ci->previous);
   else
-    return std::nullopt; /* no way to find a name */
+    return {std::nullopt, nullptr}; /* no way to find a name */
 }
 
 static int auxgetinfo(lua_State* L, byte_view what, size_t wpos,
@@ -442,10 +450,9 @@ static int auxgetinfo(lua_State* L, byte_view what, size_t wpos,
     }
     case 'n':
     {
-      const InternalString* name = nullptr;
-      std::optional<byte_view> namewhat = getfuncname(L, ci, &name);
-      ar->namewhat = namewhat;
-      ar->name = (namewhat.has_value() && name != nullptr) ? name->view() : (std::optional<byte_view>)std::nullopt;
+      VarName fn = getfuncname(L, ci);
+      ar->namewhat = fn.kind;
+      ar->name = (fn.kind.has_value() && fn.name != nullptr) ? fn.name->view() : (std::optional<byte_view>)std::nullopt;
       break;
     }
     case 'r':
@@ -630,29 +637,28 @@ static int findsetreg(const Proto* p, int lastpc, int reg)
 /*
 ** Find a "name" for the constant 'c'.
 */
-static std::optional<byte_view> kname(const Proto* p, int index, const InternalString** name)
+static VarName kname(const Proto* p, int index)
 {
   const TValue* kvalue = &p->k[index];
   if ((((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
-  {
-    *name = &tsvalue(kvalue)->data;
-    return lt::constant;
-  }
+    return {lt::constant, &tsvalue(kvalue)->data};
   else
-  {
-    *name = &lt::qmark_i;
-    return std::nullopt;
-  }
+    return {std::nullopt, &lt::qmark_i};
 }
 
-static std::optional<byte_view> basicgetobjname(const Proto* p, int* ppc, int reg, const InternalString** name)
+struct RegName
 {
-  int pc = *ppc;
-  *name = p->luaF_getlocalname(reg + 1, pc);
-  if (*name) /* is a local? */
-    return lt::local;
+  VarName var;
+  int pc;
+};
+
+static RegName basicgetobjname(const Proto* p, int pc, int reg)
+{
+  const InternalString* name = p->luaF_getlocalname(reg + 1, pc);
+  if (name) /* is a local? */
+    return {{lt::local, name}, pc};
   /* else try symbolic execution */
-  *ppc = pc = findsetreg(p, pc, reg);
+  pc = findsetreg(p, pc, reg);
   if (pc != -1)
   { /* could find instruction? */
     Instruction i = p->code[pc];
@@ -663,33 +669,33 @@ static std::optional<byte_view> basicgetobjname(const Proto* p, int* ppc, int re
     {
       int b = GETARG_B(i); /* move from 'b' to 'a' */
       if (b < GETARG_A(i))
-        return basicgetobjname(p, ppc, b, name); /* get name for 'b' */
+        return basicgetobjname(p, pc, b); /* get name for 'b' */
       break;
     }
     case OP_GETUPVAL:
     {
-      *name = upvalname(p, GETARG_B(i));
-      return lt::upvalue;
+      return {{lt::upvalue, upvalname(p, GETARG_B(i))}, pc};
     }
     case OP_LOADK:
-      return kname(p, GETARG_Bx(i), name);
+      return {kname(p, GETARG_Bx(i)), pc};
     case OP_LOADKX:
-      return kname(p, GETARG_Ax(p->code[pc + 1]), name);
+      return {kname(p, GETARG_Ax(p->code[pc + 1])), pc};
     default:
       break;
     }
   }
-  return std::nullopt; /* could not find reasonable name */
+  return {{std::nullopt, name}, pc}; /* could not find reasonable name */
 }
 
 /*
 ** Find a "name" for the register 'c'.
 */
-static void rname(const Proto* p, int pc, int c, const InternalString** name)
+static const InternalString* rname(const Proto* p, int pc, int c)
 {
-  std::optional<byte_view> what = basicgetobjname(p, &pc, c, name); /* search for 'c' */
-  if (!what.has_value() || what.value() != lt::constant) /* did not find a constant name? */
-    *name = &lt::qmark_i;
+  VarName what = basicgetobjname(p, pc, c).var; /* search for 'c' */
+  if (!what.kind.has_value() || what.kind.value() != lt::constant) /* did not find a constant name? */
+    return &lt::qmark_i;
+  return what.name;
 }
 
 /*
@@ -704,10 +710,11 @@ static byte_view isEnv(const Proto* p, int pc, Instruction i, int isup)
     name = upvalname(p, t);
   else
   { /* 't' is a register */
-    std::optional<byte_view> what = basicgetobjname(p, &pc, t, &name);
+    VarName what = basicgetobjname(p, pc, t).var;
+    name = what.name;
     /* 'name' must be the name of a local variable (at the current
        level or an upvalue) */
-    if (!what.has_value() || (what.value() != lt::local && what.value() != lt::upvalue))
+    if (!what.kind.has_value() || (what.kind.value() != lt::local && what.kind.value() != lt::upvalue))
       name = nullptr; /* cannot be the variable _ENV */
   }
   return (name != nullptr && name->view() == lt::_ENV) ? lt::global : lt::field;
@@ -716,11 +723,12 @@ static byte_view isEnv(const Proto* p, int pc, Instruction i, int isup)
 /*
 ** Extend 'basicgetobjname' to handle table accesses
 */
-static std::optional<byte_view> getobjname(const Proto* p, int lastpc, int reg, const InternalString** name)
+static VarName getobjname(const Proto* p, int lastpc, int reg)
 {
-  std::optional<byte_view> kind = basicgetobjname(p, &lastpc, reg, name);
-  if (kind.has_value())
-    return kind;
+  RegName basic = basicgetobjname(p, lastpc, reg);
+  lastpc = basic.pc;
+  if (basic.var.kind.has_value())
+    return basic.var;
   else if (lastpc != -1)
   { /* could find instruction? */
     Instruction i = p->code[lastpc];
@@ -730,38 +738,33 @@ static std::optional<byte_view> getobjname(const Proto* p, int lastpc, int reg, 
     case OP_GETTABUP:
     {
       int k = GETARG_C(i); /* key index */
-      kname(p, k, name);
-      return isEnv(p, lastpc, i, 1);
+      return {isEnv(p, lastpc, i, 1), kname(p, k).name};
     }
     case OP_GETTABLE:
     case OP_GETVARG:
     {
       int k = GETARG_C(i); /* key index */
-      rname(p, lastpc, k, name);
-      return isEnv(p, lastpc, i, 0);
+      return {isEnv(p, lastpc, i, 0), rname(p, lastpc, k)};
     }
     case OP_GETI:
     {
-      *name = &lt::integer_index_i;
-      return lt::field;
+      return {lt::field, &lt::integer_index_i};
     }
     case OP_GETFIELD:
     {
       int k = GETARG_C(i); /* key index */
-      kname(p, k, name);
-      return isEnv(p, lastpc, i, 0);
+      return {isEnv(p, lastpc, i, 0), kname(p, k).name};
     }
     case OP_SELF:
     {
       int k = GETARG_C(i); /* key index */
-      kname(p, k, name);
-      return lt::method;
+      return {lt::method, kname(p, k).name};
     }
     default:
       break;
     }
   }
-  return std::nullopt; /* could not find reasonable name */
+  return {std::nullopt, basic.var.name}; /* could not find reasonable name */
 }
 
 /*
@@ -770,7 +773,7 @@ static std::optional<byte_view> getobjname(const Proto* p, int lastpc, int reg, 
 ** Returns what the name is (e.g., "for iterator", "method",
 ** "metamethod") and sets '*name' to point to the name.
 */
-static std::optional<byte_view> funcnamefromcode(const Proto* p, int pc, const InternalString** name)
+static VarName funcnamefromcode(const Proto* p, int pc)
 {
   TMS tm = (TMS) 0;            /* (initial value avoids warnings) */
   Instruction i = p->code[pc]; /* calling instruction */
@@ -778,11 +781,10 @@ static std::optional<byte_view> funcnamefromcode(const Proto* p, int pc, const I
   {
   case OP_CALL:
   case OP_TAILCALL:
-    return getobjname(p, pc, GETARG_A(i), name); /* get function name */
+    return getobjname(p, pc, GETARG_A(i)); /* get function name */
   case OP_TFORCALL:
   { /* for iterator */
-    *name = &lt::for_iterator_i;
-    return (*name)->view();
+    return {lt::for_iterator_i.view(), &lt::for_iterator_i};
   }
   /* other instructions can do calls through metamethods */
   case OP_SELF:
@@ -836,31 +838,28 @@ static std::optional<byte_view> funcnamefromcode(const Proto* p, int pc, const I
     tm = TM_CLOSE;
     break;
   default:
-    return std::nullopt; /* cannot find a reasonable name */
+    return {std::nullopt, nullptr}; /* cannot find a reasonable name */
   }
-  *name = &tmplainname[tm];
-  return lt::metamethod;
+  return {lt::metamethod, &tmplainname[tm]};
 }
 
 /*
 ** Try to find a name for a function based on how it was called.
 */
-static std::optional<byte_view> funcnamefromcall(lua_State* L, CallInfo* ci, const InternalString** name)
+static VarName funcnamefromcall(lua_State* L, CallInfo* ci)
 {
   if (ci->callstatus & CIST_HOOKED)
   { /* was it called inside a hook? */
-    *name = &lt::qmark_i;
-    return lt::hook;
+    return {lt::hook, &lt::qmark_i};
   }
   else if (ci->callstatus & CIST_FIN)
   { /* was it called as a finalizer? */
-    *name = &lt::mm_gc_i;
-    return lt::metamethod; /* report it as such */
+    return {lt::metamethod, &lt::mm_gc_i}; /* report it as such */
   }
   else if (isLua(ci))
-    return funcnamefromcode(ci_func(L, ci)->p, currentpc(L, ci), name);
+    return funcnamefromcode(ci_func(L, ci)->p, currentpc(L, ci));
   else
-    return std::nullopt;
+    return {std::nullopt, nullptr};
 }
 
 /* }====================================================== */
@@ -891,7 +890,9 @@ static byte_view varinfo(lua_State* L, StkId src)
       if (src >= base && src < ci->top)
       {
 
-        kind = getobjname(ci_func(L, ci)->p, currentpc(L, ci), (int)(src - base), &name);
+        VarName obj = getobjname(ci_func(L, ci)->p, currentpc(L, ci), (int)(src - base));
+        kind = obj.kind;
+        name = obj.name;
       }
     }
   }
@@ -924,9 +925,8 @@ l_noret luaG_typeerror(lua_State* L, const TValue* o, byte_view op, StkId src)
 l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
 {
   CallInfo* ci = L->ci;
-  const InternalString* name = nullptr; /* to avoid warnings */
-  std::optional<byte_view> kind = funcnamefromcall(L, ci, &name);
-  byte_view extra = kind.has_value() ? formatvarinfo(L, kind, name) : varinfo(L, src);
+  VarName fn = funcnamefromcall(L, ci);
+  byte_view extra = fn.kind.has_value() ? formatvarinfo(L, fn.kind, fn.name) : varinfo(L, src);
   typeerror(L, o, lt::call, extra);
 }
 
@@ -981,7 +981,7 @@ l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
 {
   const InternalString* globalname = &lt::qmark_i; /* default name if k == 0 */
   if (k > 0)
-    kname(cl->p, k - 1, &globalname);
+    globalname = kname(cl->p, k - 1).name;
   luaG_runerror(L, lt::global_s_already_defined, FmtArgs().str(globalname->view()));
 }
 

@@ -781,8 +781,14 @@ static size_t lmemfind(byte_view s1, size_t off1, size_t l1,
   }
 }
 
-static ptrdiff_t get_onecapture(MatchState* ms, int i, ptrdiff_t s,
-                                ptrdiff_t e, ptrdiff_t* cap)
+struct Capture
+{
+  ptrdiff_t init;
+  ptrdiff_t len;
+};
+
+static Capture get_onecapture(MatchState* ms, int i, ptrdiff_t s,
+                                ptrdiff_t e)
 {
   if (i >= ms->level)
   {
@@ -791,18 +797,16 @@ static ptrdiff_t get_onecapture(MatchState* ms, int i, ptrdiff_t s,
       lua_pushinteger(ms->L, i + 1);
       luaL_errori(ms->L, lt::invalid_capture_index_d);
     }
-    *cap = s;
-    return (e - s);
+    return {s, (e - s)};
   }
   else
   {
     ptrdiff_t capl = ms->capture[i].len;
-    *cap = ms->capture[i].init;
     if (l_unlikely(capl == CAP_UNFINISHED))
       luaL_errori(ms->L, lt::unfinished_capture);
     else if (capl == CAP_POSITION)
       lua_pushinteger(ms->L, ((lua_Integer)(ms->capture[i].init)) + 1);
-    return capl;
+    return {ms->capture[i].init, capl};
   }
 }
 
@@ -812,10 +816,9 @@ static ptrdiff_t get_onecapture(MatchState* ms, int i, ptrdiff_t s,
 static void push_onecapture(MatchState* ms, int i, ptrdiff_t s,
                             ptrdiff_t e)
 {
-  ptrdiff_t cap;
-  ptrdiff_t l = get_onecapture(ms, i, s, e, &cap);
-  if (l != CAP_POSITION)
-    lua_pushlstring(ms->L, ms->src->view(), ((size_t)(cap)), ((size_t)(l)));
+  Capture cap = get_onecapture(ms, i, s, e);
+  if (cap.len != CAP_POSITION)
+    lua_pushlstring(ms->L, ms->src->view(), ((size_t)(cap.init)), ((size_t)(cap.len)));
   /* else position was already pushed */
 }
 
@@ -979,12 +982,11 @@ static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
       luaL_addlstring(b, ms->src->view(), ((size_t)(s)), ((size_t)(e - s)));
     else if ('1' <= sc.spec && sc.spec <= '9')
     { /* '%n' */
-      ptrdiff_t cap;
-      ptrdiff_t resl = get_onecapture(ms, sc.spec - '1', s, e, &cap);
-      if (resl == CAP_POSITION)
+      Capture cap = get_onecapture(ms, sc.spec - '1', s, e);
+      if (cap.len == CAP_POSITION)
         luaL_addvalue(b); /* add position to accumulated result */
       else
-        luaL_addlstring(b, ms->src->view(), ((size_t)(cap)), ((size_t)(resl)));
+        luaL_addlstring(b, ms->src->view(), ((size_t)(cap.init)), ((size_t)(cap.len)));
     }
     else
     {
@@ -1893,70 +1895,61 @@ static void initheader(lua_State* L, Header* h, const InternalString* fmt)
 /*
 ** Read and classify next option. 'size' is filled with option's size.
 */
-static KOption getoption(Header* h, size_t* size)
+struct PackOption
+{
+  KOption opt;
+  size_t size;
+};
+
+static PackOption getoption(Header* h)
 {
   int opt = fmtbyte(h);
   h->pos++;
-  *size = 0; /* default */
   switch (opt)
   {
   case 'b':
-    *size = sizeof(char);
-    return Kint;
+    return {Kint, sizeof(char)};
   case 'B':
-    *size = sizeof(char);
-    return Kuint;
+    return {Kuint, sizeof(char)};
   case 'h':
-    *size = sizeof(short);
-    return Kint;
+    return {Kint, sizeof(short)};
   case 'H':
-    *size = sizeof(short);
-    return Kuint;
+    return {Kuint, sizeof(short)};
   case 'l':
-    *size = sizeof(long);
-    return Kint;
+    return {Kint, sizeof(long)};
   case 'L':
-    *size = sizeof(long);
-    return Kuint;
+    return {Kuint, sizeof(long)};
   case 'j':
-    *size = sizeof(lua_Integer);
-    return Kint;
+    return {Kint, sizeof(lua_Integer)};
   case 'J':
-    *size = sizeof(lua_Integer);
-    return Kuint;
+    return {Kuint, sizeof(lua_Integer)};
   case 'T':
-    *size = sizeof(size_t);
-    return Kuint;
+    return {Kuint, sizeof(size_t)};
   case 'f':
-    *size = sizeof(float);
-    return Kfloat;
+    return {Kfloat, sizeof(float)};
   case 'n':
-    *size = sizeof(lua_Number);
-    return Knumber;
+    return {Knumber, sizeof(lua_Number)};
   case 'd':
-    *size = sizeof(double);
-    return Kdouble;
+    return {Kdouble, sizeof(double)};
   case 'i':
-    *size = getnumlimit(h, sizeof(int));
-    return Kint;
+    return {Kint, getnumlimit(h, sizeof(int))};
   case 'I':
-    *size = getnumlimit(h, sizeof(int));
-    return Kuint;
+    return {Kuint, getnumlimit(h, sizeof(int))};
   case 's':
-    *size = getnumlimit(h, sizeof(size_t));
-    return Kstring;
+    return {Kstring, getnumlimit(h, sizeof(size_t))};
   case 'c':
-    *size = getnum(h, ((size_t)(-1)));
-    if (l_unlikely(*size == ((size_t)(-1))))
+  {
+    size_t size = getnum(h, ((size_t)(-1)));
+    if (l_unlikely(size == ((size_t)(-1))))
       luaL_errori(h->L, lt::missing_size_for_format_option_c);
-    return Kchar;
+    return {Kchar, size};
+  }
   case 'z':
-    return Kzstr;
+    return {Kzstr, 0};
   case 'x':
-    *size = 1;
-    return Kpadding;
+    return {Kpadding, 1};
   case 'X':
-    return Kpaddalign;
+    return {Kpaddalign, 0};
   case ' ':
     break;
   case '<':
@@ -1977,7 +1970,7 @@ static KOption getoption(Header* h, size_t* size)
     lua_pushinteger(h->L, opt);
     luaL_errori(h->L, lt::invalid_format_option_c);
   }
-  return Knop;
+  return {Knop, 0};
 }
 
 /*
@@ -1989,35 +1982,47 @@ static KOption getoption(Header* h, size_t* size)
 ** the maximum alignment ('maxalign'). Kchar option needs no alignment
 ** despite its size.
 */
-static KOption getdetails(Header* h, size_t totalsize,
-                          size_t* psize, size_t* ntoalign)
+struct PackDetails
 {
-  KOption opt = getoption(h, psize);
-  size_t align = *psize; /* usually, alignment follows size */
+  KOption opt;
+  size_t size;
+  size_t ntoalign;
+};
+
+static PackDetails getdetails(Header* h, size_t totalsize)
+{
+  PackOption po = getoption(h);
+  KOption opt = po.opt;
+  size_t align = po.size; /* usually, alignment follows size */
+  size_t ntoalign;
   if (opt == Kpaddalign)
   { /* 'X' gets alignment from following option */
-    if (fmtbyte(h) <= 0 || getoption(h, &align) == Kchar || align == 0)
+    if (fmtbyte(h) <= 0)
+      luaL_argerrori(h->L, 1, lt::invalid_next_option_for_option_X);
+    PackOption next = getoption(h);
+    align = next.size;
+    if (next.opt == Kchar || align == 0)
       luaL_argerrori(h->L, 1, lt::invalid_next_option_for_option_X);
   }
   if (align <= 1 || opt == Kchar) /* need no alignment? */
-    *ntoalign = 0;
+    ntoalign = 0;
   else
   {
     if (align > h->maxalign) /* enforce maximum alignment */
       align = h->maxalign;
     if (l_unlikely(!(((align) & ((align) - 1)) == 0)))
     {                /* not a power of 2? */
-      *ntoalign = 0; /* to avoid warnings */
+      ntoalign = 0; /* to avoid warnings */
       luaL_argerrori(h->L, 1, lt::format_asks_for_alignment_not_power_of_2);
     }
     else
     {
       /* 'szmoda' = totalsize % align */
       size_t szmoda = totalsize & (align - 1);
-      *ntoalign = (align - szmoda) & (align - 1);
+      ntoalign = (align - szmoda) & (align - 1);
     }
   }
-  return opt;
+  return {opt, po.size, ntoalign};
 }
 
 /*
@@ -2094,9 +2099,10 @@ static int str_pack(lua_State* L)
   luaL_buffinit(L, &b);
   while (fmtbyte(&h) > 0)
   {
-    size_t ntoalign;
-    size_t size;
-    KOption opt = getdetails(&h, totalsize, &size, &ntoalign);
+    PackDetails d = getdetails(&h, totalsize);
+    KOption opt = d.opt;
+    size_t size = d.size;
+    size_t ntoalign = d.ntoalign;
     luaL_argchecki(L, size + ntoalign <= MAX_SIZE - totalsize, arg, lt::result_too_long);
     totalsize += ntoalign + size;
     while (ntoalign-- > 0)
@@ -2197,9 +2203,10 @@ static int str_packsize(lua_State* L)
   initheader(L, &h, fmt);
   while (fmtbyte(&h) > 0)
   {
-    size_t ntoalign;
-    size_t size;
-    KOption opt = getdetails(&h, totalsize, &size, &ntoalign);
+    PackDetails d = getdetails(&h, totalsize);
+    KOption opt = d.opt;
+    size_t size = d.size;
+    size_t ntoalign = d.ntoalign;
     luaL_argchecki(L, opt != Kstring && opt != Kzstr, 1, lt::variable_length_format);
     size += ntoalign; /* total space used by option */
     luaL_argchecki(L, totalsize <= MAX_SIZE - size, 1, lt::format_result_too_large);
@@ -2263,9 +2270,10 @@ static int str_unpack(lua_State* L)
   initheader(L, &h, fmt);
   while (fmtbyte(&h) > 0)
   {
-    size_t ntoalign;
-    size_t size;
-    KOption opt = getdetails(&h, pos, &size, &ntoalign);
+    PackDetails d = getdetails(&h, pos);
+    KOption opt = d.opt;
+    size_t size = d.size;
+    size_t ntoalign = d.ntoalign;
     luaL_argchecki(L, ntoalign + size <= ld - pos, 2, lt::data_string_too_short);
     pos += ntoalign; /* skip alignment */
     /* stack space for item + next position */

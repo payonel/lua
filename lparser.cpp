@@ -1909,7 +1909,7 @@ static void forstat(LexState* ls, int line)
   leaveblock(fs); /* loop scope ('break' jumps to this point) */
 }
 
-static void test_then_block(LexState* ls, int* escapelist)
+static int test_then_block(LexState* ls, int escapelist)
 {
   /* test_then_block -> [IF | ELSEIF] cond THEN block */
   FuncState* fs = ls->fs;
@@ -1920,8 +1920,9 @@ static void test_then_block(LexState* ls, int* escapelist)
   block(ls); /* 'then' part */
   if (ls->t.token == TK_ELSE ||
       ls->t.token == TK_ELSEIF)                 /* followed by 'else'/'elseif'? */
-    luaK_concat(fs, escapelist, luaK_jump(fs)); /* must jump over it */
+    escapelist = luaK_concat(fs, escapelist, luaK_jump(fs)); /* must jump over it */
   luaK_patchtohere(fs, condtrue);
+  return escapelist;
 }
 
 static void ifstat(LexState* ls, int line)
@@ -1929,9 +1930,9 @@ static void ifstat(LexState* ls, int line)
   /* ifstat -> IF cond THEN block {ELSEIF cond THEN block} [ELSE block] END */
   FuncState* fs = ls->fs;
   int escapelist = NO_JUMP;         /* exit list for finished parts */
-  test_then_block(ls, &escapelist); /* IF cond THEN block */
+  escapelist = test_then_block(ls, escapelist); /* IF cond THEN block */
   while (ls->t.token == TK_ELSEIF)
-    test_then_block(ls, &escapelist); /* ELSEIF cond THEN block */
+    escapelist = test_then_block(ls, escapelist); /* ELSEIF cond THEN block */
   if (testnext(ls, TK_ELSE))
     block(ls); /* 'else' part */
   check_match(ls, TK_END, TK_IF, line);

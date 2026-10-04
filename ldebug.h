@@ -26,7 +26,13 @@ static l_forceinline void resethookcount(lua_State* L)
 constexpr int ABSLINEINFO = (-0x80);
 
 LUAI_FUNC int luaG_getfuncline(const Proto* f, int pc);
-LUAI_FUNC const InternalString* luaG_findlocal(lua_State* L, CallInfo* ci, int n, StkId* pos);
+struct LocalSlot
+{
+  const InternalString* name;
+  StkId pos;
+};
+
+LUAI_FUNC LocalSlot luaG_findlocal(lua_State* L, CallInfo* ci, int n);
 
 constexpr StkId UPVALORIGIN = ~(StkId)0 - 256;
 

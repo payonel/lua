@@ -162,7 +162,7 @@ static void checkclosemth(lua_State* L, StkId level)
   if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
   {                                            /* no metamethod? */
     int idx = ((int)(level - L->ci->func)); /* variable index */
-    const InternalString* vname_i = luaG_findlocal(L, L->ci, idx, nullptr);
+    const InternalString* vname_i = luaG_findlocal(L, L->ci, idx).name;
     byte_view vname = vname_i != nullptr ? vname_i->view() : lt::qmark;
     luaG_runerror(L, lt::variable_s_got_a_non_closable_value, FmtArgs().str(vname));
   }

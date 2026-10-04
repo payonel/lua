@@ -874,20 +874,25 @@ static int skipBOM(OsFile* f)
 ** first "valid" character of the file (after the optional BOM and
 ** a first-line comment).
 */
-static int skipcomment(OsFile* f, int* cp)
+struct FirstChar
 {
-  int c = *cp = skipBOM(f);
+  int skipped;
+  int c;
+};
+
+static FirstChar skipcomment(OsFile* f)
+{
+  int c = skipBOM(f);
   if (c == '#')
   { /* first line is a comment (Unix exec. file)? */
     do
     { /* skip first line */
       c = os_getbyte(f);
     } while (c != OS_EOF && c != '\n');
-    *cp = os_getbyte(f); /* next character after comment, if present */
-    return 1;      /* there was a comment */
+    return {1, os_getbyte(f)}; /* there was a comment */
   }
   else
-    return 0; /* no comment */
+    return {0, c}; /* no comment */
 }
 
 int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode)
@@ -912,7 +917,9 @@ int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optiona
       return errfile(L, lt::open_kw, fnameindex, o.err);
   }
   lf.n = 0;
-  if (skipcomment(lf.f, &c)) /* read initial portion */
+  FirstChar first = skipcomment(lf.f); /* read initial portion */
+  c = first.c;
+  if (first.skipped)
     lf.buff[lf.n++] = '\n';  /* add newline to correct line numbers */
   if (c == LUA_SIGNATURE[0])
   {           /* binary file? */
@@ -922,7 +929,7 @@ int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optiona
       int rerr = os_freopen(lf.f, *filename, lt::rb_mode); /* reopen in binary mode */
       if (rerr != 0)
         return errfile(L, lt::reopen, fnameindex, rerr);
-      skipcomment(lf.f, &c); /* re-read initial portion */
+      c = skipcomment(lf.f).c; /* re-read initial portion */
     }
   }
   if (c != OS_EOF)

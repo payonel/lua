@@ -57,7 +57,13 @@ static int luaB_warn(lua_State* L)
   return 0;
 }
 
-static size_t b_str2int(byte_view s, unsigned base, lua_Integer* pn)
+struct IntParse
+{
+  size_t end;
+  lua_Integer value;
+};
+
+static IntParse b_str2int(byte_view s, unsigned base)
 {
   const byte_view spacechars = lt::whitespace_chars;
   lua_Unsigned n = 0;
@@ -73,21 +79,20 @@ static size_t b_str2int(byte_view s, unsigned base, lua_Integer* pn)
   else if (sv_byteat(s, p) == '+')
     p++;
   if (!isalnum(sv_byteat(s, p))) /* no digit? */
-    return byte_view::npos;
+    return {byte_view::npos, 0};
   do
   {
     unsigned digit = ((unsigned int)(isdigit(sv_byteat(s, p))
                                    ? s[p] - '0'
                                    : (toupper(sv_byteat(s, p)) - 'A') + 10));
     if (digit >= base)
-      return byte_view::npos; /* invalid numeral */
+      return {byte_view::npos, 0}; /* invalid numeral */
     n = n * base + digit;
     p++;
   } while (isalnum(sv_byteat(s, p)));
   while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
     p++; /* skip trailing spaces */
-  *pn = (lua_Integer) ((neg) ? (0u - n) : n);
-  return p;
+  return {p, (lua_Integer) ((neg) ? (0u - n) : n)};
 }
 
 static int luaB_tonumber(lua_State* L)
@@ -110,14 +115,14 @@ static int luaB_tonumber(lua_State* L)
   }
   else
   {
-    lua_Integer n = 0; /* to avoid warnings */
     lua_Integer base = luaL_checkinteger(L, 2);
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
     byte_view s = *lua_tolstring(L, 1);
     luaL_argchecki(L, 2 <= base && base <= 36, 2, lt::base_out_of_range);
-    if (b_str2int(s, ((unsigned int)(base)), &n) == s.size())
+    IntParse n = b_str2int(s, ((unsigned int)(base)));
+    if (n.end == s.size())
     {
-      lua_pushinteger(L, n);
+      lua_pushinteger(L, n.value);
       return 1;
     } /* else not a number */
   } /* else not a number */

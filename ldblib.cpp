@@ -87,17 +87,21 @@ static int db_setuservalue(lua_State* L)
 ** 1 if this argument is present (so that functions can skip it to
 ** access their other arguments)
 */
-static lua_State* getthread(lua_State* L, int* arg)
+struct ThreadArg
+{
+  lua_State* L1;
+  int arg;
+};
+
+static ThreadArg getthread(lua_State* L)
 {
   if (lua_isthread(L, 1))
   {
-    *arg = 1;
-    return lua_tothread(L, 1);
+    return {lua_tothread(L, 1), 1};
   }
   else
   {
-    *arg = 0;
-    return L; /* function will operate over current thread */
+    return {L, 0}; /* function will operate over current thread */
   }
 }
 
@@ -149,8 +153,9 @@ static void treatstackoption(lua_State* L, lua_State* L1, byte_view fname)
 static int db_getinfo(lua_State* L)
 {
   InternalDebug ar;
-  int arg;
-  lua_State* L1 = getthread(L, &arg);
+  ThreadArg ta = getthread(L);
+  lua_State* L1 = ta.L1;
+  int arg = ta.arg;
   byte_view options = luaL_optlstring(L, arg + 2, lt::flnSrtu);
   InternalString funcOption = InternalString(lt::gt_op).concat(options);
   checkstack(L, L1, 3);
@@ -218,8 +223,9 @@ static int db_getinfo(lua_State* L)
 
 static int db_getlocal(lua_State* L)
 {
-  int arg;
-  lua_State* L1 = getthread(L, &arg);
+  ThreadArg ta = getthread(L);
+  lua_State* L1 = ta.L1;
+  int arg = ta.arg;
   int nvar = (int) luaL_checkinteger(L, arg + 2); /* local-variable index */
   if (lua_isfunction(L, arg + 1))
   {                                                 /* function argument? */
@@ -256,8 +262,9 @@ static int db_getlocal(lua_State* L)
 
 static int db_setlocal(lua_State* L)
 {
-  int arg;
-  lua_State* L1 = getthread(L, &arg);
+  ThreadArg ta = getthread(L);
+  lua_State* L1 = ta.L1;
+  int arg = ta.arg;
   int level = (int) luaL_checkinteger(L, arg + 1);
   int nvar = (int) luaL_checkinteger(L, arg + 2);
   std::optional<InternalDebug> ar = lua_getstacki(L1, level);
@@ -404,9 +411,11 @@ static size_t unmakemask(int mask, byte_span smask)
 
 static int db_sethook(lua_State* L)
 {
-  int arg, mask, count;
+  int mask, count;
   lua_Hook func;
-  lua_State* L1 = getthread(L, &arg);
+  ThreadArg ta = getthread(L);
+  lua_State* L1 = ta.L1;
+  int arg = ta.arg;
   if (lua_isnoneornil(L, arg + 1))
   { /* no hook? */
     lua_settop(L, arg + 1);
@@ -441,8 +450,7 @@ static int db_sethook(lua_State* L)
 
 static int db_gethook(lua_State* L)
 {
-  int arg;
-  lua_State* L1 = getthread(L, &arg);
+  lua_State* L1 = getthread(L).L1;
   byte_span buff(5);
   int mask = lua_gethookmask(L1);
   lua_Hook hook = lua_gethook(L1);
@@ -493,8 +501,9 @@ static int db_debug(lua_State* L)
 
 static int db_traceback(lua_State* L)
 {
-  int arg;
-  lua_State* L1 = getthread(L, &arg);
+  ThreadArg ta = getthread(L);
+  lua_State* L1 = ta.L1;
+  int arg = ta.arg;
   if (!lua_isstring(L, arg + 1) && !lua_isnoneornil(L, arg + 1)) /* non-string 'msg'? */
     lua_pushvalue(L, arg + 1); /* return it untouched */
   else
