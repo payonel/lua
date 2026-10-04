@@ -67,7 +67,7 @@ enum RESERVED
 };
 
 /* number of reserved words */
-constexpr int NUM_RESERVED = (((int)(TK_WHILE - FIRST_RESERVED + 1)));
+constexpr int NUM_RESERVED = (TK_WHILE - FIRST_RESERVED + 1);
 
 struct Token
 {

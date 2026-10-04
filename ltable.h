@@ -20,7 +20,7 @@ static l_forceinline Node* gnode(const Table* t, size_t i)
 */
 static l_forceinline void invalidateTMcache(Table* t)
 {
-  t->flags = (lu_byte)(t->flags & ~maskflags);
+  t->flags = (t->flags & ~maskflags);
 }
 
 /*
@@ -29,7 +29,7 @@ static l_forceinline void invalidateTMcache(Table* t)
 */
 
 constexpr int BITDUMMY = (1 << 6);
-constexpr lu_byte NOTBITDUMMY = ((lu_byte)(~BITDUMMY));
+constexpr lu_byte NOTBITDUMMY = (~BITDUMMY);
 static l_forceinline int isdummy(const Table* t)
 {
   return t->flags & BITDUMMY;
@@ -37,11 +37,11 @@ static l_forceinline int isdummy(const Table* t)
 
 static l_forceinline void setnodummy(Table* t)
 {
-  t->flags = (lu_byte)(t->flags & NOTBITDUMMY);
+  t->flags = (t->flags & NOTBITDUMMY);
 }
 static l_forceinline void setdummy(Table* t)
 {
-  t->flags = (lu_byte)(t->flags | BITDUMMY);
+  t->flags = (t->flags | BITDUMMY);
 }
 
 /* allocated size for hash nodes */

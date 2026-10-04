@@ -157,7 +157,7 @@ constexpr int BIT_ISCOLLECTABLE = (1 << 6);
 
 constexpr lu_byte ctb(lu_byte t)
 {
-  return ((lu_byte)(t | BIT_ISCOLLECTABLE));
+  return (t | BIT_ISCOLLECTABLE);
 }
 
 /* }================================================================== */
@@ -350,7 +350,7 @@ static l_forceinline int isvararg(const Proto* p)
 
 static l_forceinline void needvatab(Proto* p)
 {
-  p->flag = (lu_byte)(p->flag | PF_VATAB);
+  p->flag = (p->flag | PF_VATAB);
 }
 
 /* }================================================================== */

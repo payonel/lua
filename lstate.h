@@ -160,7 +160,7 @@ constexpr int get_nresults(l_uint32 cs)
 */
 static l_forceinline lu_byte getcistrecst(const CallInfo* ci)
 {
-  return (lu_byte)((ci->callstatus >> CIST_RECST) & 7);
+  return ((ci->callstatus >> CIST_RECST) & 7);
 }
 static l_forceinline void setcistrecst(CallInfo* ci, int st)
 {
@@ -458,7 +458,7 @@ static l_forceinline int yieldable(const lua_State* L)
 /* real number of C calls */
 static l_forceinline int getCcalls(const lua_State* L)
 {
-  return (int)(L->nCcalls & 0xffff);
+  return (L->nCcalls & 0xffff);
 }
 
 static l_forceinline void incnny(lua_State* L)

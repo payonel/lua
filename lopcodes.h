@@ -284,7 +284,7 @@ static l_forceinline int checkopm(Instruction i, enum OpMode m)
 
 constexpr int getarg(Instruction i, int pos, int size)
 {
-  return (int)((i >> pos) & MASK1(size, 0));
+  return ((i >> pos) & MASK1(size, 0));
 }
 
 constexpr int GETARG_A(Instruction i)
@@ -324,7 +324,7 @@ static l_forceinline int GETARG_sC(Instruction i)
 
 constexpr int TESTARG_k(Instruction i)
 {
-  return (int)(i & (1u << POS_k));
+  return (i & (1u << POS_k));
 }
 constexpr int GETARG_k(Instruction i)
 {

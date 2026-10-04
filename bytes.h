@@ -265,7 +265,7 @@ private:
     std::to_chars_result r = std::to_chars(data() + start, data() + size() - 1, value, base);
     assert(r.ec == std::errc());
     *r.ptr = '\0';
-    return ((size_t)(r.ptr - data())) - pos;
+    return (r.ptr - data()) - pos;
   }
 
 public:
@@ -275,7 +275,7 @@ public:
     std::to_chars_result r = std::to_chars(data() + pos, data() + size() - 1, value, fmt, precision);
     assert(r.ec == std::errc());
     *r.ptr = '\0';
-    return ((size_t)(r.ptr - data())) - pos;
+    return (r.ptr - data()) - pos;
   }
 
   size_t write_number(long long value, int base = 10, size_t pos = 0)

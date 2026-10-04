@@ -104,7 +104,7 @@ static l_forceinline int tofinalize(const GCObject* x)
 
 static l_forceinline lu_byte otherwhite(global_State* g)
 {
-  return (lu_byte)(g->currentwhite ^ WHITEBITS);
+  return (g->currentwhite ^ WHITEBITS);
 }
 constexpr int isdeadm(lu_byte ow, lu_byte m)
 {
@@ -117,17 +117,17 @@ static l_forceinline int isdead(global_State* g, const GCObject* v)
 
 static l_forceinline void changewhite(GCObject* x)
 {
-  x->marked = (lu_byte)(x->marked ^ WHITEBITS);
+  x->marked = (x->marked ^ WHITEBITS);
 }
 static l_forceinline void nw2black(GCObject* x)
 {
   assert(!iswhite(x));
-  x->marked = (lu_byte)(x->marked | bitmask(BLACKBIT));
+  x->marked = (x->marked | bitmask(BLACKBIT));
 }
 
 static l_forceinline lu_byte luaC_white(global_State* g)
 {
-  return (lu_byte)(g->currentwhite & WHITEBITS);
+  return (g->currentwhite & WHITEBITS);
 }
 
 /* object age in generational mode */
@@ -147,7 +147,7 @@ static l_forceinline int getage(const GCObject* o)
 }
 static l_forceinline void setage(GCObject* o, int a)
 {
-  o->marked = (lu_byte)((o->marked & ~AGEBITS) | a);
+  o->marked = ((o->marked & ~AGEBITS) | a);
 }
 static l_forceinline int isold(const GCObject* o)
 {
