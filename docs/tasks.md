@@ -373,6 +373,29 @@ uses, and they have different costs:
 **Done when:** `point2uint`, `uintptr_t` and `const_cast` appear only
 inside the two identity functions and `os_api.cpp`.
 
+**Status: done** (`349f4409`).
+
+**Decisions:**
+- **Hashing keeps upstream's `point2uint`** (`llimits.h`, two overloads)
+  as its single hook instead of a renamed `identityhash`; C0 keeps upstream
+  names. Java maps it to `System.identityHashCode`.
+- **`%p` text** goes through `util::pointertext(out, pos, p)` (object and C
+  function overloads) at all three sites (`lobject` `luaO_pushvfstring`,
+  `lstrlib` `string.format`, `util::func_to_string`).
+- **Java `%p`/`lua_topointer` uniqueness**: no C++ change was needed;
+  addresses are already unique in C++. In Java, `pointertext` and
+  `lua_topointer` read an id from a lazily filled side table on
+  `GlobalState`, so objects that are never printed cost nothing (a
+  port-time choice; see the port-time notes).
+- **Light userdata from a `const void*`** goes through a
+  `setpvalue(TValue*, const void*)` overload, which holds the one
+  `const_cast`. `const` disappears in Java.
+- **Remaining by design:** `util::as_userdata` and the `const_cast`s in
+  `ltests.cpp`. `ltests.cpp` is immutable, and the helper only forges test
+  handles.
+
+**Results:** `make full` green; no hot path changed.
+
 ### L6. Width-dependent `sizeof` in Lua-visible behavior
 
 **Effort:** low · **Risk:** low
