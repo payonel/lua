@@ -55,11 +55,11 @@ struct LuaError
   int level;
 };
 
-static void LUAI_TRY(lua_State* L, lua_longjmp* c, Pfunc f, void* ud)
+static void LUAI_TRY(lua_State* L, lua_longjmp* c, ProtectedCall* f)
 {
   try
   {
-    f(L, ud); /* call function protected */
+    f->run(L); /* call function protected */
   }
   catch (LuaError& e)
   {              /* Lua error */
@@ -129,7 +129,7 @@ l_noret luaD_throwbaselevel(lua_State* L, TStatus errcode)
   luaD_throw(L, errcode);
 }
 
-TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
+TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f)
 {
   l_uint32 oldnCcalls = L->nCcalls;
   lua_longjmp lj;
@@ -137,7 +137,7 @@ TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud)
   lj.previous = L->errorJmp; /* chain new error handler */
   lj.level = (lj.previous != nullptr) ? lj.previous->level + 1 : 1;
   L->errorJmp = &lj;
-  LUAI_TRY(L, &lj, f, ud);   /* call 'f' catching errors */
+  LUAI_TRY(L, &lj, f);   /* call 'f' catching errors */
   L->errorJmp = lj.previous; /* restore old error handler */
   L->nCcalls = oldnCcalls;
   return lj.status;
@@ -778,7 +778,7 @@ static void finishCcall(lua_State* L, CallInfo* ci)
 ** previously interrupted coroutine until the stack is empty (or another
 ** interruption long-jumps out of the loop).
 */
-static void unroll(lua_State* L, void*)
+static void unroll(lua_State* L)
 {
   CallInfo* ci;
   while ((ci = L->ci) != &L->base_ci)
@@ -830,9 +830,8 @@ static int resume_error(lua_State* L, byte_view msg, int narg)
 ** function), plus erroneous cases: non-suspended coroutine or dead
 ** coroutine.
 */
-static void resume(lua_State* L, void* ud)
+static void resume(lua_State* L, int n)
 {
-  int n = *(static_cast<int*>(ud));     /* number of arguments */
   StkId firstArg = L->top - n; /* first argument */
   CallInfo* ci = L->ci;
   if (L->status == LUA_OK)                  /* starting a coroutine? */
@@ -861,9 +860,20 @@ static void resume(lua_State* L, void* ud)
       }
       luaD_poscall(L, ci, n); /* finish 'luaD_call' */
     }
-    unroll(L, nullptr); /* run continuation */
+    unroll(L); /* run continuation */
   }
 }
+
+struct Unroll : ProtectedCall
+{
+  void run(lua_State* L) override { unroll(L); }
+};
+
+struct Resume : ProtectedCall
+{
+  int nargs;
+  void run(lua_State* L) override { resume(L, nargs); }
+};
 
 /*
 ** Unrolls a coroutine in protected mode while there are recoverable
@@ -880,7 +890,8 @@ static TStatus precover(lua_State* L, TStatus status)
   {
     L->ci = ci;               /* go down to recovery functions */
     setcistrecst(ci, status); /* status to finish 'pcall' */
-    status = luaD_rawrunprotected(L, unroll, nullptr);
+    Unroll u;
+    status = luaD_rawrunprotected(L, &u);
   }
   return status;
 }
@@ -903,7 +914,9 @@ LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
     return {resume_error(L, lt::C_stack_overflow, nargs), 1};
   L->nCcalls++;
   api_checkpop(L, (L->status == LUA_OK) ? nargs + 1 : nargs);
-  status = luaD_rawrunprotected(L, resume, &nargs);
+  Resume r;
+  r.nargs = nargs;
+  status = luaD_rawrunprotected(L, &r);
   /* continue running after recoverable errors */
   status = precover(L, status);
   if (l_likely(!errorstatus(status)))
@@ -961,19 +974,24 @@ LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
 /*
 ** Auxiliary structure to call 'luaF_close' in protected mode.
 */
-struct CloseP
+struct CloseP : ProtectedCall
 {
   StkId level;
   TStatus status;
+  void run(lua_State* L) override;
 };
 
 /*
 ** Auxiliary function to call 'luaF_close' in protected mode.
 */
-static void closepaux(lua_State* L, void* ud)
+static void closepaux(lua_State* L, CloseP* pcl)
 {
-  struct CloseP* pcl = static_cast<struct CloseP*>(ud);
   luaF_close(L, pcl->level, pcl->status, 0);
+}
+
+void CloseP::run(lua_State* L)
+{
+  closepaux(L, this);
 }
 
 /*
@@ -989,7 +1007,7 @@ TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status)
     struct CloseP pcl;
     pcl.level = (static_cast<StkId>(level));
     pcl.status = status;
-    status = luaD_rawrunprotected(L, &closepaux, &pcl);
+    status = luaD_rawrunprotected(L, &pcl);
     if (l_likely(status == LUA_OK)) /* no more errors? */
       return pcl.status;
     else
@@ -1005,7 +1023,7 @@ TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status)
 ** thread information ('allowhook', etc.) and in particular
 ** its stack level in case of errors.
 */
-TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId old_top,
+TStatus luaD_pcall(lua_State* L, ProtectedCall* func, StkId old_top,
                    StkId ef)
 {
   TStatus status;
@@ -1013,7 +1031,7 @@ TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId old_top,
   lu_byte old_allowhooks = L->allowhook;
   StkId old_errfunc = L->errfunc;
   L->errfunc = ef;
-  status = luaD_rawrunprotected(L, func, u);
+  status = luaD_rawrunprotected(L, func);
   if (l_unlikely(status != LUA_OK))
   { /* an error occurred? */
     L->ci = old_ci;
@@ -1029,13 +1047,14 @@ TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId old_top,
 /*
 ** Execute a protected parser.
 */
-struct SParser
+struct SParser : ProtectedCall
 { /* data to 'f_parser' */
   ZIO* z;
   MBuffer buff;
   Dyndata dyd;  /* dynamic structures used by the parser */
   byte_view mode;
   byte_view name;
+  void run(lua_State* L) override;
 };
 
 static void checkmode(lua_State* L, byte_view mode, byte_view x)
@@ -1052,10 +1071,9 @@ static void checkmode(lua_State* L, byte_view mode, byte_view x)
 ** Before the first call to the reader function, Lua reserves a slot
 ** with a table for anchoring stuff.
 */
-static void f_parser(lua_State* L, void* ud)
+static void f_parser(lua_State* L, SParser* p)
 {
   LClosure* cl;
-  struct SParser* p = static_cast<struct SParser*>(ud);
   byte_view mode = p->mode;
   int c;
   Table* anchor;
@@ -1084,6 +1102,11 @@ static void f_parser(lua_State* L, void* ud)
   setslotclL(L, L->top++, cl); /* push closure */
   assert(cl->upvals.size() == cl->p->upvalues.size());
   cl->luaF_initupvals(L);
+}
+
+void SParser::run(lua_State* L)
+{
+  f_parser(L, this);
 }
 
 /*
@@ -1118,7 +1141,7 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   p.dyd.gt.size = 0;
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
-  status = luaD_pcall(L, f_parser, &p, (L->top), L->errfunc);
+  status = luaD_pcall(L, &p, (L->top), L->errfunc);
   luaM_alloc_Vardesc_span(L->l_G, L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);

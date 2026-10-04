@@ -1392,16 +1392,21 @@ LUA_API void lua_callk(lua_State* L, int nargs, int nresults,
 /*
 ** Execute a protected call.
 */
-struct CallS
+struct CallS : ProtectedCall
 { /* data to 'f_call' */
   StkId func;
   int nresults;
+  void run(lua_State* L) override;
 };
 
-static void f_call(lua_State* L, void* ud)
+static void f_call(lua_State* L, CallS* c)
 {
-  struct CallS* c = static_cast<struct CallS*>(ud);
   luaD_callnoyield(L, c->func, c->nresults);
+}
+
+void CallS::run(lua_State* L)
+{
+  f_call(L, this);
 }
 
 LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
@@ -1427,7 +1432,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   if (k == nullptr || !yieldable(L))
   {                        /* no continuation or no yieldable? */
     c.nresults = nresults; /* do a 'conventional' protected call */
-    status = luaD_pcall(L, f_call, &c, (c.func), func);
+    status = luaD_pcall(L, &c, (c.func), func);
   }
   else
   { /* prepare continuation (call is already protected by 'resume') */

@@ -13,7 +13,13 @@
 
 
 /* type of protected functions, to be ran by 'runprotected' */
-typedef void (*Pfunc)(lua_State* L, void* ud);
+struct ProtectedCall
+{
+  virtual void run(lua_State* L) = 0;
+
+protected:
+  ~ProtectedCall() = default;
+};
 
 LUAI_FUNC l_noret luaD_errerr(lua_State* L);
 LUAI_FUNC void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop);
@@ -25,7 +31,7 @@ LUAI_FUNC CallInfo* luaD_precall(lua_State* L, StkId func, int nResults);
 LUAI_FUNC void luaD_call(lua_State* L, StkId func, int nResults);
 LUAI_FUNC void luaD_callnoyield(lua_State* L, StkId func, int nResults);
 LUAI_FUNC TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status);
-LUAI_FUNC TStatus luaD_pcall(lua_State* L, Pfunc func, void* u, StkId oldtop, StkId ef);
+LUAI_FUNC TStatus luaD_pcall(lua_State* L, ProtectedCall* func, StkId oldtop, StkId ef);
 LUAI_FUNC void luaD_poscall(lua_State* L, CallInfo* ci, int nres);
 LUAI_FUNC int luaD_reallocstack(lua_State* L, int newsize, int raiseerror);
 LUAI_FUNC int luaD_growstack(lua_State* L, int n, int raiseerror);
@@ -48,4 +54,4 @@ LUAI_FUNC void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj);
 
 LUAI_FUNC l_noret luaD_throw(lua_State* L, TStatus errcode);
 LUAI_FUNC l_noret luaD_throwbaselevel(lua_State* L, TStatus errcode);
-LUAI_FUNC TStatus luaD_rawrunprotected(lua_State* L, Pfunc f, void* ud);
+LUAI_FUNC TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f);

@@ -1030,10 +1030,15 @@ static GCObject* udata2finalize(global_State* g)
   return o;
 }
 
-static void dothecall(lua_State* L, void*)
+static void dothecall(lua_State* L)
 {
   luaD_callnoyield(L, L->top - 2, 0);
 }
+
+struct DoTheCall : ProtectedCall
+{
+  void run(lua_State* L) override { dothecall(L); }
+};
 
 static void GCTM(lua_State* L)
 {
@@ -1053,7 +1058,8 @@ static void GCTM(lua_State* L)
     setslot(L, L->top++, tm);   /* push finalizer... */
     setslot(L, L->top++, &v);   /* ... and its argument */
     L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
-    status = luaD_pcall(L, dothecall, nullptr, (L->top - 2), 0);
+    DoTheCall call;
+    status = luaD_pcall(L, &call, (L->top - 2), 0);
     L->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */
     L->allowhook = oldah;           /* restore hooks */
     g->gcstp = oldgcstp;            /* restore state */

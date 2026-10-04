@@ -695,9 +695,8 @@ static void freebuff(BuffFS* buff)
   }
 }
 
-static void pushbuff(lua_State* L, void* ud)
+static void pushbuff(lua_State* L, BuffFS* buff)
 {
-  BuffFS* buff = static_cast<BuffFS*>(ud);
   if (buff->err == 1)
     luaD_throw(L, LUA_ERRMEM);
   InternalString res(byte_view(buff->b.data(), buff->b.size()), 0, buff->blen);
@@ -708,11 +707,19 @@ static void pushbuff(lua_State* L, void* ud)
   L->top++;
 }
 
+struct PushBuff : ProtectedCall
+{
+  BuffFS* buff;
+  void run(lua_State* L) override { pushbuff(L, buff); }
+};
+
 static const InternalString* clearbuff(BuffFS* buff)
 {
   lua_State* L = buff->L;
   const InternalString* res;
-  if (luaD_rawrunprotected(L, pushbuff, buff) != LUA_OK) /* errors? */
+  PushBuff pb;
+  pb.buff = buff;
+  if (luaD_rawrunprotected(L, &pb) != LUA_OK) /* errors? */
     res = nullptr;                                          /* error message is on the top of the stack */
   else
   {
