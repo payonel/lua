@@ -314,6 +314,31 @@ within noise.
 **Done when:** `\.data\(\)\s*[+-]` matches only `os_api.cpp` and
 `ltable.h` (until M3), and `memcpy|memmove|memset` matches only `bytes.h`.
 
+**Status: done** (`b0e36311`), with two items moved to other tasks.
+
+**Decisions:**
+- **`byte_view::from_double`/`from_float` are removed.** They returned a
+  view over the caller's local `double`, which Java can't express.
+  `byte_span::write_double`/`write_float` now write little-endian bytes
+  from `std::bit_cast` bits. `toDouble`/`toFloat` assemble little-endian
+  bytes the same way. Compilers fold both into a single load or store.
+- **`lparser`** (`fixforjump`, call statement) indexes `code[pc]` instead
+  of holding an `Instruction*` into it. `lcode` `finaltarget` takes a
+  `std::span<const Instruction>`.
+- **`loslib`** calls `os_strftime(out, off, fmt, tm)`. The rest of
+  `loslib`'s libc time calls are a new task, L12.
+- **Moved to L9:** `lzio` `luaZ_read(z, void* b, n)` and `lundump`
+  `loadBlock(S, void*, size)` / `ldump` `dumpBlock(D, const void*, size)`.
+  These read and write arbitrary typed memory as bytes, which is the chunk
+  I/O problem L9 owns.
+- **Moved to M3:** the `ltable.h` `getArrVal`/`getArrTag` pointers, and
+  `lvm`'s `k + n` arithmetic on the `Proto::k` base pointer. Plain
+  array-base pointers used only with indexing (`lvm` `code`) are arrays in
+  Java and stay.
+
+**Results:** `make full` green. A/B against `d31c19b8`: b_string (pack and
+unpack of floats) 0.65s → 0.64s median; all.lua within noise.
+
 ### L5. Addresses as values
 
 **Effort:** medium · **Risk:** medium · **A/B** (memory, if an id field is
@@ -486,6 +511,24 @@ loadlib.cpp:158  os_dlclose(reinterpret_cast<OsLib*>(*p));
 
 **Done when:** `loadlib.cpp` has no `reinterpret_cast`.
 **Depends:** M4 for the `void**` overlay.
+
+### L12. Time functions behind `os_api` (added during L4)
+
+**Effort:** low · **Risk:** low
+
+`loslib.cpp` still calls libc time functions directly: `clock`, `time`,
+`gmtime_r`, `localtime_r`, `mktime`, `difftime`, and `struct tm`
+throughout `os.date`/`os.time`. Everything else in the host OS layer
+already goes through `os_api`, and Java reimplements this with
+`java.time`.
+
+Approach: `os_api` gains `os_clock`, `os_time_now`, `os_gmtime`,
+`os_localtime`, `os_mktime` and `os_difftime`, plus an engine-side
+broken-down time struct, so `loslib` never names `struct tm` or
+`time_t`. Keep upstream's field handling in `setallfields`/`getfield`.
+
+**Done when:** `loslib.cpp` includes no `<time.h>` and calls no libc time
+function.
 
 ### L11. Cast elimination
 
