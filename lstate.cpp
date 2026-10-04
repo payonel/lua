@@ -240,12 +240,12 @@ static void preinit_thread(lua_State* L, global_State* g)
   L->base_ci.previous = L->base_ci.next = nullptr;
 }
 
-lu_mem luaE_threadsize(lua_State* L)
+l_mem luaE_threadsize(lua_State* L)
 {
-  lu_mem sz = ((lu_mem)(sizeof(lua_State))) + ((unsigned int)(L->nci)) * sizeof(CallInfo);
+  l_mem sz = cost::Thread + L->nci * cost::CallInfo;
   if (L->stack.data() != nullptr)
-    sz += ((unsigned int)(stacksize(L) + EXTRA_STACK)) * sizeof(TValue);
-  sz += ((unsigned int)(L->tbc.size())) * sizeof(StkId);
+    sz += (stacksize(L) + EXTRA_STACK) * cost::TValue;
+  sz += L->tbc.size() * cost::Ref;
   return sz;
 }
 
@@ -263,8 +263,8 @@ static void close_state(lua_State* L)
     luai_userstateclose(L);
   }
   freestack(L);
-  assert(gettotalbytes(g) == sizeof(global_State));
-  g->frealloc->permit(sizeof(global_State), 0, LUA_TTHREAD); /* free main block */
+  assert(gettotalbytes(g) == cost::Global);
+  g->frealloc->permit(cost::Global, 0, LUA_TTHREAD); /* free main block */
   delete g;
 }
 
@@ -332,7 +332,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
 {
   int i;
   lua_State* L;
-  if (!f->permit(0, sizeof(global_State), LUA_TTHREAD))
+  if (!f->permit(0, cost::Global, LUA_TTHREAD))
     return nullptr;
   global_State* g = new global_State();
   if (g == nullptr)
@@ -364,7 +364,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   g->gray.gclist = g->grayagain.gclist = nullptr;
   g->weak.gclist = g->ephemeron.gclist = g->allweak.gclist = nullptr;
   g->twups = nullptr;
-  g->GCtotalbytes = sizeof(global_State);
+  g->GCtotalbytes = cost::Global;
   g->GCmarked = 0;
   g->GCdebt = 0;
   g->memlimit = 0;

@@ -10,6 +10,7 @@
 #include <span>
 
 #include "llimits.h"
+#include "lmem.h"
 #include "internal_string.h"
 #include "lua.h"
 #include "bytes.h"
@@ -338,7 +339,7 @@ struct Proto : GCListed
 
   static Proto* luaF_newproto(lua_State* L);
 
-  lu_mem luaF_protosize();
+  l_mem luaF_protosize();
   void luaF_freeproto(lua_State* L);
   const InternalString* luaF_getlocalname(int local_number, int pc) const;
 };
@@ -398,9 +399,9 @@ struct CClosure : Closure
   static CClosure* luaF_newCclosure(lua_State* L, int nupvals);
 };
 
-constexpr size_t sizeCclosure(int n)
+constexpr int sizeCclosure(int n)
 {
-  return sizeof(CClosure) + sizeof(TValue) * (unsigned int)n;
+  return cost::CClosure + cost::TValue * n;
 }
 
 struct LClosure : Closure
@@ -412,9 +413,9 @@ struct LClosure : Closure
   void luaF_initupvals(lua_State* L);
 };
 
-constexpr size_t sizeLclosure(int n)
+constexpr int sizeLclosure(int n)
 {
-  return sizeof(LClosure) + sizeof(UpVal*) * (unsigned int)n;
+  return cost::LClosure + cost::Ref * n;
 }
 
 struct CFuncInfo : GCObject
@@ -487,7 +488,7 @@ struct Table : GCListed
   void luaH_finishset(lua_State* L, const TValue* key, TValue* value, int hres);
   void luaH_resize(lua_State* L, int nasize, int nhsize);
   void luaH_resizearray(lua_State* L, int nasize);
-  lu_mem luaH_size();
+  l_mem luaH_size();
   void luaH_free(lua_State* L);
   int luaH_next(lua_State* L, StkId key);
   lua_Integer luaH_getn(lua_State* L);
@@ -515,7 +516,7 @@ private:
   int ikeyinarray(lua_Integer k) const;
   int keyinarray(const TValue* key);
   lua_Integer findindex(lua_State* L, TValue* key, int asize);
-  size_t sizehash();
+  int sizehash();
   void freehash(lua_State* L);
   int insertkey(const TValue* key, TValue* value);
   void newcheckedkey(const TValue* key, TValue* value);

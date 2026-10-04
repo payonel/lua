@@ -120,7 +120,7 @@ static inline Node* gnodelast(Table* h)
 
 static l_mem objsize(GCObject* o)
 {
-  lu_mem res;
+  l_mem res;
   switch (o->tt)
   {
   case LUA_VTABLE:
@@ -143,7 +143,7 @@ static l_mem objsize(GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    res = sizeof(Udata) + (lu_mem)u->uv.size() * sizeof(TValue) + u->data.size();
+    res = cost::Udata + u->uv.size() * cost::TValue + u->data.size();
     break;
   }
   case LUA_VPROTO:
@@ -160,17 +160,17 @@ static l_mem objsize(GCObject* o)
   {
     assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
-    res = sizeof(TString) + (strisexternal(ts) ? 0 : ts->data.size());
+    res = cost::TString + (strisexternal(ts) ? 0 : ts->data.size());
     break;
   }
   case LUA_VUPVAL:
   {
-    res = sizeof(UpVal);
+    res = cost::UpVal;
     break;
   }
   case LUA_VLCF:
   {
-    res = sizeof(CFuncInfo);
+    res = cost::CFuncInfo;
     break;
   }
   default:
@@ -1831,7 +1831,7 @@ void luaC_runtilstate(lua_State* L, int state, int fast)
 static void incstep(lua_State* L, global_State* g)
 {
   l_mem stepsize = luaO_applyparam((g)->gcparams[LUA_GCPSTEPSIZE], 100);
-  l_mem work2do = luaO_applyparam((g)->gcparams[LUA_GCPSTEPMUL], stepsize / ((int)(sizeof(void*))));
+  l_mem work2do = luaO_applyparam((g)->gcparams[LUA_GCPSTEPMUL], stepsize / cost::Ref);
   l_mem stres;
   int fast = (work2do == 0); /* special case: do a full collection */
   do

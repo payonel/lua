@@ -63,7 +63,7 @@ constexpr int MAXABITS = 30;
 ** MAXASIZEB is the maximum number of elements in the array part such
 ** that the size of the array fits in 'size_t'.
 */
-constexpr size_t MAXASIZEB = (MAX_SIZET / (sizeof(Value) + 1));
+constexpr size_t MAXASIZEB = (MAX_SIZET / (cost::Value + cost::Byte));
 
 /*
 ** MAXASIZE is the maximum size of the array part. It is the minimum
@@ -83,7 +83,7 @@ constexpr int MAXHBITS = 30;
 ** between 2^MAXHBITS and the maximum size such that, measured in bytes,
 ** it fits in a 'size_t'.
 */
-constexpr int MAXHSIZE = (((1 << MAXHBITS) <= MAX_SIZET / sizeof(Node)) ? (1 << MAXHBITS) : (MAX_SIZET / sizeof(Node)));
+constexpr int MAXHSIZE = (((1 << MAXHBITS) <= MAX_SIZET / cost::Node) ? (1 << MAXHBITS) : (MAX_SIZET / cost::Node));
 
 /*
 ** When the original hash value is good, hashing by a power of 2
@@ -416,10 +416,10 @@ int Table::luaH_next(lua_State* L, StkId key)
 }
 
 /* 'node' size in bytes */
-size_t Table::sizehash()
+int Table::sizehash()
 {
   Table* t = this;
-  return (sizenode(t)) * sizeof(Node);
+  return sizenode(t) * cost::Node;
 }
 
 void Table::freehash(lua_State* L)
@@ -871,11 +871,11 @@ Table* Table::luaH_new(lua_State* L)
   return t;
 }
 
-lu_mem Table::luaH_size()
+l_mem Table::luaH_size()
 {
   Table* t = this;
-  lu_mem sz = ((lu_mem)(sizeof(Table)))
-            + ((lu_mem)(t->array.size())) * (sizeof(Value) + sizeof(char));
+  l_mem sz = cost::Table
+            + t->array.size() * (cost::Value + cost::Byte);
   if (!isdummy(t))
     sz += t->sizehash();
   return sz;

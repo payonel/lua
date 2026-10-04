@@ -38,7 +38,7 @@ static_assert(sizeof(lua_Integer) == 8,
 typedef ptrdiff_t l_mem;
 typedef size_t lu_mem;
 
-constexpr l_mem MAX_LMEM = ((((lu_mem)(1)) << (((int)(sizeof(l_mem) * CHAR_BIT)) - 1)) - 1);
+constexpr l_mem MAX_LMEM = PTRDIFF_MAX;
 
 /* chars used as small naturals (so that 'char' is reserved for characters) */
 typedef unsigned char lu_byte;
@@ -56,7 +56,8 @@ constexpr size_t MAX_SIZET = (~(size_t)0);
 ** Maximum size for strings and userdata visible for Lua; should be
 ** representable as a lua_Integer and as a size_t.
 */
-constexpr size_t MAX_SIZE = sizeof(size_t) < sizeof(lua_Integer) ? MAX_SIZET : (LUA_MAXINTEGER);
+constexpr size_t MAX_SIZE = LUA_MAXINTEGER;
+static_assert(sizeof(size_t) >= sizeof(lua_Integer));
 
 /*
 ** test whether an unsigned value is a power of 2 (or zero)

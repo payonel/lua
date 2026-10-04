@@ -228,7 +228,7 @@ constexpr int LUAI_GCPAUSE = 250;
 constexpr int LUAI_GCMUL = 200;
 
 /* How many bytes to allocate before next GC step */
-constexpr size_t LUAI_GCSTEPSIZE = (200 * sizeof(Table));
+constexpr int LUAI_GCSTEPSIZE = (200 * cost::Table);
 
 /* }====================================================== */
 

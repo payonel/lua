@@ -155,7 +155,7 @@ TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f)
 constexpr int STACKERRSPACE = 200;
 
 /* maximum stack size that respects size_t */
-constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / sizeof(lua_Integer)) - STACKERRSPACE);
+constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / cost::TValue) - STACKERRSPACE);
 
 /*
 ** Minimum between LUAI_MAXSTACK and MAXSTACK_BYSIZET

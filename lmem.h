@@ -12,6 +12,32 @@
 #include "llimits.h"
 #include "lua.h"
 
+namespace cost
+{
+constexpr int Byte = 1;
+constexpr int Ref = 8;
+constexpr int Instruction = 4;
+constexpr int Value = 16;
+constexpr int TValue = 24;
+constexpr int Node = 48;
+constexpr int LocVar = 16;
+constexpr int Vardesc = 48;
+constexpr int Upvaldesc = 24;
+constexpr int Labeldesc = 24;
+constexpr int AbsLineInfo = 8;
+constexpr int CallInfo = 88;
+constexpr int TString = 64;
+constexpr int Udata = 72;
+constexpr int Table = 96;
+constexpr int CClosure = 48;
+constexpr int LClosure = 48;
+constexpr int CFuncInfo = 64;
+constexpr int UpVal = 72;
+constexpr int Proto = 168;
+constexpr int Thread = 280;
+constexpr int Global = 1024;
+}
+
 LUAI_FUNC l_noret luaM_toobig(lua_State* L);
 
 struct global_State;

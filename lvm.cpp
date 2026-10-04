@@ -815,7 +815,7 @@ void luaV_concat(lua_State* L, int total)
         StkId o = top - n - 1;
         assert((slottag(L, o) & NOVARIANT_MASK) == LUA_TSTRING);
         size_t l = tsslen(slottsval(L, o));
-        if (l_unlikely(l >= MAX_SIZE - sizeof(TString) - tl))
+        if (l_unlikely(l >= MAX_SIZE - cost::TString - tl))
         {
           L->top = top - total; /* pop strings to avoid wasting stack */
           luaG_runerror(L, lt::string_length_overflow);

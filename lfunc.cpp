@@ -294,18 +294,18 @@ Proto* Proto::luaF_newproto(lua_State* L)
   return f;
 }
 
-lu_mem Proto::luaF_protosize()
+l_mem Proto::luaF_protosize()
 {
-  lu_mem sz = (lu_mem)sizeof(Proto)
-              + p.size() * sizeof(Proto*)
-              + k.size() * sizeof(TValue)
-              + locvars.size() * sizeof(LocVar)
-              + upvalues.size() * sizeof(Upvaldesc);
+  l_mem sz = cost::Proto
+              + p.size() * cost::Ref
+              + k.size() * cost::TValue
+              + locvars.size() * cost::LocVar
+              + upvalues.size() * cost::Upvaldesc;
   if (!(flag & PF_FIXED))
   {
-    sz += code.size() * sizeof(Instruction);
-    sz += lineinfo.size() * sizeof(lu_byte);
-    sz += abslineinfo.size() * sizeof(AbsLineInfo);
+    sz += code.size() * cost::Instruction;
+    sz += lineinfo.size() * cost::Byte;
+    sz += abslineinfo.size() * cost::AbsLineInfo;
   }
   return sz;
 }
