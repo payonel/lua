@@ -118,6 +118,50 @@ original algorithm and its O(1) behavior.
 `gengc.lua`, `memerr.lua` and `tests/deep` pass in both builds, and the
 A/B shows no sweep regression.
 
+**Status: done** (`b37ee7bc`).
+
+**Decisions:**
+- **Sentinel heads instead of null-means-head.** The list heads that code
+  manipulates by address (`allgc`, `finobj`, `tobefnz`, and the five gray
+  lists) became sentinel nodes embedded in `global_State` (`GCObject` /
+  `GCListed`). Every `GCObject** p` became `GCObject* p` (predecessor node):
+  `*p` → `p->next`, `p = &curr->next` → `p = curr`. This keeps every sweep,
+  finalizer and gray-list algorithm line for line, with no null-means-head
+  branches and no list enum. In C++ reading a head is the same single load
+  (`g->allgc.next`). In Java it is one extra field load from a final
+  sentinel object. `linkgclist_(o, list)` keeps upstream's
+  `*pnext = *list; *list = o` shape.
+- **`twups` and open upvalues** have no sentinel (one would be a whole
+  `lua_State`/`UpVal`), so they use a predecessor pointer where `nullptr`
+  means the head. `upisopen` now tests `owner != nullptr`, which is
+  already null exactly when closed.
+- **`lundump` `loadString`** takes a setter lambda (a template parameter,
+  cold path) instead of `TString**`. That keeps upstream's order: the slot
+  is written before `luaH_setint` can trigger an emergency GC, so the
+  string stays anchored.
+- **`sweepgen`**'s `GCObject** pfirstold1` (`&g->firstold1` or a local
+  dummy) became `bool setfirstold1`, with identical effect.
+  `checkpointer` returns the corrected pointer.
+- **Deferred:** `lvm.cpp` `frameentry` (pointers to interpreter locals),
+  `ldebug.cpp` `const InternalString**` name results and `l_mem* paddedold`
+  go to L2. The `loadlib.cpp` `void**` overlay goes to M4. `lua.cpp`
+  stays host code.
+
+**Results:**
+- `make full` green.
+- Object sizes are unchanged (the `GCListed` base takes the slot each type
+  already had). `global_State` is +104 bytes (912 → 1016) for the
+  sentinels.
+- A/B against `731cae2a` (5 interleaved runs, pinned CPU), median: all.lua
+  5.52s → 5.56s (+0.7%); b_call, b_string, b_vm and b_table are within
+  noise.
+- b_gc runs 2.44s → 2.09s, and its peak RSS 62.9 → 68.5 MB. This is GC
+  *phase*: `global_State`'s size is charged to `GCtotalbytes`, and +104
+  bytes shifts when cycles start. With the start pinned to the old size,
+  the `collectgarbage("count")` trajectories after a full collection are
+  identical to baseline, so the collector algorithm is unchanged. M2's
+  cost constants will remove the dependence on `sizeof(global_State)`.
+
 ### L2. Out-parameters
 
 **Effort:** medium · **Risk:** low · **A/B** (the `lvm.h` converters)
