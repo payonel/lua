@@ -1399,6 +1399,12 @@ methods), `ltm.*`, and the scalar `TValue`/`Value`.
 `lopcodes.*` → `OpCodes`; `ldebug.*` (`luaG_*`) → `Debug`, kept
 distinct from `lua::lib::DebugLib`.
 
+**Status: done** (`eb6a2ade`). `lvm` (`luaV_execute` keeps its single
+dispatch `switch`), `lopcodes` and `ldebug` are in `lua::vm`. The public
+and internal (`…i`) debug API that `ldebug.cpp` defines stays global, and
+`Instruction`'s forward typedef sits with `lua::object`. `make full`
+passes. A/B: see the C-phase summary row in C12.
+
 ### C6. `lua::compiler`
 
 `llex.*`, `lparser.*`, `lcode.*`, plus `ldump.cpp`/`lundump.cpp`.
