@@ -86,40 +86,35 @@ constexpr int HFIRSTNODE = 3;
 */
 
 /* Computes the address of the tag for the abstract C-index 'k' */
-static l_forceinline const lu_byte* getArrTag(const Table* t, lua_Unsigned k)
+static l_forceinline lu_byte getArrTag(const Table* t, lua_Integer k)
 {
-  return t->tags.data() + k;
+  return t->tags[k];
 }
 
-static l_forceinline lu_byte* getArrTag(Table* t, lua_Unsigned k)
+static l_forceinline void setArrTag(Table* t, lua_Integer k, lu_byte tag)
 {
-  return t->tags.data() + k;
+  t->tags[k] = tag;
 }
 
 /* Computes the address of the value for the abstract C-index 'k' */
-static l_forceinline const Value* getArrVal(const Table* t, lua_Unsigned k)
+static l_forceinline Value getArrVal(const Table* t, lua_Integer k)
 {
-  return t->array.data() + k;
-}
-
-static l_forceinline Value* getArrVal(Table* t, lua_Unsigned k)
-{
-  return t->array.data() + k;
+  return t->array[k];
 }
 
 /*
 ** Move TValues to/from arrays, using C indices
 */
-static l_forceinline void arr2obj(const Table* h, lua_Unsigned k, TValue* val)
+static l_forceinline void arr2obj(const Table* h, lua_Integer k, TValue* val)
 {
-  val->tt_ = *getArrTag(h, k);
-  val->value_ = *getArrVal(h, k);
+  val->tt_ = h->tags[k];
+  val->value_ = h->array[k];
 }
 
-static l_forceinline void obj2arr(Table* h, lua_Unsigned k, const TValue* val)
+static l_forceinline void obj2arr(Table* h, lua_Integer k, const TValue* val)
 {
-  *getArrTag(h, k) = val->tt_;
-  *getArrVal(h, k) = val->value_;
+  h->tags[k] = val->tt_;
+  h->array[k] = val->value_;
 }
 
 /*
@@ -127,14 +122,14 @@ static l_forceinline void obj2arr(Table* h, lua_Unsigned k, const TValue* val)
 ** following macros also move TValues to/from arrays, but receive the
 ** precomputed tag value or address as an extra argument.
 */
-static l_forceinline void farr2val(const Table* h, lua_Unsigned k, lu_byte tag, TValue* res)
+static l_forceinline void farr2val(const Table* h, lua_Integer k, lu_byte tag, TValue* res)
 {
   res->tt_ = tag;
-  res->value_ = *getArrVal(h, k);
+  res->value_ = h->array[k];
 }
 
-static l_forceinline void fval2arr(Table* h, lua_Unsigned k, lu_byte* tag, const TValue* val)
+static l_forceinline void fval2arr(Table* h, lua_Integer k, const TValue* val)
 {
-  *tag = val->tt_;
-  *getArrVal(h, k) = val->value_;
+  h->tags[k] = val->tt_;
+  h->array[k] = val->value_;
 }

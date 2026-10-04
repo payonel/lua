@@ -78,7 +78,7 @@ static inline GCObject* gcvalueN(const TValue* o)
 
 static inline GCObject* gcvalarr(Table* t, int i)
 {
-  return (*getArrTag(t, i) & BIT_ISCOLLECTABLE) ? getArrVal(t, i)->ref : nullptr;
+  return (getArrTag(t, i) & BIT_ISCOLLECTABLE) ? getArrVal(t, i).ref : nullptr;
 }
 
 static inline void markvalue(global_State* g, TValue* o)
@@ -874,7 +874,7 @@ static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
     {
       GCObject* o = gcvalarr(h, i);
       if (iscleared(g, o))             /* value was collected? */
-        *getArrTag(h, i) = LUA_VEMPTY; /* remove entry */
+        setArrTag(h, i, LUA_VEMPTY); /* remove entry */
     }
     for (n = gnode(h, 0); n < limit; n++)
     {

@@ -390,7 +390,7 @@ int Table::luaH_next(lua_State* L, StkId key)
   lua_Integer i = t->findindex(L, &keyv, asize); /* find original key */
   for (; i < asize; i++)
   { /* try first array part */
-    lu_byte tag = *getArrTag(t, i);
+    lu_byte tag = getArrTag(t, i);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     { /* a non-empty entry? */
       setsloti(L, key, i + 1);
@@ -512,7 +512,7 @@ static void countint(lua_Integer key, Counters* ct)
 
 inline int Table::arraykeyisempty(int key) const
 {
-  int tag = *getArrTag(this, key - 1);
+  int tag = getArrTag(this, key - 1);
   return (((tag) & NOVARIANT_MASK) == LUA_TNIL);
 }
 
@@ -728,7 +728,7 @@ void Table::reinsertOldSlice(int oldasize,
   int i;
   for (i = newasize; i < oldasize; i++)
   { /* traverse vanishing slice */
-    lu_byte tag = *getArrTag(t, i);
+    lu_byte tag = getArrTag(t, i);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     { /* a non-empty entry? */
       TValue key, aux;
@@ -746,7 +746,7 @@ void Table::clearNewSlice(int oldasize, int newasize)
 {
   Table* t = this;
   for (; oldasize < newasize; oldasize++)
-    *getArrTag(t, oldasize) = LUA_VEMPTY;
+    setArrTag(t, oldasize, LUA_VEMPTY);
 }
 
 /*
@@ -1055,7 +1055,7 @@ lu_byte Table::luaH_getint(lua_Integer key, TValue* res)
   int k = t->ikeyinarray(key);
   if (k > 0)
   {
-    lu_byte tag = *getArrTag(t, k - 1);
+    lu_byte tag = getArrTag(t, k - 1);
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
       farr2val(t, k - 1, tag, res);
     return tag;
@@ -1186,13 +1186,13 @@ int Table::psetint(lua_Integer key, TValue* val)
 {
   Table* t = this;
   int hres;
-  lua_Unsigned u = (lua_Unsigned)key - 1u;
-  if (u < t->array.size())
+  lua_Integer u = l_intsub(key, 1);
+  if (l_ult(u, t->asize()))
   {
-    lu_byte* tag = getArrTag(t, u);
-    if (checknoTM(t->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
+    lu_byte tag = getArrTag(t, u);
+    if (checknoTM(t->metatable, TM_NEWINDEX) || (tag & NOVARIANT_MASK) != LUA_TNIL)
     {
-      fval2arr(t, u, tag, val);
+      fval2arr(t, u, val);
       hres = HOK;
     }
     else

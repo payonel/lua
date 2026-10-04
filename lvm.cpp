@@ -1380,10 +1380,10 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           else
           {
             Table* h = slothval(L, rb);
-            lua_Unsigned u = (lua_Unsigned)slotival(L, rc) - 1u;
-            if (u < h->array.size())
+            lua_Integer u = l_intsub(slotival(L, rc), 1);
+            if (l_ult(u, h->asize()))
             {
-              tag = *getArrTag(h, u);
+              tag = getArrTag(h, u);
               if ((tag & NOVARIANT_MASK) != LUA_TNIL)
                 farr2val(h, u, tag, &res);
             }
@@ -1423,10 +1423,10 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else
         {
           Table* h = slothval(L, rb);
-          lua_Unsigned u = (lua_Unsigned)c - 1u;
-          if (u < h->array.size())
+          lua_Integer u = l_intsub(c, 1);
+          if (l_ult(u, h->asize()))
           {
-            tag = *getArrTag(h, u);
+            tag = getArrTag(h, u);
             if ((tag & NOVARIANT_MASK) != LUA_TNIL)
               farr2val(h, u, tag, &res);
           }
@@ -1513,13 +1513,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           else
           {
             Table* h = slothval(L, t);
-            lua_Unsigned u = (lua_Unsigned)slotival(L, rb) - 1u;
-            if (u < h->array.size())
+            lua_Integer u = l_intsub(slotival(L, rb), 1);
+            if (l_ult(u, h->asize()))
             {
-              lu_byte* tag = getArrTag(h, u);
-              if (checknoTM(h->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
+              lu_byte tag = getArrTag(h, u);
+              if (checknoTM(h->metatable, TM_NEWINDEX) || (tag & NOVARIANT_MASK) != LUA_TNIL)
               {
-                fval2arr(h, u, tag, &rc);
+                fval2arr(h, u, &rc);
                 hres = HOK;
               }
               else
@@ -1565,13 +1565,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else
         {
           Table* h = slothval(L, t);
-          lua_Unsigned u = (lua_Unsigned)b - 1u;
-          if (u < h->array.size())
+          lua_Integer u = l_intsub(b, 1);
+          if (l_ult(u, h->asize()))
           {
-            lu_byte* tag = getArrTag(h, u);
-            if (checknoTM(h->metatable, TM_NEWINDEX) || (*tag & NOVARIANT_MASK) != LUA_TNIL)
+            lu_byte tag = getArrTag(h, u);
+            if (checknoTM(h->metatable, TM_NEWINDEX) || (tag & NOVARIANT_MASK) != LUA_TNIL)
             {
-              fval2arr(h, u, tag, &rc);
+              fval2arr(h, u, &rc);
               hres = HOK;
             }
             else

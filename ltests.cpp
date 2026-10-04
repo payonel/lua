@@ -1218,7 +1218,7 @@ static int table_query(lua_State* L)
   else if (((unsigned int)(i)) < asize)
   {
     lua_pushinteger(L, i);
-    if (!(((*getArrTag(t, i)) & NOVARIANT_MASK) == LUA_TNIL))
+    if (!(((getArrTag(t, i)) & NOVARIANT_MASK) == LUA_TNIL))
     {
       TValue v;
       arr2obj(t, ((unsigned int)(i)), &v);
