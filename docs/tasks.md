@@ -269,6 +269,30 @@ the `int` in `resume` at `ldo.cpp:835`, `firstcall` at
 **Done when:** no `void* ud` parameters and no `static_cast<X*>(ud)`
 remain.
 
+**Status: done** (`7bd8c456`, `d31c19b8`).
+
+**Decisions:**
+- **`ProtectedCall`** (in `ldo.h`) has one virtual `run(lua_State*)`.
+  Upstream worker functions keep their bodies and take the typed struct
+  (`closepaux(L, CloseP*)`, `f_parser(L, SParser*)`, `f_call(L, CallS*)`,
+  `pushbuff(L, BuffFS*)`); the struct's `run` forwards to them. Stateless
+  or scalar-context calls (`unroll`, `resume(L, int n)`, `f_luaopen`,
+  `dothecall`) get small wrapper structs.
+- **`lua_longjmp`/`errorJmp` keep their upstream names.** C0's
+  "keep upstream names" wins over the rename this task originally listed.
+- **The warn interface receives the calling `lua_State`.** Upstream's
+  lauxlib warn state machine (`warnfoff`/`warnfon`/`warnfcont`) uses
+  `ud = L` only to call `lua_setwarnf`, which acts on the shared
+  `global_State`. So the three became stateless static interface objects,
+  and no per-state warn object is needed.
+- **`lua_getallocf`** returns the `lua_Alloc*`; `lua_Allocator` is gone.
+- **`ltests.cpp`'s `Memcontrol`** (an aggregate in `lhack.h`) stays a
+  data struct. A `DebugAlloc` adapter forwards to `debug_realloc`.
+
+**Results:** `make full` green. A/B (`b_call`: pcall, coroutine resume,
+`__index` loop) against `94667cf7`: 2.30s → 2.30s median; all.lua
+within noise.
+
 ### L4. Raw byte operations
 
 **Effort:** low · **Risk:** low
