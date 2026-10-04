@@ -901,7 +901,7 @@ static TStatus precover(lua_State* L, TStatus status)
 
 }
 
-LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
+lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
 {
   TStatus status;
   lua_lock(L);
@@ -939,13 +939,13 @@ LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
 }
 
 
-LUA_API int lua_isyieldable(lua_State* L)
+int lua_isyieldable(lua_State* L)
 {
   return yieldable(L);
 }
 
 
-LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
+int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
                        lua_KFunction k)
 {
   CallInfo* ci;

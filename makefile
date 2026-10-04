@@ -100,7 +100,7 @@ CORE_O        = $(OBJ_DIR)/liblua_combined.o
 $(CORE_T): $(OBJ_FILES)
 	ld -r -o $(CORE_O) $(OBJ_FILES)
 	@if [ "$(VARIANT)" != "debug" ]; then \
-	  nm $(CORE_O) | awk '$$2 ~ /^[TDBR]$$/ && $$3 ~ /^_Z/ && $$3 !~ /^_ZN11luaL_Buffer/ {print $$3}' > $(OBJ_DIR)/localize.syms; \
+	  nm $(CORE_O) | awk '$$2 ~ /^[TDBR]$$/ && $$3 ~ /^_Z/ && $$3 !~ /^_ZN11luaL_Buffer/ && $$3 !~ /^_Z[0-9]+(lua|luaL|luaopen)_/ {print $$3}' > $(OBJ_DIR)/localize.syms; \
 	  objcopy --localize-symbols=$(OBJ_DIR)/localize.syms $(CORE_O); \
 	  echo "sealed $@: internals localized"; \
 	fi

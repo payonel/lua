@@ -9,6 +9,9 @@
 #include "llimits.h"
 #include "lstate.h"
 
+namespace lua::api
+{
+
 static l_forceinline void api_incr_top(lua_State* L)
 {
   L->top++;
@@ -38,4 +41,6 @@ static l_forceinline void api_checkpop(lua_State* L, int n)
   (void) L;
   (void) n;
   assert((n < L->top - L->ci->func && L->tbclist < L->top - n) && "not enough free elements in the stack");
+}
+
 }

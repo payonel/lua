@@ -273,7 +273,7 @@ static void close_state(lua_State* L)
 
 }
 
-LUA_API lua_State* lua_newthread(lua_State* L)
+lua_State* lua_newthread(lua_State* L)
 {
   global_State* g = L->l_G;
   lua_State* L1;
@@ -326,7 +326,7 @@ TStatus luaE_resetthread(lua_State* L, TStatus status)
 
 }
 
-LUA_API int lua_closethread(lua_State* L, lua_State* from)
+int lua_closethread(lua_State* L, lua_State* from)
 {
   TStatus status;
   lua_lock(L);
@@ -339,7 +339,7 @@ LUA_API int lua_closethread(lua_State* L, lua_State* from)
 }
 
 
-LUA_API lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
+lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
 {
   int i;
   lua_State* L;
@@ -399,7 +399,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
 }
 
 
-LUA_API void lua_close(lua_State* L)
+void lua_close(lua_State* L)
 {
   lua_lock(L);
   L = mainthread(L->l_G); /* only the main thread can be closed */

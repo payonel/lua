@@ -8,8 +8,6 @@
 
 #include <limits.h>
 
-#define LUA_API extern "C"
-#define LUALIB_API LUA_API
 #define LUAMOD_API extern "C"
 
 constexpr int LUA_MAXINPUT = 512;

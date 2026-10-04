@@ -154,7 +154,7 @@ static void settraps(CallInfo* ci)
 */
 }
 
-LUA_API void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
+void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
 {
   if (func == nullptr || mask == 0)
   { /* turn off hooks? */
@@ -170,19 +170,19 @@ LUA_API void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
 }
 
 
-LUA_API lua_Hook lua_gethook(lua_State* L)
+lua_Hook lua_gethook(lua_State* L)
 {
   return L->hook;
 }
 
 
-LUA_API int lua_gethookmask(lua_State* L)
+int lua_gethookmask(lua_State* L)
 {
   return L->hookmask;
 }
 
 
-LUA_API int lua_gethookcount(lua_State* L)
+int lua_gethookcount(lua_State* L)
 {
   return L->basehookcount;
 }
@@ -208,7 +208,7 @@ std::optional<InternalDebug> lua_getstacki(lua_State* L, int level)
 }
 
 
-LUA_API std::optional<lua_Debug> lua_getstack(lua_State* L, int level)
+std::optional<lua_Debug> lua_getstack(lua_State* L, int level)
 {
   std::optional<InternalDebug> iar = lua_getstacki(L, level);
   if (!iar)
@@ -302,7 +302,7 @@ const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n
 }
 
 
-LUA_API std::optional<HostString> lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
+std::optional<HostString> lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
 {
   InternalDebug iar{};
   if (ar != nullptr)
@@ -331,7 +331,7 @@ const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n
 }
 
 
-LUA_API std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug& ar, int n)
+std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug& ar, int n)
 {
   InternalDebug iar{};
   iar.i_ci = ar.i_ci;
@@ -543,7 +543,7 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, byte_view what, const In
 }
 
 
-LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options, const lua_Debug& arin)
+std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options, const lua_Debug& arin)
 {
   byte_view what = options.to_utf8();
   InternalDebug iar{};

@@ -35,7 +35,7 @@ static const luaL_Regi stdlibs[] = {
 /*
 ** require and preload selected standard libraries
 */
-LUALIB_API void luaL_openselectedlibs(lua_State* L, int load, int preload)
+void luaL_openselectedlibs(lua_State* L, int load, int preload)
 {
   int mask = 1;
   luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
@@ -57,7 +57,7 @@ LUALIB_API void luaL_openselectedlibs(lua_State* L, int load, int preload)
   lua_pop(L, 1); /* remove PRELOAD table */
 }
 
-LUALIB_API void luaL_openlibs(lua_State* L)
+void luaL_openlibs(lua_State* L)
 {
   luaL_openselectedlibs(L, ~0, 0);
 }

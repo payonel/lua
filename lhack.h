@@ -16,7 +16,7 @@ struct Memcontrol
   unsigned long objcount[LUA_NUMTYPES];
 };
 
-LUA_API Memcontrol l_memcontrol;
+extern Memcontrol l_memcontrol;
 
 #define luai_userstateopen(l)       ((l)->l_G->apilock = 0)
 #define luai_userstateclose(l)      assert((l)->l_G->apilock == 1 && (l) == mainthread((l)->l_G))

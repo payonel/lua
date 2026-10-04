@@ -51,7 +51,7 @@ constexpr int LUA_UTF8LIBK = (LUA_TABLIBK << 1);
 LUAMOD_API int(luaopen_utf8)(lua_State* L);
 
 /* open selected libraries */
-LUALIB_API void(luaL_openselectedlibs)(lua_State* L, int load, int preload);
+void(luaL_openselectedlibs)(lua_State* L, int load, int preload);
 
 /* open all libraries */
-LUALIB_API void luaL_openlibs(lua_State* L);
+void luaL_openlibs(lua_State* L);
