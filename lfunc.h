@@ -8,6 +8,9 @@
 
 #include "lobject.h"
 
+namespace lua::object
+{
+
 /* test whether thread is in 'twups' list */
 static l_forceinline int isintwups(lua_State* L)
 {
@@ -58,3 +61,5 @@ constexpr int CLOSEKTOP = (LUA_ERRERR + 1);
 LUAI_FUNC void luaF_newtbcupval(lua_State* L, StkId level);
 LUAI_FUNC void luaF_closeupval(lua_State* L, StkId level);
 LUAI_FUNC StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy);
+
+}

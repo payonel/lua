@@ -11,6 +11,9 @@
 #include "lstate.h"
 #include "literals.h"
 
+namespace lua::object
+{
+
 static l_forceinline int isreserved(const TString* s)
 {
   return s->extra > 0;
@@ -29,4 +32,6 @@ static l_forceinline unsigned int luaS_gethash(TString* ts)
   if (l_unlikely(!ts->hashed))
     ts->luaS_forcehash();
   return ts->hash;
+}
+
 }

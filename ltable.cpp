@@ -35,6 +35,9 @@
 #include "lvm.h"
 #include "literals.h"
 
+namespace lua::object
+{
+
 /*
 ** Only hash parts with at least 2^LIMFORLAST have a 'lastfree' field
 ** that optimizes finding a free slot. That field is stored just before
@@ -1502,3 +1505,5 @@ int Table::luaH_mainposition(const TValue* key) const
 }
 
 #endif
+
+}

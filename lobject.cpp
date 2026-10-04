@@ -30,6 +30,9 @@
 #include "lauxlib.h"
 #include "literals.h"
 
+namespace lua::object
+{
+
 /*
 ** Computes ceil(log2(x)), which is the smallest integer n such that
 ** x <= (1 << n).
@@ -1016,4 +1019,6 @@ void luaO_chunkid(byte_span out, byte_view source)
     byte_span(out).copy_from(bytes,pos);
     out[pos + lt::backquote.size()] = '\0';
   }
+}
+
 }

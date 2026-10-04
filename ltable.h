@@ -8,6 +8,9 @@
 
 #include "lobject.h"
 
+namespace lua::object
+{
+
 static l_forceinline Node* gnode(const Table* t, size_t i)
 {
   return &t->node[i];
@@ -132,4 +135,6 @@ static l_forceinline void fval2arr(Table* h, lua_Integer k, const TValue* val)
 {
   h->tags[k] = val->tt_;
   h->array[k] = val->value_;
+}
+
 }

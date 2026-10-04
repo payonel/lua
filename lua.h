@@ -53,7 +53,10 @@ constexpr int LUA_ERRMEM = 4;
 constexpr int LUA_ERRERR = 5;
 
 struct lua_State;
+namespace lua::object
+{
 struct CFuncInfo;
+}
 
 /*
 ** basic types

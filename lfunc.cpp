@@ -19,6 +19,9 @@
 #include "lstate.h"
 #include "literals.h"
 
+namespace lua::object
+{
+
 CFuncInfo* CFuncInfo::luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<byte_view> name)
 {
   CFuncInfo* cfi = luaM_malloc_CFuncInfo(L);
@@ -337,4 +340,6 @@ const InternalString* Proto::luaF_getlocalname(int local_number, int pc) const
     }
   }
   return nullptr; /* not found */
+}
+
 }

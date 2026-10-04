@@ -15,6 +15,9 @@
 #include "lua.h"
 #include "bytes.h"
 
+namespace lua::object
+{
+
 /*
 ** Extra types for collectable non-values
 */
@@ -907,3 +910,5 @@ LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L, byte_view fmt, c
 LUAI_FUNC int luaO_fmtargcount(byte_view fmt);
 LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
 LUAI_FUNC void luaO_chunkid(byte_span out, byte_view source);
+
+}

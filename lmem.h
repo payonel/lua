@@ -48,17 +48,15 @@ LUAI_FUNC void luaM_freeobj(lua_State* L, size_t size);
 LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
 // type allocators
+namespace lua::object
+{
 struct TValue;
 struct Value;
 struct UpVal;
-struct CallInfo;
 struct LocVar;
-struct Vardesc;
 struct Upvaldesc;
-struct Labeldesc;
 struct Proto;
 struct AbsLineInfo;
-typedef l_uint32 Instruction;
 typedef ptrdiff_t StkId;
 struct Node;
 struct GCObject;
@@ -68,6 +66,11 @@ struct Table;
 struct CClosure;
 struct LClosure;
 struct CFuncInfo;
+}
+struct CallInfo;
+struct Vardesc;
+struct Labeldesc;
+typedef l_uint32 Instruction;
 LUAI_FUNC byte_owner luaM_alloc_char_span(global_State* g, lua_State* L, byte_span block, size_t count, bool bthrow);
 LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L, std::span<TValue> block, size_t count, bool bthrow);
 LUAI_FUNC std::span<Value> luaM_alloc_Value_span(global_State* g, lua_State* L, std::span<Value> block, size_t count, bool bthrow);

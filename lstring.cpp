@@ -17,6 +17,9 @@
 #include "lstate.h"
 #include "lstring.h"
 
+namespace lua::object
+{
+
 /*
 ** generic equality for strings
 */
@@ -230,4 +233,6 @@ Udata* Udata::luaS_newudata(lua_State* L, size_t s, int nuvalue)
   for (i = 0; i < nuvalue; i++)
     (u->uv[i].tt_ = LUA_VNIL);
   return u;
+}
+
 }
