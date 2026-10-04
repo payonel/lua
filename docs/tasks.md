@@ -1461,6 +1461,10 @@ with `linit` as the registry. Functions register through `CFuncInfo`.
 
 `os_api.*` and `locale_util.*`: reimplemented, not transcribed, in Java.
 
+**Status: done** (`0e86c46a`). `os_api` and `locale_util` are in
+`lua::platform`, and the public `luaL_Stream`'s `OsFile*` names the
+package. `make full` passes.
+
 ### C10. `lua::host`
 
 `lua.cpp` becomes the launcher class, outside the engine.
