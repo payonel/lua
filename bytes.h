@@ -151,6 +151,13 @@ inline byte_view as_byte_view(std::span<const std::byte> b)
   return byte_view(reinterpret_cast<const char*>(b.data()), b.size());
 }
 
+inline void copy_bytes(std::span<std::byte> dst, byte_view src)
+{
+  assert(src.size() <= dst.size());
+  if (!src.empty())
+    memcpy(dst.data(), src.data(), src.size());
+}
+
 template <typename Self>
 struct byte_writes
 {

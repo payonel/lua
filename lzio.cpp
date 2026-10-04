@@ -64,7 +64,7 @@ size_t luaZ_read(ZIO* z, std::span<std::byte> b)
       return n; /* no more input; return number of missing bytes */
     size_t avail = z->chunk.size() - z->pos;
     m = (n <= avail) ? n : avail;
-    memcpy(b.data() + outpos, z->chunk.data() + z->pos, m);
+    copy_bytes(b.subspan(outpos, m), z->chunk.substr(z->pos, m));
     z->pos += m;
     outpos += m;
     n -= m;
