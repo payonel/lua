@@ -50,8 +50,9 @@ static int checkbuffer(ZIO* z)
   return 1; /* now buffer has something */
 }
 
-size_t luaZ_read(ZIO* z, void* b, size_t n)
+size_t luaZ_read(ZIO* z, std::span<std::byte> b)
 {
+  size_t n = b.size();
   size_t outpos = 0;
   while (n)
   {
@@ -60,7 +61,7 @@ size_t luaZ_read(ZIO* z, void* b, size_t n)
       return n; /* no more input; return number of missing bytes */
     size_t avail = z->chunk.size() - z->pos;
     m = (n <= avail) ? n : avail;
-    memcpy(static_cast<char*>(b) + outpos, z->chunk.data() + z->pos, m);
+    memcpy(b.data() + outpos, z->chunk.data() + z->pos, m);
     z->pos += m;
     outpos += m;
     n -= m;
@@ -68,14 +69,14 @@ size_t luaZ_read(ZIO* z, void* b, size_t n)
   return 0;
 }
 
-const void* luaZ_getaddr(ZIO* z, size_t n)
+std::optional<byte_view> luaZ_getaddr(ZIO* z, size_t n)
 {
-  const void* res;
+  byte_view res;
   if (!checkbuffer(z))
-    return nullptr; /* no more input */
+    return std::nullopt; /* no more input */
   if (z->chunk.size() - z->pos < n) /* not enough bytes? */
-    return nullptr; /* block not whole; cannot give an address */
-  res = z->chunk.substr(z->pos, n).data();
+    return std::nullopt; /* block not whole; cannot give an address */
+  res = z->chunk.substr(z->pos, n);
   z->pos += n; /* consume these bytes */
   return res;
 }

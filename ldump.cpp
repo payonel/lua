@@ -35,32 +35,44 @@ struct DumpState
 ** change the endianness of the result
 */
 
-static void dumpBlock(DumpState* D, const void* b, size_t size)
+static void dumpBlock(DumpState* D, std::span<const std::byte> b)
 {
   if (D->status == 0)
   { /* do not write anything after an error */
-    std::optional<byte_view> block = (b != nullptr)
-        ? std::optional<byte_view>(byte_view{(const char*)(b), size})
+    std::optional<byte_view> block = (b.data() != nullptr)
+        ? std::optional<byte_view>(as_byte_view(b))
         : std::nullopt;
     lua_unlock(D->L);
     D->status = D->writer->write(D->L, block);
     lua_lock(D->L);
-    D->offset += size;
+    D->offset += b.size();
   }
+}
+
+template <typename T>
+static void dumpVector(DumpState* D, std::span<const T> v)
+{
+  dumpBlock(D, std::as_bytes(v));
+}
+
+template <typename T>
+static void dumpVar(DumpState* D, const T& x)
+{
+  dumpVector(D, std::span<const T>(&x, 1));
 }
 
 /*
 ** Dump enough zeros to ensure that current position is a multiple of
 ** 'align'.
 */
-static void dumpAlign(DumpState* D, unsigned align)
+static void dumpAlign(DumpState* D, size_t align)
 {
-  unsigned padding = align - ((unsigned int)(D->offset % align));
+  size_t padding = align - D->offset % align;
   if (padding < align)
   { /* padding == align means no padding */
-    static lua_Integer paddingContent = 0;
+    static const std::byte paddingContent[sizeof(lua_Integer)] = {};
     assert(align <= sizeof(lua_Integer));
-    dumpBlock(D, &paddingContent, padding);
+    dumpBlock(D, std::span<const std::byte>(paddingContent).first(padding));
   }
   assert(D->offset % align == 0);
 }
@@ -68,7 +80,7 @@ static void dumpAlign(DumpState* D, unsigned align)
 static void dumpByte(DumpState* D, int y)
 {
   lu_byte x = (lu_byte) y;
-  dumpBlock(D, &(x), (1) * sizeof((&(x))[0]));
+  dumpVar(D, x);
 }
 
 /*
@@ -84,27 +96,27 @@ static_assert(sizeof(lua_Unsigned) * CHAR_BIT == 64);
 static void dumpVarint(DumpState* D, lua_Unsigned x)
 {
   lu_byte buff[DIBS];
-  unsigned n = 1;
+  int n = 1;
   buff[DIBS - 1] = x & 0x7f; /* fill least-significant byte */
   while ((x >>= 7) != 0)     /* fill other bytes in reverse order */
     buff[DIBS - (++n)] = ((lu_byte)((x & 0x7f) | 0x80));
-  dumpBlock(D, buff + DIBS - n, (n) * sizeof((buff + DIBS - n)[0]));
+  dumpVector(D, std::span<const lu_byte>(buff).subspan(DIBS - n));
 }
 
 static void dumpSize(DumpState* D, size_t sz)
 {
-  dumpVarint(D, ((lua_Unsigned)(sz)));
+  dumpVarint(D, sz);
 }
 
 static void dumpInt(DumpState* D, int x)
 {
   assert(x >= 0);
-  dumpVarint(D, ((unsigned int)(x)));
+  dumpVarint(D, x);
 }
 
 static void dumpNumber(DumpState* D, lua_Number x)
 {
-  dumpBlock(D, &(x), (1) * sizeof((&(x))[0]));
+  dumpVar(D, x);
 }
 
 /*
@@ -139,12 +151,10 @@ static void dumpString(DumpState* D, TString* ts)
     else
     {                    /* must write and save the string */
       TValue key, value; /* to save the string in the hash */
-      size_t size;
       byte_view sv = ts->data.view();
-      size = sv.size();
-      const char* s = sv.data();
+      size_t size = sv.size();
       dumpSize(D, size + 1);
-      dumpBlock(D, s, (size + 1) * sizeof((s)[0]));            /* include ending '\0' */
+      dumpVector(D, std::span<const char>(sv.data(), size + 1)); /* include ending '\0' */
       D->nstr++;                             /* one more saved string */
       setsvalue(D->L, &key, ts);             /* the string is the key */
       setivalue(&value, ((lua_Integer)(D->nstr))); /* its index is the value */
@@ -159,7 +169,7 @@ static void dumpCode(DumpState* D, const Proto* f)
   dumpInt(D, (int)f->code.size());
   dumpAlign(D, sizeof(f->code[0]));
   assert(f->code.data() != nullptr);
-  dumpBlock(D, f->code.data(), (((unsigned int)(f->code.size()))) * sizeof((f->code)[0]));
+  dumpVector<Instruction>(D, f->code);
 }
 
 static void dumpFunction(DumpState* D, const Proto* f);
@@ -219,14 +229,14 @@ static void dumpDebug(DumpState* D, const Proto* f)
   n = (D->strip) ? 0 : (int)f->lineinfo.size();
   dumpInt(D, n);
   if (f->lineinfo.data() != nullptr)
-    dumpBlock(D, f->lineinfo.data(), (((unsigned int)(n))) * sizeof((f->lineinfo)[0]));
+    dumpVector<ls_byte>(D, f->lineinfo.first(n));
   n = (D->strip) ? 0 : (int)f->abslineinfo.size();
   dumpInt(D, n);
   if (n > 0)
   {
     /* 'abslineinfo' is an array of structures of int's */
     dumpAlign(D, sizeof(int));
-    dumpBlock(D, f->abslineinfo.data(), (((unsigned int)(n))) * sizeof((f->abslineinfo)[0]));
+    dumpVector<AbsLineInfo>(D, f->abslineinfo.first(n));
   }
   n = (D->strip) ? 0 : (int)f->locvars.size();
   dumpInt(D, n);
@@ -257,16 +267,23 @@ static void dumpFunction(DumpState* D, const Proto* f)
   dumpDebug(D, f);
 }
 
+template <typename T>
+static void dumpNumInfo(DumpState* D, T v)
+{
+  dumpByte(D, sizeof(T));
+  dumpVar(D, v);
+}
+
 static void dumpHeader(DumpState* D)
 {
-  dumpBlock(D, LUA_SIGNATURE.data(), LUA_SIGNATURE.size());
+  dumpVector(D, std::span<const char>(LUA_SIGNATURE.data(), LUA_SIGNATURE.size()));
   dumpByte(D, LUAC_VERSION);
   dumpByte(D, LUAC_FORMAT);
-  dumpBlock(D, lt::LUAC_DATA.data(), lt::LUAC_DATA.size());
-  { int i = LUAC_INT; dumpByte(D, sizeof(int)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
-  { Instruction i = LUAC_INST; dumpByte(D, sizeof(Instruction)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
-  { lua_Integer i = LUAC_INT; dumpByte(D, sizeof(lua_Integer)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
-  { lua_Number i = LUAC_NUM; dumpByte(D, sizeof(lua_Number)); dumpBlock(D, &(i), (1) * sizeof((&(i))[0])); };
+  dumpVector(D, std::span<const char>(lt::LUAC_DATA.data(), lt::LUAC_DATA.size()));
+  dumpNumInfo<int>(D, LUAC_INT);
+  dumpNumInfo<Instruction>(D, LUAC_INST);
+  dumpNumInfo<lua_Integer>(D, LUAC_INT);
+  dumpNumInfo<lua_Number>(D, LUAC_NUM);
 }
 
 /*
@@ -288,6 +305,6 @@ int luaU_dump(lua_State* L, const Proto* f, lua_Writer* w,
   dumpHeader(&D);
   dumpByte(&D, (int)f->upvalues.size());
   dumpFunction(&D, f);
-  dumpBlock(&D, nullptr, 0); /* signal end of dump */
+  dumpBlock(&D, {}); /* signal end of dump */
   return D.status;
 }

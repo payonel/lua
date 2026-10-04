@@ -31,7 +31,7 @@ struct LoadState
   Table* h;          /* list for string reuse */
   size_t offset;     /* current position relative to beginning of dump */
   lua_Unsigned nstr; /* number of strings in the list */
-  lu_byte fixed;     /* dump is fixed in memory */
+  bool fixed;        /* dump is fixed in memory */
 };
 
 static l_noret error(LoadState* S, byte_view why)
@@ -45,31 +45,45 @@ static l_noret error(LoadState* S, byte_view why)
 ** adapt to the endianness of the input
 */
 
-static void loadBlock(LoadState* S, void* b, size_t size)
+static void loadBlock(LoadState* S, std::span<std::byte> b)
 {
-  if (luaZ_read(S->Z, b, size) != 0)
+  if (luaZ_read(S->Z, b) != 0)
     error(S, lt::truncated_chunk);
-  S->offset += size;
+  S->offset += b.size();
 }
 
-static void loadAlign(LoadState* S, unsigned align)
+template <typename T>
+static void loadVector(LoadState* S, std::span<T> v)
 {
-  unsigned padding = align - ((unsigned int)(S->offset % align));
+  loadBlock(S, std::as_writable_bytes(v));
+}
+
+template <typename T>
+static void loadVar(LoadState* S, T& x)
+{
+  loadVector(S, std::span<T>(&x, 1));
+}
+
+static void loadAlign(LoadState* S, size_t align)
+{
+  size_t padding = align - S->offset % align;
   if (padding < align)
   { /* (padding == align) means no padding */
-    lua_Integer paddingContent;
-    loadBlock(S, &paddingContent, padding);
+    std::byte paddingContent[sizeof(lua_Integer)];
+    loadBlock(S, std::span<std::byte>(paddingContent).first(padding));
     assert(S->offset % align == 0);
   }
 }
 
-static const void* getaddr_(LoadState* S, size_t size)
+template <typename T>
+static std::span<T> getaddr(LoadState* S, int n)
 {
-  const void* block = luaZ_getaddr(S->Z, size);
+  size_t size = n * sizeof(T);
+  std::optional<byte_view> block = luaZ_getaddr(S->Z, size);
   S->offset += size;
-  if (block == nullptr)
+  if (!block.has_value())
     error(S, lt::truncated_fixed_buffer);
-  return block;
+  return luaZ_overlay<T>(*block);
 }
 
 static lu_byte loadByte(LoadState* S)
@@ -100,18 +114,18 @@ static lua_Unsigned loadVarint(LoadState* S, lua_Unsigned limit)
 
 static size_t loadSize(LoadState* S)
 {
-  return ((size_t)(loadVarint(S, MAX_SIZE)));
+  return loadVarint(S, MAX_SIZE);
 }
 
 static int loadInt(LoadState* S)
 {
-  return ((int)(loadVarint(S, ((size_t)(INT_MAX)))));
+  return ((int)(loadVarint(S, INT_MAX)));
 }
 
 static lua_Number loadNumber(LoadState* S)
 {
   lua_Number x;
-  loadBlock(S, &(x), ((size_t)(1)) * sizeof((&(x))[0]));
+  loadVar(S, x);
   return x;
 }
 
@@ -158,7 +172,7 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
   else if ((size -= 1) <= 40)
   {
     char buff[41];
-    loadBlock(S, buff, ((size_t)(size + 1)) * sizeof((buff)[0]));          /* load string into buffer */
+    loadVector(S, std::span<char>(buff, size + 1)); /* load string into buffer */
     byte_view buffstr{buff, size};
     ts = TString::luaS_createstr(L, buffstr); /* create string */
     setslot(ts);
@@ -168,7 +182,7 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
   {
     MBuffer tmp{L};
     tmp.growTo(size + 1);
-    loadBlock(S, tmp.area().data(), ((size_t)(size + 1)) * sizeof(char));
+    loadVector(S, std::span<char>(tmp.area().data(), size + 1));
     byte_view tmpsv{tmp.area().data(), size};
     ts = TString::luaS_createstr(L, tmpsv);
     setslot(ts);
@@ -188,12 +202,12 @@ static void loadCode(LoadState* S, Proto* f)
   loadAlign(S, sizeof(f->code[0]));
   if (S->fixed)
   {
-    f->code = std::span<Instruction>((Instruction*)(getaddr_(S, ((size_t)(n)) * sizeof(Instruction))), (size_t)n);
+    f->code = getaddr<Instruction>(S, n);
   }
   else
   {
-    f->code = luaM_alloc_Instruction_span(S->L->l_G, S->L, {}, (size_t)n, true);
-    loadBlock(S, f->code.data(), ((size_t)(n)) * sizeof((f->code)[0]));
+    f->code = luaM_alloc_Instruction_span(S->L->l_G, S->L, {}, n, true);
+    loadVector(S, f->code);
   }
 }
 
@@ -203,7 +217,7 @@ static void loadConstants(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->k = luaM_alloc_TValue_span(S->L->l_G, S->L, {}, (size_t)n, true);
+  f->k = luaM_alloc_TValue_span(S->L->l_G, S->L, {}, n, true);
   for (i = 0; i < n; i++)
     (f->k[i].tt_ = LUA_VNIL);
   for (i = 0; i < n; i++)
@@ -247,7 +261,7 @@ static void loadProtos(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->p = luaM_alloc_Proto_ptr_span(S->L->l_G, S->L, {}, (size_t)n, true);
+  f->p = luaM_alloc_Proto_ptr_span(S->L->l_G, S->L, {}, n, true);
   for (i = 0; i < n; i++)
     f->p[i] = nullptr;
   for (i = 0; i < n; i++)
@@ -268,7 +282,7 @@ static void loadUpvalues(LoadState* S, Proto* f)
 {
   int i;
   int n = loadInt(S);
-  f->upvalues = luaM_alloc_Upvaldesc_span(S->L->l_G, S->L, {}, (size_t)n, true);
+  f->upvalues = luaM_alloc_Upvaldesc_span(S->L->l_G, S->L, {}, n, true);
   for (i = 0; i < n; i++) /* make array valid for GC */
     f->upvalues[i].name = nullptr;
   for (i = 0; i < n; i++)
@@ -285,12 +299,12 @@ static void loadDebug(LoadState* S, Proto* f)
   int n = loadInt(S);
   if (S->fixed)
   {
-    f->lineinfo = std::span<ls_byte>((ls_byte*)(getaddr_(S, ((size_t)(n)) * sizeof(ls_byte))), (size_t)n);
+    f->lineinfo = getaddr<ls_byte>(S, n);
   }
   else
   {
-    f->lineinfo = luaM_alloc_ls_byte_span(S->L->l_G, S->L, {}, (size_t)n, true);
-    loadBlock(S, f->lineinfo.data(), ((size_t)(n)) * sizeof((f->lineinfo)[0]));
+    f->lineinfo = luaM_alloc_ls_byte_span(S->L->l_G, S->L, {}, n, true);
+    loadVector(S, f->lineinfo);
   }
   n = loadInt(S);
   if (n > 0)
@@ -298,16 +312,16 @@ static void loadDebug(LoadState* S, Proto* f)
     loadAlign(S, sizeof(int));
     if (S->fixed)
     {
-      f->abslineinfo = std::span<AbsLineInfo>((AbsLineInfo*)(getaddr_(S, ((size_t)(n)) * sizeof(AbsLineInfo))), (size_t)n);
+      f->abslineinfo = getaddr<AbsLineInfo>(S, n);
     }
     else
     {
-      f->abslineinfo = luaM_alloc_AbsLineInfo_span(S->L->l_G, S->L, {}, (size_t)n, true);
-      loadBlock(S, f->abslineinfo.data(), ((size_t)(n)) * sizeof((f->abslineinfo)[0]));
+      f->abslineinfo = luaM_alloc_AbsLineInfo_span(S->L->l_G, S->L, {}, n, true);
+      loadVector(S, f->abslineinfo);
     }
   }
   n = loadInt(S);
-  f->locvars = luaM_alloc_LocVar_span(S->L->l_G, S->L, {}, (size_t)n, true);
+  f->locvars = luaM_alloc_LocVar_span(S->L->l_G, S->L, {}, n, true);
   for (i = 0; i < n; i++)
     f->locvars[i].varname = nullptr;
   for (i = 0; i < n; i++)
@@ -345,7 +359,7 @@ static void checkliteral(LoadState* S, byte_view s, byte_view msg)
 {
   char buff[LUA_SIGNATURE.size() + lt::LUAC_DATA.size()]; /* larger than both */
   size_t len = s.size();
-  loadBlock(S, buff, len * sizeof(buff[0]));
+  loadVector(S, std::span<char>(buff, len));
   if (!s.equals(byte_view(buff, len)))
     error(S, msg);
 }
@@ -368,6 +382,15 @@ static void checknumformat(LoadState* S, int eq, byte_view tname)
     numerror(S, lt::format, tname);
 }
 
+template <typename T>
+static void checknum(LoadState* S, T v, byte_view tname)
+{
+  T i;
+  checknumsize(S, sizeof(i), tname);
+  loadVar(S, i);
+  checknumformat(S, i == v, tname);
+}
+
 static void checkHeader(LoadState* S)
 {
   /* skip 1st char (already read and checked) */
@@ -378,10 +401,10 @@ static void checkHeader(LoadState* S)
   if (loadByte(S) != LUAC_FORMAT)
     error(S, lt::format_mismatch);
   checkliteral(S, lt::LUAC_DATA, lt::corrupted_chunk);
-  { int i; checknumsize(S, sizeof(i), lt::int_kw); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), lt::int_kw); };
-  { Instruction i; checknumsize(S, sizeof(i), lt::instruction); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INST), lt::instruction); };
-  { lua_Integer i; checknumsize(S, sizeof(i), lt::Lua_integer); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_INT), lt::Lua_integer); };
-  { lua_Number i; checknumsize(S, sizeof(i), lt::Lua_number); loadBlock(S, &(i), ((size_t)(1)) * sizeof((&(i))[0])); checknumformat(S, i == (LUAC_NUM), lt::Lua_number); };
+  checknum<int>(S, LUAC_INT, lt::int_kw);
+  checknum<Instruction>(S, LUAC_INST, lt::instruction);
+  checknum<lua_Integer>(S, LUAC_INT, lt::Lua_integer);
+  checknum<lua_Number>(S, LUAC_NUM, lt::Lua_number);
 }
 
 /*
@@ -403,7 +426,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int f
   S.name = name;
   S.L = L;
   S.Z = Z;
-  S.fixed = ((lu_byte)(fixed));
+  S.fixed = fixed != 0;
   S.offset = 1; /* fist byte was already read */
   checkHeader(&S);
   S.h = anchor;

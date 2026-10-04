@@ -147,6 +147,11 @@ private:
   }
 };
 
+inline byte_view as_byte_view(std::span<const std::byte> b)
+{
+  return byte_view(reinterpret_cast<const char*>(b.data()), b.size());
+}
+
 struct byte_owner : std::span<char>
 {
   byte_owner() : std::span<char>() {}
