@@ -1374,6 +1374,25 @@ would add a dereference in Java. `GarbageCollector` operates on
 → `LuaState` methods), `lmem.*` (`luaM_*` → `LuaState`/`GlobalState`
 methods), `ltm.*`, and the scalar `TValue`/`Value`.
 
+**Status: done** (`0205ff78`).
+- `lstate` (`global_State`, `CallInfo`), `ldo`, `lmem` (the cost table
+  becomes `lua::runtime::cost`) and `ltm` are in `lua::runtime`.
+- **Decision: the public API surface stays global.**
+  - `lua_State` is defined outside the package, and the `lua_*`
+    functions these files define (`lua_newstate`, `lua_close`,
+    `lua_newthread`, `lua_resume`, …) sit outside it, via
+    `tools/apiout.py`'s close/reopen.
+  - Consumers that forward-declare `struct lua_State;` keep working, as
+    `tests/libs/lib_decls.h` does and as upstream C-API users do.
+  - This follows from C0's "public API shape is kept".
+- **Rename:** the stack-to-`TValue` `setobj(L, TValue*, StkId)` overload
+  is now `slot2obj`, beside the other slot accessors.
+  `lua::object::setobj` hid it inside `lua::object`, and Java static
+  methods in different classes can't share a name across the call anyway.
+- `ltests.h` got a mechanical update (it includes `packages.h`).
+- **Results:** `make full` passes. A/B: b_call 4.29s → 4.28s,
+  b_vm 1.07s → 1.07s.
+
 ### C5. `lua::vm`
 
 `lvm.cpp` keeps its single dispatch `switch` as `Interpreter::execute`.
