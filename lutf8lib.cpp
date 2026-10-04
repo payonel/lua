@@ -21,6 +21,9 @@
 #include "lualib.h"
 #include "literals.h"
 
+namespace lua::lib
+{
+
 constexpr int MAXUNICODE = 0x10FFFF;
 
 constexpr int MAXUTF = 0x7FFFFFFF;
@@ -315,6 +318,8 @@ static const luaL_RegCFI funcs[] = {
   {lt::charpattern, nullptr},
 };
 
+}
+
 LUAMOD_API int luaopen_utf8(lua_State* L)
 {
   luaL_newlibcfi(L, funcs);
@@ -323,3 +328,4 @@ LUAMOD_API int luaopen_utf8(lua_State* L)
   lua_setfieldi(L, -2, lt::charpattern);
   return 1;
 }
+

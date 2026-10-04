@@ -32,6 +32,9 @@
 #include "util_cast.h"
 #include "literals.h"
 
+namespace lua::lib
+{
+
 /*
 ** maximum number of captures that a pattern can do during
 ** pattern-matching. This limit is arbitrary, but must fit in
@@ -2422,9 +2425,12 @@ static void createmetatable(lua_State* L)
 /*
 ** Open string library
 */
+}
+
 LUAMOD_API int luaopen_string(lua_State* L)
 {
   luaL_newlibcfi(L, strlib);
   createmetatable(L);
   return 1;
 }
+

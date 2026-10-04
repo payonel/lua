@@ -23,6 +23,9 @@
 #include "lobject.h"
 #include "literals.h"
 
+namespace lua::lib
+{
+
 constexpr lua_Number PI = (3.141592653589793238462643383279502884);
 
 static int math_abs(lua_State* L)
@@ -540,6 +543,8 @@ static const luaL_RegCFI mathlib[] = {
 /*
 ** Open math library
 */
+}
+
 LUAMOD_API int luaopen_math(lua_State* L)
 {
   luaL_newlibcfi(L, mathlib);
@@ -554,3 +559,4 @@ LUAMOD_API int luaopen_math(lua_State* L)
   setrandfunc(L);
   return 1;
 }
+

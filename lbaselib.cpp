@@ -22,6 +22,9 @@
 #include "literals.h"
 #include "locale_util.h"
 
+namespace lua::lib
+{
+
 static int luaB_print(lua_State* L)
 {
   int n = lua_gettop(L); /* number of arguments */
@@ -626,6 +629,8 @@ static const luaL_RegCFI base_funcs[] = {
   {lt::_VERSION, nullptr}
 };
 
+}
+
 LUAMOD_API int luaopen_base(lua_State* L)
 {
   /* open lib into global table */
@@ -639,3 +644,4 @@ LUAMOD_API int luaopen_base(lua_State* L)
   lua_setfieldi(L, -2, lt::_VERSION);
   return 1;
 }
+

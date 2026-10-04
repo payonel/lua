@@ -24,6 +24,9 @@
 #include "lualib.h"
 #include "literals.h"
 
+namespace lua::lib
+{
+
 
 /*
 ** system-dependent functions
@@ -563,6 +566,8 @@ static void createsearcherstable(lua_State* L)
   lua_setfieldi(L, -2, lt::searchers); /* put it in field 'searchers' */
 }
 
+}
+
 LUAMOD_API int luaopen_package(lua_State* L)
 {
   luaL_getsubtablei(L, LUA_REGISTRYINDEX, lt::_CLIBS); /* create lt::_CLIBS table */
@@ -587,3 +592,4 @@ LUAMOD_API int luaopen_package(lua_State* L)
   lua_pop(L, 1);                 /* pop global table */
   return 1;                      /* return 'package' table */
 }
+

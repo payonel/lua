@@ -21,6 +21,9 @@
 #include "lualib.h"
 #include "literals.h"
 
+namespace lua::lib
+{
+
 /*
 ** If L1 != L, L1 can be in any state, and therefore there are no
 ** guarantees about its stack space; any push in L1 must be
@@ -555,8 +558,11 @@ static const luaL_RegCFI dblib[] = {
   {lt::traceback, &cfi_db_traceback},
 };
 
+}
+
 LUAMOD_API int luaopen_debug(lua_State* L)
 {
   luaL_newlibcfi(L, dblib);
   return 1;
 }
+

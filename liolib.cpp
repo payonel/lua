@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include "lua.h"
 
@@ -22,6 +23,9 @@
 #include "locale_util.h"
 #include "lualib.h"
 #include "literals.h"
+
+namespace lua::lib
+{
 
 static int l_checkmode(byte_view mode)
 {
@@ -41,7 +45,6 @@ static inline int l_checkmodep(byte_view m)
 
 /* }====================================================== */
 
-#include <sys/types.h>
 
 /* }====================================================== */
 
@@ -788,6 +791,8 @@ static void createstdfile(lua_State* L, OsFile* f, byte_view k,
     lua_setfieldi(L, LUA_REGISTRYINDEX, k); /* add file to registry */
   }
   lua_setfieldi(L, -2, fname); /* add file to module */
+}
+
 }
 
 LUAMOD_API int luaopen_io(lua_State* L)

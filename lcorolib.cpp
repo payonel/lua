@@ -18,6 +18,9 @@
 #include "lualib.h"
 #include "literals.h"
 
+namespace lua::lib
+{
+
 static lua_State* getco(lua_State* L)
 {
   lua_State* co = lua_tothread(L, 1);
@@ -238,8 +241,11 @@ static const luaL_RegCFI co_funcs[] = {
   {lt::close_kw, &cfi_luaB_close},
 };
 
+}
+
 LUAMOD_API int luaopen_coroutine(lua_State* L)
 {
   luaL_newlibcfi(L, co_funcs);
   return 1;
 }
+

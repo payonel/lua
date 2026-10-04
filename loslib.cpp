@@ -49,6 +49,9 @@
 */
 #include <unistd.h>
 
+namespace lua::lib
+{
+
 constexpr int LUA_TMPNAMBUFSIZE = 32;
 
 /* }================================================================== */
@@ -72,7 +75,7 @@ static int os_execute(lua_State* L)
 static int os_remove(lua_State* L)
 {
   const InternalString* filename = luaL_checkistring(L, 1);
-  OsResult r = os_remove(filename->view());
+  OsResult r = ::os_remove(filename->view());
   return luaL_fileresulti(L, r.ok, filename->view(), r.err);
 }
 
@@ -80,13 +83,13 @@ static int os_rename(lua_State* L)
 {
   const InternalString* fromname = luaL_checkistring(L, 1);
   const InternalString* toname = luaL_checkistring(L, 2);
-  OsResult r = os_rename(fromname->view(), toname->view());
+  OsResult r = ::os_rename(fromname->view(), toname->view());
   return luaL_fileresulti(L, r.ok, {}, r.err);
 }
 
 static int os_tmpname(lua_State* L)
 {
-  std::optional<InternalString> tname = os_tmpname();
+  std::optional<InternalString> tname = ::os_tmpname();
   if (l_unlikely(!tname.has_value()))
     return luaL_errori(L, lt::unable_to_generate_a_unique_filename);
   lua_pushistring(L, std::move(*tname));
@@ -95,7 +98,7 @@ static int os_tmpname(lua_State* L)
 
 static int os_getenv(lua_State* L)
 {
-  std::optional<byte_view> v = os_getenv(luaL_checkistring(L, 1)->view());
+  std::optional<byte_view> v = ::os_getenv(luaL_checkistring(L, 1)->view());
   if (v.has_value())
     lua_pushistring(L, std::move(*v));
   else
@@ -368,8 +371,11 @@ static const luaL_RegCFI syslib[] = {
 
 /* }====================================================== */
 
+}
+
 LUAMOD_API int luaopen_os(lua_State* L)
 {
   luaL_newlibcfi(L, syslib);
   return 1;
 }
+

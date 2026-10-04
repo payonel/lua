@@ -15,6 +15,9 @@
 #include "lualib.h"
 #include "lua_internal.h"
 
+namespace lua::lib
+{
+
 /*
 ** Standard Libraries. (Must be listed in the same ORDER of their
 ** respective constants LUA_<libname>K.)
@@ -35,6 +38,8 @@ static const luaL_Regi stdlibs[] = {
 /*
 ** require and preload selected standard libraries
 */
+}
+
 void luaL_openselectedlibs(lua_State* L, int load, int preload)
 {
   int mask = 1;
@@ -57,7 +62,9 @@ void luaL_openselectedlibs(lua_State* L, int load, int preload)
   lua_pop(L, 1); /* remove PRELOAD table */
 }
 
+
 void luaL_openlibs(lua_State* L)
 {
   luaL_openselectedlibs(L, ~0, 0);
 }
+

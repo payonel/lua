@@ -19,6 +19,9 @@
 #include "lobject.h"
 #include "literals.h"
 
+namespace lua::lib
+{
+
 /*
 ** Operations that an object must define to mimic a table
 ** (some functions only need some of them)
@@ -443,8 +446,11 @@ static const luaL_RegCFI tab_funcs[] = {
   {lt::sort, &cfi_sort},
 };
 
+}
+
 LUAMOD_API int luaopen_table(lua_State* L)
 {
   luaL_newlibcfi(L, tab_funcs);
   return 1;
 }
+
