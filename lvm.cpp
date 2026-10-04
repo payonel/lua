@@ -1479,7 +1479,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         int hres;
         TValue upval = upvalgetval(cl->upvals[GETARG_A(i)]);
         TValue* rb = (k + GETARG_B(i));
-        TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
+        TValue rc = (TESTARG_k(i)) ? getobj(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rb); /* key must be a short string */
         if (upval.tt_ != ctb(LUA_VTABLE))
@@ -1504,7 +1504,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         int hres;
         StkId rb = (base + GETARG_B(i)); /* key (table is in 'ra') */
-        TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i)); /* value */
+        TValue rc = (TESTARG_k(i)) ? getobj(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i)); /* value */
         if ((slottag(L, rb) == LUA_VNUMINT))
         { /* fast track for integers? */
           StkId t = ra;
@@ -1558,7 +1558,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         int hres;
         int b = GETARG_B(i);
-        TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
+        TValue rc = (TESTARG_k(i)) ? getobj(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         StkId t = ra;
         if (slottag(L, t) != ctb(LUA_VTABLE))
           hres = HNOTATABLE;
@@ -1599,7 +1599,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         int hres;
         TValue* rb = (k + GETARG_B(i));
-        TValue rc = (TESTARG_k(i)) ? *(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
+        TValue rc = (TESTARG_k(i)) ? getobj(k + GETARG_C(i)) : getslot(L, base + GETARG_C(i));
         assert((rb->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
         TString* key = tsvalue(rb); /* key must be a short string */
         StkId t = ra;

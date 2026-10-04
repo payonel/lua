@@ -252,28 +252,28 @@ static l_forceinline void setslottag(lua_State* L, StkId idx, lu_byte tt)
 
 static l_forceinline TValue getslot(lua_State* L, StkId idx)
 {
-  return L->stack[idx];
+  return getobj(&L->stack[idx]);
 }
 
 static l_forceinline void setslot(lua_State* L, StkId idx, const TValue* v)
 {
-  L->stack[idx] = *v;
+  copyobj(&L->stack[idx], v);
   checkliveness(L, v);
 }
 
 static l_forceinline void copyslot(lua_State* L, StkId dst, StkId src)
 {
-  L->stack[dst] = L->stack[src];
+  copyobj(&L->stack[dst], &L->stack[src]);
 }
 
 static l_forceinline void copyslot(lua_State* to, StkId dst, lua_State* from, StkId src)
 {
-  to->stack[dst] = from->stack[src];
+  copyobj(&to->stack[dst], &from->stack[src]);
 }
 
 static l_forceinline void setobj(lua_State* L, TValue* dst, StkId src)
 {
-  *dst = L->stack[src];
+  copyobj(dst, &L->stack[src]);
   checkliveness(L, dst);
 }
 

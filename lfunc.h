@@ -33,7 +33,7 @@ static l_forceinline StkId uplevel(const UpVal* up)
 
 static l_forceinline TValue upvalgetval(const UpVal* uv)
 {
-  return upisopen(uv) ? getslot(uv->owner, uv->stkid) : uv->value;
+  return upisopen(uv) ? getslot(uv->owner, uv->stkid) : getobj(&uv->value);
 }
 
 static l_forceinline void upvalsetval(lua_State* L, UpVal* uv, const TValue* v)

@@ -55,7 +55,24 @@ struct TValue
 {
   Value value_;
   lu_byte tt_;
+  TValue() = default;
+  constexpr TValue(Value v, lu_byte t) : value_(v), tt_(t) {}
+  TValue(const TValue&) = delete;
+  TValue& operator=(const TValue&) = delete;
+  TValue(TValue&&) = default;
+  TValue& operator=(TValue&&) = default;
 };
+
+static l_forceinline TValue getobj(const TValue* o)
+{
+  return TValue(o->value_, o->tt_);
+}
+
+static l_forceinline void copyobj(TValue* dst, const TValue* src)
+{
+  dst->value_ = src->value_;
+  dst->tt_ = src->tt_;
+}
 
 
 constexpr int NOVARIANT_MASK = 0x0F;
@@ -456,6 +473,14 @@ struct Node
   int next;         /* for chaining */
   Value key_val;    /* key value */
 };
+
+static l_forceinline void copynode(Node* dst, const Node* src)
+{
+  copyobj(&dst->val, &src->val);
+  dst->key_tt = src->key_tt;
+  dst->next = src->next;
+  dst->key_val = src->key_val;
+}
 
 struct Counters;
 

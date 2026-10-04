@@ -945,7 +945,7 @@ int Table::insertkey(const TValue* key, TValue* value)
       while (othern + (gnode(t, othern)->next) != mp) /* find previous */
         othern += (gnode(t, othern)->next);
       (gnode(t, othern)->next) = f - othern; /* rechain to point to 'f' */
-      *gnode(t, f) = *gnode(t, mp);          /* copy colliding node into free pos. (mp->next also goes) */
+      copynode(gnode(t, f), gnode(t, mp));          /* copy colliding node into free pos. (mp->next also goes) */
       if ((gnode(t, mp)->next) != 0)
       {
         (gnode(t, f)->next) += mp - f; /* correct 'next' */

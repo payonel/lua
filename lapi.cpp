@@ -89,7 +89,7 @@ static IndexAddr resolveindex(lua_State* L, int idx)
 static TValue index2val(lua_State* L, int idx)
 {
   IndexAddr a = resolveindex(L, idx);
-  return (a.row != nullptr) ? *a.row : getslot(L, a.slot);
+  return (a.row != nullptr) ? getobj(a.row) : getslot(L, a.slot);
 }
 
 static int isvalidindex(lua_State* L, int idx)
@@ -1792,7 +1792,7 @@ const InternalString* lua_getupvaluei(lua_State* L, int funcindex, int n)
   name = aux_upvalue(&fi, n, &addr);
   if (name)
   {
-    TValue v = (addr.uv != nullptr) ? upvalgetval(addr.uv) : *addr.row;
+    TValue v = (addr.uv != nullptr) ? upvalgetval(addr.uv) : getobj(addr.row);
     setslot(L, L->top, &v);
     api_incr_top(L);
   }

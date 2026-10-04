@@ -165,7 +165,7 @@ LUAI_FUNC std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L
     nb = std::span<TValue>(new TValue[count], count);
     if (!block.empty())
       for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
-        nb[ci] = block[ci];
+        copyobj(&nb[ci], &block[ci]);
   }
   delete [] block.data();
   return nb;
@@ -259,7 +259,7 @@ LUAI_FUNC std::span<Vardesc> luaM_alloc_Vardesc_span(global_State* g, lua_State*
     nb = std::span<Vardesc>(new Vardesc[count], count);
     if (!block.empty())
       for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
-        nb[ci] = block[ci];
+        nb[ci] = std::move(block[ci]);
   }
   delete [] block.data();
   return nb;
@@ -461,7 +461,7 @@ LUAI_FUNC std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, st
     nb = std::span<Node>(new Node[count], count);
     if (!block.empty())
       for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
-        nb[ci] = block[ci];
+        copynode(&nb[ci], &block[ci]);
   }
   delete [] block.data();
   return nb;
