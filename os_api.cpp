@@ -123,6 +123,11 @@ void* os_dlsym(OsLib* lib, byte_view sym)
   return dlsym(reinterpret_cast<void*>(lib), s.c_str());
 }
 
+int (*os_dlfunc(OsLib* lib, byte_view sym))(struct lua_State*)
+{
+  return reinterpret_cast<int (*)(struct lua_State*)>(os_dlsym(lib, sym));
+}
+
 void os_dlclose(OsLib* lib)
 {
   dlclose(reinterpret_cast<void*>(lib));

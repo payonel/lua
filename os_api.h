@@ -44,6 +44,7 @@ OsExecStatus os_decode_exec(int stat);
 struct OsLib;
 OsLib* os_dlopen(byte_view path, bool global);
 void* os_dlsym(OsLib* lib, byte_view sym);
+int (*os_dlfunc(OsLib* lib, byte_view sym))(struct lua_State*);
 void os_dlclose(OsLib* lib);
 InternalString os_dlerror();
 

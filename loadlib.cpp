@@ -29,9 +29,9 @@
 ** system-dependent functions
 */
 
-static void* lsys_load(lua_State* L, byte_view path, int seeglb);
+static OsLib* lsys_load(lua_State* L, byte_view path, int seeglb);
 
-static lua_CFunction lsys_sym(lua_State* L, void* lib, byte_view sym);
+static lua_CFunction lsys_sym(lua_State* L, OsLib* lib, byte_view sym);
 
 /*
 ** {========================================================================
@@ -40,17 +40,17 @@ static lua_CFunction lsys_sym(lua_State* L, void* lib, byte_view sym);
 ** =========================================================================
 */
 
-static void* lsys_load(lua_State* L, byte_view path, int seeglb)
+static OsLib* lsys_load(lua_State* L, byte_view path, int seeglb)
 {
   OsLib* lib = os_dlopen(path, seeglb != 0);
   if (l_unlikely(lib == nullptr))
     lua_pushistring(L, os_dlerror());
-  return reinterpret_cast<void*>(lib);
+  return lib;
 }
 
-static lua_CFunction lsys_sym(lua_State* L, void* lib, byte_view sym)
+static lua_CFunction lsys_sym(lua_State* L, OsLib* lib, byte_view sym)
 {
-  lua_CFunction f = reinterpret_cast<lua_CFunction>(os_dlsym(reinterpret_cast<OsLib*>(lib), sym));
+  lua_CFunction f = os_dlfunc(lib, sym);
   if (l_unlikely(f == nullptr))
     lua_pushistring(L, os_dlerror());
   return f;
@@ -140,30 +140,30 @@ static void setpath(lua_State* L, byte_view fieldname, byte_view envname, byte_v
 /*
 ** return registry.lt::_CLIBS[path]
 */
-static void* checkclib(lua_State* L, byte_view path)
+static OsLib* checkclib(lua_State* L, byte_view path)
 {
-  void* plib;
+  OsLib* plib;
   lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_CLIBS);
   lua_getfieldi(L, -1, path);
-  plib = lua_touserdata(L, -1); /* plib = lt::_CLIBS[path] */
+  plib = static_cast<OsLib*>(lua_touserdata(L, -1)); /* plib = lt::_CLIBS[path] */
   lua_pop(L, 2);                /* pop lt::_CLIBS table and 'plib' */
   return plib;
 }
 
 static int lib_gc(lua_State* L)
 {
-  void** p = (void**) lua_touserdata(L, 1);
+  OsLib** p = static_cast<OsLib**>(lua_touserdata(L, 1));
   if (*p)
   {
-    os_dlclose(reinterpret_cast<OsLib*>(*p));
+    os_dlclose(*p);
     *p = nullptr;
   }
   return 0;
 }
 
-static void createlibstr(lua_State* L, void* plib)
+static void createlibstr(lua_State* L, OsLib* plib)
 {
-  void** p = (void**) lua_newuserdatauv(L, sizeof(void*), 0);
+  OsLib** p = static_cast<OsLib**>(lua_newuserdatauv(L, sizeof(OsLib*), 0));
   *p = plib;
   static CFuncInfo cfi_lib_gc("loadlib.__gc"_hs, lib_gc);
   luaL_newmetatablei(L, lt::_LOADLIB);
@@ -177,7 +177,7 @@ static void createlibstr(lua_State* L, void* plib)
 ** Also create a reference to strlib, so that the library string will
 ** only be collected when registry.lt::_CLIBS is collected.
 */
-static void addtoclib(lua_State* L, byte_view path, void* plib)
+static void addtoclib(lua_State* L, byte_view path, OsLib* plib)
 {
   lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_CLIBS);
   lua_pushlightuserdata(L, plib);
@@ -205,7 +205,7 @@ constexpr int ERRFUNC = 2;
 static int lookforfunc(lua_State* L, byte_view path, byte_view sym)
 {
   int loadlibonly = (!sym.empty() && sym[0] == '*');
-  void* reg = checkclib(L, path); /* check loaded C libraries */
+  OsLib* reg = checkclib(L, path); /* check loaded C libraries */
   if (reg == nullptr)
   {                                          /* must load library? */
     reg = lsys_load(L, path, loadlibonly); /* global symbols if 'sym'=='*' */
