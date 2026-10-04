@@ -183,7 +183,7 @@ static void fixjump(FuncState* fs, int pc, int dest)
   if (!(-OFFSET_sJ <= offset && offset <= MAXARG_sJ - OFFSET_sJ))
     luaX_syntaxerror(fs->ls, lt::control_structure_too_long);
   assert(GET_OPCODE(fs->f->code[jmp]) == OP_JMP);
-  fs->f->code[jmp] = ((fs->f->code[jmp] & MASK0(SIZE_sJ, POS_sJ)) | ((((Instruction)(((unsigned int)((offset) + OFFSET_sJ)))) << POS_sJ) & MASK1(SIZE_sJ, POS_sJ)));
+  fs->f->code[jmp] = ((fs->f->code[jmp] & MASK0(SIZE_sJ, POS_sJ)) | ((((Instruction)((offset) + OFFSET_sJ)) << POS_sJ) & MASK1(SIZE_sJ, POS_sJ)));
 }
 
 /*
@@ -1657,7 +1657,7 @@ static void finishbinexpval(FuncState* fs, expdesc* e1, expdesc* e2,
   e1->info = pc;
   e1->k = VRELOC; /* all those operations are relocatable */
   luaK_fixline(fs, line);
-  luaK_codeABCk(fs, mmop, v1, v2, ((int)(event)), flip); /* metamethod */
+  luaK_codeABCk(fs, mmop, v1, v2, (event), flip); /* metamethod */
   luaK_fixline(fs, line);
 }
 
@@ -1875,7 +1875,7 @@ void luaK_prefix(FuncState* fs, UnOpr opr, expdesc* e, int line)
   {
   case OPR_MINUS:
   case OPR_BNOT: /* use 'ef' as fake 2nd operand */
-    if (constfolding(fs, ((int)(opr + LUA_OPUNM)), e, &ef))
+    if (constfolding(fs, (opr + LUA_OPUNM), e, &ef))
       break;
     /* else */ /* FALLTHROUGH */
   case OPR_LEN:
@@ -1987,7 +1987,7 @@ void luaK_posfix(FuncState* fs, BinOpr opr,
                  expdesc* e1, expdesc* e2, int line)
 {
   luaK_dischargevars(fs, e2);
-  if (foldbinop(opr) && constfolding(fs, ((int)(opr + LUA_OPADD)), e1, e2))
+  if (foldbinop(opr) && constfolding(fs, (opr + LUA_OPADD), e1, e2))
     return; /* done by folding */
   switch (opr)
   {

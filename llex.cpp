@@ -383,7 +383,7 @@ static int readhexaesc(LexState* ls)
 {
   int r = gethexa(ls);
   r = (r << 4) + gethexa(ls);
-  ls->buff->drop((size_t)(2)); /* remove saved chars from buffer */
+  ls->buff->drop(2); /* remove saved chars from buffer */
   return r;
 }
 
@@ -407,7 +407,7 @@ static int readutf8esc(LexState* ls)
   }
   esccheck(ls, ls->current == '}', lt::missing_2);
   next(ls);                     /* skip '}' */
-  ls->buff->drop((size_t)(i)); /* remove saved chars from buffer */
+  ls->buff->drop(i); /* remove saved chars from buffer */
   return r;
 }
 
@@ -429,7 +429,7 @@ static int readdecesc(LexState* ls)
     save_and_next(ls);
   }
   esccheck(ls, r <= UCHAR_MAX, lt::decimal_escape_too_large);
-  ls->buff->drop((size_t)(i)); /* remove read digits from buffer */
+  ls->buff->drop(i); /* remove read digits from buffer */
   return r;
 }
 
@@ -454,44 +454,44 @@ static void read_string(LexState* ls, int del, Token* seminfo)
       {
       case 'a':
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, '\a');
         break;
       case 'b':
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, '\b');
         break;
       case 'f':
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, '\f');
         break;
       case 'n':
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, '\n');
         break;
       case 'r':
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, '\r');
         break;
       case 't':
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, '\t');
         break;
       case 'v':
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, '\v');
         break;
       case 'x':
       {
         int c = readhexaesc(ls); /* final character to be saved */
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, c);
         break;
       }
@@ -501,7 +501,7 @@ static void read_string(LexState* ls, int del, Token* seminfo)
       case '\n':
       case '\r':
         inclinenumber(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, '\n');
         break;
       case '\\':
@@ -510,7 +510,7 @@ static void read_string(LexState* ls, int del, Token* seminfo)
       {
         int c = ls->current; /* final character to be saved */
         next(ls);
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, c);
         break;
       }
@@ -518,7 +518,7 @@ static void read_string(LexState* ls, int del, Token* seminfo)
         break; /* will raise an error next loop */
       case 'z':
       {                               /* zap following span of spaces */
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         next(ls);                     /* skip the 'z' */
         while (lisspace(ls->current))
         {
@@ -533,7 +533,7 @@ static void read_string(LexState* ls, int del, Token* seminfo)
       {
         esccheck(ls, lisdigit(ls->current), lt::invalid_escape_sequence);
         int c = readdecesc(ls); /* digital escape '\ddd' */
-        ls->buff->drop((size_t)(1)); /* remove '\\' */
+        ls->buff->drop(1); /* remove '\\' */
         save(ls, c);
         break;
       }

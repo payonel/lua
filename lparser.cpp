@@ -457,7 +457,7 @@ static int searchvar(FuncState* fs, TString* n, expdesc* var)
         if (vd->kind == RDKVAVAR) /* vararg parameter? */
           var->k = VVARGVAR;
       }
-      return ((int)(var->k));
+      return (var->k);
     }
   }
   return -1; /* not found */
@@ -876,13 +876,13 @@ static void close_func(LexState* ls)
   leaveblock(fs);
   assert(fs->bl == nullptr);
   luaK_finish(fs);
-  f->code = luaM_alloc_Instruction_span(L->l_G, L, f->code, (size_t)fs->pc, true);
-  f->lineinfo = luaM_alloc_ls_byte_span(L->l_G, L, f->lineinfo, (size_t)fs->pc, true);
-  f->abslineinfo = luaM_alloc_AbsLineInfo_span(L->l_G, L, f->abslineinfo, (size_t)fs->nabslineinfo, true);
-  f->k = luaM_alloc_TValue_span(L->l_G, L, f->k, (size_t)fs->nk, true);
-  f->p = luaM_alloc_Proto_ptr_span(L->l_G, L, f->p, (size_t)fs->np, true);
-  f->locvars = luaM_alloc_LocVar_span(L->l_G, L, f->locvars, (size_t)fs->ndebugvars, true);
-  f->upvalues = luaM_alloc_Upvaldesc_span(L->l_G, L, f->upvalues, (size_t)fs->nups, true);
+  f->code = luaM_alloc_Instruction_span(L->l_G, L, f->code, fs->pc, true);
+  f->lineinfo = luaM_alloc_ls_byte_span(L->l_G, L, f->lineinfo, fs->pc, true);
+  f->abslineinfo = luaM_alloc_AbsLineInfo_span(L->l_G, L, f->abslineinfo, fs->nabslineinfo, true);
+  f->k = luaM_alloc_TValue_span(L->l_G, L, f->k, fs->nk, true);
+  f->p = luaM_alloc_Proto_ptr_span(L->l_G, L, f->p, fs->np, true);
+  f->locvars = luaM_alloc_LocVar_span(L->l_G, L, f->locvars, fs->ndebugvars, true);
+  f->upvalues = luaM_alloc_Upvaldesc_span(L->l_G, L, f->upvalues, fs->nups, true);
   /* remove kcache table from scanner table ("weigh" its anchor) */
   sethvalue(L, &temp, fs->kcache); /* key to be set to nil */
   ls->h->luaH_set(L, &temp, &L->l_G->nilvalue);

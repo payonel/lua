@@ -99,7 +99,7 @@ static void dumpVarint(DumpState* D, lua_Unsigned x)
   int n = 1;
   buff[DIBS - 1] = x & 0x7f; /* fill least-significant byte */
   while ((x >>= 7) != 0)     /* fill other bytes in reverse order */
-    buff[DIBS - (++n)] = ((lu_byte)((x & 0x7f) | 0x80));
+    buff[DIBS - (++n)] = ((x & 0x7f) | 0x80);
   dumpVector(D, std::span<const lu_byte>(buff).subspan(DIBS - n));
 }
 
@@ -146,7 +146,7 @@ static void dumpString(DumpState* D, TString* ts)
     if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
     {                                         /* string already saved? */
       dumpVarint(D, 0);                       /* reuse a saved string */
-      dumpVarint(D, ((lua_Unsigned)(ivalue(&idx)))); /* index of saved string */
+      dumpVarint(D, (ivalue(&idx))); /* index of saved string */
     }
     else
     {                    /* must write and save the string */
@@ -157,7 +157,7 @@ static void dumpString(DumpState* D, TString* ts)
       dumpVector(D, std::span<const char>(sv.data(), size + 1)); /* include ending '\0' */
       D->nstr++;                             /* one more saved string */
       setsvalue(D->L, &key, ts);             /* the string is the key */
-      setivalue(&value, ((lua_Integer)(D->nstr))); /* its index is the value */
+      setivalue(&value, (D->nstr)); /* its index is the value */
       D->h->luaH_set(D->L, &key, &value);    /* h[ts] = nstr */
       /* integer value does not need barrier */
     }

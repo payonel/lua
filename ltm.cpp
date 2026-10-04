@@ -250,7 +250,7 @@ int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
   const TValue* p2;
   if (isfloat)
   {
-    setfltvalue(&aux, ((lua_Number)(v2)));
+    setfltvalue(&aux, (v2));
   }
   else
     setivalue(&aux, v2);

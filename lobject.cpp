@@ -448,7 +448,7 @@ static NumParse str2dec(byte_view s, size_t off)
       }
     }
     long magnitude = e10 + ((intdigits > 0) ? intdigits : -fraczeros);
-    v = (magnitude > 0) ? ((lua_Number)(HUGE_VAL)) : 0.0;
+    v = (magnitude > 0) ? (HUGE_VAL) : 0.0;
   }
   else if (res.ec != std::errc())
     return {off, 0.0};
@@ -504,8 +504,8 @@ static NumParse l_str2d(byte_view s, size_t off)
   return r;
 }
 
-constexpr lua_Unsigned MAXBY10 = ((lua_Unsigned)(LUA_MAXINTEGER / 10));
-constexpr int MAXLASTD = ((int)(LUA_MAXINTEGER % 10));
+constexpr lua_Unsigned MAXBY10 = (LUA_MAXINTEGER / 10);
+constexpr int MAXLASTD = (LUA_MAXINTEGER % 10);
 
 static IntParse l_str2int(byte_view s, size_t off)
 {

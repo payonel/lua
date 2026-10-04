@@ -51,19 +51,19 @@ static void entersweep(lua_State* L);
 
 static inline void makewhite(global_State* g, GCObject* x)
 {
-  x->marked = (lu_byte)((x->marked & ~maskcolors) | luaC_white(g));
+  x->marked = ((x->marked & ~maskcolors) | luaC_white(g));
 }
 
 /* make an object gray (neither white nor black) */
 static inline void set2gray(GCObject* x)
 {
-  x->marked = (lu_byte)(x->marked & ~maskcolors);
+  x->marked = (x->marked & ~maskcolors);
 }
 
 /* make an object black (coming from any color) */
 static inline void set2black(GCObject* x)
 {
-  x->marked = (lu_byte)((x->marked & ~WHITEBITS) | bitmask(BLACKBIT));
+  x->marked = ((x->marked & ~WHITEBITS) | bitmask(BLACKBIT));
 }
 
 static inline int keyiswhite(const Node* n)
@@ -115,7 +115,7 @@ static inline void markobjectN(global_State* g, GCObject* t)
 /* one after last element in a hash array */
 static inline Node* gnodelast(Table* h)
 {
-  return gnode(h, (size_t)sizenode(h));
+  return gnode(h, sizenode(h));
 }
 
 static l_mem objsize(GCObject* o)
@@ -177,7 +177,7 @@ static l_mem objsize(GCObject* o)
     res = 0;
     assert(0);
   }
-  return ((l_mem)(res));
+  return (res);
 }
 
 static GCListed* getgclist(GCObject* o)
@@ -667,7 +667,7 @@ static l_mem traversetable(global_State* g, Table* h)
       linkgclist_(h, &g->allweak); /* must clear collected entries */
     break;
   }
-  return ((l_mem)(1 + 2 * sizenode(h) + h->asize()));
+  return (1 + 2 * sizenode(h) + h->asize());
 }
 
 static l_mem traverseudata(global_State* g, Udata* u)
@@ -974,7 +974,7 @@ static GCObject* sweeplist(lua_State* L, GCObject* p, l_mem countin)
     }
     else
     { /* change mark to 'white' and age to 'new' */
-      curr->marked = ((lu_byte)((marked & ~maskgcbits) | white | G_NEW));
+      curr->marked = ((marked & ~maskgcbits) | white | G_NEW);
       p = curr; /* go to next element */
     }
   }
@@ -1162,7 +1162,7 @@ void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt)
     p->next = o->next;        /* remove 'o' from 'allgc' list */
     o->next = g->finobj.next; /* link it in 'finobj' list */
     g->finobj.next = o;
-    o->marked = (lu_byte)(o->marked | bitmask(FINALIZEDBIT)); /* mark it as such */
+    o->marked = (o->marked | bitmask(FINALIZEDBIT)); /* mark it as such */
   }
 }
 
@@ -1684,7 +1684,7 @@ static void atomic(lua_State* L)
   /* clear values from resurrected weak tables */
   clearbyvalues(g, g->weak.gclist, origweak);
   clearbyvalues(g, g->allweak.gclist, origall);
-  g->currentwhite = ((lu_byte)(otherwhite(g))); /* flip current white */
+  g->currentwhite = (otherwhite(g)); /* flip current white */
   assert(g->gray.gclist == nullptr);
 }
 

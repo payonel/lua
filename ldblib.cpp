@@ -368,7 +368,7 @@ static void hookf(lua_State* L, lua_Debug* ar)
   lua_pushthread(L);
   if (lua_rawget(L, -2) == LUA_TFUNCTION)
   {                                                /* is there a hook function? */
-    lua_pushistringref(L, hooknames[(int) ar->event]); /* push event name */
+    lua_pushistringref(L, hooknames[ar->event]); /* push event name */
     if (ar->currentline >= 0)
       lua_pushinteger(L, ar->currentline); /* push current line */
     else

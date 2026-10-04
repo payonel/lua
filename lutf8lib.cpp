@@ -110,14 +110,14 @@ static int utflen(lua_State* L)
   luaL_argchecki(L, --posj < (lua_Integer) len, 3, lt::final_position_out_of_bounds);
   while (posi <= posj)
   {
-    size_t s1 = utf8_decode(s, (size_t) posi, !lax).next;
+    size_t s1 = utf8_decode(s, posi, !lax).next;
     if (s1 == 0)
     {                               /* conversion error? */
       luaL_pushfail(L);             /* return fail ... */
       lua_pushinteger(L, posi + 1); /* ... and current position */
       return 2;
     }
-    posi = (lua_Integer) s1;
+    posi = s1;
     n++;
   }
   lua_pushinteger(L, n);
@@ -146,7 +146,7 @@ static int codepoint(lua_State* L)
   n = (int) (pose - posi) + 1; /* upper bound for number of returns */
   luaL_checkstacki(L, n, lt::string_slice_too_long);
   n = 0;             /* count the number of returns */
-  se = (size_t) pose; /* string end */
+  se = pose; /* string end */
   for (size_t pos = (size_t) posi - 1; pos < se;)
   {
     Utf8Code dec = utf8_decode(s, pos, !lax);
@@ -205,12 +205,12 @@ static int byteoffset(lua_State* L)
   if (n == 0)
   {
     /* find beginning of current byte sequence */
-    while (posi > 0 && iscontat(s, (size_t) posi))
+    while (posi > 0 && iscontat(s, posi))
       posi--;
   }
   else
   {
-    if (iscontat(s, (size_t) posi))
+    if (iscontat(s, posi))
       return luaL_errori(L, lt::initial_position_is_a_continuation_byte);
     if (n < 0)
     {
@@ -219,7 +219,7 @@ static int byteoffset(lua_State* L)
         do
         { /* find beginning of previous character */
           posi--;
-        } while (posi > 0 && iscontat(s, (size_t) posi));
+        } while (posi > 0 && iscontat(s, posi));
         n++;
       }
     }
@@ -231,7 +231,7 @@ static int byteoffset(lua_State* L)
         do
         { /* find beginning of next character */
           posi++;
-        } while (iscontat(s, (size_t) posi));
+        } while (iscontat(s, posi));
         n--;
       }
     }
@@ -242,9 +242,9 @@ static int byteoffset(lua_State* L)
     return 1;
   }
   lua_pushinteger(L, posi + 1); /* initial position */
-  if ((ubyte(s, (size_t) posi) & 0x80) != 0)
+  if ((ubyte(s, posi) & 0x80) != 0)
   { /* multi-byte character? */
-    if (iscont(ubyte(s, (size_t) posi)))
+    if (iscont(ubyte(s, posi)))
       return luaL_errori(L, lt::initial_position_is_a_continuation_byte);
     while (iscontat(s, (size_t) posi + 1))
       posi++; /* skip to last continuation byte */
@@ -258,7 +258,7 @@ static int iter_aux(lua_State* L, int strict)
 {
   const InternalString* s = luaL_checkistring(L, 1);
   size_t len = s->size();
-  lua_Unsigned n = (lua_Unsigned) lua_tointeger(L, 2);
+  lua_Unsigned n = lua_tointeger(L, 2);
   if (n < len)
   {
     while (iscontat(s, n))
@@ -271,7 +271,7 @@ static int iter_aux(lua_State* L, int strict)
     Utf8Code dec = utf8_decode(s, n, strict);
     if (dec.next == 0 || iscontat(s, dec.next))
       return luaL_errori(L, lt::invalid_UTF_8_code);
-    lua_pushinteger(L, ((lua_Integer)(n + 1)));
+    lua_pushinteger(L, (n + 1));
     lua_pushinteger(L, dec.code);
     return 2;
   }

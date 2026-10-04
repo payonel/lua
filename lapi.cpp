@@ -512,7 +512,7 @@ LUA_API lua_Unsigned lua_rawlen(lua_State* L, int idx)
   switch ((o.tt_ & WITHVARIANT_MASK))
   {
   case LUA_VSHRSTR:
-    return (lua_Unsigned)tsslen(tsvalue(&o));
+    return tsslen(tsvalue(&o));
   case LUA_VUSERDATA:
   {
     Udata* pu = uvalue(&o);
@@ -1452,7 +1452,7 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   }
   adjustresults(L, nresults);
   lua_unlock(L);
-  return ((int)(status));
+  return (status);
 }
 
 int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkname, std::optional<byte_view> mode)
@@ -1478,7 +1478,7 @@ int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkna
     }
   }
   lua_unlock(L);
-  return ((int)(status));
+  return (status);
 }
 
 LUA_API int lua_load(lua_State* L, lua_Reader* reader,
@@ -1510,7 +1510,7 @@ LUA_API int lua_dump(lua_State* L, lua_Writer* writer, int strip)
 
 LUA_API int lua_status(lua_State* L)
 {
-  return ((int)(L->status));
+  return (L->status);
 }
 
 LUA_API int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
@@ -1546,13 +1546,13 @@ LUA_API int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value
   }
   case LUA_GCCOUNTB:
   {
-    res = ((int)(gettotalbytes(g) & 0x3ff));
+    res = (gettotalbytes(g) & 0x3ff);
     break;
   }
   case LUA_GCSTEP:
   {
     lu_byte oldstp = g->gcstp;
-    l_mem n = ((l_mem)(stepsize));
+    l_mem n = (stepsize);
     l_mem newdebt;
     int work = 0; /* true if GC did some work */
     g->gcstp = 0; /* allow GC to run (other bits must be zero here) */

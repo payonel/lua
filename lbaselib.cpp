@@ -179,7 +179,7 @@ static int luaB_rawlen(lua_State* L)
 {
   int t = lua_type(L, 1);
   luaL_argexpectedi(L, t == LUA_TTABLE || t == LUA_TSTRING, 1, lt::table_or_string);
-  lua_pushinteger(L, ((lua_Integer)(lua_rawlen(L, 1))));
+  lua_pushinteger(L, (lua_rawlen(L, 1)));
   return 1;
 }
 
@@ -230,12 +230,12 @@ static int luaB_collectgarbage(lua_State* L)
   case 100:
   {
     lua_Integer limit = luaL_checkinteger(L, 2);
-    lua_setmemlimit(L, (size_t)(limit <= 0 ? 0 : limit));
+    lua_setmemlimit(L, (limit <= 0 ? 0 : limit));
     return 0;
   }
   case 101:
   {
-    lua_pushinteger(L, ((lua_Integer)(lua_getmemlimit(L))));
+    lua_pushinteger(L, (lua_getmemlimit(L)));
     return 1;
   }
   case LUA_GCCOUNT:
@@ -249,7 +249,7 @@ static int luaB_collectgarbage(lua_State* L)
   case LUA_GCSTEP:
   {
     lua_Integer n = luaL_optinteger(L, 2, 0);
-    int res = lua_gc(L, o, ((size_t)(n)), 0, 0);
+    int res = lua_gc(L, o, (n), 0, 0);
     { if ((res) == -1) break; };
     lua_pushboolean(L, res);
     return 1;

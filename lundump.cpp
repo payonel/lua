@@ -134,9 +134,9 @@ static lua_Integer loadInteger(LoadState* S)
   lua_Unsigned cx = loadVarint(S, LUA_MAXUNSIGNED);
   /* decode unsigned to signed */
   if ((cx & 1) != 0)
-    return ((lua_Integer)(~(cx >> 1)));
+    return (~(cx >> 1));
   else
-    return ((lua_Integer)(cx >> 1));
+    return (cx >> 1);
 }
 
 /*
@@ -161,7 +161,7 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
       setslot(nullptr);
       return;
     }
-    if ((S->h->luaH_getint(((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
+    if ((S->h->luaH_getint((idx), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
       error(S, lt::invalid_string_index);
     assert((stv.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
     ts = tsvalue(&stv); /* get its value */
@@ -191,7 +191,7 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
   /* add string to list of saved strings */
   S->nstr++;
   setsvalue(L, &sv, ts);
-  S->h->luaH_setint(L, ((lua_Integer)(S->nstr)), &sv);
+  S->h->luaH_setint(L, (S->nstr), &sv);
   assert((S->h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
   luaC_objbarrierback(L, S->h, ts);
 }
@@ -343,7 +343,7 @@ static void loadFunction(LoadState* S, Proto* f)
   f->lastlinedefined = loadInt(S);
   f->numparams = loadByte(S);
   /* get only the meaningful flags */
-  f->flag = ((lu_byte)(loadByte(S) & ~PF_FIXED));
+  f->flag = (loadByte(S) & ~PF_FIXED);
   if (S->fixed)
     f->flag |= PF_FIXED; /* signal that code is fixed */
   f->maxstacksize = loadByte(S);

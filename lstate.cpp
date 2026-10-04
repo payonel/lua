@@ -139,7 +139,7 @@ static void resetCI(lua_State* L)
 static void stack_init(lua_State* L1, lua_State* L)
 {
   int i;
-  size_t nslots = (size_t)(BASIC_STACK_SIZE + EXTRA_STACK);
+  size_t nslots = (BASIC_STACK_SIZE + EXTRA_STACK);
   std::span<TValue> stk = luaM_alloc_TValue_span(L->l_G, L, {}, nslots, false);
   if (l_unlikely(stk.data() == nullptr))
   {
@@ -325,7 +325,7 @@ LUA_API int lua_closethread(lua_State* L, lua_State* from)
   if (L == from) /* closing itself? */
     luaD_throwbaselevel(L, status);
   lua_unlock(L);
-  return ((int)(status));
+  return (status);
 }
 
 LUA_API lua_State* lua_newstate(lua_Alloc* f, unsigned seed)

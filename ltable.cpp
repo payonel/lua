@@ -70,7 +70,7 @@ constexpr size_t MAXASIZEB = (MAX_SIZET / (sizeof(Value) + 1));
 ** between 2^MAXABITS and MAXASIZEB.
 */
 constexpr int MAXASIZE = 1 << MAXABITS;
-static_assert((size_t)MAXASIZE <= MAXASIZEB);
+static_assert(MAXASIZE <= MAXASIZEB);
 
 /*
 ** MAXHBITS is the largest integer such that 2^MAXHBITS fits in a
@@ -83,7 +83,7 @@ constexpr int MAXHBITS = 30;
 ** between 2^MAXHBITS and the maximum size such that, measured in bytes,
 ** it fits in a 'size_t'.
 */
-constexpr int MAXHSIZE = ((((size_t)(1 << MAXHBITS)) <= MAX_SIZET / sizeof(Node)) ? (1 << MAXHBITS) : ((int)((MAX_SIZET / sizeof(Node)))));
+constexpr int MAXHSIZE = (((1 << MAXHBITS) <= MAX_SIZET / sizeof(Node)) ? (1 << MAXHBITS) : (MAX_SIZET / sizeof(Node)));
 
 /*
 ** When the original hash value is good, hashing by a power of 2
@@ -100,7 +100,7 @@ inline int Table::hashpow2(lua_Unsigned n) const
 */
 inline int Table::hashmod(lua_Unsigned n) const
 {
-  return (int)l_umod(n, (lua_Unsigned)((sizenode(this) - 1) | 1));
+  return (int)l_umod(n, ((sizenode(this) - 1) | 1));
 }
 
 inline int Table::hashstr(TString* str) const
@@ -109,7 +109,7 @@ inline int Table::hashstr(TString* str) const
 }
 inline int Table::hashboolean(int p) const
 {
-  return hashpow2((lua_Unsigned)p);
+  return hashpow2(p);
 }
 
 inline int Table::hashpointer(const void* p) const
@@ -141,8 +141,8 @@ static const TValue absentkey = {{0, nullptr}, LUA_VABSTKEY};
 int Table::hashint(lua_Integer i) const
 {
   const Table* t = this;
-  lua_Unsigned ui = ((lua_Unsigned)(i));
-  if (ui <= ((unsigned int)(INT_MAX)))
+  lua_Unsigned ui = (i);
+  if (ui <= (INT_MAX))
     return ((int)(ui)) % ((sizenode(t) - 1) | 1);
   else
     return t->hashmod(ui);
@@ -174,7 +174,7 @@ static unsigned l_hashfloat(lua_Number n)
   else
   { /* normal case */
     unsigned int u = ((unsigned int)(i)) + ((unsigned int)(ni.v));
-    return (u <= ((unsigned int)(INT_MAX)) ? u : ~u);
+    return (u <= (INT_MAX) ? u : ~u);
   }
 }
 
@@ -419,7 +419,7 @@ int Table::luaH_next(lua_State* L, StkId key)
 size_t Table::sizehash()
 {
   Table* t = this;
-  return ((size_t)(sizenode(t))) * sizeof(Node);
+  return (sizenode(t)) * sizeof(Node);
 }
 
 void Table::freehash(lua_State* L)
@@ -609,13 +609,13 @@ std::span<Value> Table::resizearray(lua_State* L,
   }
   else
   {
-    std::span<Value> nv = luaM_alloc_Value_span(L->l_G, L, {}, (size_t)newasize, false);
+    std::span<Value> nv = luaM_alloc_Value_span(L->l_G, L, {}, newasize, false);
     if (nv.data() == nullptr) /* allocation error? */
     {
       *newtags = {};
       return {};
     }
-    std::span<lu_byte> nt = luaM_alloc_lu_byte_span(L->l_G, L, {}, (size_t)newasize, false);
+    std::span<lu_byte> nt = luaM_alloc_lu_byte_span(L->l_G, L, {}, newasize, false);
     if (nt.data() == nullptr) /* allocation error? */
     {
       luaM_alloc_Value_span(L->l_G, L, nv, 0, false);
@@ -627,9 +627,9 @@ std::span<Value> Table::resizearray(lua_State* L,
       /* move common elements to new arrays */
       int tomove = (oldasize < newasize) ? oldasize : newasize;
       for (int mi = 0; mi < tomove; mi++)
-        nv[(size_t)mi] = t->array[(size_t)mi];
+        nv[mi] = t->array[mi];
       for (int mi = 0; mi < tomove; mi++)
-        nt[(size_t)mi] = t->tags[(size_t)mi];
+        nt[mi] = t->tags[mi];
       luaM_alloc_Value_span(L->l_G, L, t->array, 0, false);
       luaM_alloc_lu_byte_span(L->l_G, L, t->tags, 0, false);
     }
@@ -661,7 +661,7 @@ void Table::setnodevector(lua_State* L, int size)
     if (lsize > MAXHBITS || (1 << lsize) > MAXHSIZE)
       luaG_runerror(L, lt::table_overflow);
     size = twoto(lsize);
-    t->node = luaM_alloc_Node_span(L->l_G, L, {}, (size_t)size, true);
+    t->node = luaM_alloc_Node_span(L->l_G, L, {}, size, true);
     t->lastfree = 0;
     if (lsize >= LIMFORLAST)
     {
@@ -711,7 +711,7 @@ static void exchangehashpart(Table* t1, Table* t2)
   int bitdummy1 = t1->flags & BITDUMMY;
   t1->node = t2->node;
   t1->lastfree = t2->lastfree;
-  t1->flags = ((lu_byte)((t1->flags & NOTBITDUMMY) | (t2->flags & BITDUMMY)));
+  t1->flags = ((t1->flags & NOTBITDUMMY) | (t2->flags & BITDUMMY));
   t2->node = node;
   t2->lastfree = lastfree;
   t2->flags = ((lu_byte)((t2->flags & NOTBITDUMMY) | bitdummy1));

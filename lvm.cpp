@@ -225,7 +225,7 @@ static int forprep(lua_State* L, StkId ra)
         count /= ((lua_Unsigned)(-(step + 1))) + 1u;
       }
       /* use 'chgivalue' for places that for sure had integers */
-      chgsloti(L, ra, ((lua_Integer)(count))); /* change init to count */
+      chgsloti(L, ra, (count)); /* change init to count */
       setsloti(L, ra + 1, step);         /* change limit to step */
       chgsloti(L, ra + 2, init);         /* change step to init */
     }
@@ -862,7 +862,7 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src)
   case LUA_VSHRSTR:
   {
     TString* ts = tsvalue(rb);
-    setsloti(L, ra, (lua_Integer)tsslen(ts));
+    setsloti(L, ra, tsslen(ts));
     return;
   }
   default:
@@ -951,14 +951,14 @@ lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y)
     if (y <= -NBITS)
       return 0;
     else
-      return ((lua_Integer)(((lua_Unsigned)(x)) >> ((lua_Unsigned)(-y))));
+      return (((lua_Unsigned)(x)) >> (-y));
   }
   else
   { /* shift left */
     if (y >= NBITS)
       return 0;
     else
-      return ((lua_Integer)(((lua_Unsigned)(x)) << ((lua_Unsigned)(y))));
+      return (((lua_Unsigned)(x)) << ((lua_Unsigned)(y)));
   }
 }
 
@@ -1275,7 +1275,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         int b = GETARG_sBx(i);
-        setslotflt(L, ra, ((lua_Number)(b)));
+        setslotflt(L, ra, (b));
         break;
       }
       case OP_LOADK:
@@ -1693,7 +1693,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else if (slottag(L, v1) == LUA_VNUMFLT)
         {
           lua_Number nb = slotfltval(L, v1);
-          lua_Number fimm = (lua_Number)imm;
+          lua_Number fimm = imm;
           pc++;
           setslotflt(L, ra, luai_numadd(L, nb, fimm));
         }
@@ -2408,7 +2408,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (slottag(L, ra) == LUA_VNUMINT)
           cond = (slotival(L, ra) == im);
         else if (slottag(L, ra) == LUA_VNUMFLT)
-          cond = (slotfltval(L, ra) == (((lua_Number)(im))));
+          cond = (slotfltval(L, ra) == (im));
         else
           cond = 0; /* other types cannot be equal to a number */
         if (cond != GETARG_k(i))
@@ -2431,7 +2431,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else if (slottag(L, ra) == LUA_VNUMFLT)
         {
           lua_Number fa = slotfltval(L, ra);
-          lua_Number fim = (lua_Number)im;
+          lua_Number fim = im;
           cond = luai_numlt(fa, fim);
         }
         else
@@ -2462,7 +2462,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else if (slottag(L, ra) == LUA_VNUMFLT)
         {
           lua_Number fa = slotfltval(L, ra);
-          lua_Number fim = (lua_Number)im;
+          lua_Number fim = im;
           cond = luai_numle(fa, fim);
         }
         else
@@ -2493,7 +2493,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else if (slottag(L, ra) == LUA_VNUMFLT)
         {
           lua_Number fa = slotfltval(L, ra);
-          lua_Number fim = (lua_Number)im;
+          lua_Number fim = im;
           cond = luai_numgt(fa, fim);
         }
         else
@@ -2524,7 +2524,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         else if (slottag(L, ra) == LUA_VNUMFLT)
         {
           lua_Number fa = slotfltval(L, ra);
-          lua_Number fim = (lua_Number)im;
+          lua_Number fim = im;
           cond = luai_numge(fa, fim);
         }
         else

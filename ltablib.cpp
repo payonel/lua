@@ -342,7 +342,7 @@ static IdxT partition(lua_State* L, IdxT lo, IdxT up)
 static IdxT choosePivot(IdxT lo, IdxT up, unsigned int rnd)
 {
   IdxT r4 = (up - lo) / 4; /* range/4 */
-  IdxT p = (IdxT)l_umod(rnd ^ (unsigned int)lo ^ (unsigned int)up, (lua_Unsigned)(r4 * 2)) + (lo + r4);
+  IdxT p = (IdxT)l_umod(rnd ^ (unsigned int)lo ^ (unsigned int)up, (r4 * 2)) + (lo + r4);
   assert(lo + r4 <= p && p <= up - r4);
   return p;
 }

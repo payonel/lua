@@ -517,7 +517,7 @@ static int g_read(lua_State* L, OsFile* f, int first)
     {
       if (lua_type(L, n) == LUA_TNUMBER)
       {
-        size_t l = (size_t) luaL_checkinteger(L, n);
+        size_t l = luaL_checkinteger(L, n);
         success = (l == 0) ? test_eof(L, f) : read_chars(L, f, l);
       }
       else
@@ -623,7 +623,7 @@ static int g_write(lua_State* L, OsFile* f, int arg)
     if (numbytes < bv.size())
     { /* write error? */
       int n = luaL_fileresulti(L, 0, {}, errno);
-      lua_pushinteger(L, ((lua_Integer)(totalbytes)));
+      lua_pushinteger(L, (totalbytes));
       return n + 1; /* return fail, error msg., error code, and counter */
     }
   }
@@ -648,14 +648,14 @@ static int f_seek(lua_State* L)
   OsFile* f = tofile(L);
   int op = luaL_checkoptioni(L, 2, lt::cur, modenames);
   lua_Integer p3 = luaL_optinteger(L, 3, 0);
-  long long offset = (long long) p3;
-  luaL_argchecki(L, (lua_Integer) offset == p3, 3, lt::not_an_integer_in_proper_range);
+  long long offset = p3;
+  luaL_argchecki(L, offset == p3, 3, lt::not_an_integer_in_proper_range);
   int serr = os_fseek(f, offset, op);
   if (l_unlikely(serr != 0))
     return luaL_fileresulti(L, 0, {}, serr); /* error */
   else
   {
-    lua_pushinteger(L, (lua_Integer) os_ftell(f));
+    lua_pushinteger(L, os_ftell(f));
     return 1;
   }
 }
@@ -666,7 +666,7 @@ static int f_setvbuf(lua_State* L)
   OsFile* f = tofile(L);
   int op = luaL_checkoptioni(L, 2, {}, modenames);
   lua_Integer sz = luaL_optinteger(L, 3, LUAL_BUFFERSIZE);
-  int res = os_setvbuf(f, op, (size_t) sz);
+  int res = os_setvbuf(f, op, sz);
   return luaL_fileresulti(L, res == 0, {}, res);
 }
 

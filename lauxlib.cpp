@@ -650,7 +650,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
   size_t newsize = B->bytes.size();
   size_t len = B->used;
   if (l_unlikely(sz >= MAX_SIZE - len))
-    return ((size_t)(luaL_errori(B->L, lt::resulting_string_too_large)));
+    return (luaL_errori(B->L, lt::resulting_string_too_large));
   if (newsize <= MAX_SIZE / 3 * 2) /* no overflow? */
     newsize += (newsize >> 1);     /* new size *= 1.5 */
   if (newsize < len + sz)          /* not big enough? */
@@ -1381,17 +1381,17 @@ void WarnOn::warn(lua_State* L, const HostString& message, int tocont)
 static unsigned int luai_makeseed(void)
 {
   unsigned long long nanos =
-    (unsigned long long) std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::steady_clock::now().time_since_epoch())
       .count();
   unsigned long long millis =
-    (unsigned long long) std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now().time_since_epoch())
       .count();
   unsigned int buff[4];
-  buff[0] = (unsigned int) (nanos & 0xFFFFFFFFu);
+  buff[0] = (nanos & 0xFFFFFFFFu);
   buff[1] = (unsigned int) ((nanos >> 32) & 0xFFFFFFFFu);
-  buff[2] = (unsigned int) (millis & 0xFFFFFFFFu);
+  buff[2] = (millis & 0xFFFFFFFFu);
   buff[3] = (unsigned int) ((millis >> 32) & 0xFFFFFFFFu);
   unsigned int res = buff[0];
   for (unsigned int i = 1; i < 4; i++)

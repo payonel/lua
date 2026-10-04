@@ -161,7 +161,7 @@ constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / sizeof(lua_Integer)) - STACKER
 ** Minimum between LUAI_MAXSTACK and MAXSTACK_BYSIZET
 ** (Maximum size for the stack must respect size_t.)
 */
-constexpr int MAXSTACK = ((int)(LUAI_MAXSTACK < MAXSTACK_BYSIZET ? LUAI_MAXSTACK : MAXSTACK_BYSIZET));
+constexpr int MAXSTACK = (LUAI_MAXSTACK < MAXSTACK_BYSIZET ? LUAI_MAXSTACK : MAXSTACK_BYSIZET);
 
 /* stack size with extra space for error handling */
 constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
@@ -208,8 +208,8 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
 {
   int oldsize = stacksize(L);
   int i;
-  size_t oldn = (size_t)(oldsize + EXTRA_STACK);
-  size_t newn = (size_t)(newsize + EXTRA_STACK);
+  size_t oldn = (oldsize + EXTRA_STACK);
+  size_t newn = (newsize + EXTRA_STACK);
   size_t keep = (oldn < newn) ? oldn : newn;
   lu_byte oldgcstop = L->l_G->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
@@ -766,7 +766,7 @@ static void finishCcall(lua_State* L, CallInfo* ci)
       status = finishpcallk(L, ci);   /* finish it */
     adjustresults(L, LUA_MULTRET);    /* finish 'lua_callk' */
     lua_unlock(L);
-    n = (*kf)(L, ((int)(status)), ci->ctx); /* call continuation */
+    n = (*kf)(L, (status), ci->ctx); /* call continuation */
     lua_lock(L);
     api_checknelems(L, n);
   }
@@ -930,7 +930,7 @@ LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
   int nresults = (status == LUA_YIELD) ? L->ci->nyield
                                        : ((int)(L->top - (L->ci->func + 1)));
   lua_unlock(L);
-  return {((int)(status)), nresults};
+  return {(status), nresults};
 }
 
 LUA_API int lua_isyieldable(lua_State* L)
@@ -1059,7 +1059,7 @@ struct SParser : ProtectedCall
 
 static void checkmode(lua_State* L, byte_view mode, byte_view x)
 {
-  if (mode.find((char) x[0]) == byte_view::npos)
+  if (mode.find(x[0]) == byte_view::npos)
   {
     luaO_pushfstring(L, lt::attempt_to_load_a_s_chunk_mode_is_s,
                      FmtArgs().str(x).str(mode));
