@@ -55,7 +55,7 @@ static IndexAddr resolveindex(lua_State* L, int idx)
   if (idx > 0)
   {
     StkId o = ci->func + idx;
-    assert((((StkId)(idx)) <= ci->top - (ci->func + 1)) && "unacceptable index");
+    assert(((idx) <= ci->top - (ci->func + 1)) && "unacceptable index");
     if (o >= L->top)
       return {0, &L->l_G->nilvalue};
     else
@@ -63,7 +63,7 @@ static IndexAddr resolveindex(lua_State* L, int idx)
   }
   else if (!ispseudo(idx))
   { /* negative index */
-    assert((idx != 0 && ((StkId)(-idx)) <= L->top - (ci->func + 1)) && "invalid index");
+    assert((idx != 0 && -idx <= L->top - (ci->func + 1)) && "invalid index");
     return {L->top + idx, nullptr};
   }
   else if (idx == LUA_REGISTRYINDEX)
@@ -124,7 +124,7 @@ static StkId index2stack(lua_State* L, int idx)
   }
   else
   { /* non-positive index */
-    assert((idx != 0 && ((StkId)(-idx)) <= L->top - (ci->func + 1)) && "invalid index");
+    assert((idx != 0 && -idx <= L->top - (ci->func + 1)) && "invalid index");
     assert((!ispseudo(idx)) && "invalid index");
     return L->top + idx;
   }
@@ -137,7 +137,7 @@ LUA_API int lua_checkstack(lua_State* L, int n)
   lua_lock(L);
   ci = L->ci;
   assert((n >= 0) && "negative 'n'");
-  if (L->top + ((StkId)(n)) < L->stack_last) /* stack large enough? */
+  if (L->stack_last - L->top > n) /* stack large enough? */
     res = 1;                          /* yes; check is OK */
   else                                /* need to grow stack */
     res = luaD_growstack(L, n, 0);
@@ -155,7 +155,7 @@ LUA_API void lua_xmove(lua_State* from, lua_State* to, int n)
   lua_lock(to);
   api_checkpop(from, n);
   assert((from->l_G == to->l_G) && "moving among independent states");
-  assert((to->ci->top >= to->top + ((StkId)(n))) && "stack overflow");
+  assert((to->ci->top >= to->top + (n)) && "stack overflow");
   from->top -= n;
   for (i = 0; i < n; i++)
   {
@@ -209,14 +209,14 @@ LUA_API void lua_settop(lua_State* L, int idx)
   func = ci->func;
   if (idx >= 0)
   {
-    assert((((StkId)(idx)) <= ci->top - (func + 1)) && "new top too large");
+    assert(((idx) <= ci->top - (func + 1)) && "new top too large");
     diff = ((int)(((func + 1) + idx) - L->top));
     for (; diff > 0; diff--)
       setslottag(L, L->top++, LUA_VNIL); /* clear new slots */
   }
   else
   {
-    assert((((StkId)(-(idx + 1))) <= (L->top - (func + 1))) && "invalid new top");
+    assert((-(idx + 1) <= (L->top - (func + 1))) && "invalid new top");
     diff = idx + 1; /* will "subtract" index (as it is negative) */
   }
   newtop = L->top + diff;
@@ -1363,7 +1363,7 @@ static inline void checkresults(lua_State* L, int na, int nr)
   (void) L;
   (void) na;
   (void) nr;
-  assert((nr == LUA_MULTRET || (nr <= na || L->ci->top >= L->top + ((StkId)(nr - na)))) && "results from function overflow current stack size");
+  assert((nr == LUA_MULTRET || (nr <= na || L->ci->top >= L->top + (nr - na))) && "results from function overflow current stack size");
   assert((LUA_MULTRET <= nr && nr <= MAXRESULTS) && "invalid number of results");
 }
 

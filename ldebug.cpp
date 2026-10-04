@@ -247,7 +247,7 @@ LocalSlot luaG_findlocal(lua_State* L, CallInfo* ci, int n)
   if (name == nullptr)
   { /* no 'standard' name? */
     StkId limit = (ci == L->ci) ? L->top : ci->next->func;
-    if (limit - base >= ((StkId)(n)) && n > 0)
+    if (limit - base >= (n) && n > 0)
     { /* is 'n' inside 'ci' stack? */
       /* generic name for any valid slot */
       name = isLua(ci) ? &lt::temporary_i : &lt::C_temporary_i;
@@ -878,9 +878,9 @@ static byte_view varinfo(lua_State* L, StkId src)
   std::optional<byte_view> kind = std::nullopt;
   if (isLua(ci))
   {
-    if (src >= UPVALORIGIN && src != NOSLOT)
+    if (src <= UPVALORIGIN)
     {
-      name = upvalname(ci_func(L, ci)->p, (int)(src - UPVALORIGIN));
+      name = upvalname(ci_func(L, ci)->p, UPVALORIGIN - src);
       kind = lt::upvalue;
     }
     else if (src != NOSLOT)

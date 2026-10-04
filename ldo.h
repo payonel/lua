@@ -38,7 +38,7 @@ LUAI_FUNC int luaD_growstack(lua_State* L, int n, int raiseerror);
 
 static l_forceinline void luaD_checkstack(lua_State* L, int n)
 {
-  if (l_unlikely(L->top + (StkId)n >= L->stack_last))
+  if (l_unlikely(L->stack_last - L->top <= n))
     luaD_growstack(L, n, 1);
 }
 

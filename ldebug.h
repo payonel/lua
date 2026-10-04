@@ -34,11 +34,11 @@ struct LocalSlot
 
 LUAI_FUNC LocalSlot luaG_findlocal(lua_State* L, CallInfo* ci, int n);
 
-constexpr StkId UPVALORIGIN = ~(StkId)0 - 256;
+constexpr StkId UPVALORIGIN = NOSLOT - 1;
 
 static l_forceinline StkId upvalorigin(int uvidx)
 {
-  return UPVALORIGIN + (StkId)uvidx;
+  return UPVALORIGIN - uvidx;
 }
 
 LUAI_FUNC l_noret luaG_typeerror(lua_State* L, const TValue* o, byte_view opname, StkId src);
