@@ -109,10 +109,10 @@ struct InternalDebug
   int currentline = 0;
   int linedefined = 0;
   int lastlinedefined = 0;
-  unsigned char nups = 0;
-  unsigned char nparams = 0;
+  int nups = 0;
+  int nparams = 0;
   char isvararg = 0;
-  unsigned char extraargs = 0;
+  int extraargs = 0;
   char istailcall = 0;
   int ftransfer = 0;
   int ntransfer = 0;

@@ -420,7 +420,7 @@ static int auxgetinfo(lua_State* L, byte_view what, size_t wpos,
     }
     case 'u':
     {
-      ar->nups = (lu_byte)((f == nullptr) ? 0 : (LuaClosure(f) ? static_cast<LClosure*>(f)->upvals.size() : static_cast<CClosure*>(f)->upvalue.size()));
+      ar->nups = (int)((f == nullptr) ? 0 : (LuaClosure(f) ? static_cast<LClosure*>(f)->upvals.size() : static_cast<CClosure*>(f)->upvalue.size()));
       if (!LuaClosure(f))
       {
         ar->isvararg = 1;

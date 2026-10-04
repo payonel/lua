@@ -272,7 +272,7 @@ struct Upvaldesc
 {
   TString* name;   /* upvalue name (for debug information) */
   lu_byte instack; /* whether it is in stack (register) */
-  lu_byte idx;     /* index of upvalue (in stack or in outer function's list) */
+  int idx;     /* index of upvalue (in stack or in outer function's list) */
   lu_byte kind;    /* kind of corresponding variable */
 };
 
@@ -322,9 +322,9 @@ constexpr int PF_FIXED = 4; /* prototype has parts in fixed memory */
 */
 struct Proto : GCListed
 {
-  lu_byte numparams; /* number of fixed (named) parameters */
+  int numparams; /* number of fixed (named) parameters */
   lu_byte flag;
-  lu_byte maxstacksize; /* number of registers needed by this function */
+  int maxstacksize; /* number of registers needed by this function */
   int linedefined;          /* debug information  */
   int lastlinedefined;      /* debug information  */
   std::span<TValue> k;                /* constants used by the function */
@@ -858,9 +858,9 @@ struct FmtArgs
 /* }================================================================== */
 
 LUAI_FUNC int luaO_utf8esc(byte_span buff, l_uint32 x);
-LUAI_FUNC lu_byte luaO_ceillog2(unsigned int x);
-LUAI_FUNC lu_byte luaO_codeparam(unsigned int p);
-LUAI_FUNC l_mem luaO_applyparam(lu_byte p, l_mem x);
+LUAI_FUNC int luaO_ceillog2(int x);
+LUAI_FUNC int luaO_codeparam(lua_Integer p);
+LUAI_FUNC l_mem luaO_applyparam(int p, l_mem x);
 
 LUAI_FUNC int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2, TValue* res);
 LUAI_FUNC void luaO_arith(lua_State* L, int op, StkId p1, StkId p2, StkId res);

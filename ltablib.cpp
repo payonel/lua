@@ -66,10 +66,10 @@ static inline lua_Integer aux_getn(lua_State* L, int n, int w)
 
 static int tcreate(lua_State* L)
 {
-  lua_Unsigned sizeseq = (lua_Unsigned) luaL_checkinteger(L, 1);
-  lua_Unsigned sizerest = (lua_Unsigned) luaL_optinteger(L, 2, 0);
-  luaL_argchecki(L, sizeseq <= ((unsigned int)(INT_MAX)), 1, lt::out_of_range);
-  luaL_argchecki(L, sizerest <= ((unsigned int)(INT_MAX)), 2, lt::out_of_range);
+  lua_Integer sizeseq = luaL_checkinteger(L, 1);
+  lua_Integer sizerest = luaL_optinteger(L, 2, 0);
+  luaL_argchecki(L, 0 <= sizeseq && sizeseq <= INT_MAX, 1, lt::out_of_range);
+  luaL_argchecki(L, 0 <= sizerest && sizerest <= INT_MAX, 2, lt::out_of_range);
   lua_createtable(L, ((int)(sizeseq)), ((int)(sizerest)));
   return 1;
 }
@@ -78,7 +78,7 @@ static int tinsert(lua_State* L)
 {
   lua_Integer pos; /* where to insert new element */
   lua_Integer e = aux_getn(L, 1, TAB_RW);
-  e = ((lua_Integer)((lua_Unsigned)(e) + (lua_Unsigned)(1))); /* first empty element */
+  e = l_intadd(e, 1); /* first empty element */
   switch (lua_gettop(L))
   {
   case 2:
@@ -91,7 +91,7 @@ static int tinsert(lua_State* L)
     lua_Integer i;
     pos = luaL_checkinteger(L, 2); /* 2nd argument is the position */
     /* check whether 'pos' is in [1, e] */
-    luaL_argchecki(L, (lua_Unsigned) pos - 1u < (lua_Unsigned) e, 2, lt::position_out_of_bounds);
+    luaL_argchecki(L, l_ult((lua_Unsigned) pos - 1u, (lua_Unsigned) e), 2, lt::position_out_of_bounds);
     for (i = e; i > pos; i--)
     { /* move up elements */
       lua_geti(L, 1, i - 1);
@@ -114,7 +114,7 @@ static int tremove(lua_State* L)
   lua_Integer pos = luaL_optinteger(L, 2, size);
   if (pos != size) /* validate 'pos' if given */
     /* check whether 'pos' is in [1, size + 1] */
-    luaL_argchecki(L, (lua_Unsigned) pos - 1u <= (lua_Unsigned) size, 2, lt::position_out_of_bounds);
+    luaL_argchecki(L, !l_ult((lua_Unsigned) size, (lua_Unsigned) pos - 1u), 2, lt::position_out_of_bounds);
   lua_geti(L, 1, pos); /* result = t[pos] */
   for (; pos < size; pos++)
   {
@@ -251,7 +251,7 @@ static int tunpack(lua_State* L)
 ** Type for array indices. These indices are always limited by INT_MAX,
 ** so it is safe to cast them to lua_Integer even for Lua 32 bits.
 */
-typedef unsigned int IdxT;
+typedef int IdxT;
 
 /* Versions of lua_seti/lua_geti specialized for IdxT */
 
@@ -263,12 +263,12 @@ typedef unsigned int IdxT;
 */
 
 /* arrays larger than 'RANLIMIT' may use randomized pivots */
-constexpr unsigned RANLIMIT = 100u;
+constexpr int RANLIMIT = 100;
 
 static void set2(lua_State* L, IdxT i, IdxT j)
 {
-  lua_seti(L, 1, ((lua_Integer)(i)));
-  lua_seti(L, 1, ((lua_Integer)(j)));
+  lua_seti(L, 1, i);
+  lua_seti(L, 1, j);
 }
 
 /*
@@ -307,7 +307,7 @@ static IdxT partition(lua_State* L, IdxT lo, IdxT up)
   for (;;)
   {
     /* next loop: repeat ++i while a[i] < P */
-    while ((void) lua_geti(L, 1, ((lua_Integer)(++i))), sort_comp(L, -1, -2))
+    while ((void) lua_geti(L, 1, ++i), sort_comp(L, -1, -2))
     {
       if (l_unlikely(i == up - 1)) /* a[up - 1] < P == a[up - 1] */
         luaL_errori(L, lt::invalid_order_function_for_sorting);
@@ -315,7 +315,7 @@ static IdxT partition(lua_State* L, IdxT lo, IdxT up)
     }
     /* after the loop, a[i] >= P and a[lo .. i - 1] < P  (a) */
     /* next loop: repeat --j while P < a[j] */
-    while ((void) lua_geti(L, 1, ((lua_Integer)(--j))), sort_comp(L, -3, -1))
+    while ((void) lua_geti(L, 1, --j), sort_comp(L, -3, -1))
     {
       if (l_unlikely(j < i)) /* j <= i - 1 and a[j] > P, contradicts (a) */
         luaL_errori(L, lt::invalid_order_function_for_sorting);
@@ -342,7 +342,7 @@ static IdxT partition(lua_State* L, IdxT lo, IdxT up)
 static IdxT choosePivot(IdxT lo, IdxT up, unsigned int rnd)
 {
   IdxT r4 = (up - lo) / 4; /* range/4 */
-  IdxT p = (rnd ^ lo ^ up) % (r4 * 2) + (lo + r4);
+  IdxT p = (IdxT)l_umod(rnd ^ (unsigned int)lo ^ (unsigned int)up, (lua_Unsigned)(r4 * 2)) + (lo + r4);
   assert(lo + r4 <= p && p <= up - r4);
   return p;
 }
@@ -357,8 +357,8 @@ static void auxsort(lua_State* L, IdxT lo, IdxT up, unsigned rnd)
     IdxT p; /* Pivot index */
     IdxT n; /* to be used later */
     /* sort elements 'lo', 'p', and 'up' */
-    lua_geti(L, 1, ((lua_Integer)(lo)));
-    lua_geti(L, 1, ((lua_Integer)(up)));
+    lua_geti(L, 1, lo);
+    lua_geti(L, 1, up);
     if (sort_comp(L, -1, -2)) /* a[up] < a[lo]? */
       set2(L, lo, up);        /* swap a[lo] - a[up] */
     else
@@ -366,17 +366,17 @@ static void auxsort(lua_State* L, IdxT lo, IdxT up, unsigned rnd)
     if (up - lo == 1)                   /* only 2 elements? */
       return;                           /* already sorted */
     if (up - lo < RANLIMIT || rnd == 0) /* small interval or no randomize? */
-      p = (lo + up) / 2;                /* middle element is a good pivot */
+      p = lo + (up - lo) / 2;                /* middle element is a good pivot */
     else                                /* for larger intervals, it is worth a random pivot */
       p = choosePivot(lo, up, rnd);
-    lua_geti(L, 1, ((lua_Integer)(p)));
-    lua_geti(L, 1, ((lua_Integer)(lo)));
+    lua_geti(L, 1, p);
+    lua_geti(L, 1, lo);
     if (sort_comp(L, -2, -1)) /* a[p] < a[lo]? */
       set2(L, p, lo);         /* swap a[p] - a[lo] */
     else
     {
       lua_pop(L, 1); /* remove a[lo] */
-      lua_geti(L, 1, ((lua_Integer)(up)));
+      lua_geti(L, 1, up);
       if (sort_comp(L, -1, -2)) /* a[up] < a[p]? */
         set2(L, p, up);         /* swap a[up] - a[p] */
       else
@@ -384,9 +384,9 @@ static void auxsort(lua_State* L, IdxT lo, IdxT up, unsigned rnd)
     }
     if (up - lo == 2)     /* only 3 elements? */
       return;             /* already sorted */
-    lua_geti(L, 1, ((lua_Integer)(p)));        /* get middle element (Pivot) */
+    lua_geti(L, 1, p);        /* get middle element (Pivot) */
     lua_pushvalue(L, -1); /* push Pivot */
-    lua_geti(L, 1, ((lua_Integer)(up - 1)));   /* push a[up - 1] */
+    lua_geti(L, 1, up - 1);   /* push a[up - 1] */
     set2(L, p, up - 1);   /* swap Pivot (a[p]) with a[up - 1] */
     p = partition(L, lo, up);
     /* a[lo .. p - 1] <= a[p] == P <= a[p + 1 .. up] */

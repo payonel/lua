@@ -456,7 +456,7 @@ static int read_line(lua_State* L, OsFile* f, int chop)
   {                                   /* may need to read several chunks to get whole line */
     size_t off = luaL_prepbuffer(&b); /* preallocate buffer space */
     byte_span buff = luaL_buffaddr(&b);
-    unsigned i = 0;
+    size_t i = 0;
     os_flockfile(f); /* no memory errors can happen inside the lock */
     while (i < LUAL_BUFFERSIZE && (c = os_getbyte(f)) != OS_EOF && c != '\n')
       buff[off + i++] = ((char)(c)); /* read up to end of line or buffer limit */

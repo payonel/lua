@@ -803,7 +803,7 @@ LUALIB_API void luaL_unref(lua_State* L, int t, int ref)
 
 struct LoadF : lua_Reader
 {
-  unsigned n;        /* number of pre-read characters */
+  int n;        /* number of pre-read characters */
   OsFile* f;         /* file being read */
   byte_span buff = byte_span(BUFSIZ); /* area for reading file */
   std::optional<byte_view> read(lua_State* L) override;
@@ -813,7 +813,7 @@ static std::optional<byte_view> getF(lua_State*, LoadF* lf)
 {
   if (lf->n > 0)
   {                          /* are there pre-read characters to be read? */
-    unsigned len = lf->n;
+    int len = lf->n;
     lf->n = 0;               /* no more pre-read characters */
     return lf->buff.view().substr(0, len); /* return them (chars already in buffer) */
   }

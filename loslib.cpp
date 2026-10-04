@@ -193,7 +193,7 @@ static size_t checkoption(lua_State* L, byte_view fmt, size_t pos, byte_span buf
   byte_view option = lt::strftime_options;
   size_t opos = 0;
   size_t convlen = fmt.size() - pos;
-  unsigned oplen = 1; /* length of options being checked */
+  size_t oplen = 1; /* length of options being checked */
   for (; opos < option.size() && oplen <= convlen; opos += oplen)
   {
     if (option[opos] == '|') /* next block? */

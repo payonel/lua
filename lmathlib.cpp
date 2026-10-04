@@ -31,7 +31,7 @@ static int math_abs(lua_State* L)
   {
     lua_Integer n = lua_tointeger(L, 1);
     if (n < 0)
-      n = (lua_Integer) (0u - (lua_Unsigned) n);
+      n = l_intunm(n);
     lua_pushinteger(L, n);
   }
   else
@@ -128,7 +128,7 @@ static int math_fmod(lua_State* L)
   if (lua_isinteger(L, 1) && lua_isinteger(L, 2))
   {
     lua_Integer d = lua_tointeger(L, 2);
-    if ((lua_Unsigned) d + 1u <= 1u)
+    if (d == 0 || d == -1)
     { /* special cases: -1 or 0 */
       luaL_argchecki(L, d != 0, 2, lt::zero);
       lua_pushinteger(L, 0); /* avoid overflow with 0x80000... / -1 */
@@ -176,7 +176,7 @@ static int math_ult(lua_State* L)
 {
   lua_Integer a = luaL_checkinteger(L, 1);
   lua_Integer b = luaL_checkinteger(L, 2);
-  lua_pushboolean(L, (lua_Unsigned) a < (lua_Unsigned) b);
+  lua_pushboolean(L, l_ult((lua_Unsigned) a, (lua_Unsigned) b));
   return 1;
 }
 

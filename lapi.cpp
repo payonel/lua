@@ -1339,7 +1339,7 @@ LUA_API int lua_setiuservalue(lua_State* L, int idx, int n)
   TValue o = index2val(L, idx);
   assert(((o.tt_ == ctb(LUA_VUSERDATA))) && "full userdata expected");
   Udata* u = uvalue(&o);
-  if (!((unsigned int)n - 1u < (unsigned int)u->uv.size()))
+  if (!(n >= 1 && (size_t)n <= u->uv.size()))
     res = 0;
   else
   {
@@ -1597,7 +1597,7 @@ LUA_API int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value
     assert((0 <= param && param < LUA_GCPN) && "invalid parameter");
     res = ((int)(luaO_applyparam(g->gcparams[param], 100)));
     if (value >= 0)
-      g->gcparams[param] = luaO_codeparam(((unsigned int)(value)));
+      g->gcparams[param] = luaO_codeparam(value);
     break;
   }
   default:
@@ -1760,7 +1760,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr)
   case LUA_VCCL:
   { /* C closure */
     CClosure* f = clCvalue(fi);
-    if (!(((unsigned int)(n)) - 1u < ((unsigned int)(f->upvalue.size()))))
+    if (!(n >= 1 && (size_t)n <= f->upvalue.size()))
       return nullptr; /* 'n' not in [1, f->nupvalues] */
     assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     *addr = {&f->upvalue[n - 1], nullptr, f};
@@ -1771,7 +1771,7 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr)
     LClosure* f = clLvalue(fi);
     TString* name;
     Proto* p = f->p;
-    if (!(((unsigned int)(n)) - 1u < ((unsigned int)(p->upvalues.size()))))
+    if (!(n >= 1 && (size_t)n <= p->upvalues.size()))
       return nullptr; /* 'n' not in [1, p->sizeupvalues] */
     assert((f->upvals[n - 1]->tt & NOVARIANT_MASK) >= LUA_TSTRING);
     *addr = {nullptr, f->upvals[n - 1], f->upvals[n - 1]};

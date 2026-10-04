@@ -198,7 +198,7 @@ static int str_byte(lua_State* L)
   n = (int) (pose - posi) + 1;
   luaL_checkstacki(L, n, lt::string_slice_too_long);
   for (i = 0; i < n; i++)
-    lua_pushinteger(L, s->byteAt(posi + ((unsigned int)(i)) - 1));
+    lua_pushinteger(L, s->byteAt(posi + i - 1));
   return n;
 }
 
@@ -207,7 +207,7 @@ static int str_char(lua_State* L)
   int n = lua_gettop(L); /* number of arguments */
   int i;
   luaL_Buffer b;
-  size_t off = luaL_buffinitsize(L, &b, ((unsigned int)(n)));
+  size_t off = luaL_buffinitsize(L, &b, n);
   byte_span p = luaL_buffaddr(&b);
   for (i = 1; i <= n; i++)
   {
@@ -215,7 +215,7 @@ static int str_char(lua_State* L)
     luaL_argchecki(L, c <= (lua_Unsigned) UCHAR_MAX, i, lt::value_out_of_range);
     p[off + i - 1] = ((char)(((unsigned char)(c))));
   }
-  luaL_pushresultsize(&b, ((unsigned int)(n)));
+  luaL_pushresultsize(&b, n);
   return 1;
 }
 
@@ -1877,7 +1877,7 @@ static size_t getnum(Header* h, size_t df)
     size_t a = 0;
     do
     {
-      a = a * 10 + ((unsigned int)(fmtbyte(h) - '0'));
+      a = a * 10 + (fmtbyte(h) - '0');
       h->pos++;
     } while (digit(fmtbyte(h)) && a <= (MAX_SIZE - 9) / 10);
     return a;
@@ -2145,7 +2145,7 @@ static int str_pack(lua_State* L)
     { /* unsigned integers */
       lua_Integer n = luaL_checkinteger(L, arg);
       if (size < SZINT) /* need overflow check? */
-        luaL_argchecki(L, (lua_Unsigned) n < ((lua_Unsigned) 1 << (size * NB)), arg, lt::unsigned_overflow);
+        luaL_argchecki(L, l_ult((lua_Unsigned) n, (lua_Unsigned) 1 << (size * NB)), arg, lt::unsigned_overflow);
       packint(&b, (lua_Unsigned) n, h.islittle, size, 0);
       break;
     }

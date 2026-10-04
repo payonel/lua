@@ -496,7 +496,7 @@ struct global_State
   TValue l_registry;
   TValue nilvalue;   /* a nil value */
   unsigned int seed; /* randomized seed for hashes */
-  lu_byte gcparams[LUA_GCPN];
+  int gcparams[LUA_GCPN];
   lu_byte currentwhite;
   lu_byte gcstate;     /* state of garbage collector */
   lu_byte gckind;      /* kind of GC running */

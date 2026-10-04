@@ -500,7 +500,7 @@ void luaK_checkstack(FuncState* fs, int n)
   if (newstack > fs->f->maxstacksize)
   {
     luaY_checklimit(fs, newstack, MAX_FSTACK, lt::registers);
-    fs->f->maxstacksize = ((lu_byte)(newstack));
+    fs->f->maxstacksize = newstack;
   }
 }
 
@@ -510,7 +510,7 @@ void luaK_checkstack(FuncState* fs, int n)
 void luaK_reserveregs(FuncState* fs, int n)
 {
   luaK_checkstack(fs, n);
-  fs->freereg = ((lu_byte)(fs->freereg + n));
+  fs->freereg = fs->freereg + n;
 }
 
 /*
@@ -709,7 +709,7 @@ static int nilK(FuncState* fs)
 */
 static int fitsC(lua_Integer i)
 {
-  return (((lua_Unsigned)(i)) + OFFSET_sC <= ((unsigned int)(MAXARG_C)));
+  return (-OFFSET_sC <= i && i <= MAXARG_C - OFFSET_sC);
 }
 
 /*
@@ -1414,7 +1414,7 @@ static int isKint(expdesc* e)
 */
 static int isCint(expdesc* e)
 {
-  return isKint(e) && (((lua_Unsigned)(e->ival)) <= ((lua_Unsigned)(MAXARG_C)));
+  return isKint(e) && (0 <= e->ival && e->ival <= MAXARG_C);
 }
 
 /*
@@ -1485,7 +1485,7 @@ void luaK_self(FuncState* fs, expdesc* e, expdesc* key)
 /* auxiliary function to define indexing expressions */
 static void fillidxk(expdesc* t, int idx, expkind k)
 {
-  t->ind.idx = ((lu_byte)(idx));
+  t->ind.idx = idx;
   t->k = k;
 }
 
@@ -1507,7 +1507,7 @@ void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k)
     luaK_exp2anyreg(fs, t);             /* put it in a register */
   if (t->k == VUPVAL)
   {
-    lu_byte temp = ((lu_byte)(t->info)); /* upvalue index */
+    int temp = t->info; /* upvalue index */
     t->ind.t = temp;                   /* (avoid a direct assignment; values overlap) */
     assert(isKstr(fs, k));
     fillidxk(t, k->info, VINDEXUP); /* literal short string */
@@ -1515,7 +1515,7 @@ void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k)
   else if (t->k == VVARGVAR)
   {                                          /* indexing the vararg parameter? */
     int kreg = luaK_exp2anyreg(fs, k);       /* put key in some register */
-    lu_byte vreg = ((lu_byte)(t->var.ridx)); /* register with vararg param. */
+    int vreg = t->var.ridx; /* register with vararg param. */
     assert(vreg == fs->f->numparams);
     t->ind.t = vreg;           /* (avoid a direct assignment; values may overlap?) */
     fillidxk(t, kreg, VVARGIND); /* 't' represents 'vararg[k]' */
@@ -1523,7 +1523,7 @@ void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k)
   else
   {
     /* register index of the table */
-    lu_byte temp = ((lu_byte)((t->k == VLOCAL) ? t->var.ridx : t->info));
+    int temp = (t->k == VLOCAL) ? t->var.ridx : t->info;
     t->ind.t = temp; /* (avoid a direct assignment; values may overlap?) */
     if (isKstr(fs, k))
       fillidxk(t, k->info, VINDEXSTR); /* literal short string */
@@ -2101,7 +2101,7 @@ void luaK_settablesize(FuncState* fs, int pc, int ra, int asize, int hsize)
   int extra = asize / (MAXARG_vC + 1); /* higher bits of array size */
   int rc = asize % (MAXARG_vC + 1);    /* lower bits of array size */
   int k = (extra > 0);                 /* true iff needs extra argument */
-  hsize = (hsize != 0) ? luaO_ceillog2(((unsigned int)(hsize))) + 1 : 0;
+  hsize = (hsize != 0) ? luaO_ceillog2(hsize) + 1 : 0;
   fs->f->code[inst] = CREATE_vABCk(OP_NEWTABLE, ra, hsize, rc, k);
   fs->f->code[inst + 1] = CREATE_Ax(OP_EXTRAARG, extra);
 }
@@ -2127,7 +2127,7 @@ void luaK_setlist(FuncState* fs, int base, int nelems, int tostore)
     luaK_codevABCk(fs, OP_SETLIST, base, tostore, nelems, 1);
     codeextraarg(fs, extra);
   }
-  fs->freereg = ((lu_byte)(base + 1)); /* free registers with list values */
+  fs->freereg = base + 1; /* free registers with list values */
 }
 
 /*

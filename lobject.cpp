@@ -45,7 +45,7 @@ int luaO_checkliveness(lua_State* L, const TValue* obj)
   return 1;
 }
 
-lu_byte luaO_ceillog2(unsigned int x)
+int luaO_ceillog2(int x)
 {
   static const lu_byte log_2[256] = {/* log_2[i - 1] = ceil(log2(i)) */
                                      0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
@@ -63,7 +63,7 @@ lu_byte luaO_ceillog2(unsigned int x)
     l += 8;
     x >>= 8;
   }
-  return ((lu_byte)(l + log_2[x]));
+  return l + log_2[x];
 }
 
 /*
@@ -74,23 +74,23 @@ lu_byte luaO_ceillog2(unsigned int x)
 ** to signal that. So, the real value is (1xxxx) * 2^(eeee - 7 - 1) if
 ** eeee != 0, and (xxxx) * 2^-7 otherwise (subnormal numbers).
 */
-lu_byte luaO_codeparam(unsigned int p)
+int luaO_codeparam(lua_Integer p)
 {
-  if (p >= (((lu_mem)(0x1F)) << (0xF - 7 - 1)) * 100u) /* overflow? */
+  if (p < 0 || p >= ((lua_Integer)0x1F << (0xF - 7 - 1)) * 100) /* overflow? */
     return 0xFF;                                         /* return maximum value */
   else
   {
-    p = (((l_uint32)(p)) * 128 + 99) / 100; /* round up the division */
-    if (p < 0x10)
+    int q = (int)((p * 128 + 99) / 100); /* round up the division */
+    if (q < 0x10)
     { /* subnormal number? */
       /* exponent bits are already zero; nothing else to do */
-      return ((lu_byte)(p));
+      return q;
     }
     else
     { /* p >= 0x10 implies ceil(log2(p + 1)) >= 5 */
       /* preserve 5 bits in 'p' */
-      unsigned log = luaO_ceillog2(p + 1) - 5u;
-      return ((lu_byte)(((p >> log) - 0x10) | ((log + 1) << 4)));
+      int log = luaO_ceillog2(q + 1) - 5;
+      return ((q >> log) - 0x10) | ((log + 1) << 4);
     }
   }
 }
@@ -104,7 +104,7 @@ lu_byte luaO_codeparam(unsigned int p)
 ** more significant bits, as long as the multiplication does not
 ** overflow, so we check which order is best.
 */
-l_mem luaO_applyparam(lu_byte p, l_mem x)
+l_mem luaO_applyparam(int p, l_mem x)
 {
   int m = p & 0xF;  /* mantissa */
   int e = (p >> 4); /* exponent */
@@ -139,29 +139,29 @@ static lua_Integer intarith(lua_State* L, int op, lua_Integer v1,
   switch (op)
   {
   case LUA_OPADD:
-    return ((lua_Integer)(((lua_Unsigned)(v1)) + ((lua_Unsigned)(v2))));
+    return l_intadd(v1, v2);
   case LUA_OPSUB:
-    return ((lua_Integer)(((lua_Unsigned)(v1)) - ((lua_Unsigned)(v2))));
+    return l_intsub(v1, v2);
   case LUA_OPMUL:
-    return ((lua_Integer)(((lua_Unsigned)(v1)) * ((lua_Unsigned)(v2))));
+    return l_intmul(v1, v2);
   case LUA_OPMOD:
     return luaV_mod(L, v1, v2);
   case LUA_OPIDIV:
     return luaV_idiv(L, v1, v2);
   case LUA_OPBAND:
-    return ((lua_Integer)(((lua_Unsigned)(v1)) & ((lua_Unsigned)(v2))));
+    return l_intband(v1, v2);
   case LUA_OPBOR:
-    return ((lua_Integer)(((lua_Unsigned)(v1)) | ((lua_Unsigned)(v2))));
+    return l_intbor(v1, v2);
   case LUA_OPBXOR:
-    return ((lua_Integer)(((lua_Unsigned)(v1)) ^ ((lua_Unsigned)(v2))));
+    return l_intbxor(v1, v2);
   case LUA_OPSHL:
     return luaV_shiftl(v1, v2);
   case LUA_OPSHR:
     return luaV_shiftr(v1, v2);
   case LUA_OPUNM:
-    return ((lua_Integer)(((lua_Unsigned)(0)) - ((lua_Unsigned)(v1))));
+    return l_intunm(v1);
   case LUA_OPBNOT:
-    return ((lua_Integer)(((lua_Unsigned)(~((lua_Unsigned)(0)))) ^ ((lua_Unsigned)(v1))));
+    return l_intbnot(v1);
   default:
     assert(0);
     return 0;

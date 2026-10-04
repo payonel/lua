@@ -48,7 +48,7 @@ constexpr lua_Unsigned MAXINTFITSF = ((lua_Unsigned) 1 << NBM);
 /* check whether 'i' is in the interval [-MAXINTFITSF, MAXINTFITSF] */
 static inline int l_intfitsf(lua_Integer i)
 {
-  return (MAXINTFITSF + (lua_Unsigned)i) <= (2 * MAXINTFITSF);
+  return -(lua_Integer)MAXINTFITSF <= i && i <= (lua_Integer)MAXINTFITSF;
 }
 
 /*
@@ -890,11 +890,11 @@ void luaV_objlen(lua_State* L, StkId ra, StkId rb)
 */
 lua_Integer luaV_idiv(lua_State* L, lua_Integer m, lua_Integer n)
 {
-  if (l_unlikely(((lua_Unsigned)(n)) + 1u <= 1u))
+  if (l_unlikely(n == 0 || n == -1))
   { /* special cases: -1 or 0 */
     if (n == 0)
       luaG_runerror(L, lt::attempt_to_divide_by_zero);
-    return ((lua_Integer)(((lua_Unsigned)(0)) - ((lua_Unsigned)(m)))); /* n==-1; avoid overflow with 0x80000...//-1 */
+    return l_intunm(m); /* n==-1; avoid overflow with 0x80000...//-1 */
   }
   else
   {
@@ -912,7 +912,7 @@ lua_Integer luaV_idiv(lua_State* L, lua_Integer m, lua_Integer n)
 */
 lua_Integer luaV_mod(lua_State* L, lua_Integer m, lua_Integer n)
 {
-  if (l_unlikely(((lua_Unsigned)(n)) + 1u <= 1u))
+  if (l_unlikely(n == 0 || n == -1))
   { /* special cases: -1 or 0 */
     if (n == 0)
       luaG_runerror(L, lt::attempt_to_perform_n_0);
@@ -1080,29 +1080,29 @@ void luaV_finishOp(lua_State* L)
 static l_forceinline lua_Integer l_addi(lua_State* L, lua_Integer a, lua_Integer b)
 {
   (void) L;
-  return (lua_Integer)((lua_Unsigned)a + (lua_Unsigned)b);
+  return l_intadd(a, b);
 }
 static l_forceinline lua_Integer l_subi(lua_State* L, lua_Integer a, lua_Integer b)
 {
   (void) L;
-  return (lua_Integer)((lua_Unsigned)a - (lua_Unsigned)b);
+  return l_intsub(a, b);
 }
 static l_forceinline lua_Integer l_muli(lua_State* L, lua_Integer a, lua_Integer b)
 {
   (void) L;
-  return (lua_Integer)((lua_Unsigned)a * (lua_Unsigned)b);
+  return l_intmul(a, b);
 }
 static l_forceinline lua_Integer l_band(lua_Integer a, lua_Integer b)
 {
-  return (lua_Integer)((lua_Unsigned)a & (lua_Unsigned)b);
+  return l_intband(a, b);
 }
 static l_forceinline lua_Integer l_bor(lua_Integer a, lua_Integer b)
 {
-  return (lua_Integer)((lua_Unsigned)a | (lua_Unsigned)b);
+  return l_intbor(a, b);
 }
 static l_forceinline lua_Integer l_bxor(lua_Integer a, lua_Integer b)
 {
-  return (lua_Integer)((lua_Unsigned)a ^ (lua_Unsigned)b);
+  return l_intbxor(a, b);
 }
 
 static l_forceinline int l_lti(lua_Integer a, lua_Integer b)
@@ -2211,7 +2211,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if ((slottag(L, rb) == LUA_VNUMINT))
         {
           lua_Integer ib = slotival(L, rb);
-          setsloti(L, ra, ((lua_Integer)(((lua_Unsigned)(0)) - ((lua_Unsigned)(ib)))));
+          setsloti(L, ra, l_intunm(ib));
         }
         else if (tonumberns(L, rb, &nb))
         {
@@ -2233,7 +2233,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         IntResult ib;
         if (tointegerns(L, rb, &ib))
         {
-          setsloti(L, ra, ((lua_Integer)(((lua_Unsigned)(~((lua_Unsigned)(0)))) ^ ((lua_Unsigned)(ib.v)))));
+          setsloti(L, ra, l_intbnot(ib.v));
         }
         else
         {
@@ -2756,15 +2756,15 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         if (slottag(L, ra + 1) == LUA_VNUMINT)
         { /* integer loop? */
           assert(slottag(L, ra) == LUA_VNUMINT);
-          lua_Unsigned count = ((lua_Unsigned)(slotival(L, ra)));
-          if (count > 0)
+          lua_Integer count = slotival(L, ra);
+          if (count != 0)
           { /* still more iterations? */
             assert(slottag(L, ra + 1) == LUA_VNUMINT);
             lua_Integer step = slotival(L, ra + 1);
             assert(slottag(L, ra + 2) == LUA_VNUMINT);
             lua_Integer idx = slotival(L, ra + 2);    /* control variable */
-            chgsloti(L, ra, ((lua_Integer)(count - 1))); /* update counter */
-            idx = ((lua_Integer)(((lua_Unsigned)(idx)) + ((lua_Unsigned)(step))));                /* add step to index */
+            chgsloti(L, ra, l_intsub(count, 1)); /* update counter */
+            idx = l_intadd(idx, step);                /* add step to index */
             chgsloti(L, ra + 2, idx);              /* update control variable */
             pc -= GETARG_Bx(i);                       /* jump back */
           }

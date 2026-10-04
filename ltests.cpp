@@ -1274,7 +1274,7 @@ static int test_applyparam(lua_State* L)
 {
   lua_Integer p = luaL_checkinteger(L, 1);
   lua_Integer x = luaL_checkinteger(L, 2);
-  lua_pushinteger(L, ((lua_Integer)(luaO_applyparam(((lu_byte)(p)), x))));
+  lua_pushinteger(L, ((lua_Integer)(luaO_applyparam(((int)(p)), x))));
   return 1;
 }
 

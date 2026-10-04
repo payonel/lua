@@ -1370,7 +1370,7 @@ lua_Integer Table::hash_search(lua_State* L, int asize)
   Table* t = this;
   lua_Integer i = (lua_Integer)asize + 1; /* caller ensures t[i] is present */
   unsigned rnd = L->l_G->seed;
-  int n = (asize > 0) ? luaO_ceillog2((unsigned int)asize) : 0; /* width of 'asize' */
+  int n = (asize > 0) ? luaO_ceillog2(asize) : 0; /* width of 'asize' */
   lua_Integer mask = ((lua_Integer)1 << n) - 1;                  /* 11...111 with the width of 'asize' */
   lua_Integer incr = (rnd & mask) + 1;               /* first increment (at least 1) */
   lua_Integer j = (incr <= LUA_MAXINTEGER - i) ? i + incr : i + 1;

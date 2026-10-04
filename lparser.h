@@ -87,14 +87,14 @@ struct expdesc
   int info;         /* for generic use */
   struct
   {             /* for indexed variables */
-    short idx;  /* index (R or "long" K) */
-    lu_byte t;  /* table (register or upvalue) */
+    int idx;  /* index (R or "long" K) */
+    int t;  /* table (register or upvalue) */
     lu_byte ro; /* true if variable is read-only */
     int keystr; /* index in 'k' of string key, or -1 if not a string */
   } ind;
   struct
   {               /* for local variables */
-    lu_byte ridx; /* register holding the variable */
+    int ridx; /* register holding the variable */
     short vidx;   /* index in 'actvar.arr' */
   } var;
   int t; /* patch list of 'exit when true' */
@@ -115,7 +115,7 @@ struct Vardesc
 {
   TValue k;      /* constant value (if it is a compile-time constant) */
   lu_byte kind;
-  lu_byte ridx;  /* register holding the variable */
+  int ridx;  /* register holding the variable */
   short pidx;    /* index of the variable in the Proto's 'locvars' array */
   TString* name; /* variable name */
 };
@@ -184,13 +184,13 @@ struct FuncState
   int firstlabel;         /* index of first label (in 'dyd->label->arr') */
   short ndebugvars;       /* number of elements in 'f->locvars' */
   short nactvar;          /* number of active variable declarations */
-  lu_byte nups;           /* number of upvalues */
-  lu_byte freereg;        /* first free register */
-  lu_byte iwthabs;        /* instructions issued since last absolute line info */
+  int nups;           /* number of upvalues */
+  int freereg;        /* first free register */
+  int iwthabs;        /* instructions issued since last absolute line info */
   lu_byte needclose;      /* function needs to close upvalues when returning */
 };
 
-LUAI_FUNC lu_byte luaY_nvarstack(FuncState* fs);
+LUAI_FUNC int luaY_nvarstack(FuncState* fs);
 LUAI_FUNC void luaY_checklimit(FuncState* fs, int v, int l, byte_view what);
 class MBuffer;
 LUAI_FUNC LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, byte_view name, int firstchar);

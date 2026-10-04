@@ -437,10 +437,10 @@ struct lua_Debug
   int currentline;            /* (l) */
   int linedefined;            /* (S) */
   int lastlinedefined;        /* (S) */
-  unsigned char nups;         /* (u) number of upvalues */
-  unsigned char nparams;      /* (u) number of parameters */
+  int nups;         /* (u) number of upvalues */
+  int nparams;      /* (u) number of parameters */
   char isvararg;              /* (u) */
-  unsigned char extraargs;    /* (t) number of extra arguments */
+  int extraargs;    /* (t) number of extra arguments */
   char istailcall;            /* (t) */
   int ftransfer;              /* (r) index of first value transferred */
   int ntransfer;              /* (r) number of transferred values */

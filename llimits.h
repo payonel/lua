@@ -152,6 +152,51 @@ static inline lua_Unsigned l_umod(lua_Unsigned a, lua_Unsigned b)
   return a % b;
 }
 
+static inline bool l_ult(lua_Unsigned a, lua_Unsigned b)
+{
+  return a < b;
+}
+
+static l_forceinline lua_Integer l_intadd(lua_Integer a, lua_Integer b)
+{
+  return (lua_Integer)((lua_Unsigned)a + (lua_Unsigned)b);
+}
+
+static l_forceinline lua_Integer l_intsub(lua_Integer a, lua_Integer b)
+{
+  return (lua_Integer)((lua_Unsigned)a - (lua_Unsigned)b);
+}
+
+static l_forceinline lua_Integer l_intmul(lua_Integer a, lua_Integer b)
+{
+  return (lua_Integer)((lua_Unsigned)a * (lua_Unsigned)b);
+}
+
+static l_forceinline lua_Integer l_intband(lua_Integer a, lua_Integer b)
+{
+  return (lua_Integer)((lua_Unsigned)a & (lua_Unsigned)b);
+}
+
+static l_forceinline lua_Integer l_intbor(lua_Integer a, lua_Integer b)
+{
+  return (lua_Integer)((lua_Unsigned)a | (lua_Unsigned)b);
+}
+
+static l_forceinline lua_Integer l_intbxor(lua_Integer a, lua_Integer b)
+{
+  return (lua_Integer)((lua_Unsigned)a ^ (lua_Unsigned)b);
+}
+
+static l_forceinline lua_Integer l_intunm(lua_Integer a)
+{
+  return (lua_Integer)(0u - (lua_Unsigned)a);
+}
+
+static l_forceinline lua_Integer l_intbnot(lua_Integer a)
+{
+  return (lua_Integer)(~(lua_Unsigned)a);
+}
+
 struct IntResult
 {
   lua_Integer v;

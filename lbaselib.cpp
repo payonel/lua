@@ -63,7 +63,7 @@ struct IntParse
   lua_Integer value;
 };
 
-static IntParse b_str2int(byte_view s, unsigned base)
+static IntParse b_str2int(byte_view s, int base)
 {
   const byte_view spacechars = lt::whitespace_chars;
   lua_Unsigned n = 0;
@@ -82,7 +82,7 @@ static IntParse b_str2int(byte_view s, unsigned base)
     return {byte_view::npos, 0};
   do
   {
-    unsigned digit = ((unsigned int)(isdigit(sv_byteat(s, p))
+    int digit = ((isdigit(sv_byteat(s, p))
                                    ? s[p] - '0'
                                    : (toupper(sv_byteat(s, p)) - 'A') + 10));
     if (digit >= base)
@@ -119,7 +119,7 @@ static int luaB_tonumber(lua_State* L)
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
     byte_view s = *lua_tolstring(L, 1);
     luaL_argchecki(L, 2 <= base && base <= 36, 2, lt::base_out_of_range);
-    IntParse n = b_str2int(s, ((unsigned int)(base)));
+    IntParse n = b_str2int(s, ((int)(base)));
     if (n.end == s.size())
     {
       lua_pushinteger(L, n.value);
@@ -346,7 +346,7 @@ static int luaB_pairs(lua_State* L)
 static int ipairsaux(lua_State* L)
 {
   lua_Integer i = luaL_checkinteger(L, 2);
-  i = ((lua_Integer)((lua_Unsigned)(i) + (lua_Unsigned)(1)));
+  i = l_intadd(i, 1);
   lua_pushinteger(L, i);
   return (lua_geti(L, 1, i) == LUA_TNIL) ? 1 : 2;
 }

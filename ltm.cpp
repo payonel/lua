@@ -349,7 +349,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   IntResult n;
   if (tointegerns(rc, &n))
   { /* integral value? */
-    if (((lua_Unsigned)(n.v)) - 1 < ((unsigned int)(nextra)))
+    if (n.v >= 1 && n.v <= nextra)
     {
       StkId slot = ci->func - nextra + ((int)(n.v)) - 1;
       copyslot(L, ra, slot);
@@ -390,7 +390,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
     TValue res;
     byte_view bytes = lt::n_char;
     if (h->luaH_getshortstr(TString::luaS_createstr(L, bytes), &res) != LUA_VNUMINT ||
-        ((lua_Unsigned)(ivalue(&res))) > ((unsigned int)(INT_MAX / 2)))
+        (ivalue(&res) < 0 || ivalue(&res) > INT_MAX / 2))
       luaG_runerror(L, lt::vararg_table_has_no_proper_n);
     assert(res.tt_ == LUA_VNUMINT);
     return ((int)(ivalue(&res)));

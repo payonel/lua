@@ -236,13 +236,13 @@ static Vardesc* getlocalvardesc(FuncState* fs, int vidx)
 ** register. For that, search for the highest variable below that level
 ** that is in a register and uses its register index ('ridx') plus one.
 */
-static lu_byte reglevel(FuncState* fs, int nvar)
+static int reglevel(FuncState* fs, int nvar)
 {
   while (nvar-- > 0)
   {
     Vardesc* vd = getlocalvardesc(fs, nvar); /* get previous variable */
     if (varinreg(vd))                        /* is in a register? */
-      return ((lu_byte)(vd->ridx + 1));
+      return vd->ridx + 1;
   }
   return 0; /* no variables in registers */
 }
@@ -251,7 +251,7 @@ static lu_byte reglevel(FuncState* fs, int nvar)
 ** Return the number of variables in the register stack for the given
 ** function.
 */
-lu_byte luaY_nvarstack(FuncState* fs)
+int luaY_nvarstack(FuncState* fs)
 {
   return reglevel(fs, fs->nactvar);
 }
@@ -352,7 +352,7 @@ static void adjustlocalvars(LexState* ls, int nvars)
   {
     int vidx = fs->nactvar++;
     Vardesc* var = getlocalvardesc(fs, vidx);
-    var->ridx = ((lu_byte)(reglevel++));
+    var->ridx = reglevel++;
     var->pidx = registerlocalvar(ls, fs, var->name);
     luaY_checklimit(fs, reglevel, MAXVARS, lt::local_variables);
   }
@@ -414,7 +414,7 @@ static int newupvalue(FuncState* fs, TString* name, expdesc* v)
   else
   {
     up->instack = 0;
-    up->idx = ((lu_byte)(v->info));
+    up->idx = v->info;
     up->kind = prev->f->upvalues[v->info].kind;
     assert(eqstr(name, prev->f->upvalues[v->info].name));
   }
@@ -591,7 +591,7 @@ static void adjust_assign(LexState* ls, int nvars, int nexps, expdesc* e)
   if (needed > 0)
     luaK_reserveregs(fs, needed);                  /* registers for extra values */
   else                                             /* adding 'needed' is actually a subtraction */
-    fs->freereg = ((lu_byte)(fs->freereg + needed)); /* remove extra values */
+    fs->freereg = fs->freereg + needed; /* remove extra values */
 }
 
 static inline void enterlevel(LexState* ls)
@@ -635,7 +635,7 @@ static void closegoto(LexState* ls, int g, Labeldesc* label, int bup)
   if (gt->close ||
       (label->nactvar < gt->nactvar && bup))
   { /* needs close? */
-    lu_byte stklevel = reglevel(fs, label->nactvar);
+    int stklevel = reglevel(fs, label->nactvar);
     /* move jump to CLOSE position */
     fs->f->code[gt->pc + 1] = fs->f->code[gt->pc];
     /* put CLOSE instruction at original position */
@@ -783,7 +783,7 @@ static void leaveblock(FuncState* fs)
 {
   BlockCnt* bl = fs->bl;
   LexState* ls = fs->ls;
-  lu_byte stklevel = reglevel(fs, bl->nactvar); /* level outside block */
+  int stklevel = reglevel(fs, bl->nactvar); /* level outside block */
   if (bl->previous && bl->upval)                /* need a 'close'? */
     luaK_codeABC(fs, OP_CLOSE, stklevel, 0, 0);
   fs->freereg = stklevel;                 /* free registers */
@@ -981,7 +981,7 @@ static void recfield(LexState* ls, ConsControl* cc)
 {
   /* recfield -> (NAME | '['exp']') = exp */
   FuncState* fs = ls->fs;
-  lu_byte reg = ls->fs->freereg;
+  int reg = ls->fs->freereg;
   expdesc tab, key, val;
   if (ls->t.token == TK_NAME)
     codename(ls, &key);
@@ -1153,7 +1153,7 @@ static void parlist(LexState* ls)
     } while (!varargk && testnext(ls, ','));
   }
   adjustlocalvars(ls, nparams);
-  f->numparams = ((lu_byte)(fs->nactvar));
+  f->numparams = fs->nactvar;
   if (varargk)
   {
     setvararg(fs);          /* declared vararg */
@@ -1254,7 +1254,7 @@ static void funcargs(LexState* ls, expdesc* f)
   luaK_fixline(fs, line);
   /* call removes function and arguments and leaves one result (unless
      changed later) */
-  fs->freereg = ((lu_byte)(base + 1));
+  fs->freereg = base + 1;
 }
 
 /*
@@ -1581,7 +1581,7 @@ struct LHS_assign
 static void check_conflict(LexState* ls, struct LHS_assign* lh, expdesc* v)
 {
   FuncState* fs = ls->fs;
-  lu_byte extra = fs->freereg; /* eventual position to save local variable */
+  int extra = fs->freereg; /* eventual position to save local variable */
   int conflict = 0;
   for (; lh; lh = lh->prev)
   { /* check all previous assignments */
