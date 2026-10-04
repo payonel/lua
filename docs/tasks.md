@@ -1,0 +1,724 @@
+# Port-prep task plan
+
+Everything still needed before the C++ sources can be ported to Java by
+transcription. Goal, rules and history are in [summary.md](summary.md).
+
+## Principles
+
+These govern every task below. When a task's approach conflicts with them,
+the principle wins and the task gets revised.
+
+- **Honor the original.** Upstream Lua's shape, file boundaries, function
+  names and performance decisions are kept, and so are the decisions already
+  made on this branch: owning spans, per-type allocation functions, the
+  prim/ref/tag stack columns, `std::optional` for nullable views, and
+  `CFuncInfo` identity. A task changes a construct only because Java cannot
+  express it, never for style.
+- **Same cost or better.** A rewrite must not add work on a hot path: no
+  added indirection, dispatch, allocation or conversion. When the original
+  uses one indirect call (a function pointer), the replacement may use one
+  indirect call (a virtual method), not more.
+- **Think in Java too.** Where C++ and Java performance disagree, choose the
+  shape that performs best in Java, measure the C++ cost (see A/B checks), and
+  record it.
+- **Signed-compatible.** Values are signed unless they genuinely need
+  wraparound or bit-container behavior. `size_t` stays where it interfaces
+  with standard containers (`.size()`, span/view lengths). Avoid casts: fix
+  the declared type instead of converting at the use site.
+- **C++ quality where Java is unaffected.** Keep C++ constructs that make
+  intent readable when they still port to Java in one line. For example,
+  `byte_view` (read-only), `byte_span` (read-write) and `byte_owner`
+  (owning) all become `byte[]` + offset + length in Java. Their distinction
+  is kept because it documents intent, and it costs the port nothing.
+- **Invisible engine.** No new Lua-visible limits or behaviors. A Lua script
+  must not be able to tell it is running on this engine.
+- **No new comments; immutable tests.** As in `summary.md`. A required
+  `ltests.cpp` edit is a mechanical call-shape update only and is called out
+  in the commit message.
+
+## How to work this plan
+
+- **Phase order is fixed:** line changes (L), then memory changes (M), then
+  class changes (C). The `Table` class move already landed. It stays: it is
+  already the target shape, and reverting it would only add churn. Later
+  phases edit its methods in place. No further class moves happen before
+  phase C.
+- Within a phase, tasks are independent unless a **Depends** line says
+  otherwise. Every commit passes `make full`.
+- Site lists come from a scan at `24eee778`. Re-grep before starting each
+  task. The **Done when** check is the acceptance gate.
+
+### A/B checks
+
+Required for every task marked **A/B**, and recommended for the rest.
+
+- **Baseline:** the commit before the task. **Candidate:** the task's last
+  commit. Both use release builds from a clean `obj/`.
+- **Time:** run `tests/all.lua` 5× per side and compare the median
+  `total time`. Also run a focused micro-benchmark of the paths the task
+  touches (for example, a table get/set loop for M3, or `pcall` in a loop
+  for L3). Benchmarks live outside the repository; this branch removed
+  measurement scripts deliberately (`b7b71ea4`).
+- **Memory:** max RSS (`/usr/bin/time -v`, already used by `make full`) and
+  `collectgarbage("count")` at the same checkpoints in the micro-benchmark.
+- **Record** the numbers in a **Results** line under the task when it lands.
+  Proposed thresholds: ≤1% time and ≤2% RSS on `all.lua`. Tasks that trade
+  C++ cost for Java performance (M3, L9) record the C++ cost and are
+  accepted case by case.
+
+---
+
+## Phase L — line changes
+
+Local rewrites of individual constructs that have no Java equivalent. Object
+layout and ownership don't change.
+
+### L1. Pointer-to-pointer list handling
+
+**Effort:** high · **Risk:** high (GC correctness) · **A/B**
+
+Java has no address of a field, so every `T**` that points at "the link
+field of whoever precedes me" must change. Each rewrite below keeps the
+original algorithm and its O(1) behavior.
+
+- **`getgclist`** (`lgc.cpp:183`) is a tag `switch` that returns
+  `&X->gclist`. The holders are `Table`, `LClosure`/`CClosure`
+  (through `Closure`), `lua_State`, `Proto` and `Udata`; each already
+  has a `gclist` field. Add an intermediate base `GCListed : GCObject`
+  that owns `gclist`, derive those types from it, and read
+  `static_cast<GCListed*>(o)->gclist` directly. Memory is unchanged and the
+  switch goes away. In Java this is a plain field on a superclass.
+- **`linkgclist_(o, pnext, list)`** and the list heads on `global_State`
+  (`gray`, `grayagain`, `weak`, `ephemeron`, `allweak`): return the new
+  head, as in `g->gray = linkgclist(o, g->gray)`.
+- **Sweeping** (`sweeplist`, `sweeptolive`, `sweep2old`, `sweepgen`,
+  `findlast`, `separatetobefnz`, `correctgraylist`, `checkpointer`,
+  `psurvival`, `pfirstold1`, the `nextlist` parameter):
+  - The cursor becomes the *predecessor object*, with `nullptr` meaning
+    "at the list head". The current `gcstate` already determines which list
+    is being swept, so no list enum is needed. Unlinking writes either
+    `prev->next` or the head field.
+  - `global_State::sweepgc` (`lstate.h:509`) becomes that predecessor.
+    Upstream re-anchors `sweepgc` when the object whose `next` it points at
+    leaves the list (`luaC_checkfinalizer`, `sweeptolive`). Keep the same
+    re-anchoring with the predecessor form; this is where the risk is.
+  - The `&g->twups` walk works the same way.
+- **Open upvalues** (`UpVal::previous` is `UpVal**`, plus `newupval(...,
+  UpVal** prev)` and `&L->openupval`): `previous` becomes `UpVal*
+  prevopen`, and `nullptr` means `L->openupval` is the head. Unlink stays
+  O(1).
+- **String table** (`lstring.cpp:186`): unlink a bucket chain with a
+  predecessor pointer.
+- **Out-references:** `lapi.cpp:1755` `GCObject** owner`,
+  `lapi.cpp:1851` `LClosure** pf`, `lundump.cpp:134` `TString** sl`.
+  These are handled in L2. `lvm.cpp:968` `UpVal** encup` is an array and
+  becomes a `std::span<UpVal*>`.
+
+**Done when:** `\w\s*\*\*\s*\w` matches only `argv`/`lua.cpp`. `gc.lua`,
+`gengc.lua`, `memerr.lua` and `tests/deep` pass in both builds, and the
+A/B shows no sweep regression.
+
+### L2. Out-parameters
+
+**Effort:** medium · **Risk:** low · **A/B** (the `lvm.h` converters)
+
+Java can't take the address of a local. There are about 34 primitive
+out-params and about 10 reference out-params. Treat hot and cold sites
+differently:
+
+- **Hot converters keep their shape.** `luaV_tonumber_`, `luaV_tointeger`,
+  `luaV_tointegerns` and `luaV_flttointeger`, the inline
+  `tonumber`/`tonumberns`/`tointeger`/`tointegerns` (`lvm.h`), and
+  `lua_numbertointeger` (`llimits.h:150`) are used in about 32 places in
+  `lvm.cpp`, mostly in opcode bodies.
+  - The out-param becomes a pointer to a small result struct
+    (`IntResult { lua_Integer v; }`, `NumResult`) instead of a
+    pointer to a primitive. In C++ this is the same stack slot and identical
+    code; in Java it is an object reference.
+  - The Java port decides between a local allocation (relying on escape
+    analysis after inlining) and a reusable per-`LuaState` holder.
+  - Do **not** use `std::optional<lua_Integer>` here: its Java counterpart
+    (`OptionalLong`) allocates.
+- **Cold sites return values.** Return a value, an `std::optional` of a
+  view or reference, or a small named struct:
+  - `lobject.cpp`: `isneg`, `lua_strx2number`, `str2dec`, `l_str2dloc`,
+    `l_str2d`, `l_str2int`
+  - `lcode.cpp` `isSCnumber`
+  - `ldebug.cpp`: `getbaseline`, `basicgetobjname(int* ppc)`, and every
+    `const InternalString** name` (in `funcnamefromcall`, `getfuncname`,
+    `kname`, `rname`, `getobjname`, `funcnamefromcode`)
+  - `lbaselib.cpp:60` `b_str2int`, `ldblib.cpp:90` `getthread`,
+    `lauxlib.cpp:877` `skipcomment`, `lstrlib.cpp:1896` `getoption`
+  - `lapi.cpp:1755` `owner`, `lapi.cpp:1851` `pf`,
+    `lundump.cpp:134` `sl`
+- **Jump lists:** `luaK_concat(fs, int* l1, l2)` and
+  `test_then_block(ls, int* escapelist)` change to
+  `l1 = luaK_concat(fs, l1, l2)`. Callers usually pass a field (`&e->t`),
+  and assigning a field is free in both languages.
+- Pointers to *objects* that the callee fills in (`TValue* res`) are fine
+  in Java and stay. `ltable.h:136` `fval2arr(lu_byte* tag)` moves to M3.
+
+**Done when:** no parameter of primitive pointer type remains outside the
+result-struct form, and no `const InternalString**` remains.
+
+### L3. `void*` context callbacks
+
+**Effort:** medium · **Risk:** medium · **A/B** (`pcall`, coroutine resume)
+
+Upstream pairs a function pointer with a `void* ud` that points at a typed
+struct (`SParser`, `CloseP`, `CallS`, `LoadS`, `LoadF`, `str_Writer`,
+the `int` in `resume` at `ldo.cpp:835`, `firstcall` at
+`lbaselib.cpp:416`, `BuffFS`). The struct is the context; only the
+`void*` erasure can't be transcribed.
+
+- **Protected calls** (`Pfunc`, `luaD_rawrunprotected`, `luaD_pcall`,
+  `LUAI_TRY`):
+  - Each context struct becomes a class deriving from one small base with a
+    single virtual `run(lua_State*)`. The function that today casts `ud`
+    becomes that method, and data-free calls (`unroll`, `f_luaopen`) get
+    stateless instances.
+  - This is one indirect call, like the original function pointer, and maps
+    to a Java interface. Do not use templates or capturing lambdas: they
+    change the code's shape and would allocate per call in Java anyway.
+  - Rename the leftover `struct lua_longjmp`/`errorJmp` to reflect what it
+    now holds (an exception recovery frame).
+- **Public hooks** (`lua_Reader`, `lua_Writer`, `lua_WarnFunction`,
+  `lua_Alloc`): same pattern, an abstract interface replacing `fn` + `ud`.
+  This is a public API change, so update `test_public_api.cpp` and
+  `tests/libs`.
+
+**Done when:** no `void* ud` parameters and no `static_cast<X*>(ud)`
+remain.
+
+### L4. Raw byte operations
+
+**Effort:** low · **Risk:** low
+
+- `bytes.h:197,205,211` `memcpy`/`memset`/`memmove` stay. They are the
+  sanctioned primitives and map to `System.arraycopy`/`Arrays.fill`. Their
+  signatures become `(dst, dstoff, src, srcoff, len)` with no
+  `.data() + pos` at callers.
+- `bytes.h:126-144`: float/double ↔ bytes through `reinterpret_cast` +
+  `memcpy` → `std::bit_cast` plus an explicit little-endian byte order
+  (Java: `Double.doubleToRawLongBits`).
+- `lzio.cpp:64`: `memcpy` into `static_cast<char*>(b)` → `luaZ_read`
+  takes a `byte_span` plus offset.
+- `loslib.cpp:261`: `strftime(buff.data() + off, ...)` moves behind
+  `os_api`.
+- The `ltable.h` `getArrVal`/`getArrTag` interior pointers move to M3,
+  which rewrites that storage anyway.
+
+**Done when:** `\.data\(\)\s*[+-]` matches only `os_api.cpp` and
+`ltable.h` (until M3), and `memcpy|memmove|memset` matches only `bytes.h`.
+
+### L5. Addresses as values
+
+**Effort:** medium · **Risk:** medium · **A/B** (memory, if an id field is
+added)
+
+Java has no addresses. Two separate needs sit behind the current address
+uses, and they have different costs:
+
+1. **Hashing** (`ltable.cpp:109-117` `hashpointer` via `point2uint`)
+   needs a well-distributed hash, not uniqueness. Route it through one
+   function, `identityhash(const void*)`, which is the address in C++ and
+   `System.identityHashCode` in Java. This costs no memory, and the
+   behavior in C++ is unchanged.
+2. **`%p` and `lua_topointer`** need uniqueness per live object:
+   `pm.lua:448` and `tests/deep/identity.lua` assert that distinct objects
+   format differently. `identityHashCode` can collide, so Java needs a
+   unique id.
+   - Route `lobject.cpp:877`, `lstrlib.cpp:1725`, `util_cast.h:23` and
+     `lapi.cpp:~587` through one `identitytext(...)` / `identityof(...)`
+     function. In C++ it stays the address.
+   - **Decision, with an A/B on memory:** a 64-bit id on `GCObject`
+     assigned from a counter on `global_State` (8 bytes per object), or a
+     lazily populated id side table on `global_State` (no cost for objects
+     that are never printed). Recommended: the side table, unless the A/B
+     shows its lookup cost matters (it is used only by `%p`/`topointer`,
+     so it shouldn't).
+- `lua_rawgetp`/`lua_rawsetp`'s `const_cast<void*>` (`lapi.cpp:1041,1268`)
+  goes away once light userdata keys use the same identity path. The
+  `util_cast.h:27-28` `as_userdata(int)` forging is `ltests.cpp`-only and
+  becomes a port-time note.
+
+**Done when:** `point2uint`, `uintptr_t` and `const_cast` appear only
+inside the two identity functions and `os_api.cpp`.
+
+### L6. Width-dependent `sizeof` in Lua-visible behavior
+
+**Effort:** low · **Risk:** low
+
+Java has no `sizeof`. Where a size is observable, pin it as a named constant,
+following `9d35bf2c` (the string.pack `!` alignment pin).
+
+- `lstrlib.cpp:1804-1946`: `string.pack` option widths and `SZINT`.
+  Also `2051-2081` for float/double.
+- `lstrlib.cpp:1542,1625,1711`: `sizeof(prefix)`/`sizeof(body)` on local
+  arrays → `std::size()` (Java: `.length`).
+- `lstrlib.cpp:2380` → `std::size(stringmetamethods)`.
+- `ldump.cpp`/`lundump.cpp` (about 31 sites) → the chunk format's fixed
+  widths.
+- `lhack.h:58` `LUAL_BUFFERSIZE` → a literal. `LUA_EXTRASPACE` is
+  handled by M5.
+
+Accounting `sizeof`s are handled by M2.
+
+**Done when:** `tpack.lua` and `tests/deep` pass, and `sizeof` remains
+only in accounting and `static_assert`s.
+
+### L7. Signed compatibility
+
+**Effort:** high (many sites, mostly mechanical) · **Risk:** medium · **A/B**
+
+Java has only signed `byte/short/int/long`. Almost no unsigned use in the
+sources depends on being unsigned, and none of it can exceed the signed
+maximum, so the default is to make it signed. Do it by changing declared
+types, not by adding casts. Each step below is its own commit series.
+
+1. **Counts, indices, sizes and limits:** `unsigned`, `unsigned int`,
+   `unsigned short`, `lu_mem`, `l_mem`, and `size_t` wherever it is not a
+   standard-container size → `int` / `lua_Integer` / `int64_t`, chosen
+   by range. Examples: `nuvalue`, table sizes and hints (`asize`,
+   `lenhint`, `MAXASIZE`), `findindex`, `computesizes`, `nums[]`, the
+   `lstrlib` match offsets (`ptrdiff_t` → `lua_Integer`) and
+   `lua_KContext` (`ptrdiff_t` → `int64_t`). `size_t` stays on
+   `.size()` and span/view lengths. Where a signed value meets a `.size()`,
+   change the declaration so the comparison is between like types;
+   don't cast at the use site.
+2. **`lu_byte` fields:** tags, variant bits, GC marks and age bits, TM
+   flags and `CallInfo` status stay below 128 and become `int8_t`-safe as
+   is. Fields that can reach 255 (`Proto::maxstacksize`, `numparams`,
+   `FuncState::nups`/`freereg`, the instruction argument limits) widen to
+   `int` or `short`, so Java never needs `& 0xFF`.
+3. **Genuine wraparound and logical shifts:**
+   - Lua integer arithmetic must wrap (`intop`, `l_castS2U`/`l_castU2S`),
+     and string/seed hashing wraps. Signed overflow is undefined in C++, so
+     these stay unsigned inside a few named helpers (`wrapadd`,
+     `wrapmul`, …) that hold the only casts. In Java the helpers are
+     plain `+`/`*`.
+   - Lua's `>>` is a logical shift (`luaV_shiftl`), and so are `Instruction`
+     field decodes. These use a named `ushr` (Java: `>>>`).
+   - `math.ult` and the unsigned for-loop count use named `ult`/`udiv`
+     (Java: `Long.compareUnsigned`/`divideUnsigned`).
+   - `Instruction` itself becomes `int32_t`, with decoding through `ushr`.
+     This preserves the bit-container semantics (see the port-time notes).
+
+**Done when:** `unsigned`, `lu_mem`, `ptrdiff_t` and `uintptr_t` appear
+only inside the wraparound/shift helpers, `os_api`, and declarations tied to
+`size_t` container sizes. The number of casts is lower than at the start
+(record the before/after count in Results).
+
+### L8. Locale routing
+
+**Effort:** low · **Risk:** low
+
+The locale seam already exists: `locale_util.*` wraps the ctype classes,
+`tolower`/`toupper`, the radix point and `setlocale`, and `strcoll` sits
+in `os_api`. Some direct libc ctype calls still bypass it, and they are
+upstream's locale-sensitive calls:
+
+- `liolib.cpp:388,412`: `isxdigit`/`isdigit`/`isspace` when reading
+  numbers
+- `lstrlib.cpp:1248,1346,1349,1376,1432,1438,1602`: `isdigit`/`isalpha`
+  in format and `gsub` handling
+- `lbaselib.cpp:75-81`: `isalnum`/`isdigit`/`toupper` in `tonumber` with
+  a base
+
+Route each through `locale_util` and keep upstream's locale-sensitive
+semantics; don't swap in `lctype`'s ASCII tables. In Java, `locale_util`
+is then the single file to reimplement.
+
+**Done when:** no libc ctype call exists outside `locale_util.cpp`.
+
+### L9. `lundump` fixed-buffer loading
+
+**Effort:** medium · **Risk:** medium · **A/B** (instruction fetch is the
+hottest path in the VM)
+
+Fixed-buffer loads are an upstream 5.5 feature and asserted by the
+immutable tests (`api.lua:550-590` requires the load to account fewer than
+2000 bytes). So the code must keep aliasing the buffer rather than copying
+it. Today that aliasing is a pointer cast:
+
+```cpp
+lundump.cpp:187  f->code = std::span<Instruction>((Instruction*)(getaddr_(S, n * sizeof(Instruction))), n);
+lundump.cpp:284  f->lineinfo = std::span<ls_byte>((ls_byte*)(getaddr_(S, n * sizeof(ls_byte))), n);
+lundump.cpp:297  f->abslineinfo = std::span<AbsLineInfo>((AbsLineInfo*)(getaddr_(S, n * sizeof(AbsLineInfo))), n);
+```
+
+Java can't overlay `int[]` on `byte[]`, but it can read little-endian
+`int`s out of a `byte[]` at array-like speed (a `byteArrayViewVarHandle`).
+
+- **Proposed:** `Proto::code` becomes a byte-backed store (bytes +
+  offset) for *all* protos, read through one `fetch(pc)` accessor that
+  decodes a little-endian `int32`. In C++ this compiles to a plain load.
+  Fixed protos alias the host buffer; others own their bytes.
+- `lineinfo` is bytes already. `abslineinfo` gets the same treatment
+  through an `(pc, line)` accessor pair.
+- **A/B is the gate.** If C++ instruction fetch regresses beyond threshold,
+  keep `std::span<Instruction>` in C++, confine the cast to one
+  `getaddr`-side function, and record this as a port-time decision
+  instead.
+
+**Done when:** `lundump.cpp` has no pointer casts, and `api.lua`'s
+fixed-buffer test passes unchanged.
+
+### L10. `loadlib` casts behind `os_api`
+
+**Effort:** low · **Risk:** low
+
+Keep upstream's `loadlib` structure (handle userdata, `_CLIBS`, `__gc`)
+and move only the native typing behind `os_api`:
+
+```cpp
+loadlib.cpp:48   return reinterpret_cast<void*>(lib);
+loadlib.cpp:53   lua_CFunction f = reinterpret_cast<lua_CFunction>(os_dlsym(reinterpret_cast<OsLib*>(lib), sym));
+loadlib.cpp:158  os_dlclose(reinterpret_cast<OsLib*>(*p));
+```
+
+`os_api` gains `os_dlfunc(OsLib*, byte_view) -> lua_CFunction` and
+`loadlib` holds `OsLib*` throughout. The `void**` userdata overlay
+(`loadlib.cpp:155,166`) is handled by M4.
+
+**Done when:** `loadlib.cpp` has no `reinterpret_cast`.
+**Depends:** M4 for the `void**` overlay.
+
+### L11. Cast elimination
+
+**Effort:** medium · **Risk:** low
+
+After L1–L10 (and especially L7), list every remaining cast: C-style casts
+(`((int)(size))`, `(StkId)n`, `(lua_Unsigned)n`, `(void**)`) and
+`static_cast`s between arithmetic types. Remove each by correcting a
+declared type. What legitimately remains:
+
+- `GCObject` hierarchy downcasts (fine in Java)
+- the wraparound/shift helpers (L7)
+- the identity functions (L5)
+- `os_api.cpp`
+
+**Done when:** every remaining cast falls in one of those groups, and the
+before/after cast count is recorded in Results.
+
+---
+
+## Phase M — memory changes
+
+Changes to layout, payloads and accounting, so that a Java object graph
+reproduces today's behavior, including GC pacing, `collectgarbage("count")`
+and the out-of-memory paths in `memerr.lua` and `test_public_api.cpp`.
+
+### M1. Limit parity audit (no new limits)
+
+**Effort:** low · **Risk:** low
+
+Compare every size limit with upstream 5.5 on a 64-bit host:
+
+- `MAX_SIZE`, `MAXASIZE`, `MAXHSIZE` (`ltable.cpp:52-80`)
+- `LUAI_MAXSTACK`, `LUAI_MAXCCALLS`, `MAXUPVAL`, `MAXREGS`
+- string, `string.rep` and `table.concat` limits
+- the `lhack.h` debug overrides
+
+Any limit that drifted from upstream is restored; nothing here introduces a
+cap. Java-side constraints (a `byte[]` holds at most about 2³¹ bytes,
+while upstream allows larger strings) are recorded as port-time notes, not
+imposed in C++.
+
+**Done when:** a written table of limit → upstream value → our value, all
+equal.
+
+### M2. Accounting by named cost constants
+
+**Effort:** medium · **Risk:** medium
+
+GC debt and the sizes passed to the `lua_Alloc` permission hook come from
+`sizeof` (46 sites in `lmem.cpp`, plus `luaF_protosize`, `luaH_size`,
+`lstate.cpp`, `lfunc.cpp`). Java has no `sizeof`.
+
+- Replace them with one `constexpr` cost table (`cost::Table`,
+  `cost::Node`, `cost::Value`, …).
+- **Proposed values:** stock Lua 5.5's 64-bit sizes, so that
+  `collectgarbage("count")` and GC pacing match stock. That fits the
+  invisible-engine principle, and `tests/deep/allocinfo.lua` already
+  treats stock as the reference.
+- The constants are decoupled from `sizeof`, so M3's layout changes don't
+  perturb pacing.
+- Verify `gc.lua`, `gengc.lua`, `memerr.lua`, `api.lua` (fixed buffer),
+  `allocinfo.lua`, and the `size_deny_alloc`/`counting_alloc` tests in
+  `test_public_api.cpp`. Those tests deny or count specific `nsize`
+  values, so update them only if they are consumer tests pinned to old
+  sizes. If stock values break an immutable test, fall back to today's
+  `sizeof` values frozen as constants.
+
+**Done when:** `sizeof` remains only in `static_assert`s.
+
+### M3. Value storage layout: parallel columns
+
+**Effort:** high · **Risk:** medium · **A/B** (time and memory)
+
+`Value {prim, ref}`, `TValue` and `Node` are stored by value inside
+arrays. Arrays of small objects in Java mean a header plus a pointer chase
+per element. Parallel primitive/reference columns are what perform best
+there, and the stack already uses them.
+
+- **Table array part:** `array` (`span<Value>`) → `prim` + `ref`
+  columns beside the existing `tags`. The `getArrVal`/`getArrTag`
+  interior pointers and `fval2arr(lu_byte* tag)` become `(t, k)`
+  get/set accessors. This finishes what `ff278e40` started.
+- **Table hash part:** `Node` key/value/next → columns indexed by node.
+  This is the highest-risk piece: the collision chains, `lastfree`, and
+  `reinserthash`/`exchangehashpart` all touch it. Do it last, after the
+  other containers have proven the accessor pattern.
+- **`Proto::k`, `Udata::uv`, `CClosure` upvalues, `UpVal::value`**: same
+  column form where they are arrays. A lone `UpVal::value` stays a field
+  pair.
+- **Scalar `TValue`s** (locals, parameters, returns) stay a small struct,
+  but copies go through one named operation, so Java can make `TValue`
+  immutable or add explicit copies mechanically. Audit the struct-copy
+  sites (`*a = *b`, `TValue x = ...`, `setobj*`).
+- **One container per commit**, each with an A/B. C++ may lose some cache
+  locality (`Node` especially). Record the cost; accept it only where it
+  buys the Java layout.
+
+**Done when:** no array stores `Value`/`TValue`/`Node` by value, and
+every scalar copy goes through the named copy.
+
+### M4. Userdata payloads that hold native state
+
+**Effort:** medium · **Risk:** medium
+
+Raw-byte userdata is upstream's model and stays the consumer API. Some
+library code, though, overlays structs that hold native or engine
+references, which a Java `byte[]` can't contain:
+
+- `liolib.cpp:53,65,104,223,576` `LStream` (`OsFile*` + `closef`
+  function)
+- `lstrlib.cpp:931,955` `GMatchState` (views into strings + `lua_State*`)
+- `loadlib.cpp:155,166` `void*` library handle
+- `lua.cpp:704` `argv` (host launcher; see the port-time notes)
+
+These need an *object payload*: the `Udata` carries a typed reference
+(Java: `Object`) instead of bytes. Pure-data overlays stay bytes: for
+example, `lmathlib.cpp:386,439,465` `RanState` (4 × 64-bit) is read
+through little-endian `byte_span` accessors, which keeps `math.random`
+sequences bit-identical. Design the object-payload API so that Java
+consumers can use it for their own objects too. This is a public API
+addition.
+
+**Done when:** no `static_cast<T*>` on a userdata payload remains in
+library code.
+
+### M5. `lua_getextraspace` → typed slot
+
+**Effort:** low · **Risk:** low
+
+`lua_getextraspace` returns raw per-state bytes, and `lhack.h`'s debug
+lock macros pun them as `uint64_t*`/`void**`. Replace it with a typed
+per-state user slot (public API change) and an explicit `reentrancy` field
+for the debug lock assertions.
+
+**Done when:** `LUA_EXTRASPACE` and the pointer casts in `lhack.h` are
+gone.
+
+### M6. Byte storage: view, span, owner
+
+**Effort:** medium · **Risk:** low · **A/B** (allocation churn on
+`tostring` and formatting paths)
+
+The intent is `byte_view` for read-only access and `byte_span` for
+read-write access, both non-owning. Ownership needs its own type, and today
+`byte_span` carries it: `byte_span` holds a
+`std::shared_ptr<byte_owner>`. That has three costs:
+
+- Every span copy is an atomic reference-count bump.
+- `byte_span(out).copy_from(...)` (`lobject.cpp:951-1002`,
+  `loslib.cpp:203`) writes through a *copy* that shares storage. Which
+  object writes where is hard to read.
+- Each scratch buffer (`byte_span buff(N)`, about 35 sites, e.g.
+  `lapi.cpp:425`, `lobject.cpp:653,751,874`, `lvm.cpp:827`,
+  `lstrlib.cpp:1500-1705`) is a heap allocation plus a `make_shared`, where
+  upstream uses a stack array.
+
+None of the current owners needs shared ownership. In each case one object
+owns the bytes and others borrow them for a scope:
+
+- `Udata::data`
+- `lua_Debug::short_src_out`
+- `MBuffer::bytes_`
+- `BuffFS::b`
+- `luaL_Buffer::bytes`
+- the `luaM_alloc_char_span` results
+
+Java gets sharing for free (any reference to a `byte[]` keeps it alive), so
+C++ needs only unique ownership plus borrowing.
+
+- **`byte_owner`** owns exactly one buffer and is move-only
+  (`std::unique_ptr<char[]>` + size, or the current `span` base with moves
+  enabled). It lends `.span()`/`.view()` and its member owners are
+  allocated, resized and released through `luaM_alloc_char_span`. Java:
+  a `byte[]` field.
+- **`byte_span`**: a non-owning pointer + length, writable, with
+  `subspan(pos, len)` and `view()`. Java: `(byte[], off, len)`.
+- **`byte_view`**: unchanged in role. Its commented-out `offset`/`length`
+  fields can go, since `sv` already carries both. Java:
+  `(byte[], off, len)`, read-only by convention.
+- Struct members above become `byte_owner`. Functions take
+  `byte_span`/`byte_view` parameters, never `byte_owner` unless they
+  transfer or resize ownership.
+- **Scratch buffers** become a `byte_owner` local. For the hot fixed-size
+  ones (number → string in `lapi`/`lobject`/`lvm`, `%p` and format items
+  in `lstrlib`), A/B a fixed-capacity inline owner against heap
+  allocation. In Java both are `new byte[N]`.
+- **Java hot-path rule:** in Java, each view or span value is an object. In
+  loops (lexer, pattern matching, formatting), advance an index over one
+  base view rather than creating a sub-view per step. The code mostly does
+  this already ("walk by offset"); keep it that way.
+
+**Done when:** `shared_ptr` is gone from `bytes.h`. No owning `byte_span`
+exists: every buffer that outlives its scope is a `byte_owner` member.
+Scratch-buffer A/B results are recorded.
+
+---
+
+## Phase C — class changes
+
+Reorganize into namespaces and classes that stand in for the Java
+package/class layout. This is a pure staging move: no behavior change, and
+inlining and direct dispatch are preserved exactly.
+
+### C0. Conventions (decide before C1)
+
+- **Namespaces:** `lua::x` → `lua.x`, using the layout in C1–C10.
+- **Keep upstream file boundaries and function names.** A file's functions
+  become methods of the class that file represents. Names keep their C
+  prefixes (`Table::luaH_get`), as already done, so upstream fixes stay
+  easy to map. Renaming is optional and comes last (C13).
+- **Visibility:**
+  - `static` (about 1,280) → `private`
+  - `LUAI_FUNC` (about 270) → package-private. C++ has no package scope, so
+    these are public members and the namespace marks the boundary.
+  - `LUA_API` (about 250) → `public` on `LuaState`/`LuaAuxLib`.
+- **Free functions** whose first argument is always one type become methods
+  on that type. No generic utility classes, and no templates beyond those
+  already present.
+- **No new virtual dispatch.** Hot methods stay concrete and
+  `inline`/`constexpr`. The only virtual methods are the L3 interfaces,
+  each of which replaces an existing function pointer.
+- **API and tests:** the public API may change shape (`lua_State*`-first →
+  `LuaState::method()`), and `test_public_api.cpp`/`tests/libs` follow.
+  `ltests.cpp` gets mechanical call-shape updates only, flagged per commit.
+
+### C1. `lua::object`
+
+Finish the `GCObject` hierarchy, including `GCListed` from L1. `Table`,
+`TString`, `UpVal`, `Proto` and the closure constructors have moved
+already. Left to do: the inline helpers in `ltable.h`, the value helpers in
+`lobject.h`/`lobject.cpp`, and the leftovers in `lstring.h`/`lfunc.h`.
+
+### C2. `lua::bytes`
+
+`byte_view`, `byte_span`, `byte_owner`, `Zio` (`lzio.*`), `MBuffer`,
+`InternalString` and `literals.h`. A leaf namespace.
+
+### C3. `lua::gc`
+
+`lgc.cpp`'s algorithms become a `GarbageCollector` class. **State stays on
+`global_State`.** `GCdebt`, `gcstate` and the list heads are read on
+allocation and barrier hot paths, and moving them into a separate object
+would add a dereference in Java. `GarbageCollector` operates on
+`global_State`'s fields.
+
+### C4. `lua::runtime`
+
+`lstate.*` (`LuaState`, `GlobalState`, `CallInfo`), `ldo.*` (`luaD_*`
+→ `LuaState` methods), `lmem.*` (`luaM_*` → `LuaState`/`GlobalState`
+methods), `ltm.*`, and the scalar `TValue`/`Value`.
+
+### C5. `lua::vm`
+
+`lvm.cpp` keeps its single dispatch `switch` as `Interpreter::execute`.
+`lopcodes.*` → `OpCodes`; `ldebug.*` (`luaG_*`) → `Debug`, kept
+distinct from `lua::lib::DebugLib`.
+
+### C6. `lua::compiler`
+
+`llex.*`, `lparser.*`, `lcode.*`, plus `ldump.cpp`/`lundump.cpp`.
+
+### C7. `lua::api`
+
+`lapi.cpp` → `LuaState`'s public methods; `lauxlib.cpp` → `LuaAuxLib`.
+This is the only namespace that touches `HostString`. Retire `extern "C"`,
+`LUA_API`, `LUALIB_API` and `LUAMOD_API`.
+
+### C8. `lua::lib`
+
+One class per library file (`BaseLib`, `StringLib`, `TableLib`, `MathLib`,
+`OsLib`, `IoLib`, `CoroutineLib`, `DebugLib`, `Utf8Lib`, `PackageLib`),
+with `linit` as the registry. Functions register through `CFuncInfo`.
+
+### C9. `lua::platform`
+
+`os_api.*` and `locale_util.*`: reimplemented, not transcribed, in Java.
+
+### C10. `lua::host`
+
+`lua.cpp` becomes the launcher class, outside the engine.
+
+### C11. Macro teardown
+
+Remove `LUAI_FUNC`, `LUAI_DDEC`/`LUAI_DDEF` and any file-scope `static`
+helpers that remain. `l_noret` → `[[noreturn]]`. `l_forceinline`,
+`l_likely`/`l_unlikely` and `lhack.h` stay as build configuration.
+
+### C12. Final audit
+
+- Run every **Done when** check from L, M and C again.
+- Confirm that every `luaM_free_*` and span release is accounting plus
+  dropping the reference, with no reuse of freed storage.
+- Write the port checklist that maps each remaining C++ idiom to its one
+  Java transcription:
+  - `byte_owner` → `byte[]`; `byte_span`/`byte_view` → `byte[]` +
+    offset + length (read-only by convention for views)
+  - `std::optional` → nullable reference
+  - L7 helpers → `>>>` / `compareUnsigned`
+  - M3 column accessors
+  - M2 cost constants
+  - L3 interfaces
+
+### C13. Renaming (optional)
+
+If wanted, drop the C prefixes (`luaH_get` → `get`) and apply Java class
+names (`Table` → `LuaTable`), one namespace per commit, after everything
+else.
+
+---
+
+## Port-time notes (no C++ action)
+
+- **Interrupts:** `lua.cpp`'s SIGINT handler already uses upstream's
+  host-invoked design. It calls only `lua_sethook`, and the engine never
+  installs a handler. In Java, the host calls `lua_sethook` from whichever
+  thread observes the interrupt. `trap`/`hook`/`hookmask` transcribe as
+  `volatile`.
+- **Host launcher:** `lua.cpp` (`argv` as light userdata, readline
+  `dlsym`) is rewritten as the Java `main`, not transcribed. It keeps
+  upstream's shape until then.
+- **Debug lock macros** (`lhack.h` `lua_lock`/`lua_unlock`) become
+  assertions on M5's reentrancy field.
+- **Branch hints and forced inlining** (`luai_likely`/`luai_unlikely`,
+  `l_forceinline`) disappear; the JIT handles them.
+- **`os_api.cpp`** keeps its casts and `std::string` temporaries, and is
+  reimplemented against the JVM.
+- **Java size ceilings:**
+  - A `byte[]` holds about 2³¹ bytes, while upstream allows larger strings
+    on 64-bit hosts. Avoiding a new user-visible limit means a segmented or
+    `long`-indexed store for oversized strings and userdata, behind the same
+    `byte_span`/`byte_view` accessors.
+  - `MAXASIZE` is 2³¹, one more than the largest Java array length. It is
+    unreachable in practice (about 18 GB), but should be noted.
+- **`as_userdata(int)`** (`util_cast.h`, `ltests.cpp` only) forges light
+  userdata from integers. In Java, light userdata is an opaque reference,
+  and the test helper wraps the integer.
+- **Bit containers:** after L7, the shift and wraparound helpers are the
+  only places that need `>>>` or wrapping semantics in Java.

@@ -1,6 +1,6 @@
 # Project summary — C++ → Java portability effort
 
-## Project overview
+## Goal
 
 A C++ fork of Lua 5.5 (branch `lua-c++`), being methodically transformed with
 one end goal: make every construct in the sources translate line-by-line into
@@ -12,21 +12,26 @@ Memory-footprint parity with upstream Lua is explicitly **not** a goal —
 representability is. The guiding idea is that when the port to Java happens,
 it should be a near-mechanical transcription rather than a redesign.
 
-Beyond the C→Java roadmap, a major project goal is that a `lua_State` must be
-fully serializable/deserializable — this drives the function-callback design
-toward stable registry identifiers.
+A second goal is that a `lua_State` must be fully serializable and
+deserializable. This drives the function-callback design toward stable
+identities (`CFuncInfo`) instead of raw function pointers.
 
-**Ground rules:** little-endian only, ASCII only, no logic macros, the Lua
-test suite (`ltests.cpp` and `tests/all.lua`) is immutable unless explicitly
-told to adjust it, every commit independently verified by `make full`
-(release + debug, asserts live in both). Additional custom testing goes in
-`test_public_api.cpp` and `tests/deep/*.lua`.
+The remaining work is tracked in [tasks.md](tasks.md).
 
-**Never add new comments to the source code.** Only comments inherited from
-upstream Lua master are kept; any agent- or bot-added comment must be
-removed. Fixes applied from this doc must not introduce explanatory comments.
+## Ground rules
 
-### Terminology and the boundary
+- Little-endian only, ASCII only, no logic macros.
+- The Lua test suite (`ltests.cpp` and `tests/all.lua`) is immutable unless
+  explicitly told to adjust it. Additional custom testing goes in
+  `test_public_api.cpp` and `tests/deep/*.lua`.
+- Every commit is independently verified by `make full` (release + debug,
+  asserts live in both).
+- Lua-visible language behavior does not change.
+- **Never add new comments to the source code.** Only comments inherited from
+  upstream Lua master are kept; any agent- or bot-added comment must be
+  removed.
+
+## Terminology and the boundary
 
 - **Consumer code** — code compiled against the SDK that drives the engine as
   a library, e.g. `test_public_api.cpp`. Post-port this is Java application
@@ -41,316 +46,95 @@ and all strings stay `byte[]` (UTF-8), null-terminated, enforced by
 `char*`/`byte[]` in Java rather than `java.lang.String`. The internal string
 system operates byte-for-byte as it did in C. Only **consumer code** speaks
 `HostString` — a wrapper around a Java `String` (UTF-16). The boundary is
-exactly that mote between UTF-16 Java strings on the consumer side and the
+exactly that line between UTF-16 Java strings on the consumer side and the
 internal UTF-8 `byte[]` system on the engine side: text crosses it with
 strict UTF-8 ↔ UTF-16 conversion and never penetrates the engine as UTF-16.
 
-## Open cleanup tasks
+## History
 
-Each of these is independent; pick any one up without needing the others.
-The exception is task 0 below — the C++ namespace/class staging — which
-touches nearly every file and should be coordinated with whichever of
-tasks 1-6 are in flight so diffs don't collide.
+The branch forks upstream Lua 5.5 master at `53b41d0c` (2026-06-03). The
+work so far, in roughly the order it landed:
 
-### 0. C++ namespace/class staging for the Java port shape
+### 1. C++ conversion and control flow
 
-**Effort:** very high (whole-codebase) · **Risk:** medium — mechanical by
-design, but touches every file; must land in reviewable increments, each
-independently verified by `make full`
+- Sources renamed `.c` → `.cpp`, `#pragma once`, unifdef'd, clang-formatted.
+  An upstream bug in `OP_VARARGPREP`'s IT bit was fixed along the way.
+- Every `goto` removed: retry loops, lexer escape actions, match/format
+  bodies, frame transitions. The interpreter's jump-table dispatch became a
+  plain `switch`; `pc`/`savedpc` became integer indices.
+- `stdarg`/`va_list` purged: internal error formatting uses typed `FmtArgs`
+  appends; `lua_pushfstring`/`luaL_error` carry arguments on the Lua stack;
+  `lua_gc` is no longer variadic; `l_sprintf` became an explicit
+  `string.format` directive engine.
+- Struct-hack flexible arrays replaced by separately allocated arrays; the
+  chunk format became field-wise fixed-width serialization (upstream
+  format-0 framing restored on top).
+- Numeric representation pinned: `lua_Number` is IEEE binary64,
+  `lua_Integer` is 64-bit, the radix character is `.`, float↔string uses
+  `std::from_chars`/`to_chars` and Lua's own hex-float code.
+- Lua errors propagate as C++ exceptions (`LuaError`) with depth-matched
+  recovery; the `jmp_buf` machinery is gone.
 
-**Goal:** reorganize the *existing C++* source into namespaces and classes
-that are a near-mechanical stand-in for the eventual Java package/class
-layout, so the actual Java port becomes a transcription rather than a
-redesign. This is a pure staging move — no behavior change, no Lua-visible
-change, and performance-critical call shapes (inlining, hot-path dispatch)
-must be preserved exactly; only the *organization* of the code moves.
+### 2. Unions and the value representation
 
-**Package/namespace layout** (`lua::x` in C++ → `lua.x` in Java):
+- `union Value` became a two-column struct `{prim, ref}`; typed accessors are
+  the representation seam. The Lua stack was transposed into parallel
+  prim/ref/tag columns, and `lapi` index resolution was redesigned around
+  by-copy reads and discriminated addresses (Value steps C1–D).
+- `StkId` is an index, not a pointer. Upvalues reference the stack by index;
+  the to-be-closed list is an explicit `StkId` array on `lua_State`.
+- `GCUnion` was replaced by C++ inheritance (`struct X : GCObject`); the
+  `Closure`, `Node`, `CallInfo`, `expdesc`, `Vardesc` and `SemInfo` unions
+  were flattened; alignment unions became `alignas`.
+- Hash-part addressing uses node indices; `lcode` indexes `code[]` by `int`;
+  the `UpVal**` upvalue reference became value/index access.
+- Endianness is fixed by `static_assert` and `std::endian`.
 
-- `lua::runtime` — `LuaState`, `GlobalState`, `CallInfo`, the collapsed
-  `TValue`/`Value` representation.
-- `lua::object` — the `GCObject` hierarchy: `LuaObject` (base), `LuaString`,
-  `LuaTable`, `LuaUserdata`, `LuaClosure`/`CClosure`/`LClosure`, `Proto`,
-  `UpVal`, `CFuncInfo`. This one is close to free — `lobject.h`/`lstate.h`
-  already declare these as `struct X : GCObject`.
-- `lua::vm` — `Interpreter` (the `lvm.cpp` dispatch `switch`, kept as a
-  switch — closest to today's shape, best for hot-loop inlining, matches the
-  project's line-by-line-fidelity preference over a handler-per-opcode
-  redesign), `OpCodes` (opcode metadata from `lopcodes.cpp`), `Debug`
-  (`ldebug.cpp`'s `luaG_*` — internal error/traceback/line-info machinery;
-  keep distinct from `lua::lib::DebugLib`, the `debug.*` Lua-visible
-  library, despite the shared C prefix).
-- `lua::gc` — `GarbageCollector` (`lgc.cpp`'s incremental/generational state
-  machine), separate from the `LuaObject` hierarchy it operates on.
-- `lua::compiler` — `Lexer`, `Parser`, `CodeGen` from `llex.cpp`/
-  `lparser.cpp`/`lcode.cpp`.
-- `lua::lib` — one class per stdlib file: `BaseLib`, `StringLib`, `TableLib`,
-  `MathLib`, `OsLib`, `IoLib`, `CoroutineLib`, `DebugLib`, each registering
-  its functions through the `CFuncInfo` identity layer (ties to task 2,
-  function-callback port design — the registration-before-load contract
-  plugs in here).
-- `lua::api` — the public embedding surface: `lapi.cpp` → `LuaState`'s public
-  methods, `lauxlib.cpp` → `LuaAuxLib`. Only this namespace touches
-  `HostString`.
-- `lua::bytes` — `byte_view`/`byte_span` and the `Zio` buffered-reader
-  (`lzio.*`). Shared infrastructure used by the compiler, `lundump`, and
-  stdlib scratch buffers alike — doesn't belong to any one of the packages
-  above.
-- `lua::platform` — `os_api.*`. The designated per-host swap seam (task 4):
-  dlopen, file I/O primitives, `getenv`. Kept visibly separate from
-  `lua::lib` because this is the one namespace expected to look completely
-  different in the Java port; everything else should transcribe near
-  verbatim.
-- Top-level / `lua::host` — `lua.cpp` (the CLI) becomes the launcher, not
-  engine code.
+### 3. Strings and the host boundary
 
-**Visibility mapping**, applied per function during the move:
+- `InternalString` (engine bytes) and `HostString` (consumer text) were
+  separated; `HostString` exists only at the public API.
+- All string literals moved to `lit<>`/`literals.h` constants (15-part
+  migration). The engine walks text via `byte_view`/`byte_span` plus
+  offsets; `std::string_view` and `char*` cursors are gone from the core.
+- String interning uses an intrusive table with lazy long-string hashing;
+  `strcache` was deleted.
+- All host OS calls are isolated in `os_api.*`; locale-dependent logic in
+  `locale_util.*`. `liblua.a` is sealed to the published API surface, and
+  `test_public_api.cpp` plus `tests/deep/*.lua` pin the consumer- and
+  user-visible behavior (verified against a stock lua-master build).
+- C functions carry identity through `CFuncInfo` (static for library
+  functions, GC-managed otherwise), so `lua_topointer` and table keys work
+  without raw function-pointer identity.
 
-- `static` (translation-unit-private, ~500 today) → `private` method on
-  whichever class now owns the operation. Mechanical in most cases —
-  `ltable.cpp`'s `static` helpers all take a `Table*` first arg already, so
-  they become private `LuaTable` methods with that parameter dropped.
-- `LUAI_FUNC` (engine-internal, cross-file, ~250 today) → package-private
-  (default access) — that is exactly its current scope.
-- `LUA_API` (public C API, 123 in `lua.h`) → `public`, on `LuaState`/
-  `LuaAuxLib`. This is where the public API shape is allowed to change
-  — see the note below.
-- Free functions whose first argument is always a specific type (`lmem.cpp`'s
-  `luaM_*`, which all take `lua_State*`/`global_State*`) become methods on
-  that type directly — `LuaState::alloc(...)`, etc. — not a generic utility
-  class. No new namespace needed for these; they land in `lua::runtime`.
+### 4. Macro removal
 
-**Performance constraint:** this is a reorganization, not a rewrite. Methods
-that are `constexpr`/`inline`/hot-path today stay that way after the move;
-class-method dispatch must not introduce virtual-call overhead where the
-call was static/direct before (e.g. `Interpreter`'s dispatch loop and
-`LuaTable`'s hot accessors should end up as concrete, non-virtual methods,
-not funneled through the `GCObject`/`LuaObject` base's virtual interface).
+Effectively every logic macro was converted: value/tag/type tests, GC
+helpers, instruction encode/decode, VM code templates, service headers,
+`lctype` classes, version/limit/opcode constants (`constexpr`).
+`lua_assert` became plain `assert`, enabled in release builds. Only
+build/platform configuration `#define`s remain (`luaconf.h`, `llimits.h`,
+`lhack.h`).
 
-**Public API surface is allowed to change shape** as part of this move
-(namespacing, `lua_State*`-first-arg → `LuaState::method()`, etc.) — this is
-an accepted, intended consequence, not a regression to avoid. It requires
-updating `test_public_api.cpp` and any other embedder-facing test/consumer
-code to the new call shapes.
+### 5. Memory ownership
 
-**What must not change:** Lua-visible language behavior. `tests/deep/*.lua`
-and `tests/all.lua` (user-code-level) need zero changes. `ltests.cpp` is
-nominally immutable per the ground rules, but it pokes at engine internals
-directly (debug hooks, introspection) and will need **mechanical symbol/call
--shape updates only** (renamed/relocated function calls, no behavior change)
-to keep compiling against the new namespace layout — flag each such edit
-explicitly rather than treating the immutability rule as silently waived.
+- `lua_Alloc` was reshaped into a permission hook: the engine owns memory and
+  the host only approves or denies each request.
+- Allocation is typed: per-type GC object allocators and frees, and one
+  central allocation function per array element type (`luaM_alloc_X_span`,
+  with `safegrow` wrappers that fold in limit/error text).
+- Size fields such as `asize`, `lsizenode`, the seven `Proto` size ints,
+  `nupvalues` and `nuvalue` were replaced by owning spans. A detour through
+  `std::vector` was tried and reverted in favor of spans with central
+  accounting.
+- Casts were tightened: C-style pointer casts became `static_cast`; GC
+  upcasts, interior-pointer strips, raw mem-ops and the `LX` wrapper were
+  removed; pointer arithmetic is confined to `bytes.h`.
 
-### 1. Locale surface
+### 6. Class staging (started)
 
-**Effort:** medium · **Risk:** medium (touches immutable test assertions)
-
-Pattern classes (`%a`/`%l`…), `string.upper`/`string.lower`, and string `<`
-collation currently lean on libc `ctype`/`strcoll` (`lctype.cpp`/`.h`,
-`locale_util.cpp`), which are locale-sensitive and asserted by the immutable
-tests under `pt_BR`. Java has no process-global `setlocale`.
-
-```cpp
-locale_util.cpp:45  std::optional<byte_view> locale_setlocale(int category, std::optional<byte_view> locale)
-locale_util.cpp:51    res = setlocale(category, l.c_str());   // libc call, needs NUL-terminated arg
-```
-
-Needs an engine-owned byte-classification/collation table plus an explicit
-threaded "current locale" field, replacing the libc `ctype`/`strcoll` calls.
-`locale_util.cpp`'s `std::string` use (line 50-51) is a libc-boundary
-artifact of this and folds away once the libc call is replaced.
-
-### 2. Function-callback port design
-
-**Effort:** medium · **Risk:** low (shapes are already Java-portable; this is about persistence, not portability)
-
-The `CFuncInfo` identity layer is in place. Remaining pieces, all needed so a
-`lua_State` can be serialized with live callback references:
-
-- `lua_KFunction`/`lua_KContext` continuation identifiers — currently raw
-  function pointer + `ptrdiff_t` context (`lua.h:86,96`; used at
-  `ldo.cpp:762`, `lua_yieldk`). Needs the same stable-identity treatment
-  `CFuncInfo` gave `lua_CFunction`.
-- `lua_Alloc` replacement — currently a raw function pointer
-  (`lua.h:105,127,336`).
-- `CClosure` function-slot conversion (`lobject.h:366`) — still holds a raw
-  callable slot rather than a serializable reference.
-- The registration-before-load contract (a name→callback registry so a
-  deserialized chunk resolves callbacks by stable id instead of by raw
-  pointer) — not yet designed.
-
-### 3. Serialization layer
-
-**Effort:** high · **Risk:** high (the big design item)
-
-Serialize/deserialize a complete `lua_State` (globals, string table, tables,
-protos, upvalues, suspended coroutines). The chunk byte format is already
-fixed (see item 4 below and the completed bytecode-serialization work), so
-this is the remaining big design item, gated on item 2's registry contract
-for anything holding a callback reference.
-
-### 4. `loadlib`/`os_api` abstraction seam (native library loading)
-
-**Effort:** high (design) but low-risk, mechanical once decided · **Risk:** low for shape, high for the native reality
-
-`require` of a C module (`.so`) walks `loadlib.cpp`, which asks the OS layer
-(`os_api.cpp`) to `dlopen`/`dlsym` and calls the result as a `lua_CFunction`.
-There is no `dlopen` for the JVM and a `.so` is not loadable as a Lua module
-the way it is in C — this is the one place the engine pulls native machine
-code in at runtime.
-
-The native-boundary punning in `os_api.cpp` is correct where it lives:
-
-```cpp
-OsLib* os_dlopen(byte_view path, bool global)
-{ return reinterpret_cast<OsLib*>(dlopen(p.c_str(), RTLD_NOW | (global ? RTLD_GLOBAL : RTLD_LOCAL))); }
-void* os_dlsym(OsLib* lib, byte_view sym) { return dlsym(reinterpret_cast<void*>(lib), s.c_str()); }
-void os_dlclose(OsLib* lib) { dlclose(reinterpret_cast<void*>(lib)); }
-```
-`OsLib` is an opaque incomplete type; at the Java port this file is
-reimplemented (not transcribed) against JNI/FFM `SymbolLookup` or a registry
-of statically-linked extensions, and the handle becomes a Java object.
-
-The still-open part is that the **policy layer** (`loadlib.cpp`) still holds
-native-typing casts that belong behind the `os_api` seam:
-
-```cpp
-loadlib.cpp:45   OsLib* lib = os_dlopen(path, seeglb != 0);
-loadlib.cpp:48   return reinterpret_cast<void*>(lib);                 // handle punned to void* for storage
-loadlib.cpp:53   lua_CFunction f = reinterpret_cast<lua_CFunction>(os_dlsym(reinterpret_cast<OsLib*>(lib), sym));
-loadlib.cpp:158  os_dlclose(reinterpret_cast<OsLib*>(*p));
-```
-Plus the handle is boxed twice — as full userdata with a `__gc` that calls
-`os_dlclose`, and as light userdata in `registry._CLIBS[path]` for dedupe
-(`lib_gc`, `createlibstr`, `addtoclib` in `loadlib.cpp`). In Java the handle
-is just an object reference; `__gc`-driven `dlclose` becomes explicit
-close/phantom-reachability cleanup, and `_CLIBS` is an ordinary map.
-
-**Proposed direction:** make `loadlib` as abstract as possible — it should
-express only policy (search paths, `_CLIBS` dedupe, error messages, the
-registration/`__gc` lifecycle) and delegate every native act (open, resolve a
-symbol to a callable, close) to `os_api`. Move the `reinterpret_cast`s and
-handle typing out of `loadlib.cpp` into `os_api`, and widen the `os_api` dl
-interface so `loadlib` never holds a raw handle. This makes porting
-`loadlib` to Java a straight transcription — only `os_api`'s dlopen family
-gets reimplemented against the JVM (a likely target: a registry of
-pre-registered native extensions, so `require` of a C module resolves a name
-to an already-bound Java `LuaCFunction` rather than dlsym-ing raw code at
-runtime). Gated behind wanting to touch the loader — not urgent on its own.
-
-### 5. `lundump` byte-reinterpretation (memmap abstraction)
-
-**Effort:** medium · **Risk:** medium
-
-The undump path hands out a `std::span<T>` over a raw byte region by casting
-the byte address to `T*` — three sites in `lundump.cpp`:
-
-```cpp
-lundump.cpp:187  f->code = std::span<Instruction>((Instruction*)(getaddr_(S, n * sizeof(Instruction))), n);
-lundump.cpp:284  f->lineinfo = std::span<ls_byte>((ls_byte*)(getaddr_(S, n * sizeof(ls_byte))), n);
-lundump.cpp:297  f->abslineinfo = std::span<AbsLineInfo>((AbsLineInfo*)(getaddr_(S, n * sizeof(AbsLineInfo))), n);
-```
-
-Java `byte[]` cannot be reinterpreted as `int[]` or as an array of structs;
-this needs an explicit mapping layer. Two distinct sub-problems:
-
-- **`byte[]` → primitive integral** (`code`, `lineinfo`) — solvable with
-  `java.nio.ByteBuffer`/`.asIntBuffer()` or `java.lang.foreign.MemorySegment`
-  with a `JAVA_INT` value layout. `ls_byte` (a `signed char`) is trivially
-  the bytes themselves.
-- **`byte[]` → struct array** (`abslineinfo`, `AbsLineInfo = {int pc; int
-  line;}`) — Java can't overlay an object on raw bytes, but since the struct
-  is exactly two `int32_t`, this reduces to the primitive-integral problem
-  plus a stride-2 access convention (`[pc0, line0, pc1, line1, ...]`); the
-  `AbsLineInfo` object is materialized on demand rather than overlaid.
-
-**Confirmed by scan:** `Instruction` (`l_uint32`) unsignedness is used only
-in the bit-container sense (logical right shift + mask, `lopcodes.h`'s
-`MASK1`/`GET_OPCODE`/`getarg`), never as a signed-vs-unsigned magnitude or
-comparison. So Java can store an `Instruction` in a signed `int` and get
-identical results **provided every decode site uses `>>>`** instead of `>>`
-(Java's `>>` sign-extends; C's shift on unsigned `Instruction` is logical).
-This is a per-decode-site rule, not a representation blocker. Same
-bit-container usage pattern elsewhere for `l_uint32` (UTF-8 decode sentinels,
-call-status flags) — no changes needed there beyond the same `>>>` rule at
-the eventual port.
-
-**Proposed direction (not now):** a memmap abstraction on the Java side — a
-thin little-endian reader over the backing `byte[]` yielding `int`, used for
-`code` (decoded with `>>>`) and `abslineinfo` (int-pairs); `lineinfo` stays
-raw bytes. Mirror the existing defined-width byte format so the reader is
-format-driven, not layout-driven. **Follow-up for the port checklist:** audit
-that every Instruction right-shift in the Java port uses `>>>` — the C
-correctness here rides on `Instruction` being unsigned, and that guarantee is
-exactly what's lost crossing to Java's signed `int`.
-
-### 6. SIGINT / `volatile` interruption model
-
-**Effort:** low (fields already correct) / medium (signal wiring) · **Risk:** low
-
-`volatile` fields drive the async-interruption (SIGINT) model and one file-close
-guard:
-
-```cpp
-lstate.h:99    volatile l_signalT trap;      /* function is tracing lines/counts */
-lstate.h:213   volatile lua_Hook hook;
-lstate.h:220   volatile l_signalT hookmask;
-liolib.cpp:118 volatile lua_CFunction cf = p->closef;  /* avoids longjmp/close reorder */
-ldo.cpp:49     volatile TStatus status;                /* in lua_longjmp */
-```
-These map cleanly to Java `volatile` (async writer, polling reader) — no
-change needed to the fields themselves. The C-ism is the writer: `lua.cpp`
-still installs a real OS signal handler (`setsignal(SIGINT, laction)` at
-`lua.cpp:145`, restored at `:147`), which the VM polls `trap` for at
-dispatch. The engine can't install OS signal handlers in the port (no engine
-threads on the JVM side).
-
-**Proposed fix:** replace the OS signal handler with a host-invoked interrupt
-entry point; the engine never installs a signal handler itself.
-
-```cpp
-// engine side: unchanged polling of L->trap in the dispatch loop
-// host side (replaces laction/SIGINT in lua.cpp):
-void luaState_interrupt(lua_State* L);   // sets hook flags; host wires it to SIGINT if it wants
-// Java: volatile fields on LuaState; host calls luaState.interrupt()
-```
-`liolib.cpp:118`'s `volatile` guards against reordering around the C++
-throw/close path; re-evaluate once error handling is fully exception-clean —
-it likely becomes an ordinary field in Java.
-
-## Accepted design notes (not tasks)
-
-### Config macros with pointer puns (`lhack.h`, debug-only)
-
-**Status: no action required now** — flagged for awareness only, not a task.
-
-The only remaining `#define`s in the tree are build/platform config, which is
-in scope to keep. Two are worth noting because they contain C-isms that would
-need handling *if* they ever reached the port surface — but both are the
-debug/host-hook layer and the compiler-hint layer, both dropped/replaced
-wholesale at the port rather than transcribed:
-
-```cpp
-lhack.h:22  #define _getlock(l)   (*((uint64_t*)(lua_getextraspace(l))))
-lhack.h:23  #define _getplock(l)  (ismainthread(l) ? ((uint64_t*)(lua_getextraspace(l))) \
-                                                   : ((uint64_t*)(*((void**)(lua_getextraspace(l))))))
-lhack.h:29  #define lua_lock(l)   assert((*_getplock(l))++ == 0)
-lhack.h:30  #define lua_unlock(l) assert(--(*_getplock(l)) == 0)
-```
-These cast `lua_getextraspace(l)` to `uint64_t*`/`void**` — pointer punning
-into a raw buffer, existing only to assert the no-reentrancy contract in
-debug builds. At the port, `lua_lock`/`lua_unlock` and the extraspace
-punning are dropped entirely — the no-threads constraint means the lock
-contract is a no-op, or at most a plain boolean/reentrancy-assert field on
-`LuaState` with no pointer punning:
-
-```cpp
-// Java: assert reentrancyGuard++ == 0;  ...  assert --reentrancyGuard == 0;
-```
-
-```cpp
-luaconf.h:20  #define luai_likely(x)   (__builtin_expect(((x) != 0), 1))
-luaconf.h:21  #define luai_unlikely(x) (__builtin_expect(((x) != 0), 0))
-```
-`__builtin_expect` has no Java equivalent and simply disappears at the port —
-branch hints are the JIT's job.
+The first moves toward the Java class layout have landed: `Table` owns the
+`luaH_*` operations as methods with its `static` helpers as private methods,
+and the `lstring`/`lfunc` operations moved onto `TString`, `Udata`, `Proto`,
+`UpVal`, `CClosure`, `LClosure` and `CFuncInfo`. Method names still carry
+their C prefixes.
