@@ -1478,6 +1478,31 @@ Remove `LUAI_FUNC`, `LUAI_DDEC`/`LUAI_DDEF` and any file-scope `static`
 helpers that remain. `l_noret` → `[[noreturn]]`. `l_forceinline`,
 `l_likely`/`l_unlikely` and `lhack.h` stay as build configuration.
 
+**Status: done** (`c2ebf70d`).
+- `LUAI_FUNC`/`LUAI_DDEC`/`LUAI_DDEF` are gone, together with upstream's
+  comment describing them. `LUAI_DDEC(x)` becomes `extern x`, and
+  `l_noret` becomes `[[noreturn]] void`.
+- File-scope `static` helpers now sit inside their package namespace,
+  where `static` still means private (Java: `private static`).
+- `l_forceinline`, `l_likely`/`l_unlikely` and `lhack.h` stay as build
+  configuration.
+- **Decision: `LUAI_FUNC`'s internal-visibility hint is retired, not
+  moved.**
+  - A visibility attribute can't sit on a nested namespace definition
+    (`namespace lua::x`).
+  - Pragma-based `push(internal)` clashes with public structs that hold
+    package types: `lua_Debug` holds `byte_view` values and a
+    `CallInfo*`, and `luaL_Stream` holds an `OsFile*`.
+  - The archive seal (C7) still localizes packaged internals. The
+    executable's `-Wl,-E` dynamic table now also lists them, which only
+    a C module could notice, and a C module has no declarations to name
+    them with. PIE calls bind locally either way, so there is no
+    runtime cost.
+- **Phase C A/B** (before C1 `8e276daa` → after C11 `c2ebf70d`, min):
+  all.lua 4.68s → 4.66s, b_vm 1.09s → 1.08s, b_call 4.25s → 4.26s,
+  b_arith 1.24s → 1.23s, b_table 0.35s → 0.35s, b_gc 3.67s → 3.67s,
+  b_fmt 3.84s → 3.83s. RSS is identical.
+
 ### C12. Final audit
 
 - Run every **Done when** check from L, M and C again.
