@@ -617,7 +617,7 @@ static int g_write(lua_State* L, OsFile* f, int arg)
   for (; nargs--; arg++)
   { /* for each argument */
     size_t numbytes; /* bytes written in one call to 'fwrite' */
-    byte_owner numbuff(LUA_N2SBUFFSZ);
+    byte_inline<LUA_N2SBUFFSZ> numbuff;
     std::optional<byte_view> numtxt = lua_numbertocstringi(L, arg, numbuff); /* try as a number */
     byte_view bv = numtxt.has_value()
       ? numbuff.view().substr(0, numtxt->size())

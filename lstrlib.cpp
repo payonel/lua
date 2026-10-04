@@ -1252,7 +1252,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
     }
     else if (locale_matchclass(c, 'c'))
     {
-      byte_owner dbuf(4);
+      byte_inline<4> dbuf;
       byte_view d = dbuf.view().substr(0, dbuf.write_number(c));
       luaL_addchar(b, '\\');
       if (locale_isdigit(sv_byteat(s->view(), i + 1)))
@@ -1507,14 +1507,14 @@ static size_t formatint(lua_State* L, int arg, byte_view form,
   lua_Unsigned u = (issigned && n < 0)
                        ? 0u - ((lua_Unsigned)(n))
                        : (n);
-  byte_owner digits(24);
+  byte_inline<24> digits;
   size_t ndigits = digits.write_number(u, base);
   if (spec.conv == 'X')
   {
     for (size_t i = 0; i < ndigits; i++)
       digits[i] = ((char)(locale_toupper(((unsigned char)(digits[i])))));
   }
-  byte_owner body(MAX_ITEM);
+  byte_inline<MAX_ITEM> body;
   size_t blen = 0;
   if (u == 0 && spec.precision == 0)
     ;
@@ -1569,7 +1569,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
     prefix[prefixlen++] = '+';
   else if (spec.space)
     prefix[prefixlen++] = ' ';
-  byte_owner body(MAX_ITEMF);
+  byte_inline<MAX_ITEMF> body;
   size_t blen;
   bool zeropadok = true;
   if (std::isinf(n) || std::isnan(n))
@@ -1656,7 +1656,7 @@ static int str_format(lua_State* L)
     }
     else
     {                                              /* format item */
-      byte_owner form(MAX_FORMAT);         /* to store the format ('%...') */
+      byte_inline<MAX_FORMAT> form;         /* to store the format ('%...') */
       size_t formlen;
       size_t maxitem = MAX_ITEM;                  /* maximum length for the result */
       size_t boff = luaL_prepbuffsize(&b, maxitem); /* to put result */
@@ -1712,7 +1712,7 @@ static int str_format(lua_State* L)
         checkformat(L, formv, lt::minus_ch, 0);
         FormatSpec spec;
         scanformat(formv, &spec);
-        byte_owner body(MAX_ITEM);
+        byte_inline<MAX_ITEM> body;
         size_t blen;
         if (lua_islightcfunction(L, arg))
         {

@@ -29,7 +29,7 @@ namespace util
 
   inline InternalString func_to_string(lua_CFunction_t pf)
   {
-    byte_owner buf(20);
+    byte_inline<20> buf;
     size_t n = pointertext(buf, 0, pf);
     return InternalString(buf.view().substr(0, n));
   }

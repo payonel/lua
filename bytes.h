@@ -314,6 +314,7 @@ struct byte_span : byte_writes<byte_span>
 
 private:
   friend struct byte_owner;
+  template <size_t N> friend struct byte_inline;
   constexpr byte_span(char* p, size_t n) : p_(p), n_(n) {}
   char* p_ = nullptr;
   size_t n_ = 0;
@@ -345,4 +346,21 @@ struct byte_owner : byte_writes<byte_owner>
 private:
   std::unique_ptr<char[]> p_;
   size_t n_ = 0;
+};
+
+template <size_t N>
+struct byte_inline : byte_writes<byte_inline<N>>
+{
+  byte_inline() = default;
+  byte_inline(const byte_inline&) = delete;
+  byte_inline& operator=(const byte_inline&) = delete;
+
+  size_t size() const { return N; }
+  char* data() const { return a_; }
+
+  byte_span span() const { return byte_span(data(), N); }
+  operator byte_span() const { return span(); }
+
+private:
+  mutable char a_[N] = {};
 };

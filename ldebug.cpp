@@ -990,7 +990,7 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
   if (src == nullptr) /* no debug information? */
     return luaO_pushfstring(L, lt::fmt_unknown_loc_s, FmtArgs().str(msg))->view();
 
-  byte_owner bytes(LUA_IDSIZE);
+  byte_inline<LUA_IDSIZE> bytes;
   luaO_chunkid(bytes, src->data.view());
   byte_view sv = bytes.str_view();
   return luaO_pushfstring(L, lt::fmt_s_d_s, FmtArgs().str(sv).num(line).str(msg))->view();

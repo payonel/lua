@@ -240,7 +240,7 @@ static int os_date(lua_State* L)
   }
   else
   {
-    byte_owner cc(4); /* buffer for individual conversion specifiers */
+    byte_inline<4> cc; /* buffer for individual conversion specifiers */
     luaL_Buffer b;
     cc[0] = '%';
     luaL_buffinit(L, &b);

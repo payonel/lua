@@ -451,7 +451,7 @@ static int db_sethook(lua_State* L)
 static int db_gethook(lua_State* L)
 {
   lua_State* L1 = getthread(L).L1;
-  byte_owner buff(5);
+  byte_inline<5> buff;
   int mask = lua_gethookmask(L1);
   lua_Hook hook = lua_gethook(L1);
   if (hook == nullptr)
