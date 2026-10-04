@@ -392,17 +392,17 @@ static int readhexaesc(LexState* ls)
 ** for error reporting in case of errors; 'i' counts the number of
 ** saved characters, so that they can be removed if case of success.
 */
-static l_uint32 readutf8esc(LexState* ls)
+static int readutf8esc(LexState* ls)
 {
-  l_uint32 r;
+  int r;
   int i = 4;         /* number of chars to be removed: start with #"\u{X" */
   save_and_next(ls); /* skip 'u' */
   esccheck(ls, ls->current == '{', lt::missing_1);
-  r = ((unsigned int)(gethexa(ls))); /* must have at least one digit */
+  r = gethexa(ls); /* must have at least one digit */
   while (((void)(save_and_next(ls))), lisxdigit(ls->current))
   {
     i++;
-    esccheck(ls, r <= (0x7FFFFFFFu >> 4), lt::UTF_8_value_too_large);
+    esccheck(ls, r <= (0x7FFFFFFF >> 4), lt::UTF_8_value_too_large);
     r = (r << 4) + luaO_hexavalue(ls->current);
   }
   esccheck(ls, ls->current == '}', lt::missing_2);

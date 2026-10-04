@@ -201,7 +201,7 @@ void TString::luaS_remove(lua_State* L)
   }
 }
 
-Udata* Udata::luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue)
+Udata* Udata::luaS_newudata(lua_State* L, size_t s, int nuvalue)
 {
   global_State* g = L->l_G;
   Udata* u;

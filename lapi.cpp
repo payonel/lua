@@ -772,7 +772,7 @@ const InternalString* lua_pushfstringi(lua_State* L, byte_view fmt)
     {
       StkId o = slot;
       assert((slottag(L, o) == LUA_VNUMINT) && "integer expected");
-      args.utf8(((unsigned long)(slotival(L, o))));
+      args.utf8(slotival(L, o));
       break;
     }
     default:
@@ -1738,7 +1738,7 @@ LUA_API void* lua_newuserdatauv(lua_State* L, size_t size, int nuvalue)
   Udata* u;
   lua_lock(L);
   assert((0 <= nuvalue && nuvalue < SHRT_MAX) && "invalid value");
-  u = Udata::luaS_newudata(L, size, ((unsigned short)(nuvalue)));
+  u = Udata::luaS_newudata(L, size, nuvalue);
   setslotu(L, L->top, u);
   api_incr_top(L);
   luaC_checkGC(L);

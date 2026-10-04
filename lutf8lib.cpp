@@ -21,9 +21,9 @@
 #include "lualib.h"
 #include "literals.h"
 
-constexpr unsigned MAXUNICODE = 0x10FFFFu;
+constexpr int MAXUNICODE = 0x10FFFF;
 
-constexpr unsigned MAXUTF = 0x7FFFFFFFu;
+constexpr int MAXUTF = 0x7FFFFFFF;
 
 constexpr int iscont(int c)
 {
@@ -55,15 +55,15 @@ static lua_Integer u_posrelat(lua_Integer pos, size_t len)
 struct Utf8Code
 {
   size_t next;
-  l_uint32 code;
+  int code;
 };
 
 static Utf8Code utf8_decode(const InternalString* s, size_t pos, int strict)
 {
-  static const l_uint32 limits[] =
-      {~(l_uint32) 0, 0x80, 0x800, 0x10000u, 0x200000u, 0x4000000u};
-  unsigned int c = (unsigned int) ubyte(s, pos);
-  l_uint32 res = 0; /* final result */
+  static const int limits[] =
+      {INT_MAX, 0x80, 0x800, 0x10000, 0x200000, 0x4000000};
+  int c = ubyte(s, pos);
+  int res = 0; /* final result */
   if (c < 0x80)     /* ASCII? */
     res = c;
   else if (c >= 0xfe) /* c >= 1111 1110b ? */
@@ -73,13 +73,13 @@ static Utf8Code utf8_decode(const InternalString* s, size_t pos, int strict)
     int count = 0; /* to count number of continuation bytes */
     for (; c & 0x40; c <<= 1)
     {                                                            /* while it needs continuation bytes... */
-      unsigned int cc = (unsigned int) ubyte(s, pos + (size_t) ++count); /* read next byte */
-      if (!iscont((int) cc))                                     /* not a continuation byte? */
+      int cc = ubyte(s, pos + (size_t) ++count); /* read next byte */
+      if (!iscont(cc))                                     /* not a continuation byte? */
         return {0, 0};                                                /* invalid byte sequence */
       res = (res << 6) | (cc & 0x3F);                            /* add lower 6 bits from cont. byte */
     }
     assert(count <= 5);
-    res |= ((l_uint32) (c & 0x7F) << (count * 5)); /* add first byte */
+    res |= ((c & 0x7F) << (count * 5)); /* add first byte */
     if (res > MAXUTF || res < limits[count])
       return {0, 0};             /* invalid byte sequence */
     pos += (size_t) count;  /* skip continuation bytes read */
@@ -87,7 +87,7 @@ static Utf8Code utf8_decode(const InternalString* s, size_t pos, int strict)
   if (strict)
   {
     /* check for invalid code points; too large or surrogates */
-    if (res > MAXUNICODE || (0xD800u <= res && res <= 0xDFFFu))
+    if (res > MAXUNICODE || (0xD800 <= res && res <= 0xDFFF))
       return {0, 0};
   }
   return {pos + 1, res}; /* +1 to include first byte */
@@ -153,7 +153,7 @@ static int codepoint(lua_State* L)
     pos = dec.next;
     if (pos == 0)
       return luaL_errori(L, lt::invalid_UTF_8_code);
-    lua_pushinteger(L, ((lua_Integer)(dec.code)));
+    lua_pushinteger(L, dec.code);
     n++;
   }
   return n;
@@ -161,9 +161,9 @@ static int codepoint(lua_State* L)
 
 static void pushutfchar(lua_State* L, int arg)
 {
-  lua_Unsigned code = (lua_Unsigned) luaL_checkinteger(L, arg);
-  luaL_argchecki(L, code <= MAXUTF, arg, lt::value_out_of_range);
-  lua_pushinteger(L, ((lua_Integer)(code)));
+  lua_Integer code = luaL_checkinteger(L, arg);
+  luaL_argchecki(L, 0 <= code && code <= MAXUTF, arg, lt::value_out_of_range);
+  lua_pushinteger(L, code);
   lua_pushfstringi(L, lt::fmt_U);
 }
 
@@ -272,7 +272,7 @@ static int iter_aux(lua_State* L, int strict)
     if (dec.next == 0 || iscontat(s, dec.next))
       return luaL_errori(L, lt::invalid_UTF_8_code);
     lua_pushinteger(L, ((lua_Integer)(n + 1)));
-    lua_pushinteger(L, ((lua_Integer)(dec.code)));
+    lua_pushinteger(L, dec.code);
     return 2;
   }
 }

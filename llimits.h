@@ -152,9 +152,9 @@ static inline lua_Unsigned l_umod(lua_Unsigned a, lua_Unsigned b)
   return a % b;
 }
 
-static inline bool l_ult(lua_Unsigned a, lua_Unsigned b)
+static inline bool l_ult(lua_Integer a, lua_Integer b)
 {
-  return a < b;
+  return (lua_Unsigned)a < (lua_Unsigned)b;
 }
 
 static l_forceinline lua_Integer l_intadd(lua_Integer a, lua_Integer b)

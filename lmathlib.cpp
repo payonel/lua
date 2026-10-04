@@ -176,7 +176,7 @@ static int math_ult(lua_State* L)
 {
   lua_Integer a = luaL_checkinteger(L, 1);
   lua_Integer b = luaL_checkinteger(L, 2);
-  lua_pushboolean(L, l_ult((lua_Unsigned) a, (lua_Unsigned) b));
+  lua_pushboolean(L, l_ult(a, b));
   return 1;
 }
 

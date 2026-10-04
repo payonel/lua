@@ -416,7 +416,7 @@ static void rethook(lua_State* L, CallInfo* ci, int nres)
 ** (This count will be saved in the 'callstatus' of the call).
 **  Raise an error if this counter overflows.
 */
-static unsigned tryfuncTM(lua_State* L, StkId func, unsigned status)
+static l_uint32 tryfuncTM(lua_State* L, StkId func, l_uint32 status)
 {
   const TValue* tm;
   StkId p;
@@ -526,7 +526,7 @@ static inline CallInfo* next_ci(lua_State* L)
 ** CIST_C (if it's a C function), and number of extra arguments.
 ** (All these bit-fields fit in 16-bit values.)
 */
-static inline CallInfo* prepCallInfo(lua_State* L, StkId func, unsigned status,
+static inline CallInfo* prepCallInfo(lua_State* L, StkId func, l_uint32 status,
                                  StkId top)
 {
   CallInfo* ci = L->ci = next_ci(L); /* new frame */
@@ -540,7 +540,7 @@ static inline CallInfo* prepCallInfo(lua_State* L, StkId func, unsigned status,
 /*
 ** precall for C functions
 */
-static inline int precallC(lua_State* L, StkId func, unsigned status,
+static inline int precallC(lua_State* L, StkId func, l_uint32 status,
                        lua_CFunction f)
 {
   int n; /* number of returns */
@@ -571,7 +571,7 @@ static inline int precallC(lua_State* L, StkId func, unsigned status,
 int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
                      int narg1, int delta)
 {
-  unsigned status = LUA_MULTRET + 1;
+  l_uint32 status = LUA_MULTRET + 1;
   for (;;)
   {
     switch (slottag(L, func) & WITHVARIANT_MASK)
@@ -616,7 +616,7 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
 
 CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
 {
-  unsigned status = ((unsigned int)(nresults + 1));
+  l_uint32 status = nresults + 1;
   assert(status <= MAXRESULTS + 1);
   for (;;)
   {

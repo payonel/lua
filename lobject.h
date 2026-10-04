@@ -244,7 +244,7 @@ struct Udata : GCListed
   byte_span data;
   bool zb;
 
-  static Udata* luaS_newudata(lua_State* L, size_t s, unsigned short nuvalue);
+  static Udata* luaS_newudata(lua_State* L, size_t s, int nuvalue);
 };
 
 /* get the address of the memory block inside 'Udata' */
@@ -852,12 +852,12 @@ struct FmtArgs
   FmtArgs& lint(lua_Integer i);
   FmtArgs& flt(lua_Number f);
   FmtArgs& ptr(const void* p);
-  FmtArgs& utf8(unsigned long u);
+  FmtArgs& utf8(lua_Integer u);
 };
 
 /* }================================================================== */
 
-LUAI_FUNC int luaO_utf8esc(byte_span buff, l_uint32 x);
+LUAI_FUNC int luaO_utf8esc(byte_span buff, lua_Integer x);
 LUAI_FUNC int luaO_ceillog2(int x);
 LUAI_FUNC int luaO_codeparam(lua_Integer p);
 LUAI_FUNC l_mem luaO_applyparam(int p, l_mem x);

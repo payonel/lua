@@ -1501,9 +1501,9 @@ static size_t formatint(lua_State* L, int arg, byte_view form,
   int base = (spec.conv == 'o') ? 8
              : (spec.conv == 'x' || spec.conv == 'X') ? 16
                                                       : 10;
-  unsigned long long u = (issigned && n < 0)
-                             ? 0ULL - ((unsigned long long)(n))
-                             : ((unsigned long long)(n));
+  lua_Unsigned u = (issigned && n < 0)
+                       ? 0u - ((lua_Unsigned)(n))
+                       : ((lua_Unsigned)(n));
   byte_span digits(24);
   size_t ndigits = digits.write_number(u, base);
   if (spec.conv == 'X')
@@ -2145,7 +2145,7 @@ static int str_pack(lua_State* L)
     { /* unsigned integers */
       lua_Integer n = luaL_checkinteger(L, arg);
       if (size < SZINT) /* need overflow check? */
-        luaL_argchecki(L, l_ult((lua_Unsigned) n, (lua_Unsigned) 1 << (size * NB)), arg, lt::unsigned_overflow);
+        luaL_argchecki(L, l_ult(n, lua_Integer{1} << (size * NB)), arg, lt::unsigned_overflow);
       packint(&b, (lua_Unsigned) n, h.islittle, size, 0);
       break;
     }

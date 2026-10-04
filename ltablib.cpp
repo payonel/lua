@@ -91,7 +91,7 @@ static int tinsert(lua_State* L)
     lua_Integer i;
     pos = luaL_checkinteger(L, 2); /* 2nd argument is the position */
     /* check whether 'pos' is in [1, e] */
-    luaL_argchecki(L, l_ult((lua_Unsigned) pos - 1u, (lua_Unsigned) e), 2, lt::position_out_of_bounds);
+    luaL_argchecki(L, l_ult(l_intsub(pos, 1), e), 2, lt::position_out_of_bounds);
     for (i = e; i > pos; i--)
     { /* move up elements */
       lua_geti(L, 1, i - 1);
@@ -114,7 +114,7 @@ static int tremove(lua_State* L)
   lua_Integer pos = luaL_optinteger(L, 2, size);
   if (pos != size) /* validate 'pos' if given */
     /* check whether 'pos' is in [1, size + 1] */
-    luaL_argchecki(L, !l_ult((lua_Unsigned) size, (lua_Unsigned) pos - 1u), 2, lt::position_out_of_bounds);
+    luaL_argchecki(L, !l_ult(size, l_intsub(pos, 1)), 2, lt::position_out_of_bounds);
   lua_geti(L, 1, pos); /* result = t[pos] */
   for (; pos < size; pos++)
   {
@@ -219,14 +219,14 @@ static int tpack(lua_State* L)
 
 static int tunpack(lua_State* L)
 {
-  lua_Unsigned n;
+  lua_Integer n;
   lua_Integer len = aux_getn(L, 1, TAB_R);
   lua_Integer i = luaL_optinteger(L, 2, 1);
   lua_Integer e = (lua_isnoneornil(L, (3)) ? (len) : luaL_checkinteger(L, (3)));
   if (i > e)
     return 0;                      /* empty range */
-  n = ((lua_Unsigned)(e)) - ((lua_Unsigned)(i)); /* number of elements minus 1 */
-  if (l_unlikely(n >= (unsigned int) INT_MAX ||
+  n = l_intsub(e, i); /* number of elements minus 1 */
+  if (l_unlikely(!l_ult(n, INT_MAX) ||
                  !lua_checkstack(L, (int) (++n))))
     return luaL_errori(L, lt::too_many_results_to_unpack);
   for (; i < e; i++)

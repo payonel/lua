@@ -535,7 +535,7 @@ static IntParse l_str2int(byte_view s, size_t off)
       int d = s[p] - '0';
       if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + neg)) /* overflow? */
         return {byte_view::npos, 0};                            /* do not accept it (as integer) */
-      a = a * 10 + ((unsigned int)(d));
+      a = a * 10 + d;
       empty = 0;
     }
   }
@@ -567,15 +567,15 @@ size_t luaO_str2num(byte_view s, TValue* o)
   return e + 1;
 }
 
-int luaO_utf8esc(byte_span buff, l_uint32 x)
+int luaO_utf8esc(byte_span buff, lua_Integer x)
 {
   int n = 1; /* number of bytes put in buffer (backwards) */
-  assert(x <= 0x7FFFFFFFu);
+  assert(0 <= x && x <= 0x7FFFFFFF);
   if (x < 0x80) /* ASCII? */
     buff[UTF8BUFFSZ - 1] = ((char)(x));
   else
   {                          /* need continuation bytes */
-    unsigned int mfb = 0x3f; /* maximum that fits in first byte */
+    int mfb = 0x3f; /* maximum that fits in first byte */
     do
     { /* add continuation bytes */
       buff[UTF8BUFFSZ - (n++)] = ((char)(0x80 | (x & 0x3f)));
@@ -823,11 +823,11 @@ FmtArgs& FmtArgs::ptr(const void* p)
   return *this;
 }
 
-FmtArgs& FmtArgs::utf8(unsigned long u)
+FmtArgs& FmtArgs::utf8(lua_Integer u)
 {
   assert(n < MAXFMTARGS);
   arg[n].tag = 'U';
-  arg[n].i = ((lua_Integer)(u));
+  arg[n].i = u;
   n++;
   return *this;
 }
@@ -896,7 +896,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     {
       assert(argn < args.n && args.arg[argn].tag == 'U');
       byte_span bf(UTF8BUFFSZ);
-      int len = luaO_utf8esc(bf, ((l_uint32)(args.arg[argn++].i)));
+      int len = luaO_utf8esc(bf, args.arg[argn++].i);
       addstr2buff(&buff, bf.view().substr(UTF8BUFFSZ - len));
       break;
     }

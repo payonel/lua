@@ -438,8 +438,7 @@ static int auxgetinfo(lua_State* L, byte_view what, size_t wpos,
       if (ci != nullptr)
       {
         ar->istailcall = !!(ci->callstatus & CIST_TAIL);
-        ar->extraargs =
-            ((unsigned char)((ci->callstatus & MAX_CCMT) >> CIST_CCMT));
+        ar->extraargs = (ci->callstatus & MAX_CCMT) >> CIST_CCMT;
       }
       else
       {
