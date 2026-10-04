@@ -147,6 +147,11 @@ struct GCObject
   lu_byte marked;
 };
 
+struct GCListed : GCObject
+{
+  GCObject* gclist;
+};
+
 /* Bit mark for collectable types */
 constexpr int BIT_ISCOLLECTABLE = (1 << 6);
 
@@ -232,10 +237,9 @@ constexpr lu_byte LUA_VLIGHTUSERDATA = makevariant(LUA_TLIGHTUSERDATA, 0);
 constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
 
 struct Table;
-struct Udata : GCObject
+struct Udata : GCListed
 {
   Table* metatable;
-  GCObject* gclist;
   std::span<TValue> uv;
   byte_span data;
   bool zb;
@@ -316,7 +320,7 @@ constexpr int PF_FIXED = 4; /* prototype has parts in fixed memory */
 /*
 ** Function Prototypes
 */
-struct Proto : GCObject
+struct Proto : GCListed
 {
   lu_byte numparams; /* number of fixed (named) parameters */
   lu_byte flag;
@@ -331,7 +335,6 @@ struct Proto : GCObject
   std::span<AbsLineInfo> abslineinfo; /* idem */
   std::span<LocVar> locvars;          /* information about local variables (debug information) */
   TString* source;          /* used for debug information */
-  GCObject* gclist;
 
   static Proto* luaF_newproto(lua_State* L);
 
@@ -371,7 +374,7 @@ constexpr lu_byte LUA_VCCL = makevariant(LUA_TFUNCTION, 2); /* C closure */
 struct UpVal : GCObject
 {
   struct UpVal* opennext;
-  struct UpVal** previous;
+  struct UpVal* prevopen;
   struct lua_State* owner;
   StkId stkid;
   TValue value;
@@ -380,12 +383,11 @@ struct UpVal : GCObject
   void luaF_unlinkupval();
 
 private:
-  static UpVal* newupval(lua_State* L, StkId level, UpVal** prev);
+  static UpVal* newupval(lua_State* L, StkId level, UpVal* prev);
 };
 
-struct Closure : GCObject
+struct Closure : GCListed
 {
-  GCObject* gclist;
 };
 
 struct CClosure : Closure
@@ -456,7 +458,7 @@ struct Node
 
 struct Counters;
 
-struct Table : GCObject
+struct Table : GCListed
 {
   lu_byte flags;      /* 1<<p means tagmethod(p) is not present */
   std::span<Value> array; /* array part: values, forward-indexed */
@@ -465,7 +467,6 @@ struct Table : GCObject
   int lastfree;
   unsigned lenhint;   /* hint for #t; see luaH_getn */
   struct Table* metatable;
-  GCObject* gclist;
 
   static Table* luaH_new(lua_State* L);
 

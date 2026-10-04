@@ -183,16 +183,20 @@ void TString::luaS_remove(lua_State* L)
     auto& st = g->strt;
     if (st.buckets.empty())
       return;
-    TString** p = &st.buckets[ts->hash & (st.buckets.size() - 1)];
-    while (*p != nullptr)
+    size_t b = ts->hash & (st.buckets.size() - 1);
+    TString* prev = nullptr;
+    for (TString* p = st.buckets[b]; p != nullptr; p = p->hnext)
     {
-      if (*p == ts)
+      if (p == ts)
       {
-        *p = ts->hnext;
+        if (prev != nullptr)
+          prev->hnext = ts->hnext;
+        else
+          st.buckets[b] = ts->hnext;
         st.count--;
         return;
       }
-      p = &(*p)->hnext;
+      prev = p;
     }
   }
 }

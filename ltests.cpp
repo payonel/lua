@@ -625,11 +625,11 @@ static l_mem checkgrays(global_State* g)
   l_mem total = 0; /* count number of elements in all lists */
   if (!keepinvariant(g))
     return total;
-  total += checkgraylist(g, g->gray);
-  total += checkgraylist(g, g->grayagain);
-  total += checkgraylist(g, g->weak);
-  total += checkgraylist(g, g->allweak);
-  total += checkgraylist(g, g->ephemeron);
+  total += checkgraylist(g, g->gray.gclist);
+  total += checkgraylist(g, g->grayagain.gclist);
+  total += checkgraylist(g, g->weak.gclist);
+  total += checkgraylist(g, g->allweak.gclist);
+  total += checkgraylist(g, g->ephemeron.gclist);
   return total;
 }
 
@@ -715,15 +715,15 @@ static int lua_checkmemory(lua_State* L)
 
   /* check 'allgc' list */
   maybedead = (GCSatomic < g->gcstate && g->gcstate <= GCSswpallgc);
-  totalshould = checklist(g, maybedead, 0, g->allgc,
+  totalshould = checklist(g, maybedead, 0, g->allgc.next,
                           g->survival, g->old1, g->reallyold);
 
   /* check 'finobj' list */
-  totalshould += checklist(g, 0, 1, g->finobj,
+  totalshould += checklist(g, 0, 1, g->finobj.next,
                            g->finobjsur, g->finobjold1, g->finobjrold);
 
   /* check 'tobefnz' list */
-  for (o = g->tobefnz; o != nullptr; o = o->next)
+  for (o = g->tobefnz.next; o != nullptr; o = o->next)
   {
     checkobject(g, o, 0, G_NEW);
     incifingray(g, o, &totalshould);

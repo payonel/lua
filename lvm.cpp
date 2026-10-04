@@ -965,7 +965,7 @@ lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y)
 ** create a new Lua closure, push it in the stack, and initialize
 ** its upvalues.
 */
-static void pushclosure(lua_State* L, Proto* p, UpVal** encup, StkId base,
+static void pushclosure(lua_State* L, Proto* p, std::span<UpVal*> encup, StkId base,
                         StkId ra)
 {
   int nup = (int)p->upvalues.size();
@@ -2860,7 +2860,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         Proto* p = cl->p->p[GETARG_Bx(i)];
         ci->savedpc = pc;
         L->top = ci->top;
-        pushclosure(L, p, cl->upvals.data(), base, ra);
+        pushclosure(L, p, cl->upvals, base, ra);
         if (L->l_G->GCdebt <= 0)
         {
           ci->savedpc = pc;

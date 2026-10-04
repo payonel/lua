@@ -22,7 +22,7 @@ constexpr int MAXUPVAL = 255;
 
 static l_forceinline int upisopen(const UpVal* up)
 {
-  return up->previous != nullptr;
+  return up->owner != nullptr;
 }
 
 static l_forceinline StkId uplevel(const UpVal* up)

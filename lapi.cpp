@@ -1749,10 +1749,10 @@ struct UpvalAddr
 {
   TValue* row;
   UpVal* uv;
+  GCObject* owner;
 };
 
-static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
-                               GCObject** owner)
+static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr)
 {
   switch (((fi)->tt_ & WITHVARIANT_MASK))
   {
@@ -1761,12 +1761,8 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
     CClosure* f = clCvalue(fi);
     if (!(((unsigned int)(n)) - 1u < ((unsigned int)(f->upvalue.size()))))
       return nullptr; /* 'n' not in [1, f->nupvalues] */
-    *addr = {&f->upvalue[n - 1], nullptr};
-    if (owner)
-    {
-      assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-      *owner = f;
-    }
+    assert((f->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    *addr = {&f->upvalue[n - 1], nullptr, f};
     return &lt::empty_str_i;
   }
   case LUA_VLCL:
@@ -1776,12 +1772,8 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
     Proto* p = f->p;
     if (!(((unsigned int)(n)) - 1u < ((unsigned int)(p->upvalues.size()))))
       return nullptr; /* 'n' not in [1, p->sizeupvalues] */
-    *addr = {nullptr, f->upvals[n - 1]};
-    if (owner)
-    {
-      assert((f->upvals[n - 1]->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-      *owner = f->upvals[n - 1];
-    }
+    assert((f->upvals[n - 1]->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    *addr = {nullptr, f->upvals[n - 1], f->upvals[n - 1]};
     name = p->upvalues[n - 1].name;
     return (name == nullptr) ? &lt::no_name_i : &name->data;
   }
@@ -1793,10 +1785,10 @@ static const InternalString* aux_upvalue(TValue* fi, int n, UpvalAddr* addr,
 const InternalString* lua_getupvaluei(lua_State* L, int funcindex, int n)
 {
   const InternalString* name;
-  UpvalAddr addr = {{}, nullptr};
+  UpvalAddr addr = {{}, nullptr, nullptr};
   lua_lock(L);
   TValue fi = index2val(L, funcindex);
-  name = aux_upvalue(&fi, n, &addr, nullptr);
+  name = aux_upvalue(&fi, n, &addr);
   if (name)
   {
     TValue v = (addr.uv != nullptr) ? upvalgetval(addr.uv) : *addr.row;
@@ -1818,12 +1810,11 @@ LUA_API std::optional<HostString> lua_getupvalue(lua_State* L, int funcindex, in
 const InternalString* lua_setupvaluei(lua_State* L, int funcindex, int n)
 {
   const InternalString* name;
-  UpvalAddr addr = {{}, nullptr};
-  GCObject* owner = nullptr; /* to avoid warnings */
+  UpvalAddr addr = {{}, nullptr, nullptr};
   lua_lock(L);
   TValue fi = index2val(L, funcindex);
   api_checknelems(L, 1);
-  name = aux_upvalue(&fi, n, &addr, &owner);
+  name = aux_upvalue(&fi, n, &addr);
   if (name)
   {
     L->top--;
@@ -1834,7 +1825,7 @@ const InternalString* lua_setupvaluei(lua_State* L, int funcindex, int n)
     {
       setobj(L, addr.row, &v);
     }
-    luaC_barrier(L, owner, &v);
+    luaC_barrier(L, addr.owner, &v);
   }
   lua_unlock(L);
   return name;
@@ -1848,13 +1839,11 @@ LUA_API std::optional<HostString> lua_setupvalue(lua_State* L, int funcindex, in
   return HostString(name->view());
 }
 
-static UpVal* getupval(lua_State* L, int fidx, int n, LClosure** pf)
+static UpVal* getupval(lua_State* L, int fidx, int n)
 {
   TValue fi = index2val(L, fidx);
   assert(((fi.tt_ == ctb(LUA_VLCL))) && "Lua function expected");
   LClosure* f = clLvalue(&fi);
-  if (pf)
-    *pf = f;
   if (1 <= n && n <= (int)f->p->upvalues.size())
     return f->upvals[n - 1]; /* get its upvalue */
   else
@@ -1868,7 +1857,7 @@ LUA_API void* lua_upvalueid(lua_State* L, int fidx, int n)
   {
   case LUA_VLCL:
   { /* lua closure */
-    return getupval(L, fidx, n, nullptr);
+    return getupval(L, fidx, n);
   }
   case LUA_VCCL:
   { /* C closure */
@@ -1890,9 +1879,10 @@ LUA_API void* lua_upvalueid(lua_State* L, int fidx, int n)
 LUA_API void lua_upvaluejoin(lua_State* L, int fidx1, int n1,
                              int fidx2, int n2)
 {
-  LClosure* f1;
-  UpVal* uv1 = getupval(L, fidx1, n1, &f1);
-  UpVal* uv2 = getupval(L, fidx2, n2, nullptr);
+  UpVal* uv1 = getupval(L, fidx1, n1);
+  UpVal* uv2 = getupval(L, fidx2, n2);
+  TValue fi1 = index2val(L, fidx1);
+  LClosure* f1 = clLvalue(&fi1);
   assert((uv1 != nullptr && uv2 != nullptr) && "invalid upvalue index");
   f1->upvals[n1 - 1] = uv2;
   luaC_objbarrier(L, f1, uv2);

@@ -74,7 +74,7 @@ void LClosure::luaF_initupvals(lua_State* L)
     UpVal* uv = luaM_malloc_UpVal(L);
     luaC_link(L, uv, LUA_VUPVAL);
     uv->opennext = nullptr;
-    uv->previous = nullptr;
+    uv->prevopen = nullptr;
     uv->owner = nullptr;
     uv->stkid = 0;
     (uv->value.tt_ = LUA_VNIL);
@@ -87,18 +87,21 @@ void LClosure::luaF_initupvals(lua_State* L)
 ** Create a new upvalue at the given level, and link it to the list of
 ** open upvalues of 'L' after entry 'prev'.
 **/
-UpVal* UpVal::newupval(lua_State* L, StkId level, UpVal** prev)
+UpVal* UpVal::newupval(lua_State* L, StkId level, UpVal* prev)
 {
   UpVal* uv = luaM_malloc_UpVal(L);
   luaC_link(L, uv, LUA_VUPVAL);
-  UpVal* next = *prev;
+  UpVal* next = (prev != nullptr) ? prev->opennext : L->openupval;
   uv->owner = L;
   uv->stkid = level;
   uv->opennext = next;        /* link it to list of open upvalues */
-  uv->previous = prev;
+  uv->prevopen = prev;
   if (next)
-    next->previous = &uv->opennext;
-  *prev = uv;
+    next->prevopen = uv;
+  if (prev != nullptr)
+    prev->opennext = uv;
+  else
+    L->openupval = uv;
   if (!isintwups(L))
   {                         /* thread not in list of threads with upvalues? */
     L->twups = L->l_G->twups; /* link it to the list */
@@ -113,15 +116,16 @@ UpVal* UpVal::newupval(lua_State* L, StkId level, UpVal** prev)
 */
 UpVal* UpVal::luaF_findupval(lua_State* L, StkId level)
 {
-  UpVal** pp = &L->openupval;
-  UpVal* p;
+  UpVal* pp = nullptr;
+  UpVal* p = L->openupval;
   assert(isintwups(L) || L->openupval == nullptr);
-  while ((p = *pp) != nullptr && uplevel(p) >= level)
+  while (p != nullptr && uplevel(p) >= level)
   { /* search for it */
     assert(!isdead(L->l_G, p));
     if (uplevel(p) == level) /* corresponding upvalue? */
       return p;              /* return it */
-    pp = &p->opennext;
+    pp = p;
+    p = p->opennext;
   }
   /* not found: create a new upvalue after 'pp' */
   return UpVal::newupval(L, level, pp);
@@ -214,9 +218,12 @@ void luaF_newtbcupval(lua_State* L, StkId level)
 void UpVal::luaF_unlinkupval()
 {
   assert(upisopen(this));
-  *previous = opennext;
+  if (prevopen != nullptr)
+    prevopen->opennext = opennext;
+  else
+    owner->openupval = opennext;
   if (opennext)
-    opennext->previous = previous;
+    opennext->prevopen = prevopen;
 }
 
 /*
@@ -231,7 +238,7 @@ void luaF_closeupval(lua_State* L, StkId level)
     assert(uplevel(uv) < L->top);
     uv->luaF_unlinkupval();       /* remove upvalue from 'openupval' list */
     setobj(L, slot, uv->stkid); /* move value to upvalue slot */
-    uv->previous = nullptr;
+    uv->prevopen = nullptr;
     uv->opennext = nullptr;
     uv->owner = nullptr;
     if (!iswhite(uv))

@@ -193,7 +193,7 @@ static l_forceinline lu_byte getoah(const CallInfo* ci)
 ** 'per thread' state
 */
 struct global_State;
-struct lua_State : GCObject
+struct lua_State : GCListed
 {
   lu_byte allowhook;
   TStatus status;
@@ -206,7 +206,6 @@ struct lua_State : GCObject
   StkId tbclist;
   std::span<StkId> tbc;
   int ntbc;
-  GCObject* gclist;
   struct lua_State* twups;      /* list of threads with open upvalues */
   struct lua_longjmp* errorJmp; /* current error recover point */
   CallInfo base_ci;             /* CallInfo for first level (C host) */
@@ -505,15 +504,15 @@ struct global_State
   lu_byte gcstopem;    /* stops emergency collections */
   lu_byte gcstp;       /* control whether GC is running */
   lu_byte gcemergency; /* true if this is an emergency collection */
-  GCObject* allgc;     /* list of all collectable objects */
-  GCObject** sweepgc;  /* current position of sweep in list */
-  GCObject* finobj;    /* list of collectable objects with finalizers */
-  GCObject* gray;      /* list of gray objects */
-  GCObject* grayagain; /* list of objects to be traversed atomically */
-  GCObject* weak;      /* list of tables with weak values */
-  GCObject* ephemeron; /* list of ephemeron tables (weak keys) */
-  GCObject* allweak;   /* list of all-weak tables */
-  GCObject* tobefnz;   /* list of userdata to be GC */
+  GCObject allgc;      /* list of all collectable objects */
+  GCObject* sweepgc;  /* current position of sweep in list */
+  GCObject finobj;     /* list of collectable objects with finalizers */
+  GCListed gray;       /* list of gray objects */
+  GCListed grayagain;  /* list of objects to be traversed atomically */
+  GCListed weak;       /* list of tables with weak values */
+  GCListed ephemeron;  /* list of ephemeron tables (weak keys) */
+  GCListed allweak;    /* list of all-weak tables */
+  GCObject tobefnz;    /* list of userdata to be GC */
   GCObject* fixedgc;   /* list of objects not to be collected */
   /* fields for generational collector */
   GCObject* survival;                        /* start of objects that survived one GC cycle */

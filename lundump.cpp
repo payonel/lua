@@ -131,7 +131,8 @@ static lua_Integer loadInteger(LoadState* S)
 ** possible GC activity, to anchor the string. (Both 'loadVector' and
 ** 'luaH_setint' can call the GC.)
 */
-static void loadString(LoadState* S, Proto* p, TString** sl)
+template <typename SetSlot>
+static void loadString(LoadState* S, Proto* p, SetSlot setslot)
 {
   lua_State* L = S->L;
   TString* ts;
@@ -143,13 +144,14 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     TValue stv;
     if (idx == 0)
     {                          /* no string? */
-      assert(*sl == nullptr); /* must be prefilled */
+      setslot(nullptr);
       return;
     }
     if ((S->h->luaH_getint(((lua_Integer)(idx)), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
       error(S, lt::invalid_string_index);
     assert((stv.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
-    *sl = ts = tsvalue(&stv); /* get its value */
+    ts = tsvalue(&stv); /* get its value */
+    setslot(ts);
     luaC_objbarrier(L, p, ts);
     return; /* do not save it again */
   }
@@ -158,7 +160,8 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     char buff[41];
     loadBlock(S, buff, ((size_t)(size + 1)) * sizeof((buff)[0]));          /* load string into buffer */
     byte_view buffstr{buff, size};
-    *sl = ts = TString::luaS_createstr(L, buffstr); /* create string */
+    ts = TString::luaS_createstr(L, buffstr); /* create string */
+    setslot(ts);
     luaC_objbarrier(L, p, ts);
   }
   else
@@ -167,7 +170,8 @@ static void loadString(LoadState* S, Proto* p, TString** sl)
     tmp.growTo(size + 1);
     loadBlock(S, tmp.area().data(), ((size_t)(size + 1)) * sizeof(char));
     byte_view tmpsv{tmp.area().data(), size};
-    *sl = ts = TString::luaS_createstr(L, tmpsv);
+    ts = TString::luaS_createstr(L, tmpsv);
+    setslot(ts);
     luaC_objbarrier(L, p, ts);
   }
   /* add string to list of saved strings */
@@ -226,7 +230,7 @@ static void loadConstants(LoadState* S, Proto* f)
     case LUA_VSHRSTR:
     {
       assert(f->source == nullptr);
-      loadString(S, f, &f->source); /* use 'source' to anchor string */
+      loadString(S, f, [f](TString* ts) { f->source = ts; }); /* use 'source' to anchor string */
       if (f->source == nullptr)
         error(S, lt::bad_format_for_constant_string);
       setsvalue(S->L, o, f->source); /* save it in the right place */
@@ -308,7 +312,7 @@ static void loadDebug(LoadState* S, Proto* f)
     f->locvars[i].varname = nullptr;
   for (i = 0; i < n; i++)
   {
-    loadString(S, f, &f->locvars[i].varname);
+    loadString(S, f, [f, i](TString* ts) { f->locvars[i].varname = ts; });
     f->locvars[i].startpc = loadInt(S);
     f->locvars[i].endpc = loadInt(S);
   }
@@ -316,7 +320,7 @@ static void loadDebug(LoadState* S, Proto* f)
   if (n != 0)            /* does it have debug information? */
     n = (int)f->upvalues.size(); /* must be this many */
   for (i = 0; i < n; i++)
-    loadString(S, f, &f->upvalues[i].name);
+    loadString(S, f, [f, i](TString* ts) { f->upvalues[i].name = ts; });
 }
 
 static void loadFunction(LoadState* S, Proto* f)
@@ -333,7 +337,7 @@ static void loadFunction(LoadState* S, Proto* f)
   loadConstants(S, f);
   loadUpvalues(S, f);
   loadProtos(S, f);
-  loadString(S, f, &f->source);
+  loadString(S, f, [f](TString* ts) { f->source = ts; });
   loadDebug(S, f);
 }
 

@@ -339,7 +339,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   L->marked = luaC_white(g);
   preinit_thread(L, g);
   assert((L->tt & NOVARIANT_MASK) >= LUA_TSTRING);
-  g->allgc = L; /* by now, only object is the main thread */
+  g->allgc.next = L; /* by now, only object is the main thread */
   L->next = nullptr;
   incnny(L); /* main thread is always non yieldable */
   g->frealloc = f;
@@ -354,12 +354,12 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   g->gckind = KGC_INC;
   g->gcstopem = 0;
   g->gcemergency = 0;
-  g->finobj = g->tobefnz = g->fixedgc = nullptr;
+  g->finobj.next = g->tobefnz.next = g->fixedgc = nullptr;
   g->firstold1 = g->survival = g->old1 = g->reallyold = nullptr;
   g->finobjsur = g->finobjold1 = g->finobjrold = nullptr;
   g->sweepgc = nullptr;
-  g->gray = g->grayagain = nullptr;
-  g->weak = g->ephemeron = g->allweak = nullptr;
+  g->gray.gclist = g->grayagain.gclist = nullptr;
+  g->weak.gclist = g->ephemeron.gclist = g->allweak.gclist = nullptr;
   g->twups = nullptr;
   g->GCtotalbytes = sizeof(global_State);
   g->GCmarked = 0;
