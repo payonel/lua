@@ -418,6 +418,27 @@ Accounting `sizeof`s are handled by M2.
 **Done when:** `tpack.lua` and `tests/deep` pass, and `sizeof` remains
 only in accounting and `static_assert`s.
 
+**Status: done** (`29b16559`) for the Lua-visible sizes.
+
+**Decisions:**
+- **Each pinned width has a `static_assert`** against the host `sizeof`,
+  so the C++ build still refuses a host where they differ.
+- **`luaO_pushvfstring` `%c`** wrote through a view over a single local
+  `char`; it is now a one-element array.
+- **`sizeof` still present, owned by other tasks:**
+  - **M2 (accounting and GC pacing):** `objsize`, `luaF_protosize`,
+    `luaH_size`, `luaE_threadsize`, `sizeLclosure`/`sizeCclosure`,
+    `LUAI_GCSTEPSIZE`, `lgc` step `sizeof(void*)`, `global_State`.
+  - **M1 (limits):** `MAX_SIZE`, `MAX_LMEM`, `MAXASIZEB`, `MAXHSIZE`,
+    `MAXABITS`, `MAXSTACK_BYSIZET`, and the
+    `MAX_SIZE - sizeof(TString/Udata)` checks.
+  - **L9 (chunk I/O):** `lundump`/`ldump`.
+  - **M4 (userdata payloads):** the `sizeof(LStream/RanState/GMatchState
+    /void*)` userdata sizes.
+  - **M5:** `LUA_EXTRASPACE`.
+
+**Results:** `make full` green, including `tpack.lua`.
+
 ### L7. Signed compatibility
 
 **Effort:** high (many sites, mostly mechanical) · **Risk:** medium · **A/B**
