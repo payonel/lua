@@ -1409,6 +1409,11 @@ passes. A/B: see the C-phase summary row in C12.
 
 `llex.*`, `lparser.*`, `lcode.*`, plus `ldump.cpp`/`lundump.cpp`.
 
+**Status: done** (`b223e5ee`). `llex`, `lparser`, `lcode`, `ldump` and
+`lundump` are in `lua::compiler`, and `lopnames.h`'s name table is in
+`lua::vm`. `lcode.cpp`'s two mid-file includes move up with the others.
+`make full` passes.
+
 ### C7. `lua::api`
 
 `lapi.cpp` → `LuaState`'s public methods; `lauxlib.cpp` → `LuaAuxLib`.
