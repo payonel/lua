@@ -1518,6 +1518,80 @@ helpers that remain. `l_noret` → `[[noreturn]]`. `l_forceinline`,
   - M2 cost constants
   - L3 interfaces
 
+**Status: done** (`256b6244`).
+
+**Audit (every "Done when" re-run at the end):**
+- **L1:** `T**` appears only in `lua.cpp` (`argv`, readline `dlsym`).
+- **L2:** no `InternalString**`. Out-params are result structs.
+- **L3:** no `void* ud` and no `static_cast<X*>(ud)`.
+- **L4:** `memcpy`/`memmove`/`memset` and `.data()` arithmetic appear
+  only in `bytes.h` and `os_api.cpp`.
+  - The audit caught `luaZ_read`'s `memcpy` (added in L9). It now goes
+    through `bytes.h` `copy_bytes` (`256b6244`).
+- **L5:** `point2uint` (the identity hash), `uintptr_t` (`util_cast.h`)
+  and `const_cast` (`setpvalue`, `luaZ_overlay`) appear only in the
+  recorded identity and overlay functions.
+- **L6/M2:** `sizeof` remains in `static_assert`s, the chunk-format
+  element widths of `ldump`/`lundump`'s typed I/O templates, and
+  `luaZ_overlay`. These are recorded in M2.
+- **L8:** no libc ctype call outside `locale_util.cpp`.
+- **L9:** `lundump.cpp` has no pointer casts.
+- **L10:** `loadlib.cpp` has no `reinterpret_cast`.
+- **L12:** `loslib.cpp` uses no libc time function and no `<time.h>`.
+- **L11:** casts total 550 (arithmetic 394), down from 985 (arithmetic
+  811) at the plan's start. Every remaining cast falls in one of L11's
+  recorded groups.
+- **M3:** `TValue` copies are compiler-enforced through
+  `getobj`/`copyobj`/`setobj`/`copynode`.
+- **M4:** no `static_cast` on a userdata *payload*. The one
+  `static_cast<OsLib*>(lua_touserdata)` left in `loadlib` reads a
+  *light* userdata (L10).
+- **M5:** `lhack.h` has no `LUA_EXTRASPACE` or pointer puns.
+- **M6:** `bytes.h` has no `shared_ptr`.
+- **Frees:** every `luaM_free_*` and every
+  `luaM_alloc_*_span(…, 0, …)` is accounting (`free_debt`/
+  `_alloc_span_request`) plus `delete`/`delete[]`. Each call site then
+  either replaces the field with the new block (`luaD_reallocstack`,
+  `luaH_resize`'s array/hash, buffer growth) or destroys the owner
+  (`freeobj`, `luaE_freethread`, `luaF_freeproto`).
+  - AddressSanitizer + UBSan ran the full suite, deep tests and
+    `test_public_api` clean in both configurations (M6). Nothing reads
+    freed storage.
+
+**Port checklist (C++ idiom → one Java transcription):**
+
+| C++ | Java |
+|---|---|
+| package namespace `lua::x` | package `lua.x` |
+| file `lxxx.cpp` + prefix `luaX_` | class (`Ldo`, `Lvm`, `Lcode`, …) with static methods. `Table::`/`TString::`/`Proto::` methods stay instance methods |
+| file-scope `static` in a package | `private static` |
+| public `lua_*`/`luaL_*` (global) | `public static` on `LuaApi`/`LuaAuxLib`; `luaopen_*` on each library class |
+| `byte_owner`, `byte_inline<N>` | `byte[]` (`new byte[N]`) |
+| `byte_span`, `byte_view` | `byte[]` + offset + length (views read-only by convention); loops advance an index over one base view |
+| `HostString` | `String` (consumer text) |
+| `std::optional<T*>`/`std::optional<byte_view>` | nullable reference |
+| `std::optional<lua_Integer>`/`<lua_Number>`, `IntResult`/`NumResult`, result structs | small result classes (or `OptionalLong`/`OptionalDouble`) |
+| `std::unique_ptr<T>` | plain reference |
+| `std::span<T>` arrays | `T[]` (length is the array's) |
+| `l_intadd`/`sub`/`mul`/`unm`/`bnot`/`band`/`bor`/`bxor` | `+ - * - ~ & \| ^` on `long` |
+| `l_ult`, `l_umod`, `(lua_Unsigned)` `/` and `>>` | `Long.compareUnsigned(a,b) < 0`, `Long.remainderUnsigned`, `Long.divideUnsigned`, `>>>` |
+| bit containers (hash, seed, `Instruction`, `callstatus`) | `int` with `>>>` where shifted |
+| `(unsigned char)c` | `c & 0xFF` |
+| `(int)`, `(lu_byte)`, `(char)` narrowing | `(int)`, `(byte)` |
+| `StkId` (`ptrdiff_t`) | `int` |
+| slot accessors (`getslot`/`setslot`/`copyslot`/`slot2obj`/`slotival`/…) | stack columns `long[] prim`, `Object[] ref`, `byte[] tag` |
+| `getArrTag`/`setArrTag`/`getArrVal`/`arr2obj`/`obj2arr`/`farr2val`/`fval2arr` | `Table` array columns `long[]`/`Object[]`/`byte[]` |
+| `Node`, `gnode(t,i)`, `&gnode(t,i)->val` | `Node extends TValue` (flattened key fields) in `Node[]`; the node itself |
+| `getobj`/`copyobj`/`copynode`/`setobj` | explicit field copies (never share a `TValue`) |
+| `cost::X` | `static final int` |
+| `ProtectedCall`, `lua_Reader`, `lua_Writer`, `lua_Alloc`, `lua_WarnFunction`, `lua_UserObject` | interfaces / abstract classes; `lua_UserObject` is `Object` |
+| `Proto::code` (`std::span<Instruction>`, `luaZ_overlay` for fixed chunks) | code store over `byte[]` read with a little-endian `VarHandle` (aliases fixed buffers; see port-time notes) |
+| `GCListed` sentinel list heads | sentinel objects |
+| `[[noreturn]]` + `luaD_throw` | `throw` |
+| `l_forceinline`, `l_likely`/`l_unlikely`, `lhack.h` | dropped (JIT) |
+| `os_api`, `locale_util` | reimplemented on the JVM |
+| `as_byte_view`, `copy_bytes`, `luaZ_overlay`, `util::pointertext` | `byte[]` access / identity hash text |
+
 ### C13. Renaming (optional)
 
 If wanted, drop the C prefixes (`luaH_get` → `get`) and apply Java class
