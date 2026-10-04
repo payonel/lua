@@ -1222,6 +1222,51 @@ C++ needs only unique ownership plus borrowing.
 exists: every buffer that outlives its scope is a `byte_owner` member.
 Scratch-buffer A/B results are recorded.
 
+**Status: done** (`33428451`, `731cbe00`, `73c17300`).
+- **Types:**
+  - `byte_span` is now a non-owning pointer + length. Its raw-pointer
+    constructor stays private, so spans come only from an owner or from
+    `subspan`.
+  - `byte_owner` is the move-only owner (`unique_ptr<char[]>` + size).
+  - `byte_inline<N>` is a fixed-capacity owner with inline storage, the
+    counterpart of upstream's stack arrays.
+  - All three share their write/format methods through a CRTP mixin
+    (`byte_writes<Self>`), so call sites read the same as before.
+  - `shared_ptr` is gone from `bytes.h`.
+- **Owners:** `Udata::data`, `MBuffer::bytes_`, `luaL_Buffer::bytes`,
+  `BuffFS::b`, `InternalDebug::short_src_out` and `LoadF::buff` are
+  `byte_owner`.
+  - `luaM_alloc_char_span` borrows the old block (for accounting and
+    copying) and returns a new owner, so a failed growth leaves the
+    caller's buffer intact, as before.
+  - `InternalDebug`'s copy deep-copies `short_src_out`.
+- **Scratch buffers:** the compile-time-sized ones (number → string,
+  format items and specs, UTF-8 escapes, chunk ids, `%p`) are
+  `byte_inline<N>`. Runtime-sized ones (`lvm` concat, the REPL line) are
+  `byte_owner`.
+- **Bugs found by AddressSanitizer + UBSan** (full suite, deep tests and
+  `test_public_api`, release and debug configurations, all clean
+  afterwards):
+  - `lua.cpp`'s REPL kept a `byte_view` into a destroyed `HostString`
+    temporary (`lua_tostring(L, 1)->to_utf8()`), a stack-use-after-scope.
+    This predates M6.
+  - `copy_from` called `memcpy` with a null pointer for an empty source.
+  - Spans from `luaL_buffaddr` now follow upstream's rule (invalid after
+    the buffer grows), and no code depended on the old shared-ownership
+    behavior.
+- **Java:** owner, span and inline buffer all become `byte[]` (+ offset,
+  length). Ownership is implicit.
+
+**Results:** `make full` passes. The scratch-buffer A/B:
+
+| A/B (min) | b_fmt (tostring + string.format ×2M) | b_string |
+|---|---|---|
+| shared span → `byte_owner` (`8ea3f7ed` → `33428451`) | 5.74s → 4.66s (−19%) | 1.21s → 1.02s (−16%) |
+| heap owner → `byte_inline` (`33428451` → `731cbe00`) | 4.45s → 3.97s (−11%) | 0.98s → 0.91s (−7%) |
+
+all.lua and RSS are neutral. `ltests.cpp` got a mechanical type-name
+update (scratch `byte_span(N)` → `byte_owner(N)`).
+
 ---
 
 ## Phase C — class changes
