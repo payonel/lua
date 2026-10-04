@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <string>
 #include <dlfcn.h>
 #include <sys/wait.h>
@@ -52,6 +53,12 @@ int os_strcoll(byte_view a, byte_view b)
   std::string sa(a.data(), a.size());
   std::string sb(b.data(), b.size());
   return strcoll(sa.c_str(), sb.c_str());
+}
+
+size_t os_strftime(byte_span out, size_t off, byte_view fmt, const struct tm* stm)
+{
+  std::string f(fmt.data(), fmt.size());
+  return strftime(out.data() + off, out.size() - off, f.c_str(), stm);
 }
 
 OsResult os_remove(byte_view path)

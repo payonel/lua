@@ -2061,7 +2061,7 @@ static void packFloat(luaL_Buffer* b, float f, int islittle)
   size_t pos = luaL_prepbuffsize(b, sizeof(float));
   byte_span buff = luaL_buffaddr(b);
   luaL_addsize(b, sizeof(float));
-  buff.apply(byte_view::from_float(f), pos);
+  buff.write_float(f, pos);
   if (islittle != nativeendian_little)
   {
     buff.reverse(pos, sizeof(float));
@@ -2073,7 +2073,7 @@ static void packDouble(luaL_Buffer* b, double f, bool islittle)
   size_t pos = luaL_prepbuffsize(b, sizeof(double));
   byte_span buff = luaL_buffaddr(b);
   luaL_addsize(b, sizeof(double));
-  buff.apply(byte_view::from_double(f), pos);
+  buff.write_double(f, pos);
   if (islittle != nativeendian_little)
   {
     buff.reverse(pos, sizeof(double));

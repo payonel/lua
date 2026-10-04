@@ -15,6 +15,9 @@ byte_view os_strerror(int err);
 
 int os_strcoll(byte_view a, byte_view b);
 
+struct tm;
+size_t os_strftime(byte_span out, size_t off, byte_view fmt, const struct tm* stm);
+
 struct OsResult
 {
   bool ok;

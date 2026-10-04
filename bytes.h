@@ -11,6 +11,8 @@
 #include <memory>
 #include <type_traits>
 #include <array>
+#include <bit>
+#include <cstdint>
 
 struct byte_view
 {
@@ -122,26 +124,18 @@ struct byte_view
 
   double toDouble(size_t pos = 0) const
   {
-    double result {};
-    memcpy(reinterpret_cast<void*>(&result), sv.data() + pos, sizeof(double));
-    return result;
+    uint64_t bits = 0;
+    for (size_t i = sizeof(uint64_t); i-- > 0;)
+      bits = (bits << 8) | static_cast<unsigned char>(sv[pos + i]);
+    return std::bit_cast<double>(bits);
   }
 
   float toFloat(size_t pos = 0) const
   {
-    float result {};
-    memcpy(reinterpret_cast<void*>(&result), sv.data() + pos, sizeof(float));
-    return result;
-  }
-
-  static byte_view from_double(const double& f)
-  {
-    return byte_view(std::string_view(reinterpret_cast<const char*>(&f), sizeof(double)));
-  }
-
-  static byte_view from_float(const float& f)
-  {
-    return byte_view(std::string_view(reinterpret_cast<const char*>(&f), sizeof(float)));
+    uint32_t bits = 0;
+    for (size_t i = sizeof(uint32_t); i-- > 0;)
+      bits = (bits << 8) | static_cast<unsigned char>(sv[pos + i]);
+    return std::bit_cast<float>(bits);
   }
 
   std::string_view sv {nullptr, 0};
@@ -189,6 +183,26 @@ struct byte_span
   {
     assert(from.size() + pos <= size());
     return std::copy_n(from.data(), from.size(), data() + pos) - data();
+  }
+
+  void write_double(double v, size_t pos)
+  {
+    uint64_t bits = std::bit_cast<uint64_t>(v);
+    for (size_t i = 0; i < sizeof(uint64_t); i++)
+    {
+      data()[pos + i] = static_cast<char>(bits & 0xFF);
+      bits >>= 8;
+    }
+  }
+
+  void write_float(float v, size_t pos)
+  {
+    uint32_t bits = std::bit_cast<uint32_t>(v);
+    for (size_t i = 0; i < sizeof(uint32_t); i++)
+    {
+      data()[pos + i] = static_cast<char>(bits & 0xFF);
+      bits >>= 8;
+    }
   }
 
   void copy_from(byte_view src, size_t pos = 0)

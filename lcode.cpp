@@ -2133,7 +2133,7 @@ void luaK_setlist(FuncState* fs, int base, int nelems, int tostore)
 /*
 ** return the final target of a jump (skipping jumps to jumps)
 */
-static int finaltarget(Instruction* code, int i)
+static int finaltarget(std::span<const Instruction> code, int i)
 {
   int count;
   for (count = 0; count < 100; count++)
@@ -2197,7 +2197,7 @@ void luaK_finish(FuncState* fs)
     }
     case OP_JMP:
     { /* to optimize jumps to jumps */
-      int target = finaltarget(p->code.data(), i);
+      int target = finaltarget(p->code, i);
       fixjump(fs, i, target); /* jump directly to final target */
       break;
     }

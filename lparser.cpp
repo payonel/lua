@@ -1794,13 +1794,13 @@ static void exp1(LexState* ls)
 */
 static void fixforjump(FuncState* fs, int pc, int dest, int back)
 {
-  Instruction* jmp = &fs->f->code[pc];
+  std::span<Instruction> code = fs->f->code;
   int offset = dest - (pc + 1);
   if (back)
     offset = -offset;
   if (l_unlikely(offset > MAXARG_Bx))
     luaX_syntaxerror(fs->ls, lt::control_structure_too_long);
-  ((*jmp) = (((*jmp) & MASK0(SIZE_Bx, POS_Bx)) | ((((Instruction)(offset)) << POS_Bx) & MASK1(SIZE_Bx, POS_Bx))));
+  code[pc] = ((code[pc] & MASK0(SIZE_Bx, POS_Bx)) | ((((Instruction)(offset)) << POS_Bx) & MASK1(SIZE_Bx, POS_Bx)));
 }
 
 /*
@@ -2182,10 +2182,10 @@ static void exprstat(LexState* ls)
   }
   else
   { /* stat -> func */
-    Instruction* inst;
+    std::span<Instruction> code = fs->f->code;
     check_condition(ls, v.v.k == VCALL, lt::syntax_error);
-    inst = &((fs)->f->code[(&v.v)->info]);
-    ((*inst) = (((*inst) & MASK0(SIZE_C, POS_C)) | ((((Instruction)(1)) << POS_C) & MASK1(SIZE_C, POS_C)))); /* call statement uses no results */
+    int pc = v.v.info;
+    code[pc] = ((code[pc] & MASK0(SIZE_C, POS_C)) | ((((Instruction)(1)) << POS_C) & MASK1(SIZE_C, POS_C))); /* call statement uses no results */
   }
 }
 

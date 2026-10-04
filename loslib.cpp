@@ -258,7 +258,7 @@ static int os_date(lua_State* L)
         sp++; /* skip '%' */
         sp = checkoption(L, sfmt, sp, cc, 1);
         byte_span buff = luaL_buffaddr(&b);
-        reslen = strftime(buff.data() + off, buff.size() - off, cc.data(), stm);
+        reslen = os_strftime(buff, off, cc.str_view(), stm);
         luaL_addsize(&b, reslen);
       }
     }
