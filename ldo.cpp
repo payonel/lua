@@ -30,6 +30,9 @@
 #include "lauxlib.h"
 #include "literals.h"
 
+namespace lua::runtime
+{
+
 constexpr int errorstatus(TStatus s)
 {
   return s > LUA_YIELD;
@@ -896,6 +899,8 @@ static TStatus precover(lua_State* L, TStatus status)
   return status;
 }
 
+}
+
 LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
 {
   TStatus status;
@@ -933,10 +938,12 @@ LUA_API lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
   return {(status), nresults};
 }
 
+
 LUA_API int lua_isyieldable(lua_State* L)
 {
   return yieldable(L);
 }
+
 
 LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
                        lua_KFunction k)
@@ -970,6 +977,9 @@ LUA_API int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
   lua_unlock(L);
   return 0; /* return to 'luaD_hook' */
 }
+
+namespace lua::runtime
+{
 
 /*
 ** Auxiliary structure to call 'luaF_close' in protected mode.
@@ -1147,4 +1157,6 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);
   decnny(L);
   return status;
+}
+
 }

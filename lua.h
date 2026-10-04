@@ -438,7 +438,10 @@ constexpr int LUA_MASKRET = (1 << LUA_HOOKRET);
 constexpr int LUA_MASKLINE = (1 << LUA_HOOKLINE);
 constexpr int LUA_MASKCOUNT = (1 << LUA_HOOKCOUNT);
 
+namespace lua::runtime
+{
 struct CallInfo;
+}
 struct lua_Debug
 {
   int event;

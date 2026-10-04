@@ -6,18 +6,25 @@
 
 #pragma once
 
+#include <signal.h>
 #include <vector>
 
 #include "lua.h"
 
 /* Some header files included here need this definition */
+namespace lua::runtime
+{
 struct CallInfo;
+}
 
 #include "lobject.h"
 #include "ltm.h"
 #include "lzio.h"
 
 #include "lhack.h"
+
+namespace lua::runtime
+{
 
 /*
 ** Moreover, there is another set of lists that control gray objects.
@@ -71,7 +78,6 @@ struct lua_longjmp; /* defined in ldo.c */
 ** Atomic type (relative to signals) to better ensure that 'lua_sethook'
 ** is thread safe
 */
-#include <signal.h>
 typedef sig_atomic_t l_signalT;
 
 /*
@@ -193,6 +199,8 @@ static l_forceinline lu_byte getoah(const CallInfo* ci)
 ** 'per thread' state
 */
 struct global_State;
+}
+
 struct lua_State : GCListed
 {
   lu_byte allowhook;
@@ -224,6 +232,9 @@ struct lua_State : GCListed
   } transferinfo;
   void* extra;
 };
+
+namespace lua::runtime
+{
 
 static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
 {
@@ -271,7 +282,7 @@ static l_forceinline void copyslot(lua_State* to, StkId dst, lua_State* from, St
   copyobj(&to->stack[dst], &from->stack[src]);
 }
 
-static l_forceinline void setobj(lua_State* L, TValue* dst, StkId src)
+static l_forceinline void slot2obj(lua_State* L, TValue* dst, StkId src)
 {
   copyobj(dst, &L->stack[src]);
   checkliveness(L, dst);
@@ -570,3 +581,5 @@ LUAI_FUNC void luaE_incCstack(lua_State* L);
 LUAI_FUNC void luaE_warning(lua_State* L, byte_view msg, int tocont);
 LUAI_FUNC void luaE_warnerror(lua_State* L, byte_view where);
 LUAI_FUNC TStatus luaE_resetthread(lua_State* L, TStatus status);
+
+}

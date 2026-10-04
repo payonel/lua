@@ -25,6 +25,9 @@
 #include "ltm.h"
 #include "literals.h"
 
+namespace lua::runtime
+{
+
 /*
 ** set GCdebt to a new value keeping the real number of allocated
 ** objects (GCtotalobjs - GCdebt) invariant and avoiding overflows in
@@ -268,6 +271,8 @@ static void close_state(lua_State* L)
   delete g;
 }
 
+}
+
 LUA_API lua_State* lua_newthread(lua_State* L)
 {
   global_State* g = L->l_G;
@@ -293,6 +298,9 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   return L1;
 }
 
+namespace lua::runtime
+{
+
 void luaE_freethread(lua_State* L, lua_State* L1)
 {
   luaF_closeupval(L1, 0); /* close all upvalues */
@@ -316,6 +324,8 @@ TStatus luaE_resetthread(lua_State* L, TStatus status)
   return status;
 }
 
+}
+
 LUA_API int lua_closethread(lua_State* L, lua_State* from)
 {
   TStatus status;
@@ -327,6 +337,7 @@ LUA_API int lua_closethread(lua_State* L, lua_State* from)
   lua_unlock(L);
   return (status);
 }
+
 
 LUA_API lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
 {
@@ -387,12 +398,16 @@ LUA_API lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   return L;
 }
 
+
 LUA_API void lua_close(lua_State* L)
 {
   lua_lock(L);
   L = mainthread(L->l_G); /* only the main thread can be closed */
   close_state(L);
 }
+
+namespace lua::runtime
+{
 
 void luaE_warning(lua_State* L, byte_view msg, int tocont)
 {
@@ -420,4 +435,6 @@ void luaE_warnerror(lua_State* L, byte_view where)
   luaE_warning(L, lt::sp_lparen, 1);
   luaE_warning(L, msg, 1);
   luaE_warning(L, lt::rparen, 0);
+}
+
 }

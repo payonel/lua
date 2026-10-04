@@ -1,5 +1,6 @@
 #pragma once
 
+#include "packages.h"
 #include "lhack.h"
 
 struct lua_State;

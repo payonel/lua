@@ -240,7 +240,7 @@ void luaF_closeupval(lua_State* L, StkId level)
     TValue* slot = &uv->value; /* new position for value */
     assert(uplevel(uv) < L->top);
     uv->luaF_unlinkupval();       /* remove upvalue from 'openupval' list */
-    setobj(L, slot, uv->stkid); /* move value to upvalue slot */
+    slot2obj(L, slot, uv->stkid); /* move value to upvalue slot */
     uv->prevopen = nullptr;
     uv->opennext = nullptr;
     uv->owner = nullptr;

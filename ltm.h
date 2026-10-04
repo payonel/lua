@@ -8,6 +8,9 @@
 
 #include "lobject.h"
 
+namespace lua::runtime
+{
+
 /*
  * WARNING: if you change the order of this enumeration,
  * grep "ORDER TM" and "ORDER OP"
@@ -113,3 +116,5 @@ LUAI_FUNC void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc);
 LUAI_FUNC void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, StkId rc);
 LUAI_FUNC void luaT_getvarargs(lua_State* L, struct CallInfo* ci, StkId where,
                                int wanted, int vatab);
+
+}

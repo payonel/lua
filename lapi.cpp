@@ -812,7 +812,7 @@ LUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
     cl->f = fn;
     for (i = 0; i < n; i++)
     {
-      setobj(L, &cl->upvalue[i], L->top - n + i);
+      slot2obj(L, &cl->upvalue[i], L->top - n + i);
       /* does not need barrier because closure is white */
       assert(iswhite(cl));
     }

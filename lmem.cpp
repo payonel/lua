@@ -16,6 +16,9 @@
 #include "lopcodes.h"
 #include "lfunc.h"
 
+namespace lua::runtime
+{
+
 /*
 ** When an allocation fails, it will try again after an emergency
 ** collection, except when it cannot run a collection.  The GC should
@@ -589,4 +592,6 @@ LUAI_FUNC void luaM_free_CallInfo(lua_State* L, CallInfo* p)
 {
   if (p != nullptr) free_debt(L, cost::CallInfo, 0);
   delete p;
+}
+
 }

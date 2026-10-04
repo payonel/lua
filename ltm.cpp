@@ -20,6 +20,9 @@
 #include "lvm.h"
 #include "literals.h"
 
+namespace lua::runtime
+{
+
 LUAI_DDEF const byte_view luaT_typenames_[] = {
     lt::no_value,
     lt::nil, lt::boolean, lt::userdata, lt::number_2,
@@ -441,4 +444,6 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
   }
   for (; i < wanted; i++) /* complete required results with nil */
     setslottag(L, where + i, LUA_VNIL);
+}
+
 }
