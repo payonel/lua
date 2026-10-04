@@ -22,8 +22,7 @@
 struct DumpState
 {
   lua_State* L;
-  lua_Writer writer;
-  void* data;
+  lua_Writer* writer;
   size_t offset; /* current position relative to beginning of dump */
   int strip;
   int status;
@@ -44,7 +43,7 @@ static void dumpBlock(DumpState* D, const void* b, size_t size)
         ? std::optional<byte_view>(byte_view{(const char*)(b), size})
         : std::nullopt;
     lua_unlock(D->L);
-    D->status = (*D->writer)(D->L, block, D->data);
+    D->status = D->writer->write(D->L, block);
     lua_lock(D->L);
     D->offset += size;
   }
@@ -272,7 +271,7 @@ static void dumpHeader(DumpState* D)
 /*
 ** dump Lua function as precompiled chunk
 */
-int luaU_dump(lua_State* L, const Proto* f, lua_Writer w, void* data,
+int luaU_dump(lua_State* L, const Proto* f, lua_Writer* w,
               int strip)
 {
   DumpState D;
@@ -282,7 +281,6 @@ int luaU_dump(lua_State* L, const Proto* f, lua_Writer w, void* data,
   D.L = L;
   D.writer = w;
   D.offset = 0;
-  D.data = data;
   D.strip = strip;
   D.status = 0;
   D.nstr = 0;

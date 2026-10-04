@@ -481,8 +481,7 @@ static l_forceinline int stacksize(const lua_State* th)
 */
 struct global_State
 {
-  lua_Alloc frealloc; /* function to reallocate memory */
-  void* ud;           /* auxiliary data to 'frealloc' */
+  lua_Alloc* frealloc; /* function to reallocate memory */
   l_mem GCtotalbytes; /* number of bytes currently allocated + debt */
   l_mem GCdebt;       /* bytes counted but not yet allocated */
   size_t memlimit;
@@ -527,8 +526,7 @@ struct global_State
   TString* memerrmsg;                        /* message for memory-allocation errors */
   TString* tmname[TM_N];                     /* array with tag-method names */
   struct Table* mt[LUA_NUMTYPES];            /* metatables for basic types */
-  lua_WarnFunction warnf;                    /* warning function */
-  void* ud_warn;                             /* auxiliary data to 'warnf' */
+  lua_WarnFunction* warnf;                    /* warning function */
   InternalString locale_name;
   lua_State mainth;                          /* main thread of this state */
 };

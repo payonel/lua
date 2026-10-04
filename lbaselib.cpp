@@ -416,12 +416,17 @@ static int luaB_loadfile(lua_State* L)
 /*
 ** Reader for generic 'load' function.
 */
-static std::optional<byte_view> generic_reader(lua_State* L, void* ud)
+struct GenericReader : lua_Reader
 {
-  int* firstcall = static_cast<int*>(ud);
+  int firstcall;
+  std::optional<byte_view> read(lua_State* L) override;
+};
+
+static std::optional<byte_view> generic_reader(lua_State* L, GenericReader* r)
+{
   luaL_checkstacki(L, 2, lt::too_many_nested_functions);
-  if (*firstcall)
-    *firstcall = 0;
+  if (r->firstcall)
+    r->firstcall = 0;
   else
     lua_pop(L, 1);     /* remove previous result */
   lua_pushvalue(L, 1); /* get function */
@@ -431,6 +436,11 @@ static std::optional<byte_view> generic_reader(lua_State* L, void* ud)
   else if (l_unlikely(!lua_isstring(L, -1)))
     luaL_errori(L, lt::reader_function_must_return_a_string);
   return *lua_tolstring(L, -1);
+}
+
+std::optional<byte_view> GenericReader::read(lua_State* L)
+{
+  return generic_reader(L, this);
 }
 
 static int luaB_load(lua_State* L)
@@ -448,11 +458,12 @@ static int luaB_load(lua_State* L)
   }
   else
   {                    /* loading from a reader function */
-    int firstcall = 1; /* userdata for generic_reader */
+    GenericReader reader; /* userdata for generic_reader */
+    reader.firstcall = 1;
     const InternalString* chunkname = luaL_optistring(L, 2, &lt::load_1_i);
     std::optional<byte_view> optname = (chunkname != nullptr) ? std::optional<byte_view>(chunkname->view()) : std::nullopt;
     luaL_checktype(L, 1, LUA_TFUNCTION);
-    status = lua_loadi(L, generic_reader, &firstcall, optname, optmode);
+    status = lua_loadi(L, &reader, optname, optmode);
   }
   return load_aux(L, status, env);
 }

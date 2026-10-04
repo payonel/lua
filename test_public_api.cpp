@@ -32,60 +32,61 @@ static void check_impl(bool ok, const char* expr, int line)
 }
 #define CHECK(cond) check_impl((cond), #cond, __LINE__)
 
-struct AllocStats
+struct AllocStats : lua_Alloc
 {
   unsigned long calls = 0;
-};
 
-static bool counting_alloc(void* ud, size_t, size_t, int)
-{
-  if (ud != nullptr)
-    static_cast<AllocStats*>(ud)->calls++;
-  return true;
-}
+  bool permit(size_t, size_t, int) override
+  {
+    calls++;
+    return true;
+  }
+};
 
 static AllocStats g_alloc_stats;
 
 static lua_State* new_state()
 {
-  lua_State* L = lua_newstate(counting_alloc, &g_alloc_stats, 0);
+  lua_State* L = lua_newstate(&g_alloc_stats, 0);
   CHECK(L != nullptr);
   return L;
 }
 
-struct StringReader
+struct StringReader : lua_Reader
 {
   byte_view src;
   bool done;
+
+  StringReader(byte_view s, bool d) : src(s), done(d) {}
+
+  std::optional<byte_view> read(lua_State*) override
+  {
+    if (done)
+      return std::nullopt;
+    done = true;
+    return src;
+  }
 };
 
-static std::optional<byte_view> whole_reader(lua_State*, void* ud)
-{
-  StringReader* r = static_cast<StringReader*>(ud);
-  if (r->done)
-    return std::nullopt;
-  r->done = true;
-  return r->src;
-}
-
-struct ByteReader
+struct ByteReader : lua_Reader
 {
   byte_view src;
   size_t pos;
-};
 
-static std::optional<byte_view> byte_reader(lua_State*, void* ud)
-{
-  ByteReader* r = static_cast<ByteReader*>(ud);
-  if (r->pos >= r->src.size())
-    return std::nullopt;
-  return r->src.substr(r->pos++, 1);
-}
+  ByteReader(byte_view s, size_t p) : src(s), pos(p) {}
+
+  std::optional<byte_view> read(lua_State*) override
+  {
+    if (pos >= src.size())
+      return std::nullopt;
+    return src.substr(pos++, 1);
+  }
+};
 
 static int load_string(lua_State* L, byte_view code)
 {
   StringReader r{code, false};
-  return lua_load(L, whole_reader, &r, "=tpa"_hs, std::nullopt);
+  return lua_load(L, &r, "=tpa"_hs, std::nullopt);
 }
 
 static int do_string(lua_State* L, byte_view code)
@@ -209,7 +210,7 @@ static void push_table_with_mm(lua_State* L, const char* event, lua_CFunction fn
   CHECK(r == 1);
 }
 
-struct DumpBuf
+struct DumpBuf : lua_Writer
 {
   std::string bytes;
   int empty_calls = 0;
@@ -219,44 +220,46 @@ struct DumpBuf
   {
     return byte_view(bytes.data(), bytes.size());
   }
-};
 
-static int dump_writer(lua_State*, std::optional<byte_view> b, void* ud)
-{
-  DumpBuf* d = static_cast<DumpBuf*>(ud);
-  if (!b.has_value() || b->empty())
+  int write(lua_State*, std::optional<byte_view> b) override
   {
-    d->empty_calls++;
-    d->empty_was_last = true;
+    if (!b.has_value() || b->empty())
+    {
+      empty_calls++;
+      empty_was_last = true;
+      return 0;
+    }
+    empty_was_last = false;
+    bytes.append(b->data(), b->size());
     return 0;
   }
-  d->empty_was_last = false;
-  d->bytes.append(b->data(), b->size());
-  return 0;
-}
+};
 
-static int failing_writer(lua_State*, std::optional<byte_view>, void* ud)
+struct FailingWriter : lua_Writer
 {
-  int* n = static_cast<int*>(ud);
-  (*n)++;
-  return 33;
-}
+  int calls = 0;
 
-struct WarnLog
+  int write(lua_State*, std::optional<byte_view>) override
+  {
+    calls++;
+    return 33;
+  }
+};
+
+struct WarnLog : lua_WarnFunction
 {
   std::string text;
   int calls = 0;
   int last_tocont = -1;
-};
 
-static void warn_collect(void* ud, const HostString& msg, int tocont)
-{
-  WarnLog* w = static_cast<WarnLog*>(ud);
-  w->calls++;
-  w->last_tocont = tocont;
-  byte_view v = msg.to_utf8();
-  w->text.append(v.data(), v.size());
-}
+  void warn(lua_State*, const HostString& msg, int tocont) override
+  {
+    calls++;
+    last_tocont = tocont;
+    byte_view v = msg.to_utf8();
+    text.append(v.data(), v.size());
+  }
+};
 
 static int g_cont_status = -999;
 static lua_KContext g_cont_ctx = 0;
@@ -1240,7 +1243,7 @@ static void test_load_dump()
   {
     byte_view ro("return 6 * 7");
     ByteReader r{ro, 0};
-    CHECK(lua_load(L, byte_reader, &r, "=bytes"_hs, std::nullopt) == LUA_OK);
+    CHECK(lua_load(L, &r, "=bytes"_hs, std::nullopt) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 42);
     lua_pop(L, 1);
@@ -1249,7 +1252,7 @@ static void test_load_dump()
   {
     CHECK(load_string(L, "return 10 + 11") == LUA_OK);
     DumpBuf d;
-    int st = lua_dump(L, dump_writer, &d, 0);
+    int st = lua_dump(L, &d, 0);
     CHECK(st == 0);
     CHECK(!d.bytes.empty());
     CHECK(d.empty_calls >= 1);
@@ -1260,23 +1263,23 @@ static void test_load_dump()
     CHECK(d.bytes.size() >= 4 && d.view().substr(0, 4) == LUA_SIGNATURE);
 
     StringReader r{d.view(), false};
-    CHECK(lua_load(L, whole_reader, &r, "=dumped"_hs, "b"_hs) == LUA_OK);
+    CHECK(lua_load(L, &r, "=dumped"_hs, "b"_hs) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 21);
     lua_pop(L, 1);
 
     StringReader r2{d.view(), false};
-    int lst = lua_load(L, whole_reader, &r2, "=dumped"_hs, "t"_hs);
+    int lst = lua_load(L, &r2, "=dumped"_hs, "t"_hs);
     CHECK(lst != LUA_OK);
     lua_pop(L, 1);
 
     CHECK(load_string(L, "return 10 + 11") == LUA_OK);
     DumpBuf ds;
-    CHECK(lua_dump(L, dump_writer, &ds, 1) == 0);
+    CHECK(lua_dump(L, &ds, 1) == 0);
     lua_pop(L, 1);
     CHECK(!ds.bytes.empty() && ds.bytes.size() <= d.bytes.size());
     StringReader r3{byte_view(ds.view()), false};
-    CHECK(lua_load(L, whole_reader, &r3, std::nullopt, "b"_hs) == LUA_OK);
+    CHECK(lua_load(L, &r3, std::nullopt, "b"_hs) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 21);
     lua_pop(L, 1);
@@ -1284,10 +1287,10 @@ static void test_load_dump()
 
   {
     CHECK(load_string(L, "return 1") == LUA_OK);
-    int calls = 0;
-    int st = lua_dump(L, failing_writer, &calls, 0);
+    FailingWriter fw;
+    int st = lua_dump(L, &fw, 0);
     CHECK(st == 33);
-    CHECK(calls == 1);
+    CHECK(fw.calls == 1);
     lua_pop(L, 1);
   }
 
@@ -1439,7 +1442,7 @@ static void test_warnings()
 {
   lua_State* L = new_state();
   WarnLog w;
-  lua_setwarnf(L, warn_collect, &w);
+  lua_setwarnf(L, &w);
 
   lua_warning(L, "part1;", 1);
   CHECK(w.calls == 1);
@@ -1449,7 +1452,7 @@ static void test_warnings()
   CHECK(w.last_tocont == 0);
   CHECK(w.text == "part1;part2");
 
-  lua_setwarnf(L, nullptr, nullptr);
+  lua_setwarnf(L, nullptr);
   lua_warning(L, "ignored", 0);
   CHECK(w.calls == 2);
 
@@ -1801,19 +1804,21 @@ static void test_zero_size_userdata()
   lua_close(L);
 }
 
-struct SizeDeny
+struct SizeDeny : lua_Alloc
 {
   size_t deny_size;
-};
-static bool size_deny_alloc(void* ud, size_t, size_t nsize, int)
-{
-  SizeDeny* d = static_cast<SizeDeny*>(ud);
-  if (nsize == 0)
+
+  explicit SizeDeny(size_t n) : deny_size(n) {}
+
+  bool permit(size_t, size_t nsize, int) override
+  {
+    if (nsize == 0)
+      return true;
+    if (deny_size != 0 && nsize == deny_size)
+      return false;
     return true;
-  if (d->deny_size != 0 && nsize == d->deny_size)
-    return false;
-  return true;
-}
+  }
+};
 
 static int cf_make_arraytable(lua_State* L)
 {
@@ -1824,7 +1829,7 @@ static int cf_make_arraytable(lua_State* L)
 static void test_oom_between_array_allocs()
 {
   SizeDeny sd{0};
-  lua_State* L = lua_newstate(size_deny_alloc, &sd, 0);
+  lua_State* L = lua_newstate(&sd, 0);
   CHECK(L != nullptr);
   luaL_openselectedlibs(L, LUA_GLIBK, 0);
 
@@ -1974,19 +1979,18 @@ static void test_misc()
   }
 
   {
-    lua_Allocator a = lua_getallocf(L);
-    CHECK(a.f == counting_alloc);
-    CHECK(a.ud == &g_alloc_stats);
+    lua_Alloc* a = lua_getallocf(L);
+    CHECK(a == &g_alloc_stats);
     unsigned long before = g_alloc_stats.calls;
     lua_pushlstring(L, "force an allocation with a long enough string", 0, 45);
     lua_pop(L, 1);
     CHECK(g_alloc_stats.calls > before);
 
     AllocStats other;
-    lua_setallocf(L, counting_alloc, &other);
-    lua_Allocator a2 = lua_getallocf(L);
-    CHECK(a2.ud == &other);
-    lua_setallocf(L, counting_alloc, &g_alloc_stats);
+    lua_setallocf(L, &other);
+    lua_Alloc* a2 = lua_getallocf(L);
+    CHECK(a2 == &other);
+    lua_setallocf(L, &g_alloc_stats);
   }
 
   {
@@ -2237,24 +2241,27 @@ static int cf_panic_record(lua_State* L)
   throw PanicJump{};
 }
 
-static bool null_alloc(void*, size_t, size_t, int)
+struct NullAlloc : lua_Alloc
 {
-  return false;
-}
+  bool permit(size_t, size_t, int) override
+  {
+    return false;
+  }
+};
 
-struct DenyAlloc
+struct DenyAlloc : lua_Alloc
 {
   bool deny = false;
-};
-static bool deny_alloc(void* ud, size_t osize, size_t nsize, int)
-{
-  DenyAlloc* d = static_cast<DenyAlloc*>(ud);
-  if (nsize == 0)
+
+  bool permit(size_t osize, size_t nsize, int) override
+  {
+    if (nsize == 0)
+      return true;
+    if (deny && nsize > osize)
+      return false;
     return true;
-  if (d->deny && nsize > osize)
-    return false;
-  return true;
-}
+  }
+};
 
 static int cf_neg_arith(lua_State* L)
 {
@@ -2309,13 +2316,14 @@ static void test_negative()
   }
 
   {
-    lua_State* L = lua_newstate(null_alloc, nullptr, 0);
+    NullAlloc na;
+    lua_State* L = lua_newstate(&na, 0);
     CHECK(L == nullptr);
   }
 
   {
     DenyAlloc da;
-    lua_State* L = lua_newstate(deny_alloc, &da, 0);
+    lua_State* L = lua_newstate(&da, 0);
     CHECK(L != nullptr);
     CHECK(load_string(L,
         "local t = {}\n"
@@ -2648,7 +2656,7 @@ static void test_auxlib_load()
   lua_pop(L, 1);
   DumpBuf d;
   CHECK(luaL_loadstring(L, "return 99"_hs) == LUA_OK);
-  CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
+  CHECK(lua_dump(L, &d, 0) == 0);
   lua_pop(L, 1);
   CHECK(d.bytes.size() > 0);
   CHECK(luaL_loadbufferx(L, d.view(), "=bin"_hs, "b"_hs) ==
@@ -2956,7 +2964,7 @@ static void test_dump_limits()
 
   DumpBuf d;
   lua_pushvalue(L, aidx);
-  CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
+  CHECK(lua_dump(L, &d, 0) == 0);
   lua_pop(L, 1);
   CHECK(luaL_loadbufferx(L, d.view(), "=re"_hs, "b"_hs) == LUA_OK);
   int lidx = lua_gettop(L);
@@ -2977,7 +2985,7 @@ static void test_dump_limits()
       "local u1, u2 = 10, 20\n"
       "return function() return u1, u2 end") == LUA_OK);
   DumpBuf d2;
-  CHECK(lua_dump(L, dump_writer, &d2, 0) == 0);
+  CHECK(lua_dump(L, &d2, 0) == 0);
   lua_pop(L, 1);
   CHECK(luaL_loadbufferx(L, d2.view(), "=re2"_hs, "b"_hs) == LUA_OK);
   lidx = lua_gettop(L);
@@ -2995,7 +3003,7 @@ static void test_dump_limits()
 
   CHECK(do_string(L, "return function() return 1 end") == LUA_OK);
   DumpBuf d3;
-  CHECK(lua_dump(L, dump_writer, &d3, 1) == 0);
+  CHECK(lua_dump(L, &d3, 1) == 0);
   lua_pop(L, 1);
   CHECK(luaL_loadbufferx(L, d3.view(), "=s"_hs, "b"_hs) ==
         LUA_OK);
@@ -3695,12 +3703,12 @@ static void test_fixed_chunks()
   CHECK(load_string(L, "local acc = 0\n"
                        "for i = 1, 5 do acc = acc + i end\n"
                        "return acc * 2") == LUA_OK);
-  CHECK(lua_dump(L, dump_writer, &d, 0) == 0);
+  CHECK(lua_dump(L, &d, 0) == 0);
   lua_pop(L, 1);
   CHECK(!d.bytes.empty());
 
   StringReader r{d.view(), false};
-  CHECK(lua_load(L, whole_reader, &r, "=fixed"_hs, "B"_hs) == LUA_OK);
+  CHECK(lua_load(L, &r, "=fixed"_hs, "B"_hs) == LUA_OK);
   CHECK(lua_type(L, -1) == LUA_TFUNCTION);
 
   lua_pushvalue(L, -1);
@@ -3715,10 +3723,10 @@ static void test_fixed_chunks()
   {
     CHECK(load_string(L, "return 'fixed-stripped'") == LUA_OK);
     DumpBuf ds;
-    CHECK(lua_dump(L, dump_writer, &ds, 1) == 0);
+    CHECK(lua_dump(L, &ds, 1) == 0);
     lua_pop(L, 1);
     StringReader rs{ds.view(), false};
-    CHECK(lua_load(L, whole_reader, &rs, std::nullopt, "B"_hs) == LUA_OK);
+    CHECK(lua_load(L, &rs, std::nullopt, "B"_hs) == LUA_OK);
     lua_call(L, 0, 1);
     CHECK(lua_tolstring(L, -1) == "fixed-stripped");
     lua_pop(L, 1);
@@ -4154,25 +4162,26 @@ static void test_intern_long_keys()
 ** then skips repopulation forever. Metamethod setup must be unconditional.
 */
 
-struct OomAllocState
+struct OomAllocState : lua_Alloc
 {
   int allocs_remaining; /* -1 = unlimited; 0 = next alloc fails */
   bool active;
-};
 
-static bool oom_alloc(void* ud, size_t, size_t nsize, int)
-{
-  OomAllocState* st = static_cast<OomAllocState*>(ud);
-  if (nsize == 0)
-    return true;
-  if (st->active && st->allocs_remaining >= 0)
+  OomAllocState(int remaining, bool on) : allocs_remaining(remaining), active(on) {}
+
+  bool permit(size_t, size_t nsize, int) override
   {
-    if (st->allocs_remaining == 0)
-      return false; /* simulate OOM */
-    st->allocs_remaining--;
+    if (nsize == 0)
+      return true;
+    if (active && allocs_remaining >= 0)
+    {
+      if (allocs_remaining == 0)
+        return false; /* simulate OOM */
+      allocs_remaining--;
+    }
+    return true;
   }
-  return true;
-}
+};
 
 static int cf_setup_mt_always(lua_State* L)
 {
@@ -4243,7 +4252,7 @@ static void test_newmetatable_oom()
   /* unconditional setup recovers from OOM */
   {
     OomAllocState oom_state{-1, false};
-    lua_State* L = lua_newstate(oom_alloc, &oom_state, 0);
+    lua_State* L = lua_newstate(&oom_state, 0);
     CHECK(L != nullptr);
     luaL_openlibs(L);
 
@@ -4291,7 +4300,7 @@ static void test_newmetatable_oom()
   /* if-guarded setup loses metamethods after OOM */
   {
     OomAllocState oom_state{-1, false};
-    lua_State* L = lua_newstate(oom_alloc, &oom_state, 0);
+    lua_State* L = lua_newstate(&oom_state, 0);
     CHECK(L != nullptr);
     luaL_openlibs(L);
 

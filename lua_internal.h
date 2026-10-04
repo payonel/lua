@@ -12,7 +12,7 @@ int lua_islightcfunction(lua_State* L, int idx);
 
 const InternalString* lua_toistring(lua_State* L, int idx);
 
-int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::optional<byte_view> chunkname, std::optional<byte_view> mode);
+int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkname, std::optional<byte_view> mode);
 
 int lua_reservebytes(lua_State* L, size_t sz);
 void lua_releasebytes(lua_State* L, size_t sz);

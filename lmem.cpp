@@ -33,14 +33,14 @@ static bool luaM_permit_(global_State* g, lua_State* L, size_t osize, size_t nsi
 {
   if (osize == 0 && nsize == 0)
     return 1;
-  if (l_unlikely(!(*g->frealloc)(g->ud, osize, nsize, tag)))
+  if (l_unlikely(!g->frealloc->permit(osize, nsize, tag)))
   {
     if (!L)
       return false;
     if (!cantryagain(g))
       return false;
     luaC_fullgc(L, 1); /* try to free some memory... */
-    if (!(*g->frealloc)(g->ud, osize, nsize, tag))
+    if (!g->frealloc->permit(osize, nsize, tag))
       return false;
   }
   return true;
@@ -85,7 +85,7 @@ LUAI_FUNC byte_span luaM_alloc_char_span(global_State* g, lua_State* L, byte_spa
 static inline void free_debt(lua_State* L, size_t size, int tag)
 {
   global_State* g = L->l_G;
-  (*g->frealloc)(g->ud, size, 0, tag);
+  g->frealloc->permit(size, 0, tag);
   g->GCdebt += (l_mem)size;
 }
 

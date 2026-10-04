@@ -264,7 +264,7 @@ static void close_state(lua_State* L)
   }
   freestack(L);
   assert(gettotalbytes(g) == sizeof(global_State));
-  (*g->frealloc)(g->ud, sizeof(global_State), 0, LUA_TTHREAD); /* free main block */
+  g->frealloc->permit(sizeof(global_State), 0, LUA_TTHREAD); /* free main block */
   delete g;
 }
 
@@ -328,11 +328,11 @@ LUA_API int lua_closethread(lua_State* L, lua_State* from)
   return ((int)(status));
 }
 
-LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
+LUA_API lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
 {
   int i;
   lua_State* L;
-  if (!(*f)(ud, 0, sizeof(global_State), LUA_TTHREAD))
+  if (!f->permit(0, sizeof(global_State), LUA_TTHREAD))
     return nullptr;
   global_State* g = new global_State();
   if (g == nullptr)
@@ -348,9 +348,7 @@ LUA_API lua_State* lua_newstate(lua_Alloc f, void* ud, unsigned seed)
   L->next = nullptr;
   incnny(L); /* main thread is always non yieldable */
   g->frealloc = f;
-  g->ud = ud;
   g->warnf = nullptr;
-  g->ud_warn = nullptr;
   g->seed = seed;
   g->gcstp = GCSTPGC; /* no GC while building state */
   (g->l_registry.tt_ = LUA_VNIL);
@@ -398,12 +396,11 @@ LUA_API void lua_close(lua_State* L)
 
 void luaE_warning(lua_State* L, byte_view msg, int tocont)
 {
-  lua_WarnFunction wf = L->l_G->warnf;
-  void* ud = L->l_G->ud_warn;
+  lua_WarnFunction* wf = L->l_G->warnf;
   if (wf != nullptr)
   {
     lua_unlock(L);
-    wf(ud, HostString{msg}, tocont);
+    wf->warn(L, HostString{msg}, tocont);
     lua_lock(L);
   }
 }

@@ -801,16 +801,16 @@ LUALIB_API void luaL_unref(lua_State* L, int t, int ref)
 ** =======================================================
 */
 
-struct LoadF
+struct LoadF : lua_Reader
 {
   unsigned n;        /* number of pre-read characters */
   OsFile* f;         /* file being read */
   byte_span buff = byte_span(BUFSIZ); /* area for reading file */
+  std::optional<byte_view> read(lua_State* L) override;
 };
 
-static std::optional<byte_view> getF(lua_State*, void* ud)
+static std::optional<byte_view> getF(lua_State*, LoadF* lf)
 {
-  LoadF* lf = static_cast<LoadF*>(ud);
   if (lf->n > 0)
   {                          /* are there pre-read characters to be read? */
     unsigned len = lf->n;
@@ -829,6 +829,11 @@ static std::optional<byte_view> getF(lua_State*, void* ud)
     return std::nullopt;
 
   return lf->buff.view().substr(0, n);
+}
+
+std::optional<byte_view> LoadF::read(lua_State* L)
+{
+  return getF(L, this);
 }
 
 static int errfile(lua_State* L, byte_view what, int fnameindex, int err)
@@ -934,7 +939,7 @@ int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optiona
   }
   if (c != OS_EOF)
     lf.buff[lf.n++] = ((char)(c)); /* 'c' is the first character */
-  status = lua_loadi(L, getF, &lf, lua_toistring(L, -1)->view(), mode);
+  status = lua_loadi(L, &lf, lua_toistring(L, -1)->view(), mode);
   readstatus = os_ferror(lf.f) ? 1 : 0;
   if (!bNullname)
     os_fclose(lf.f); /* close file (even in case of errors) */
@@ -954,14 +959,14 @@ LUALIB_API int luaL_loadfilex(lua_State* L, const std::optional<HostString>& fil
   return luaL_loadfilei(L, fn, m);
 }
 
-struct LoadS
+struct LoadS : lua_Reader
 {
   byte_view chunk {lt::empty_str};
+  std::optional<byte_view> read(lua_State* L) override;
 };
 
-static std::optional<byte_view> getS(lua_State*, void* ud)
+static std::optional<byte_view> getS(lua_State*, LoadS* ls)
 {
-  LoadS* ls = static_cast<LoadS*>(ud);
   if (ls->chunk.empty())
     return std::nullopt;
   byte_view chunk = ls->chunk;
@@ -969,11 +974,16 @@ static std::optional<byte_view> getS(lua_State*, void* ud)
   return chunk;
 }
 
+std::optional<byte_view> LoadS::read(lua_State* L)
+{
+  return getS(L, this);
+}
+
 int luaL_loadbufferi(lua_State* L, byte_view buff, std::optional<byte_view> name, std::optional<byte_view> mode)
 {
   LoadS ls;
   ls.chunk = buff;
-  return lua_loadi(L, getS, &ls, name, mode);
+  return lua_loadi(L, &ls, name, mode);
 }
 
 LUALIB_API int luaL_loadbufferx(lua_State* L, byte_view buff, const std::optional<HostString>& name, const std::optional<HostString>& mode)
@@ -1268,10 +1278,13 @@ LUALIB_API HostString luaL_gsub(lua_State* L, const HostString& s, const HostStr
   return HostString(luaL_gsubi(L, s.to_utf8(), p.to_utf8(), r.to_utf8()));
 }
 
-static bool luaL_alloc(void*, size_t, size_t, int)
+static struct AuxAlloc : lua_Alloc
 {
-  return true;
-}
+  bool permit(size_t, size_t, int) override
+  {
+    return true;
+  }
+} luaL_alloc;
 
 /*
 ** Standard panic function just prints an error message. The test
@@ -1295,9 +1308,18 @@ static int panic(lua_State* L)
 ** warnfon: ready to start a new message
 ** warnfcont: previous message is to be continued
 */
-static void warnfoff(void* ud, const HostString& message, int tocont);
-static void warnfon(void* ud, const HostString& message, int tocont);
-static void warnfcont(void* ud, const HostString& message, int tocont);
+static struct WarnOff : lua_WarnFunction
+{
+  void warn(lua_State* L, const HostString& message, int tocont) override;
+} warnfoff;
+static struct WarnOn : lua_WarnFunction
+{
+  void warn(lua_State* L, const HostString& message, int tocont) override;
+} warnfon;
+static struct WarnCont : lua_WarnFunction
+{
+  void warn(lua_State* L, const HostString& message, int tocont) override;
+} warnfcont;
 
 /*
 ** Check whether message is a control message. If so, execute the
@@ -1312,44 +1334,43 @@ static int checkcontrol(lua_State* L, const HostString& message, int tocont)
   {
     byte_view tail = byte_view(m).substr(1);
     if (tail == lt::off_2)
-      lua_setwarnf(L, warnfoff, L); /* turn warnings off */
+      lua_setwarnf(L, &warnfoff); /* turn warnings off */
     else if (tail == lt::on_2)
-      lua_setwarnf(L, warnfon, L); /* turn warnings on */
+      lua_setwarnf(L, &warnfon); /* turn warnings on */
     return 1;                      /* it was a control message */
   }
 }
 
-static void warnfoff(void* ud, const HostString& message, int tocont)
+void WarnOff::warn(lua_State* L, const HostString& message, int tocont)
 {
-  checkcontrol(static_cast<lua_State*>(ud), message, tocont);
+  checkcontrol(L, message, tocont);
 }
 
 /*
 ** Writes the message and handle 'tocont', finishing the message
 ** if needed and setting the next warn function.
 */
-static void warnfcont(void* ud, const HostString& message, int tocont)
+void WarnCont::warn(lua_State* L, const HostString& message, int tocont)
 {
-  lua_State* L = static_cast<lua_State*>(ud);
   os_print_stderr(message.to_utf8());
   os_flush_stderr();
   if (tocont)                          /* not the last part? */
-    lua_setwarnf(L, warnfcont, L);     /* to be continued */
+    lua_setwarnf(L, &warnfcont);     /* to be continued */
   else
   {                                /* last part */
     os_print_stderr(lt::n_3); /* finish message with end-of-line */
     os_flush_stderr();
-    lua_setwarnf(L, warnfon, L);   /* next call is a new message */
+    lua_setwarnf(L, &warnfon);   /* next call is a new message */
   }
 }
 
-static void warnfon(void* ud, const HostString& message, int tocont)
+void WarnOn::warn(lua_State* L, const HostString& message, int tocont)
 {
-  if (checkcontrol(static_cast<lua_State*>(ud), message, tocont)) /* control message? */
+  if (checkcontrol(L, message, tocont)) /* control message? */
     return;                                           /* nothing else to be done */
   os_print_stderr(lt::Lua_warning); /* start a new warning */
   os_flush_stderr();
-  warnfcont(ud, message, tocont);         /* finish processing */
+  warnfcont.warn(L, message, tocont);         /* finish processing */
 }
 
 /*
@@ -1389,11 +1410,11 @@ LUALIB_API unsigned int luaL_makeseed(lua_State*)
 */
 LUALIB_API lua_State*(luaL_newstate) (void)
 {
-  lua_State* L = _lua_newstate(luaL_alloc, nullptr, luaL_makeseed(nullptr));
+  lua_State* L = _lua_newstate(&luaL_alloc, luaL_makeseed(nullptr));
   if (l_likely(L))
   {
     lua_atpanic(L, &panic);
-    lua_setwarnf(L, warnfon, L);
+    lua_setwarnf(L, &warnfon);
   }
   return L;
 }

@@ -225,15 +225,15 @@ static int str_char(lua_State* L)
 ** top of the stack when 'lua_dump' is called. ('luaL_buffinit' might
 ** push stuff.)
 */
-struct str_Writer
+struct str_Writer : lua_Writer
 {
   int init; /* true iff buffer has been initialized */
   luaL_Buffer B;
+  int write(lua_State* L, std::optional<byte_view> b) override;
 };
 
-static int writer(lua_State* L, std::optional<byte_view> b, void* ud)
+static int writer(lua_State* L, std::optional<byte_view> b, str_Writer* state)
 {
-  struct str_Writer* state = static_cast<struct str_Writer*>(ud);
   if (!state->init)
   {
     state->init = 1;
@@ -249,6 +249,11 @@ static int writer(lua_State* L, std::optional<byte_view> b, void* ud)
   return 0;
 }
 
+int str_Writer::write(lua_State* L, std::optional<byte_view> b)
+{
+  return writer(L, b, this);
+}
+
 static int str_dump(lua_State* L)
 {
   struct str_Writer state;
@@ -257,7 +262,7 @@ static int str_dump(lua_State* L)
   /* ensure function is on the top of the stack and vacate slot 1 */
   lua_pushvalue(L, 1);
   state.init = 0;
-  lua_dump(L, writer, &state, strip);
+  lua_dump(L, &state, strip);
   lua_settop(L, 1); /* leave final result on top */
   return 1;
 }

@@ -104,14 +104,13 @@ static int tpanic(lua_State* L)
 ** - 1.allow: all messages are shown;
 ** - 2.store: all warnings go to the global '_WARN';
 */
-static void warnf(void* ud, const HostString& msg, int tocont)
+static void warnf(lua_State* L, const HostString& msg, int tocont)
 {
   static byte_span buffsp(200); /* should be enough for tests... */
 
   std::string mstr = to_string(msg.to_utf8());
   byte_view m = to_view(mstr);
 
-  lua_State* L = static_cast<lua_State*>(ud);
   static int onoff = 0;
   static int mode = 0; /* start in normal mode */
   static int lasttocont = 0;
@@ -176,6 +175,14 @@ static void warnf(void* ud, const HostString& msg, int tocont)
   }
 }
 
+static struct TestWarn : lua_WarnFunction
+{
+  void warn(lua_State* L, const HostString& msg, int tocont) override
+  {
+    warnf(L, msg, tocont);
+  }
+} test_warnf;
+
 /*
 ** {======================================================================
 ** Controlled version for realloc.
@@ -185,9 +192,8 @@ static void warnf(void* ud, const HostString& msg, int tocont)
 Memcontrol l_memcontrol =
     {0, 0UL, 0UL, 0UL, 0UL, (~0UL), {0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL}};
 
-static bool debug_realloc(void* ud, size_t oldsize, size_t nsize, int tag)
+static bool debug_realloc(Memcontrol* mc, size_t oldsize, size_t nsize, int tag)
 {
-  Memcontrol* mc = static_cast<Memcontrol*>(ud);
   int type = (((size_t)(tag)) < LUA_NUMTYPES) ? tag : 0;
   if (mc->memlimit == 0)
   {                                   /* first time? */
@@ -225,6 +231,14 @@ static bool debug_realloc(void* ud, size_t oldsize, size_t nsize, int tag)
     mc->maxmem = mc->total;
   return true;
 }
+
+static struct DebugAlloc : lua_Alloc
+{
+  bool permit(size_t oldsize, size_t nsize, int tag) override
+  {
+    return debug_realloc(&l_memcontrol, oldsize, nsize, tag);
+  }
+} debug_alloc;
 
 /* }====================================================================== */
 
@@ -1413,9 +1427,7 @@ static int makeseed(lua_State* L)
 
 static int newstate(lua_State* L)
 {
-  void* ud;
-  lua_Allocator a = lua_getallocf(L); lua_Alloc f = a.f; ud = a.ud;
-  lua_State* L1 = lua_newstate(f, ud, 0);
+  lua_State* L1 = lua_newstate(lua_getallocf(L), 0);
   if (L1)
   {
     lua_atpanic(L1, tpanic);
@@ -1514,13 +1526,12 @@ static int panicback(lua_State* L)
 static int checkpanic(lua_State* L)
 {
   struct Aux b;
-  void* ud;
   lua_State* L1;
   byte_view code = luaL_checklstring(L, 1);
-  lua_Allocator a = lua_getallocf(L); lua_Alloc f = a.f; ud = a.ud;
+  lua_Alloc* f = lua_getallocf(L);
   b.paniccode = std::string(luaL_optlstring(L, 2, lt::empty_str).data());
   b.L = L;
-  L1 = lua_newstate(f, ud, 0); /* create new state */
+  L1 = lua_newstate(f, 0); /* create new state */
   if (L1 == nullptr)
   { /* error? */
     lua_pushstring(L, HostString(lt::not_enough_memory));
@@ -2498,23 +2509,22 @@ static void checkfinalmem(void)
 
 int luaB_opentests(lua_State* L)
 {
-  void* ud;
-  lua_Allocator a = lua_getallocf(L); lua_Alloc f = a.f; ud = a.ud;
+  lua_Alloc* f = lua_getallocf(L);
   lua_atpanic(L, &tpanic);
-  lua_setwarnf(L, &warnf, L);
+  lua_setwarnf(L, &test_warnf);
   lua_pushboolean(L, 0);
   lua_setglobal(L, HostString(lt::_WARN)); /* _WARN = false */
   regcodes(L);
   atexit(checkfinalmem);
-  assert(f == debug_realloc && ud == &l_memcontrol);
-  lua_setallocf(L, f, ud); /* exercise this function */
+  assert(f == &debug_alloc);
+  lua_setallocf(L, f); /* exercise this function */
   luaL_newlibi(L, tests_funcs);
   return 1;
 }
 
 lua_State* luai_newstate()
 {
-  return lua_newstate(debug_realloc, &l_memcontrol, luaL_makeseed(nullptr));
+  return lua_newstate(&debug_alloc, luaL_makeseed(nullptr));
 }
 
 void luai_openlibstest(lua_State* L)

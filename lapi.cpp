@@ -1455,13 +1455,13 @@ LUA_API int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   return ((int)(status));
 }
 
-int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::optional<byte_view> chunkname, std::optional<byte_view> mode)
+int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkname, std::optional<byte_view> mode)
 {
   ZIO z;
   TStatus status;
   lua_lock(L);
   luaC_checkGC(L);
-  luaZ_init(L, &z, reader, data);
+  luaZ_init(L, &z, reader);
   status = luaD_protectedparser(L, &z, chunkname, mode);
   if (status == LUA_OK)
   {                                            /* no errors? */
@@ -1481,20 +1481,20 @@ int lua_loadi(lua_State* L, lua_Reader reader, void* data, std::optional<byte_vi
   return ((int)(status));
 }
 
-LUA_API int lua_load(lua_State* L, lua_Reader reader, void* data,
+LUA_API int lua_load(lua_State* L, lua_Reader* reader,
                      const std::optional<HostString>& chunkname,
                      const std::optional<HostString>& mode)
 {
   std::optional<byte_view> name = chunkname.has_value() ? std::optional<byte_view>(chunkname->to_utf8()) : std::nullopt;
   std::optional<byte_view> m = mode.has_value() ? std::optional<byte_view>(mode->to_utf8()) : std::nullopt;
-  return lua_loadi(L, reader, data, name, m);
+  return lua_loadi(L, reader, name, m);
 }
 
 /*
 ** Dump a Lua function, calling 'writer' to write its parts. Ensure
 ** the stack returns with its original size.
 */
-LUA_API int lua_dump(lua_State* L, lua_Writer writer, void* data, int strip)
+LUA_API int lua_dump(lua_State* L, lua_Writer* writer, int strip)
 {
   int status;
   StkId otop = (L->top); /* original top */
@@ -1502,7 +1502,7 @@ LUA_API int lua_dump(lua_State* L, lua_Writer writer, void* data, int strip)
   lua_lock(L);
   api_checkpop(L, 1);
   assert(((slottag(L, f) == ctb(LUA_VLCL))) && "Lua function expected");
-  status = luaU_dump(L, slotclLval(L, f)->p, writer, data, strip);
+  status = luaU_dump(L, slotclLval(L, f)->p, writer, strip);
   L->top = (static_cast<StkId>(otop)); /* restore top */
   lua_unlock(L);
   return status;
@@ -1679,20 +1679,17 @@ LUA_API void lua_len(lua_State* L, int idx)
   lua_unlock(L);
 }
 
-LUA_API lua_Allocator lua_getallocf(lua_State* L)
+LUA_API lua_Alloc* lua_getallocf(lua_State* L)
 {
-  lua_Allocator a;
   lua_lock(L);
-  a.f = L->l_G->frealloc;
-  a.ud = L->l_G->ud;
+  lua_Alloc* a = L->l_G->frealloc;
   lua_unlock(L);
   return a;
 }
 
-LUA_API void lua_setallocf(lua_State* L, lua_Alloc f, void* ud)
+LUA_API void lua_setallocf(lua_State* L, lua_Alloc* f)
 {
   lua_lock(L);
-  L->l_G->ud = ud;
   L->l_G->frealloc = f;
   lua_unlock(L);
 }
@@ -1707,10 +1704,9 @@ size_t lua_getmemlimit(lua_State* L)
   return L->l_G->memlimit;
 }
 
-void lua_setwarnf(lua_State* L, lua_WarnFunction f, void* ud)
+void lua_setwarnf(lua_State* L, lua_WarnFunction* f)
 {
   lua_lock(L);
-  L->l_G->ud_warn = ud;
   L->l_G->warnf = f;
   lua_unlock(L);
 }

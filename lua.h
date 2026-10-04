@@ -95,16 +95,40 @@ typedef int (*lua_CFunction)(lua_State* L);
 */
 typedef int (*lua_KFunction)(lua_State* L, int status, lua_KContext ctx);
 
-typedef std::optional<byte_view> (*lua_Reader)(lua_State* L, void* ud);
+struct lua_Reader
+{
+  virtual std::optional<byte_view> read(lua_State* L) = 0;
 
-typedef int (*lua_Writer)(lua_State* L, std::optional<byte_view> b, void* ud);
+protected:
+  ~lua_Reader() = default;
+};
+
+struct lua_Writer
+{
+  virtual int write(lua_State* L, std::optional<byte_view> b) = 0;
+
+protected:
+  ~lua_Writer() = default;
+};
 
 /*
 ** Type for memory-allocation functions
 */
-typedef bool (*lua_Alloc)(void* ud, size_t osize, size_t nsize, int tag);
+struct lua_Alloc
+{
+  virtual bool permit(size_t osize, size_t nsize, int tag) = 0;
 
-typedef void (*lua_WarnFunction)(void* ud, const HostString& msg, int tocont);
+protected:
+  ~lua_Alloc() = default;
+};
+
+struct lua_WarnFunction
+{
+  virtual void warn(lua_State* L, const HostString& msg, int tocont) = 0;
+
+protected:
+  ~lua_WarnFunction() = default;
+};
 
 /*
 ** Type used by the debug API to collect debug information
@@ -124,7 +148,7 @@ extern const byte_view lua_ident;
 /*
 ** state manipulation
 */
-LUA_API lua_State*(lua_newstate) (lua_Alloc f, void* ud, unsigned seed);
+LUA_API lua_State*(lua_newstate) (lua_Alloc* f, unsigned seed);
 LUA_API void(lua_close)(lua_State* L);
 LUA_API lua_State*(lua_newthread) (lua_State* L);
 LUA_API int(lua_closethread)(lua_State* L, lua_State* from);
@@ -254,11 +278,11 @@ LUA_API int(lua_pcallk)(lua_State* L, int nargs, int nresults, int errfunc,
                         lua_KContext ctx, lua_KFunction k);
 LUA_API int lua_pcall(lua_State* L, int nargs, int nresults, int errfunc);
 
-LUA_API int(lua_load)(lua_State* L, lua_Reader reader, void* dt,
+LUA_API int(lua_load)(lua_State* L, lua_Reader* reader,
                       const std::optional<HostString>& chunkname,
                       const std::optional<HostString>& mode);
 
-LUA_API int(lua_dump)(lua_State* L, lua_Writer writer, void* data, int strip);
+LUA_API int(lua_dump)(lua_State* L, lua_Writer* writer, int strip);
 
 /*
 ** coroutine functions
@@ -279,7 +303,7 @@ LUA_API int lua_yield(lua_State* L, int nresults);
 /*
 ** Warning-related functions
 */
-LUA_API void(lua_setwarnf)(lua_State* L, lua_WarnFunction f, void* ud);
+LUA_API void(lua_setwarnf)(lua_State* L, lua_WarnFunction* f);
 LUA_API void(lua_warning)(lua_State* L, const HostString& msg, int tocont);
 
 /*
@@ -331,13 +355,8 @@ constexpr int LUA_N2SBUFFSZ = 64;
 LUA_API std::optional<HostString>(lua_numbertocstring)(lua_State* L, int idx);
 LUA_API size_t(lua_stringtonumber)(lua_State* L, const HostString& s);
 
-struct lua_Allocator
-{
-  lua_Alloc f;
-  void* ud;
-};
-LUA_API lua_Allocator(lua_getallocf)(lua_State* L);
-LUA_API void(lua_setallocf)(lua_State* L, lua_Alloc f, void* ud);
+LUA_API lua_Alloc*(lua_getallocf)(lua_State* L);
+LUA_API void(lua_setallocf)(lua_State* L, lua_Alloc* f);
 
 LUA_API void(lua_toclose)(lua_State* L, int idx);
 LUA_API void(lua_closeslot)(lua_State* L, int idx);

@@ -19,7 +19,7 @@ int luaZ_fill(ZIO* z)
 {
   lua_State* L = z->L;
   lua_unlock(L);
-  std::optional<byte_view> chunk = z->reader(L, z->data);
+  std::optional<byte_view> chunk = z->reader->read(L);
   lua_lock(L);
   if (!chunk.has_value() || chunk->empty())
     return EOZ;
@@ -28,11 +28,10 @@ int luaZ_fill(ZIO* z)
   return ((unsigned char)(z->chunk[0]));
 }
 
-void luaZ_init(lua_State* L, ZIO* z, lua_Reader reader, void* data)
+void luaZ_init(lua_State* L, ZIO* z, lua_Reader* reader)
 {
   z->L = L;
   z->reader = reader;
-  z->data = data;
   z->chunk = byte_view(lt::empty_str);
   z->pos = 0;
 }
