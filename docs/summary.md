@@ -79,8 +79,11 @@ work so far, in roughly the order it landed:
 
 - `union Value` became a two-column struct `{prim, ref}`; typed accessors are
   the representation seam. The Lua stack was transposed into parallel
-  prim/ref/tag columns, and `lapi` index resolution was redesigned around
-  by-copy reads and discriminated addresses (Value steps C1–D).
+  prim/ref/tag columns, then returned to a `TValue` array behind the same
+  slot accessors for C++ performance (`396e7bb5`); the accessors stay the
+  seam a Java port stores columns behind. `lapi` index resolution was
+  redesigned around by-copy reads and discriminated addresses (Value
+  steps C1–D).
 - `StkId` is an index, not a pointer. Upvalues reference the stack by index;
   the to-be-closed list is an explicit `StkId` array on `lua_State`.
 - `GCUnion` was replaced by C++ inheritance (`struct X : GCObject`); the
@@ -138,3 +141,50 @@ The first moves toward the Java class layout have landed: `Table` owns the
 and the `lstring`/`lfunc` operations moved onto `TString`, `Udata`, `Proto`,
 `UpVal`, `CClosure`, `LClosure` and `CFuncInfo`. Method names still carry
 their C prefixes.
+
+### 7. Port-prep plan (`docs/tasks.md`, L → M → C)
+
+The plan ran to completion. Each task was committed separately, with
+`make full` passing and an A/B check where the task touched a hot path.
+Decisions and measurements are recorded per task in `tasks.md`.
+
+- **Line changes (L1–L12):**
+  - Pointer-to-pointer list walks became `GCListed` sentinel heads.
+  - Out-parameters became result structs.
+  - `void*` callbacks became interfaces (`ProtectedCall`, `lua_Reader`,
+    `lua_Writer`, `lua_Alloc`, `lua_WarnFunction`).
+  - Raw byte operations went into `bytes.h`, and addresses-as-values
+    into identity helpers.
+  - Lua-visible widths were pinned as named constants.
+  - Integer arithmetic became signed, with named wraparound helpers.
+    `StkId` became signed (`ptrdiff_t`), with negative sentinels and
+    upstream's overflow-safe stack checks.
+  - ctype calls go through `locale_util`, and time functions and dynamic
+    loading through `os_api`.
+  - Chunk I/O became typed spans, keeping fixed-buffer zero-copy
+    loading.
+  - Casts dropped from 985 to 550.
+- **Memory changes (M1–M6):**
+  - A limit audit found parity with upstream. The one recorded
+    deviation (`MAXASIZE` 2³⁰) is not visible to Lua.
+  - Accounting uses named per-unit cost constants (frozen at the
+    previous sizes), so every allocation is charged.
+  - Table storage is reached only through value accessors, and `TValue`
+    copies are compiler-enforced to be named operations.
+  - Userdata holding native state uses `lua_UserObject` payloads, and
+    the extra space became a typed slot.
+  - Byte storage is split into `byte_owner` (owns), `byte_span`/
+    `byte_view` (borrow) and `byte_inline<N>` (inline scratch). The split
+    sped up formatting paths by up to 31%, and an AddressSanitizer pass
+    found and fixed two latent memory bugs.
+- **Class changes (C0–C12):**
+  - Every file sits in a package namespace (`lua::bytes`, `object`,
+    `gc`, `runtime`, `vm`, `compiler`, `api`, `lib`, `platform`,
+    `host`).
+  - Upstream's prefixes name the classes.
+  - The public API keeps its shape, with C++ linkage and the archive
+    seal adapted to it.
+  - The `LUAI_*` macros are gone.
+  - The final audit re-ran every task's acceptance check and wrote the
+    C++ → Java port checklist.
+  - Renaming (C13) was left out on purpose.
