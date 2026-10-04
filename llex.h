@@ -12,6 +12,9 @@
 #include "lzio.h"
 #include "literals.h"
 
+namespace lua::compiler
+{
+
 /*
 ** Single-char tokens (terminal symbols) are represented by their own
 ** numeric code. Other tokens start at the following value.
@@ -110,3 +113,5 @@ LUAI_FUNC void                  luaX_next(LexState* ls);
 LUAI_FUNC int                   luaX_lookahead(LexState* ls);
 LUAI_FUNC l_noret               luaX_syntaxerror(LexState* ls, byte_view s);
 LUAI_FUNC byte_view      luaX_token2str(LexState* ls, int token);
+
+}

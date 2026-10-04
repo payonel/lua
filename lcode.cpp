@@ -25,6 +25,11 @@
 #include "lstring.h"
 #include "ltable.h"
 #include "lvm.h"
+#include "lopnames.h"
+#include "literals.h"
+
+namespace lua::compiler
+{
 
 /* (note that expressions VJMP also have jumps.) */
 static inline int hasjumps(const expdesc* e)
@@ -2151,8 +2156,6 @@ static int finaltarget(std::span<const Instruction> code, int i)
 ** Do a final pass over the code of a function, doing small peephole
 ** optimizations and adjustments.
 */
-#include "lopnames.h"
-#include "literals.h"
 void luaK_finish(FuncState* fs)
 {
   int i;
@@ -2205,4 +2208,6 @@ void luaK_finish(FuncState* fs)
       break;
     }
   }
+}
+
 }

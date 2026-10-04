@@ -32,8 +32,11 @@ struct CClosure;
 struct LClosure;
 struct CFuncInfo;
 }
+namespace lua::compiler
+{
 struct Vardesc;
 struct Labeldesc;
+}
 
 namespace lua::runtime
 {

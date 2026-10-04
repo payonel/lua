@@ -11,6 +11,9 @@
 #include "lopcodes.h"
 #include "lparser.h"
 
+namespace lua::compiler
+{
+
 /*
 ** Marks the end of a patch list. It is an invalid value both as an absolute
 ** address, and as a list link (would link an element to itself).
@@ -123,4 +126,6 @@ static inline void luaK_setmultret(FuncState* fs, expdesc* e)
 static inline void luaK_jumpto(FuncState* fs, int t)
 {
   luaK_patchlist(fs, luaK_jump(fs), t);
+}
+
 }

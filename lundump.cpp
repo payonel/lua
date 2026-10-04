@@ -23,6 +23,9 @@
 #include "lauxlib.h"
 #include "literals.h"
 
+namespace lua::compiler
+{
+
 struct LoadState
 {
   lua_State* L;
@@ -440,4 +443,6 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int f
   if (cl->upvals.size() != cl->p->upvalues.size())
     error(&S, lt::corrupted_chunk);
   return cl;
+}
+
 }

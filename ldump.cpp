@@ -19,6 +19,9 @@
 
 #include "literals.h"
 
+namespace lua::compiler
+{
+
 struct DumpState
 {
   lua_State* L;
@@ -307,4 +310,6 @@ int luaU_dump(lua_State* L, const Proto* f, lua_Writer* w,
   dumpFunction(&D, f);
   dumpBlock(&D, {}); /* signal end of dump */
   return D.status;
+}
+
 }

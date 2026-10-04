@@ -9,6 +9,9 @@
 #include "internal_string.h"
 #include "literals.h"
 
+namespace lua::vm
+{
+
 /* ORDER OP */
 
 static const byte_view opnames[] =
@@ -99,3 +102,5 @@ static const byte_view opnames[] =
   lt::VARARGPREP,
   lt::EXTRAARG
 };
+
+}

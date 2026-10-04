@@ -26,6 +26,9 @@
 #include "lauxlib.h"
 #include "literals.h"
 
+namespace lua::compiler
+{
+
 static l_forceinline void next(LexState* ls)
 {
   ls->current = (ls->z->pos < ls->z->chunk.size())
@@ -742,4 +745,6 @@ int luaX_lookahead(LexState* ls)
   assert(ls->lookahead.token == TK_EOS);
   ls->lookahead.token = llex(ls, &ls->lookahead);
   return ls->lookahead.token;
+}
+
 }

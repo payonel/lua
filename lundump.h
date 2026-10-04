@@ -12,6 +12,9 @@
 #include "lobject.h"
 #include "lzio.h"
 
+namespace lua::compiler
+{
+
 /* data to catch conversion errors */
 inline constexpr int LUAC_INT = -0x5678;
 inline constexpr Instruction LUAC_INST = 0x12345678;
@@ -29,3 +32,5 @@ LUAI_FUNC LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view n
 
 /* dump one chunk; from ldump.c */
 LUAI_FUNC int luaU_dump(lua_State* L, const Proto* f, lua_Writer* w, int strip);
+
+}

@@ -26,6 +26,9 @@
 #include "lhack.h"
 #include "literals.h"
 
+namespace lua::compiler
+{
+
 /* maximum number of variable declarations per function (must be
    smaller than 250, due to the bytecode format) */
 constexpr int MAXVARS = 200;
@@ -2367,4 +2370,6 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndat
   /* all scopes should be correctly finished */
   assert(dyd->actvar.n == 0 && dyd->gt.n == 0 && dyd->label.n == 0);
   return cl;
+}
+
 }
