@@ -1335,6 +1335,15 @@ Finish the `GCObject` hierarchy, including `GCListed` from L1. `Table`,
 already. Left to do: the inline helpers in `ltable.h`, the value helpers in
 `lobject.h`/`lobject.cpp`, and the leftovers in `lstring.h`/`lfunc.h`.
 
+**Status: done** (`ba0b3f64`).
+- `lobject`, `ltable`, `lstring` and `lfunc` (`.h`/`.cpp`) are in
+  `lua::object`. Other headers forward-declare object types inside it.
+- The `GCObject` hierarchy (`GCListed` from L1) and the type methods
+  (`Table::`, `TString::`, `Proto::`, closures) are as before. The inline
+  value helpers stay free functions in the package (C0).
+- **Results:** `make full` passes. A/B: b_vm 1.11s → 1.11s,
+  b_table 0.37s → 0.35s.
+
 ### C2. `lua::bytes`
 
 `byte_view`, `byte_span`, `byte_owner`, `Zio` (`lzio.*`), `MBuffer`,
