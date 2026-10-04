@@ -112,11 +112,6 @@ static inline void markobjectN(global_State* g, GCObject* t)
 ** =======================================================
 */
 
-/* one after last element in a hash array */
-static inline Node* gnodelast(Table* h)
-{
-  return gnode(h, sizenode(h));
-}
 
 static l_mem objsize(GCObject* o)
 {
@@ -510,12 +505,13 @@ static void genlink(global_State* g, GCObject* o)
 */
 static void traverseweakvalue(global_State* g, Table* h)
 {
-  Node *n, *limit = gnodelast(h);
+  int i, nsize = sizenode(h);
   /* if there is array part, assume it may have white values (it is not
      worth traversing it now just to check) */
   int hasclears = (h->array.size() > 0);
-  for (n = gnode(h, 0); n < limit; n++)
+  for (i = 0; i < nsize; i++)
   {                       /* traverse hash part */
+    Node* n = gnode(h, i);
     if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
       clearkey(n);        /* clear its key */
     else
@@ -612,10 +608,11 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
 
 static void traversestrongtable(global_State* g, Table* h)
 {
-  Node *n, *limit = gnodelast(h);
+  int i, nsize = sizenode(h);
   traversearray(g, h);
-  for (n = gnode(h, 0); n < limit; n++)
+  for (i = 0; i < nsize; i++)
   {                       /* traverse hash part */
+    Node* n = gnode(h, i);
     if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
       clearkey(n);        /* clear its key */
     else
@@ -845,10 +842,10 @@ static void clearbykeys(global_State* g, GCObject* l)
   {
     assert(l->tt == LUA_VTABLE);
     Table* h = static_cast<Table*>(l);
-    Node* limit = gnodelast(h);
-    Node* n;
-    for (n = gnode(h, 0); n < limit; n++)
+    int i, nsize = sizenode(h);
+    for (i = 0; i < nsize; i++)
     {
+      Node* n = gnode(h, i);
       if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? gckey(n) : nullptr))) /* unmarked key? */
         (n->val.tt_ = LUA_VEMPTY);         /* remove entry */
       if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))        /* is entry empty? */
@@ -867,8 +864,7 @@ static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
   {
     assert(l->tt == LUA_VTABLE);
     Table* h = static_cast<Table*>(l);
-    Node *n, *limit = gnodelast(h);
-    int i;
+    int i, nsize = sizenode(h);
     int asize = h->asize();
     for (i = 0; i < asize; i++)
     {
@@ -876,8 +872,9 @@ static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
       if (iscleared(g, o))             /* value was collected? */
         setArrTag(h, i, LUA_VEMPTY); /* remove entry */
     }
-    for (n = gnode(h, 0); n < limit; n++)
+    for (i = 0; i < nsize; i++)
     {
+      Node* n = gnode(h, i);
       if (iscleared(g, gcvalueN((&(n)->val)))) /* unmarked value? */
         (n->val.tt_ = LUA_VEMPTY);                 /* remove entry */
       if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))                /* is entry empty? */
