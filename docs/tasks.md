@@ -481,7 +481,7 @@ only inside the wraparound/shift helpers, `os_api`, and declarations tied to
 `size_t` container sizes. The number of casts is lower than at the start
 (record the before/after count in Results).
 
-**Status: in progress.**
+**Status: done** (`0c55701a`, `65630970`, `7e85b1a7`).
 - [x] Tables (`0c55701a`): sizes, counters, hints and in-part indices are
   `int`; traversal indices and borders are `lua_Integer`.
   - `MAXABITS` is now 30 (was 31) so a power-of-two array part fits `int`.
@@ -492,6 +492,41 @@ only inside the wraparound/shift helpers, `os_api`, and declarations tied to
   - `hashmod`'s full-width unsigned `%` goes through `l_umod`
     (`llimits.h`).
   - A/B: b_table 0.23s → 0.23s, b_gc 1.87s → 1.87s.
+- [x] Integer arithmetic (`65630970`): `llimits.h` has the wraparound
+  helpers `l_intadd`/`l_intsub`/`l_intmul`/`l_intunm`, the bit helpers
+  `l_intband`/`l_intbor`/`l_intbxor`/`l_intbnot`, `l_ult` and `l_umod`.
+  These hold the only signed/unsigned casts for Lua integer math. `lvm`,
+  `lobject` `intarith`, `ipairs`, `ltablib` and `math.abs`/`math.ult` use
+  them. The `FORLOOP` count is a `lua_Integer`. `luaV_idiv`/`luaV_mod`
+  test `n == 0 || n == -1` instead of `(lua_Unsigned)n + 1u <= 1u`.
+  Range checks are written as signed comparisons.
+- [x] Byte-width fields (`65630970`): `Proto::numparams`/`maxstacksize`,
+  `Upvaldesc::idx`, `expdesc` `ind.t`/`ind.idx`/`var.ridx`,
+  `Vardesc::ridx`, `FuncState` `nups`/`freereg`/`iwthabs`, and
+  `lua_Debug` `nups`/`nparams`/`extraargs` widen to `int`.
+  `luaO_codeparam`/`luaO_applyparam`/`ceillog2` and `gcparams` are `int`.
+  Library counters (`LoadF::n`, `tonumber` base/digit, `table` `IdxT`,
+  `RANLIMIT`) are `int` or `size_t`.
+- [x] UTF-8 and the remaining sites (`7e85b1a7`): code points are `int`
+  (max `0x7FFFFFFF`), and `luaO_utf8esc`/`FmtArgs::utf8` take
+  `lua_Integer`. `luaS_newudata` takes `int nuvalue`. `l_ult` takes
+  `lua_Integer`, so callers don't cast. The `table.unpack`/`insert`/`remove`
+  checks use `l_intsub` + `l_ult`.
+
+**Results:**
+- `make full` passes. The A/B results are neutral:
+  - all.lua: 5.48s → 5.39s min (load-shifted rerun 5.85s → 5.90s)
+  - b_vm: 0.78 → 0.77
+  - b_arith: 0.85 → 0.88 (median 0.98 → 0.95)
+  - b_call: 2.44 → 2.40
+  - b_string: 0.62 → 0.62
+  - b_table: 0.25 → 0.25
+- RSS stays within 1%.
+- Struct sizes: `Proto` 160 → 168, `Upvaldesc` 16 → 24, `global_State`
+  1016 → 1024 bytes. These are fixed per-function costs, and no per-value
+  object grew.
+- **Cast count** (C-style + named casts, excluding `ltests`): 1252 before
+  L7 (`e8102b82`), 1113 after.
 
 **Decisions so far:**
 - **`ptrdiff_t` stays.** It is already a signed 64-bit type (Java `long`);
@@ -504,6 +539,26 @@ only inside the wraparound/shift helpers, `os_api`, and declarations tied to
   `getArrTag`/`getArrVal`/`farr2val`/`fval2arr` (`lua_Unsigned k`) and the
   `(lua_Unsigned)key - 1 < size` fast paths in `lvm`/`lapi` are rewritten
   there for the column layout, so their index types change once.
+- **Bit containers stay unsigned.** These are bit patterns, never
+  quantities: string hashes (`TString::hash`, `luaS_hash`, `l_hashfloat`),
+  seeds (`luai_makeseed`, `global_State::seed`, the `lua_newstate` seed
+  in the public API), the sort pivot randomizer, `callstatus`
+  (`l_uint32`), and instruction words (`CREATE_*`). Java holds them in
+  `int` and uses `>>>` where they are shifted.
+- **`(unsigned char)` byte reads stay.** Widening a `char` to 0..255
+  (`zgetc`, `lstrlib` ctype arguments, `byteAt`) is the C spelling of
+  Java's `& 0xFF`. Each one is a single conversion with no alternative
+  type to declare.
+- **Moved to other tasks:**
+  - `lu_mem`/`l_mem` accounting, closure and thread sizes → M2
+  - `ldump`/`lundump` `dumpAlign`/`loadAlign` and the varint → L9
+  - `bytes.h` `write_number(unsigned long long)` stays, as the
+    formatter for `lua_Unsigned` (Java: `Long.toUnsignedString`)
+- **Signed-overflow traps.** Wherever the original relied on unsigned
+  wraparound for a range test (`(lua_Unsigned)pos - 1u < e`), the
+  rewrite goes through `l_intsub`/`l_ult`, not plain signed `-`/`<`.
+  `pos` can be `minint`, so plain signed subtraction would be undefined
+  behavior.
 
 ### L8. Locale routing
 
