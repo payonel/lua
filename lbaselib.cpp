@@ -6,7 +6,6 @@
 
 
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +20,7 @@
 #include "llimits.h"
 #include "lualib.h"
 #include "literals.h"
+#include "locale_util.h"
 
 static int luaB_print(lua_State* L)
 {
@@ -78,18 +78,18 @@ static IntParse b_str2int(byte_view s, int base)
   } /* handle sign */
   else if (sv_byteat(s, p) == '+')
     p++;
-  if (!isalnum(sv_byteat(s, p))) /* no digit? */
+  if (!locale_isalnum(sv_byteat(s, p))) /* no digit? */
     return {byte_view::npos, 0};
   do
   {
-    int digit = ((isdigit(sv_byteat(s, p))
+    int digit = ((locale_isdigit(sv_byteat(s, p))
                                    ? s[p] - '0'
-                                   : (toupper(sv_byteat(s, p)) - 'A') + 10));
+                                   : (locale_toupper(sv_byteat(s, p)) - 'A') + 10));
     if (digit >= base)
       return {byte_view::npos, 0}; /* invalid numeral */
     n = n * base + digit;
     p++;
-  } while (isalnum(sv_byteat(s, p)));
+  } while (locale_isalnum(sv_byteat(s, p)));
   while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
     p++; /* skip trailing spaces */
   return {p, (lua_Integer) ((neg) ? (0u - n) : n)};

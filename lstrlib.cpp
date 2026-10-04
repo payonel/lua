@@ -11,7 +11,6 @@
 
 #include <charconv>
 #include <cmath>
-#include <ctype.h>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -1252,7 +1251,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
       byte_span dbuf(4);
       byte_view d = dbuf.view().substr(0, dbuf.write_number(c));
       luaL_addchar(b, '\\');
-      if (isdigit(sv_byteat(s->view(), i + 1)))
+      if (locale_isdigit(sv_byteat(s->view(), i + 1)))
       {
         for (size_t j = d.size(); j < 3; j++)
           luaL_addchar(b, '0');
@@ -1350,10 +1349,10 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
 
 static size_t get2digits(byte_view s, size_t p)
 {
-  if (isdigit(sv_byteat(s, p)))
+  if (locale_isdigit(sv_byteat(s, p)))
   {
     p++;
-    if (isdigit(sv_byteat(s, p)))
+    if (locale_isdigit(sv_byteat(s, p)))
       p++; /* (2 digits at most) */
   }
   return p;
@@ -1380,7 +1379,7 @@ static void checkformat(lua_State* L, byte_view form,
       p = get2digits(form, p); /* skip precision */
     }
   }
-  if (!(p + 1 == form.size() && isalpha(sv_byteat(form, p))))
+  if (!(p + 1 == form.size() && locale_isalpha(sv_byteat(form, p))))
   { /* did not go to the end? */
     lua_pushlstring(L, form, 0, form.size());
     luaL_errori(L, lt::invalid_conversion_specification_s);
@@ -1436,13 +1435,13 @@ static void scanformat(byte_view form, FormatSpec* spec)
     }
     break;
   }
-  while (isdigit(sv_byteat(form, p)))
+  while (locale_isdigit(sv_byteat(form, p)))
     spec->width = spec->width * 10 + (form[p++] - '0');
   if (sv_byteat(form, p) == '.')
   {
     p++;
     spec->precision = 0;
-    while (isdigit(sv_byteat(form, p)))
+    while (locale_isdigit(sv_byteat(form, p)))
       spec->precision = spec->precision * 10 + (form[p++] - '0');
   }
   spec->conv = form[form.size() - 1];
@@ -1606,7 +1605,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
         bool seennonzero = false;
         for (size_t i = 0; i < epos; i++)
         {
-          if (isdigit(((unsigned char)(body[i]))))
+          if (locale_isdigit(((unsigned char)(body[i]))))
           {
             if (body[i] != '0')
               seennonzero = true;

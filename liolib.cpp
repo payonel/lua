@@ -6,7 +6,6 @@
 
 
 
-#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -385,7 +384,7 @@ static int test2(RN* rn, byte_view set)
 static int readdigits(RN* rn, int hex)
 {
   int count = 0;
-  while ((hex ? isxdigit(rn->c) : isdigit(rn->c)) && nextc(rn))
+  while ((hex ? locale_isxdigit(rn->c) : locale_isdigit(rn->c)) && nextc(rn))
     count++;
   return count;
 }
@@ -409,7 +408,7 @@ static int read_number(lua_State* L, OsFile* f)
   do
   {
     rn.c = os_getbyte(rn.f);
-  } while (isspace(rn.c)); /* skip spaces */
+  } while (locale_isspace(rn.c)); /* skip spaces */
   test2(&rn, lt::fmt_flags_sign);        /* optional sign */
   if (test2(&rn, lt::zero_zero))
   {

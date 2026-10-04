@@ -37,6 +37,31 @@ int locale_islower(int c)
   return islower(c);
 }
 
+int locale_isalpha(int c)
+{
+  return isalpha(c);
+}
+
+int locale_isdigit(int c)
+{
+  return isdigit(c);
+}
+
+int locale_isalnum(int c)
+{
+  return isalnum(c);
+}
+
+int locale_isxdigit(int c)
+{
+  return isxdigit(c);
+}
+
+int locale_isspace(int c)
+{
+  return isspace(c);
+}
+
 char locale_radixpoint()
 {
   return localeconv()->decimal_point[0];
