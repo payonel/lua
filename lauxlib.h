@@ -128,7 +128,7 @@ LUALIB_API void luaL_pushfail(lua_State* L);
 
 struct luaL_Buffer
 {
-  byte_span bytes = {};
+  byte_owner bytes = {};
   size_t used = 0;
   size_t reserved = 0;
   lua_State* L = nullptr;

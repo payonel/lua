@@ -50,7 +50,7 @@ public:
   byte_span area() noexcept { return bytes_; }
 
 private:
-  byte_span bytes_;
+  byte_owner bytes_;
   size_t len_ = 0;
   lua_State* L_ = nullptr;
 };

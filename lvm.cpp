@@ -824,13 +824,13 @@ void luaV_concat(lua_State* L, int total)
       }
       if (tl <= 40)
       {
-        byte_span buff(tl);
+        byte_owner buff(tl);
         copy2buff(L, top, n, buff);
         ts = TString::luaS_createstr(L, buff.view());
       }
       else
       {
-        byte_span buff = luaM_alloc_char_span(L->l_G, L, {}, tl, true);
+        byte_owner buff = luaM_alloc_char_span(L->l_G, L, {}, tl, true);
         copy2buff(L, top, n, buff);
         ts = TString::luaS_createstr(L, buff.view());
         luaM_alloc_char_span(L->l_G, L, buff, 0, false);

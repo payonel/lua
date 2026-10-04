@@ -559,7 +559,7 @@ static int incomplete(lua_State* L, int status)
 */
 static int pushline(lua_State* L, int firstline)
 {
-  byte_span buffer(LUA_MAXINPUT);
+  byte_owner buffer(LUA_MAXINPUT);
   InternalString prmt = get_prompt(L, firstline);
   bool ready = lua_readline(buffer, prmt.view());
   lua_pop(L, 1); /* remove prompt */
@@ -639,7 +639,8 @@ static int loadline(lua_State* L)
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
-  byte_view line = lua_tostring(L, 1)->to_utf8();
+  std::optional<HostString> hline = lua_tostring(L, 1);
+  byte_view line = hline->to_utf8();
   if (!line.empty())            /* non empty? */
     lua_saveline(line); /* keep history */
   lua_remove(L, 1);     /* remove line from the stack */

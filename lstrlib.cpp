@@ -1252,7 +1252,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
     }
     else if (locale_matchclass(c, 'c'))
     {
-      byte_span dbuf(4);
+      byte_owner dbuf(4);
       byte_view d = dbuf.view().substr(0, dbuf.write_number(c));
       luaL_addchar(b, '\\');
       if (locale_isdigit(sv_byteat(s->view(), i + 1)))
@@ -1507,14 +1507,14 @@ static size_t formatint(lua_State* L, int arg, byte_view form,
   lua_Unsigned u = (issigned && n < 0)
                        ? 0u - ((lua_Unsigned)(n))
                        : (n);
-  byte_span digits(24);
+  byte_owner digits(24);
   size_t ndigits = digits.write_number(u, base);
   if (spec.conv == 'X')
   {
     for (size_t i = 0; i < ndigits; i++)
       digits[i] = ((char)(locale_toupper(((unsigned char)(digits[i])))));
   }
-  byte_span body(MAX_ITEM);
+  byte_owner body(MAX_ITEM);
   size_t blen = 0;
   if (u == 0 && spec.precision == 0)
     ;
@@ -1569,7 +1569,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
     prefix[prefixlen++] = '+';
   else if (spec.space)
     prefix[prefixlen++] = ' ';
-  byte_span body(MAX_ITEMF);
+  byte_owner body(MAX_ITEMF);
   size_t blen;
   bool zeropadok = true;
   if (std::isinf(n) || std::isnan(n))
@@ -1656,7 +1656,7 @@ static int str_format(lua_State* L)
     }
     else
     {                                              /* format item */
-      byte_span form(MAX_FORMAT);         /* to store the format ('%...') */
+      byte_owner form(MAX_FORMAT);         /* to store the format ('%...') */
       size_t formlen;
       size_t maxitem = MAX_ITEM;                  /* maximum length for the result */
       size_t boff = luaL_prepbuffsize(&b, maxitem); /* to put result */
@@ -1712,7 +1712,7 @@ static int str_format(lua_State* L)
         checkformat(L, formv, lt::minus_ch, 0);
         FormatSpec spec;
         scanformat(formv, &spec);
-        byte_span body(MAX_ITEM);
+        byte_owner body(MAX_ITEM);
         size_t blen;
         if (lua_islightcfunction(L, arg))
         {
@@ -2101,13 +2101,13 @@ static void packDouble(luaL_Buffer* b, double f, bool islittle)
 static double unpackDouble(byte_view data, size_t pos, bool islittle)
 {
   data = data.substr(pos, SZ_DOUBLE);
-  return (islittle == nativeendian_little ? data : byte_span(data).reverse().view()).toDouble();
+  return (islittle == nativeendian_little ? data : byte_owner(data).reverse().view()).toDouble();
 }
 
 static float unpackFloat(byte_view data, size_t pos, bool islittle)
 {
   data = data.substr(pos, SZ_FLOAT);
-  return (islittle == nativeendian_little ? data : byte_span(data).reverse().view()).toFloat();
+  return (islittle == nativeendian_little ? data : byte_owner(data).reverse().view()).toFloat();
 }
 
 static int str_pack(lua_State* L)

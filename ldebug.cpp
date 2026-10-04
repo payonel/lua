@@ -343,7 +343,7 @@ static void funcinfo(InternalDebug* ar, Closure* cl)
     ar->lastlinedefined = p->lastlinedefined;
     ar->what = (ar->linedefined == 0) ? lt::main : lt::Lua;
   }
-  ar->short_src_out = byte_span(LUA_IDSIZE);
+  ar->short_src_out = byte_owner(LUA_IDSIZE);
   luaO_chunkid(ar->short_src_out, ar->source);
 }
 
@@ -990,7 +990,7 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
   if (src == nullptr) /* no debug information? */
     return luaO_pushfstring(L, lt::fmt_unknown_loc_s, FmtArgs().str(msg))->view();
 
-  byte_span bytes(LUA_IDSIZE);
+  byte_owner bytes(LUA_IDSIZE);
   luaO_chunkid(bytes, src->data.view());
   byte_view sv = bytes.str_view();
   return luaO_pushfstring(L, lt::fmt_s_d_s, FmtArgs().str(sv).num(line).str(msg))->view();

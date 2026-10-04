@@ -489,7 +489,7 @@ static NumParse l_str2d(byte_view s, size_t off)
   NumParse r = l_str2dloc(s, off, mode); /* try to convert */
   if (r.end == byte_view::npos)
   {
-    byte_span buff(L_MAXLENNUM + 1);
+    byte_owner buff(L_MAXLENNUM + 1);
     char point = locale_radixpoint();
     size_t ppoint = (point != '.') ? s.find(point, off) : byte_view::npos;
     size_t len = s.size() - off;
@@ -657,7 +657,7 @@ size_t luaO_tostringbuff(const TValue* obj, byte_span buff)
 */
 void luaO_tostring(lua_State* L, TValue* obj)
 {
-  byte_span buff(LUA_N2SBUFFSZ);
+  byte_owner buff(LUA_N2SBUFFSZ);
   size_t len = luaO_tostringbuff(obj, buff);
   byte_view bytes = buff.view().substr(0, len);
   setsvalue(L, obj, TString::luaS_createstr(L, bytes));
@@ -672,7 +672,7 @@ void luaO_tostring(lua_State* L, TValue* obj)
 struct BuffFS
 {
   lua_State* L;
-  byte_span b;
+  byte_owner b;
   size_t blen;
   int err;
 };
@@ -745,13 +745,13 @@ static void addstr2buff(BuffFS* buff, byte_view bv)
   {
     global_State* g = buff->L->l_G;
     size_t newsize = std::max<size_t>(buff->blen + slen, 256);
-    byte_span nb = luaM_alloc_char_span(g, nullptr, buff->b, newsize, false);
+    byte_owner nb = luaM_alloc_char_span(g, nullptr, buff->b, newsize, false);
     if (l_unlikely(nb.data() == nullptr))
     {
       buff->err = 1; /* memory error */
       return;
     }
-    buff->b = nb;
+    buff->b = std::move(nb);
   }
   byte_span(buff->b).copy_from(bv, buff->blen);
   buff->blen += slen;
@@ -762,7 +762,7 @@ static void addstr2buff(BuffFS* buff, byte_view bv)
 */
 static void addnum2buff(BuffFS* buff, TValue* num)
 {
-  byte_span numbuff(LUA_N2SBUFFSZ);
+  byte_owner numbuff(LUA_N2SBUFFSZ);
   size_t len = luaO_tostringbuff(num, numbuff);
   addstr2buff(buff, numbuff.view().substr(0, len));
 }
@@ -885,7 +885,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     }
     case 'p':
     {
-      byte_span bf(LUA_N2SBUFFSZ);
+      byte_owner bf(LUA_N2SBUFFSZ);
       assert(argn < args.n && args.arg[argn].tag == 'p');
       const void* p = args.arg[argn++].p;
       size_t bfn = util::pointertext(bf, 0, p);
@@ -895,7 +895,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     case 'U':
     {
       assert(argn < args.n && args.arg[argn].tag == 'U');
-      byte_span bf(UTF8BUFFSZ);
+      byte_owner bf(UTF8BUFFSZ);
       int len = luaO_utf8esc(bf, args.arg[argn++].i);
       addstr2buff(&buff, bf.view().substr(UTF8BUFFSZ - len));
       break;

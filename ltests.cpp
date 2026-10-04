@@ -106,7 +106,7 @@ static int tpanic(lua_State* L)
 */
 static void warnf(lua_State* L, const HostString& msg, int tocont)
 {
-  static byte_span buffsp(200); /* should be enough for tests... */
+  static byte_owner buffsp(200); /* should be enough for tests... */
 
   std::string mstr = to_string(msg.to_utf8());
   byte_view m = to_view(mstr);
@@ -296,7 +296,7 @@ static void lua_printvalue(TValue* v)
   case LUA_VNUMINT:
   case LUA_VNUMFLT:
   {
-    byte_span buff(LUA_N2SBUFFSZ);
+    byte_owner buff(LUA_N2SBUFFSZ);
     size_t len = luaO_tostringbuff(v, buff);
     buff[len] = '\0';
     printf("%s", buff.data());

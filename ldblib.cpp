@@ -451,7 +451,7 @@ static int db_sethook(lua_State* L)
 static int db_gethook(lua_State* L)
 {
   lua_State* L1 = getthread(L).L1;
-  byte_span buff(5);
+  byte_owner buff(5);
   int mask = lua_gethookmask(L1);
   lua_Hook hook = lua_gethook(L1);
   if (hook == nullptr)
@@ -481,7 +481,7 @@ static int db_debug(lua_State* L)
 {
   for (;;)
   {
-    byte_span buffer(LUA_MAXINPUT);
+    byte_owner buffer(LUA_MAXINPUT);
     os_print_stderr(lt::lua_debug);
     os_flush_stderr();
     if (!os_readline(os_stdin(), buffer) || buffer.str_view() == lt::cont_n)

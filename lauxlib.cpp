@@ -619,13 +619,13 @@ static void bb_growTo(luaL_Buffer* B, size_t cap)
     return;
   assert(B->L != nullptr);
   global_State* g = B->L->l_G;
-  byte_span nb = luaM_alloc_char_span(g, nullptr, B->bytes, cap, false);
+  byte_owner nb = luaM_alloc_char_span(g, nullptr, B->bytes, cap, false);
   if (l_unlikely(nb.data() == nullptr && cap > 0))
   {
     lua_pushistringref(B->L, lt::not_enough_memory);
     lua_error(B->L); /* raise a memory error */
   }
-  B->bytes = nb;
+  B->bytes = std::move(nb);
 }
 
 static void bb_append(luaL_Buffer* B, byte_view b)
@@ -829,7 +829,7 @@ struct LoadF : lua_Reader
 {
   int n;        /* number of pre-read characters */
   OsFile* f;         /* file being read */
-  byte_span buff = byte_span(BUFSIZ); /* area for reading file */
+  byte_owner buff = byte_owner(BUFSIZ); /* area for reading file */
   std::optional<byte_view> read(lua_State* L) override;
 };
 
@@ -1085,7 +1085,7 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
     {
     case LUA_TNUMBER:
     {
-      byte_span buff(LUA_N2SBUFFSZ);
+      byte_owner buff(LUA_N2SBUFFSZ);
       byte_view n = *lua_numbertocstringi(L, idx, buff);
       lua_pushlstring(L, n, 0, n.size());
       break;

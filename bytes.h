@@ -152,37 +152,12 @@ inline byte_view as_byte_view(std::span<const std::byte> b)
   return byte_view(reinterpret_cast<const char*>(b.data()), b.size());
 }
 
-struct byte_owner : std::span<char>
+template <typename Self>
+struct byte_writes
 {
-  byte_owner() : std::span<char>() {}
-  byte_owner(size_t s) : std::span<char>(new char[s](), s) {}
-  byte_owner(byte_owner&&) = delete;
-  byte_owner(const byte_owner&) = delete;
-  void operator=(byte_owner&&) = delete;
-  void operator=(const byte_owner&) = delete;
-  ~byte_owner()
-  {
-    delete [] data();
-  }
-};
-
-struct byte_span
-{
-  explicit byte_span(size_t n) { storage = std::make_shared<byte_owner>(n); }
-  byte_span()                  { storage = std::make_shared<byte_owner>(); } /* storage stays null: data() == nullptr, size() == 0 */
-
-  explicit byte_span(byte_view view) : byte_span(view.size()) { apply(view); }
-
-  byte_span(const byte_span&) = default;
-  byte_span& operator=(const byte_span&) = default;
-  byte_span(byte_span&&) = default;
-  byte_span& operator=(byte_span&&) = default;
-
-  byte_span(char* rw, size_t len) = delete;
-  template <size_t N> constexpr byte_span(char (&arr)[N]) = delete;
-
-  size_t size() const { return storage->size(); }
-  char* data() const { return storage->data(); }
+  size_t size() const { return static_cast<const Self*>(this)->size(); }
+  char* data() const { return static_cast<const Self*>(this)->data(); }
+  Self& self() { return *static_cast<Self*>(this); }
 
   size_t apply(byte_view from, size_t pos = 0)
   {
@@ -213,7 +188,8 @@ struct byte_span
   void copy_from(byte_view src, size_t pos = 0)
   {
     assert(pos + src.size() <= size());
-    memcpy(data() + pos, src.data(), src.size());
+    if (!src.empty())
+      memcpy(data() + pos, src.data(), src.size());
   }
 
   void fill(std::byte v, size_t pos = 0, size_t len = byte_view::npos)
@@ -230,7 +206,7 @@ struct byte_span
     memmove(data() + pos, src.data(), src.size());
   }
 
-  byte_span reverse(size_t pos = 0, size_t len = byte_view::npos)
+  Self& reverse(size_t pos = 0, size_t len = byte_view::npos)
   {
     size_t s = size();
     assert(pos <= s);
@@ -243,7 +219,7 @@ struct byte_span
       p[ei] = p[i + pos];
       p[i + pos] = tmp;
     }
-    return *this;
+    return self();
   }
 
   template <typename... Args> void write_number(Args&&...) = delete;
@@ -319,6 +295,54 @@ public:
 
   bool empty() const { return size() == 0; }
 
-  private:
-  std::shared_ptr<byte_owner> storage;
+};
+
+struct byte_owner;
+
+struct byte_span : byte_writes<byte_span>
+{
+  constexpr byte_span() = default;
+
+  size_t size() const { return n_; }
+  char* data() const { return p_; }
+
+  byte_span subspan(size_t pos, size_t len = byte_view::npos) const
+  {
+    assert(pos <= n_);
+    return byte_span(p_ + pos, std::min(len, n_ - pos));
+  }
+
+private:
+  friend struct byte_owner;
+  constexpr byte_span(char* p, size_t n) : p_(p), n_(n) {}
+  char* p_ = nullptr;
+  size_t n_ = 0;
+};
+
+struct byte_owner : byte_writes<byte_owner>
+{
+  byte_owner() = default;
+  explicit byte_owner(size_t n) : p_(new char[n]()), n_(n) {}
+  explicit byte_owner(byte_view view) : byte_owner(view.size()) { apply(view); }
+
+  byte_owner(const byte_owner&) = delete;
+  byte_owner& operator=(const byte_owner&) = delete;
+  byte_owner(byte_owner&& o) noexcept : p_(std::move(o.p_)), n_(o.n_) { o.n_ = 0; }
+  byte_owner& operator=(byte_owner&& o) noexcept
+  {
+    p_ = std::move(o.p_);
+    n_ = o.n_;
+    o.n_ = 0;
+    return *this;
+  }
+
+  size_t size() const { return n_; }
+  char* data() const { return p_.get(); }
+
+  byte_span span() const { return byte_span(p_.get(), n_); }
+  operator byte_span() const { return span(); }
+
+private:
+  std::unique_ptr<char[]> p_;
+  size_t n_ = 0;
 };

@@ -213,7 +213,7 @@ Udata* Udata::luaS_newudata(lua_State* L, size_t s, int nuvalue)
   u->metatable = nullptr;
   u->uv = {};
   u->zb = s == 0;
-  u->data = byte_span{};
+  u->data = byte_owner{};
   u->objsize = 0;
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;

@@ -266,7 +266,7 @@ struct Udata : GCListed
 {
   Table* metatable;
   std::span<TValue> uv;
-  byte_span data;
+  byte_owner data;
   bool zb;
   std::unique_ptr<lua_UserObject> obj;
   size_t objsize;

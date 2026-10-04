@@ -118,8 +118,20 @@ struct InternalDebug
   char istailcall = 0;
   int ftransfer = 0;
   int ntransfer = 0;
-  byte_span short_src_out; /* lazily allocated by funcinfo() when the 'S' option is requested */
+  byte_owner short_src_out; /* lazily allocated by funcinfo() when the 'S' option is requested */
   CallInfo* i_ci = nullptr;
+
+  InternalDebug() = default;
+  InternalDebug(InternalDebug&&) = default;
+  InternalDebug& operator=(InternalDebug&&) = default;
+  InternalDebug(const InternalDebug& o)
+      : event(o.event), name(o.name), namewhat(o.namewhat), what(o.what), source(o.source),
+        currentline(o.currentline), linedefined(o.linedefined), lastlinedefined(o.lastlinedefined),
+        nups(o.nups), nparams(o.nparams), isvararg(o.isvararg), extraargs(o.extraargs),
+        istailcall(o.istailcall), ftransfer(o.ftransfer), ntransfer(o.ntransfer),
+        short_src_out(o.short_src_out.data() != nullptr ? byte_owner(o.short_src_out.view()) : byte_owner()), i_ci(o.i_ci)
+  {
+  }
 };
 
 std::optional<InternalDebug> lua_getstacki(lua_State* L, int level);

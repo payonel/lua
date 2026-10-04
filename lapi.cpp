@@ -422,7 +422,7 @@ std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, byte_span b
 
 LUA_API std::optional<HostString> lua_numbertocstring(lua_State* L, int idx)
 {
-  byte_span buff(LUA_N2SBUFFSZ);
+  byte_owner buff(LUA_N2SBUFFSZ);
   std::optional<byte_view> s = lua_numbertocstringi(L, idx, buff);
   if (!s.has_value())
     return std::nullopt;
