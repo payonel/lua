@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include <signal.h>
+#include <unistd.h>
 
 #include "lua.h"
 
@@ -20,6 +21,9 @@
 #include "os_api.h"
 #include "literals.h"
 #include "internal_string.h"
+
+namespace lua::host
+{
 
 static lua_State* globalL = nullptr;
 
@@ -428,7 +432,6 @@ static int handle_luainit(lua_State* L)
 ** lua_stdin_is_tty detects whether the standard input is a 'tty' (that
 ** is, whether we're running lua interactively).
 */
-#include <unistd.h>
 static inline int lua_stdin_is_tty(void)
 {
   return isatty(0);
@@ -749,6 +752,8 @@ static int pmain(lua_State* L)
   return 1;
 }
 
+}
+
 int main(int argc, char** argv)
 {
   int status, result;
@@ -769,3 +774,4 @@ int main(int argc, char** argv)
   lua_close(L);
   return (result && status == LUA_OK) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
+
