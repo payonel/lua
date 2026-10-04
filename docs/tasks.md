@@ -1144,6 +1144,26 @@ for the debug lock assertions.
 **Done when:** `LUA_EXTRASPACE` and the pointer casts in `lhack.h` are
 gone.
 
+**Status: done** (`ee01222f`).
+- **Public API:** `lua_getextraspace` is replaced by
+  `lua_getextra(L)` / `lua_setextra(L, void*)`, a typed per-thread slot
+  (Java: `Object`). A new thread starts with the main thread's value,
+  matching upstream's `memcpy` of the extra space in `lua_newthread`.
+- **Debug lock:** the counter is `global_State::apilock`, and all
+  threads of a state share it. This is what upstream's `plock` pointer
+  achieved: one counter per state, reached from any thread. The
+  `luai_userstatethread`/`free` assertions check the shared
+  `global_State` instead of comparing `plock`s.
+- `LUA_EXTRASPACE` and the `uint64_t*`/`void**` puns in `lhack.h` are
+  gone.
+- **`test_public_api`:** the extraspace check, which wrote raw bytes
+  with `memcpy`, now uses `lua_setextra`/`lua_getextra` and also checks
+  thread inheritance.
+
+**Results:** `make full` passes; the debug build exercises the lock
+assertions. Not a hot path, so there was no A/B. `global_State` grows by
+the `int` (its charge is frozen as `cost::Global`).
+
 ### M6. Byte storage: view, span, owner
 
 **Effort:** medium · **Risk:** low · **A/B** (allocation churn on
