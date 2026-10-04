@@ -67,11 +67,11 @@ LUAI_FUNC int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2);
 LUAI_FUNC int luaV_equalobj(lua_State* L, StkId t1, StkId t2);
 LUAI_FUNC int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r);
 LUAI_FUNC int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r);
-LUAI_FUNC int luaV_tonumber_(const TValue* obj, lua_Number* n);
-LUAI_FUNC int luaV_tointeger(const TValue* obj, lua_Integer* p, F2Imod mode);
-LUAI_FUNC int luaV_tointegerns(const TValue* obj, lua_Integer* p,
+LUAI_FUNC int luaV_tonumber_(const TValue* obj, NumResult* n);
+LUAI_FUNC int luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode);
+LUAI_FUNC int luaV_tointegerns(const TValue* obj, IntResult* p,
                                F2Imod mode);
-LUAI_FUNC int luaV_flttointeger(lua_Number n, lua_Integer* p, F2Imod mode);
+LUAI_FUNC int luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode);
 LUAI_FUNC lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
                                  StkId val, lu_byte tag, StkId tsrc);
 LUAI_FUNC void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
@@ -86,64 +86,64 @@ LUAI_FUNC lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y);
 LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src);
 LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, StkId rb);
 
-static l_forceinline int tonumber(const TValue* o, lua_Number* nout)
+static l_forceinline int tonumber(const TValue* o, NumResult* nout)
 {
   if (o->tt_ == LUA_VNUMFLT)
   {
-    *nout = fltvalue(o);
+    nout->v = fltvalue(o);
     return 1;
   }
   return luaV_tonumber_(o, nout);
 }
 
-static l_forceinline int tonumberns(const TValue* o, lua_Number* nout)
+static l_forceinline int tonumberns(const TValue* o, NumResult* nout)
 {
   if (o->tt_ == LUA_VNUMFLT)
   {
-    *nout = fltvalue(o);
+    nout->v = fltvalue(o);
     return 1;
   }
   if (o->tt_ == LUA_VNUMINT)
   {
-    *nout = (lua_Number)ivalue(o);
+    nout->v = (lua_Number)ivalue(o);
     return 1;
   }
   return 0;
 }
 
-static l_forceinline int tointeger(const TValue* o, lua_Integer* iout)
+static l_forceinline int tointeger(const TValue* o, IntResult* iout)
 {
   if (l_likely(o->tt_ == LUA_VNUMINT))
   {
-    *iout = ivalue(o);
+    iout->v = ivalue(o);
     return 1;
   }
   return luaV_tointeger(o, iout, LUA_FLOORN2I);
 }
 
-static l_forceinline int tointegerns(const TValue* o, lua_Integer* iout)
+static l_forceinline int tointegerns(const TValue* o, IntResult* iout)
 {
   if (l_likely(o->tt_ == LUA_VNUMINT))
   {
-    *iout = ivalue(o);
+    iout->v = ivalue(o);
     return 1;
   }
   return luaV_tointegerns(o, iout, LUA_FLOORN2I);
 }
 
-static l_forceinline int tonumber(lua_State* L, StkId idx, lua_Number* nout)
+static l_forceinline int tonumber(lua_State* L, StkId idx, NumResult* nout)
 {
   TValue v = getslot(L, idx);
   return tonumber(&v, nout);
 }
 
-static l_forceinline int tonumberns(lua_State* L, StkId idx, lua_Number* nout)
+static l_forceinline int tonumberns(lua_State* L, StkId idx, NumResult* nout)
 {
   TValue v = getslot(L, idx);
   return tonumberns(&v, nout);
 }
 
-static l_forceinline int tointegerns(lua_State* L, StkId idx, lua_Integer* iout)
+static l_forceinline int tointegerns(lua_State* L, StkId idx, IntResult* iout)
 {
   TValue v = getslot(L, idx);
   return tointegerns(&v, iout);

@@ -207,11 +207,11 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   case LUA_OPSHR:
   case LUA_OPBNOT:
   { /* operate only on integers */
-    lua_Integer i1;
-    lua_Integer i2;
+    IntResult i1;
+    IntResult i2;
     if (tointegerns(p1, &i1) && tointegerns(p2, &i2))
     {
-      setivalue(res, intarith(L, op, i1, i2));
+      setivalue(res, intarith(L, op, i1.v, i2.v));
       return 1;
     }
     else
@@ -220,11 +220,11 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   case LUA_OPDIV:
   case LUA_OPPOW:
   { /* operate only on floats */
-    lua_Number n1;
-    lua_Number n2;
+    NumResult n1;
+    NumResult n2;
     if (tonumberns(p1, &n1) && tonumberns(p2, &n2))
     {
-      setfltvalue(res, numarith(L, op, n1, n2));
+      setfltvalue(res, numarith(L, op, n1.v, n2.v));
       return 1;
     }
     else
@@ -232,8 +232,8 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   }
   default:
   { /* other operations */
-    lua_Number n1;
-    lua_Number n2;
+    NumResult n1;
+    NumResult n2;
     if (((p1)->tt_ == LUA_VNUMINT) && ((p2)->tt_ == LUA_VNUMINT))
     {
       setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
@@ -241,7 +241,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
     }
     else if (tonumberns(p1, &n1) && tonumberns(p2, &n2))
     {
-      setfltvalue(res, numarith(L, op, n1, n2));
+      setfltvalue(res, numarith(L, op, n1.v, n2.v));
       return 1;
     }
     else

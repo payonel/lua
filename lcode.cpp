@@ -655,7 +655,7 @@ static int luaK_numberK(FuncState* fs, lua_Number r)
     const int nbm = DBL_MANT_DIG;
     const lua_Number q = ldexp(1.0, -nbm + 1);
     const lua_Number k = r * (1 + q); /* key */
-    lua_Integer ik;
+    IntResult ik;
     setfltvalue(&kv, k); /* key as a TValue */
     if (!luaV_flttointeger(k, &ik, F2Ieq))
     {                                         /* not an integer value? */
@@ -729,9 +729,9 @@ void luaK_int(FuncState* fs, int reg, lua_Integer i)
 
 static void luaK_float(FuncState* fs, int reg, lua_Number f)
 {
-  lua_Integer fi;
-  if (luaV_flttointeger(f, &fi, F2Ieq) && fitsBx(fi))
-    codeAsBx(fs, OP_LOADF, reg, ((int)(fi)));
+  IntResult fi;
+  if (luaV_flttointeger(f, &fi, F2Ieq) && fitsBx(fi.v))
+    codeAsBx(fs, OP_LOADF, reg, ((int)(fi.v)));
   else
     luaK_codek(fs, reg, luaK_numberK(fs, f));
 }
@@ -1431,16 +1431,16 @@ static int isSCint(expdesc* e)
 */
 static int isSCnumber(expdesc* e, int* pi, int* isfloat)
 {
-  lua_Integer i;
+  IntResult i;
   if (e->k == VKINT)
-    i = e->ival;
+    i.v = e->ival;
   else if (e->k == VKFLT && luaV_flttointeger(e->nval, &i, F2Ieq))
     *isfloat = 1;
   else
     return 0; /* not a number */
-  if (!hasjumps(e) && fitsC(i))
+  if (!hasjumps(e) && fitsC(i.v))
   {
-    *pi = int2sC(((int)(i)));
+    *pi = int2sC(((int)(i.v)));
     return 1;
   }
   else
@@ -1545,7 +1545,7 @@ static int validop(int op, TValue* v1, TValue* v2)
   case LUA_OPSHR:
   case LUA_OPBNOT:
   { /* conversion errors */
-    lua_Integer i;
+    IntResult i;
     return (luaV_tointegerns(v1, &i, LUA_FLOORN2I) &&
             luaV_tointegerns(v2, &i, LUA_FLOORN2I));
   }

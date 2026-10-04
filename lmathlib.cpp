@@ -92,9 +92,9 @@ static int math_toint(lua_State* L)
 
 static void pushnumint(lua_State* L, lua_Number d)
 {
-  lua_Integer n;
+  IntResult n;
   if (lua_numbertointeger(d, &n)) /* does 'd' fit in an integer? */
-    lua_pushinteger(L, n);        /* result is integer */
+    lua_pushinteger(L, n.v);        /* result is integer */
   else
     lua_pushnumber(L, d); /* result is float */
 }

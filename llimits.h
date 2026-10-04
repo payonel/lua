@@ -147,11 +147,21 @@ static l_forceinline lua_Number luai_nummod(lua_State* L, lua_Number a, lua_Numb
 ** MAXINTEGER may not have one, and therefore its conversion to float
 ** may have an ill-defined value.)
 */
-static inline int lua_numbertointeger(lua_Number n, lua_Integer* p)
+struct IntResult
+{
+  lua_Integer v;
+};
+
+struct NumResult
+{
+  lua_Number v;
+};
+
+static inline int lua_numbertointeger(lua_Number n, IntResult* p)
 {
   if (n >= (lua_Number)LUA_MININTEGER && n < -(lua_Number)LUA_MININTEGER)
   {
-    *p = (lua_Integer)n;
+    p->v = (lua_Integer)n;
     return 1;
   }
   return 0;

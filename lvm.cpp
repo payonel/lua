@@ -75,19 +75,19 @@ static int l_strton(const TValue* obj, TValue* result)
 ** Try to convert a value to a float. The float case is already handled
 ** by the macro 'tonumber'.
 */
-int luaV_tonumber_(const TValue* obj, lua_Number* n)
+int luaV_tonumber_(const TValue* obj, NumResult* n)
 {
   TValue v;
   if (((obj)->tt_ == LUA_VNUMINT))
   {
-    *n = ((lua_Number)(ivalue(obj)));
+    n->v = ((lua_Number)(ivalue(obj)));
     return 1;
   }
   else if (l_strton(obj, &v))
   {                  /* string coercible to number? */
     /* convert result of 'luaO_str2num' to a float */
     assert((v.tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-    *n = (v.tt_ == LUA_VNUMINT) ? (lua_Number)ivalue(&v) : fltvalue(&v);
+    n->v = (v.tt_ == LUA_VNUMINT) ? (lua_Number)ivalue(&v) : fltvalue(&v);
     return 1;
   }
   else
@@ -97,7 +97,7 @@ int luaV_tonumber_(const TValue* obj, lua_Number* n)
 /*
 ** try to convert a float to an integer, rounding according to 'mode'.
 */
-int luaV_flttointeger(lua_Number n, lua_Integer* p, F2Imod mode)
+int luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode)
 {
   lua_Number f = floor(n);
   if (n != f)
@@ -115,13 +115,13 @@ int luaV_flttointeger(lua_Number n, lua_Integer* p, F2Imod mode)
 ** without string coercion.
 ** ("Fast track" handled by macro 'tointegerns'.)
 */
-int luaV_tointegerns(const TValue* obj, lua_Integer* p, F2Imod mode)
+int luaV_tointegerns(const TValue* obj, IntResult* p, F2Imod mode)
 {
   if (((obj)->tt_ == LUA_VNUMFLT))
     return luaV_flttointeger(fltvalue(obj), p, mode);
   else if (((obj)->tt_ == LUA_VNUMINT))
   {
-    *p = ivalue(obj);
+    p->v = ivalue(obj);
     return 1;
   }
   else
@@ -131,7 +131,7 @@ int luaV_tointegerns(const TValue* obj, lua_Integer* p, F2Imod mode)
 /*
 ** try to convert a value to an integer.
 */
-int luaV_tointeger(const TValue* obj, lua_Integer* p, F2Imod mode)
+int luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode)
 {
   TValue v;
   if (l_strton(obj, &v)) /* does 'obj' point to a numerical string? */
@@ -156,31 +156,31 @@ int luaV_tointeger(const TValue* obj, lua_Integer* p, F2Imod mode)
 ** an initial value equal to LUA_MININTEGER.)
 */
 static int forlimit(lua_State* L, lua_Integer init, StkId limslot,
-                    lua_Integer* p, lua_Integer step)
+                    IntResult* p, lua_Integer step)
 {
   TValue limv = getslot(L, limslot);
   const TValue* lim = &limv;
   if (!luaV_tointeger(lim, p, (step < 0 ? F2Iceil : F2Ifloor)))
   {
     /* not coercible to in integer */
-    lua_Number flim;           /* try to convert to float */
+    NumResult flim;           /* try to convert to float */
     if (!tonumber(lim, &flim)) /* cannot convert to float? */
       luaG_forerror(L, lim, lt::limit);
     /* else 'flim' is a float out of integer bounds */
-    if (((0) < (flim)))
+    if (((0) < (flim.v)))
     { /* if it is positive, it is too large */
       if (step < 0)
         return 1;          /* initial value must be less than it */
-      *p = LUA_MAXINTEGER; /* truncate */
+      p->v = LUA_MAXINTEGER; /* truncate */
     }
     else
     { /* it is less than min integer */
       if (step > 0)
         return 1;          /* initial value must be greater than it */
-      *p = LUA_MININTEGER; /* truncate */
+      p->v = LUA_MININTEGER; /* truncate */
     }
   }
-  return (step > 0 ? init > *p : init < *p); /* not to run? */
+  return (step > 0 ? init > p->v : init < p->v); /* not to run? */
 }
 
 /*
@@ -204,7 +204,7 @@ static int forprep(lua_State* L, StkId ra)
   { /* integer loop? */
     lua_Integer init = slotival(L, pinit);
     lua_Integer step = slotival(L, pstep);
-    lua_Integer limit;
+    IntResult limit;
     if (step == 0)
       luaG_runerror(L, lt::for_step_is_zero);
     if (forlimit(L, init, plimit, &limit, step))
@@ -214,13 +214,13 @@ static int forprep(lua_State* L, StkId ra)
       lua_Unsigned count;
       if (step > 0)
       { /* ascending loop? */
-        count = ((lua_Unsigned)(limit)) - ((lua_Unsigned)(init));
+        count = ((lua_Unsigned)(limit.v)) - ((lua_Unsigned)(init));
         if (step != 1) /* avoid division in the too common case */
           count /= ((lua_Unsigned)(step));
       }
       else
       { /* step < 0; descending loop */
-        count = ((lua_Unsigned)(init)) - ((lua_Unsigned)(limit));
+        count = ((lua_Unsigned)(init)) - ((lua_Unsigned)(limit.v));
         /* 'step+1' avoids negating 'mininteger' */
         count /= ((lua_Unsigned)(-(step + 1))) + 1u;
       }
@@ -232,26 +232,26 @@ static int forprep(lua_State* L, StkId ra)
   }
   else
   { /* try making all values floats */
-    lua_Number init;
-    lua_Number limit;
-    lua_Number step;
+    NumResult init;
+    NumResult limit;
+    NumResult step;
     if (l_unlikely(!tonumber(L, plimit, &limit)))
       luaG_forerror(L, plimit, lt::limit);
     if (l_unlikely(!tonumber(L, pstep, &step)))
       luaG_forerror(L, pstep, lt::step);
     if (l_unlikely(!tonumber(L, pinit, &init)))
       luaG_forerror(L, pinit, lt::initial_value);
-    if (step == 0)
+    if (step.v == 0)
       luaG_runerror(L, lt::for_step_is_zero);
-    if (((0) < (step)) ? ((limit) < (init))
-                            : ((init) < (limit)))
+    if (((0) < (step.v)) ? ((limit.v) < (init.v))
+                            : ((init.v) < (limit.v)))
       return 1; /* skip the loop */
     else
     {
       /* make sure all values are floats */
-      setslotflt(L, ra, limit);
-      setslotflt(L, ra + 1, step);
-      setslotflt(L, ra + 2, init); /* control variable */
+      setslotflt(L, ra, limit.v);
+      setslotflt(L, ra + 1, step.v);
+      setslotflt(L, ra + 2, init.v); /* control variable */
     }
   }
   return 0;
@@ -435,9 +435,9 @@ static inline int LTintfloat(lua_Integer i, lua_Number f)
     return ((((lua_Number)(i))) < (f)); /* compare them as floats */
   else
   { /* i < f <=> i < ceil(f) */
-    lua_Integer fi;
+    IntResult fi;
     if (luaV_flttointeger(f, &fi, F2Iceil)) /* fi = ceil(f) */
-      return i < fi;                        /* compare them as integers */
+      return i < fi.v;                        /* compare them as integers */
     else                                    /* 'f' is either greater or less than all integers */
       return f > 0;                         /* greater? */
   }
@@ -453,9 +453,9 @@ static inline int LEintfloat(lua_Integer i, lua_Number f)
     return ((((lua_Number)(i))) <= (f)); /* compare them as floats */
   else
   { /* i <= f <=> i <= floor(f) */
-    lua_Integer fi;
+    IntResult fi;
     if (luaV_flttointeger(f, &fi, F2Ifloor)) /* fi = floor(f) */
-      return i <= fi;                        /* compare them as integers */
+      return i <= fi.v;                        /* compare them as integers */
     else                                     /* 'f' is either greater or less than all integers */
       return f > 0;                          /* greater? */
   }
@@ -471,9 +471,9 @@ static inline int LTfloatint(lua_Number f, lua_Integer i)
     return ((f) < (((lua_Number)(i)))); /* compare them as floats */
   else
   { /* f < i <=> floor(f) < i */
-    lua_Integer fi;
+    IntResult fi;
     if (luaV_flttointeger(f, &fi, F2Ifloor)) /* fi = floor(f) */
-      return fi < i;                         /* compare them as integers */
+      return fi.v < i;                         /* compare them as integers */
     else                                     /* 'f' is either greater or less than all integers */
       return f < 0;                          /* less? */
   }
@@ -489,9 +489,9 @@ static inline int LEfloatint(lua_Number f, lua_Integer i)
     return ((f) <= (((lua_Number)(i)))); /* compare them as floats */
   else
   { /* f <= i <=> ceil(f) <= i */
-    lua_Integer fi;
+    IntResult fi;
     if (luaV_flttointeger(f, &fi, F2Iceil)) /* fi = ceil(f) */
-      return fi <= i;                       /* compare them as integers */
+      return fi.v <= i;                       /* compare them as integers */
     else                                    /* 'f' is either greater or less than all integers */
       return f < 0;                         /* less? */
   }
@@ -650,16 +650,16 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
     { /* integer == float? */
       /* integer and float can only be equal if float has an integer
          value equal to the integer */
-      lua_Integer i2;
+      IntResult i2;
       assert(t2->tt_ == LUA_VNUMFLT);
-      return (luaV_flttointeger(fltvalue(t2), &i2, F2Ieq) && ivalue(t1) == i2);
+      return (luaV_flttointeger(fltvalue(t2), &i2, F2Ieq) && ivalue(t1) == i2.v);
     }
     case LUA_VNUMFLT:
     {                 /* float == integer? */
-      lua_Integer i1; /* see comment in previous case */
+      IntResult i1; /* see comment in previous case */
       assert(t1->tt_ == LUA_VNUMFLT);
       assert(t2->tt_ == LUA_VNUMINT);
-      return (luaV_flttointeger(fltvalue(t1), &i1, F2Ieq) && i1 == ivalue(t2));
+      return (luaV_flttointeger(fltvalue(t1), &i1, F2Ieq) && i1.v == ivalue(t2));
     }
     case LUA_VSHRSTR:
     {
@@ -1721,13 +1721,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luai_numadd(L, n1, n2));
+            setslotflt(L, ra, luai_numadd(L, n1.v, n2.v));
           }
         }
         break;
@@ -1747,13 +1747,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luai_numsub(L, n1, n2));
+            setslotflt(L, ra, luai_numsub(L, n1.v, n2.v));
           }
         }
         break;
@@ -1773,13 +1773,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luai_nummul(L, n1, n2));
+            setslotflt(L, ra, luai_nummul(L, n1.v, n2.v));
           }
         }
         break;
@@ -1801,13 +1801,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luaV_modf(L, n1, n2));
+            setslotflt(L, ra, luaV_modf(L, n1.v, n2.v));
           }
         }
         break;
@@ -1817,13 +1817,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-        lua_Number n1;
-        lua_Number n2;
+        NumResult n1;
+        NumResult n2;
         if (tonumberns(L, v1, &n1) && tonumberns(v2, &n2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setslotflt(L, ra, luai_numpow(L, n1, n2));
+          setslotflt(L, ra, luai_numpow(L, n1.v, n2.v));
         }
         break;
       }
@@ -1832,13 +1832,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
         assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-        lua_Number n1;
-        lua_Number n2;
+        NumResult n1;
+        NumResult n2;
         if (tonumberns(L, v1, &n1) && tonumberns(v2, &n2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setslotflt(L, ra, luai_numdiv(L, n1, n2));
+          setslotflt(L, ra, luai_numdiv(L, n1.v, n2.v));
         }
         break;
       }
@@ -1859,13 +1859,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luai_numidiv(L, n1, n2));
+            setslotflt(L, ra, luai_numidiv(L, n1.v, n2.v));
           }
         }
         break;
@@ -1874,14 +1874,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
-        lua_Integer i1;
+        IntResult i1;
         lua_Integer i2 = ivalue(v2);
         assert(v2->tt_ == LUA_VNUMINT);
         if (tointegerns(L, v1, &i1))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setsloti(L, ra, l_band(i1, i2));
+          setsloti(L, ra, l_band(i1.v, i2));
         }
         break;
       }
@@ -1889,14 +1889,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
-        lua_Integer i1;
+        IntResult i1;
         lua_Integer i2 = ivalue(v2);
         assert(v2->tt_ == LUA_VNUMINT);
         if (tointegerns(L, v1, &i1))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setsloti(L, ra, l_bor(i1, i2));
+          setsloti(L, ra, l_bor(i1.v, i2));
         }
         break;
       }
@@ -1904,14 +1904,14 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         TValue* v2 = k + GETARG_C(i);
-        lua_Integer i1;
+        IntResult i1;
         lua_Integer i2 = ivalue(v2);
         assert(v2->tt_ == LUA_VNUMINT);
         if (tointegerns(L, v1, &i1))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setsloti(L, ra, l_bxor(i1, i2));
+          setsloti(L, ra, l_bxor(i1.v, i2));
         }
         break;
       }
@@ -1920,11 +1920,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         StkId rb = (base + GETARG_B(i));
         int ic = GETARG_sC(i);
-        lua_Integer ib;
+        IntResult ib;
         if (tointegerns(L, rb, &ib))
         {
           pc++;
-          setsloti(L, ra, luaV_shiftl(ic, ib));
+          setsloti(L, ra, luaV_shiftl(ic, ib.v));
         }
         break;
       }
@@ -1933,11 +1933,11 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         StkId ra = (base + GETARG_A(i));
         StkId rb = (base + GETARG_B(i));
         int ic = GETARG_sC(i);
-        lua_Integer ib;
+        IntResult ib;
         if (tointegerns(L, rb, &ib))
         {
           pc++;
-          setsloti(L, ra, luaV_shiftl(ib, -ic));
+          setsloti(L, ra, luaV_shiftl(ib.v, -ic));
         }
         break;
       }
@@ -1955,13 +1955,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(L, v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luai_numadd(L, n1, n2));
+            setslotflt(L, ra, luai_numadd(L, n1.v, n2.v));
           }
         }
         break;
@@ -1980,13 +1980,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(L, v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luai_numsub(L, n1, n2));
+            setslotflt(L, ra, luai_numsub(L, n1.v, n2.v));
           }
         }
         break;
@@ -2005,13 +2005,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(L, v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luai_nummul(L, n1, n2));
+            setslotflt(L, ra, luai_nummul(L, n1.v, n2.v));
           }
         }
         break;
@@ -2032,13 +2032,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(L, v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luaV_modf(L, n1, n2));
+            setslotflt(L, ra, luaV_modf(L, n1.v, n2.v));
           }
         }
         break;
@@ -2047,13 +2047,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         StkId v2 = base + GETARG_C(i);
-        lua_Number n1;
-        lua_Number n2;
+        NumResult n1;
+        NumResult n2;
         if (tonumberns(L, v1, &n1) && tonumberns(L, v2, &n2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setslotflt(L, ra, luai_numpow(L, n1, n2));
+          setslotflt(L, ra, luai_numpow(L, n1.v, n2.v));
         }
         break;
       }
@@ -2061,13 +2061,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       { /* float division (always with floats) */
         StkId v1 = base + GETARG_B(i);
         StkId v2 = base + GETARG_C(i);
-        lua_Number n1;
-        lua_Number n2;
+        NumResult n1;
+        NumResult n2;
         if (tonumberns(L, v1, &n1) && tonumberns(L, v2, &n2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setslotflt(L, ra, luai_numdiv(L, n1, n2));
+          setslotflt(L, ra, luai_numdiv(L, n1.v, n2.v));
         }
         break;
       }
@@ -2087,13 +2087,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else
         {
-          lua_Number n1;
-          lua_Number n2;
+          NumResult n1;
+          NumResult n2;
           if (tonumberns(L, v1, &n1) && tonumberns(L, v2, &n2))
           {
             StkId ra = base + GETARG_A(i);
             pc++;
-            setslotflt(L, ra, luai_numidiv(L, n1, n2));
+            setslotflt(L, ra, luai_numidiv(L, n1.v, n2.v));
           }
         }
         break;
@@ -2102,13 +2102,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         StkId v2 = base + GETARG_C(i);
-        lua_Integer i1;
-        lua_Integer i2;
+        IntResult i1;
+        IntResult i2;
         if (tointegerns(L, v1, &i1) && tointegerns(L, v2, &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setsloti(L, ra, l_band(i1, i2));
+          setsloti(L, ra, l_band(i1.v, i2.v));
         }
         break;
       }
@@ -2116,13 +2116,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         StkId v2 = base + GETARG_C(i);
-        lua_Integer i1;
-        lua_Integer i2;
+        IntResult i1;
+        IntResult i2;
         if (tointegerns(L, v1, &i1) && tointegerns(L, v2, &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setsloti(L, ra, l_bor(i1, i2));
+          setsloti(L, ra, l_bor(i1.v, i2.v));
         }
         break;
       }
@@ -2130,13 +2130,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         StkId v2 = base + GETARG_C(i);
-        lua_Integer i1;
-        lua_Integer i2;
+        IntResult i1;
+        IntResult i2;
         if (tointegerns(L, v1, &i1) && tointegerns(L, v2, &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setsloti(L, ra, l_bxor(i1, i2));
+          setsloti(L, ra, l_bxor(i1.v, i2.v));
         }
         break;
       }
@@ -2144,13 +2144,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         StkId v2 = base + GETARG_C(i);
-        lua_Integer i1;
-        lua_Integer i2;
+        IntResult i1;
+        IntResult i2;
         if (tointegerns(L, v1, &i1) && tointegerns(L, v2, &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setsloti(L, ra, luaV_shiftl(i1, i2));
+          setsloti(L, ra, luaV_shiftl(i1.v, i2.v));
         }
         break;
       }
@@ -2158,13 +2158,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId v1 = base + GETARG_B(i);
         StkId v2 = base + GETARG_C(i);
-        lua_Integer i1;
-        lua_Integer i2;
+        IntResult i1;
+        IntResult i2;
         if (tointegerns(L, v1, &i1) && tointegerns(L, v2, &i2))
         {
           StkId ra = base + GETARG_A(i);
           pc++;
-          setsloti(L, ra, luaV_shiftr(i1, i2));
+          setsloti(L, ra, luaV_shiftr(i1.v, i2.v));
         }
         break;
       }
@@ -2214,7 +2214,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         StkId rb = (base + GETARG_B(i));
-        lua_Number nb;
+        NumResult nb;
         if ((slottag(L, rb) == LUA_VNUMINT))
         {
           lua_Integer ib = slotival(L, rb);
@@ -2222,7 +2222,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         }
         else if (tonumberns(L, rb, &nb))
         {
-          setslotflt(L, ra, ((void)(L), -(nb)));
+          setslotflt(L, ra, ((void)(L), -(nb.v)));
         }
         else
         {
@@ -2237,10 +2237,10 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       {
         StkId ra = (base + GETARG_A(i));
         StkId rb = (base + GETARG_B(i));
-        lua_Integer ib;
+        IntResult ib;
         if (tointegerns(L, rb, &ib))
         {
-          setsloti(L, ra, ((lua_Integer)(((lua_Unsigned)(~((lua_Unsigned)(0)))) ^ ((lua_Unsigned)(ib)))));
+          setsloti(L, ra, ((lua_Integer)(((lua_Unsigned)(~((lua_Unsigned)(0)))) ^ ((lua_Unsigned)(ib.v)))));
         }
         else
         {

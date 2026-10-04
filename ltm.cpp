@@ -346,12 +346,12 @@ void luaT_adjustvarargs(lua_State* L, CallInfo* ci, const Proto* p)
 void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
 {
   int nextra = ci->nextraargs;
-  lua_Integer n;
+  IntResult n;
   if (tointegerns(rc, &n))
   { /* integral value? */
-    if (((lua_Unsigned)(n)) - 1 < ((unsigned int)(nextra)))
+    if (((lua_Unsigned)(n.v)) - 1 < ((unsigned int)(nextra)))
     {
-      StkId slot = ci->func - nextra + ((int)(n)) - 1;
+      StkId slot = ci->func - nextra + ((int)(n.v)) - 1;
       copyslot(L, ra, slot);
       return;
     }

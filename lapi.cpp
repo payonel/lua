@@ -338,7 +338,7 @@ LUA_API int lua_isinteger(lua_State* L, int idx)
 
 LUA_API int lua_isnumber(lua_State* L, int idx)
 {
-  lua_Number n;
+  NumResult n;
   TValue o = index2val(L, idx);
   return tonumber(&o, &n);
 }
@@ -443,20 +443,20 @@ LUA_API size_t lua_stringtonumber(lua_State* L, const HostString& s)
 
 LUA_API std::optional<lua_Number> lua_tonumberx(lua_State* L, int idx)
 {
-  lua_Number n = 0;
+  NumResult n = {0};
   TValue o = index2val(L, idx);
   if (!tonumber(&o, &n))
     return std::nullopt;
-  return n;
+  return n.v;
 }
 
 LUA_API std::optional<lua_Integer> lua_tointegerx(lua_State* L, int idx)
 {
-  lua_Integer res = 0;
+  IntResult res = {0};
   TValue o = index2val(L, idx);
   if (!tointeger(&o, &res))
     return std::nullopt;
-  return res;
+  return res.v;
 }
 
 LUA_API int lua_toboolean(lua_State* L, int idx)

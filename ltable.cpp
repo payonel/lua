@@ -158,7 +158,7 @@ int Table::hashint(lua_Integer i) const
 static unsigned l_hashfloat(lua_Number n)
 {
   int i;
-  lua_Integer ni;
+  IntResult ni;
   n = frexp(n, &i) * -((lua_Number)(INT_MIN));
   if (!lua_numbertointeger(n, &ni))
   { /* is 'n' inf/-inf/NaN? */
@@ -167,7 +167,7 @@ static unsigned l_hashfloat(lua_Number n)
   }
   else
   { /* normal case */
-    unsigned int u = ((unsigned int)(i)) + ((unsigned int)(ni));
+    unsigned int u = ((unsigned int)(i)) + ((unsigned int)(ni.v));
     return (u <= ((unsigned int)(INT_MAX)) ? u : ~u);
   }
 }
@@ -1121,9 +1121,9 @@ lu_byte Table::luaH_get(const TValue* key, TValue* res)
     break;
   case LUA_VNUMFLT:
   {
-    lua_Integer k;
+    IntResult k;
     if (luaV_flttointeger(fltvalue(key), &k, F2Ieq)) /* integral index? */
-      return t->luaH_getint(k, res);                 /* use specialized version */
+      return t->luaH_getint(k.v, res);                 /* use specialized version */
     /* else... */
   } /* FALLTHROUGH */
   default:
@@ -1255,9 +1255,9 @@ int Table::luaH_pset(const TValue* key, TValue* val)
     return HNOTFOUND;
   case LUA_VNUMFLT:
   {
-    lua_Integer k;
+    IntResult k;
     if (luaV_flttointeger(fltvalue(key), &k, F2Ieq)) /* integral index? */
-      return t->psetint(k, val);                     /* use specialized version */
+      return t->psetint(k.v, val);                     /* use specialized version */
     /* else... */
   } /* FALLTHROUGH */
   default:
@@ -1285,10 +1285,10 @@ void Table::luaH_finishset(lua_State* L, const TValue* key,
     else if (((key)->tt_ == LUA_VNUMFLT))
     {
       lua_Number f = fltvalue(key);
-      lua_Integer k;
+      IntResult k;
       if (luaV_flttointeger(f, &k, F2Ieq))
       { /* is key equal to an integer? */
-        setivalue(&aux, k);
+        setivalue(&aux, k.v);
         actk = &aux; /* use the integer as the key */
       }
       else if (l_unlikely((!((f) == (f)))))

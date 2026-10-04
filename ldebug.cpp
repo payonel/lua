@@ -960,7 +960,7 @@ l_noret luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, byte_v
 */
 l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2)
 {
-  lua_Integer temp;
+  IntResult temp;
   (void)p2;
   if (!luaV_tointegerns(p1, &temp, LUA_FLOORN2I))
     src2 = src1;
