@@ -681,6 +681,19 @@ loadlib.cpp:158  os_dlclose(reinterpret_cast<OsLib*>(*p));
 **Done when:** `loadlib.cpp` has no `reinterpret_cast`.
 **Depends:** M4 for the `void**` overlay.
 
+**Status: done** (`c474c74b`). `loadlib.cpp` has no `reinterpret_cast`.
+- `os_dlfunc` returns `int (*)(lua_State*)`, declared without including
+  `lua.h` in `os_api.h`. `os_dlsym` stays for `lua.cpp`'s readline
+  lookup, which is host-launcher code and is rewritten in Java rather
+  than transcribed.
+- **Remaining:** `static_cast<OsLib*>` on the `_CLIBS` light userdata,
+  which Java expresses as a plain downcast `(OsLib) obj`, and
+  `static_cast<OsLib**>` on the `__gc` userdata payload, which M4
+  replaces.
+
+**Results:** `make full` passes. This is not a hot path, so there was no
+A/B.
+
 ### L12. Time functions behind `os_api` (added during L4)
 
 **Effort:** low · **Risk:** low
