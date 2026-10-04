@@ -11,6 +11,9 @@
 #include "lobject.h"
 #include "lstate.h"
 
+namespace lua::gc
+{
+
 /*
 ** Collectable objects may have one of three colors: white, which means
 ** the object is not marked; gray, which means the object is marked, but
@@ -283,3 +286,5 @@ static l_forceinline void luaC_barrierback(lua_State* L, GCObject* p, const TVal
 }
 LUAI_FUNC void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt);
 LUAI_FUNC void luaC_changemode(lua_State* L, int newmode);
+
+}

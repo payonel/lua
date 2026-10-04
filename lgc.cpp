@@ -21,6 +21,9 @@
 #include "ltm.h"
 #include "literals.h"
 
+namespace lua::gc
+{
+
 /*
 ** Maximum number of elements to sweep in each single step.
 ** (Large enough to dissipate fixed overheads but small enough
@@ -1927,3 +1930,5 @@ void luaC_fullgc(lua_State* L, int isemergency)
 }
 
 /* }====================================================== */
+
+}
