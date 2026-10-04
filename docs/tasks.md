@@ -1420,6 +1420,26 @@ passes. A/B: see the C-phase summary row in C12.
 This is the only namespace that touches `HostString`. Retire `extern "C"`,
 `LUA_API`, `LUALIB_API` and `LUAMOD_API`.
 
+**Status: done** (`4c6d0ded`).
+- `lapi.h` and the internals of `lapi.cpp`/`lauxlib.cpp` are in
+  `lua::api`. The public `lua_*`/`luaL_*` functions, `lua_ident` and
+  the `luaL_Buffer` destructor stay global (C0).
+- `LUA_API`/`LUALIB_API` (`extern "C"`) are retired, so the public API
+  has C++ linkage.
+- **Decision: `LUAMOD_API` stays `extern "C"`.** `package.loadlib`/
+  `require` find a C module's `luaopen_*` entry point by its unmangled
+  name (`dlsym`), so this is host ABI, not engine shape.
+- **The user's library seal keeps its intent.** The `makefile` step that
+  localizes every mangled symbol in `liblua.a` now also keeps the mangled
+  global-scope `lua_*`/`luaL_*`/`luaopen_*` functions. The public API
+  stays linkable, and the packaged internals (`_ZN3lua…`) are still
+  sealed off. It previously relied on `extern "C"` to tell the two
+  apart.
+- `HostString` stays a global public type, since it appears in the API
+  signatures.
+- **Results:** `make full` passes, including `test_public_api` against
+  the sealed archive and the `tests/libs` C modules.
+
 ### C8. `lua::lib`
 
 One class per library file (`BaseLib`, `StringLib`, `TableLib`, `MathLib`,
