@@ -1469,6 +1469,9 @@ package. `make full` passes.
 
 `lua.cpp` becomes the launcher class, outside the engine.
 
+**Status: done** (`2fe920ff`). `lua.cpp` is in `lua::host`; `main` stays
+global. `make full` passes.
+
 ### C11. Macro teardown
 
 Remove `LUAI_FUNC`, `LUAI_DDEC`/`LUAI_DDEF` and any file-scope `static`
