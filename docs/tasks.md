@@ -1297,6 +1297,37 @@ inlining and direct dispatch are preserved exactly.
   `LuaState::method()`), and `test_public_api.cpp`/`tests/libs` follow.
   `ltests.cpp` gets mechanical call-shape updates only, flagged per commit.
 
+**C0 decisions (recorded before C1):**
+- **Upstream's prefixes are the class names; functions stay free.**
+  - `luaD_call(L, …)` transcribes mechanically to Java's
+    `Ldo.luaD_call(L, …)` (a static method). Upstream's prefix already
+    names the file that is the class: `luaD_` → ldo, `luaV_` → lvm,
+    `luaK_` → lcode, `luaG_` → ldebug, and so on.
+  - Converting every first-argument function into a method on that type
+    would rewrite about 1,600 internal call sites and change upstream's
+    call shape, with no Java benefit. So by "favor shape", free functions
+    stay free.
+  - The exception is where a file *is* a type, as the branch already did
+    for `Table`, `TString`, `Proto` and the closures. Those keep their
+    methods.
+- **Public API shape is kept.**
+  - `lua_*`/`luaL_*` stay free functions over `lua_State*`. Java gets
+    `LuaApi.lua_xxx(L, …)`/`LuaAuxLib.luaL_xxx(L, …)` static methods.
+  - This avoids rewriting about 2,600 call sites in `test_public_api`,
+    `tests/libs` and `ltests.cpp` (which may only take mechanical edits),
+    and consumers keep upstream's API.
+  - C7 still retires `extern "C"` and the `LUA_API`-style macros.
+- **Packages are C++ namespaces** (`lua::bytes`, `lua::object`,
+  `lua::gc`, `lua::runtime`, `lua::vm`, `lua::compiler`, `lua::api`,
+  `lua::lib`, `lua::platform`, `lua::host`).
+  - `packages.h` declares them and brings them into global scope with
+    using-directives, the stand-in for Java imports. Wrapping a file in
+    its package therefore leaves every call site unchanged.
+  - Each namespace is one Java package, and each file is one class in
+    it.
+  - Mangled names change and nothing else does: same inlining, same
+    dispatch.
+
 ### C1. `lua::object`
 
 Finish the `GCObject` hierarchy, including `GCListed` from L1. `Table`,
