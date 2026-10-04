@@ -1038,7 +1038,7 @@ LUA_API int lua_rawgetp(lua_State* L, int idx, const void* p)
   TValue k;
   lua_lock(L);
   t = gettable(L, idx);
-  setpvalue(&k, const_cast<void*>(p));
+  setpvalue(&k, p);
   TValue res;
   lu_byte tag = t->luaH_get(&k, &res);
   if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
@@ -1265,7 +1265,7 @@ LUA_API void lua_rawset(lua_State* L, int idx)
 LUA_API void lua_rawsetp(lua_State* L, int idx, const void* p)
 {
   TValue k;
-  setpvalue(&k, const_cast<void*>(p));
+  setpvalue(&k, p);
   aux_rawset(L, idx, &k, 1);
 }
 

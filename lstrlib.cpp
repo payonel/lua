@@ -1729,7 +1729,7 @@ static int str_format(lua_State* L)
           }
           else
           {
-            blen = body.write_number(((uintptr_t)(p)), 16, size_t(0), true);
+            blen = util::pointertext(body, 0, p);
           }
         }
         byte_view bodybytes = body.view().substr(0, blen);

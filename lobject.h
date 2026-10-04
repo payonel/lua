@@ -751,6 +751,11 @@ static l_forceinline void setpvalue(TValue* obj, void* x)
   obj->tt_ = LUA_VLIGHTUSERDATA;
 }
 
+static l_forceinline void setpvalue(TValue* obj, const void* x)
+{
+  setpvalue(obj, const_cast<void*>(x));
+}
+
 static l_forceinline void setfvalue(TValue* obj, CFuncInfo* cfi)
 {
   obj->value_.ref = cfi;

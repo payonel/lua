@@ -888,7 +888,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
       byte_span bf(LUA_N2SBUFFSZ);
       assert(argn < args.n && args.arg[argn].tag == 'p');
       const void* p = args.arg[argn++].p;
-      size_t bfn = bf.write_number(((uintptr_t)(p)), 16, size_t(0), true);
+      size_t bfn = util::pointertext(bf, 0, p);
       addstr2buff(&buff, bf.view().substr(0, bfn));
       break;
     }

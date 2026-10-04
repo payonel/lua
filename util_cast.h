@@ -17,10 +17,20 @@ namespace util
 
   template <typename T, typename V> T type_cast(V) = delete;
 
+  inline size_t pointertext(byte_span out, size_t pos, const void* p)
+  {
+    return out.write_number(reinterpret_cast<uintptr_t>(p), 16, pos, true);
+  }
+
+  inline size_t pointertext(byte_span out, size_t pos, lua_CFunction_t pf)
+  {
+    return out.write_number(reinterpret_cast<uintptr_t>(pf), 16, pos, true);
+  }
+
   inline InternalString func_to_string(lua_CFunction_t pf)
   {
     byte_span buf(20);
-    size_t n = buf.write_number(reinterpret_cast<uintptr_t>(pf), 16, 0ul, true);
+    size_t n = pointertext(buf, 0, pf);
     return InternalString(buf.view().substr(0, n));
   }
   
