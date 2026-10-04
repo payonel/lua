@@ -1361,6 +1361,13 @@ allocation and barrier hot paths, and moving them into a separate object
 would add a dereference in Java. `GarbageCollector` operates on
 `global_State`'s fields.
 
+**Status: done** (`31954e74`).
+- `lgc` is in `lua::gc`. Its functions keep their `luaC_` names (Java:
+  static methods of `GarbageCollector`) and still operate on
+  `global_State`'s fields, which stay put.
+- **Results:** `make full` passes. A/B: b_gc 3.71s → 3.76s min
+  (3.82s → 3.80s median).
+
 ### C4. `lua::runtime`
 
 `lstate.*` (`LuaState`, `GlobalState`, `CallInfo`), `ldo.*` (`luaD_*`
