@@ -205,6 +205,41 @@ differently:
 **Done when:** no parameter of primitive pointer type remains outside the
 result-struct form, and no `const InternalString**` remains.
 
+**Status: done** (`54a708c1`, `94667cf7`).
+
+**Decisions:**
+- **Hot converters use holders.** `IntResult`/`NumResult` (in `llimits.h`)
+  replace the primitive out-param in every converter and in `forlimit`.
+  Call shapes are unchanged; readers use `.v`. Port note: in Java, hoist
+  the holders out of the `luaV_execute` opcode bodies (one allocation per
+  `luaV_execute` entry) instead of relying on escape analysis.
+- **`frameentry` is expanded inline.** `84668e05`'s shared forced-inline
+  helper wrote six interpreter locals (`cl`, `k`, `code`, `pc`, `base`,
+  `trap`) through pointers. Java can't do that, and keeping them true
+  locals matters most for Java interpreter speed. A holder struct would
+  turn `pc`/`base` into field loads on every instruction. The seven
+  expansions are upstream's `startfunc`/`returning` block text. C++ codegen
+  is unchanged, since the helper was already forced inline.
+- **`isSCnumber`** keeps upstream's quirk that a failed float attempt
+  leaves `isfloat` set (it is encoded into the instruction). So it fills an
+  `SCImm {im, isfloat}` holder shared across attempts rather than
+  returning a value.
+- **Cold sites return small named structs**: `VarName`, `RegName`,
+  `BaseLine`, `LocalSlot`, `NumParse`/`IntParse`, `Sign`, `PackOption`,
+  `PackDetails`, `Capture`, `Utf8Code`, `ThreadArg`, `FirstChar`,
+  `GenSweep`. `luaK_concat` and `test_then_block` return the jump-list
+  head (`e->t = luaK_concat(fs, e->t, l2)`).
+- **Left for later tasks:** `ltable.h` `fval2arr(lu_byte* tag)` (M3);
+  `Instruction*` interior pointers into `code` (`lparser.cpp:1797,2185`,
+  `lcode.cpp`) (L4). `lmathlib` `uint64_t* state` and `lcode`
+  `finaltarget(Instruction* code)` are array parameters, which are fine
+  in Java.
+
+**Results:** `make full` green. A/B against L1 (`b37ee7bc`), 5–11
+interleaved runs, medians: all.lua 5.06s → 5.00s; b_vm 0.62 → 0.63s;
+b_arith 0.75 → 0.72s; b_call, b_string and b_gc within noise. RSS
+unchanged.
+
 ### L3. `void*` context callbacks
 
 **Effort:** medium · **Risk:** medium · **A/B** (`pcall`, coroutine resume)
