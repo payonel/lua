@@ -918,6 +918,52 @@ GC debt and the sizes passed to the `lua_Alloc` permission hook come from
 
 **Done when:** `sizeof` remains only in `static_assert`s.
 
+**Status: done** (`909f3741`).
+- `lmem.h` `namespace cost` has one `int` per-unit charge per
+  allocation kind:
+  - per element: `Byte`, `Ref`, `Instruction`, `Value`, `TValue`,
+    `Node`, `LocVar`, `Vardesc`, `Upvaldesc`, `Labeldesc`,
+    `AbsLineInfo`
+  - per object: `CallInfo`, `TString`, `Udata`, `Table`, `CClosure`,
+    `LClosure`, `CFuncInfo`, `UpVal`, `Proto`, `Thread`, `Global`
+- **Users:** the typed span allocators, `take_debt`/`free_debt`,
+  `objsize`, `luaF_protosize`, `luaH_size`, `luaE_threadsize`,
+  `sizeCclosure`/`sizeLclosure`, the GC step unit (`stepsize / cost::Ref`),
+  `LUAI_GCSTEPSIZE`, and the `MAX_SIZE - cost::X` and
+  `MAX_SIZET / cost::X` guards.
+- Accounting sums are `l_mem`, and `lu_mem` is unused (the typedef stays
+  with upstream's comment). `MAX_LMEM` is `PTRDIFF_MAX`, and `MAX_SIZE`
+  is `LUA_MAXINTEGER` with a `static_assert`.
+
+**Decision: frozen current sizes, not stock 5.5 sizes.**
+- The user's accountability guidance puts accountability first and
+  exactness second. Today's values already scale (per slot, per node,
+  per byte of string or userdata), and no allocation is uncharged.
+- Switching to stock values would move GC pacing and
+  `collectgarbage("count")` and risk the pinned `nsize` tests, and
+  would add nothing to accountability.
+- Constants are `int`, so the signed `GCdebt` arithmetic never mixes
+  with unsigned.
+
+**Remaining `sizeof`, all outside accounting:**
+- `static_assert`s.
+- The userdata payload sizes `sizeof(LStream/RanState/GMatchState/
+  OsLib*)`, which M4 replaces.
+- The chunk-format widths in `ldump`/`lundump` (`sizeof(T)` in
+  `loadVector`/`dumpNumInfo`/align). These are the format's
+  fixed widths; Java uses `Integer.BYTES`/`Long.BYTES`/`Double.BYTES`.
+- `luaZ_overlay`'s element count.
+- **Note for M3:** `ltests` `T.querytab`-style size reports still print
+  `sizeof(TValue/Node/lua_State)`. Accounting no longer follows them, so
+  a layout change shows up there and nowhere else.
+
+**Results:**
+- `make full` passes.
+- `trace_gc.lua` + `trace_gc2.lua` output is byte-identical before and
+  after.
+- A/B (min): all.lua 4.90s → 4.86s, b_gc 3.92s → 3.88s,
+  b_table 0.41s → 0.40s. RSS is equal.
+
 ### M3. Value storage layout: parallel columns
 
 **Effort:** high · **Risk:** medium · **A/B** (time and memory)
