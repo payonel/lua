@@ -351,10 +351,12 @@ constexpr uint64_t Int2I(lua_Integer x)
   return x;
 }
 
-struct RanState
+struct RanState : lua_UserObject
 {
   uint64_t s[4];
 };
+
+constexpr size_t RANSTATE_SIZE = 32;
 
 /*
 ** Project the random integer 'ran' into the interval [0, n].
@@ -383,7 +385,7 @@ static int math_random(lua_State* L)
 {
   lua_Integer low, up;
   lua_Unsigned p;
-  RanState* state = static_cast<RanState*>(lua_touserdata(L, lua_upvalueindex(1)));
+  RanState* state = static_cast<RanState*>(lua_touserobject(L, lua_upvalueindex(1)));
   uint64_t rv = nextrand(state->s); /* next pseudo-random value */
   switch (lua_gettop(L))
   { /* check number of arguments */
@@ -436,7 +438,7 @@ static void setseed(lua_State* L, uint64_t* state,
 
 static int math_randomseed(lua_State* L)
 {
-  RanState* state = static_cast<RanState*>(lua_touserdata(L, lua_upvalueindex(1)));
+  RanState* state = static_cast<RanState*>(lua_touserobject(L, lua_upvalueindex(1)));
   lua_Unsigned n1, n2;
   if (lua_isnone(L, 1))
   {
@@ -462,7 +464,9 @@ static const luaL_Regi randfuncs[] = {
 */
 static void setrandfunc(lua_State* L)
 {
-  RanState* state = static_cast<RanState*>(lua_newuserdatauv(L, sizeof(RanState), 0));
+  std::unique_ptr<RanState> o = std::make_unique<RanState>();
+  RanState* state = o.get();
+  lua_newuserobject(L, std::move(o), RANSTATE_SIZE, 0);
   setseed(L, state->s, luaL_makeseed(L), 0); /* initialize with random seed */
   lua_pop(L, 2);                             /* remove pushed seeds */
   luaL_setfuncsi(L, randfuncs, 1);

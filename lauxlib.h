@@ -59,6 +59,8 @@ LUALIB_API int(luaL_newmetatable)(lua_State* L, const HostString& tname);
 LUALIB_API void(luaL_setmetatable)(lua_State* L, const HostString& tname);
 LUALIB_API void*(luaL_testudata) (lua_State* L, int ud, const HostString& tname);
 LUALIB_API void*(luaL_checkudata) (lua_State* L, int ud, const HostString& tname);
+LUALIB_API lua_UserObject*(luaL_testuserobject) (lua_State* L, int ud, const HostString& tname);
+LUALIB_API lua_UserObject*(luaL_checkuserobject) (lua_State* L, int ud, const HostString& tname);
 LUALIB_API void(luaL_where)(lua_State* L, int lvl);
 LUALIB_API int(luaL_error)(lua_State* L, const HostString& fmt);
 LUALIB_API int(luaL_checkoption)(lua_State* L, int arg, const std::optional<HostString>& def, const std::span<const HostString>& lst);
@@ -175,7 +177,7 @@ inline void luaL_addchar(luaL_Buffer* B, char c)
 
 inline constexpr byte_view LUA_FILEHANDLE = "FILE*";
 
-struct luaL_Stream
+struct luaL_Stream : lua_UserObject
 {
   OsFile* f;
   lua_CFunction closef;

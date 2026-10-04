@@ -49,7 +49,7 @@ typedef luaL_Stream LStream;
 
 static inline LStream* tolstream(lua_State* L)
 {
-  return static_cast<LStream*>(luaL_checkudatai(L, 1, LUA_FILEHANDLE));
+  return static_cast<LStream*>(luaL_checkuserobjecti(L, 1, LUA_FILEHANDLE));
 }
 
 static inline int isclosed(const LStream* p)
@@ -61,7 +61,7 @@ static int io_type(lua_State* L)
 {
   LStream* p;
   luaL_checkany(L, 1);
-  p = static_cast<LStream*>(luaL_testudatai(L, 1, LUA_FILEHANDLE));
+  p = static_cast<LStream*>(luaL_testuserobjecti(L, 1, LUA_FILEHANDLE));
   if (p == nullptr)
     luaL_pushfail(L); /* not a file */
   else if (isclosed(p))
@@ -98,10 +98,14 @@ static OsFile* tofile(lua_State* L)
 ** before opening the actual file; so, if there is a memory error, the
 ** handle is in a consistent state.
 */
+constexpr size_t LSTREAM_SIZE = 16;
+
 static LStream* newprefile(lua_State* L)
 {
-  LStream* p = static_cast<LStream*>(lua_newuserdatauv(L, sizeof(LStream), 0));
+  std::unique_ptr<LStream> o = std::make_unique<LStream>();
+  LStream* p = o.get();
   p->closef = nullptr; /* mark file handle as 'closed' */
+  lua_newuserobject(L, std::move(o), LSTREAM_SIZE, 0);
   luaL_setmetatablei(L, LUA_FILEHANDLE);
   return p;
 }
@@ -219,7 +223,7 @@ static OsFile* getiofile(lua_State* L, byte_view findex)
 {
   LStream* p;
   lua_getfieldi(L, LUA_REGISTRYINDEX, findex);
-  p = static_cast<LStream*>(lua_touserdata(L, -1));
+  p = static_cast<LStream*>(lua_touserobject(L, -1));
   if (l_unlikely(isclosed(p)))
   {
     byte_view name = byte_view(findex).substr(lt::_IO_.size());
@@ -572,7 +576,7 @@ static int f_read(lua_State* L)
 */
 static int io_readline(lua_State* L)
 {
-  LStream* p = static_cast<LStream*>(lua_touserdata(L, lua_upvalueindex(1)));
+  LStream* p = static_cast<LStream*>(lua_touserobject(L, lua_upvalueindex(1)));
   int i;
   int n = (int) lua_tointeger(L, lua_upvalueindex(2));
   if (isclosed(p)) /* file is already closed? */

@@ -137,6 +137,16 @@ l_noret luaM_toobig(lua_State* L)
   luaG_runerror(L, lt::memory_allocation_error_block_too_big);
 }
 
+void luaM_takeobj(lua_State* L, size_t size)
+{
+  take_debt(L, size, LUA_VUSERDATA & NOVARIANT_MASK);
+}
+
+void luaM_freeobj(lua_State* L, size_t size)
+{
+  free_debt(L, size, LUA_VUSERDATA & NOVARIANT_MASK);
+}
+
 bool luaM_reserve(lua_State* L, size_t size)
 {
   global_State* g = L->l_G;

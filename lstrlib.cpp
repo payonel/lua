@@ -925,7 +925,9 @@ static int str_match(lua_State* L)
 }
 
 /* state for 'gmatch' */
-struct GMatchState
+constexpr size_t GMATCHSTATE_SIZE = 584;
+
+struct GMatchState : lua_UserObject
 {
   ptrdiff_t src;       /* current position */
   ptrdiff_t p;
@@ -935,7 +937,7 @@ struct GMatchState
 
 static int gmatch_aux(lua_State* L)
 {
-  GMatchState* gm = static_cast<GMatchState*>(lua_touserdata(L, lua_upvalueindex(3)));
+  GMatchState* gm = static_cast<GMatchState*>(lua_touserobject(L, lua_upvalueindex(3)));
   ptrdiff_t src;
   gm->ms.L = L;
   for (src = gm->src; src <= gm->ms.src_end; src++)
@@ -959,7 +961,9 @@ static int gmatch(lua_State* L)
   size_t init = posrelatI(luaL_optinteger(L, 3, 1), ls) - 1;
   GMatchState* gm;
   lua_settop(L, 2); /* keep strings on closure to avoid being collected */
-  gm = static_cast<GMatchState*>(lua_newuserdatauv(L, sizeof(GMatchState), 0));
+  std::unique_ptr<GMatchState> o = std::make_unique<GMatchState>();
+  gm = o.get();
+  lua_newuserobject(L, std::move(o), GMATCHSTATE_SIZE, 0);
   if (init > ls)   /* start after string's end? */
     init = ls + 1;
   prepstate(&gm->ms, L, s, p);

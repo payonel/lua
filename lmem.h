@@ -43,6 +43,8 @@ LUAI_FUNC l_noret luaM_toobig(lua_State* L);
 struct global_State;
 
 LUAI_FUNC bool luaM_reserve(lua_State* L, size_t size);
+LUAI_FUNC void luaM_takeobj(lua_State* L, size_t size);
+LUAI_FUNC void luaM_freeobj(lua_State* L, size_t size);
 LUAI_FUNC void luaM_release(lua_State* L, size_t size);
 
 // type allocators

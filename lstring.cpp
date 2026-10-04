@@ -214,6 +214,7 @@ Udata* Udata::luaS_newudata(lua_State* L, size_t s, int nuvalue)
   u->uv = {};
   u->zb = s == 0;
   u->data = byte_span{};
+  u->objsize = 0;
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
   std::span<TValue> uv = luaM_alloc_TValue_span(L->l_G, L, {}, nuvalue, false);

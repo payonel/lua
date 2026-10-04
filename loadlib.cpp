@@ -150,21 +150,29 @@ static OsLib* checkclib(lua_State* L, byte_view path)
   return plib;
 }
 
+struct LibHandle : lua_UserObject
+{
+  OsLib* lib;
+};
+
+constexpr size_t LIBHANDLE_SIZE = 8;
+
 static int lib_gc(lua_State* L)
 {
-  OsLib** p = static_cast<OsLib**>(lua_touserdata(L, 1));
-  if (*p)
+  LibHandle* p = static_cast<LibHandle*>(lua_touserobject(L, 1));
+  if (p->lib)
   {
-    os_dlclose(*p);
-    *p = nullptr;
+    os_dlclose(p->lib);
+    p->lib = nullptr;
   }
   return 0;
 }
 
 static void createlibstr(lua_State* L, OsLib* plib)
 {
-  OsLib** p = static_cast<OsLib**>(lua_newuserdatauv(L, sizeof(OsLib*), 0));
-  *p = plib;
+  std::unique_ptr<LibHandle> o = std::make_unique<LibHandle>();
+  o->lib = plib;
+  lua_newuserobject(L, std::move(o), LIBHANDLE_SIZE, 0);
   static CFuncInfo cfi_lib_gc("loadlib.__gc"_hs, lib_gc);
   luaL_newmetatablei(L, lt::_LOADLIB);
   lua_pushcfuncinfo(L, &cfi_lib_gc);

@@ -80,6 +80,8 @@ int luaL_newmetatablei(lua_State* L, byte_view tname);
 void luaL_setmetatablei(lua_State* L, byte_view tname);
 void* luaL_testudatai(lua_State* L, int ud, byte_view tname);
 void* luaL_checkudatai(lua_State* L, int ud, byte_view tname);
+lua_UserObject* luaL_testuserobjecti(lua_State* L, int ud, byte_view tname);
+lua_UserObject* luaL_checkuserobjecti(lua_State* L, int ud, byte_view tname);
 int luaL_getmetatablei(lua_State* L, byte_view tname);
 
 int luaL_getsubtablei(lua_State* L, int idx, byte_view fname);

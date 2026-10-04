@@ -138,7 +138,7 @@ static l_mem objsize(GCObject* o)
   case LUA_VUSERDATA:
   {
     Udata* u = static_cast<Udata*>(o);
-    res = cost::Udata + u->uv.size() * cost::TValue + u->data.size();
+    res = cost::Udata + u->uv.size() * cost::TValue + u->data.size() + u->objsize;
     break;
   }
   case LUA_VPROTO:
@@ -930,6 +930,8 @@ static void freeobj(lua_State* L, GCObject* o)
       (void)luaM_alloc_char_span(L->l_G, L, u->data, 0, false);
       u->data = {};
     }
+    if (u->objsize != 0)
+      luaM_freeobj(L, u->objsize);
     luaM_free_Udata(L, u);
     break;
   }

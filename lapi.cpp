@@ -1733,6 +1733,29 @@ void lua_releasebytes(lua_State* L, size_t sz)
   luaM_release(L, sz);
 }
 
+LUA_API void lua_newuserobject(lua_State* L, std::unique_ptr<lua_UserObject> obj, size_t size, int nuvalue)
+{
+  Udata* u;
+  lua_lock(L);
+  assert((0 <= nuvalue && nuvalue < SHRT_MAX) && "invalid value");
+  u = Udata::luaS_newudata(L, 0, nuvalue);
+  setslotu(L, L->top, u);
+  api_incr_top(L);
+  luaM_takeobj(L, size);
+  u->objsize = size;
+  u->obj = std::move(obj);
+  luaC_checkGC(L);
+  lua_unlock(L);
+}
+
+LUA_API lua_UserObject* lua_touserobject(lua_State* L, int idx)
+{
+  TValue o = index2val(L, idx);
+  if ((o.tt_ & NOVARIANT_MASK) != LUA_TUSERDATA)
+    return nullptr;
+  return uvalue(&o)->obj.get();
+}
+
 LUA_API void* lua_newuserdatauv(lua_State* L, size_t size, int nuvalue)
 {
   Udata* u;

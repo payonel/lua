@@ -268,6 +268,8 @@ struct Udata : GCListed
   std::span<TValue> uv;
   byte_span data;
   bool zb;
+  std::unique_ptr<lua_UserObject> obj;
+  size_t objsize;
 
   static Udata* luaS_newudata(lua_State* L, size_t s, int nuvalue);
 };

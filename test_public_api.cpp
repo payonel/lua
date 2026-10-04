@@ -1714,6 +1714,78 @@ static void test_gc()
   lua_close(L);
 }
 
+static int g_userobject_dtors = 0;
+static int g_userobject_gc_value = 0;
+
+struct CountedObject : lua_UserObject
+{
+  int value = 0;
+  ~CountedObject() override { g_userobject_dtors++; }
+};
+
+static int cf_userobject_gc(lua_State* L)
+{
+  CountedObject* o = static_cast<CountedObject*>(lua_touserobject(L, 1));
+  g_userobject_gc_value = (o != nullptr) ? o->value : -1;
+  return 0;
+}
+
+static int gc_bytes(lua_State* L)
+{
+  return lua_gc(L, LUA_GCCOUNT, 0, 0, 0) * 1024 + lua_gc(L, LUA_GCCOUNTB, 0, 0, 0);
+}
+
+static void test_userobject()
+{
+  lua_State* L = new_state();
+  g_userobject_dtors = 0;
+  g_userobject_gc_value = 0;
+  lua_gc(L, LUA_GCSTOP, 0, 0, 0);
+
+  int before = gc_bytes(L);
+  std::unique_ptr<CountedObject> o = std::make_unique<CountedObject>();
+  CountedObject* raw = o.get();
+  raw->value = 42;
+  lua_newuserobject(L, std::move(o), 4096, 1);
+  CHECK(gc_bytes(L) - before >= 4096);
+  CHECK(lua_type(L, -1) == LUA_TUSERDATA);
+  CHECK(lua_touserobject(L, -1) == raw);
+  CHECK(lua_touserdata(L, -1) != nullptr);
+
+  lua_pushinteger(L, 7);
+  CHECK(lua_setiuservalue(L, -2, 1) == 1);
+  CHECK(lua_getiuservalue(L, -1, 1) == LUA_TNUMBER);
+  CHECK(lua_tointeger(L, -1) == 7);
+  lua_pop(L, 1);
+
+  lua_pushinteger(L, 1);
+  CHECK(lua_touserobject(L, -1) == nullptr);
+  lua_pop(L, 1);
+  lua_newuserdatauv(L, 8, 0);
+  CHECK(lua_touserobject(L, -1) == nullptr);
+  lua_pop(L, 1);
+
+  CHECK(luaL_newmetatable(L, "test.userobject"_hs) == 1);
+  lua_pushcfunction(L, cf_userobject_gc);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  CHECK(luaL_testuserobject(L, -1, "test.userobject"_hs) == raw);
+  CHECK(luaL_testuserobject(L, -1, "test.other"_hs) == nullptr);
+  CHECK(luaL_checkuserobject(L, -1, "test.userobject"_hs) == raw);
+  lua_pop(L, 1);
+
+  lua_gc(L, LUA_GCRESTART, 0, 0, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  CHECK(g_userobject_gc_value == 42);
+  CHECK(g_userobject_dtors == 1);
+  CHECK(gc_bytes(L) - before < 4096);
+
+  lua_newuserobject(L, std::make_unique<CountedObject>(), 16, 0);
+  lua_close(L);
+  CHECK(g_userobject_dtors == 2);
+}
+
 static int g_zud_gc = 0;
 static int cf_zud_gc(lua_State*)
 {
@@ -4707,6 +4779,7 @@ int main()
       {"db_debug", test_db_debug},
       {"gc", test_gc},
       {"zero_size_userdata", test_zero_size_userdata},
+      {"userobject", test_userobject},
       {"oom_between_array_allocs", test_oom_between_array_allocs},
       {"misc", test_misc},
       {"debug_api", test_debug_api},

@@ -435,6 +435,30 @@ void* luaL_checkudatai(lua_State* L, int ud, byte_view tname)
   return p;
 }
 
+LUALIB_API lua_UserObject* luaL_testuserobject(lua_State* L, int ud, const HostString& tname)
+{
+  return luaL_testuserobjecti(L, ud, tname.to_utf8());
+}
+
+lua_UserObject* luaL_testuserobjecti(lua_State* L, int ud, byte_view tname)
+{
+  if (luaL_testudatai(L, ud, tname) == nullptr)
+    return nullptr;
+  return lua_touserobject(L, ud);
+}
+
+LUALIB_API lua_UserObject* luaL_checkuserobject(lua_State* L, int ud, const HostString& tname)
+{
+  return luaL_checkuserobjecti(L, ud, tname.to_utf8());
+}
+
+lua_UserObject* luaL_checkuserobjecti(lua_State* L, int ud, byte_view tname)
+{
+  lua_UserObject* p = luaL_testuserobjecti(L, ud, tname);
+  luaL_argexpectedi(L, p != nullptr, ud, tname);
+  return p;
+}
+
 /* }====================================================== */
 
 /*
