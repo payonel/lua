@@ -375,7 +375,8 @@ LUA_API void(lua_closeslot)(lua_State* L, int idx);
 ** ===============================================================
 */
 
-LUA_API void* lua_getextraspace(lua_State* L);
+LUA_API void* lua_getextra(lua_State* L);
+LUA_API void lua_setextra(lua_State* L, void* p);
 
 LUA_API lua_Number lua_tonumber(lua_State* L, int idx);
 LUA_API lua_Integer lua_tointeger(lua_State* L, int idx);

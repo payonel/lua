@@ -1933,9 +1933,14 @@ LUA_API int lua_yield(lua_State* L, int nresults)
   return lua_yieldk(L, nresults, 0, nullptr);
 }
 
-LUA_API void* lua_getextraspace(lua_State* L)
+LUA_API void* lua_getextra(lua_State* L)
 {
-  return &L->extra;
+  return L->extra;
+}
+
+LUA_API void lua_setextra(lua_State* L, void* p)
+{
+  L->extra = p;
 }
 
 LUA_API lua_Number lua_tonumber(lua_State* L, int idx)

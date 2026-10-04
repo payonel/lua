@@ -2066,16 +2066,16 @@ static void test_misc()
   }
 
   {
-    void* es = lua_getextraspace(L);
-    CHECK(es != nullptr);
-    void* saved;
-    std::memcpy(&saved, es, sizeof(void*));
-    void* marker = &saved;
-    std::memcpy(es, &marker, sizeof(void*));
-    void* back;
-    std::memcpy(&back, lua_getextraspace(L), sizeof(void*));
-    CHECK(back == marker);
-    std::memcpy(es, &saved, sizeof(void*));
+    void* saved = lua_getextra(L);
+    int marker = 0;
+    lua_setextra(L, &marker);
+    CHECK(lua_getextra(L) == &marker);
+    lua_State* L1 = lua_newthread(L);
+    CHECK(lua_getextra(L1) == &marker);
+    lua_setextra(L1, nullptr);
+    CHECK(lua_getextra(L) == &marker);
+    lua_pop(L, 1);
+    lua_setextra(L, saved);
   }
 
   g_closed = 0;

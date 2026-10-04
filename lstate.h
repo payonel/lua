@@ -482,6 +482,7 @@ static l_forceinline int stacksize(const lua_State* th)
 struct global_State
 {
   lua_Alloc* frealloc; /* function to reallocate memory */
+  int apilock;
   l_mem GCtotalbytes; /* number of bytes currently allocated + debt */
   l_mem GCdebt;       /* bytes counted but not yet allocated */
   size_t memlimit;

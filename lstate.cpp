@@ -286,7 +286,7 @@ LUA_API lua_State* lua_newthread(lua_State* L)
   L1->hook = L->hook;
   resethookcount(L1);
   /* initialize L1 extra space */
-  L1->extra = &mainthread(g)->extra;
+  L1->extra = mainthread(g)->extra;
   luai_userstatethread(L, L1);
   stack_init(L1, L); /* init stack */
   lua_unlock(L);

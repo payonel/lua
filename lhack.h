@@ -18,16 +18,12 @@ struct Memcontrol
 
 LUA_API Memcontrol l_memcontrol;
 
-#define ismainthread(l)             ((l) == mainthread(l->l_G))
-#define _getlock(l)                 (*((uint64_t*)(lua_getextraspace(l))))
-#define _getplock(l)                (ismainthread(l) ? ((uint64_t*)(lua_getextraspace(l))) : ((uint64_t*)(*((void**)(lua_getextraspace(l))))))
-
-#define luai_userstateopen(l)       (_getlock(l) = 0)
-#define luai_userstateclose(l)      assert(_getlock(l) == 1 && ismainthread(l))
-#define luai_userstatethread(l, l1) assert(_getplock(l1) == _getplock(l))
-#define luai_userstatefree(l, l1)   assert(_getplock(l) == _getplock(l1))
-#define lua_lock(l)                 assert((*_getplock(l))++ == 0)
-#define lua_unlock(l)               assert(--(*_getplock(l)) == 0)
+#define luai_userstateopen(l)       ((l)->l_G->apilock = 0)
+#define luai_userstateclose(l)      assert((l)->l_G->apilock == 1 && (l) == mainthread((l)->l_G))
+#define luai_userstatethread(l, l1) assert((l1)->l_G == (l)->l_G)
+#define luai_userstatefree(l, l1)   assert((l)->l_G == (l1)->l_G)
+#define lua_lock(l)                 assert(((l)->l_G->apilock)++ == 0)
+#define lua_unlock(l)               assert(--((l)->l_G->apilock) == 0)
 
 
 #define LUAL_BUFFERSIZE 23
@@ -76,4 +72,3 @@ LUA_API Memcontrol l_memcontrol;
 
 #endif
 
-#define LUA_EXTRASPACE (sizeof(void*))
