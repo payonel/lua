@@ -1349,6 +1349,10 @@ already. Left to do: the inline helpers in `ltable.h`, the value helpers in
 `byte_view`, `byte_span`, `byte_owner`, `Zio` (`lzio.*`), `MBuffer`,
 `InternalString` and `literals.h`. A leaf namespace.
 
+**Status: done** (`cf244dd8`). `bytes.h`, `internal_string.h`, `literals.h`
+(`lt` becomes `lua::bytes::lt`), `util_cast.h` and `lzio` are in
+`lua::bytes`. `HostString` stays with the API (C7). `make full` passes.
+
 ### C3. `lua::gc`
 
 `lgc.cpp`'s algorithms become a `GarbageCollector` class. **State stays on
