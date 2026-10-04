@@ -582,6 +582,15 @@ is then the single file to reimplement.
 
 **Done when:** no libc ctype call exists outside `locale_util.cpp`.
 
+**Status: done** (`2b039407`). `locale_util` gains `locale_isalpha`,
+`isdigit`, `isalnum`, `isxdigit` and `isspace`, written out of line like
+the existing `locale_tolower`/`toupper`. `locale_util.cpp` is now the only
+file that includes `<cctype>`.
+
+**Results:** `make full` passes. The calls are in format-spec parsing, in
+`tonumber` with a base, and in `io.read("n")`, none of which is a VM hot
+path, so this task had no A/B.
+
 ### L9. `lundump` fixed-buffer loading
 
 **Effort:** medium · **Risk:** medium · **A/B** (instruction fetch is the
