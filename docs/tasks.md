@@ -481,6 +481,30 @@ only inside the wraparound/shift helpers, `os_api`, and declarations tied to
 `size_t` container sizes. The number of casts is lower than at the start
 (record the before/after count in Results).
 
+**Status: in progress.**
+- [x] Tables (`0c55701a`): sizes, counters, hints and in-part indices are
+  `int`; traversal indices and borders are `lua_Integer`.
+  - `MAXABITS` is now 30 (was 31) so a power-of-two array part fits `int`.
+    Arrays past 2³⁰ entries keep living in the hash part, so nothing
+    changes for Lua code; `MAXHBITS` stays 30.
+  - Doubling loops guard the last doubling instead of relying on unsigned
+    wraparound; binary searches use `i + (j - i) / 2`.
+  - `hashmod`'s full-width unsigned `%` goes through `l_umod`
+    (`llimits.h`).
+  - A/B: b_table 0.23s → 0.23s, b_gc 1.87s → 1.87s.
+
+**Decisions so far:**
+- **`ptrdiff_t` stays.** It is already a signed 64-bit type (Java `long`);
+  renaming it to `lua_Integer` would be churn with no portability gain.
+- **`Instruction` stays `l_uint32`.** Every field decode in `lopcodes.h`
+  masks after shifting (`getarg`, `GET_OPCODE`), so the result is the same
+  whether Java uses `>>` or `>>>`. Instruction words are already safe with
+  signed integers.
+- **The array accessors and VM integer-key fast paths move to M3.**
+  `getArrTag`/`getArrVal`/`farr2val`/`fval2arr` (`lua_Unsigned k`) and the
+  `(lua_Unsigned)key - 1 < size` fast paths in `lvm`/`lapi` are rewritten
+  there for the column layout, so their index types change once.
+
 ### L8. Locale routing
 
 **Effort:** low · **Risk:** low
