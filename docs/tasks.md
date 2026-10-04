@@ -1084,6 +1084,54 @@ addition.
 **Done when:** no `static_cast<T*>` on a userdata payload remains in
 library code.
 
+**Status: done** (`350f38ae`).
+- **Public API:**
+  - `lua.h`: `struct lua_UserObject { virtual ~lua_UserObject(); }`,
+    `lua_newuserobject(L, std::unique_ptr<lua_UserObject>, size,
+    nuvalue)` and `lua_touserobject(L, idx)`.
+  - `lauxlib`: `luaL_testuserobject`/`luaL_checkuserobject` (plus the
+    internal `i` variants).
+  - In Java, `lua_UserObject` is `Object` and consumers pass their own
+    objects.
+- **Ownership:** the `Udata` owns the object. It is destroyed when the
+  userdata is freed, which is after `__gc`, so finalizers still see
+  it. The `unique_ptr` parameter means an allocation error can't leak
+  it.
+- **Accountability:** the declared `size` is charged (`luaM_takeobj`),
+  counted in `objsize`, and released on free (`luaM_freeobj`). Each
+  library declares today's payload size (`LSTREAM_SIZE` 16,
+  `GMATCHSTATE_SIZE` 584, `LIBHANDLE_SIZE` 8, `RANSTATE_SIZE` 32), so
+  `collectgarbage("count")` does not move.
+- **Converted:**
+  - `luaL_Stream` derives from `lua_UserObject`. External libraries
+    that build their own `FILE*` handles now use `lua_newuserobject`.
+  - `GMatchState`, the `loadlib` handle (`LibHandle`) and `RanState`.
+- **Remaining casts are hierarchy downcasts**
+  (`static_cast<LStream*>(lua_UserObject*)`), which Java expresses as
+  `(LStream) obj`. `loadlib`'s `static_cast<OsLib*>` on the `_CLIBS`
+  *light* userdata stays (L10). `lua.cpp`'s `argv` is host-launcher
+  code (port-time note).
+- `test_public_api` has a new `userobject` test: identity, user values,
+  metatable checks, `__gc` sees the object, the destructor runs on
+  collect and on `lua_close`, and the charge appears in and leaves
+  `LUA_GCCOUNT`.
+
+**Decision: `RanState` is an object payload, not little-endian bytes.**
+The plan kept it as bytes read through `byte_span` accessors. That would
+decode and re-encode four 64-bit words on every `math.random` call, in
+C++ and in Java. The generator state is the same `uint64_t[4]` either
+way, so sequences stay bit-identical. Performance first: object.
+
+**Cost:** `Udata` grows from 72 to 88 bytes of real memory (the owning
+pointer and `objsize`). The accounting charge is unchanged
+(`cost::Udata` is frozen).
+
+**Results:** `make full` passes.
+- A/B (min): all.lua 5.10s → 5.04s; `b_ud` (gmatch ×200k +
+  `math.random` ×3M) 2.50s → 2.49s; b_gc 4.33s → 4.28s. RSS is equal.
+- `ltests.cpp` `T.nonblock` got a mechanical update
+  (`luaL_checkudata` overlay → `luaL_checkuserobject`).
+
 ### M5. `lua_getextraspace` → typed slot
 
 **Effort:** low · **Risk:** low
