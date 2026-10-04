@@ -748,6 +748,83 @@ declared type. What legitimately remains:
 **Done when:** every remaining cast falls in one of those groups, and the
 before/after cast count is recorded in Results.
 
+**Status: done** (`d2dd5624`, `307f8fbb`, `ec3189cd`).
+- **Mechanical pass:** about 240 casts removed from `.cpp` and header
+  files.
+  - **Candidates:** only casts in a value context (argument, initializer,
+    assignment, return, comparison), where the implicit conversion is
+    the same one the cast performed. Casts on an operand of an
+    arithmetic, bitwise, shift or compound-assignment operator were
+    never candidates, because removing them changes the type the
+    expression is evaluated in.
+  - **Check:** each removal had to leave the release (`-O2`) and debug
+    (`-Og -DLUA_DEBUG`) object code byte-identical, and each commit
+    compares identical across all TUs.
+  - Byte-identical code alone is not enough: an earlier run without the
+    context rule turned `(lua_Unsigned)a - (lua_Unsigned)b` into a
+    signed `a - b` that GCC happened to compile identically. That run
+    was discarded.
+- **`StkId` is signed (`ptrdiff_t`).**
+  - `int` was tried first. It cost 3–5% on C-call paths (pcall
+    1.38s → 1.45s, `__index`/calls 0.72s → 0.74s), because every
+    `stack[func + idx]` needed a sign extension. `ptrdiff_t` keeps the
+    64-bit addressing and is neutral (pcall 1.38s → 1.38s, b_vm
+    1.14s → 1.07s). Java uses `int`, because values are bounded by
+    `LUAI_MAXSTACK`.
+  - Signed indices required two shape fixes, both restoring upstream's
+    forms:
+    - `NOSLOT` is -1, and upvalue origins count down from
+      `UPVALORIGIN = -2`. They were `~0` and `~0 - 256`, which relied
+      on unsigned ordering.
+    - `lua_checkstack`/`luaD_checkstack` test
+      `stack_last - top > n`, as upstream does, instead of
+      `top + n < stack_last`. The latter overflows for
+      `lua_checkstack(L, INT_MAX)`, which `test_public_api` exercises.
+
+**Decision: what legitimately remains** (the plan's groups, extended).
+Each remaining cast is one Java also needs, or is owned by a later task:
+- `GCObject` hierarchy downcasts (`static_cast<Table*>` …): Java casts
+  the same way.
+- **Narrowing to a smaller declared type**, such as `(int)` from a
+  `.size()`, a `StkId` difference or a `lua_Integer` that was already
+  range-checked, or `(lu_byte)`/`(char)` into byte fields. Java needs an
+  explicit `(int)`/`(byte)` at the same places.
+- **Integer ↔ float conversions** that set the evaluation type
+  (`(lua_Number)i` in float arithmetic). Java needs them too.
+- **`lua_Unsigned` conversions.** They mark where Lua's unsigned
+  semantics start: the for-loop iteration count, `luaV_shiftl`'s logical
+  shifts, `math.random`'s `project`, `string.pack`/`unpack`, and the
+  dump varint/zigzag. Java transcribes the operators that follow as
+  `>>>`, `divideUnsigned` and `compareUnsigned`.
+- **Bit containers:** hashes, seeds, `Instruction` encodes and
+  `callstatus` (see L7).
+- `(unsigned char)` byte reads, the `& 0xFF` idiom (see L7).
+- `(void)x` for unused parameters (Java: nothing).
+- **Owned elsewhere:**
+  - M2: `lu_mem` accounting sums in `lfunc`, `lgc`, `lstate`, `ltable`
+    and the closure sizes.
+  - M3: the `(lua_Unsigned)k - 1u` array fast paths.
+  - M4: the userdata payload `static_cast<T*>(lua_touserdata)`.
+  - Identity: `util_cast.h`, `luaZ_overlay`, `as_byte_view`, and
+    `os_api.cpp`.
+
+**Results:**
+- **Cast count:** C-style casts to arithmetic or engine types, pointer
+  casts and named casts, excluding `ltests`, `test_public_api`,
+  `os_api.cpp`, `lua.cpp` and `lhack.h`.
+
+  | Point | Total | Arithmetic |
+  |---|---|---|
+  | Plan start (`24eee778`) | 985 | 811 |
+  | Before L7 (`e8102b82`) | 970 | 808 |
+  | After L7 (`7e85b1a7`) | 831 | 669 |
+  | After L11 | 573 | 416 |
+
+  (L7's own Results used a looser counter that also counted
+  parenthesized macro arguments.)
+- `make full` passes. A/B for `StkId` is above; the cast removals are
+  code-identical by construction.
+
 ---
 
 ## Phase M — memory changes
