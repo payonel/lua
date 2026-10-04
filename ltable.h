@@ -45,7 +45,7 @@ static l_forceinline void setdummy(Table* t)
 }
 
 /* allocated size for hash nodes */
-static l_forceinline unsigned int allocsizenode(const Table* t)
+static l_forceinline int allocsizenode(const Table* t)
 {
   return isdummy(t) ? 0 : sizenode(t);
 }

@@ -1229,7 +1229,7 @@ static int table_query(lua_State* L)
     api_incr_top(L);
     lua_pushnil(L);
   }
-  else if (((unsigned int)(i -= ((int)(asize)))) < sizenode(t))
+  else if (((unsigned int)(i -= ((int)(asize)))) < (unsigned int)sizenode(t))
   {
     TValue k;
     getnodekey(L, &k, gnode(t, i));

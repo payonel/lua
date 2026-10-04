@@ -856,7 +856,7 @@ void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src)
     tm = gfasttm(L->l_G, h->metatable, TM_LEN);
     if (tm)
       break;                                        /* metamethod? break switch to call it */
-    setsloti(L, ra, ((lua_Integer)(h->luaH_getn(L)))); /* else primitive len */
+    setsloti(L, ra, h->luaH_getn(L)); /* else primitive len */
     return;
   }
   case LUA_VSHRSTR:
@@ -1624,16 +1624,16 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_NEWTABLE:
       {
         StkId ra = (base + GETARG_A(i));
-        unsigned b = ((unsigned int)(GETARG_vB(i))); /* log2(hash size) + 1 */
-        unsigned c = ((unsigned int)(GETARG_vC(i))); /* array size */
+        int b = GETARG_vB(i); /* log2(hash size) + 1 */
+        int c = GETARG_vC(i); /* array size */
         Table* t;
         if (b > 0)
-          b = 1u << (b - 1); /* hash size is 2^(b - 1) */
+          b = 1 << (b - 1); /* hash size is 2^(b - 1) */
         if (TESTARG_k(i))
         { /* non-zero extra argument? */
           assert(GETARG_Ax(code[pc]) != 0);
           /* add it to array size */
-          c += ((unsigned int)(GETARG_Ax(code[pc]))) * (MAXARG_vC + 1);
+          c += GETARG_Ax(code[pc]) * (MAXARG_vC + 1);
         }
         pc++;              /* skip extra argument */
         L->top = ra + 1; /* correct top in case of emergency GC */
@@ -2852,21 +2852,21 @@ void luaV_execute(lua_State* L, CallInfo* ci)
       case OP_SETLIST:
       {
         StkId ra = (base + GETARG_A(i));
-        unsigned n = ((unsigned int)(GETARG_vB(i)));
-        unsigned last = ((unsigned int)(GETARG_vC(i)));
+        int n = GETARG_vB(i);
+        int last = GETARG_vC(i);
         Table* h = slothval(L, ra);
         if (n == 0)
-          n = ((unsigned int)(L->top - ra)) - 1; /* get up to the top */
+          n = ((int)(L->top - ra)) - 1; /* get up to the top */
         else
           L->top = ci->top; /* correct top in case of emergency GC */
         last += n;
         if (TESTARG_k(i))
         {
-          last += ((unsigned int)(GETARG_Ax(code[pc]))) * (MAXARG_vC + 1);
+          last += GETARG_Ax(code[pc]) * (MAXARG_vC + 1);
           pc++;
         }
         /* when 'n' is known, table should have proper size */
-        if (last > h->array.size())
+        if (last > h->asize())
         { /* needs more space? */
           /* fixed-size sets should have space preallocated */
           assert(GETARG_vB(i) == 0);

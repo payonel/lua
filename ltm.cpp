@@ -282,7 +282,7 @@ static void createvarargtab(lua_State* L, StkId f, int n)
   Table* t = Table::luaH_new(L);
   setsloth(L, L->top, t);
   L->top++;
-  t->luaH_resize(L, ((unsigned int)(n)), 1);
+  t->luaH_resize(L, n, 1);
   byte_view bytes = lt::n_char;
   setsvalue(L, &key, TString::luaS_createstr(L, bytes)); /* key is "n" */
   setivalue(&value, n);                 /* value is n */

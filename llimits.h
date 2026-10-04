@@ -147,6 +147,11 @@ static l_forceinline lua_Number luai_nummod(lua_State* L, lua_Number a, lua_Numb
 ** MAXINTEGER may not have one, and therefore its conversion to float
 ** may have an ill-defined value.)
 */
+static inline lua_Unsigned l_umod(lua_Unsigned a, lua_Unsigned b)
+{
+  return a % b;
+}
+
 struct IntResult
 {
   lua_Integer v;

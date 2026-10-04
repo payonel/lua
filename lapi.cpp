@@ -1054,7 +1054,7 @@ LUA_API void lua_createtable(lua_State* L, int narray, int nrec)
   setsloth(L, L->top, t);
   api_incr_top(L);
   if (narray > 0 || nrec > 0)
-    t->luaH_resize(L, ((unsigned int)(narray)), ((unsigned int)(nrec)));
+    t->luaH_resize(L, narray, nrec);
   luaC_checkGC(L);
   lua_unlock(L);
 }

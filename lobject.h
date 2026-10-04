@@ -465,7 +465,7 @@ struct Table : GCListed
   std::span<lu_byte> tags; /* array part: tags, forward-indexed */
   std::span<Node> node;
   int lastfree;
-  unsigned lenhint;   /* hint for #t; see luaH_getn */
+  int lenhint;   /* hint for #t; see luaH_getn */
   struct Table* metatable;
 
   static Table* luaH_new(lua_State* L);
@@ -485,12 +485,13 @@ struct Table : GCListed
   void luaH_set(lua_State* L, const TValue* key, TValue* value);
 
   void luaH_finishset(lua_State* L, const TValue* key, TValue* value, int hres);
-  void luaH_resize(lua_State* L, unsigned nasize, unsigned nhsize);
-  void luaH_resizearray(lua_State* L, unsigned nasize);
+  void luaH_resize(lua_State* L, int nasize, int nhsize);
+  void luaH_resizearray(lua_State* L, int nasize);
   lu_mem luaH_size();
   void luaH_free(lua_State* L);
   int luaH_next(lua_State* L, StkId key);
-  lua_Unsigned luaH_getn(lua_State* L);
+  lua_Integer luaH_getn(lua_State* L);
+  int asize() const;
 
 #if defined(LUA_DEBUG)
   int luaH_mainposition(const TValue* key) const;
@@ -511,34 +512,34 @@ private:
   int mainpositionfromnode(int nd) const;
   int nodegeneric(const TValue* key, int deadok);
   const TValue* getgeneric(const TValue* key, int deadok);
-  unsigned ikeyinarray(lua_Integer k) const;
-  unsigned keyinarray(const TValue* key);
-  unsigned findindex(lua_State* L, TValue* key, unsigned asize);
+  int ikeyinarray(lua_Integer k) const;
+  int keyinarray(const TValue* key);
+  lua_Integer findindex(lua_State* L, TValue* key, int asize);
   size_t sizehash();
   void freehash(lua_State* L);
   int insertkey(const TValue* key, TValue* value);
   void newcheckedkey(const TValue* key, TValue* value);
-  void reinsertOldSlice(unsigned oldasize, unsigned newasize);
-  void clearNewSlice(unsigned oldasize, unsigned newasize);
+  void reinsertOldSlice(int oldasize, int newasize);
+  void clearNewSlice(int oldasize, int newasize);
   void rehash(lua_State* L, const TValue* ek);
   int getfreepos();
   void luaH_newkey(lua_State* L, const TValue* key, TValue* value);
   int nodeintfromhash(lua_Integer key);
   const TValue* getintfromhash(lua_Integer key);
-  int hashkeyisempty(lua_Unsigned key);
+  int hashkeyisempty(lua_Integer key);
   int nodeshortstr(TString* key);
   const TValue* Hgetstr(TString* key);
   int finishnodeset(int idx, TValue* val);
   int rawfinishnodeset(int idx, TValue* val);
   int psetint(lua_Integer key, TValue* val);
-  lua_Unsigned hash_search(lua_State* L, unsigned asize);
-  unsigned int binsearch(unsigned int i, unsigned int j);
-  lua_Unsigned newhint(unsigned hint);
-  int arraykeyisempty(unsigned key) const;
+  lua_Integer hash_search(lua_State* L, int asize);
+  int binsearch(int i, int j);
+  lua_Integer newhint(int hint);
+  int arraykeyisempty(int key) const;
   void numusearray(Counters* ct) const;
   void numusehash(Counters* ct) const;
-  std::span<Value> resizearray(lua_State* L, unsigned oldasize, unsigned newasize, std::span<lu_byte>* newtags);
-  void setnodevector(lua_State* L, unsigned size);
+  std::span<Value> resizearray(lua_State* L, int oldasize, int newasize, std::span<lu_byte>* newtags);
+  void setnodevector(lua_State* L, int size);
 };
 
 /*
@@ -553,19 +554,19 @@ private:
 /*
 ** 'module' operation for hashing (size is always a power of 2)
 */
-static l_forceinline unsigned int lmod(lua_Unsigned s, unsigned int size)
+static l_forceinline int lmod(lua_Unsigned s, int size)
 {
   assert((size & (size - 1)) == 0);
-  return (unsigned int)s & (size - 1);
+  return (int)(s & (lua_Unsigned)(size - 1));
 }
 
-constexpr unsigned int twoto(int x)
+constexpr int twoto(int x)
 {
-  return 1u << x;
+  return 1 << x;
 }
-static l_forceinline unsigned int sizenode(const Table* t)
+static l_forceinline int sizenode(const Table* t)
 {
-  return (unsigned int)t->node.size();
+  return (int)t->node.size();
 }
 
 
