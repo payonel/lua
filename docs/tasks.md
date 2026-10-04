@@ -852,6 +852,43 @@ imposed in C++.
 **Done when:** a written table of limit → upstream value → our value, all
 equal.
 
+**Status: done** (audit; no code change).
+
+Upstream reference: the `master` branch (stock Lua 5.5 C sources), 64-bit host. Debug values are `ltests.h` (upstream) vs `lhack.h` (ours).
+
+| Limit | Upstream | Ours | |
+|---|---|---|---|
+| `MAX_SIZE` | `LUA_MAXINTEGER` (size_t ≥ lua_Integer) | same | = |
+| `MAX_LMEM` | 2⁶³−1 | same | = |
+| `MAXABITS` / `MAXASIZE` | 31 / 2³¹ | 30 / 2³⁰ | see below |
+| `MAXHBITS` / `MAXHSIZE` | 30 / min(2³⁰, MAX_SIZET/sizeof(Node)) | same | = |
+| `LUAI_MAXSTACK` | 1 000 000 (debug 68 000) | same | = |
+| `MAXSTACK_BYSIZET` | MAX_SIZET/sizeof(StackValue) − STACKERRSPACE | MAX_SIZET/sizeof(lua_Integer) − STACKERRSPACE | unreachable either way (≫ LUAI_MAXSTACK) |
+| `LUAI_MAXCCALLS` | 200 (debug 180) | same | = |
+| `MAXUPVAL` | 255 | same | = |
+| `MAXVARS` | 200 | same | = |
+| `MAX_FSTACK` / `MAXARG_*` | from `SIZE_A/B/C/vB/vC/Bx/Ax/sJ` = 8/8/8/6/10/17/25/25 | same | = |
+| `MAXINDEXRK` | `MAXARG_B` (debug 1) | same | = |
+| `MAXRESULTS` | 250 | same | = |
+| `MAXIWTHABS` | 128 (debug 3) | same | = |
+| `LUAI_MAXSHORTLEN` | 40 | same | = |
+| `MINSTRTABSIZE` | 128 (debug 2) | same | = |
+| string table cap `MAXSTRTB` / `nuse == INT_MAX` | INT_MAX entries | none (`std::vector` buckets) | fewer limits, not more |
+| `STRCACHE_N/M` (API string cache) | 53×2 | removed with the C-string API | not a limit |
+| `LUA_IDSIZE` | 60 | same | = |
+| `LUAL_BUFFERSIZE` | 16·sizeof(void*)·sizeof(lua_Number) = 1024 (debug 23) | 1024 (debug 23) | = |
+| `LUA_MAXCAPTURES` | 32 | same | = |
+| `MAXCCALLS` (pattern matching) | 200 | same | = |
+| `MAX_ITEM` / `MAX_ITEMF` / `MAX_FORMAT` | 120 / 110+DBL_MAX_10_EXP / 32 | same | = |
+| `MAXINTSIZE` (pack) | 16 | same | = |
+| `MAXUNICODE` / `MAXUTF` | 0x10FFFF / 0x7FFFFFFF | same | = |
+| `MAXMISS`, `EXTRA_STACK`, `LUA_MINSTACK` | 10, 5, 20 | same | = |
+| `string.rep` / `string.pack` / `luaL_Buffer` growth | against `MAX_SIZE` | same expressions | = |
+| `table.create` / `table.unpack` / `table.concat` index ranges | `INT_MAX` | same (signed form) | = |
+| `string.byte` / `utf8.codepoint` result count | `INT_MAX` | same | = |
+
+**Decision (`MAXASIZE` 2³¹ → 2³⁰, from L7):** kept. Not Lua-visible: a table whose array part would exceed 2³⁰ entries (≥ 9 GB of values) keeps the excess in the hash part, exactly as upstream does past 2³¹; `#t`, `next`, and indexing semantics are unchanged. It makes the array size an `int` (Java array index) and leaves the C++ and Java limits identical.
+
 ### M2. Accounting by named cost constants
 
 **Effort:** medium · **Risk:** medium
