@@ -6,7 +6,10 @@
 #include "literals.h"
 #include <array>
 
+namespace lua::bytes
+{
 class InternalString;
+}
 
 int lua_islightcfunction(lua_State* L, int idx);
 

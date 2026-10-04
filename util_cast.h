@@ -7,6 +7,9 @@
 
 struct lua_State;
 
+namespace lua::bytes
+{
+
 namespace util
 {
   using lua_CFunction_t = int (*)(lua_State*);
@@ -37,3 +40,5 @@ namespace util
   inline constexpr void* as_userdata(long long val) { return reinterpret_cast<void*>(static_cast<uintptr_t>(val)); } 
   inline constexpr void* as_userdata(int val) { return reinterpret_cast<void*>(static_cast<uintptr_t>(val)); } 
 };
+
+}

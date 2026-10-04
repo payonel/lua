@@ -11,6 +11,9 @@
 #include "literals.h"
 #include "lmem.h"
 
+namespace lua::bytes
+{
+
 constexpr int EOZ = (-1); /* end of stream */
 
 class MBuffer
@@ -78,3 +81,5 @@ struct ZIO
 };
 
 LUAI_FUNC int luaZ_fill(ZIO* z);
+
+}

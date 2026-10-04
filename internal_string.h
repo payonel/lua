@@ -11,6 +11,9 @@
 #include "host_string.h"
 #include "bytes.h"
 
+namespace lua::bytes
+{
+
 inline int sv_byteat(byte_view s, size_t i)
 {
   return (i < s.size()) ? ((unsigned char)(s[i])) : -1;
@@ -112,3 +115,4 @@ private:
   std::string bytes_;
 };
 
+}

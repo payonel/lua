@@ -77,7 +77,10 @@ struct Token
   TString* ts;
 };
 
+namespace lua::bytes
+{
 class MBuffer;
+}
 
 /* state of the scanner plus state of the parser when shared by all
    functions */

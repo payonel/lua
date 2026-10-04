@@ -16,6 +16,9 @@
 #include <bit>
 #include <cstdint>
 
+namespace lua::bytes
+{
+
 struct byte_view
 {
   static constexpr size_t npos = size_t(-1);
@@ -360,3 +363,5 @@ struct byte_inline : byte_writes<byte_inline<N>>
 private:
   mutable char a_[N] = {};
 };
+
+}

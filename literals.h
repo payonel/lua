@@ -3,6 +3,9 @@
 #include "internal_string.h"
 #include <algorithm>
 
+namespace lua::bytes
+{
+
 namespace lt
 {
   template <size_t N>
@@ -1004,4 +1007,6 @@ namespace lt
   constexpr byte_view LUA_PATH_MARK("?");
   constexpr byte_view LUA_DIRSEP("/");
   constexpr byte_view CONFIG("/\n;\n?\n!\n-\n");
+}
+
 }

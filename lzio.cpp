@@ -15,6 +15,9 @@
 #include "lstate.h"
 #include "lzio.h"
 
+namespace lua::bytes
+{
+
 int luaZ_fill(ZIO* z)
 {
   lua_State* L = z->L;
@@ -94,4 +97,6 @@ MBuffer::~MBuffer()
 {
   if (bytes_.data() != nullptr)
     luaM_alloc_char_span(L_->l_G, L_, bytes_, 0, false);
+}
+
 }
