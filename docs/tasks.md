@@ -631,6 +631,36 @@ Java can't overlay `int[]` on `byte[]`, but it can read little-endian
 **Done when:** `lundump.cpp` has no pointer casts, and `api.lua`'s
 fixed-buffer test passes unchanged.
 
+**Status: done** (`0fa14389`).
+- `lzio` takes and returns typed views: `luaZ_read(ZIO*, std::span<std::byte>)`
+  and `luaZ_getaddr(...) -> std::optional<byte_view>`. The single overlay
+  of a fixed block as a typed span is `luaZ_overlay<T>` in `lzio.h`.
+- `lundump`/`ldump` get back upstream's `loadVector`/`loadVar`/`getaddr`/
+  `checknum` and `dumpVector`/`dumpVar`/`dumpNumInfo` as small templates
+  over spans; the macro-expanded `sizeof` blocks are gone. `bytes.h`
+  `as_byte_view` bridges `std::byte` to `byte_view`.
+- `dumpAlign`/`loadAlign` use `size_t`; the varint counter is `int`.
+  `LoadState::fixed` is `bool`.
+
+**Decision: code storage stays `std::span<Instruction>` in C++.**
+- **Problem:** the proposal made `Proto::code` byte-backed in C++ too.
+  That touches about 150 sites (lcode patches instructions in place, and
+  `ltests` reads them) for no C++ gain.
+- **Why the C++ change isn't needed:** every access is already index
+  form, `code[pc]` and `code[pc] = x`, so Java can choose its storage
+  without C++ changing shape.
+- **Choice (shape and performance first):** keep the span and confine the
+  cast to `luaZ_overlay`. See the port-time note **Instruction storage**.
+- **Rejected for Java:** copying a fixed chunk into an `int[]` either
+  goes uncharged, which violates the accountability principle, or is
+  charged, which breaks `api.lua:575`'s fewer-than-2000-bytes assertion.
+  So Java must alias.
+
+**Results:**
+- `make full` passes, including `api.lua`'s fixed-buffer tests.
+- A/B (min): all.lua 5.17s → 5.12s, b_dump (dump+load ×3000) 0.49s →
+  0.49s, b_vm 0.67s → 0.61s (noise; fetch is unchanged). RSS is equal.
+
 ### L10. `loadlib` casts behind `os_api`
 
 **Effort:** low · **Risk:** low
@@ -1009,5 +1039,16 @@ else.
 - **`as_userdata(int)`** (`util_cast.h`, `ltests.cpp` only) forges light
   userdata from integers. In Java, light userdata is an opaque reference,
   and the test helper wraps the integer.
+- **Instruction storage (from L9):**
+  - `Proto.code` is a small class over `byte[] + offset`, read with a
+    little-endian `int` `VarHandle`: `code[pc]` → `code.get(pc)`,
+    `code[pc] = x` → `code.set(pc, x)`. A fixed-buffer load aliases the
+    host's `byte[]`, so nothing is allocated and nothing goes uncharged.
+    A compiled proto owns its bytes.
+  - Use one representation for every proto. A branch between `int[]` and
+    `byte[]` in the fetch loop costs more than the `VarHandle` read.
+  - `lineinfo` is already bytes. `abslineinfo` gets `pc(i)`/`line(i)`
+    accessors over the same bytes.
+  - Measure fetch against an `int[]` prototype at port time.
 - **Bit containers:** after L7, the shift and wraparound helpers are the
   only places that need `>>>` or wrapping semantics in Java.
