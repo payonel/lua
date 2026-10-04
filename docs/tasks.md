@@ -712,6 +712,25 @@ broken-down time struct, so `loslib` never names `struct tm` or
 **Done when:** `loslib.cpp` includes no `<time.h>` and calls no libc time
 function.
 
+**Status: done** (`262116ef`).
+- `OsDate` is the engine-side broken-down time. It also carries `gmtoff`
+  and `zone`, so `strftime`'s `%z`/`%Z` output is byte-identical
+  (checked against the previous build).
+- **Naming:** the functions are `os_cpuclock`, `os_now`, `os_gmtime`,
+  `os_localtime`, `os_mktime` and `os_timediff`. The planned
+  `os_clock`/`os_difftime` names collide with `loslib`'s own Lua entry
+  points.
+- **Decision:** `time_t` is pinned to 64 bits by a `static_assert` in
+  `os_api.cpp`, and times cross the seam as `long long`. Upstream's
+  `(time_t)t == t` checks (`l_checktime`, `os.time`'s result) could
+  never fail on a supported host, so they are gone, and
+  `os.time`/`os.date` accept the same values as before.
+  `lt::time_out_of_bounds` is now unused.
+
+**Results:** `make full` passes. `os.date` output for `%c`, `%Z`, `%z`,
+`!%c` and `*t`, plus `os.time{...}`, was spot-checked against the
+previous build. These aren't hot paths, so there was no A/B.
+
 ### L11. Cast elimination
 
 **Effort:** medium · **Risk:** low
