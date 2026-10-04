@@ -995,6 +995,70 @@ there, and the stack already uses them.
 **Done when:** no array stores `Value`/`TValue`/`Node` by value, and
 every scalar copy goes through the named copy.
 
+**Status: done**, with a revised target (`122d856d`, `eebae878`,
+`223d563a`, `4923c1f5`).
+- **Table array part (`122d856d`):** `getArrTag`/`getArrVal` return
+  values, not interior pointers. Upstream's names are kept, so its
+  comment stays true. `setArrTag` writes a tag, and `fval2arr` takes the
+  index instead of a `lu_byte*`.
+  - Indices are `lua_Integer`, so the L7-deferred `lua_Unsigned` index
+    type is gone.
+  - The VM/API/`psetint` fast paths keep their single unsigned range
+    test, written `l_ult(l_intsub(k, 1), asize)`.
+- **Hash part (`eebae878`):** the GC's four `for (n = gnode(h,0);
+  n < limit; n++)` pointer walks are index loops, and `gnodelast` is
+  gone. Everything else already used node indices and `next` offsets.
+- **Explicit copies (`4923c1f5`):** `TValue`'s copy operations are
+  private and defaulted. The only copies are the named friends `getobj`
+  (read a copy) and `copyobj` (raw copy), plus the existing `setobj`
+  (checked assignment) and the new `copynode`. Moves stay public
+  (assigning a fresh value). The compiler now enforces that every
+  scalar copy is named. Array growth for `Vardesc` moves elements.
+
+**Decisions:**
+- **C++ storage stays as it is; Java gets columns behind the accessors.**
+  - The user already tried a physical prim/ref/tag column layout for the
+    stack (`6da9b08a`) and went back to `TValue[]` behind the slot
+    accessors (`396e7bb5`).
+  - M3 follows that precedent: the accessors are the seam, and storage
+    is a per-language choice.
+  - The table array part was already split (`array` + `tags`,
+    `ff278e40`) and stays that way. In Java it becomes
+    `long[] prim` + `Object[] ref` + `byte[] tags`.
+- **`Node` is not split into columns, in C++ or Java.**
+  - A lookup reads key tag, key value and `next` together, so six
+    parallel arrays would cost three cache misses where one node record
+    costs one. This is the same reason `java.util.HashMap` uses entry
+    objects.
+  - Java transcribes `Node` as a class with flattened fields that
+    extends `TValue`. Then `&gnode(t,i)->val`, which `getgeneric`/
+    `luaH_Hgetshortstr` return as `const TValue*`, is the node itself,
+    and `copynode` copies fields.
+- **`Proto::k`, `Udata::uv`, `CClosure` upvalues and `UpVal::value`
+  stay `TValue` arrays and fields.**
+  - Java uses `TValue[]` of owned element objects: constants are
+    immutable, and upvalue/user-value writes go through `setobj` into
+    the element.
+  - Because copies are compiler-enforced to be named, an element object
+    is never shared by accident.
+  - The arrays are small (≤255 upvalues), so columns would buy nothing
+    measurable.
+- **Cost found on the way:** the first version of the copy change used
+  deleted copy operations with memberwise bodies. The slot accessors
+  then copied 16 + 1 bytes instead of the whole 24-byte struct, which
+  cost b_arith +9% and b_vm +2%. Private defaulted copies keep the same
+  enforcement with the original codegen.
+
+**Results:** `make full` passes.
+
+| A/B (min) | all.lua | b_vm | b_call | b_arith | b_table | b_gc |
+|---|---|---|---|---|---|---|
+| array accessors (`7498236d` → `122d856d`) | 4.82 → 4.84 | 1.07 → 1.09 | | | 0.41 → 0.41 | 3.83 → 3.89 |
+| node loops (`122d856d` → `eebae878`) | 4.86 → 4.86 | | | | | 3.93 → 3.91 |
+| explicit copies (`eebae878` → `4923c1f5`) | 4.83 → 4.83 | 1.08 → 1.09 | 4.27 → 4.26 | 1.25 → 1.24 | 0.40 → 0.40 | |
+
+RSS is unchanged throughout.
+
 ### M4. Userdata payloads that hold native state
 
 **Effort:** medium · **Risk:** medium
