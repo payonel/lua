@@ -35,7 +35,8 @@ struct luaL_Reg
   lua_CFunction func;
 };
 
-constexpr size_t LUAL_NUMSIZES = (sizeof(lua_Integer) * 16 + sizeof(lua_Number));
+constexpr size_t LUAL_NUMSIZES = (8 * 16 + 8);
+static_assert(LUAL_NUMSIZES == sizeof(lua_Integer) * 16 + sizeof(lua_Number));
 
 LUALIB_API void(luaL_checkversion_)(lua_State* L, lua_Number ver, size_t sz);
 LUALIB_API void luaL_checkversion(lua_State* L);

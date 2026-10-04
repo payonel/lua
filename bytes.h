@@ -125,7 +125,7 @@ struct byte_view
   double toDouble(size_t pos = 0) const
   {
     uint64_t bits = 0;
-    for (size_t i = sizeof(uint64_t); i-- > 0;)
+    for (size_t i = 8; i-- > 0;)
       bits = (bits << 8) | static_cast<unsigned char>(sv[pos + i]);
     return std::bit_cast<double>(bits);
   }
@@ -133,7 +133,7 @@ struct byte_view
   float toFloat(size_t pos = 0) const
   {
     uint32_t bits = 0;
-    for (size_t i = sizeof(uint32_t); i-- > 0;)
+    for (size_t i = 4; i-- > 0;)
       bits = (bits << 8) | static_cast<unsigned char>(sv[pos + i]);
     return std::bit_cast<float>(bits);
   }
@@ -188,7 +188,7 @@ struct byte_span
   void write_double(double v, size_t pos)
   {
     uint64_t bits = std::bit_cast<uint64_t>(v);
-    for (size_t i = 0; i < sizeof(uint64_t); i++)
+    for (size_t i = 0; i < 8; i++)
     {
       data()[pos + i] = static_cast<char>(bits & 0xFF);
       bits >>= 8;
@@ -198,7 +198,7 @@ struct byte_span
   void write_float(float v, size_t pos)
   {
     uint32_t bits = std::bit_cast<uint32_t>(v);
-    for (size_t i = 0; i < sizeof(uint32_t); i++)
+    for (size_t i = 0; i < 4; i++)
     {
       data()[pos + i] = static_cast<char>(bits & 0xFF);
       bits >>= 8;

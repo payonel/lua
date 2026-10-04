@@ -855,8 +855,8 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     case 'c':
     { /* an 'int' as a character */
       assert(argn < args.n && args.arg[argn].tag == 'c');
-      char c = ((char)(args.arg[argn++].i));
-      addstr2buff(&buff, byte_view(byte_view(&c, sizeof(char))));
+      char c[1] = {((char)(args.arg[argn++].i))};
+      addstr2buff(&buff, byte_view(c, std::size(c)));
       break;
     }
     case 'd':

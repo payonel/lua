@@ -1546,7 +1546,7 @@ static size_t formatint(lua_State* L, int arg, byte_view form,
     prefix[prefixlen++] = spec.conv;
   }
   return packformat(area, off, maxitem, &spec,
-                    byte_view(prefix, sizeof(prefix)).substr(0, prefixlen),
+                    byte_view(prefix, std::size(prefix)).substr(0, prefixlen),
                     body.view().substr(0, blen), spec.precision < 0);
 }
 
@@ -1629,7 +1629,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
       body[i] = ((char)(locale_toupper(((unsigned char)(body[i])))));
   }
   return packformat(area, off, maxitem, &spec,
-                    byte_view(prefix, sizeof(prefix)).substr(0, prefixlen),
+                    byte_view(prefix, std::size(prefix)).substr(0, prefixlen),
                     body.view().substr(0, blen), zeropadok);
 }
 
@@ -1715,7 +1715,7 @@ static int str_format(lua_State* L)
         {
           InternalString fa = lua_funcaddressi(L, arg);
           blen = fa.size();
-          assert(blen < sizeof(body));
+          assert(blen < body.size());
           body.copy_from(fa.view());
         }
         else
@@ -1808,7 +1808,22 @@ constexpr int NB = CHAR_BIT;
 constexpr int MC = ((1 << NB) - 1);
 
 /* size of a lua_Integer */
-constexpr int SZINT = ((int) sizeof(lua_Integer));
+constexpr int SZINT = 8;
+
+constexpr size_t SZ_CHAR = 1;
+constexpr size_t SZ_SHORT = 2;
+constexpr size_t SZ_INT = 4;
+constexpr size_t SZ_LONG = 8;
+constexpr size_t SZ_INTEGER = 8;
+constexpr size_t SZ_SIZET = 8;
+constexpr size_t SZ_FLOAT = 4;
+constexpr size_t SZ_NUMBER = 8;
+constexpr size_t SZ_DOUBLE = 8;
+static_assert(SZINT == sizeof(lua_Integer) && SZ_INTEGER == sizeof(lua_Integer) &&
+              SZ_CHAR == sizeof(char) && SZ_SHORT == sizeof(short) &&
+              SZ_INT == sizeof(int) && SZ_LONG == sizeof(long) &&
+              SZ_SIZET == sizeof(size_t) && SZ_FLOAT == sizeof(float) &&
+              SZ_NUMBER == sizeof(lua_Number) && SZ_DOUBLE == sizeof(double));
 
 constexpr bool nativeendian_little = (std::endian::native == std::endian::little);
 
@@ -1913,35 +1928,35 @@ static PackOption getoption(Header* h)
   switch (opt)
   {
   case 'b':
-    return {Kint, sizeof(char)};
+    return {Kint, SZ_CHAR};
   case 'B':
-    return {Kuint, sizeof(char)};
+    return {Kuint, SZ_CHAR};
   case 'h':
-    return {Kint, sizeof(short)};
+    return {Kint, SZ_SHORT};
   case 'H':
-    return {Kuint, sizeof(short)};
+    return {Kuint, SZ_SHORT};
   case 'l':
-    return {Kint, sizeof(long)};
+    return {Kint, SZ_LONG};
   case 'L':
-    return {Kuint, sizeof(long)};
+    return {Kuint, SZ_LONG};
   case 'j':
-    return {Kint, sizeof(lua_Integer)};
+    return {Kint, SZ_INTEGER};
   case 'J':
-    return {Kuint, sizeof(lua_Integer)};
+    return {Kuint, SZ_INTEGER};
   case 'T':
-    return {Kuint, sizeof(size_t)};
+    return {Kuint, SZ_SIZET};
   case 'f':
-    return {Kfloat, sizeof(float)};
+    return {Kfloat, SZ_FLOAT};
   case 'n':
-    return {Knumber, sizeof(lua_Number)};
+    return {Knumber, SZ_NUMBER};
   case 'd':
-    return {Kdouble, sizeof(double)};
+    return {Kdouble, SZ_DOUBLE};
   case 'i':
-    return {Kint, getnumlimit(h, sizeof(int))};
+    return {Kint, getnumlimit(h, SZ_INT)};
   case 'I':
-    return {Kuint, getnumlimit(h, sizeof(int))};
+    return {Kuint, getnumlimit(h, SZ_INT)};
   case 's':
-    return {Kstring, getnumlimit(h, sizeof(size_t))};
+    return {Kstring, getnumlimit(h, SZ_SIZET)};
   case 'c':
   {
     size_t size = getnum(h, ((size_t)(-1)));
@@ -2058,37 +2073,37 @@ static void packint(luaL_Buffer* b, lua_Unsigned n,
 
 static void packFloat(luaL_Buffer* b, float f, int islittle)
 {
-  size_t pos = luaL_prepbuffsize(b, sizeof(float));
+  size_t pos = luaL_prepbuffsize(b, SZ_FLOAT);
   byte_span buff = luaL_buffaddr(b);
-  luaL_addsize(b, sizeof(float));
+  luaL_addsize(b, SZ_FLOAT);
   buff.write_float(f, pos);
   if (islittle != nativeendian_little)
   {
-    buff.reverse(pos, sizeof(float));
+    buff.reverse(pos, SZ_FLOAT);
   }
 }
 
 static void packDouble(luaL_Buffer* b, double f, bool islittle)
 {
-  size_t pos = luaL_prepbuffsize(b, sizeof(double));
+  size_t pos = luaL_prepbuffsize(b, SZ_DOUBLE);
   byte_span buff = luaL_buffaddr(b);
-  luaL_addsize(b, sizeof(double));
+  luaL_addsize(b, SZ_DOUBLE);
   buff.write_double(f, pos);
   if (islittle != nativeendian_little)
   {
-    buff.reverse(pos, sizeof(double));
+    buff.reverse(pos, SZ_DOUBLE);
   }
 }
 
 static double unpackDouble(byte_view data, size_t pos, bool islittle)
 {
-  data = data.substr(pos, sizeof(double));
+  data = data.substr(pos, SZ_DOUBLE);
   return (islittle == nativeendian_little ? data : byte_span(data).reverse().view()).toDouble();
 }
 
 static float unpackFloat(byte_view data, size_t pos, bool islittle)
 {
-  data = data.substr(pos, sizeof(float));
+  data = data.substr(pos, SZ_FLOAT);
   return (islittle == nativeendian_little ? data : byte_span(data).reverse().view()).toFloat();
 }
 
@@ -2171,7 +2186,7 @@ static int str_pack(lua_State* L)
     { /* strings with length count */
       byte_view s = luaL_checklstring(L, arg);
       size_t len = s.size();
-      luaL_argchecki(L, size >= sizeof(lua_Unsigned) || len < ((lua_Unsigned) 1 << (size * NB)), arg, lt::string_length_does_not_fit_in_given_size);
+      luaL_argchecki(L, size >= SZ_INTEGER || len < ((lua_Unsigned) 1 << (size * NB)), arg, lt::string_length_does_not_fit_in_given_size);
       /* pack length */
       packint(&b, (lua_Unsigned) len, h.islittle, size, 0);
       luaL_addlstring(&b, s, 0, len);
@@ -2390,7 +2405,7 @@ static const luaL_RegCFI strlib[] = {
 static void createmetatable(lua_State* L)
 {
   /* table to be metatable for strings */
-  lua_createtable(L, 0, sizeof(stringmetamethods) / sizeof((stringmetamethods)[0]) - 1);
+  lua_createtable(L, 0, std::size(stringmetamethods) - 1);
   luaL_setfuncscfi(L, stringmetamethods);
   lua_pushistringref(L, lt::empty_str);         /* dummy string */
   lua_pushvalue(L, -2);           /* copy table */

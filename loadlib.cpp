@@ -544,7 +544,7 @@ static void createsearcherstable(lua_State* L)
       nullptr};
   int i;
   /* create 'searchers' table */
-  lua_createtable(L, sizeof(searchers) / sizeof(searchers[0]) - 1, 0);
+  lua_createtable(L, std::size(searchers) - 1, 0);
   /* fill it with predefined searchers */
   for (i = 0; searchers[i] != nullptr; i++)
   {

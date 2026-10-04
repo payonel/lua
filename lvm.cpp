@@ -938,7 +938,8 @@ lua_Number luaV_modf(lua_State* L, lua_Number m, lua_Number n)
 }
 
 /* number of bits in an integer */
-constexpr int NBITS = ((int)(sizeof(lua_Integer) * CHAR_BIT));
+constexpr int NBITS = 64;
+static_assert(NBITS == sizeof(lua_Integer) * CHAR_BIT);
 
 /*
 ** Shift left operation. (Shift right just negates 'y'.)

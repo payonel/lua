@@ -55,7 +55,7 @@ LUA_API Memcontrol l_memcontrol;
 #define lua_lock(L)   ((void) 0)
 #define lua_unlock(L) ((void) 0)
 
-#define LUAL_BUFFERSIZE ((int) (16 * sizeof(void*) * sizeof(lua_Number)))
+#define LUAL_BUFFERSIZE 1024
 
 #define MAXIWTHABS 128
 

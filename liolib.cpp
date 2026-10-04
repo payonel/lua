@@ -419,7 +419,7 @@ static int read_number(lua_State* L, OsFile* f)
       count = 1; /* count initial '0' as a valid digit */
   }
   count += readdigits(&rn, hex);   /* integral part */
-  if (test2(&rn, byte_view(decp, sizeof(decp))))
+  if (test2(&rn, byte_view(decp, std::size(decp))))
     count += readdigits(&rn, hex); /* fractional part */
   if (count > 0 && test2(&rn, (hex ? lt::pP_chars : lt::eE_chars)))
   {                     /* exponent mark? */
@@ -755,7 +755,7 @@ static void createmeta(lua_State* L)
 {
   luaL_newmetatablei(L, LUA_FILEHANDLE); /* metatable for file handles */
   luaL_setfuncscfi(L, metameth);        /* add metamethods to new metatable */
-  lua_createtable(L, 0, sizeof(meth) / sizeof((meth)[0]) - 1);            /* create method table */
+  lua_createtable(L, 0, std::size(meth) - 1);            /* create method table */
   luaL_setfuncscfi(L, meth);            /* add file methods to method table */
   lua_setfieldi(L, -2, lt::mm_index);       /* metatable.__index = method table */
   lua_pop(L, 1);                        /* pop metatable */
