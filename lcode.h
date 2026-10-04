@@ -71,47 +71,47 @@ typedef enum UnOpr
 
 /* get (pointer to) instruction of given 'expdesc' */
 
-LUAI_FUNC int luaK_code(FuncState* fs, Instruction i);
-LUAI_FUNC int luaK_codeABx(FuncState* fs, OpCode o, int A, int Bx);
-LUAI_FUNC int luaK_codeABCk(FuncState* fs, OpCode o, int A, int B, int C,
+int luaK_code(FuncState* fs, Instruction i);
+int luaK_codeABx(FuncState* fs, OpCode o, int A, int Bx);
+int luaK_codeABCk(FuncState* fs, OpCode o, int A, int B, int C,
                             int k);
-LUAI_FUNC int luaK_codevABCk(FuncState* fs, OpCode o, int A, int B, int C,
+int luaK_codevABCk(FuncState* fs, OpCode o, int A, int B, int C,
                              int k);
-LUAI_FUNC int luaK_exp2const(FuncState* fs, const expdesc* e, TValue* v);
-LUAI_FUNC void luaK_fixline(FuncState* fs, int line);
-LUAI_FUNC void luaK_nil(FuncState* fs, int from, int n);
-LUAI_FUNC void luaK_codecheckglobal(FuncState* fs, expdesc* var, int k,
+int luaK_exp2const(FuncState* fs, const expdesc* e, TValue* v);
+void luaK_fixline(FuncState* fs, int line);
+void luaK_nil(FuncState* fs, int from, int n);
+void luaK_codecheckglobal(FuncState* fs, expdesc* var, int k,
                                     int line);
-LUAI_FUNC void luaK_reserveregs(FuncState* fs, int n);
-LUAI_FUNC void luaK_checkstack(FuncState* fs, int n);
-LUAI_FUNC void luaK_int(FuncState* fs, int reg, lua_Integer n);
-LUAI_FUNC void luaK_vapar2local(FuncState* fs, expdesc* var);
-LUAI_FUNC void luaK_dischargevars(FuncState* fs, expdesc* e);
-LUAI_FUNC int luaK_exp2anyreg(FuncState* fs, expdesc* e);
-LUAI_FUNC void luaK_exp2anyregup(FuncState* fs, expdesc* e);
-LUAI_FUNC void luaK_exp2nextreg(FuncState* fs, expdesc* e);
-LUAI_FUNC void luaK_exp2val(FuncState* fs, expdesc* e);
-LUAI_FUNC void luaK_self(FuncState* fs, expdesc* e, expdesc* key);
-LUAI_FUNC void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k);
-LUAI_FUNC void luaK_goiftrue(FuncState* fs, expdesc* e);
-LUAI_FUNC void luaK_storevar(FuncState* fs, expdesc* var, expdesc* e);
-LUAI_FUNC void luaK_setreturns(FuncState* fs, expdesc* e, int nresults);
-LUAI_FUNC void luaK_setoneret(FuncState* fs, expdesc* e);
-LUAI_FUNC int luaK_jump(FuncState* fs);
-LUAI_FUNC void luaK_ret(FuncState* fs, int first, int nret);
-LUAI_FUNC void luaK_patchlist(FuncState* fs, int list, int target);
-LUAI_FUNC void luaK_patchtohere(FuncState* fs, int list);
-LUAI_FUNC int luaK_concat(FuncState* fs, int l1, int l2);
-LUAI_FUNC int luaK_getlabel(FuncState* fs);
-LUAI_FUNC void luaK_prefix(FuncState* fs, UnOpr op, expdesc* v, int line);
-LUAI_FUNC void luaK_infix(FuncState* fs, BinOpr op, expdesc* v);
-LUAI_FUNC void luaK_posfix(FuncState* fs, BinOpr op, expdesc* v1,
+void luaK_reserveregs(FuncState* fs, int n);
+void luaK_checkstack(FuncState* fs, int n);
+void luaK_int(FuncState* fs, int reg, lua_Integer n);
+void luaK_vapar2local(FuncState* fs, expdesc* var);
+void luaK_dischargevars(FuncState* fs, expdesc* e);
+int luaK_exp2anyreg(FuncState* fs, expdesc* e);
+void luaK_exp2anyregup(FuncState* fs, expdesc* e);
+void luaK_exp2nextreg(FuncState* fs, expdesc* e);
+void luaK_exp2val(FuncState* fs, expdesc* e);
+void luaK_self(FuncState* fs, expdesc* e, expdesc* key);
+void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k);
+void luaK_goiftrue(FuncState* fs, expdesc* e);
+void luaK_storevar(FuncState* fs, expdesc* var, expdesc* e);
+void luaK_setreturns(FuncState* fs, expdesc* e, int nresults);
+void luaK_setoneret(FuncState* fs, expdesc* e);
+int luaK_jump(FuncState* fs);
+void luaK_ret(FuncState* fs, int first, int nret);
+void luaK_patchlist(FuncState* fs, int list, int target);
+void luaK_patchtohere(FuncState* fs, int list);
+int luaK_concat(FuncState* fs, int l1, int l2);
+int luaK_getlabel(FuncState* fs);
+void luaK_prefix(FuncState* fs, UnOpr op, expdesc* v, int line);
+void luaK_infix(FuncState* fs, BinOpr op, expdesc* v);
+void luaK_posfix(FuncState* fs, BinOpr op, expdesc* v1,
                            expdesc* v2, int line);
-LUAI_FUNC void luaK_settablesize(FuncState* fs, int pc,
+void luaK_settablesize(FuncState* fs, int pc,
                                  int ra, int asize, int hsize);
-LUAI_FUNC void luaK_setlist(FuncState* fs, int base, int nelems, int tostore);
-LUAI_FUNC void luaK_finish(FuncState* fs);
-LUAI_FUNC l_noret luaK_semerror(LexState* ls, byte_view fmt, const FmtArgs& args);
+void luaK_setlist(FuncState* fs, int base, int nelems, int tostore);
+void luaK_finish(FuncState* fs);
+[[noreturn]] void luaK_semerror(LexState* ls, byte_view fmt, const FmtArgs& args);
 
 static inline int luaK_codeABC(FuncState* fs, OpCode o, int a, int b, int c)
 {

@@ -120,7 +120,7 @@ void luaE_checkcstack(lua_State* L)
     luaD_errerr(L); /* error while handling stack error */
 }
 
-LUAI_FUNC void luaE_incCstack(lua_State* L)
+void luaE_incCstack(lua_State* L)
 {
   L->nCcalls++;
   if (l_unlikely(getCcalls(L) >= LUAI_MAXCCALLS))

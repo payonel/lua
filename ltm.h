@@ -68,53 +68,53 @@ static l_forceinline int checknoTM(const Table* mt, TMS e)
 }
 
 
-LUAI_DDEC(const byte_view luaT_typenames_[LUA_TOTALTYPES];)
+extern const byte_view luaT_typenames_[LUA_TOTALTYPES];
 
 static l_forceinline byte_view ttypename(int x)
 {
   return luaT_typenames_[x + 1];
 }
 
-LUAI_FUNC byte_view luaT_objtypename(lua_State* L, const TValue* o);
+byte_view luaT_objtypename(lua_State* L, const TValue* o);
 
-LUAI_FUNC const TValue* luaT_gettm(Table* events, TMS event, TString* ename);
-LUAI_FUNC const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event);
-LUAI_FUNC const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o,
+const TValue* luaT_gettm(Table* events, TMS event, TString* ename);
+const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event);
+const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o,
                                         TMS event);
-LUAI_FUNC void luaT_init(lua_State* L);
+void luaT_init(lua_State* L);
 
-LUAI_FUNC void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
+void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
                            const TValue* p2, const TValue* p3);
-LUAI_FUNC lu_byte luaT_callTMres(lua_State* L, const TValue* f,
+lu_byte luaT_callTMres(lua_State* L, const TValue* f,
                                  const TValue* p1, const TValue* p2, StkId p3);
-LUAI_FUNC void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
+void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
                              StkId res, TMS event,
                              StkId src1, StkId src2);
-LUAI_FUNC void luaT_trybinTM(lua_State* L, StkId p1, StkId p2,
+void luaT_trybinTM(lua_State* L, StkId p1, StkId p2,
                              StkId res, TMS event);
-LUAI_FUNC void luaT_tryconcatTM(lua_State* L);
-LUAI_FUNC void luaT_trybinassocTM(lua_State* L, const TValue* p1,
+void luaT_tryconcatTM(lua_State* L);
+void luaT_trybinassocTM(lua_State* L, const TValue* p1,
                                   const TValue* p2, int inv, StkId res, TMS event,
                                   StkId src1);
-LUAI_FUNC void luaT_trybinassocTM(lua_State* L, StkId p1,
+void luaT_trybinassocTM(lua_State* L, StkId p1,
                                   const TValue* p2, int inv, StkId res, TMS event);
-LUAI_FUNC void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
+void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
                               int inv, StkId res, TMS event,
                               StkId src1);
-LUAI_FUNC void luaT_trybiniTM(lua_State* L, StkId p1, lua_Integer i2,
+void luaT_trybiniTM(lua_State* L, StkId p1, lua_Integer i2,
                               int inv, StkId res, TMS event);
-LUAI_FUNC int luaT_callorderTM(lua_State* L, const TValue* p1,
+int luaT_callorderTM(lua_State* L, const TValue* p1,
                                const TValue* p2, TMS event);
-LUAI_FUNC int luaT_callorderiTM(lua_State* L, StkId p1, int v2,
+int luaT_callorderiTM(lua_State* L, StkId p1, int v2,
                                 int inv, int isfloat, TMS event);
-LUAI_FUNC int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
+int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
                                 int inv, int isfloat, TMS event);
 
-LUAI_FUNC void luaT_adjustvarargs(lua_State* L, struct CallInfo* ci,
+void luaT_adjustvarargs(lua_State* L, struct CallInfo* ci,
                                   const Proto* p);
-LUAI_FUNC void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc);
-LUAI_FUNC void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, StkId rc);
-LUAI_FUNC void luaT_getvarargs(lua_State* L, struct CallInfo* ci, StkId where,
+void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc);
+void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, StkId rc);
+void luaT_getvarargs(lua_State* L, struct CallInfo* ci, StkId where,
                                int wanted, int vatab);
 
 }

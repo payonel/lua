@@ -928,7 +928,7 @@ static byte_view varinfo(lua_State* L, StkId src)
 /*
 ** Raise a type error
 */
-static l_noret typeerror(lua_State* L, const TValue* o, byte_view op, byte_view extra)
+[[noreturn]] static void typeerror(lua_State* L, const TValue* o, byte_view op, byte_view extra)
 {
   byte_view t = luaT_objtypename(L, o);
   luaG_runerror(L, lt::attempt_to_s_a_s_value_s, FmtArgs().str(op).str(t).str(extra));
@@ -938,7 +938,7 @@ static l_noret typeerror(lua_State* L, const TValue* o, byte_view op, byte_view 
 ** Raise a type error with "standard" information about the faulty
 ** object 'o' (using 'varinfo').
 */
-l_noret luaG_typeerror(lua_State* L, const TValue* o, byte_view op, StkId src)
+[[noreturn]] void luaG_typeerror(lua_State* L, const TValue* o, byte_view op, StkId src)
 {
   typeerror(L, o, op, varinfo(L, src));
 }
@@ -948,7 +948,7 @@ l_noret luaG_typeerror(lua_State* L, const TValue* o, byte_view op, StkId src)
 ** for the object based on how it was called ('funcnamefromcall'); if it
 ** cannot get a name there, try 'varinfo'.
 */
-l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
+[[noreturn]] void luaG_callerror(lua_State* L, const TValue* o, StkId src)
 {
   CallInfo* ci = L->ci;
   VarName fn = funcnamefromcall(L, ci);
@@ -956,12 +956,12 @@ l_noret luaG_callerror(lua_State* L, const TValue* o, StkId src)
   typeerror(L, o, lt::call, extra);
 }
 
-l_noret luaG_forerror(lua_State* L, const TValue* o, byte_view what)
+[[noreturn]] void luaG_forerror(lua_State* L, const TValue* o, byte_view what)
 {
   luaG_runerror(L, lt::bad_for_s_number_expected_got_s, FmtArgs().str(what).str(luaT_objtypename(L, o)));
 }
 
-l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2)
+[[noreturn]] void luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2)
 {
   if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(p1))
   {
@@ -971,7 +971,7 @@ l_noret luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2, StkId
   luaG_typeerror(L, p1, lt::concatenate, src1);
 }
 
-l_noret luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, byte_view msg, StkId src1, StkId src2)
+[[noreturn]] void luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, byte_view msg, StkId src1, StkId src2)
 {
   if (!(((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) /* first operand is wrong? */
   {
@@ -984,7 +984,7 @@ l_noret luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, byte_v
 /*
 ** Error when both values are convertible to numbers, but not to integers
 */
-l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2)
+[[noreturn]] void luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2)
 {
   IntResult temp;
   (void)p2;
@@ -993,7 +993,7 @@ l_noret luaG_tointerror(lua_State* L, const TValue* p1, const TValue* p2, StkId 
   luaG_runerror(L, lt::number_s_has_no_integer_representation, FmtArgs().str(varinfo(L, src2)));
 }
 
-l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
+[[noreturn]] void luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
 {
   byte_view t1 = luaT_objtypename(L, p1);
   byte_view t2 = luaT_objtypename(L, p2);
@@ -1003,7 +1003,7 @@ l_noret luaG_ordererror(lua_State* L, const TValue* p1, const TValue* p2)
     luaG_runerror(L, lt::attempt_to_compare_s_with_s, FmtArgs().str(t1).str(t2));
 }
 
-l_noret luaG_errnnil(lua_State* L, LClosure* cl, int k)
+[[noreturn]] void luaG_errnnil(lua_State* L, LClosure* cl, int k)
 {
   const InternalString* globalname = &lt::qmark_i; /* default name if k == 0 */
   if (k > 0)
@@ -1023,7 +1023,7 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
   return luaO_pushfstring(L, lt::fmt_s_d_s, FmtArgs().str(sv).num(line).str(msg))->view();
 }
 
-l_noret luaG_errormsg(lua_State* L)
+[[noreturn]] void luaG_errormsg(lua_State* L)
 {
   if (L->errfunc != 0)
   { /* is there an error handling function? */
@@ -1043,7 +1043,7 @@ l_noret luaG_errormsg(lua_State* L)
   luaD_throw(L, LUA_ERRRUN);
 }
 
-l_noret luaG_runerror(lua_State* L, byte_view fmt,
+[[noreturn]] void luaG_runerror(lua_State* L, byte_view fmt,
                       const FmtArgs& args)
 {
   CallInfo* ci = L->ci;
@@ -1062,7 +1062,7 @@ l_noret luaG_runerror(lua_State* L, byte_view fmt,
   luaG_errormsg(L);
 }
 
-l_noret luaG_runerror(lua_State* L, byte_view fmt)
+[[noreturn]] void luaG_runerror(lua_State* L, byte_view fmt)
 {
   luaG_runerror(L, fmt, FmtArgs());
 }

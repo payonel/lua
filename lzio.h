@@ -60,9 +60,9 @@ private:
 
 struct ZIO;
 
-LUAI_FUNC void luaZ_init(lua_State* L, ZIO* z, lua_Reader* reader);
-LUAI_FUNC size_t luaZ_read(ZIO* z, std::span<std::byte> b); /* read next n bytes */
-LUAI_FUNC std::optional<byte_view> luaZ_getaddr(ZIO* z, size_t n);
+void luaZ_init(lua_State* L, ZIO* z, lua_Reader* reader);
+size_t luaZ_read(ZIO* z, std::span<std::byte> b); /* read next n bytes */
+std::optional<byte_view> luaZ_getaddr(ZIO* z, size_t n);
 
 template <typename T>
 std::span<T> luaZ_overlay(byte_view block)
@@ -80,6 +80,6 @@ struct ZIO
   lua_State* L = nullptr;
 };
 
-LUAI_FUNC int luaZ_fill(ZIO* z);
+int luaZ_fill(ZIO* z);
 
 }

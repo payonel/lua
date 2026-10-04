@@ -28,9 +28,9 @@ inline constexpr int LUAC_VERSION = LUA_VERSION_MAJOR_N * 16 + LUA_VERSION_MINOR
 inline constexpr int LUAC_FORMAT = 0; /* this is the official format */
 
 /* load one chunk; from lundump.c */
-LUAI_FUNC LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int fixed);
+LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int fixed);
 
 /* dump one chunk; from ldump.c */
-LUAI_FUNC int luaU_dump(lua_State* L, const Proto* f, lua_Writer* w, int strip);
+int luaU_dump(lua_State* L, const Proto* f, lua_Writer* w, int strip);
 
 }

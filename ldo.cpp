@@ -91,7 +91,7 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
   L->top = oldtop + 1; /* top goes back to old top plus error object */
 }
 
-l_noret luaD_throw(lua_State* L, TStatus errcode)
+[[noreturn]] void luaD_throw(lua_State* L, TStatus errcode)
 {
   if (L->errorJmp)
   {                       /* thread has an error handler? */
@@ -121,7 +121,7 @@ l_noret luaD_throw(lua_State* L, TStatus errcode)
   }
 }
 
-l_noret luaD_throwbaselevel(lua_State* L, TStatus errcode)
+[[noreturn]] void luaD_throwbaselevel(lua_State* L, TStatus errcode)
 {
   if (L->errorJmp)
   {
@@ -170,7 +170,7 @@ constexpr int MAXSTACK = (LUAI_MAXSTACK < MAXSTACK_BYSIZET ? LUAI_MAXSTACK : MAX
 constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
 
 /* raise a stack error while running the message handler */
-l_noret luaD_errerr(lua_State* L)
+[[noreturn]] void luaD_errerr(lua_State* L)
 {
   byte_view errstr = lt::error_in_error_handling;
   TString* msg = TString::luaS_createstr(L, errstr);

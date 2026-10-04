@@ -97,7 +97,6 @@ static inline unsigned int point2uint(lua_CFunction p)
 /*
 ** non-return type
 */
-#define l_noret void __attribute__((noreturn))
 
 /*
 ** An unsigned with (at least) 4 bytes
@@ -220,24 +219,6 @@ static inline int lua_numbertointeger(lua_Number n, IntResult* p)
   }
   return 0;
 }
-
-/*
-** LUAI_FUNC is a mark for all extern functions that are not to be
-** exported to outside modules.
-** LUAI_DDEF and LUAI_DDEC are marks for all extern (const) variables,
-** none of which to be exported to outside modules (LUAI_DDEF for
-** definitions and LUAI_DDEC for declarations).
-** Elf and MACH/gcc (versions 3.2 and later) mark them as "hidden" to
-** optimize access when Lua is compiled as a shared library. Not all elf
-** targets support this attribute. Unfortunately, gcc does not offer
-** a way to check whether the target offers that support, and those
-** without support give a warning about it. To avoid these warnings,
-** change to the default definition.
-*/
-#define LUAI_FUNC __attribute__((visibility("internal"))) extern
-
-#define LUAI_DDEC(dec) LUAI_FUNC dec
-#define LUAI_DDEF      /* empty */
 
 /* Give these macros simpler names for internal use */
 #define l_likely(x)   luai_likely(x)

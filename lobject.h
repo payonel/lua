@@ -745,7 +745,7 @@ static l_forceinline CFuncInfo* keycfuncinfo(const Node* n)
 
 /* }================================================================== */
 
-LUAI_FUNC int luaO_checkliveness(struct lua_State* L, const TValue* obj);
+int luaO_checkliveness(struct lua_State* L, const TValue* obj);
 
 static l_forceinline void checkliveness(struct lua_State* L, const TValue* obj)
 {
@@ -895,20 +895,20 @@ struct FmtArgs
 
 /* }================================================================== */
 
-LUAI_FUNC int luaO_utf8esc(byte_span buff, lua_Integer x);
-LUAI_FUNC int luaO_ceillog2(int x);
-LUAI_FUNC int luaO_codeparam(lua_Integer p);
-LUAI_FUNC l_mem luaO_applyparam(int p, l_mem x);
+int luaO_utf8esc(byte_span buff, lua_Integer x);
+int luaO_ceillog2(int x);
+int luaO_codeparam(lua_Integer p);
+l_mem luaO_applyparam(int p, l_mem x);
 
-LUAI_FUNC int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2, TValue* res);
-LUAI_FUNC void luaO_arith(lua_State* L, int op, StkId p1, StkId p2, StkId res);
-LUAI_FUNC size_t luaO_str2num(byte_view s, TValue* o);
-LUAI_FUNC size_t luaO_tostringbuff(const TValue* obj, byte_span buff);
-LUAI_FUNC lu_byte luaO_hexavalue(int c);
-LUAI_FUNC void luaO_tostring(lua_State* L, TValue* obj);
-LUAI_FUNC const InternalString* luaO_pushvfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
-LUAI_FUNC int luaO_fmtargcount(byte_view fmt);
-LUAI_FUNC const InternalString* luaO_pushfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
-LUAI_FUNC void luaO_chunkid(byte_span out, byte_view source);
+int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2, TValue* res);
+void luaO_arith(lua_State* L, int op, StkId p1, StkId p2, StkId res);
+size_t luaO_str2num(byte_view s, TValue* o);
+size_t luaO_tostringbuff(const TValue* obj, byte_span buff);
+lu_byte luaO_hexavalue(int c);
+void luaO_tostring(lua_State* L, TValue* obj);
+const InternalString* luaO_pushvfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
+int luaO_fmtargcount(byte_view fmt);
+const InternalString* luaO_pushfstring(lua_State* L, byte_view fmt, const FmtArgs& args);
+void luaO_chunkid(byte_span out, byte_view source);
 
 }

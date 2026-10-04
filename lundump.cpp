@@ -37,7 +37,7 @@ struct LoadState
   bool fixed;        /* dump is fixed in memory */
 };
 
-static l_noret error(LoadState* S, byte_view why)
+[[noreturn]] static void error(LoadState* S, byte_view why)
 {
   luaO_pushfstring(S->L, lt::s_bad_binary_format_s, FmtArgs().str(S->name).str(why));
   luaD_throw(S->L, LUA_ERRSYNTAX);
@@ -367,7 +367,7 @@ static void checkliteral(LoadState* S, byte_view s, byte_view msg)
     error(S, msg);
 }
 
-static l_noret numerror(LoadState* S, byte_view what, byte_view tname)
+[[noreturn]] static void numerror(LoadState* S, byte_view what, byte_view tname)
 {
   byte_view msg = luaO_pushfstring(S->L, lt::s_s_mismatch, FmtArgs().str(tname).str(what))->view();
   error(S, msg);

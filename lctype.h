@@ -35,7 +35,7 @@ constexpr int MASK(int B)
 }
 
 /* one entry for each character and for -1 (EOZ) */
-LUAI_DDEC(const lu_byte luai_ctype_[UCHAR_MAX + 2];)
+extern const lu_byte luai_ctype_[UCHAR_MAX + 2];
 
 /*
 ** add 1 to char to allow index -1 (EOZ)

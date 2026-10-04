@@ -550,11 +550,11 @@ struct global_State
 
 /* actual number of total memory allocated */
 
-LUAI_FUNC void luaE_setdebt(global_State* g, l_mem debt);
-LUAI_FUNC void luaE_freethread(lua_State* L, lua_State* L1);
-LUAI_FUNC l_mem luaE_threadsize(lua_State* L);
-LUAI_FUNC CallInfo* luaE_extendCI(lua_State* L, int err);
-LUAI_FUNC void luaE_shrinkCI(lua_State* L);
+void luaE_setdebt(global_State* g, l_mem debt);
+void luaE_freethread(lua_State* L, lua_State* L1);
+l_mem luaE_threadsize(lua_State* L);
+CallInfo* luaE_extendCI(lua_State* L, int err);
+void luaE_shrinkCI(lua_State* L);
 static l_forceinline lua_State* mainthread(global_State* g)
 {
   return &g->mainth;
@@ -576,10 +576,10 @@ static l_forceinline const TValue* gfasttm(global_State* g, Table* mt, TMS e)
   return checknoTM(mt, e) ? nullptr : luaT_gettm(mt, e, g->tmname[e]);
 }
 
-LUAI_FUNC void luaE_checkcstack(lua_State* L);
-LUAI_FUNC void luaE_incCstack(lua_State* L);
-LUAI_FUNC void luaE_warning(lua_State* L, byte_view msg, int tocont);
-LUAI_FUNC void luaE_warnerror(lua_State* L, byte_view where);
-LUAI_FUNC TStatus luaE_resetthread(lua_State* L, TStatus status);
+void luaE_checkcstack(lua_State* L);
+void luaE_incCstack(lua_State* L);
+void luaE_warning(lua_State* L, byte_view msg, int tocont);
+void luaE_warnerror(lua_State* L, byte_view where);
+TStatus luaE_resetthread(lua_State* L, TStatus status);
 
 }

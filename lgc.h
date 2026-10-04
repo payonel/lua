@@ -246,20 +246,20 @@ static l_forceinline int gcrunning(global_State* g)
   return g->gcstp == 0;
 }
 
-LUAI_FUNC void luaC_fix(lua_State* L, GCObject* o);
-LUAI_FUNC void luaC_freeallobjects(lua_State* L);
-LUAI_FUNC void luaC_step(lua_State* L);
+void luaC_fix(lua_State* L, GCObject* o);
+void luaC_freeallobjects(lua_State* L);
+void luaC_step(lua_State* L);
 
 static l_forceinline void luaC_checkGC(lua_State* L)
 {
   if (L->l_G->GCdebt <= 0)
     luaC_step(L);
 }
-LUAI_FUNC void luaC_runtilstate(lua_State* L, int state, int fast);
-LUAI_FUNC void luaC_fullgc(lua_State* L, int isemergency);
-LUAI_FUNC GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt);
-LUAI_FUNC void luaC_barrier_(lua_State* L, GCObject* o, GCObject* v);
-LUAI_FUNC void luaC_barrierback_(lua_State* L, GCObject* o);
+void luaC_runtilstate(lua_State* L, int state, int fast);
+void luaC_fullgc(lua_State* L, int isemergency);
+GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt);
+void luaC_barrier_(lua_State* L, GCObject* o, GCObject* v);
+void luaC_barrierback_(lua_State* L, GCObject* o);
 
 static l_forceinline void luaC_objbarrier(lua_State* L, GCObject* p, GCObject* o)
 {
@@ -284,7 +284,7 @@ static l_forceinline void luaC_barrierback(lua_State* L, GCObject* p, const TVal
   if (v->tt_ & BIT_ISCOLLECTABLE)
     luaC_objbarrierback(L, p, gcvalue(v));
 }
-LUAI_FUNC void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt);
-LUAI_FUNC void luaC_changemode(lua_State* L, int newmode);
+void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt);
+void luaC_changemode(lua_State* L, int newmode);
 
 }

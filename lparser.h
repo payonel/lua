@@ -193,12 +193,12 @@ struct FuncState
   lu_byte needclose;      /* function needs to close upvalues when returning */
 };
 
-LUAI_FUNC int luaY_nvarstack(FuncState* fs);
-LUAI_FUNC void luaY_checklimit(FuncState* fs, int v, int l, byte_view what);
+int luaY_nvarstack(FuncState* fs);
+void luaY_checklimit(FuncState* fs, int v, int l, byte_view what);
 namespace lua::bytes
 {
 class MBuffer;
 }
-LUAI_FUNC LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, byte_view name, int firstchar);
+LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, byte_view name, int firstchar);
 
 }

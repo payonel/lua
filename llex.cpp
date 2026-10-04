@@ -55,7 +55,7 @@ static const byte_view luaX_tokens[] = {
     lt::number_1, lt::integer_1, lt::name_1, lt::string_1};
 
 
-static l_noret lexerror(LexState* ls, byte_view msg, int token);
+[[noreturn]] static void lexerror(LexState* ls, byte_view msg, int token);
 
 static void save(LexState* ls, int c)
 {
@@ -127,7 +127,7 @@ static byte_view txtToken(LexState* ls, int token)
   }
 }
 
-static l_noret lexerror(LexState* ls, byte_view msg, int token)
+[[noreturn]] static void lexerror(LexState* ls, byte_view msg, int token)
 {
   msg = luaG_addinfo(ls->L, msg, ls->source, ls->linenumber);
   if (token)
@@ -135,7 +135,7 @@ static l_noret lexerror(LexState* ls, byte_view msg, int token)
   luaD_throw(ls->L, LUA_ERRSYNTAX);
 }
 
-l_noret luaX_syntaxerror(LexState* ls, byte_view msg)
+[[noreturn]] void luaX_syntaxerror(LexState* ls, byte_view msg)
 {
   lexerror(ls, msg, ls->t.token);
 }

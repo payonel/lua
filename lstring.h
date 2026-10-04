@@ -24,8 +24,8 @@ static l_forceinline int eqshrstr(const TString* a, const TString* b)
   return a == b;
 }
 
-LUAI_FUNC int      luaS_eqstr(TString* a, TString* b);
-LUAI_FUNC void     luaS_init(lua_State* L);
+int luaS_eqstr(TString* a, TString* b);
+void luaS_init(lua_State* L);
 
 static l_forceinline unsigned int luaS_gethash(TString* ts)
 {

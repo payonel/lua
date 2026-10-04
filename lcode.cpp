@@ -40,7 +40,7 @@ static inline int hasjumps(const expdesc* e)
 static int codesJ(FuncState* fs, OpCode o, int sj, int k);
 
 /* semantic error */
-l_noret luaK_semerror(LexState* ls, byte_view fmt, const FmtArgs& args)
+[[noreturn]] void luaK_semerror(LexState* ls, byte_view fmt, const FmtArgs& args)
 {
   const InternalString* msg = luaO_pushvfstring(ls->L, fmt, args);
   if (msg == nullptr)

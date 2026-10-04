@@ -66,28 +66,28 @@ constexpr F2Imod LUA_FLOORN2I = F2Ieq;
 ** Shift right is the same as shift left with a negative 'y'
 */
 
-LUAI_FUNC int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2);
-LUAI_FUNC int luaV_equalobj(lua_State* L, StkId t1, StkId t2);
-LUAI_FUNC int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r);
-LUAI_FUNC int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r);
-LUAI_FUNC int luaV_tonumber_(const TValue* obj, NumResult* n);
-LUAI_FUNC int luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode);
-LUAI_FUNC int luaV_tointegerns(const TValue* obj, IntResult* p,
+int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2);
+int luaV_equalobj(lua_State* L, StkId t1, StkId t2);
+int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r);
+int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r);
+int luaV_tonumber_(const TValue* obj, NumResult* n);
+int luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode);
+int luaV_tointegerns(const TValue* obj, IntResult* p,
                                F2Imod mode);
-LUAI_FUNC int luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode);
-LUAI_FUNC lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
+int luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode);
+lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
                                  StkId val, lu_byte tag, StkId tsrc);
-LUAI_FUNC void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
+void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
                               TValue* val, int aux, StkId tsrc);
-LUAI_FUNC void luaV_finishOp(lua_State* L);
-LUAI_FUNC void luaV_execute(lua_State* L, CallInfo* ci);
-LUAI_FUNC void luaV_concat(lua_State* L, int total);
-LUAI_FUNC lua_Integer luaV_idiv(lua_State* L, lua_Integer x, lua_Integer y);
-LUAI_FUNC lua_Integer luaV_mod(lua_State* L, lua_Integer x, lua_Integer y);
-LUAI_FUNC lua_Number luaV_modf(lua_State* L, lua_Number x, lua_Number y);
-LUAI_FUNC lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y);
-LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src);
-LUAI_FUNC void luaV_objlen(lua_State* L, StkId ra, StkId rb);
+void luaV_finishOp(lua_State* L);
+void luaV_execute(lua_State* L, CallInfo* ci);
+void luaV_concat(lua_State* L, int total);
+lua_Integer luaV_idiv(lua_State* L, lua_Integer x, lua_Integer y);
+lua_Integer luaV_mod(lua_State* L, lua_Integer x, lua_Integer y);
+lua_Number luaV_modf(lua_State* L, lua_Number x, lua_Number y);
+lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y);
+void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src);
+void luaV_objlen(lua_State* L, StkId ra, StkId rb);
 
 static l_forceinline int tonumber(const TValue* o, NumResult* nout)
 {

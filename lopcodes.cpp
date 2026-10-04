@@ -17,7 +17,7 @@ constexpr lu_byte opmode(int mm, int ot, int it, int t, int a, int m)
 
 /* ORDER OP */
 
-LUAI_DDEF const lu_byte luaP_opmodes[NUM_OPCODES] = {
+const lu_byte luaP_opmodes[NUM_OPCODES] = {
     /*       MM OT IT T  A  mode       opcode  */
     opmode(0, 0, 0, 0, 1, iABC) /* OP_MOVE */
     ,

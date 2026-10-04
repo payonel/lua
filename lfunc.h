@@ -58,8 +58,8 @@ constexpr int MAXMISS = 10;
 /* special status to close upvalues preserving the top of the stack */
 constexpr int CLOSEKTOP = (LUA_ERRERR + 1);
 
-LUAI_FUNC void luaF_newtbcupval(lua_State* L, StkId level);
-LUAI_FUNC void luaF_closeupval(lua_State* L, StkId level);
-LUAI_FUNC StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy);
+void luaF_newtbcupval(lua_State* L, StkId level);
+void luaF_closeupval(lua_State* L, StkId level);
+StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy);
 
 }

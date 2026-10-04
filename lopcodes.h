@@ -273,7 +273,7 @@ constexpr OpCode GET_OPCODE(Instruction i)
   return (OpCode)((i >> POS_OP) & MASK1(SIZE_OP, 0));
 }
 
-LUAI_DDEC(const lu_byte luaP_opmodes[NUM_OPCODES];)
+extern const lu_byte luaP_opmodes[NUM_OPCODES];
 
 static l_forceinline enum OpMode getOpMode(int m)
 {
@@ -464,7 +464,7 @@ static l_forceinline int testMMMode(int m)
   return luaP_opmodes[m] & (1 << 7);
 }
 
-LUAI_FUNC int luaP_isOT(Instruction i);
-LUAI_FUNC int luaP_isIT(Instruction i);
+int luaP_isOT(Instruction i);
+int luaP_isIT(Instruction i);
 
 }

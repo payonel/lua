@@ -65,12 +65,12 @@ struct BlockCnt
 static void statement(LexState* ls);
 static void expr(LexState* ls, expdesc* v);
 
-static l_noret error_expected(LexState* ls, int token)
+[[noreturn]] static void error_expected(LexState* ls, int token)
 {
   luaX_syntaxerror(ls, luaO_pushfstring(ls->L, lt::s_expected, FmtArgs().str(luaX_token2str(ls, token)))->view());
 }
 
-static l_noret errorlimit(FuncState* fs, int limit, byte_view what)
+[[noreturn]] static void errorlimit(FuncState* fs, int limit, byte_view what)
 {
   lua_State* L = fs->ls->L;
   const InternalString* msg;
@@ -611,7 +611,7 @@ static inline void leavelevel(LexState* ls)
 ** Generates an error that a goto jumps into the scope of some
 ** variable declaration.
 */
-static l_noret jumpscopeerror(LexState* ls, Labeldesc* gt)
+[[noreturn]] static void jumpscopeerror(LexState* ls, Labeldesc* gt)
 {
   TString* tsname = getlocalvardesc(ls->fs, gt->nactvar)->name;
   byte_view varname = (tsname != nullptr) ? tsname->data.view() : lt::star;
@@ -774,7 +774,7 @@ static void enterblock(FuncState* fs, BlockCnt* bl, lu_byte isloop)
 /*
 ** generates an error for an undefined 'goto'.
 */
-static l_noret undefgoto(LexState* ls, Labeldesc* gt)
+[[noreturn]] static void undefgoto(LexState* ls, Labeldesc* gt)
 {
   /* breaks are checked when created, cannot be undefined */
   assert(!eqstr(gt->name, ls->brkn));
