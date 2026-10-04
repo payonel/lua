@@ -31,7 +31,7 @@ struct Labeldesc;
 struct Proto;
 struct AbsLineInfo;
 typedef l_uint32 Instruction;
-typedef int StkId;
+typedef ptrdiff_t StkId;
 struct Node;
 struct GCObject;
 struct TString;

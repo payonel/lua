@@ -880,7 +880,7 @@ static byte_view varinfo(lua_State* L, StkId src)
   {
     if (src <= UPVALORIGIN)
     {
-      name = upvalname(ci_func(L, ci)->p, UPVALORIGIN - src);
+      name = upvalname(ci_func(L, ci)->p, (int)(UPVALORIGIN - src));
       kind = lt::upvalue;
     }
     else if (src != NOSLOT)

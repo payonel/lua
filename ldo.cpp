@@ -255,7 +255,7 @@ int luaD_growstack(lua_State* L, int n, int raiseerror)
   else if (n < MAXSTACK)
   {                                   /* avoids arithmetic overflows */
     int newsize = size + (size >> 1); /* tentative new size (size * 1.5) */
-    int needed = L->top + n;
+    int needed = (int)L->top + n;
     if (newsize > MAXSTACK) /* cannot cross the limit */
       newsize = MAXSTACK;
     if (newsize < needed) /* but must respect what was asked for */

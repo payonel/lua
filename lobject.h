@@ -66,7 +66,7 @@ constexpr int WITHVARIANT_MASK = 0x3F;
 /* collectable object has the same tag as the original value */
 
 
-typedef int StkId;
+typedef ptrdiff_t StkId;
 
 constexpr StkId NOSLOT = -1;
 
