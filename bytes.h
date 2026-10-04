@@ -20,28 +20,22 @@ struct byte_view
 
   constexpr byte_view()
     : sv("", 0)
-    // , offset(0)
-    // , length(0)
   {}
 
   constexpr byte_view(const char* bytes)
     : sv(bytes)
-    // , offset(0)
-    // , length(sv.size())
   {}
 
   constexpr byte_view(const char* bytes, size_t len)
     : sv(bytes, len)
-    // , offset(0)
-    // , length(len)
   {}
 
-  constexpr explicit byte_view(std::string_view v) : sv(v)/*, offset(0), length(v.size())*/ {}
+  constexpr explicit byte_view(std::string_view v) : sv(v) {}
 
-  constexpr size_t size() const { return sv.size()/*length*/; }
-  constexpr const char* data() const { return sv.data() /*+ offset*/; }
+  constexpr size_t size() const { return sv.size(); }
+  constexpr const char* data() const { return sv.data(); }
 
-  constexpr bool empty() const { return sv.empty(); /*length == 0;*/ }
+  constexpr bool empty() const { return sv.empty(); }
 
   constexpr bool ends_with(char c) const
   {
@@ -70,7 +64,7 @@ struct byte_view
 
   constexpr char operator[] (size_t i) const
   {
-    return sv.data()[/*offset +*/ i];
+    return sv.data()[i];
   }
 
   constexpr bool starts_with(byte_view s) const
