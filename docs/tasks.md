@@ -1598,6 +1598,16 @@ If wanted, drop the C prefixes (`luaH_get` → `get`) and apply Java class
 names (`Table` → `LuaTable`), one namespace per commit, after everything
 else.
 
+**Status: not done, by decision.**
+- C0 made upstream's prefixes the class mapping (`luaD_` → `Ldo`, …).
+  The names stay upstream's, so upstream fixes keep mapping line for
+  line.
+- Renaming now would cost every call site and that traceability, and
+  the port gets nothing from it: a transcriber can rename at the Java
+  end with the checklist above.
+- If renaming is wanted later, it remains one namespace per commit, as
+  planned.
+
 ---
 
 ## Port-time notes (no C++ action)
