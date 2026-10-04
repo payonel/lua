@@ -7,6 +7,9 @@
 
 #include "lopcodes.h"
 
+namespace lua::vm
+{
+
 constexpr lu_byte opmode(int mm, int ot, int it, int t, int a, int m)
 {
   return (lu_byte)((mm << 7) | (ot << 6) | (it << 5) | (t << 4) | (a << 3) | m);
@@ -209,4 +212,6 @@ int luaP_isIT(Instruction i)
   default:
     return testITMode(GET_OPCODE(i)) && GETARG_B(i) == 0;
   }
+}
+
 }

@@ -26,6 +26,9 @@
 #include "lua_internal.h"
 #include "literals.h"
 
+namespace lua::vm
+{
+
 static inline int LuaClosure(const Closure* f)
 {
   return f != nullptr && f->tt == LUA_VLCL;
@@ -149,6 +152,8 @@ static void settraps(CallInfo* ci)
 ** for all platforms where it runs). Moreover, 'hook' is always checked
 ** before being called (see 'luaD_hook').
 */
+}
+
 LUA_API void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
 {
   if (func == nullptr || mask == 0)
@@ -164,20 +169,24 @@ LUA_API void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
     settraps(L->ci); /* to trace inside 'luaV_execute' */
 }
 
+
 LUA_API lua_Hook lua_gethook(lua_State* L)
 {
   return L->hook;
 }
+
 
 LUA_API int lua_gethookmask(lua_State* L)
 {
   return L->hookmask;
 }
 
+
 LUA_API int lua_gethookcount(lua_State* L)
 {
   return L->basehookcount;
 }
+
 
 std::optional<InternalDebug> lua_getstacki(lua_State* L, int level)
 {
@@ -198,6 +207,7 @@ std::optional<InternalDebug> lua_getstacki(lua_State* L, int level)
   return std::nullopt; /* no such level */
 }
 
+
 LUA_API std::optional<lua_Debug> lua_getstack(lua_State* L, int level)
 {
   std::optional<InternalDebug> iar = lua_getstacki(L, level);
@@ -207,6 +217,9 @@ LUA_API std::optional<lua_Debug> lua_getstack(lua_State* L, int level)
   ar.i_ci = iar->i_ci;
   return ar;
 }
+
+namespace lua::vm
+{
 
 static const InternalString* upvalname(const Proto* p, int uv)
 {
@@ -258,6 +271,8 @@ LocalSlot luaG_findlocal(lua_State* L, CallInfo* ci, int n)
   return {name, base + (n - 1)};
 }
 
+}
+
 const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n)
 {
   const InternalString* name;
@@ -286,6 +301,7 @@ const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n
   return name;
 }
 
+
 LUA_API std::optional<HostString> lua_getlocal(lua_State* L, const lua_Debug* ar, int n)
 {
   InternalDebug iar{};
@@ -296,6 +312,7 @@ LUA_API std::optional<HostString> lua_getlocal(lua_State* L, const lua_Debug* ar
     return std::nullopt;
   return HostString(name->view());
 }
+
 
 const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n)
 {
@@ -313,6 +330,7 @@ const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n
   return name;
 }
 
+
 LUA_API std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug& ar, int n)
 {
   InternalDebug iar{};
@@ -322,6 +340,9 @@ LUA_API std::optional<HostString> lua_setlocal(lua_State* L, const lua_Debug& ar
     return std::nullopt;
   return HostString(name->view());
 }
+
+namespace lua::vm
+{
 
 static void funcinfo(InternalDebug* ar, Closure* cl)
 {
@@ -475,6 +496,8 @@ static int auxgetinfo(lua_State* L, byte_view what, size_t wpos,
   return status;
 }
 
+}
+
 std::optional<InternalDebug> lua_getinfoi(lua_State* L, byte_view what, const InternalDebug& ar)
 {
   int status;
@@ -518,6 +541,7 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, byte_view what, const In
     return std::nullopt; /* invalid option */
   return moredetail;
 }
+
 
 LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options, const lua_Debug& arin)
 {
@@ -563,6 +587,9 @@ LUA_API std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& opt
   }
   return ar;
 }
+
+namespace lua::vm
+{
 
 /*
 ** {======================================================
@@ -1142,4 +1169,6 @@ int luaG_traceexec(lua_State* L, int pc)
     luaD_throw(L, LUA_YIELD);
   }
   return 1; /* keep 'trap' on */
+}
+
 }

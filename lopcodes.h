@@ -9,6 +9,9 @@
 #include "llimits.h"
 #include "lobject.h"
 
+namespace lua::vm
+{
+
 /*===========================================================================
   We assume that instructions are unsigned 32-bit integers.
   All instructions have an opcode in the first 7 bits.
@@ -463,3 +466,5 @@ static l_forceinline int testMMMode(int m)
 
 LUAI_FUNC int luaP_isOT(Instruction i);
 LUAI_FUNC int luaP_isIT(Instruction i);
+
+}

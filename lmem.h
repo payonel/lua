@@ -22,6 +22,7 @@ struct Upvaldesc;
 struct Proto;
 struct AbsLineInfo;
 typedef ptrdiff_t StkId;
+typedef l_uint32 Instruction;
 struct Node;
 struct GCObject;
 struct TString;
@@ -33,7 +34,6 @@ struct CFuncInfo;
 }
 struct Vardesc;
 struct Labeldesc;
-typedef l_uint32 Instruction;
 
 namespace lua::runtime
 {

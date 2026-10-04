@@ -10,6 +10,9 @@
 #include "lobject.h"
 #include "ltm.h"
 
+namespace lua::vm
+{
+
 static inline int cvt2str(const TValue* o)
 {
   return (o->tt_ & NOVARIANT_MASK) == LUA_TNUMBER;
@@ -175,4 +178,6 @@ static inline void luaV_finishfastset(lua_State* L, StkId t, const TValue* v)
 static inline lua_Integer luaV_shiftr(lua_Integer x, lua_Integer y)
 {
   return luaV_shiftl(x, l_intunm(y));
+}
+
 }

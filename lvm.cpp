@@ -30,6 +30,9 @@
 #include "os_api.h"
 #include "literals.h"
 
+namespace lua::vm
+{
+
 /* limit for table tag-method chains (to avoid infinite loops) */
 constexpr int MAXTAGLOOP = 2000;
 
@@ -2952,3 +2955,5 @@ void luaV_execute(lua_State* L, CallInfo* ci)
 }
 
 /* }================================================================== */
+
+}

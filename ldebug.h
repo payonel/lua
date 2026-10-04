@@ -8,6 +8,9 @@
 
 #include "lstate.h"
 
+namespace lua::vm
+{
+
 /* Active Lua function (given call info) */
 static l_forceinline LClosure* ci_func(lua_State* L, const CallInfo* ci)
 {
@@ -75,3 +78,5 @@ LUAI_FUNC byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int 
 LUAI_FUNC l_noret luaG_errormsg(lua_State* L);
 LUAI_FUNC int luaG_traceexec(lua_State* L, int pc);
 LUAI_FUNC int luaG_tracecall(lua_State* L);
+
+}
