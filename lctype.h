@@ -20,6 +20,9 @@ static_assert('A' == 65 && '0' == 48, "this port supports only ASCII execution c
 
 #include "llimits.h"
 
+namespace lua::bytes
+{
+
 inline constexpr int ALPHABIT = 0;
 inline constexpr int DIGITBIT = 1;
 inline constexpr int PRINTBIT = 2;
@@ -76,4 +79,6 @@ static l_forceinline int ltolower(int c)
 {
   assert(('A' <= c && c <= 'Z') || c == (c | ('A' ^ 'a')));
   return c | ('A' ^ 'a');
+}
+
 }

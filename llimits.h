@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <assert.h>
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
@@ -19,6 +20,9 @@
 #include "ltests.h"
 #endif
 #include "lhack.h"
+
+namespace lua::object
+{
 
 static_assert(std::endian::native == std::endian::little,
               "this port supports little-endian hosts only");
@@ -78,7 +82,6 @@ static inline unsigned int point2uint(lua_CFunction p)
 
 /* types of 'usual argument conversions' for lua_Number and lua_Integer */
 
-#include <assert.h>
 
 /*
 ** cast a size_t to lua_Integer: These casts are always valid for
@@ -239,3 +242,5 @@ static inline int lua_numbertointeger(lua_Number n, IntResult* p)
 /* Give these macros simpler names for internal use */
 #define l_likely(x)   luai_likely(x)
 #define l_unlikely(x) luai_unlikely(x)
+
+}
