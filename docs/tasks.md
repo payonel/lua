@@ -32,6 +32,13 @@ the principle wins and the task gets revised.
   is kept because it documents intent, and it costs the port nothing.
 - **Invisible engine.** No new Lua-visible limits or behaviors. A Lua script
   must not be able to tell it is running on this engine.
+- **Every allocation is accountable.** A Lua script is charged for the
+  memory it asks for, and no allocation path goes uncharged. Exact byte
+  parity is not the goal. When the true cost can't be measured, charge a
+  logical value that scales with the request. Strings set the precedent:
+  they are charged their character length, even though the `std::string`
+  behind them uses more. This applies to every engine allocation in C++
+  and in Java, including copies Java makes where C++ can alias memory.
 - **No new comments; immutable tests.** As in `summary.md`. A required
   `ltests.cpp` edit is a mechanical call-shape update only and is called out
   in the commit message.
@@ -716,6 +723,10 @@ GC debt and the sizes passed to the `lua_Alloc` permission hook come from
 
 - Replace them with one `constexpr` cost table (`cost::Table`,
   `cost::Node`, `cost::Value`, …).
+- **Accountability first, exactness second** (see Principles). Each
+  constant is a logical per-unit cost that scales with the request (per
+  slot, per node, per byte), not a measurement of the host's layout. An
+  object with no clean C++ equivalent still gets a charge.
 - **Proposed values:** stock Lua 5.5's 64-bit sizes, so that
   `collectgarbage("count")` and GC pacing match stock. That fits the
   invisible-engine principle, and `tests/deep/allocinfo.lua` already
