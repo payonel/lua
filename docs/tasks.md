@@ -1446,6 +1446,17 @@ One class per library file (`BaseLib`, `StringLib`, `TableLib`, `MathLib`,
 `OsLib`, `IoLib`, `CoroutineLib`, `DebugLib`, `Utf8Lib`, `PackageLib`),
 with `linit` as the registry. Functions register through `CFuncInfo`.
 
+**Status: done** (`f4c20316`).
+- The ten libraries and the `linit` registry are in `lua::lib`. The
+  `luaopen_*` entry points and `linit`'s public functions stay global.
+- **Name collision:** `loslib`'s own `os_remove`/`os_rename`/
+  `os_tmpname`/`os_getenv` (the Lua functions) hide the platform
+  functions of the same names inside the package, so its platform calls
+  are written `::os_remove(…)` and so on. In Java the two are already
+  distinct (`OsLib.os_remove(L)` vs `OsApi.os_remove(path)`).
+- `liolib`'s mid-file `<sys/types.h>` include moves up with the others.
+- **Results:** `make full` passes.
+
 ### C9. `lua::platform`
 
 `os_api.*` and `locale_util.*`: reimplemented, not transcribed, in Java.
