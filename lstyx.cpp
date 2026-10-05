@@ -3,6 +3,7 @@
 */
 
 #include <algorithm>
+#include <bit>
 #include <cstring>
 #include <functional>
 #include <string>
@@ -280,20 +281,72 @@ enum class Op : char
   Proto,      /* write prototype 'p' */
   Upvalue,    /* write upvalue 'i' of closure 'p' */
   TableNext,  /* write the entries of table 'p' from position 'i' ('n': array only) */
-  NodeNext,   /* write node 'i' on of table 'p', which has 'n' nodes */
+  NodeNext,   /* write node 'i' on of table 'p', which has 'n' nodes ('v': its id; 'nodes') */
   TableValue, /* write the value at position 'i' of table 'p' */
   ThreadSlot, /* write slots 'i' to 'n' of thread 'p' */
   ThreadTail, /* write the frames, to-be-closed list and hook of thread 'p' */
 };
 
+/* NodeNext: the dead keys among the nodes of the current word, and the
+   table's dead-node record, plus one (0: none yet) */
+struct NodeWalk
+{
+  lua_Unsigned bits;
+  lua_Integer rec;
+};
+
 struct Task
 {
   Op op = Op::Byte;
-  PathRec step;
+  union
+  {
+    PathRec step{}; /* how the value was reached (a node walk has none) */
+    NodeWalk nodes;
+  };
   Slot v;
   lua_Integer i = 0;
   lua_Integer n = 0;
   const void* p = nullptr;
+};
+
+/*
+** A filter of addresses: 'maybe' is true for every address added, and for
+** few others (16 bits per address). It never dereferences an address.
+*/
+class AddressFilter
+{
+public:
+  AddressFilter(lua_State* L, bool charged, size_t n) : words_(L, charged)
+  {
+    while ((size_t(1) << lgbits_) < 16 * n && lgbits_ < 40)
+      lgbits_++;
+    size_t nwords = size_t(1) << (lgbits_ - 6);
+    words_.reserve(nwords);
+    for (size_t i = 0; i < nwords; i++)
+      words_.push(0);
+  }
+
+  void add(const void* p)
+  {
+    size_t b = slot(p);
+    words_.set(b / 64, words_.get(b / 64) | (lua_Unsigned(1) << (b % 64)));
+  }
+
+  bool maybe(const void* p)
+  {
+    size_t b = slot(p);
+    return (words_.get(b / 64) >> (b % 64)) & 1;
+  }
+
+private:
+  WorkStack<lua_Unsigned> words_;
+  int lgbits_ = 6;
+
+  size_t slot(const void* p) const
+  {
+    lua_Unsigned h = (static_cast<lua_Unsigned>(reinterpret_cast<uintptr_t>(p)) >> 3) * 0x9E3779B97F4A7C15u;
+    return static_cast<size_t>(h >> (64 - lgbits_));
+  }
 };
 
 class Walker
@@ -302,14 +355,14 @@ public:
   /* a script's persist: output to 'B', references in the table at 'refs' */
   Walker(lua_State* L, Table* perms, luaL_Buffer* B, int refs)
       : L_(L), host_(false), perms_(perms), B_(B), refs_(refs), tasks_(L, true), paths_(L, true),
-        marked_(L, true)
+        marked_(L, true), dead_large_(L, true), dead_(L, true), dead_bits_(L, true)
   {
   }
 
   /* a host persist: output to 'w', nothing allocated in the state */
   Walker(lua_State* L, Table* perms, lua_Writer* w)
       : L_(L), host_(true), perms_(perms), w_(w), tasks_(L, false), paths_(L, false),
-        marked_(L, false)
+        marked_(L, false), dead_large_(L, false), dead_(L, false), dead_bits_(L, false)
   {
   }
 
@@ -352,15 +405,17 @@ public:
   }
 
   /*
-  ** The trailer (ADR-10), after the value: what only the whole walk knows,
-  ** the tables to mark for finalization, in the order their originals were
-  ** marked (ADR-28); then the trailer's length, written backward, so that
-  ** unpersist reads it first, from the end.
+  ** The trailer (ADR-10), after the value: what only the whole walk knows.
+  ** The tables to mark for finalization, in the order their originals were
+  ** marked (ADR-28), and the dead keys that are persisted strings (ADR-29);
+  ** then the trailer's length, written backward, so that unpersist reads
+  ** it first, from the end.
   */
   void trailer()
   {
     lua_Integer start = position();
     marks();
+    dead_keys();
     lua_Unsigned len = static_cast<lua_Unsigned>(position() - start);
     char b[10];
     size_t n = 0;
@@ -419,9 +474,15 @@ private:
   int refs_ = 0;
   lua_Writer* w_ = nullptr;
   std::string buf_;
-  std::unordered_map<const void*, lua_Integer> map_;
+  struct HostRef
+  {
+    lua_Integer id;
+    lu_byte tt;
+  };
+  std::unordered_map<const void*, HostRef> map_;
   lua_Integer refcount_ = 0;
   lua_Integer flushed_ = 0; /* bytes handed to the writer */
+  size_t nstrings_ = 0;      /* strings written */
   WorkStack<Task> tasks_;
   WorkStack<PathRec> paths_;
 
@@ -432,6 +493,39 @@ private:
     lua_Integer id;
   };
   WorkStack<Marked> marked_;
+
+  /* the nodes of a table written slot by slot that were dead keys, as bits:
+     a table of up to 64 nodes has them in its record, a larger one in 'n'
+     bits of 'dead_bits_' from word 'bits' */
+  struct DeadNodesLarge
+  {
+    const Table* h;
+    lua_Integer n;
+    lua_Integer bits;
+  };
+  struct DeadNodes
+  {
+    const Table* h;
+    lua_Unsigned bits;
+  };
+  WorkStack<DeadNodesLarge> dead_large_;
+  WorkStack<DeadNodes> dead_;
+  WorkStack<lua_Unsigned> dead_bits_;
+
+  /* a persisted string, by address */
+  struct StringRef
+  {
+    const void* p;
+    lua_Integer id;
+  };
+
+  /* a dead key that is a persisted string */
+  struct DeadFix
+  {
+    lua_Integer table;
+    lua_Integer node;
+    lua_Integer string;
+  };
 
   static constexpr size_t FLUSH_SIZE = 64 * 1024;
 
@@ -505,6 +599,124 @@ private:
     var(static_cast<lua_Integer>(order.size()));
     for (size_t i = order.size(); i > 0; i--)
       var(order.get(i - 1));
+  }
+
+  /* every node written as a dead key that still is one: f(key, table, node) */
+  template <class F>
+  void each_dead_key(F f)
+  {
+    auto word = [&](const Table* h, lua_Integer w, lua_Unsigned bits)
+    {
+      for (int b = 0; bits != 0; b++, bits >>= 1)
+        if (bits & 1)
+        {
+          lua_Integer j = w * 64 + b;
+          if (j >= sizenode(h)) /* a table resized since it was written */
+            return;
+          const Node* nd = gnode(h, static_cast<size_t>(j));
+          if (keyisdead(nd))
+            f(nd->key_val.ref, h, j);
+        }
+    };
+    for (size_t r = 0; r < dead_.size(); r++)
+    {
+      DeadNodes d = dead_.get(r);
+      word(d.h, 0, d.bits);
+    }
+    for (size_t r = 0; r < dead_large_.size(); r++)
+    {
+      DeadNodesLarge d = dead_large_.get(r);
+      for (lua_Integer w = 0; w < (d.n + 63) / 64; w++)
+        word(d.h, w, dead_bits_.get(static_cast<size_t>(d.bits + w)));
+    }
+  }
+
+  /* every persisted string: f(address, id) */
+  template <class F>
+  void each_string(F f)
+  {
+    if (host_)
+    {
+      for (const auto& e : map_)
+        if (novariant(e.second.tt) == LUA_TSTRING)
+          f(e.first, e.second.id);
+      return;
+    }
+    TValue rt = getslot(L_, L_->ci->func + refs_);
+    const Table* refs = hvalue(&rt);
+    for (int i = 0; i < sizenode(refs); i++)
+    {
+      const Node* nd = gnode(refs, static_cast<size_t>(i));
+      if (!isempty(&nd->val) && novariant(nd->key_tt) == LUA_TSTRING && ttisinteger(&nd->val))
+        f(nd->key_val.ref, ivalue(&nd->val));
+    }
+  }
+
+  /*
+  ** The dead keys whose objects are persisted strings: their identities
+  ** (ADR-29). A node counts if it was written as a dead key and still is
+  ** one (a '__persist' function or a collection may have changed a table
+  ** since it was written). Keys are matched by address, so nothing
+  ** dereferences them, against candidate strings sorted by address: with
+  ** fewer keys than strings, the strings that pass a filter of the keys'
+  ** addresses; otherwise every string. A filter of the candidates picks
+  ** the keys to look up.
+  */
+  void dead_keys()
+  {
+    size_t nkeys = 0; /* written as dead keys (some may be no longer) */
+    for (size_t r = 0; r < dead_.size(); r++)
+      nkeys += static_cast<size_t>(std::popcount(dead_.get(r).bits));
+    for (size_t w = 0; w < dead_bits_.size(); w++)
+      nkeys += static_cast<size_t>(std::popcount(dead_bits_.get(w)));
+    if (nkeys == 0)
+    {
+      var(0);
+      return;
+    }
+    bool few_keys = nkeys <= nstrings_;
+    AddressFilter keys(L_, !host_, few_keys ? nkeys : 0);
+    if (few_keys)
+      each_dead_key([&](const void* p, const Table*, lua_Integer) { keys.add(p); });
+    auto candidate = [&](const void* p) { return !few_keys || keys.maybe(p); };
+    size_t ncand = 0;
+    each_string([&](const void* p, lua_Integer) { if (candidate(p)) ncand++; });
+    if (ncand == 0)
+    {
+      var(0);
+      return;
+    }
+    WorkStack<StringRef> cand(L_, !host_);
+    cand.reserve(ncand); /* nothing below allocates while the strings are read */
+    each_string([&](const void* p, lua_Integer id) { if (candidate(p)) cand.push(StringRef{p, id}); });
+    auto by_address = [](const StringRef& a, const StringRef& b) { return std::less<const void*>()(a.p, b.p); };
+    cand.sort(by_address);
+    AddressFilter strings(L_, !host_, ncand);
+    for (size_t i = 0; i < cand.size(); i++)
+      strings.add(cand.get(i).p);
+    WorkStack<DeadFix> fixes(L_, !host_);
+    each_dead_key([&](const void* p, const Table* h, lua_Integer node)
+    {
+      if (!strings.maybe(p))
+        return;
+      size_t k = cand.lower_bound(StringRef{p, 0}, by_address);
+      if (k < cand.size() && cand.get(k).p == p)
+      {
+        TValue t{};
+        sethvalue(L_, &t, const_cast<Table*>(h));
+        lua_Integer table = 0;
+        ref_find(t, h, &table);
+        fixes.push(DeadFix{table, node, cand.get(k).id});
+      }
+    });
+    var(static_cast<lua_Integer>(fixes.size()));
+    for (size_t i = 0; i < fixes.size(); i++)
+    {
+      DeadFix f = fixes.get(i);
+      var(f.table);
+      var(f.node);
+      var(f.string);
+    }
   }
 
   /* ---- work ---- */
@@ -593,7 +805,7 @@ private:
         table_next(static_cast<Table*>(const_cast<void*>(t.p)), t.i, t.n != 0);
         break;
       case Op::NodeNext:
-        node_next(static_cast<Table*>(const_cast<void*>(t.p)), t.i, t.n);
+        node_next(t);
         break;
       case Op::TableValue:
       {
@@ -727,7 +939,7 @@ private:
       auto it = map_.find(id);
       if (it == map_.end())
         return false;
-      *found = it->second;
+      *found = it->second.id;
       return true;
     }
     TValue rt = getslot(L_, L_->ci->func + refs_);
@@ -744,7 +956,7 @@ private:
     lua_Integer n = ++refcount_;
     if (host_)
     {
-      map_.emplace(id, n);
+      map_.emplace(id, HostRef{n, key.tt_});
       return;
     }
     luaL_checkstacki(L_, 2, std::nullopt);
@@ -838,6 +1050,7 @@ private:
     case LUA_TSTRING:
     {
       byte_view s = tsvalue(&v)->data.view();
+      nstrings_++;
       byte(TAG_STRING);
       var(static_cast<lua_Integer>(s.size()));
       raw(s.data(), s.size());
@@ -968,7 +1181,15 @@ private:
     /* the metatable, then the entries in the order of 'next' (in layout
        mode the array part's, then the free-slot position and the nodes) */
     if (layout)
-      push_op(Op::NodeNext, 0, h, sizenode(h));
+    {
+      Task t;
+      t.op = Op::NodeNext;
+      t.nodes = NodeWalk{0, 0};
+      t.p = h;
+      t.n = sizenode(h);
+      t.v.v.prim = id;
+      tasks_.push(t);
+    }
     push_op(Op::TableNext, 0, h, layout ? 1 : 0);
     if (h->metatable != nullptr)
     {
@@ -1020,21 +1241,58 @@ private:
   }
 
   /*
+  ** The dead keys among the nodes of word 'w' of a task's table: a table
+  ** gets its record, with a word for every 64 nodes, at its first dead key.
+  */
+  void dead_word(Task& t, lua_Integer w)
+  {
+    if (t.nodes.bits == 0)
+      return;
+    const Table* h = static_cast<const Table*>(t.p);
+    if (t.n <= 64)
+      dead_.push(DeadNodes{h, t.nodes.bits});
+    else
+    {
+      if (t.nodes.rec == 0)
+      {
+        dead_large_.push(DeadNodesLarge{h, t.n, static_cast<lua_Integer>(dead_bits_.size())});
+        t.nodes.rec = static_cast<lua_Integer>(dead_large_.size());
+        for (lua_Integer k = 0; k < (t.n + 63) / 64; k++)
+          dead_bits_.push(0);
+      }
+      size_t first = static_cast<size_t>(dead_large_.get(static_cast<size_t>(t.nodes.rec - 1)).bits);
+      dead_bits_.set(first + static_cast<size_t>(w), t.nodes.bits);
+    }
+    t.nodes.bits = 0;
+  }
+
+  /*
   ** Node 'j' of a table written slot by slot: a state byte (0: no key, 1: a
   ** dead key, 2: a key, then its key and value), then its chain link. The
   ** nodes are read when their turn comes; a table whose hash part changed
-  ** meanwhile (by a '__persist' function) is an error.
+  ** meanwhile (by a '__persist' function) is an error. Dead keys are noted
+  ** for the trailer (ADR-29).
   */
-  void node_next(Table* h, lua_Integer j, lua_Integer n)
+  void node_next(Task t)
   {
+    Table* h = static_cast<Table*>(const_cast<void*>(t.p));
+    lua_Integer j = t.i, n = t.n;
     if (sizenode(h) != n)
       fail(lt::a_table_changed_while_being_persisted);
     if (j == 0)
       var(h->lastfree);
     if (j == n)
+    {
+      dead_word(t, (j - 1) / 64);
       return;
-    push_op(Op::NodeNext, j + 1, h, n);
+    }
+    if (j % 64 == 0 && j > 0)
+      dead_word(t, j / 64 - 1);
     const Node* nd = gnode(h, static_cast<size_t>(j));
+    if (keyisdead(nd))
+      t.nodes.bits |= lua_Unsigned(1) << (j % 64);
+    t.i = j + 1;
+    tasks_.push(t); /* the next node, after this one's key and value */
     if (keyisnil(nd) || keyisdead(nd))
     {
       byte(keyisnil(nd) ? 0 : 1);
@@ -1550,7 +1808,8 @@ class Restorer
 public:
   /* stack: 1: permanents (key -> object); 3: refs (id -> object); 4: upvalues */
   Restorer(lua_State* L, byte_view data, bool host)
-      : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true)
+      : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true),
+        fixes_(L, true)
   {
   }
 
@@ -1619,16 +1878,46 @@ public:
       lua_pop(L_, 1);
       marked_.sort([](lua_Integer a, lua_Integer b) { return a < b; });
     }
+    int m = t.get_count(3);
+    for (int i = 0; i < m; i++)
+    {
+      DeadFix f{t.get_var(), t.get_var(), t.get_var()};
+      if (f.table < 1 || f.node < 0 || f.node > INT_MAX || f.key < 1)
+        t.invalid();
+      fixes_.push(f);
+    }
     if (t.pos != t.data.size())
       t.invalid();
     r_.data = d.substr(0, end - static_cast<size_t>(len));
   }
 
-  /* the value is read: every table made for the trailer must have been met */
+  /*
+  ** The value is read: every table made for the trailer must have been met,
+  ** and dead keys get their identities (ADR-29). The restore succeeded.
+  */
   void finish()
   {
     if (next_marked_ != marked_.size())
       r_.invalid();
+    for (size_t i = 0; i < fixes_.size(); i++)
+    {
+      DeadFix f = fixes_.get(i);
+      lua_rawgeti(L_, REFS, f.table);
+      lua_rawgeti(L_, REFS, f.key);
+      if (!lua_istable(L_, -2) || lua_type(L_, -1) != LUA_TSTRING)
+        r_.invalid();
+      TValue t = getslot(L_, L_->top - 2);
+      TValue k = getslot(L_, L_->top - 1);
+      Table* h = hvalue(&t);
+      if (same_seed()) /* otherwise the table was rebuilt, with no dead keys */
+      {
+        if (isdummy(h) || f.node >= sizenode(h) || !keyisdead(gnode(h, static_cast<size_t>(f.node))))
+          r_.invalid();
+        int j = static_cast<int>(f.node);
+        h->luaH_setnode(L_, j, &k, true, nullptr, gnode(h, static_cast<size_t>(j))->next);
+      }
+      lua_pop(L_, 2);
+    }
     done_ = true;
   }
 
@@ -1675,6 +1964,14 @@ private:
   WorkStack<lua_Integer> marked_; /* ids of the tables made for the trailer, sorted */
   WorkStack<Table*> made_;        /* those tables */
   size_t next_marked_ = 0;        /* the next of them the value meets */
+
+  struct DeadFix
+  {
+    lua_Integer table;
+    lua_Integer node;
+    lua_Integer key;
+  };
+  WorkStack<DeadFix> fixes_;
   bool done_ = false;
 
   /* the next reference id, of an object other than a table */

@@ -106,6 +106,7 @@ local x = styx.settings(name [, value])    -- query or change a setting
   12. finalizers and the collector: marks, their order, and in a whole
       state the finalizer list and the collector's settings (done:
       `finalizers.lua`, C++ tests `host_state_*`, ADR-28)
+  13. `next` from a deleted key (done: `tables.lua`, ADR-29)
 - Items are added or reordered as the tests teach us something.
 
 ## Not supported yet
@@ -157,11 +158,11 @@ of these raises a clear error unless it says otherwise.
   with object keys (tables, functions, userdata, threads hash by address),
   or one restored in a state with another seed, is rebuilt: its contents
   are kept, its `pairs` order can differ, so a coroutine suspended in a
-  `pairs` loop over it can skip or repeat keys.
-- **`next` from a deleted key**: a deleted key that a collection already
-  marked dead is restored without its identity, so `next(t, k)` from that
-  key (a loop that cleared the current entry before yielding) fails after
-  restore.
+  `pairs` loop over it can skip or repeat keys, and `next` from a key
+  deleted from it fails.
+- **`next` from a deleted object key**: a deleted string key keeps its
+  identity (ADR-29); a deleted key that is an object hashes by address, so
+  it goes with the order of object keys above.
 - **A `__persist` restore closure that reaches the value it rebuilds**
   (directly or through its upvalues). Today: unpersist error ("invalid
   persisted data"); the value has no object yet while its closure is read.
@@ -256,8 +257,9 @@ A persisted string is the header `"Styx\x04"` (name plus format version),
 the persisting state's string hash seed (8 bytes, ADR-22), then one value
 (or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload;
 then the trailer, what only the whole walk knows (the tables to mark for
-finalization, ADR-28), and the trailer's length, written backward so that
-unpersist reads it first, from the end. Integers, reference ids, lengths, counts, table sizes
+finalization, ADR-28, and the identities of dead keys, ADR-29), and the
+trailer's length, written backward so that unpersist reads it first, from
+the end. Integers, reference ids, lengths, counts, table sizes
 and prototype fields are variable-length integers (zigzag, 7 bits per byte:
 -64..63 take one byte); floats are 8 raw little-endian bytes (the engine is
 little-endian only), instructions 4 raw bytes each, and a thread's frames,
@@ -602,6 +604,38 @@ not, and a failed unpersist finalized what it had half built.
   both directions, a garbage userdata).
 - Cost: none for values without marked tables; otherwise one pass over the
   collector's lists for their order.
+
+### ADR-29: `next` from a deleted key
+**Status:** accepted
+A key removed from a table becomes a dead key at the next collection;
+`next` still continues from it, comparing it by address, so a loop that
+clears its current entry continues where it was. Restored dead keys had no
+identity, so `next` from such a key failed after a restore ("invalid key to
+'next'"); a coroutine clearing entries as it iterated stopped working.
+- The engine's `Table::luaH_setnode` takes a dead key's identity (on
+  `lua-c++`; its table copy keeps them too, tested in `test_engine`).
+  Nothing dereferences it; the collector never marks dead keys.
+- Persist cannot read a dead key's object (it may be collected), so it
+  matches dead keys by address against the strings it persisted, after the
+  walk: the trailer gives, for each match, the table, the node and the
+  string, and unpersist with the same seed gives the dead node that
+  identity. A dead key whose object was not persisted needs none: nothing
+  restored can be passed to `next` as that key. A dead key whose object was
+  collected and whose address a persisted string now has gets that string's
+  identity, as `next` on the original would also take that string there.
+- The walk keeps a bit per node of each table with dead keys (a table of up
+  to 64 nodes in a 16-byte record) and, after it, reads those nodes again;
+  matching sorts the smaller side (the dead keys, through a filter of
+  addresses, or the strings). It costs nothing without dead keys and grows
+  with their number: within noise when a fifth of 20000 records have two
+  dead keys, about 13% more persist time when half the nodes of every table
+  are dead keys (160000).
+- Tested: `next` from every deleted key of churned tables; a coroutine
+  clearing entries as it iterates resumes and visits the same keys; a dead
+  key whose string is not persisted; allocation failure; trailer checks;
+  host and script bytes alike; another seed (contents kept).
+- Not supported yet: deleted object keys (they hash by address, with the
+  order of object keys) and another seed.
 
 ## Open questions
 

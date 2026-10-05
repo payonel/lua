@@ -306,6 +306,59 @@ case("a coroutine suspended in a pairs loop neither skips nor repeats", function
   end
 end)
 
+-- a key removed from a table becomes a dead key at the next collection;
+-- 'next' still continues from it (ADR-29)
+case("next from a deleted key, dead after a collection, continues as before", function()
+  for seed = 1, 30 do
+    local t = churned(64, seed)
+    local keys = {}
+    for k in pairs(t) do if type(k) == "string" then keys[#keys + 1] = k end end
+    local gone = {}
+    for i = 1, #keys, 3 do t[keys[i]] = nil; gone[#gone + 1] = keys[i] end
+    collectgarbage(); collectgarbage()
+    local r = roundtrip({t = t, gone = gone})
+    for i, k in ipairs(r.gone) do
+      local ok, nk = pcall(next, r.t, k)
+      assert(ok, "seed " .. seed .. ": " .. tostring(nk))
+      assert(nk == next(t, gone[i]), "seed " .. seed)
+    end
+  end
+end)
+
+case("a coroutine that clears entries as it iterates resumes where it was", function()
+  local perms = {[_ENV] = "env", [coroutine.yield] = "yield", [pairs] = "pairs", [next] = "next"}
+  local back = {env = _ENV, yield = coroutine.yield, pairs = pairs, next = next}
+  for seed = 1, 30 do
+    local t = churned(64, seed)
+    local function make(tt)
+      return coroutine.create(function()
+        local seen = {}
+        for k in pairs(tt) do tt[k] = nil; seen[#seen + 1] = tostring(k); coroutine.yield() end
+        return table.concat(seen, " ")
+      end)
+    end
+    local co = make(t)
+    for _ = 1, 10 do coroutine.resume(co) end
+    collectgarbage(); collectgarbage()   -- the cleared keys become dead keys
+    local r = styx.unpersist(back, styx.persist(perms, co))
+    local function finish(c)
+      local ok, seen
+      repeat ok, seen = coroutine.resume(c); assert(ok, seen) until coroutine.status(c) == "dead"
+      return seen
+    end
+    assert(finish(r) == finish(co), "seed " .. seed)
+  end
+end)
+
+case("a dead key whose string is not persisted needs nothing", function()
+  local t = {}
+  for i = 1, 20 do t["only" .. i] = i end
+  for i = 1, 20, 2 do t["only" .. i] = nil end
+  collectgarbage(); collectgarbage()
+  local r = roundtrip(t)
+  assert(order(r) == order(t))
+end)
+
 case("a table with object keys is rebuilt (contents kept)", function()
   local ks = {}
   local t = {}

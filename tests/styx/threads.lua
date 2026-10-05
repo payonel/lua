@@ -175,9 +175,9 @@ case("frames that do not match the stack are rejected", function()
   coroutine.resume(co, 1)
   local blob = styx.persist(perms, co)
   assert(styx.unpersist(back, blob))
-  local tail = blob:sub(-2) -- the trailer (empty) and its length
-  assert(tail == "\0\1", "layout: trailer")
-  blob = blob:sub(1, -3)
+  local tail = blob:sub(-3) -- the trailer (empty) and its length
+  assert(tail == "\0\0\2", "layout: trailer")
+  blob = blob:sub(1, -4)
   local frame_size = 10 * 8
   local frames_end = #blob - 8 - 1
   assert(string.unpack("<i8", blob, frames_end + 1) == 0, "layout: ntbc")

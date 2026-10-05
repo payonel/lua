@@ -90,8 +90,8 @@ case("the trailer is checked", function()
   assert(type(styx.unpersist(H.stream(empty_table))) == "table")
   -- no trailer, or a length past the start
   fails("invalid persisted data", styx.unpersist, H.header .. "\0")
-  fails("invalid persisted data", styx.unpersist, H.header .. "\0" .. v(0) .. H.backvar(100))
-  fails("invalid persisted data", styx.unpersist, H.header .. "\0" .. v(0) .. "\255")
+  fails("invalid persisted data", styx.unpersist, H.header .. "\0" .. v(0) .. v(0) .. H.backvar(100))
+  fails("invalid persisted data", styx.unpersist, H.header .. "\0" .. v(0) .. v(0) .. "\255")
   -- bytes between the value and the trailer
   fails("invalid persisted data", styx.unpersist, H.stream("\0\0"))
   -- marks: tables only, each once, all met
@@ -101,6 +101,14 @@ case("the trailer is checked", function()
   fails("invalid persisted data", styx.unpersist, H.stream(empty_table, {0}))
   fails("invalid persisted data", styx.unpersist, H.stream(empty_table, {2}))
   fails("invalid persisted data", styx.unpersist, H.stream("\0", {1}))
+  -- dead keys: a node of a table that is a dead key, given a string
+  local layout = "\6" .. v(0) .. v(2) .. v(0) .. "\1" .. "\0" .. "\0" .. v(2) ..
+                 "\2" .. "\5" .. v(1) .. "k" .. "\2" .. v(0) .. "\1" .. v(0)
+  assert(type(styx.unpersist(H.stream(layout))) == "table")
+  assert(type(styx.unpersist(H.stream(layout, nil, {{1, 1, 2}}))) == "table")
+  for _, bad in ipairs{{1, 0, 2}, {1, 2, 2}, {1, -1, 2}, {1, 1, 1}, {2, 1, 2}, {3, 1, 2}, {1, 1, 3}} do
+    fails("invalid persisted data", styx.unpersist, H.stream(layout, nil, {bad}))
+  end
   H.checkheap()
 end)
 

@@ -430,6 +430,9 @@ static const char* const graph_samples[] = {
   "for i = 1, 50, 2 do t['k' .. i] = nil end return t, {}",
   "local mt = {__gc = function() end} local t = {} "
   "for i = 1, 4 do t[i] = setmetatable({i}, mt) end t[5] = {t[3], t[1]} return t, {}",
+  "local t = {} for i = 1, 30 do t['d' .. i] = i end local gone = {} "
+  "for i = 1, 30, 3 do t['d' .. i] = nil gone[#gone + 1] = 'd' .. i end "
+  "collectgarbage() collectgarbage() return {t, gone}, {}",
 };
 
 /* host persist of a value is byte for byte the script path's stream */
@@ -463,10 +466,12 @@ static void test_host_persist_allocates_nothing()
   lua_State* L = new_counted_state(&a);
   CHECK(eval(L, "local mt = {__gc = function() end} marked = {} "
                 "for i = 1, 5 do marked[i] = setmetatable({}, mt) end "
+                "dk = {} for i = 1, 20 do dk['k' .. i] = i end dkeys = {} "
+                "for i = 1, 20, 2 do dk['k' .. i] = nil dkeys[#dkeys + 1] = 'k' .. i end "
                 "collectgarbage() collectgarbage() "
                 "for i = 1, 3 do setmetatable({}, mt) end return 'ok'") == "ok");
   CHECK(eval(L, build_perms) == "ok");
-  CHECK(push_value_and_perms(L, "return marked, {}"));
+  CHECK(push_value_and_perms(L, "return {marked, dk, dkeys}, {}"));
   lua_getglobal(L, "_PERMS");
   a.grows = 0;
   a.deny = true;
@@ -1061,6 +1066,36 @@ static void test_host_state_garbage_userdata()
   lua_close(A);
 }
 
+/* next from a deleted key: with the seed kept, as before; with another, the contents */
+static void test_dead_keys_across_states()
+{
+  CountingAlloc a1;
+  lua_State* A = lua_newstate(&a1, 77);
+  luaL_openlibs(A);
+  CHECK(eval(A, "t = {} for i = 1, 40 do t['k' .. i] = i end gone = {} "
+                "for i = 1, 40, 3 do t['k' .. i] = nil gone[#gone + 1] = 'k' .. i end "
+                "collectgarbage() collectgarbage() "
+                "local e = {} for i, k in ipairs(gone) do e[i] = tostring(next(t, k)) end "
+                "expected = table.concat(e, ' ') return 'ok'") == "ok");
+  std::string expected = eval(A, "return expected");
+  std::string blob = eval(A, "return require('styx').persist({t = t, gone = gone})");
+  lua_close(A);
+  HostString msg;
+  for (unsigned int seed : {77u, 78u})
+  {
+    CountingAlloc a2;
+    lua_State* B = lua_newstate(&a2, seed);
+    luaL_openlibs(B);
+    CHECK(luaL_unpersistvalue(B, 0, byte_view(blob.data(), blob.size()), &msg) == LUA_OK);
+    lua_setglobal(B, "v");
+    CHECK(eval(B, "local n = 0 for _ in pairs(v.t) do n = n + 1 end return tostring(n == 26 and v.t.k2 == 2)") == "true");
+    if (seed == 77)
+      CHECK(eval(B, "local e = {} for i, k in ipairs(v.gone) do e[i] = tostring(next(v.t, k)) end "
+                    "return table.concat(e, ' ')") == expected);
+    lua_close(B);
+  }
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -1100,6 +1135,7 @@ static void run_cpp_tests()
       {"host_state_pending_finalizers", test_host_state_pending_finalizers},
       {"host_state_collector_settings", test_host_state_collector_settings},
       {"host_state_garbage_userdata", test_host_state_garbage_userdata},
+      {"dead_keys_across_states", test_dead_keys_across_states},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

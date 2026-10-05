@@ -142,15 +142,21 @@ if T then
     assert(n > 0 and #blob == #expected)
   end)
 
-  -- the trailer: tables marked for finalization
+  -- the trailer's parts: tables marked for finalization, dead keys
   local function marked_sample(log)
     local mt = {__gc = function(o) log[#log + 1] = o.name end}
     local v = {}
     for i = 1, 4 do v[i] = setmetatable({name = "m" .. i}, mt) end
+    local t = {}
+    for i = 1, 30 do t["d" .. i] = i end
+    local gone = {}
+    for i = 1, 30, 2 do t["d" .. i] = nil; gone[#gone + 1] = "d" .. i end
+    collectgarbage(); collectgarbage() -- the deleted keys become dead keys
+    v.t, v.gone = t, gone
     return v
   end
 
-  case("persist of marked tables survives an allocation failure at every point", function()
+  case("persist of marked tables and dead keys survives an allocation failure at every point", function()
     local log = {}
     local v = marked_sample(log)
     local expected = styx.persist({[log] = "log"}, v)
@@ -159,7 +165,7 @@ if T then
     assert(n > 0 and blob == expected)
   end)
 
-  case("unpersist of marked tables survives an allocation failure at every point", function()
+  case("unpersist of marked tables and dead keys survives an allocation failure at every point", function()
     local log = {}
     local v = marked_sample(log)
     local blob = styx.persist({[log] = "log"}, v)
@@ -168,6 +174,10 @@ if T then
     assert(n > 0)
     collectgarbage(); collectgarbage()
     assert(#log == 0, "failed attempts ran finalizers: " .. table.concat(log, " "))
+    for i, k in ipairs(r.gone) do
+      assert(pcall(next, r.t, k), "next from a deleted key")
+      assert(next(r.t, k) == next(v.t, v.gone[i]))
+    end
     v, r = nil, nil
     collectgarbage(); collectgarbage()
     assert(#log == 8, table.concat(log, " "))

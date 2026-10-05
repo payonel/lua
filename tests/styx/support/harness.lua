@@ -217,11 +217,15 @@ end
 H.header = styx.persist(nil):sub(1, 13)
 
 -- a hand-made stream: 'body' is the value; 'marked' lists reference ids to
--- mark for finalization
-function H.stream(body, marked)
-  marked = marked or {}
+-- mark for finalization, 'dead' lists {table id, node, key id} triples
+function H.stream(body, marked, dead)
+  marked, dead = marked or {}, dead or {}
   local t = {H.varint(#marked)}
   for _, id in ipairs(marked) do t[#t + 1] = H.varint(id) end
+  t[#t + 1] = H.varint(#dead)
+  for _, d in ipairs(dead) do
+    t[#t + 1] = H.varint(d[1]) .. H.varint(d[2]) .. H.varint(d[3])
+  end
   local trailer = table.concat(t)
   return H.header .. body .. trailer .. H.backvar(#trailer)
 end
