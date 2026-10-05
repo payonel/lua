@@ -358,6 +358,46 @@ static l_forceinline int GETARG_sJ(Instruction i)
   return getarg(i, POS_sJ, SIZE_sJ) - OFFSET_sJ;
 }
 
+constexpr Instruction SET_OPCODE(Instruction i, OpCode o)
+{
+  return (i & MASK0(SIZE_OP, POS_OP)) | (((Instruction)o << POS_OP) & MASK1(SIZE_OP, POS_OP));
+}
+
+constexpr Instruction setarg(Instruction i, int v, int pos, int size)
+{
+  return (i & MASK0(size, pos)) | (((Instruction)v << pos) & MASK1(size, pos));
+}
+
+constexpr Instruction SETARG_A(Instruction i, int v)
+{
+  return setarg(i, v, POS_A, SIZE_A);
+}
+
+constexpr Instruction SETARG_B(Instruction i, int v)
+{
+  return setarg(i, v, POS_B, SIZE_B);
+}
+
+constexpr Instruction SETARG_C(Instruction i, int v)
+{
+  return setarg(i, v, POS_C, SIZE_C);
+}
+
+constexpr Instruction SETARG_k(Instruction i, int v)
+{
+  return setarg(i, v, POS_k, 1);
+}
+
+constexpr Instruction SETARG_Bx(Instruction i, int v)
+{
+  return setarg(i, v, POS_Bx, SIZE_Bx);
+}
+
+constexpr Instruction SETARG_sJ(Instruction i, int j)
+{
+  return setarg(i, j + OFFSET_sJ, POS_sJ, SIZE_sJ);
+}
+
 constexpr Instruction CREATE_ABCk(int o, int a, int b, int c, int k)
 {
   return ((Instruction)o << POS_OP) | ((Instruction)a << POS_A) | ((Instruction)b << POS_B) | ((Instruction)c << POS_C) | ((Instruction)k << POS_k);

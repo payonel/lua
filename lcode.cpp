@@ -155,8 +155,8 @@ void luaK_nil(FuncState* fs, int from, int n)
         from = pfrom; /* from = min(from, pfrom) */
       if (pl > l)
         l = pl; /* l = max(l, pl) */
-      fs->f->code[previous] = ((fs->f->code[previous] & MASK0(SIZE_A, POS_A)) | ((((Instruction)(from)) << POS_A) & MASK1(SIZE_A, POS_A)));
-      fs->f->code[previous] = ((fs->f->code[previous] & MASK0(SIZE_B, POS_B)) | ((((Instruction)(l - from)) << POS_B) & MASK1(SIZE_B, POS_B)));
+      fs->f->code[previous] = SETARG_A(fs->f->code[previous], from);
+      fs->f->code[previous] = SETARG_B(fs->f->code[previous], l - from);
       return;
     } /* else go through */
   }
@@ -188,7 +188,7 @@ static void fixjump(FuncState* fs, int pc, int dest)
   if (!(-OFFSET_sJ <= offset && offset <= MAXARG_sJ - OFFSET_sJ))
     luaX_syntaxerror(fs->ls, lt::control_structure_too_long);
   assert(GET_OPCODE(fs->f->code[jmp]) == OP_JMP);
-  fs->f->code[jmp] = ((fs->f->code[jmp] & MASK0(SIZE_sJ, POS_sJ)) | ((((Instruction)((offset) + OFFSET_sJ)) << POS_sJ) & MASK1(SIZE_sJ, POS_sJ)));
+  fs->f->code[jmp] = SETARG_sJ(fs->f->code[jmp], offset);
 }
 
 /*
@@ -288,7 +288,7 @@ static int patchtestreg(FuncState* fs, int node, int reg)
   if (GET_OPCODE(fs->f->code[i]) != OP_TESTSET)
     return 0; /* cannot patch other instructions */
   if (reg != NO_REG && reg != GETARG_B(fs->f->code[i]))
-    fs->f->code[i] = ((fs->f->code[i] & MASK0(SIZE_A, POS_A)) | ((((Instruction)(reg)) << POS_A) & MASK1(SIZE_A, POS_A)));
+    fs->f->code[i] = SETARG_A(fs->f->code[i], reg);
   else
   {
     /* no register to put value or register already has the value;
@@ -803,12 +803,12 @@ void luaK_setreturns(FuncState* fs, expdesc* e, int nresults)
   int pc = e->info;
   luaY_checklimit(fs, nresults + 1, MAXARG_C, lt::multiple_results);
   if (e->k == VCALL) /* expression is an open function call? */
-    fs->f->code[pc] = ((fs->f->code[pc] & MASK0(SIZE_C, POS_C)) | ((((Instruction)(nresults + 1)) << POS_C) & MASK1(SIZE_C, POS_C)));
+    fs->f->code[pc] = SETARG_C(fs->f->code[pc], nresults + 1);
   else
   {
     assert(e->k == VVARARG);
-    fs->f->code[pc] = ((fs->f->code[pc] & MASK0(SIZE_C, POS_C)) | ((((Instruction)(nresults + 1)) << POS_C) & MASK1(SIZE_C, POS_C)));
-    fs->f->code[pc] = ((fs->f->code[pc] & MASK0(SIZE_A, POS_A)) | ((((Instruction)(fs->freereg)) << POS_A) & MASK1(SIZE_A, POS_A)));
+    fs->f->code[pc] = SETARG_C(fs->f->code[pc], nresults + 1);
+    fs->f->code[pc] = SETARG_A(fs->f->code[pc], fs->freereg);
     luaK_reserveregs(fs, 1);
   }
 }
@@ -845,7 +845,7 @@ void luaK_setoneret(FuncState* fs, expdesc* e)
   }
   else if (e->k == VVARARG)
   {
-    fs->f->code[e->info] = ((fs->f->code[e->info] & MASK0(SIZE_C, POS_C)) | ((((Instruction)(2)) << POS_C) & MASK1(SIZE_C, POS_C)));
+    fs->f->code[e->info] = SETARG_C(fs->f->code[e->info], 2);
     e->k = VRELOC; /* can relocate its simple result */
   }
 }
@@ -982,7 +982,7 @@ static void discharge2reg(FuncState* fs, expdesc* e, int reg)
   case VRELOC:
   {
     int pc = e->info;
-    fs->f->code[pc] = ((fs->f->code[pc] & MASK0(SIZE_A, POS_A)) | ((((Instruction)(reg)) << POS_A) & MASK1(SIZE_A, POS_A))); /* instruction will put result in 'reg' */
+    fs->f->code[pc] = SETARG_A(fs->f->code[pc], reg); /* instruction will put result in 'reg' */
     break;
   }
   case VNONRELOC:
@@ -1255,7 +1255,7 @@ static void negatecondition(FuncState* fs, expdesc* e)
   int pc = getjumpcontrol(fs, e->info);
   assert(testTMode(GET_OPCODE(fs->f->code[pc])) && GET_OPCODE(fs->f->code[pc]) != OP_TESTSET &&
              GET_OPCODE(fs->f->code[pc]) != OP_TEST);
-  fs->f->code[pc] = ((fs->f->code[pc] & MASK0(1, POS_k)) | ((((Instruction)((GETARG_k(fs->f->code[pc]) ^ 1))) << POS_k) & MASK1(1, POS_k)));
+  fs->f->code[pc] = SETARG_k(fs->f->code[pc], GETARG_k(fs->f->code[pc]) ^ 1);
 }
 
 /*
@@ -1724,7 +1724,7 @@ static int finishbinexpneg(FuncState* fs, expdesc* e1, expdesc* e2,
       int v2 = ((int)(i2));
       finishbinexpval(fs, e1, e2, op, int2sC(-v2), 0, line, OP_MMBINI, event);
       /* correct metamethod argument */
-      fs->f->code[fs->pc - 1] = ((fs->f->code[fs->pc - 1] & MASK0(SIZE_B, POS_B)) | ((((Instruction)(int2sC(v2))) << POS_B) & MASK1(SIZE_B, POS_B)));
+      fs->f->code[fs->pc - 1] = SETARG_B(fs->f->code[fs->pc - 1], int2sC(v2));
       return 1; /* successfully coded */
     }
   }
@@ -1974,8 +1974,8 @@ static void codeconcat(FuncState* fs, expdesc* e1, expdesc* e2, int line)
     int n = GETARG_B(fs->f->code[ie2]); /* # of elements concatenated in 'e2' */
     assert(e1->info + 1 == GETARG_A(fs->f->code[ie2]));
     freeexp(fs, e2);
-    fs->f->code[ie2] = ((fs->f->code[ie2] & MASK0(SIZE_A, POS_A)) | ((((Instruction)(e1->info)) << POS_A) & MASK1(SIZE_A, POS_A))); /* correct first element ('e1') */
-    fs->f->code[ie2] = ((fs->f->code[ie2] & MASK0(SIZE_B, POS_B)) | ((((Instruction)(n + 1)) << POS_B) & MASK1(SIZE_B, POS_B)));      /* will concatenate one more element */
+    fs->f->code[ie2] = SETARG_A(fs->f->code[ie2], e1->info); /* correct first element ('e1') */
+    fs->f->code[ie2] = SETARG_B(fs->f->code[ie2], n + 1);      /* will concatenate one more element */
   }
   else
   {                                                /* 'e2' is not a concatenation */
@@ -2175,27 +2175,27 @@ void luaK_finish(FuncState* fs)
       if (!(fs->needclose || (p->flag & PF_VAHID)))
         break; /* no extra work */
       /* else use OP_RETURN to do the extra work */
-      p->code[i] = ((p->code[i] & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_RETURN)) << POS_OP) & MASK1(SIZE_OP, POS_OP)));
+      p->code[i] = SET_OPCODE(p->code[i], OP_RETURN);
     } /* FALLTHROUGH */
     case OP_RETURN:
     case OP_TAILCALL:
     {
       if (fs->needclose)
-        p->code[i] = ((p->code[i] & MASK0(1, POS_k)) | ((((Instruction)(1)) << POS_k) & MASK1(1, POS_k)));                /* signal that it needs to close */
+        p->code[i] = SETARG_k(p->code[i], 1);                /* signal that it needs to close */
       if (p->flag & PF_VAHID)            /* does it use hidden arguments? */
-        p->code[i] = ((p->code[i] & MASK0(SIZE_C, POS_C)) | ((((Instruction)(p->numparams + 1)) << POS_C) & MASK1(SIZE_C, POS_C))); /* signal that */
+        p->code[i] = SETARG_C(p->code[i], p->numparams + 1); /* signal that */
       break;
     }
     case OP_GETVARG:
     {
       if (p->flag & PF_VATAB)         /* function has a vararg table? */
-        p->code[i] = ((p->code[i] & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_GETTABLE)) << POS_OP) & MASK1(SIZE_OP, POS_OP))); /* must get vararg there */
+        p->code[i] = SET_OPCODE(p->code[i], OP_GETTABLE); /* must get vararg there */
       break;
     }
     case OP_VARARG:
     {
       if (p->flag & PF_VATAB) /* function has a vararg table? */
-        p->code[i] = ((p->code[i] & MASK0(1, POS_k)) | ((((Instruction)(1)) << POS_k) & MASK1(1, POS_k)));     /* must get vararg there */
+        p->code[i] = SETARG_k(p->code[i], 1);     /* must get vararg there */
       break;
     }
     case OP_JMP:

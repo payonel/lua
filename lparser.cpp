@@ -1803,7 +1803,7 @@ static void fixforjump(FuncState* fs, int pc, int dest, int back)
     offset = -offset;
   if (l_unlikely(offset > MAXARG_Bx))
     luaX_syntaxerror(fs->ls, lt::control_structure_too_long);
-  code[pc] = ((code[pc] & MASK0(SIZE_Bx, POS_Bx)) | ((((Instruction)(offset)) << POS_Bx) & MASK1(SIZE_Bx, POS_Bx)));
+  code[pc] = SETARG_Bx(code[pc], offset);
 }
 
 /*
@@ -2188,7 +2188,7 @@ static void exprstat(LexState* ls)
     std::span<Instruction> code = fs->f->code;
     check_condition(ls, v.v.k == VCALL, lt::syntax_error);
     int pc = v.v.info;
-    code[pc] = ((code[pc] & MASK0(SIZE_C, POS_C)) | ((((Instruction)(1)) << POS_C) & MASK1(SIZE_C, POS_C))); /* call statement uses no results */
+    code[pc] = SETARG_C(code[pc], 1); /* call statement uses no results */
   }
 }
 
@@ -2209,7 +2209,7 @@ static void retstat(LexState* ls)
       luaK_setmultret(fs, &e);
       if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc)
       { /* tail call? */
-        ((((fs)->f->code[(&e)->info])) = (((((fs)->f->code[(&e)->info])) & MASK0(SIZE_OP, POS_OP)) | ((((Instruction)(OP_TAILCALL)) << POS_OP) & MASK1(SIZE_OP, POS_OP))));
+        fs->f->code[e.info] = SET_OPCODE(fs->f->code[e.info], OP_TAILCALL);
         assert(GETARG_A(((fs)->f->code[(&e)->info])) == luaY_nvarstack(fs));
       }
       nret = LUA_MULTRET; /* return all values */
