@@ -1610,6 +1610,74 @@ else.
 
 ---
 
+## Phase R — review cleanup (after L/M/C)
+
+Added after the plan finished, from the user's review: the Lua script API
+comes first, then performance, then the C API. Compact memory layout
+matters less than API shape and performance. Now that the code has real
+types, use construction and initialization where they simplify, and bring
+the code closer to the original's intent and performance.
+
+### R1. Named value predicates and setters
+Upstream's `ttisnil`, `isempty`, `ttisinteger`, `iscollectable`,
+`setnilvalue`, `setempty`, … were expanded inline by the earlier macro
+removal. About 350 sites now spell out `(o->tt_ & NOVARIANT_MASK) == …`.
+Restore them as `lobject.h` inline functions with upstream's names (Java:
+static methods) and replace the expansions.
+**Check:** object code byte-identical (`objcmp.sh`).
+
+### R2. `SETARG_*` instruction setters
+The 21 `lcode`/`lparser` sites that spell out
+`(i & MASK0(…)) | ((Instruction)(v) << POS & MASK1(…))` go back to
+upstream's `SETARG_A`/`B`/`C`/`k`/`Bx`/`sJ`/`OP` as `lopcodes.h` inline
+functions. **Check:** byte-identical.
+
+### R3. Construction instead of field-by-field initialization
+GC objects (`Proto`, `Table`, `Udata`, `UpVal`, closures, `TString`,
+`CFuncInfo`), `lua_State` (`preinit_thread`), `CallInfo` and
+`global_State` get default member initializers. The creation functions
+keep only what depends on arguments or state (`luaC_link`, sizes).
+`luaM_malloc_*` already constructs with `new`. **Check:** `make full`,
+A/B (no extra work: the same zeroing, now in the constructor).
+
+### R4. `short_src` back to an inline buffer
+`InternalDebug::short_src_out` is a lazily heap-allocated `byte_owner`
+with a hand-written copy constructor. Upstream's is `char
+short_src[LUA_IDSIZE]`. Make it `byte_inline<LUA_IDSIZE>` (and make
+`byte_inline` copyable like the array it stands for), then drop the lazy
+allocation and the copy constructor.
+
+### R5. API files without namespace fragments
+`lapi.cpp`/`lauxlib.cpp` are almost entirely public API, which stays
+global (C0). Wrapping them left 37 close/reopen fragments. The API
+package *is* the global scope: unwrap both files (their `static` helpers
+keep internal linkage).
+
+### R6. Chunk I/O without templates
+C0 allows no new templates, but L9 added `loadVector`/`loadVar`/
+`getaddr`/`checknum` and `dumpVector`/`dumpVar`/`dumpNumInfo`. Replace
+them with the typed functions Java would write: blocks of chars,
+instructions, line info, absolute line info, and `int`/`Instruction`/
+`lua_Integer`/`lua_Number` scalars.
+
+### R7. Reviewed, no change
+- **VM `Protect`/`savestate`/`updatetrap` stay expanded** in
+  `luaV_execute`. Lambdas capturing `pc`/`base`/`trap` by reference risk
+  forcing those locals into memory in the hot loop, and Java lambdas
+  can't capture mutable locals anyway.
+- **`lastfree` gating for small hash parts stays.** It exists because C
+  stores `lastfree` before the node block, but it also decides
+  free-slot choice, and so iteration order and rehash timing.
+- **Per-type `luaM_alloc_*_span` functions stay** (the user's decision;
+  one Java method each).
+- **`TValue`'s private copies stay** (compiler-enforced named copies,
+  M3).
+- **User objects:** they are internal state holders for the libraries.
+  C-API extensibility is low priority, so the API stays minimal and
+  unchanged.
+
+---
+
 ## Port-time notes (no C++ action)
 
 - **Interrupts:** `lua.cpp`'s SIGINT handler already uses upstream's
