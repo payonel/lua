@@ -69,6 +69,59 @@ static int l_setnodes(lua_State* L)
   return 1;
 }
 
+/* copywith(t, map): t's layout, every key k that 'map' maps replaced by map[k] */
+static int l_copywith(lua_State* L)
+{
+  luaL_checktype(L, 1, LUA_TTABLE);
+  luaL_checktype(L, 2, LUA_TTABLE);
+  Table* src = table_at(L, 1);
+  lua_createtable(L, 0, 0);
+  Table* t = table_at(L, -1);
+  t->luaH_resize(L, src->asize(), allocsizenode(src));
+  if (!isdummy(src))
+    for (int i = 0; i < sizenode(src); i++)
+    {
+      const Node* n = gnode(src, i);
+      TValue key;
+      bool has = !keyisnil(n);
+      if (has)
+      {
+        getnodekey(L, &key, n);
+        if (!keyisdead(n))
+        {
+          setslot(L, L->top, &key);
+          L->top++;
+          if (lua_rawget(L, 2) != LUA_TNIL)
+          {
+            TValue m = getslot(L, L->top - 1);
+            copyobj(&key, &m);
+          }
+          lua_pop(L, 1);
+        }
+      }
+      t->luaH_setnode(L, i, has ? &key : nullptr, keyisdead(n), &n->val, n->next);
+    }
+  t->lastfree = src->lastfree;
+  return 1;
+}
+
+/* hash(o): the hash an object got when it was created */
+static int l_hash(lua_State* L)
+{
+  luaL_checkany(L, 1);
+  const void* p = lua_topointer(L, 1);
+  lua_pushinteger(L, static_cast<const GCObject*>(p)->hash);
+  return 1;
+}
+
+/* takehash(o, from): 'o', which no table holds as a key, takes the hash of 'from' */
+static int l_takehash(lua_State* L)
+{
+  GCObject* o = const_cast<GCObject*>(static_cast<const GCObject*>(lua_topointer(L, 1)));
+  o->hash = static_cast<const GCObject*>(lua_topointer(L, 2))->hash;
+  return 0;
+}
+
 /* layout(t): array size, node count, lastfree and length hint */
 static int l_layout(lua_State* L)
 {
@@ -94,6 +147,12 @@ static lua_State* new_state()
   lua_setglobal(L, "layout");
   lua_pushcfunction(L, l_setnodes);
   lua_setglobal(L, "setnodes");
+  lua_pushcfunction(L, l_copywith);
+  lua_setglobal(L, "copywith");
+  lua_pushcfunction(L, l_hash);
+  lua_setglobal(L, "hash");
+  lua_pushcfunction(L, l_takehash);
+  lua_setglobal(L, "takehash");
   return L;
 }
 
@@ -199,11 +258,103 @@ static void run_cases(const char* group, const Case* cases, size_t n)
   }
 }
 
+/*
+** Object keys (tables, functions, threads, userdata) hash by the hash each
+** object gets when it is created, not by its address.
+*/
+
+struct PlainAlloc : lua_Alloc
+{
+  bool permit(size_t, size_t, int) override { return true; }
+};
+
+static PlainAlloc plain_alloc;
+
+/* a state with a given seed (the debug build's test library needs its own
+   allocator, so it is not opened here) */
+static lua_State* seeded_state(unsigned int seed)
+{
+  lua_State* L = lua_newstate(&plain_alloc, seed);
+  luaL_openlibs(L);
+  lua_pushcfunction(L, l_layout);
+  lua_setglobal(L, "layout");
+  return L;
+}
+
+/* runs 'code' (prelude included) and returns its result as a string */
+static std::string run(lua_State* L, const char* code)
+{
+  std::string chunk = std::string(prelude) + code;
+  if (luaL_dostring(L, chunk.c_str()) != LUA_OK)
+  {
+    auto m = lua_tolstring(L, -1);
+    std::printf("      error: %s\n", m ? std::string(m->data(), m->size()).c_str() : "?");
+    return "<error>";
+  }
+  auto r = lua_gettop(L) > 0 ? lua_tolstring(L, -1) : std::nullopt;
+  std::string out = r ? std::string(r->data(), r->size()) : "<nil>";
+  lua_settop(L, 0);
+  return out;
+}
+
+/* a table whose keys are objects of every kind, each named in 'names' */
+static const char* const object_keys =
+  "names = {} t = {} "
+  "for i = 1, 300 do "
+  "  local k = (i % 3 == 0) and {} or (i % 3 == 1) and function() return i end "
+  "            or coroutine.create(function() end) "
+  "  names[k] = 'k' .. i t[k] = i "
+  "end "
+  "for k in pairs(t) do if t[k] % 7 == 0 then t[k] = nil end end ";
+
+static void test_same_order_in_two_states()
+{
+  std::printf("    the same program and seed iterate object keys in the same order ... ");
+  g_test_failures = 0;
+  std::string order[2];
+  for (int i = 0; i < 2; i++)
+  {
+    lua_State* L = seeded_state(1234); /* the second state's objects live elsewhere */
+    run(L, object_keys);
+    order[i] = run(L, "local o = {} for k in pairs(t) do o[#o + 1] = names[k] end return table.concat(o, ' ')");
+    lua_close(L);
+  }
+  CHECK(order[0] == order[1] && order[0] != "<error>");
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
+static const Case object_key_cases[] = {
+  {"every object has a hash, distinct for objects made one after another",
+   "local seen = {} for i = 1, 1000 do local h = hash({}) assert(not seen[h]) seen[h] = true end "
+   "assert(hash(print) ~= nil and hash(coroutine.running()) ~= nil)"},
+  {"an object given another's hash takes its place in a copied layout",
+   "local ks, t = {}, {} for i = 1, 50 do ks[i] = {} t[ks[i]] = i end for i = 1, 50, 4 do t[ks[i]] = nil end "
+   "local news = {} for i = 1, 50 do news[i] = {} takehash(news[i], ks[i]) end "
+   "local map = {} for i = 1, 50 do map[ks[i]] = news[i] end "
+   "local u = copywith(t, map) "
+   "for i = 1, 50 do assert(u[news[i]] == t[ks[i]], i) end "
+   "local o1, o2 = {}, {} for k in pairs(t) do o1[#o1 + 1] = t[k] end for k in pairs(u) do o2[#o2 + 1] = u[k] end "
+   "assert(table.concat(o1, ' ') == table.concat(o2, ' ')) "
+   "for i = 1, 50 do u[news[i]] = i * 2 end for i = 1, 50 do assert(u[news[i]] == i * 2) end heap()"},
+  {"object keys keep working: inserts, deletes, rehash, weak keys, every mode",
+   "for _, mode in ipairs{'incremental', 'generational'} do collectgarbage(mode) "
+   "local ks, t = {}, {} for i = 1, 2000 do ks[i] = (i % 2 == 0) and {} or function() end t[ks[i]] = i end "
+   "for i = 1, 2000, 3 do t[ks[i]] = nil end for i = 1, 2000 do if i % 3 ~= 1 then assert(t[ks[i]] == i) end end "
+   "local w = setmetatable({}, {__mode = 'k'}) for i = 1, 500 do w[{}] = i end collectgarbage() assert(next(w) == nil) "
+   "local e = setmetatable({}, {__mode = 'k'}) for i = 1, 100 do e[ks[i]] = {ks[i]} end collectgarbage() "
+   "for i = 1, 100 do assert(e[ks[i]][1] == ks[i]) end heap() end collectgarbage('incremental')"},
+  {"light C functions and light userdata still hash (by address)",
+   "local t = {[print] = 1, [string.format] = 2} assert(t[print] == 1 and t[string.format] == 2)"},
+};
+
 int main()
 {
   std::printf("\n\tStarting engine internals tests\n\n");
   run_cases("Table::luaH_copyfrom (ltable.cpp)", table_copy_cases,
             sizeof(table_copy_cases) / sizeof(table_copy_cases[0]));
+  run_cases("object keys hash by the object's hash (ltable.cpp, lgc.cpp)", object_key_cases,
+            sizeof(object_key_cases) / sizeof(object_key_cases[0]));
+  test_same_order_in_two_states();
   if (g_failures == 0)
     std::printf("\n\tOK - engine: %d checks, 0 failures\n\n", g_checks);
   else

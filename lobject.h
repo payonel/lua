@@ -271,6 +271,7 @@ struct GCObject
   struct GCObject* next;
   lu_byte tt;
   lu_byte marked;
+  unsigned int hash; /* as a table key: given when the object is created (luaC_link) */
 };
 
 struct GCListed : GCObject
@@ -616,12 +617,12 @@ struct CFuncInfo : GCObject
   lua_CFunction fptr;
 
   CFuncInfo()
-    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
+    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */, 0}
     , fptr(nullptr)
   {}
 
   explicit CFuncInfo(lua_CFunction f)
-    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
+    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */, 0}
     , fptr(f)
   {}
 

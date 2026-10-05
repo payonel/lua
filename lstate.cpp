@@ -338,6 +338,8 @@ lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   incnny(L); /* main thread is always non yieldable */
   g->frealloc = f;
   g->seed = seed;
+  g->nexthash = seed;
+  L->hash = luaC_newhash(g);
   g->gcstp = GCSTPGC; /* no GC while building state */
   g->gcstate = GCSpause;
   g->gckind = KGC_INC;

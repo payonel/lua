@@ -309,6 +309,7 @@ GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt)
   global_State* g = L->l_G;
   o->marked = luaC_white(g);
   o->tt = tt;
+  o->hash = luaC_newhash(g);
   o->next = g->allgc.next;
   g->allgc.next = o;
   return o;

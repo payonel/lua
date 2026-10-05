@@ -508,6 +508,7 @@ struct global_State
   TValue l_registry{Value{0, nullptr}, LUA_VNIL};
   TValue nilvalue{Value{0, nullptr}, LUA_VNIL};   /* a nil value */
   unsigned int seed = 0; /* randomized seed for hashes */
+  unsigned int nexthash = 0; /* the hash of the next object created */
   int gcparams[LUA_GCPN] = {};
   lu_byte currentwhite = 0;
   lu_byte gcstate = 0;     /* state of garbage collector */

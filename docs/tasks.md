@@ -386,6 +386,19 @@ inside the two identity functions and `os_api.cpp`.
 - **Hashing keeps upstream's `point2uint`** (`llimits.h`, two overloads)
   as its single hook instead of a renamed `identityhash`; C0 keeps upstream
   names. Java maps it to `System.identityHashCode`.
+  - **Superseded for objects:** a table key that is an object (table,
+    function, thread, userdata) hashes by `GCObject::hash`, given when the
+    object is created (`luaC_link`: a sequence from the seed, stepping by
+    an odd constant), not by its address. The same program with the same
+    seed then puts object keys in the same slots, and a copy of an object
+    can take its hash (identity hashes cannot be set, in either language).
+    In C++ the field sits in the header's padding (no object grew); in
+    Java it is an `int` field. `point2uint` stays for light userdata and
+    light C functions (shared by all states, often static). A/B: the test
+    suite and string keys unchanged, object creation +2%; lookups by object
+    key read the key's header, which costs nothing for small key sets and
+    up to +37% in a lookup loop over 10000 cold keys (+16% at 100000), as
+    `identityHashCode` would in Java.
 - **`%p` text** goes through `util::pointertext(out, pos, p)` (object and C
   function overloads) at all three sites (`lobject` `luaO_pushvfstring`,
   `lstrlib` `string.format`, `util::func_to_string`).

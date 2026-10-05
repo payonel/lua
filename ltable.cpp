@@ -217,11 +217,16 @@ int Table::mainpositionTV(const TValue* key) const
     void* p = pvalue(key);
     return t->hashpointer(p);
   }
+  case LUA_VLCF: /* shared by all states (often static): by address */
+    return t->hashpointer(gcvalue(key));
   default:
   {
+    /* an object hashes by the hash it was given when created, not by its
+       address: the same program with the same seed puts it in the same
+       slot, and a copy of an object can take its hash */
     assert(iscollectable(key));
     GCObject* o = gcvalue(key);
-    return t->hashpointer(o);
+    return t->hashmod(o->hash);
   }
   }
 }

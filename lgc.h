@@ -258,6 +258,20 @@ static l_forceinline void luaC_checkGC(lua_State* L)
 void luaC_runtilstate(lua_State* L, int state, int fast);
 void luaC_fullgc(lua_State* L, int isemergency);
 GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt);
+
+/*
+** The hash of a new object as a table key: a sequence that starts at the
+** seed and steps by an odd constant, so it visits every value once (the
+** k-th object made gets seed + k * HASHSTEP).
+*/
+constexpr unsigned int HASHSTEP = 0x9E3779B9u;
+
+static l_forceinline unsigned int luaC_newhash(global_State* g)
+{
+  unsigned int h = g->nexthash;
+  g->nexthash = h + HASHSTEP;
+  return h;
+}
 void luaC_barrier_(lua_State* L, GCObject* o, GCObject* v);
 void luaC_barrierback_(lua_State* L, GCObject* o);
 
