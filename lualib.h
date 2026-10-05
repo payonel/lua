@@ -26,6 +26,10 @@ inline constexpr byte_view LUA_DBLIBNAME = "debug";
 constexpr int LUA_DBLIBK = LUA_COLIBK << 1;
 LUAMOD_API int(luaopen_debug)(lua_State* L);
 
+/* the hook function 'debug.sethook' installs (with the Lua hook kept in
+   the registry); lets a host or library recognize such a hook */
+lua_Hook(luaL_debughook)(void);
+
 inline constexpr byte_view LUA_IOLIBNAME = "io";
 constexpr int LUA_IOLIBK = LUA_DBLIBK << 1;
 LUAMOD_API int(luaopen_io)(lua_State* L);

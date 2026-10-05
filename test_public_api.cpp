@@ -1542,6 +1542,31 @@ static void test_warn_control()
 ** Reaches unmakemask (ldblib.cpp) through db_gethook: every mask bit
 ** individually, combined, count-only, and the external-hook path.
 */
+static void dummy_hook(lua_State*, lua_Debug*) {}
+
+/* luaL_debughook is the hook debug.sethook installs, on any thread */
+static void test_debughook_identity()
+{
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+  CHECK(luaL_debughook() != nullptr);
+  CHECK(lua_gethook(L) == nullptr);
+  CHECK(do_string(L, "debug.sethook(function() end, 'l')") == LUA_OK);
+  CHECK(lua_gethook(L) == luaL_debughook());
+  CHECK(do_string(L, "co = coroutine.create(function() end) debug.sethook(co, function() end, '', 5)") == LUA_OK);
+  lua_getglobal(L, "co");
+  CHECK(lua_gethook(lua_tothread(L, -1)) == luaL_debughook());
+  lua_settop(L, 0);
+  CHECK(do_string(L, "debug.sethook()") == LUA_OK);
+  CHECK(lua_gethook(L) == nullptr);
+  lua_sethook(L, dummy_hook, LUA_MASKLINE, 0);
+  CHECK(lua_gethook(L) != luaL_debughook());
+  CHECK(do_string(L, "return debug.gethook()") == LUA_OK);
+  CHECK(lua_tolstring(L, 1) == "external hook");
+  lua_sethook(L, nullptr, 0, 0);
+  lua_close(L);
+}
+
 static void test_db_gethook_mask()
 {
   lua_State* L = luaL_newstate();
@@ -4883,6 +4908,7 @@ int main()
       {"warnings", test_warnings},
       {"warn_control", test_warn_control},
       {"db_gethook_mask", test_db_gethook_mask},
+      {"debughook_identity", test_debughook_identity},
       {"db_debug", test_db_debug},
       {"gc", test_gc},
       {"zero_size_userdata", test_zero_size_userdata},

@@ -566,3 +566,7 @@ LUAMOD_API int luaopen_debug(lua_State* L)
   return 1;
 }
 
+lua_Hook luaL_debughook(void)
+{
+  return lua::lib::hookf;
+}
