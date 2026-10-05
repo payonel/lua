@@ -106,13 +106,6 @@ case("an error inside a deep graph does not leak the stack", function()
   for _ = 1, 10 do fails("not supported yet", styx.persist, t) end
 end)
 
-case("nesting past the depth limit is an error, not a crash", function()
-  local t = {}
-  local cur = t
-  for _ = 1, 20000 do cur.n = {}; cur = cur.n end
-  fails("nested too deeply", styx.persist, t)
-end)
-
 case("settings is not implemented yet", function()
   fails("not implemented", styx.settings, "path")
 end)

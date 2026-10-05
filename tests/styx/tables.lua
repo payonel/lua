@@ -52,6 +52,31 @@ case("deep nesting below the depth limit", function()
   assert(r.last == true)
 end)
 
+case("no depth limit: a 200000-deep chain persists and restores", function()
+  local t = {}
+  local cur = t
+  for i = 1, 200000 do cur.next = {i = i}; cur = cur.next end
+  local r = styx.unpersist(styx.persist(t))
+  local n = 0
+  cur = r.next
+  while cur do n = n + 1; assert(cur.i == n); cur = cur.next end
+  assert(n == 200000)
+end)
+
+case("no depth limit: deeply nested closures", function()
+  local function make(depth)
+    local f = function() return 0 end
+    for i = 1, depth do
+      local g, k = f, i
+      f = function() return g() + k end
+    end
+    return f
+  end
+  local f = make(5000)
+  local r = styx.unpersist(styx.persist(f))
+  assert(r() == f())
+end)
+
 case("shared references stay shared", function()
   local shared = {1, 2, 3}
   local t = {a = shared, b = shared, list = {shared, shared}}

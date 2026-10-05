@@ -2,9 +2,11 @@
 ** Styx: persistence of Lua values (see docs/styx.md)
 */
 
+#include <algorithm>
 #include <cstring>
 #include <functional>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -20,6 +22,7 @@
 #include "ltable.h"
 #include "lctype.h"
 #include "ltm.h"
+#include "lzio.h"
 
 #include "internal_string.h"
 #include "lauxlib.h"
@@ -52,72 +55,86 @@ constexpr char TAG_STATE = 17;      /* a whole state: seed, registry, type metat
 constexpr char TAG_MAINTHREAD = 18; /* the main thread of the state being restored */
 constexpr char TAG_UPVAL_PERM = 19; /* a variable that is a permanent: its key */
 
-constexpr int MAX_DEPTH = 10000;
-
-static void put_raw(luaL_Buffer* B, const void* p, size_t n)
-{
-  luaL_addlstring(B, byte_view(static_cast<const char*>(p), n), 0, n);
-}
-
-static void put_i64(luaL_Buffer* B, lua_Integer v)
-{
-  put_raw(B, &v, sizeof(v));
-}
-
 /*
-** Persisting. The value to persist is on top of the stack; every function
-** leaves the stack as it found it.
+** The walks keep their own work stacks, so they have no depth limit. For a
+** script's persist or unpersist the stacks are memory charged to the state
+** (a byte buffer grown under the API lock, as an API function allocates);
+** for a host persist they are host memory, so the state is not touched.
 */
-/*
-** How the walk reached the value being persisted, one node per step, kept
-** on the C stack; it is turned into a path only when an error is raised.
-*/
-enum class Step : char
+template <class T>
+class WorkStack
 {
-  Value,     /* table value; 'a': stack index of its key */
-  Key,       /* table key; 'a': stack index of the key */
-  Metatable,
-  Upvalue,   /* 'a': stack index of the function, 'b': upvalue number */
-  Stack,     /* 'b': thread stack slot */
-  Special,   /* closure returned by __persist */
-  PermKey,   /* key of a permanent */
-  Hook,      /* a thread's debug hook function */
-};
+  static_assert(std::is_trivially_copyable_v<T>);
 
-struct PathNode
-{
-  const PathNode* up;
-  Step step;
-  int a;
-  int b;
-};
+public:
+  WorkStack(lua_State* L, bool charged) : L_(L), charged_(charged), bytes_(L) {}
+  WorkStack(const WorkStack&) = delete;
+  WorkStack& operator=(const WorkStack&) = delete;
 
-struct Persist
-{
-  lua_State* L;
-  luaL_Buffer B;
-  int perms;  /* stack index: permanents (object -> key) */
-  int refs;   /* stack index: object -> reference id */
-  lua_Integer refcount = 0;
-  int depth = 0;
-  const PathNode* path = nullptr;
-};
+  size_t size() const { return charged_ ? n_ : host_.size(); }
+  bool empty() const { return size() == 0; }
 
-/* records one step of the path while it is in scope */
-struct PathStep
-{
-  Persist& P;
-  PathNode node;
-  PathStep(Persist& p, Step step, int a = 0, int b = 0) : P(p), node{p.path, step, a, b}
+  void push(const T& v)
   {
-    P.path = &node;
+    if (!charged_)
+    {
+      host_.push_back(v);
+      return;
+    }
+    if ((n_ + 1) * sizeof(T) > bytes_.capacity())
+    {
+      size_t cap = std::max<size_t>(16, 2 * (n_ + 1)) * sizeof(T);
+      lua_lock(L_);
+      bytes_.growTo(cap);
+      lua_unlock(L_);
+    }
+    std::memcpy(bytes_.area().data() + n_ * sizeof(T), &v, sizeof(T));
+    n_++;
   }
-  ~PathStep()
+
+  T get(size_t i)
   {
-    P.path = node.up;
+    if (!charged_)
+      return host_[i];
+    T v;
+    std::memcpy(&v, bytes_.area().data() + i * sizeof(T), sizeof(T));
+    return v;
   }
-  PathStep(const PathStep&) = delete;
-  PathStep& operator=(const PathStep&) = delete;
+
+  void set(size_t i, const T& v)
+  {
+    if (!charged_)
+      host_[i] = v;
+    else
+      std::memcpy(bytes_.area().data() + i * sizeof(T), &v, sizeof(T));
+  }
+
+  T top() { return get(size() - 1); }
+  void set_top(const T& v) { set(size() - 1, v); }
+
+  void pop()
+  {
+    if (!charged_)
+      host_.pop_back();
+    else
+      n_--;
+  }
+
+private:
+  lua_State* L_;
+  bool charged_;
+  MBuffer bytes_;
+  size_t n_ = 0;
+  std::vector<T> host_;
+};
+
+/* a value as stored in the walks' records (TValue copies are named) */
+struct Slot
+{
+  Value v{0, nullptr};
+  lu_byte tt = LUA_VNIL;
+  static Slot of(const TValue& o) { return Slot{o.value_, o.tt_}; }
+  TValue get() const { return TValue{v, tt}; }
 };
 
 static bool is_name(byte_view s)
@@ -130,558 +147,922 @@ static bool is_name(byte_view s)
   return true;
 }
 
-static void push_step(lua_State* L, const PathNode& n)
+static std::string text(byte_view b)
 {
-  switch (n.step)
+  return std::string(b.data(), b.size());
+}
+
+/* 'fmt' with each "%s" or "%d" replaced by the next argument */
+static std::string format(byte_view fmt, std::initializer_list<std::string> args)
+{
+  std::string r;
+  auto a = args.begin();
+  for (size_t i = 0; i < fmt.size(); i++)
   {
-  case Step::Value:
-    switch (lua_type(L, n.a))
+    if (fmt[i] == '%' && i + 1 < fmt.size() && (fmt[i + 1] == 's' || fmt[i + 1] == 'd') &&
+        a != args.end())
     {
-    case LUA_TSTRING:
-      lua_pushvalue(L, n.a);
-      lua_pushfstringi(L, is_name(*lua_tolstring(L, n.a)) ? lt::path_field_s : lt::path_string_key_s);
-      return;
-    case LUA_TNUMBER:
-    case LUA_TBOOLEAN:
-      luaL_tolstring(L, n.a);
-      lua_pushfstringi(L, lt::path_index_s);
-      return;
-    default:
-      lua_pushstring(L, luaL_typename(L, n.a));
-      lua_pushfstringi(L, lt::path_object_key_s);
-      return;
-    }
-  case Step::Key:
-    lua_pushstring(L, luaL_typename(L, n.a));
-    lua_pushfstringi(L, lt::path_key_s);
-    return;
-  case Step::Metatable:
-    lua_pushistringref(L, lt::path_metatable);
-    return;
-  case Step::Upvalue:
-  {
-    const InternalString* name = lua_getupvaluei(L, n.a, n.b);
-    if (name != nullptr)
-      lua_pop(L, 1);
-    if (name != nullptr && name->size() > 0)
-    {
-      lua_pushistringref(L, name->view());
-      lua_pushfstringi(L, lt::path_upvalue_s);
+      r += *a++;
+      i++;
     }
     else
+      r.push_back(fmt[i]);
+  }
+  return r;
+}
+
+/* the raw value of a string field of a table (nil if absent) */
+static TValue string_field(const Table* t, byte_view name)
+{
+  TValue r{};
+  setnilvalue(&r);
+  for (int i = 0; i < sizenode(t); i++)
+  {
+    const Node* n = gnode(t, static_cast<size_t>(i));
+    if (!isempty(&n->val) && (n->key_tt & NOVARIANT_MASK) == LUA_TSTRING &&
+        static_cast<TString*>(n->key_val.ref)->data.view() == name)
     {
-      lua_pushinteger(L, n.b);
-      lua_pushfstringi(L, lt::path_upvalue_d);
+      copyobj(&r, &n->val);
+      break;
     }
-    return;
   }
-  case Step::Stack:
-    lua_pushinteger(L, n.b);
-    lua_pushfstringi(L, lt::path_stack_d);
-    return;
-  case Step::Special:
-    lua_pushistringref(L, lt::path_special);
-    return;
-  case Step::PermKey:
-    lua_pushistringref(L, lt::path_permanent_key);
-    return;
-  case Step::Hook:
-    lua_pushistringref(L, lt::path_hook);
-    return;
-  }
-}
-
-static void push_path(lua_State* L, const PathNode* n)
-{
-  luaL_checkstacki(L, 4, std::nullopt);
-  if (n == nullptr)
-  {
-    lua_pushistringref(L, lt::path_root);
-    return;
-  }
-  push_path(L, n->up);
-  push_step(L, *n);
-  lua_concat(L, 2);
-}
-
-/* raises 'fmt' (its arguments already pushed) followed by the path */
-[[noreturn]] static void persist_error(Persist& P, byte_view fmt)
-{
-  lua_State* L = P.L;
-  lua_pushfstringi(L, fmt);
-  push_path(L, P.path);
-  luaL_errori(L, lt::s_at_s);
-  std::abort();
-}
-
-static void persist(Persist& P);
-
-/* true if the object on top was fully handled (reference or permanent) */
-static bool begin_object(Persist& P)
-{
-  lua_State* L = P.L;
-  lua_pushvalue(L, -1);
-  lua_rawget(L, P.refs);
-  if (!lua_isnil(L, -1))
-  {
-    luaL_addchar(&P.B, TAG_REF);
-    put_i64(&P.B, lua_tointeger(L, -1));
-    lua_pop(L, 1);
-    return true;
-  }
-  lua_pop(L, 1);
-  lua_pushvalue(L, -1);
-  lua_pushinteger(L, ++P.refcount);
-  lua_rawset(L, P.refs);
-  lua_pushvalue(L, -1);
-  lua_rawget(L, P.perms);
-  if (!lua_isnil(L, -1))
-  {
-    luaL_addchar(&P.B, TAG_PERM);
-    luaL_addchar(&P.B, static_cast<char>(lua_type(L, -2)));
-    PathStep step(P, Step::PermKey);
-    persist(P); /* the permanent key */
-    lua_pop(L, 1);
-    return true;
-  }
-  lua_pop(L, 1);
-  return false;
-}
-
-static void persist_string(Persist& P)
-{
-  byte_view s = *lua_tolstring(P.L, -1);
-  luaL_addchar(&P.B, TAG_STRING);
-  put_i64(&P.B, static_cast<lua_Integer>(s.size()));
-  luaL_addlstring(&P.B, s, 0, s.size());
+  return r;
 }
 
 /*
-** The '__persist' field of a table's metatable: absent or true persists
-** the table literally, false forbids it, and a function is called with the
-** table and returns a closure that is persisted in its place; unpersist
-** calls that closure to rebuild the table. Returns true if the table was
-** written this way.
+** {======================================================
+** Persisting: one walk for a script's persist and for the host's. The walk
+** reads the objects directly and keeps a stack of work; the path from the
+** root to the value at hand is a stack too, turned into text only when an
+** error is raised. A script's persist writes to a buffer and keeps its
+** references in a table, all charged to the state, and calls '__persist'
+** functions; a host persist writes to a writer, keeps everything in host
+** memory and runs no Lua code (nothing is allocated in the state and no
+** collection starts). Table entries, thread slots and upvalues are read
+** when their turn comes, so Lua code run by a '__persist' function cannot
+** leave pending work pointing at a collected value.
+** =======================================================
 */
-static bool persist_special(Persist& P)
+
+struct HostError
 {
-  lua_State* L = P.L;
-  luaL_checkstacki(L, 3, std::nullopt);
-  if (!lua_getmetatable(L, -1))
-    return false;
-  lua_pushistringref(L, lt::mm_persist);
-  lua_rawget(L, -2);
-  switch (lua_type(L, -1))
+  std::string message;
+};
+
+/* how the walk reached a value, for error paths */
+enum class Step : char
+{
+  None,      /* no step of its own (a part of the value at hand) */
+  Root,      /* 'label' */
+  Value,     /* table value under 'key' */
+  Key,       /* table key 'key' */
+  Metatable,
+  Upvalue,   /* upvalue 'n' of a closure of 'proto' */
+  Stack,     /* thread stack slot 'n' */
+  Special,   /* closure returned by __persist */
+  PermKey,   /* key of a permanent */
+  Hook,      /* a thread's debug hook function */
+};
+
+struct PathRec
+{
+  Step step = Step::None;
+  Slot key;
+  const Proto* proto = nullptr;
+  int n = 0;
+  const byte_view* label = nullptr;
+};
+
+enum class Op : char
+{
+  Value,      /* write 'v' */
+  PopPath,    /* the value whose step is on top of the path stack is done */
+  Byte,       /* write 'i' as one byte */
+  I64,        /* write 'i' */
+  Raw,        /* write 'i' bytes at 'p' */
+  Proto,      /* write prototype 'p' */
+  Upvalue,    /* write upvalue 'i' of closure 'p' */
+  TableNext,  /* write the entries of table 'p' from position 'i' */
+  TableValue, /* write the value at position 'i' of table 'p' */
+  ThreadSlot, /* write slots 'i' to 'n' of thread 'p' */
+  ThreadTail, /* write the frames, to-be-closed list and hook of thread 'p' */
+};
+
+struct Task
+{
+  Op op = Op::Byte;
+  PathRec step;
+  Slot v;
+  lua_Integer i = 0;
+  lua_Integer n = 0;
+  const void* p = nullptr;
+};
+
+class Walker
+{
+public:
+  /* a script's persist: output to 'B', references in the table at 'refs' */
+  Walker(lua_State* L, Table* perms, luaL_Buffer* B, int refs)
+      : L_(L), host_(false), perms_(perms), B_(B), refs_(refs), tasks_(L, true), paths_(L, true)
   {
-  case LUA_TNIL:
-    lua_pop(L, 2);
-    return false;
-  case LUA_TBOOLEAN:
+  }
+
+  /* a host persist: output to 'w', nothing allocated in the state */
+  Walker(lua_State* L, Table* perms, lua_Writer* w)
+      : L_(L), host_(true), perms_(perms), w_(w), tasks_(L, false), paths_(L, false)
   {
-    bool allow = lua_toboolean(L, -1);
-    lua_pop(L, 2);
-    if (!allow)
-      persist_error(P, lt::cannot_persist_a_table_its___persist_is_false);
+  }
+
+  void root(const TValue& v, const byte_view* label)
+  {
+    Task t;
+    t.op = Op::Value;
+    t.step.step = Step::Root;
+    t.step.label = label;
+    t.v = Slot::of(v);
+    tasks_.push(t);
+    run();
+  }
+
+  void byte(char c) { out(&c, 1); }
+  void i64(lua_Integer v) { out(&v, sizeof(v)); }
+  void raw(const void* p, size_t n) { out(p, n); }
+
+  void finish()
+  {
+    if (host_)
+      flush(true);
+  }
+
+private:
+  lua_State* L_;
+  bool host_;
+  Table* perms_;
+  luaL_Buffer* B_ = nullptr;
+  int refs_ = 0;
+  lua_Writer* w_ = nullptr;
+  std::string buf_;
+  std::unordered_map<const void*, lua_Integer> map_;
+  lua_Integer refcount_ = 0;
+  WorkStack<Task> tasks_;
+  WorkStack<PathRec> paths_;
+
+  static constexpr size_t FLUSH_SIZE = 64 * 1024;
+
+  void out(const void* p, size_t n)
+  {
+    if (host_)
+      buf_.append(static_cast<const char*>(p), n);
+    else
+      luaL_addlstring(B_, byte_view(static_cast<const char*>(p), n), 0, n);
+  }
+
+  void flush(bool end)
+  {
+    if (!buf_.empty())
+    {
+      if (w_->write(L_, byte_view(buf_.data(), buf_.size())) != 0)
+        throw HostError{text(lt::persist_output_stopped_by_the_writer)};
+      buf_.clear();
+    }
+    if (end && w_->write(L_, std::nullopt) != 0)
+      throw HostError{text(lt::persist_output_stopped_by_the_writer)};
+  }
+
+  /* ---- work ---- */
+
+  void push_value(const TValue& v, Step step, const TValue* key = nullptr,
+                  const Proto* proto = nullptr, int n = 0)
+  {
+    Task t;
+    t.op = Op::Value;
+    t.step.step = step;
+    if (key != nullptr)
+      t.step.key = Slot::of(*key);
+    t.step.proto = proto;
+    t.step.n = n;
+    t.v = Slot::of(v);
+    tasks_.push(t);
+  }
+
+  void push_op(Op op, lua_Integer i = 0, const void* p = nullptr, lua_Integer n = 0)
+  {
+    Task t;
+    t.op = op;
+    t.i = i;
+    t.p = p;
+    t.n = n;
+    tasks_.push(t);
+  }
+
+  void push_name(TString* ts)
+  {
+    TValue v{};
+    if (ts != nullptr)
+      setsvalue(L_, &v, ts);
+    else
+      setnilvalue(&v);
+    push_value(v, Step::None);
+  }
+
+  /* enters the step of a value: it stays on the path until the value is done */
+  void enter(const PathRec& step)
+  {
+    if (step.step == Step::None)
+      return;
+    paths_.push(step);
+    push_op(Op::PopPath);
+  }
+
+  void run()
+  {
+    while (!tasks_.empty())
+    {
+      Task t = tasks_.top();
+      tasks_.pop();
+      switch (t.op)
+      {
+      case Op::Value:
+      {
+        enter(t.step);
+        TValue v = t.v.get();
+        value(v);
+        break;
+      }
+      case Op::PopPath:
+        paths_.pop();
+        break;
+      case Op::Byte:
+        byte(static_cast<char>(t.i));
+        break;
+      case Op::I64:
+        i64(t.i);
+        break;
+      case Op::Raw:
+        raw(t.p, static_cast<size_t>(t.i));
+        break;
+      case Op::Proto:
+        proto(static_cast<const Proto*>(t.p));
+        break;
+      case Op::Upvalue:
+        enter(t.step);
+        upvalue(static_cast<const LClosure*>(t.p), static_cast<int>(t.i));
+        break;
+      case Op::TableNext:
+        table_next(static_cast<Table*>(const_cast<void*>(t.p)), t.i);
+        break;
+      case Op::TableValue:
+      {
+        enter(t.step);
+        TValue v = table_value(static_cast<Table*>(const_cast<void*>(t.p)), t.i);
+        value(v);
+        break;
+      }
+      case Op::ThreadSlot:
+        thread_slot(static_cast<lua_State*>(const_cast<void*>(t.p)), t.i, t.n);
+        break;
+      case Op::ThreadTail:
+        thread_tail(static_cast<lua_State*>(const_cast<void*>(t.p)));
+        break;
+      }
+      if (host_ && buf_.size() >= FLUSH_SIZE)
+        flush(false);
+    }
+  }
+
+  /* ---- errors ---- */
+
+  template <class Add>
+  void key_text(const TValue& k, Add&& add)
+  {
+    switch (ttype(&k))
+    {
+    case LUA_TSTRING:
+    {
+      byte_view s = tsvalue(&k)->data.view();
+      add(format(is_name(s) ? lt::path_field_s : lt::path_string_key_s, {text(s)}));
+      return;
+    }
+    case LUA_TNUMBER:
+    {
+      byte_inline<LUA_N2SBUFFSZ> b;
+      size_t len = luaO_tostringbuff(&k, b);
+      add(format(lt::path_index_s, {text(b.view().substr(0, len))}));
+      return;
+    }
+    case LUA_TBOOLEAN:
+      add(format(lt::path_index_s, {tagisfalse(k.tt_) ? "false" : "true"}));
+      return;
+    default:
+      add(format(lt::path_object_key_s, {text(ttypename(ttype(&k)))}));
+      return;
+    }
+  }
+
+  template <class Add>
+  void path_text(Add&& add)
+  {
+    for (size_t i = 0; i < paths_.size(); i++)
+    {
+      PathRec r = paths_.get(i);
+      TValue k = r.key.get();
+      switch (r.step)
+      {
+      case Step::None:
+        break;
+      case Step::Root:
+        add(text(*r.label));
+        break;
+      case Step::Value:
+        key_text(k, add);
+        break;
+      case Step::Key:
+        add(format(lt::path_key_s, {text(ttypename(ttype(&k)))}));
+        break;
+      case Step::Metatable:
+        add(text(lt::path_metatable));
+        break;
+      case Step::Upvalue:
+      {
+        const TString* name = r.proto->upvalues[static_cast<size_t>(r.n - 1)].name;
+        if (name != nullptr && name->data.size() > 0)
+          add(format(lt::path_upvalue_s, {text(name->data.view())}));
+        else
+          add(format(lt::path_upvalue_d, {std::to_string(r.n)}));
+        break;
+      }
+      case Step::Stack:
+        add(format(lt::path_stack_d, {std::to_string(r.n)}));
+        break;
+      case Step::Special:
+        add(text(lt::path_special));
+        break;
+      case Step::PermKey:
+        add(text(lt::path_permanent_key));
+        break;
+      case Step::Hook:
+        add(text(lt::path_hook));
+        break;
+      }
+    }
+  }
+
+  /* raises 'what' with the path of the value at hand */
+  [[noreturn]] void fail(byte_view what)
+  {
+    if (host_)
+    {
+      std::string m = text(what) + text(lt::path_at);
+      path_text([&](const std::string& s) { m += s; });
+      m += text(lt::path_end);
+      throw HostError{m};
+    }
+    luaL_Buffer E;
+    luaL_buffinit(L_, &E);
+    auto add = [&](const std::string& s) { luaL_addlstring(&E, byte_view(s.data(), s.size()), 0, s.size()); };
+    luaL_addlstring(&E, what, 0, what.size());
+    add(text(lt::path_at));
+    path_text(add);
+    add(text(lt::path_end));
+    luaL_pushresult(&E);
+    lua_error(L_);
+    std::abort();
+  }
+
+  [[noreturn]] void fail(const std::string& what)
+  {
+    fail(byte_view(what.data(), what.size()));
+  }
+
+  /* ---- references ---- */
+
+  bool ref_find(const TValue& key, const void* id, lua_Integer* found)
+  {
+    if (host_)
+    {
+      auto it = map_.find(id);
+      if (it == map_.end())
+        return false;
+      *found = it->second;
+      return true;
+    }
+    TValue rt = getslot(L_, L_->ci->func + refs_);
+    TValue r{};
+    lu_byte tag = hvalue(&rt)->luaH_get(&key, &r);
+    if (tagisempty(tag) || !ttisinteger(&r))
+      return false;
+    *found = ivalue(&r);
+    return true;
+  }
+
+  void ref_add(const TValue& key, const void* id)
+  {
+    lua_Integer n = ++refcount_;
+    if (host_)
+    {
+      map_.emplace(id, n);
+      return;
+    }
+    luaL_checkstacki(L_, 2, std::nullopt);
+    setslot(L_, L_->top, &key);
+    L_->top++;
+    lua_pushinteger(L_, n);
+    lua_rawset(L_, refs_);
+  }
+
+  /* an internal object (prototype, upvalue) as a reference key */
+  static TValue pointer_key(const void* p)
+  {
+    TValue k{};
+    setpvalue(&k, p);
+    return k;
+  }
+
+  bool perm_key(const TValue& v, TValue* key)
+  {
+    if (perms_ == nullptr)
+      return false;
+    lu_byte tag = perms_->luaH_get(&v, key);
+    return !tagisempty(tag) && !ttisnil(key);
+  }
+
+  /* reference or permanent: true if the object was fully written */
+  bool begin_object(const TValue& v)
+  {
+    const void* id = v.value_.ref;
+    lua_Integer found;
+    if (ref_find(v, id, &found))
+    {
+      byte(TAG_REF);
+      i64(found);
+      return true;
+    }
+    ref_add(v, id);
+    TValue key{};
+    if (perm_key(v, &key))
+    {
+      byte(TAG_PERM);
+      byte(static_cast<char>(ttype(&v)));
+      push_value(key, Step::PermKey);
+      return true;
+    }
     return false;
   }
-  case LUA_TFUNCTION:
+
+  /* ---- values ---- */
+
+  void value(const TValue& v)
   {
-    lua_remove(L, -2);       /* the metatable */
-    lua_pushvalue(L, -2);    /* the table */
-    int st = lua_pcall(L, 1, 1, 0);
+    switch (ttype(&v))
+    {
+    case LUA_TNIL:
+      byte(TAG_NIL);
+      return;
+    case LUA_TBOOLEAN:
+      byte(tagisfalse(v.tt_) ? TAG_FALSE : TAG_TRUE);
+      return;
+    case LUA_TNUMBER:
+      if (ttisinteger(&v))
+      {
+        byte(TAG_INTEGER);
+        i64(ivalue(&v));
+      }
+      else
+      {
+        lua_Number n = fltvalue(&v);
+        byte(TAG_FLOAT);
+        raw(&n, sizeof(n));
+      }
+      return;
+    case LUA_TLIGHTUSERDATA:
+      if (!begin_object(v))
+        fail(lt::persisting_a_userdata_value_is_not_supported_yet);
+      return;
+    case LUA_TSTRING:
+    case LUA_TTABLE:
+    case LUA_TFUNCTION:
+    case LUA_TTHREAD:
+    case LUA_TUSERDATA:
+      break;
+    default:
+      fail(format(lt::cannot_persist_a_s_value, {text(ttypename(ttype(&v)))}));
+    }
+    if (begin_object(v))
+      return;
+    switch (ttype(&v))
+    {
+    case LUA_TSTRING:
+    {
+      byte_view s = tsvalue(&v)->data.view();
+      byte(TAG_STRING);
+      i64(static_cast<lua_Integer>(s.size()));
+      raw(s.data(), s.size());
+      return;
+    }
+    case LUA_TUSERDATA:
+      fail(lt::persisting_a_userdata_value_is_not_supported_yet);
+    case LUA_TTABLE:
+      table(hvalue(&v));
+      return;
+    case LUA_TFUNCTION:
+      if (!ttisLclosure(&v))
+        fail(lt::cannot_persist_a_C_function);
+      closure(clLvalue(&v));
+      return;
+    default:
+      thread(thvalue(&v));
+      return;
+    }
+  }
+
+  /*
+  ** The '__persist' field of a table's metatable (read raw): absent or true
+  ** persists the table literally, false forbids it, and a function is called
+  ** with the table and returns a closure that is persisted in its place
+  ** (unpersist calls it to rebuild the table). Returns true if the table was
+  ** written this way.
+  */
+  bool special(Table* h)
+  {
+    if (h->metatable == nullptr)
+      return false;
+    TValue f = string_field(h->metatable, lt::mm_persist);
+    switch (ttype(&f))
+    {
+    case LUA_TNIL:
+      return false;
+    case LUA_TBOOLEAN:
+      if (tagisfalse(f.tt_))
+        fail(lt::cannot_persist_a_table_its___persist_is_false);
+      return false;
+    case LUA_TFUNCTION:
+      break;
+    default:
+      fail(lt::mm_persist_must_be_a_boolean_or_a_function);
+    }
+    if (host_)
+      fail(lt::a___persist_function_is_not_supported_yet_in_a_host_persist);
+    luaL_checkstacki(L_, 3, std::nullopt);
+    setslot(L_, L_->top, &f);
+    L_->top++;
+    sethvalue2s(h);
+    int st = lua_pcall(L_, 1, 1, 0);
     if (st == LUA_ERRMEM)
     {
-      lua_lock(L);
-      luaD_throw(L, LUA_ERRMEM);
+      lua_lock(L_);
+      luaD_throw(L_, LUA_ERRMEM);
     }
     if (st != LUA_OK)
     {
-      if (lua_type(L, -1) == LUA_TSTRING)  /* a message gets the path */
-      {
-        push_path(L, P.path);
-        luaL_errori(L, lt::s_at_s);
-      }
-      lua_error(L);                        /* any other value as it is */
+      if (lua_type(L_, -1) == LUA_TSTRING) /* a message gets the path */
+        fail(*lua_tolstring(L_, -1));
+      lua_error(L_); /* any other value as it is */
     }
-    if (!lua_isfunction(L, -1))
-      persist_error(P, lt::mm_persist_must_return_a_function);
-    luaL_addchar(&P.B, TAG_SPECIAL);
-    luaL_addchar(&P.B, static_cast<char>(LUA_TTABLE));
-    {
-      PathStep step(P, Step::Special);
-      persist(P);
-    }
-    lua_pop(L, 1);
+    if (!lua_isfunction(L_, -1))
+      fail(lt::mm_persist_must_return_a_function);
+    byte(TAG_SPECIAL);
+    byte(static_cast<char>(LUA_TTABLE));
+    TValue c = getslot(L_, L_->top - 1);
+    push_value(c, Step::Special);
+    lua_pop(L_, 1);
     return true;
   }
-  default:
-    persist_error(P, lt::mm_persist_must_be_a_boolean_or_a_function);
-  }
-}
 
-static void persist_table(Persist& P)
-{
-  lua_State* L = P.L;
-  int t = lua_gettop(L);
-  luaL_checkstacki(L, 5, std::nullopt);
-  luaL_addchar(&P.B, TAG_TABLE);
-  TValue tv = getslot(L, L->ci->func + t);
-  const Table* h = hvalue(&tv);
-  put_i64(&P.B, h->asize());
-  put_i64(&P.B, allocsizenode(h));
-  put_i64(&P.B, h->asize() > 0 ? h->lenhint : 0);
-  if (lua_getmetatable(L, t))
+  void sethvalue2s(Table* h)
   {
-    PathStep step(P, Step::Metatable);
-    persist(P);
-    lua_pop(L, 1);
+    TValue t{};
+    sethvalue(L_, &t, h);
+    setslot(L_, L_->top, &t);
+    L_->top++;
   }
-  else
-    luaL_addchar(&P.B, TAG_NIL);
-  lua_pushnil(L);
-  while (lua_next(L, t))
+
+  void table(Table* h)
   {
-    int key = lua_gettop(L) - 1;
-    lua_pushvalue(L, key);
+    if (special(h))
+      return;
+    byte(TAG_TABLE);
+    i64(h->asize());
+    i64(allocsizenode(h));
+    i64(h->asize() > 0 ? h->lenhint : 0);
+    /* the metatable, then the entries in the order of 'next' */
+    push_op(Op::TableNext, 0, h);
+    if (h->metatable != nullptr)
     {
-      PathStep step(P, Step::Key, key);
-      persist(P);
-    }
-    lua_pop(L, 1);
-    {
-      PathStep step(P, Step::Value, key);
-      persist(P);
-    }
-    lua_pop(L, 1); /* keep the key for the next iteration */
-  }
-  luaL_addchar(&P.B, TAG_NIL); /* end of entries */
-}
-
-/*
-** A thread that is running (the caller, or one that resumed another) has
-** frames that are not persisted yet; an open upvalue it owns is persisted
-** as its current value instead.
-*/
-static bool is_running(lua_State* L, lua_State* T)
-{
-  return T == L || (T->status == LUA_OK && T->ci != &T->base_ci);
-}
-
-/* persists the value 'v' (pushed for the walk, then popped) */
-static void persist_tvalue(Persist& P, const TValue* v)
-{
-  lua_State* L = P.L;
-  setslot(L, L->top, v);
-  L->top++;
-  persist(P);
-  lua_pop(L, 1);
-}
-
-static void persist_tstring(Persist& P, TString* ts)
-{
-  TValue v{};
-  if (ts != nullptr)
-    setsvalue(P.L, &v, ts);
-  else
-    setnilvalue(&v);
-  persist_tvalue(P, &v);
-}
-
-/*
-** A prototype is written once, field by field; later uses refer to it by
-** id. Its constants and names are ordinary values (strings get reference
-** ids like any other) and its nested prototypes are prototypes too.
-*/
-static void persist_proto(Persist& P, const Proto* p)
-{
-  lua_State* L = P.L;
-  luaL_checkstacki(L, 2, std::nullopt);
-  lua_pushlightuserdata(L, const_cast<Proto*>(p));
-  lua_rawget(L, P.refs);
-  if (!lua_isnil(L, -1))
-  {
-    luaL_addchar(&P.B, TAG_PROTO_REF);
-    put_i64(&P.B, lua_tointeger(L, -1));
-    lua_pop(L, 1);
-    return;
-  }
-  lua_pop(L, 1);
-  lua_pushlightuserdata(L, const_cast<Proto*>(p));
-  lua_pushinteger(L, ++P.refcount);
-  lua_rawset(L, P.refs);
-  luaL_addchar(&P.B, TAG_PROTO_NEW);
-  put_i64(&P.B, p->linedefined);
-  put_i64(&P.B, p->lastlinedefined);
-  put_i64(&P.B, p->numparams);
-  luaL_addchar(&P.B, static_cast<char>(p->flag & ~PF_FIXED));
-  put_i64(&P.B, p->maxstacksize);
-  put_i64(&P.B, static_cast<lua_Integer>(p->code.size()));
-  put_raw(&P.B, p->code.data(), p->code.size() * sizeof(Instruction));
-  put_i64(&P.B, static_cast<lua_Integer>(p->k.size()));
-  for (const TValue& k : p->k)
-    persist_tvalue(P, &k);
-  put_i64(&P.B, static_cast<lua_Integer>(p->upvalues.size()));
-  for (const Upvaldesc& uv : p->upvalues)
-  {
-    luaL_addchar(&P.B, static_cast<char>(uv.instack));
-    put_i64(&P.B, uv.idx);
-    luaL_addchar(&P.B, static_cast<char>(uv.kind));
-    persist_tstring(P, uv.name);
-  }
-  put_i64(&P.B, static_cast<lua_Integer>(p->p.size()));
-  for (const Proto* nested : p->p)
-    persist_proto(P, nested);
-  persist_tstring(P, p->source);
-  put_i64(&P.B, static_cast<lua_Integer>(p->lineinfo.size()));
-  put_raw(&P.B, p->lineinfo.data(), p->lineinfo.size());
-  put_i64(&P.B, static_cast<lua_Integer>(p->abslineinfo.size()));
-  for (const AbsLineInfo& a : p->abslineinfo)
-  {
-    put_i64(&P.B, a.pc);
-    put_i64(&P.B, a.line);
-  }
-  put_i64(&P.B, static_cast<lua_Integer>(p->locvars.size()));
-  for (const LocVar& lv : p->locvars)
-  {
-    persist_tstring(P, lv.varname);
-    put_i64(&P.B, lv.startpc);
-    put_i64(&P.B, lv.endpc);
-  }
-}
-
-static void persist_lclosure(Persist& P)
-{
-  lua_State* L = P.L;
-  int f = lua_gettop(L);
-  luaL_checkstacki(L, 4, std::nullopt);
-  luaL_addchar(&P.B, TAG_LCLOSURE);
-
-  LClosure* cl = clLvalue(&L->stack[L->ci->func + f]);
-  persist_proto(P, cl->p);
-
-  int nup = static_cast<int>(cl->upvals.size());
-  put_i64(&P.B, nup);
-  for (int i = 1; i <= nup; i++)
-  {
-    void* id = lua_upvalueid(L, f, i);
-    lua_pushlightuserdata(L, id);
-    lua_rawget(L, P.refs);
-    if (!lua_isnil(L, -1))
-    {
-      luaL_addchar(&P.B, TAG_UPVAL_REF);
-      put_i64(&P.B, lua_tointeger(L, -1));
-      lua_pop(L, 1);
-      continue;
-    }
-    lua_pop(L, 1);
-    lua_pushlightuserdata(L, id);
-    lua_pushinteger(L, ++P.refcount);
-    lua_rawset(L, P.refs);
-    PathStep step(P, Step::Upvalue, f, i);
-    lua_pushlightuserdata(L, id);
-    lua_rawget(L, P.perms);
-    if (!lua_isnil(L, -1)) /* the variable is a permanent */
-    {
-      luaL_addchar(&P.B, TAG_UPVAL_PERM);
-      PathStep key(P, Step::PermKey);
-      persist(P);
-      lua_pop(L, 1);
-      continue;
-    }
-    lua_pop(L, 1);
-    UpVal* uv = cl->upvals[i - 1];
-    if (upisopen(uv) && !is_running(L, uv->owner))
-    {
-      luaL_addchar(&P.B, TAG_UPVAL_OPEN);
-      setslotth(L, L->top, uv->owner);
-      L->top++;
-      persist(P);
-      lua_pop(L, 1);
-      put_i64(&P.B, uv->stkid);
-      continue;
-    }
-    luaL_addchar(&P.B, TAG_UPVAL_NEW);
-    lua_getupvalue(L, f, i);
-    persist(P);
-    lua_pop(L, 1);
-  }
-}
-
-[[noreturn]] static void cannot_persist_thread_with(Persist& P, byte_view what)
-{
-  lua_pushlstring(P.L, what, 0, what.size());
-  persist_error(P, lt::cannot_persist_a_thread_with_s);
-}
-
-/*
-** A thread's debug hook, as debug.sethook sets it: the debug library's C
-** hook with the Lua hook function kept in the registry. Written with its
-** mask, base count, current count and last traced pc, then the function.
-*/
-static void persist_hook(Persist& P, lua_State* T)
-{
-  lua_State* L = P.L;
-  if (T->hook == nullptr)
-  {
-    luaL_addchar(&P.B, 0);
-    return;
-  }
-  if (T->hook != luaL_debughook())
-    persist_error(P, lt::a_hook_not_set_by_the_debug_library_is_not_supported_yet);
-  luaL_addchar(&P.B, 1);
-  put_i64(&P.B, T->hookmask);
-  put_i64(&P.B, T->basehookcount);
-  put_i64(&P.B, T->hookcount);
-  put_i64(&P.B, T->oldpc);
-  luaL_addchar(&P.B, static_cast<char>(T->allowhook));
-  luaL_checkstacki(L, 3, std::nullopt);
-  lua_pushistringref(L, lt::_HOOKKEY);
-  if (lua_rawget(L, LUA_REGISTRYINDEX) == LUA_TTABLE)
-  {
-    setslotth(L, L->top, T);
-    L->top++;
-    lua_rawget(L, -2);
-  }
-  else
-    lua_pushnil(L);
-  {
-    PathStep step(P, Step::Hook);
-    persist(P);
-  }
-  lua_pop(L, 2);
-}
-
-static void persist_thread(Persist& P)
-{
-  lua_State* L = P.L;
-  lua_State* T = lua_tothread(L, -1);
-  luaL_checkstacki(L, 3, std::nullopt);
-  if (is_running(L, T))
-    persist_error(P, lt::cannot_persist_a_running_thread);
-
-  lua_Integer nframes = 0;
-  StkId maxtop = T->top;
-  if (T->ci != &T->base_ci)
-  {
-    for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
-    {
-      if (ci->k != nullptr)
-        cannot_persist_thread_with(P, lt::a_continuation_function);
-      if (ci->callstatus & (CIST_HOOKED | CIST_HOOKYIELD | CIST_FIN | CIST_TBC | CIST_CLSRET))
-        cannot_persist_thread_with(P, lt::a_hook_or_finalizer_call);
-      nframes++;
-      if (ci->top > maxtop)
-        maxtop = ci->top;
-      if (ci == T->ci)
-        break;
-    }
-  }
-
-  luaL_addchar(&P.B, TAG_THREAD);
-  luaL_addchar(&P.B, static_cast<char>(T->status));
-  put_i64(&P.B, T->top);
-  put_i64(&P.B, maxtop);
-  for (StkId i = 0; i < T->top; i++)
-  {
-    copyslot(L, L->top, T, i);
-    L->top++;
-    PathStep step(P, Step::Stack, 0, static_cast<int>(i));
-    persist(P);
-    lua_pop(L, 1);
-  }
-  put_i64(&P.B, nframes);
-  if (nframes > 0)
-  {
-    for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
-    {
-      put_i64(&P.B, ci->func);
-      put_i64(&P.B, ci->top);
-      put_i64(&P.B, ci->savedpc);
-      put_i64(&P.B, ci->nextraargs);
-      put_i64(&P.B, ci->callstatus);
-      put_i64(&P.B, ci->old_errfunc);
-      put_i64(&P.B, ci->ctx);
-      put_i64(&P.B, ci->funcidx);
-      put_i64(&P.B, ci->nyield);
-      put_i64(&P.B, ci->nres);
-      if (ci == T->ci)
-        break;
-    }
-  }
-  put_i64(&P.B, T->ntbc);
-  for (int k = 0; k < T->ntbc; k++)
-    put_i64(&P.B, T->tbc[k]);
-  persist_hook(P, T);
-}
-
-static void persist(Persist& P)
-{
-  lua_State* L = P.L;
-  switch (lua_type(L, -1))
-  {
-  case LUA_TNIL:
-    luaL_addchar(&P.B, TAG_NIL);
-    return;
-  case LUA_TBOOLEAN:
-    luaL_addchar(&P.B, lua_toboolean(L, -1) ? TAG_TRUE : TAG_FALSE);
-    return;
-  case LUA_TNUMBER:
-    if (lua_isinteger(L, -1))
-    {
-      lua_Integer i = lua_tointeger(L, -1);
-      luaL_addchar(&P.B, TAG_INTEGER);
-      put_i64(&P.B, i);
+      TValue mt{};
+      sethvalue(L_, &mt, h->metatable);
+      push_value(mt, Step::Metatable);
     }
     else
-    {
-      lua_Number n = lua_tonumber(L, -1);
-      luaL_addchar(&P.B, TAG_FLOAT);
-      put_raw(&P.B, &n, sizeof(n));
-    }
-    return;
-  case LUA_TSTRING:
-  case LUA_TTABLE:
-  case LUA_TFUNCTION:
-  case LUA_TTHREAD:
-  case LUA_TUSERDATA:
-  case LUA_TLIGHTUSERDATA:
-    break;
-  default:
-    lua_pushstring(L, luaL_typename(L, -1));
-    persist_error(P, lt::cannot_persist_a_s_value);
+      push_op(Op::Byte, TAG_NIL);
   }
 
-  if (begin_object(P))
-    return;
-  if (lua_type(L, -1) == LUA_TUSERDATA || lua_type(L, -1) == LUA_TLIGHTUSERDATA)
-    persist_error(P, lt::persisting_a_userdata_value_is_not_supported_yet);
-  if (P.depth >= MAX_DEPTH)
-    persist_error(P, lt::persisted_data_is_nested_too_deeply);
-  P.depth++;
-  switch (lua_type(L, -1))
+  /* the next entry from position 'pos' (array part, then hash part) */
+  void table_next(Table* h, lua_Integer pos)
   {
-  case LUA_TSTRING:
-    persist_string(P);
-    break;
-  case LUA_TTABLE:
-    if (!persist_special(P))
-      persist_table(P);
-    break;
-  case LUA_TFUNCTION:
-    if (lua_iscfunction(L, -1))
-      persist_error(P, lt::cannot_persist_a_C_function);
-    persist_lclosure(P);
-    break;
-  default:
-    persist_thread(P);
-    break;
+    int asize = h->asize();
+    for (;; pos++)
+    {
+      TValue k{};
+      if (pos < asize)
+      {
+        if (tagisempty(getArrTag(h, static_cast<int>(pos))))
+          continue;
+        setivalue(&k, pos + 1);
+      }
+      else
+      {
+        lua_Integer j = pos - asize;
+        if (j >= sizenode(h))
+        {
+          byte(TAG_NIL); /* end of entries */
+          return;
+        }
+        Node* n = gnode(h, static_cast<size_t>(j));
+        if (isempty(&n->val))
+          continue;
+        getnodekey(L_, &k, n);
+      }
+      push_op(Op::TableNext, pos + 1, h);
+      Task tv;
+      tv.op = Op::TableValue;
+      tv.step.step = Step::Value;
+      tv.step.key = Slot::of(k);
+      tv.i = pos;
+      tv.p = h;
+      tasks_.push(tv);
+      push_value(k, Step::Key, &k);
+      return;
+    }
   }
-  P.depth--;
-}
+
+  /* the value at position 'pos', as it is now (nil if it is gone) */
+  TValue table_value(Table* h, lua_Integer pos)
+  {
+    TValue v{};
+    setnilvalue(&v);
+    int asize = h->asize();
+    if (pos < asize)
+    {
+      lu_byte tag = getArrTag(h, static_cast<int>(pos));
+      if (!tagisempty(tag))
+        farr2val(h, static_cast<int>(pos), tag, &v);
+    }
+    else if (pos - asize < sizenode(h))
+    {
+      Node* n = gnode(h, static_cast<size_t>(pos - asize));
+      if (!isempty(&n->val))
+        copyobj(&v, &n->val);
+    }
+    return v;
+  }
+
+  void closure(LClosure* cl)
+  {
+    byte(TAG_LCLOSURE);
+    int nup = static_cast<int>(cl->upvals.size());
+    for (int i = nup; i >= 1; i--)
+    {
+      Task t;
+      t.op = Op::Upvalue;
+      t.step.step = Step::Upvalue;
+      t.step.proto = cl->p;
+      t.step.n = i;
+      t.i = i;
+      t.p = cl;
+      tasks_.push(t);
+    }
+    push_op(Op::I64, nup);
+    push_op(Op::Proto, 0, cl->p);
+  }
+
+  bool is_running(lua_State* T)
+  {
+    return (!host_ && T == L_) || (T->status == LUA_OK && T->ci != &T->base_ci);
+  }
+
+  void upvalue(const LClosure* cl, int i)
+  {
+    UpVal* uv = cl->upvals[static_cast<size_t>(i - 1)];
+    TValue id = pointer_key(uv);
+    lua_Integer found;
+    if (ref_find(id, uv, &found))
+    {
+      byte(TAG_UPVAL_REF);
+      i64(found);
+      return;
+    }
+    ref_add(id, uv);
+    TValue key{};
+    if (perm_key(id, &key)) /* the variable is a permanent */
+    {
+      byte(TAG_UPVAL_PERM);
+      push_value(key, Step::PermKey);
+      return;
+    }
+    if (upisopen(uv) && !is_running(uv->owner))
+    {
+      byte(TAG_UPVAL_OPEN);
+      push_op(Op::I64, uv->stkid);
+      TValue th{};
+      setthvalue(L_, &th, uv->owner);
+      push_value(th, Step::None);
+      return;
+    }
+    byte(TAG_UPVAL_NEW);
+    push_value(upvalgetval(uv), Step::None);
+  }
+
+  /*
+  ** A prototype is written once, field by field; later uses refer to it by
+  ** id. Its constants and names are values (strings get reference ids like
+  ** any other) and its nested prototypes are prototypes too.
+  */
+  void proto(const Proto* f)
+  {
+    TValue id = pointer_key(f);
+    lua_Integer found;
+    if (ref_find(id, f, &found))
+    {
+      byte(TAG_PROTO_REF);
+      i64(found);
+      return;
+    }
+    ref_add(id, f);
+    byte(TAG_PROTO_NEW);
+    i64(f->linedefined);
+    i64(f->lastlinedefined);
+    i64(f->numparams);
+    byte(static_cast<char>(f->flag & ~PF_FIXED));
+    i64(f->maxstacksize);
+    i64(static_cast<lua_Integer>(f->code.size()));
+    raw(f->code.data(), f->code.size() * sizeof(Instruction));
+    i64(static_cast<lua_Integer>(f->k.size()));
+    /* the rest, pushed from last to first */
+    for (size_t j = f->locvars.size(); j-- > 0;)
+    {
+      push_op(Op::I64, f->locvars[j].endpc);
+      push_op(Op::I64, f->locvars[j].startpc);
+      push_name(f->locvars[j].varname);
+    }
+    push_op(Op::I64, static_cast<lua_Integer>(f->locvars.size()));
+    for (size_t j = f->abslineinfo.size(); j-- > 0;)
+    {
+      push_op(Op::I64, f->abslineinfo[j].line);
+      push_op(Op::I64, f->abslineinfo[j].pc);
+    }
+    push_op(Op::I64, static_cast<lua_Integer>(f->abslineinfo.size()));
+    push_op(Op::Raw, static_cast<lua_Integer>(f->lineinfo.size()), f->lineinfo.data());
+    push_op(Op::I64, static_cast<lua_Integer>(f->lineinfo.size()));
+    push_name(f->source);
+    for (size_t j = f->p.size(); j-- > 0;)
+      push_op(Op::Proto, 0, f->p[j]);
+    push_op(Op::I64, static_cast<lua_Integer>(f->p.size()));
+    for (size_t j = f->upvalues.size(); j-- > 0;)
+    {
+      push_name(f->upvalues[j].name);
+      push_op(Op::Byte, f->upvalues[j].kind);
+      push_op(Op::I64, f->upvalues[j].idx);
+      push_op(Op::Byte, f->upvalues[j].instack);
+    }
+    push_op(Op::I64, static_cast<lua_Integer>(f->upvalues.size()));
+    for (size_t j = f->k.size(); j-- > 0;)
+      push_value(f->k[j], Step::None);
+  }
+
+  void thread(lua_State* T)
+  {
+    if (host_ && T == mainthread(L_->l_G))
+    {
+      byte(TAG_MAINTHREAD);
+      return;
+    }
+    if (is_running(T))
+      fail(lt::cannot_persist_a_running_thread);
+    StkId maxtop = T->top;
+    if (T->ci != &T->base_ci)
+    {
+      for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
+      {
+        if (ci->k != nullptr)
+          fail(format(lt::cannot_persist_a_thread_with_s, {text(lt::a_continuation_function)}));
+        if (ci->callstatus & (CIST_HOOKED | CIST_HOOKYIELD | CIST_FIN | CIST_TBC | CIST_CLSRET))
+          fail(format(lt::cannot_persist_a_thread_with_s, {text(lt::a_hook_or_finalizer_call)}));
+        if (ci->top > maxtop)
+          maxtop = ci->top;
+        if (ci == T->ci)
+          break;
+      }
+    }
+    byte(TAG_THREAD);
+    byte(static_cast<char>(T->status));
+    i64(T->top);
+    i64(maxtop);
+    push_op(Op::ThreadTail, 0, T);
+    push_op(Op::ThreadSlot, 0, T, T->top);
+  }
+
+  /* slots 'i' to 'n' (a slot no longer in use is written as nil) */
+  void thread_slot(lua_State* T, lua_Integer i, lua_Integer n)
+  {
+    if (i >= n)
+      return;
+    push_op(Op::ThreadSlot, i + 1, T, n);
+    TValue v{};
+    if (i < T->top)
+    {
+      TValue s = getslot(T, static_cast<StkId>(i));
+      copyobj(&v, &s);
+    }
+    else
+      setnilvalue(&v);
+    push_value(v, Step::Stack, nullptr, nullptr, static_cast<int>(i));
+  }
+
+  void thread_tail(lua_State* T)
+  {
+    lua_Integer nframes = 0;
+    if (T->ci != &T->base_ci)
+      for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
+      {
+        nframes++;
+        if (ci == T->ci)
+          break;
+      }
+    i64(nframes);
+    if (nframes > 0)
+      for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
+      {
+        i64(ci->func);
+        i64(ci->top);
+        i64(ci->savedpc);
+        i64(ci->nextraargs);
+        i64(ci->callstatus);
+        i64(ci->old_errfunc);
+        i64(ci->ctx);
+        i64(ci->funcidx);
+        i64(ci->nyield);
+        i64(ci->nres);
+        if (ci == T->ci)
+          break;
+      }
+    i64(T->ntbc);
+    for (int k = 0; k < T->ntbc; k++)
+      i64(T->tbc[k]);
+    hook(T);
+  }
+
+  /*
+  ** A thread's debug hook, as debug.sethook sets it: the debug library's C
+  ** hook with the Lua hook function kept in the registry. Written with its
+  ** mask, base count, current count and last traced pc, then the function.
+  */
+  void hook(lua_State* T)
+  {
+    if (T->hook == nullptr)
+    {
+      byte(0);
+      return;
+    }
+    if (T->hook != luaL_debughook())
+      fail(lt::a_hook_not_set_by_the_debug_library_is_not_supported_yet);
+    byte(1);
+    i64(T->hookmask);
+    i64(T->basehookcount);
+    i64(T->hookcount);
+    i64(T->oldpc);
+    byte(static_cast<char>(T->allowhook));
+    TValue f{};
+    setnilvalue(&f);
+    if (ttistable(&L_->l_G->l_registry))
+    {
+      TValue hooks = string_field(hvalue(&L_->l_G->l_registry), lt::_HOOKKEY);
+      if (ttistable(&hooks))
+      {
+        TValue th{};
+        setthvalue(L_, &th, T);
+        TValue v{};
+        lu_byte tag = hvalue(&hooks)->luaH_get(&th, &v);
+        if (!tagisempty(tag))
+          copyobj(&f, &v);
+      }
+    }
+    push_value(f, Step::Hook);
+  }
+};
+
+/* }====================================================== */
 
 /*
-** Unpersisting. Every function pushes exactly one value.
+** {======================================================
+** Unpersisting: one reader for a script's unpersist and for the host's.
+** A value is built from frames kept on a work stack (charged to the
+** state): each frame is an object being built and the part it waits for.
+** Every object is anchored in the reference table from the moment it is
+** made, so frames hold plain pointers and the Lua stack only ever holds
+** the value being handed to the frame below.
+** =======================================================
 */
+
 struct Reader
 {
   lua_State* L;
@@ -728,87 +1109,24 @@ struct Reader
     pos += n;
     return v;
   }
-};
 
-struct Unpersist
-{
-  Reader r;
-  int perms; /* stack index: permanents (key -> object) */
-  int refs;  /* stack index: reference id -> object */
-  int ups;   /* stack index: upvalue id -> closure, -id -> upvalue index */
-  lua_Integer refcount = 0;
-  int depth = 0;
-  bool host = false; /* a host restore: the main thread may be referenced */
-};
-
-static void unpersist(Unpersist& U);
-
-static void register_object(Unpersist& U, lua_Integer id)
-{
-  lua_pushvalue(U.r.L, -1);
-  lua_rawseti(U.r.L, U.refs, id);
-}
-
-static void unpersist_table(Unpersist& U, lua_Integer id)
-{
-  lua_State* L = U.r.L;
-  luaL_checkstacki(L, 5, std::nullopt);
-  lua_Integer asize = U.r.get_i64();
-  lua_Integer hsize = U.r.get_i64();
-  lua_Integer lenhint = U.r.get_i64();
-  if (asize < 0 || asize > INT_MAX || hsize < 0 || hsize > INT_MAX ||
-      (hsize & (hsize - 1)) != 0 || lenhint < 0 || lenhint > asize)
-    U.r.invalid();
-  /* same sizes as the original (the table limits are checked by
-     lua_createtable): entries go where they were, with no rehash */
-  lua_createtable(L, static_cast<int>(asize), static_cast<int>(hsize));
-  int t = lua_gettop(L);
-  register_object(U, id);
-  unpersist(U); /* metatable */
-  if (lua_isnil(L, -1))
-    lua_pop(L, 1);
-  else
-    lua_setmetatable(L, t);
-  for (;;)
+  int get_int()
   {
-    unpersist(U); /* key */
-    if (lua_isnil(L, -1))
-    {
-      lua_pop(L, 1);
-      break;
-    }
-    unpersist(U); /* value */
-    lua_rawset(L, t);
+    lua_Integer n = get_i64();
+    if (n < INT_MIN || n > INT_MAX)
+      invalid();
+    return static_cast<int>(n);
   }
-  TValue tv = getslot(L, L->ci->func + t);
-  Table* h = hvalue(&tv);
-  if (h->asize() != asize || allocsizenode(h) != hsize)
-    U.r.invalid();
-  h->lenhint = static_cast<int>(lenhint);
-}
 
-/*
-** A value rebuilt by the closure its '__persist' function returned. Its
-** reference id is taken before the closure is read, matching persist.
-*/
-static void unpersist_special(Unpersist& U, lua_Integer id)
-{
-  lua_State* L = U.r.L;
-  int type = U.r.get_byte();
-  if (type != LUA_TTABLE)
-    U.r.invalid();
-  unpersist(U);
-  if (!lua_isfunction(L, -1))
-    U.r.invalid();
-  lua_call(L, 0, 1);
-  if (lua_type(L, -1) != type)
+  /* a count, at most the number of bytes left (each item takes 'item' bytes) */
+  int get_count(size_t item = 1)
   {
-    lua_pushstring(L, luaL_typename(L, -1));
-    lua_pushstring(L, lua_typename(L, type));
-    luaL_errori(L, lt::mm_persist_restore_returned_s_s_expected);
+    lua_Integer n = get_i64();
+    if (n < 0 || n > INT_MAX || static_cast<size_t>(n) > (data.size() - pos) / item)
+      invalid();
+    return static_cast<int>(n);
   }
-  register_object(U, id);
-}
+};
 
 /*
 ** A thread being restored is not running, so nothing may raise an error on
@@ -835,282 +1153,15 @@ struct FindUpval : ProtectedCall
   }
 };
 
-/* replaces upvalue 'i' of the closure at 'f' by an open upvalue of a thread */
-static void unpersist_open_upvalue(Unpersist& U, int f, int i)
+/* registers a to-be-closed variable of a thread (run protected) */
+struct NewTbc : ProtectedCall
 {
-  lua_State* L = U.r.L;
-  unpersist(U); /* the owner thread */
-  lua_State* L1 = lua_tothread(L, -1);
-  lua_Integer level = U.r.get_i64();
-  if (L1 == nullptr || is_running(L, L1) || level < 0 || level >= L1->top)
-    U.r.invalid();
-  FindUpval fu;
-  fu.level = level;
-  if (luaD_rawrunprotected(L1, &fu) != LUA_OK)
-    memory_error(L);
-  LClosure* cl = clLvalue(&L->stack[L->ci->func + f]);
-  cl->upvals[i - 1] = fu.uv;
-  luaC_objbarrier(L, cl, fu.uv);
-  lua_pop(L, 1);
-}
-
-/* reads a count, at most the number of bytes left (each item takes one) */
-static int get_count(Unpersist& U, size_t item_bytes = 1)
-{
-  lua_Integer n = U.r.get_i64();
-  if (n < 0 || n > INT_MAX ||
-      static_cast<size_t>(n) > (U.r.data.size() - U.r.pos) / item_bytes)
-    U.r.invalid();
-  return static_cast<int>(n);
-}
-
-static int get_int(Unpersist& U)
-{
-  lua_Integer n = U.r.get_i64();
-  if (n < INT_MIN || n > INT_MAX)
-    U.r.invalid();
-  return static_cast<int>(n);
-}
-
-/* reads a string or nil; returns the string (anchored by the caller's barrier) */
-static TString* unpersist_name(Unpersist& U, GCObject* owner)
-{
-  lua_State* L = U.r.L;
-  unpersist(U);
-  TString* ts = nullptr;
-  if (lua_type(L, -1) == LUA_TSTRING)
+  StkId level = 0;
+  void run(lua_State* L1) override
   {
-    TValue v = getslot(L, L->top - 1);
-    ts = tsvalue(&v);
-    luaC_objbarrier(L, owner, ts);
+    luaF_newtbcupval(L1, level);
   }
-  else if (!lua_isnil(L, -1))
-    U.r.invalid();
-  lua_pop(L, 1);
-  return ts;
-}
-
-/*
-** Pushes a function holding the closure's prototype. A new prototype is
-** built field by field, as the engine's loader builds one: it is anchored
-** first (by a holder closure), and each part is made valid for the
-** collector before anything that can run it (reading a value).
-*/
-static void unpersist_proto(Unpersist& U)
-{
-  lua_State* L = U.r.L;
-  global_State* g = L->l_G;
-  luaL_checkstacki(L, 3, std::nullopt);
-  char tag = U.r.get_byte();
-  if (tag == TAG_PROTO_REF)
-  {
-    lua_rawgeti(L, U.refs, U.r.get_i64());
-    if (lua_type(L, -1) != LUA_TFUNCTION || lua_iscfunction(L, -1))
-      U.r.invalid();
-    return;
-  }
-  if (tag != TAG_PROTO_NEW)
-    U.r.invalid();
-  lua_Integer pid = ++U.refcount;
-  lua_lock(L);
-  Proto* p = Proto::luaF_newproto(L);
-  LClosure* holder = LClosure::luaF_newLclosure(L, 0);
-  holder->p = p;
-  setslotclL(L, L->top, holder);
-  L->top++;
-  luaC_objbarrier(L, holder, p);
-  lua_unlock(L);
-  lua_pushvalue(L, -1);
-  lua_rawseti(L, U.refs, pid);
-
-  p->linedefined = get_int(U);
-  p->lastlinedefined = get_int(U);
-  p->numparams = get_int(U);
-  p->flag = static_cast<lu_byte>(U.r.get_byte() & ~PF_FIXED);
-  p->maxstacksize = get_int(U);
-  if (p->numparams < 0 || p->maxstacksize < 0 || p->numparams > p->maxstacksize)
-    U.r.invalid();
-
-  int n = get_count(U, sizeof(Instruction));
-  byte_view code = U.r.get_bytes(static_cast<size_t>(n) * sizeof(Instruction));
-  lua_lock(L);
-  p->code = luaM_alloc_Instruction_span(g, L, {}, static_cast<size_t>(n), true);
-  lua_unlock(L);
-  std::memcpy(p->code.data(), code.data(), code.size());
-
-  n = get_count(U);
-  lua_lock(L);
-  p->k = luaM_alloc_TValue_span(g, L, {}, static_cast<size_t>(n), true);
-  for (TValue& k : p->k)
-    setnilvalue(&k);
-  lua_unlock(L);
-  for (TValue& k : p->k)
-  {
-    unpersist(U);
-    int t = lua_type(L, -1);
-    if (t != LUA_TNIL && t != LUA_TBOOLEAN && t != LUA_TNUMBER && t != LUA_TSTRING)
-      U.r.invalid();
-    k = getslot(L, L->top - 1);
-    luaC_barrier(L, p, &k);
-    lua_pop(L, 1);
-  }
-
-  n = get_count(U);
-  lua_lock(L);
-  p->upvalues = luaM_alloc_Upvaldesc_span(g, L, {}, static_cast<size_t>(n), true);
-  for (Upvaldesc& uv : p->upvalues)
-    uv = Upvaldesc{nullptr, 0, 0, 0};
-  lua_unlock(L);
-  for (Upvaldesc& uv : p->upvalues)
-  {
-    uv.instack = static_cast<lu_byte>(U.r.get_byte());
-    uv.idx = get_int(U);
-    uv.kind = static_cast<lu_byte>(U.r.get_byte());
-    uv.name = unpersist_name(U, p);
-  }
-
-  n = get_count(U);
-  lua_lock(L);
-  p->p = luaM_alloc_Proto_ptr_span(g, L, {}, static_cast<size_t>(n), true);
-  for (Proto*& nested : p->p)
-    nested = nullptr;
-  lua_unlock(L);
-  for (Proto*& nested : p->p)
-  {
-    unpersist_proto(U);
-    TValue h = getslot(L, L->top - 1);
-    nested = clLvalue(&h)->p;
-    luaC_objbarrier(L, p, nested);
-    lua_pop(L, 1);
-  }
-
-  p->source = unpersist_name(U, p);
-
-  n = get_count(U);
-  byte_view lines = U.r.get_bytes(static_cast<size_t>(n));
-  lua_lock(L);
-  p->lineinfo = luaM_alloc_ls_byte_span(g, L, {}, static_cast<size_t>(n), true);
-  lua_unlock(L);
-  std::memcpy(p->lineinfo.data(), lines.data(), lines.size());
-
-  n = get_count(U, 16);
-  lua_lock(L);
-  p->abslineinfo = luaM_alloc_AbsLineInfo_span(g, L, {}, static_cast<size_t>(n), true);
-  lua_unlock(L);
-  for (AbsLineInfo& a : p->abslineinfo)
-  {
-    a.pc = get_int(U);
-    a.line = get_int(U);
-  }
-
-  n = get_count(U);
-  lua_lock(L);
-  p->locvars = luaM_alloc_LocVar_span(g, L, {}, static_cast<size_t>(n), true);
-  for (LocVar& lv : p->locvars)
-    lv = LocVar{nullptr, 0, 0};
-  lua_unlock(L);
-  for (LocVar& lv : p->locvars)
-  {
-    lv.varname = unpersist_name(U, p);
-    lv.startpc = get_int(U);
-    lv.endpc = get_int(U);
-  }
-}
-
-/*
-** A closure is made as OP_CLOSURE makes one: a new closure on the shared
-** prototype, anchored on the stack before its upvalues are created. This
-** allocates, so it runs under the API lock, as an API function would.
-*/
-static void push_new_closure(lua_State* L, Proto* p)
-{
-  lua_lock(L);
-  LClosure* cl = LClosure::luaF_newLclosure(L, static_cast<int>(p->upvalues.size()));
-  cl->p = p;
-  setslotclL(L, L->top, cl);
-  L->top++;
-  luaC_objbarrier(L, cl, p);
-  cl->luaF_initupvals(L);
-  lua_unlock(L);
-}
-
-/*
-** A variable that is a permanent: the permanents give, for its key, a Lua
-** function whose first upvalue is the variable to share; upvalue 'i' of the
-** closure at 'f' is joined to it.
-*/
-static void unpersist_perm_upvalue(Unpersist& U, int f, int i)
-{
-  lua_State* L = U.r.L;
-  luaL_checkstacki(L, 4, std::nullopt);
-  unpersist(U); /* the key */
-  lua_pushvalue(L, -1);
-  lua_rawget(L, U.perms);
-  if (lua_isnil(L, -1))
-  {
-    luaL_tolstring(L, -2);
-    luaL_errori(L, lt::bad_permanent_value_for_key_s);
-  }
-  if (lua_type(L, -1) != LUA_TFUNCTION || lua_iscfunction(L, -1) ||
-      lua_getupvaluei(L, -1, 1) == nullptr)
-  {
-    lua_pushistringref(L, lt::a_function_capturing_the_variable);
-    lua_pushstring(L, luaL_typename(L, -2));
-    luaL_errori(L, lt::bad_permanent_value_s_expected_got_s);
-  }
-  lua_pop(L, 1); /* the upvalue's value */
-  lua_upvaluejoin(L, f, i, lua_gettop(L), 1);
-  lua_pop(L, 2);
-}
-
-static void unpersist_lclosure(Unpersist& U, lua_Integer id)
-{
-  lua_State* L = U.r.L;
-  luaL_checkstacki(L, 5, std::nullopt);
-  unpersist_proto(U);
-  TValue holder = getslot(L, L->top - 1);
-  push_new_closure(L, clLvalue(&holder)->p);
-  lua_remove(L, -2); /* the prototype's holder */
-  int f = lua_gettop(L);
-  register_object(U, id);
-  lua_Integer nup = U.r.get_i64();
-  LClosure* cl = clLvalue(&L->stack[L->ci->func + f]);
-  if (nup != static_cast<lua_Integer>(cl->upvals.size()))
-    U.r.invalid();
-  for (int i = 1; i <= nup; i++)
-  {
-    char tag = U.r.get_byte();
-    if (tag == TAG_UPVAL_NEW || tag == TAG_UPVAL_OPEN || tag == TAG_UPVAL_PERM)
-    {
-      lua_Integer uid = ++U.refcount;
-      lua_pushvalue(L, f);
-      lua_rawseti(L, U.ups, uid);
-      lua_pushinteger(L, i);
-      lua_rawseti(L, U.ups, -uid);
-      if (tag == TAG_UPVAL_OPEN)
-        unpersist_open_upvalue(U, f, i);
-      else if (tag == TAG_UPVAL_PERM)
-        unpersist_perm_upvalue(U, f, i);
-      else
-      {
-        unpersist(U);
-        lua_setupvalue(L, f, i);
-      }
-    }
-    else if (tag == TAG_UPVAL_REF)
-    {
-      lua_Integer uid = U.r.get_i64();
-      lua_rawgeti(L, U.ups, uid);
-      lua_rawgeti(L, U.ups, -uid);
-      if (!lua_isfunction(L, -2) || !lua_isinteger(L, -1))
-        U.r.invalid();
-      lua_upvaluejoin(L, f, i, lua_gettop(L) - 1, static_cast<int>(lua_tointeger(L, -1)));
-      lua_pop(L, 2);
-    }
-    else
-      U.r.invalid();
-  }
-}
+};
 
 /*
 ** A thread is persisted with its status: not started or dead (LUA_OK, no
@@ -1145,281 +1196,924 @@ static bool valid_frame(lua_State* L1, const CallInfo* ci)
   return ci->savedpc >= 0 && ci->savedpc <= static_cast<int>(p->code.size());
 }
 
-static void unpersist_frames(Unpersist& U, lua_State* L1, lua_Integer nframes,
-                             lua_Integer top, lua_Integer maxtop, int need);
-static void unpersist_tbc(Unpersist& U, lua_State* L1, lua_Integer nframes, lua_Integer top);
-static void unpersist_hook(Unpersist& U, lua_State* L1);
-
 /*
-** The thread is valid at every point a collection can see it: its stack is
-** filled while it has only its base frame, then the frames are read into
-** spare CallInfos past 'ci' (only an emergency collection, which keeps
-** them, can run meanwhile) and become part of the thread in one step.
+** A closure is made as OP_CLOSURE makes one: a new closure on the shared
+** prototype, anchored on the stack before its upvalues are created. This
+** allocates, so it runs under the API lock, as an API function would.
 */
-static void unpersist_thread(Unpersist& U, lua_Integer id)
+static void push_new_closure(lua_State* L, Proto* p)
 {
-  lua_State* L = U.r.L;
-  luaL_checkstacki(L, 5, std::nullopt);
-  lua_State* L1 = lua_newthread(L);
-  register_object(U, id);
-
-  char status = U.r.get_byte();
-  lua_Integer top = U.r.get_i64();
-  lua_Integer maxtop = U.r.get_i64();
-  if (!valid_status(status) || top < 1 || maxtop < top ||
-      maxtop >= LUAI_MAXSTACK - LUA_MINSTACK)
-    U.r.invalid();
-
-  int need = static_cast<int>(maxtop) + LUA_MINSTACK;
-  if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
-    memory_error(L);
-  L1->top = top;
-  for (StkId i = 0; i < top; i++)
-  {
-    unpersist(U);
-    copyslot(L1, i, L, L->top - 1);
-    lua_pop(L, 1);
-  }
-
-  lua_Integer nframes = U.r.get_i64();
-  if (nframes < 0 || (nframes > 0 && status == LUA_OK))
-    U.r.invalid();
-  if (nframes > 0)
-    unpersist_frames(U, L1, nframes, top, maxtop, need);
-  unpersist_tbc(U, L1, nframes, top);
-  unpersist_hook(U, L1);
-  L1->status = static_cast<TStatus>(status);
-}
-
-/*
-** A debug hook: installed as debug.sethook installs it (the Lua function in
-** the registry's hook table, the debug library's C hook on the thread),
-** then the count and last traced pc are put back where they stood.
-*/
-static void unpersist_hook(Unpersist& U, lua_State* L1)
-{
-  lua_State* L = U.r.L;
-  char kind = U.r.get_byte();
-  if (kind == 0)
-    return;
-  if (kind != 1)
-    U.r.invalid();
-  lua_Integer mask = U.r.get_i64();
-  int base = get_int(U);
-  int count = get_int(U);
-  int oldpc = get_int(U);
-  char allow = U.r.get_byte();
-  if ((mask & ~(LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE | LUA_MASKCOUNT)) != 0 ||
-      mask == 0 || base < 0 || count < 0 || (allow != 0 && allow != 1))
-    U.r.invalid();
-  luaL_checkstacki(L, 4, std::nullopt);
-  unpersist(U); /* the hook function */
-  if (!lua_isfunction(L, -1) && !lua_isnil(L, -1))
-    U.r.invalid();
-  if (!luaL_getsubtablei(L, LUA_REGISTRYINDEX, lt::_HOOKKEY))
-  { /* as debug.sethook creates it */
-    lua_pushistringref(L, lt::k_char);
-    lua_setfieldi(L, -2, lt::mm_mode);
-    lua_pushvalue(L, -1);
-    lua_setmetatable(L, -2);
-  }
-  setslotth(L, L->top, L1);
+  lua_lock(L);
+  LClosure* cl = LClosure::luaF_newLclosure(L, static_cast<int>(p->upvalues.size()));
+  cl->p = p;
+  setslotclL(L, L->top, cl);
   L->top++;
-  lua_pushvalue(L, -3);
-  lua_rawset(L, -3);
-  lua_pop(L, 2);
-  lua_sethook(L1, luaL_debughook(), static_cast<int>(mask), base);
-  L1->hookcount = count;
-  L1->oldpc = oldpc;
-  L1->allowhook = static_cast<lu_byte>(allow);
+  luaC_objbarrier(L, cl, p);
+  cl->luaF_initupvals(L);
+  lua_unlock(L);
 }
 
-/* frames are read into spare CallInfos and attached in one step */
-static void unpersist_frames(Unpersist& U, lua_State* L1, lua_Integer nframes,
-                             lua_Integer top, lua_Integer maxtop, int need)
+/* what is being built */
+enum class Build : char
 {
-  lua_State* L = U.r.L;
-  /* a collection may have shrunk the stack while the values were read */
-  if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
-    memory_error(L);
-  CallInfo* last = L1->ci;
-  for (lua_Integer k = 0; k < nframes; k++)
+  Table,
+  Perm,
+  Special,
+  Closure,
+  Proto,
+  Thread,
+};
+
+/* the part a frame waits for */
+enum class Part : char
+{
+  Meta,      /* Table: the metatable */
+  Key,       /* Table: a key, or nil for the end */
+  Val,       /* Table: the value of 'key' */
+  End,       /* Table: all entries read */
+  Object,    /* Perm: the key; Special: the restore closure */
+  Proto,     /* Closure: its prototype */
+  Upvals,    /* Closure: upvalue 'i' (raw part) */
+  UpNew,     /* Closure: the value of upvalue 'i' */
+  UpOpen,    /* Closure: the thread owning upvalue 'i' */
+  UpPerm,    /* Closure: the key of upvalue 'i' */
+  Consts,    /* Proto: constant 'i' */
+  UpDesc,    /* Proto: upvalue description 'i' (raw part) */
+  UpName,    /* Proto: the name of upvalue 'i' */
+  Nested,    /* Proto: nested prototype 'i' */
+  Source,    /* Proto: its source */
+  LocVar,    /* Proto: the name of local variable 'i' */
+  Slots,     /* Thread: stack slot 'i' */
+  HookFn,    /* Thread: its hook function */
+};
+
+struct Frame
+{
+  Build kind = Build::Table;
+  Part part = Part::Meta;
+  char type = 0;      /* Perm, Special: the expected type; Thread: status */
+  int i = 0;          /* the part being read */
+  int n = 0;          /* number of parts */
+  lua_Integer id = 0; /* reference id */
+  lua_Integer a = 0;  /* Table: asize; Thread: top;  hook: mask */
+  lua_Integer b = 0;  /* Table: hsize; Thread: maxtop; hook: base count */
+  lua_Integer c = 0;  /* Table: length hint; hook: current count */
+  lua_Integer d = 0;  /* hook: last traced pc */
+  lua_Integer e = 0;  /* hook: allowhook */
+  void* p = nullptr;  /* Table*, LClosure* (a Proto's holder, or the closure), lua_State* */
+  Slot key;           /* Table: the key waiting for its value */
+};
+
+class Restorer
+{
+public:
+  /* stack: 1: permanents (key -> object); 3: refs (id -> object); 4: upvalues */
+  Restorer(lua_State* L, byte_view data, bool host) : r_{L, data}, L_(L), host_(host), frames_(L, true) {}
+
+  Reader r_;
+
+  /* reads one value and pushes it */
+  void value()
   {
-    CallInfo* ci = last->next;
-    if (ci == nullptr)
+    size_t base = frames_.size();
+    Next next = Next::Read;
+    for (;;)
     {
-      L1->ci = last;
-      ci = luaE_extendCI(L1, 0);
-      L1->ci = &L1->base_ci;
-      if (ci == nullptr)
-        memory_error(L);
+      switch (next)
+      {
+      case Next::Read:
+        next = start();
+        break;
+      case Next::Advance:
+        next = advance();
+        break;
+      case Next::Ready:
+        if (frames_.size() == base)
+          return;
+        next = deliver();
+        break;
+      }
     }
-    ci->func = U.r.get_i64();
-    ci->top = U.r.get_i64();
-    ci->savedpc = static_cast<int>(U.r.get_i64());
-    ci->nextraargs = static_cast<int>(U.r.get_i64());
-    ci->callstatus = static_cast<l_uint32>(U.r.get_i64());
-    ci->old_errfunc = U.r.get_i64();
-    ci->ctx = U.r.get_i64();
-    ci->funcidx = static_cast<int>(U.r.get_i64());
-    ci->nyield = static_cast<int>(U.r.get_i64());
-    ci->nres = static_cast<int>(U.r.get_i64());
-    ci->k = nullptr;
-    ci->trap = 0;
-    if (ci->func < 0 || ci->func >= top || ci->top < ci->func || ci->top > maxtop ||
-        !valid_frame(L1, ci))
-      U.r.invalid();
-    last = ci;
   }
-  L1->ci = last;
-}
 
-/* registers a to-be-closed variable of a thread (run protected) */
-struct NewTbc : ProtectedCall
-{
-  StkId level = 0;
-  void run(lua_State* L1) override
+private:
+  enum class Next : char
   {
-    luaF_newtbcupval(L1, level);
+    Read,    /* read a value */
+    Advance, /* the frame on top reads its next part */
+    Ready,   /* a value is on top of the stack, for the frame on top */
+  };
+
+  static constexpr int PERMS = 1;
+  static constexpr int REFS = 3;
+  static constexpr int UPS = 4;
+
+  lua_State* L_;
+  bool host_;
+  lua_Integer refcount_ = 0;
+  WorkStack<Frame> frames_;
+
+  void register_top(lua_Integer id)
+  {
+    lua_pushvalue(L_, -1);
+    lua_rawseti(L_, REFS, id);
+  }
+
+  void push_table(Table* h)
+  {
+    TValue t{};
+    sethvalue(L_, &t, h);
+    setslot(L_, L_->top, &t);
+    L_->top++;
+  }
+
+  void push_closure(LClosure* cl)
+  {
+    setslotclL(L_, L_->top, cl);
+    L_->top++;
+  }
+
+  void push_thread(lua_State* T)
+  {
+    setslotth(L_, L_->top, T);
+    L_->top++;
+  }
+
+  /* the frame on top is done and its value is on the stack */
+  Next done()
+  {
+    frames_.pop();
+    return Next::Ready;
+  }
+
+  Next start()
+  {
+    luaL_checkstacki(L_, 8, std::nullopt);
+    char tag = r_.get_byte();
+    switch (tag)
+    {
+    case TAG_NIL:
+      lua_pushnil(L_);
+      return Next::Ready;
+    case TAG_FALSE:
+      lua_pushboolean(L_, 0);
+      return Next::Ready;
+    case TAG_TRUE:
+      lua_pushboolean(L_, 1);
+      return Next::Ready;
+    case TAG_INTEGER:
+      lua_pushinteger(L_, r_.get_i64());
+      return Next::Ready;
+    case TAG_FLOAT:
+    {
+      lua_Number n;
+      r_.get_raw(&n, sizeof(n));
+      lua_pushnumber(L_, n);
+      return Next::Ready;
+    }
+    case TAG_REF:
+    {
+      lua_Integer id = r_.get_i64();
+      lua_rawgeti(L_, REFS, id);
+      if (lua_isnil(L_, -1))
+        r_.invalid();
+      return Next::Ready;
+    }
+    case TAG_PERM:
+    case TAG_SPECIAL:
+    {
+      Frame f;
+      f.kind = (tag == TAG_PERM) ? Build::Perm : Build::Special;
+      f.part = Part::Object;
+      f.type = r_.get_byte();
+      f.id = ++refcount_;
+      if (f.kind == Build::Special && f.type != LUA_TTABLE)
+        r_.invalid();
+      frames_.push(f);
+      return Next::Read;
+    }
+    case TAG_STRING:
+    {
+      lua_Integer id = ++refcount_;
+      lua_Integer n = r_.get_i64();
+      if (n < 0)
+        r_.invalid();
+      byte_view s = r_.get_bytes(static_cast<size_t>(n));
+      lua_pushlstring(L_, s, 0, s.size());
+      register_top(id);
+      return Next::Ready;
+    }
+    case TAG_TABLE:
+      start_table(++refcount_);
+      return Next::Read;
+    case TAG_LCLOSURE:
+    {
+      Frame f;
+      f.kind = Build::Closure;
+      f.part = Part::Proto;
+      f.id = ++refcount_;
+      frames_.push(f);
+      return Next::Advance;
+    }
+    case TAG_THREAD:
+      start_thread(++refcount_);
+      return Next::Advance;
+    case TAG_MAINTHREAD:
+    {
+      if (!host_) /* a script never gets the main thread from a stream */
+        r_.invalid();
+      lua_Integer id = ++refcount_;
+      push_thread(mainthread(L_->l_G));
+      register_top(id);
+      return Next::Ready;
+    }
+    default:
+      r_.invalid();
+    }
+  }
+
+  /* the value on top of the stack goes to the frame on top */
+  Next deliver()
+  {
+    Frame f = frames_.top();
+    switch (f.kind)
+    {
+    case Build::Table:
+      return table_part(f);
+    case Build::Perm:
+      return perm_part(f);
+    case Build::Special:
+      return special_part(f);
+    case Build::Closure:
+      return closure_part(f);
+    case Build::Proto:
+      return proto_part(f);
+    default:
+      return thread_part(f);
+    }
+  }
+
+  /* the frame on top reads its next raw parts */
+  Next advance()
+  {
+    Frame f = frames_.top();
+    switch (f.kind)
+    {
+    case Build::Closure:
+      return closure_advance(f);
+    case Build::Proto:
+      return proto_advance(f);
+    case Build::Thread:
+      return thread_advance(f);
+    default:
+      return Next::Read;
+    }
+  }
+
+  /* ---- tables ---- */
+
+  void start_table(lua_Integer id)
+  {
+    lua_Integer asize = r_.get_i64();
+    lua_Integer hsize = r_.get_i64();
+    lua_Integer lenhint = r_.get_i64();
+    if (asize < 0 || asize > INT_MAX || hsize < 0 || hsize > INT_MAX ||
+        (hsize & (hsize - 1)) != 0 || lenhint < 0 || lenhint > asize)
+      r_.invalid();
+    /* same sizes as the original (the table limits are checked by
+       lua_createtable): entries go where they were, with no rehash */
+    lua_createtable(L_, static_cast<int>(asize), static_cast<int>(hsize));
+    register_top(id);
+    TValue t = getslot(L_, L_->top - 1);
+    Frame f;
+    f.kind = Build::Table;
+    f.part = Part::Meta;
+    f.a = asize;
+    f.b = hsize;
+    f.c = lenhint;
+    f.p = hvalue(&t);
+    lua_pop(L_, 1);
+    frames_.push(f);
+  }
+
+  Next table_part(Frame f)
+  {
+    Table* h = static_cast<Table*>(f.p);
+    switch (f.part)
+    {
+    case Part::Meta:
+      if (lua_isnil(L_, -1))
+        lua_pop(L_, 1);
+      else
+      {
+        if (!lua_istable(L_, -1))
+          r_.invalid();
+        push_table(h);
+        lua_insert(L_, -2);
+        lua_setmetatable(L_, -2);
+        lua_pop(L_, 1);
+      }
+      f.part = Part::Key;
+      frames_.set_top(f);
+      return Next::Read;
+    case Part::Key:
+      if (lua_isnil(L_, -1))
+      {
+        lua_pop(L_, 1);
+        if (h->asize() != f.a || allocsizenode(h) != f.b)
+          r_.invalid();
+        h->lenhint = static_cast<int>(f.c);
+        push_table(h);
+        return done();
+      }
+      {
+        TValue k = getslot(L_, L_->top - 1);
+        f.key = Slot::of(k);
+      }
+      lua_pop(L_, 1);
+      f.part = Part::Val;
+      frames_.set_top(f);
+      return Next::Read;
+    default: /* Part::Val */
+    {
+      push_table(h);
+      TValue k = f.key.get();
+      setslot(L_, L_->top, &k);
+      L_->top++;
+      lua_rotate(L_, -3, 2); /* table, key, value */
+      lua_rawset(L_, -3);
+      lua_pop(L_, 1);
+      f.part = Part::Key;
+      frames_.set_top(f);
+      return Next::Read;
+    }
+    }
+  }
+
+  /* ---- permanents and __persist ---- */
+
+  Next perm_part(Frame f)
+  {
+    lua_pushvalue(L_, -1);
+    lua_rawget(L_, PERMS);
+    if (lua_isnil(L_, -1))
+    {
+      luaL_tolstring(L_, -2);
+      luaL_errori(L_, lt::bad_permanent_value_for_key_s);
+    }
+    if (lua_type(L_, -1) != f.type)
+    {
+      lua_pushstring(L_, lua_typename(L_, f.type));
+      lua_pushstring(L_, luaL_typename(L_, -2));
+      luaL_errori(L_, lt::bad_permanent_value_s_expected_got_s);
+    }
+    lua_remove(L_, -2);
+    register_top(f.id);
+    return done();
+  }
+
+  /*
+  ** A value rebuilt by the closure its '__persist' function returned. Its
+  ** reference id was taken before the closure was read, matching persist.
+  */
+  Next special_part(Frame f)
+  {
+    if (!lua_isfunction(L_, -1))
+      r_.invalid();
+    lua_call(L_, 0, 1);
+    if (lua_type(L_, -1) != f.type)
+    {
+      lua_pushstring(L_, luaL_typename(L_, -1));
+      lua_pushstring(L_, lua_typename(L_, f.type));
+      luaL_errori(L_, lt::mm_persist_restore_returned_s_s_expected);
+    }
+    register_top(f.id);
+    return done();
+  }
+
+  /* ---- prototypes ---- */
+
+  /*
+  ** A prototype is built field by field, as the engine's loader builds one:
+  ** it is anchored first (by a holder closure, registered under its id), and
+  ** each part is made valid for the collector before anything that can run
+  ** it (reading a value). Allocations run under the API lock.
+  */
+  Next proto_tag()
+  {
+    char tag = r_.get_byte();
+    if (tag == TAG_PROTO_REF)
+    {
+      lua_rawgeti(L_, REFS, r_.get_i64());
+      if (lua_type(L_, -1) != LUA_TFUNCTION || lua_iscfunction(L_, -1))
+        r_.invalid();
+      return Next::Ready;
+    }
+    if (tag != TAG_PROTO_NEW)
+      r_.invalid();
+    start_proto(++refcount_);
+    return Next::Advance;
+  }
+
+  void start_proto(lua_Integer pid)
+  {
+    global_State* g = L_->l_G;
+    lua_lock(L_);
+    Proto* p = Proto::luaF_newproto(L_);
+    LClosure* holder = LClosure::luaF_newLclosure(L_, 0);
+    holder->p = p;
+    setslotclL(L_, L_->top, holder);
+    L_->top++;
+    luaC_objbarrier(L_, holder, p);
+    lua_unlock(L_);
+    register_top(pid);
+    lua_pop(L_, 1);
+
+    p->linedefined = r_.get_int();
+    p->lastlinedefined = r_.get_int();
+    p->numparams = r_.get_int();
+    p->flag = static_cast<lu_byte>(r_.get_byte() & ~PF_FIXED);
+    p->maxstacksize = r_.get_int();
+    if (p->numparams < 0 || p->maxstacksize < 0 || p->numparams > p->maxstacksize)
+      r_.invalid();
+    int n = r_.get_count(sizeof(Instruction));
+    byte_view code = r_.get_bytes(static_cast<size_t>(n) * sizeof(Instruction));
+    lua_lock(L_);
+    p->code = luaM_alloc_Instruction_span(g, L_, {}, static_cast<size_t>(n), true);
+    lua_unlock(L_);
+    std::memcpy(p->code.data(), code.data(), code.size());
+    n = r_.get_count();
+    lua_lock(L_);
+    p->k = luaM_alloc_TValue_span(g, L_, {}, static_cast<size_t>(n), true);
+    for (TValue& k : p->k)
+      setnilvalue(&k);
+    lua_unlock(L_);
+    Frame f;
+    f.kind = Build::Proto;
+    f.part = Part::Consts;
+    f.n = n;
+    f.p = holder;
+    frames_.push(f);
+  }
+
+  /* a string or nil for a name */
+  TString* name_part(GCObject* owner)
+  {
+    TString* ts = nullptr;
+    if (lua_type(L_, -1) == LUA_TSTRING)
+    {
+      TValue v = getslot(L_, L_->top - 1);
+      ts = tsvalue(&v);
+      luaC_objbarrier(L_, owner, ts);
+    }
+    else if (!lua_isnil(L_, -1))
+      r_.invalid();
+    lua_pop(L_, 1);
+    return ts;
+  }
+
+  Next proto_advance(Frame f)
+  {
+    global_State* g = L_->l_G;
+    Proto* p = static_cast<LClosure*>(f.p)->p;
+    for (;;)
+    {
+      switch (f.part)
+      {
+      case Part::Consts:
+        if (f.i < f.n)
+          return Next::Read;
+        f.n = r_.get_count();
+        f.i = 0;
+        lua_lock(L_);
+        p->upvalues = luaM_alloc_Upvaldesc_span(g, L_, {}, static_cast<size_t>(f.n), true);
+        for (Upvaldesc& uv : p->upvalues)
+          uv = Upvaldesc{nullptr, 0, 0, 0};
+        lua_unlock(L_);
+        f.part = Part::UpDesc;
+        break;
+      case Part::UpDesc:
+        if (f.i < f.n)
+        {
+          Upvaldesc& uv = p->upvalues[static_cast<size_t>(f.i)];
+          uv.instack = static_cast<lu_byte>(r_.get_byte());
+          uv.idx = r_.get_int();
+          uv.kind = static_cast<lu_byte>(r_.get_byte());
+          f.part = Part::UpName;
+          frames_.set_top(f);
+          return Next::Read;
+        }
+        f.n = r_.get_count();
+        f.i = 0;
+        lua_lock(L_);
+        p->p = luaM_alloc_Proto_ptr_span(g, L_, {}, static_cast<size_t>(f.n), true);
+        for (Proto*& nested : p->p)
+          nested = nullptr;
+        lua_unlock(L_);
+        f.part = Part::Nested;
+        break;
+      case Part::Nested:
+        frames_.set_top(f);
+        if (f.i < f.n)
+          return proto_tag();
+        f.part = Part::Source;
+        frames_.set_top(f);
+        return Next::Read;
+      default:
+        frames_.set_top(f);
+        return Next::Read;
+      }
+    }
+  }
+
+  Next proto_part(Frame f)
+  {
+    global_State* g = L_->l_G;
+    LClosure* holder = static_cast<LClosure*>(f.p);
+    Proto* p = holder->p;
+    switch (f.part)
+    {
+    case Part::Consts:
+    {
+      int t = lua_type(L_, -1);
+      if (t != LUA_TNIL && t != LUA_TBOOLEAN && t != LUA_TNUMBER && t != LUA_TSTRING)
+        r_.invalid();
+      TValue v = getslot(L_, L_->top - 1);
+      TValue& k = p->k[static_cast<size_t>(f.i)];
+      copyobj(&k, &v);
+      luaC_barrier(L_, p, &k);
+      lua_pop(L_, 1);
+      f.i++;
+      frames_.set_top(f);
+      return Next::Advance;
+    }
+    case Part::UpName:
+      p->upvalues[static_cast<size_t>(f.i)].name = name_part(p);
+      f.i++;
+      f.part = Part::UpDesc;
+      frames_.set_top(f);
+      return Next::Advance;
+    case Part::Nested:
+    {
+      TValue h = getslot(L_, L_->top - 1);
+      Proto* nested = clLvalue(&h)->p;
+      p->p[static_cast<size_t>(f.i)] = nested;
+      luaC_objbarrier(L_, p, nested);
+      lua_pop(L_, 1);
+      f.i++;
+      frames_.set_top(f);
+      return Next::Advance;
+    }
+    case Part::Source:
+    {
+      p->source = name_part(p);
+      int n = r_.get_count();
+      byte_view lines = r_.get_bytes(static_cast<size_t>(n));
+      lua_lock(L_);
+      p->lineinfo = luaM_alloc_ls_byte_span(g, L_, {}, static_cast<size_t>(n), true);
+      lua_unlock(L_);
+      std::memcpy(p->lineinfo.data(), lines.data(), lines.size());
+      n = r_.get_count(16);
+      lua_lock(L_);
+      p->abslineinfo = luaM_alloc_AbsLineInfo_span(g, L_, {}, static_cast<size_t>(n), true);
+      lua_unlock(L_);
+      for (AbsLineInfo& a : p->abslineinfo)
+      {
+        a.pc = r_.get_int();
+        a.line = r_.get_int();
+      }
+      f.n = r_.get_count();
+      f.i = 0;
+      lua_lock(L_);
+      p->locvars = luaM_alloc_LocVar_span(g, L_, {}, static_cast<size_t>(f.n), true);
+      for (LocVar& lv : p->locvars)
+        lv = LocVar{nullptr, 0, 0};
+      lua_unlock(L_);
+      f.part = Part::LocVar;
+      break;
+    }
+    default: /* Part::LocVar */
+    {
+      LocVar& lv = p->locvars[static_cast<size_t>(f.i)];
+      lv.varname = name_part(p);
+      lv.startpc = r_.get_int();
+      lv.endpc = r_.get_int();
+      f.i++;
+      break;
+    }
+    }
+    if (f.i < f.n)
+    {
+      frames_.set_top(f);
+      return Next::Read;
+    }
+    push_closure(holder); /* the prototype is complete */
+    return done();
+  }
+
+  /* ---- closures ---- */
+
+  Next closure_advance(Frame f)
+  {
+    if (f.part == Part::Proto)
+      return proto_tag();
+    LClosure* cl = static_cast<LClosure*>(f.p);
+    while (f.i <= f.n)
+    {
+      char tag = r_.get_byte();
+      if (tag == TAG_UPVAL_NEW || tag == TAG_UPVAL_OPEN || tag == TAG_UPVAL_PERM)
+      {
+        lua_Integer uid = ++refcount_;
+        push_closure(cl);
+        lua_rawseti(L_, UPS, uid);
+        lua_pushinteger(L_, f.i);
+        lua_rawseti(L_, UPS, -uid);
+        f.part = (tag == TAG_UPVAL_NEW) ? Part::UpNew : (tag == TAG_UPVAL_OPEN) ? Part::UpOpen : Part::UpPerm;
+        frames_.set_top(f);
+        return Next::Read;
+      }
+      if (tag != TAG_UPVAL_REF)
+        r_.invalid();
+      lua_Integer uid = r_.get_i64();
+      lua_rawgeti(L_, UPS, uid);
+      lua_rawgeti(L_, UPS, -uid);
+      if (!lua_isfunction(L_, -2) || !lua_isinteger(L_, -1))
+        r_.invalid();
+      push_closure(cl);
+      lua_upvaluejoin(L_, -1, f.i, -3, static_cast<int>(lua_tointeger(L_, -2)));
+      lua_pop(L_, 3);
+      f.i++;
+    }
+    push_closure(cl);
+    return done();
+  }
+
+  Next closure_part(Frame f)
+  {
+    switch (f.part)
+    {
+    case Part::Proto:
+    {
+      TValue h = getslot(L_, L_->top - 1);
+      push_new_closure(L_, clLvalue(&h)->p);
+      lua_remove(L_, -2); /* the prototype's holder */
+      register_top(f.id);
+      TValue c = getslot(L_, L_->top - 1);
+      LClosure* cl = clLvalue(&c);
+      lua_pop(L_, 1);
+      lua_Integer nup = r_.get_i64();
+      if (nup != static_cast<lua_Integer>(cl->upvals.size()))
+        r_.invalid();
+      f.p = cl;
+      f.n = static_cast<int>(nup);
+      f.i = 1;
+      f.part = Part::Upvals;
+      break;
+    }
+    case Part::UpNew:
+    {
+      push_closure(static_cast<LClosure*>(f.p));
+      lua_insert(L_, -2);
+      lua_setupvalue(L_, -2, f.i);
+      lua_pop(L_, 1);
+      break;
+    }
+    case Part::UpOpen:
+    {
+      lua_State* L1 = lua_tothread(L_, -1);
+      lua_Integer level = r_.get_i64();
+      if (L1 == nullptr || L1 == L_ || (L1->status == LUA_OK && L1->ci != &L1->base_ci) ||
+          level < 0 || level >= L1->top)
+        r_.invalid();
+      FindUpval fu;
+      fu.level = level;
+      if (luaD_rawrunprotected(L1, &fu) != LUA_OK)
+        memory_error(L_);
+      LClosure* cl = static_cast<LClosure*>(f.p);
+      cl->upvals[static_cast<size_t>(f.i - 1)] = fu.uv;
+      luaC_objbarrier(L_, cl, fu.uv);
+      lua_pop(L_, 1);
+      break;
+    }
+    default: /* Part::UpPerm */
+    {
+      /*
+      ** A variable that is a permanent: the permanents give, for its key, a
+      ** Lua function whose first upvalue is the variable to share.
+      */
+      lua_pushvalue(L_, -1);
+      lua_rawget(L_, PERMS);
+      if (lua_isnil(L_, -1))
+      {
+        luaL_tolstring(L_, -2);
+        luaL_errori(L_, lt::bad_permanent_value_for_key_s);
+      }
+      if (lua_type(L_, -1) != LUA_TFUNCTION || lua_iscfunction(L_, -1) ||
+          lua_getupvaluei(L_, -1, 1) == nullptr)
+      {
+        lua_pushistringref(L_, lt::a_function_capturing_the_variable);
+        lua_pushstring(L_, luaL_typename(L_, -2));
+        luaL_errori(L_, lt::bad_permanent_value_s_expected_got_s);
+      }
+      lua_pop(L_, 1); /* the upvalue's value */
+      push_closure(static_cast<LClosure*>(f.p));
+      lua_upvaluejoin(L_, -1, f.i, -2, 1);
+      lua_pop(L_, 3);
+      break;
+    }
+    }
+    if (f.part != Part::Upvals)
+      f.i++;
+    f.part = Part::Upvals;
+    frames_.set_top(f);
+    return Next::Advance;
+  }
+
+  /* ---- threads ---- */
+
+  /*
+  ** The thread is valid at every point a collection can see it: its stack is
+  ** filled while it has only its base frame, then the frames are read into
+  ** spare CallInfos past 'ci' (only an emergency collection, which keeps
+  ** them, can run meanwhile) and become part of the thread in one step.
+  */
+  void start_thread(lua_Integer id)
+  {
+    lua_State* L1 = lua_newthread(L_);
+    register_top(id);
+    lua_pop(L_, 1);
+    char status = r_.get_byte();
+    lua_Integer top = r_.get_i64();
+    lua_Integer maxtop = r_.get_i64();
+    if (!valid_status(status) || top < 1 || maxtop < top ||
+        maxtop >= LUAI_MAXSTACK - LUA_MINSTACK)
+      r_.invalid();
+    int need = static_cast<int>(maxtop) + LUA_MINSTACK;
+    if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
+      memory_error(L_);
+    L1->top = top;
+    Frame f;
+    f.kind = Build::Thread;
+    f.part = Part::Slots;
+    f.type = status;
+    f.a = top;
+    f.b = maxtop;
+    f.p = L1;
+    frames_.push(f);
+  }
+
+  Next thread_advance(Frame f)
+  {
+    lua_State* L1 = static_cast<lua_State*>(f.p);
+    if (f.i < f.a)
+      return Next::Read;
+    lua_Integer nframes = r_.get_i64();
+    if (nframes < 0 || (nframes > 0 && f.type == LUA_OK))
+      r_.invalid();
+    if (nframes > 0)
+      read_frames(L1, nframes, f.a, f.b);
+    read_tbc(L1, nframes, f.a);
+    char kind = r_.get_byte();
+    if (kind == 0)
+    {
+      L1->status = static_cast<TStatus>(f.type);
+      push_thread(L1);
+      return done();
+    }
+    if (kind != 1)
+      r_.invalid();
+    f.a = r_.get_i64();
+    f.b = r_.get_int();
+    f.c = r_.get_int();
+    f.d = r_.get_int();
+    f.e = r_.get_byte();
+    if ((f.a & ~(LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE | LUA_MASKCOUNT)) != 0 ||
+        f.a == 0 || f.b < 0 || f.c < 0 || (f.e != 0 && f.e != 1))
+      r_.invalid();
+    f.part = Part::HookFn;
+    frames_.set_top(f);
+    return Next::Read;
+  }
+
+  Next thread_part(Frame f)
+  {
+    lua_State* L1 = static_cast<lua_State*>(f.p);
+    if (f.part == Part::Slots)
+    {
+      copyslot(L1, static_cast<StkId>(f.i), L_, L_->top - 1);
+      lua_pop(L_, 1);
+      f.i++;
+      frames_.set_top(f);
+      return Next::Advance;
+    }
+    /*
+    ** A debug hook: installed as debug.sethook installs it (the Lua function
+    ** in the registry's hook table, the debug library's C hook on the
+    ** thread), then the count and last traced pc are put back.
+    */
+    if (!lua_isfunction(L_, -1) && !lua_isnil(L_, -1))
+      r_.invalid();
+    if (!luaL_getsubtablei(L_, LUA_REGISTRYINDEX, lt::_HOOKKEY))
+    { /* as debug.sethook creates it */
+      lua_pushistringref(L_, lt::k_char);
+      lua_setfieldi(L_, -2, lt::mm_mode);
+      lua_pushvalue(L_, -1);
+      lua_setmetatable(L_, -2);
+    }
+    push_thread(L1);
+    lua_pushvalue(L_, -3);
+    lua_rawset(L_, -3);
+    lua_pop(L_, 2);
+    lua_sethook(L1, luaL_debughook(), static_cast<int>(f.a), static_cast<int>(f.b));
+    L1->hookcount = static_cast<int>(f.c);
+    L1->oldpc = static_cast<int>(f.d);
+    L1->allowhook = static_cast<lu_byte>(f.e);
+    L1->status = static_cast<TStatus>(f.type);
+    push_thread(L1);
+    return done();
+  }
+
+  /* frames are read into spare CallInfos and attached in one step */
+  void read_frames(lua_State* L1, lua_Integer nframes, lua_Integer top, lua_Integer maxtop)
+  {
+    int need = static_cast<int>(maxtop) + LUA_MINSTACK;
+    /* a collection may have shrunk the stack while the values were read */
+    if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
+      memory_error(L_);
+    CallInfo* last = L1->ci;
+    for (lua_Integer k = 0; k < nframes; k++)
+    {
+      CallInfo* ci = last->next;
+      if (ci == nullptr)
+      {
+        L1->ci = last;
+        ci = luaE_extendCI(L1, 0);
+        L1->ci = &L1->base_ci;
+        if (ci == nullptr)
+          memory_error(L_);
+      }
+      ci->func = r_.get_i64();
+      ci->top = r_.get_i64();
+      ci->savedpc = static_cast<int>(r_.get_i64());
+      ci->nextraargs = static_cast<int>(r_.get_i64());
+      ci->callstatus = static_cast<l_uint32>(r_.get_i64());
+      ci->old_errfunc = r_.get_i64();
+      ci->ctx = r_.get_i64();
+      ci->funcidx = static_cast<int>(r_.get_i64());
+      ci->nyield = static_cast<int>(r_.get_i64());
+      ci->nres = static_cast<int>(r_.get_i64());
+      ci->k = nullptr;
+      ci->trap = 0;
+      if (ci->func < 0 || ci->func >= top || ci->top < ci->func || ci->top > maxtop ||
+          !valid_frame(L1, ci))
+        r_.invalid();
+      last = ci;
+    }
+    L1->ci = last;
+  }
+
+  /*
+  ** To-be-closed variables are registered once the thread's stack and frames
+  ** are complete, with the engine's own luaF_newtbcupval, run protected on
+  ** the thread; an error there is raised on the caller.
+  */
+  void read_tbc(lua_State* L1, lua_Integer nframes, lua_Integer top)
+  {
+    lua_Integer ntbc = r_.get_i64();
+    if (ntbc < 0 || ntbc > top || (ntbc > 0 && nframes == 0))
+      r_.invalid();
+    StkId prev = 0;
+    for (lua_Integer k = 0; k < ntbc; k++)
+    {
+      lua_Integer level = r_.get_i64();
+      if (level <= prev || level >= top)
+        r_.invalid();
+      prev = level;
+      NewTbc nt;
+      nt.level = level;
+      TStatus st = luaD_rawrunprotected(L1, &nt);
+      if (st == LUA_ERRMEM)
+        memory_error(L_);
+      if (st != LUA_OK)
+      {
+        lua_xmove(L1, L_, 1);
+        lua_error(L_);
+      }
+    }
   }
 };
 
-/*
-** To-be-closed variables are registered once the thread's stack and frames
-** are complete, with the engine's own luaF_newtbcupval, run protected on
-** the thread; an error there is raised on the caller.
-*/
-static void unpersist_tbc(Unpersist& U, lua_State* L1, lua_Integer nframes, lua_Integer top)
-{
-  lua_State* L = U.r.L;
-  lua_Integer ntbc = U.r.get_i64();
-  if (ntbc < 0 || ntbc > top || (ntbc > 0 && nframes == 0))
-    U.r.invalid();
-  StkId prev = 0;
-  for (lua_Integer k = 0; k < ntbc; k++)
-  {
-    lua_Integer level = U.r.get_i64();
-    if (level <= prev || level >= top)
-      U.r.invalid();
-    prev = level;
-    NewTbc nt;
-    nt.level = level;
-    TStatus st = luaD_rawrunprotected(L1, &nt);
-    if (st == LUA_ERRMEM)
-      memory_error(L);
-    if (st != LUA_OK)
-    {
-      lua_xmove(L1, L, 1);
-      lua_error(L);
-    }
-  }
-}
+/* }====================================================== */
 
-static void unpersist(Unpersist& U)
+/* checks the header and sets up the stack for a Restorer (3: refs; 4: upvalues) */
+static void begin_restore(lua_State* L, Restorer& R)
 {
-  lua_State* L = U.r.L;
-  luaL_checkstacki(L, 5, std::nullopt);
-  char tag = U.r.get_byte();
-  switch (tag)
-  {
-  case TAG_NIL:
-    lua_pushnil(L);
-    return;
-  case TAG_FALSE:
-    lua_pushboolean(L, 0);
-    return;
-  case TAG_TRUE:
-    lua_pushboolean(L, 1);
-    return;
-  case TAG_INTEGER:
-    lua_pushinteger(L, U.r.get_i64());
-    return;
-  case TAG_FLOAT:
-  {
-    lua_Number n;
-    U.r.get_raw(&n, sizeof(n));
-    lua_pushnumber(L, n);
-    return;
-  }
-  case TAG_REF:
-  {
-    lua_Integer id = U.r.get_i64();
-    lua_rawgeti(L, U.refs, id);
-    if (lua_isnil(L, -1))
-      U.r.invalid();
-    return;
-  }
-  case TAG_PERM:
-  {
-    char type = U.r.get_byte();
-    lua_Integer id = ++U.refcount;
-    unpersist(U); /* the permanent key */
-    lua_pushvalue(L, -1);
-    lua_rawget(L, U.perms);
-    if (lua_isnil(L, -1))
-    {
-      luaL_tolstring(L, -2);
-      luaL_errori(L, lt::bad_permanent_value_for_key_s);
-    }
-    if (lua_type(L, -1) != type)
-    {
-      lua_pushstring(L, lua_typename(L, type));
-      lua_pushstring(L, luaL_typename(L, -2));
-      luaL_errori(L, lt::bad_permanent_value_s_expected_got_s);
-    }
-    lua_remove(L, -2);
-    register_object(U, id);
-    return;
-  }
-  case TAG_STRING:
-  case TAG_TABLE:
-  case TAG_LCLOSURE:
-  case TAG_THREAD:
-  case TAG_SPECIAL:
-    break;
-  case TAG_MAINTHREAD:
-    if (!U.host) /* a script never gets the main thread from a stream */
-      U.r.invalid();
-    break;
-  default:
-    U.r.invalid();
-  }
-
-  if (U.depth >= MAX_DEPTH)
-    luaL_errori(L, lt::persisted_data_is_nested_too_deeply);
-  U.depth++;
-  lua_Integer id = ++U.refcount;
-  switch (tag)
-  {
-  case TAG_STRING:
-  {
-    lua_Integer n = U.r.get_i64();
-    if (n < 0)
-      U.r.invalid();
-    byte_view s = U.r.get_bytes(static_cast<size_t>(n));
-    lua_pushlstring(L, s, 0, s.size());
-    register_object(U, id);
-    break;
-  }
-  case TAG_TABLE:
-    unpersist_table(U, id);
-    break;
-  case TAG_LCLOSURE:
-    unpersist_lclosure(U, id);
-    break;
-  case TAG_SPECIAL:
-    unpersist_special(U, id);
-    break;
-  case TAG_MAINTHREAD:
-    lua_pushthread(mainthread(L->l_G));
-    lua_xmove(mainthread(L->l_G), L, 1);
-    register_object(U, id);
-    break;
-  default:
-    unpersist_thread(U, id);
-    break;
-  }
-  U.depth--;
+  const byte_view header = lt::styx_header;
+  if (R.r_.data.size() < header.size() || R.r_.data.substr(0, header.size()) != header)
+    R.r_.invalid();
+  R.r_.pos = header.size();
+  lua_createtable(L, 0, 0);
+  lua_createtable(L, 0, 0);
 }
 
 /* persist([perms,] value) */
@@ -1436,17 +2130,17 @@ static int styx_persist(lua_State* L)
     lua_createtable(L, 0, 0);
     lua_insert(L, 1);
   }
-  lua_createtable(L, 0, 0);
-  Persist P;
-  P.L = L;
-  P.perms = 1;
-  P.refs = 3;
-  luaL_buffinit(L, &P.B);
-  luaL_addlstring(&P.B, lt::styx_header, 0, lt::styx_header.size());
-  lua_pushvalue(L, 2);
-  persist(P);
-  lua_pop(L, 1);
-  luaL_pushresult(&P.B);
+  lua_createtable(L, 0, 0); /* 3: object -> reference id */
+  TValue perms = getslot(L, L->ci->func + 1);
+  luaL_Buffer B;
+  luaL_buffinit(L, &B);
+  luaL_addlstring(&B, lt::styx_header, 0, lt::styx_header.size());
+  {
+    Walker w(L, hvalue(&perms), &B, 3);
+    TValue v = getslot(L, L->ci->func + 2);
+    w.root(v, &lt::path_root);
+  }
+  luaL_pushresult(&B);
   return 1;
 }
 
@@ -1463,16 +2157,11 @@ static int styx_unpersist(lua_State* L)
     lua_createtable(L, 0, 0);
     lua_insert(L, 1);
   }
-  Unpersist U{Reader{L, luaL_checklstring(L, 2)}, 1, 3, 4};
-  const byte_view header = lt::styx_header;
-  if (U.r.data.size() < header.size() || U.r.data.substr(0, header.size()) != header)
-    U.r.invalid();
-  U.r.pos = header.size();
-  lua_createtable(L, 0, 0);
-  lua_createtable(L, 0, 0);
-  unpersist(U);
-  if (U.r.pos != U.r.data.size())
-    U.r.invalid();
+  Restorer R(L, luaL_checklstring(L, 2), false);
+  begin_restore(L, R);
+  R.value();
+  if (R.r_.pos != R.r_.data.size())
+    R.r_.invalid();
   return 1;
 }
 
@@ -1493,629 +2182,15 @@ static const luaL_RegCFI funcs[] = {
 
 /*
 ** {======================================================
-** Host side persist: the host persists a value, or the whole state, of a
-** state that is not running. The walk reads the objects directly, keeps
-** its bookkeeping (references, pending work, paths) in host memory and
-** sends the stream to a writer, so it allocates nothing in the state, runs
-** no Lua code and never triggers a collection: the result is a consistent
-** snapshot, also of a state at its memory cap. It keeps its own work stack,
-** so it has no depth limit. The stream is the same as the script path's.
+** The host side. A host persist works on a state that is not running: it
+** allocates nothing in the state, runs no Lua code and starts no
+** collection, so the result is a consistent snapshot, also of a state at
+** its memory cap. A host restore runs protected on the idle state; what it
+** restores is charged through the state's allocator, and a state's registry
+** and type metatables replace the state's own only after the whole stream
+** was read, so a failed restore leaves the state as it was.
 ** =======================================================
 */
-
-struct HostError
-{
-  std::string message;
-};
-
-/* a value as stored in the walker's records (TValue copies are named) */
-struct Slot
-{
-  Value v{0, nullptr};
-  lu_byte tt = LUA_VNIL;
-  static Slot of(const TValue& o) { return Slot{o.value_, o.tt_}; }
-  TValue get() const { return TValue{v, tt}; }
-};
-
-class HostPersist
-{
-public:
-  HostPersist(lua_State* L, Table* perms, lua_Writer* w) : L_(L), perms_(perms), w_(w) {}
-
-  void root(const TValue& v, byte_view label)
-  {
-    paths_.push_back(PathRec{-1, Step::Value, {}, nullptr, 0, label});
-    push_value(v, static_cast<int>(paths_.size()) - 1);
-    run();
-  }
-
-  void byte(char c) { buf_.push_back(c); }
-  void i64(lua_Integer v) { buf_.append(reinterpret_cast<const char*>(&v), sizeof(v)); }
-  void raw(const void* p, size_t n) { buf_.append(static_cast<const char*>(p), n); }
-
-  void flush(bool end)
-  {
-    if (!buf_.empty())
-    {
-      if (w_->write(L_, byte_view(buf_.data(), buf_.size())) != 0)
-        throw HostError{"persist output stopped by the writer"};
-      buf_.clear();
-    }
-    if (end && w_->write(L_, std::nullopt) != 0)
-      throw HostError{"persist output stopped by the writer"};
-  }
-
-private:
-  struct PathRec
-  {
-    int parent;
-    Step step;
-    Slot key;            /* Value, Key */
-    const Proto* proto;  /* Upvalue: names come from the prototype */
-    int n;               /* Upvalue number, Stack slot */
-    byte_view label;     /* root */
-  };
-
-  enum class Op : char
-  {
-    Value,
-    Byte,
-    I64,
-    Raw,
-    Proto,
-    Upvalue,
-    ThreadTail,
-  };
-
-  struct Task
-  {
-    Op op;
-    int path;
-    Slot v;
-    lua_Integer i;
-    const void* p;
-  };
-
-  lua_State* L_;
-  Table* perms_;
-  lua_Writer* w_;
-  std::string buf_;
-  std::unordered_map<const void*, lua_Integer> refs_;
-  lua_Integer refcount_ = 0;
-  std::vector<PathRec> paths_;
-  std::vector<Task> tasks_;
-
-  static constexpr size_t FLUSH_SIZE = 64 * 1024;
-
-  int path(int parent, Step step, const TValue* key = nullptr, const Proto* proto = nullptr, int n = 0)
-  {
-    PathRec r{parent, step, {}, proto, n, {}};
-    if (key != nullptr)
-      r.key = Slot::of(*key);
-    paths_.push_back(r);
-    return static_cast<int>(paths_.size()) - 1;
-  }
-
-  void push_value(const TValue& v, int p) { tasks_.push_back(Task{Op::Value, p, Slot::of(v), 0, nullptr}); }
-  void push_byte(char c) { tasks_.push_back(Task{Op::Byte, 0, {}, c, nullptr}); }
-  void push_i64(lua_Integer v) { tasks_.push_back(Task{Op::I64, 0, {}, v, nullptr}); }
-  void push_raw(const void* p, size_t n)
-  {
-    tasks_.push_back(Task{Op::Raw, 0, {}, static_cast<lua_Integer>(n), p});
-  }
-  void push_tstring(TString* ts, int p)
-  {
-    TValue v{};
-    if (ts != nullptr)
-      setsvalue(L_, &v, ts);
-    else
-      setnilvalue(&v);
-    push_value(v, p);
-  }
-
-  void run()
-  {
-    while (!tasks_.empty())
-    {
-      Task t = tasks_.back();
-      tasks_.pop_back();
-      switch (t.op)
-      {
-      case Op::Value:
-      {
-        TValue v = t.v.get();
-        value(v, t.path);
-        break;
-      }
-      case Op::Byte:
-        byte(static_cast<char>(t.i));
-        break;
-      case Op::I64:
-        i64(t.i);
-        break;
-      case Op::Raw:
-        raw(t.p, static_cast<size_t>(t.i));
-        break;
-      case Op::Proto:
-        proto(static_cast<const Proto*>(t.p));
-        break;
-      case Op::Upvalue:
-        upvalue(static_cast<const LClosure*>(t.p), static_cast<int>(t.i), t.path);
-        break;
-      case Op::ThreadTail:
-        thread_tail(static_cast<lua_State*>(const_cast<void*>(t.p)), t.path);
-        break;
-      }
-      if (buf_.size() >= FLUSH_SIZE)
-        flush(false);
-    }
-  }
-
-  [[noreturn]] void fail(const std::string& what, int p)
-  {
-    throw HostError{what + " (at " + path_text(p) + ")"};
-  }
-
-  static std::string str(byte_view b) { return std::string(b.data(), b.size()); }
-
-  std::string key_text(const TValue& k)
-  {
-    switch (ttype(&k))
-    {
-    case LUA_TSTRING:
-    {
-      byte_view s = tsvalue(&k)->data.view();
-      return is_name(s) ? "." + str(s) : "[\"" + str(s) + "\"]";
-    }
-    case LUA_TNUMBER:
-    {
-      byte_inline<LUA_N2SBUFFSZ> b;
-      size_t len = luaO_tostringbuff(&k, b);
-      return "[" + str(b.view().substr(0, len)) + "]";
-    }
-    case LUA_TBOOLEAN:
-      return tagisfalse(k.tt_) ? "[false]" : "[true]";
-    default:
-      return "[<" + str(ttypename(ttype(&k))) + ">]";
-    }
-  }
-
-  std::string path_text(int p)
-  {
-    if (p < 0)
-      return "root";
-    const PathRec& r = paths_[static_cast<size_t>(p)];
-    if (r.parent < 0)
-      return str(r.label);
-    std::string up = path_text(r.parent);
-    switch (r.step)
-    {
-    case Step::Value:
-    {
-      TValue k = r.key.get();
-      return up + key_text(k);
-    }
-    case Step::Key:
-    {
-      TValue k = r.key.get();
-      return up + "<key " + str(ttypename(ttype(&k))) + ">";
-    }
-    case Step::Metatable:
-      return up + "<metatable>";
-    case Step::Upvalue:
-    {
-      const TString* name = r.proto->upvalues[static_cast<size_t>(r.n - 1)].name;
-      if (name != nullptr && name->data.size() > 0)
-        return up + "<upvalue " + str(name->data.view()) + ">";
-      return up + "<upvalue " + std::to_string(r.n) + ">";
-    }
-    case Step::Stack:
-      return up + "<stack " + std::to_string(r.n) + ">";
-    case Step::Special:
-      return up + "<__persist>";
-    case Step::PermKey:
-      return up + "<permanent key>";
-    case Step::Hook:
-      return up + "<hook>";
-    }
-    return up;
-  }
-
-  /* reference or permanent: true if the object was fully written */
-  bool begin_object(const TValue& v, const void* id, int p)
-  {
-    auto it = refs_.find(id);
-    if (it != refs_.end())
-    {
-      byte(TAG_REF);
-      i64(it->second);
-      return true;
-    }
-    refs_.emplace(id, ++refcount_);
-    if (perms_ != nullptr)
-    {
-      TValue key{};
-      lu_byte tag = perms_->luaH_get(&v, &key);
-      if (!tagisempty(tag) && !ttisnil(&key))
-      {
-        byte(TAG_PERM);
-        byte(static_cast<char>(ttype(&v)));
-        push_value(key, path(p, Step::PermKey));
-        return true;
-      }
-    }
-    return false;
-  }
-
-  void value(const TValue& v, int p)
-  {
-    switch (ttype(&v))
-    {
-    case LUA_TNIL:
-      byte(TAG_NIL);
-      return;
-    case LUA_TBOOLEAN:
-      byte(tagisfalse(v.tt_) ? TAG_FALSE : TAG_TRUE);
-      return;
-    case LUA_TNUMBER:
-      if (ttisinteger(&v))
-      {
-        byte(TAG_INTEGER);
-        i64(ivalue(&v));
-      }
-      else
-      {
-        lua_Number n = fltvalue(&v);
-        byte(TAG_FLOAT);
-        raw(&n, sizeof(n));
-      }
-      return;
-    case LUA_TLIGHTUSERDATA:
-      if (!begin_object(v, v.value_.ref, p))
-        fail("persisting a userdata value is not supported yet", p);
-      return;
-    case LUA_TSTRING:
-    case LUA_TTABLE:
-    case LUA_TFUNCTION:
-    case LUA_TTHREAD:
-    case LUA_TUSERDATA:
-      break;
-    default:
-      fail("cannot persist a " + str(ttypename(ttype(&v))) + " value", p);
-    }
-    if (begin_object(v, v.value_.ref, p))
-      return;
-    switch (ttype(&v))
-    {
-    case LUA_TSTRING:
-    {
-      byte_view s = tsvalue(&v)->data.view();
-      byte(TAG_STRING);
-      i64(static_cast<lua_Integer>(s.size()));
-      raw(s.data(), s.size());
-      return;
-    }
-    case LUA_TUSERDATA:
-      fail("persisting a userdata value is not supported yet", p);
-    case LUA_TTABLE:
-      table(hvalue(&v), p);
-      return;
-    case LUA_TFUNCTION:
-      if (!ttisLclosure(&v))
-        fail("cannot persist a C function", p);
-      closure(clLvalue(&v), p);
-      return;
-    default:
-      thread(thvalue(&v), p);
-      return;
-    }
-  }
-
-  /* the raw '__persist' field of a metatable (nil if absent) */
-  static TValue persist_field(const Table* mt)
-  {
-    TValue r{};
-    setnilvalue(&r);
-    for (int i = 0; i < sizenode(mt); i++)
-    {
-      const Node* n = gnode(mt, static_cast<size_t>(i));
-      if (!isempty(&n->val) && (n->key_tt & NOVARIANT_MASK) == LUA_TSTRING &&
-          static_cast<TString*>(n->key_val.ref)->data.view() == lt::mm_persist)
-      {
-        copyobj(&r, &n->val);
-        break;
-      }
-    }
-    return r;
-  }
-
-  void table(Table* h, int p)
-  {
-    if (h->metatable != nullptr)
-    {
-      TValue f = persist_field(h->metatable);
-      switch (ttype(&f))
-      {
-      case LUA_TNIL:
-        break;
-      case LUA_TBOOLEAN:
-        if (tagisfalse(f.tt_))
-          fail("cannot persist a table: its __persist is false", p);
-        break;
-      case LUA_TFUNCTION:
-        fail("a __persist function is not supported yet in a host persist", p);
-      default:
-        fail("__persist must be a boolean or a function", p);
-      }
-    }
-    byte(TAG_TABLE);
-    i64(h->asize());
-    i64(allocsizenode(h));
-    i64(h->asize() > 0 ? h->lenhint : 0);
-    /* in the order of 'next': array part, then hash part (pushed reversed) */
-    push_byte(TAG_NIL);
-    for (int i = sizenode(h) - 1; i >= 0; i--)
-    {
-      Node* n = gnode(h, static_cast<size_t>(i));
-      if (isempty(&n->val))
-        continue;
-      TValue k{};
-      getnodekey(L_, &k, n);
-      push_value(n->val, path(p, Step::Value, &k));
-      push_value(k, path(p, Step::Key, &k));
-    }
-    for (int i = h->asize() - 1; i >= 0; i--)
-    {
-      lu_byte tag = getArrTag(h, i);
-      if (tagisempty(tag))
-        continue;
-      TValue k, val;
-      setivalue(&k, i + 1);
-      farr2val(h, i, tag, &val);
-      push_value(val, path(p, Step::Value, &k));
-      push_value(k, path(p, Step::Key, &k));
-    }
-    if (h->metatable != nullptr)
-    {
-      TValue mt{};
-      sethvalue(L_, &mt, h->metatable);
-      push_value(mt, path(p, Step::Metatable));
-    }
-    else
-      push_byte(TAG_NIL);
-  }
-
-  void closure(LClosure* cl, int p)
-  {
-    byte(TAG_LCLOSURE);
-    int nup = static_cast<int>(cl->upvals.size());
-    for (int i = nup; i >= 1; i--)
-      tasks_.push_back(Task{Op::Upvalue, path(p, Step::Upvalue, nullptr, cl->p, i), {}, i, cl});
-    push_i64(nup);
-    tasks_.push_back(Task{Op::Proto, p, {}, 0, cl->p});
-  }
-
-  void upvalue(const LClosure* cl, int i, int p)
-  {
-    UpVal* uv = cl->upvals[static_cast<size_t>(i - 1)];
-    auto it = refs_.find(uv);
-    if (it != refs_.end())
-    {
-      byte(TAG_UPVAL_REF);
-      i64(it->second);
-      return;
-    }
-    refs_.emplace(uv, ++refcount_);
-    if (perms_ != nullptr) /* the variable may be a permanent */
-    {
-      TValue id, key;
-      setpvalue(&id, static_cast<void*>(uv));
-      lu_byte tag = perms_->luaH_get(&id, &key);
-      if (!tagisempty(tag) && !ttisnil(&key))
-      {
-        byte(TAG_UPVAL_PERM);
-        push_value(key, path(p, Step::PermKey));
-        return;
-      }
-    }
-    if (upisopen(uv) && !is_running(uv->owner))
-    {
-      byte(TAG_UPVAL_OPEN);
-      push_i64(uv->stkid);
-      TValue th{};
-      setthvalue(L_, &th, uv->owner);
-      push_value(th, p);
-      return;
-    }
-    byte(TAG_UPVAL_NEW);
-    push_value(upvalgetval(uv), p);
-  }
-
-  void proto(const Proto* f)
-  {
-    auto it = refs_.find(f);
-    if (it != refs_.end())
-    {
-      byte(TAG_PROTO_REF);
-      i64(it->second);
-      return;
-    }
-    refs_.emplace(f, ++refcount_);
-    byte(TAG_PROTO_NEW);
-    i64(f->linedefined);
-    i64(f->lastlinedefined);
-    i64(f->numparams);
-    byte(static_cast<char>(f->flag & ~PF_FIXED));
-    i64(f->maxstacksize);
-    i64(static_cast<lua_Integer>(f->code.size()));
-    raw(f->code.data(), f->code.size() * sizeof(Instruction));
-    i64(static_cast<lua_Integer>(f->k.size()));
-    /* the rest, in stream order, pushed reversed */
-    std::vector<Task> seq;
-    for (const TValue& k : f->k)
-      seq.push_back(Task{Op::Value, -1, Slot::of(k), 0, nullptr});
-    seq.push_back(Task{Op::I64, 0, {}, static_cast<lua_Integer>(f->upvalues.size()), nullptr});
-    for (const Upvaldesc& uv : f->upvalues)
-    {
-      seq.push_back(Task{Op::Byte, 0, {}, uv.instack, nullptr});
-      seq.push_back(Task{Op::I64, 0, {}, uv.idx, nullptr});
-      seq.push_back(Task{Op::Byte, 0, {}, uv.kind, nullptr});
-      seq.push_back(name_task(uv.name));
-    }
-    seq.push_back(Task{Op::I64, 0, {}, static_cast<lua_Integer>(f->p.size()), nullptr});
-    for (const Proto* nested : f->p)
-      seq.push_back(Task{Op::Proto, -1, {}, 0, nested});
-    seq.push_back(name_task(f->source));
-    seq.push_back(Task{Op::I64, 0, {}, static_cast<lua_Integer>(f->lineinfo.size()), nullptr});
-    seq.push_back(Task{Op::Raw, 0, {}, static_cast<lua_Integer>(f->lineinfo.size()), f->lineinfo.data()});
-    seq.push_back(Task{Op::I64, 0, {}, static_cast<lua_Integer>(f->abslineinfo.size()), nullptr});
-    for (const AbsLineInfo& a : f->abslineinfo)
-    {
-      seq.push_back(Task{Op::I64, 0, {}, a.pc, nullptr});
-      seq.push_back(Task{Op::I64, 0, {}, a.line, nullptr});
-    }
-    seq.push_back(Task{Op::I64, 0, {}, static_cast<lua_Integer>(f->locvars.size()), nullptr});
-    for (const LocVar& lv : f->locvars)
-    {
-      seq.push_back(name_task(lv.varname));
-      seq.push_back(Task{Op::I64, 0, {}, lv.startpc, nullptr});
-      seq.push_back(Task{Op::I64, 0, {}, lv.endpc, nullptr});
-    }
-    tasks_.insert(tasks_.end(), seq.rbegin(), seq.rend());
-  }
-
-  Task name_task(TString* ts)
-  {
-    TValue v{};
-    if (ts != nullptr)
-      setsvalue(L_, &v, ts);
-    else
-      setnilvalue(&v);
-    return Task{Op::Value, -1, Slot::of(v), 0, nullptr};
-  }
-
-  static bool is_running(lua_State* T)
-  {
-    return T->status == LUA_OK && T->ci != &T->base_ci;
-  }
-
-  void thread(lua_State* T, int p)
-  {
-    if (T == mainthread(L_->l_G))
-    {
-      byte(TAG_MAINTHREAD);
-      return;
-    }
-    if (is_running(T))
-      fail("cannot persist a running thread", p);
-    StkId maxtop = T->top;
-    if (T->ci != &T->base_ci)
-    {
-      for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
-      {
-        if (ci->k != nullptr)
-          fail("cannot persist a thread with a continuation function", p);
-        if (ci->callstatus & (CIST_HOOKED | CIST_HOOKYIELD | CIST_FIN | CIST_TBC | CIST_CLSRET))
-          fail("cannot persist a thread with a hook or finalizer call", p);
-        if (ci->top > maxtop)
-          maxtop = ci->top;
-        if (ci == T->ci)
-          break;
-      }
-    }
-    byte(TAG_THREAD);
-    byte(static_cast<char>(T->status));
-    i64(T->top);
-    i64(maxtop);
-    tasks_.push_back(Task{Op::ThreadTail, p, {}, 0, T});
-    for (StkId i = T->top - 1; i >= 0; i--)
-      push_value(getslot(T, i), path(p, Step::Stack, nullptr, nullptr, static_cast<int>(i)));
-  }
-
-  void thread_tail(lua_State* T, int p)
-  {
-    lua_Integer nframes = 0;
-    if (T->ci != &T->base_ci)
-      for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
-      {
-        nframes++;
-        if (ci == T->ci)
-          break;
-      }
-    i64(nframes);
-    if (nframes > 0)
-      for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
-      {
-        i64(ci->func);
-        i64(ci->top);
-        i64(ci->savedpc);
-        i64(ci->nextraargs);
-        i64(ci->callstatus);
-        i64(ci->old_errfunc);
-        i64(ci->ctx);
-        i64(ci->funcidx);
-        i64(ci->nyield);
-        i64(ci->nres);
-        if (ci == T->ci)
-          break;
-      }
-    i64(T->ntbc);
-    for (int k = 0; k < T->ntbc; k++)
-      i64(T->tbc[k]);
-    hook(T, p);
-  }
-
-  /* the raw value of a string field of a table (nil if absent) */
-  static TValue string_field(const Table* t, byte_view name)
-  {
-    TValue r{};
-    setnilvalue(&r);
-    for (int i = 0; i < sizenode(t); i++)
-    {
-      const Node* n = gnode(t, static_cast<size_t>(i));
-      if (!isempty(&n->val) && (n->key_tt & NOVARIANT_MASK) == LUA_TSTRING &&
-          static_cast<TString*>(n->key_val.ref)->data.view() == name)
-      {
-        copyobj(&r, &n->val);
-        break;
-      }
-    }
-    return r;
-  }
-
-  void hook(lua_State* T, int p)
-  {
-    if (T->hook == nullptr)
-    {
-      byte(0);
-      return;
-    }
-    if (T->hook != luaL_debughook())
-      fail("a hook not set by the debug library is not supported yet", p);
-    byte(1);
-    i64(T->hookmask);
-    i64(T->basehookcount);
-    i64(T->hookcount);
-    i64(T->oldpc);
-    byte(static_cast<char>(T->allowhook));
-    TValue f{};
-    setnilvalue(&f);
-    if (ttistable(&L_->l_G->l_registry))
-    {
-      TValue hooks = string_field(hvalue(&L_->l_G->l_registry), lt::_HOOKKEY);
-      if (ttistable(&hooks))
-      {
-        TValue th{};
-        setthvalue(L_, &th, T);
-        TValue v{};
-        lu_byte tag = hvalue(&hooks)->luaH_get(&th, &v);
-        if (!tagisempty(tag))
-          copyobj(&f, &v);
-      }
-    }
-    push_value(f, path(p, Step::Hook));
-  }
-};
 
 /* the value at a stack index of a state that is not running */
 static bool value_at(lua_State* L, int idx, TValue* v)
@@ -2129,25 +2204,25 @@ static bool value_at(lua_State* L, int idx, TValue* v)
 }
 
 static int host_persist(lua_State* L, int perms, lua_Writer* w, HostString* msg,
-                        const std::function<void(HostPersist&)>& body)
+                        const std::function<void(Walker&)>& body)
 {
   try
   {
     lua_State* main = mainthread(L->l_G);
     if (main->ci != &main->base_ci || L->ci != &L->base_ci)
-      throw HostError{"the state is running"};
+      throw HostError{text(lt::the_state_is_running)};
     Table* pt = nullptr;
     if (perms != 0)
     {
       TValue pv{};
       if (!value_at(L, perms, &pv) || !ttistable(&pv))
-        throw HostError{"the permanents must be a table"};
+        throw HostError{text(lt::the_permanents_must_be_a_table)};
       pt = hvalue(&pv);
     }
-    HostPersist hp(L, pt, w);
+    Walker hp(L, pt, w);
     hp.raw(lt::styx_header.data(), lt::styx_header.size());
     body(hp);
-    hp.flush(true);
+    hp.finish();
     return LUA_OK;
   }
   catch (HostError& e)
@@ -2157,13 +2232,6 @@ static int host_persist(lua_State* L, int perms, lua_Writer* w, HostString* msg,
   }
 }
 
-/*
-** Host side restore: runs protected on the idle state, with the machinery
-** of 'unpersist' (the stream may refer to the main thread); everything
-** restored is charged to the state through its allocator. A state's
-** registry and type metatables replace the state's own only after the
-** whole stream was read, so a failed restore leaves the state as it was.
-*/
 struct HostRestore
 {
   byte_view data;
@@ -2179,37 +2247,31 @@ static int host_restore_body(lua_State* L)
     lua_createtable(L, 0, 0);
     lua_replace(L, 1);
   }
-  Unpersist U{Reader{L, hr->data}, 1, 3, 4};
-  U.host = true;
-  const byte_view header = lt::styx_header;
-  if (U.r.data.size() < header.size() || U.r.data.substr(0, header.size()) != header)
-    U.r.invalid();
-  U.r.pos = header.size();
-  lua_createtable(L, 0, 0);
-  lua_createtable(L, 0, 0);
+  Restorer R(L, hr->data, true);
+  begin_restore(L, R);
   if (!hr->state)
   {
-    if (U.r.pos < U.r.data.size() && U.r.data[U.r.pos] == TAG_STATE)
-      U.r.invalid();
-    unpersist(U);
-    if (U.r.pos != U.r.data.size())
-      U.r.invalid();
+    if (R.r_.pos < R.r_.data.size() && R.r_.data[R.r_.pos] == TAG_STATE)
+      R.r_.invalid();
+    R.value();
+    if (R.r_.pos != R.r_.data.size())
+      R.r_.invalid();
     return 1;
   }
-  if (U.r.get_byte() != TAG_STATE)
-    U.r.invalid();
-  U.r.get_i64(); /* the seed: the host created the state (luaL_persistedseed) */
-  unpersist(U);  /* the registry, at 5 */
+  if (R.r_.get_byte() != TAG_STATE)
+    R.r_.invalid();
+  R.r_.get_i64(); /* the seed: the host created the state (luaL_persistedseed) */
+  R.value();      /* the registry, at 5 */
   if (!lua_istable(L, -1))
-    U.r.invalid();
+    R.r_.invalid();
   for (int t = 0; t < LUA_NUMTYPES; t++) /* the type metatables, at 6... */
   {
-    unpersist(U);
+    R.value();
     if (!lua_isnil(L, -1) && !lua_istable(L, -1))
-      U.r.invalid();
+      R.r_.invalid();
   }
-  if (U.r.pos != U.r.data.size())
-    U.r.invalid();
+  if (R.r_.pos != R.r_.data.size())
+    R.r_.invalid();
   /* the whole stream is read: the state takes the restored roots */
   global_State* g = L->l_G;
   TValue reg = getslot(L, L->ci->func + 5);
@@ -2229,7 +2291,7 @@ static int host_restore(lua_State* L, int perms, byte_view data, bool state, Hos
   lua_State* main = mainthread(L->l_G);
   if (main->ci != &main->base_ci || L->ci != &L->base_ci)
   {
-    *msg = HostString("the state is running");
+    *msg = HostString::from_bytes(lt::the_state_is_running);
     return LUA_ERRRUN;
   }
   int top = lua_gettop(L);
@@ -2237,12 +2299,12 @@ static int host_restore(lua_State* L, int perms, byte_view data, bool state, Hos
     perms = top + perms + 1;
   if (perms != 0 && (perms > top || !lua_istable(L, perms)))
   {
-    *msg = HostString("the permanents must be a table");
+    *msg = HostString::from_bytes(lt::the_permanents_must_be_a_table);
     return LUA_ERRRUN;
   }
   if (!lua_checkstack(L, 3))
   {
-    *msg = HostString("not enough memory");
+    *msg = HostString::from_bytes(lt::not_enough_memory);
     return LUA_ERRMEM;
   }
   HostRestore hr{data, state};
@@ -2256,7 +2318,7 @@ static int host_restore(lua_State* L, int perms, byte_view data, bool state, Hos
   if (st != LUA_OK)
   {
     auto m = lua_tolstring(L, -1);
-    *msg = m ? HostString::from_bytes(*m) : HostString("error object is not a string");
+    *msg = m ? HostString::from_bytes(*m) : HostString::from_bytes(lt::error_object_is_not_a_string);
     lua_settop(L, top);
   }
   return st;
@@ -2296,21 +2358,21 @@ int luaL_persistvalue(lua_State* L, int perms, int idx, lua_Writer* w, HostStrin
   TValue v{};
   if (!value_at(L, idx, &v))
   {
-    *msg = HostString("invalid value index");
+    *msg = HostString::from_bytes(lt::invalid_value_index);
     return LUA_ERRRUN;
   }
-  return host_persist(L, perms, w, msg, [&](HostPersist& hp) { hp.root(v, lt::path_root); });
+  return host_persist(L, perms, w, msg, [&](Walker& hp) { hp.root(v, &lt::path_root); });
 }
 
 int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
 {
   using namespace lua::lib;
-  return host_persist(L, perms, w, msg, [&](HostPersist& hp)
+  return host_persist(L, perms, w, msg, [&](Walker& hp)
   {
     global_State* g = L->l_G;
     hp.byte(TAG_STATE);
     hp.i64(g->seed);
-    hp.root(g->l_registry, lt::path_registry);
+    hp.root(g->l_registry, &lt::path_registry);
     for (int t = 0; t < LUA_NUMTYPES; t++)
     {
       TValue mt{};
@@ -2318,7 +2380,7 @@ int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
         sethvalue(L, &mt, g->mt[t]);
       else
         setnilvalue(&mt);
-      hp.root(mt, lt::path_type_metatable);
+      hp.root(mt, &lt::path_type_metatable);
     }
   });
 }

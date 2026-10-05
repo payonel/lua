@@ -163,18 +163,12 @@ of these raises a clear error unless it says otherwise.
 - **A `__persist` function in a host persist**: it would run Lua code in
   the state being snapshotted. Today: error ("not supported yet in a host
   persist"); `true` and `false` work.
-- **Recursion depth of the script path**: the host persist keeps its own
-  work stack (no depth limit); the script path still recurses (see
-  "Recursion depth").
 - **The main thread from the script API**: `styx.persist` reaching the
   main thread fails (it is the caller or above it); the host API persists
   it as a reference and restores it as the restoring state's main thread
   (ADR-21, ADR-24).
 
 ### Format and robustness
-- **Recursion depth**: persist and unpersist recurse on the C stack and
-  raise an error past a depth of 10000 (`MAX_DEPTH`), a limit stock Lua
-  does not have. To be replaced by an iterative walk.
 - **Untrusted input**: unpersist builds prototypes from the instructions in
   the stream without verifying them (as with binary chunks), and checks the
   thread state it reads only for consistency with itself. Do not unpersist
@@ -409,7 +403,7 @@ thread). They are for the host, not for scripts:
   state, no Lua code runs and no collection starts. The result is a
   consistent snapshot, and a state at its memory cap can be persisted (the
   test denies every allocation during the call).
-- It keeps its own work stack, so it has no depth limit.
+- It keeps its own work stack, so it has no depth limit (ADR-27).
 - The stream is the script path's format: for the same value both produce
   the same bytes (tested over a set of value graphs), which keeps the two
   writers from drifting apart.
@@ -501,6 +495,30 @@ the debug library's hook as `luaL_debughook` (a general library function)
 so the hook can be recognized and reinstalled; a hook set from C is not
 supported yet. Tested in `hooks.lua`, a host/script byte-identity sample
 and the allocation-failure sample.
+
+### ADR-27: One walk each way, with no depth limit
+**Status:** accepted
+Persist is one walk for the script and the host (`Walker`), unpersist one
+reader for both (`Restorer`). Neither recurses: the walk keeps a stack of
+work and the reader a stack of frames (an object being built and the part
+it waits for), so there is no depth limit, a limit stock Lua does not have
+(a 200000-deep chain persists and restores from script and from the host).
+- Script persist and unpersist keep these stacks in memory charged to the
+  state (a byte buffer grown under the API lock); a host persist keeps them
+  in host memory and allocates nothing in the state.
+- A script's persist may run Lua code (`__persist` functions), and with it
+  the collector, so table entries, thread slots and upvalues are read when
+  their turn comes rather than copied ahead; pending work never points at a
+  value that may have been collected. Every key on the error path has a
+  reference id, so it stays alive too.
+- The reader anchors every object in the reference table from the moment
+  it is made, so frames hold plain pointers and the Lua stack only holds the
+  value being handed to the frame below.
+- The error path is a stack holding exactly the steps from the root to the
+  value at hand, written out only when an error is raised.
+- The stream format did not change; script and host output stay byte for
+  byte the same (tested), and the suite also runs under AddressSanitizer
+  and UBSan.
 
 ## Open questions
 

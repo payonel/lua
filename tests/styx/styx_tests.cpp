@@ -538,6 +538,11 @@ static void test_host_persist_deep()
   HostString msg;
   CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_OK);
   CHECK(w.out.size() > 200000);
+  lua_settop(L, 0);
+  CHECK(luaL_unpersistvalue(L, 0, byte_view(w.out.data(), w.out.size()), &msg) == LUA_OK);
+  lua_setglobal(L, "r");
+  CHECK(eval(L, "local n, cur = 0, r while cur.n do n = n + 1 cur = cur.n end "
+                "return tostring(n == 200000 and cur.last)") == "true");
   lua_close(L);
 }
 
