@@ -167,16 +167,18 @@ case("errors raised after restore are catchable", function()
 end)
 
 -- a thread stream ends with its frames ('nframes' then ten 8-byte fields
--- per frame, the first being the stack slot of the frame's function) and
--- its to-be-closed list ('ntbc' then one 8-byte level each; none here)
+-- per frame, the first being the stack slot of the frame's function), its
+-- to-be-closed list ('ntbc' then one 8-byte level each; none here) and its
+-- hook (one byte, 0: no hook)
 case("frames that do not match the stack are rejected", function()
   local co = coroutine.create(function(a) coroutine.yield(a) end)
   coroutine.resume(co, 1)
   local blob = styx.persist(perms, co)
   assert(styx.unpersist(back, blob))
   local frame_size = 10 * 8
-  local frames_end = #blob - 8
+  local frames_end = #blob - 8 - 1
   assert(string.unpack("<i8", blob, frames_end + 1) == 0, "layout: ntbc")
+  assert(blob:byte(-1) == 0, "layout: hook")
   local nframes = string.unpack("<i8", blob, frames_end - 2 * frame_size - 7)
   assert(nframes == 2, "layout: " .. nframes)
   local first = frames_end - 2 * frame_size

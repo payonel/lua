@@ -81,6 +81,7 @@ enum class Step : char
   Stack,     /* 'b': thread stack slot */
   Special,   /* closure returned by __persist */
   PermKey,   /* key of a permanent */
+  Hook,      /* a thread's debug hook function */
 };
 
 struct PathNode
@@ -183,6 +184,9 @@ static void push_step(lua_State* L, const PathNode& n)
     return;
   case Step::PermKey:
     lua_pushistringref(L, lt::path_permanent_key);
+    return;
+  case Step::Hook:
+    lua_pushistringref(L, lt::path_hook);
     return;
   }
 }
@@ -509,6 +513,44 @@ static void persist_lclosure(Persist& P)
   persist_error(P, lt::cannot_persist_a_thread_with_s);
 }
 
+/*
+** A thread's debug hook, as debug.sethook sets it: the debug library's C
+** hook with the Lua hook function kept in the registry. Written with its
+** mask, base count, current count and last traced pc, then the function.
+*/
+static void persist_hook(Persist& P, lua_State* T)
+{
+  lua_State* L = P.L;
+  if (T->hook == nullptr)
+  {
+    luaL_addchar(&P.B, 0);
+    return;
+  }
+  if (T->hook != luaL_debughook())
+    persist_error(P, lt::a_hook_not_set_by_the_debug_library_is_not_supported_yet);
+  luaL_addchar(&P.B, 1);
+  put_i64(&P.B, T->hookmask);
+  put_i64(&P.B, T->basehookcount);
+  put_i64(&P.B, T->hookcount);
+  put_i64(&P.B, T->oldpc);
+  luaL_addchar(&P.B, static_cast<char>(T->allowhook));
+  luaL_checkstacki(L, 3, std::nullopt);
+  lua_pushistringref(L, lt::_HOOKKEY);
+  if (lua_rawget(L, LUA_REGISTRYINDEX) == LUA_TTABLE)
+  {
+    setslotth(L, L->top, T);
+    L->top++;
+    lua_rawget(L, -2);
+  }
+  else
+    lua_pushnil(L);
+  {
+    PathStep step(P, Step::Hook);
+    persist(P);
+  }
+  lua_pop(L, 2);
+}
+
 static void persist_thread(Persist& P)
 {
   lua_State* L = P.L;
@@ -569,6 +611,7 @@ static void persist_thread(Persist& P)
   put_i64(&P.B, T->ntbc);
   for (int k = 0; k < T->ntbc; k++)
     put_i64(&P.B, T->tbc[k]);
+  persist_hook(P, T);
 }
 
 static void persist(Persist& P)
@@ -1105,6 +1148,7 @@ static bool valid_frame(lua_State* L1, const CallInfo* ci)
 static void unpersist_frames(Unpersist& U, lua_State* L1, lua_Integer nframes,
                              lua_Integer top, lua_Integer maxtop, int need);
 static void unpersist_tbc(Unpersist& U, lua_State* L1, lua_Integer nframes, lua_Integer top);
+static void unpersist_hook(Unpersist& U, lua_State* L1);
 
 /*
 ** The thread is valid at every point a collection can see it: its stack is
@@ -1143,7 +1187,51 @@ static void unpersist_thread(Unpersist& U, lua_Integer id)
   if (nframes > 0)
     unpersist_frames(U, L1, nframes, top, maxtop, need);
   unpersist_tbc(U, L1, nframes, top);
+  unpersist_hook(U, L1);
   L1->status = static_cast<TStatus>(status);
+}
+
+/*
+** A debug hook: installed as debug.sethook installs it (the Lua function in
+** the registry's hook table, the debug library's C hook on the thread),
+** then the count and last traced pc are put back where they stood.
+*/
+static void unpersist_hook(Unpersist& U, lua_State* L1)
+{
+  lua_State* L = U.r.L;
+  char kind = U.r.get_byte();
+  if (kind == 0)
+    return;
+  if (kind != 1)
+    U.r.invalid();
+  lua_Integer mask = U.r.get_i64();
+  int base = get_int(U);
+  int count = get_int(U);
+  int oldpc = get_int(U);
+  char allow = U.r.get_byte();
+  if ((mask & ~(LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE | LUA_MASKCOUNT)) != 0 ||
+      mask == 0 || base < 0 || count < 0 || (allow != 0 && allow != 1))
+    U.r.invalid();
+  luaL_checkstacki(L, 4, std::nullopt);
+  unpersist(U); /* the hook function */
+  if (!lua_isfunction(L, -1) && !lua_isnil(L, -1))
+    U.r.invalid();
+  if (!luaL_getsubtablei(L, LUA_REGISTRYINDEX, lt::_HOOKKEY))
+  { /* as debug.sethook creates it */
+    lua_pushistringref(L, lt::k_char);
+    lua_setfieldi(L, -2, lt::mm_mode);
+    lua_pushvalue(L, -1);
+    lua_setmetatable(L, -2);
+  }
+  setslotth(L, L->top, L1);
+  L->top++;
+  lua_pushvalue(L, -3);
+  lua_rawset(L, -3);
+  lua_pop(L, 2);
+  lua_sethook(L1, luaL_debughook(), static_cast<int>(mask), base);
+  L1->hookcount = count;
+  L1->oldpc = oldpc;
+  L1->allowhook = static_cast<lu_byte>(allow);
 }
 
 /* frames are read into spare CallInfos and attached in one step */
@@ -1555,7 +1643,7 @@ private:
         upvalue(static_cast<const LClosure*>(t.p), static_cast<int>(t.i), t.path);
         break;
       case Op::ThreadTail:
-        thread_tail(static_cast<lua_State*>(const_cast<void*>(t.p)));
+        thread_tail(static_cast<lua_State*>(const_cast<void*>(t.p)), t.path);
         break;
       }
       if (buf_.size() >= FLUSH_SIZE)
@@ -1627,6 +1715,8 @@ private:
       return up + "<__persist>";
     case Step::PermKey:
       return up + "<permanent key>";
+    case Step::Hook:
+      return up + "<hook>";
     }
     return up;
   }
@@ -1942,7 +2032,7 @@ private:
       push_value(getslot(T, i), path(p, Step::Stack, nullptr, nullptr, static_cast<int>(i)));
   }
 
-  void thread_tail(lua_State* T)
+  void thread_tail(lua_State* T, int p)
   {
     lua_Integer nframes = 0;
     if (T->ci != &T->base_ci)
@@ -1972,6 +2062,58 @@ private:
     i64(T->ntbc);
     for (int k = 0; k < T->ntbc; k++)
       i64(T->tbc[k]);
+    hook(T, p);
+  }
+
+  /* the raw value of a string field of a table (nil if absent) */
+  static TValue string_field(const Table* t, byte_view name)
+  {
+    TValue r{};
+    setnilvalue(&r);
+    for (int i = 0; i < sizenode(t); i++)
+    {
+      const Node* n = gnode(t, static_cast<size_t>(i));
+      if (!isempty(&n->val) && (n->key_tt & NOVARIANT_MASK) == LUA_TSTRING &&
+          static_cast<TString*>(n->key_val.ref)->data.view() == name)
+      {
+        copyobj(&r, &n->val);
+        break;
+      }
+    }
+    return r;
+  }
+
+  void hook(lua_State* T, int p)
+  {
+    if (T->hook == nullptr)
+    {
+      byte(0);
+      return;
+    }
+    if (T->hook != luaL_debughook())
+      fail("a hook not set by the debug library is not supported yet", p);
+    byte(1);
+    i64(T->hookmask);
+    i64(T->basehookcount);
+    i64(T->hookcount);
+    i64(T->oldpc);
+    byte(static_cast<char>(T->allowhook));
+    TValue f{};
+    setnilvalue(&f);
+    if (ttistable(&L_->l_G->l_registry))
+    {
+      TValue hooks = string_field(hvalue(&L_->l_G->l_registry), lt::_HOOKKEY);
+      if (ttistable(&hooks))
+      {
+        TValue th{};
+        setthvalue(L_, &th, T);
+        TValue v{};
+        lu_byte tag = hvalue(&hooks)->luaH_get(&th, &v);
+        if (!tagisempty(tag))
+          copyobj(&f, &v);
+      }
+    }
+    push_value(f, path(p, Step::Hook));
   }
 };
 

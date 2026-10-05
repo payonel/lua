@@ -23,6 +23,7 @@ local function sample(with_thread)
       coroutine.yield(function() return t end)
       return a
     end)
+    debug.sethook(co, function() end, "l", 3)
     local _, open = coroutine.resume(co, 5)
     get_local = open
   end

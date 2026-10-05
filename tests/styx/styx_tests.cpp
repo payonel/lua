@@ -423,6 +423,9 @@ static const char* const graph_samples[] = {
   "local function counter() local n = 0 "
   "return function() n = n + 1 return n end, function() return n end end "
   "local inc, get = counter() return {inc, get}, {[debug.upvalueid(inc, 1)] = 'count'}",
+  "local log = {} local co = coroutine.create(function() for i = 1, 3 do coroutine.yield(i) end end) "
+  "debug.sethook(co, function(e, l) log[#log + 1] = l end, 'l', 4) coroutine.resume(co) "
+  "return co, {[_ENV] = 'env', [coroutine.yield] = 'yield', [log] = 'log'}",
   "local t = {} for i = 1, 50 do t['k' .. i] = i end "
   "for i = 1, 50, 2 do t['k' .. i] = nil end return t, {}",
 };
@@ -817,6 +820,29 @@ static void test_host_stream_kinds()
   lua_close(L);
 }
 
+static void external_hook(lua_State*, lua_Debug*) {}
+
+/* a hook set from C (not by the debug library) is not supported yet */
+static void test_external_hook_not_supported()
+{
+  lua_State* L = new_state();
+  CHECK(eval(L, "co = coroutine.create(function() coroutine.yield() end) coroutine.resume(co) return 'ok'") == "ok");
+  lua_getglobal(L, "co");
+  lua_sethook(lua_tothread(L, -1), external_hook, LUA_MASKLINE, 0);
+  lua_pop(L, 1);
+  CHECK(eval(L, "local ok, err = pcall(require('styx').persist, "
+                "{[_ENV] = 'env', [coroutine.yield] = 'y'}, {co}) return err")
+        == "a hook not set by the debug library is not supported yet (at root[1])");
+  CHECK(eval(L, "_P = {[_ENV] = 'env', [coroutine.yield] = 'y'} return 'ok'") == "ok");
+  lua_getglobal(L, "_P");
+  lua_getglobal(L, "co");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persistvalue(L, 1, 2, &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()) == "a hook not set by the debug library is not supported yet (at root)");
+  lua_close(L);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -850,6 +876,7 @@ static void run_cpp_tests()
       {"host_restore_out_of_memory", test_host_restore_out_of_memory},
       {"host_value_restore", test_host_value_restore},
       {"host_stream_kinds", test_host_stream_kinds},
+      {"external_hook_not_supported", test_external_hook_not_supported},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

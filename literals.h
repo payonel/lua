@@ -140,6 +140,8 @@ namespace lt
   constexpr byte_view path_stack_d("<stack %d>");
   constexpr byte_view path_special("<__persist>");
   constexpr byte_view path_permanent_key("<permanent key>");
+  constexpr byte_view path_hook("<hook>");
+  constexpr byte_view a_hook_not_set_by_the_debug_library_is_not_supported_yet("a hook not set by the debug library is not supported yet");
   constexpr byte_view cannot_persist_a_table_its___persist_is_false("cannot persist a table: its __persist is false");
   constexpr byte_view mm_persist_must_be_a_boolean_or_a_function("__persist must be a boolean or a function");
   constexpr byte_view mm_persist_must_return_a_function("__persist must return a function");

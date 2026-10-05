@@ -126,8 +126,9 @@ of these raises a clear error unless it says otherwise.
   normal), and the main thread while it runs. Today: error. An open
   upvalue owned by such a thread is persisted as its current value
   (ADR-16).
-- **Hooks, `allowhook`, per-thread counters**. Today: not persisted; a
-  restored thread starts with the defaults of a new thread.
+- **Hooks set from C** (not by `debug.sethook`) on a persisted thread.
+  Today: error ("a hook not set by the debug library is not supported
+  yet"). Debug-library hooks work (ADR-26).
 
 ### Functions
 - **C functions and C closures** other than through the permanents table.
@@ -486,6 +487,20 @@ restored closures' upvalue is joined to it. Closures that shared the
 variable share the supplied one. A missing key, or a value that is not a
 Lua function with an upvalue, is an error. Both walkers support it; tested
 in `permanents.lua` and among the host/script byte-identity samples.
+
+### ADR-26: Debug hooks
+**Status:** accepted
+A thread's debug hook as `debug.sethook` sets it (the debug library's C
+hook on the thread, the Lua hook function in the registry's hook table) is
+persisted with the thread: its mask, base count, current count, last traced
+pc and `allowhook`, then the hook function as a value. Unpersist installs
+it as `debug.sethook` does and puts the count and last traced pc back, so
+the restored thread produces the same hook events as the original (line,
+call/return and count hooks, also persisted mid-count). The engine exposes
+the debug library's hook as `luaL_debughook` (a general library function)
+so the hook can be recognized and reinstalled; a hook set from C is not
+supported yet. Tested in `hooks.lua`, a host/script byte-identity sample
+and the allocation-failure sample.
 
 ## Open questions
 
