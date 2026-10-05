@@ -893,8 +893,19 @@ wherever the VM is.
 
 **Decisions.**
 1. Preempted code runs in a coroutine the host resumes (the main thread
-   cannot yield); the host suspends it from a count or line hook (a hook
-   yield), and Styx persists the suspended thread.
+   cannot yield). The host suspends it through a **host interrupt**, not a
+   debug hook: scripts keep `debug.sethook` for themselves, and a state has
+   one hook per thread, so a hook the host relied on would be visible to
+   scripts and replaceable by them. The interrupt is an engine feature of
+   its own, outside the debug library: the host arms it (an instruction
+   budget, or a flag set from outside, as a signal handler would), the VM
+   checks it where it checks count hooks (the same trap, so no cost while
+   unarmed), and when it fires the running coroutine is suspended at that
+   instruction and control returns to the host's `lua_resume`. Scripts can
+   neither see it nor change it. (Layered hooks tied to `_ENV` were
+   considered and rejected: hooks belong to threads, `_ENV` to functions,
+   and the debug library would have to expose the layers.) Styx persists
+   the suspended thread.
 2. Every C function our standard libraries put into a Lua runtime is
    suspendable, without exception: the library functions, the closures and iterators they
    return (`coroutine.wrap`'s function, the `string.gmatch` iterator,
@@ -955,8 +966,9 @@ it is):
 **Phases**, each with tests and an A/B:
 1. Continuation names and data-only contexts; Styx persists the frames of
    suspendable C functions.
-2. Hook yields as the host's preemption point; Styx persists a thread
-   suspended in a hook.
+2. The host interrupt (decision 1), with `coroutine.resume` and
+   `coroutine.wrap` passing it up (decision 7); Styx persists a thread
+   suspended by it.
 3. The base library (`pcall`, `xpcall`, `dofile`, `pairs`, `tostring`,
    `print`, `ipairs`, `load`).
 4. The table, string and math libraries (`table.sort` as an explicit
