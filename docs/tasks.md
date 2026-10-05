@@ -1724,6 +1724,10 @@ short_src[LUA_IDSIZE]`. Make it `byte_inline<LUA_IDSIZE>` (and make
 `byte_inline` copyable like the array it stands for), then drop the lazy
 allocation and the copy constructor.
 
+**Status: done** (`61353c36`). `short_src_out` is `byte_inline<LUA_IDSIZE>`,
+and `byte_inline` is copyable. The custom copy constructor, the move
+operations and `funcinfo`'s allocation are gone. `make full` passes.
+
 ### R5. API files without namespace fragments
 `lapi.cpp`/`lauxlib.cpp` are almost entirely public API, which stays
 global (C0). Wrapping them left 37 close/reopen fragments. The API
