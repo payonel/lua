@@ -116,6 +116,90 @@ local x = styx.settings(name [, value])    -- query or change a setting
       ADR-31; what is not deterministic yet: "Determinism" below)
 - Items are added or reordered as the tests teach us something.
 
+## What looks unpersistable
+
+Everything a Lua state holds that seems impossible to persist, with why it
+seems so, what Styx does today, and the kind of solution it needs. Each
+item is resolved on its own, with tests; the details are in "Not supported
+yet" below. Four kinds of solution cover them:
+- **Identity re-bound by the host**: the restoring side supplies the object
+  (the permanents table, ADR-3, ADR-11); what remains is giving such
+  objects the same hash, where they are table keys (ADR-30).
+- **State by value**: what sits behind C (bytes, upvalues, library state)
+  saved and rebuilt, through an interface the owner of that state provides.
+- **C frames**: a stable description of a C function's frame and its
+  continuation, so a suspended coroutine can resume through it.
+- **External resources**: a host protocol to reopen, reconnect or replay.
+
+### Values
+1. **File handles** (`io.open`, `io.stdin`, `io.stdout`, `io.stderr`,
+   `io.tmpfile`, `io.popen`): userdata over an operating-system file (its
+   position, buffered data, mode) or a child process. Today: only as
+   permanents; the restoring side's handle is used. Needs: external
+   resources (reopen, seek), or the host providing its own file objects.
+2. **C functions**: their identity is a code address. Today: permanents.
+   Needs: identity re-bound by the host (done); a stable hash as keys.
+3. **Full userdata**: bytes, a metatable and user values, often a host
+   object (a Minecraft component, a buffer). Today: permanents only.
+   Needs: state by value, through an interface the owner provides.
+4. **Light userdata**: a bare pointer. Today: permanents only. Needs:
+   identity re-bound by the host.
+5. **C closures**: a C function with upvalues. Several library functions
+   look like Lua functions but keep their state in C: `coroutine.wrap`
+   (holds the coroutine), the `string.gmatch` iterator (the string, the
+   pattern and the position: a coroutine suspended in a
+   `for w in s:gmatch(p)` loop cannot be persisted), `io.lines` and
+   `file:lines` (the file), `math.random` (the generator), and functions
+   the host makes with bound state. Today: permanents only, with the
+   restoring side's upvalues. Needs: identity for the function, its
+   upvalues by value.
+6. **Loaded C code**: modules from `require` of a C library or
+   `package.loadlib` are functions from a shared library; the registry's
+   `_CLIBS` holds the library handles (unloaded by a finalizer). Needs:
+   identity re-bound by the host (the module loaded again on restore).
+
+### Execution states
+7. **Running threads**: the coroutine calling `persist`, coroutines that
+   resumed another (status normal), the main thread from the script API.
+   Today: error. Needs: C frames (they wait inside `coroutine.resume` or
+   inside `persist` itself).
+8. **A coroutine suspended inside a C call that continues later**: a yield
+   inside `pcall`, `xpcall`, `dofile`, a `__pairs` metamethod, or any C
+   function that calls or yields with a continuation (`lua_callk`,
+   `lua_pcallk`, `lua_yieldk`). Today: error. Probably the most common
+   blocker for real scripts (`pcall` around a loop that yields). Needs: C
+   frames.
+9. **A coroutine suspended inside a hook or a `__close` handler**. Today:
+   error. Needs: C frames.
+10. **To-be-closed variables of C functions** (`lua_toclose`). Today:
+    error (Lua's own work, ADR-20). Needs: C frames.
+11. **Hooks set from C** (not by `debug.sethook`). Today: error. Needs:
+    identity for the hook function, as for C functions.
+12. **An object waiting for its finalizer that another finalizer made
+    reachable again**. Today: restored, finalized when unreachable again
+    rather than at the next step (ADR-28).
+
+### Hidden state behind values that persist
+13. **Library state kept in C or the host**: `math.random`'s generator,
+    `io`'s default input and output (file handles in the registry),
+    `os.setlocale` (the process's), the warning system's on/off state,
+    `table.sort`'s time-based pivot. Needs: state by value; see
+    "Determinism".
+14. **The host's API stack** on the main thread. Today: not part of a
+    snapshot; the host manages it.
+
+### Outside the VM
+15. **External state**: the clock and time, environment variables, file
+    contents, sockets, child processes, the host's event queue, timers and
+    world. Outside the persistence layer: the host saves, replays or
+    reconnects it (see "Determinism").
+
+### Refused by design or by choice
+16. **Persistable, but refused**: tables whose `__persist` is `false`;
+    `__persist` functions in a host persist (they would run Lua code during
+    a snapshot); a `__persist` restore closure that refers to the value it
+    rebuilds.
+
 ## Not supported yet
 
 Each entry is an edge to return to and resolve on its own, with tests. None
@@ -128,11 +212,14 @@ of these raises a clear error unless it says otherwise.
   finalizer call", the frame flag check). Lua to-be-closed variables work
   (ADR-20).
 - **Yields through continuations**, for example a yield inside `pcall`,
-  `xpcall`, a metamethod or an iterator called from C, or any C function
-  that yields with a continuation. Only a plain `coroutine.yield` from Lua
-  code works. Today: error ("a thread with a continuation function").
-- **Hook yields, and calls made from hooks or finalizers** in a suspended
-  thread. Today: error.
+  `xpcall`, `dofile`, a `__pairs` metamethod, a metamethod or an iterator
+  called from C, or any C function that calls or yields with a
+  continuation (`lua_callk`, `lua_pcallk`, `lua_yieldk`). Only a plain
+  `coroutine.yield` from Lua code works. Today: error ("a thread with a
+  continuation function").
+- **Hook yields, calls made from hooks or finalizers, and yields inside a
+  `__close` handler** in a suspended thread. Today: error ("a thread with a
+  hook or finalizer call").
 - **Running threads**: the caller, a thread that resumed another (status
   normal), and the main thread while it runs. Today: error. An open
   upvalue owned by such a thread is persisted as its current value
@@ -146,13 +233,23 @@ of these raises a clear error unless it says otherwise.
   Today: error ("cannot persist a C function"). Through the permanents
   table, the restoring side's closure is used, with its own upvalues: for
   example `math.random`'s generator state is an upvalue of a C closure, so
-  a restored state draws from the restoring state's generator.
+  a restored state draws from the restoring state's generator. Library
+  functions that are C closures with state: `coroutine.wrap`'s function
+  (the coroutine), the `string.gmatch` iterator (string, pattern,
+  position), `io.lines` and `file:lines` (the file), `math.random`.
+- **Loaded C code**: C modules (`require` of a C library,
+  `package.loadlib`) and the library handles in the registry's `_CLIBS`.
+  Today: their functions only as permanents, the handles as userdata.
 
 ### Userdata
 - **Full userdata** (bytes, metatable, user values, host objects), and
   `__persist` on userdata. Today: error ("persisting a userdata value is not
   supported yet"); userdata work only as permanents.
 - **Light userdata** other than as permanents. Today: the same error.
+- **File handles** (`io.open`, the standard files, `io.tmpfile`,
+  `io.popen`): userdata over an operating-system file or a child process,
+  also held as `io`'s default input and output. Today: only as permanents
+  (the restoring side's handles).
 - **Garbage userdata waiting for its finalizer** in a whole-state snapshot:
   the snapshot includes every object marked for finalization (ADR-28), so
   it fails as for any userdata ("(at finalizer list)"); a full collection
@@ -214,9 +311,10 @@ across a restore, and are to be revisited:
   stack is sized to what it holds, for example). Objects made by
   finalizers take hashes when the finalizers run.
 - **Host input and output** is outside the persistence layer: `os.time`,
-  `os.clock`, `os.getenv`, files, the host's callbacks, and the warning
-  system's state (`warn("@on")` is the host's warning function, not the
-  state's data).
+  `os.clock`, `os.getenv`, `os.setlocale`, file contents, sockets, child
+  processes, the host's callbacks, event queue, timers and world, and the
+  warning system's state (`warn("@on")` is the host's warning function, not
+  the state's data).
 
 ### Format and robustness
 - **Untrusted input**: unpersist builds prototypes from the instructions in
