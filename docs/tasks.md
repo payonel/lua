@@ -1626,6 +1626,22 @@ Restore them as `lobject.h` inline functions with upstream's names (Java:
 static methods) and replace the expansions.
 **Check:** object code byte-identical (`objcmp.sh`).
 
+**Status: done** (`08c8d548`).
+- Restored with upstream's names and in upstream's places. Several
+  upstream comments that the macro removal had left orphaned now sit on
+  their functions again.
+- **Coverage:** about 400 sites use the predicates again. Stack-slot
+  tags keep their slot accessors and use `novariant`/`tagisempty`.
+- Node-key tests are back too (`keyisnil`, `keyisinteger`,
+  `keyisshrstr`, `keyiscollectable`, `keyisdead`, `setnilkey`,
+  `setdeadkey`, `gckeyN`).
+- The tag helpers return `lu_byte`, so `-Wconversion` keeps seeing the
+  masked range.
+- **Check:** with asserts compiled out, object code is identical except
+  basic-block layout in a few functions (the `bool`-returning
+  predicates). A/B b_table (15 runs) 0.42s → 0.41s; b_vm, b_arith,
+  b_call and b_gc are neutral.
+
 ### R2. `SETARG_*` instruction setters
 The 21 `lcode`/`lparser` sites that spell out
 `(i & MASK0(…)) | ((Instruction)(v) << POS & MASK1(…))` go back to
