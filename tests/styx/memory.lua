@@ -119,6 +119,25 @@ if T then
     assert(n > 0)
   end)
 
+  case("an error with a path survives an allocation failure at every point", function()
+    local value = {a = {b = {c = io.stdout}}, list = {1, 2, 3}}
+    local n = 0
+    while true do
+      collectgarbage()
+      T.alloccount(n)
+      local ok, err = pcall(styx.persist, value)
+      T.alloccount()
+      assert(not ok)
+      H.checkheap()
+      err = tostring(err)
+      if err:find("(at root.a.b.c)", 1, true) then break end
+      assert(err:find("not enough memory", 1, true), "allocation " .. n .. ": " .. err)
+      n = n + 1
+      assert(n < 100000, "no end to allocations")
+    end
+    assert(n > 0)
+  end)
+
   case("unpersist under a memory limit", function()
     local big = {}
     for i = 1, 5000 do big[i] = {i, tostring(i)} end

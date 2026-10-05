@@ -61,7 +61,7 @@ local x = styx.settings(name [, value])    -- query or change a setting
     feeds every proper prefix of a stream to unpersist.
   - `*.lua`: Lua script tests, one per area: `primitives`, `strings`,
     `tables`, `closures`, `open_upvalues`, `threads`, `permanents`,
-    `special` (`__persist`), `errors`, `memory`
+    `special` (`__persist`), `paths` (error paths), `errors`, `memory`
     (accounting and allocation failures), `processes` (unpersist in a
     separate interpreter process), `resume_print`.
   - Debug builds (`make debug styx-test`) also open the test library `T`,
@@ -96,7 +96,8 @@ local x = styx.settings(name [, value])    -- query or change a setting
      (done: `closures.lua`, `open_upvalues.lua`, ADR-16)
   8. coroutines (first cut done: `threads.lua`, C++ cross-state tests)
   9. userdata (not supported yet; see below)
-  10. error reporting with a path to the offending value (not started)
+  10. error reporting with a path to the offending value (done:
+      `paths.lua`, ADR-19)
 - Items are added or reordered as the tests teach us something.
 
 ## Not supported yet
@@ -167,8 +168,9 @@ of these raises a clear error unless it says otherwise.
   unpersist data you do not trust.
 - **Compact output**: integers and counts are fixed 8-byte values; sizes
   and the format version are not final.
-- **Error paths**: errors say what failed but not where (a path such as
-  `root.cache[3]`).
+- **Paths for errors raised by user code**: an error raised inside a
+  `__persist` function reaches the caller as it was raised, without the
+  path (ADR-19).
 - **`settings`**. Today: error ("not implemented").
 
 ## ADRs
@@ -342,6 +344,24 @@ return a table, which takes the table's reference id (reserved before the
 closure is read, so sharing is kept). Any other `__persist` value is an
 error. Userdata are not supported yet, so `__persist` on userdata has no
 effect today.
+
+### ADR-19: Errors say where
+**Status:** accepted
+Every error persist raises ends with the path from the root to the value
+that failed, for example
+`persisting a userdata value is not supported yet (at root.config.output)`.
+Each step of the walk records how it reached the value (table key, the key
+itself, metatable, upvalue, thread stack slot, `__persist` closure,
+permanent key) in a node on the C stack, so nothing is allocated unless an
+error is raised. Path syntax: `.name` for string keys that are names,
+`["text"]` for other strings, `[3]`, `[2.5]`, `[true]`, `[<table>]` for
+object keys, `<key T>` when the key itself fails, `<metatable>`,
+`<upvalue name>` (or `<upvalue N>` without debug names), `<stack N>`,
+`<__persist>`, `<permanent key>`.
+Unpersist errors about the stream give the byte offset where the problem
+was found: `invalid persisted data (at byte N)`.
+Memory errors stay "not enough memory", and errors raised by a `__persist`
+function pass through unchanged.
 
 ### Required tests for later work
 - Host-side persist (from the C API, on a state that is not running) of a

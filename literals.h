@@ -124,6 +124,20 @@ namespace lt
   constexpr byte_view bad_permanent_value_s_expected_got_s("bad permanent value (%s expected, got %s)");
   constexpr byte_view persisted_data_is_nested_too_deeply("persisted data is nested too deeply");
   constexpr byte_view mm_persist("__persist");
+  constexpr byte_view s_at_s("%s (at %s)");
+  constexpr byte_view invalid_persisted_data_at_byte_d("invalid persisted data (at byte %d)");
+  constexpr byte_view path_root("root");
+  constexpr byte_view path_field_s(".%s");
+  constexpr byte_view path_index_s("[%s]");
+  constexpr byte_view path_string_key_s("[\"%s\"]");
+  constexpr byte_view path_object_key_s("[<%s>]");
+  constexpr byte_view path_key_s("<key %s>");
+  constexpr byte_view path_metatable("<metatable>");
+  constexpr byte_view path_upvalue_s("<upvalue %s>");
+  constexpr byte_view path_upvalue_d("<upvalue %d>");
+  constexpr byte_view path_stack_d("<stack %d>");
+  constexpr byte_view path_special("<__persist>");
+  constexpr byte_view path_permanent_key("<permanent key>");
   constexpr byte_view cannot_persist_a_table_its___persist_is_false("cannot persist a table: its __persist is false");
   constexpr byte_view mm_persist_must_be_a_boolean_or_a_function("__persist must be a boolean or a function");
   constexpr byte_view mm_persist_must_return_a_function("__persist must return a function");
@@ -411,7 +425,6 @@ namespace lt
   constexpr byte_view invalid_option_s("invalid option '%s'");
   constexpr byte_view invalid_order_function_for_sorting("invalid order function for sorting");
   constexpr byte_view invalid_pattern_capture("invalid pattern capture");
-  constexpr byte_view invalid_persisted_data("invalid persisted data");
   constexpr byte_view invalid_replacement_value_a_s("invalid replacement value (a %s)");
   constexpr byte_view invalid_string_index("invalid string index");
   constexpr byte_view invalid_upvalue_index("invalid upvalue index");
