@@ -106,6 +106,35 @@ static void test_primitives_roundtrip()
   lua_close(L);
 }
 
+/* persist in one state, restore and resume in a separate one */
+static void test_thread_across_states()
+{
+  lua_State* A = new_state();
+  CHECK(luaL_dostring(A,
+    "co = coroutine.create(function() local p = print; coroutine.yield(); p('hi', 42) end)\n"
+    "coroutine.resume(co)\n"
+    "blob = require('styx').persist({[_ENV]='env', [print]='print', [coroutine.yield]='yield'}, co)") == LUA_OK);
+  CHECK(lua_getglobal(A, "blob") == LUA_TSTRING);
+  std::string blob;
+  if (auto b = lua_tolstring(A, -1))
+    blob.assign(b->data(), b->size());
+  lua_close(A);
+  CHECK(!blob.empty());
+
+  lua_State* B = new_state();
+  lua_pushlstring(B, byte_view(blob.data(), blob.size()), 0, blob.size());
+  lua_setglobal(B, "blob");
+  CHECK(luaL_dostring(B,
+    "perms = {env = _ENV, print = function(...) got = table.concat({...}, ',') end, yield = coroutine.yield}\n"
+    "co = require('styx').unpersist(perms, blob)\n"
+    "ok = coroutine.resume(co)\n"
+    "status = coroutine.status(co)") == LUA_OK);
+  CHECK(lua_getglobal(B, "ok") == LUA_TBOOLEAN && lua_toboolean(B, -1));
+  CHECK(lua_getglobal(B, "got") == LUA_TSTRING && lua_tolstring(B, -1) == "hi,42");
+  CHECK(lua_getglobal(B, "status") == LUA_TSTRING && lua_tolstring(B, -1) == "dead");
+  lua_close(B);
+}
+
 static bool run_script(const std::filesystem::path& path)
 {
   lua_State* L = new_state();
@@ -132,6 +161,7 @@ int main()
       {"requirable_not_global", test_requirable_not_global},
       {"api_surface", test_api_surface},
       {"primitives_roundtrip", test_primitives_roundtrip},
+      {"thread_across_states", test_thread_across_states},
   };
   for (const auto& t : tests)
   {

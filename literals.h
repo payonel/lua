@@ -114,6 +114,17 @@ namespace lt
   constexpr byte_view cannot_close_standard_file("cannot close standard file");
   constexpr byte_view cannot_open_file_s_s("cannot open file '%s' (%s)");
   constexpr byte_view cannot_persist_a_s_value("cannot persist a %s value");
+  constexpr byte_view cannot_persist_a_C_function("cannot persist a C function");
+  constexpr byte_view cannot_persist_a_running_thread("cannot persist a running thread");
+  constexpr byte_view cannot_persist_a_thread_with_s("cannot persist a thread with %s");
+  constexpr byte_view cannot_persist_an_open_upvalue("cannot persist an open upvalue");
+  constexpr byte_view open_upvalues("open upvalues");
+  constexpr byte_view a_continuation_function("a continuation function");
+  constexpr byte_view a_hook_or_finalizer_call("a hook or finalizer call");
+  constexpr byte_view an_error_status("an error status");
+  constexpr byte_view bad_permanent_value_for_key_s("bad permanent value for key '%s'");
+  constexpr byte_view bad_permanent_value_s_expected_got_s("bad permanent value (%s expected, got %s)");
+  constexpr byte_view persisted_data_is_nested_too_deeply("persisted data is nested too deeply");
   constexpr byte_view cannot_resume_dead_coroutine("cannot resume dead coroutine");
   constexpr byte_view cannot_resume_non_suspended_coroutine("cannot resume non-suspended coroutine");
   constexpr byte_view cannot_s_s("cannot %s %s");

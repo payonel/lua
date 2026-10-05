@@ -45,8 +45,10 @@ local x = styx.settings(name [, value])    -- query or change a setting
 ## Layout and running
 
 - `lstyx.cpp`: the library (`lua::lib`, `luaopen_styx`). Today
-  `persist`/`unpersist` handle nil, booleans, integers and floats and accept
-  (and ignore) the permanents table; `settings` raises "not implemented".
+  `persist`/`unpersist` handle nil, booleans, numbers, strings, tables
+  (with metatables, shared references and cycles), Lua closures with closed
+  upvalues, and suspended or unstarted coroutines, plus the permanents table.
+  `settings` raises "not implemented".
 - `tests/styx/`: the Styx tests.
   - `styx_tests.cpp`: C++ tests (using the C API; internals are reachable
     since the test links the raw objects) plus a runner that executes every
@@ -67,18 +69,55 @@ local x = styx.settings(name [, value])    -- query or change a setting
 - Test-driven, on both fronts: each capability starts as a failing test,
   written as a Lua script and as a C++ test, then the implementation is made
   to pass it. One issue at a time.
-- Suggested order of capabilities, each with its own tests:
-  1. nil, booleans, numbers (integers and floats, exact round trip)
-  2. strings (short, long, embedded zeros)
-  3. tables (array part, hash part, nested)
-  4. shared references and cycles (identity preserved)
-  5. metatables and `__persist`
-  6. permanents
-  7. Lua closures, upvalues (shared between closures), prototypes
-  8. coroutines
-  9. userdata
-  10. error reporting with a path to the offending value
+- Capabilities, in the order planned. Done items have tests in
+  `tests/styx/`:
+  1. nil, booleans, numbers (done: `primitives.lua`)
+  2. strings (done: `tables.lua`)
+  3. tables (done, see skipped items)
+  4. shared references and cycles (done)
+  5. metatables (done); `__persist` (not started)
+  6. permanents (done; unpersist takes the inverse table, as in Eris)
+  7. Lua closures and closed upvalues, including shared upvalues (done:
+     `closures.lua`)
+  8. coroutines (first cut done: `threads.lua`, and a two-state C++ test)
+  9. userdata (not started)
+  10. error reporting with a path to the offending value (not started)
 - Items are added or reordered as the tests teach us something.
+
+## Skipped for now (return to these)
+
+Deliberately left out of the first cut of thread support. Each raises a
+clear error unless noted.
+
+- **Open upvalues** (a closure capturing a live local of a running
+  function): error. Also threads that own open upvalues.
+- **Threads with to-be-closed variables**: error.
+- **Yields through continuations** (for example a yield inside `pcall` in
+  the coroutine): error. Only a plain `coroutine.yield` from Lua code works.
+- **Hook yields, calls from hooks or finalizers**: error.
+- **Running or resuming-another threads, and the main thread**: error.
+  Threads in an error state: error.
+- **Hooks, `allowhook`, per-thread counters**: not persisted; a restored
+  thread starts with the defaults of a new thread.
+- **C closures, light userdata, full userdata**: error (C functions work
+  only through the permanents table).
+- **Proto sharing**: every closure persists its own copy of its prototype;
+  two closures of one prototype restore with two prototypes.
+- **Table layout fidelity**: entries are rebuilt, so array and hash
+  sizing and iteration order can differ from the original. This is the
+  ADR-4 motivation and is still open.
+- **Weak tables and `__gc` finalizer state**: contents persist like any
+  table; the collector's finalizer queue, mark state and weak-clearing
+  state are not persisted.
+- **Recursion depth**: persist and unpersist recurse on the C stack and
+  raise an error past a depth of 10000 (`MAX_DEPTH`). This is a new limit
+  and should be replaced by an iterative walk or a configurable setting.
+- **`__persist` metamethod and `settings`**.
+- **Untrusted input**: unpersist loads bytecode through `lua_load` and
+  trusts the thread state it reads (only basic sanity checks). Do not
+  unpersist data you do not trust.
+- **Compact output**: integers and counts are fixed 8-byte values; sizes
+  and the format version are not yet considered final.
 
 ## ADRs
 
@@ -141,6 +180,11 @@ followed by one value: a tag byte and a payload. Integers and floats are 8
 raw little-endian bytes (the engine is little-endian only). Output is built
 in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a missing
 header, unknown tags, truncation and trailing bytes.
+Non-basic values (strings, tables, functions, threads) get a reference id in
+first-seen order; a repeat is written as a back reference, which preserves
+sharing and cycles. An object found in the permanents table is written as
+its permanent key instead of its contents. Persist keeps its object-to-id
+table on the Lua stack, so the bookkeeping is memory-accounted too.
 
 ### ADR-11: Permanent keys are any persistable value
 **Status:** accepted
@@ -164,6 +208,14 @@ constructor, the `name` parameter of `lua_createcfuncinfo` and
 removed, and the logical accounting cost went from 64 to 24. `CFuncInfo`
 stays the identity object and still holds the function, which maps to a
 method handle in Java.
+
+### ADR-13: Lua function prototypes reuse `lua_dump`/`lua_load`
+**Status:** proposed
+A closure is written as its prototype's binary chunk (`lua_dump`, debug
+info kept) plus its upvalues, and restored with `lua_load`; the restored
+upvalues replace the freshly created ones, sharing via `lua_upvalueid` and
+`lua_upvaluejoin`. This reuses the engine's existing, tested prototype
+format instead of a second one.
 
 ## Open questions
 
