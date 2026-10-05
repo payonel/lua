@@ -58,7 +58,6 @@ CallInfo* luaE_extendCI(lua_State* L, int err)
   L->ci->next = ci;
   if (ci->next)
     ci->next->previous = ci;
-  ci->trap = 0;
   L->nci++;
   return ci;
 }
@@ -222,25 +221,6 @@ struct LuaOpen : ProtectedCall
 static void preinit_thread(lua_State* L, global_State* g)
 {
   L->l_G = g;
-  L->stack = {};
-  L->tbclist = 0;
-  L->tbc = {};
-  L->ntbc = 0;
-  L->ci = nullptr;
-  L->nci = 0;
-  L->twups = L; /* thread has no upvalues */
-  L->nCcalls = 0;
-  L->errorJmp = nullptr;
-  L->hook = nullptr;
-  L->hookmask = 0;
-  L->basehookcount = 0;
-  L->allowhook = 1;
-  resethookcount(L);
-  L->openupval = nullptr;
-  L->status = LUA_OK;
-  L->errfunc = 0;
-  L->oldpc = 0;
-  L->base_ci.previous = L->base_ci.next = nullptr;
 }
 
 l_mem luaE_threadsize(lua_State* L)
@@ -341,7 +321,6 @@ int lua_closethread(lua_State* L, lua_State* from)
 
 lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
 {
-  int i;
   lua_State* L;
   if (!f->permit(0, cost::Global, LUA_TTHREAD))
     return nullptr;
@@ -349,7 +328,6 @@ lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   if (g == nullptr)
     return nullptr;
   L = &g->mainth;
-  L->extra = nullptr;
   L->tt = LUA_VTHREAD;
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);
@@ -359,26 +337,10 @@ lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   L->next = nullptr;
   incnny(L); /* main thread is always non yieldable */
   g->frealloc = f;
-  g->warnf = nullptr;
   g->seed = seed;
   g->gcstp = GCSTPGC; /* no GC while building state */
-  setnilvalue(&g->l_registry);
-  g->panic = nullptr;
   g->gcstate = GCSpause;
   g->gckind = KGC_INC;
-  g->gcstopem = 0;
-  g->gcemergency = 0;
-  g->finobj.next = g->tobefnz.next = g->fixedgc = nullptr;
-  g->firstold1 = g->survival = g->old1 = g->reallyold = nullptr;
-  g->finobjsur = g->finobjold1 = g->finobjrold = nullptr;
-  g->sweepgc = nullptr;
-  g->gray.gclist = g->grayagain.gclist = nullptr;
-  g->weak.gclist = g->ephemeron.gclist = g->allweak.gclist = nullptr;
-  g->twups = nullptr;
-  g->GCtotalbytes = cost::Global;
-  g->GCmarked = 0;
-  g->GCdebt = 0;
-  g->memlimit = 0;
   setivalue(&g->nilvalue, 0); /* to signal that state is not yet built */
   g->gcparams[LUA_GCPPAUSE] = luaO_codeparam(LUAI_GCPAUSE);
   g->gcparams[LUA_GCPSTEPMUL] = luaO_codeparam(LUAI_GCMUL);
@@ -386,8 +348,6 @@ lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   g->gcparams[LUA_GCPMINORMUL] = luaO_codeparam(LUAI_GENMINORMUL);
   g->gcparams[LUA_GCPMINORMAJOR] = luaO_codeparam(LUAI_MINORMAJOR);
   g->gcparams[LUA_GCPMAJORMINOR] = luaO_codeparam(LUAI_MAJORMINOR);
-  for (i = 0; i < LUA_NUMTYPES; i++)
-    g->mt[i] = nullptr;
   LuaOpen open;
   if (luaD_rawrunprotected(L, &open) != LUA_OK)
   {

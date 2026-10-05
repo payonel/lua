@@ -355,7 +355,7 @@ struct TString : GCObject
   lu_byte extra;
   lu_byte hashed;
   unsigned int hash;
-  TString* hnext;
+  TString* hnext = nullptr;
   InternalString data;
 
   static TString* luaS_createstr(lua_State* L, byte_view str);
@@ -411,12 +411,12 @@ static l_forceinline bool ttisfulluserdata(const TValue* o)
 struct Table;
 struct Udata : GCListed
 {
-  Table* metatable;
+  Table* metatable = nullptr;
   std::span<TValue> uv;
   byte_owner data;
-  bool zb;
+  bool zb = false;
   std::unique_ptr<lua_UserObject> obj;
-  size_t objsize;
+  size_t objsize = 0;
 
   static Udata* luaS_newudata(lua_State* L, size_t s, int nuvalue);
 };
@@ -496,11 +496,11 @@ constexpr int PF_FIXED = 4; /* prototype has parts in fixed memory */
 */
 struct Proto : GCListed
 {
-  int numparams; /* number of fixed (named) parameters */
-  lu_byte flag;
-  int maxstacksize; /* number of registers needed by this function */
-  int linedefined;          /* debug information  */
-  int lastlinedefined;      /* debug information  */
+  int numparams = 0; /* number of fixed (named) parameters */
+  lu_byte flag = 0;
+  int maxstacksize = 0; /* number of registers needed by this function */
+  int linedefined = 0;          /* debug information  */
+  int lastlinedefined = 0;      /* debug information  */
   std::span<TValue> k;                /* constants used by the function */
   std::span<Instruction> code;        /* opcodes */
   std::span<Proto*> p;         /* functions defined inside the function */
@@ -508,7 +508,7 @@ struct Proto : GCListed
   std::span<ls_byte> lineinfo;        /* information about source lines (debug information) */
   std::span<AbsLineInfo> abslineinfo; /* idem */
   std::span<LocVar> locvars;          /* information about local variables (debug information) */
-  TString* source;          /* used for debug information */
+  TString* source = nullptr;          /* used for debug information */
 
   static Proto* luaF_newproto(lua_State* L);
 
@@ -567,11 +567,11 @@ static l_forceinline bool ttisCclosure(const TValue* o)
 */
 struct UpVal : GCObject
 {
-  struct UpVal* opennext;
-  struct UpVal* prevopen;
-  struct lua_State* owner;
-  StkId stkid;
-  TValue value;
+  UpVal* opennext = nullptr;
+  UpVal* prevopen = nullptr;
+  lua_State* owner = nullptr;
+  StkId stkid = 0;
+  TValue value{Value{0, nullptr}, LUA_VNIL};
 
   static UpVal* luaF_findupval(lua_State* L, StkId level);
   void luaF_unlinkupval();
@@ -586,7 +586,7 @@ struct Closure : GCListed
 
 struct CClosure : Closure
 {
-  lua_CFunction f;
+  lua_CFunction f = nullptr;
   std::span<TValue> upvalue;
 
   static CClosure* luaF_newCclosure(lua_State* L, int nupvals);
@@ -599,7 +599,7 @@ constexpr int sizeCclosure(int n)
 
 struct LClosure : Closure
 {
-  struct Proto* p;
+  Proto* p = nullptr;
   std::span<UpVal*> upvals;
 
   static LClosure* luaF_newLclosure(lua_State* L, int nupvals);
@@ -671,9 +671,9 @@ struct Table : GCListed
   std::span<Value> array; /* array part: values, forward-indexed */
   std::span<lu_byte> tags; /* array part: tags, forward-indexed */
   std::span<Node> node;
-  int lastfree;
-  int lenhint;   /* hint for #t; see luaH_getn */
-  struct Table* metatable;
+  int lastfree = 0;
+  int lenhint = 0;   /* hint for #t; see luaH_getn */
+  Table* metatable = nullptr;
 
   static Table* luaH_new(lua_State* L);
 

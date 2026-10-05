@@ -98,19 +98,20 @@ constexpr int KGC_GENMAJOR = 2; /* generational in major mode */
 
 struct CallInfo
 {
-  StkId func;                       /* function index in the stack */
-  StkId top;                        /* top for this function */
-  struct CallInfo *previous, *next; /* dynamic call link */
-  int savedpc;
-  volatile l_signalT trap; /* function is tracing lines/counts */
-  int nextraargs;          /* # of extra arguments in vararg functions */
-  lua_KFunction k; /* continuation in case of yields */
-  StkId old_errfunc;
-  lua_KContext ctx; /* context info. in case of yields */
-  int funcidx;      /* called-function index */
-  int nyield;       /* number of values yielded */
-  int nres;         /* number of values returned */
-  l_uint32 callstatus;
+  StkId func = 0;                       /* function index in the stack */
+  StkId top = 0;                        /* top for this function */
+  CallInfo* previous = nullptr; /* dynamic call link */
+  CallInfo* next = nullptr;
+  int savedpc = 0;
+  volatile l_signalT trap = 0; /* function is tracing lines/counts */
+  int nextraargs = 0;          /* # of extra arguments in vararg functions */
+  lua_KFunction k = nullptr; /* continuation in case of yields */
+  StkId old_errfunc = 0;
+  lua_KContext ctx = 0; /* context info. in case of yields */
+  int funcidx = 0;      /* called-function index */
+  int nyield = 0;       /* number of values yielded */
+  int nres = 0;         /* number of values returned */
+  l_uint32 callstatus = 0;
 };
 
 /*
@@ -203,34 +204,34 @@ struct global_State;
 
 struct lua_State : GCListed
 {
-  lu_byte allowhook;
-  TStatus status;
-  StkId top; /* first free slot in the stack */
-  global_State* l_G;
-  CallInfo* ci;    /* call info for current function */
-  StkId stack_last; /* end of stack (last element + 1) */
+  lu_byte allowhook = 1;
+  TStatus status = LUA_OK;
+  StkId top = 0; /* first free slot in the stack */
+  global_State* l_G = nullptr;
+  CallInfo* ci = nullptr;    /* call info for current function */
+  StkId stack_last = 0; /* end of stack (last element + 1) */
   std::span<TValue> stack;    /* stack base */
-  UpVal* openupval;    /* list of open upvalues in this stack */
-  StkId tbclist;
+  UpVal* openupval = nullptr;    /* list of open upvalues in this stack */
+  StkId tbclist = 0;
   std::span<StkId> tbc;
-  int ntbc;
-  struct lua_State* twups;      /* list of threads with open upvalues */
-  struct lua_longjmp* errorJmp; /* current error recover point */
+  int ntbc = 0;
+  lua_State* twups = this;      /* list of threads with open upvalues */
+  lua_longjmp* errorJmp = nullptr; /* current error recover point */
   CallInfo base_ci;             /* CallInfo for first level (C host) */
-  volatile lua_Hook hook;
-  StkId errfunc; /* current error handling function (stack index) */
-  l_uint32 nCcalls;  /* number of nested non-yieldable or C calls */
-  int oldpc;         /* last pc traced */
-  int nci;           /* number of items in 'ci' list */
-  int basehookcount;
-  int hookcount;
-  volatile l_signalT hookmask;
+  volatile lua_Hook hook = nullptr;
+  StkId errfunc = 0; /* current error handling function (stack index) */
+  l_uint32 nCcalls = 0;  /* number of nested non-yieldable or C calls */
+  int oldpc = 0;         /* last pc traced */
+  int nci = 0;           /* number of items in 'ci' list */
+  int basehookcount = 0;
+  int hookcount = 0;
+  volatile l_signalT hookmask = 0;
   struct
   {                /* info about transferred values (for call/return hooks) */
-    int ftransfer; /* offset of first value transferred */
-    int ntransfer; /* number of values transferred */
+    int ftransfer = 0; /* offset of first value transferred */
+    int ntransfer = 0; /* number of values transferred */
   } transferinfo;
-  void* extra;
+  void* extra = nullptr;
 };
 
 namespace lua::runtime
@@ -492,53 +493,53 @@ static l_forceinline int stacksize(const lua_State* th)
 */
 struct global_State
 {
-  lua_Alloc* frealloc; /* function to reallocate memory */
-  int apilock;
-  l_mem GCtotalbytes; /* number of bytes currently allocated + debt */
-  l_mem GCdebt;       /* bytes counted but not yet allocated */
-  size_t memlimit;
-  l_mem GCmarked;     /* number of objects marked in a GC cycle */
-  l_mem GCmajorminor; /* auxiliary counter to control major-minor shifts */
+  lua_Alloc* frealloc = nullptr; /* function to reallocate memory */
+  int apilock = 0;
+  l_mem GCtotalbytes = cost::Global; /* number of bytes currently allocated + debt */
+  l_mem GCdebt = 0;       /* bytes counted but not yet allocated */
+  size_t memlimit = 0;
+  l_mem GCmarked = 0;     /* number of objects marked in a GC cycle */
+  l_mem GCmajorminor = 0; /* auxiliary counter to control major-minor shifts */
   struct StringTable
   {
     std::vector<TString*> buckets;
     size_t count = 0;
   };
   StringTable strt;
-  TValue l_registry;
-  TValue nilvalue;   /* a nil value */
-  unsigned int seed; /* randomized seed for hashes */
-  int gcparams[LUA_GCPN];
-  lu_byte currentwhite;
-  lu_byte gcstate;     /* state of garbage collector */
-  lu_byte gckind;      /* kind of GC running */
-  lu_byte gcstopem;    /* stops emergency collections */
-  lu_byte gcstp;       /* control whether GC is running */
-  lu_byte gcemergency; /* true if this is an emergency collection */
-  GCObject allgc;      /* list of all collectable objects */
-  GCObject* sweepgc;  /* current position of sweep in list */
-  GCObject finobj;     /* list of collectable objects with finalizers */
-  GCListed gray;       /* list of gray objects */
-  GCListed grayagain;  /* list of objects to be traversed atomically */
-  GCListed weak;       /* list of tables with weak values */
-  GCListed ephemeron;  /* list of ephemeron tables (weak keys) */
-  GCListed allweak;    /* list of all-weak tables */
-  GCObject tobefnz;    /* list of userdata to be GC */
-  GCObject* fixedgc;   /* list of objects not to be collected */
+  TValue l_registry{Value{0, nullptr}, LUA_VNIL};
+  TValue nilvalue{Value{0, nullptr}, LUA_VNIL};   /* a nil value */
+  unsigned int seed = 0; /* randomized seed for hashes */
+  int gcparams[LUA_GCPN] = {};
+  lu_byte currentwhite = 0;
+  lu_byte gcstate = 0;     /* state of garbage collector */
+  lu_byte gckind = 0;      /* kind of GC running */
+  lu_byte gcstopem = 0;    /* stops emergency collections */
+  lu_byte gcstp = 0;       /* control whether GC is running */
+  lu_byte gcemergency = 0; /* true if this is an emergency collection */
+  GCObject allgc{};      /* list of all collectable objects */
+  GCObject* sweepgc = nullptr;  /* current position of sweep in list */
+  GCObject finobj{};     /* list of collectable objects with finalizers */
+  GCListed gray{};       /* list of gray objects */
+  GCListed grayagain{};  /* list of objects to be traversed atomically */
+  GCListed weak{};       /* list of tables with weak values */
+  GCListed ephemeron{};  /* list of ephemeron tables (weak keys) */
+  GCListed allweak{};    /* list of all-weak tables */
+  GCObject tobefnz{};    /* list of userdata to be GC */
+  GCObject* fixedgc = nullptr;   /* list of objects not to be collected */
   /* fields for generational collector */
-  GCObject* survival;                        /* start of objects that survived one GC cycle */
-  GCObject* old1;                            /* start of old1 objects */
-  GCObject* reallyold;                       /* objects more than one cycle old ("really old") */
-  GCObject* firstold1;                       /* first OLD1 object in the list (if any) */
-  GCObject* finobjsur;                       /* list of survival objects with finalizers */
-  GCObject* finobjold1;                      /* list of old1 objects with finalizers */
-  GCObject* finobjrold;                      /* list of really old objects with finalizers */
-  struct lua_State* twups;                   /* list of threads with open upvalues */
-  lua_CFunction panic;                       /* to be called in unprotected errors */
-  TString* memerrmsg;                        /* message for memory-allocation errors */
-  TString* tmname[TM_N];                     /* array with tag-method names */
-  struct Table* mt[LUA_NUMTYPES];            /* metatables for basic types */
-  lua_WarnFunction* warnf;                    /* warning function */
+  GCObject* survival = nullptr;                        /* start of objects that survived one GC cycle */
+  GCObject* old1 = nullptr;                            /* start of old1 objects */
+  GCObject* reallyold = nullptr;                       /* objects more than one cycle old ("really old") */
+  GCObject* firstold1 = nullptr;                       /* first OLD1 object in the list (if any) */
+  GCObject* finobjsur = nullptr;                       /* list of survival objects with finalizers */
+  GCObject* finobjold1 = nullptr;                      /* list of old1 objects with finalizers */
+  GCObject* finobjrold = nullptr;                      /* list of really old objects with finalizers */
+  lua_State* twups = nullptr;                   /* list of threads with open upvalues */
+  lua_CFunction panic = nullptr;                       /* to be called in unprotected errors */
+  TString* memerrmsg = nullptr;                        /* message for memory-allocation errors */
+  TString* tmname[TM_N] = {};                     /* array with tag-method names */
+  Table* mt[LUA_NUMTYPES] = {};            /* metatables for basic types */
+  lua_WarnFunction* warnf = nullptr;                    /* warning function */
   InternalString locale_name;
   lua_State mainth;                          /* main thread of this state */
 };

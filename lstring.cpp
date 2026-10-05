@@ -48,7 +48,6 @@ TString* TString::createstrobj(lua_State* L, InternalString&& str, size_t h,
   luaC_link(L, ts, LUA_VSTRING);
   ts->hash = (unsigned int)h;
   ts->hashed = (lu_byte)hashed;
-  ts->hnext = nullptr;
   ts->extra = external ? STREXTRA_EXTERNAL : 0;
   if (!external && l_unlikely(!luaM_reserve(L, str.size())))
     luaD_throw(L, LUA_ERRMEM);
@@ -213,11 +212,7 @@ Udata* Udata::luaS_newudata(lua_State* L, size_t s, int nuvalue)
     luaM_toobig(L);
   u = luaM_malloc_Udata(L);
   luaC_link(L, u, LUA_VUSERDATA);
-  u->metatable = nullptr;
-  u->uv = {};
   u->zb = s == 0;
-  u->data = byte_owner{};
-  u->objsize = 0;
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
   std::span<TValue> uv = luaM_alloc_TValue_span(L->l_G, L, {}, nuvalue, false);

@@ -37,7 +37,6 @@ CClosure* CClosure::luaF_newCclosure(lua_State* L, int nupvals)
   global_State* g = L->l_G;
   CClosure* c = luaM_malloc_CClosure(L);
   luaC_link(L, c, LUA_VCCL);
-  c->upvalue = {};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
   std::span<TValue> upvalue = luaM_alloc_TValue_span(L->l_G, L, {}, nupvals, false);
@@ -53,8 +52,6 @@ LClosure* LClosure::luaF_newLclosure(lua_State* L, int nupvals)
   global_State* g = L->l_G;
   LClosure* c = luaM_malloc_LClosure(L);
   luaC_link(L, c, LUA_VLCL);
-  c->p = nullptr;
-  c->upvals = {};
   lu_byte oldgcstop = g->gcstopem;
   g->gcstopem = 1;
   std::span<UpVal*> upvals = luaM_alloc_UpVal_ptr_span(L->l_G, L, {}, nupvals, false);
@@ -76,11 +73,6 @@ void LClosure::luaF_initupvals(lua_State* L)
   {
     UpVal* uv = luaM_malloc_UpVal(L);
     luaC_link(L, uv, LUA_VUPVAL);
-    uv->opennext = nullptr;
-    uv->prevopen = nullptr;
-    uv->owner = nullptr;
-    uv->stkid = 0;
-    setnilvalue(&uv->value);
     upvals[i] = uv;
     luaC_objbarrier(L, this, uv);
   }
@@ -281,19 +273,6 @@ Proto* Proto::luaF_newproto(lua_State* L)
 {
   Proto* f = luaM_malloc_Proto(L);
   luaC_link(L, f, LUA_VPROTO);
-  f->k = {};
-  f->p = {};
-  f->code = {};
-  f->lineinfo = {};
-  f->abslineinfo = {};
-  f->upvalues = {};
-  f->numparams = 0;
-  f->flag = 0;
-  f->maxstacksize = 0;
-  f->locvars = {};
-  f->linedefined = 0;
-  f->lastlinedefined = 0;
-  f->source = nullptr;
   return f;
 }
 
