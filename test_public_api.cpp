@@ -4890,6 +4890,220 @@ static void test_cfunc_stress()
   test_cfunc_stress_group6();
 }
 
+
+/*
+** API calls with continuations ('lua_getik' and the others): a metamethod
+** they run may yield; when the coroutine is resumed and the metamethod
+** returns, the continuation finds the stack as the plain call leaves it.
+*/
+
+/* the continuation of every test function: returns what is on the stack,
+   after a marker saying whether it ran (true) and its context */
+static int apik_cont(lua_State* L, int status, lua_KContext ctx)
+{
+  CHECK(status == LUA_YIELD);
+  int n = lua_gettop(L);
+  lua_pushboolean(L, 1);
+  lua_pushinteger(L, static_cast<lua_Integer>(ctx));
+  lua_rotate(L, 1, 2);
+  return n + 2;
+}
+
+/* direct path: the same results, with the marker false */
+static int apik_done(lua_State* L)
+{
+  int n = lua_gettop(L);
+  lua_pushboolean(L, 0);
+  lua_pushinteger(L, 0);
+  lua_rotate(L, 1, 2);
+  return n + 2;
+}
+
+/* each test function returns its whole stack after the call, on both
+   paths, so the two must agree */
+static int cf_getik(lua_State* L) /* (t, n) -> t, t[n] */
+{
+  lua_Integer n = lua_tointeger(L, 2);
+  lua_settop(L, 1);
+  lua_getik(L, 1, n, 11, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_getfieldk(lua_State* L) /* (t) -> t, t.field */
+{
+  lua_settop(L, 1);
+  lua_getfieldk(L, 1, "field", 12, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_gettablek(lua_State* L) /* (t, k) -> t, k, t[k] */
+{
+  lua_settop(L, 2);
+  lua_pushvalue(L, 2);
+  lua_gettablek(L, 1, 13, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_setik(lua_State* L) /* (t, n, v) -> t, n (t[n] = v) */
+{
+  lua_Integer n = lua_tointeger(L, 2);
+  lua_settop(L, 3);
+  lua_setik(L, 1, n, 14, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_setfieldk(lua_State* L) /* (t, v) -> t (t.field = v) */
+{
+  lua_settop(L, 2);
+  lua_setfieldk(L, 1, "field", 15, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_settablek(lua_State* L) /* (t, k, v) -> t, k, v (t[k] = v) */
+{
+  lua_settop(L, 3);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_settablek(L, 1, 16, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_comparek(lua_State* L) /* (a, b) -> a, b, a < b */
+{
+  lua_settop(L, 2);
+  lua_comparek(L, 1, 2, LUA_OPLT, 17, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_lenk(lua_State* L) /* (v) -> v, #v */
+{
+  lua_settop(L, 1);
+  lua_lenk(L, 1, 18, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_arithk(lua_State* L) /* (a, b) -> a + b */
+{
+  lua_settop(L, 2);
+  lua_arithk(L, LUA_OPADD, 19, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_concatk(lua_State* L) /* (...) -> concatenation of all */
+{
+  lua_concatk(L, lua_gettop(L), 20, apik_cont);
+  return apik_done(L);
+}
+
+static void test_api_continuations()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+  const struct { const char* name; lua_CFunction f; } fs[] = {
+      {"getik", cf_getik}, {"getfieldk", cf_getfieldk}, {"gettablek", cf_gettablek},
+      {"setik", cf_setik}, {"setfieldk", cf_setfieldk}, {"settablek", cf_settablek},
+      {"comparek", cf_comparek}, {"lenk", cf_lenk}, {"arithk", cf_arithk},
+      {"concatk", cf_concatk}};
+  for (const auto& f : fs)
+  {
+    lua_pushcfunction(L, f.f);
+    lua_setglobal(L, f.name);
+  }
+  int st = luaL_dostring(L, R"(
+    -- run 'f' in a coroutine, resuming every yield; returns its results
+    -- and the number of yields
+    local function run(f, ...)
+      local co = coroutine.create(f)
+      local r = table.pack(coroutine.resume(co, ...))
+      local yields = 0
+      while coroutine.status(co) ~= "dead" do
+        assert(r[1], r[2])
+        assert(r[2] == "pause")
+        yields = yields + 1
+        r = table.pack(coroutine.resume(co))
+      end
+      assert(r[1], r[2])
+      return yields, table.unpack(r, 2, r.n)
+    end
+    local function pause() coroutine.yield("pause") coroutine.yield("pause") end
+    local mt = {
+      __index = function(t, k) pause() return "got " .. tostring(k) end,
+      __newindex = function(t, k, v) pause() rawset(t, k, v .. "!") end,
+      __lt = function(a, b) pause() return a.v < b.v end,
+      __len = function(t) pause() return 99 end,
+      __add = function(a, b) pause() return a.v + b end,
+      __concat = function(a, b)
+        pause()
+        return (type(a) == "table" and a.v or a) .. (type(b) == "table" and b.v or b)
+      end,
+    }
+    local function obj(v) return setmetatable({v = v}, mt) end
+
+    local function check(yields, ran, ctx, ...)
+      return {yields = yields, ran = ran, ctx = ctx, n = select("#", ...), ...}
+    end
+
+    -- through a yielding metamethod: the continuation sees the plain result
+    local o = obj(1)
+    local r = check(run(getik, o, 5))
+    assert(r.yields == 2 and r.ran and r.ctx == 11 and r.n == 2 and r[1] == o and r[2] == "got 5")
+    r = check(run(getfieldk, o))
+    assert(r.yields == 2 and r.ran and r.ctx == 12 and r.n == 2 and r[2] == "got field")
+    r = check(run(gettablek, o, "key"))
+    assert(r.yields == 2 and r.ran and r.ctx == 13 and r.n == 3 and r[2] == "key" and r[3] == "got key")
+    local t = obj(1)
+    r = check(run(setik, t, 3, "x"))
+    assert(r.yields == 2 and r.ran and r.ctx == 14 and r.n == 2 and rawget(t, 3) == "x!")
+    r = check(run(setfieldk, t, "y"))
+    assert(r.yields == 2 and r.ran and r.ctx == 15 and r.n == 1 and rawget(t, "field") == "y!")
+    r = check(run(settablek, t, "k", "z"))
+    assert(r.yields == 2 and r.ran and r.ctx == 16 and r.n == 3 and r[3] == "z" and rawget(t, "k") == "z!")
+    r = check(run(comparek, obj(1), obj(2)))
+    assert(r.yields == 2 and r.ran and r.ctx == 17 and r.n == 3 and r[3] == true)
+    r = check(run(comparek, obj(2), obj(1)))
+    assert(r.yields == 2 and r.ran and r.n == 3 and r[3] == false)
+    r = check(run(lenk, o))
+    assert(r.yields == 2 and r.ran and r.ctx == 18 and r.n == 2 and r[2] == 99)
+    r = check(run(arithk, obj(40), 2))
+    assert(r.yields == 2 and r.ran and r.ctx == 19 and r.n == 1 and r[1] == 42)
+    -- concatenation goes on after each yield: two metamethod calls, four yields
+    r = check(run(concatk, "a", obj("b"), "c", obj("d")))
+    assert(r.yields == 4 and r.ran and r.ctx == 20 and r.n == 1 and r[1] == "abcd", r[1])
+
+    -- without metamethods: the same stacks, no continuation
+    r = check(run(getik, {10, 20}, 2))
+    assert(r.yields == 0 and not r.ran and r.n == 2 and r[2] == 20)
+    r = check(run(getfieldk, {field = "f"}))
+    assert(r.yields == 0 and not r.ran and r.n == 2 and r[2] == "f")
+    r = check(run(setik, {}, 1, "v"))
+    assert(r.yields == 0 and not r.ran and r.n == 2)
+    r = check(run(comparek, 1, 2))
+    assert(r.yields == 0 and not r.ran and r.n == 3 and r[3] == true)
+    r = check(run(concatk, "x", 1, "y"))
+    assert(r.yields == 0 and not r.ran and r.n == 1 and r[1] == "x1y")
+    r = check(run(arithk, 40, 2))
+    assert(r.yields == 0 and not r.ran and r.n == 1 and r[1] == 42)
+
+    -- outside a coroutine a metamethod cannot yield: the plain call
+    local ok, err = pcall(getik, obj(1), 1)
+    assert(not ok and string.find(err, "outside a coroutine"))
+    local ran, ctx, _, v = getik(setmetatable({}, {__index = function() return "plain" end}), 1)
+    assert(ran == false and v == "plain")
+
+    -- an error raised by the metamethod after a resume propagates
+    local bad = setmetatable({}, {__index = function() coroutine.yield("pause") error("late", 0) end})
+    local co = coroutine.create(getik)
+    assert(coroutine.resume(co, bad, 1))
+    local ok2, err2 = coroutine.resume(co)
+    assert(not ok2 and err2 == "late")
+    return "ok"
+  )");
+  if (st != LUA_OK)
+    std::printf("      %s\n", std::string(lua_tolstring(L, -1)->data(), lua_tolstring(L, -1)->size()).c_str());
+  CHECK(st == LUA_OK);
+  lua_close(L);
+}
+
 int main()
 {
   const TestEntry tests[] = {
@@ -4905,6 +5119,7 @@ int main()
       {"error_handling", test_error_handling},
       {"load_dump", test_load_dump},
       {"coroutines", test_coroutines},
+      {"api_continuations", test_api_continuations},
       {"warnings", test_warnings},
       {"warn_control", test_warn_control},
       {"db_gethook_mask", test_db_gethook_mask},

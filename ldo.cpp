@@ -738,6 +738,49 @@ static TStatus finishpcallk(lua_State* L, CallInfo* ci)
 }
 
 /*
+** Finishes an API call with a continuation ('lua_getik' and the others)
+** whose metamethod yielded and has now returned (its result is on the
+** top): the stack is left as the call leaves it. A concatenation goes on
+** with the values left, and its metamethods may yield again.
+*/
+static void finishapik(lua_State* L, CallInfo* ci)
+{
+  switch (ci->apiop)
+  {
+  case APIK_PUSH:
+    break;
+  case APIK_OVERKEY:
+    copyslot(L, L->top - 2, L->top - 1);
+    L->top--;
+    break;
+  case APIK_POP1:
+    L->top--;
+    break;
+  case APIK_POP2:
+    L->top -= 2;
+    break;
+  case APIK_BOOL:
+    setslottag(L, L->top - 1, tagisfalse(slottag(L, L->top - 1)) ? LUA_VFALSE : LUA_VTRUE);
+    break;
+  case APIK_ARITH:
+    copyslot(L, L->top - 3, L->top - 1);
+    L->top -= 2;
+    break;
+  default:
+  {
+    assert(ci->apiop == APIK_CONCAT);
+    StkId top = L->top - 1;        /* top when the metamethod was called */
+    copyslot(L, top - 2, top);     /* its result, over its first operand */
+    L->top = top - 1;
+    luaV_concat(L, static_cast<int>(L->top - ci->apifirst)); /* may yield again */
+    luaC_checkGC(L);
+    break;
+  }
+  }
+  ci->callstatus &= ~CIST_APIK;
+}
+
+/*
 ** Completes the execution of a C function interrupted by an yield.
 ** The interruption must have happened while the function was either
 ** closing its tbc variables in 'moveresults' or executing
@@ -767,6 +810,8 @@ static void finishCcall(lua_State* L, CallInfo* ci)
     assert(kf != nullptr && yieldable(L));
     if (ci->callstatus & CIST_YPCALL) /* was inside a 'lua_pcallk'? */
       status = finishpcallk(L, ci);   /* finish it */
+    else if (ci->callstatus & CIST_APIK) /* inside an API call ('lua_getik'...)? */
+      finishapik(L, ci);
     adjustresults(L, LUA_MULTRET);    /* finish 'lua_callk' */
     lua_unlock(L);
     n = (*kf)(L, status, ci->ctx); /* call continuation */

@@ -1392,6 +1392,110 @@ void lua_callk(lua_State* L, int nargs, int nresults,
 }
 
 /*
+** API calls with continuations: while one runs, a metamethod it calls may
+** yield, and 'finishCcall' finishes the call as 'op' says (APIK_*) before
+** calling the continuation. Without a continuation, or where the thread
+** cannot yield, it is the plain call.
+*/
+static bool armk(lua_State* L, lua_KContext ctx, lua_KFunction k, lu_byte op)
+{
+  CallInfo* ci = L->ci;
+  assert((k == nullptr || !isLua(ci)) && "cannot use continuations inside hooks");
+  if (k == nullptr || !yieldable(L))
+    return false;
+  ci->k = k;
+  ci->ctx = ctx;
+  ci->apiop = op;
+  ci->callstatus |= CIST_APIK;
+  return true;
+}
+
+static void disarmk(lua_State* L, bool armed)
+{
+  if (armed)
+    L->ci->callstatus &= ~CIST_APIK;
+}
+
+int lua_gettablek(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_OVERKEY);
+  int t = lua_gettable(L, idx);
+  disarmk(L, armed);
+  return t;
+}
+
+int lua_getfieldk(lua_State* L, int idx, const HostString& key, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_OVERKEY);
+  int t = lua_getfield(L, idx, key);
+  disarmk(L, armed);
+  return t;
+}
+
+int lua_getik(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_PUSH);
+  int t = lua_geti(L, idx, n);
+  disarmk(L, armed);
+  return t;
+}
+
+void lua_settablek(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_POP2);
+  lua_settable(L, idx);
+  disarmk(L, armed);
+}
+
+void lua_setfieldk(lua_State* L, int idx, const HostString& key, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_POP2);
+  lua_setfield(L, idx, key);
+  disarmk(L, armed);
+}
+
+void lua_setik(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_POP1);
+  lua_seti(L, idx, n);
+  disarmk(L, armed);
+}
+
+int lua_comparek(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua_KFunction k)
+{
+  idx1 = lua_absindex(L, idx1);
+  idx2 = lua_absindex(L, idx2);
+  bool armed = armk(L, ctx, k, APIK_BOOL);
+  int r = lua_compare(L, idx1, idx2, op);
+  disarmk(L, armed);
+  lua_pushboolean(L, r);
+  return r;
+}
+
+void lua_lenk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_PUSH);
+  lua_len(L, idx);
+  disarmk(L, armed);
+}
+
+void lua_arithk(lua_State* L, int op, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_ARITH);
+  lua_arith(L, op);
+  disarmk(L, armed);
+}
+
+void lua_concatk(lua_State* L, int n, lua_KContext ctx, lua_KFunction k)
+{
+  bool armed = armk(L, ctx, k, APIK_CONCAT);
+  if (armed)
+    L->ci->apifirst = L->top - n;
+  lua_concat(L, n);
+  disarmk(L, armed);
+}
+
+/*
 ** Execute a protected call.
 */
 struct CallS : ProtectedCall

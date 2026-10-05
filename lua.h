@@ -289,6 +289,24 @@ int(lua_pcallk)(lua_State* L, int nargs, int nresults, int errfunc,
                         lua_KContext ctx, lua_KFunction k);
 int lua_pcall(lua_State* L, int nargs, int nresults, int errfunc);
 
+/*
+** API calls that may run metamethods, with a continuation: a metamethod
+** they run may yield (in a coroutine), and when it returns after the
+** coroutine is resumed, 'k' is called (status LUA_YIELD, context 'ctx')
+** with the stack as the plain call leaves it. lua_comparek also pushes
+** the result, as a boolean.
+*/
+int(lua_gettablek)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
+int(lua_getfieldk)(lua_State* L, int idx, const HostString& key, lua_KContext ctx, lua_KFunction k);
+int(lua_getik)(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k);
+void(lua_settablek)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
+void(lua_setfieldk)(lua_State* L, int idx, const HostString& key, lua_KContext ctx, lua_KFunction k);
+void(lua_setik)(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k);
+int(lua_comparek)(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua_KFunction k);
+void(lua_lenk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
+void(lua_arithk)(lua_State* L, int op, lua_KContext ctx, lua_KFunction k);
+void(lua_concatk)(lua_State* L, int n, lua_KContext ctx, lua_KFunction k);
+
 int(lua_load)(lua_State* L, lua_Reader* reader,
                       const std::optional<HostString>& chunkname,
                       const std::optional<HostString>& mode);

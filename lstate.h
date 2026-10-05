@@ -112,6 +112,8 @@ struct CallInfo
   int nyield = 0;       /* number of values yielded */
   int nres = 0;         /* number of values returned */
   l_uint32 callstatus = 0;
+  lu_byte apiop = 0;  /* CIST_APIK: how to finish the API call (APIK_*) */
+  StkId apifirst = 0; /* CIST_APIK, a concatenation: its first value */
 };
 
 /*
@@ -153,6 +155,21 @@ constexpr l_uint32 CIST_TAIL = CIST_YPCALL << 1;
 constexpr l_uint32 CIST_HOOKYIELD = CIST_TAIL << 1;
 /* function "called" a finalizer */
 constexpr l_uint32 CIST_FIN = CIST_HOOKYIELD << 1;
+/* C function is in an API call with a continuation ('lua_getik'...):
+   a metamethod the call runs may yield */
+constexpr l_uint32 CIST_APIK = CIST_FIN << 1;
+
+/*
+** How 'finishCcall' finishes an API call with a continuation whose
+** metamethod yielded, so that the stack is as the call leaves it.
+*/
+constexpr lu_byte APIK_PUSH = 1;    /* the result is on the top: done */
+constexpr lu_byte APIK_OVERKEY = 2; /* the result replaces the key below it */
+constexpr lu_byte APIK_POP1 = 3;    /* pop the value set */
+constexpr lu_byte APIK_POP2 = 4;    /* pop the value set and its key */
+constexpr lu_byte APIK_BOOL = 5;    /* the result, as a boolean, is on the top */
+constexpr lu_byte APIK_ARITH = 6;   /* the result replaces both operands */
+constexpr lu_byte APIK_CONCAT = 7;  /* the result replaces two values; go on */
 
 constexpr int get_nresults(l_uint32 cs)
 {
