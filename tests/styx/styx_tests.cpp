@@ -380,15 +380,22 @@ static std::string script_persist(lua_State* L)
 
 /* sets _PERMS: every C function and userdata reachable from _G, the
    registry and the string metatable, named by its path */
+/* sets _PERMS: every C function and userdata reachable from _G, the
+   registry and the string metatable, named by its path; keys are visited
+   in sorted order, so two states with the same libraries agree on names;
+   _BACK is the inverse */
 static const char* const build_perms =
   "local perms = {} local seen = {} "
   "local function walk(t, name) if seen[t] then return end seen[t] = true "
-  "for k, v in pairs(t) do local n = name .. '.' .. tostring(k) "
-  "if type(v) == 'function' or type(v) == 'userdata' then perms[v] = n "
+  "local keys = {} for k in pairs(t) do keys[#keys + 1] = k end "
+  "table.sort(keys, function(a, b) return tostring(a) < tostring(b) end) "
+  "for _, k in ipairs(keys) do local v = t[k] local n = name .. '.' .. tostring(k) "
+  "if (type(v) == 'function' and debug.getinfo(v, 'S').what == 'C') or type(v) == 'userdata' then "
+  "if perms[v] == nil then perms[v] = n end "
   "elseif type(v) == 'table' then walk(v, n) end end "
   "local mt = getmetatable(t) if mt then walk(mt, name .. '<mt>') end end "
-  "walk(_G, '_G') walk(debug.getregistry(), 'R') walk(getmetatable(''), 'smt') "
-  "_PERMS = perms return 'ok'";
+  "walk(getmetatable(''), 'smt') walk(_G, '_G') walk(debug.getregistry(), 'R') "
+  "_PERMS = perms _BACK = {} for v, n in pairs(perms) do _BACK[n] = v end return 'ok'";
 
 static const char* const graph_samples[] = {
   "return {1, 2.5, -0.0, true, false, 'str', ('long'):rep(40)}, {}",
@@ -621,6 +628,190 @@ static void test_host_persists_child_thread()
   lua_close(B);
 }
 
+/*
+** Host side restore (luaL_unpersiststate, luaL_unpersistvalue): the host
+** creates a state (with the persisted seed), opens what it provides, and
+** restores into it; what is restored is charged through its allocator.
+*/
+
+/* a state with the allocator 'a' and the seed of 'blob' (or 0) */
+static lua_State* new_state_for(CountingAlloc* a, const std::string& blob)
+{
+  unsigned int seed = 0;
+  luaL_persistedseed(byte_view(blob.data(), blob.size()), &seed);
+  lua_State* L = lua_newstate(a, seed);
+  luaL_openlibs(L);
+  return L;
+}
+
+static int restore_state(lua_State* L, const std::string& blob, HostString* msg)
+{
+  eval(L, build_perms);
+  lua_getglobal(L, "_BACK");
+  int st = luaL_unpersiststate(L, lua_gettop(L), byte_view(blob.data(), blob.size()), msg);
+  lua_pop(L, 1);
+  return st;
+}
+
+/* a running program, persisted whole by the host and restored in a new state */
+static const char* const program =
+  "data = {list = {1, 2, 3}, name = 'state'} "
+  "local function counter() local n = 0 "
+  "  return function() n = n + 1 return n end, function() return n end end "
+  "inc, get = counter() inc() "
+  "local C = {__close = function(v) closed = (closed or '') .. v.name end} "
+  "worker = coroutine.create(function(a) "
+  "  local total = a "
+  "  local res <close> = setmetatable({name = 'res'}, C) "
+  "  peek = function() return total end "
+  "  while true do total = total + coroutine.yield(total) end "
+  "end) "
+  "coroutine.resume(worker, 10) "
+  "getmetatable('').__index.shout = function(s) return s:upper() .. '!' end "
+  "debug.setmetatable(0, {__index = {double = function(n) return n * 2 end}}) "
+  "main_ref = coroutine.running() "
+  "return 'ok'";
+
+static void test_host_state_roundtrip()
+{
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, program) == "ok");
+  CHECK(eval(A, build_perms) == "ok");
+  lua_getglobal(A, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(A, 1, &w, &msg) == LUA_OK);
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = new_state_for(&a2, w.out);
+  int st = restore_state(B, w.out, &msg);
+  if (st != LUA_OK)
+    std::printf("      host restore error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  CHECK(lua_gettop(B) == 0);
+  CHECK(eval(B, "return data.name .. #data.list") == "state3");
+  CHECK(eval(B, "inc() return tostring(get())") == "2");
+  CHECK(eval(B, "local _, t = coroutine.resume(worker, 5) return tostring(t) .. ',' .. peek()") == "15,15");
+  CHECK(eval(B, "return ('hey'):shout()") == "HEY!");
+  CHECK(eval(B, "return tostring((21):double())") == "42");
+  CHECK(eval(B, "return tostring(main_ref == coroutine.running() and debug.getregistry()[3] == main_ref)") == "true");
+  CHECK(eval(B, "coroutine.close(worker) return closed") == "res");
+  CHECK(eval(B, "return tostring(print == _BACK and true or type(print))") == "function");
+  lua_close(B);
+}
+
+/* a state persisted at its memory cap is restored and runs on */
+static void test_host_restore_of_capped_state()
+{
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  lua_getglobal(A, "_PERMS");
+  a1.cap = a1.used + 256 * 1024;
+  CHECK(eval(A,
+    "hog = {} "
+    "local ok, err = pcall(function() for i = 1, 1e9 do hog[i] = ('x'):rep(100) .. i end end) "
+    "return tostring(err)").find("not enough memory") != std::string::npos);
+  int count_a = lua_gc(A, LUA_GCCOUNT, 0, 0, 0);
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(A, 1, &w, &msg) == LUA_OK);
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = new_state_for(&a2, w.out);
+  CHECK(restore_state(B, w.out, &msg) == LUA_OK);
+  lua_gc(B, LUA_GCCOLLECT, 0, 0, 0);
+  int count_b = lua_gc(B, LUA_GCCOUNT, 0, 0, 0);
+  CHECK(count_b > count_a / 2 && count_b < count_a * 2);
+  CHECK(eval(B, "return tostring(#hog > 100 and hog[1] == ('x'):rep(100) .. 1)") == "true");
+  /* the restored program runs under the same cap again */
+  a2.cap = a2.used + 64 * 1024;
+  CHECK(eval(B,
+    "local ok, err = pcall(function() for i = 1, 1e9 do hog[#hog + 1] = ('y'):rep(100) .. i end end) "
+    "return tostring(err)").find("not enough memory") != std::string::npos);
+  a2.cap = 0;
+  lua_close(B);
+}
+
+/* a restore that runs out of memory fails cleanly and leaves the state as it was */
+static void test_host_restore_out_of_memory()
+{
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, "big = {} for i = 1, 20000 do big[i] = 'item' .. i end return 'ok'") == "ok");
+  CHECK(eval(A, build_perms) == "ok");
+  lua_getglobal(A, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(A, 1, &w, &msg) == LUA_OK);
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = new_state_for(&a2, w.out);
+  CHECK(eval(B, "mine = 'still here' return 'ok'") == "ok");
+  CHECK(eval(B, build_perms) == "ok");
+  lua_getglobal(B, "_BACK");
+  a2.cap = a2.used + 64 * 1024;
+  int st = luaL_unpersiststate(B, 1, byte_view(w.out.data(), w.out.size()), &msg);
+  a2.cap = 0;
+  CHECK(st != LUA_OK);
+  CHECK(std::string(msg.to_os()).find("not enough memory") != std::string::npos);
+  CHECK(lua_gettop(B) == 1);
+  lua_settop(B, 0);
+  CHECK(eval(B, "return mine") == "still here");
+  CHECK(eval(B, "return tostring(big)") == "nil");
+  lua_close(B);
+}
+
+/* values: host restore takes the inverse permanents and may restore the main thread */
+static void test_host_value_restore()
+{
+  lua_State* A = new_state();
+  CHECK(push_value_and_perms(A,
+    "local t = {list = {1, 2}, f = function() return 7 end} t.self = t "
+    "return {t, coroutine.running(), print}, {[print] = 'print'}"));
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persistvalue(A, 2, 1, &w, &msg) == LUA_OK);
+  lua_close(A);
+
+  lua_State* B = new_state();
+  CHECK(eval(B, "_BACK = {print = tostring} return 'ok'") == "ok");
+  lua_getglobal(B, "_BACK");
+  CHECK(luaL_unpersistvalue(B, 1, byte_view(w.out.data(), w.out.size()), &msg) == LUA_OK);
+  CHECK(lua_gettop(B) == 2 && lua_type(B, 2) == LUA_TTABLE);
+  lua_setglobal(B, "v");
+  lua_settop(B, 0);
+  CHECK(eval(B, "return tostring(v[1].self == v[1] and v[1].f() == 7 and #v[1].list == 2)") == "true");
+  CHECK(eval(B, "return tostring(v[2] == coroutine.running() and v[3] == tostring)") == "true");
+  lua_close(B);
+}
+
+/* the formats keep apart: scripts cannot read state streams, values are not states */
+static void test_host_stream_kinds()
+{
+  lua_State* L = new_state();
+  CHECK(eval(L, build_perms) == "ok");
+  lua_getglobal(L, "_PERMS");
+  StringWriter ws;
+  HostString msg;
+  CHECK(luaL_persiststate(L, 1, &ws, &msg) == LUA_OK);
+  unsigned int seed = 12345;
+  CHECK(luaL_persistedseed(byte_view(ws.out.data(), ws.out.size()), &seed) == 1);
+  push_string(L, ws.out);
+  CHECK(call_styx(L, "unpersist", 1, 1) == LUA_ERRRUN);
+  lua_settop(L, 0);
+  std::string value = persist_in_new_state("return require('styx').persist({1, 2})");
+  CHECK(luaL_persistedseed(byte_view(value.data(), value.size()), &seed) == 0);
+  CHECK(luaL_unpersiststate(L, 0, byte_view(value.data(), value.size()), &msg) != LUA_OK);
+  CHECK(luaL_unpersistvalue(L, 0, byte_view(ws.out.data(), ws.out.size()), &msg) != LUA_OK);
+  CHECK(lua_gettop(L) == 0);
+  lua_close(L);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -649,6 +840,11 @@ static void run_cpp_tests()
       {"host_persist_running_state", test_host_persist_running_state},
       {"host_persist_state_stream", test_host_persist_state_stream},
       {"host_persists_child_thread", test_host_persists_child_thread},
+      {"host_state_roundtrip", test_host_state_roundtrip},
+      {"host_restore_of_capped_state", test_host_restore_of_capped_state},
+      {"host_restore_out_of_memory", test_host_restore_out_of_memory},
+      {"host_value_restore", test_host_value_restore},
+      {"host_stream_kinds", test_host_stream_kinds},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

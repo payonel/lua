@@ -101,8 +101,8 @@ local x = styx.settings(name [, value])    -- query or change a setting
   9. userdata (not supported yet; see below)
   10. error reporting with a path to the offending value (done:
       `paths.lua`, ADR-19)
-  11. host side persist of a value or the whole state (done: C++ tests
-      `host_*`, ADR-21); host side restore (next)
+  11. host side persist and restore of a value or the whole state (done:
+      C++ tests `host_*`, ADR-21, ADR-24)
 - Items are added or reordered as the tests teach us something.
 
 ## Not supported yet
@@ -133,7 +133,6 @@ of these raises a clear error unless it says otherwise.
 ### Functions
 - **C functions and C closures** other than through the permanents table.
   Today: error ("cannot persist a C function").
-
 - **Variables (upvalues) as permanents**: today a permanent is a value;
   a captured variable can be kept shared only through a table that is a
   permanent (ADR-23). A permanents entry keyed by an upvalue
@@ -151,7 +150,10 @@ of these raises a clear error unless it says otherwise.
   reinserted, so `pairs` order over the hash part differs once the table
   has had deletions and reinsertions (200 of 200 trials). A coroutine
   suspended inside a `pairs` loop then skips or repeats keys after restore
-  (68 of 100 trials). Plan: ADR-22.
+  (68 of 100 trials). Plan: ADR-22. Keys that are objects (tables,
+  functions, userdata, threads) hash by address, and a restored object has
+  a new address, so a slot-for-slot copy cannot place them; they need
+  either a rebuild (order differs) or a stored per-object hash.
 - **A `__persist` restore closure that reaches the value it rebuilds**
   (directly or through its upvalues). Today: unpersist error ("invalid
   persisted data"); the value has no object yet while its closure is read.
@@ -160,8 +162,6 @@ of these raises a clear error unless it says otherwise.
   finalizer queue, mark state and weak-clearing state are not persisted.
 
 ### States and memory
-- **Whole-state restore on the host** (the counterpart of
-  `luaL_persiststate`, ADR-21). Today: host persist only.
 - **The main thread's API stack** is not part of a state snapshot; the host
   manages it. Today: not persisted.
 - **A `__persist` function in a host persist**: it would run Lua code in
@@ -170,9 +170,10 @@ of these raises a clear error unless it says otherwise.
 - **Recursion depth of the script path**: the host persist keeps its own
   work stack (no depth limit); the script path still recurses (see
   "Recursion depth").
-- **Policy for restoring over a memory limit** (for a host-driven restore).
-  Today: unpersist is charged and limited like any script allocation.
-- **The main thread** as a persisted value.
+- **The main thread from the script API**: `styx.persist` reaching the
+  main thread fails (it is the caller or above it); the host API persists
+  it as a reference and restores it as the restoring state's main thread
+  (ADR-21, ADR-24).
 
 ### Format and robustness
 - **Recursion depth**: persist and unpersist recurse on the C stack and
@@ -457,10 +458,28 @@ by a scope that is not persisted is restored as its value; to keep it
 shared, keep it in a table that is a permanent. Tested from script
 (`children.lua`) and from the host (`host_persists_child_thread`).
 
-### Required tests for later work
-- Host restore of a state persisted at its memory cap must succeed and the
-  restored state must resume (host persist at the cap is tested, ADR-21).
-  Scripts must have no way to use this to get around their memory limit.
+### ADR-24: Host side restore
+**Status:** accepted
+`luaL_unpersistvalue(L, perms, data, msg)` pushes a value and
+`luaL_unpersiststate(L, perms, data, msg)` restores a whole state, with
+`perms` the inverse permanents (key -> object) built in the restoring
+state. The host creates the state (with `luaL_persistedseed`'s seed, so
+strings hash as before), opens what it provides, and restores into it.
+- The restore runs in a protected call on the idle state with the
+  machinery of `unpersist`; only host restores accept the main thread
+  reference.
+- Everything restored is charged to the state through its allocator, so
+  the host's allocator is the memory policy: a restore that it denies fails
+  with "not enough memory". The state's registry and type metatables are
+  replaced only after the whole stream was read, so a failed restore leaves
+  the state as it was.
+- Tested: a running program (closures with shared upvalues, a suspended
+  coroutine with an open upvalue and a to-be-closed variable, string and
+  number metatables, the main thread) restored whole in a new state; a
+  state persisted at its memory cap restored and running on under the cap
+  again; a restore that runs out of memory; value restores; streams of one
+  kind refused by the other. Scripts cannot reach any of this, so it gives
+  them no way around their memory limit.
 
 ## Open questions
 

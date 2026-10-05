@@ -1927,8 +1927,137 @@ static int host_persist(lua_State* L, int perms, lua_Writer* w, HostString* msg,
   }
 }
 
+/*
+** Host side restore: runs protected on the idle state, with the machinery
+** of 'unpersist' (the stream may refer to the main thread); everything
+** restored is charged to the state through its allocator. A state's
+** registry and type metatables replace the state's own only after the
+** whole stream was read, so a failed restore leaves the state as it was.
+*/
+struct HostRestore
+{
+  byte_view data;
+  bool state;
+};
+
+/* 1: permanents (key -> object) or nil; 2: the HostRestore */
+static int host_restore_body(lua_State* L)
+{
+  HostRestore* hr = static_cast<HostRestore*>(lua_touserdata(L, 2));
+  if (lua_isnil(L, 1))
+  {
+    lua_createtable(L, 0, 0);
+    lua_replace(L, 1);
+  }
+  Unpersist U{Reader{L, hr->data}, 1, 3, 4};
+  U.host = true;
+  const byte_view header = lt::styx_header;
+  if (U.r.data.size() < header.size() || U.r.data.substr(0, header.size()) != header)
+    U.r.invalid();
+  U.r.pos = header.size();
+  lua_createtable(L, 0, 0);
+  lua_createtable(L, 0, 0);
+  if (!hr->state)
+  {
+    if (U.r.pos < U.r.data.size() && U.r.data[U.r.pos] == TAG_STATE)
+      U.r.invalid();
+    unpersist(U);
+    if (U.r.pos != U.r.data.size())
+      U.r.invalid();
+    return 1;
+  }
+  if (U.r.get_byte() != TAG_STATE)
+    U.r.invalid();
+  U.r.get_i64(); /* the seed: the host created the state (luaL_persistedseed) */
+  unpersist(U);  /* the registry, at 5 */
+  if (!lua_istable(L, -1))
+    U.r.invalid();
+  for (int t = 0; t < LUA_NUMTYPES; t++) /* the type metatables, at 6... */
+  {
+    unpersist(U);
+    if (!lua_isnil(L, -1) && !lua_istable(L, -1))
+      U.r.invalid();
+  }
+  if (U.r.pos != U.r.data.size())
+    U.r.invalid();
+  /* the whole stream is read: the state takes the restored roots */
+  global_State* g = L->l_G;
+  TValue reg = getslot(L, L->ci->func + 5);
+  copyobj(&g->l_registry, &reg);
+  for (int t = 0; t < LUA_NUMTYPES; t++)
+  {
+    TValue mt = getslot(L, L->ci->func + 6 + t);
+    g->mt[t] = ttistable(&mt) ? hvalue(&mt) : nullptr;
+  }
+  return 0;
+}
+
+static CFuncInfo cfi_host_restore(host_restore_body);
+
+static int host_restore(lua_State* L, int perms, byte_view data, bool state, HostString* msg)
+{
+  lua_State* main = mainthread(L->l_G);
+  if (main->ci != &main->base_ci || L->ci != &L->base_ci)
+  {
+    *msg = HostString("the state is running");
+    return LUA_ERRRUN;
+  }
+  int top = lua_gettop(L);
+  if (perms < 0)
+    perms = top + perms + 1;
+  if (perms != 0 && (perms > top || !lua_istable(L, perms)))
+  {
+    *msg = HostString("the permanents must be a table");
+    return LUA_ERRRUN;
+  }
+  if (!lua_checkstack(L, 3))
+  {
+    *msg = HostString("not enough memory");
+    return LUA_ERRMEM;
+  }
+  HostRestore hr{data, state};
+  lua_pushcfuncinfo(L, &cfi_host_restore);
+  if (perms != 0)
+    lua_pushvalue(L, perms);
+  else
+    lua_pushnil(L);
+  lua_pushlightuserdata(L, &hr);
+  int st = lua_pcall(L, 2, state ? 0 : 1, 0);
+  if (st != LUA_OK)
+  {
+    auto m = lua_tolstring(L, -1);
+    *msg = m ? HostString::from_bytes(*m) : HostString("error object is not a string");
+    lua_settop(L, top);
+  }
+  return st;
+}
+
 /* }====================================================== */
 
+}
+
+int luaL_persistedseed(byte_view data, unsigned int* seed)
+{
+  using namespace lua::lib;
+  const byte_view header = lt::styx_header;
+  size_t need = header.size() + 1 + sizeof(lua_Integer);
+  if (data.size() < need || data.substr(0, header.size()) != header ||
+      data[header.size()] != TAG_STATE)
+    return 0;
+  lua_Integer v;
+  std::memcpy(&v, data.substr(header.size() + 1, sizeof(v)).data(), sizeof(v));
+  *seed = static_cast<unsigned int>(v);
+  return 1;
+}
+
+int luaL_unpersistvalue(lua_State* L, int perms, byte_view data, HostString* msg)
+{
+  return lua::lib::host_restore(L, perms, data, false, msg);
+}
+
+int luaL_unpersiststate(lua_State* L, int perms, byte_view data, HostString* msg)
+{
+  return lua::lib::host_restore(L, perms, data, true, msg);
 }
 
 int luaL_persistvalue(lua_State* L, int perms, int idx, lua_Writer* w, HostString* msg)

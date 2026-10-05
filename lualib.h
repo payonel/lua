@@ -68,6 +68,20 @@ LUAMOD_API int(luaopen_styx)(lua_State* L);
 int(luaL_persistvalue)(lua_State* L, int perms, int idx, lua_Writer* w, HostString* msg);
 int(luaL_persiststate)(lua_State* L, int perms, lua_Writer* w, HostString* msg);
 
+/*
+** The host side restore. 'perms' is the stack index of the inverse
+** permanents (key -> object), or 0. luaL_unpersistvalue pushes the value;
+** luaL_unpersiststate makes the stream's registry and type metatables the
+** state's (create the state with luaL_persistedseed's seed). The state
+** must not be running; what is restored is charged through its allocator.
+** On error nothing is pushed or changed and 'msg' says why.
+** luaL_persistedseed returns 1 and the string hash seed of a state stream,
+** or 0 for any other data.
+*/
+int(luaL_unpersistvalue)(lua_State* L, int perms, byte_view data, HostString* msg);
+int(luaL_unpersiststate)(lua_State* L, int perms, byte_view data, HostString* msg);
+int(luaL_persistedseed)(byte_view data, unsigned int* seed);
+
 /* open selected libraries */
 void(luaL_openselectedlibs)(lua_State* L, int load, int preload);
 
