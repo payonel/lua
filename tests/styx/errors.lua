@@ -11,9 +11,9 @@ local function fails(pattern, f, ...)
   end
 end
 
-case("userdata cannot be persisted", function()
-  fails("cannot persist a userdata value", styx.persist, io.stdout)
-  fails("cannot persist a userdata value", styx.persist, {file = io.stdout})
+case("userdata are not supported yet", function()
+  fails("persisting a userdata value is not supported yet", styx.persist, io.stdout)
+  fails("persisting a userdata value is not supported yet", styx.persist, {file = io.stdout})
 end)
 
 case("C functions need the permanents table", function()
@@ -104,7 +104,7 @@ case("an error inside a deep graph does not leak the stack", function()
   local cur = t
   for _ = 1, 500 do cur.n = {}; cur = cur.n end
   cur.bad = io.stdout
-  for _ = 1, 10 do fails("cannot persist", styx.persist, t) end
+  for _ = 1, 10 do fails("not supported yet", styx.persist, t) end
 end)
 
 case("nesting past the depth limit is an error, not a crash", function()

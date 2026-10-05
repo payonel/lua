@@ -278,6 +278,30 @@ static void test_truncation_from_cpp()
   lua_close(L);
 }
 
+/* light userdata are restored through the permanents table */
+static void test_light_userdata()
+{
+  static int here, there;
+  lua_State* L = new_state();
+  lua_pushlightuserdata(L, &here);
+  CHECK(call_styx(L, "persist", 1, 1) == LUA_ERRRUN);
+  CHECK(to_string(L, -1).find("persisting a userdata value is not supported yet") != std::string::npos);
+  lua_pop(L, 1);
+  lua_newtable(L);
+  lua_pushlightuserdata(L, &here);
+  lua_pushstring(L, "here");
+  lua_rawset(L, -3);
+  lua_pushlightuserdata(L, &here);
+  CHECK(call_styx(L, "persist", 2, 1) == LUA_OK);
+  lua_newtable(L);
+  lua_pushlightuserdata(L, &there);
+  lua_setfield(L, -2, "here");
+  lua_insert(L, -2);
+  CHECK(call_styx(L, "unpersist", 2, 1) == LUA_OK);
+  CHECK(lua_touserdata(L, -1) == &there);
+  lua_close(L);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -295,6 +319,7 @@ static void run_cpp_tests()
       {"tables_across_states", test_tables_across_states},
       {"closures_across_states", test_closures_across_states},
       {"truncation_from_cpp", test_truncation_from_cpp},
+      {"light_userdata", test_light_userdata},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

@@ -39,6 +39,7 @@ constexpr char TAG_PERM = 10;    /* object replaced by its permanent key */
 constexpr char TAG_UPVAL_NEW = 11;
 constexpr char TAG_UPVAL_REF = 12;
 constexpr char TAG_UPVAL_OPEN = 13; /* open upvalue: owner thread, stack level */
+constexpr char TAG_SPECIAL = 14;    /* a value rebuilt by a closure (__persist) */
 
 constexpr int MAX_DEPTH = 10000;
 
@@ -105,6 +106,51 @@ static void persist_string(Persist& P)
   luaL_addchar(&P.B, TAG_STRING);
   put_i64(&P.B, static_cast<lua_Integer>(s.size()));
   luaL_addlstring(&P.B, s, 0, s.size());
+}
+
+/*
+** The '__persist' field of a table's metatable: absent or true persists
+** the table literally, false forbids it, and a function is called with the
+** table and returns a closure that is persisted in its place; unpersist
+** calls that closure to rebuild the table. Returns true if the table was
+** written this way.
+*/
+static bool persist_special(Persist& P)
+{
+  lua_State* L = P.L;
+  luaL_checkstacki(L, 3, std::nullopt);
+  if (!lua_getmetatable(L, -1))
+    return false;
+  lua_pushistringref(L, lt::mm_persist);
+  lua_rawget(L, -2);
+  switch (lua_type(L, -1))
+  {
+  case LUA_TNIL:
+    lua_pop(L, 2);
+    return false;
+  case LUA_TBOOLEAN:
+  {
+    bool allow = lua_toboolean(L, -1);
+    lua_pop(L, 2);
+    if (!allow)
+      luaL_errori(L, lt::cannot_persist_a_table_its___persist_is_false);
+    return false;
+  }
+  case LUA_TFUNCTION:
+    lua_remove(L, -2);       /* the metatable */
+    lua_pushvalue(L, -2);    /* the table */
+    lua_call(L, 1, 1);
+    if (!lua_isfunction(L, -1))
+      luaL_errori(L, lt::mm_persist_must_return_a_function);
+    luaL_addchar(&P.B, TAG_SPECIAL);
+    luaL_addchar(&P.B, static_cast<char>(LUA_TTABLE));
+    persist(P);
+    lua_pop(L, 1);
+    return true;
+  default:
+    luaL_errori(L, lt::mm_persist_must_be_a_boolean_or_a_function);
+    return false;
+  }
 }
 
 static void persist_table(Persist& P)
@@ -309,6 +355,8 @@ static void persist(Persist& P)
   case LUA_TTABLE:
   case LUA_TFUNCTION:
   case LUA_TTHREAD:
+  case LUA_TUSERDATA:
+  case LUA_TLIGHTUSERDATA:
     break;
   default:
     lua_pushstring(L, luaL_typename(L, -1));
@@ -317,6 +365,8 @@ static void persist(Persist& P)
 
   if (begin_object(P))
     return;
+  if (lua_type(L, -1) == LUA_TUSERDATA || lua_type(L, -1) == LUA_TLIGHTUSERDATA)
+    luaL_errori(L, lt::persisting_a_userdata_value_is_not_supported_yet);
   if (P.depth >= MAX_DEPTH)
     luaL_errori(L, lt::persisted_data_is_nested_too_deeply);
   P.depth++;
@@ -326,7 +376,8 @@ static void persist(Persist& P)
     persist_string(P);
     break;
   case LUA_TTABLE:
-    persist_table(P);
+    if (!persist_special(P))
+      persist_table(P);
     break;
   case LUA_TFUNCTION:
     if (lua_iscfunction(L, -1))
@@ -438,6 +489,29 @@ static void unpersist_table(Unpersist& U, lua_Integer id)
   if (h->asize() != asize || allocsizenode(h) != hsize)
     luaL_errori(L, lt::invalid_persisted_data);
   h->lenhint = static_cast<int>(lenhint);
+}
+
+/*
+** A value rebuilt by the closure its '__persist' function returned. Its
+** reference id is taken before the closure is read, matching persist.
+*/
+static void unpersist_special(Unpersist& U, lua_Integer id)
+{
+  lua_State* L = U.r.L;
+  int type = U.r.get_byte();
+  if (type != LUA_TTABLE)
+    luaL_errori(L, lt::invalid_persisted_data);
+  unpersist(U);
+  if (!lua_isfunction(L, -1))
+    luaL_errori(L, lt::invalid_persisted_data);
+  lua_call(L, 0, 1);
+  if (lua_type(L, -1) != type)
+  {
+    lua_pushstring(L, luaL_typename(L, -1));
+    lua_pushstring(L, lua_typename(L, type));
+    luaL_errori(L, lt::mm_persist_restore_returned_s_s_expected);
+  }
+  register_object(U, id);
 }
 
 struct BytesReader : lua_Reader
@@ -694,6 +768,7 @@ static void unpersist(Unpersist& U)
   case TAG_TABLE:
   case TAG_LCLOSURE:
   case TAG_THREAD:
+  case TAG_SPECIAL:
     break;
   default:
     luaL_errori(L, lt::invalid_persisted_data);
@@ -720,6 +795,9 @@ static void unpersist(Unpersist& U)
     break;
   case TAG_LCLOSURE:
     unpersist_lclosure(U, id);
+    break;
+  case TAG_SPECIAL:
+    unpersist_special(U, id);
     break;
   default:
     unpersist_thread(U, id);

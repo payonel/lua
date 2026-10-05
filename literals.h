@@ -123,6 +123,12 @@ namespace lt
   constexpr byte_view bad_permanent_value_for_key_s("bad permanent value for key '%s'");
   constexpr byte_view bad_permanent_value_s_expected_got_s("bad permanent value (%s expected, got %s)");
   constexpr byte_view persisted_data_is_nested_too_deeply("persisted data is nested too deeply");
+  constexpr byte_view mm_persist("__persist");
+  constexpr byte_view cannot_persist_a_table_its___persist_is_false("cannot persist a table: its __persist is false");
+  constexpr byte_view mm_persist_must_be_a_boolean_or_a_function("__persist must be a boolean or a function");
+  constexpr byte_view mm_persist_must_return_a_function("__persist must return a function");
+  constexpr byte_view mm_persist_restore_returned_s_s_expected("__persist restore function returned %s, %s expected");
+  constexpr byte_view persisting_a_userdata_value_is_not_supported_yet("persisting a userdata value is not supported yet");
   constexpr byte_view cannot_resume_dead_coroutine("cannot resume dead coroutine");
   constexpr byte_view cannot_resume_non_suspended_coroutine("cannot resume non-suspended coroutine");
   constexpr byte_view cannot_s_s("cannot %s %s");

@@ -36,9 +36,9 @@ local x = styx.settings(name [, value])    -- query or change a setting
 - `perms` is the permanents table: it maps objects to names. On persist an
   object found in `perms` is written as its name; on unpersist the name is
   resolved back to the object in the `perms` supplied to that call.
-- A metatable field (`__persist` by default) lets a table or userdata
-  control its own persistence: `true` for literal, `false` for forbidden,
-  or a function that returns a restore closure.
+- A metatable field (`__persist`) lets a table (and, once supported,
+  userdata) control its own persistence: `true` for literal, `false` for
+  forbidden, or a function that returns a restore closure.
 - Settings are the open list; the first candidates are error-path
   generation, a recursion limit, and the name of the metatable field.
 
@@ -61,7 +61,7 @@ local x = styx.settings(name [, value])    -- query or change a setting
     feeds every proper prefix of a stream to unpersist.
   - `*.lua`: Lua script tests, one per area: `primitives`, `strings`,
     `tables`, `closures`, `open_upvalues`, `threads`, `permanents`,
-    `errors`, `memory`
+    `special` (`__persist`), `errors`, `memory`
     (accounting and allocation failures), `processes` (unpersist in a
     separate interpreter process), `resume_print`.
   - Debug builds (`make debug styx-test`) also open the test library `T`,
@@ -85,51 +85,91 @@ local x = styx.settings(name [, value])    -- query or change a setting
 - Capabilities, in the order planned. Done items have tests in
   `tests/styx/`:
   1. nil, booleans, numbers (done: `primitives.lua`)
-  2. strings (done: `tables.lua`)
-  3. tables (done, see skipped items)
+  2. strings (done: `strings.lua`)
+  3. tables, with their layout (done: `tables.lua`, ADR-17)
   4. shared references and cycles (done)
-  5. metatables (done); `__persist` (not started)
-  6. permanents (done; unpersist takes the inverse table, as in Eris)
-  7. Lua closures and closed upvalues, including shared upvalues (done:
-     `closures.lua`)
-  8. coroutines (first cut done: `threads.lua`, and a two-state C++ test)
-  9. userdata (not started)
+  5. metatables (done); `__persist` for tables (done: `special.lua`,
+     ADR-18)
+  6. permanents (done: `permanents.lua`; unpersist takes the inverse table,
+     as in Eris; any value, userdata included, can be a permanent)
+  7. Lua closures, closed and open upvalues, including shared upvalues
+     (done: `closures.lua`, `open_upvalues.lua`, ADR-16)
+  8. coroutines (first cut done: `threads.lua`, C++ cross-state tests)
+  9. userdata (not supported yet; see below)
   10. error reporting with a path to the offending value (not started)
 - Items are added or reordered as the tests teach us something.
 
-## Skipped for now (return to these)
+## Not supported yet
 
-Deliberately left out of the first cut of thread support. Each raises a
-clear error unless noted.
+Each entry is an edge to return to and resolve on its own, with tests. None
+of them is a limit of the design. "Today" says what happens now; every one
+of these raises a clear error unless it says otherwise.
 
-- **Threads with to-be-closed variables**: error.
-- **Yields through continuations** (for example a yield inside `pcall` in
-  the coroutine): error. Only a plain `coroutine.yield` from Lua code works.
-- **Hook yields, calls from hooks or finalizers**: error.
-- **Running or resuming-another threads, and the main thread**: error.
-  Threads in an error state: error.
-- **Hooks, `allowhook`, per-thread counters**: not persisted; a restored
-  thread starts with the defaults of a new thread.
-- **C closures, light userdata, full userdata**: error (C functions work
-  only through the permanents table).
-- **Proto sharing**: every closure persists its own copy of its prototype;
-  two closures of one prototype restore with two prototypes.
-- **Table iteration order**: a restored table has the original's array
-  size, hash size and length hint (ADR-17), so `#t` and the array part
-  match, but entries are reinserted, so the order of `pairs` over the hash
-  part can differ. Matching it needs the string hash seed and node layout.
-- **Weak tables and `__gc` finalizer state**: contents persist like any
-  table; the collector's finalizer queue, mark state and weak-clearing
-  state are not persisted.
+### Threads
+- **To-be-closed variables** in a suspended thread. Today: error ("a
+  thread with to-be-closed variables").
+- **Yields through continuations**, for example a yield inside `pcall`,
+  `xpcall`, a metamethod or an iterator called from C, or any C function
+  that yields with a continuation. Only a plain `coroutine.yield` from Lua
+  code works. Today: error ("a thread with a continuation function").
+- **Hook yields, and calls made from hooks or finalizers** in a suspended
+  thread. Today: error.
+- **Running threads**: the caller, a thread that resumed another (status
+  normal), and the main thread while it runs. Today: error. An open
+  upvalue owned by such a thread is persisted as its current value
+  (ADR-16).
+- **Threads in an error state** (dead after an error). Today: error.
+- **Hooks, `allowhook`, per-thread counters**. Today: not persisted; a
+  restored thread starts with the defaults of a new thread.
+
+### Functions
+- **C functions and C closures** other than through the permanents table.
+  Today: error ("cannot persist a C function").
+- **Prototype sharing**: every closure persists its own copy of its
+  prototype, so two closures of one prototype restore with two prototypes
+  (each works correctly). Today: larger output, more memory after restore.
+- **Prototypes through `lua_dump`/`lua_load`** (ADR-13): this is a public
+  API route; an engine-native way is to come.
+
+### Userdata
+- **Full userdata** (bytes, metatable, user values, host objects), and
+  `__persist` on userdata. Today: error ("persisting a userdata value is not
+  supported yet"); userdata work only as permanents.
+- **Light userdata** other than as permanents. Today: the same error.
+
+### Tables
+- **Iteration order**: a restored table has the original's array size,
+  hash size and length hint (ADR-17), so `#t` and the array part match, but
+  hash entries are reinserted, so `pairs` order over the hash part can
+  differ (it depends on the string hash seed and the node layout).
+- **A `__persist` restore closure that reaches the value it rebuilds**
+  (directly or through its upvalues). Today: unpersist error ("invalid
+  persisted data"); the value has no object yet while its closure is read.
+- **Weak tables and `__gc` state**: contents persist like any table, and a
+  restored object with `__gc` is finalized normally, but the collector's
+  finalizer queue, mark state and weak-clearing state are not persisted.
+
+### States and memory
+- **Whole-state persist from the host** (C API, a state that is not
+  running, roots in the registry and every thread), with scratch memory
+  outside the state, so a state at its memory cap can be persisted. Today:
+  only values reachable from a script call. See "Required tests".
+- **Policy for restoring over a memory limit** (for a host-driven restore).
+  Today: unpersist is charged and limited like any script allocation.
+- **The main thread** as a persisted value.
+
+### Format and robustness
 - **Recursion depth**: persist and unpersist recurse on the C stack and
-  raise an error past a depth of 10000 (`MAX_DEPTH`). This is a new limit
-  and should be replaced by an iterative walk or a configurable setting.
-- **`__persist` metamethod and `settings`**.
+  raise an error past a depth of 10000 (`MAX_DEPTH`), a limit stock Lua
+  does not have. To be replaced by an iterative walk.
 - **Untrusted input**: unpersist loads bytecode through `lua_load` and
-  trusts the thread state it reads (only basic sanity checks). Do not
+  checks the thread state it reads only for consistency with itself. Do not
   unpersist data you do not trust.
 - **Compact output**: integers and counts are fixed 8-byte values; sizes
-  and the format version are not yet considered final.
+  and the format version are not final.
+- **Error paths**: errors say what failed but not where (a path such as
+  `root.cache[3]`).
+- **`settings`**. Today: error ("not implemented").
 
 ## ADRs
 
@@ -277,9 +317,10 @@ running) is persisted by its owner:
   so it runs protected on that thread and a failure is raised on the caller
   (ADR-15).
 - Owner is running (the caller, or a thread that resumed another) or is the
-  main thread with frames: those frames cannot be persisted, so the
-  upvalue is persisted as its current value, as a closed upvalue. Closures
-  that shared it still share one upvalue after restore.
+  main thread with frames: persisting a running thread's frames is not
+  supported yet, so the upvalue is persisted as its current value, as a
+  closed upvalue. Closures that shared it still share one upvalue after
+  restore.
 
 ### ADR-17: Tables keep their layout
 **Status:** accepted
@@ -290,6 +331,17 @@ restores the hint. A table with holes has several borders, and which one
 `#t` returns depends on that layout, so without this a restored table
 could report a different length. Sizes are checked; the table limits
 themselves are left to `lua_createtable`.
+
+### ADR-18: `__persist` for tables
+**Status:** accepted
+As in Eris, a table's metatable may hold `__persist` (read raw): absent or
+`true` persists the table literally, `false` forbids it, and a function is
+called with the table and must return a closure. That closure is persisted
+in the table's place; unpersist calls it with no arguments and it must
+return a table, which takes the table's reference id (reserved before the
+closure is read, so sharing is kept). Any other `__persist` value is an
+error. Userdata are not supported yet, so `__persist` on userdata has no
+effect today.
 
 ### Required tests for later work
 - Host-side persist (from the C API, on a state that is not running) of a
