@@ -71,10 +71,8 @@ constexpr int Global = 1024;
 
 struct global_State;
 
-bool luaM_reserve(lua_State* L, size_t size);
 void luaM_takeobj(lua_State* L, size_t size);
 void luaM_freeobj(lua_State* L, size_t size);
-void luaM_release(lua_State* L, size_t size);
 
 // type allocators
 struct CallInfo;
@@ -105,7 +103,7 @@ std::span<TValue> luaM_safegrow_TValue_span(lua_State* L, std::span<TValue> bloc
 std::span<StkId> luaM_safegrow_StkId_span(lua_State* L, std::span<StkId> block, size_t nelems);
 
 // typed GC-object allocators (throwing, fixed-size per type)
-TString* luaM_malloc_TString(lua_State* L);
+TString* luaM_malloc_TString(lua_State* L, size_t bytes);
 Udata* luaM_malloc_Udata(lua_State* L);
 Table* luaM_malloc_Table(lua_State* L);
 CClosure* luaM_malloc_CClosure(lua_State* L);
@@ -120,7 +118,7 @@ void luaM_free_UpVal(lua_State* L, UpVal* p);
 void luaM_free_LClosure(lua_State* L, LClosure* p);
 void luaM_free_CClosure(lua_State* L, CClosure* p);
 void luaM_free_Udata(lua_State* L, Udata* p);
-void luaM_free_TString(lua_State* L, TString* p);
+void luaM_free_TString(lua_State* L, TString* p, size_t bytes);
 void luaM_free_CFuncInfo(lua_State* L, CFuncInfo* p);
 void luaM_free_Proto(lua_State* L, Proto* p);
 void luaM_free_Table(lua_State* L, Table* p);

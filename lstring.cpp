@@ -44,13 +44,13 @@ void TString::luaS_forcehash()
 TString* TString::createstrobj(lua_State* L, InternalString&& str, size_t h,
                              int hashed, int external)
 {
-  TString* ts = luaM_malloc_TString(L);
+  /* the string and its bytes are charged together, before the string is
+     known to the collector (a refusal may run an emergency collection) */
+  TString* ts = luaM_malloc_TString(L, external ? 0 : str.size());
   luaC_link(L, ts, LUA_VSTRING);
   ts->hash = (unsigned int)h;
   ts->hashed = (lu_byte)hashed;
   ts->extra = external ? STREXTRA_EXTERNAL : 0;
-  if (!external && l_unlikely(!luaM_reserve(L, str.size())))
-    luaD_throw(L, LUA_ERRMEM);
   ts->data = std::move(str);
   return ts;
 }

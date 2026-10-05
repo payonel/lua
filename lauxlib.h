@@ -133,7 +133,6 @@ struct luaL_Buffer
 {
   byte_owner bytes = {};
   size_t used = 0;
-  size_t reserved = 0;
   lua_State* L = nullptr;
 
   ~luaL_Buffer();

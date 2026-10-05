@@ -943,9 +943,7 @@ static void freeobj(lua_State* L, GCObject* o)
     assert(novariant(o->tt) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
     ts->luaS_remove(L);
-    if (!strisexternal(ts))
-      luaM_release(L, ts->data.size());
-    luaM_free_TString(L, ts);
+    luaM_free_TString(L, ts, strisexternal(ts) ? 0 : ts->data.size());
     break;
   }
   case LUA_VLCF:

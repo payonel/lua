@@ -497,7 +497,6 @@ struct global_State
   int apilock = 0;
   l_mem GCtotalbytes = cost::Global; /* number of bytes currently allocated + debt */
   l_mem GCdebt = 0;       /* bytes counted but not yet allocated */
-  size_t memlimit = 0;
   l_mem GCmarked = 0;     /* number of objects marked in a GC cycle */
   l_mem GCmajorminor = 0; /* auxiliary counter to control major-minor shifts */
   struct StringTable

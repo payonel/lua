@@ -17,15 +17,11 @@ const InternalString* lua_toistring(lua_State* L, int idx);
 
 int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkname, std::optional<byte_view> mode);
 
-int lua_reservebytes(lua_State* L, size_t sz);
-void lua_releasebytes(lua_State* L, size_t sz);
 
 void lua_pushistring(lua_State* L, InternalString&& s);
 void lua_pushistringext(lua_State* L, InternalString&& s);
 void lua_pushistringref(lua_State* L, byte_view bytes);
 
-void lua_setmemlimit(lua_State* L, size_t limit);
-size_t lua_getmemlimit(lua_State* L);
 
 void* lua_newuserdata(lua_State* L, size_t sz);
 int lua_resetthread(lua_State* L);

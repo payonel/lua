@@ -124,3 +124,12 @@ do
   collectgarbage("collect")
   assert(weak[1] == nil)
 end
+
+-- collectgarbage has only the stock options; there is no script-visible
+-- memory limit (the host's allocator is the only one)
+do
+  for _, opt in ipairs{"setlimit", "getlimit", "memlimit"} do
+    local ok, err = pcall(collectgarbage, opt, 1000)
+    assert(not ok and err:find("invalid option", 1, true), opt)
+  end
+end

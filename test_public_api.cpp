@@ -1892,33 +1892,110 @@ struct SizeDeny : lua_Alloc
   }
 };
 
-/*
-** A long concatenation whose result cannot be created (the state's memory
-** limit) releases what it reserved for its temporary buffer: after repeated
-** failures a collection brings the count back to where it was, and the
-** state closes cleanly (closing checks that everything was released).
-*/
-static void test_oom_long_concat()
+/* tracks bytes in use and denies growth past 'cap' (frees always pass) */
+struct CapDeny : lua_Alloc
 {
-  lua_State* L = luaL_newstate();
+  size_t used = 0;
+  size_t cap = 0;
+  bool permit(size_t osize, size_t nsize, int) override
+  {
+    if (nsize > osize && cap != 0 && used + (nsize - osize) > cap)
+      return false;
+    used = used + nsize - osize;
+    return true;
+  }
+};
+
+/*
+** One gate for memory: string bytes are asked of the allocator like any
+** other allocation, and given back to it when the string is collected.
+*/
+static void test_strings_through_allocator()
+{
+  CapDeny cd;
+  lua_State* L = lua_newstate(&cd, 0);
   luaL_openlibs(L);
-  int st = luaL_dostring(L,
-    "local big = ('x'):rep(100000) "
-    "local parts = {} "
-    "collectgarbage() collectgarbage() "
-    "local before = collectgarbage('count') "
-    "collectgarbage('setlimit', math.floor(before * 1024) + 150000) "
-    "for i = 1, 20 do "
-    "  local ok, err = pcall(function() parts[#parts + 1] = big .. 'tail' end) "
-    "  assert(not ok and tostring(err):find('not enough memory'), tostring(err)) "
-    "end "
-    "collectgarbage('setlimit', 0) "
-    "collectgarbage() collectgarbage() "
-    "local after = collectgarbage('count') "
-    "assert(after - before < 50, string.format('leaked %.0fK', after - before))");
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  size_t before = cd.used;
+  CHECK(luaL_dostring(L, "big = ('x'):rep(1000000)") == LUA_OK);
+  CHECK(cd.used - before >= 1000000);
+  CHECK(luaL_dostring(L, "big = nil") == LUA_OK);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  CHECK(cd.used - before < 1000);
+  /* a cap in the allocator stops string growth too */
+  cd.cap = cd.used + 100000;
+  CHECK(luaL_dostring(L, "big = ('x'):rep(1000000)") == LUA_ERRMEM);
+  cd.cap = 0;
+  lua_close(L);
+  CHECK(cd.used == 0);
+}
+
+/* denies the first request for at least 'size' bytes with tag 'tag', once */
+struct DenyOnce : lua_Alloc
+{
+  size_t size = 0;
+  int tag = 0;
+  int denied = 0;
+  bool permit(size_t osize, size_t nsize, int t) override
+  {
+    if (denied == 0 && size != 0 && t == tag && nsize > osize && nsize - osize >= size)
+    {
+      denied++;
+      return false;
+    }
+    return true;
+  }
+};
+
+/*
+** When the bytes of a new string are refused once, the emergency collection
+** that follows must not collect the string being created.
+*/
+static void test_string_emergency_collection()
+{
+  DenyOnce d;
+  lua_State* L = lua_newstate(&d, 0);
+  luaL_openlibs(L);
+  CHECK(luaL_dostring(L, "a = ('y'):rep(61728) garbage = {} "
+                         "for i = 1, 1000 do garbage[i] = {i} end garbage = nil") == LUA_OK);
+  d.size = 123457;   /* a .. a .. 'y': the string with its bytes */
+  d.tag = LUA_TSTRING;
+  int st = luaL_dostring(L, "s = a .. a .. 'y' t = {} for i = 1, 100 do t[i] = ('z'):rep(i) .. i end "
+                            "assert(#s == 123457 and s:sub(-1) == 'y')");
   if (st != LUA_OK)
     std::printf("  %s\n", std::string(lua_tolstring(L, -1)->data(), lua_tolstring(L, -1)->size()).c_str());
   CHECK(st == LUA_OK);
+  CHECK(d.denied == 1);
+  CHECK(luaL_dostring(L, "collectgarbage() assert(#s == 123457 and s:byte(1) == 121)") == LUA_OK);
+  lua_close(L);
+}
+
+/*
+** A long concatenation whose result cannot be created releases what it
+** reserved for its temporary buffer: after repeated failures a collection
+** brings the count back to where it was, and the state closes cleanly
+** (closing checks that everything was released).
+*/
+static void test_oom_long_concat()
+{
+  CapDeny cd;
+  lua_State* L = lua_newstate(&cd, 0);
+  luaL_openlibs(L);
+  CHECK(luaL_dostring(L, "big = ('x'):rep(100000) parts = {}") == LUA_OK);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  int before = lua_gc(L, LUA_GCCOUNT, 0, 0, 0);
+  /* room for the concatenation's buffer but not also for its result */
+  cd.cap = cd.used + 150000;
+  for (int i = 0; i < 20; i++)
+  {
+    CHECK(luaL_loadstring(L, "parts[#parts + 1] = big .. 'tail'") == LUA_OK);
+    CHECK(lua_pcall(L, 0, 0, 0) == LUA_ERRMEM);
+    lua_settop(L, 0);
+  }
+  cd.cap = 0;
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  int after = lua_gc(L, LUA_GCCOUNT, 0, 0, 0);
+  CHECK(after - before < 50);   /* in Kbytes; each leak would be ~100K */
   lua_close(L);
 }
 
@@ -4812,6 +4889,8 @@ int main()
       {"userobject", test_userobject},
       {"oom_between_array_allocs", test_oom_between_array_allocs},
       {"oom_long_concat", test_oom_long_concat},
+      {"strings_through_allocator", test_strings_through_allocator},
+      {"string_emergency_collection", test_string_emergency_collection},
       {"misc", test_misc},
       {"debug_api", test_debug_api},
       {"libraries", test_libraries},

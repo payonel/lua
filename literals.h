@@ -303,7 +303,6 @@ namespace lt
   constexpr byte_view gethook("gethook");
   constexpr byte_view GETI("GETI");
   constexpr byte_view getinfo("getinfo");
-  constexpr byte_view getlimit("getlimit");
   constexpr byte_view getlocal("getlocal");
   constexpr byte_view getmetatable("getmetatable");
   constexpr byte_view getref("getref");
@@ -750,7 +749,6 @@ namespace lt
   constexpr byte_view sethook("sethook");
   constexpr byte_view SETI("SETI");
   constexpr byte_view seti("seti");
-  constexpr byte_view setlimit("setlimit");
   constexpr byte_view SETLIST("SETLIST");
   constexpr byte_view setlocal("setlocal");
   constexpr byte_view setlocale("setlocale");

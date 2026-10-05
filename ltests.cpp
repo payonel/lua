@@ -967,20 +967,7 @@ static int mem_query(lua_State* L)
   else if (lua_isnumber(L, 1))
   {
     unsigned long limit = ((unsigned long)(luaL_checkinteger(L, 1)));
-    global_State* g = L->l_G;
-    if (limit == 0)
-    {
-      l_memcontrol.memlimit = ULONG_MAX;
-      g->memlimit = 0;
-    }
-    else
-    {
-      long headroom = ((long)(limit)) - ((long)(l_memcontrol.total));
-      l_memcontrol.memlimit = limit;
-      g->memlimit = (headroom > 0)
-                        ? ((size_t)(gettotalbytes(g) + headroom))
-                        : 1;
-    }
+    l_memcontrol.memlimit = (limit == 0) ? ULONG_MAX : limit;
     return 0;
   }
   else

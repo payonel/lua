@@ -150,24 +150,6 @@ void luaM_freeobj(lua_State* L, size_t size)
   free_debt(L, size, novariant(LUA_VUSERDATA));
 }
 
-bool luaM_reserve(lua_State* L, size_t size)
-{
-  global_State* g = L->l_G;
-  if (g->memlimit > 0 &&
-      gettotalbytes(g) + size > g->memlimit)
-  {
-    return false;
-  }
-  g->GCdebt -= (l_mem)size;
-  return true;
-}
-
-void luaM_release(lua_State* L, size_t size)
-{
-  global_State* g = L->l_G;
-  g->GCdebt += (l_mem)size;
-}
-
 // type allocators
 std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L, std::span<TValue> block, size_t count, bool bthrow)
 {
@@ -480,9 +462,9 @@ std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, std::span<No
   return nb;
 }
 
-TString* luaM_malloc_TString(lua_State* L)
+TString* luaM_malloc_TString(lua_State* L, size_t bytes)
 {
-  take_debt(L, cost::TString, novariant(LUA_VSTRING));
+  take_debt(L, cost::TString + bytes, novariant(LUA_VSTRING));
   return new TString;
 }
 
@@ -558,9 +540,9 @@ void luaM_free_Udata(lua_State* L, Udata* p)
   delete p;
 }
 
-void luaM_free_TString(lua_State* L, TString* p)
+void luaM_free_TString(lua_State* L, TString* p, size_t bytes)
 {
-  if (p != nullptr) free_debt(L, cost::TString, novariant(LUA_VSTRING));
+  if (p != nullptr) free_debt(L, cost::TString + bytes, novariant(LUA_VSTRING));
   delete p;
 }
 

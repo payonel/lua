@@ -1697,16 +1697,6 @@ void lua_setallocf(lua_State* L, lua_Alloc* f)
   lua_unlock(L);
 }
 
-void lua_setmemlimit(lua_State* L, size_t limit)
-{
-  L->l_G->memlimit = limit;
-}
-
-size_t lua_getmemlimit(lua_State* L)
-{
-  return L->l_G->memlimit;
-}
-
 void lua_setwarnf(lua_State* L, lua_WarnFunction* f)
 {
   lua_lock(L);
@@ -1724,16 +1714,6 @@ void lua_warningi(lua_State* L, byte_view msg, int tocont)
   lua_lock(L);
   luaE_warning(L, msg, tocont);
   lua_unlock(L);
-}
-
-int lua_reservebytes(lua_State* L, size_t sz)
-{
-  return luaM_reserve(L, sz);
-}
-
-void lua_releasebytes(lua_State* L, size_t sz)
-{
-  luaM_release(L, sz);
 }
 
 void lua_newuserobject(lua_State* L, std::unique_ptr<lua_UserObject> obj, size_t size, int nuvalue)

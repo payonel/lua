@@ -223,24 +223,13 @@ static int luaB_collectgarbage(lua_State* L)
   static const byte_view opts[] = {
       lt::stop, lt::restart, lt::collect,
       lt::count, lt::step, lt::isrunning, lt::generational,
-      lt::incremental, lt::param, lt::setlimit, lt::getlimit};
+      lt::incremental, lt::param};
   static const char optsnum[] = {LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
                                  LUA_GCCOUNT, LUA_GCSTEP, LUA_GCISRUNNING, LUA_GCGEN, LUA_GCINC,
-                                 LUA_GCPARAM, 100, 101};
+                                 LUA_GCPARAM};
   int o = optsnum[luaL_checkoptioni(L, 1, lt::collect, opts)];
   switch (o)
   {
-  case 100:
-  {
-    lua_Integer limit = luaL_checkinteger(L, 2);
-    lua_setmemlimit(L, (limit <= 0 ? 0 : limit));
-    return 0;
-  }
-  case 101:
-  {
-    lua_pushinteger(L, lua_getmemlimit(L));
-    return 1;
-  }
   case LUA_GCCOUNT:
   {
     int k = lua_gc(L, o, 0, 0, 0);

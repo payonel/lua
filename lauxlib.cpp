@@ -663,9 +663,6 @@ static InternalString bb_release(luaL_Buffer* B)
 
 luaL_Buffer::~luaL_Buffer()
 {
-  if (reserved != 0 && L != nullptr)
-    lua_releasebytes(L, reserved);
-
   bb_dealloc(this);
 }
 
@@ -689,13 +686,6 @@ static size_t prepbuff(luaL_Buffer* B, size_t sz)
   if (sz > B->bytes.size() - B->used)
   {
     size_t newsize = newbuffsize(B, sz);
-    assert(newsize >= B->reserved);
-    if (l_unlikely(!lua_reservebytes(B->L, newsize - B->reserved)))
-    {
-      lua_pushistringref(B->L, lt::not_enough_memory);
-      lua_error(B->L); /* raise a memory error */
-    }
-    B->reserved = newsize;
     bb_growTo(B, newsize);
   }
 
@@ -726,10 +716,6 @@ void luaL_addstring(luaL_Buffer* B, const HostString& s)
 void luaL_pushresult(luaL_Buffer* B)
 {
   lua_State* L = B->L;
-  size_t reserved = B->reserved;
-  B->reserved = 0;
-  if (reserved != 0)
-    lua_releasebytes(L, reserved);
   lua_pushistring(L, bb_release(B));
 }
 
