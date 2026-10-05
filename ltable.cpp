@@ -895,6 +895,84 @@ void Table::luaH_free(lua_State* L)
   luaM_free_Table(L, t);
 }
 
+/*
+** Sets node 'i' of the hash part as a node of another table is: its key
+** (none when 'key' is null; a dead key, with no identity, when 'dead'),
+** its value (empty when 'val' is null or nil) and its chain link 'link'.
+** With the same keys in the same slots and links, and the same 'lastfree',
+** a table iterates in the same order. The caller keeps every key in a slot
+** of the chain that starts at its main position.
+*/
+void Table::luaH_setnode(lua_State* L, int i, const TValue* key, bool dead,
+                         const TValue* val, int link)
+{
+  Table* t = this;
+  assert(!isdummy(t) && 0 <= i && i < sizenode(t));
+  assert(0 <= i + link && i + link < sizenode(t));
+  Node* n = gnode(t, i);
+  n->next = link;
+  if (dead)
+  {
+    setdeadkey(n);
+    n->key_val = Value{0, nullptr};
+  }
+  else if (key == nullptr)
+    setnilkey(n);
+  else
+  {
+    setnodekey(n, key);
+    luaC_barrierback(L, t, key);
+  }
+  if (val == nullptr || ttisnil(val))
+    setempty(&n->val);
+  else
+  {
+    setobj(nullptr, &n->val, val);
+    luaC_barrierback(L, t, val);
+  }
+  invalidateTMcache(t);
+}
+
+/*
+** Copies 'src' into this table, which must be new and empty (and anchored,
+** as copying allocates): the same array and hash sizes, every node in its
+** slot, the same 'lastfree' and length hint, and the same metatable, so the
+** copy iterates in the same order as 'src'.
+*/
+void Table::luaH_copyfrom(lua_State* L, Table* src)
+{
+  Table* t = this;
+  t->luaH_resize(L, src->asize(), allocsizenode(src));
+  for (int i = 0; i < src->asize(); i++)
+  {
+    TValue v;
+    lu_byte tag = getArrTag(src, i);
+    if (tagisempty(tag))
+      continue;
+    farr2val(src, i, tag, &v);
+    obj2arr(t, i, &v);
+    luaC_barrierback(L, t, &v);
+  }
+  if (!isdummy(src))
+  {
+    for (int i = 0; i < sizenode(src); i++)
+    {
+      const Node* n = gnode(src, i);
+      TValue key;
+      bool hasKey = !keyisnil(n) && !keyisdead(n);
+      if (hasKey)
+        getnodekey(L, &key, n);
+      t->luaH_setnode(L, i, hasKey ? &key : nullptr, keyisdead(n), &n->val, n->next);
+    }
+    t->lastfree = src->lastfree;
+  }
+  t->lenhint = src->lenhint;
+  t->metatable = src->metatable;
+  if (t->metatable != nullptr)
+    luaC_objbarrier(L, t, t->metatable);
+  invalidateTMcache(t);
+}
+
 int Table::getfreepos()
 {
   Table* t = this;

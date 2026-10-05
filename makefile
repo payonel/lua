@@ -62,18 +62,20 @@ LUA_T         =lua
 
 TEST_API_O    =$(OBJ_DIR)/test_public_api.o
 TEST_API_T    =test_public_api
-DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d)
+ENGINE_TEST_O =$(OBJ_DIR)/engine_tests.o
+ENGINE_TEST_T =test_engine
+DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d)
 
-all: $(LUA_T) $(TEST_API_T)
+all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
 
 include tests/libs/build.mk
 
 debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
-debug: $(LUA_T) $(TEST_API_T)
+debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
 
 cov: VARIANT=cov
-cov: $(LUA_T) $(TEST_API_T)
+cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
 	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
 	$(MAKE) test
 	./cov-report.sh
@@ -114,10 +116,22 @@ $(LUA_T): $(LUA_O) $(OBJ_FILES) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES) $(VARIANT_
 $(TEST_API_T): $(TEST_API_O) $(CORE_T) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(TEST_API_O) $(CORE_T) $(LDFLAGS)
 
+# engine internals tests link the raw objects (internals reachable)
+$(ENGINE_TEST_O): tests/engine/engine_tests.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -I$(TOP_DIR) -MF $(OBJ_DIR)/engine_tests.d -o $@ -c $<
+
+$(ENGINE_TEST_T): $(ENGINE_TEST_O) $(OBJ_FILES) $(VARIANT_STAMP)
+	$(CXX) -o $@ $(ENGINE_TEST_O) $(OBJ_FILES) $(LDFLAGS)
+
+# just the engine internals tests (`make test` runs them too)
+engine-test: $(ENGINE_TEST_T)
+	./$(ENGINE_TEST_T)
+
 clean:
 	$(RM) -r $(OBJ_DIR_BASE)
 	$(RM) $(LUA_T)
 	$(RM) $(TEST_API_T)
+	$(RM) $(ENGINE_TEST_T)
 	$(RM) $(TEST_BUILD_FILES)
 	$(RM) $(TEST_DIR)/*.gcno $(TEST_DIR)/*.gcda
 
@@ -129,6 +143,7 @@ $(OBJ_DIR):
 
 test:
 	./$(TEST_API_T)
+	./$(ENGINE_TEST_T)
 	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
 		ulimit -S -s 8192; \
@@ -147,4 +162,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: all debug cov clean test full
+.PHONY: all debug cov clean test engine-test full

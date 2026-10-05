@@ -690,6 +690,8 @@ struct Table : GCListed
   void luaH_finishset(lua_State* L, const TValue* key, TValue* value, int hres);
   void luaH_resize(lua_State* L, int nasize, int nhsize);
   void luaH_resizearray(lua_State* L, int nasize);
+  void luaH_setnode(lua_State* L, int i, const TValue* key, bool dead, const TValue* val, int link);
+  void luaH_copyfrom(lua_State* L, Table* src);
   l_mem luaH_size();
   void luaH_free(lua_State* L);
   int luaH_next(lua_State* L, StkId key);
