@@ -16,7 +16,7 @@ OBJ_DIR       = $(OBJ_DIR_BASE)/$(VARIANT)
 OBJ_NAMES     = lapi.o lauxlib.o lbaselib.o lcode.o lcorolib.o lctype.o ldblib.o ldebug.o ldo.o ldump.o lfunc.o lgc.o
 OBJ_NAMES    += linit.o liolib.o llex.o lmathlib.o lmem.o loadlib.o lobject.o lopcodes.o loslib.o lparser.o lstate.o
 OBJ_NAMES    += lstring.o lstrlib.o ltable.o ltablib.o ltests.o ltm.o lundump.o lutf8lib.o lvm.o lzio.o
-OBJ_NAMES    += util_cast.o os_api.o locale_util.o lnames.o
+OBJ_NAMES    += util_cast.o os_api.o locale_util.o lnames.o lstyx.o
 OBJ_FILES     = $(addprefix $(OBJ_DIR)/, $(OBJ_NAMES))
 
 DEP_FILES     = $(OBJ_FILES:.o=.d)
@@ -67,6 +67,9 @@ ENGINE_TEST_T =test_engine
 GATE_O        =$(OBJ_DIR)/gate.o
 GATE_T        =test_gate
 DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(GATE_O:.o=.d)
+STYX_TEST_O  =$(OBJ_DIR)/styx_tests.o
+STYX_TEST_T  =test_styx
+DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(STYX_TEST_O:.o=.d)
 
 all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 
@@ -150,6 +153,14 @@ gate-run:
 # just the engine internals tests (`make test` runs them too)
 engine-test: $(ENGINE_TEST_T)
 	./$(ENGINE_TEST_T)
+# The styx tests link the raw objects (internals reachable) and are not part
+# of `test`/`full` while Styx is being built test-first.
+$(STYX_TEST_O): tests/styx/styx_tests.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -I$(TOP_DIR) -MF $(OBJ_DIR)/styx_tests.d -o $@ -c $<
+$(STYX_TEST_T): $(STYX_TEST_O) $(OBJ_FILES) $(VARIANT_STAMP)
+	$(CXX) -o $@ $(STYX_TEST_O) $(OBJ_FILES) $(LDFLAGS)
+test-styx: $(STYX_TEST_T)
+	cd tests/styx && ../../$(STYX_TEST_T)
 
 clean:
 	$(RM) -r $(OBJ_DIR_BASE)
@@ -157,6 +168,7 @@ clean:
 	$(RM) $(TEST_API_T)
 	$(RM) $(ENGINE_TEST_T)
 	$(RM) $(GATE_T)
+	$(RM) $(STYX_TEST_T)
 	$(RM) $(TEST_BUILD_FILES)
 	$(RM) $(TEST_DIR)/*.gcno $(TEST_DIR)/*.gcda
 
@@ -189,3 +201,4 @@ full:
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
 .PHONY: all debug cov clean test engine-test gate gate-run full
+.PHONY: all debug cov clean test engine-test full test-styx

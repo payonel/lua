@@ -126,6 +126,7 @@ namespace lt
   constexpr byte_view freeze_outside_the_budget_callback("freeze outside the budget callback");
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");
   constexpr byte_view ceil_kw("ceil");
+  constexpr byte_view styx("styx");
   constexpr byte_view char_kw("char");
   constexpr byte_view charpattern("charpattern");
   constexpr byte_view checkmemory("checkmemory");
@@ -609,6 +610,7 @@ namespace lt
   constexpr byte_view not_an_integer_in_proper_range("not an integer in proper range");
   constexpr byte_view not_enough_memory("not enough memory");
   constexpr byte_view not_enough_stack("not enough stack");
+  constexpr byte_view not_implemented("not implemented");
   constexpr byte_view NOT_kw("NOT");
   constexpr byte_view not_kw("not");
   constexpr byte_view nparams("nparams");
@@ -660,6 +662,7 @@ namespace lt
   constexpr byte_view percent_ch("%");
   constexpr byte_view perform_arithmetic_on("perform arithmetic on");
   constexpr byte_view perform_bitwise_operation_on("perform bitwise operation on");
+  constexpr byte_view persist("persist");
   constexpr byte_view pi("pi");
   constexpr byte_view pobj("pobj");
   constexpr byte_view pop("pop");
@@ -770,6 +773,7 @@ namespace lt
   constexpr byte_view setmetatable("setmetatable");
   constexpr byte_view SETTABLE("SETTABLE");
   constexpr byte_view settable("settable");
+  constexpr byte_view settings("settings");
   constexpr byte_view SETTABUP("SETTABUP");
   constexpr byte_view settop("settop");
   constexpr byte_view SETUPVAL("SETUPVAL");
@@ -922,6 +926,7 @@ namespace lt
   constexpr byte_view unfinished_string_for_format_z("unfinished string for format 'z'");
   constexpr byte_view unfinished_string_in_C_script("unfinished string in C script");
   constexpr byte_view unknown_attribute_s("unknown attribute '%s'");
+  constexpr byte_view unpersist("unpersist");
   constexpr byte_view unknown_instruction_s("unknown instruction %s");
   constexpr byte_view unknown_type_s("unknown type '%s'");
   constexpr byte_view UNM("UNM");
