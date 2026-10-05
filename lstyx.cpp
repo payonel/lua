@@ -41,6 +41,8 @@ constexpr char TAG_UPVAL_NEW = 11;
 constexpr char TAG_UPVAL_REF = 12;
 constexpr char TAG_UPVAL_OPEN = 13; /* open upvalue: owner thread, stack level */
 constexpr char TAG_SPECIAL = 14;    /* a value rebuilt by a closure (__persist) */
+constexpr char TAG_PROTO_NEW = 15;  /* a prototype, written the first time it is met */
+constexpr char TAG_PROTO_REF = 16;  /* a prototype already written */
 
 constexpr int MAX_DEPTH = 10000;
 
@@ -355,16 +357,35 @@ static void persist_lclosure(Persist& P)
   luaL_checkstacki(L, 4, std::nullopt);
   luaL_addchar(&P.B, TAG_LCLOSURE);
 
-  luaL_Buffer pb;
-  luaL_buffinit(L, &pb);
-  ProtoWriter w;
-  w.B = &pb;
-  lua_dump(L, &w, 0);
-  size_t n = luaL_bufflen(&pb);
-  put_i64(&P.B, static_cast<lua_Integer>(n));
-  luaL_addlstring(&P.B, byte_view(luaL_buffaddr(&pb).data(), n), 0, n);
-
   LClosure* cl = clLvalue(&L->stack[L->ci->func + f]);
+  /* a prototype is written once; closures sharing it refer to it by id */
+  lua_pushlightuserdata(L, cl->p);
+  lua_rawget(L, P.refs);
+  if (!lua_isnil(L, -1))
+  {
+    luaL_addchar(&P.B, TAG_PROTO_REF);
+    put_i64(&P.B, lua_tointeger(L, -1));
+    lua_pop(L, 1);
+  }
+  else
+  {
+    lua_pop(L, 1);
+    lua_pushlightuserdata(L, cl->p);
+    lua_pushinteger(L, ++P.refcount);
+    lua_rawset(L, P.refs);
+    luaL_addchar(&P.B, TAG_PROTO_NEW);
+    luaL_Buffer pb;
+    luaL_buffinit(L, &pb);
+    ProtoWriter w;
+    w.B = &pb;
+    lua_pushvalue(L, f);
+    lua_dump(L, &w, 0);
+    lua_pop(L, 1);
+    size_t n = luaL_bufflen(&pb);
+    put_i64(&P.B, static_cast<lua_Integer>(n));
+    luaL_addlstring(&P.B, byte_view(luaL_buffaddr(&pb).data(), n), 0, n);
+  }
+
   int nup = static_cast<int>(cl->upvals.size());
   put_i64(&P.B, nup);
   for (int i = 1; i <= nup; i++)
@@ -724,17 +745,62 @@ static void unpersist_open_upvalue(Unpersist& U, int f, int i)
   lua_pop(L, 1);
 }
 
+/*
+** Pushes a function holding the closure's prototype: decoded by the
+** engine's loader the first time it is met, then kept under its id.
+*/
+static void unpersist_proto(Unpersist& U)
+{
+  lua_State* L = U.r.L;
+  char tag = U.r.get_byte();
+  if (tag == TAG_PROTO_NEW)
+  {
+    lua_Integer pid = ++U.refcount;
+    lua_Integer n = U.r.get_i64();
+    if (n < 0)
+      U.r.invalid();
+    BytesReader br;
+    br.bytes = U.r.get_bytes(static_cast<size_t>(n));
+    if (lua_load(L, &br, "=styx", "b") != LUA_OK)
+      lua_error(L);
+    lua_pushvalue(L, -1);
+    lua_rawseti(L, U.refs, pid);
+  }
+  else if (tag == TAG_PROTO_REF)
+  {
+    lua_rawgeti(L, U.refs, U.r.get_i64());
+    if (lua_type(L, -1) != LUA_TFUNCTION || lua_iscfunction(L, -1))
+      U.r.invalid();
+  }
+  else
+    U.r.invalid();
+}
+
+/*
+** A closure is made as OP_CLOSURE makes one: a new closure on the shared
+** prototype, anchored on the stack before its upvalues are created. This
+** allocates, so it runs under the API lock, as an API function would.
+*/
+static void push_new_closure(lua_State* L, Proto* p)
+{
+  lua_lock(L);
+  LClosure* cl = LClosure::luaF_newLclosure(L, static_cast<int>(p->upvalues.size()));
+  cl->p = p;
+  setslotclL(L, L->top, cl);
+  L->top++;
+  luaC_objbarrier(L, cl, p);
+  cl->luaF_initupvals(L);
+  lua_unlock(L);
+}
+
 static void unpersist_lclosure(Unpersist& U, lua_Integer id)
 {
   lua_State* L = U.r.L;
   luaL_checkstacki(L, 5, std::nullopt);
-  lua_Integer n = U.r.get_i64();
-  if (n < 0)
-    U.r.invalid();
-  BytesReader br;
-  br.bytes = U.r.get_bytes(static_cast<size_t>(n));
-  if (lua_load(L, &br, "=styx", "b") != LUA_OK)
-    lua_error(L);
+  unpersist_proto(U);
+  TValue holder = getslot(L, L->top - 1);
+  push_new_closure(L, clLvalue(&holder)->p);
+  lua_remove(L, -2); /* the prototype's holder */
   int f = lua_gettop(L);
   register_object(U, id);
   lua_Integer nup = U.r.get_i64();

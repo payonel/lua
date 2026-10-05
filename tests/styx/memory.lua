@@ -14,6 +14,7 @@ local function sample(with_thread)
     return function() n = n + 1; return n end, function() return n end
   end
   local inc, get = counter()
+  local inc2 = counter()   -- same prototype as 'inc'
   local co, get_local
   if with_thread then
     co = coroutine.create(function(a)
@@ -26,7 +27,7 @@ local function sample(with_thread)
     get_local = open
   end
   local t = {1, 2.5, "string", ("long"):rep(20), inc = inc, get = get, co = co,
-             open = get_local}
+             open = get_local, inc2 = inc2}
   t.self = t
   return setmetatable(t, {__index = {extra = true}})
 end
@@ -89,6 +90,7 @@ if T then
     local n = fails_cleanly_at_every_allocation(function() r = styx.unpersist(back, blob) end)
     assert(n > 0)
     assert(r.get() == 0 and r.inc() == 1 and r.self == r and r.extra == true)
+    assert(r.inc2() == 1 and r.get() == 1)
     assert(r.open()[1] == 5)
     assert(select(2, coroutine.resume(r.co)) == 5)
   end)

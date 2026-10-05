@@ -62,7 +62,8 @@ local x = styx.settings(name [, value])    -- query or change a setting
   - `*.lua`: Lua script tests, one per area: `primitives`, `strings`,
     `tables`, `closures`, `open_upvalues`, `threads`, `permanents`,
     `special` (`__persist`), `paths` (error paths), `tbc`
-    (to-be-closed variables), `errors`, `memory`
+    (to-be-closed variables), `protos` (shared prototypes), `errors`,
+    `memory`
     (accounting and allocation failures), `processes` (unpersist in a
     separate interpreter process), `resume_print`.
   - Debug builds (`make debug styx-test`) also open the test library `T`,
@@ -130,11 +131,13 @@ of these raises a clear error unless it says otherwise.
 ### Functions
 - **C functions and C closures** other than through the permanents table.
   Today: error ("cannot persist a C function").
-- **Prototype sharing**: every closure persists its own copy of its
-  prototype, so two closures of one prototype restore with two prototypes
-  (each works correctly). Today: larger output, more memory after restore.
-- **Prototypes through `lua_dump`/`lua_load`** (ADR-13): this is a public
-  API route; an engine-native way is to come.
+- **Nested prototype identity**: a prototype is shared among the closures
+  persisted with it (ADR-13), but a closure of a nested prototype persisted
+  on its own carries a copy of that prototype, separate from the one inside
+  its parent's prototype (both work). Today: more output and memory.
+- **Prototype encoding through `lua_dump`/`lua_load`** (ADR-13): prototypes
+  are encoded and decoded by the engine's chunk format; closures are built
+  natively. An engine-native prototype encoding is to come.
 
 ### Userdata
 - **Full userdata** (bytes, metatable, user values, host objects), and
@@ -271,13 +274,18 @@ removed, and the logical accounting cost went from 64 to 24. `CFuncInfo`
 stays the identity object and still holds the function, which maps to a
 method handle in Java.
 
-### ADR-13: Lua function prototypes reuse `lua_dump`/`lua_load`
-**Status:** proposed
-A closure is written as its prototype's binary chunk (`lua_dump`, debug
-info kept) plus its upvalues, and restored with `lua_load`; the restored
-upvalues replace the freshly created ones, sharing via `lua_upvalueid` and
-`lua_upvaluejoin`. This reuses the engine's existing, tested prototype
-format instead of a second one.
+### ADR-13: Prototypes once, closures built natively
+**Status:** accepted (revised)
+A prototype gets a reference id, keyed by its identity, and is written
+once, as the engine's binary chunk (`lua_dump`, debug info kept); later
+closures of it refer to it by id. Unpersist decodes a prototype once with
+the engine's loader (`lua_load`, binary mode) and builds every closure the
+way `OP_CLOSURE` does: a new closure on the shared prototype, anchored on
+the stack before its upvalues are created, under the API lock because it
+allocates. Closures of one prototype therefore share it after restore, as
+in the original, and the output and restored memory grow with the number
+of closures, not the number of copies. Upvalues are then set (closed),
+joined (shared) or reopened (ADR-16).
 
 ### ADR-14: Bugs fail where they happen
 **Status:** accepted
