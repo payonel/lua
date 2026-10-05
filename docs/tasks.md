@@ -1774,6 +1774,11 @@ instructions, line info, absolute line info, and `int`/`Instruction`/
   C-API extensibility is low priority, so the API stays minimal and
   unchanged.
 
+**Phase R A/B** (before R1 `54965296` → after `48c42197`, 9 runs,
+median): all.lua 4.97s → 4.94s, b_vm 1.17s → 1.18s, b_arith 1.35s →
+1.34s, b_table 0.40s → 0.39s, b_call 4.57s → 4.53s, b_gc 3.97s → 3.95s,
+b_fmt 4.18s → 4.15s, b_alloc 0.79s → 0.78s. RSS is unchanged.
+
 ---
 
 ## Port-time notes (no C++ action)
