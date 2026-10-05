@@ -13,8 +13,9 @@ representability is. The guiding idea is that when the port to Java happens,
 it should be a near-mechanical transcription rather than a redesign.
 
 A second goal is that a `lua_State` must be fully serializable and
-deserializable. This drives the function-callback design toward stable
-identities (`CFuncInfo`) instead of raw function pointers.
+deserializable; that work is planned in [styx.md](styx.md). It drives the
+function-callback design toward object identities (`CFuncInfo`) instead of
+raw function pointers.
 
 The remaining work is tracked in [tasks.md](tasks.md).
 
@@ -109,7 +110,8 @@ work so far, in roughly the order it landed:
 - C functions carry identity through `CFuncInfo` (static for library
   functions, GC-managed otherwise), so `lua_topointer` and table keys work
   without raw function-pointer identity. A `CFuncInfo` holds only the
-  function (a method handle in Java); it has no name.
+  function (a method handle in Java); it has no name. Persistence keys come
+  from the caller's permanents table (see `styx.md`).
 
 ### 4. Macro removal
 
