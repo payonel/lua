@@ -182,7 +182,7 @@ static int luaB_rawlen(lua_State* L)
 {
   int t = lua_type(L, 1);
   luaL_argexpectedi(L, t == LUA_TTABLE || t == LUA_TSTRING, 1, lt::table_or_string);
-  lua_pushinteger(L, (lua_rawlen(L, 1)));
+  lua_pushinteger(L, lua_rawlen(L, 1));
   return 1;
 }
 
@@ -238,7 +238,7 @@ static int luaB_collectgarbage(lua_State* L)
   }
   case 101:
   {
-    lua_pushinteger(L, (lua_getmemlimit(L)));
+    lua_pushinteger(L, lua_getmemlimit(L));
     return 1;
   }
   case LUA_GCCOUNT:

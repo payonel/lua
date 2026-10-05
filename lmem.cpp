@@ -142,19 +142,19 @@ static inline size_t luaM_growsize_(lua_State* L, size_t size, size_t nelems, si
 
 void luaM_takeobj(lua_State* L, size_t size)
 {
-  take_debt(L, size, LUA_VUSERDATA & NOVARIANT_MASK);
+  take_debt(L, size, novariant(LUA_VUSERDATA));
 }
 
 void luaM_freeobj(lua_State* L, size_t size)
 {
-  free_debt(L, size, LUA_VUSERDATA & NOVARIANT_MASK);
+  free_debt(L, size, novariant(LUA_VUSERDATA));
 }
 
 bool luaM_reserve(lua_State* L, size_t size)
 {
   global_State* g = L->l_G;
   if (g->memlimit > 0 &&
-      ((gettotalbytes(g))) + size > g->memlimit)
+      gettotalbytes(g) + size > g->memlimit)
   {
     return false;
   }
@@ -482,55 +482,55 @@ std::span<Node> luaM_alloc_Node_span(global_State* g, lua_State* L, std::span<No
 
 TString* luaM_malloc_TString(lua_State* L)
 {
-  take_debt(L, cost::TString, LUA_VSTRING & NOVARIANT_MASK);
+  take_debt(L, cost::TString, novariant(LUA_VSTRING));
   return new TString;
 }
 
 Udata* luaM_malloc_Udata(lua_State* L)
 {
-  take_debt(L, cost::Udata, LUA_VUSERDATA & NOVARIANT_MASK);
+  take_debt(L, cost::Udata, novariant(LUA_VUSERDATA));
   return new Udata;
 }
 
 Table* luaM_malloc_Table(lua_State* L)
 {
-  take_debt(L, cost::Table, LUA_VTABLE & NOVARIANT_MASK);
+  take_debt(L, cost::Table, novariant(LUA_VTABLE));
   return new Table;
 }
 
 CClosure* luaM_malloc_CClosure(lua_State* L)
 {
-  take_debt(L, cost::CClosure, LUA_VCCL & NOVARIANT_MASK);
+  take_debt(L, cost::CClosure, novariant(LUA_VCCL));
   return new CClosure;
 }
 
 LClosure* luaM_malloc_LClosure(lua_State* L)
 {
-  take_debt(L, cost::LClosure, LUA_VLCL & NOVARIANT_MASK);
+  take_debt(L, cost::LClosure, novariant(LUA_VLCL));
   return new LClosure;
 }
 
 CFuncInfo* luaM_malloc_CFuncInfo(lua_State* L)
 {
-  take_debt(L, cost::CFuncInfo, LUA_VLCF & NOVARIANT_MASK);
+  take_debt(L, cost::CFuncInfo, novariant(LUA_VLCF));
   return new CFuncInfo;
 }
 
 UpVal* luaM_malloc_UpVal(lua_State* L)
 {
-  take_debt(L, cost::UpVal, LUA_VUPVAL & NOVARIANT_MASK);
+  take_debt(L, cost::UpVal, novariant(LUA_VUPVAL));
   return new UpVal;
 }
 
 Proto* luaM_malloc_Proto(lua_State* L)
 {
-  take_debt(L, cost::Proto, LUA_VPROTO & NOVARIANT_MASK);
+  take_debt(L, cost::Proto, novariant(LUA_VPROTO));
   return new Proto;
 }
 
 lua_State* luaM_malloc_lua_State(lua_State* L)
 {
-  take_debt(L, cost::Thread, LUA_TTHREAD & NOVARIANT_MASK);
+  take_debt(L, cost::Thread, novariant(LUA_TTHREAD));
   return new lua_State;
 }
 
@@ -542,31 +542,31 @@ void luaM_free_UpVal(lua_State* L, UpVal* p)
 
 void luaM_free_LClosure(lua_State* L, LClosure* p)
 {
-  if (p != nullptr) free_debt(L, cost::LClosure, LUA_VLCL & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, cost::LClosure, novariant(LUA_VLCL));
   delete p;
 }
 
 void luaM_free_CClosure(lua_State* L, CClosure* p)
 {
-  if (p != nullptr) free_debt(L, cost::CClosure, LUA_VCCL & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, cost::CClosure, novariant(LUA_VCCL));
   delete p;
 }
 
 void luaM_free_Udata(lua_State* L, Udata* p)
 {
-  if (p != nullptr) free_debt(L, cost::Udata, LUA_VUSERDATA & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, cost::Udata, novariant(LUA_VUSERDATA));
   delete p;
 }
 
 void luaM_free_TString(lua_State* L, TString* p)
 {
-  if (p != nullptr) free_debt(L, cost::TString, LUA_VSTRING & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, cost::TString, novariant(LUA_VSTRING));
   delete p;
 }
 
 void luaM_free_CFuncInfo(lua_State* L, CFuncInfo* p)
 {
-  if (p != nullptr) free_debt(L, cost::CFuncInfo, LUA_VLCF & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, cost::CFuncInfo, novariant(LUA_VLCF));
   delete p;
 }
 
@@ -578,7 +578,7 @@ void luaM_free_Proto(lua_State* L, Proto* p)
 
 void luaM_free_Table(lua_State* L, Table* p)
 {
-  if (p != nullptr) free_debt(L, cost::Table, LUA_VTABLE & NOVARIANT_MASK);
+  if (p != nullptr) free_debt(L, cost::Table, novariant(LUA_VTABLE));
   delete p;
 }
 

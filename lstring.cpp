@@ -122,7 +122,7 @@ void luaS_init(lua_State* L)
   global_State* g = L->l_G;
   /* pre-create memory-error message */
   g->memerrmsg = TString::luaS_createstr(L, lt::not_enough_memory);
-  assert((g->memerrmsg->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(g->memerrmsg->tt) >= LUA_TSTRING);
   luaC_fix(L, g->memerrmsg); /* it should never be collected */
 }
 
@@ -231,7 +231,7 @@ Udata* Udata::luaS_newudata(lua_State* L, size_t s, int nuvalue)
   if ((uv.data() == nullptr && nuvalue > 0) || u->data.data() == nullptr)
     luaD_throw(L, LUA_ERRMEM);
   for (i = 0; i < nuvalue; i++)
-    (u->uv[i].tt_ = LUA_VNIL);
+    setnilvalue(&u->uv[i]);
   return u;
 }
 

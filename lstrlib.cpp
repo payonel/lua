@@ -1901,7 +1901,7 @@ static size_t getnumlimit(Header* h, size_t df)
   {
     lua_pushinteger(h->L, (sz));
     lua_pushinteger(h->L, MAXINTSIZE);
-    return (luaL_errori(h->L, lt::integral_size_d_out_of_limits_1_d));
+    return luaL_errori(h->L, lt::integral_size_d_out_of_limits_1_d);
   }
   return sz;
 }

@@ -164,9 +164,9 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
       setslot(nullptr);
       return;
     }
-    if ((S->h->luaH_getint((idx), &stv) & NOVARIANT_MASK) != LUA_TSTRING)
+    if (novariant(S->h->luaH_getint((idx), &stv)) != LUA_TSTRING)
       error(S, lt::invalid_string_index);
-    assert((stv.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(ttisstring(&stv));
     ts = tsvalue(&stv); /* get its value */
     setslot(ts);
     luaC_objbarrier(L, p, ts);
@@ -195,7 +195,7 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
   S->nstr++;
   setsvalue(L, &sv, ts);
   S->h->luaH_setint(L, (S->nstr), &sv);
-  assert((S->h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(S->h->tt) >= LUA_TSTRING);
   luaC_objbarrierback(L, S->h, ts);
 }
 
@@ -222,7 +222,7 @@ static void loadConstants(LoadState* S, Proto* f)
   int n = loadInt(S);
   f->k = luaM_alloc_TValue_span(S->L->l_G, S->L, {}, n, true);
   for (i = 0; i < n; i++)
-    (f->k[i].tt_ = LUA_VNIL);
+    setnilvalue(&f->k[i]);
   for (i = 0; i < n; i++)
   {
     TValue* o = &f->k[i];
@@ -230,7 +230,7 @@ static void loadConstants(LoadState* S, Proto* f)
     switch (t)
     {
     case LUA_VNIL:
-      ((o)->tt_ = LUA_VNIL);
+      setnilvalue(o);
       break;
     case LUA_VFALSE:
       ((o)->tt_ = LUA_VFALSE);
@@ -435,7 +435,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, byte_view name, int f
   S.h = anchor;
   S.nstr = 0;
   cl = LClosure::luaF_newLclosure(L, loadByte(&S));
-  assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(cl->tt) >= LUA_TSTRING);
   luaD_anchorobj(L, anchor, cl);
   cl->p = Proto::luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);

@@ -89,6 +89,46 @@ constexpr int NOVARIANT_MASK = 0x0F;
 
 constexpr int WITHVARIANT_MASK = 0x3F;
 
+/* raw type tag of a TValue */
+static l_forceinline lu_byte rawtt(const TValue* o)
+{
+  return o->tt_;
+}
+
+/* tag with no variants (bits 0-3) */
+constexpr lu_byte novariant(int t)
+{
+  return t & NOVARIANT_MASK;
+}
+
+/* type tag of a TValue (bits 0-3 for tags + variant bits 4-5) */
+constexpr lu_byte withvariant(int t)
+{
+  return t & WITHVARIANT_MASK;
+}
+
+static l_forceinline lu_byte ttypetag(const TValue* o)
+{
+  return withvariant(rawtt(o));
+}
+
+/* type of a TValue */
+static l_forceinline lu_byte ttype(const TValue* o)
+{
+  return novariant(rawtt(o));
+}
+
+/* Macros to test type */
+static l_forceinline bool checktag(const TValue* o, int t)
+{
+  return rawtt(o) == t;
+}
+
+static l_forceinline bool checktype(const TValue* o, int t)
+{
+  return ttype(o) == t;
+}
+
 /* Macros for internal tests */
 
 /* collectable object has the same tag as the original value */
@@ -116,23 +156,62 @@ constexpr lu_byte LUA_VABSTKEY = makevariant(LUA_TNIL, 2);
 /* Special variant to signal that a fast get is accessing a non-table */
 constexpr lu_byte LUA_VNOTABLE = makevariant(LUA_TNIL, 3);
 
+/* macro to test for (any kind of) nil */
+static l_forceinline bool ttisnil(const TValue* v)
+{
+  return checktype(v, LUA_TNIL);
+}
+
 /*
 ** Macro to test the result of a table access. Formally, it should
 ** distinguish between LUA_VEMPTY/LUA_VABSTKEY/LUA_VNOTABLE and
 ** other tags. As currently nil is equivalent to LUA_VEMPTY, it is
 ** simpler to just test whether the value is nil.
 */
+constexpr bool tagisempty(int tag)
+{
+  return novariant(tag) == LUA_TNIL;
+}
+
+/* macro to test for a standard nil */
+static l_forceinline bool ttisstrictnil(const TValue* o)
+{
+  return checktag(o, LUA_VNIL);
+}
+
+static l_forceinline void setnilvalue(TValue* obj)
+{
+  obj->tt_ = LUA_VNIL;
+}
+
+static l_forceinline bool isabstkey(const TValue* v)
+{
+  return checktag(v, LUA_VABSTKEY);
+}
 
 /*
 ** macro to detect non-standard nils (used only in assertions)
 */
+static l_forceinline bool isnonstrictnil(const TValue* v)
+{
+  return ttisnil(v) && !ttisstrictnil(v);
+}
 
 /*
 ** By default, entries with any kind of nil are considered empty.
 ** (In any definition, values associated with absent keys must also
 ** be accepted as empty.)
 */
+static l_forceinline bool isempty(const TValue* v)
+{
+  return ttisnil(v);
+}
 
+/* mark an entry as empty */
+static l_forceinline void setempty(TValue* v)
+{
+  v->tt_ = LUA_VEMPTY;
+}
 
 /* }================================================================== */
 
@@ -144,6 +223,26 @@ constexpr lu_byte LUA_VNOTABLE = makevariant(LUA_TNIL, 3);
 
 constexpr lu_byte LUA_VFALSE = makevariant(LUA_TBOOLEAN, 0);
 constexpr lu_byte LUA_VTRUE = makevariant(LUA_TBOOLEAN, 1);
+
+static l_forceinline bool ttisboolean(const TValue* o)
+{
+  return checktype(o, LUA_TBOOLEAN);
+}
+
+static l_forceinline bool ttisfalse(const TValue* o)
+{
+  return checktag(o, LUA_VFALSE);
+}
+
+static l_forceinline bool ttistrue(const TValue* o)
+{
+  return checktag(o, LUA_VTRUE);
+}
+
+static l_forceinline bool l_isfalse(const TValue* o)
+{
+  return ttisfalse(o) || ttisnil(o);
+}
 
 /* }================================================================== */
 
@@ -188,6 +287,16 @@ constexpr lu_byte ctb(lu_byte t)
   return (t | BIT_ISCOLLECTABLE);
 }
 
+static l_forceinline bool iscollectable(const TValue* o)
+{
+  return rawtt(o) & BIT_ISCOLLECTABLE;
+}
+
+static l_forceinline bool ttisthread(const TValue* o)
+{
+  return checktag(o, ctb(LUA_VTHREAD));
+}
+
 /* }================================================================== */
 
 /*
@@ -199,6 +308,21 @@ constexpr lu_byte ctb(lu_byte t)
 /* Variant tags for numbers */
 constexpr lu_byte LUA_VNUMINT = makevariant(LUA_TNUMBER, 0); /* integer numbers */
 constexpr lu_byte LUA_VNUMFLT = makevariant(LUA_TNUMBER, 1); /* float numbers */
+
+static l_forceinline bool ttisnumber(const TValue* o)
+{
+  return checktype(o, LUA_TNUMBER);
+}
+
+static l_forceinline bool ttisfloat(const TValue* o)
+{
+  return checktag(o, LUA_VNUMFLT);
+}
+
+static l_forceinline bool ttisinteger(const TValue* o)
+{
+  return checktag(o, LUA_VNUMINT);
+}
 
 /* }================================================================== */
 
@@ -212,6 +336,17 @@ constexpr lu_byte LUA_VNUMFLT = makevariant(LUA_TNUMBER, 1); /* float numbers */
 constexpr lu_byte LUA_VSTRING = makevariant(LUA_TSTRING, 0);
 constexpr lu_byte LUA_VSHRSTR = LUA_VSTRING;
 constexpr lu_byte LUA_VLNGSTR = LUA_VSTRING;
+
+/* test for a string */
+static l_forceinline bool ttisstring(const TValue* o)
+{
+  return checktype(o, LUA_TSTRING);
+}
+
+static l_forceinline bool ttisshrstring(const TValue* o)
+{
+  return checktag(o, ctb(LUA_VSHRSTR));
+}
 
 /*
 ** Header for a string value.
@@ -263,6 +398,16 @@ static l_forceinline size_t tsslen(const TString* ts)
 constexpr lu_byte LUA_VLIGHTUSERDATA = makevariant(LUA_TLIGHTUSERDATA, 0);
 
 constexpr lu_byte LUA_VUSERDATA = makevariant(LUA_TUSERDATA, 0);
+
+static l_forceinline bool ttislightuserdata(const TValue* o)
+{
+  return checktag(o, LUA_VLIGHTUSERDATA);
+}
+
+static l_forceinline bool ttisfulluserdata(const TValue* o)
+{
+  return checktag(o, ctb(LUA_VUSERDATA));
+}
 
 struct Table;
 struct Udata : GCListed
@@ -398,6 +543,26 @@ constexpr lu_byte LUA_VLCL = makevariant(LUA_TFUNCTION, 0); /* Lua closure */
 constexpr lu_byte LUA_VLCF = makevariant(LUA_TFUNCTION, 1); /* light C function */
 constexpr lu_byte LUA_VCCL = makevariant(LUA_TFUNCTION, 2); /* C closure */
 
+static l_forceinline bool ttisfunction(const TValue* o)
+{
+  return checktype(o, LUA_TFUNCTION);
+}
+
+static l_forceinline bool ttisLclosure(const TValue* o)
+{
+  return checktag(o, ctb(LUA_VLCL));
+}
+
+static l_forceinline bool ttislcf(const TValue* o)
+{
+  return checktag(o, ctb(LUA_VLCF));
+}
+
+static l_forceinline bool ttisCclosure(const TValue* o)
+{
+  return checktag(o, ctb(LUA_VCCL));
+}
+
 /*
 ** Upvalues for Lua closures
 */
@@ -477,6 +642,11 @@ struct CFuncInfo : GCObject
 */
 
 constexpr lu_byte LUA_VTABLE = makevariant(LUA_TTABLE, 0);
+
+static l_forceinline bool ttistable(const TValue* o)
+{
+  return checktag(o, ctb(LUA_VTABLE));
+}
 
 struct Node
 {
@@ -610,64 +780,64 @@ static l_forceinline int sizenode(const Table* t)
 
 static l_forceinline lua_Integer ivalue(const TValue* o)
 {
-  assert(o->tt_ == LUA_VNUMINT);
+  assert(ttisinteger(o));
   return o->value_.prim;
 }
 
 static l_forceinline lua_Number fltvalue(const TValue* o)
 {
-  assert(o->tt_ == LUA_VNUMFLT);
+  assert(ttisfloat(o));
   return std::bit_cast<lua_Number>(o->value_.prim);
 }
 
 static l_forceinline lua_Number nvalue(const TValue* o)
 {
-  assert(o->tt_ == LUA_VNUMINT || o->tt_ == LUA_VNUMFLT);
-  return (o->tt_ == LUA_VNUMINT) ? ((lua_Number)(o->value_.prim))
+  assert(ttisinteger(o) || ttisfloat(o));
+  return ttisinteger(o) ? ((lua_Number)(o->value_.prim))
                                  : std::bit_cast<lua_Number>(o->value_.prim);
 }
 
 static l_forceinline void* pvalue(const TValue* o)
 {
-  assert(o->tt_ == LUA_VLIGHTUSERDATA);
+  assert(ttislightuserdata(o));
   return static_cast<void*>(o->value_.ref);
 }
 
 static l_forceinline lua_CFunction fvalue(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VLCF));
+  assert(ttislcf(o));
   return static_cast<CFuncInfo*>(o->value_.ref)->fptr;
 }
 
 static l_forceinline CFuncInfo* fcfuncinfo(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VLCF));
+  assert(ttislcf(o));
   return static_cast<CFuncInfo*>(o->value_.ref);
 }
 
 static l_forceinline GCObject* gcvalue(const TValue* o)
 {
-  assert(o->tt_ & BIT_ISCOLLECTABLE);
+  assert(iscollectable(o));
   return o->value_.ref;
 }
 
 static l_forceinline TString* tsvalue(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VSHRSTR) || o->tt_ == ctb(LUA_VLNGSTR));
-  assert((o->value_.ref->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  assert(ttisshrstring(o));
+  assert(novariant(o->value_.ref->tt) == LUA_TSTRING);
   return static_cast<TString*>(o->value_.ref);
 }
 
 static l_forceinline Table* hvalue(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VTABLE));
+  assert(ttistable(o));
   assert(o->value_.ref->tt == LUA_VTABLE);
   return static_cast<Table*>(o->value_.ref);
 }
 
 static l_forceinline Udata* uvalue(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VUSERDATA));
+  assert(ttisfulluserdata(o));
   assert(o->value_.ref->tt == LUA_VUSERDATA);
   return static_cast<Udata*>(o->value_.ref);
 }
@@ -675,21 +845,21 @@ static l_forceinline Udata* uvalue(const TValue* o)
 
 static l_forceinline Closure* clvalue(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VLCL) || o->tt_ == ctb(LUA_VCCL));
+  assert(ttisLclosure(o) || ttisCclosure(o));
   assert(o->value_.ref->tt == LUA_VLCL || o->value_.ref->tt == LUA_VCCL);
   return static_cast<Closure*>(o->value_.ref);
 }
 
 static l_forceinline LClosure* clLvalue(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VLCL));
+  assert(ttisLclosure(o));
   assert(o->value_.ref->tt == LUA_VLCL);
   return static_cast<LClosure*>(o->value_.ref);
 }
 
 static l_forceinline CClosure* clCvalue(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VCCL));
+  assert(ttisCclosure(o));
   assert(o->value_.ref->tt == LUA_VCCL);
   return static_cast<CClosure*>(o->value_.ref);
 }
@@ -700,22 +870,67 @@ static l_forceinline Proto* getproto(const TValue* o)
 }
 
 
+static l_forceinline lu_byte keytt(const Node* node)
+{
+  return node->key_tt;
+}
+
+static l_forceinline bool keyisnil(const Node* node)
+{
+  return keytt(node) == LUA_TNIL;
+}
+
+static l_forceinline bool keyisinteger(const Node* node)
+{
+  return keytt(node) == LUA_VNUMINT;
+}
+
+static l_forceinline bool keyisshrstr(const Node* node)
+{
+  return keytt(node) == ctb(LUA_VSHRSTR);
+}
+
+static l_forceinline void setnilkey(Node* node)
+{
+  node->key_tt = LUA_TNIL;
+}
+
+static l_forceinline bool keyiscollectable(const Node* n)
+{
+  return keytt(n) & BIT_ISCOLLECTABLE;
+}
+
+static l_forceinline void setdeadkey(Node* node)
+{
+  node->key_tt = LUA_TDEADKEY;
+}
+
+static l_forceinline bool keyisdead(const Node* node)
+{
+  return keytt(node) == LUA_TDEADKEY;
+}
+
 static l_forceinline GCObject* gckey(const Node* n)
 {
-  assert((n->key_tt & BIT_ISCOLLECTABLE) || n->key_tt == LUA_TDEADKEY);
+  assert(keyiscollectable(n) || keyisdead(n));
   return n->key_val.ref;
+}
+
+static l_forceinline GCObject* gckeyN(const Node* n)
+{
+  return keyiscollectable(n) ? gckey(n) : nullptr;
 }
 
 static l_forceinline TString* keystrval(const Node* n)
 {
-  assert(n->key_tt == ctb(LUA_VSHRSTR));
-  assert((n->key_val.ref->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  assert(keyisshrstr(n));
+  assert(novariant(n->key_val.ref->tt) == LUA_TSTRING);
   return static_cast<TString*>(n->key_val.ref);
 }
 
 static l_forceinline lua_Integer keyival(const Node* n)
 {
-  assert(n->key_tt == LUA_VNUMINT);
+  assert(keyisinteger(n));
   return n->key_val.prim;
 }
 
@@ -757,7 +972,7 @@ static l_forceinline void setobj(struct lua_State* L, TValue* obj1, const TValue
   obj1->value_ = obj2->value_;
   obj1->tt_ = obj2->tt_;
   checkliveness(L, obj1);
-  assert(!((((obj1)->tt_ & NOVARIANT_MASK) == LUA_TNIL) && !((obj1)->tt_ == LUA_VNIL)));
+  assert(!isnonstrictnil(obj1));
 }
 
 static l_forceinline void setfltvalue(TValue* obj, lua_Number x)
@@ -768,7 +983,7 @@ static l_forceinline void setfltvalue(TValue* obj, lua_Number x)
 
 static l_forceinline void chgfltvalue(TValue* obj, lua_Number x)
 {
-  assert(obj->tt_ == LUA_VNUMFLT);
+  assert(ttisfloat(obj));
   obj->value_.prim = std::bit_cast<lua_Integer>(x);
 }
 
@@ -780,7 +995,7 @@ static l_forceinline void setivalue(TValue* obj, lua_Integer x)
 
 static l_forceinline void chgivalue(TValue* obj, lua_Integer x)
 {
-  assert(obj->tt_ == LUA_VNUMINT);
+  assert(ttisinteger(obj));
   obj->value_.prim = x;
 }
 
@@ -810,7 +1025,7 @@ static l_forceinline void setgcovalue(struct lua_State* L, TValue* obj, GCObject
 
 static l_forceinline void setsvalue(struct lua_State* L, TValue* obj, TString* x)
 {
-  assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  assert(novariant(x->tt) == LUA_TSTRING);
   obj->value_.ref = x;
   obj->tt_ = ctb(x->tt);
   checkliveness(L, obj);

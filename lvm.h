@@ -15,7 +15,7 @@ namespace lua::vm
 
 static inline int cvt2str(const TValue* o)
 {
-  return (o->tt_ & NOVARIANT_MASK) == LUA_TNUMBER;
+  return ttype(o) == LUA_TNUMBER;
 }
 
 static inline int cvt2str(lua_State* L, StkId idx)
@@ -26,7 +26,7 @@ static inline int cvt2str(lua_State* L, StkId idx)
 
 static inline int cvt2num(const TValue* o)
 {
-  return (o->tt_ & NOVARIANT_MASK) == LUA_TSTRING;
+  return ttype(o) == LUA_TSTRING;
 }
 
 /*
@@ -91,7 +91,7 @@ void luaV_objlen(lua_State* L, StkId ra, StkId rb);
 
 static l_forceinline int tonumber(const TValue* o, NumResult* nout)
 {
-  if (o->tt_ == LUA_VNUMFLT)
+  if (ttisfloat(o))
   {
     nout->v = fltvalue(o);
     return 1;
@@ -101,12 +101,12 @@ static l_forceinline int tonumber(const TValue* o, NumResult* nout)
 
 static l_forceinline int tonumberns(const TValue* o, NumResult* nout)
 {
-  if (o->tt_ == LUA_VNUMFLT)
+  if (ttisfloat(o))
   {
     nout->v = fltvalue(o);
     return 1;
   }
-  if (o->tt_ == LUA_VNUMINT)
+  if (ttisinteger(o))
   {
     nout->v = (lua_Number)ivalue(o);
     return 1;
@@ -116,7 +116,7 @@ static l_forceinline int tonumberns(const TValue* o, NumResult* nout)
 
 static l_forceinline int tointeger(const TValue* o, IntResult* iout)
 {
-  if (l_likely(o->tt_ == LUA_VNUMINT))
+  if (l_likely(ttisinteger(o)))
   {
     iout->v = ivalue(o);
     return 1;
@@ -126,7 +126,7 @@ static l_forceinline int tointeger(const TValue* o, IntResult* iout)
 
 static l_forceinline int tointegerns(const TValue* o, IntResult* iout)
 {
-  if (l_likely(o->tt_ == LUA_VNUMINT))
+  if (l_likely(ttisinteger(o)))
   {
     iout->v = ivalue(o);
     return 1;
@@ -165,7 +165,7 @@ static inline int luaV_rawequalobj(lua_State* L, StkId t1, const TValue* t2)
 
 static inline void luaV_finishfastset(lua_State* L, const TValue* t, const TValue* v)
 {
-  assert(t->tt_ & BIT_ISCOLLECTABLE);
+  assert(iscollectable(t));
   luaC_barrierback(L, gcvalue(t), v);
 }
 

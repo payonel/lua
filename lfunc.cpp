@@ -80,7 +80,7 @@ void LClosure::luaF_initupvals(lua_State* L)
     uv->prevopen = nullptr;
     uv->owner = nullptr;
     uv->stkid = 0;
-    (uv->value.tt_ = LUA_VNIL);
+    setnilvalue(&uv->value);
     upvals[i] = uv;
     luaC_objbarrier(L, this, uv);
   }
@@ -162,7 +162,7 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
 static void checkclosemth(lua_State* L, StkId level)
 {
   const TValue* tm = luaT_gettmbyobj(L, level, TM_CLOSE);
-  if ((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (ttisnil(tm))
   {                                            /* no metamethod? */
     int idx = ((int)(level - L->ci->func)); /* variable index */
     const InternalString* vname_i = luaG_findlocal(L, L->ci, idx).name;
@@ -208,7 +208,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
 void luaF_newtbcupval(lua_State* L, StkId level)
 {
   assert(level > L->tbclist);
-  if ((slottag(L, level) == LUA_VFALSE) || ((slottag(L, level) & NOVARIANT_MASK) == LUA_TNIL))
+  if ((slottag(L, level) == LUA_VFALSE) || tagisempty(slottag(L, level)))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
   {

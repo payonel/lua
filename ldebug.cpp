@@ -395,7 +395,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
       int i;
       TValue v;
       (v.tt_ = LUA_VTRUE);     /* boolean 'true' to be the value of all indices */
-      if (!(isvararg(p))) /* regular function? */
+      if (!isvararg(p)) /* regular function? */
         i = 0;            /* consider all instructions */
       else
       { /* vararg function */
@@ -449,7 +449,7 @@ static int auxgetinfo(lua_State* L, byte_view what, size_t wpos,
       }
       else
       {
-        ar->isvararg = (isvararg(static_cast<LClosure*>(f)->p)) ? 1 : 0;
+        ar->isvararg = isvararg(static_cast<LClosure*>(f)->p) ? 1 : 0;
         ar->nparams = static_cast<LClosure*>(f)->p->numparams;
       }
       break;
@@ -510,7 +510,7 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, byte_view what, const In
   {
     ci = nullptr;
     func = L->top - 1;
-    assert((slottag(L, func) & NOVARIANT_MASK) == LUA_TFUNCTION && "function expected");
+    assert(novariant(slottag(L, func)) == LUA_TFUNCTION && "function expected");
     wpos = 1;   /* skip the '>' */
     L->top--;
   }
@@ -518,12 +518,12 @@ std::optional<InternalDebug> lua_getinfoi(lua_State* L, byte_view what, const In
   {
     ci = ar.i_ci;
     func = ci->func;
-    assert((slottag(L, func) & NOVARIANT_MASK) == LUA_TFUNCTION);
+    assert(novariant(slottag(L, func)) == LUA_TFUNCTION);
   }
   if (slottag(L, func) == ctb(LUA_VLCL) || slottag(L, func) == ctb(LUA_VCCL))
   {
     cl = slotclval(L, func);
-    assert((cl->tt & NOVARIANT_MASK) == LUA_TFUNCTION);
+    assert(novariant(cl->tt) == LUA_TFUNCTION);
   }
   else
     cl = nullptr;
@@ -666,7 +666,7 @@ static int findsetreg(const Proto* p, int lastpc, int reg)
 static VarName kname(const Proto* p, int index)
 {
   const TValue* kvalue = &p->k[index];
-  if ((((kvalue)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
+  if (ttisstring(kvalue))
     return {lt::constant, &tsvalue(kvalue)->data};
   else
     return {std::nullopt, &lt::qmark_i};
@@ -963,7 +963,7 @@ static byte_view varinfo(lua_State* L, StkId src)
 
 [[noreturn]] void luaG_concaterror(lua_State* L, const TValue* p1, const TValue* p2, StkId src1, StkId src2)
 {
-  if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING) || cvt2str(p1))
+  if (ttisstring(p1) || cvt2str(p1))
   {
     p1 = p2;
     src1 = src2;
@@ -973,7 +973,7 @@ static byte_view varinfo(lua_State* L, StkId src)
 
 [[noreturn]] void luaG_opinterror(lua_State* L, const TValue* p1, const TValue* p2, byte_view msg, StkId src1, StkId src2)
 {
-  if (!(((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER)) /* first operand is wrong? */
+  if (!ttisnumber(p1)) /* first operand is wrong? */
   {
     p2 = p1;           /* now second is wrong */
     src2 = src1;
@@ -1028,13 +1028,13 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
   if (L->errfunc != 0)
   { /* is there an error handling function? */
     StkId errfunc = (static_cast<StkId>(L->errfunc));
-    assert((slottag(L, errfunc) & NOVARIANT_MASK) == LUA_TFUNCTION);
+    assert(novariant(slottag(L, errfunc)) == LUA_TFUNCTION);
     copyslot(L, L->top, L->top - 1); /* move argument */
     copyslot(L, L->top - 1, errfunc);  /* push function */
     L->top++;                           /* assume EXTRA_STACK */
     luaD_callnoyield(L, L->top - 2, 1); /* call it */
   }
-  if ((slottag(L, L->top - 1) & NOVARIANT_MASK) == LUA_TNIL)
+  if (tagisempty(slottag(L, L->top - 1)))
   { /* error object is nil? */
     /* change it to a proper message */
     byte_view errstr = lt::no_error_object;

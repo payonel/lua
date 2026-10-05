@@ -329,7 +329,7 @@ static void check_readonly(LexState* ls, expdesc* e)
     if (e->ind.ro) /* read-only? */
     {
       TValue* kv = &fs->f->k[e->ind.keystr];
-      assert((kv->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+      assert(ttisstring(kv));
       varname = tsvalue(kv);
     }
     break;
@@ -864,7 +864,7 @@ static void open_func(LexState* ls, FuncState* fs, BlockCnt* bl)
   luaC_objbarrier(L, f, f->source);
   f->maxstacksize = 2;                           /* registers 0/1 are always valid */
   fs->kcache = Table::luaH_new(L);                      /* create table for function */
-  assert((fs->kcache->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(fs->kcache->tt) >= LUA_TSTRING);
   luaD_anchorobj(L, ls->h, fs->kcache); /* anchor it */
   enterblock(fs, bl, 0);
 }
@@ -2355,7 +2355,7 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndat
   LClosure* cl;
   lexstate.h = anchor;                    /* table for scanner */
   cl = LClosure::luaF_newLclosure(L, 1);            /* create main closure */
-  assert((cl->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(cl->tt) >= LUA_TSTRING);
   luaD_anchorobj(L, anchor, cl); /* anchor it in scanner table */
   funcstate.f = cl->p = Proto::luaF_newproto(L);
   luaC_objbarrier(L, cl, cl->p);

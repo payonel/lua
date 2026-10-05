@@ -271,7 +271,7 @@ static int math_max(lua_State* L)
 static int math_type(lua_State* L)
 {
   if (lua_type(L, 1) == LUA_TNUMBER)
-    lua_pushistringref(L, (lua_isinteger(L, 1)) ? lt::integer_2 : lt::float_kw);
+    lua_pushistringref(L, lua_isinteger(L, 1) ? lt::integer_2 : lt::float_kw);
   else
   {
     luaL_checkany(L, 1);
@@ -403,7 +403,7 @@ static int math_random(lua_State* L)
     up = luaL_checkinteger(L, 1);
     if (up == 0)
     {                                            /* single 0 as argument? */
-      lua_pushinteger(L, (I2UInt(rv))); /* full random integer */
+      lua_pushinteger(L, I2UInt(rv)); /* full random integer */
       return 1;
     }
     break;
@@ -450,8 +450,8 @@ static int math_randomseed(lua_State* L)
   }
   else
   {
-    n1 = (luaL_checkinteger(L, 1));
-    n2 = (luaL_optinteger(L, 2, 0));
+    n1 = luaL_checkinteger(L, 1);
+    n2 = luaL_optinteger(L, 2, 0);
   }
   setseed(L, state->s, n1, n2);
   return 2; /* return seeds */

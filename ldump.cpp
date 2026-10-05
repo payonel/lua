@@ -146,10 +146,10 @@ static void dumpString(DumpState* D, TString* ts)
   {
     TValue idx;
     int tag = D->h->luaH_getstr(ts, &idx);
-    if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
+    if (!tagisempty(tag))
     {                                         /* string already saved? */
       dumpVarint(D, 0);                       /* reuse a saved string */
-      dumpVarint(D, (ivalue(&idx))); /* index of saved string */
+      dumpVarint(D, ivalue(&idx)); /* index of saved string */
     }
     else
     {                    /* must write and save the string */
@@ -185,7 +185,7 @@ static void dumpConstants(DumpState* D, const Proto* f)
   for (i = 0; i < n; i++)
   {
     const TValue* o = &f->k[i];
-    int tt = ((o)->tt_ & WITHVARIANT_MASK);
+    int tt = ttypetag(o);
     dumpByte(D, tt);
     switch (tt)
     {
@@ -196,7 +196,7 @@ static void dumpConstants(DumpState* D, const Proto* f)
       dumpInteger(D, ivalue(o));
       break;
     case LUA_VSHRSTR:
-      assert((o->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+      assert(ttisstring(o));
       dumpString(D, tsvalue(o));
       break;
     default:

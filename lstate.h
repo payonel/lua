@@ -246,7 +246,7 @@ static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
 
 static l_forceinline lua_State* thvalue(const TValue* o)
 {
-  assert(o->tt_ == ctb(LUA_VTHREAD));
+  assert(ttisthread(o));
   assert(o->value_.ref->tt == LUA_VTHREAD);
   return static_cast<lua_State*>(o->value_.ref);
 }
@@ -355,12 +355,12 @@ static l_forceinline CClosure* slotclCval(lua_State* L, StkId idx)
 
 static l_forceinline void setslotnil(lua_State* L, StkId idx)
 {
-  L->stack[idx].tt_ = LUA_VNIL;
+  setnilvalue(&L->stack[idx]);
 }
 
 static l_forceinline void setslotempty(lua_State* L, StkId idx)
 {
-  L->stack[idx].tt_ = LUA_VEMPTY;
+  setempty(&L->stack[idx]);
 }
 
 static l_forceinline void setslotbt(lua_State* L, StkId idx)
@@ -387,13 +387,13 @@ static l_forceinline void setslotflt(lua_State* L, StkId idx, lua_Number x)
 
 static l_forceinline void chgsloti(lua_State* L, StkId idx, lua_Integer x)
 {
-  assert(L->stack[idx].tt_ == LUA_VNUMINT);
+  assert(ttisinteger(&L->stack[idx]));
   L->stack[idx].value_.prim = x;
 }
 
 static l_forceinline void chgslotflt(lua_State* L, StkId idx, lua_Number x)
 {
-  assert(L->stack[idx].tt_ == LUA_VNUMFLT);
+  assert(ttisfloat(&L->stack[idx]));
   L->stack[idx].value_.prim = std::bit_cast<lua_Integer>(x);
 }
 
@@ -411,7 +411,7 @@ static l_forceinline void setslotf(lua_State* L, StkId idx, CFuncInfo* cfi)
 
 static l_forceinline void setslots(lua_State* L, StkId idx, TString* x)
 {
-  assert((x->tt & NOVARIANT_MASK) == LUA_TSTRING);
+  assert(novariant(x->tt) == LUA_TSTRING);
   L->stack[idx].value_.ref = x;
   L->stack[idx].tt_ = ctb(x->tt);
   checkliveness(L, &L->stack[idx]);
@@ -562,7 +562,7 @@ static l_forceinline lua_State* mainthread(global_State* g)
 
 static l_forceinline int completestate(global_State* g)
 {
-  return (g->nilvalue.tt_ & NOVARIANT_MASK) == LUA_TNIL;
+  return ttype(&g->nilvalue) == LUA_TNIL;
 }
 
 /* actual number of total memory allocated */

@@ -59,7 +59,7 @@ constexpr lu_byte maskflags = (~(~0u << (TM_EQ + 1)));
 */
 static l_forceinline int notm(const TValue* tm)
 {
-  return (tm->tt_ & NOVARIANT_MASK) == LUA_TNIL;
+  return ttype(tm) == LUA_TNIL;
 }
 
 static l_forceinline int checknoTM(const Table* mt, TMS e)

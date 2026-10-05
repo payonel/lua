@@ -45,7 +45,7 @@ void luaT_init(lua_State* L)
   {
     byte_view bytes = luaT_eventname[i];
     L->l_G->tmname[i] = TString::luaS_createstr(L, bytes);
-    assert((((L->l_G->tmname[i])->tt) & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert(novariant(((L->l_G->tmname[i])->tt)) >= LUA_TSTRING);
     luaC_fix(L, L->l_G->tmname[i]); /* never collect these names */
   }
 }
@@ -70,7 +70,7 @@ const TValue* luaT_gettm(Table* events, TMS event, TString* ename)
 const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
 {
   Table* mt;
-  switch ((o->tt_ & NOVARIANT_MASK))
+  switch (ttype(o))
   {
   case LUA_TTABLE:
     mt = hvalue(o)->metatable;
@@ -79,7 +79,7 @@ const TValue* luaT_gettmbyobj(lua_State* L, const TValue* o, TMS event)
     mt = uvalue(o)->metatable;
     break;
   default:
-    mt = L->l_G->mt[(o->tt_ & NOVARIANT_MASK)];
+    mt = L->l_G->mt[ttype(o)];
   }
   return (mt ? mt->luaH_Hgetshortstr(L->l_G->tmname[event]) : &L->l_G->nilvalue);
 }
@@ -97,16 +97,16 @@ const TValue* luaT_gettmbyobj(lua_State* L, StkId o, TMS event)
 byte_view luaT_objtypename(lua_State* L, const TValue* o)
 {
   Table* mt;
-  if ((((o)->tt_ == ctb(LUA_VTABLE)) && (mt = hvalue(o)->metatable) != nullptr) ||
-      (((o)->tt_ == ctb(LUA_VUSERDATA)) && (mt = uvalue(o)->metatable) != nullptr))
+  if ((ttistable(o) && (mt = hvalue(o)->metatable) != nullptr) ||
+      (ttisfulluserdata(o) && (mt = uvalue(o)->metatable) != nullptr))
   {
     const TValue* name = mt->luaH_Hgetshortstr(TString::luaS_createstr(L, lt::mm_name));
-    if ((((name)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))           /* is '__name' a string? */
+    if (ttisstring(name))           /* is '__name' a string? */
     {
       return tsvalue(name)->data.view(); /* use it as type name */
     }
   }
-  return ttypename((o->tt_ & NOVARIANT_MASK)); /* else use standard type name */
+  return ttypename(ttype(o)); /* else use standard type name */
 }
 
 void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
@@ -141,7 +141,7 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
     luaD_callnoyield(L, func, 1);
   res = (static_cast<StkId>(result));
   copyslot(L, res, --L->top); /* move result to its place */
-  return ((slottag(L, res) & WITHVARIANT_MASK));     /* return tag of the result */
+  return withvariant(slottag(L, res));     /* return tag of the result */
 }
 
 static int callbinTM(lua_State* L, const TValue* p1, const TValue* p2,
@@ -170,7 +170,7 @@ void luaT_trybinTM(lua_State* L, const TValue* p1, const TValue* p2,
     case TM_SHR:
     case TM_BNOT:
     {
-      if ((((p1)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER) && (((p2)->tt_ & NOVARIANT_MASK) == LUA_TNUMBER))
+      if (ttisnumber(p1) && ttisnumber(p2))
         luaG_tointerror(L, p1, p2, src1, src2);
       else
         luaG_opinterror(L, p1, p2, lt::perform_bitwise_operation_on, src1, src2);
@@ -241,7 +241,7 @@ int luaT_callorderTM(lua_State* L, const TValue* p1, const TValue* p2,
 {
   int tag = callbinTM(L, p1, p2, L->top, event); /* try original event */
   if (tag >= 0)                                    /* found tag method? */
-    return !((tag) == LUA_VFALSE || ((tag) & NOVARIANT_MASK) == LUA_TNIL);
+    return !((tag) == LUA_VFALSE || tagisempty(tag));
   luaG_ordererror(L, p1, p2); /* no metamethod found */
   return 0;                   /* to avoid warnings */
 }
@@ -359,7 +359,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
       return;
     }
   }
-  else if ((((rc)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
+  else if (ttisstring(rc))
   { /* string value? */
     TString* ts = tsvalue(rc);
     if (ts->data.size() == 1 && ts->data.byteAt(0) == 'n')
@@ -395,7 +395,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
     if (h->luaH_getshortstr(TString::luaS_createstr(L, bytes), &res) != LUA_VNUMINT ||
         (ivalue(&res) < 0 || ivalue(&res) > INT_MAX / 2))
       luaG_runerror(L, lt::vararg_table_has_no_proper_n);
-    assert(res.tt_ == LUA_VNUMINT);
+    assert(ttisinteger(&res));
     return ((int)(ivalue(&res)));
   }
 }
@@ -436,7 +436,7 @@ void luaT_getvarargs(lua_State* L, CallInfo* ci, StkId where, int wanted,
     {
       TValue res;
       lu_byte tag = h->luaH_getint(i + 1, &res);
-      if ((((tag) & NOVARIANT_MASK) == LUA_TNIL))
+      if (tagisempty(tag))
         setslottag(L, where + i, LUA_VNIL);
       else
         setslot(L, where + i, &res);

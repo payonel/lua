@@ -85,7 +85,7 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
   else
   {
     assert(errorstatus(errcode));        /* must be a real error */
-    assert((slottag(L, L->top - 1) & NOVARIANT_MASK) != LUA_TNIL); /* with a non-nil object */
+    assert(!tagisempty(slottag(L, L->top - 1))); /* with a non-nil object */
     copyslot(L, oldtop, L->top - 1);      /* move it to 'oldtop' */
   }
   L->top = oldtop + 1; /* top goes back to old top plus error object */
@@ -424,7 +424,7 @@ static l_uint32 tryfuncTM(lua_State* L, StkId func, l_uint32 status)
   const TValue* tm;
   StkId p;
   tm = luaT_gettmbyobj(L, func, TM_CALL);
-  if (l_unlikely((((tm)->tt_ & NOVARIANT_MASK) == LUA_TNIL))) /* no metamethod? */
+  if (l_unlikely(ttisnil(tm))) /* no metamethod? */
     luaG_callerror(L, func);
   for (p = L->top; p > func; p--) /* open space for metamethod */
     copyslot(L, p, p - 1);
@@ -577,7 +577,7 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
   l_uint32 status = LUA_MULTRET + 1;
   for (;;)
   {
-    switch (slottag(L, func) & WITHVARIANT_MASK)
+    switch (withvariant(slottag(L, func)))
     {
     case LUA_VCCL: /* C closure */
     {
@@ -623,7 +623,7 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
   assert(status <= MAXRESULTS + 1);
   for (;;)
   {
-    switch (slottag(L, func) & WITHVARIANT_MASK)
+    switch (withvariant(slottag(L, func)))
     {
     case LUA_VCCL: /* C closure */
     {

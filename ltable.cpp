@@ -188,7 +188,7 @@ static unsigned l_hashfloat(lua_Number n)
 int Table::mainpositionTV(const TValue* key) const
 {
   const Table* t = this;
-  switch (((key)->tt_ & WITHVARIANT_MASK))
+  switch (ttypetag(key))
   {
   case LUA_VNUMINT:
   {
@@ -202,7 +202,7 @@ int Table::mainpositionTV(const TValue* key) const
   }
   case LUA_VSHRSTR:
   {
-    assert((key->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(ttisstring(key));
     TString* ts = tsvalue(key);
     return t->hashstr(ts);
   }
@@ -217,7 +217,7 @@ int Table::mainpositionTV(const TValue* key) const
   }
   default:
   {
-    assert(key->tt_ & BIT_ISCOLLECTABLE);
+    assert(iscollectable(key));
     GCObject* o = gcvalue(key);
     return t->hashpointer(o);
   }
@@ -252,18 +252,18 @@ inline int Table::mainpositionfromnode(int nd) const
 */
 static int equalkey(const TValue* k1, const Node* n2, int deadok)
 {
-  if ((k1)->tt_ != ((n2)->key_tt))
+  if (rawtt(k1) != keytt(n2))
   { /* not the same variants? */
-    if (((n2)->key_tt == ctb(LUA_VSHRSTR)) && (((k1)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
+    if (keyisshrstr(n2) && ttisstring(k1))
     {
       /* an external string can be equal to a short-string key */
       return luaS_eqstr(tsvalue(k1),
                         keystrval(n2));
     }
-    else if (deadok && ((n2)->key_tt == LUA_TDEADKEY) && ((k1)->tt_ & BIT_ISCOLLECTABLE))
+    else if (deadok && keyisdead(n2) && iscollectable(k1))
     {
       /* a collectable value can be equal to a dead key */
-      assert(k1->tt_ & BIT_ISCOLLECTABLE);
+      assert(iscollectable(k1));
       return gcvalue(k1) == gckey(n2);
     }
     else
@@ -271,20 +271,20 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
   }
   else
   { /* equal variants */
-    switch (((n2)->key_tt))
+    switch (keytt(n2))
     {
     case LUA_VNIL:
     case LUA_VFALSE:
     case LUA_VTRUE:
       return 1;
     case LUA_VNUMINT:
-      assert(k1->tt_ == LUA_VNUMINT);
+      assert(ttisinteger(k1));
       return (ivalue(k1) == keyival(n2));
     case LUA_VNUMFLT:
-      assert(k1->tt_ == LUA_VNUMFLT);
+      assert(ttisfloat(k1));
       return (fltvalue(k1) == keyfltval(n2));
     case LUA_VLIGHTUSERDATA:
-      assert(k1->tt_ == LUA_VLIGHTUSERDATA);
+      assert(ttislightuserdata(k1));
       return pvalue(k1) == keypval(n2);
     case ctb(LUA_VLNGSTR):
     {
@@ -292,7 +292,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
                         keystrval(n2));
     }
     default:
-      assert(k1->tt_ & BIT_ISCOLLECTABLE);
+      assert(iscollectable(k1));
       return gcvalue(k1) == gckey(n2);
     }
   }
@@ -321,7 +321,7 @@ const TValue* Table::getgeneric(const TValue* key, int deadok)
 {
   Table* t = this;
   int idx = t->nodegeneric(key, deadok);
-  return (idx < 0) ? &absentkey : (&(gnode(t, idx))->val);
+  return (idx < 0) ? &absentkey : (&gnode(t, idx)->val);
 }
 
 /*
@@ -357,7 +357,7 @@ inline int Table::ikeyinarray(lua_Integer k) const
 */
 int Table::keyinarray(const TValue* key)
 {
-  return (((key)->tt_ == LUA_VNUMINT)) ? ikeyinarray(ivalue(key)) : 0;
+  return ttisinteger(key) ? ikeyinarray(ivalue(key)) : 0;
 }
 
 /*
@@ -369,7 +369,7 @@ lua_Integer Table::findindex(lua_State* L, TValue* key, int asize)
 {
   Table* t = this;
   int i;
-  if ((((key)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (isempty(key))
     return 0; /* first iteration */
   i = t->keyinarray(key);
   if (i != 0) /* is 'key' inside array part? */
@@ -394,7 +394,7 @@ int Table::luaH_next(lua_State* L, StkId key)
   for (; i < asize; i++)
   { /* try first array part */
     lu_byte tag = getArrTag(t, i);
-    if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
+    if (!tagisempty(tag))
     { /* a non-empty entry? */
       setsloti(L, key, i + 1);
       TValue res;
@@ -405,7 +405,7 @@ int Table::luaH_next(lua_State* L, StkId key)
   }
   for (i -= asize; i < sizenode(t); i++)
   { /* hash part */
-    if (!((gnode(t, i)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
+    if (!isempty(&gnode(t, i)->val))
     { /* a non-empty entry? */
       Node* n = gnode(t, i);
       TValue nk;
@@ -516,7 +516,7 @@ static void countint(lua_Integer key, Counters* ct)
 inline int Table::arraykeyisempty(int key) const
 {
   int tag = getArrTag(this, key - 1);
-  return (((tag) & NOVARIANT_MASK) == LUA_TNIL);
+  return tagisempty(tag);
 }
 
 /*
@@ -567,15 +567,15 @@ void Table::numusehash(Counters* ct) const
   while (i--)
   {
     Node* n = gnode(t, i);
-    if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
+    if (isempty(&n->val))
     {
-      assert(!((n)->key_tt == LUA_TNIL)); /* entry was deleted; key cannot be nil */
+      assert(!keyisnil(n)); /* entry was deleted; key cannot be nil */
       ct->deleted = 1;
     }
     else
     {
       total++;
-      if (((n)->key_tt == LUA_VNUMINT))
+      if (keyisinteger(n))
         countint(keyival(n), ct);
     }
   }
@@ -675,8 +675,8 @@ void Table::setnodevector(lua_State* L, int size)
     {
       Node* n = gnode(t, i);
       ((n)->next) = 0;
-      ((n)->key_tt = LUA_TNIL);
-      (n->val.tt_ = LUA_VEMPTY);
+      setnilkey(n);
+      setempty(&n->val);
     }
   }
 }
@@ -691,7 +691,7 @@ void reinserthash(lua_State* L, Table* ot, Table* t)
   for (j = 0; j < size; j++)
   {
     Node* old = gnode(ot, j);
-    if (!((old->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
+    if (!isempty(&old->val))
     {
       /* doesn't need barrier/invalidate cache, as entry was
          already present in the table */
@@ -732,7 +732,7 @@ void Table::reinsertOldSlice(int oldasize,
   for (i = newasize; i < oldasize; i++)
   { /* traverse vanishing slice */
     lu_byte tag = getArrTag(t, i);
-    if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
+    if (!tagisempty(tag))
     { /* a non-empty entry? */
       TValue key, aux;
       setivalue(&key, ((lua_Integer)(i)) + 1); /* make the key */
@@ -832,7 +832,7 @@ void Table::rehash(lua_State* L, const TValue* ek)
   ct.na = 0;
   ct.deleted = 0;
   ct.total = 1; /* count extra key */
-  if (((ek)->tt_ == LUA_VNUMINT))
+  if (ttisinteger(ek))
     countint(ivalue(ek), &ct); /* extra key may go to array */
   t->numusehash(&ct);          /* count keys in hash part */
   if (ct.na == 0)
@@ -905,7 +905,7 @@ int Table::getfreepos()
     while (t->lastfree > 0)
     {
       int free = --t->lastfree;
-      if ((gnode(t, free)->key_tt == LUA_TNIL))
+      if (keyisnil(gnode(t, free)))
         return free;
     }
   }
@@ -914,7 +914,7 @@ int Table::getfreepos()
     int i = sizenode(t);
     while (i--)
     { /* do a linear search */
-      if ((gnode(t, i)->key_tt == LUA_TNIL))
+      if (keyisnil(gnode(t, i)))
         return i;
     }
   }
@@ -935,7 +935,7 @@ int Table::insertkey(const TValue* key, TValue* value)
   int mp = t->mainpositionTV(key);
   /* table cannot already contain the key */
   assert(t->nodegeneric(key, 0) < 0);
-  if (!((gnode(t, mp)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL) || isdummy(t))
+  if (!isempty(&gnode(t, mp)->val) || isdummy(t))
   { /* main position is taken? */
     int f = t->getfreepos(); /* get a free place */
     if (f < 0)             /* cannot find a free place? */
@@ -954,7 +954,7 @@ int Table::insertkey(const TValue* key, TValue* value)
         (gnode(t, f)->next) += mp - f; /* correct 'next' */
         (gnode(t, mp)->next) = 0;      /* now 'mp' is free */
       }
-      (gnode(t, mp)->val.tt_ = LUA_VEMPTY);
+      setempty(&gnode(t, mp)->val);
     }
     else
     { /* colliding node is in its own main position */
@@ -968,8 +968,8 @@ int Table::insertkey(const TValue* key, TValue* value)
     }
   }
   setnodekey(gnode(t, mp), key);
-  assert(((gnode(t, mp)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL));
-  setobj(nullptr, (&(gnode(t, mp))->val), value);
+  assert(isempty(&gnode(t, mp)->val));
+  setobj(nullptr, (&gnode(t, mp)->val), value);
   return 1;
 }
 
@@ -995,7 +995,7 @@ void Table::luaH_newkey(lua_State* L, const TValue* key,
                         TValue* value)
 {
   Table* t = this;
-  if (!(((value)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (!isempty(value))
   { /* do not insert nil values */
     int done = t->insertkey(key, value);
     if (!done)
@@ -1003,7 +1003,7 @@ void Table::luaH_newkey(lua_State* L, const TValue* key,
       t->rehash(L, key);            /* grow table */
       t->newcheckedkey(key, value); /* insert key in grown table */
     }
-    assert((t->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert(novariant(t->tt) >= LUA_TSTRING);
     luaC_barrierback(L, t, key);
   }
 }
@@ -1016,7 +1016,7 @@ int Table::nodeintfromhash(lua_Integer key)
   for (;;)
   { /* check whether 'key' is somewhere in the chain */
     Node* n = gnode(t, i);
-    if (((n)->key_tt == LUA_VNUMINT) && keyival(n) == key)
+    if (keyisinteger(n) && keyival(n) == key)
       return i; /* that's it */
     else
     {
@@ -1033,23 +1033,23 @@ const TValue* Table::getintfromhash(lua_Integer key)
 {
   Table* t = this;
   int idx = t->nodeintfromhash(key);
-  return (idx < 0) ? &absentkey : (&(gnode(t, idx))->val);
+  return (idx < 0) ? &absentkey : (&gnode(t, idx)->val);
 }
 
 int Table::hashkeyisempty(lua_Integer key)
 {
   Table* t = this;
   const TValue* val = t->getintfromhash(key);
-  return (((val)->tt_ & NOVARIANT_MASK) == LUA_TNIL);
+  return isempty(val);
 }
 
 static lu_byte finishnodeget(const TValue* val, TValue* res)
 {
-  if (!(((val)->tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (!isempty(val))
   {
     setobj(nullptr, res, val);
   }
-  return ((val)->tt_ & WITHVARIANT_MASK);
+  return ttypetag(val);
 }
 
 lu_byte Table::luaH_getint(lua_Integer key, TValue* res)
@@ -1059,7 +1059,7 @@ lu_byte Table::luaH_getint(lua_Integer key, TValue* res)
   if (k > 0)
   {
     lu_byte tag = getArrTag(t, k - 1);
-    if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))
+    if (!tagisempty(tag))
       farr2val(t, k - 1, tag, res);
     return tag;
   }
@@ -1074,7 +1074,7 @@ int Table::nodeshortstr(TString* key)
   for (;;)
   { /* check whether 'key' is somewhere in the chain */
     Node* n = gnode(t, i);
-    if (((n)->key_tt == ctb(LUA_VSHRSTR)))
+    if (keyisshrstr(n))
     {
       if (luaS_eqstr(keystrval(n), key))
         return i; /* that's it */
@@ -1090,7 +1090,7 @@ const TValue* Table::luaH_Hgetshortstr(TString* key)
 {
   Table* t = this;
   int idx = t->nodeshortstr(key);
-  return (idx < 0) ? &absentkey : (&(gnode(t, idx))->val);
+  return (idx < 0) ? &absentkey : (&gnode(t, idx)->val);
 }
 
 lu_byte Table::luaH_getshortstr(TString* key, TValue* res)
@@ -1118,7 +1118,7 @@ lu_byte Table::luaH_get(const TValue* key, TValue* res)
 {
   Table* t = this;
   const TValue* slot;
-  switch (((key)->tt_ & WITHVARIANT_MASK))
+  switch (ttypetag(key))
   {
   case LUA_VSHRSTR:
     slot = t->luaH_Hgetshortstr(tsvalue(key));
@@ -1157,9 +1157,9 @@ static int retpsetcode(int idx)
 int Table::finishnodeset(int idx, TValue* val)
 {
   Table* t = this;
-  if (idx >= 0 && !((gnode(t, idx)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (idx >= 0 && !isempty(&gnode(t, idx)->val))
   {
-    setobj(nullptr, (&(gnode(t, idx))->val), val);
+    setobj(nullptr, (&gnode(t, idx)->val), val);
     return HOK; /* success */
   }
   else
@@ -1173,7 +1173,7 @@ int Table::rawfinishnodeset(int idx, TValue* val)
   else
   {
     Table* t = this;
-    setobj(nullptr, (&(gnode(t, idx))->val), val);
+    setobj(nullptr, (&gnode(t, idx)->val), val);
     return 1; /* success */
   }
 }
@@ -1193,7 +1193,7 @@ int Table::psetint(lua_Integer key, TValue* val)
   if (l_ult(u, t->asize()))
   {
     lu_byte tag = getArrTag(t, u);
-    if (checknoTM(t->metatable, TM_NEWINDEX) || (tag & NOVARIANT_MASK) != LUA_TNIL)
+    if (checknoTM(t->metatable, TM_NEWINDEX) || !tagisempty(tag))
     {
       fval2arr(t, u, val);
       hres = HOK;
@@ -1218,14 +1218,14 @@ int Table::luaH_psetshortstr(TString* key, TValue* val)
 {
   Table* t = this;
   int idx = t->nodeshortstr(key);
-  if (idx >= 0 && !((gnode(t, idx)->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))
+  if (idx >= 0 && !isempty(&gnode(t, idx)->val))
   {                                                        /* key already has a value? (all too common) */
-    setobj(nullptr, (&(gnode(t, idx))->val), val); /* update it */
+    setobj(nullptr, (&gnode(t, idx)->val), val); /* update it */
     return HOK;                                            /* done */
   }
   else if (checknoTM(t->metatable, TM_NEWINDEX))
   {                        /* no metamethod? */
-    if ((((val)->tt_ & NOVARIANT_MASK) == LUA_TNIL))      /* new value is nil? */
+    if (isempty(val))      /* new value is nil? */
       return HOK;          /* done (value is already nil/absent) */
     if (idx < 0 && /* key is absent? */
         !(isblack(t) && iswhite(key)))
@@ -1254,7 +1254,7 @@ int Table::luaH_psetstr(TString* key, TValue* val)
 int Table::luaH_pset(const TValue* key, TValue* val)
 {
   Table* t = this;
-  switch (((key)->tt_ & WITHVARIANT_MASK))
+  switch (ttypetag(key))
   {
   case LUA_VSHRSTR:
     return t->luaH_psetshortstr(tsvalue(key), val);
@@ -1289,9 +1289,9 @@ void Table::luaH_finishset(lua_State* L, const TValue* key,
   {
     TValue aux;
     const TValue* actk = key; /* actual key to insert */
-    if (l_unlikely((((key)->tt_ & NOVARIANT_MASK) == LUA_TNIL)))
+    if (l_unlikely(isempty(key)))
       luaG_runerror(L, lt::table_index_is_nil);
-    else if (((key)->tt_ == LUA_VNUMFLT))
+    else if (ttisfloat(key))
     {
       lua_Number f = fltvalue(key);
       IntResult k;
@@ -1307,7 +1307,7 @@ void Table::luaH_finishset(lua_State* L, const TValue* key,
   }
   else if (hres > 0)
   { /* regular Node? */
-    setobj(L, (&(gnode(t, hres - HFIRSTNODE))->val), value);
+    setobj(L, (&gnode(t, hres - HFIRSTNODE)->val), value);
   }
   else
   {               /* array entry */

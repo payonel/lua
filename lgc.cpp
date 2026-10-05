@@ -71,12 +71,12 @@ static inline void set2black(GCObject* x)
 
 static inline int keyiswhite(const Node* n)
 {
-  return (n->key_tt & BIT_ISCOLLECTABLE) && iswhite(gckey(n));
+  return keyiscollectable(n) && iswhite(gckey(n));
 }
 
 static inline GCObject* gcvalueN(const TValue* o)
 {
-  return (o->tt_ & BIT_ISCOLLECTABLE) ? gcvalue(o) : nullptr;
+  return iscollectable(o) ? gcvalue(o) : nullptr;
 }
 
 static inline GCObject* gcvalarr(Table* t, int i)
@@ -87,7 +87,7 @@ static inline GCObject* gcvalarr(Table* t, int i)
 static inline void markvalue(global_State* g, TValue* o)
 {
   checkliveness(mainthread(g), o);
-  if ((o->tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(o)))
+  if (iscollectable(o) && iswhite(gcvalue(o)))
     reallymarkobject(g, gcvalue(o));
 }
 
@@ -156,7 +156,7 @@ static l_mem objsize(GCObject* o)
   }
   case LUA_VSHRSTR:
   {
-    assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(novariant(o->tt) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
     res = cost::TString + (strisexternal(ts) ? 0 : ts->data.size());
     break;
@@ -213,9 +213,9 @@ static void linkgclist_(GCListed* o, GCListed* list)
 */
 static void clearkey(Node* n)
 {
-  assert(((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL));
-  if (((n)->key_tt & BIT_ISCOLLECTABLE))
-    ((n)->key_tt = LUA_TDEADKEY); /* unused key; remove it */
+  assert(isempty(&n->val));
+  if (keyiscollectable(n))
+    setdeadkey(n); /* unused key; remove it */
 }
 
 /*
@@ -229,7 +229,7 @@ static int iscleared(global_State* g, GCObject* o)
 {
   if (o == nullptr)
     return 0; /* non-collectable value */
-  else if (((o->tt) & NOVARIANT_MASK) == LUA_TSTRING)
+  else if (novariant(o->tt) == LUA_TSTRING)
   {
     markobject(g, o);
     return 0;
@@ -515,11 +515,11 @@ static void traverseweakvalue(global_State* g, Table* h)
   for (i = 0; i < nsize; i++)
   {                       /* traverse hash part */
     Node* n = gnode(h, i);
-    if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
+    if (isempty(&n->val)) /* entry is empty? */
       clearkey(n);        /* clear its key */
     else
     {
-      assert(!((n)->key_tt == LUA_TNIL));
+      assert(!keyisnil(n));
       markkey(g, n);
       if (!hasclears && iscleared(g, gcvalueN((&(n)->val)))) /* a white value? */
         hasclears = 1;                                   /* table will have to be cleared */
@@ -531,7 +531,7 @@ static void traverseweakvalue(global_State* g, Table* h)
     linkgclist_(h, &g->weak); /* has to be cleared later */
   else
   {
-    assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert(novariant(h->tt) >= LUA_TSTRING);
     genlink(g, h);
   }
 }
@@ -580,15 +580,15 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
   for (i = 0; i < nsize; i++)
   {
     Node* n = inv ? gnode(h, nsize - 1 - i) : gnode(h, i);
-    if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
+    if (isempty(&n->val)) /* entry is empty? */
       clearkey(n);        /* clear its key */
-    else if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? gckey(n) : nullptr)))
+    else if (iscleared(g, gckeyN(n)))
     {                          /* key is not marked (yet)? */
       hasclears = 1;           /* table must be cleared */
-      if ((n->val.tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(&n->val))) /* value not marked yet? */
+      if (iscollectable(&n->val) && iswhite(gcvalue(&n->val))) /* value not marked yet? */
         hasww = 1;             /* white-white entry */
     }
-    else if ((n->val.tt_ & BIT_ISCOLLECTABLE) && iswhite(gcvalue(&n->val)))
+    else if (iscollectable(&n->val) && iswhite(gcvalue(&n->val)))
     { /* value not marked yet? */
       marked = 1;
       reallymarkobject(g, gcvalue(&n->val)); /* mark it now */
@@ -603,7 +603,7 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
     linkgclist_(h, &g->allweak);   /* may have to clean white keys */
   else
   {
-    assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert(novariant(h->tt) >= LUA_TSTRING);
     genlink(g, h); /* check whether collector still needs to see it */
   }
   return marked;
@@ -616,16 +616,16 @@ static void traversestrongtable(global_State* g, Table* h)
   for (i = 0; i < nsize; i++)
   {                       /* traverse hash part */
     Node* n = gnode(h, i);
-    if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL)) /* entry is empty? */
+    if (isempty(&n->val)) /* entry is empty? */
       clearkey(n);        /* clear its key */
     else
     {
-      assert(!((n)->key_tt == LUA_TNIL));
+      assert(!keyisnil(n));
       markkey(g, n);
       markvalue(g, (&(n)->val));
     }
   }
-  assert((h->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(h->tt) >= LUA_TSTRING);
   genlink(g, h);
 }
 
@@ -635,7 +635,7 @@ static void traversestrongtable(global_State* g, Table* h)
 static int getmode(global_State* g, Table* h)
 {
   const TValue* mode = gfasttm(g, h->metatable, TM_MODE);
-  if (mode == nullptr || !(((mode)->tt_ & NOVARIANT_MASK) == LUA_TSTRING))
+  if (mode == nullptr || !ttisstring(mode))
     return 0; /* ignore non-string modes */
   else
   {
@@ -676,7 +676,7 @@ static l_mem traverseudata(global_State* g, Udata* u)
   markobjectN(g, u->metatable); /* mark its metatable */
   for (i = 0; i < (int)u->uv.size(); i++)
     markvalue(g, &u->uv[i]);
-  assert((u->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(u->tt) >= LUA_TSTRING);
   genlink(g, u);
   return 1 + (int)u->uv.size();
 }
@@ -849,9 +849,9 @@ static void clearbykeys(global_State* g, GCObject* l)
     for (i = 0; i < nsize; i++)
     {
       Node* n = gnode(h, i);
-      if (iscleared(g, (((n)->key_tt & BIT_ISCOLLECTABLE) ? gckey(n) : nullptr))) /* unmarked key? */
-        (n->val.tt_ = LUA_VEMPTY);         /* remove entry */
-      if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))        /* is entry empty? */
+      if (iscleared(g, gckeyN(n))) /* unmarked key? */
+        setempty(&n->val);         /* remove entry */
+      if (isempty(&n->val))        /* is entry empty? */
         clearkey(n);               /* clear its key */
     }
   }
@@ -879,8 +879,8 @@ static void clearbyvalues(global_State* g, GCObject* l, GCObject* f)
     {
       Node* n = gnode(h, i);
       if (iscleared(g, gcvalueN((&(n)->val)))) /* unmarked value? */
-        (n->val.tt_ = LUA_VEMPTY);                 /* remove entry */
-      if (((n->val.tt_ & NOVARIANT_MASK) == LUA_TNIL))                /* is entry empty? */
+        setempty(&n->val);                 /* remove entry */
+      if (isempty(&n->val))                /* is entry empty? */
         clearkey(n);                       /* clear its key */
     }
   }
@@ -940,7 +940,7 @@ static void freeobj(lua_State* L, GCObject* o)
   }
   case LUA_VSHRSTR:
   {
-    assert((o->tt & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(novariant(o->tt) == LUA_TSTRING);
     TString* ts = static_cast<TString*>(o);
     ts->luaS_remove(L);
     if (!strisexternal(ts))
@@ -1643,7 +1643,7 @@ void luaC_freeallobjects(lua_State* L)
   separatetobefnz(g, 1); /* separate all objects with finalizers */
   assert(g->finobj.next == nullptr);
   callallpendingfinalizers(L);
-  assert((mainthread(g)->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(mainthread(g)->tt) >= LUA_TSTRING);
   deletelist(L, g->allgc.next, mainthread(g));
   assert(g->finobj.next == nullptr);   /* no new finalizers */
   deletelist(L, g->fixedgc, nullptr); /* collect fixed objects */
@@ -1686,7 +1686,7 @@ static void atomic(lua_State* L)
   /* clear values from resurrected weak tables */
   clearbyvalues(g, g->weak.gclist, origweak);
   clearbyvalues(g, g->allweak.gclist, origall);
-  g->currentwhite = (otherwhite(g)); /* flip current white */
+  g->currentwhite = otherwhite(g); /* flip current white */
   assert(g->gray.gclist == nullptr);
 }
 

@@ -103,7 +103,7 @@ int luaK_exp2const(FuncState* fs, const expdesc* e, TValue* v)
     v->tt_ = LUA_VTRUE;
     return 1;
   case VNIL:
-    v->tt_ = LUA_VNIL;
+    setnilvalue(v);
     return 1;
   case VKSTR:
   {
@@ -579,7 +579,7 @@ static int addk(FuncState* fs, Proto* f, TValue* v)
   int k = fs->nk;
   f->k = luaM_safegrow_TValue_span(L, f->k, k);
   while (oldsize < (int)f->k.size())
-    f->k[oldsize++].tt_ = LUA_VNIL;
+    setnilvalue(&f->k[oldsize++]);
   setobj(L, &f->k[k], v);
   fs->nk++;
   luaC_barrier(L, f, v);
@@ -597,11 +597,11 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   TValue val;
   Proto* f = fs->f;
   int tag = fs->kcache->luaH_get(key, &val); /* query scanner table */
-  if (!((tag & NOVARIANT_MASK) == LUA_TNIL))
+  if (!tagisempty(tag))
   { /* is there an index there? */
     int k = ((int)(ivalue(&val)));
     /* collisions can happen only for float keys */
-    assert((key->tt_ == LUA_VNUMFLT) || luaV_rawequalobj(&f->k[k], v));
+    assert(ttisfloat(key) || luaV_rawequalobj(&f->k[k], v));
     return k; /* reuse index */
   }
   else
@@ -763,16 +763,16 @@ void luaK_codecheckglobal(FuncState* fs, expdesc* var, int k, int line)
 */
 static void const2exp(TValue* v, expdesc* e)
 {
-  switch ((v->tt_ & WITHVARIANT_MASK))
+  switch (ttypetag(v))
   {
   case LUA_VNUMINT:
     e->k = VKINT;
-    assert(v->tt_ == LUA_VNUMINT);
+    assert(ttisinteger(v));
     e->ival = ivalue(v);
     break;
   case LUA_VNUMFLT:
     e->k = VKFLT;
-    assert(v->tt_ == LUA_VNUMFLT);
+    assert(ttisfloat(v));
     e->nval = fltvalue(v);
     break;
   case LUA_VFALSE:
@@ -786,7 +786,7 @@ static void const2exp(TValue* v, expdesc* e)
     break;
   case LUA_VSHRSTR:
     e->k = VKSTR;
-    assert((v->tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(ttisstring(v));
     e->strval = tsvalue(v);
     break;
   default:
@@ -1402,7 +1402,7 @@ static void codenot(FuncState* fs, expdesc* e)
 static int isKstr(FuncState* fs, expdesc* e)
 {
   return (e->k == VK && !hasjumps(e) && e->info <= MAXINDEXRK &&
-          ((fs->f->k[e->info].tt_ & NOVARIANT_MASK) == LUA_TSTRING));
+          ttisstring(&fs->f->k[e->info]));
 }
 
 /*
@@ -1565,8 +1565,8 @@ static int validop(int op, TValue* v1, TValue* v2)
   case LUA_OPIDIV:
   case LUA_OPMOD: /* division by 0 */
   {
-    assert((v2->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
-    lua_Number n2 = (v2->tt_ == LUA_VNUMINT) ? (lua_Number)ivalue(v2) : fltvalue(v2);
+    assert(ttisnumber(v2));
+    lua_Number n2 = ttisinteger(v2) ? (lua_Number)ivalue(v2) : fltvalue(v2);
     return n2 != 0;
   }
   default:
@@ -1585,15 +1585,15 @@ static int constfolding(FuncState* fs, int op, expdesc* e1,
   if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(op, &v1, &v2))
     return 0;                                   /* non-numeric operands or not safe to fold */
   luaO_rawarith(fs->ls->L, op, &v1, &v2, &res); /* does operation */
-  if (res.tt_ == LUA_VNUMINT)
+  if (ttisinteger(&res))
   {
     e1->k = VKINT;
-    assert(res.tt_ == LUA_VNUMINT);
+    assert(ttisinteger(&res));
     e1->ival = ivalue(&res);
   }
   else
   { /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
-    assert(res.tt_ == LUA_VNUMFLT);
+    assert(ttisfloat(&res));
     lua_Number n = fltvalue(&res);
     if ((!(n == n)) || n == 0)
       return 0;

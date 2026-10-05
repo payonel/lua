@@ -40,9 +40,9 @@ namespace lua::object
 int luaO_checkliveness(lua_State* L, const TValue* obj)
 {
   (void) L;
-  if (obj->tt_ & BIT_ISCOLLECTABLE)
+  if (iscollectable(obj))
   {
-    assert((((obj)->tt_ & WITHVARIANT_MASK) == gcvalue(obj)->tt));
+    assert((ttypetag(obj) == gcvalue(obj)->tt));
     assert(L == nullptr || !isdead(L->l_G, gcvalue(obj)));
   }
   return 1;
@@ -237,7 +237,7 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
   { /* other operations */
     NumResult n1;
     NumResult n2;
-    if (((p1)->tt_ == LUA_VNUMINT) && ((p2)->tt_ == LUA_VNUMINT))
+    if (ttisinteger(p1) && ttisinteger(p2))
     {
       setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
       return 1;
@@ -639,16 +639,16 @@ static size_t tostringbuffFloat(lua_Number n, byte_span buff)
 size_t luaO_tostringbuff(const TValue* obj, byte_span buff)
 {
   size_t len;
-  assert((obj->tt_ & NOVARIANT_MASK) == LUA_TNUMBER);
+  assert(ttisnumber(obj));
   assert(buff.size() >= LUA_N2SBUFFSZ);
-  if (obj->tt_ == LUA_VNUMINT)
+  if (ttisinteger(obj))
   {
     byte_span bs(buff);
     len = bs.write_number(ivalue(obj));
   }
   else
   {
-    assert(obj->tt_ == LUA_VNUMFLT);
+    assert(ttisfloat(obj));
     len = tostringbuffFloat(fltvalue(obj), buff);
   }
   assert(len < LUA_N2SBUFFSZ);
@@ -727,7 +727,7 @@ static const InternalString* clearbuff(BuffFS* buff)
   else
   {
     StkId s = L->top - 1;
-    assert((slottag(L, s) & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(novariant(slottag(L, s)) == LUA_TSTRING);
     res = &slottsval(L, s)->data;
   }
   freebuff(buff);

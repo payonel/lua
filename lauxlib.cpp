@@ -255,7 +255,7 @@ int luaL_argerrori(lua_State* L, int arg, byte_view extramsg)
     }
   }
   if (!ar.name.has_value())
-    ar.name = (pushglobalfuncname(L, &ar)) ? *lua_tolstring(L, -1) : lt::qmark;
+    ar.name = pushglobalfuncname(L, &ar) ? *lua_tolstring(L, -1) : lt::qmark;
   lua_pushistringref(L, argword);
   lua_pushinteger(L, arg);
   lua_pushlstring(L, ar.name.value(), 0, ar.name->size());
@@ -749,7 +749,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
   size_t newsize = B->bytes.size();
   size_t len = B->used;
   if (l_unlikely(sz >= MAX_SIZE - len))
-    return (luaL_errori(B->L, lt::resulting_string_too_large));
+    return luaL_errori(B->L, lt::resulting_string_too_large);
   if (newsize <= MAX_SIZE / 3 * 2) /* no overflow? */
     newsize += (newsize >> 1);     /* new size *= 1.5 */
   if (newsize < len + sz)          /* not big enough? */

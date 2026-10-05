@@ -82,13 +82,13 @@ void luaX_init(lua_State* L)
 {
   int i;
   TString* e = TString::luaS_createstr(L, lt::_ENV); /* create env name */
-  assert((e->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(e->tt) >= LUA_TSTRING);
   luaC_fix(L, e);                  /* never collect this name */
   for (i = 0; i < NUM_RESERVED; i++)
   {
     byte_view bytes = luaX_tokens[i];
     TString* ts = TString::luaS_createstr(L, bytes);
-    assert((ts->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+    assert(novariant(ts->tt) >= LUA_TSTRING);
     luaC_fix(L, ts);     /* reserved words are never collected */
     ts->extra = ((lu_byte)(i + 1)); /* reserved word */
   }
@@ -151,9 +151,9 @@ static TString* anchorstr(LexState* ls, TString* ts)
   lua_State* L = ls->L;
   TValue oldts;
   int tag = ls->h->luaH_getstr(ts, &oldts);
-  if (!(((tag) & NOVARIANT_MASK) == LUA_TNIL))     /* string already present? */
+  if (!tagisempty(tag))     /* string already present? */
   {
-    assert((oldts.tt_ & NOVARIANT_MASK) == LUA_TSTRING);
+    assert(ttisstring(&oldts));
     return tsvalue(&oldts); /* use stored value */
   }
   else
@@ -280,15 +280,15 @@ static int read_numeral(LexState* ls, Token* seminfo)
     save_and_next(ls);        /* force an error */
   if (luaO_str2num(ls->buff->view(), &obj) == 0) /* format error? */
     lexerror(ls, lt::malformed_number, TK_FLT);
-  if ((obj.tt_ == LUA_VNUMINT))
+  if (ttisinteger(&obj))
   {
     seminfo->i = ivalue(&obj);
     return TK_INT;
   }
   else
   {
-    assert((obj.tt_ == LUA_VNUMFLT));
-    assert(obj.tt_ == LUA_VNUMFLT);
+    assert(ttisfloat(&obj));
+    assert(ttisfloat(&obj));
     seminfo->r = fltvalue(&obj);
     return TK_FLT;
   }

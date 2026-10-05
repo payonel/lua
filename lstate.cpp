@@ -206,7 +206,7 @@ static void f_luaopen(lua_State* L)
   luaT_init(L);
   luaX_init(L);
   g->gcstp = 0;              /* allow gc */
-  (g->nilvalue.tt_ = LUA_VNIL); /* now state is complete */
+  setnilvalue(&g->nilvalue); /* now state is complete */
   luai_userstateopen(L);
 }
 
@@ -354,7 +354,7 @@ lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   g->currentwhite = bitmask(WHITE0BIT);
   L->marked = luaC_white(g);
   preinit_thread(L, g);
-  assert((L->tt & NOVARIANT_MASK) >= LUA_TSTRING);
+  assert(novariant(L->tt) >= LUA_TSTRING);
   g->allgc.next = L; /* by now, only object is the main thread */
   L->next = nullptr;
   incnny(L); /* main thread is always non yieldable */
@@ -362,7 +362,7 @@ lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   g->warnf = nullptr;
   g->seed = seed;
   g->gcstp = GCSTPGC; /* no GC while building state */
-  (g->l_registry.tt_ = LUA_VNIL);
+  setnilvalue(&g->l_registry);
   g->panic = nullptr;
   g->gcstate = GCSpause;
   g->gckind = KGC_INC;
@@ -426,7 +426,7 @@ void luaE_warning(lua_State* L, byte_view msg, int tocont)
 void luaE_warnerror(lua_State* L, byte_view where)
 {
   StkId errobj = L->top - 1; /* error object */
-  byte_view msg = ((slottag(L, errobj) & NOVARIANT_MASK) == LUA_TSTRING)
+  byte_view msg = (novariant(slottag(L, errobj)) == LUA_TSTRING)
                              ? slottsval(L, errobj)->data.view()
                              : lt::error_object_is_not_a_string;
   /* produce warning "error in %s (%s)" (where, msg) */
