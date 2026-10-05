@@ -364,7 +364,6 @@ static void funcinfo(InternalDebug* ar, Closure* cl)
     ar->lastlinedefined = p->lastlinedefined;
     ar->what = (ar->linedefined == 0) ? lt::main : lt::Lua;
   }
-  ar->short_src_out = byte_owner(LUA_IDSIZE);
   luaO_chunkid(ar->short_src_out, ar->source);
 }
 

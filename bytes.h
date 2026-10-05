@@ -358,8 +358,6 @@ template <size_t N>
 struct byte_inline : byte_writes<byte_inline<N>>
 {
   byte_inline() = default;
-  byte_inline(const byte_inline&) = delete;
-  byte_inline& operator=(const byte_inline&) = delete;
 
   size_t size() const { return N; }
   char* data() const { return a_; }
