@@ -128,12 +128,6 @@ clear error unless noted.
 - **Untrusted input**: unpersist loads bytecode through `lua_load` and
   trusts the thread state it reads (only basic sanity checks). Do not
   unpersist data you do not trust.
-- **Known bug: allocation failure while restoring a thread.** If an
-  allocation fails while unpersist grows a restored thread's stack, the
-  error is raised on the new thread, outside the API lock, and the debug
-  lock check aborts (`memory.lua` leaves threads out of its unpersist
-  allocation-failure case until this is fixed). The fix is an engine-native
-  thread restore rather than a patch to `lstyx.cpp`.
 - **Compact output**: integers and counts are fixed 8-byte values; sizes
   and the format version are not yet considered final.
 
@@ -198,6 +192,9 @@ followed by one value: a tag byte and a payload. Integers and floats are 8
 raw little-endian bytes (the engine is little-endian only). Output is built
 in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a missing
 header, unknown tags, truncation and trailing bytes.
+A thread is written as its status, stack top and maximum frame top, then
+its stack values, then its frames, so that unpersist can fill the stack
+before any frame exists (see ADR-15).
 Non-basic values (strings, tables, functions, threads) get a reference id in
 first-seen order; a repeat is written as a back reference, which preserves
 sharing and cycles. An object found in the permanents table is written as
@@ -252,6 +249,27 @@ and tested so that a bug shows up where it happens:
 - Persist and unpersist must fail cleanly (an error, intact heap) when any
   single allocation fails.
 - Errors name what failed and, in time, where (a path to the value).
+
+### ADR-15: Restoring a thread never raises an error on it
+**Status:** accepted
+The thread being restored is not running and has no error handler, so an
+error raised on it would reach the main thread's handler instead of the
+caller's (and, in debug builds, break the API lock count). Its stack is
+grown with `lua_checkstack` and its frames with the non-raising
+`luaE_extendCI`; a failure is raised on the calling thread as a memory
+error, as `coroutine.resume` does when it grows a coroutine's stack.
+The thread is valid whenever a collection can see it: the stack is filled
+while only the base frame exists, the frames are read into spare
+CallInfos (only an emergency collection, which keeps them, can run
+meanwhile), each frame is checked against the stack (a Lua frame's slot
+holds a Lua closure and its saved pc is inside its code), and then all
+frames are attached at once. No engine change was needed.
+
+### Required tests for later work
+- Host-side persist (from the C API, on a state that is not running) of a
+  state that is at its memory cap must succeed, and the restored state
+  must resume. Scripts must have no way to use this to get around their
+  memory limit.
 
 ## Open questions
 

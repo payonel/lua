@@ -166,6 +166,25 @@ case("errors raised after restore are catchable", function()
   assert(coroutine.status(r) == "dead")
 end)
 
+-- a thread stream ends with its frames: 'nframes' then ten 8-byte fields
+-- per frame, the first being the stack slot of the frame's function
+case("frames that do not match the stack are rejected", function()
+  local co = coroutine.create(function(a) coroutine.yield(a) end)
+  coroutine.resume(co, 1)
+  local blob = styx.persist(perms, co)
+  assert(styx.unpersist(back, blob))
+  local frame_size = 10 * 8
+  local nframes = string.unpack("<i8", blob, #blob - 2 * frame_size - 7)
+  assert(nframes == 2, "layout: " .. nframes)
+  local first = #blob - 2 * frame_size
+  for _, slot in ipairs{0, 2} do   -- the nil base slot; the argument
+    local bad = blob:sub(1, first) .. string.pack("<i8", slot) .. blob:sub(first + 9)
+    local ok, err = pcall(styx.unpersist, back, bad)
+    assert(not ok and err:find("invalid persisted data", 1, true), tostring(err))
+  end
+  H.checkheap()
+end)
+
 case("rejects truncation of a thread stream", function()
   local co = coroutine.create(function(a) local t = {a}; coroutine.yield(t); return a end)
   coroutine.resume(co, 3)

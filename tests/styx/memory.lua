@@ -8,8 +8,6 @@ local perms = {[_ENV] = "env", [coroutine.yield] = "yield"}
 local back = {env = _ENV, yield = coroutine.yield}
 
 -- a value that exercises every kind of object Styx handles today
--- ('with_thread' adds a suspended coroutine; restoring one under an
--- allocation failure is a known bug, see docs/styx.md)
 local function sample(with_thread)
   local function counter()
     local n = 0
@@ -83,11 +81,39 @@ if T then
   end)
 
   case("unpersist survives an allocation failure at every point", function()
-    local blob = styx.persist(perms, sample(false))
+    local blob = styx.persist(perms, sample(true))
     local r
     local n = fails_cleanly_at_every_allocation(function() r = styx.unpersist(back, blob) end)
     assert(n > 0)
     assert(r.get() == 0 and r.inc() == 1 and r.self == r and r.extra == true)
+    assert(select(2, coroutine.resume(r.co)) == 5)
+  end)
+
+  -- the error from a failed allocation must reach the pcall of the coroutine
+  -- that called unpersist, not a handler further out
+  case("allocation failures in a coroutine's unpersist stay in that coroutine", function()
+    local blob = styx.persist(perms, sample(true))
+    local n = 0
+    while true do
+      collectgarbage()
+      local co = coroutine.create(function()
+        T.alloccount(n)
+        local ok, err = pcall(styx.unpersist, back, blob)
+        T.alloccount()
+        return ok, err
+      end)
+      local resumed, ok, err = coroutine.resume(co)
+      T.alloccount()
+      assert(resumed, "allocation " .. n .. ": error escaped the coroutine: " .. tostring(ok))
+      assert(coroutine.status(co) == "dead")
+      H.checkheap()
+      if ok then break end
+      assert(tostring(err):find("not enough memory", 1, true),
+             "allocation " .. n .. ": " .. tostring(err))
+      n = n + 1
+      assert(n < 100000, "no end to allocations")
+    end
+    assert(n > 0)
   end)
 
   case("unpersist under a memory limit", function()

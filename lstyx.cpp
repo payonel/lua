@@ -227,6 +227,13 @@ static void persist_thread(Persist& P)
   luaL_addchar(&P.B, static_cast<char>(T->status));
   put_i64(&P.B, T->top);
   put_i64(&P.B, maxtop);
+  for (StkId i = 0; i < T->top; i++)
+  {
+    copyslot(L, L->top, T, i);
+    L->top++;
+    persist(P);
+    lua_pop(L, 1);
+  }
   put_i64(&P.B, nframes);
   if (nframes > 0)
   {
@@ -245,13 +252,6 @@ static void persist_thread(Persist& P)
       if (ci == T->ci)
         break;
     }
-  }
-  for (StkId i = 0; i < T->top; i++)
-  {
-    copyslot(L, L->top, T, i);
-    L->top++;
-    persist(P);
-    lua_pop(L, 1);
   }
 }
 
@@ -460,6 +460,37 @@ static void unpersist_lclosure(Unpersist& U, lua_Integer id)
   }
 }
 
+/*
+** The thread being restored is not running, so nothing may raise an error
+** on it: its stack and frames are grown in the modes that report failure,
+** and a failure is raised on the calling thread, as `coroutine.resume`
+** does when it grows a coroutine's stack.
+*/
+[[noreturn]] static void memory_error(lua_State* L)
+{
+  lua_pushistringref(L, lt::not_enough_memory);
+  lua_error(L);
+  std::abort();
+}
+
+/* the frame's function slot holds what its call status says it calls */
+static bool valid_frame(lua_State* L1, const CallInfo* ci)
+{
+  TValue f = getslot(L1, ci->func);
+  if (ci->callstatus & CIST_C)
+    return ttisfunction(&f);
+  if (!ttisLclosure(&f))
+    return false;
+  const Proto* p = clLvalue(&f)->p;
+  return ci->savedpc >= 0 && ci->savedpc <= static_cast<int>(p->code.size());
+}
+
+/*
+** The thread is valid at every point a collection can see it: its stack is
+** filled while it has only its base frame, then the frames are read into
+** spare CallInfos past 'ci' (only an emergency collection, which keeps
+** them, can run meanwhile) and become part of the thread in one step.
+*/
 static void unpersist_thread(Unpersist& U, lua_Integer id)
 {
   lua_State* L = U.r.L;
@@ -470,19 +501,44 @@ static void unpersist_thread(Unpersist& U, lua_Integer id)
   char status = U.r.get_byte();
   lua_Integer top = U.r.get_i64();
   lua_Integer maxtop = U.r.get_i64();
-  lua_Integer nframes = U.r.get_i64();
   if ((status != LUA_OK && status != LUA_YIELD) || top < 1 || maxtop < top ||
-      maxtop >= LUAI_MAXSTACK - LUA_MINSTACK || nframes < 0 || (nframes > 0 && status != LUA_YIELD))
+      maxtop >= LUAI_MAXSTACK - LUA_MINSTACK)
     luaL_errori(L, lt::invalid_persisted_data);
 
   int need = static_cast<int>(maxtop) + LUA_MINSTACK;
-  if (need > L1->stack_last)
-    luaD_reallocstack(L1, need, 1);
+  if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
+    memory_error(L);
   L1->top = top;
+  for (StkId i = 0; i < top; i++)
+  {
+    unpersist(U);
+    copyslot(L1, i, L, L->top - 1);
+    lua_pop(L, 1);
+  }
+
+  lua_Integer nframes = U.r.get_i64();
+  if (nframes < 0 || (nframes > 0 && status != LUA_YIELD))
+    luaL_errori(L, lt::invalid_persisted_data);
+  if (nframes == 0)
+  {
+    L1->status = static_cast<TStatus>(status);
+    return;
+  }
+  /* a collection may have shrunk the stack while the values were read */
+  if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
+    memory_error(L);
+  CallInfo* last = L1->ci;
   for (lua_Integer k = 0; k < nframes; k++)
   {
-    CallInfo* ci = L1->ci->next != nullptr ? L1->ci->next : luaE_extendCI(L1, 1);
-    L1->ci = ci;
+    CallInfo* ci = last->next;
+    if (ci == nullptr)
+    {
+      L1->ci = last;
+      ci = luaE_extendCI(L1, 0);
+      L1->ci = &L1->base_ci;
+      if (ci == nullptr)
+        memory_error(L);
+    }
     ci->func = U.r.get_i64();
     ci->top = U.r.get_i64();
     ci->savedpc = static_cast<int>(U.r.get_i64());
@@ -495,15 +551,12 @@ static void unpersist_thread(Unpersist& U, lua_Integer id)
     ci->nres = static_cast<int>(U.r.get_i64());
     ci->k = nullptr;
     ci->trap = 0;
-    if (ci->func < 0 || ci->func >= top || ci->top < ci->func || ci->top > maxtop)
+    if (ci->func < 0 || ci->func >= top || ci->top < ci->func || ci->top > maxtop ||
+        !valid_frame(L1, ci))
       luaL_errori(L, lt::invalid_persisted_data);
+    last = ci;
   }
-  for (StkId i = 0; i < top; i++)
-  {
-    unpersist(U);
-    copyslot(L1, i, L, L->top - 1);
-    lua_pop(L, 1);
-  }
+  L1->ci = last;
   L1->status = static_cast<TStatus>(status);
 }
 
