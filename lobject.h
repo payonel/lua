@@ -718,7 +718,7 @@ private:
   int ikeyinarray(lua_Integer k) const;
   int keyinarray(const TValue* key);
   lua_Integer findindex(lua_State* L, TValue* key, int asize);
-  int sizehash();
+  l_mem sizehash();
   void freehash(lua_State* L);
   int insertkey(const TValue* key, TValue* value);
   void newcheckedkey(const TValue* key, TValue* value);

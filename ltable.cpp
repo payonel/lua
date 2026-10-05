@@ -22,6 +22,8 @@
 #include <math.h>
 #include <string.h>
 
+#include <limits>
+
 #include "lua.h"
 
 #include "ldebug.h"
@@ -419,10 +421,11 @@ int Table::luaH_next(lua_State* L, StkId key)
 }
 
 /* 'node' size in bytes */
-int Table::sizehash()
+l_mem Table::sizehash()
 {
+  static_assert(std::numeric_limits<decltype(sizehash())>::max() / cost::Node >= MAXHSIZE);
   Table* t = this;
-  return sizenode(t) * cost::Node;
+  return l_mem{sizenode(t)} * cost::Node;
 }
 
 void Table::freehash(lua_State* L)
