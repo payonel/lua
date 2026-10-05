@@ -159,6 +159,67 @@ case("restored tables are independent of the originals", function()
   assert(t.v == 1)
 end)
 
+-- tables with holes have several borders; the one '#' finds depends on the
+-- table's layout, so a restored table must keep the original layout
+local function holey_tables()
+  local list = {}
+  list[#list + 1] = {1, nil, 3}
+  list[#list + 1] = {1, 2, nil, 4, nil, nil, 7}
+  local t = {}
+  for i = 1, 20 do t[i] = i end
+  t[5], t[17] = nil, nil
+  list[#list + 1] = t
+  t = {}
+  t[1], t[2], t[4] = 1, 2, 4
+  list[#list + 1] = t
+  t = {n = 1, 10, 20, 30}
+  t[2] = nil
+  list[#list + 1] = t
+  t = {}
+  for i = 1, 100 do t[i] = i end
+  for i = 1, 100, 3 do t[i] = nil end
+  list[#list + 1] = t
+  t = {}
+  for i = 1, 64 do t[i] = i end
+  for i = 33, 64 do t[i] = nil end   -- array part larger than its contents
+  list[#list + 1] = t
+  return list
+end
+
+case("the length of tables with holes is unchanged", function()
+  for i, t in ipairs(holey_tables()) do
+    local before = #t
+    local r = roundtrip(t)
+    assert(#r == before, "table " .. i .. ": #" .. #r .. " vs " .. before)
+  end
+end)
+
+case("a table with holes behaves the same when it grows", function()
+  for i, t in ipairs(holey_tables()) do
+    local r = roundtrip(t)
+    t[#t + 1] = "x"; r[#r + 1] = "x"
+    assert(#r == #t, "table " .. i)
+  end
+end)
+
+if T then
+  case("array size, hash size and length hint are restored", function()
+    local list = holey_tables()
+    local big = {}
+    for i = 1, 1000 do big["k" .. i] = i end
+    for i = 1, 900 do big["k" .. i] = nil end   -- hash part larger than its contents
+    list[#list + 1] = big
+    list[#list + 1] = {}
+    for i, t in ipairs(list) do
+      local r = roundtrip(t)
+      local a1, h1, l1 = T.querytab(t)
+      local a2, h2, l2 = T.querytab(r)
+      assert(a1 == a2 and h1 == h2 and l1 == l2,
+             string.format("table %d: %d/%d/%d vs %d/%d/%d", i, a1, h1, l1, a2, h2, l2))
+    end
+  end)
+end
+
 case("rejects truncation of a table stream", function()
   local blob = styx.persist({1, "two", {3}, x = {y = "z"}})
   H.rejects_truncation(blob)

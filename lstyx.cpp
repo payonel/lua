@@ -13,6 +13,7 @@
 #include "lfunc.h"
 #include "lapi.h"
 #include "lgc.h"
+#include "ltable.h"
 
 #include "internal_string.h"
 #include "lauxlib.h"
@@ -112,6 +113,11 @@ static void persist_table(Persist& P)
   int t = lua_gettop(L);
   luaL_checkstacki(L, 5, std::nullopt);
   luaL_addchar(&P.B, TAG_TABLE);
+  TValue tv = getslot(L, L->ci->func + t);
+  const Table* h = hvalue(&tv);
+  put_i64(&P.B, h->asize());
+  put_i64(&P.B, allocsizenode(h));
+  put_i64(&P.B, h->asize() > 0 ? h->lenhint : 0);
   if (lua_getmetatable(L, t))
   {
     persist(P);
@@ -400,7 +406,15 @@ static void unpersist_table(Unpersist& U, lua_Integer id)
 {
   lua_State* L = U.r.L;
   luaL_checkstacki(L, 5, std::nullopt);
-  lua_createtable(L, 0, 0);
+  lua_Integer asize = U.r.get_i64();
+  lua_Integer hsize = U.r.get_i64();
+  lua_Integer lenhint = U.r.get_i64();
+  if (asize < 0 || asize > INT_MAX || hsize < 0 || hsize > INT_MAX ||
+      (hsize & (hsize - 1)) != 0 || lenhint < 0 || lenhint > asize)
+    luaL_errori(L, lt::invalid_persisted_data);
+  /* same sizes as the original (the table limits are checked by
+     lua_createtable): entries go where they were, with no rehash */
+  lua_createtable(L, static_cast<int>(asize), static_cast<int>(hsize));
   int t = lua_gettop(L);
   register_object(U, id);
   unpersist(U); /* metatable */
@@ -419,6 +433,11 @@ static void unpersist_table(Unpersist& U, lua_Integer id)
     unpersist(U); /* value */
     lua_rawset(L, t);
   }
+  TValue tv = getslot(L, L->ci->func + t);
+  Table* h = hvalue(&tv);
+  if (h->asize() != asize || allocsizenode(h) != hsize)
+    luaL_errori(L, lt::invalid_persisted_data);
+  h->lenhint = static_cast<int>(lenhint);
 }
 
 struct BytesReader : lua_Reader

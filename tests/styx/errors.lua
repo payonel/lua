@@ -75,6 +75,21 @@ case("negative lengths are rejected", function()
   fails("invalid persisted data", styx.unpersist, header .. "\5" .. string.pack("<i8", -1))
 end)
 
+case("table sizes are checked", function()
+  local header = styx.persist(nil):sub(1, -2)
+  local function table_stream(asize, hsize, lenhint)
+    return header .. "\6" .. string.pack("<i8i8i8", asize, hsize, lenhint) .. "\0\0"
+  end
+  assert(next(styx.unpersist(table_stream(0, 0, 0))) == nil)
+  assert(next(styx.unpersist(table_stream(4, 8, 4))) == nil)
+  fails("invalid persisted data", styx.unpersist, table_stream(-1, 0, 0))
+  fails("invalid persisted data", styx.unpersist, table_stream(0, 3, 0))
+  fails("invalid persisted data", styx.unpersist, table_stream(0, -4, 0))
+  fails("invalid persisted data", styx.unpersist, table_stream(2, 0, 3))
+  fails("invalid persisted data", styx.unpersist, table_stream(1 << 40, 0, 0))
+  H.checkheap()
+end)
+
 case("errors leave nothing half-built behind", function()
   for _ = 1, 20 do
     pcall(styx.persist, {1, 2, {3, io.stdout}})

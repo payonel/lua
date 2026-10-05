@@ -114,9 +114,10 @@ clear error unless noted.
   only through the permanents table).
 - **Proto sharing**: every closure persists its own copy of its prototype;
   two closures of one prototype restore with two prototypes.
-- **Table layout fidelity**: entries are rebuilt, so array and hash
-  sizing and iteration order can differ from the original. This is the
-  ADR-4 motivation and is still open.
+- **Table iteration order**: a restored table has the original's array
+  size, hash size and length hint (ADR-17), so `#t` and the array part
+  match, but entries are reinserted, so the order of `pairs` over the hash
+  part can differ. Matching it needs the string hash seed and node layout.
 - **Weak tables and `__gc` finalizer state**: contents persist like any
   table; the collector's finalizer queue, mark state and weak-clearing
   state are not persisted.
@@ -279,6 +280,16 @@ running) is persisted by its owner:
   main thread with frames: those frames cannot be persisted, so the
   upvalue is persisted as its current value, as a closed upvalue. Closures
   that shared it still share one upvalue after restore.
+
+### ADR-17: Tables keep their layout
+**Status:** accepted
+A table's array size, hash size and length hint are persisted, and
+unpersist creates the table with those sizes before inserting the entries
+(the hash part has room for all of them, so nothing rehashes) and then
+restores the hint. A table with holes has several borders, and which one
+`#t` returns depends on that layout, so without this a restored table
+could report a different length. Sizes are checked; the table limits
+themselves are left to `lua_createtable`.
 
 ### Required tests for later work
 - Host-side persist (from the C API, on a state that is not running) of a
