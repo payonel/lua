@@ -1,6 +1,6 @@
 /*
 ** Styx test host: C++ tests plus a runner for the Lua scripts in this
-** directory. Run from tests/styx (see `make test-styx`).
+** directory. Run from tests/styx (part of `make test`).
 */
 
 #include <algorithm>
@@ -28,23 +28,26 @@ static void check_impl(bool ok, const char* expr, int line)
 }
 #define CHECK(cond) check_impl((cond), #cond, __LINE__)
 
-/* Styx is not part of the default state: every test opens it explicitly. */
-static lua_State* new_state(bool with_styx = true)
+static lua_State* new_state()
 {
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
-  if (with_styx)
-  {
-    luaL_requiref(L, "styx", luaopen_styx, 1);
-    lua_pop(L, 1);
-  }
   return L;
+}
+
+/* pushes the module, as a script's `require "styx"` would */
+static bool push_styx(lua_State* L)
+{
+  lua_getglobal(L, "require");
+  lua_pushstring(L, "styx");
+  return lua_pcall(L, 1, 1, 0) == LUA_OK;
 }
 
 /* [args...] -> [results...] (or [error]); returns the lua_pcall status */
 static int call_styx(lua_State* L, const char* fn, int nargs, int nresults)
 {
-  lua_getglobal(L, "styx");
+  if (!push_styx(L))
+    return LUA_ERRRUN;
   lua_getfield(L, -1, fn);
   lua_remove(L, -2);
   lua_insert(L, -(nargs + 1));
@@ -65,17 +68,20 @@ static bool roundtrips(lua_State* L)
   return ok;
 }
 
-static void test_not_loaded_by_default()
+static void test_requirable_not_global()
 {
-  lua_State* L = new_state(false);
+  lua_State* L = new_state();
   CHECK(lua_getglobal(L, "styx") == LUA_TNIL);
+  lua_pop(L, 1);
+  CHECK(push_styx(L));
+  CHECK(lua_type(L, -1) == LUA_TTABLE);
   lua_close(L);
 }
 
 static void test_api_surface()
 {
   lua_State* L = new_state();
-  CHECK(lua_getglobal(L, "styx") == LUA_TTABLE);
+  CHECK(push_styx(L));
   CHECK(lua_getfield(L, -1, "persist") == LUA_TFUNCTION);
   lua_pop(L, 1);
   CHECK(lua_getfield(L, -1, "unpersist") == LUA_TFUNCTION);
@@ -123,7 +129,7 @@ struct TestEntry
 int main()
 {
   const TestEntry tests[] = {
-      {"not_loaded_by_default", test_not_loaded_by_default},
+      {"requirable_not_global", test_requirable_not_global},
       {"api_surface", test_api_surface},
       {"primitives_roundtrip", test_primitives_roundtrip},
   };

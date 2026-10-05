@@ -65,7 +65,7 @@ extern Memcontrol l_memcontrol;
 
 #define LUAI_MAXCCALLS 200
 
-#define luai_openlibs(L) luaL_openselectedlibs(L, ~0, 0)
+#define luai_openlibs(L) luaL_openlibs(L)
 #define luai_tracegc(L, f) ((void) 0)
 
 #define _lua_newstate(f,seed) lua_newstate(f,seed)

@@ -113,6 +113,7 @@ namespace lt
   constexpr byte_view cannot_close_main_thread("cannot close main thread");
   constexpr byte_view cannot_close_standard_file("cannot close standard file");
   constexpr byte_view cannot_open_file_s_s("cannot open file '%s' (%s)");
+  constexpr byte_view cannot_persist_a_s_value("cannot persist a %s value");
   constexpr byte_view cannot_resume_dead_coroutine("cannot resume dead coroutine");
   constexpr byte_view cannot_resume_non_suspended_coroutine("cannot resume non-suspended coroutine");
   constexpr byte_view cannot_s_s("cannot %s %s");
@@ -127,6 +128,7 @@ namespace lt
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");
   constexpr byte_view ceil_kw("ceil");
   constexpr byte_view styx("styx");
+  constexpr byte_view styx_header = lit("Styx\x01");
   constexpr byte_view char_kw("char");
   constexpr byte_view charpattern("charpattern");
   constexpr byte_view checkmemory("checkmemory");
@@ -394,6 +396,7 @@ namespace lt
   constexpr byte_view invalid_option_s("invalid option '%s'");
   constexpr byte_view invalid_order_function_for_sorting("invalid order function for sorting");
   constexpr byte_view invalid_pattern_capture("invalid pattern capture");
+  constexpr byte_view invalid_persisted_data("invalid persisted data");
   constexpr byte_view invalid_replacement_value_a_s("invalid replacement value (a %s)");
   constexpr byte_view invalid_string_index("invalid string index");
   constexpr byte_view invalid_upvalue_index("invalid upvalue index");

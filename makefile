@@ -72,15 +72,21 @@ STYX_TEST_T  =test_styx
 DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(STYX_TEST_O:.o=.d)
 
 all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
+all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
+all: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
 
 include tests/libs/build.mk
 
 debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
 debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
+debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
+debug: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
 
 cov: VARIANT=cov
 cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
+cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
+cov: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
 	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
 	$(MAKE) test
 	./cov-report.sh
@@ -188,6 +194,7 @@ test:
 		cat /dev/null | /usr/bin/time -v ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 	cd tests && ../$(LUA_T) deep/all.lua
 	$(MAKE) gate-run
+	cd tests/styx && ../../$(STYX_TEST_T)
 
 full:
 	make clean

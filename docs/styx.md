@@ -44,19 +44,21 @@ local x = styx.settings(name [, value])    -- query or change a setting
 
 ## Layout and running
 
-- `lstyx.cpp`: the library (`lua::lib`, `luaopen_styx`). Scaffold only:
-  `persist`, `unpersist` and `settings` currently raise "not implemented".
+- `lstyx.cpp`: the library (`lua::lib`, `luaopen_styx`). Today
+  `persist`/`unpersist` handle nil, booleans, integers and floats and accept
+  (and ignore) the permanents table; `settings` raises "not implemented".
 - `tests/styx/`: the Styx tests.
   - `styx_tests.cpp`: C++ tests (using the C API; internals are reachable
     since the test links the raw objects) plus a runner that executes every
     `tests/styx/*.lua` in a fresh state.
   - `*.lua`: Lua script tests. Each starts with `require "styx"`.
-- `make test-styx` builds `test_styx` and runs it from `tests/styx`.
-  It is deliberately not part of `make test` / `make full` while Styx is
-  built test-first and red tests are expected.
-- Styx is not part of the standard library set: `luaL_openlibs` does not
-  open it, and a default state has no `styx`. Hosts and tests open it
-  explicitly (`luaL_requiref(L, "styx", luaopen_styx, 1)`).
+- `make test` runs everything, the Styx tests last (`test_styx`, run from
+  `tests/styx`; built by `make`). While Styx is built test-first, red
+  Styx tests make `make test` fail.
+- The engine provides Styx by default but not as a global:
+  `luaL_openlibs` puts it in `package.preload`, so `require "styx"` works
+  and `_G.styx` is nil. A host that wants it global can call
+  `luaL_requiref(L, "styx", luaopen_styx, 1)`.
 
 ## Development approach
 
@@ -116,16 +118,26 @@ when a test reaches them.
 Even the simplest test needs the library permanents solved first, so for
 now the standard libraries are loaded automatically on unpersist. This
 layer is to be removed later, test-first, in favor of ADR-3.
+Not yet implemented: the primitives tests do not need it.
 
-### ADR-8: Styx is not in the default state
+### ADR-8: Styx is requirable by default, not a global
 **Status:** accepted
-`luaL_openlibs` and `linit` do not open Styx. Tests and hosts load it
-explicitly through `luaopen_styx`.
+`luaL_openlibs` preloads Styx (`LUA_STYXLIBK` in the `linit` library
+list), so `require "styx"` works in every default state while `_G.styx`
+stays nil. Scripts and tests load it with `require`.
 
 ### ADR-9: Tests are Lua scripts and C++, in `tests/styx/`
 **Status:** accepted
 Every capability is covered from script and from C++ for careful testing,
-in a dedicated test subdirectory run by `make test-styx`.
+in `tests/styx/`, run by `make test` with everything else.
+
+### ADR-10: Stream format, first cut
+**Status:** proposed
+A persisted string is the header `"Styx\x01"` (name plus format version)
+followed by one value: a tag byte and a payload. Integers and floats are 8
+raw little-endian bytes (the engine is little-endian only). Output is built
+in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a missing
+header, unknown tags, truncation and trailing bytes.
 
 ## Open questions
 

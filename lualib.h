@@ -54,8 +54,8 @@ inline constexpr byte_view LUA_UTF8LIBNAME = "utf8";
 constexpr int LUA_UTF8LIBK = LUA_TABLIBK << 1;
 LUAMOD_API int(luaopen_utf8)(lua_State* L);
 
-/* Styx persistence: not part of the standard set, hosts open it explicitly */
 inline constexpr byte_view LUA_STYXLIBNAME = "styx";
+constexpr int LUA_STYXLIBK = LUA_UTF8LIBK << 1;
 LUAMOD_API int(luaopen_styx)(lua_State* L);
 
 /* open selected libraries */
