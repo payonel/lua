@@ -309,7 +309,21 @@ GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt)
   global_State* g = L->l_G;
   o->marked = luaC_white(g);
   o->tt = tt;
-  o->hash = luaC_newhash(g);
+  /* only objects that hash by identity as table keys take a hash: whether
+     a string is new or reused depends on the collector, and the sequence
+     must depend only on what the program makes */
+  switch (tt)
+  {
+  case LUA_VTABLE:
+  case LUA_VUSERDATA:
+  case LUA_VLCL:
+  case LUA_VCCL:
+  case LUA_VTHREAD:
+    o->hash = luaC_newhash(g);
+    break;
+  default:
+    o->hash = 0;
+  }
   o->next = g->allgc.next;
   g->allgc.next = o;
   return o;

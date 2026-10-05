@@ -13,6 +13,7 @@
 #include "lobject.h"
 #include "lstate.h"
 #include "ltable.h"
+#include "lgc.h"
 #ifdef LUA_DEBUG
 #include "ltests.h"
 #endif
@@ -111,6 +112,18 @@ static int l_hash(lua_State* L)
   luaL_checkany(L, 1);
   const void* p = lua_topointer(L, 1);
   lua_pushinteger(L, static_cast<const GCObject*>(p)->hash);
+  return 1;
+}
+
+/* steps(a, b): how many hashes of the sequence lie from a's hash to b's */
+static int l_steps(lua_State* L)
+{
+  unsigned int inv = HASHSTEP;
+  for (int i = 0; i < 5; i++)
+    inv *= 2u - HASHSTEP * inv;
+  unsigned int ha = static_cast<const GCObject*>(lua_topointer(L, 1))->hash;
+  unsigned int hb = static_cast<const GCObject*>(lua_topointer(L, 2))->hash;
+  lua_pushinteger(L, static_cast<lua_Integer>((hb - ha) * inv));
   return 1;
 }
 
@@ -232,6 +245,8 @@ static lua_State* new_state()
   lua_setglobal(L, "hash");
   lua_pushcfunction(L, l_takehash);
   lua_setglobal(L, "takehash");
+  lua_pushcfunction(L, l_steps);
+  lua_setglobal(L, "steps");
   return L;
 }
 
@@ -387,6 +402,28 @@ static const char* const object_keys =
   "end "
   "for k in pairs(t) do if t[k] % 7 == 0 then t[k] = nil end end ";
 
+/* object keys made among strings: their order does not depend on which
+   strings a state already had (interning reuses them) */
+static void test_order_independent_of_interned_strings()
+{
+  std::printf("    object keys made among strings keep their order whatever strings exist ... ");
+  g_test_failures = 0;
+  std::string order[2];
+  for (int i = 0; i < 2; i++)
+  {
+    lua_State* L = seeded_state(77);
+    /* the same program, but the second state has the strings already */
+    run(L, i == 0 ? "keep = {} for i = 1, 300 do keep[i] = 'other' .. i end return 'ok'"
+                  : "keep = {} for i = 1, 300 do keep[i] = 'name' .. i end return 'ok'");
+    order[i] = run(L, "local t, names = {}, {} "
+                      "for i = 1, 300 do local n = 'name' .. i local k = {} t[k] = i names[k] = n end "
+                      "local o = {} for k in pairs(t) do o[#o + 1] = names[k] end return table.concat(o, ' ')");
+    lua_close(L);
+  }
+  CHECK(order[0] == order[1] && order[0] != "<error>");
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
 static void test_same_order_in_two_states()
 {
   std::printf("    the same program and seed iterate object keys in the same order ... ");
@@ -432,6 +469,10 @@ static const Case object_key_cases[] = {
    "local w = setmetatable({}, {__mode = 'k'}) for i = 1, 500 do w[{}] = i end collectgarbage() assert(next(w) == nil) "
    "local e = setmetatable({}, {__mode = 'k'}) for i = 1, 100 do e[ks[i]] = {ks[i]} end collectgarbage() "
    "for i = 1, 100 do assert(e[ks[i]][1] == ks[i]) end heap() end collectgarbage('incremental')"},
+  {"only objects that hash by identity take hashes: strings, new or reused, do not",
+   "local a = {} local s1 = ('fresh'):rep(3) .. 'x' local s2 = 'reused' local f = function() end "
+   "local b = {} assert(steps(a, f) == 1 and steps(f, b) == 1, steps(a, b)) "
+   "local c = coroutine.create(print) local d = {} assert(steps(b, c) == 1 and steps(c, d) == 1)"},
   {"light C functions and light userdata still hash (by address)",
    "local t = {[print] = 1, [string.format] = 2} assert(t[print] == 1 and t[string.format] == 2)"},
 };
@@ -446,6 +487,7 @@ int main()
   run_cases("object keys hash by the object's hash (ltable.cpp, lgc.cpp)", object_key_cases,
             sizeof(object_key_cases) / sizeof(object_key_cases[0]));
   test_same_order_in_two_states();
+  test_order_independent_of_interned_strings();
   if (g_failures == 0)
     std::printf("\n\tOK - engine: %d checks, 0 failures\n\n", g_checks);
   else

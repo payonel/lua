@@ -271,7 +271,7 @@ struct GCObject
   struct GCObject* next;
   lu_byte tt;
   lu_byte marked;
-  unsigned int hash; /* as a table key: given when the object is created (luaC_link) */
+  unsigned int hash; /* as a table key: given when made (luaC_link), if it hashes by identity */
 };
 
 struct GCListed : GCObject
