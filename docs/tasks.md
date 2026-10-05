@@ -1701,6 +1701,22 @@ keep only what depends on arguments or state (`luaC_link`, sizes).
 `luaM_malloc_*` already constructs with `new`. **Check:** `make full`,
 A/B (no extra work: the same zeroing, now in the constructor).
 
+**Status: done** (`11a409a7`).
+- The object, thread, call-info and global-state structs carry their
+  defaults as member initializers. The creation functions keep only
+  argument- or state-dependent setup.
+- **Exceptions:**
+  - `GCObject`'s header (`next`/`tt`/`marked`) stays uninitialized,
+    because `luaC_link` sets it on every allocation and an out-of-line
+    call can't elide duplicate stores.
+  - `Table::flags = maskflags`, `global_State`'s GC configuration
+    (`currentwhite`, `gcstate`, `gckind`, `gcstp` from `lgc.h`) and the
+    "not yet built" `nilvalue` stay explicit in `luaH_new`/
+    `lua_newstate`.
+- **Check:** `trace_gc`/`trace_gc2` output is byte-identical. A/B (15
+  runs, min): all.lua 4.90s → 4.89s, `b_alloc` (tables, closures,
+  coroutines) 0.79s → 0.79s; b_gc/b_call are neutral.
+
 ### R4. `short_src` back to an inline buffer
 `InternalDebug::short_src_out` is a lazily heap-allocated `byte_owner`
 with a hand-written copy constructor. Upstream's is `char
