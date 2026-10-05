@@ -136,6 +136,7 @@ namespace lt
   constexpr byte_view invalid_value_index("invalid value index");
   constexpr byte_view path_registry("registry");
   constexpr byte_view path_type_metatable("type metatable");
+  constexpr byte_view path_finalizer_list("finalizer list");
   constexpr byte_view path_field_s(".%s");
   constexpr byte_view path_index_s("[%s]");
   constexpr byte_view path_string_key_s("[\"%s\"]");
@@ -168,7 +169,7 @@ namespace lt
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");
   constexpr byte_view ceil_kw("ceil");
   constexpr byte_view styx("styx");
-  constexpr byte_view styx_header = lit("Styx\x03");
+  constexpr byte_view styx_header = lit("Styx\x04");
   constexpr byte_view char_kw("char");
   constexpr byte_view charpattern("charpattern");
   constexpr byte_view checkmemory("checkmemory");

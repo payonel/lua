@@ -103,6 +103,9 @@ local x = styx.settings(name [, value])    -- query or change a setting
       `paths.lua`, ADR-19)
   11. host side persist and restore of a value or the whole state (done:
       C++ tests `host_*`, ADR-21, ADR-24)
+  12. finalizers and the collector: marks, their order, and in a whole
+      state the finalizer list and the collector's settings (done:
+      `finalizers.lua`, C++ tests `host_state_*`, ADR-28)
 - Items are added or reordered as the tests teach us something.
 
 ## Not supported yet
@@ -132,13 +135,20 @@ of these raises a clear error unless it says otherwise.
 
 ### Functions
 - **C functions and C closures** other than through the permanents table.
-  Today: error ("cannot persist a C function").
+  Today: error ("cannot persist a C function"). Through the permanents
+  table, the restoring side's closure is used, with its own upvalues: for
+  example `math.random`'s generator state is an upvalue of a C closure, so
+  a restored state draws from the restoring state's generator.
 
 ### Userdata
 - **Full userdata** (bytes, metatable, user values, host objects), and
   `__persist` on userdata. Today: error ("persisting a userdata value is not
   supported yet"); userdata work only as permanents.
 - **Light userdata** other than as permanents. Today: the same error.
+- **Garbage userdata waiting for its finalizer** in a whole-state snapshot:
+  the snapshot includes every object marked for finalization (ADR-28), so
+  it fails as for any userdata ("(at finalizer list)"); a full collection
+  before the snapshot finalizes it.
 
 ### Tables
 - **Iteration order with object keys, or another seed**: a table restored
@@ -155,9 +165,13 @@ of these raises a clear error unless it says otherwise.
 - **A `__persist` restore closure that reaches the value it rebuilds**
   (directly or through its upvalues). Today: unpersist error ("invalid
   persisted data"); the value has no object yet while its closure is read.
-- **Weak tables and `__gc` state**: contents persist like any table, and a
-  restored object with `__gc` is finalized normally, but the collector's
-  finalizer queue, mark state and weak-clearing state are not persisted.
+- **A finalizer already due whose object a finalizer made reachable
+  again** (the object waited to be finalized when it was persisted): it is
+  restored marked, so its finalizer runs when it is unreachable again, not
+  at the next collection step (ADR-28).
+- **A table marked for finalization by a `__persist` function after the
+  table was written**: the copy is not marked (marks are read as tables are
+  written).
 
 ### States and memory
 - **The main thread's API stack** is not part of a state snapshot; the host
@@ -169,13 +183,16 @@ of these raises a clear error unless it says otherwise.
   main thread fails (it is the caller or above it); the host API persists
   it as a reference and restores it as the restoring state's main thread
   (ADR-21, ADR-24).
+- **The warning system's state** (`warn("@on")`, `warn("@off")`): it is the
+  host's warning function, not the state's data; a restored state has the
+  restoring host's.
 
 ### Format and robustness
 - **Untrusted input**: unpersist builds prototypes from the instructions in
   the stream without verifying them (as with binary chunks), and checks the
   thread state it reads only for consistency with itself. Do not unpersist
   data you do not trust.
-- **A final format**: the format (version 2, ADR-10) may still change;
+- **A final format**: the format (version 4, ADR-10) may still change;
   no stream of an earlier version is read.
 - **`settings`**. Today: error ("not implemented").
 
@@ -234,16 +251,20 @@ Every capability is covered from script and from C++ for careful testing,
 in `tests/styx/`, run by `make test` with everything else.
 
 ### ADR-10: Stream format
-**Status:** accepted (version 3)
-A persisted string is the header `"Styx\x03"` (name plus format version),
+**Status:** accepted (version 4)
+A persisted string is the header `"Styx\x04"` (name plus format version),
 the persisting state's string hash seed (8 bytes, ADR-22), then one value
-(or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload. Integers, reference ids, lengths, counts, table sizes
+(or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload;
+then the trailer, what only the whole walk knows (the tables to mark for
+finalization, ADR-28), and the trailer's length, written backward so that
+unpersist reads it first, from the end. Integers, reference ids, lengths, counts, table sizes
 and prototype fields are variable-length integers (zigzag, 7 bits per byte:
 -64..63 take one byte); floats are 8 raw little-endian bytes (the engine is
 little-endian only), instructions 4 raw bytes each, and a thread's frames,
 to-be-closed list and hook fields fixed 8-byte values. Version 2 made
 streams about 70% smaller than version 1's fixed 8-byte integers; version
-3 added the seed and the layout mode of tables (ADR-22). Output
+3 added the seed and the layout mode of tables (ADR-22); version 4 the
+trailer. Output
 is built in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a
 missing header (or another version), unknown tags, truncation and trailing
 bytes.
@@ -415,8 +436,9 @@ thread). They are for the host, not for scripts:
 - The stream is the script path's format: for the same value both produce
   the same bytes (tested over a set of value graphs), which keeps the two
   writers from drifting apart.
-- A state stream is `TAG_STATE`, the string hash seed, the registry, then
-  the metatable of each basic type. The main thread is written as
+- A state stream is `TAG_STATE`, the string hash seed, the registry, the
+  metatable of each basic type, then every object marked for finalization
+  and the collector's settings (ADR-28). The main thread is written as
   `TAG_MAINTHREAD` (restored as the restoring state's main thread); a
   script's unpersist rejects that tag, so a stream cannot hand a script the
   main thread.
@@ -479,7 +501,7 @@ strings hash as before), opens what it provides, and restores into it.
   the host's allocator is the memory policy: a restore that it denies fails
   with "not enough memory". The state's registry and type metatables are
   replaced only after the whole stream was read, so a failed restore leaves
-  the state as it was.
+  the state as it was; the collector's settings are applied last (ADR-28).
 - Tested: a running program (closures with shared upvalues, a suspended
   coroutine with an open upvalue and a to-be-closed variable, string and
   number metatables, the main thread) restored whole in a new state; a
@@ -536,6 +558,50 @@ it waits for), so there is no depth limit, a limit stock Lua does not have
 - The stream format did not change; script and host output stay byte for
   byte the same (tested), and the suite also runs under AddressSanitizer
   and UBSan.
+
+### ADR-28: Finalizers and the collector
+**Status:** accepted
+Stock Lua finalizes an object if it was *marked* (by `setmetatable` with a
+metatable that had `__gc` at that moment) and calls the finalizers of
+objects collected together in the reverse order of their marks. Restoring
+with `setmetatable` reproduced neither: an object met while its metatable
+was still being built (a class that lists its instances) was never
+finalized, an object already finalized was finalized again, one whose
+`__gc` was set after `setmetatable` was finalized though the original is
+not, and a failed unpersist finalized what it had half built.
+- Persist writes the marks in the trailer: the persisted tables that are
+  marked (also those whose finalizer is already due), oldest mark first, in
+  the order the collector holds them. Permanents and tables rebuilt by
+  `__persist` keep their own marks.
+- Unpersist reads the trailer first and makes those tables before anything
+  else, in that order, each marked as a script marks one (a metatable with
+  `__gc`, replaced later); the value's table records fill them. Other
+  tables get their metatable with no mark. A restored table is so marked
+  exactly when the original was, whatever its metatable holds, and the
+  finalizers run in the original's order. Marking as soon as a table is
+  made also keeps it cheap: the collector finds a table to mark by walking
+  its list from the newest object.
+- A failed unpersist removes the metatables of the tables it made, so no
+  finalizer runs on what it half built.
+- A whole-state snapshot also persists every object marked for
+  finalization, reachable or not: garbage waiting for its finalizer and
+  finalizers already due run after the restore, once each. It persists the
+  collector's mode, whether it is stopped, and its parameters as stored
+  (through `collectgarbage("param")` they round and would not read back the
+  same); a host restore applies them last.
+- Not persisted, as stock Lua promises nothing about them: when within a
+  cycle a finalizer runs, the collector's phase, colors and ages, and how
+  far weak tables were cleared (a restored state starts a new cycle).
+- Tested: `finalizers.lua` (a class listing its instances, an instance
+  restored first, finalized once, `__gc` set late, marked with `__gc` or
+  the metatable removed, the order, a finalizer already due, permanents and
+  `__persist`, a failing unpersist, truncation, a second round trip),
+  allocation failure at every point in both directions with no finalizer
+  run by a failed attempt, trailer checks in `errors.lua`, and the C++
+  `host_state_*` tests (garbage and finalizers due, the order, settings in
+  both directions, a garbage userdata).
+- Cost: none for values without marked tables; otherwise one pass over the
+  collector's lists for their order.
 
 ## Open questions
 

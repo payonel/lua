@@ -142,6 +142,37 @@ if T then
     assert(n > 0 and #blob == #expected)
   end)
 
+  -- the trailer: tables marked for finalization
+  local function marked_sample(log)
+    local mt = {__gc = function(o) log[#log + 1] = o.name end}
+    local v = {}
+    for i = 1, 4 do v[i] = setmetatable({name = "m" .. i}, mt) end
+    return v
+  end
+
+  case("persist of marked tables survives an allocation failure at every point", function()
+    local log = {}
+    local v = marked_sample(log)
+    local expected = styx.persist({[log] = "log"}, v)
+    local blob
+    local n = fails_cleanly_at_every_allocation(function() blob = styx.persist({[log] = "log"}, v) end)
+    assert(n > 0 and blob == expected)
+  end)
+
+  case("unpersist of marked tables survives an allocation failure at every point", function()
+    local log = {}
+    local v = marked_sample(log)
+    local blob = styx.persist({[log] = "log"}, v)
+    local r
+    local n = fails_cleanly_at_every_allocation(function() r = styx.unpersist({log = log}, blob) end)
+    assert(n > 0)
+    collectgarbage(); collectgarbage()
+    assert(#log == 0, "failed attempts ran finalizers: " .. table.concat(log, " "))
+    v, r = nil, nil
+    collectgarbage(); collectgarbage()
+    assert(#log == 8, table.concat(log, " "))
+  end)
+
   case("an error with a path survives an allocation failure at every point", function()
     local value = {a = {b = {c = io.stdout}}, list = {1, 2, 3}}
     local n = 0

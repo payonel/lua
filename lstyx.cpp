@@ -112,6 +112,42 @@ public:
   T top() { return get(size() - 1); }
   void set_top(const T& v) { set(size() - 1, v); }
 
+  /* room for 'n' more items, so that pushing them does not allocate */
+  void reserve(size_t n)
+  {
+    if (!charged_)
+      host_.reserve(host_.size() + n);
+    else if ((n_ + n) * sizeof(T) > bytes_.capacity())
+    {
+      lua_lock(L_);
+      bytes_.growTo((n_ + n) * sizeof(T));
+      lua_unlock(L_);
+    }
+  }
+
+  template <class Less>
+  void sort(Less less)
+  {
+    T* p = charged_ ? reinterpret_cast<T*>(bytes_.area().data()) : host_.data();
+    std::sort(p, p + size(), less);
+  }
+
+  /* the first position whose item is not less than 'v' (the items are sorted) */
+  template <class Less>
+  size_t lower_bound(const T& v, Less less)
+  {
+    size_t lo = 0, hi = size();
+    while (lo < hi)
+    {
+      size_t mid = lo + (hi - lo) / 2;
+      if (less(get(mid), v))
+        lo = mid + 1;
+      else
+        hi = mid;
+    }
+    return lo;
+  }
+
   void pop()
   {
     if (!charged_)
@@ -265,13 +301,15 @@ class Walker
 public:
   /* a script's persist: output to 'B', references in the table at 'refs' */
   Walker(lua_State* L, Table* perms, luaL_Buffer* B, int refs)
-      : L_(L), host_(false), perms_(perms), B_(B), refs_(refs), tasks_(L, true), paths_(L, true)
+      : L_(L), host_(false), perms_(perms), B_(B), refs_(refs), tasks_(L, true), paths_(L, true),
+        marked_(L, true)
   {
   }
 
   /* a host persist: output to 'w', nothing allocated in the state */
   Walker(lua_State* L, Table* perms, lua_Writer* w)
-      : L_(L), host_(true), perms_(perms), w_(w), tasks_(L, false), paths_(L, false)
+      : L_(L), host_(true), perms_(perms), w_(w), tasks_(L, false), paths_(L, false),
+        marked_(L, false)
   {
   }
 
@@ -313,6 +351,66 @@ public:
       flush(true);
   }
 
+  /*
+  ** The trailer (ADR-10), after the value: what only the whole walk knows,
+  ** the tables to mark for finalization, in the order their originals were
+  ** marked (ADR-28); then the trailer's length, written backward, so that
+  ** unpersist reads it first, from the end.
+  */
+  void trailer()
+  {
+    lua_Integer start = position();
+    marks();
+    lua_Unsigned len = static_cast<lua_Unsigned>(position() - start);
+    char b[10];
+    size_t n = 0;
+    do
+    {
+      char c = static_cast<char>(len & 0x7F);
+      len >>= 7;
+      if (len != 0)
+        c = static_cast<char>(c | 0x80);
+      b[n++] = c;
+    } while (len != 0);
+    for (size_t i = n; i > 0; i--)
+      byte(b[i - 1]);
+  }
+
+  /*
+  ** A state's objects marked for finalization, garbage or not: they are part
+  ** of the state until their finalizers run (ADR-28). Permanents are the
+  ** restoring host's own objects.
+  */
+  void marked_objects()
+  {
+    std::vector<GCObject*> list; /* host memory: a state persist is a host's */
+    each_marked([&](GCObject* o)
+    {
+      TValue v, key;
+      setgcovalue(L_, &v, o);
+      if (!perm_key(v, &key))
+        list.push_back(o);
+    });
+    var(static_cast<lua_Integer>(list.size()));
+    for (GCObject* o : list)
+    {
+      TValue v{};
+      setgcovalue(L_, &v, o);
+      root(v, &lt::path_finalizer_list);
+    }
+  }
+
+  /* the collector's settings that a script sees: its mode, whether it is
+     stopped, and its parameters (as stored, so they read back the same) */
+  void collector()
+  {
+    global_State* g = L_->l_G;
+    byte(g->gckind == KGC_INC ? 0 : 1);
+    byte((g->gcstp & GCSTPUSR) ? 1 : 0);
+    for (int p = 0; p < LUA_GCPN; p++)
+      byte(static_cast<char>(g->gcparams[p]));
+  }
+
 private:
   lua_State* L_;
   bool host_;
@@ -323,8 +421,17 @@ private:
   std::string buf_;
   std::unordered_map<const void*, lua_Integer> map_;
   lua_Integer refcount_ = 0;
+  lua_Integer flushed_ = 0; /* bytes handed to the writer */
   WorkStack<Task> tasks_;
   WorkStack<PathRec> paths_;
+
+  /* a table written as such that is marked for finalization */
+  struct Marked
+  {
+    const GCObject* o;
+    lua_Integer id;
+  };
+  WorkStack<Marked> marked_;
 
   static constexpr size_t FLUSH_SIZE = 64 * 1024;
 
@@ -342,10 +449,62 @@ private:
     {
       if (w_->write(L_, byte_view(buf_.data(), buf_.size())) != 0)
         throw HostError{text(lt::persist_output_stopped_by_the_writer)};
+      flushed_ += static_cast<lua_Integer>(buf_.size());
       buf_.clear();
     }
     if (end && w_->write(L_, std::nullopt) != 0)
       throw HostError{text(lt::persist_output_stopped_by_the_writer)};
+  }
+
+  /* ---- the trailer ---- */
+
+  /* bytes written so far */
+  lua_Integer position() const
+  {
+    size_t n = host_ ? buf_.size() : luaL_bufflen(B_);
+    return flushed_ + static_cast<lua_Integer>(n);
+  }
+
+  /* every object the collector would finalize, in the order it would call
+     their finalizers: those waiting for it, then the marked, newest first */
+  template <class F>
+  void each_marked(F f)
+  {
+    global_State* g = L_->l_G;
+    for (GCObject* o = g->tobefnz.next; o != nullptr; o = o->next)
+      f(o);
+    for (GCObject* o = g->finobj.next; o != nullptr; o = o->next)
+      f(o);
+  }
+
+  /* the persisted tables marked for finalization, oldest mark first */
+  void marks()
+  {
+    size_t n = marked_.size();
+    if (n == 1 && !tofinalize(marked_.get(0).o)) /* finalized meanwhile */
+      n = 0;
+    if (n <= 1)
+    {
+      var(static_cast<lua_Integer>(n));
+      if (n == 1)
+        var(marked_.get(0).id);
+      return;
+    }
+    /* their order is the collector's: nothing below allocates while its
+       lists are read */
+    auto by_object = [](const Marked& a, const Marked& b) { return std::less<const GCObject*>()(a.o, b.o); };
+    marked_.sort(by_object);
+    WorkStack<lua_Integer> order(L_, !host_);
+    order.reserve(n);
+    each_marked([&](GCObject* o)
+    {
+      size_t i = marked_.lower_bound(Marked{o, 0}, by_object);
+      if (i < marked_.size() && marked_.get(i).o == o)
+        order.push(marked_.get(i).id);
+    });
+    var(static_cast<lua_Integer>(order.size()));
+    for (size_t i = order.size(); i > 0; i--)
+      var(order.get(i - 1));
   }
 
   /* ---- work ---- */
@@ -795,8 +954,11 @@ private:
 
   void table(Table* h)
   {
+    lua_Integer id = refcount_; /* the table's, taken just before */
     if (special(h))
       return;
+    if (tofinalize(h))
+      marked_.push(Marked{h, id});
     bool layout = layout_ok(h);
     byte(TAG_TABLE);
     var(h->asize());
@@ -1387,10 +1549,88 @@ class Restorer
 {
 public:
   /* stack: 1: permanents (key -> object); 3: refs (id -> object); 4: upvalues */
-  Restorer(lua_State* L, byte_view data, bool host) : r_{L, data}, L_(L), host_(host), frames_(L, true) {}
+  Restorer(lua_State* L, byte_view data, bool host)
+      : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true)
+  {
+  }
+
+  Restorer(const Restorer&) = delete;
+  Restorer& operator=(const Restorer&) = delete;
+
+  /* a failed restore leaves no finalizer to run on what it built (ADR-28) */
+  ~Restorer()
+  {
+    if (!done_)
+      for (size_t i = 0; i < made_.size(); i++)
+        made_.get(i)->metatable = nullptr;
+  }
 
   Reader r_;
   lua_Integer seed_ = 0; /* the hash seed of the persisting state */
+
+  /*
+  ** The trailer (ADR-10), read first, from the end: the value ends where it
+  ** starts. The tables to mark for finalization are made now, in the order
+  ** their originals were marked, and marked as a script marks a table (by
+  ** a metatable with '__gc'); the value's table records fill them (ADR-28).
+  */
+  void read_trailer()
+  {
+    byte_view d = r_.data;
+    size_t end = d.size();
+    lua_Unsigned len = 0;
+    for (int shift = 0;; shift += 7)
+    {
+      if (shift > 63 || end <= r_.pos)
+        Reader{L_, d, end}.invalid();
+      lua_Unsigned c = static_cast<unsigned char>(d[--end]);
+      len |= (c & 0x7F) << shift;
+      if ((c & 0x80) == 0)
+        break;
+    }
+    if (len > end - r_.pos)
+      Reader{L_, d, end}.invalid();
+    Reader t{L_, d.substr(0, end), end - static_cast<size_t>(len)};
+    int n = t.get_count();
+    if (n > 0)
+    {
+      luaL_checkstacki(L_, 4, std::nullopt);
+      lua_createtable(L_, 0, 1); /* a metatable that marks */
+      TValue gc{};
+      setsvalue(L_, &gc, L_->l_G->tmname[TM_GC]);
+      setslot(L_, L_->top, &gc);
+      L_->top++;
+      lua_pushboolean(L_, 1);
+      lua_rawset(L_, -3);
+      for (int i = 0; i < n; i++)
+      {
+        lua_Integer id = t.get_var();
+        if (id < 1 || lua_rawgeti(L_, REFS, id) != LUA_TNIL)
+          t.invalid();
+        lua_pop(L_, 1);
+        lua_createtable(L_, 0, 0);
+        TValue h = getslot(L_, L_->top - 1);
+        made_.push(hvalue(&h));
+        marked_.push(id);
+        lua_pushvalue(L_, -2);
+        lua_setmetatable(L_, -2);
+        lua_rawseti(L_, REFS, id);
+      }
+      lua_pop(L_, 1);
+      marked_.sort([](lua_Integer a, lua_Integer b) { return a < b; });
+    }
+    if (t.pos != t.data.size())
+      t.invalid();
+    r_.data = d.substr(0, end - static_cast<size_t>(len));
+  }
+
+  /* the value is read: every table made for the trailer must have been met */
+  void finish()
+  {
+    if (next_marked_ != marked_.size())
+      r_.invalid();
+    done_ = true;
+  }
 
   /* reads one value and pushes it */
   void value()
@@ -1432,6 +1672,19 @@ private:
   bool host_;
   lua_Integer refcount_ = 0;
   WorkStack<Frame> frames_;
+  WorkStack<lua_Integer> marked_; /* ids of the tables made for the trailer, sorted */
+  WorkStack<Table*> made_;        /* those tables */
+  size_t next_marked_ = 0;        /* the next of them the value meets */
+  bool done_ = false;
+
+  /* the next reference id, of an object other than a table */
+  lua_Integer new_id()
+  {
+    lua_Integer id = ++refcount_;
+    if (next_marked_ < marked_.size() && marked_.get(next_marked_) == id)
+      r_.invalid(); /* marked for finalization, so it must be a table */
+    return id;
+  }
 
   void register_top(lua_Integer id)
   {
@@ -1506,7 +1759,7 @@ private:
       f.kind = (tag == TAG_PERM) ? Build::Perm : Build::Special;
       f.part = Part::Object;
       f.type = r_.get_byte();
-      f.id = ++refcount_;
+      f.id = new_id();
       if (f.kind == Build::Special && f.type != LUA_TTABLE)
         r_.invalid();
       frames_.push(f);
@@ -1514,7 +1767,7 @@ private:
     }
     case TAG_STRING:
     {
-      lua_Integer id = ++refcount_;
+      lua_Integer id = new_id();
       lua_Integer n = r_.get_var();
       if (n < 0)
         r_.invalid();
@@ -1531,18 +1784,18 @@ private:
       Frame f;
       f.kind = Build::Closure;
       f.part = Part::Proto;
-      f.id = ++refcount_;
+      f.id = new_id();
       frames_.push(f);
       return Next::Advance;
     }
     case TAG_THREAD:
-      start_thread(++refcount_);
+      start_thread(new_id());
       return Next::Advance;
     case TAG_MAINTHREAD:
     {
       if (!host_) /* a script never gets the main thread from a stream */
         r_.invalid();
-      lua_Integer id = ++refcount_;
+      lua_Integer id = new_id();
       push_thread(mainthread(L_->l_G));
       register_top(id);
       return Next::Ready;
@@ -1604,10 +1857,22 @@ private:
         (hsize & (hsize - 1)) != 0 || lenhint < 0 || lenhint > asize ||
         (layout != 0 && layout != 1) || (layout == 1 && hsize == 0))
       r_.invalid();
-    /* same sizes as the original (the table limits are checked by
+    /* same sizes as the original (the table limits are checked as by
        lua_createtable): entries go where they were, with no rehash */
-    lua_createtable(L_, static_cast<int>(asize), static_cast<int>(hsize));
-    register_top(id);
+    if (next_marked_ < marked_.size() && marked_.get(next_marked_) == id)
+    { /* made for the trailer */
+      next_marked_++;
+      lua_rawgeti(L_, REFS, id);
+      TValue m = getslot(L_, L_->top - 1);
+      lua_lock(L_);
+      hvalue(&m)->luaH_resize(L_, static_cast<int>(asize), static_cast<int>(hsize));
+      lua_unlock(L_);
+    }
+    else
+    {
+      lua_createtable(L_, static_cast<int>(asize), static_cast<int>(hsize));
+      register_top(id);
+    }
     TValue t = getslot(L_, L_->top - 1);
     Frame f;
     f.kind = Build::Table;
@@ -1677,20 +1942,25 @@ private:
     switch (f.part)
     {
     case Part::Meta:
-      if (lua_isnil(L_, -1))
-        lua_pop(L_, 1);
-      else
+    {
+      /* set as lua_setmetatable sets it, but without marking the table for
+         finalization: the trailer marks exactly the marked (ADR-28) */
+      Table* mt = nullptr;
+      if (!lua_isnil(L_, -1))
       {
         if (!lua_istable(L_, -1))
           r_.invalid();
-        push_table(h);
-        lua_insert(L_, -2);
-        lua_setmetatable(L_, -2);
-        lua_pop(L_, 1);
+        TValue m = getslot(L_, L_->top - 1);
+        mt = hvalue(&m);
       }
+      h->metatable = mt;
+      if (mt != nullptr)
+        luaC_objbarrier(L_, h, mt);
+      lua_pop(L_, 1);
       f.part = Part::Key;
       frames_.set_top(f);
       return Next::Read;
+    }
     case Part::Key:
       if (lua_isnil(L_, -1))
       {
@@ -1829,7 +2099,7 @@ private:
     }
     if (tag != TAG_PROTO_NEW)
       r_.invalid();
-    start_proto(++refcount_);
+    start_proto(new_id());
     return Next::Advance;
   }
 
@@ -2041,7 +2311,7 @@ private:
       char tag = r_.get_byte();
       if (tag == TAG_UPVAL_NEW || tag == TAG_UPVAL_OPEN || tag == TAG_UPVAL_PERM)
       {
-        lua_Integer uid = ++refcount_;
+        lua_Integer uid = new_id();
         push_closure(cl);
         lua_rawseti(L_, UPS, uid);
         lua_pushinteger(L_, f.i);
@@ -2338,6 +2608,7 @@ static void begin_restore(lua_State* L, Restorer& R)
   R.seed_ = R.r_.get_i64();
   lua_createtable(L, 0, 0);
   lua_createtable(L, 0, 0);
+  R.read_trailer();
 }
 
 /* persist([perms,] value) */
@@ -2364,6 +2635,7 @@ static int styx_persist(lua_State* L)
     w.i64(L->l_G->seed);
     TValue v = getslot(L, L->ci->func + 2);
     w.root(v, &lt::path_root);
+    w.trailer();
   }
   luaL_pushresult(&B);
   return 1;
@@ -2387,6 +2659,7 @@ static int styx_unpersist(lua_State* L)
   R.value();
   if (R.r_.pos != R.r_.data.size())
     R.r_.invalid();
+  R.finish();
   return 1;
 }
 
@@ -2448,6 +2721,7 @@ static int host_persist(lua_State* L, int perms, lua_Writer* w, HostString* msg,
     hp.raw(lt::styx_header.data(), lt::styx_header.size());
     hp.i64(L->l_G->seed);
     body(hp);
+    hp.trailer();
     hp.finish();
     return LUA_OK;
   }
@@ -2482,6 +2756,7 @@ static int host_restore_body(lua_State* L)
     R.value();
     if (R.r_.pos != R.r_.data.size())
       R.r_.invalid();
+    R.finish();
     return 1;
   }
   if (R.r_.get_byte() != TAG_STATE)
@@ -2495,9 +2770,25 @@ static int host_restore_body(lua_State* L)
     if (!lua_isnil(L, -1) && !lua_istable(L, -1))
       R.r_.invalid();
   }
+  int nmarked = R.r_.get_count(); /* the objects marked for finalization */
+  for (int i = 0; i < nmarked; i++)
+  {
+    R.value();
+    if (!lua_istable(L, -1))
+      R.r_.invalid();
+    lua_pop(L, 1);
+  }
+  char kind = R.r_.get_byte(); /* the collector's settings */
+  char stopped = R.r_.get_byte();
+  if ((kind != 0 && kind != 1) || (stopped != 0 && stopped != 1))
+    R.r_.invalid();
+  unsigned char params[LUA_GCPN];
+  R.r_.get_raw(params, sizeof(params));
   if (R.r_.pos != R.r_.data.size())
     R.r_.invalid();
-  /* the whole stream is read: the state takes the restored roots */
+  R.finish();
+  /* the whole stream is read: the state takes the restored roots, then
+     the collector's settings */
   global_State* g = L->l_G;
   TValue reg = getslot(L, L->ci->func + 5);
   copyobj(&g->l_registry, &reg);
@@ -2506,6 +2797,10 @@ static int host_restore_body(lua_State* L)
     TValue mt = getslot(L, L->ci->func + 6 + t);
     g->mt[t] = ttistable(&mt) ? hvalue(&mt) : nullptr;
   }
+  for (int p = 0; p < LUA_GCPN; p++)
+    g->gcparams[p] = params[p];
+  lua_gc(L, kind ? LUA_GCGEN : LUA_GCINC, 0, 0, 0);
+  lua_gc(L, stopped ? LUA_GCSTOP : LUA_GCRESTART, 0, 0, 0);
   return 0;
 }
 
@@ -2605,6 +2900,8 @@ int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
         setnilvalue(&mt);
       hp.root(mt, &lt::path_type_metatable);
     }
+    hp.marked_objects();
+    hp.collector();
   });
 }
 

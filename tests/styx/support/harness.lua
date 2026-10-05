@@ -200,6 +200,32 @@ function H.varint(n)
   return table.concat(bytes)
 end
 
+-- a length as the stream's last bytes: unsigned, 7 bits per byte, written
+-- backward (the trailer's length, read from the end)
+function H.backvar(n)
+  local bytes = {}
+  repeat
+    local b = n & 0x7F
+    n = n >> 7
+    if n ~= 0 then b = b | 0x80 end
+    table.insert(bytes, 1, string.char(b))
+  until n == 0
+  return table.concat(bytes)
+end
+
+-- the start of every stream of this state: name and version, then the seed
+H.header = styx.persist(nil):sub(1, 13)
+
+-- a hand-made stream: 'body' is the value; 'marked' lists reference ids to
+-- mark for finalization
+function H.stream(body, marked)
+  marked = marked or {}
+  local t = {H.varint(#marked)}
+  for _, id in ipairs(marked) do t[#t + 1] = H.varint(id) end
+  local trailer = table.concat(t)
+  return H.header .. body .. trailer .. H.backvar(#trailer)
+end
+
 -- every proper prefix of a valid stream is rejected with an error
 function H.rejects_truncation(blob, back)
   for n = 0, #blob - 1 do

@@ -428,6 +428,8 @@ static const char* const graph_samples[] = {
   "return co, {[_ENV] = 'env', [coroutine.yield] = 'yield', [log] = 'log'}",
   "local t = {} for i = 1, 50 do t['k' .. i] = i end "
   "for i = 1, 50, 2 do t['k' .. i] = nil end return t, {}",
+  "local mt = {__gc = function() end} local t = {} "
+  "for i = 1, 4 do t[i] = setmetatable({i}, mt) end t[5] = {t[3], t[1]} return t, {}",
 };
 
 /* host persist of a value is byte for byte the script path's stream */
@@ -459,8 +461,12 @@ static void test_host_persist_allocates_nothing()
 {
   CountingAlloc a;
   lua_State* L = new_counted_state(&a);
+  CHECK(eval(L, "local mt = {__gc = function() end} marked = {} "
+                "for i = 1, 5 do marked[i] = setmetatable({}, mt) end "
+                "collectgarbage() collectgarbage() "
+                "for i = 1, 3 do setmetatable({}, mt) end return 'ok'") == "ok");
   CHECK(eval(L, build_perms) == "ok");
-  CHECK(push_value_and_perms(L, graph_samples[4]));
+  CHECK(push_value_and_perms(L, "return marked, {}"));
   lua_getglobal(L, "_PERMS");
   a.grows = 0;
   a.deny = true;
@@ -902,6 +908,159 @@ static void test_table_order_across_states()
   }
 }
 
+
+/*
+** Finalization and the collector in a whole state (ADR-28): objects marked
+** for finalization are part of the state until their finalizers run, so
+** garbage waiting for its finalizer, and finalizers already due, run after
+** a restore, once each, in the original's order; the collector's mode,
+** parameters and running state are restored.
+*/
+
+static std::string persist_state(lua_State* A)
+{
+  lua_getglobal(A, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  int st = luaL_persiststate(A, lua_gettop(A), &w, &msg);
+  if (st != LUA_OK)
+    std::printf("      host persist error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  lua_pop(A, 1);
+  return w.out;
+}
+
+static lua_State* restored_state(CountingAlloc* a, const std::string& blob)
+{
+  lua_State* B = new_state_for(a, blob);
+  HostString msg;
+  int st = restore_state(B, blob, &msg);
+  if (st != LUA_OK)
+    std::printf("      host restore error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  return B;
+}
+
+static void test_host_state_marked_garbage()
+{
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, "collectgarbage('stop') finalized = {} "
+                "local mt = {__gc = function(o) finalized[#finalized + 1] = o.name end} "
+                "for i = 1, 5 do setmetatable({name = 'g' .. i}, mt) end "
+                "kept = setmetatable({name = 'kept'}, mt) "
+                "collectgarbage('restart') return 'ok'") == "ok");
+  std::string blob = persist_state(A);
+  std::string order = eval(A, "collectgarbage() collectgarbage() return table.concat(finalized, ' ')");
+  CHECK(order == "g5 g4 g3 g2 g1");
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(eval(B, "return tostring(#finalized)") == "0");
+  CHECK(eval(B, "collectgarbage() collectgarbage() return table.concat(finalized, ' ')") == order);
+  CHECK(eval(B, "kept = nil collectgarbage() collectgarbage() return finalized[#finalized]") == "kept");
+  lua_close(B);
+}
+
+static void test_host_state_pending_finalizers()
+{
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, "collectgarbage('incremental') count = 0 "
+                "local mt = {__gc = function() count = count + 1 end} "
+                "for i = 1, 200 do setmetatable({}, mt) end return 'ok'") == "ok");
+  /* step the collector until some finalizers ran and the others are due */
+  int ran = 0;
+  for (int i = 0; i < 100000 && ran == 0; i++)
+  {
+    lua_gc(A, LUA_GCSTEP, 0, 0, 0);
+    lua_getglobal(A, "count");
+    ran = static_cast<int>(lua_tointeger(A, -1));
+    lua_pop(A, 1);
+  }
+  CHECK(ran > 0 && ran < 200);
+  std::string blob = persist_state(A);
+  CHECK(eval(A, "collectgarbage() return tostring(count)") == "200");
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  lua_getglobal(B, "count");
+  CHECK(lua_tointeger(B, -1) >= ran);
+  lua_pop(B, 1);
+  CHECK(eval(B, "collectgarbage() collectgarbage() return tostring(count)") == "200");
+  lua_close(B);
+}
+
+static const char* const read_settings =
+  "local p = {} for _, n in ipairs{'minormul', 'majorminor', 'minormajor', 'pause', 'stepmul', 'stepsize'} "
+  "do p[#p + 1] = collectgarbage('param', n) end "
+  "local running = collectgarbage('isrunning') "
+  "local mode = collectgarbage('incremental') collectgarbage(mode) "
+  "return table.concat(p, ' ') .. ' ' .. tostring(running) .. ' ' .. mode";
+
+static void test_host_state_collector_settings()
+{
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, "collectgarbage('generational') collectgarbage('param', 'minormul', 33) "
+                "collectgarbage('param', 'pause', 150) collectgarbage('param', 'stepmul', 300) "
+                "collectgarbage('stop') return 'ok'") == "ok");
+  std::string settings = eval(A, read_settings);
+  CHECK(settings.find("false generational") != std::string::npos);
+  std::string blob = persist_state(A);
+  lua_close(A);
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(eval(B, read_settings) == settings);
+  lua_close(B);
+
+  /* and back: a running incremental state restored over a stopped one */
+  CountingAlloc a3;
+  lua_State* C = new_counted_state(&a3);
+  CHECK(eval(C, build_perms) == "ok");
+  std::string defaults = eval(C, read_settings);
+  CHECK(defaults.find("true incremental") != std::string::npos);
+  blob = persist_state(C);
+  lua_close(C);
+  CountingAlloc a4;
+  lua_State* D = new_state_for(&a4, blob);
+  CHECK(eval(D, "collectgarbage('generational') collectgarbage('param', 'pause', 400) "
+                "collectgarbage('stop') return 'ok'") == "ok");
+  HostString msg;
+  CHECK(restore_state(D, blob, &msg) == LUA_OK);
+  CHECK(eval(D, read_settings) == defaults);
+  lua_close(D);
+}
+
+static int noop(lua_State*) { return 0; }
+
+/* garbage with a finalizer is part of the state: a userdata is not supported yet */
+static void test_host_state_garbage_userdata()
+{
+  lua_State* A = new_state();
+  CHECK(eval(A, build_perms) == "ok");
+  lua_newuserdatauv(A, 8, 0);
+  lua_createtable(A, 0, 1);
+  lua_pushcfunction(A, noop);
+  lua_setfield(A, -2, "__gc");
+  lua_setmetatable(A, -2);
+  lua_pop(A, 1);
+  lua_getglobal(A, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(A, 1, &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()) == "persisting a userdata value is not supported yet (at finalizer list)");
+  lua_gc(A, LUA_GCCOLLECT, 0, 0, 0); /* finalized: no longer marked */
+  StringWriter w2;
+  CHECK(luaL_persiststate(A, 1, &w2, &msg) == LUA_OK);
+  lua_close(A);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -937,6 +1096,10 @@ static void run_cpp_tests()
       {"host_stream_kinds", test_host_stream_kinds},
       {"external_hook_not_supported", test_external_hook_not_supported},
       {"table_order_across_states", test_table_order_across_states},
+      {"host_state_marked_garbage", test_host_state_marked_garbage},
+      {"host_state_pending_finalizers", test_host_state_pending_finalizers},
+      {"host_state_collector_settings", test_host_state_collector_settings},
+      {"host_state_garbage_userdata", test_host_state_garbage_userdata},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

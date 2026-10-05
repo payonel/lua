@@ -175,6 +175,9 @@ case("frames that do not match the stack are rejected", function()
   coroutine.resume(co, 1)
   local blob = styx.persist(perms, co)
   assert(styx.unpersist(back, blob))
+  local tail = blob:sub(-2) -- the trailer (empty) and its length
+  assert(tail == "\0\1", "layout: trailer")
+  blob = blob:sub(1, -3)
   local frame_size = 10 * 8
   local frames_end = #blob - 8 - 1
   assert(string.unpack("<i8", blob, frames_end + 1) == 0, "layout: ntbc")
@@ -183,7 +186,7 @@ case("frames that do not match the stack are rejected", function()
   assert(nframes == 2, "layout: " .. nframes)
   local first = frames_end - 2 * frame_size
   for _, slot in ipairs{0, 2} do   -- the nil base slot; the argument
-    local bad = blob:sub(1, first) .. string.pack("<i8", slot) .. blob:sub(first + 9)
+    local bad = blob:sub(1, first) .. string.pack("<i8", slot) .. blob:sub(first + 9) .. tail
     local ok, err = pcall(styx.unpersist, back, bad)
     assert(not ok and err:find("invalid persisted data", 1, true), tostring(err))
   end

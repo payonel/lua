@@ -52,32 +52,27 @@ case("truncated and trailing bytes are rejected", function()
 end)
 
 case("unknown tags are rejected", function()
-  local header = styx.persist(nil):sub(1, -2)
   for tag = 13, 255 do
-    fails("invalid persisted data", styx.unpersist, header .. string.char(tag))
+    fails("invalid persisted data", styx.unpersist, H.stream(string.char(tag)))
   end
 end)
 
 case("a stream cannot hand a script the main thread", function()
-  local header = styx.persist(nil):sub(1, -2)
-  fails("invalid persisted data", styx.unpersist, header .. "\18")
+  fails("invalid persisted data", styx.unpersist, H.stream("\18"))
 end)
 
 case("dangling back references are rejected", function()
   -- a back reference to an id that was never defined
-  local header = styx.persist(nil):sub(1, -2)
-  fails("invalid persisted data", styx.unpersist, header .. "\9" .. H.varint(99))
+  fails("invalid persisted data", styx.unpersist, H.stream("\9" .. H.varint(99)))
 end)
 
 case("negative lengths are rejected", function()
-  local header = styx.persist(nil):sub(1, -2)
-  fails("invalid persisted data", styx.unpersist, header .. "\5" .. H.varint(-1))
+  fails("invalid persisted data", styx.unpersist, H.stream("\5" .. H.varint(-1)))
 end)
 
 case("table sizes are checked", function()
-  local header = styx.persist(nil):sub(1, -2)
   local function table_stream(asize, hsize, lenhint)
-    return header .. "\6" .. H.varint(asize) .. H.varint(hsize) .. H.varint(lenhint) .. "\0\0\0"
+    return H.stream("\6" .. H.varint(asize) .. H.varint(hsize) .. H.varint(lenhint) .. "\0\0\0")
   end
   assert(next(styx.unpersist(table_stream(0, 0, 0))) == nil)
   assert(next(styx.unpersist(table_stream(4, 8, 4))) == nil)
@@ -86,6 +81,26 @@ case("table sizes are checked", function()
   fails("invalid persisted data", styx.unpersist, table_stream(0, -4, 0))
   fails("invalid persisted data", styx.unpersist, table_stream(2, 0, 3))
   fails("invalid persisted data", styx.unpersist, table_stream(1 << 40, 0, 0))
+  H.checkheap()
+end)
+
+case("the trailer is checked", function()
+  local v = H.varint
+  local empty_table = "\6" .. v(0) .. v(0) .. v(0) .. "\0\0\0"
+  assert(type(styx.unpersist(H.stream(empty_table))) == "table")
+  -- no trailer, or a length past the start
+  fails("invalid persisted data", styx.unpersist, H.header .. "\0")
+  fails("invalid persisted data", styx.unpersist, H.header .. "\0" .. v(0) .. H.backvar(100))
+  fails("invalid persisted data", styx.unpersist, H.header .. "\0" .. v(0) .. "\255")
+  -- bytes between the value and the trailer
+  fails("invalid persisted data", styx.unpersist, H.stream("\0\0"))
+  -- marks: tables only, each once, all met
+  assert(type(styx.unpersist(H.stream(empty_table, {1}))) == "table")
+  fails("invalid persisted data", styx.unpersist, H.stream("\5" .. v(1) .. "x", {1}))
+  fails("invalid persisted data", styx.unpersist, H.stream(empty_table, {1, 1}))
+  fails("invalid persisted data", styx.unpersist, H.stream(empty_table, {0}))
+  fails("invalid persisted data", styx.unpersist, H.stream(empty_table, {2}))
+  fails("invalid persisted data", styx.unpersist, H.stream("\0", {1}))
   H.checkheap()
 end)
 
