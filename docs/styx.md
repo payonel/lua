@@ -60,7 +60,8 @@ local x = styx.settings(name [, value])    -- query or change a setting
     unpersists a value and checks it (see ADR-14); `rejects_truncation`
     feeds every proper prefix of a stream to unpersist.
   - `*.lua`: Lua script tests, one per area: `primitives`, `strings`,
-    `tables`, `closures`, `threads`, `permanents`, `errors`, `memory`
+    `tables`, `closures`, `open_upvalues`, `threads`, `permanents`,
+    `errors`, `memory`
     (accounting and allocation failures), `processes` (unpersist in a
     separate interpreter process), `resume_print`.
   - Debug builds (`make debug styx-test`) also open the test library `T`,
@@ -101,8 +102,6 @@ local x = styx.settings(name [, value])    -- query or change a setting
 Deliberately left out of the first cut of thread support. Each raises a
 clear error unless noted.
 
-- **Open upvalues** (a closure capturing a live local of a running
-  function): error. Also threads that own open upvalues.
 - **Threads with to-be-closed variables**: error.
 - **Yields through continuations** (for example a yield inside `pcall` in
   the coroutine): error. Only a plain `coroutine.yield` from Lua code works.
@@ -264,6 +263,22 @@ CallInfos (only an emergency collection, which keeps them, can run
 meanwhile), each frame is checked against the stack (a Lua frame's slot
 holds a Lua closure and its saved pc is inside its code), and then all
 frames are attached at once. No engine change was needed.
+
+### ADR-16: Open upvalues
+**Status:** accepted
+An open upvalue (a closure over a local of a function that is still
+running) is persisted by its owner:
+- Owner is a thread that can be persisted (suspended, unstarted): the
+  stream holds the owner thread and the stack level. Unpersist restores the
+  thread (if not already) and uses the engine's own `luaF_findupval` on it,
+  so every closure over that local, and the restored thread's stack, share
+  one open upvalue again. `luaF_findupval` allocates on the restored thread,
+  so it runs protected on that thread and a failure is raised on the caller
+  (ADR-15).
+- Owner is running (the caller, or a thread that resumed another) or is the
+  main thread with frames: those frames cannot be persisted, so the
+  upvalue is persisted as its current value, as a closed upvalue. Closures
+  that shared it still share one upvalue after restore.
 
 ### Required tests for later work
 - Host-side persist (from the C API, on a state that is not running) of a

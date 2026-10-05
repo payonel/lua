@@ -117,8 +117,6 @@ namespace lt
   constexpr byte_view cannot_persist_a_C_function("cannot persist a C function");
   constexpr byte_view cannot_persist_a_running_thread("cannot persist a running thread");
   constexpr byte_view cannot_persist_a_thread_with_s("cannot persist a thread with %s");
-  constexpr byte_view cannot_persist_an_open_upvalue("cannot persist an open upvalue");
-  constexpr byte_view open_upvalues("open upvalues");
   constexpr byte_view a_continuation_function("a continuation function");
   constexpr byte_view a_hook_or_finalizer_call("a hook or finalizer call");
   constexpr byte_view an_error_status("an error status");

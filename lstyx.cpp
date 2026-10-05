@@ -12,6 +12,7 @@
 #include "ldo.h"
 #include "lfunc.h"
 #include "lapi.h"
+#include "lgc.h"
 
 #include "internal_string.h"
 #include "lauxlib.h"
@@ -36,6 +37,7 @@ constexpr char TAG_REF = 9;      /* back reference to an object already written 
 constexpr char TAG_PERM = 10;    /* object replaced by its permanent key */
 constexpr char TAG_UPVAL_NEW = 11;
 constexpr char TAG_UPVAL_REF = 12;
+constexpr char TAG_UPVAL_OPEN = 13; /* open upvalue: owner thread, stack level */
 
 constexpr int MAX_DEPTH = 10000;
 
@@ -129,6 +131,16 @@ static void persist_table(Persist& P)
   luaL_addchar(&P.B, TAG_NIL); /* end of entries */
 }
 
+/*
+** A thread that is running (the caller, or one that resumed another) has
+** frames that cannot be persisted; an open upvalue it owns is persisted as
+** its current value instead.
+*/
+static bool is_running(lua_State* L, lua_State* T)
+{
+  return T == L || (T->status == LUA_OK && T->ci != &T->base_ci);
+}
+
 struct ProtoWriter : lua_Writer
 {
   luaL_Buffer* B;
@@ -172,11 +184,20 @@ static void persist_lclosure(Persist& P)
       continue;
     }
     lua_pop(L, 1);
-    if (upisopen(cl->upvals[i - 1]))
-      luaL_errori(L, lt::cannot_persist_an_open_upvalue);
     lua_pushlightuserdata(L, id);
     lua_pushinteger(L, ++P.refcount);
     lua_rawset(L, P.refs);
+    UpVal* uv = cl->upvals[i - 1];
+    if (upisopen(uv) && !is_running(L, uv->owner))
+    {
+      luaL_addchar(&P.B, TAG_UPVAL_OPEN);
+      setslotth(L, L->top, uv->owner);
+      L->top++;
+      persist(P);
+      lua_pop(L, 1);
+      put_i64(&P.B, uv->stkid);
+      continue;
+    }
     luaL_addchar(&P.B, TAG_UPVAL_NEW);
     lua_getupvalue(L, f, i);
     persist(P);
@@ -200,8 +221,6 @@ static void persist_thread(Persist& P)
     luaL_errori(L, lt::cannot_persist_a_running_thread);
   if (T->status != LUA_OK && T->status != LUA_YIELD)
     cannot_persist_thread_with(L, lt::an_error_status);
-  if (T->openupval != nullptr)
-    cannot_persist_thread_with(L, lt::open_upvalues);
   if (T->ntbc != 0)
     cannot_persist_thread_with(L, lt::to_be_closed_variables);
 
@@ -415,6 +434,50 @@ struct BytesReader : lua_Reader
   }
 };
 
+/*
+** A thread being restored is not running, so nothing may raise an error on
+** it: its stack and frames are grown in the modes that report failure, work
+** that can only raise runs protected on it (as `lua_resume` runs a
+** coroutine), and a failure is raised on the calling thread, as
+** `coroutine.resume` does when it grows a coroutine's stack.
+*/
+[[noreturn]] static void memory_error(lua_State* L)
+{
+  lua_pushistringref(L, lt::not_enough_memory);
+  lua_error(L);
+  std::abort();
+}
+
+/* finds or creates the open upvalue at 'level' of a thread (run protected) */
+struct FindUpval : ProtectedCall
+{
+  StkId level = 0;
+  UpVal* uv = nullptr;
+  void run(lua_State* L1) override
+  {
+    uv = UpVal::luaF_findupval(L1, level);
+  }
+};
+
+/* replaces upvalue 'i' of the closure at 'f' by an open upvalue of a thread */
+static void unpersist_open_upvalue(Unpersist& U, int f, int i)
+{
+  lua_State* L = U.r.L;
+  unpersist(U); /* the owner thread */
+  lua_State* L1 = lua_tothread(L, -1);
+  lua_Integer level = U.r.get_i64();
+  if (L1 == nullptr || is_running(L, L1) || level < 0 || level >= L1->top)
+    luaL_errori(L, lt::invalid_persisted_data);
+  FindUpval fu;
+  fu.level = level;
+  if (luaD_rawrunprotected(L1, &fu) != LUA_OK)
+    memory_error(L);
+  LClosure* cl = clLvalue(&L->stack[L->ci->func + f]);
+  cl->upvals[i - 1] = fu.uv;
+  luaC_objbarrier(L, cl, fu.uv);
+  lua_pop(L, 1);
+}
+
 static void unpersist_lclosure(Unpersist& U, lua_Integer id)
 {
   lua_State* L = U.r.L;
@@ -435,15 +498,20 @@ static void unpersist_lclosure(Unpersist& U, lua_Integer id)
   for (int i = 1; i <= nup; i++)
   {
     char tag = U.r.get_byte();
-    if (tag == TAG_UPVAL_NEW)
+    if (tag == TAG_UPVAL_NEW || tag == TAG_UPVAL_OPEN)
     {
       lua_Integer uid = ++U.refcount;
       lua_pushvalue(L, f);
       lua_rawseti(L, U.ups, uid);
       lua_pushinteger(L, i);
       lua_rawseti(L, U.ups, -uid);
-      unpersist(U);
-      lua_setupvalue(L, f, i);
+      if (tag == TAG_UPVAL_OPEN)
+        unpersist_open_upvalue(U, f, i);
+      else
+      {
+        unpersist(U);
+        lua_setupvalue(L, f, i);
+      }
     }
     else if (tag == TAG_UPVAL_REF)
     {
@@ -458,19 +526,6 @@ static void unpersist_lclosure(Unpersist& U, lua_Integer id)
     else
       luaL_errori(L, lt::invalid_persisted_data);
   }
-}
-
-/*
-** The thread being restored is not running, so nothing may raise an error
-** on it: its stack and frames are grown in the modes that report failure,
-** and a failure is raised on the calling thread, as `coroutine.resume`
-** does when it grows a coroutine's stack.
-*/
-[[noreturn]] static void memory_error(lua_State* L)
-{
-  lua_pushistringref(L, lt::not_enough_memory);
-  lua_error(L);
-  std::abort();
 }
 
 /* the frame's function slot holds what its call status says it calls */
