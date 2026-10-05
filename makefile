@@ -69,6 +69,7 @@ GATE_T        =test_gate
 DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(GATE_O:.o=.d)
 STYX_TEST_O  =$(OBJ_DIR)/styx_tests.o
 STYX_TEST_T  =test_styx
+STYX_RUN     =cd tests/styx && ../../$(STYX_TEST_T)
 DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(STYX_TEST_O:.o=.d)
 
 all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
@@ -168,6 +169,10 @@ $(STYX_TEST_T): $(STYX_TEST_O) $(OBJ_FILES) $(VARIANT_STAMP)
 test-styx: $(STYX_TEST_T)
 	cd tests/styx && ../../$(STYX_TEST_T)
 
+# just the Styx tests (`make test` runs them too, along with everything else)
+styx-test: $(STYX_TEST_T)
+	$(STYX_RUN)
+
 clean:
 	$(RM) -r $(OBJ_DIR_BASE)
 	$(RM) $(LUA_T)
@@ -195,6 +200,7 @@ test:
 	cd tests && ../$(LUA_T) deep/all.lua
 	$(MAKE) gate-run
 	cd tests/styx && ../../$(STYX_TEST_T)
+	$(STYX_RUN)
 
 full:
 	make clean
@@ -209,3 +215,4 @@ full:
 
 .PHONY: all debug cov clean test engine-test gate gate-run full
 .PHONY: all debug cov clean test engine-test full test-styx
+.PHONY: all debug cov clean test engine-test full test-styx styx-test

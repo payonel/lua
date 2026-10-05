@@ -52,9 +52,10 @@ local x = styx.settings(name [, value])    -- query or change a setting
     since the test links the raw objects) plus a runner that executes every
     `tests/styx/*.lua` in a fresh state.
   - `*.lua`: Lua script tests. Each starts with `require "styx"`.
-- `make test` runs everything, the Styx tests last (`test_styx`, run from
-  `tests/styx`; built by `make`). While Styx is built test-first, red
-  Styx tests make `make test` fail.
+- `make styx-test` builds and runs just the Styx tests (`test_styx`, run
+  from `tests/styx`). `make test` is the all-tests target and runs them
+  last, after everything else. `make debug styx-test` selects the debug
+  variant, like the other targets.
 - The engine provides Styx by default but not as a global:
   `luaL_openlibs` puts it in `package.preload`, so `require "styx"` works
   and `_G.styx` is nil. A host that wants it global can call
