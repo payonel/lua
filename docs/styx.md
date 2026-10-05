@@ -114,6 +114,7 @@ local x = styx.settings(name [, value])    -- query or change a setting
       deterministic within a run (done: C++ tests
       `snapshot_continues_identically`, `state_restore_needs_its_state`,
       ADR-31; what is not deterministic yet: "Determinism" below)
+  16. preemptive persistence: suspendable C functions (planned: ADR-32)
 - Items are added or reordered as the tests teach us something.
 
 ## What looks unpersistable
@@ -128,7 +129,9 @@ yet" below. Four kinds of solution cover them:
 - **State by value**: what sits behind C (bytes, upvalues, library state)
   saved and rebuilt, through an interface the owner of that state provides.
 - **C frames**: a stable description of a C function's frame and its
-  continuation, so a suspended coroutine can resume through it.
+  continuation, so a suspended coroutine can resume through it: every
+  internal C function that calls back into Lua becomes *suspendable*
+  (ADR-32).
 - **External resources**: a host protocol to reopen, reconnect or replay.
 
 ### Values
@@ -162,13 +165,15 @@ yet" below. Four kinds of solution cover them:
 7. **Running threads**: the coroutine calling `persist`, coroutines that
    resumed another (status normal), the main thread from the script API.
    Today: error. Needs: C frames (they wait inside `coroutine.resume` or
-   inside `persist` itself).
+   inside `persist` itself); with preemption, `coroutine.resume` becomes
+   suspendable (ADR-32).
 8. **A coroutine suspended inside a C call that continues later**: a yield
    inside `pcall`, `xpcall`, `dofile`, a `__pairs` metamethod, or any C
    function that calls or yields with a continuation (`lua_callk`,
    `lua_pcallk`, `lua_yieldk`). Today: error. Probably the most common
    blocker for real scripts (`pcall` around a loop that yields). Needs: C
-   frames.
+   frames: suspendable C functions (ADR-32), which preemption needs for
+   every C function that calls back into Lua.
 9. **A coroutine suspended inside a hook or a `__close` handler**. Today:
    error. Needs: C frames.
 10. **To-be-closed variables of C functions** (`lua_toclose`). Today:
@@ -187,15 +192,19 @@ yet" below. Four kinds of solution cover them:
     "Determinism".
 14. **The host's API stack** on the main thread. Today: not part of a
     snapshot; the host manages it.
+15. **Opaque user C functions** (calling back into Lua with plain
+    `lua_call`) on the stack of a thread being persisted. Allowed in the
+    VM; persisting fails, by design (ADR-32), with a follow-up to wait for
+    them (a deferred or blocking suspend).
 
 ### Outside the VM
-15. **External state**: the clock and time, environment variables, file
+16. **External state**: the clock and time, environment variables, file
     contents, sockets, child processes, the host's event queue, timers and
     world. Outside the persistence layer: the host saves, replays or
     reconnects it (see "Determinism").
 
 ### Refused by design or by choice
-16. **Persistable, but refused**: tables whose `__persist` is `false`;
+17. **Persistable, but refused**: tables whose `__persist` is `false`;
     `__persist` functions in a host persist (they would run Lua code during
     a snapshot); a `__persist` restore closure that refers to the value it
     rebuilds.
@@ -855,6 +864,121 @@ stream.
   transcripts; with strings taking hashes, or without the snapshot's next
   hash, they differ. `state_restore_needs_its_state`: a state with another
   seed is refused and left as it was.
+
+### ADR-32: Preemptive persistence and suspendable C functions
+**Status:** proposed (plan)
+Styx will be a preemptive serializer: the host may suspend a VM and
+persist it at any instruction, not only where a script yields. A C
+function that called back into Lua may then be on the stack, with its
+progress on the native C stack, which cannot be persisted. Waiting for a
+safe point (deferred preemption) is rejected: suspension must succeed
+wherever the VM is.
+
+**Terms.**
+- A **continuation** is the function Lua calls instead of returning into a
+  suspended C function (`lua_KFunction`, with its context `ctx`).
+- A **suspendable** C function keeps its progress across every call back
+  into Lua as Lua-visible data, and is resumed through a continuation with
+  a stable name. It can be suspended at any of its calls back into Lua,
+  persisted, and resumed in another process. (A suspendable `table.sort`
+  has a continuation that reads the sort's saved state and re-enters it.)
+- A **yieldable** C function (upstream's term) has a continuation but may
+  keep state a stream cannot carry: a pointer in `ctx`, progress in C
+  memory. It survives a yield within one process.
+- An **opaque** C function calls back into Lua with plain `lua_call` or
+  `lua_pcall`; its progress is on the native C stack.
+- A C function that never calls back into Lua is suspendable trivially:
+  it cannot be on the stack where a hook fires and has no progress to keep;
+  it needs only a stable name.
+
+**Decisions.**
+1. Preempted code runs in a coroutine the host resumes (the main thread
+   cannot yield); the host suspends it from a count or line hook (a hook
+   yield), and Styx persists the suspended thread.
+2. Every C function our standard libraries put into a Lua runtime is
+   suspendable, without exception: the library functions, the closures and iterators they
+   return (`coroutine.wrap`'s function, the `string.gmatch` iterator,
+   `io.lines`), the metamethods they install, the package searchers. We
+   provide no opaque C function. Those that call back into Lua are ported
+   (the inventory below); the rest are suspendable as they are. The
+   mechanism is the upstream continuation API; `lua_call` stays in the C
+   API for hosts (removing stock behavior is not an option), but no
+   library function calls back into Lua with it.
+3. User C functions may be opaque: the VM runs them, but persisting fails
+   if one is on the stack of a thread being persisted, and the error names
+   it (see the follow-up below).
+4. Every library C function and continuation gets a stable name, and a
+   suspendable function's `ctx` holds data only. A name the library gives
+   its own functions would also let them persist without the permanents
+   table, and hash the same in every process as table keys (the addresses
+   item under "Determinism"). A C closure's upvalues are persisted by value
+   (the `gmatch` iterator's position, `math.random`'s generator); a host
+   resource among them (`io.lines`'s file) is an external resource.
+5. The engine's own calls back into Lua, with no C function to make
+   suspendable, become resumable in the engine: metamethods run from C API
+   calls, finalizers, error message handlers, hooks, `__close` handlers
+   run while unwinding or by `coroutine.close`.
+6. The C API gains continuation variants of the calls that may run
+   metamethods (`lua_geti`, `lua_seti`, `lua_gettable`, `lua_settable`,
+   `lua_getfield`, `lua_setfield`, `lua_compare`, `lua_len`, `lua_arith`,
+   `lua_concat`; `luaL_tolstring`, `luaL_len`, `luaL_callmeta`), so library
+   code can be written suspendably.
+7. Nested coroutines: `coroutine.resume` and `coroutine.wrap` become
+   suspendable. A preemption of the coroutine they resumed suspends them
+   too and goes up to the host, rather than being returned to the script
+   as a yield; resuming them resumes the inner coroutine.
+
+**Inventory** (the standard library's C functions that call back into
+Lua, which need porting; every other library C function is suspendable as
+it is):
+- base: `pcall`, `xpcall`, `dofile`, `pairs` (`__pairs`) are yieldable
+  already and become suspendable; `load` with a reader function,
+  `tostring` and `print` (`__tostring`, `__name`), `ipairs` (`__index`).
+- string: `string.gsub` (a replacement function, or a replacement table's
+  `__index`); `string.format` (`__tostring`, for `%s` and in `%q`);
+  arithmetic on strings (the string metatable calls the other operand's
+  metamethod).
+- table: `table.sort` (the comparator, `__lt`, `__index`, `__newindex`;
+  its recursive quicksort becomes an explicit state), `table.insert`,
+  `table.remove`, `table.move`, `table.concat`, `table.unpack`
+  (`__index`, `__newindex`, `__len`).
+- math: `math.min`, `math.max` (`__lt`).
+- package: `require` (the searchers, the loader, the module's body).
+- debug: the hook `debug.sethook` installs (it calls the Lua hook),
+  `debug.debug`.
+- coroutine: `coroutine.resume`, `coroutine.wrap` (decision 7),
+  `coroutine.close` (runs `__close` handlers).
+- auxiliary library: `luaL_tolstring`, `luaL_len`, `luaL_callmeta`; the
+  host helpers (`luaL_dofile`, `luaL_dostring`, `luaL_requiref`) run
+  outside a preempted coroutine and stay as they are.
+
+**Phases**, each with tests and an A/B:
+1. Continuation names and data-only contexts; Styx persists the frames of
+   suspendable C functions.
+2. Hook yields as the host's preemption point; Styx persists a thread
+   suspended in a hook.
+3. The base library (`pcall`, `xpcall`, `dofile`, `pairs`, `tostring`,
+   `print`, `ipairs`, `load`).
+4. The table, string and math libraries (`table.sort` as an explicit
+   state).
+5. The engine's own calls back into Lua (decision 5) and the API's
+   continuation variants (decision 6).
+6. `coroutine.resume`, `coroutine.wrap`, `coroutine.close`, `require`,
+   the debug library.
+7. Preemption everywhere, tested by transcripts: a program preempted at
+   every instruction (each count-hook position), persisted, restored and
+   continued, against an uninterrupted run.
+
+**Follow-up feature** (not now): opaque user C functions on the stack.
+Persisting then fails (decision 3); a host could instead wait for them:
+- a query: Styx inspects a state and returns whether it can be suspended
+  now (an enum: suspendable; blocked by an opaque C function, naming it;
+  running; ...);
+- a deferred or blocking suspend: Styx injects an ad hoc hook just below
+  the bottommost opaque C function's frame, so the coroutine is suspended
+  when that function returns, and the host's handler persists it there; a
+  blocking call can wait for that point. This applies only to opaque
+  functions the host chose to allow; the library's own are suspendable.
 
 ## Open questions
 
