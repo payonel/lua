@@ -52,7 +52,7 @@ static l_forceinline int lislalpha(int c)
 
 static l_forceinline int lislalnum(int c)
 {
-  return testprop(c, (MASK(ALPHABIT) | MASK(DIGITBIT)));
+  return testprop(c, MASK(ALPHABIT) | MASK(DIGITBIT));
 }
 
 static l_forceinline int lisdigit(int c)

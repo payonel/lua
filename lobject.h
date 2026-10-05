@@ -22,13 +22,13 @@ namespace lua::object
 ** Extra types for collectable non-values
 */
 constexpr int LUA_TUPVAL = LUA_NUMTYPES; /* upvalues */
-constexpr int LUA_TPROTO = (LUA_NUMTYPES + 1); /* function prototypes */
-constexpr int LUA_TDEADKEY = (LUA_NUMTYPES + 2); /* removed keys in tables */
+constexpr int LUA_TPROTO = LUA_NUMTYPES + 1; /* function prototypes */
+constexpr int LUA_TDEADKEY = LUA_NUMTYPES + 2; /* removed keys in tables */
 
 /*
 ** number of all possible types (including LUA_TNONE but excluding DEADKEY)
 */
-constexpr int LUA_TOTALTYPES = (LUA_TPROTO + 2);
+constexpr int LUA_TOTALTYPES = LUA_TPROTO + 2;
 
 /*
 ** tags for Tagged Values have the following use of bits:
@@ -40,7 +40,7 @@ constexpr int LUA_TOTALTYPES = (LUA_TPROTO + 2);
 /* add variant bits to a type */
 constexpr lu_byte makevariant(int t, int v)
 {
-  return ((lu_byte)(t | (v << 4)));
+  return (lu_byte)(t | (v << 4));
 }
 
 struct Value
@@ -244,6 +244,11 @@ static l_forceinline bool l_isfalse(const TValue* o)
   return ttisfalse(o) || ttisnil(o);
 }
 
+constexpr bool tagisfalse(int t)
+{
+  return t == LUA_VFALSE || novariant(t) == LUA_TNIL;
+}
+
 /* }================================================================== */
 
 /*
@@ -280,11 +285,11 @@ struct GCListed : GCObject
 };
 
 /* Bit mark for collectable types */
-constexpr int BIT_ISCOLLECTABLE = (1 << 6);
+constexpr int BIT_ISCOLLECTABLE = 1 << 6;
 
 constexpr lu_byte ctb(lu_byte t)
 {
-  return (t | BIT_ISCOLLECTABLE);
+  return t | BIT_ISCOLLECTABLE;
 }
 
 static l_forceinline bool iscollectable(const TValue* o)
@@ -525,7 +530,7 @@ static l_forceinline int isvararg(const Proto* p)
 
 static l_forceinline void needvatab(Proto* p)
 {
-  p->flag = (p->flag | PF_VATAB);
+  p->flag = p->flag | PF_VATAB;
 }
 
 /* }================================================================== */
@@ -793,7 +798,7 @@ static l_forceinline lua_Number fltvalue(const TValue* o)
 static l_forceinline lua_Number nvalue(const TValue* o)
 {
   assert(ttisinteger(o) || ttisfloat(o));
-  return ttisinteger(o) ? ((lua_Number)(o->value_.prim))
+  return ttisinteger(o) ? (lua_Number)o->value_.prim
                                  : std::bit_cast<lua_Number>(o->value_.prim);
 }
 

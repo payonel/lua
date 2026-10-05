@@ -366,7 +366,7 @@ static void savelineinfo(FuncState* fs, Proto* f, int line)
     fs->iwthabs = 1;       /* restart counter */
   }
   f->lineinfo = luaM_safegrow_ls_byte_span(fs->ls->L, f->lineinfo, pc);
-  f->lineinfo[pc] = ((ls_byte)(linedif));
+  f->lineinfo[pc] = (ls_byte)linedif;
   fs->previousline = line; /* last line saved */
 }
 
@@ -599,7 +599,7 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   int tag = fs->kcache->luaH_get(key, &val); /* query scanner table */
   if (!tagisempty(tag))
   { /* is there an index there? */
-    int k = ((int)(ivalue(&val)));
+    int k = (int)(ivalue(&val));
     /* collisions can happen only for float keys */
     assert(ttisfloat(key) || luaV_rawequalobj(&f->k[k], v));
     return k; /* reuse index */
@@ -728,7 +728,7 @@ static int fitsBx(lua_Integer i)
 void luaK_int(FuncState* fs, int reg, lua_Integer i)
 {
   if (fitsBx(i))
-    codeAsBx(fs, OP_LOADI, reg, ((int)(i)));
+    codeAsBx(fs, OP_LOADI, reg, (int)i);
   else
     luaK_codek(fs, reg, luaK_intK(fs, i));
 }
@@ -737,7 +737,7 @@ static void luaK_float(FuncState* fs, int reg, lua_Number f)
 {
   IntResult fi;
   if (luaV_flttointeger(f, &fi, F2Ieq) && fitsBx(fi.v))
-    codeAsBx(fs, OP_LOADF, reg, ((int)(fi.v)));
+    codeAsBx(fs, OP_LOADF, reg, (int)fi.v);
   else
     luaK_codek(fs, reg, luaK_numberK(fs, f));
 }
@@ -1452,7 +1452,7 @@ static int isSCnumber(expdesc* e, SCImm* sc)
     return 0; /* not a number */
   if (!hasjumps(e) && fitsC(i.v))
   {
-    sc->im = int2sC(((int)(i.v)));
+    sc->im = int2sC((int)i.v);
     return 1;
   }
   else
@@ -1533,7 +1533,7 @@ void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k)
     if (isKstr(fs, k))
       fillidxk(t, k->info, VINDEXSTR); /* literal short string */
     else if (isCint(k))                  /* int. constant in proper range? */
-      fillidxk(t, ((int)(k->ival)), VINDEXI);
+      fillidxk(t, (int)k->ival, VINDEXI);
     else
       fillidxk(t, luaK_exp2anyreg(fs, k), VINDEXED); /* register */
   }
@@ -1611,7 +1611,7 @@ static inline OpCode binopr2op(BinOpr opr, BinOpr baser, OpCode base)
   assert(baser <= opr &&
              ((baser == OPR_ADD && opr <= OPR_SHR) ||
               (baser == OPR_LT && opr <= OPR_LE)));
-  return (OpCode)((((int)(opr)) - ((int)(baser))) + ((int)(base)));
+  return (OpCode)(((int)opr - (int)baser) + (int)base);
 }
 
 /*
@@ -1619,8 +1619,8 @@ static inline OpCode binopr2op(BinOpr opr, BinOpr baser, OpCode base)
 */
 static inline OpCode unopr2op(UnOpr opr)
 {
-  return (OpCode)((((int)(opr)) - ((int)(OPR_MINUS))) +
-                          ((int)(OP_UNM)));
+  return (OpCode)(((int)opr - (int)OPR_MINUS) +
+                          (int)OP_UNM);
 }
 
 /*
@@ -1629,7 +1629,7 @@ static inline OpCode unopr2op(UnOpr opr)
 static inline TMS binopr2TM(BinOpr opr)
 {
   assert(OPR_ADD <= opr && opr <= OPR_SHR);
-  return (TMS)((((int)(opr)) - ((int)(OPR_ADD))) + ((int)(TM_ADD)));
+  return (TMS)(((int)opr - (int)OPR_ADD) + (int)TM_ADD);
 }
 
 /*
@@ -1662,7 +1662,7 @@ static void finishbinexpval(FuncState* fs, expdesc* e1, expdesc* e2,
   e1->info = pc;
   e1->k = VRELOC; /* all those operations are relocatable */
   luaK_fixline(fs, line);
-  luaK_codeABCk(fs, mmop, v1, v2, (event), flip); /* metamethod */
+  luaK_codeABCk(fs, mmop, v1, v2, event, flip); /* metamethod */
   luaK_fixline(fs, line);
 }
 
@@ -1689,7 +1689,7 @@ static void codebini(FuncState* fs, OpCode op,
                      expdesc* e1, expdesc* e2, int flip, int line,
                      TMS event)
 {
-  int v2 = int2sC(((int)(e2->ival))); /* immediate operand */
+  int v2 = int2sC((int)e2->ival); /* immediate operand */
   assert(e2->k == VKINT);
   finishbinexpval(fs, e1, e2, op, v2, flip, line, OP_MMBINI, event);
 }
@@ -1721,7 +1721,7 @@ static int finishbinexpneg(FuncState* fs, expdesc* e1, expdesc* e2,
       return 0; /* not in the proper range */
     else
     { /* operating a small integer constant */
-      int v2 = ((int)(i2));
+      int v2 = (int)i2;
       finishbinexpval(fs, e1, e2, op, int2sC(-v2), 0, line, OP_MMBINI, event);
       /* correct metamethod argument */
       fs->f->code[fs->pc - 1] = SETARG_B(fs->f->code[fs->pc - 1], int2sC(v2));
@@ -1865,7 +1865,7 @@ static void codeeq(FuncState* fs, BinOpr opr, expdesc* e1, expdesc* e2)
     r2 = luaK_exp2anyreg(fs, e2);
   }
   freeexps(fs, e1, e2);
-  e1->info = condjump(fs, op, r1, r2, sc.isfloat, (opr == OPR_EQ));
+  e1->info = condjump(fs, op, r1, r2, sc.isfloat, opr == OPR_EQ);
   e1->k = VJMP;
 }
 
@@ -1880,7 +1880,7 @@ void luaK_prefix(FuncState* fs, UnOpr opr, expdesc* e, int line)
   {
   case OPR_MINUS:
   case OPR_BNOT: /* use 'ef' as fake 2nd operand */
-    if (constfolding(fs, (opr + LUA_OPUNM), e, &ef))
+    if (constfolding(fs, opr + LUA_OPUNM, e, &ef))
       break;
     /* else */ /* FALLTHROUGH */
   case OPR_LEN:
@@ -1992,7 +1992,7 @@ void luaK_posfix(FuncState* fs, BinOpr opr,
                  expdesc* e1, expdesc* e2, int line)
 {
   luaK_dischargevars(fs, e2);
-  if (foldbinop(opr) && constfolding(fs, (opr + LUA_OPADD), e1, e2))
+  if (foldbinop(opr) && constfolding(fs, opr + LUA_OPADD, e1, e2))
     return; /* done by folding */
   switch (opr)
   {
@@ -2077,7 +2077,7 @@ void luaK_posfix(FuncState* fs, BinOpr opr,
   {
     /* '(a > b)' <=> '(b < a)';  '(a >= b)' <=> '(b <= a)' */
     swapexps(e1, e2);
-    opr = ((BinOpr)((opr - OPR_GT) + OPR_LT));
+    opr = (BinOpr)((opr - OPR_GT) + OPR_LT);
   } /* FALLTHROUGH */
   case OPR_LT:
   case OPR_LE:
@@ -2128,7 +2128,7 @@ void luaK_setlist(FuncState* fs, int base, int nelems, int tostore)
   else
   {
     int extra = nelems / (MAXARG_vC + 1);
-    nelems %= (MAXARG_vC + 1);
+    nelems %= MAXARG_vC + 1;
     luaK_codevABCk(fs, OP_SETLIST, base, tostore, nelems, 1);
     codeextraarg(fs, extra);
   }
@@ -2161,7 +2161,7 @@ void luaK_finish(FuncState* fs)
   int i;
   Proto* p = fs->f;
   if (p->flag & PF_VATAB)            /* will it use a vararg table? */
-    p->flag &= ((lu_byte)(~PF_VAHID)); /* then it will not use hidden args. */
+    p->flag &= (lu_byte)(~PF_VAHID); /* then it will not use hidden args. */
   for (i = 0; i < fs->pc; i++)
   {
     (void) luaP_isOT;

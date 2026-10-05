@@ -29,7 +29,7 @@ namespace lua::lib
 constexpr int TAB_R = 1; /* read */
 constexpr int TAB_W = 2; /* write */
 constexpr int TAB_L = 4; /* length */
-constexpr int TAB_RW = (TAB_R | TAB_W); /* read/write */
+constexpr int TAB_RW = TAB_R | TAB_W; /* read/write */
 
 
 static int checkfield(lua_State* L, byte_view key, int n)
@@ -73,7 +73,7 @@ static int tcreate(lua_State* L)
   lua_Integer sizerest = luaL_optinteger(L, 2, 0);
   luaL_argchecki(L, 0 <= sizeseq && sizeseq <= INT_MAX, 1, lt::out_of_range);
   luaL_argchecki(L, 0 <= sizerest && sizerest <= INT_MAX, 2, lt::out_of_range);
-  lua_createtable(L, ((int)(sizeseq)), ((int)(sizerest)));
+  lua_createtable(L, (int)sizeseq, (int)sizerest);
   return 1;
 }
 
@@ -225,7 +225,7 @@ static int tunpack(lua_State* L)
   lua_Integer n;
   lua_Integer len = aux_getn(L, 1, TAB_R);
   lua_Integer i = luaL_optinteger(L, 2, 1);
-  lua_Integer e = (lua_isnoneornil(L, (3)) ? (len) : luaL_checkinteger(L, (3)));
+  lua_Integer e = (lua_isnoneornil(L, 3) ? len : luaL_checkinteger(L, 3));
   if (i > e)
     return 0;                      /* empty range */
   n = l_intsub(e, i); /* number of elements minus 1 */
@@ -345,7 +345,7 @@ static IdxT partition(lua_State* L, IdxT lo, IdxT up)
 static IdxT choosePivot(IdxT lo, IdxT up, unsigned int rnd)
 {
   IdxT r4 = (up - lo) / 4; /* range/4 */
-  IdxT p = (IdxT)l_umod(rnd ^ (unsigned int)lo ^ (unsigned int)up, (r4 * 2)) + (lo + r4);
+  IdxT p = (IdxT)l_umod(rnd ^ (unsigned int)lo ^ (unsigned int)up, r4 * 2) + (lo + r4);
   assert(lo + r4 <= p && p <= up - r4);
   return p;
 }

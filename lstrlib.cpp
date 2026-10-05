@@ -110,7 +110,7 @@ static int str_reverse(lua_State* L)
   size_t off = luaL_buffinitsize(L, &b, l);
   byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
-    p[off + i] = ((char)(s->byteAt(l - i - 1)));
+    p[off + i] = (char)(s->byteAt(l - i - 1));
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -124,7 +124,7 @@ static int str_lower(lua_State* L)
   size_t off = luaL_buffinitsize(L, &b, l);
   byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
-    p[off + i] = ((char)(locale_tolower(s->byteAt(i))));
+    p[off + i] = (char)(locale_tolower(s->byteAt(i)));
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -138,7 +138,7 @@ static int str_upper(lua_State* L)
   size_t off = luaL_buffinitsize(L, &b, l);
   byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
-    p[off + i] = ((char)(locale_toupper(s->byteAt(i))));
+    p[off + i] = (char)(locale_toupper(s->byteAt(i)));
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -158,13 +158,13 @@ static int str_rep(lua_State* L)
   {
     lua_pushistringref(L, lt::empty_str); /* no repetitions or both strings empty */
   }
-  else if (l_unlikely(sv.size() > MAX_SIZE - sepsv.size() || ((lua_Integer)(sv.size() + sepsv.size())) > ((lua_Integer)(MAX_SIZE)) / n))
+  else if (l_unlikely(sv.size() > MAX_SIZE - sepsv.size() || (lua_Integer)(sv.size() + sepsv.size()) > ((lua_Integer)MAX_SIZE) / n))
   {
     return luaL_errori(L, lt::resulting_string_too_large);
   }
   else
   {
-    size_t totallen = (((size_t)(n)) * (sv.size() + sepsv.size())) - sepsv.size();
+    size_t totallen = ((size_t)n * (sv.size() + sepsv.size())) - sepsv.size();
     luaL_Buffer b;
     size_t off = luaL_buffinitsize(L, &b, totallen);
     byte_span p = byte_span(luaL_buffaddr(&b));
@@ -215,7 +215,7 @@ static int str_char(lua_State* L)
   {
     lua_Unsigned c = luaL_checkinteger(L, i);
     luaL_argchecki(L, c <= UCHAR_MAX, i, lt::value_out_of_range);
-    p[off + i - 1] = ((char)(c));
+    p[off + i - 1] = (char)c;
   }
   luaL_pushresultsize(&b, n);
   return 1;
@@ -394,8 +394,8 @@ static const luaL_RegCFI stringmetamethods[] = {
 ** =======================================================
 */
 
-constexpr int CAP_UNFINISHED = (-1);
-constexpr int CAP_POSITION = (-2);
+constexpr int CAP_UNFINISHED = -1;
+constexpr int CAP_POSITION = -2;
 
 constexpr ptrdiff_t NOMATCH = -1;
 
@@ -583,7 +583,7 @@ static ptrdiff_t max_expand(MatchState* ms, ptrdiff_t s,
   /* keeps trying to match with the maximum repetitions */
   while (i >= 0)
   {
-    ptrdiff_t res = match(ms, (s + i), ep + 1);
+    ptrdiff_t res = match(ms, s + i, ep + 1);
     if (res != NOMATCH)
       return res;
     i--; /* else didn't match; reduce 1 repetition to try again */
@@ -812,7 +812,7 @@ static Capture get_onecapture(MatchState* ms, int i, ptrdiff_t s,
     if (l_unlikely(capl == CAP_UNFINISHED))
       luaL_errori(ms->L, lt::unfinished_capture);
     else if (capl == CAP_POSITION)
-      lua_pushinteger(ms->L, ((lua_Integer)(ms->capture[i].init)) + 1);
+      lua_pushinteger(ms->L, (lua_Integer)ms->capture[i].init + 1);
     return {ms->capture[i].init, capl};
   }
 }
@@ -825,7 +825,7 @@ static void push_onecapture(MatchState* ms, int i, ptrdiff_t s,
 {
   Capture cap = get_onecapture(ms, i, s, e);
   if (cap.len != CAP_POSITION)
-    lua_pushlstring(ms->L, ms->src->view(), (cap.init), (cap.len));
+    lua_pushlstring(ms->L, ms->src->view(), cap.init, cap.len);
   /* else position was already pushed */
 }
 
@@ -850,9 +850,9 @@ static void prepstate(MatchState* ms, lua_State* L,
 {
   ms->L = L;
   ms->src = s;
-  ms->src_end = (s->size());
+  ms->src_end = s->size();
   ms->p = p;
-  ms->p_end = (p->size());
+  ms->p_end = p->size();
 }
 
 /*
@@ -884,15 +884,15 @@ static int str_find_aux(lua_State* L, int find)
     size_t pos = lmemfind(s->view(), init, ls - init, p->view(), lp);
     if (pos != byte_view::npos)
     {
-      lua_pushinteger(L, ((lua_Integer)(pos)) + 1);
-      lua_pushinteger(L, (pos + lp));
+      lua_pushinteger(L, (lua_Integer)pos + 1);
+      lua_pushinteger(L, pos + lp);
       return 2;
     }
   }
   else
   {
     MatchState ms;
-    ptrdiff_t s1 = (init);
+    ptrdiff_t s1 = init;
     int anchor = (lp > 0 && p->byteAt(0) == '^');
     ptrdiff_t pinit = anchor ? 1 : 0; /* skip anchor character */
     prepstate(&ms, L, s, p);
@@ -904,8 +904,8 @@ static int str_find_aux(lua_State* L, int find)
       {
         if (find)
         {
-          lua_pushinteger(L, ((lua_Integer)(s1)) + 1); /* start */
-          lua_pushinteger(L, (res));    /* end */
+          lua_pushinteger(L, (lua_Integer)s1 + 1); /* start */
+          lua_pushinteger(L, res);    /* end */
           return push_captures(&ms, NOMATCH, 0) + 2;
         }
         else
@@ -970,7 +970,7 @@ static int gmatch(lua_State* L)
   if (init > ls)   /* start after string's end? */
     init = ls + 1;
   prepstate(&gm->ms, L, s, p);
-  gm->src = (init);
+  gm->src = init;
   gm->p = 0;
   gm->lastmatch = NOMATCH;
   lua_pushcclosure(L, gmatch_aux, 3);
@@ -988,16 +988,16 @@ static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
   {
     luaL_addlstring(b, nv, sc.litStart, sc.litEnd - sc.litStart);
     if (sc.spec == L_ESC) /* '%%' */
-      luaL_addchar(b, ((char)(sc.spec)));
+      luaL_addchar(b, (char)sc.spec);
     else if (sc.spec == '0') /* '%0' */
-      luaL_addlstring(b, ms->src->view(), (s), (e - s));
+      luaL_addlstring(b, ms->src->view(), s, e - s);
     else if ('1' <= sc.spec && sc.spec <= '9')
     { /* '%n' */
       Capture cap = get_onecapture(ms, sc.spec - '1', s, e);
       if (cap.len == CAP_POSITION)
         luaL_addvalue(b); /* add position to accumulated result */
       else
-        luaL_addlstring(b, ms->src->view(), (cap.init), (cap.len));
+        luaL_addlstring(b, ms->src->view(), cap.init, cap.len);
     }
     else
     {
@@ -1042,8 +1042,8 @@ static int add_value(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
   if (!lua_toboolean(L, -1))
   {                /* nil or false? */
     lua_pop(L, 1); /* remove value */
-    luaL_addlstring(b, ms->src->view(), (s),
-                    (e - s)); /* keep original text */
+    luaL_addlstring(b, ms->src->view(), s,
+                    e - s); /* keep original text */
     return 0;                           /* no changes */
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
@@ -1068,7 +1068,7 @@ static int str_gsub(lua_State* L)
   ptrdiff_t lastmatch = NOMATCH; /* end of last match */
   int tr = lua_type(L, 3);       /* replacement type */
   /* max replacements */
-  lua_Integer max_s = luaL_optinteger(L, 4, ((lua_Integer)(srcl)) + 1);
+  lua_Integer max_s = luaL_optinteger(L, 4, (lua_Integer)srcl + 1);
   int anchor = (lp > 0 && pat->byteAt(0) == '^');
   ptrdiff_t pinit = anchor ? 1 : 0; /* skip anchor character */
   lua_Integer n = 0;                /* replacement count */
@@ -1089,7 +1089,7 @@ static int str_gsub(lua_State* L)
       src = lastmatch = e;
     }
     else if (src < ms.src_end) /* otherwise, skip one character */
-      luaL_addchar(&b, ((char)(srcs->byteAt(src++))));
+      luaL_addchar(&b, (char)(srcs->byteAt(src++)));
     else
       break; /* end of subject */
     if (anchor)
@@ -1099,7 +1099,7 @@ static int str_gsub(lua_State* L)
     lua_pushvalue(L, 1); /* return original string */
   else
   { /* something changed */
-    luaL_addlstring(&b, srcs->view(), (src), (ms.src_end - src));
+    luaL_addlstring(&b, srcs->view(), src, ms.src_end - src);
     luaL_pushresult(&b); /* create and return new string */
   }
   lua_pushinteger(L, n); /* number of substitutions */
@@ -1127,7 +1127,7 @@ static int str_gsub(lua_State* L)
 ** to nibble boundaries by making what is left after that first digit a
 ** multiple of 4.
 */
-constexpr int L_NBFD = ((DBL_MANT_DIG - 1) % 4 + 1);
+constexpr int L_NBFD = (DBL_MANT_DIG - 1) % 4 + 1;
 
 /*
 ** Add integer part of 'x' to buffer and return new 'x'
@@ -1136,7 +1136,7 @@ static lua_Number adddigit(byte_span buff, size_t n, lua_Number x)
 {
   lua_Number dd = floor(x); /* get integer part from 'x' */
   int d = (int) dd;
-  buff[n] = ((char)(d < 10 ? d + '0' : d - 10 + 'a')); /* add to buffer */
+  buff[n] = (char)(d < 10 ? d + '0' : d - 10 + 'a'); /* add to buffer */
   return x - dd;                                        /* return what is left */
 }
 
@@ -1198,7 +1198,7 @@ static size_t lua_number2strx(lua_State* L, byte_span area, size_t off, size_t s
   if (fmt[1] == 'A')
   {
     for (size_t i = 0; i < n; i++)
-      area[off + i] = ((char)(locale_toupper(((unsigned char)(area[off + i])))));
+      area[off + i] = (char)(locale_toupper((unsigned char)area[off + i]));
   }
   else if (l_unlikely(fmt[1] != 'a'))
   {
@@ -1214,7 +1214,7 @@ static size_t lua_number2strx(lua_State* L, byte_span area, size_t off, size_t s
 ** and '\0') + number of decimal digits to represent maxfloat (which
 ** is maximum exponent + 1). (99+3+1, adding some extra, 110)
 */
-constexpr int MAX_ITEMF = (110 + DBL_MAX_10_EXP);
+constexpr int MAX_ITEMF = 110 + DBL_MAX_10_EXP;
 
 /*
 ** All formats except '%f' do not need that large limit.  The other
@@ -1251,7 +1251,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
     if (c == '"' || c == '\\' || c == '\n')
     {
       luaL_addchar(b, '\\');
-      luaL_addchar(b, ((char)(c)));
+      luaL_addchar(b, (char)c);
     }
     else if (locale_matchclass(c, 'c'))
     {
@@ -1266,7 +1266,7 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
       luaL_addlstring(b, d, 0, d.size());
     }
     else
-      luaL_addchar(b, ((char)(c)));
+      luaL_addchar(b, (char)c);
   }
   luaL_addchar(b, '"');
 }
@@ -1330,7 +1330,7 @@ static void addliteral(lua_State* L, luaL_Buffer* b, int arg)
       lua_Integer n = lua_tointeger(L, arg);
       if (n == LUA_MININTEGER)
       {
-        nb = area.write_number(((lua_Unsigned)(n)), 16, off, true);
+        nb = area.write_number((lua_Unsigned)n, 16, off, true);
       }
       else
       {
@@ -1462,7 +1462,7 @@ static size_t packformat(byte_span area, size_t off, size_t maxitem,
   size_t prefixlen = prefix.size();
   size_t bodylen = body.size();
   size_t content = prefixlen + bodylen;
-  size_t width = (spec->width);
+  size_t width = spec->width;
   size_t total = (content > width) ? content : width;
   size_t pad = total - content;
   size_t pos = off;
@@ -1508,14 +1508,14 @@ static size_t formatint(lua_State* L, int arg, byte_view form,
              : (spec.conv == 'x' || spec.conv == 'X') ? 16
                                                       : 10;
   lua_Unsigned u = (issigned && n < 0)
-                       ? 0u - ((lua_Unsigned)(n))
-                       : (n);
+                       ? 0u - (lua_Unsigned)n
+                       : n;
   byte_inline<24> digits;
   size_t ndigits = digits.write_number(u, base);
   if (spec.conv == 'X')
   {
     for (size_t i = 0; i < ndigits; i++)
-      digits[i] = ((char)(locale_toupper(((unsigned char)(digits[i])))));
+      digits[i] = (char)(locale_toupper((unsigned char)digits[i]));
   }
   byte_inline<MAX_ITEM> body;
   size_t blen = 0;
@@ -1523,7 +1523,7 @@ static size_t formatint(lua_State* L, int arg, byte_view form,
     ;
   else
   {
-    size_t mindigits = (spec.precision >= 0) ? (spec.precision) : 1;
+    size_t mindigits = (spec.precision >= 0) ? spec.precision : 1;
     while (blen + ndigits < mindigits)
       body[blen++] = '0';
     body.copy_from(digits.view().substr(0, ndigits), blen);
@@ -1562,7 +1562,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
   checkformat(L, form, lt::fmtflags_f, 1);
   FormatSpec spec;
   scanformat(form, &spec);
-  char lower = ((char)(locale_tolower(((unsigned char)(spec.conv)))));
+  char lower = (char)(locale_tolower((unsigned char)spec.conv));
   int precision = (spec.precision >= 0) ? spec.precision : 6;
   char prefix[1];
   size_t prefixlen = 0;
@@ -1612,7 +1612,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
         bool seennonzero = false;
         for (size_t i = 0; i < epos; i++)
         {
-          if (locale_isdigit(((unsigned char)(body[i]))))
+          if (locale_isdigit((unsigned char)body[i]))
           {
             if (body[i] != '0')
               seennonzero = true;
@@ -1622,7 +1622,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
         }
         if (sig == 0)
           sig = 1;
-        size_t zeros = (((size_t)(precision)) > sig) ? precision - sig : 0;
+        size_t zeros = ((size_t)precision > sig) ? precision - sig : 0;
         body.move_from(body.view().substr(epos, blen - epos), epos + zeros);
         body.fill(std::byte{'0'}, epos, zeros);
         blen += zeros;
@@ -1632,7 +1632,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
   if (spec.conv == 'E' || spec.conv == 'G')
   {
     for (size_t i = 0; i < blen; i++)
-      body[i] = ((char)(locale_toupper(((unsigned char)(body[i])))));
+      body[i] = (char)(locale_toupper((unsigned char)body[i]));
   }
   return packformat(area, off, maxitem, &spec,
                     byte_view(prefix, std::size(prefix)).substr(0, prefixlen),
@@ -1651,10 +1651,10 @@ static int str_format(lua_State* L)
   while (i < sfl)
   {
     if (sf->byteAt(i) != L_ESC)
-      luaL_addchar(&b, ((char)(sf->byteAt(i++))));
+      luaL_addchar(&b, (char)(sf->byteAt(i++)));
     else if (sv_byteat(sf->view(), ++i) == L_ESC)
     {
-      luaL_addchar(&b, ((char)(sf->byteAt(i)))); /* %% */
+      luaL_addchar(&b, (char)(sf->byteAt(i))); /* %% */
       i++;
     }
     else
@@ -1676,7 +1676,7 @@ static int str_format(lua_State* L)
         FormatSpec spec;
         scanformat(formv, &spec);
         char buff[1] {};
-        buff[0] = ((char)(luaL_checkinteger(L, arg)));
+        buff[0] = (char)(luaL_checkinteger(L, arg));
         byte_view body(buff, 1);
         nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, body, false);
         break;
@@ -1768,8 +1768,8 @@ static int str_format(lua_State* L)
           { /* format the string into 'buff' */
             FormatSpec spec;
             scanformat(formv, &spec);
-            size_t blen = (spec.precision >= 0 && ((size_t)(spec.precision)) < sv.size())
-                              ? (spec.precision) /* truncate */
+            size_t blen = (spec.precision >= 0 && (size_t)spec.precision < sv.size())
+                              ? spec.precision /* truncate */
                               : sv.size();
             nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, sv.substr(0, blen), false);
             lua_pop(L, 1);
@@ -1811,7 +1811,7 @@ constexpr size_t PACK_MAXALIGN = 16;
 constexpr int NB = CHAR_BIT;
 
 /* mask for one character (NB 1's) */
-constexpr int MC = ((1 << NB) - 1);
+constexpr int MC = (1 << NB) - 1;
 
 /* size of a lua_Integer */
 constexpr int SZINT = 8;
@@ -1899,7 +1899,7 @@ static size_t getnumlimit(Header* h, size_t df)
   size_t sz = getnum(h, df);
   if (l_unlikely((sz - 1u) >= MAXINTSIZE))
   {
-    lua_pushinteger(h->L, (sz));
+    lua_pushinteger(h->L, sz);
     lua_pushinteger(h->L, MAXINTSIZE);
     return luaL_errori(h->L, lt::integral_size_d_out_of_limits_1_d);
   }
@@ -1965,8 +1965,8 @@ static PackOption getoption(Header* h)
     return {Kstring, getnumlimit(h, SZ_SIZET)};
   case 'c':
   {
-    size_t size = getnum(h, (-1));
-    if (l_unlikely(size == ((size_t)(-1))))
+    size_t size = getnum(h, -1);
+    if (l_unlikely(size == (size_t)(-1)))
       luaL_errori(h->L, lt::missing_size_for_format_option_c);
     return {Kchar, size};
   }
@@ -2144,7 +2144,7 @@ static int str_pack(lua_State* L)
         lua_Integer lim = (lua_Integer) 1 << ((size * NB) - 1);
         luaL_argchecki(L, -lim <= n && n < lim, arg, lt::integer_overflow);
       }
-      packint(&b, n, h.islittle, size, (n < 0));
+      packint(&b, n, h.islittle, size, n < 0);
       break;
     }
     case Kuint:
@@ -2238,7 +2238,7 @@ static int str_packsize(lua_State* L)
     luaL_argchecki(L, totalsize <= MAX_SIZE - size, 1, lt::format_result_too_large);
     totalsize += size;
   }
-  lua_pushinteger(L, (totalsize));
+  lua_pushinteger(L, totalsize);
   return 1;
 }
 
@@ -2259,14 +2259,14 @@ static lua_Integer unpackint(lua_State* L, byte_view data, size_t off,
   for (i = limit - 1; i >= 0; i--)
   {
     res <<= NB;
-    res |= (lua_Unsigned) (unsigned char) data[off + ((size_t)(islittle ? i : size - 1 - i))];
+    res |= (lua_Unsigned) (unsigned char) data[off + (size_t)(islittle ? i : size - 1 - i)];
   }
   if (size < SZINT)
   { /* real size smaller than lua_Integer? */
     if (issigned)
     { /* needs sign extension? */
       lua_Unsigned mask = (lua_Unsigned) 1 << (size * NB - 1);
-      res = ((res ^ mask) - mask); /* do sign extension */
+      res = (res ^ mask) - mask; /* do sign extension */
     }
   }
   else if (size > SZINT)
@@ -2274,7 +2274,7 @@ static lua_Integer unpackint(lua_State* L, byte_view data, size_t off,
     int mask = (!issigned || (lua_Integer) res >= 0) ? 0 : MC;
     for (i = limit; i < size; i++)
     {
-      if (l_unlikely((unsigned char) data[off + ((size_t)(islittle ? i : size - 1 - i))] != mask))
+      if (l_unlikely((unsigned char) data[off + (size_t)(islittle ? i : size - 1 - i)] != mask))
       {
         lua_pushinteger(L, size);
         luaL_errori(L, lt::d_byte_integer_does_not_fit_into_Lua_Integer);
@@ -2311,7 +2311,7 @@ static int str_unpack(lua_State* L)
     case Kuint:
     {
       lua_Integer res = unpackint(L, data, pos, h.islittle,
-                                  ((int)(size)), (opt == Kint));
+                                  (int)size, opt == Kint);
       lua_pushinteger(L, res);
       break;
     }
@@ -2341,10 +2341,10 @@ static int str_unpack(lua_State* L)
     case Kstring:
     {
       lua_Unsigned len = unpackint(L, data, pos,
-                                                  h.islittle, ((int)(size)), 0);
+                                                  h.islittle, (int)size, 0);
       luaL_argchecki(L, len <= ld - pos - size, 2, lt::data_string_too_short);
-      lua_pushlstring(L, data, pos + size, (len));
-      pos += ((size_t)(len)); /* skip string */
+      lua_pushlstring(L, data, pos + size, len);
+      pos += (size_t)len; /* skip string */
       break;
     }
     case Kzstr:
@@ -2364,7 +2364,7 @@ static int str_unpack(lua_State* L)
     }
     pos += size;
   }
-  lua_pushinteger(L, ((lua_Integer)(pos)) + 1); /* next position */
+  lua_pushinteger(L, (lua_Integer)pos + 1); /* next position */
   return n + 1;
 }
 

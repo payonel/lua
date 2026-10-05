@@ -26,7 +26,7 @@ static l_forceinline void resethookcount(lua_State* L)
 ** mark for entries in 'lineinfo' array that has absolute information in
 ** 'abslineinfo' array
 */
-constexpr int ABSLINEINFO = (-0x80);
+constexpr int ABSLINEINFO = -0x80;
 
 int luaG_getfuncline(const Proto* f, int pc);
 struct LocalSlot

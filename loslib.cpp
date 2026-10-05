@@ -225,7 +225,7 @@ static int os_date(lua_State* L)
 {
   byte_view sfmt = luaL_optlstring(L, 1, lt::fmt_c);
   size_t sp = 0;
-  lua_Integer t = (lua_isnoneornil(L, (2)) ? os_now() : l_checktime(L, (2)));
+  lua_Integer t = (lua_isnoneornil(L, 2) ? os_now() : l_checktime(L, 2));
   std::optional<OsDate> stm;
   if (sv_byteat(sfmt, sp) == '!')
   { /* UTC? */

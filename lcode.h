@@ -18,7 +18,7 @@ namespace lua::compiler
 ** Marks the end of a patch list. It is an invalid value both as an absolute
 ** address, and as a list link (would link an element to itself).
 */
-constexpr int NO_JUMP = (-1);
+constexpr int NO_JUMP = -1;
 
 /*
 ** grep "ORDER OPR" if you change these enums  (ORDER OP)

@@ -70,7 +70,7 @@ namespace lua::runtime
 /* Decrement the number of non-yieldable calls */
 
 /* Non-yieldable call increment */
-constexpr int nyci = (0x10000 | 1);
+constexpr int nyci = 0x10000 | 1;
 
 struct lua_longjmp; /* defined in ldo.c */
 
@@ -89,7 +89,7 @@ typedef sig_atomic_t l_signalT;
 */
 constexpr int EXTRA_STACK = 5;
 
-constexpr int BASIC_STACK_SIZE = (2 * LUA_MINSTACK);
+constexpr int BASIC_STACK_SIZE = 2 * LUA_MINSTACK;
 
 /* kinds of Garbage Collection */
 constexpr int KGC_INC = 0; /* incremental gc */
@@ -127,31 +127,31 @@ constexpr l_uint32 CIST_NRESULTS = 0xffu;
 
 /* bits 8-11 count call metamethods (and their extra arguments) */
 constexpr int CIST_CCMT = 8; /* the offset, not the mask */
-constexpr l_uint32 MAX_CCMT = (0xfu << CIST_CCMT);
+constexpr l_uint32 MAX_CCMT = 0xfu << CIST_CCMT;
 
 /* Bits 12-14 are used for CIST_RECST (see below) */
 constexpr int CIST_RECST = 12; /* the offset, not the mask */
 
 /* call is running a C function (still in first 16 bits) */
-constexpr l_uint32 CIST_C = (1u << (CIST_RECST + 3));
+constexpr l_uint32 CIST_C = 1u << (CIST_RECST + 3);
 /* call is on a fresh "luaV_execute" frame */
-constexpr l_uint32 CIST_FRESH = (((l_uint32)(CIST_C)) << 1);
+constexpr l_uint32 CIST_FRESH = (l_uint32)CIST_C << 1;
 /* function is closing tbc variables */
-constexpr l_uint32 CIST_CLSRET = (CIST_FRESH << 1);
+constexpr l_uint32 CIST_CLSRET = CIST_FRESH << 1;
 /* function has tbc variables to close */
-constexpr l_uint32 CIST_TBC = (CIST_CLSRET << 1);
+constexpr l_uint32 CIST_TBC = CIST_CLSRET << 1;
 /* original value of 'allowhook' */
-constexpr l_uint32 CIST_OAH = (CIST_TBC << 1);
+constexpr l_uint32 CIST_OAH = CIST_TBC << 1;
 /* call is running a debug hook */
-constexpr l_uint32 CIST_HOOKED = (CIST_OAH << 1);
+constexpr l_uint32 CIST_HOOKED = CIST_OAH << 1;
 /* doing a yieldable protected call */
-constexpr l_uint32 CIST_YPCALL = (CIST_HOOKED << 1);
+constexpr l_uint32 CIST_YPCALL = CIST_HOOKED << 1;
 /* call was tail called */
-constexpr l_uint32 CIST_TAIL = (CIST_YPCALL << 1);
+constexpr l_uint32 CIST_TAIL = CIST_YPCALL << 1;
 /* last hook called yielded */
-constexpr l_uint32 CIST_HOOKYIELD = (CIST_TAIL << 1);
+constexpr l_uint32 CIST_HOOKYIELD = CIST_TAIL << 1;
 /* function "called" a finalizer */
-constexpr l_uint32 CIST_FIN = (CIST_HOOKYIELD << 1);
+constexpr l_uint32 CIST_FIN = CIST_HOOKYIELD << 1;
 
 constexpr int get_nresults(l_uint32 cs)
 {
@@ -166,7 +166,7 @@ constexpr int get_nresults(l_uint32 cs)
 */
 static l_forceinline lu_byte getcistrecst(const CallInfo* ci)
 {
-  return ((ci->callstatus >> CIST_RECST) & 7);
+  return (ci->callstatus >> CIST_RECST) & 7;
 }
 static l_forceinline void setcistrecst(CallInfo* ci, int st)
 {
@@ -469,7 +469,7 @@ static l_forceinline int yieldable(const lua_State* L)
 /* real number of C calls */
 static l_forceinline int getCcalls(const lua_State* L)
 {
-  return (L->nCcalls & 0xffff);
+  return L->nCcalls & 0xffff;
 }
 
 static l_forceinline void incnny(lua_State* L)

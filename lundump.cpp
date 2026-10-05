@@ -92,12 +92,12 @@ static std::span<T> getaddr(LoadState* S, int n)
 static lu_byte loadByte(LoadState* S)
 {
   int b = (S->Z->pos < S->Z->chunk.size())
-              ? ((unsigned char)(S->Z->chunk[S->Z->pos++]))
+              ? (unsigned char)S->Z->chunk[S->Z->pos++]
               : luaZ_fill(S->Z);
   if (b == EOZ)
     error(S, lt::truncated_chunk);
   S->offset++;
-  return ((lu_byte)(b));
+  return (lu_byte)b;
 }
 
 static lua_Unsigned loadVarint(LoadState* S, lua_Unsigned limit)
@@ -122,7 +122,7 @@ static size_t loadSize(LoadState* S)
 
 static int loadInt(LoadState* S)
 {
-  return ((int)(loadVarint(S, INT_MAX)));
+  return (int)(loadVarint(S, INT_MAX));
 }
 
 static lua_Number loadNumber(LoadState* S)
@@ -137,9 +137,9 @@ static lua_Integer loadInteger(LoadState* S)
   lua_Unsigned cx = loadVarint(S, LUA_MAXUNSIGNED);
   /* decode unsigned to signed */
   if ((cx & 1) != 0)
-    return (~(cx >> 1));
+    return ~(cx >> 1);
   else
-    return (cx >> 1);
+    return cx >> 1;
 }
 
 /*
@@ -164,7 +164,7 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
       setslot(nullptr);
       return;
     }
-    if (novariant(S->h->luaH_getint((idx), &stv)) != LUA_TSTRING)
+    if (novariant(S->h->luaH_getint(idx, &stv)) != LUA_TSTRING)
       error(S, lt::invalid_string_index);
     assert(ttisstring(&stv));
     ts = tsvalue(&stv); /* get its value */
@@ -194,7 +194,7 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
   /* add string to list of saved strings */
   S->nstr++;
   setsvalue(L, &sv, ts);
-  S->h->luaH_setint(L, (S->nstr), &sv);
+  S->h->luaH_setint(L, S->nstr, &sv);
   assert(novariant(S->h->tt) >= LUA_TSTRING);
   luaC_objbarrierback(L, S->h, ts);
 }
@@ -233,10 +233,10 @@ static void loadConstants(LoadState* S, Proto* f)
       setnilvalue(o);
       break;
     case LUA_VFALSE:
-      ((o)->tt_ = LUA_VFALSE);
+      (o->tt_ = LUA_VFALSE);
       break;
     case LUA_VTRUE:
-      ((o)->tt_ = LUA_VTRUE);
+      (o->tt_ = LUA_VTRUE);
       break;
     case LUA_VNUMFLT:
       setfltvalue(o, loadNumber(S));
@@ -346,7 +346,7 @@ static void loadFunction(LoadState* S, Proto* f)
   f->lastlinedefined = loadInt(S);
   f->numparams = loadByte(S);
   /* get only the meaningful flags */
-  f->flag = (loadByte(S) & ~PF_FIXED);
+  f->flag = loadByte(S) & ~PF_FIXED;
   if (S->fixed)
     f->flag |= PF_FIXED; /* signal that code is fixed */
   f->maxstacksize = loadByte(S);

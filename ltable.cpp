@@ -66,7 +66,7 @@ constexpr int MAXABITS = 30;
 ** MAXASIZEB is the maximum number of elements in the array part such
 ** that the size of the array fits in 'size_t'.
 */
-constexpr size_t MAXASIZEB = (MAX_SIZET / (cost::Value + cost::Byte));
+constexpr size_t MAXASIZEB = MAX_SIZET / (cost::Value + cost::Byte);
 
 /*
 ** MAXASIZE is the maximum size of the array part. It is the minimum
@@ -103,7 +103,7 @@ inline int Table::hashpow2(lua_Unsigned n) const
 */
 inline int Table::hashmod(lua_Unsigned n) const
 {
-  return (int)l_umod(n, ((sizenode(this) - 1) | 1));
+  return (int)l_umod(n, (sizenode(this) - 1) | 1);
 }
 
 inline int Table::hashstr(TString* str) const
@@ -144,9 +144,9 @@ static const TValue absentkey = {{0, nullptr}, LUA_VABSTKEY};
 int Table::hashint(lua_Integer i) const
 {
   const Table* t = this;
-  lua_Unsigned ui = (i);
-  if (ui <= (INT_MAX))
-    return ((int)(ui)) % ((sizenode(t) - 1) | 1);
+  lua_Unsigned ui = i;
+  if (ui <= INT_MAX)
+    return (int)ui % ((sizenode(t) - 1) | 1);
   else
     return t->hashmod(ui);
 }
@@ -168,16 +168,16 @@ static unsigned l_hashfloat(lua_Number n)
 {
   int i;
   IntResult ni;
-  n = frexp(n, &i) * -((lua_Number)(INT_MIN));
+  n = frexp(n, &i) * -(lua_Number)INT_MIN;
   if (!lua_numbertointeger(n, &ni))
   { /* is 'n' inf/-inf/NaN? */
-    assert((!((n) == (n))) || fabs(n) == ((lua_Number)(HUGE_VAL)));
+    assert((!(n == n)) || fabs(n) == (lua_Number)HUGE_VAL);
     return 0;
   }
   else
   { /* normal case */
-    unsigned int u = ((unsigned int)(i)) + ((unsigned int)(ni.v));
-    return (u <= (INT_MAX) ? u : ~u);
+    unsigned int u = (unsigned int)i + (unsigned int)ni.v;
+    return (u <= INT_MAX ? u : ~u);
   }
 }
 
@@ -309,7 +309,7 @@ int Table::nodegeneric(const TValue* key, int deadok)
       return i; /* that's it */
     else
     {
-      int nx = ((n)->next);
+      int nx = n->next;
       if (nx == 0)
         return -1; /* not found */
       i += nx;
@@ -330,7 +330,7 @@ const TValue* Table::getgeneric(const TValue* key, int deadok)
 */
 static int checkrange(lua_Integer k, int limit)
 {
-  return (k >= 1 && k <= limit) ? ((int)(k)) : 0;
+  return (k >= 1 && k <= limit) ? (int)k : 0;
 }
 
 /*
@@ -411,7 +411,7 @@ int Table::luaH_next(lua_State* L, StkId key)
       TValue nk;
       getnodekey(L, &nk, n);
       setslot(L, key, &nk);
-      setslot(L, key + 1, (&(n)->val));
+      setslot(L, key + 1, &n->val);
       return 1;
     }
   }
@@ -674,7 +674,7 @@ void Table::setnodevector(lua_State* L, int size)
     for (i = 0; i < size; i++)
     {
       Node* n = gnode(t, i);
-      ((n)->next) = 0;
+      n->next = 0;
       setnilkey(n);
       setempty(&n->val);
     }
@@ -697,7 +697,7 @@ void reinserthash(lua_State* L, Table* ot, Table* t)
          already present in the table */
       TValue k;
       getnodekey(L, &k, old);
-      t->newcheckedkey(&k, (&(old)->val));
+      t->newcheckedkey(&k, &old->val);
     }
   }
 }
@@ -714,10 +714,10 @@ static void exchangehashpart(Table* t1, Table* t2)
   int bitdummy1 = t1->flags & BITDUMMY;
   t1->node = t2->node;
   t1->lastfree = t2->lastfree;
-  t1->flags = ((t1->flags & NOTBITDUMMY) | (t2->flags & BITDUMMY));
+  t1->flags = (t1->flags & NOTBITDUMMY) | (t2->flags & BITDUMMY);
   t2->node = node;
   t2->lastfree = lastfree;
-  t2->flags = ((lu_byte)((t2->flags & NOTBITDUMMY) | bitdummy1));
+  t2->flags = (lu_byte)((t2->flags & NOTBITDUMMY) | bitdummy1);
 }
 
 /*
@@ -735,7 +735,7 @@ void Table::reinsertOldSlice(int oldasize,
     if (!tagisempty(tag))
     { /* a non-empty entry? */
       TValue key, aux;
-      setivalue(&key, ((lua_Integer)(i)) + 1); /* make the key */
+      setivalue(&key, (lua_Integer)i + 1); /* make the key */
       farr2val(t, i, tag, &aux);         /* copy value into 'aux' */
       t->insertkey(&key, &aux);          /* insert entry into the hash part */
     }
@@ -946,7 +946,7 @@ int Table::insertkey(const TValue* key, TValue* value)
     { /* is colliding node out of its main position? */
       /* yes; move colliding node into free position */
       while (othern + (gnode(t, othern)->next) != mp) /* find previous */
-        othern += (gnode(t, othern)->next);
+        othern += gnode(t, othern)->next;
       (gnode(t, othern)->next) = f - othern; /* rechain to point to 'f' */
       copynode(gnode(t, f), gnode(t, mp));          /* copy colliding node into free pos. (mp->next also goes) */
       if ((gnode(t, mp)->next) != 0)
@@ -969,7 +969,7 @@ int Table::insertkey(const TValue* key, TValue* value)
   }
   setnodekey(gnode(t, mp), key);
   assert(isempty(&gnode(t, mp)->val));
-  setobj(nullptr, (&gnode(t, mp)->val), value);
+  setobj(nullptr, &gnode(t, mp)->val, value);
   return 1;
 }
 
@@ -987,7 +987,7 @@ void Table::newcheckedkey(const TValue* key, TValue* value)
   {
     int done = t->insertkey(key, value); /* insert key in the hash part */
     assert(done);                    /* it cannot fail */
-    ((void)(done));                    /* to avoid warnings */
+    (void)done;                    /* to avoid warnings */
   }
 }
 
@@ -1020,7 +1020,7 @@ int Table::nodeintfromhash(lua_Integer key)
       return i; /* that's it */
     else
     {
-      int nx = ((n)->next);
+      int nx = n->next;
       if (nx == 0)
         break;
       i += nx;
@@ -1079,7 +1079,7 @@ int Table::nodeshortstr(TString* key)
       if (luaS_eqstr(keystrval(n), key))
         return i; /* that's it */
     }
-    int nx = ((n)->next);
+    int nx = n->next;
     if (nx == 0)
       return -1; /* not found */
     i += nx;
@@ -1159,7 +1159,7 @@ int Table::finishnodeset(int idx, TValue* val)
   Table* t = this;
   if (idx >= 0 && !isempty(&gnode(t, idx)->val))
   {
-    setobj(nullptr, (&gnode(t, idx)->val), val);
+    setobj(nullptr, &gnode(t, idx)->val, val);
     return HOK; /* success */
   }
   else
@@ -1173,7 +1173,7 @@ int Table::rawfinishnodeset(int idx, TValue* val)
   else
   {
     Table* t = this;
-    setobj(nullptr, (&gnode(t, idx)->val), val);
+    setobj(nullptr, &gnode(t, idx)->val, val);
     return 1; /* success */
   }
 }
@@ -1220,7 +1220,7 @@ int Table::luaH_psetshortstr(TString* key, TValue* val)
   int idx = t->nodeshortstr(key);
   if (idx >= 0 && !isempty(&gnode(t, idx)->val))
   {                                                        /* key already has a value? (all too common) */
-    setobj(nullptr, (&gnode(t, idx)->val), val); /* update it */
+    setobj(nullptr, &gnode(t, idx)->val, val); /* update it */
     return HOK;                                            /* done */
   }
   else if (checknoTM(t->metatable, TM_NEWINDEX))
@@ -1300,14 +1300,14 @@ void Table::luaH_finishset(lua_State* L, const TValue* key,
         setivalue(&aux, k.v);
         actk = &aux; /* use the integer as the key */
       }
-      else if (l_unlikely((!((f) == (f)))))
+      else if (l_unlikely(!(f == f)))
         luaG_runerror(L, lt::table_index_is_NaN);
     }
     t->luaH_newkey(L, actk, value);
   }
   else if (hres > 0)
   { /* regular Node? */
-    setobj(L, (&gnode(t, hres - HFIRSTNODE)->val), value);
+    setobj(L, &gnode(t, hres - HFIRSTNODE)->val, value);
   }
   else
   {               /* array entry */

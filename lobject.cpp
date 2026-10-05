@@ -42,7 +42,7 @@ int luaO_checkliveness(lua_State* L, const TValue* obj)
   (void) L;
   if (iscollectable(obj))
   {
-    assert((ttypetag(obj) == gcvalue(obj)->tt));
+    assert(ttypetag(obj) == gcvalue(obj)->tt);
     assert(L == nullptr || !isdead(L->l_G, gcvalue(obj)));
   }
   return 1;
@@ -110,7 +110,7 @@ int luaO_codeparam(lua_Integer p)
 l_mem luaO_applyparam(int p, l_mem x)
 {
   int m = p & 0xF;  /* mantissa */
-  int e = (p >> 4); /* exponent */
+  int e = p >> 4; /* exponent */
   if (e > 0)
   {            /* normalized? */
     e--;       /* correct exponent */
@@ -177,19 +177,19 @@ static lua_Number numarith(lua_State* L, int op, lua_Number v1,
   switch (op)
   {
   case LUA_OPADD:
-    return ((void)(L), (v1) + (v2));
+    return (v1) + v2;
   case LUA_OPSUB:
-    return ((void)(L), (v1) - (v2));
+    return (v1) - v2;
   case LUA_OPMUL:
-    return ((void)(L), (v1) * (v2));
+    return (v1) * v2;
   case LUA_OPDIV:
-    return ((void)(L), (v1) / (v2));
+    return v1 / v2;
   case LUA_OPPOW:
-    return ((void)(L), ((v2) == 2) ? (v1) * (v1) : pow(v1, v2));
+    return ((v2 == 2) ? (v1) * v1 : pow(v1, v2));
   case LUA_OPIDIV:
-    return ((void)(L), floor((v1) / (v2)));
+    return floor(v1 / v2);
   case LUA_OPUNM:
-    return ((void)(L), -(v1));
+    return -v1;
   case LUA_OPMOD:
     return luaV_modf(L, v1, v2);
   default:
@@ -264,7 +264,7 @@ void luaO_arith(lua_State* L, int op, StkId p1slot, StkId p2slot,
   if (!luaO_rawarith(L, op, p1, p2, &r))
   {
     /* could not perform raw operation; try metamethod */
-    luaT_trybinTM(L, p1, p2, res, ((TMS)((op - LUA_OPADD) + TM_ADD)), NOSLOT, NOSLOT);
+    luaT_trybinTM(L, p1, p2, res, (TMS)((op - LUA_OPADD) + TM_ADD), NOSLOT, NOSLOT);
   }
   else
     setslot(L, res, &r);
@@ -274,9 +274,9 @@ lu_byte luaO_hexavalue(int c)
 {
   assert(lisxdigit(c));
   if (lisdigit(c))
-    return ((lu_byte)(c - '0'));
+    return (lu_byte)(c - '0');
   else
-    return ((lu_byte)((ltolower(c) - 'a') + 10));
+    return (lu_byte)((ltolower(c) - 'a') + 10);
 }
 
 struct Sign
@@ -451,7 +451,7 @@ static NumParse str2dec(byte_view s, size_t off)
       }
     }
     long magnitude = e10 + ((intdigits > 0) ? intdigits : -fraczeros);
-    v = (magnitude > 0) ? (HUGE_VAL) : 0.0;
+    v = (magnitude > 0) ? HUGE_VAL : 0.0;
   }
   else if (res.ec != std::errc())
     return {off, 0.0};
@@ -485,7 +485,7 @@ static NumParse l_str2d(byte_view s, size_t off)
 {
   size_t pmode = s.find_first_of(lt::xXnN_chars, off); /* look for special chars */
   int mode = (pmode != byte_view::npos)
-                 ? ltolower(((unsigned char)(s[pmode])))
+                 ? ltolower((unsigned char)s[pmode])
                  : 0;
   if (mode == 'n') /* reject 'inf' and 'nan' */
     return {byte_view::npos, 0.0};
@@ -507,8 +507,8 @@ static NumParse l_str2d(byte_view s, size_t off)
   return r;
 }
 
-constexpr lua_Unsigned MAXBY10 = (LUA_MAXINTEGER / 10);
-constexpr int MAXLASTD = (LUA_MAXINTEGER % 10);
+constexpr lua_Unsigned MAXBY10 = LUA_MAXINTEGER / 10;
+constexpr int MAXLASTD = LUA_MAXINTEGER % 10;
 
 static IntParse l_str2int(byte_view s, size_t off)
 {
@@ -547,7 +547,7 @@ static IntParse l_str2int(byte_view s, size_t off)
   if (empty || p != s.size())
     return {byte_view::npos, 0}; /* something wrong in the numeral */
   else
-    return {p, ((lua_Integer)((neg) ? 0u - a : a))};
+    return {p, (lua_Integer)(neg ? 0u - a : a)};
 }
 
 size_t luaO_str2num(byte_view s, TValue* o)
@@ -575,17 +575,17 @@ int luaO_utf8esc(byte_span buff, lua_Integer x)
   int n = 1; /* number of bytes put in buffer (backwards) */
   assert(0 <= x && x <= 0x7FFFFFFF);
   if (x < 0x80) /* ASCII? */
-    buff[UTF8BUFFSZ - 1] = ((char)(x));
+    buff[UTF8BUFFSZ - 1] = (char)x;
   else
   {                          /* need continuation bytes */
     int mfb = 0x3f; /* maximum that fits in first byte */
     do
     { /* add continuation bytes */
-      buff[UTF8BUFFSZ - (n++)] = ((char)(0x80 | (x & 0x3f)));
+      buff[UTF8BUFFSZ - (n++)] = (char)(0x80 | (x & 0x3f));
       x >>= 6;   /* remove added bits */
       mfb >>= 1; /* now there is one less bit available in first byte */
     } while (x > mfb); /* still needs continuation byte? */
-    buff[UTF8BUFFSZ - n] = ((char)((~mfb << 1) | x)); /* add first byte */
+    buff[UTF8BUFFSZ - n] = (char)((~mfb << 1) | x); /* add first byte */
   }
   return n;
 }
@@ -858,7 +858,7 @@ const InternalString* luaO_pushvfstring(lua_State* L,
     case 'c':
     { /* an 'int' as a character */
       assert(argn < args.n && args.arg[argn].tag == 'c');
-      char c[1] = {((char)(args.arg[argn++].i))};
+      char c[1] = {(char)args.arg[argn++].i};
       addstr2buff(&buff, byte_view(c, std::size(c)));
       break;
     }

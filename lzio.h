@@ -14,7 +14,7 @@
 namespace lua::bytes
 {
 
-constexpr int EOZ = (-1); /* end of stream */
+constexpr int EOZ = -1; /* end of stream */
 
 class MBuffer
 {

@@ -164,7 +164,7 @@ void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
   L->hook = func;
   L->basehookcount = count;
   resethookcount(L);
-  L->hookmask = ((lu_byte)(mask));
+  L->hookmask = (lu_byte)mask;
   if (mask)
     settraps(L->ci); /* to trace inside 'luaV_execute' */
 }
@@ -260,7 +260,7 @@ LocalSlot luaG_findlocal(lua_State* L, CallInfo* ci, int n)
   if (name == nullptr)
   { /* no 'standard' name? */
     StkId limit = (ci == L->ci) ? L->top : ci->next->func;
-    if (limit - base >= (n) && n > 0)
+    if (limit - base >= n && n > 0)
     { /* is 'n' inside 'ci' stack? */
       /* generic name for any valid slot */
       name = isLua(ci) ? &lt::temporary_i : &lt::C_temporary_i;
@@ -394,7 +394,7 @@ static void collectvalidlines(lua_State* L, Closure* f)
     { /* proto with debug information? */
       int i;
       TValue v;
-      (v.tt_ = LUA_VTRUE);     /* boolean 'true' to be the value of all indices */
+      v.tt_ = LUA_VTRUE;     /* boolean 'true' to be the value of all indices */
       if (!isvararg(p)) /* regular function? */
         i = 0;            /* consider all instructions */
       else
@@ -830,7 +830,7 @@ static VarName funcnamefromcode(const Proto* p, int pc)
   case OP_MMBINI:
   case OP_MMBINK:
   {
-    tm = ((TMS)(GETARG_C(i)));
+    tm = (TMS)(GETARG_C(i));
     break;
   }
   case OP_UNM:
@@ -1124,7 +1124,7 @@ int luaG_tracecall(lua_State* L)
 int luaG_traceexec(lua_State* L, int pc)
 {
   CallInfo* ci = L->ci;
-  lu_byte mask = ((lu_byte)(L->hookmask));
+  lu_byte mask = (lu_byte)L->hookmask;
   const Proto* p = ci_func(L, ci)->p;
   int counthook;
   if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT)))

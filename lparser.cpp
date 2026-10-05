@@ -282,7 +282,7 @@ static void init_var(FuncState* fs, expdesc* e, int vidx)
 {
   e->f = e->t = NO_JUMP;
   e->k = VLOCAL;
-  e->var.vidx = ((short)(vidx));
+  e->var.vidx = (short)vidx;
   e->var.ridx = getlocalvardesc(fs, vidx)->ridx;
 }
 
@@ -367,7 +367,7 @@ static void adjustlocalvars(LexState* ls, int nvars)
 */
 static void removevars(FuncState* fs, int tolevel)
 {
-  fs->ls->dyd->actvar.n -= (fs->nactvar - tolevel);
+  fs->ls->dyd->actvar.n -= fs->nactvar - tolevel;
   while (fs->nactvar > tolevel)
   {
     LocVar* var = localdebuginfo(fs, --fs->nactvar);
@@ -429,7 +429,7 @@ static int newupvalue(FuncState* fs, TString* name, expdesc* v)
 static int searchvar(FuncState* fs, TString* n, expdesc* var)
 {
   int i;
-  for (i = ((int)(fs->nactvar)) - 1; i >= 0; i--)
+  for (i = (int)fs->nactvar - 1; i >= 0; i--)
   {
     Vardesc* vd = getlocalvardesc(fs, i);
     if (varglobal(vd))
@@ -460,7 +460,7 @@ static int searchvar(FuncState* fs, TString* n, expdesc* var)
         if (vd->kind == RDKVAVAR) /* vararg parameter? */
           var->k = VVARGVAR;
       }
-      return (var->k);
+      return var->k;
     }
   }
   return -1; /* not found */
@@ -2100,7 +2100,7 @@ static void globalnames(LexState* ls, lu_byte defkind)
   } while (testnext(ls, ','));
   if (testnext(ls, '=')) /* initialization? */
     initglobal(ls, nvars, lastidx - nvars + 1, 0, ls->linenumber);
-  fs->nactvar = ((short)(fs->nactvar + nvars)); /* activate declaration */
+  fs->nactvar = (short)(fs->nactvar + nvars); /* activate declaration */
 }
 
 static void globalstat(LexState* ls)
@@ -2210,7 +2210,7 @@ static void retstat(LexState* ls)
       if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc)
       { /* tail call? */
         fs->f->code[e.info] = SET_OPCODE(fs->f->code[e.info], OP_TAILCALL);
-        assert(GETARG_A(((fs)->f->code[(&e)->info])) == luaY_nvarstack(fs));
+        assert(GETARG_A(fs->f->code[(&e)->info]) == luaY_nvarstack(fs));
       }
       nret = LUA_MULTRET; /* return all values */
     }

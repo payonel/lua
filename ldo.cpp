@@ -158,7 +158,7 @@ TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f)
 constexpr int STACKERRSPACE = 200;
 
 /* maximum stack size that respects size_t */
-constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / cost::TValue) - STACKERRSPACE);
+constexpr size_t MAXSTACK_BYSIZET = (MAX_SIZET / cost::TValue) - STACKERRSPACE;
 
 /*
 ** Minimum between LUAI_MAXSTACK and MAXSTACK_BYSIZET
@@ -167,7 +167,7 @@ constexpr size_t MAXSTACK_BYSIZET = ((MAX_SIZET / cost::TValue) - STACKERRSPACE)
 constexpr int MAXSTACK = (LUAI_MAXSTACK < MAXSTACK_BYSIZET ? LUAI_MAXSTACK : MAXSTACK_BYSIZET);
 
 /* stack size with extra space for error handling */
-constexpr int ERRORSTACKSIZE = (MAXSTACK + STACKERRSPACE);
+constexpr int ERRORSTACKSIZE = MAXSTACK + STACKERRSPACE;
 
 /* raise a stack error while running the message handler */
 [[noreturn]] void luaD_errerr(lua_State* L)
@@ -211,8 +211,8 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
 {
   int oldsize = stacksize(L);
   int i;
-  size_t oldn = (oldsize + EXTRA_STACK);
-  size_t newn = (newsize + EXTRA_STACK);
+  size_t oldn = oldsize + EXTRA_STACK;
+  size_t newn = newsize + EXTRA_STACK;
   size_t keep = (oldn < newn) ? oldn : newn;
   lu_byte oldgcstop = L->l_G->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
@@ -289,7 +289,7 @@ static int stackinuse(lua_State* L)
       lim = ci->top;
   }
   assert(lim <= L->stack_last + EXTRA_STACK);
-  res = ((int)(lim)) + 1; /* part of stack in use */
+  res = (int)lim + 1; /* part of stack in use */
   if (res < LUA_MINSTACK)
     res = LUA_MINSTACK; /* ensure a minimum size */
   return res;
@@ -402,7 +402,7 @@ static void rethook(lua_State* L, CallInfo* ci, int nres)
         delta = ci->nextraargs + p->numparams + 1;
     }
     ci->func += delta; /* if vararg, back to virtual 'func' */
-    ftransfer = ((int)(firstres - ci->func));
+    ftransfer = (int)(firstres - ci->func);
     luaD_hook(L, LUA_HOOKRET, -1, ftransfer, nres); /* call it */
     ci->func -= delta;
   }
@@ -554,7 +554,7 @@ static inline int precallC(lua_State* L, StkId func, l_uint32 status,
   assert(ci->top <= L->stack_last);
   if (l_unlikely(L->hookmask & LUA_MASKCALL))
   {
-    int narg = ((int)(L->top - func)) - 1;
+    int narg = (int)(L->top - func) - 1;
     luaD_hook(L, LUA_HOOKCALL, -1, 1, narg);
   }
   lua_unlock(L);
@@ -638,7 +638,7 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
     { /* Lua function */
       CallInfo* ci;
       Proto* p = slotclLval(L, func)->p;
-      int narg = ((int)(L->top - func)) - 1; /* number of real arguments */
+      int narg = (int)(L->top - func) - 1; /* number of real arguments */
       int nfixparams = p->numparams;
       int fsize = p->maxstacksize; /* frame size */
       checkstackp(L, fsize, func);
@@ -769,7 +769,7 @@ static void finishCcall(lua_State* L, CallInfo* ci)
       status = finishpcallk(L, ci);   /* finish it */
     adjustresults(L, LUA_MULTRET);    /* finish 'lua_callk' */
     lua_unlock(L);
-    n = (*kf)(L, (status), ci->ctx); /* call continuation */
+    n = (*kf)(L, status, ci->ctx); /* call continuation */
     lua_lock(L);
     api_checknelems(L, n);
   }
@@ -909,7 +909,7 @@ lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
   {                           /* may be starting a coroutine */
     if (L->ci != &L->base_ci) /* not in base level? */
       return {resume_error(L, lt::cannot_resume_non_suspended_coroutine, nargs), 1};
-    else if (((int)(L->top - (L->ci->func + 1))) == nargs) /* no function? */
+    else if ((int)(L->top - (L->ci->func + 1)) == nargs) /* no function? */
       return {resume_error(L, lt::cannot_resume_dead_coroutine, nargs), 1};
   }
   else if (L->status != LUA_YIELD) /* ended with errors? */
@@ -933,9 +933,9 @@ lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
     L->ci->top = L->top;
   }
   int nresults = (status == LUA_YIELD) ? L->ci->nyield
-                                       : ((int)(L->top - (L->ci->func + 1)));
+                                       : (int)(L->top - (L->ci->func + 1));
   lua_unlock(L);
-  return {(status), nresults};
+  return {status, nresults};
 }
 
 
@@ -1047,7 +1047,7 @@ TStatus luaD_pcall(lua_State* L, ProtectedCall* func, StkId old_top,
     L->ci = old_ci;
     L->allowhook = old_allowhooks;
     status = luaD_closeprotected(L, old_top, status);
-    luaD_seterrorobj(L, status, (static_cast<StkId>(old_top)));
+    luaD_seterrorobj(L, status, static_cast<StkId>(old_top));
     luaD_shrinkstack(L); /* restore stack size in case of overflow */
   }
   L->errfunc = old_errfunc;
@@ -1087,12 +1087,12 @@ static void f_parser(lua_State* L, SParser* p)
   byte_view mode = p->mode;
   int c;
   Table* anchor;
-  StkId otop = (L->top); /* original top */
+  StkId otop = L->top; /* original top */
   luaD_checkstack(L, 2);
   anchor = Table::luaH_new(L);               /* create the anchor table */
   setsloth(L, L->top++, anchor); /* anchor the anchor table */
   c = (p->z->pos < p->z->chunk.size())
-          ? ((unsigned char)(p->z->chunk[p->z->pos++]))
+          ? (unsigned char)p->z->chunk[p->z->pos++]
           : luaZ_fill(p->z); /* read first character */
   if (c == LUA_SIGNATURE[0])
   {
@@ -1151,7 +1151,7 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   p.dyd.gt.size = 0;
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
-  status = luaD_pcall(L, &p, (L->top), L->errfunc);
+  status = luaD_pcall(L, &p, L->top, L->errfunc);
   luaM_alloc_Vardesc_span(L->l_G, L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);

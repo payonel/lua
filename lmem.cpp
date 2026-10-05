@@ -158,14 +158,14 @@ bool luaM_reserve(lua_State* L, size_t size)
   {
     return false;
   }
-  g->GCdebt -= ((l_mem)(size));
+  g->GCdebt -= (l_mem)size;
   return true;
 }
 
 void luaM_release(lua_State* L, size_t size)
 {
   global_State* g = L->l_G;
-  g->GCdebt += ((l_mem)(size));
+  g->GCdebt += (l_mem)size;
 }
 
 // type allocators

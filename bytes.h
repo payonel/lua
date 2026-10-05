@@ -118,7 +118,7 @@ struct byte_view
   {
     double out {};
     std::from_chars_result r = std::from_chars(data() + pos, data() + size(), out, fmt);
-    return { ((size_t)(r.ptr - data())), r.ec, out };
+    return { (size_t)(r.ptr - data()), r.ec, out };
   }
 
   double toDouble(size_t pos = 0) const

@@ -45,7 +45,7 @@ void luaT_init(lua_State* L)
   {
     byte_view bytes = luaT_eventname[i];
     L->l_G->tmname[i] = TString::luaS_createstr(L, bytes);
-    assert(novariant(((L->l_G->tmname[i])->tt)) >= LUA_TSTRING);
+    assert(novariant(L->l_G->tmname[i]->tt) >= LUA_TSTRING);
     luaC_fix(L, L->l_G->tmname[i]); /* never collect these names */
   }
 }
@@ -60,7 +60,7 @@ const TValue* luaT_gettm(Table* events, TMS event, TString* ename)
   assert(event <= TM_EQ);
   if (notm(tm))
   {                                          /* no tag method? */
-    events->flags |= ((lu_byte)(1u << event)); /* cache this fact */
+    events->flags |= (lu_byte)(1u << event); /* cache this fact */
     return nullptr;
   }
   else
@@ -128,7 +128,7 @@ void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
 lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
                        const TValue* p2, StkId res)
 {
-  StkId result = (res);
+  StkId result = res;
   StkId func = L->top;
   setslot(L, func, f);      /* push function (assume EXTRA_STACK) */
   setslot(L, func + 1, p1); /* 1st argument */
@@ -241,7 +241,7 @@ int luaT_callorderTM(lua_State* L, const TValue* p1, const TValue* p2,
 {
   int tag = callbinTM(L, p1, p2, L->top, event); /* try original event */
   if (tag >= 0)                                    /* found tag method? */
-    return !((tag) == LUA_VFALSE || tagisempty(tag));
+    return !(tag == LUA_VFALSE || tagisempty(tag));
   luaG_ordererror(L, p1, p2); /* no metamethod found */
   return 0;                   /* to avoid warnings */
 }
@@ -253,7 +253,7 @@ int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
   const TValue* p2;
   if (isfloat)
   {
-    setfltvalue(&aux, (v2));
+    setfltvalue(&aux, v2);
   }
   else
     setivalue(&aux, v2);
@@ -326,7 +326,7 @@ static void buildhiddenargs(lua_State* L, CallInfo* ci, const Proto* p,
 
 void luaT_adjustvarargs(lua_State* L, CallInfo* ci, const Proto* p)
 {
-  int totalargs = ((int)(L->top - ci->func)) - 1;
+  int totalargs = (int)(L->top - ci->func) - 1;
   int nfixparams = p->numparams;
   int nextra = totalargs - nfixparams; /* number of extra arguments */
   if (p->flag & PF_VATAB)
@@ -354,7 +354,7 @@ void luaT_getvararg(lua_State* L, CallInfo* ci, StkId ra, TValue* rc)
   { /* integral value? */
     if (n.v >= 1 && n.v <= nextra)
     {
-      StkId slot = ci->func - nextra + ((int)(n.v)) - 1;
+      StkId slot = ci->func - nextra + (int)n.v - 1;
       copyslot(L, ra, slot);
       return;
     }
@@ -396,7 +396,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
         (ivalue(&res) < 0 || ivalue(&res) > INT_MAX / 2))
       luaG_runerror(L, lt::vararg_table_has_no_proper_n);
     assert(ttisinteger(&res));
-    return ((int)(ivalue(&res)));
+    return (int)(ivalue(&res));
   }
 }
 

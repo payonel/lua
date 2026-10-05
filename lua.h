@@ -34,14 +34,14 @@ static_assert(LUA_VERSION_MAJOR_N == 5 && LUA_VERSION_MINOR_N == 5 && LUA_VERSIO
 inline constexpr byte_view LUA_SIGNATURE("\x1bLua");
 
 /* option for multiple returns in 'lua_pcall' and 'lua_call' */
-constexpr int LUA_MULTRET = (-1);
+constexpr int LUA_MULTRET = -1;
 
 /*
 ** Pseudo-indices
 ** (The stack size is limited to INT_MAX/2; we keep some free empty
 ** space after that to help overflow detection.)
 */
-constexpr int LUA_REGISTRYINDEX = (-(INT_MAX / 2 + 1000));
+constexpr int LUA_REGISTRYINDEX = -(INT_MAX / 2 + 1000);
 int lua_upvalueindex(int i);
 
 /* thread status */
@@ -61,7 +61,7 @@ struct CFuncInfo;
 /*
 ** basic types
 */
-constexpr int LUA_TNONE = (-1);
+constexpr int LUA_TNONE = -1;
 
 constexpr int LUA_TNIL = 0;
 constexpr int LUA_TBOOLEAN = 1;
@@ -433,10 +433,10 @@ constexpr int LUA_HOOKTAILCALL = 4;
 /*
 ** Event masks
 */
-constexpr int LUA_MASKCALL = (1 << LUA_HOOKCALL);
-constexpr int LUA_MASKRET = (1 << LUA_HOOKRET);
-constexpr int LUA_MASKLINE = (1 << LUA_HOOKLINE);
-constexpr int LUA_MASKCOUNT = (1 << LUA_HOOKCOUNT);
+constexpr int LUA_MASKCALL = 1 << LUA_HOOKCALL;
+constexpr int LUA_MASKRET = 1 << LUA_HOOKRET;
+constexpr int LUA_MASKLINE = 1 << LUA_HOOKLINE;
+constexpr int LUA_MASKCOUNT = 1 << LUA_HOOKCOUNT;
 
 namespace lua::runtime
 {

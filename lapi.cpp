@@ -59,7 +59,7 @@ static IndexAddr resolveindex(lua_State* L, int idx)
   if (idx > 0)
   {
     StkId o = ci->func + idx;
-    assert(((idx) <= ci->top - (ci->func + 1)) && "unacceptable index");
+    assert((idx <= ci->top - (ci->func + 1)) && "unacceptable index");
     if (o >= L->top)
       return {0, &L->l_G->nilvalue};
     else
@@ -162,7 +162,7 @@ void lua_xmove(lua_State* from, lua_State* to, int n)
   lua_lock(to);
   api_checkpop(from, n);
   assert((from->l_G == to->l_G) && "moving among independent states");
-  assert((to->ci->top >= to->top + (n)) && "stack overflow");
+  assert((to->ci->top >= to->top + n) && "stack overflow");
   from->top -= n;
   for (i = 0; i < n; i++)
   {
@@ -205,13 +205,13 @@ int lua_absindex(lua_State* L, int idx)
 {
   return (idx > 0 || ispseudo(idx))
              ? idx
-             : ((int)(L->top - L->ci->func)) + idx;
+             : (int)(L->top - L->ci->func) + idx;
 }
 
 
 int lua_gettop(lua_State* L)
 {
-  return ((int)(L->top - (L->ci->func + 1)));
+  return (int)(L->top - (L->ci->func + 1));
 }
 
 
@@ -225,8 +225,8 @@ void lua_settop(lua_State* L, int idx)
   func = ci->func;
   if (idx >= 0)
   {
-    assert(((idx) <= ci->top - (func + 1)) && "new top too large");
-    diff = ((int)(((func + 1) + idx) - L->top));
+    assert((idx <= ci->top - (func + 1)) && "new top too large");
+    diff = (int)(((func + 1) + idx) - L->top);
     for (; diff > 0; diff--)
       setslottag(L, L->top++, LUA_VNIL); /* clear new slots */
   }
@@ -440,7 +440,7 @@ int lua_compare(lua_State* L, int index1, int index2, int op)
       i = luaV_lessequal(L, &o1, &o2);
       break;
     default:
-      assert((0) && "invalid option");
+      assert(0 && "invalid option");
     }
   }
   lua_unlock(L);
@@ -815,14 +815,14 @@ const InternalString* lua_pushfstringi(lua_State* L, byte_view fmt)
     {
       StkId o = slot;
       assert((slottag(L, o) == LUA_VNUMINT) && "integer expected");
-      args.chr(((int)(slotival(L, o))));
+      args.chr((int)(slotival(L, o)));
       break;
     }
     case 'd':
     {
       StkId o = slot;
       assert((slottag(L, o) == LUA_VNUMINT) && "integer expected");
-      args.num(((int)(slotival(L, o))));
+      args.num((int)(slotival(L, o)));
       break;
     }
     case 'I':
@@ -973,7 +973,7 @@ static int auxgetstr(lua_State* L, const TValue* t, byte_view k)
 */
 static void getGlobalTable(lua_State* L, TValue* gt)
 {
-  Table* registry = hvalue((&L->l_G->l_registry));
+  Table* registry = hvalue(&L->l_G->l_registry);
   lu_byte tag = registry->luaH_getint(LUA_RIDX_GLOBALS, gt);
   (void) tag; /* avoid not-used warnings when checks are off */
   assert((novariant(tag) == LUA_TTABLE) && "global table must exist");
@@ -1555,13 +1555,13 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   {
     StkId o = index2stack(L, errfunc);
     assert((novariant(slottag(L, o)) == LUA_TFUNCTION) && "error handler must be a function");
-    func = (o);
+    func = o;
   }
   c.func = L->top - (nargs + 1); /* function to be called */
   if (k == nullptr || !yieldable(L))
   {                        /* no continuation or no yieldable? */
     c.nresults = nresults; /* do a 'conventional' protected call */
-    status = luaD_pcall(L, &c, (c.func), func);
+    status = luaD_pcall(L, &c, c.func, func);
   }
   else
   { /* prepare continuation (call is already protected by 'resume') */
@@ -1569,7 +1569,7 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     ci->k = k;     /* save continuation */
     ci->ctx = ctx; /* save context */
     /* save information for error recovery */
-    ci->funcidx = ((int)((c.func)));
+    ci->funcidx = (int)c.func;
     ci->old_errfunc = L->errfunc;
     L->errfunc = func;
     setoah(ci, L->allowhook);       /* save value of 'allowhook' */
@@ -1581,7 +1581,7 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   }
   adjustresults(L, nresults);
   lua_unlock(L);
-  return (status);
+  return status;
 }
 
 
@@ -1608,7 +1608,7 @@ int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkna
     }
   }
   lua_unlock(L);
-  return (status);
+  return status;
 }
 
 
@@ -1633,11 +1633,11 @@ namespace lua::api
 int lua_dump(lua_State* L, lua_Writer* writer, int strip)
 {
   int status;
-  StkId otop = (L->top); /* original top */
+  StkId otop = L->top; /* original top */
   StkId f = L->top - 1;           /* function to be dumped */
   lua_lock(L);
   api_checkpop(L, 1);
-  assert(((slottag(L, f) == ctb(LUA_VLCL))) && "Lua function expected");
+  assert((slottag(L, f) == ctb(LUA_VLCL)) && "Lua function expected");
   status = luaU_dump(L, slotclLval(L, f)->p, writer, strip);
   L->top = (static_cast<StkId>(otop)); /* restore top */
   lua_unlock(L);
@@ -1647,7 +1647,7 @@ int lua_dump(lua_State* L, lua_Writer* writer, int strip)
 
 int lua_status(lua_State* L)
 {
-  return (L->status);
+  return L->status;
 }
 
 
@@ -1679,18 +1679,18 @@ int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
   case LUA_GCCOUNT:
   {
     /* GC values are expressed in Kbytes: #bytes/2^10 */
-    res = ((int)(gettotalbytes(g) >> 10));
+    res = (int)(gettotalbytes(g) >> 10);
     break;
   }
   case LUA_GCCOUNTB:
   {
-    res = (gettotalbytes(g) & 0x3ff);
+    res = gettotalbytes(g) & 0x3ff;
     break;
   }
   case LUA_GCSTEP:
   {
     lu_byte oldstp = g->gcstp;
-    l_mem n = (stepsize);
+    l_mem n = stepsize;
     l_mem newdebt;
     int work = 0; /* true if GC did some work */
     g->gcstp = 0; /* allow GC to run (other bits must be zero here) */
@@ -1733,7 +1733,7 @@ int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
   case LUA_GCPARAM:
   {
     assert((0 <= param && param < LUA_GCPN) && "invalid parameter");
-    res = ((int)(luaO_applyparam(g->gcparams[param], 100)));
+    res = (int)(luaO_applyparam(g->gcparams[param], 100));
     if (value >= 0)
       g->gcparams[param] = luaO_codeparam(value);
     break;
@@ -2066,7 +2066,7 @@ void* lua_upvalueid(lua_State* L, int fidx, int n)
     return nullptr; /* light C functions have no upvalues */
   default:
   {
-    assert((0) && "function expected");
+    assert(0 && "function expected");
     return nullptr;
   }
   }

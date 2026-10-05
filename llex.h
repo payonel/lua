@@ -19,7 +19,7 @@ namespace lua::compiler
 ** Single-char tokens (terminal symbols) are represented by their own
 ** numeric code. Other tokens start at the following value.
 */
-constexpr int FIRST_RESERVED = (UCHAR_MAX + 1);
+constexpr int FIRST_RESERVED = UCHAR_MAX + 1;
 
 /*
  * WARNING: if you change the order of this enumeration,
@@ -70,7 +70,7 @@ enum RESERVED
 };
 
 /* number of reserved words */
-constexpr int NUM_RESERVED = (TK_WHILE - FIRST_RESERVED + 1);
+constexpr int NUM_RESERVED = TK_WHILE - FIRST_RESERVED + 1;
 
 struct Token
 {

@@ -16,7 +16,7 @@ namespace lua::bytes
 
 inline int sv_byteat(byte_view s, size_t i)
 {
-  return (i < s.size()) ? ((unsigned char)(s[i])) : -1;
+  return (i < s.size()) ? (unsigned char)s[i] : -1;
 }
 
 struct FmtScan
@@ -85,9 +85,9 @@ public:
 
   static size_t hashBytes(const char* str, size_t l) noexcept
   {
-    unsigned int h = 0x5bd1e995 ^ ((unsigned int)(l));
+    unsigned int h = 0x5bd1e995 ^ (unsigned int)l;
     for (size_t i = 0; i < l; i++)
-      h ^= ((h << 5) + (h >> 2) + ((unsigned char)(str[i])));
+      h ^= (h << 5) + (h >> 2) + (unsigned char)str[i];
     return h;
   }
   size_t hash() const noexcept { return hashBytes(bytes_.data(), bytes_.size()); }

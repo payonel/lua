@@ -28,7 +28,7 @@ int luaZ_fill(ZIO* z)
     return EOZ;
   z->chunk = *chunk;
   z->pos = 1;
-  return ((unsigned char)(z->chunk[0]));
+  return (unsigned char)z->chunk[0];
 }
 
 void luaZ_init(lua_State* L, ZIO* z, lua_Reader* reader)

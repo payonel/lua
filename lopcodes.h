@@ -50,21 +50,21 @@ constexpr int SIZE_C = 8;
 constexpr int SIZE_vC = 10;
 constexpr int SIZE_B = 8;
 constexpr int SIZE_vB = 6;
-constexpr int SIZE_Bx = (SIZE_C + SIZE_B + 1);
+constexpr int SIZE_Bx = SIZE_C + SIZE_B + 1;
 constexpr int SIZE_A = 8;
-constexpr int SIZE_Ax = (SIZE_Bx + SIZE_A);
-constexpr int SIZE_sJ = (SIZE_Bx + SIZE_A);
+constexpr int SIZE_Ax = SIZE_Bx + SIZE_A;
+constexpr int SIZE_sJ = SIZE_Bx + SIZE_A;
 
 constexpr int SIZE_OP = 7;
 
 constexpr int POS_OP = 0;
 
-constexpr int POS_A = (POS_OP + SIZE_OP);
-constexpr int POS_k = (POS_A + SIZE_A);
-constexpr int POS_B = (POS_k + 1);
-constexpr int POS_vB = (POS_k + 1);
-constexpr int POS_C = (POS_B + SIZE_B);
-constexpr int POS_vC = (POS_vB + SIZE_vB);
+constexpr int POS_A = POS_OP + SIZE_OP;
+constexpr int POS_k = POS_A + SIZE_A;
+constexpr int POS_B = POS_k + 1;
+constexpr int POS_vB = POS_k + 1;
+constexpr int POS_C = POS_B + SIZE_B;
+constexpr int POS_vC = POS_vB + SIZE_vB;
 
 constexpr int POS_Bx = POS_k;
 
@@ -78,8 +78,8 @@ constexpr int POS_sJ = POS_A;
 ** so they must fit in ints.
 */
 
-static_assert(SIZE_Ax < ((int)(sizeof(int) * CHAR_BIT)) - 1 &&
-                  SIZE_sJ < ((int)(sizeof(int) * CHAR_BIT)) - 1,
+static_assert(SIZE_Ax < (int)(sizeof(int) * CHAR_BIT) - 1 &&
+                  SIZE_sJ < (int)(sizeof(int) * CHAR_BIT) - 1,
               "int too narrow for instruction arguments");
 
 constexpr int MAXARG_Bx = (1 << SIZE_Bx) - 1;
@@ -92,12 +92,12 @@ constexpr int MAXARG_sJ = (1 << SIZE_sJ) - 1;
 
 constexpr int OFFSET_sJ = MAXARG_sJ >> 1;
 
-constexpr int MAXARG_A = ((1 << SIZE_A) - 1);
-constexpr int MAXARG_B = ((1 << SIZE_B) - 1);
-constexpr int MAXARG_vB = ((1 << SIZE_vB) - 1);
-constexpr int MAXARG_C = ((1 << SIZE_C) - 1);
-constexpr int MAXARG_vC = ((1 << SIZE_vC) - 1);
-constexpr int OFFSET_sC = (MAXARG_C >> 1);
+constexpr int MAXARG_A = (1 << SIZE_A) - 1;
+constexpr int MAXARG_B = (1 << SIZE_B) - 1;
+constexpr int MAXARG_vB = (1 << SIZE_vB) - 1;
+constexpr int MAXARG_C = (1 << SIZE_C) - 1;
+constexpr int MAXARG_vC = (1 << SIZE_vC) - 1;
+constexpr int OFFSET_sC = MAXARG_C >> 1;
 
 constexpr int int2sC(int i)
 {
@@ -266,7 +266,7 @@ typedef enum
   OP_EXTRAARG /*  Ax  extra (larger) argument for previous opcode  */
 } OpCode;
 
-constexpr int NUM_OPCODES = ((int) (OP_EXTRAARG) + 1);
+constexpr int NUM_OPCODES = (int) (OP_EXTRAARG) + 1;
 
 constexpr OpCode GET_OPCODE(Instruction i)
 {
@@ -287,7 +287,7 @@ static l_forceinline int checkopm(Instruction i, enum OpMode m)
 
 constexpr int getarg(Instruction i, int pos, int size)
 {
-  return ((i >> pos) & MASK1(size, 0));
+  return (i >> pos) & MASK1(size, 0);
 }
 
 constexpr int GETARG_A(Instruction i)
@@ -327,7 +327,7 @@ static l_forceinline int GETARG_sC(Instruction i)
 
 constexpr int TESTARG_k(Instruction i)
 {
-  return (i & (1u << POS_k));
+  return i & (1u << POS_k);
 }
 constexpr int GETARG_k(Instruction i)
 {

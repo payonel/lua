@@ -54,7 +54,7 @@ typedef lu_byte TStatus;
 /* The C API still uses 'int' for status/error codes */
 
 /* maximum value for size_t */
-constexpr size_t MAX_SIZET = (~(size_t)0);
+constexpr size_t MAX_SIZET = ~(size_t)0;
 
 /*
 ** Maximum size for strings and userdata visible for Lua; should be
@@ -72,12 +72,12 @@ static_assert(sizeof(size_t) >= sizeof(lua_Integer));
 
 static inline unsigned int point2uint(const void* p)
 {
-  return ((size_t)(p) & UINT_MAX);
+  return (size_t)(p) & UINT_MAX;
 }
 
 static inline unsigned int point2uint(lua_CFunction p)
 {
-  return ((size_t)(p) & UINT_MAX);
+  return (size_t)(p) & UINT_MAX;
 }
 
 /* types of 'usual argument conversions' for lua_Number and lua_Integer */

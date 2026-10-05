@@ -102,7 +102,7 @@ static void dumpVarint(DumpState* D, lua_Unsigned x)
   int n = 1;
   buff[DIBS - 1] = x & 0x7f; /* fill least-significant byte */
   while ((x >>= 7) != 0)     /* fill other bytes in reverse order */
-    buff[DIBS - (++n)] = ((x & 0x7f) | 0x80);
+    buff[DIBS - (++n)] = (x & 0x7f) | 0x80;
   dumpVector(D, std::span<const lu_byte>(buff).subspan(DIBS - n));
 }
 
@@ -130,8 +130,8 @@ static void dumpNumber(DumpState* D, lua_Number x)
 */
 static void dumpInteger(DumpState* D, lua_Integer x)
 {
-  lua_Unsigned cx = (x >= 0) ? 2u * ((lua_Unsigned)(x))
-                             : (2u * ~((lua_Unsigned)(x))) + 1;
+  lua_Unsigned cx = (x >= 0) ? 2u * (lua_Unsigned)x
+                             : (2u * ~(lua_Unsigned)x) + 1;
   dumpVarint(D, cx);
 }
 
@@ -160,7 +160,7 @@ static void dumpString(DumpState* D, TString* ts)
       dumpVector(D, std::span<const char>(sv.data(), size + 1)); /* include ending '\0' */
       D->nstr++;                             /* one more saved string */
       setsvalue(D->L, &key, ts);             /* the string is the key */
-      setivalue(&value, (D->nstr)); /* its index is the value */
+      setivalue(&value, D->nstr); /* its index is the value */
       D->h->luaH_set(D->L, &key, &value);    /* h[ts] = nstr */
       /* integer value does not need barrier */
     }
@@ -229,11 +229,11 @@ static void dumpUpvalues(DumpState* D, const Proto* f)
 static void dumpDebug(DumpState* D, const Proto* f)
 {
   int i, n;
-  n = (D->strip) ? 0 : (int)f->lineinfo.size();
+  n = D->strip ? 0 : (int)f->lineinfo.size();
   dumpInt(D, n);
   if (f->lineinfo.data() != nullptr)
     dumpVector<ls_byte>(D, f->lineinfo.first(n));
-  n = (D->strip) ? 0 : (int)f->abslineinfo.size();
+  n = D->strip ? 0 : (int)f->abslineinfo.size();
   dumpInt(D, n);
   if (n > 0)
   {
@@ -241,7 +241,7 @@ static void dumpDebug(DumpState* D, const Proto* f)
     dumpAlign(D, sizeof(int));
     dumpVector<AbsLineInfo>(D, f->abslineinfo.first(n));
   }
-  n = (D->strip) ? 0 : (int)f->locvars.size();
+  n = D->strip ? 0 : (int)f->locvars.size();
   dumpInt(D, n);
   for (i = 0; i < n; i++)
   {
@@ -249,7 +249,7 @@ static void dumpDebug(DumpState* D, const Proto* f)
     dumpInt(D, f->locvars[i].startpc);
     dumpInt(D, f->locvars[i].endpc);
   }
-  n = (D->strip) ? 0 : (int)f->upvalues.size();
+  n = D->strip ? 0 : (int)f->upvalues.size();
   dumpInt(D, n);
   for (i = 0; i < n; i++)
     dumpString(D, f->upvalues[i].name);

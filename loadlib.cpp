@@ -250,7 +250,7 @@ static int ll_loadlib(lua_State* L)
   { /* error; error message is on stack top */
     luaL_pushfail(L);
     lua_insert(L, -2);
-    lua_pushlstring(L, ((stat == ERRLIB) ? lt::open_kw : lt::init), 0, (((stat == ERRLIB) ? lt::open_kw : lt::init)).size());
+    lua_pushlstring(L, ((stat == ERRLIB) ? lt::open_kw : lt::init), 0, ((stat == ERRLIB) ? lt::open_kw : lt::init).size());
     return 3; /* return fail, error message, and where */
   }
 }
@@ -374,7 +374,7 @@ static int searcher_Lua(lua_State* L)
     return 1;
 
   byte_view filename = lua_toistring(L, -1)->view();
-  return checkload(L, (luaL_loadfilei(L, filename, std::nullopt) == LUA_OK), filename);
+  return checkload(L, luaL_loadfilei(L, filename, std::nullopt) == LUA_OK, filename);
 }
 
 /*
@@ -412,7 +412,7 @@ static int searcher_C(lua_State* L)
   if (!findfile(L, name, lt::cpath, lt::LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
-  return checkload(L, (loadfunc(L, filename->view(), name) == 0), filename->view());
+  return checkload(L, loadfunc(L, filename->view(), name) == 0, filename->view());
 }
 
 static int searcher_Croot(lua_State* L)

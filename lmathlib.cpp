@@ -26,7 +26,7 @@
 namespace lua::lib
 {
 
-constexpr lua_Number PI = (3.141592653589793238462643383279502884);
+constexpr lua_Number PI = 3.141592653589793238462643383279502884;
 
 static int math_abs(lua_State* L)
 {
@@ -329,14 +329,14 @@ static uint64_t nextrand(uint64_t* state)
 */
 
 /* must throw out the extra (64 - FIGS) bits */
-constexpr int shift64_FIG = (64 - FIGS);
+constexpr int shift64_FIG = 64 - FIGS;
 
 /* 2^(-FIGS) == 2^-1 / 2^(FIGS-1) */
-constexpr lua_Number scaleFIG = (0.5 / ((uint64_t) 1 << (FIGS - 1)));
+constexpr lua_Number scaleFIG = 0.5 / ((uint64_t) 1 << (FIGS - 1));
 
 static lua_Number I2d(uint64_t x)
 {
-  int64_t sx = (trim64(x) >> shift64_FIG);
+  int64_t sx = trim64(x) >> shift64_FIG;
   lua_Number res = (lua_Number) (sx) *scaleFIG;
   if (sx < 0)
     res += 1.0; /* correct the two's complement if negative */
@@ -378,7 +378,7 @@ static lua_Unsigned project(lua_Unsigned ran, lua_Unsigned n,
   int sh;               /* how much to spread bits to the right in 'lim' */
   /* spread '1' bits in 'lim' until it becomes a Mersenne number */
   for (sh = 1; (lim & (lim + 1)) != 0; sh *= 2)
-    lim |= (lim >> sh);               /* spread '1's to the right */
+    lim |= lim >> sh;               /* spread '1's to the right */
   while ((ran &= lim) > n)            /* project 'ran' into [0..lim] and test */
     ran = I2UInt(nextrand(state->s)); /* not inside [0..n]? try again */
   return ran;
@@ -420,8 +420,8 @@ static int math_random(lua_State* L)
   /* random integer in the interval [low, up] */
   luaL_argchecki(L, low <= up, 1, lt::interval_is_empty);
   /* project random integer into the interval [0, up - low] */
-  p = project(I2UInt(rv), ((lua_Unsigned)(up)) - ((lua_Unsigned)(low)), state);
-  lua_pushinteger(L, (p + ((lua_Unsigned)(low))));
+  p = project(I2UInt(rv), (lua_Unsigned)up - (lua_Unsigned)low, state);
+  lua_pushinteger(L, p + (lua_Unsigned)low);
   return 1;
 }
 
@@ -435,8 +435,8 @@ static void setseed(lua_State* L, uint64_t* state,
   state[3] = Int2I(0);
   for (i = 0; i < 16; i++)
     nextrand(state); /* discard initial values to "spread" seed */
-  lua_pushinteger(L, (n1));
-  lua_pushinteger(L, (n2));
+  lua_pushinteger(L, n1);
+  lua_pushinteger(L, n2);
 }
 
 static int math_randomseed(lua_State* L)

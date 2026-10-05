@@ -164,7 +164,7 @@ static void checkclosemth(lua_State* L, StkId level)
   const TValue* tm = luaT_gettmbyobj(L, level, TM_CLOSE);
   if (ttisnil(tm))
   {                                            /* no metamethod? */
-    int idx = ((int)(level - L->ci->func)); /* variable index */
+    int idx = (int)(level - L->ci->func); /* variable index */
     const InternalString* vname_i = luaG_findlocal(L, L->ci, idx).name;
     byte_view vname = vname_i != nullptr ? vname_i->view() : lt::qmark;
     luaG_runerror(L, lt::variable_s_got_a_non_closable_value, FmtArgs().str(vname));
@@ -208,7 +208,7 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
 void luaF_newtbcupval(lua_State* L, StkId level)
 {
   assert(level > L->tbclist);
-  if ((slottag(L, level) == LUA_VFALSE) || tagisempty(slottag(L, level)))
+  if (tagisfalse(slottag(L, level)))
     return;                /* false doesn't need to be closed */
   checkclosemth(L, level); /* value must have a close method */
   {
@@ -265,7 +265,7 @@ static void poptbclist(lua_State* L)
 */
 StkId luaF_close(lua_State* L, StkId level, TStatus status, int yy)
 {
-  StkId levelrel = (level);
+  StkId levelrel = level;
   luaF_closeupval(L, level); /* first, close the upvalues */
   while (L->tbclist >= level)
   {                                       /* traverse tbc's down to that level */

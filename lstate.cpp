@@ -142,7 +142,7 @@ static void resetCI(lua_State* L)
 static void stack_init(lua_State* L1, lua_State* L)
 {
   int i;
-  size_t nslots = (BASIC_STACK_SIZE + EXTRA_STACK);
+  size_t nslots = BASIC_STACK_SIZE + EXTRA_STACK;
   std::span<TValue> stk = luaM_alloc_TValue_span(L->l_G, L, {}, nslots, false);
   if (l_unlikely(stk.data() == nullptr))
   {
@@ -184,7 +184,7 @@ static void init_registry(lua_State* L, global_State* g)
   sethvalue(L, &g->l_registry, registry);
   registry->luaH_resize(L, LUA_RIDX_LAST, 0);
   /* registry[1] = false */
-  (aux.tt_ = LUA_VFALSE);
+  aux.tt_ = LUA_VFALSE;
   registry->luaH_setint(L, 1, &aux);
   /* registry[LUA_RIDX_MAINTHREAD] = L */
   setthvalue(L, &aux, L);
@@ -320,7 +320,7 @@ TStatus luaE_resetthread(lua_State* L, TStatus status)
     luaD_seterrorobj(L, status, 1);
   else
     L->top = 1;
-  luaD_reallocstack(L, ((int)(L->ci->top)), 0);
+  luaD_reallocstack(L, (int)L->ci->top, 0);
   return status;
 }
 
@@ -330,12 +330,12 @@ int lua_closethread(lua_State* L, lua_State* from)
 {
   TStatus status;
   lua_lock(L);
-  L->nCcalls = (from) ? getCcalls(from) : 0;
+  L->nCcalls = from ? getCcalls(from) : 0;
   status = luaE_resetthread(L, L->status);
   if (L == from) /* closing itself? */
     luaD_throwbaselevel(L, status);
   lua_unlock(L);
-  return (status);
+  return status;
 }
 
 
@@ -380,12 +380,12 @@ lua_State* lua_newstate(lua_Alloc* f, unsigned seed)
   g->GCdebt = 0;
   g->memlimit = 0;
   setivalue(&g->nilvalue, 0); /* to signal that state is not yet built */
-  ((g)->gcparams[LUA_GCPPAUSE] = luaO_codeparam(LUAI_GCPAUSE));
-  ((g)->gcparams[LUA_GCPSTEPMUL] = luaO_codeparam(LUAI_GCMUL));
-  ((g)->gcparams[LUA_GCPSTEPSIZE] = luaO_codeparam(LUAI_GCSTEPSIZE));
-  ((g)->gcparams[LUA_GCPMINORMUL] = luaO_codeparam(LUAI_GENMINORMUL));
-  ((g)->gcparams[LUA_GCPMINORMAJOR] = luaO_codeparam(LUAI_MINORMAJOR));
-  ((g)->gcparams[LUA_GCPMAJORMINOR] = luaO_codeparam(LUAI_MAJORMINOR));
+  g->gcparams[LUA_GCPPAUSE] = luaO_codeparam(LUAI_GCPAUSE);
+  g->gcparams[LUA_GCPSTEPMUL] = luaO_codeparam(LUAI_GCMUL);
+  g->gcparams[LUA_GCPSTEPSIZE] = luaO_codeparam(LUAI_GCSTEPSIZE);
+  g->gcparams[LUA_GCPMINORMUL] = luaO_codeparam(LUAI_GENMINORMUL);
+  g->gcparams[LUA_GCPMINORMAJOR] = luaO_codeparam(LUAI_MINORMAJOR);
+  g->gcparams[LUA_GCPMAJORMINOR] = luaO_codeparam(LUAI_MAJORMINOR);
   for (i = 0; i < LUA_NUMTYPES; i++)
     g->mt[i] = nullptr;
   LuaOpen open;

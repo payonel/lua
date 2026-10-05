@@ -85,9 +85,9 @@ static IntParse b_str2int(byte_view s, int base)
     return {byte_view::npos, 0};
   do
   {
-    int digit = ((locale_isdigit(sv_byteat(s, p))
+    int digit = (locale_isdigit(sv_byteat(s, p))
                                    ? s[p] - '0'
-                                   : (locale_toupper(sv_byteat(s, p)) - 'A') + 10));
+                                   : (locale_toupper(sv_byteat(s, p)) - 'A') + 10);
     if (digit >= base)
       return {byte_view::npos, 0}; /* invalid numeral */
     n = n * base + digit;
@@ -95,7 +95,7 @@ static IntParse b_str2int(byte_view s, int base)
   } while (locale_isalnum(sv_byteat(s, p)));
   while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
     p++; /* skip trailing spaces */
-  return {p, (lua_Integer) ((neg) ? (0u - n) : n)};
+  return {p, (lua_Integer) (neg ? (0u - n) : n)};
 }
 
 static int luaB_tonumber(lua_State* L)
@@ -122,7 +122,7 @@ static int luaB_tonumber(lua_State* L)
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
     byte_view s = *lua_tolstring(L, 1);
     luaL_argchecki(L, 2 <= base && base <= 36, 2, lt::base_out_of_range);
-    IntParse n = b_str2int(s, ((int)(base)));
+    IntParse n = b_str2int(s, (int)base);
     if (n.end == s.size())
     {
       lua_pushinteger(L, n.value);
@@ -245,22 +245,22 @@ static int luaB_collectgarbage(lua_State* L)
   {
     int k = lua_gc(L, o, 0, 0, 0);
     int b = lua_gc(L, LUA_GCCOUNTB, 0, 0, 0);
-    { if ((k) == -1) break; };
+    { if (k == -1) break; };
     lua_pushnumber(L, (lua_Number) k + ((lua_Number) b / 1024));
     return 1;
   }
   case LUA_GCSTEP:
   {
     lua_Integer n = luaL_optinteger(L, 2, 0);
-    int res = lua_gc(L, o, (n), 0, 0);
-    { if ((res) == -1) break; };
+    int res = lua_gc(L, o, n, 0, 0);
+    { if (res == -1) break; };
     lua_pushboolean(L, res);
     return 1;
   }
   case LUA_GCISRUNNING:
   {
     int res = lua_gc(L, o, 0, 0, 0);
-    { if ((res) == -1) break; };
+    { if (res == -1) break; };
     lua_pushboolean(L, res);
     return 1;
   }
@@ -288,7 +288,7 @@ static int luaB_collectgarbage(lua_State* L)
   default:
   {
     int res = lua_gc(L, o, 0, 0, 0);
-    { if ((res) == -1) break; };
+    { if (res == -1) break; };
     lua_pushinteger(L, res);
     return 1;
   }

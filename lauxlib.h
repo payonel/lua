@@ -24,7 +24,7 @@ struct OsFile;
 inline constexpr byte_view LUA_GNAME = "_G";
 
 /* extra error code for 'luaL_loadfilex' */
-constexpr int LUA_ERRFILE = (LUA_ERRERR + 1);
+constexpr int LUA_ERRFILE = LUA_ERRERR + 1;
 
 /* key, in the registry, for table of loaded modules */
 inline constexpr byte_view LUA_LOADED_TABLE = "_LOADED";
@@ -38,7 +38,7 @@ struct luaL_Reg
   lua_CFunction func;
 };
 
-constexpr size_t LUAL_NUMSIZES = (8 * 16 + 8);
+constexpr size_t LUAL_NUMSIZES = 8 * 16 + 8;
 static_assert(LUAL_NUMSIZES == sizeof(lua_Integer) * 16 + sizeof(lua_Number));
 
 void(luaL_checkversion_)(lua_State* L, lua_Number ver, size_t sz);
@@ -71,8 +71,8 @@ int(luaL_fileresult)(lua_State* L, int stat, const std::optional<HostString>& fn
 int(luaL_execresult)(lua_State* L, int stat);
 
 /* predefined references */
-constexpr int LUA_NOREF = (-2);
-constexpr int LUA_REFNIL = (-1);
+constexpr int LUA_NOREF = -2;
+constexpr int LUA_REFNIL = -1;
 
 int(luaL_ref)(lua_State* L, int t);
 void(luaL_unref)(lua_State* L, int t, int ref);

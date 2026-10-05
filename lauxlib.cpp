@@ -522,7 +522,7 @@ int luaL_checkoptioni(lua_State* L, int arg,
                               : luaL_checklstring(L, arg);
   for (size_t i = 0; i < lst.size(); i++)
     if (name == lst[i])
-      return ((int)(i));
+      return (int)i;
   lua_pushlstring(L, name, 0, name.size());
   const InternalString* msg = lua_pushfstringi(L, lt::invalid_option_s);
   return luaL_argerrori(L, arg, msg->view());
@@ -538,7 +538,7 @@ int luaL_checkoption(lua_State* L, int arg,
                               : luaL_checklstring(L, arg);
   for (size_t i = 0; i < lst.size(); i++)
     if (name == lst[i].to_utf8())
-      return ((int)(i));
+      return (int)i;
   lua_pushlstring(L, name, 0, name.size());
   const InternalString* msg = lua_pushfstringi(L, lt::invalid_option_s);
   return luaL_argerrori(L, arg, msg->view());
@@ -639,7 +639,7 @@ lua_Number luaL_checknumber(lua_State* L, int arg)
 
 lua_Number luaL_optnumber(lua_State* L, int arg, lua_Number def)
 {
-  return (lua_isnoneornil(L, (arg)) ? (def) : luaL_checknumber(L, (arg)));
+  return (lua_isnoneornil(L, arg) ? def : luaL_checknumber(L, arg));
 }
 
 namespace lua::api
@@ -669,7 +669,7 @@ lua_Integer luaL_checkinteger(lua_State* L, int arg)
 lua_Integer luaL_optinteger(lua_State* L, int arg,
                                        lua_Integer def)
 {
-  return (lua_isnoneornil(L, (arg)) ? (def) : luaL_checkinteger(L, (arg)));
+  return (lua_isnoneornil(L, arg) ? def : luaL_checkinteger(L, arg));
 }
 
 namespace lua::api
@@ -751,7 +751,7 @@ static size_t newbuffsize(luaL_Buffer* B, size_t sz)
   if (l_unlikely(sz >= MAX_SIZE - len))
     return luaL_errori(B->L, lt::resulting_string_too_large);
   if (newsize <= MAX_SIZE / 3 * 2) /* no overflow? */
-    newsize += (newsize >> 1);     /* new size *= 1.5 */
+    newsize += newsize >> 1;     /* new size *= 1.5 */
   if (newsize < len + sz)          /* not big enough? */
     newsize = len + sz;
   if (newsize < LUAL_BUFFERSIZE)
@@ -1057,7 +1057,7 @@ int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optiona
     }
   }
   if (c != OS_EOF)
-    lf.buff[lf.n++] = ((char)(c)); /* 'c' is the first character */
+    lf.buff[lf.n++] = (char)c; /* 'c' is the first character */
   status = lua_loadi(L, &lf, lua_toistring(L, -1)->view(), mode);
   readstatus = os_ferror(lf.f) ? 1 : 0;
   if (!bNullname)
@@ -1557,9 +1557,9 @@ static unsigned int luai_makeseed(void)
       std::chrono::system_clock::now().time_since_epoch())
       .count();
   unsigned int buff[4];
-  buff[0] = (nanos & 0xFFFFFFFFu);
+  buff[0] = nanos & 0xFFFFFFFFu;
   buff[1] = (unsigned int) ((nanos >> 32) & 0xFFFFFFFFu);
-  buff[2] = (millis & 0xFFFFFFFFu);
+  buff[2] = millis & 0xFFFFFFFFu;
   buff[3] = (unsigned int) ((millis >> 32) & 0xFFFFFFFFu);
   unsigned int res = buff[0];
   for (unsigned int i = 1; i < 4; i++)

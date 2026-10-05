@@ -37,7 +37,7 @@ void TString::luaS_forcehash()
 {
   TString* ts = this;
   byte_view bytes = ts->data.view();
-  ts->hash = ((unsigned int)(InternalString::hashBytes(bytes.data(), bytes.size())));
+  ts->hash = (unsigned int)(InternalString::hashBytes(bytes.data(), bytes.size()));
   ts->hashed = 1;
 }
 
@@ -46,8 +46,8 @@ TString* TString::createstrobj(lua_State* L, InternalString&& str, size_t h,
 {
   TString* ts = luaM_malloc_TString(L);
   luaC_link(L, ts, LUA_VSTRING);
-  ts->hash = ((unsigned int)(h));
-  ts->hashed = ((lu_byte)(hashed));
+  ts->hash = (unsigned int)h;
+  ts->hashed = (lu_byte)hashed;
   ts->hnext = nullptr;
   ts->extra = external ? STREXTRA_EXTERNAL : 0;
   if (!external && l_unlikely(!luaM_reserve(L, str.size())))
@@ -77,7 +77,7 @@ static TString* internfind(global_State* g, byte_view sv, size_t h)
   TString* ts = buckets[h & (buckets.size() - 1)];
   while (ts != nullptr)
   {
-    if (ts->hash == ((unsigned int)(h)) && ts->data.view() == sv)
+    if (ts->hash == (unsigned int)h && ts->data.view() == sv)
       return ts;
     ts = ts->hnext;
   }

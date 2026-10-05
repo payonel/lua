@@ -82,7 +82,7 @@ static Utf8Code utf8_decode(const InternalString* s, size_t pos, int strict)
       res = (res << 6) | (cc & 0x3F);                            /* add lower 6 bits from cont. byte */
     }
     assert(count <= 5);
-    res |= ((c & 0x7F) << (count * 5)); /* add first byte */
+    res |= (c & 0x7F) << (count * 5); /* add first byte */
     if (res > MAXUTF || res < limits[count])
       return {0, 0};             /* invalid byte sequence */
     pos += (size_t) count;  /* skip continuation bytes read */
@@ -202,7 +202,7 @@ static int byteoffset(lua_State* L)
   const InternalString* s = luaL_checkistring(L, 1);
   size_t len = s->size();
   lua_Integer n = luaL_checkinteger(L, 2);
-  lua_Integer posi = (n >= 0) ? 1 : ((lua_Integer)(len)) + 1;
+  lua_Integer posi = (n >= 0) ? 1 : (lua_Integer)len + 1;
   posi = u_posrelat(luaL_optinteger(L, 3, posi), len);
   luaL_argchecki(L, 1 <= posi && --posi <= (lua_Integer) len, 3, lt::position_out_of_bounds);
   if (n == 0)
@@ -274,7 +274,7 @@ static int iter_aux(lua_State* L, int strict)
     Utf8Code dec = utf8_decode(s, n, strict);
     if (dec.next == 0 || iscontat(s, dec.next))
       return luaL_errori(L, lt::invalid_UTF_8_code);
-    lua_pushinteger(L, (n + 1));
+    lua_pushinteger(L, n + 1);
     lua_pushinteger(L, dec.code);
     return 2;
   }

@@ -56,7 +56,7 @@ static l_forceinline void upvalsetval(lua_State* L, UpVal* uv, const TValue* v)
 constexpr int MAXMISS = 10;
 
 /* special status to close upvalues preserving the top of the stack */
-constexpr int CLOSEKTOP = (LUA_ERRERR + 1);
+constexpr int CLOSEKTOP = LUA_ERRERR + 1;
 
 void luaF_newtbcupval(lua_State* L, StkId level);
 void luaF_closeupval(lua_State* L, StkId level);

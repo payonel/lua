@@ -184,7 +184,7 @@ static int db_getinfo(lua_State* L)
     return luaL_argerrori(L, arg + 2, lt::invalid_option_1);
   ar = std::move(*res);
   lua_newtable(L); /* table to collect results */
-  if ((options.find('S') != byte_view::npos))
+  if (options.find('S') != byte_view::npos)
   {
     lua_pushlstring(L, ar.source, 0, ar.source.size());
     lua_setfieldi(L, -2, lt::source);
@@ -193,33 +193,33 @@ static int db_getinfo(lua_State* L)
     settabsi(L, lt::lastlinedefined, ar.lastlinedefined);
     settabss(L, lt::what, ar.what);
   }
-  if ((options.find('l') != byte_view::npos))
+  if (options.find('l') != byte_view::npos)
     settabsi(L, lt::currentline, ar.currentline);
-  if ((options.find('u') != byte_view::npos))
+  if (options.find('u') != byte_view::npos)
   {
     settabsi(L, lt::nups, ar.nups);
     settabsi(L, lt::nparams, ar.nparams);
     settabsb(L, lt::isvararg, ar.isvararg);
   }
-  if ((options.find('n') != byte_view::npos))
+  if (options.find('n') != byte_view::npos)
   {
     if (ar.name.has_value())
       settabss(L, lt::name_2, ar.name.value());
     settabss(L, lt::namewhat, ar.namewhat.value_or(lt::empty_str));
   }
-  if ((options.find('r') != byte_view::npos))
+  if (options.find('r') != byte_view::npos)
   {
     settabsi(L, lt::ftransfer, ar.ftransfer);
     settabsi(L, lt::ntransfer, ar.ntransfer);
   }
-  if ((options.find('t') != byte_view::npos))
+  if (options.find('t') != byte_view::npos)
   {
     settabsb(L, lt::istailcall, ar.istailcall);
     settabsi(L, lt::extraargs, ar.extraargs);
   }
-  if ((options.find('L') != byte_view::npos))
+  if (options.find('L') != byte_view::npos)
     treatstackoption(L, L1, lt::activelines);
-  if ((options.find('f') != byte_view::npos))
+  if (options.find('f') != byte_view::npos)
     treatstackoption(L, L1, lt::func);
   return 1; /* return table */
 }

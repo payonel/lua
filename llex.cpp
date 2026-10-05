@@ -32,7 +32,7 @@ namespace lua::compiler
 static l_forceinline void next(LexState* ls)
 {
   ls->current = (ls->z->pos < ls->z->chunk.size())
-                    ? (unsigned char)(ls->z->chunk[ls->z->pos++])
+                    ? (unsigned char)ls->z->chunk[ls->z->pos++]
                     : luaZ_fill(ls->z);
 }
 
@@ -69,7 +69,7 @@ static void save(LexState* ls, int c)
       newsize = LUA_MINBUFFER;
     b->growTo(newsize);
   }
-  b->append(((char)(c)));
+  b->append((char)c);
 }
 
 static inline void save_and_next(LexState* ls)
@@ -90,7 +90,7 @@ void luaX_init(lua_State* L)
     TString* ts = TString::luaS_createstr(L, bytes);
     assert(novariant(ts->tt) >= LUA_TSTRING);
     luaC_fix(L, ts);     /* reserved words are never collected */
-    ts->extra = ((lu_byte)(i + 1)); /* reserved word */
+    ts->extra = (lu_byte)(i + 1); /* reserved word */
   }
 }
 
@@ -402,7 +402,7 @@ static int readutf8esc(LexState* ls)
   save_and_next(ls); /* skip 'u' */
   esccheck(ls, ls->current == '{', lt::missing_1);
   r = gethexa(ls); /* must have at least one digit */
-  while (((void)(save_and_next(ls))), lisxdigit(ls->current))
+  while ((void)(save_and_next(ls)), lisxdigit(ls->current))
   {
     i++;
     esccheck(ls, r <= (0x7FFFFFFF >> 4), lt::UTF_8_value_too_large);
