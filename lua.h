@@ -241,7 +241,7 @@ byte_view(lua_pushlstring) (lua_State* L, byte_view s, size_t off, size_t len);
 void(lua_pushstring) (lua_State* L, const std::optional<HostString>& s);
 HostString(lua_pushfstring) (lua_State* L, const HostString& fmt);
 void(lua_pushcclosure)(lua_State* L, lua_CFunction fn, int n);
-CFuncInfo*(lua_createcfuncinfo)(lua_State* L, lua_CFunction fn, std::optional<HostString> name = std::nullopt);
+CFuncInfo*(lua_createcfuncinfo)(lua_State* L, lua_CFunction fn);
 void(lua_pushcfuncinfo)(lua_State* L, CFuncInfo* cfi);
 void(lua_pushboolean)(lua_State* L, int b);
 void(lua_pushlightuserdata)(lua_State* L, void* p);

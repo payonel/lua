@@ -426,14 +426,14 @@ static int sort(lua_State* L)
 
 /* }====================================================== */
 
-static CFuncInfo cfi_tconcat("concat"_hs, tconcat);
-static CFuncInfo cfi_tcreate("create"_hs, tcreate);
-static CFuncInfo cfi_tinsert("insert"_hs, tinsert);
-static CFuncInfo cfi_tpack("pack"_hs, tpack);
-static CFuncInfo cfi_tunpack("unpack"_hs, tunpack);
-static CFuncInfo cfi_tremove("remove"_hs, tremove);
-static CFuncInfo cfi_tmove("move"_hs, tmove);
-static CFuncInfo cfi_sort("sort"_hs, sort);
+static CFuncInfo cfi_tconcat(tconcat);
+static CFuncInfo cfi_tcreate(tcreate);
+static CFuncInfo cfi_tinsert(tinsert);
+static CFuncInfo cfi_tpack(tpack);
+static CFuncInfo cfi_tunpack(tunpack);
+static CFuncInfo cfi_tremove(tremove);
+static CFuncInfo cfi_tmove(tmove);
+static CFuncInfo cfi_sort(sort);
 
 static const luaL_RegCFI tab_funcs[] = {
   {lt::concat, &cfi_tconcat},

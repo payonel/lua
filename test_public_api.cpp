@@ -4525,14 +4525,14 @@ static void test_cfunc_stress_group1()
 ** Group 2: Many cfuncs pushed and called in a tight loop.
 ** Uses pre-created static CFuncInfos (realistic: library functions reused).
 */
-static CFuncInfo cfi_unique0("unique0"_hs, cf_unique<0>);
-static CFuncInfo cfi_unique1("unique1"_hs, cf_unique<1>);
-static CFuncInfo cfi_unique2("unique2"_hs, cf_unique<2>);
-static CFuncInfo cfi_unique3("unique3"_hs, cf_unique<3>);
-static CFuncInfo cfi_unique4("unique4"_hs, cf_unique<4>);
-static CFuncInfo cfi_unique5("unique5"_hs, cf_unique<5>);
-static CFuncInfo cfi_unique6("unique6"_hs, cf_unique<6>);
-static CFuncInfo cfi_unique7("unique7"_hs, cf_unique<7>);
+static CFuncInfo cfi_unique0(cf_unique<0>);
+static CFuncInfo cfi_unique1(cf_unique<1>);
+static CFuncInfo cfi_unique2(cf_unique<2>);
+static CFuncInfo cfi_unique3(cf_unique<3>);
+static CFuncInfo cfi_unique4(cf_unique<4>);
+static CFuncInfo cfi_unique5(cf_unique<5>);
+static CFuncInfo cfi_unique6(cf_unique<6>);
+static CFuncInfo cfi_unique7(cf_unique<7>);
 
 static CFuncInfo* g2_funcs[] = {
   &cfi_unique0, &cfi_unique1, &cfi_unique2, &cfi_unique3,
@@ -4568,7 +4568,7 @@ static void test_cfunc_stress_group2()
 ** Measures overhead on function call/return paths.
 */
 static int cf_recurse(lua_State* L);
-static CFuncInfo cfi_recurse("recurse"_hs, cf_recurse);
+static CFuncInfo cfi_recurse(cf_recurse);
 
 static int cf_recurse(lua_State* L)
 {
@@ -4609,10 +4609,10 @@ static void test_cfunc_stress_group3()
 ** Group 4: Large tables full of cfunc values, iterated and overwritten.
 ** Stresses table slot writes with cfunc values.
 */
-static CFuncInfo cfi_noop("noop"_hs, cf_noop);
-static CFuncInfo cfi_add1("add1"_hs, cf_add1);
-static CFuncInfo cfi_add2("add2"_hs, cf_add2);
-static CFuncInfo cfi_id("id"_hs, cf_id);
+static CFuncInfo cfi_noop(cf_noop);
+static CFuncInfo cfi_add1(cf_add1);
+static CFuncInfo cfi_add2(cf_add2);
+static CFuncInfo cfi_id(cf_id);
 
 static void test_cfunc_stress_group4()
 {

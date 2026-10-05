@@ -22,13 +22,11 @@
 namespace lua::object
 {
 
-CFuncInfo* CFuncInfo::luaF_newCFuncInfo(lua_State* L, lua_CFunction f, std::optional<byte_view> name)
+CFuncInfo* CFuncInfo::luaF_newCFuncInfo(lua_State* L, lua_CFunction f)
 {
   CFuncInfo* cfi = luaM_malloc_CFuncInfo(L);
   luaC_link(L, cfi, LUA_VLCF);
   cfi->fptr = f;
-  if (name.has_value())
-    cfi->name = InternalString(name.value());
   return cfi;
 }
 

@@ -323,7 +323,7 @@ static int pairscont(lua_State*, int, lua_KContext)
   return 4; /* __pairs did all the work, just return its results */
 }
 
-static CFuncInfo cfi_next("next"_hs, luaB_next);
+static CFuncInfo cfi_next(luaB_next);
 
 static int luaB_pairs(lua_State* L)
 {
@@ -358,7 +358,7 @@ static int ipairsaux(lua_State* L)
 ** 'ipairs' function. Returns 'ipairsaux', given "table", 0.
 ** (The given "table" may not be a table.)
 */
-static CFuncInfo cfi_ipairsaux("ipairs_aux"_hs, ipairsaux);
+static CFuncInfo cfi_ipairsaux(ipairsaux);
 
 static int luaB_ipairs(lua_State* L)
 {
@@ -577,28 +577,28 @@ static int luaB_tostring(lua_State* L)
   return 1;
 }
 
-static CFuncInfo cfi_assert("assert"_hs, luaB_assert);
-static CFuncInfo cfi_collectgarbage("collectgarbage"_hs, luaB_collectgarbage);
-static CFuncInfo cfi_dofile("dofile"_hs, luaB_dofile);
-static CFuncInfo cfi_error("error"_hs, luaB_error);
-static CFuncInfo cfi_getmetatable("getmetatable"_hs, luaB_getmetatable);
-static CFuncInfo cfi_ipairs("ipairs"_hs, luaB_ipairs);
-static CFuncInfo cfi_loadfile("loadfile"_hs, luaB_loadfile);
-static CFuncInfo cfi_load("load"_hs, luaB_load);
-static CFuncInfo cfi_pairs("pairs"_hs, luaB_pairs);
-static CFuncInfo cfi_pcall("pcall"_hs, luaB_pcall);
-static CFuncInfo cfi_print("print"_hs, luaB_print);
-static CFuncInfo cfi_warn("warn"_hs, luaB_warn);
-static CFuncInfo cfi_rawequal("rawequal"_hs, luaB_rawequal);
-static CFuncInfo cfi_rawlen("rawlen"_hs, luaB_rawlen);
-static CFuncInfo cfi_rawget("rawget"_hs, luaB_rawget);
-static CFuncInfo cfi_rawset("rawset"_hs, luaB_rawset);
-static CFuncInfo cfi_select("select"_hs, luaB_select);
-static CFuncInfo cfi_setmetatable("setmetatable"_hs, luaB_setmetatable);
-static CFuncInfo cfi_tonumber("tonumber"_hs, luaB_tonumber);
-static CFuncInfo cfi_tostring("tostring"_hs, luaB_tostring);
-static CFuncInfo cfi_type("type"_hs, luaB_type);
-static CFuncInfo cfi_xpcall("xpcall"_hs, luaB_xpcall);
+static CFuncInfo cfi_assert(luaB_assert);
+static CFuncInfo cfi_collectgarbage(luaB_collectgarbage);
+static CFuncInfo cfi_dofile(luaB_dofile);
+static CFuncInfo cfi_error(luaB_error);
+static CFuncInfo cfi_getmetatable(luaB_getmetatable);
+static CFuncInfo cfi_ipairs(luaB_ipairs);
+static CFuncInfo cfi_loadfile(luaB_loadfile);
+static CFuncInfo cfi_load(luaB_load);
+static CFuncInfo cfi_pairs(luaB_pairs);
+static CFuncInfo cfi_pcall(luaB_pcall);
+static CFuncInfo cfi_print(luaB_print);
+static CFuncInfo cfi_warn(luaB_warn);
+static CFuncInfo cfi_rawequal(luaB_rawequal);
+static CFuncInfo cfi_rawlen(luaB_rawlen);
+static CFuncInfo cfi_rawget(luaB_rawget);
+static CFuncInfo cfi_rawset(luaB_rawset);
+static CFuncInfo cfi_select(luaB_select);
+static CFuncInfo cfi_setmetatable(luaB_setmetatable);
+static CFuncInfo cfi_tonumber(luaB_tonumber);
+static CFuncInfo cfi_tostring(luaB_tostring);
+static CFuncInfo cfi_type(luaB_type);
+static CFuncInfo cfi_xpcall(luaB_xpcall);
 
 static const luaL_RegCFI base_funcs[] = {
   {lt::assert, &cfi_assert},

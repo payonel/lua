@@ -522,22 +522,22 @@ static int db_traceback(lua_State* L)
   return 1;
 }
 
-static CFuncInfo cfi_db_debug("debug"_hs, db_debug);
-static CFuncInfo cfi_db_getuservalue("getuservalue"_hs, db_getuservalue);
-static CFuncInfo cfi_db_gethook("gethook"_hs, db_gethook);
-static CFuncInfo cfi_db_getinfo("getinfo"_hs, db_getinfo);
-static CFuncInfo cfi_db_getlocal("getlocal"_hs, db_getlocal);
-static CFuncInfo cfi_db_getregistry("getregistry"_hs, db_getregistry);
-static CFuncInfo cfi_db_getmetatable("getmetatable"_hs, db_getmetatable);
-static CFuncInfo cfi_db_getupvalue("getupvalue"_hs, db_getupvalue);
-static CFuncInfo cfi_db_upvaluejoin("upvaluejoin"_hs, db_upvaluejoin);
-static CFuncInfo cfi_db_upvalueid("upvalueid"_hs, db_upvalueid);
-static CFuncInfo cfi_db_setuservalue("setuservalue"_hs, db_setuservalue);
-static CFuncInfo cfi_db_sethook("sethook"_hs, db_sethook);
-static CFuncInfo cfi_db_setlocal("setlocal"_hs, db_setlocal);
-static CFuncInfo cfi_db_setmetatable("setmetatable"_hs, db_setmetatable);
-static CFuncInfo cfi_db_setupvalue("setupvalue"_hs, db_setupvalue);
-static CFuncInfo cfi_db_traceback("traceback"_hs, db_traceback);
+static CFuncInfo cfi_db_debug(db_debug);
+static CFuncInfo cfi_db_getuservalue(db_getuservalue);
+static CFuncInfo cfi_db_gethook(db_gethook);
+static CFuncInfo cfi_db_getinfo(db_getinfo);
+static CFuncInfo cfi_db_getlocal(db_getlocal);
+static CFuncInfo cfi_db_getregistry(db_getregistry);
+static CFuncInfo cfi_db_getmetatable(db_getmetatable);
+static CFuncInfo cfi_db_getupvalue(db_getupvalue);
+static CFuncInfo cfi_db_upvaluejoin(db_upvaluejoin);
+static CFuncInfo cfi_db_upvalueid(db_upvalueid);
+static CFuncInfo cfi_db_setuservalue(db_setuservalue);
+static CFuncInfo cfi_db_sethook(db_sethook);
+static CFuncInfo cfi_db_setlocal(db_setlocal);
+static CFuncInfo cfi_db_setmetatable(db_setmetatable);
+static CFuncInfo cfi_db_setupvalue(db_setupvalue);
+static CFuncInfo cfi_db_traceback(db_traceback);
 
 static const luaL_RegCFI dblib[] = {
   {lt::debug, &cfi_db_debug},

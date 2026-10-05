@@ -614,22 +614,18 @@ constexpr int sizeLclosure(int n)
 struct CFuncInfo : GCObject
 {
   lua_CFunction fptr;
-  std::optional<InternalString> name;
 
   CFuncInfo()
     : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
     , fptr(nullptr)
-    , name(std::nullopt)
   {}
 
-  CFuncInfo(HostString n, lua_CFunction f)
+  explicit CFuncInfo(lua_CFunction f)
     : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */}
     , fptr(f)
-    , name(n.to_utf8())
   {}
 
-  static CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f,
-                                       std::optional<byte_view> name = std::nullopt);
+  static CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f);
 };
 
 /* }================================================================== */

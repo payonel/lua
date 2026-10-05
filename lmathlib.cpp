@@ -484,29 +484,29 @@ static void setrandfunc(lua_State* L)
 */
 /* }================================================================== */
 
-static CFuncInfo cfi_math_abs("abs"_hs, math_abs);
-static CFuncInfo cfi_math_acos("acos"_hs, math_acos);
-static CFuncInfo cfi_math_asin("asin"_hs, math_asin);
-static CFuncInfo cfi_math_atan("atan"_hs, math_atan);
-static CFuncInfo cfi_math_ceil("ceil"_hs, math_ceil);
-static CFuncInfo cfi_math_cos("cos"_hs, math_cos);
-static CFuncInfo cfi_math_deg("deg"_hs, math_deg);
-static CFuncInfo cfi_math_exp("exp"_hs, math_exp);
-static CFuncInfo cfi_math_toint("tointeger"_hs, math_toint);
-static CFuncInfo cfi_math_floor("floor"_hs, math_floor);
-static CFuncInfo cfi_math_fmod("fmod"_hs, math_fmod);
-static CFuncInfo cfi_math_frexp("frexp"_hs, math_frexp);
-static CFuncInfo cfi_math_ult("ult"_hs, math_ult);
-static CFuncInfo cfi_math_ldexp("ldexp"_hs, math_ldexp);
-static CFuncInfo cfi_math_log("log"_hs, math_log);
-static CFuncInfo cfi_math_max("max"_hs, math_max);
-static CFuncInfo cfi_math_min("min"_hs, math_min);
-static CFuncInfo cfi_math_modf("modf"_hs, math_modf);
-static CFuncInfo cfi_math_rad("rad"_hs, math_rad);
-static CFuncInfo cfi_math_sin("sin"_hs, math_sin);
-static CFuncInfo cfi_math_sqrt("sqrt"_hs, math_sqrt);
-static CFuncInfo cfi_math_tan("tan"_hs, math_tan);
-static CFuncInfo cfi_math_type("type"_hs, math_type);
+static CFuncInfo cfi_math_abs(math_abs);
+static CFuncInfo cfi_math_acos(math_acos);
+static CFuncInfo cfi_math_asin(math_asin);
+static CFuncInfo cfi_math_atan(math_atan);
+static CFuncInfo cfi_math_ceil(math_ceil);
+static CFuncInfo cfi_math_cos(math_cos);
+static CFuncInfo cfi_math_deg(math_deg);
+static CFuncInfo cfi_math_exp(math_exp);
+static CFuncInfo cfi_math_toint(math_toint);
+static CFuncInfo cfi_math_floor(math_floor);
+static CFuncInfo cfi_math_fmod(math_fmod);
+static CFuncInfo cfi_math_frexp(math_frexp);
+static CFuncInfo cfi_math_ult(math_ult);
+static CFuncInfo cfi_math_ldexp(math_ldexp);
+static CFuncInfo cfi_math_log(math_log);
+static CFuncInfo cfi_math_max(math_max);
+static CFuncInfo cfi_math_min(math_min);
+static CFuncInfo cfi_math_modf(math_modf);
+static CFuncInfo cfi_math_rad(math_rad);
+static CFuncInfo cfi_math_sin(math_sin);
+static CFuncInfo cfi_math_sqrt(math_sqrt);
+static CFuncInfo cfi_math_tan(math_tan);
+static CFuncInfo cfi_math_type(math_type);
 
 static const luaL_RegCFI mathlib[] = {
   {lt::abs_kw, &cfi_math_abs},

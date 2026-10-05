@@ -1970,12 +1970,9 @@ void lua_pushcfunction(lua_State* L, lua_CFunction f)
   lua_pushcclosure(L, f, 0);
 }
 
-CFuncInfo* lua_createcfuncinfo(lua_State* L, lua_CFunction fn, std::optional<HostString> name)
+CFuncInfo* lua_createcfuncinfo(lua_State* L, lua_CFunction fn)
 {
-  CFuncInfo* cfi = CFuncInfo::luaF_newCFuncInfo(L, fn);
-  if (name.has_value())
-    cfi->name = name->to_utf8();
-  return cfi;
+  return CFuncInfo::luaF_newCFuncInfo(L, fn);
 }
 
 void lua_pushcfuncinfo(lua_State* L, CFuncInfo* cfi)

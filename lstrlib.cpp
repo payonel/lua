@@ -365,14 +365,14 @@ static int arith_unm(lua_State* L)
   return arith(L, LUA_OPUNM, lt::mm_unm);
 }
 
-static CFuncInfo cfi_arith_add("mm_add"_hs, arith_add);
-static CFuncInfo cfi_arith_sub("mm_sub"_hs, arith_sub);
-static CFuncInfo cfi_arith_mul("mm_mul"_hs, arith_mul);
-static CFuncInfo cfi_arith_mod("mm_mod"_hs, arith_mod);
-static CFuncInfo cfi_arith_pow("mm_pow"_hs, arith_pow);
-static CFuncInfo cfi_arith_div("mm_div"_hs, arith_div);
-static CFuncInfo cfi_arith_idiv("mm_idiv"_hs, arith_idiv);
-static CFuncInfo cfi_arith_unm("mm_unm"_hs, arith_unm);
+static CFuncInfo cfi_arith_add(arith_add);
+static CFuncInfo cfi_arith_sub(arith_sub);
+static CFuncInfo cfi_arith_mul(arith_mul);
+static CFuncInfo cfi_arith_mod(arith_mod);
+static CFuncInfo cfi_arith_pow(arith_pow);
+static CFuncInfo cfi_arith_div(arith_div);
+static CFuncInfo cfi_arith_idiv(arith_idiv);
+static CFuncInfo cfi_arith_unm(arith_unm);
 
 static const luaL_RegCFI stringmetamethods[] = {
   {lt::mm_add, &cfi_arith_add},
@@ -2370,23 +2370,23 @@ static int str_unpack(lua_State* L)
 
 /* }====================================================== */
 
-static CFuncInfo cfi_str_byte("byte"_hs, str_byte);
-static CFuncInfo cfi_str_char("char"_hs, str_char);
-static CFuncInfo cfi_str_dump("dump"_hs, str_dump);
-static CFuncInfo cfi_str_find("find"_hs, str_find);
-static CFuncInfo cfi_str_format("format"_hs, str_format);
-static CFuncInfo cfi_gmatch("gmatch"_hs, gmatch);
-static CFuncInfo cfi_str_gsub("gsub"_hs, str_gsub);
-static CFuncInfo cfi_str_len("len"_hs, str_len);
-static CFuncInfo cfi_str_lower("lower"_hs, str_lower);
-static CFuncInfo cfi_str_match("match"_hs, str_match);
-static CFuncInfo cfi_str_rep("rep"_hs, str_rep);
-static CFuncInfo cfi_str_reverse("reverse"_hs, str_reverse);
-static CFuncInfo cfi_str_sub("sub"_hs, str_sub);
-static CFuncInfo cfi_str_upper("upper"_hs, str_upper);
-static CFuncInfo cfi_str_pack("pack"_hs, str_pack);
-static CFuncInfo cfi_str_packsize("packsize"_hs, str_packsize);
-static CFuncInfo cfi_str_unpack("unpack"_hs, str_unpack);
+static CFuncInfo cfi_str_byte(str_byte);
+static CFuncInfo cfi_str_char(str_char);
+static CFuncInfo cfi_str_dump(str_dump);
+static CFuncInfo cfi_str_find(str_find);
+static CFuncInfo cfi_str_format(str_format);
+static CFuncInfo cfi_gmatch(gmatch);
+static CFuncInfo cfi_str_gsub(str_gsub);
+static CFuncInfo cfi_str_len(str_len);
+static CFuncInfo cfi_str_lower(str_lower);
+static CFuncInfo cfi_str_match(str_match);
+static CFuncInfo cfi_str_rep(str_rep);
+static CFuncInfo cfi_str_reverse(str_reverse);
+static CFuncInfo cfi_str_sub(str_sub);
+static CFuncInfo cfi_str_upper(str_upper);
+static CFuncInfo cfi_str_pack(str_pack);
+static CFuncInfo cfi_str_packsize(str_packsize);
+static CFuncInfo cfi_str_unpack(str_unpack);
 
 static const luaL_RegCFI strlib[] = {
   {lt::byte, &cfi_str_byte},

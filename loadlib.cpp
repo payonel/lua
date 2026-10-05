@@ -176,7 +176,7 @@ static void createlibstr(lua_State* L, OsLib* plib)
   std::unique_ptr<LibHandle> o = std::make_unique<LibHandle>();
   o->lib = plib;
   lua_newuserobject(L, std::move(o), LIBHANDLE_SIZE, 0);
-  static CFuncInfo cfi_lib_gc("loadlib.__gc"_hs, lib_gc);
+  static CFuncInfo cfi_lib_gc(lib_gc);
   luaL_newmetatablei(L, lt::_LOADLIB);
   lua_pushcfuncinfo(L, &cfi_lib_gc);
   lua_setfieldi(L, -2, lt::mm_gc);
@@ -528,8 +528,8 @@ static int ll_require(lua_State* L)
 
 /* }====================================================== */
 
-static CFuncInfo cfi_ll_loadlib("loadlib"_hs, ll_loadlib);
-static CFuncInfo cfi_ll_searchpath("searchpath"_hs, ll_searchpath);
+static CFuncInfo cfi_ll_loadlib(ll_loadlib);
+static CFuncInfo cfi_ll_searchpath(ll_searchpath);
 
 static const luaL_RegCFI pk_funcs[] = {
   {lt::loadlib, &cfi_ll_loadlib},

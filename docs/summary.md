@@ -108,7 +108,8 @@ work so far, in roughly the order it landed:
   user-visible behavior (verified against a stock lua-master build).
 - C functions carry identity through `CFuncInfo` (static for library
   functions, GC-managed otherwise), so `lua_topointer` and table keys work
-  without raw function-pointer identity.
+  without raw function-pointer identity. A `CFuncInfo` holds only the
+  function (a method handle in Java); it has no name.
 
 ### 4. Macro removal
 

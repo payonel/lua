@@ -221,14 +221,14 @@ static int luaB_close(lua_State* L)
   }
 }
 
-static CFuncInfo cfi_luaB_cocreate("create"_hs, luaB_cocreate);
-static CFuncInfo cfi_luaB_coresume("resume"_hs, luaB_coresume);
-static CFuncInfo cfi_luaB_corunning("running"_hs, luaB_corunning);
-static CFuncInfo cfi_luaB_costatus("status"_hs, luaB_costatus);
-static CFuncInfo cfi_luaB_cowrap("wrap"_hs, luaB_cowrap);
-static CFuncInfo cfi_luaB_yield("yield"_hs, luaB_yield);
-static CFuncInfo cfi_luaB_yieldable("isyieldable"_hs, luaB_yieldable);
-static CFuncInfo cfi_luaB_close("close"_hs, luaB_close);
+static CFuncInfo cfi_luaB_cocreate(luaB_cocreate);
+static CFuncInfo cfi_luaB_coresume(luaB_coresume);
+static CFuncInfo cfi_luaB_corunning(luaB_corunning);
+static CFuncInfo cfi_luaB_costatus(luaB_costatus);
+static CFuncInfo cfi_luaB_cowrap(luaB_cowrap);
+static CFuncInfo cfi_luaB_yield(luaB_yield);
+static CFuncInfo cfi_luaB_yieldable(luaB_yieldable);
+static CFuncInfo cfi_luaB_close(luaB_close);
 
 static const luaL_RegCFI co_funcs[] = {
   {lt::create, &cfi_luaB_cocreate},

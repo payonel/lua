@@ -697,17 +697,17 @@ static int io_flush(lua_State* L)
 /*
 ** functions for 'io' library
 */
-static CFuncInfo cfi_io_close("close"_hs, io_close);
-static CFuncInfo cfi_io_flush("flush"_hs, io_flush);
-static CFuncInfo cfi_io_input("input"_hs, io_input);
-static CFuncInfo cfi_io_lines("lines"_hs, io_lines);
-static CFuncInfo cfi_io_open("open"_hs, io_open);
-static CFuncInfo cfi_io_output("output"_hs, io_output);
-static CFuncInfo cfi_io_popen("popen"_hs, io_popen);
-static CFuncInfo cfi_io_read("read"_hs, io_read);
-static CFuncInfo cfi_io_tmpfile("tmpfile"_hs, io_tmpfile);
-static CFuncInfo cfi_io_type("type"_hs, io_type);
-static CFuncInfo cfi_io_write("write"_hs, io_write);
+static CFuncInfo cfi_io_close(io_close);
+static CFuncInfo cfi_io_flush(io_flush);
+static CFuncInfo cfi_io_input(io_input);
+static CFuncInfo cfi_io_lines(io_lines);
+static CFuncInfo cfi_io_open(io_open);
+static CFuncInfo cfi_io_output(io_output);
+static CFuncInfo cfi_io_popen(io_popen);
+static CFuncInfo cfi_io_read(io_read);
+static CFuncInfo cfi_io_tmpfile(io_tmpfile);
+static CFuncInfo cfi_io_type(io_type);
+static CFuncInfo cfi_io_write(io_write);
 
 static const luaL_RegCFI iolib[] = {
   {lt::close_kw, &cfi_io_close},
@@ -726,13 +726,13 @@ static const luaL_RegCFI iolib[] = {
 /*
 ** methods for file handles
 */
-static CFuncInfo cfi_f_read("read"_hs, f_read);
-static CFuncInfo cfi_f_write("write"_hs, f_write);
-static CFuncInfo cfi_f_lines("lines"_hs, f_lines);
-static CFuncInfo cfi_f_flush("flush"_hs, f_flush);
-static CFuncInfo cfi_f_seek("seek"_hs, f_seek);
-static CFuncInfo cfi_f_close("close"_hs, f_close);
-static CFuncInfo cfi_f_setvbuf("setvbuf"_hs, f_setvbuf);
+static CFuncInfo cfi_f_read(f_read);
+static CFuncInfo cfi_f_write(f_write);
+static CFuncInfo cfi_f_lines(f_lines);
+static CFuncInfo cfi_f_flush(f_flush);
+static CFuncInfo cfi_f_seek(f_seek);
+static CFuncInfo cfi_f_close(f_close);
+static CFuncInfo cfi_f_setvbuf(f_setvbuf);
 
 static const luaL_RegCFI meth[] = {
   {lt::read_kw, &cfi_f_read},
@@ -747,8 +747,8 @@ static const luaL_RegCFI meth[] = {
 /*
 ** metamethods for file handles
 */
-static CFuncInfo cfi_f_gc("mm_gc"_hs, f_gc);
-static CFuncInfo cfi_f_tostring("mm_tostring"_hs, f_tostring);
+static CFuncInfo cfi_f_gc(f_gc);
+static CFuncInfo cfi_f_tostring(f_tostring);
 
 static const luaL_RegCFI metameth[] = {
   {lt::mm_index, nullptr},
