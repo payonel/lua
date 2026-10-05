@@ -110,7 +110,7 @@ static int str_reverse(lua_State* L)
   size_t off = luaL_buffinitsize(L, &b, l);
   byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
-    p[off + i] = (char)(s->byteAt(l - i - 1));
+    p[off + i] = (char)s->byteAt(l - i - 1);
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -124,7 +124,7 @@ static int str_lower(lua_State* L)
   size_t off = luaL_buffinitsize(L, &b, l);
   byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
-    p[off + i] = (char)(locale_tolower(s->byteAt(i)));
+    p[off + i] = (char)locale_tolower(s->byteAt(i));
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -138,7 +138,7 @@ static int str_upper(lua_State* L)
   size_t off = luaL_buffinitsize(L, &b, l);
   byte_span p = luaL_buffaddr(&b);
   for (i = 0; i < l; i++)
-    p[off + i] = (char)(locale_toupper(s->byteAt(i)));
+    p[off + i] = (char)locale_toupper(s->byteAt(i));
   luaL_pushresultsize(&b, l);
   return 1;
 }
@@ -1089,7 +1089,7 @@ static int str_gsub(lua_State* L)
       src = lastmatch = e;
     }
     else if (src < ms.src_end) /* otherwise, skip one character */
-      luaL_addchar(&b, (char)(srcs->byteAt(src++)));
+      luaL_addchar(&b, (char)srcs->byteAt(src++));
     else
       break; /* end of subject */
     if (anchor)
@@ -1198,7 +1198,7 @@ static size_t lua_number2strx(lua_State* L, byte_span area, size_t off, size_t s
   if (fmt[1] == 'A')
   {
     for (size_t i = 0; i < n; i++)
-      area[off + i] = (char)(locale_toupper((unsigned char)area[off + i]));
+      area[off + i] = (char)locale_toupper((unsigned char)area[off + i]);
   }
   else if (l_unlikely(fmt[1] != 'a'))
   {
@@ -1515,7 +1515,7 @@ static size_t formatint(lua_State* L, int arg, byte_view form,
   if (spec.conv == 'X')
   {
     for (size_t i = 0; i < ndigits; i++)
-      digits[i] = (char)(locale_toupper((unsigned char)digits[i]));
+      digits[i] = (char)locale_toupper((unsigned char)digits[i]);
   }
   byte_inline<MAX_ITEM> body;
   size_t blen = 0;
@@ -1562,7 +1562,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
   checkformat(L, form, lt::fmtflags_f, 1);
   FormatSpec spec;
   scanformat(form, &spec);
-  char lower = (char)(locale_tolower((unsigned char)spec.conv));
+  char lower = (char)locale_tolower((unsigned char)spec.conv);
   int precision = (spec.precision >= 0) ? spec.precision : 6;
   char prefix[1];
   size_t prefixlen = 0;
@@ -1632,7 +1632,7 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
   if (spec.conv == 'E' || spec.conv == 'G')
   {
     for (size_t i = 0; i < blen; i++)
-      body[i] = (char)(locale_toupper((unsigned char)body[i]));
+      body[i] = (char)locale_toupper((unsigned char)body[i]);
   }
   return packformat(area, off, maxitem, &spec,
                     byte_view(prefix, std::size(prefix)).substr(0, prefixlen),
@@ -1651,10 +1651,10 @@ static int str_format(lua_State* L)
   while (i < sfl)
   {
     if (sf->byteAt(i) != L_ESC)
-      luaL_addchar(&b, (char)(sf->byteAt(i++)));
+      luaL_addchar(&b, (char)sf->byteAt(i++));
     else if (sv_byteat(sf->view(), ++i) == L_ESC)
     {
-      luaL_addchar(&b, (char)(sf->byteAt(i))); /* %% */
+      luaL_addchar(&b, (char)sf->byteAt(i)); /* %% */
       i++;
     }
     else
@@ -1676,7 +1676,7 @@ static int str_format(lua_State* L)
         FormatSpec spec;
         scanformat(formv, &spec);
         char buff[1] {};
-        buff[0] = (char)(luaL_checkinteger(L, arg));
+        buff[0] = (char)luaL_checkinteger(L, arg);
         byte_view body(buff, 1);
         nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, body, false);
         break;
@@ -2036,7 +2036,7 @@ static PackDetails getdetails(Header* h, size_t totalsize)
   {
     if (align > h->maxalign) /* enforce maximum alignment */
       align = h->maxalign;
-    if (l_unlikely(!(((align) & ((align) - 1)) == 0)))
+    if (l_unlikely(!ispow2(align)))
     {                /* not a power of 2? */
       ntoalign = 0; /* to avoid warnings */
       luaL_argerrori(h->L, 1, lt::format_asks_for_alignment_not_power_of_2);

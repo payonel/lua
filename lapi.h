@@ -15,7 +15,7 @@ namespace lua::api
 static l_forceinline void api_incr_top(lua_State* L)
 {
   L->top++;
-  assert((L->top <= L->ci->top) && "stack overflow");
+  assert(L->top <= L->ci->top && "stack overflow");
 }
 
 static l_forceinline void adjustresults(lua_State* L, int nres)
@@ -29,7 +29,7 @@ static l_forceinline void api_checknelems(lua_State* L, int n)
 {
   (void) L;
   (void) n;
-  assert((n < (L->top - L->ci->func)) && "not enough elements in the stack");
+  assert(n < (L->top - L->ci->func) && "not enough elements in the stack");
 }
 
 /* Ensure the stack has at least 'n' elements to be popped. (Some
@@ -40,7 +40,7 @@ static l_forceinline void api_checkpop(lua_State* L, int n)
 {
   (void) L;
   (void) n;
-  assert((n < L->top - L->ci->func && L->tbclist < L->top - n) && "not enough free elements in the stack");
+  assert(n < L->top - L->ci->func && L->tbclist < L->top - n && "not enough free elements in the stack");
 }
 
 }

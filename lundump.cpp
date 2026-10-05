@@ -122,7 +122,7 @@ static size_t loadSize(LoadState* S)
 
 static int loadInt(LoadState* S)
 {
-  return (int)(loadVarint(S, INT_MAX));
+  return (int)loadVarint(S, INT_MAX);
 }
 
 static lua_Number loadNumber(LoadState* S)

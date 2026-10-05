@@ -185,7 +185,7 @@ static lua_Number numarith(lua_State* L, int op, lua_Number v1,
   case LUA_OPDIV:
     return v1 / v2;
   case LUA_OPPOW:
-    return ((v2 == 2) ? (v1) * v1 : pow(v1, v2));
+    return (v2 == 2) ? v1 * v1 : pow(v1, v2);
   case LUA_OPIDIV:
     return floor(v1 / v2);
   case LUA_OPUNM:

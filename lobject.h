@@ -763,7 +763,7 @@ private:
 */
 static l_forceinline int lmod(lua_Unsigned s, int size)
 {
-  assert((size & (size - 1)) == 0);
+  assert(ispow2(size));
   return (int)(s & (lua_Unsigned)(size - 1));
 }
 

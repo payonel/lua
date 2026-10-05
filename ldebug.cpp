@@ -577,8 +577,8 @@ std::optional<lua_Debug> lua_getinfo(lua_State* L, const HostString& options, co
   }
   if (what.find('n') != byte_view::npos)
   {
-    ar.namewhat = (res->namewhat.has_value()) ? HostString::from_bytes(res->namewhat.value()) : HostString{};
-    ar.name = (res->name.has_value()) ? HostString::from_bytes(res->name.value()) : HostString{};
+    ar.namewhat = res->namewhat.has_value() ? HostString::from_bytes(res->namewhat.value()) : HostString{};
+    ar.name = res->name.has_value() ? HostString::from_bytes(res->name.value()) : HostString{};
   }
   if (what.find('r') != byte_view::npos)
   {
@@ -830,7 +830,7 @@ static VarName funcnamefromcode(const Proto* p, int pc)
   case OP_MMBINI:
   case OP_MMBINK:
   {
-    tm = (TMS)(GETARG_C(i));
+    tm = (TMS)GETARG_C(i);
     break;
   }
   case OP_UNM:

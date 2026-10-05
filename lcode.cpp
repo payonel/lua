@@ -599,7 +599,7 @@ static int k2proto(FuncState* fs, TValue* key, TValue* v)
   int tag = fs->kcache->luaH_get(key, &val); /* query scanner table */
   if (!tagisempty(tag))
   { /* is there an index there? */
-    int k = (int)(ivalue(&val));
+    int k = (int)ivalue(&val);
     /* collisions can happen only for float keys */
     assert(ttisfloat(key) || luaV_rawequalobj(&f->k[k], v));
     return k; /* reuse index */

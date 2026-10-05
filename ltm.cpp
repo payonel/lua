@@ -396,7 +396,7 @@ static int getnumargs(lua_State* L, CallInfo* ci, Table* h)
         (ivalue(&res) < 0 || ivalue(&res) > INT_MAX / 2))
       luaG_runerror(L, lt::vararg_table_has_no_proper_n);
     assert(ttisinteger(&res));
-    return (int)(ivalue(&res));
+    return (int)ivalue(&res);
   }
 }
 

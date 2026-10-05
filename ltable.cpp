@@ -321,7 +321,7 @@ const TValue* Table::getgeneric(const TValue* key, int deadok)
 {
   Table* t = this;
   int idx = t->nodegeneric(key, deadok);
-  return (idx < 0) ? &absentkey : (&gnode(t, idx)->val);
+  return (idx < 0) ? &absentkey : &gnode(t, idx)->val;
 }
 
 /*
@@ -947,12 +947,12 @@ int Table::insertkey(const TValue* key, TValue* value)
       /* yes; move colliding node into free position */
       while (othern + (gnode(t, othern)->next) != mp) /* find previous */
         othern += gnode(t, othern)->next;
-      (gnode(t, othern)->next) = f - othern; /* rechain to point to 'f' */
+      gnode(t, othern)->next = f - othern; /* rechain to point to 'f' */
       copynode(gnode(t, f), gnode(t, mp));          /* copy colliding node into free pos. (mp->next also goes) */
       if ((gnode(t, mp)->next) != 0)
       {
-        (gnode(t, f)->next) += mp - f; /* correct 'next' */
-        (gnode(t, mp)->next) = 0;      /* now 'mp' is free */
+        gnode(t, f)->next += mp - f; /* correct 'next' */
+        gnode(t, mp)->next = 0;      /* now 'mp' is free */
       }
       setempty(&gnode(t, mp)->val);
     }
@@ -960,10 +960,10 @@ int Table::insertkey(const TValue* key, TValue* value)
     { /* colliding node is in its own main position */
       /* new node will go into free position */
       if ((gnode(t, mp)->next) != 0)
-        (gnode(t, f)->next) = (mp + (gnode(t, mp)->next)) - f; /* chain new position */
+        (gnode(t, f)->next) = (mp + gnode(t, mp)->next) - f; /* chain new position */
       else
-        assert((gnode(t, f)->next) == 0);
-      (gnode(t, mp)->next) = f - mp;
+        assert(gnode(t, f)->next == 0);
+      gnode(t, mp)->next = f - mp;
       mp = f;
     }
   }
@@ -1033,7 +1033,7 @@ const TValue* Table::getintfromhash(lua_Integer key)
 {
   Table* t = this;
   int idx = t->nodeintfromhash(key);
-  return (idx < 0) ? &absentkey : (&gnode(t, idx)->val);
+  return (idx < 0) ? &absentkey : &gnode(t, idx)->val;
 }
 
 int Table::hashkeyisempty(lua_Integer key)
@@ -1090,7 +1090,7 @@ const TValue* Table::luaH_Hgetshortstr(TString* key)
 {
   Table* t = this;
   int idx = t->nodeshortstr(key);
-  return (idx < 0) ? &absentkey : (&gnode(t, idx)->val);
+  return (idx < 0) ? &absentkey : &gnode(t, idx)->val;
 }
 
 lu_byte Table::luaH_getshortstr(TString* key, TValue* res)

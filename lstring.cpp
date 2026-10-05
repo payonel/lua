@@ -37,7 +37,7 @@ void TString::luaS_forcehash()
 {
   TString* ts = this;
   byte_view bytes = ts->data.view();
-  ts->hash = (unsigned int)(InternalString::hashBytes(bytes.data(), bytes.size()));
+  ts->hash = (unsigned int)InternalString::hashBytes(bytes.data(), bytes.size());
   ts->hashed = 1;
 }
 
@@ -86,7 +86,7 @@ static TString* internfind(global_State* g, byte_view sv, size_t h)
 
 static void internresize(global_State* g, size_t newsize)
 {
-  assert((newsize & (newsize - 1)) == 0);
+  assert(ispow2(newsize));
   std::vector<TString*> nb(newsize, nullptr);
   for (TString* ts : g->strt.buckets)
   {

@@ -83,7 +83,7 @@ int luaV_tonumber_(const TValue* obj, NumResult* n)
   TValue v;
   if (ttisinteger(obj))
   {
-    n->v = (lua_Number)(ivalue(obj));
+    n->v = (lua_Number)ivalue(obj);
     return 1;
   }
   else if (l_strton(obj, &v))

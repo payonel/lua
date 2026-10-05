@@ -66,6 +66,10 @@ static_assert(sizeof(size_t) >= sizeof(lua_Integer));
 /*
 ** test whether an unsigned value is a power of 2 (or zero)
 */
+constexpr bool ispow2(lua_Unsigned x)
+{
+  return (x & (x - 1)) == 0;
+}
 
 /* number of chars of a literal string without the ending \0 */
 

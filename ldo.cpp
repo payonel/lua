@@ -964,8 +964,8 @@ int lua_yieldk(lua_State* L, int nresults, lua_KContext ctx,
   if (isLua(ci))
   { /* inside a hook? */
     assert(!isLuacode(ci));
-    assert((nresults == 0) && "hooks cannot yield values");
-    assert((k == nullptr) && "hooks cannot continue after yielding");
+    assert(nresults == 0 && "hooks cannot yield values");
+    assert(k == nullptr && "hooks cannot continue after yielding");
   }
   else
   {

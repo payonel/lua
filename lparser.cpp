@@ -2210,7 +2210,7 @@ static void retstat(LexState* ls)
       if (e.k == VCALL && nret == 1 && !fs->bl->insidetbc)
       { /* tail call? */
         fs->f->code[e.info] = SET_OPCODE(fs->f->code[e.info], OP_TAILCALL);
-        assert(GETARG_A(fs->f->code[(&e)->info]) == luaY_nvarstack(fs));
+        assert(GETARG_A(fs->f->code[e.info]) == luaY_nvarstack(fs));
       }
       nret = LUA_MULTRET; /* return all values */
     }
