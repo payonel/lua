@@ -55,7 +55,7 @@ case("persist output is charged to the state", function()
   local blob = styx.persist(t)
   local after = collectgarbage("count")
   collectgarbage("restart")
-  assert(#blob > 20000 * 8)
+  assert(#blob > 20000)
   assert(after - before > #blob / 1024, "output accounted")
 end)
 

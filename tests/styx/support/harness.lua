@@ -187,6 +187,19 @@ function H.roundtrip(v, perms, back)
   return r, blob
 end
 
+-- the stream's variable-length integer: zigzag, 7 bits per byte
+function H.varint(n)
+  local u = (n << 1) ~ (n >> 63)
+  local bytes = {}
+  repeat
+    local b = u & 0x7F
+    u = u >> 7
+    if u ~= 0 then b = b | 0x80 end
+    bytes[#bytes + 1] = string.char(b)
+  until u == 0
+  return table.concat(bytes)
+end
+
 -- every proper prefix of a valid stream is rejected with an error
 function H.rejects_truncation(blob, back)
   for n = 0, #blob - 1 do

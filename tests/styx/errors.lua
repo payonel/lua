@@ -66,18 +66,18 @@ end)
 case("dangling back references are rejected", function()
   -- a back reference to an id that was never defined
   local header = styx.persist(nil):sub(1, -2)
-  fails("invalid persisted data", styx.unpersist, header .. "\9" .. string.pack("<i8", 99))
+  fails("invalid persisted data", styx.unpersist, header .. "\9" .. H.varint(99))
 end)
 
 case("negative lengths are rejected", function()
   local header = styx.persist(nil):sub(1, -2)
-  fails("invalid persisted data", styx.unpersist, header .. "\5" .. string.pack("<i8", -1))
+  fails("invalid persisted data", styx.unpersist, header .. "\5" .. H.varint(-1))
 end)
 
 case("table sizes are checked", function()
   local header = styx.persist(nil):sub(1, -2)
   local function table_stream(asize, hsize, lenhint)
-    return header .. "\6" .. string.pack("<i8i8i8", asize, hsize, lenhint) .. "\0\0"
+    return header .. "\6" .. H.varint(asize) .. H.varint(hsize) .. H.varint(lenhint) .. "\0\0"
   end
   assert(next(styx.unpersist(table_stream(0, 0, 0))) == nil)
   assert(next(styx.unpersist(table_stream(4, 8, 4))) == nil)

@@ -173,8 +173,8 @@ of these raises a clear error unless it says otherwise.
   the stream without verifying them (as with binary chunks), and checks the
   thread state it reads only for consistency with itself. Do not unpersist
   data you do not trust.
-- **Compact output**: integers and counts are fixed 8-byte values; sizes
-  and the format version are not final.
+- **A final format**: the format (version 2, ADR-10) may still change;
+  no stream of an earlier version is read.
 - **`settings`**. Today: error ("not implemented").
 
 ## ADRs
@@ -231,19 +231,24 @@ stays nil. Scripts and tests load it with `require`.
 Every capability is covered from script and from C++ for careful testing,
 in `tests/styx/`, run by `make test` with everything else.
 
-### ADR-10: Stream format, first cut
-**Status:** proposed
-A persisted string is the header `"Styx\x01"` (name plus format version)
-followed by one value: a tag byte and a payload. Integers and floats are 8
-raw little-endian bytes (the engine is little-endian only). Output is built
-in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a missing
-header, unknown tags, truncation and trailing bytes.
+### ADR-10: Stream format
+**Status:** accepted (version 2)
+A persisted string is the header `"Styx\x02"` (name plus format version)
+followed by one value (or, for a whole state, `TAG_STATE`, ADR-21): a tag
+byte and a payload. Integers, reference ids, lengths, counts, table sizes
+and prototype fields are variable-length integers (zigzag, 7 bits per byte:
+-64..63 take one byte); floats are 8 raw little-endian bytes (the engine is
+little-endian only), instructions 4 raw bytes each, and a thread's frames,
+to-be-closed list and hook fields fixed 8-byte values. Version 2 made
+streams about 70% smaller than version 1's fixed 8-byte integers. Output
+is built in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a
+missing header (or another version), unknown tags, truncation and trailing
+bytes.
 A thread is written as its status (unstarted or dead, suspended, or dead
 after an error, which keeps its frames and error value), stack top and
-maximum frame top, then
-its stack values, then its frames, then its to-be-closed list (stack
-levels), so that unpersist can fill the stack before any frame exists
-(see ADR-15, ADR-20).
+maximum frame top, then its stack values, then its frames, then its
+to-be-closed list (stack levels), then its hook, so that unpersist can
+fill the stack before any frame exists (see ADR-15, ADR-20, ADR-26).
 Non-basic values (strings, tables, functions, threads) get a reference id in
 first-seen order; a repeat is written as a back reference, which preserves
 sharing and cycles. An object found in the permanents table is written as

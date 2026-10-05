@@ -51,6 +51,15 @@ case("primitives as the only content of a table", function()
   H.roundtrip(t)
 end)
 
+case("integers take as few bytes as they need", function()
+  local header = #styx.persist(nil) - 1
+  local function payload(i) return #styx.persist(i) - header - 1 end
+  assert(payload(0) == 1 and payload(-1) == 1 and payload(63) == 1 and payload(-64) == 1)
+  assert(payload(64) == 2 and payload(8191) == 2)
+  assert(payload(math.maxinteger) == 10 and payload(math.mininteger) == 10)
+  assert(#styx.persist(("x"):rep(50)) == header + 1 + 1 + 50)
+end)
+
 case("streams start with the Styx header", function()
   local blob = styx.persist(1)
   assert(blob:sub(1, 4) == "Styx")

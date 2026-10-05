@@ -240,6 +240,7 @@ enum class Op : char
   Byte,       /* write 'i' as one byte */
   I64,        /* write 'i' */
   Raw,        /* write 'i' bytes at 'p' */
+  Var,        /* write 'i' as a variable-length integer */
   Proto,      /* write prototype 'p' */
   Upvalue,    /* write upvalue 'i' of closure 'p' */
   TableNext,  /* write the entries of table 'p' from position 'i' */
@@ -287,6 +288,23 @@ public:
   void byte(char c) { out(&c, 1); }
   void i64(lua_Integer v) { out(&v, sizeof(v)); }
   void raw(const void* p, size_t n) { out(p, n); }
+
+  /* an integer in as few bytes as it needs (zigzag, 7 bits per byte) */
+  void var(lua_Integer v)
+  {
+    lua_Unsigned u = (static_cast<lua_Unsigned>(v) << 1) ^ static_cast<lua_Unsigned>(v >> 63);
+    char b[10];
+    size_t n = 0;
+    do
+    {
+      char c = static_cast<char>(u & 0x7F);
+      u >>= 7;
+      if (u != 0)
+        c = static_cast<char>(c | 0x80);
+      b[n++] = c;
+    } while (u != 0);
+    out(b, n);
+  }
 
   void finish()
   {
@@ -397,6 +415,9 @@ private:
         break;
       case Op::I64:
         i64(t.i);
+        break;
+      case Op::Var:
+        var(t.i);
         break;
       case Op::Raw:
         raw(t.p, static_cast<size_t>(t.i));
@@ -594,7 +615,7 @@ private:
     if (ref_find(v, id, &found))
     {
       byte(TAG_REF);
-      i64(found);
+      var(found);
       return true;
     }
     ref_add(v, id);
@@ -625,7 +646,7 @@ private:
       if (ttisinteger(&v))
       {
         byte(TAG_INTEGER);
-        i64(ivalue(&v));
+        var(ivalue(&v));
       }
       else
       {
@@ -655,7 +676,7 @@ private:
     {
       byte_view s = tsvalue(&v)->data.view();
       byte(TAG_STRING);
-      i64(static_cast<lua_Integer>(s.size()));
+      var(static_cast<lua_Integer>(s.size()));
       raw(s.data(), s.size());
       return;
     }
@@ -741,9 +762,9 @@ private:
     if (special(h))
       return;
     byte(TAG_TABLE);
-    i64(h->asize());
-    i64(allocsizenode(h));
-    i64(h->asize() > 0 ? h->lenhint : 0);
+    var(h->asize());
+    var(allocsizenode(h));
+    var(h->asize() > 0 ? h->lenhint : 0);
     /* the metatable, then the entries in the order of 'next' */
     push_op(Op::TableNext, 0, h);
     if (h->metatable != nullptr)
@@ -831,7 +852,7 @@ private:
       t.p = cl;
       tasks_.push(t);
     }
-    push_op(Op::I64, nup);
+    push_op(Op::Var, nup);
     push_op(Op::Proto, 0, cl->p);
   }
 
@@ -848,7 +869,7 @@ private:
     if (ref_find(id, uv, &found))
     {
       byte(TAG_UPVAL_REF);
-      i64(found);
+      var(found);
       return;
     }
     ref_add(id, uv);
@@ -862,7 +883,7 @@ private:
     if (upisopen(uv) && !is_running(uv->owner))
     {
       byte(TAG_UPVAL_OPEN);
-      push_op(Op::I64, uv->stkid);
+      push_op(Op::Var, uv->stkid);
       TValue th{};
       setthvalue(L_, &th, uv->owner);
       push_value(th, Step::None);
@@ -884,47 +905,47 @@ private:
     if (ref_find(id, f, &found))
     {
       byte(TAG_PROTO_REF);
-      i64(found);
+      var(found);
       return;
     }
     ref_add(id, f);
     byte(TAG_PROTO_NEW);
-    i64(f->linedefined);
-    i64(f->lastlinedefined);
-    i64(f->numparams);
+    var(f->linedefined);
+    var(f->lastlinedefined);
+    var(f->numparams);
     byte(static_cast<char>(f->flag & ~PF_FIXED));
-    i64(f->maxstacksize);
-    i64(static_cast<lua_Integer>(f->code.size()));
+    var(f->maxstacksize);
+    var(static_cast<lua_Integer>(f->code.size()));
     raw(f->code.data(), f->code.size() * sizeof(Instruction));
-    i64(static_cast<lua_Integer>(f->k.size()));
+    var(static_cast<lua_Integer>(f->k.size()));
     /* the rest, pushed from last to first */
     for (size_t j = f->locvars.size(); j-- > 0;)
     {
-      push_op(Op::I64, f->locvars[j].endpc);
-      push_op(Op::I64, f->locvars[j].startpc);
+      push_op(Op::Var, f->locvars[j].endpc);
+      push_op(Op::Var, f->locvars[j].startpc);
       push_name(f->locvars[j].varname);
     }
-    push_op(Op::I64, static_cast<lua_Integer>(f->locvars.size()));
+    push_op(Op::Var, static_cast<lua_Integer>(f->locvars.size()));
     for (size_t j = f->abslineinfo.size(); j-- > 0;)
     {
-      push_op(Op::I64, f->abslineinfo[j].line);
-      push_op(Op::I64, f->abslineinfo[j].pc);
+      push_op(Op::Var, f->abslineinfo[j].line);
+      push_op(Op::Var, f->abslineinfo[j].pc);
     }
-    push_op(Op::I64, static_cast<lua_Integer>(f->abslineinfo.size()));
+    push_op(Op::Var, static_cast<lua_Integer>(f->abslineinfo.size()));
     push_op(Op::Raw, static_cast<lua_Integer>(f->lineinfo.size()), f->lineinfo.data());
-    push_op(Op::I64, static_cast<lua_Integer>(f->lineinfo.size()));
+    push_op(Op::Var, static_cast<lua_Integer>(f->lineinfo.size()));
     push_name(f->source);
     for (size_t j = f->p.size(); j-- > 0;)
       push_op(Op::Proto, 0, f->p[j]);
-    push_op(Op::I64, static_cast<lua_Integer>(f->p.size()));
+    push_op(Op::Var, static_cast<lua_Integer>(f->p.size()));
     for (size_t j = f->upvalues.size(); j-- > 0;)
     {
       push_name(f->upvalues[j].name);
       push_op(Op::Byte, f->upvalues[j].kind);
-      push_op(Op::I64, f->upvalues[j].idx);
+      push_op(Op::Var, f->upvalues[j].idx);
       push_op(Op::Byte, f->upvalues[j].instack);
     }
-    push_op(Op::I64, static_cast<lua_Integer>(f->upvalues.size()));
+    push_op(Op::Var, static_cast<lua_Integer>(f->upvalues.size()));
     for (size_t j = f->k.size(); j-- > 0;)
       push_value(f->k[j], Step::None);
   }
@@ -955,8 +976,8 @@ private:
     }
     byte(TAG_THREAD);
     byte(static_cast<char>(T->status));
-    i64(T->top);
-    i64(maxtop);
+    var(T->top);
+    var(maxtop);
     push_op(Op::ThreadTail, 0, T);
     push_op(Op::ThreadSlot, 0, T, T->top);
   }
@@ -1102,6 +1123,22 @@ struct Reader
     return v;
   }
 
+  /* a variable-length integer (see Walker::var) */
+  lua_Integer get_var()
+  {
+    lua_Unsigned u = 0;
+    for (int shift = 0;; shift += 7)
+    {
+      if (shift > 63)
+        invalid();
+      lua_Unsigned c = static_cast<unsigned char>(get_byte());
+      u |= (c & 0x7F) << shift;
+      if ((c & 0x80) == 0)
+        break;
+    }
+    return static_cast<lua_Integer>((u >> 1) ^ (0 - (u & 1)));
+  }
+
   byte_view get_bytes(size_t n)
   {
     need(n);
@@ -1112,7 +1149,7 @@ struct Reader
 
   int get_int()
   {
-    lua_Integer n = get_i64();
+    lua_Integer n = get_var();
     if (n < INT_MIN || n > INT_MAX)
       invalid();
     return static_cast<int>(n);
@@ -1121,7 +1158,7 @@ struct Reader
   /* a count, at most the number of bytes left (each item takes 'item' bytes) */
   int get_count(size_t item = 1)
   {
-    lua_Integer n = get_i64();
+    lua_Integer n = get_var();
     if (n < 0 || n > INT_MAX || static_cast<size_t>(n) > (data.size() - pos) / item)
       invalid();
     return static_cast<int>(n);
@@ -1362,7 +1399,7 @@ private:
       lua_pushboolean(L_, 1);
       return Next::Ready;
     case TAG_INTEGER:
-      lua_pushinteger(L_, r_.get_i64());
+      lua_pushinteger(L_, r_.get_var());
       return Next::Ready;
     case TAG_FLOAT:
     {
@@ -1373,7 +1410,7 @@ private:
     }
     case TAG_REF:
     {
-      lua_Integer id = r_.get_i64();
+      lua_Integer id = r_.get_var();
       lua_rawgeti(L_, REFS, id);
       if (lua_isnil(L_, -1))
         r_.invalid();
@@ -1395,7 +1432,7 @@ private:
     case TAG_STRING:
     {
       lua_Integer id = ++refcount_;
-      lua_Integer n = r_.get_i64();
+      lua_Integer n = r_.get_var();
       if (n < 0)
         r_.invalid();
       byte_view s = r_.get_bytes(static_cast<size_t>(n));
@@ -1474,9 +1511,9 @@ private:
 
   void start_table(lua_Integer id)
   {
-    lua_Integer asize = r_.get_i64();
-    lua_Integer hsize = r_.get_i64();
-    lua_Integer lenhint = r_.get_i64();
+    lua_Integer asize = r_.get_var();
+    lua_Integer hsize = r_.get_var();
+    lua_Integer lenhint = r_.get_var();
     if (asize < 0 || asize > INT_MAX || hsize < 0 || hsize > INT_MAX ||
         (hsize & (hsize - 1)) != 0 || lenhint < 0 || lenhint > asize)
       r_.invalid();
@@ -1604,7 +1641,7 @@ private:
     char tag = r_.get_byte();
     if (tag == TAG_PROTO_REF)
     {
-      lua_rawgeti(L_, REFS, r_.get_i64());
+      lua_rawgeti(L_, REFS, r_.get_var());
       if (lua_type(L_, -1) != LUA_TFUNCTION || lua_iscfunction(L_, -1))
         r_.invalid();
       return Next::Ready;
@@ -1773,7 +1810,7 @@ private:
       p->lineinfo = luaM_alloc_ls_byte_span(g, L_, {}, static_cast<size_t>(n), true);
       lua_unlock(L_);
       std::memcpy(p->lineinfo.data(), lines.data(), lines.size());
-      n = r_.get_count(16);
+      n = r_.get_count(2);
       lua_lock(L_);
       p->abslineinfo = luaM_alloc_AbsLineInfo_span(g, L_, {}, static_cast<size_t>(n), true);
       lua_unlock(L_);
@@ -1834,7 +1871,7 @@ private:
       }
       if (tag != TAG_UPVAL_REF)
         r_.invalid();
-      lua_Integer uid = r_.get_i64();
+      lua_Integer uid = r_.get_var();
       lua_rawgeti(L_, UPS, uid);
       lua_rawgeti(L_, UPS, -uid);
       if (!lua_isfunction(L_, -2) || !lua_isinteger(L_, -1))
@@ -1861,7 +1898,7 @@ private:
       TValue c = getslot(L_, L_->top - 1);
       LClosure* cl = clLvalue(&c);
       lua_pop(L_, 1);
-      lua_Integer nup = r_.get_i64();
+      lua_Integer nup = r_.get_var();
       if (nup != static_cast<lua_Integer>(cl->upvals.size()))
         r_.invalid();
       f.p = cl;
@@ -1881,7 +1918,7 @@ private:
     case Part::UpOpen:
     {
       lua_State* L1 = lua_tothread(L_, -1);
-      lua_Integer level = r_.get_i64();
+      lua_Integer level = r_.get_var();
       if (L1 == nullptr || L1 == L_ || (L1->status == LUA_OK && L1->ci != &L1->base_ci) ||
           level < 0 || level >= L1->top)
         r_.invalid();
@@ -1943,8 +1980,8 @@ private:
     register_top(id);
     lua_pop(L_, 1);
     char status = r_.get_byte();
-    lua_Integer top = r_.get_i64();
-    lua_Integer maxtop = r_.get_i64();
+    lua_Integer top = r_.get_var();
+    lua_Integer maxtop = r_.get_var();
     if (!valid_status(status) || top < 1 || maxtop < top ||
         maxtop >= LUAI_MAXSTACK - LUA_MINSTACK)
       r_.invalid();
@@ -1983,10 +2020,12 @@ private:
     if (kind != 1)
       r_.invalid();
     f.a = r_.get_i64();
-    f.b = r_.get_int();
-    f.c = r_.get_int();
-    f.d = r_.get_int();
+    f.b = r_.get_i64();
+    f.c = r_.get_i64();
+    f.d = r_.get_i64();
     f.e = r_.get_byte();
+    if (f.b > INT_MAX || f.c > INT_MAX || f.d < INT_MIN || f.d > INT_MAX)
+      r_.invalid();
     if ((f.a & ~(LUA_MASKCALL | LUA_MASKRET | LUA_MASKLINE | LUA_MASKCOUNT)) != 0 ||
         f.a == 0 || f.b < 0 || f.c < 0 || (f.e != 0 && f.e != 1))
       r_.invalid();
