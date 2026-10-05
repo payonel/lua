@@ -95,7 +95,7 @@ the first argument. Users of Eris or Pluto should find it familiar.
 ### ADR-3: Permanents are registered by the caller
 **Status:** accepted
 The caller supplies the permanents table, as in Eris. This is a workable
-solution. The only exception is the interim layer of ADR-7.
+solution. There are no exceptions (see ADR-7).
 
 ### ADR-4: Built into the engine, not on the public C API
 **Status:** proposed
@@ -114,12 +114,14 @@ test first, then a fix.
 The plan does not list things as impossible. Hard areas are worked out
 when a test reaches them.
 
-### ADR-7: Interim auto-loading of the standard libraries
-**Status:** accepted (temporary)
-Even the simplest test needs the library permanents solved first, so for
-now the standard libraries are loaded automatically on unpersist. This
-layer is to be removed later, test-first, in favor of ADR-3.
-Not yet implemented: the primitives tests do not need it.
+### ADR-7: No standard-library loading in persist or unpersist
+**Status:** accepted (supersedes the interim auto-load layer)
+Persist and unpersist never open or load any library. Every non-basic value
+that is not persisted by value (including `print` and the other library
+functions) resolves only through the caller's permanents table, so the
+unpersisting script decides what a key means (for example, mapping
+`"print"` to a local function). The interim auto-load layer that this ADR
+originally described was never implemented and is dropped.
 
 ### ADR-8: Styx is requirable by default, not a global
 **Status:** accepted
