@@ -583,6 +583,44 @@ static void test_host_persist_state_stream()
   lua_close(L);
 }
 
+/*
+** The host persists one child coroutine (not the state): what it captured
+** from outside (a table, a callback, a userdata) is in the permanents, so
+** a second state restores it connected to its own objects.
+*/
+static void test_host_persists_child_thread()
+{
+  lua_State* A = new_state();
+  CHECK(push_value_and_perms(A,
+    "local config = {prefix = 'a:'} "
+    "local callback = function(s) end "
+    "local co = coroutine.create(function() "
+    "  local out = io.stdout "
+    "  while true do local m = coroutine.yield() callback(config.prefix .. m, out) end "
+    "end) "
+    "coroutine.resume(co) "
+    "return co, {[_ENV] = 'env', [coroutine.yield] = 'yield', [config] = 'config', "
+    "            [callback] = 'callback', [io.stdout] = 'out'}"));
+  StringWriter w;
+  HostString msg;
+  int st = luaL_persistvalue(A, 2, 1, &w, &msg);
+  if (st != LUA_OK)
+    std::printf("      host persist error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  lua_close(A);
+
+  lua_State* B = restore_in_new_state(w.out,
+    "got = {} "
+    "local cfg = {prefix = 'b:'} "
+    "local cb = function(s, out) got[#got + 1] = s; got.out = out end "
+    "local back = {env = _ENV, yield = coroutine.yield, config = cfg, callback = cb, out = io.stderr} "
+    "local co = require('styx').unpersist(back, blob) "
+    "coroutine.resume(co, 'one') cfg.prefix = 'c:' coroutine.resume(co, 'two') "
+    "ok = got[1] == 'b:one' and got[2] == 'c:two' and got.out == io.stderr");
+  CHECK(eval(B, "return tostring(ok)") == "true");
+  lua_close(B);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -610,6 +648,7 @@ static void run_cpp_tests()
       {"host_persist_writer_stops", test_host_persist_writer_stops},
       {"host_persist_running_state", test_host_persist_running_state},
       {"host_persist_state_stream", test_host_persist_state_stream},
+      {"host_persists_child_thread", test_host_persists_child_thread},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

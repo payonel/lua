@@ -62,8 +62,8 @@ local x = styx.settings(name [, value])    -- query or change a setting
   - `*.lua`: Lua script tests, one per area: `primitives`, `strings`,
     `tables`, `closures`, `open_upvalues`, `threads`, `permanents`,
     `special` (`__persist`), `paths` (error paths), `tbc`
-    (to-be-closed variables), `protos` (shared prototypes), `errors`,
-    `memory`
+    (to-be-closed variables), `protos` (shared prototypes), `children`
+    (child coroutines and permanents), `errors`, `memory`
     (accounting and allocation failures), `processes` (unpersist in a
     separate interpreter process), `resume_print`.
   - Debug builds (`make debug styx-test`) also open the test library `T`,
@@ -133,6 +133,11 @@ of these raises a clear error unless it says otherwise.
 ### Functions
 - **C functions and C closures** other than through the permanents table.
   Today: error ("cannot persist a C function").
+
+- **Variables (upvalues) as permanents**: today a permanent is a value;
+  a captured variable can be kept shared only through a table that is a
+  permanent (ADR-23). A permanents entry keyed by an upvalue
+  (`debug.upvalueid`) could make the variable itself a permanent.
 
 ### Userdata
 - **Full userdata** (bytes, metatable, user values, host objects), and
@@ -437,6 +442,20 @@ match it. Plan:
   state with the same seed and gets the exact order back.
 For comparison, Eris rebuilds every table with `lua_next`/`rawset` and no
 presizing, so it has this problem (and the `#t` one of ADR-17).
+
+### ADR-23: Persisting a child coroutine; permanents are values
+**Status:** accepted
+Both APIs persist any coroutine that is not running (unstarted, suspended
+or dead), on its own or inside a larger value: the script API takes it as
+the value, the host API from a stack slot (`luaL_persistvalue`) or as part
+of the whole state. What the coroutine captured from outside is written
+by value unless it is a permanent; a permanent (table, function, userdata,
+thread) is written as its key and restored as the object supplied for that
+key, so the restored child stays connected to the restoring side's
+objects. Permanents are values, not variables: a captured variable owned
+by a scope that is not persisted is restored as its value; to keep it
+shared, keep it in a table that is a permanent. Tested from script
+(`children.lua`) and from the host (`host_persists_child_thread`).
 
 ### Required tests for later work
 - Host restore of a state persisted at its memory cap must succeed and the
