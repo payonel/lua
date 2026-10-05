@@ -302,6 +302,287 @@ static void test_light_userdata()
   lua_close(L);
 }
 
+/*
+** Host side persist (luaL_persistvalue, luaL_persiststate): called by the
+** host on a state that is not running; it allocates nothing in the state.
+*/
+
+struct StringWriter : lua_Writer
+{
+  std::string out;
+  int stop_after = -1; /* calls before reporting failure (-1: never) */
+  int write(lua_State*, std::optional<byte_view> b) override
+  {
+    if (stop_after == 0)
+      return 1;
+    if (stop_after > 0)
+      stop_after--;
+    if (b.has_value())
+      out.append(b->data(), b->size());
+    return 0;
+  }
+};
+
+/* counts requests to grow memory and can deny them (frees always pass) */
+struct CountingAlloc : lua_Alloc
+{
+  long grows = 0;
+  bool deny = false;
+  size_t cap = 0;   /* when non zero, deny growth past this many bytes */
+  size_t used = 0;
+  bool permit(size_t osize, size_t nsize, int) override
+  {
+    if (nsize > osize)
+    {
+      grows++;
+      if (deny || (cap != 0 && used + (nsize - osize) > cap))
+        return false;
+    }
+    used = used + nsize - osize;
+    return true;
+  }
+};
+
+static lua_State* new_counted_state(CountingAlloc* a)
+{
+  lua_State* L = lua_newstate(a, 0);
+  luaL_openlibs(L);
+  return L;
+}
+
+/* runs 'code', which returns a value and its permanents table */
+static bool push_value_and_perms(lua_State* L, const char* code)
+{
+  if (luaL_loadstring(L, code) != LUA_OK || lua_pcall(L, 0, 2, 0) != LUA_OK)
+  {
+    std::printf("      error: %s\n", to_string(L, -1).c_str());
+    lua_settop(L, 0);
+    return false;
+  }
+  return true;
+}
+
+/* value at -2 and perms at -1: the script path's bytes */
+static std::string script_persist(lua_State* L)
+{
+  lua_pushvalue(L, -1);
+  lua_pushvalue(L, -3);
+  if (call_styx(L, "persist", 2, 1) != LUA_OK)
+  {
+    std::printf("      script persist error: %s\n", to_string(L, -1).c_str());
+    lua_pop(L, 1);
+    return "";
+  }
+  std::string r = to_string(L, -1);
+  lua_pop(L, 1);
+  return r;
+}
+
+/* sets _PERMS: every C function and userdata reachable from _G, the
+   registry and the string metatable, named by its path */
+static const char* const build_perms =
+  "local perms = {} local seen = {} "
+  "local function walk(t, name) if seen[t] then return end seen[t] = true "
+  "for k, v in pairs(t) do local n = name .. '.' .. tostring(k) "
+  "if type(v) == 'function' or type(v) == 'userdata' then perms[v] = n "
+  "elseif type(v) == 'table' then walk(v, n) end end "
+  "local mt = getmetatable(t) if mt then walk(mt, name .. '<mt>') end end "
+  "walk(_G, '_G') walk(debug.getregistry(), 'R') walk(getmetatable(''), 'smt') "
+  "_PERMS = perms return 'ok'";
+
+static const char* const graph_samples[] = {
+  "return {1, 2.5, -0.0, true, false, 'str', ('long'):rep(40)}, {}",
+  "local t = {a = 'x', [10] = 3.5, nested = {deep = {true}}} t.self = t "
+  "return setmetatable(t, {__index = {k = 1}}), {}",
+  "local t = {1, nil, 3} t[7] = 7 local k = {} t[k] = k return t, {}",
+  "local function counter() local n = 0 "
+  "return function() n = n + 1 return n end, function() return n end end "
+  "local inc, get = counter() inc() return {inc, get, counter()}, {}",
+  "local co = coroutine.create(function(a) local n = a "
+  "coroutine.yield(function() n = n + 1 return n end) return n end) "
+  "local _, f = coroutine.resume(co, 5) "
+  "return {co, f}, {[_ENV] = 'env', [coroutine.yield] = 'yield'}",
+  "local C = {__close = function() end} "
+  "local co = coroutine.create(function() local x <close> = setmetatable({}, C) "
+  "coroutine.yield() end) coroutine.resume(co) "
+  "return co, {[_ENV] = 'env', [coroutine.yield] = 'yield'}",
+  "local function mk(i) return function() return i end end "
+  "local t = {} for i = 1, 5 do t[i] = mk(i) end return t, {}",
+  "return {print, string.format, io.stdout}, "
+  "{[print] = 'print', [string.format] = 'fmt', [io.stdout] = 1}",
+  "return {setmetatable({1}, {__persist = true}), 'x'}, {}",
+  "local t = {} for i = 1, 50 do t['k' .. i] = i end "
+  "for i = 1, 50, 2 do t['k' .. i] = nil end return t, {}",
+};
+
+/* host persist of a value is byte for byte the script path's stream */
+static void test_host_value_matches_script()
+{
+  lua_State* L = new_state();
+  for (const char* code : graph_samples)
+  {
+    if (!push_value_and_perms(L, code))
+    {
+      CHECK(false);
+      continue;
+    }
+    std::string script = script_persist(L);
+    StringWriter w;
+    HostString msg;
+    int st = luaL_persistvalue(L, lua_gettop(L), lua_gettop(L) - 1, &w, &msg);
+    if (st != LUA_OK)
+      std::printf("      host persist error: %s\n", msg.to_os());
+    CHECK(st == LUA_OK);
+    CHECK(!script.empty() && w.out == script);
+    lua_settop(L, 0);
+  }
+  lua_close(L);
+}
+
+/* host persist asks for no memory at all, even when nothing is permitted */
+static void test_host_persist_allocates_nothing()
+{
+  CountingAlloc a;
+  lua_State* L = new_counted_state(&a);
+  CHECK(eval(L, build_perms) == "ok");
+  CHECK(push_value_and_perms(L, graph_samples[4]));
+  lua_getglobal(L, "_PERMS");
+  a.grows = 0;
+  a.deny = true;
+  StringWriter w1, w2;
+  HostString msg;
+  CHECK(luaL_persistvalue(L, 2, 1, &w1, &msg) == LUA_OK);
+  CHECK(luaL_persiststate(L, 3, &w2, &msg) == LUA_OK);
+  a.deny = false;
+  CHECK(a.grows == 0);
+  CHECK(!w1.out.empty() && !w2.out.empty());
+  lua_close(L);
+}
+
+/* a state whose scripts have run out of memory can still be persisted */
+static void test_host_persist_at_memory_cap()
+{
+  CountingAlloc a;
+  lua_State* L = new_counted_state(&a);
+  CHECK(eval(L, build_perms) == "ok");
+  lua_getglobal(L, "_PERMS");  /* the permanents are ready before the cap */
+  a.cap = a.used + 256 * 1024;
+  CHECK(eval(L,
+    "hog = {} "
+    "local ok, err = pcall(function() for i = 1, 1e9 do hog[i] = ('x'):rep(100) .. i end end) "
+    "return tostring(err)").find("not enough memory") != std::string::npos);
+  StringWriter w;
+  HostString msg;
+  a.grows = 0;
+  int st = luaL_persiststate(L, 1, &w, &msg);
+  if (st != LUA_OK)
+    std::printf("      host persist error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  CHECK(a.grows == 0);
+  CHECK(w.out.size() > 100 * 1000);
+  lua_close(L);
+}
+
+/* no Lua code runs: a __persist function is not called */
+static void test_host_persist_runs_no_lua()
+{
+  lua_State* L = new_state();
+  CHECK(push_value_and_perms(L,
+    "calls = 0 "
+    "local t = setmetatable({}, {__persist = function() calls = calls + 1 "
+    "return function() return {} end end}) return {inner = t}, {}"));
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()).find("is not supported yet in a host persist (at root.inner)") != std::string::npos);
+  CHECK(eval(L, "return tostring(calls)") == "0");
+  lua_close(L);
+}
+
+/* errors carry the path, and the stack is left as it was */
+static void test_host_persist_errors()
+{
+  lua_State* L = new_state();
+  CHECK(push_value_and_perms(L, "return {a = {file = io.stdout}}, {}"));
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()) == "persisting a userdata value is not supported yet (at root.a.file)");
+  CHECK(lua_gettop(L) == 2);
+  lua_close(L);
+}
+
+/* no depth limit: the walk keeps its own stack */
+static void test_host_persist_deep()
+{
+  lua_State* L = new_state();
+  CHECK(push_value_and_perms(L,
+    "local t = {} local cur = t for i = 1, 200000 do cur.n = {} cur = cur.n end "
+    "cur.last = true return t, {}"));
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_OK);
+  CHECK(w.out.size() > 200000);
+  lua_close(L);
+}
+
+/* a writer that fails stops the persist */
+static void test_host_persist_writer_stops()
+{
+  lua_State* L = new_state();
+  CHECK(push_value_and_perms(L,
+    "local t = {} for i = 1, 100000 do t[i] = i end return t, {}"));
+  StringWriter w;
+  w.stop_after = 1;
+  HostString msg;
+  CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()).find("writer") != std::string::npos);
+  lua_close(L);
+}
+
+static int call_host_persist(lua_State* L)
+{
+  StringWriter w;
+  HostString msg;
+  lua_pushinteger(L, luaL_persistvalue(L, 0, 1, &w, &msg));
+  lua_pushstring(L, msg.to_os());
+  return 2;
+}
+
+/* a state that is running Lua code is refused */
+static void test_host_persist_running_state()
+{
+  lua_State* L = new_state();
+  lua_pushcfunction(L, call_host_persist);
+  lua_setglobal(L, "host_persist");
+  CHECK(eval(L, "local st, msg = host_persist({}) return st .. ' ' .. msg")
+        .find("the state is running") != std::string::npos);
+  lua_close(L);
+}
+
+/* whole-state streams are deterministic and use their own root tag */
+static void test_host_persist_state_stream()
+{
+  lua_State* L = new_state();
+  CHECK(eval(L, "data = {list = {1, 2, 3}, name = 'state'} return 'ok'") == "ok");
+  StringWriter w1, w2;
+  HostString msg;
+  CHECK(luaL_persiststate(L, 0, &w1, &msg) == LUA_ERRRUN);  /* C functions need perms */
+  CHECK(std::string(msg.to_os()).find("cannot persist a C function") != std::string::npos);
+  CHECK(eval(L, build_perms) == "ok");
+  lua_settop(L, 0);
+  lua_getglobal(L, "_PERMS");
+  w1.out.clear();
+  int st = luaL_persiststate(L, 1, &w1, &msg);
+  if (st != LUA_OK)
+    std::printf("      host persist error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  CHECK(luaL_persiststate(L, 1, &w2, &msg) == LUA_OK);
+  CHECK(!w1.out.empty() && w1.out == w2.out);
+  CHECK(w1.out.compare(0, 4, "Styx") == 0);
+  lua_close(L);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -320,6 +601,15 @@ static void run_cpp_tests()
       {"closures_across_states", test_closures_across_states},
       {"truncation_from_cpp", test_truncation_from_cpp},
       {"light_userdata", test_light_userdata},
+      {"host_value_matches_script", test_host_value_matches_script},
+      {"host_persist_allocates_nothing", test_host_persist_allocates_nothing},
+      {"host_persist_at_memory_cap", test_host_persist_at_memory_cap},
+      {"host_persist_runs_no_lua", test_host_persist_runs_no_lua},
+      {"host_persist_errors", test_host_persist_errors},
+      {"host_persist_deep", test_host_persist_deep},
+      {"host_persist_writer_stops", test_host_persist_writer_stops},
+      {"host_persist_running_state", test_host_persist_running_state},
+      {"host_persist_state_stream", test_host_persist_state_stream},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

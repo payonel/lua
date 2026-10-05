@@ -58,6 +58,16 @@ inline constexpr byte_view LUA_STYXLIBNAME = "styx";
 constexpr int LUA_STYXLIBK = LUA_UTF8LIBK << 1;
 LUAMOD_API int(luaopen_styx)(lua_State* L);
 
+/*
+** Styx on the host side: persist a value, or the whole state, of a state
+** that is not running Lua code. Nothing is allocated in the state and no
+** Lua code runs; 'perms' is the stack index of the permanents table
+** (object -> key), or 0 for none. The stream goes to 'w'. Returns LUA_OK,
+** or an error status with a message in 'msg'.
+*/
+int(luaL_persistvalue)(lua_State* L, int perms, int idx, lua_Writer* w, HostString* msg);
+int(luaL_persiststate)(lua_State* L, int perms, lua_Writer* w, HostString* msg);
+
 /* open selected libraries */
 void(luaL_openselectedlibs)(lua_State* L, int load, int preload);
 

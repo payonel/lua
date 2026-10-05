@@ -64,6 +64,11 @@ case("unknown tags are rejected", function()
   end
 end)
 
+case("a stream cannot hand a script the main thread", function()
+  local header = styx.persist(nil):sub(1, -2)
+  fails("invalid persisted data", styx.unpersist, header .. "\18")
+end)
+
 case("dangling back references are rejected", function()
   -- a back reference to an id that was never defined
   local header = styx.persist(nil):sub(1, -2)

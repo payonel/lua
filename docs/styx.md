@@ -101,6 +101,8 @@ local x = styx.settings(name [, value])    -- query or change a setting
   9. userdata (not supported yet; see below)
   10. error reporting with a path to the offending value (done:
       `paths.lua`, ADR-19)
+  11. host side persist of a value or the whole state (done: C++ tests
+      `host_*`, ADR-21); host side restore (next)
 - Items are added or reordered as the tests teach us something.
 
 ## Not supported yet
@@ -139,10 +141,12 @@ of these raises a clear error unless it says otherwise.
 - **Light userdata** other than as permanents. Today: the same error.
 
 ### Tables
-- **Iteration order**: a restored table has the original's array size,
-  hash size and length hint (ADR-17), so `#t` and the array part match, but
-  hash entries are reinserted, so `pairs` order over the hash part can
-  differ (it depends on the string hash seed and the node layout).
+- **Iteration order (confirmed bug)**: a restored table has the original's
+  array size, hash size and length hint (ADR-17), but its hash entries are
+  reinserted, so `pairs` order over the hash part differs once the table
+  has had deletions and reinsertions (200 of 200 trials). A coroutine
+  suspended inside a `pairs` loop then skips or repeats keys after restore
+  (68 of 100 trials). Plan: ADR-22.
 - **A `__persist` restore closure that reaches the value it rebuilds**
   (directly or through its upvalues). Today: unpersist error ("invalid
   persisted data"); the value has no object yet while its closure is read.
@@ -151,10 +155,16 @@ of these raises a clear error unless it says otherwise.
   finalizer queue, mark state and weak-clearing state are not persisted.
 
 ### States and memory
-- **Whole-state persist from the host** (C API, a state that is not
-  running, roots in the registry and every thread), with scratch memory
-  outside the state, so a state at its memory cap can be persisted. Today:
-  only values reachable from a script call. See "Required tests".
+- **Whole-state restore on the host** (the counterpart of
+  `luaL_persiststate`, ADR-21). Today: host persist only.
+- **The main thread's API stack** is not part of a state snapshot; the host
+  manages it. Today: not persisted.
+- **A `__persist` function in a host persist**: it would run Lua code in
+  the state being snapshotted. Today: error ("not supported yet in a host
+  persist"); `true` and `false` work.
+- **Recursion depth of the script path**: the host persist keeps its own
+  work stack (no depth limit); the script path still recurses (see
+  "Recursion depth").
 - **Policy for restoring over a memory limit** (for a host-driven restore).
   Today: unpersist is charged and limited like any script allocation.
 - **The main thread** as a persisted value.
@@ -385,11 +395,53 @@ an error there is raised on the caller (ADR-15). After restore they are
 closed exactly as in the original: on leaving their scope, on return, and
 by `coroutine.close`, in reverse order across frames.
 
+### ADR-21: Host side persist
+**Status:** accepted
+`luaL_persistvalue(L, perms, idx, w, msg)` and
+`luaL_persiststate(L, perms, w, msg)` (in `lualib.h`) persist a value, or
+the whole state, of a state that is not running (no Lua frame on the main
+thread). They are for the host, not for scripts:
+- The walk reads the objects directly. Its bookkeeping (reference ids,
+  pending work, error paths) is host memory and the stream goes to a
+  `lua_Writer` in 64K pieces, then `nullopt`; nothing is allocated in the
+  state, no Lua code runs and no collection starts. The result is a
+  consistent snapshot, and a state at its memory cap can be persisted (the
+  test denies every allocation during the call).
+- It keeps its own work stack, so it has no depth limit.
+- The stream is the script path's format: for the same value both produce
+  the same bytes (tested over a set of value graphs), which keeps the two
+  writers from drifting apart.
+- A state stream is `TAG_STATE`, the string hash seed, the registry, then
+  the metatable of each basic type. The main thread is written as
+  `TAG_MAINTHREAD` (restored as the restoring state's main thread); a
+  script's unpersist rejects that tag, so a stream cannot hand a script the
+  main thread.
+- Errors are returned with their path (`registry...`, `root...`), and the
+  writer can stop the persist by returning non zero.
+
+### ADR-22: Table order (planned)
+**Status:** proposed
+A restored table must iterate in the original's order, or a coroutine
+suspended in a `pairs` loop skips or repeats keys (see "Iteration order").
+Order is the node layout, which depends on the string hash seed, on the
+order of insertions and on deletions, so rebuilding by insertion cannot
+match it. Plan:
+- Persist the hash part slot by slot (key, value and collision link of
+  each node, and the free-slot position) instead of as a list of entries.
+- Engine support: a general table operation that installs a hash part
+  from such a slot list exactly, then checks that every key is found by
+  normal lookup; when the restoring state hashes strings differently
+  (another seed), the check fails and the table is rebuilt by insertion as
+  today.
+- State snapshots carry the seed (ADR-21), so a host restore recreates the
+  state with the same seed and gets the exact order back.
+For comparison, Eris rebuilds every table with `lua_next`/`rawset` and no
+presizing, so it has this problem (and the `#t` one of ADR-17).
+
 ### Required tests for later work
-- Host-side persist (from the C API, on a state that is not running) of a
-  state that is at its memory cap must succeed, and the restored state
-  must resume. Scripts must have no way to use this to get around their
-  memory limit.
+- Host restore of a state persisted at its memory cap must succeed and the
+  restored state must resume (host persist at the cap is tested, ADR-21).
+  Scripts must have no way to use this to get around their memory limit.
 
 ## Open questions
 

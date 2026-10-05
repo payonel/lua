@@ -127,6 +127,8 @@ namespace lt
   constexpr byte_view s_at_s("%s (at %s)");
   constexpr byte_view invalid_persisted_data_at_byte_d("invalid persisted data (at byte %d)");
   constexpr byte_view path_root("root");
+  constexpr byte_view path_registry("registry");
+  constexpr byte_view path_type_metatable("type metatable");
   constexpr byte_view path_field_s(".%s");
   constexpr byte_view path_index_s("[%s]");
   constexpr byte_view path_string_key_s("[\"%s\"]");
