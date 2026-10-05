@@ -1746,7 +1746,19 @@ them with the typed functions Java would write: blocks of chars,
 instructions, line info, absolute line info, and `int`/`Instruction`/
 `lua_Integer`/`lua_Number` scalars.
 
+**Status: reviewed, no change (decision).**
+- `loadVector`/`loadVar`/`getaddr`/`checknum` and `dumpVector`/
+  `dumpVar`/`dumpNumInfo` are one-line stand-ins for upstream's macros
+  of the same names. They are upstream's shape, written directly.
+- Replacing them means either per-type copies of the same body or
+  per-element writer calls, which is more code and slower `string.dump`
+  writes, for no Java benefit: Java writes its typed little-endian
+  readers and writers at port time either way.
+- C0's "no new templates" is relaxed for these macro stand-ins, and
+  for the `byte_writes` mixin (M6).
+
 ### R7. Reviewed, no change
+**Status: done (review only).**
 - **VM `Protect`/`savestate`/`updatetrap` stay expanded** in
   `luaV_execute`. Lambdas capturing `pc`/`base`/`trap` by reference risk
   forcing those locals into memory in the hot loop, and Java lambdas
