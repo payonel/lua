@@ -1666,6 +1666,33 @@ getters that only re-spell `object->field` (`rawtt`, `keytt`) give way
 to the field itself.
 **Check:** object code identical with asserts off.
 
+**Status: done** (`b3e93d67`, `837e68b9`, `cea3279f`).
+- **Parentheses:** about 760 redundant pairs left by macro expansion
+  and removed casts are gone. That covers `(ident)` before `->`/`.`/`[`,
+  doubled groups, wholly parenthesized arguments and statements,
+  parenthesized postfix and cast operands, and whole right-hand
+  sides/returns without comparisons.
+- **Kept:** parenthesized boolean results (`int fast = (work2do == 0);`)
+  are upstream's own style.
+- **Remnants replaced:**
+  - `luai_num*`'s `((void)L, a + b)` becomes `a + b`.
+  - The slot-tag form of `l_isfalse` is upstream's `tagisfalse`.
+  - Upstream's `ispow2` is restored under its orphaned comment.
+  - `api_check`-style asserts become `assert(e && "msg")` where `e` has
+    no top-level `||`/`?:`.
+  - The `rawtt`/`keytt` getters added in R1 give way to `o->tt_`/
+    `node->key_tt`.
+  - `x->marked = x->marked op y` becomes `op=` where `-Wconversion`
+    allows.
+- **Kept, with names:** upstream-named accessors stay (`gnode`,
+  `mainthread`). `getArrTag`/`getArrVal` also stay; they are the M3
+  seam for Java's columns.
+- **Check:** release object code with asserts off is identical, apart
+  from register allocation around the `bool` `tagisfalse` in
+  `lvm`/`lfunc`. `make full` passes after each commit.
+- **Remaining `(x)` forms are legitimate:** macro parameters in
+  `lhack.h`, attribute syntax, and C++ casts/constructors.
+
 ### R3. Construction instead of field-by-field initialization
 GC objects (`Proto`, `Table`, `Udata`, `UpVal`, closures, `TString`,
 `CFuncInfo`), `lua_State` (`preinit_thread`), `CallInfo` and
