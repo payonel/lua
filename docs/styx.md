@@ -131,13 +131,6 @@ of these raises a clear error unless it says otherwise.
 ### Functions
 - **C functions and C closures** other than through the permanents table.
   Today: error ("cannot persist a C function").
-- **Nested prototype identity**: a prototype is shared among the closures
-  persisted with it (ADR-13), but a closure of a nested prototype persisted
-  on its own carries a copy of that prototype, separate from the one inside
-  its parent's prototype (both work). Today: more output and memory.
-- **Prototype encoding through `lua_dump`/`lua_load`** (ADR-13): prototypes
-  are encoded and decoded by the engine's chunk format; closures are built
-  natively. An engine-native prototype encoding is to come.
 
 ### Userdata
 - **Full userdata** (bytes, metatable, user values, host objects), and
@@ -170,9 +163,10 @@ of these raises a clear error unless it says otherwise.
 - **Recursion depth**: persist and unpersist recurse on the C stack and
   raise an error past a depth of 10000 (`MAX_DEPTH`), a limit stock Lua
   does not have. To be replaced by an iterative walk.
-- **Untrusted input**: unpersist loads bytecode through `lua_load` and
-  checks the thread state it reads only for consistency with itself. Do not
-  unpersist data you do not trust.
+- **Untrusted input**: unpersist builds prototypes from the instructions in
+  the stream without verifying them (as with binary chunks), and checks the
+  thread state it reads only for consistency with itself. Do not unpersist
+  data you do not trust.
 - **Compact output**: integers and counts are fixed 8-byte values; sizes
   and the format version are not final.
 - **Paths for errors raised by user code**: an error raised inside a
@@ -274,18 +268,23 @@ removed, and the logical accounting cost went from 64 to 24. `CFuncInfo`
 stays the identity object and still holds the function, which maps to a
 method handle in Java.
 
-### ADR-13: Prototypes once, closures built natively
-**Status:** accepted (revised)
-A prototype gets a reference id, keyed by its identity, and is written
-once, as the engine's binary chunk (`lua_dump`, debug info kept); later
-closures of it refer to it by id. Unpersist decodes a prototype once with
-the engine's loader (`lua_load`, binary mode) and builds every closure the
-way `OP_CLOSURE` does: a new closure on the shared prototype, anchored on
-the stack before its upvalues are created, under the API lock because it
-allocates. Closures of one prototype therefore share it after restore, as
-in the original, and the output and restored memory grow with the number
-of closures, not the number of copies. Upvalues are then set (closed),
-joined (shared) or reopened (ADR-16).
+### ADR-13: Prototypes encoded natively, once; closures built natively
+**Status:** accepted (revised twice)
+A prototype gets a reference id, keyed by its identity, and is written once,
+field by field: its header fields, its code as raw instructions, then its
+constants, upvalue descriptions (with their names), nested prototypes,
+source, line information and local variables. Constants and names are
+ordinary values (strings get reference ids like any other), and nested
+prototypes are prototypes with ids of their own, so a nested prototype is
+shared with every closure of it in the stream. No `lua_dump`/`lua_load`.
+Unpersist builds a prototype as the engine's loader does: it is anchored
+first (by a holder closure), and every part is made valid for the collector
+before anything that can run it. Closures are built as `OP_CLOSURE` builds
+them: a new closure on the shared prototype, anchored on the stack before
+its upvalues are created, under the API lock because it allocates. Upvalues
+are then set (closed), joined (shared) or reopened (ADR-16).
+Instructions are not verified, as with binary chunks (see "Untrusted
+input").
 
 ### ADR-14: Bugs fail where they happen
 **Status:** accepted

@@ -71,6 +71,18 @@ case("a prototype shared between a coroutine and a closure", function()
   assert(select(2, coroutine.resume(r[1])) == 3)
 end)
 
+case("a nested prototype is written once with its parent", function()
+  local factory = make_factory()       -- its prototype nests the inner one
+  local inner = factory(1)
+  local alone = #styx.persist({inner})
+  local both = #styx.persist({factory, inner})
+  local parent_only = #styx.persist({factory})
+  assert(both < parent_only + alone / 2,
+         string.format("both: %d, parent: %d, inner: %d", both, parent_only, alone))
+  local r = H.roundtrip({factory, inner})
+  assert(select(1, r[2]()) == 1 and select(1, r[1](7)()) == 7)
+end)
+
 case("rejects truncation of a stream with shared prototypes", function()
   local factory = make_factory()
   H.rejects_truncation(styx.persist({factory(1), factory(2)}))

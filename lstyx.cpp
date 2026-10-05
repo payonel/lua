@@ -339,16 +339,87 @@ static bool is_running(lua_State* L, lua_State* T)
   return T == L || (T->status == LUA_OK && T->ci != &T->base_ci);
 }
 
-struct ProtoWriter : lua_Writer
+/* persists the value 'v' (pushed for the walk, then popped) */
+static void persist_tvalue(Persist& P, const TValue* v)
 {
-  luaL_Buffer* B;
-  int write(lua_State*, std::optional<byte_view> b) override
+  lua_State* L = P.L;
+  setslot(L, L->top, v);
+  L->top++;
+  persist(P);
+  lua_pop(L, 1);
+}
+
+static void persist_tstring(Persist& P, TString* ts)
+{
+  TValue v{};
+  if (ts != nullptr)
+    setsvalue(P.L, &v, ts);
+  else
+    setnilvalue(&v);
+  persist_tvalue(P, &v);
+}
+
+/*
+** A prototype is written once, field by field; later uses refer to it by
+** id. Its constants and names are ordinary values (strings get reference
+** ids like any other) and its nested prototypes are prototypes too.
+*/
+static void persist_proto(Persist& P, const Proto* p)
+{
+  lua_State* L = P.L;
+  luaL_checkstacki(L, 2, std::nullopt);
+  lua_pushlightuserdata(L, const_cast<Proto*>(p));
+  lua_rawget(L, P.refs);
+  if (!lua_isnil(L, -1))
   {
-    if (b.has_value())
-      luaL_addlstring(B, *b, 0, b->size());
-    return 0;
+    luaL_addchar(&P.B, TAG_PROTO_REF);
+    put_i64(&P.B, lua_tointeger(L, -1));
+    lua_pop(L, 1);
+    return;
   }
-};
+  lua_pop(L, 1);
+  lua_pushlightuserdata(L, const_cast<Proto*>(p));
+  lua_pushinteger(L, ++P.refcount);
+  lua_rawset(L, P.refs);
+  luaL_addchar(&P.B, TAG_PROTO_NEW);
+  put_i64(&P.B, p->linedefined);
+  put_i64(&P.B, p->lastlinedefined);
+  put_i64(&P.B, p->numparams);
+  luaL_addchar(&P.B, static_cast<char>(p->flag & ~PF_FIXED));
+  put_i64(&P.B, p->maxstacksize);
+  put_i64(&P.B, static_cast<lua_Integer>(p->code.size()));
+  put_raw(&P.B, p->code.data(), p->code.size() * sizeof(Instruction));
+  put_i64(&P.B, static_cast<lua_Integer>(p->k.size()));
+  for (const TValue& k : p->k)
+    persist_tvalue(P, &k);
+  put_i64(&P.B, static_cast<lua_Integer>(p->upvalues.size()));
+  for (const Upvaldesc& uv : p->upvalues)
+  {
+    luaL_addchar(&P.B, static_cast<char>(uv.instack));
+    put_i64(&P.B, uv.idx);
+    luaL_addchar(&P.B, static_cast<char>(uv.kind));
+    persist_tstring(P, uv.name);
+  }
+  put_i64(&P.B, static_cast<lua_Integer>(p->p.size()));
+  for (const Proto* nested : p->p)
+    persist_proto(P, nested);
+  persist_tstring(P, p->source);
+  put_i64(&P.B, static_cast<lua_Integer>(p->lineinfo.size()));
+  put_raw(&P.B, p->lineinfo.data(), p->lineinfo.size());
+  put_i64(&P.B, static_cast<lua_Integer>(p->abslineinfo.size()));
+  for (const AbsLineInfo& a : p->abslineinfo)
+  {
+    put_i64(&P.B, a.pc);
+    put_i64(&P.B, a.line);
+  }
+  put_i64(&P.B, static_cast<lua_Integer>(p->locvars.size()));
+  for (const LocVar& lv : p->locvars)
+  {
+    persist_tstring(P, lv.varname);
+    put_i64(&P.B, lv.startpc);
+    put_i64(&P.B, lv.endpc);
+  }
+}
 
 static void persist_lclosure(Persist& P)
 {
@@ -358,33 +429,7 @@ static void persist_lclosure(Persist& P)
   luaL_addchar(&P.B, TAG_LCLOSURE);
 
   LClosure* cl = clLvalue(&L->stack[L->ci->func + f]);
-  /* a prototype is written once; closures sharing it refer to it by id */
-  lua_pushlightuserdata(L, cl->p);
-  lua_rawget(L, P.refs);
-  if (!lua_isnil(L, -1))
-  {
-    luaL_addchar(&P.B, TAG_PROTO_REF);
-    put_i64(&P.B, lua_tointeger(L, -1));
-    lua_pop(L, 1);
-  }
-  else
-  {
-    lua_pop(L, 1);
-    lua_pushlightuserdata(L, cl->p);
-    lua_pushinteger(L, ++P.refcount);
-    lua_rawset(L, P.refs);
-    luaL_addchar(&P.B, TAG_PROTO_NEW);
-    luaL_Buffer pb;
-    luaL_buffinit(L, &pb);
-    ProtoWriter w;
-    w.B = &pb;
-    lua_pushvalue(L, f);
-    lua_dump(L, &w, 0);
-    lua_pop(L, 1);
-    size_t n = luaL_bufflen(&pb);
-    put_i64(&P.B, static_cast<lua_Integer>(n));
-    luaL_addlstring(&P.B, byte_view(luaL_buffaddr(&pb).data(), n), 0, n);
-  }
+  persist_proto(P, cl->p);
 
   int nup = static_cast<int>(cl->upvals.size());
   put_i64(&P.B, nup);
@@ -688,19 +733,6 @@ static void unpersist_special(Unpersist& U, lua_Integer id)
   register_object(U, id);
 }
 
-struct BytesReader : lua_Reader
-{
-  byte_view bytes;
-  bool done = false;
-  std::optional<byte_view> read(lua_State*) override
-  {
-    if (done)
-      return std::nullopt;
-    done = true;
-    return bytes;
-  }
-};
-
 /*
 ** A thread being restored is not running, so nothing may raise an error on
 ** it: its stack and frames are grown in the modes that report failure, work
@@ -745,35 +777,167 @@ static void unpersist_open_upvalue(Unpersist& U, int f, int i)
   lua_pop(L, 1);
 }
 
+/* reads a count, at most the number of bytes left (each item takes one) */
+static int get_count(Unpersist& U, size_t item_bytes = 1)
+{
+  lua_Integer n = U.r.get_i64();
+  if (n < 0 || n > INT_MAX ||
+      static_cast<size_t>(n) > (U.r.data.size() - U.r.pos) / item_bytes)
+    U.r.invalid();
+  return static_cast<int>(n);
+}
+
+static int get_int(Unpersist& U)
+{
+  lua_Integer n = U.r.get_i64();
+  if (n < INT_MIN || n > INT_MAX)
+    U.r.invalid();
+  return static_cast<int>(n);
+}
+
+/* reads a string or nil; returns the string (anchored by the caller's barrier) */
+static TString* unpersist_name(Unpersist& U, GCObject* owner)
+{
+  lua_State* L = U.r.L;
+  unpersist(U);
+  TString* ts = nullptr;
+  if (lua_type(L, -1) == LUA_TSTRING)
+  {
+    TValue v = getslot(L, L->top - 1);
+    ts = tsvalue(&v);
+    luaC_objbarrier(L, owner, ts);
+  }
+  else if (!lua_isnil(L, -1))
+    U.r.invalid();
+  lua_pop(L, 1);
+  return ts;
+}
+
 /*
-** Pushes a function holding the closure's prototype: decoded by the
-** engine's loader the first time it is met, then kept under its id.
+** Pushes a function holding the closure's prototype. A new prototype is
+** built field by field, as the engine's loader builds one: it is anchored
+** first (by a holder closure), and each part is made valid for the
+** collector before anything that can run it (reading a value).
 */
 static void unpersist_proto(Unpersist& U)
 {
   lua_State* L = U.r.L;
+  global_State* g = L->l_G;
+  luaL_checkstacki(L, 3, std::nullopt);
   char tag = U.r.get_byte();
-  if (tag == TAG_PROTO_NEW)
-  {
-    lua_Integer pid = ++U.refcount;
-    lua_Integer n = U.r.get_i64();
-    if (n < 0)
-      U.r.invalid();
-    BytesReader br;
-    br.bytes = U.r.get_bytes(static_cast<size_t>(n));
-    if (lua_load(L, &br, "=styx", "b") != LUA_OK)
-      lua_error(L);
-    lua_pushvalue(L, -1);
-    lua_rawseti(L, U.refs, pid);
-  }
-  else if (tag == TAG_PROTO_REF)
+  if (tag == TAG_PROTO_REF)
   {
     lua_rawgeti(L, U.refs, U.r.get_i64());
     if (lua_type(L, -1) != LUA_TFUNCTION || lua_iscfunction(L, -1))
       U.r.invalid();
+    return;
   }
-  else
+  if (tag != TAG_PROTO_NEW)
     U.r.invalid();
+  lua_Integer pid = ++U.refcount;
+  lua_lock(L);
+  Proto* p = Proto::luaF_newproto(L);
+  LClosure* holder = LClosure::luaF_newLclosure(L, 0);
+  holder->p = p;
+  setslotclL(L, L->top, holder);
+  L->top++;
+  luaC_objbarrier(L, holder, p);
+  lua_unlock(L);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, U.refs, pid);
+
+  p->linedefined = get_int(U);
+  p->lastlinedefined = get_int(U);
+  p->numparams = get_int(U);
+  p->flag = static_cast<lu_byte>(U.r.get_byte() & ~PF_FIXED);
+  p->maxstacksize = get_int(U);
+  if (p->numparams < 0 || p->maxstacksize < 0 || p->numparams > p->maxstacksize)
+    U.r.invalid();
+
+  int n = get_count(U, sizeof(Instruction));
+  byte_view code = U.r.get_bytes(static_cast<size_t>(n) * sizeof(Instruction));
+  lua_lock(L);
+  p->code = luaM_alloc_Instruction_span(g, L, {}, static_cast<size_t>(n), true);
+  lua_unlock(L);
+  std::memcpy(p->code.data(), code.data(), code.size());
+
+  n = get_count(U);
+  lua_lock(L);
+  p->k = luaM_alloc_TValue_span(g, L, {}, static_cast<size_t>(n), true);
+  for (TValue& k : p->k)
+    setnilvalue(&k);
+  lua_unlock(L);
+  for (TValue& k : p->k)
+  {
+    unpersist(U);
+    int t = lua_type(L, -1);
+    if (t != LUA_TNIL && t != LUA_TBOOLEAN && t != LUA_TNUMBER && t != LUA_TSTRING)
+      U.r.invalid();
+    k = getslot(L, L->top - 1);
+    luaC_barrier(L, p, &k);
+    lua_pop(L, 1);
+  }
+
+  n = get_count(U);
+  lua_lock(L);
+  p->upvalues = luaM_alloc_Upvaldesc_span(g, L, {}, static_cast<size_t>(n), true);
+  for (Upvaldesc& uv : p->upvalues)
+    uv = Upvaldesc{nullptr, 0, 0, 0};
+  lua_unlock(L);
+  for (Upvaldesc& uv : p->upvalues)
+  {
+    uv.instack = static_cast<lu_byte>(U.r.get_byte());
+    uv.idx = get_int(U);
+    uv.kind = static_cast<lu_byte>(U.r.get_byte());
+    uv.name = unpersist_name(U, p);
+  }
+
+  n = get_count(U);
+  lua_lock(L);
+  p->p = luaM_alloc_Proto_ptr_span(g, L, {}, static_cast<size_t>(n), true);
+  for (Proto*& nested : p->p)
+    nested = nullptr;
+  lua_unlock(L);
+  for (Proto*& nested : p->p)
+  {
+    unpersist_proto(U);
+    TValue h = getslot(L, L->top - 1);
+    nested = clLvalue(&h)->p;
+    luaC_objbarrier(L, p, nested);
+    lua_pop(L, 1);
+  }
+
+  p->source = unpersist_name(U, p);
+
+  n = get_count(U);
+  byte_view lines = U.r.get_bytes(static_cast<size_t>(n));
+  lua_lock(L);
+  p->lineinfo = luaM_alloc_ls_byte_span(g, L, {}, static_cast<size_t>(n), true);
+  lua_unlock(L);
+  std::memcpy(p->lineinfo.data(), lines.data(), lines.size());
+
+  n = get_count(U, 16);
+  lua_lock(L);
+  p->abslineinfo = luaM_alloc_AbsLineInfo_span(g, L, {}, static_cast<size_t>(n), true);
+  lua_unlock(L);
+  for (AbsLineInfo& a : p->abslineinfo)
+  {
+    a.pc = get_int(U);
+    a.line = get_int(U);
+  }
+
+  n = get_count(U);
+  lua_lock(L);
+  p->locvars = luaM_alloc_LocVar_span(g, L, {}, static_cast<size_t>(n), true);
+  for (LocVar& lv : p->locvars)
+    lv = LocVar{nullptr, 0, 0};
+  lua_unlock(L);
+  for (LocVar& lv : p->locvars)
+  {
+    lv.varname = unpersist_name(U, p);
+    lv.startpc = get_int(U);
+    lv.endpc = get_int(U);
+  }
 }
 
 /*
