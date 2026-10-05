@@ -72,7 +72,7 @@ end)
 
 case("table sizes are checked", function()
   local function table_stream(asize, hsize, lenhint)
-    return H.stream("\6" .. H.varint(asize) .. H.varint(hsize) .. H.varint(lenhint) .. "\0\0\0")
+    return H.stream("\6" .. H.varint(0) .. H.varint(asize) .. H.varint(hsize) .. H.varint(lenhint) .. "\0\0\0")
   end
   assert(next(styx.unpersist(table_stream(0, 0, 0))) == nil)
   assert(next(styx.unpersist(table_stream(4, 8, 4))) == nil)
@@ -81,12 +81,15 @@ case("table sizes are checked", function()
   fails("invalid persisted data", styx.unpersist, table_stream(0, -4, 0))
   fails("invalid persisted data", styx.unpersist, table_stream(2, 0, 3))
   fails("invalid persisted data", styx.unpersist, table_stream(1 << 40, 0, 0))
+  -- an object's hash is a 32-bit difference from the previous one's
+  fails("invalid persisted data", styx.unpersist,
+        H.stream("\6" .. H.varint(1 << 40) .. H.varint(0) .. H.varint(0) .. H.varint(0) .. "\0\0\0"))
   H.checkheap()
 end)
 
 case("the trailer is checked", function()
   local v = H.varint
-  local empty_table = "\6" .. v(0) .. v(0) .. v(0) .. "\0\0\0"
+  local empty_table = "\6" .. H.varint(0) .. v(0) .. v(0) .. v(0) .. "\0\0\0"
   assert(type(styx.unpersist(H.stream(empty_table))) == "table")
   -- no trailer, or a length past the start
   fails("invalid persisted data", styx.unpersist, H.header .. "\0")
@@ -101,12 +104,14 @@ case("the trailer is checked", function()
   fails("invalid persisted data", styx.unpersist, H.stream(empty_table, {0}))
   fails("invalid persisted data", styx.unpersist, H.stream(empty_table, {2}))
   fails("invalid persisted data", styx.unpersist, H.stream("\0", {1}))
-  -- dead keys: a node of a table that is a dead key, given a string
-  local layout = "\6" .. v(0) .. v(2) .. v(0) .. "\1" .. "\0" .. "\0" .. v(2) ..
+  -- dead keys: a node of a table that is a dead key, given an object (a
+  -- string, or any other object, here the table itself)
+  local layout = "\6" .. H.varint(0) .. v(0) .. v(2) .. v(0) .. "\1" .. "\0" .. "\0" .. v(2) ..
                  "\2" .. "\5" .. v(1) .. "k" .. "\2" .. v(0) .. "\1" .. v(0)
   assert(type(styx.unpersist(H.stream(layout))) == "table")
   assert(type(styx.unpersist(H.stream(layout, nil, {{1, 1, 2}}))) == "table")
-  for _, bad in ipairs{{1, 0, 2}, {1, 2, 2}, {1, -1, 2}, {1, 1, 1}, {2, 1, 2}, {3, 1, 2}, {1, 1, 3}} do
+  assert(type(styx.unpersist(H.stream(layout, nil, {{1, 1, 1}}))) == "table")
+  for _, bad in ipairs{{1, 0, 2}, {1, 2, 2}, {1, -1, 2}, {2, 1, 2}, {3, 1, 2}, {1, 1, 3}} do
     fails("invalid persisted data", styx.unpersist, H.stream(layout, nil, {bad}))
   end
   H.checkheap()

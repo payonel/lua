@@ -169,7 +169,7 @@ namespace lt
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");
   constexpr byte_view ceil_kw("ceil");
   constexpr byte_view styx("styx");
-  constexpr byte_view styx_header = lit("Styx\x04");
+  constexpr byte_view styx_header = lit("Styx\x05");
   constexpr byte_view char_kw("char");
   constexpr byte_view charpattern("charpattern");
   constexpr byte_view checkmemory("checkmemory");

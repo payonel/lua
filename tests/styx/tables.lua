@@ -359,7 +359,159 @@ case("a dead key whose string is not persisted needs nothing", function()
   assert(order(r) == order(t))
 end)
 
-case("a table with object keys is rebuilt (contents kept)", function()
+-- object keys (tables, functions, threads) hash by the hash each object was
+-- given when it was created; persisted with the object, it puts the
+-- restored object in the same slot (ADR-30)
+local function object_keyed(n, seed)
+  math.randomseed(seed)
+  local t, names = {}, {}
+  local function add(i)
+    local r = math.random(3)
+    local k = (r == 1) and {} or (r == 2) and function() return i end
+              or coroutine.create(function() end)
+    t[k] = i
+    names[k] = "o" .. i
+  end
+  for i = 1, n do add(i) end
+  for k in pairs(t) do if math.random() < 0.3 then t[k] = nil end end
+  for i = n + 1, n + n // 4 do add(i) end
+  collectgarbage(); collectgarbage() -- deleted keys become dead keys, as they would
+  return t, names
+end
+
+local function named_order(t, names)
+  local o = {}
+  for k in pairs(t) do o[#o + 1] = names[k] or tostring(k) end
+  return table.concat(o, " ")
+end
+
+case("tables, functions and threads as keys iterate in the same order", function()
+  for seed = 1, 50 do
+    local t, names = object_keyed(64, seed)
+    local r = roundtrip({t = t, names = names})
+    assert(named_order(r.t, r.names) == named_order(t, names), "seed " .. seed)
+    for k, v in pairs(t) do assert(r.t[k] == nil) end -- the restored keys are new objects
+  end
+end)
+
+case("deleted object keys keep the order, and next continues from them", function()
+  for seed = 1, 30 do
+    local t, names = object_keyed(64, seed)
+    local gone = {}
+    for k in pairs(t) do if math.random() < 0.3 then t[k] = nil; gone[#gone + 1] = k end end
+    collectgarbage(); collectgarbage()   -- the deleted keys become dead keys
+    local r = roundtrip({t = t, names = names, gone = gone})
+    assert(named_order(r.t, r.names) == named_order(t, names), "seed " .. seed)
+    for i, k in ipairs(r.gone) do
+      local ok, nk = pcall(next, r.t, k)
+      assert(ok, "seed " .. seed .. ": " .. tostring(nk))
+      local ok2, ok_nk = pcall(next, t, gone[i])
+      assert(ok2 and names[ok_nk] == r.names[nk], "seed " .. seed)
+    end
+  end
+end)
+
+case("a coroutine suspended in a pairs loop over object keys neither skips nor repeats", function()
+  local perms = {[_ENV] = "env", [coroutine.yield] = "yield", [pairs] = "pairs", [next] = "next"}
+  local back = H.invert(perms)
+  for seed = 1, 50 do
+    local t, names = object_keyed(64, seed)
+    local co = coroutine.create(function()
+      local seen = {}
+      for k in pairs(t) do seen[#seen + 1] = names[k]; coroutine.yield() end
+      return table.concat(seen, " ")
+    end)
+    for _ = 1, 20 do coroutine.resume(co) end
+    local r = styx.unpersist(back, styx.persist(perms, co))
+    local function finish(c)
+      local ok, seen
+      repeat ok, seen = coroutine.resume(c); assert(ok, seen) until coroutine.status(c) == "dead"
+      return seen
+    end
+    assert(finish(r) == finish(co), "seed " .. seed)
+  end
+end)
+
+case("a loop that clears object keys as it goes resumes where it was", function()
+  local perms = {[_ENV] = "env", [coroutine.yield] = "yield", [pairs] = "pairs", [next] = "next"}
+  local back = H.invert(perms)
+  for seed = 1, 30 do
+    local t, names = object_keyed(64, seed)
+    local co = coroutine.create(function()
+      local seen = {}
+      for k in pairs(t) do t[k] = nil; seen[#seen + 1] = names[k]; coroutine.yield() end
+      return table.concat(seen, " ")
+    end)
+    for _ = 1, 10 do coroutine.resume(co) end
+    collectgarbage(); collectgarbage()
+    local r = styx.unpersist(back, styx.persist(perms, co))
+    local function finish(c)
+      local ok, seen
+      repeat ok, seen = coroutine.resume(c); assert(ok, seen) until coroutine.status(c) == "dead"
+      return seen
+    end
+    assert(finish(r) == finish(co), "seed " .. seed)
+  end
+end)
+
+case("strings, numbers and objects mixed as keys keep the order", function()
+  for seed = 1, 30 do
+    local t, names = object_keyed(32, seed)
+    for i = 1, 40 do t["s" .. math.random(200)] = i; t[math.random(1000) + 0.5] = i end
+    t[true] = 1
+    local r = roundtrip({t = t, names = names})
+    assert(named_order(r.t, r.names) == named_order(t, names), "seed " .. seed)
+  end
+end)
+
+case("weak-keyed tables keep the order of their live keys", function()
+  local t, names = object_keyed(48, 3)
+  local weak = setmetatable({}, {__mode = "k"})
+  for k, v in pairs(t) do weak[k] = v end
+  local r = roundtrip({t = t, names = names, weak = weak})
+  assert(named_order(r.weak, r.names) == named_order(weak, names))
+end)
+
+case("keys that are permanents restored as the same objects keep the order", function()
+  local objs = {}
+  for i = 1, 40 do objs[i] = (i % 2 == 0) and {} or function() end end
+  local t, names = {}, {}
+  for i = 1, 40 do t[objs[i]] = i; names[objs[i]] = "p" .. i end
+  for i = 1, 40, 3 do t[objs[i]] = nil end
+  local perms = {}
+  for i = 1, 40 do perms[objs[i]] = "p" .. i end
+  local r = styx.unpersist(H.invert(perms), styx.persist(perms, t))
+  assert(named_order(r, names) == named_order(t, names))
+end)
+
+case("keys whose objects the restoring side supplies differently: rebuilt, contents kept", function()
+  local objs = {}
+  for i = 1, 40 do objs[i] = {} end
+  local t = {}
+  for i = 1, 40 do t[objs[i]] = i end
+  t.name = "x"
+  local perms, back, others = {}, {}, {}
+  for i = 1, 40 do perms[objs[i]] = i; others[i] = {}; back[i] = others[i] end
+  local r = styx.unpersist(back, styx.persist(perms, t))
+  local n = 0
+  for k, v in pairs(r) do n = n + 1 end
+  assert(n == 41 and r.name == "x")
+  for i = 1, 40 do assert(r[others[i]] == i) end
+  for i = 41, 200 do r[{}] = i end   -- inserts and rehash work
+  for i = 1, 40 do assert(r[others[i]] == i) end
+end)
+
+case("a key rebuilt by __persist: the table is rebuilt, contents kept", function()
+  local special = setmetatable({}, {__persist = function() return function() return {"made"} end end})
+  local t = {[special] = "s"}
+  for i = 1, 20 do t[{}] = i end
+  local r = styx.unpersist(styx.persist(t))
+  local found
+  for k, v in pairs(r) do if v == "s" then found = k end end
+  assert(found and found[1] == "made" and r[found] == "s")
+end)
+
+case("object keys: lookups through the restored keys", function()
   local ks = {}
   local t = {}
   for i = 1, 30 do ks[i] = {i = i}; t[ks[i]] = i end

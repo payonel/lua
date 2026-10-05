@@ -107,6 +107,9 @@ local x = styx.settings(name [, value])    -- query or change a setting
       state the finalizer list and the collector's settings (done:
       `finalizers.lua`, C++ tests `host_state_*`, ADR-28)
   13. `next` from a deleted key (done: `tables.lua`, ADR-29)
+  14. table order with object keys (done: `tables.lua`, C++ tests
+      `object_key_order_across_states`, `library_keys_across_states`,
+      `state_next_hash`, ADR-30)
 - Items are added or reordered as the tests teach us something.
 
 ## Not supported yet
@@ -152,17 +155,18 @@ of these raises a clear error unless it says otherwise.
   before the snapshot finalizes it.
 
 ### Tables
-- **Iteration order with object keys, or another seed**: a table restored
-  with the persisting state's seed whose hash keys all hash by content
-  (strings, numbers, booleans) iterates in the same order (ADR-22). A table
-  with object keys (tables, functions, userdata, threads hash by address),
-  or one restored in a state with another seed, is rebuilt: its contents
-  are kept, its `pairs` order can differ, so a coroutine suspended in a
-  `pairs` loop over it can skip or repeat keys, and `next` from a key
-  deleted from it fails.
-- **`next` from a deleted object key**: a deleted string key keeps its
-  identity (ADR-29); a deleted key that is an object hashes by address, so
-  it goes with the order of object keys above.
+- **Iteration order with another seed, or with keys the restoring side
+  supplies differently**: restored with the persisting state's seed, a
+  table iterates in the same order, whatever its keys (ADR-22, ADR-30).
+  With another seed (strings hash otherwise), or when a key is an object
+  the restoring side supplies with another hash, the table is rebuilt: its
+  contents are kept, its `pairs` order can differ, so a coroutine
+  suspended in a `pairs` loop over it can skip or repeat keys, and `next`
+  from a key deleted from it fails. Such keys: a permanent not made the
+  same way in the restoring state (library objects made in the same order
+  with the same seed hash the same), an object a `__persist` closure
+  makes, and light userdata and light C functions, which hash by address
+  (C functions are the same in one process).
 - **A `__persist` restore closure that reaches the value it rebuilds**
   (directly or through its upvalues). Today: unpersist error ("invalid
   persisted data"); the value has no object yet while its closure is read.
@@ -193,7 +197,7 @@ of these raises a clear error unless it says otherwise.
   the stream without verifying them (as with binary chunks), and checks the
   thread state it reads only for consistency with itself. Do not unpersist
   data you do not trust.
-- **A final format**: the format (version 4, ADR-10) may still change;
+- **A final format**: the format (version 5, ADR-10) may still change;
   no stream of an earlier version is read.
 - **`settings`**. Today: error ("not implemented").
 
@@ -252,10 +256,11 @@ Every capability is covered from script and from C++ for careful testing,
 in `tests/styx/`, run by `make test` with everything else.
 
 ### ADR-10: Stream format
-**Status:** accepted (version 4)
-A persisted string is the header `"Styx\x04"` (name plus format version),
+**Status:** accepted (version 5)
+A persisted string is the header `"Styx\x05"` (name plus format version),
 the persisting state's string hash seed (8 bytes, ADR-22), then one value
-(or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload;
+(or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload
+(a table, function or thread starts with its hash, ADR-30);
 then the trailer, what only the whole walk knows (the tables to mark for
 finalization, ADR-28, and the identities of dead keys, ADR-29), and the
 trailer's length, written backward so that unpersist reads it first, from
@@ -266,7 +271,7 @@ little-endian only), instructions 4 raw bytes each, and a thread's frames,
 to-be-closed list and hook fields fixed 8-byte values. Version 2 made
 streams about 70% smaller than version 1's fixed 8-byte integers; version
 3 added the seed and the layout mode of tables (ADR-22); version 4 the
-trailer. Output
+trailer; version 5 objects' hashes. Output
 is built in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a
 missing header (or another version), unknown tags, truncation and trailing
 bytes.
@@ -439,8 +444,9 @@ thread). They are for the host, not for scripts:
   the same bytes (tested over a set of value graphs), which keeps the two
   writers from drifting apart.
 - A state stream is `TAG_STATE`, the string hash seed, the registry, the
-  metatable of each basic type, then every object marked for finalization
-  and the collector's settings (ADR-28). The main thread is written as
+  metatable of each basic type, then every object marked for finalization,
+  the collector's settings (ADR-28) and the hash of the next object made
+  (ADR-30). The main thread is written as
   `TAG_MAINTHREAD` (restored as the restoring state's main thread); a
   script's unpersist rejects that tag, so a stream cannot hand a script the
   main thread.
@@ -466,8 +472,8 @@ rebuilding by insertion cannot match it.
   restoring state with it.
 - The writer reads the nodes when their turn comes and fails if a
   `__persist` function changed the table's hash part meanwhile.
-- Tables with object keys (they hash by address) are written as entries.
-  Not supported yet: their order, and the identity of dead keys.
+- Object keys hash by the hash each object was given when made, which is
+  persisted with it (ADR-30), so every hash part is written slot by slot.
 - Tested: 100 churned tables keep their order; deleted keys after a
   collection; a coroutine suspended in a `pairs` loop neither skips nor
   repeats; across states with the same seed (order kept) and another seed
@@ -616,17 +622,18 @@ identity, so `next` from such a key failed after a restore ("invalid key to
   `lua-c++`; its table copy keeps them too, tested in `test_engine`).
   Nothing dereferences it; the collector never marks dead keys.
 - Persist cannot read a dead key's object (it may be collected), so it
-  matches dead keys by address against the strings it persisted, after the
+  matches dead keys by address against the objects it persisted, after the
   walk: the trailer gives, for each match, the table, the node and the
-  string, and unpersist with the same seed gives the dead node that
+  object, and unpersist with the same seed gives the dead node that
   identity. A dead key whose object was not persisted needs none: nothing
   restored can be passed to `next` as that key. A dead key whose object was
-  collected and whose address a persisted string now has gets that string's
-  identity, as `next` on the original would also take that string there.
+  collected and whose address a persisted object now has gets that
+  object's identity, as `next` on the original would also take that object
+  there.
 - The walk keeps a bit per node of each table with dead keys (a table of up
   to 64 nodes in a 16-byte record) and, after it, reads those nodes again;
   matching sorts the smaller side (the dead keys, through a filter of
-  addresses, or the strings). It costs nothing without dead keys and grows
+  addresses, or the objects). It costs nothing without dead keys and grows
   with their number: within noise when a fifth of 20000 records have two
   dead keys, about 13% more persist time when half the nodes of every table
   are dead keys (160000).
@@ -634,8 +641,53 @@ identity, so `next` from such a key failed after a restore ("invalid key to
   clearing entries as it iterates resumes and visits the same keys; a dead
   key whose string is not persisted; allocation failure; trailer checks;
   host and script bytes alike; another seed (contents kept).
-- Not supported yet: deleted object keys (they hash by address, with the
-  order of object keys) and another seed.
+- Deleted object keys work as strings do (ADR-30). Not supported yet:
+  another seed.
+
+### ADR-30: Object keys keep their order
+**Status:** accepted
+A traversal that spans a save must continue as it was: `next` moves from
+the current key's slot to the following ones, so a restored table must
+have its keys in the same slots, or a coroutine suspended in a `pairs`
+loop (or a script that keeps its last key across ticks) skips or repeats
+keys. Object keys hashed by their address, which a restore cannot give
+back (and which Java does not have).
+- The engine gives every object a hash when it is made (a sequence from
+  the seed, `GCObject::hash`, in the header's padding: no object grew), and
+  object keys hash by it (on `lua-c++`, A/B in its commit; light userdata
+  and light C functions still hash by address). Persist writes the hash of
+  every table, function and thread (as its place in the sequence, relative
+  to the previous one written: mostly one byte) and unpersist gives it to
+  the restored object when it is made, before it can be a key anywhere.
+  Every hash part is then written slot by slot (ADR-22).
+- Keys the restoring side supplies (permanents, objects made by `__persist`
+  closures, light userdata, light C functions) keep their own hashes, and
+  a restored object cannot take another's in their place: after a table
+  is read, unpersist checks that every key of its hash part is in the
+  chain from its main position (`Table::luaH_mainposition`, now in every
+  build) and otherwise rebuilds the table with the same sizes (its
+  contents, in another order). Library objects made in the same order with
+  the same seed hash the same in both states, so tables keyed by them keep
+  their order.
+- Deleted object keys keep their identities as strings do (ADR-29).
+- A whole-state snapshot carries the hash of the next object, so a
+  restored state goes on giving new objects the hashes the original would
+  have.
+- Objects made by `__persist` closures keep the hash they were made with:
+  the closure may already have used them as keys.
+- Cost (A/B, 20000 records): streams +3.6% for records of small tables,
+  +12% when each record also has a table with object keys (written slot by
+  slot, as string-keyed tables are since version 3); persist +1.6% and
+  +2.3%; unpersist 4% and 3% faster (slots installed, not inserted).
+- Tested: `tables.lua` (tables, functions and threads as keys in order;
+  deleted object keys and `next`; a suspended `pairs` loop; a loop that
+  clears object keys; mixed keys; weak keys; permanents as the same
+  objects keep the order, as other objects or `__persist` objects the
+  table is rebuilt with its contents), allocation failure at every point
+  for both paths, and the C++ tests across states (object keys with the
+  same seed and another, library objects as keys, a snapshot's next
+  hash). Without the restored hashes the order tests fail; without the
+  check the rebuilt-table tests do.
 
 ## Open questions
 

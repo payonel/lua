@@ -136,10 +136,13 @@ if T then
       end}
     end
     local v = {a = setmetatable({1, 2, "three", {4}}, make_mt()), b = "after"}
-    local expected = styx.persist(v)
     local blob
     local n = fails_cleanly_at_every_allocation(function() blob = styx.persist(v) end)
-    assert(n > 0 and #blob == #expected)
+    assert(n > 0)
+    -- (the closure and copy are new objects at each attempt, with new
+    -- hashes, so the streams differ: the result is checked instead)
+    local r = styx.unpersist(blob)
+    assert(r.a[3] == "three" and r.a[4][1] == 4 and r.b == "after" and getmetatable(r.a) == nil)
   end)
 
   -- the trailer's parts: tables marked for finalization, dead keys
@@ -181,6 +184,22 @@ if T then
     v, r = nil, nil
     collectgarbage(); collectgarbage()
     assert(#log == 8, table.concat(log, " "))
+  end)
+
+  case("object keys, kept in place or rebuilt, survive an allocation failure at every point", function()
+    local objs, t = {}, {}
+    for i = 1, 30 do objs[i] = (i % 2 == 0) and {} or function() end; t[objs[i]] = i end
+    for i = 1, 30, 4 do t[objs[i]] = nil end
+    collectgarbage(); collectgarbage()
+    local perm, other = {}, {}
+    local mixed = {[perm] = "perm"}   -- 'perm' comes back as 'other': rebuilt
+    for i = 1, 10 do mixed[{}] = i end
+    local blob = styx.persist({[perm] = "perm"}, {t = t, objs = objs, mixed = mixed})
+    local r
+    local n = fails_cleanly_at_every_allocation(function() r = styx.unpersist({perm = other}, blob) end)
+    assert(n > 0)
+    for i = 1, 30 do if i % 4 ~= 1 then assert(r.t[r.objs[i]] == i) end end
+    assert(r.mixed[other] == "perm")
   end)
 
   case("an error with a path survives an allocation failure at every point", function()

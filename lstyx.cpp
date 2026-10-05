@@ -57,6 +57,22 @@ constexpr char TAG_MAINTHREAD = 18; /* the main thread of the state being restor
 constexpr char TAG_UPVAL_PERM = 19; /* a variable that is a permanent: its key */
 
 /*
+** An object's hash (ADR-30) is written as its place in the sequence of the
+** state's hashes (the k-th object made gets seed + k * HASHSTEP), relative
+** to the previous object's: objects written one after another were mostly
+** made one after another, so that is mostly one byte.
+*/
+constexpr unsigned int inverse(unsigned int a) /* modulo 2^32, 'a' odd */
+{
+  unsigned int x = a;
+  for (int i = 0; i < 5; i++)
+    x *= 2u - a * x;
+  return x;
+}
+constexpr unsigned int HASHSTEP_INV = inverse(HASHSTEP);
+static_assert(HASHSTEP * HASHSTEP_INV == 1u);
+
+/*
 ** The walks keep their own work stacks, so they have no depth limit. For a
 ** script's persist or unpersist the stacks are memory charged to the state
 ** (a byte buffer grown under the API lock, as an API function allocates);
@@ -407,7 +423,7 @@ public:
   /*
   ** The trailer (ADR-10), after the value: what only the whole walk knows.
   ** The tables to mark for finalization, in the order their originals were
-  ** marked (ADR-28), and the dead keys that are persisted strings (ADR-29);
+  ** marked (ADR-28), and the dead keys that are persisted objects (ADR-29);
   ** then the trailer's length, written backward, so that unpersist reads
   ** it first, from the end.
   */
@@ -466,6 +482,12 @@ public:
       byte(static_cast<char>(g->gcparams[p]));
   }
 
+  /* the hash the state's next object gets (ADR-30) */
+  void next_hash()
+  {
+    raw(&L_->l_G->nexthash, sizeof(L_->l_G->nexthash));
+  }
+
 private:
   lua_State* L_;
   bool host_;
@@ -482,7 +504,7 @@ private:
   std::unordered_map<const void*, HostRef> map_;
   lua_Integer refcount_ = 0;
   lua_Integer flushed_ = 0; /* bytes handed to the writer */
-  size_t nstrings_ = 0;      /* strings written */
+  unsigned int lasthash_ = 0; /* the place of the last hash written */
   WorkStack<Task> tasks_;
   WorkStack<PathRec> paths_;
 
@@ -512,19 +534,19 @@ private:
   WorkStack<DeadNodes> dead_;
   WorkStack<lua_Unsigned> dead_bits_;
 
-  /* a persisted string, by address */
-  struct StringRef
+  /* a persisted object, by address */
+  struct ObjectRef
   {
     const void* p;
     lua_Integer id;
   };
 
-  /* a dead key that is a persisted string */
+  /* a dead key that is a persisted object */
   struct DeadFix
   {
     lua_Integer table;
     lua_Integer node;
-    lua_Integer string;
+    lua_Integer object;
   };
 
   static constexpr size_t FLUSH_SIZE = 64 * 1024;
@@ -631,14 +653,14 @@ private:
     }
   }
 
-  /* every persisted string: f(address, id) */
+  /* every persisted object (permanents included): f(address, id) */
   template <class F>
-  void each_string(F f)
+  void each_object(F f)
   {
     if (host_)
     {
       for (const auto& e : map_)
-        if (novariant(e.second.tt) == LUA_TSTRING)
+        if (e.second.tt & BIT_ISCOLLECTABLE)
           f(e.first, e.second.id);
       return;
     }
@@ -647,20 +669,20 @@ private:
     for (int i = 0; i < sizenode(refs); i++)
     {
       const Node* nd = gnode(refs, static_cast<size_t>(i));
-      if (!isempty(&nd->val) && novariant(nd->key_tt) == LUA_TSTRING && ttisinteger(&nd->val))
+      if (!isempty(&nd->val) && keyiscollectable(nd) && ttisinteger(&nd->val))
         f(nd->key_val.ref, ivalue(&nd->val));
     }
   }
 
   /*
-  ** The dead keys whose objects are persisted strings: their identities
-  ** (ADR-29). A node counts if it was written as a dead key and still is
-  ** one (a '__persist' function or a collection may have changed a table
-  ** since it was written). Keys are matched by address, so nothing
-  ** dereferences them, against candidate strings sorted by address: with
-  ** fewer keys than strings, the strings that pass a filter of the keys'
-  ** addresses; otherwise every string. A filter of the candidates picks
-  ** the keys to look up.
+  ** The dead keys whose objects are persisted: their identities (ADR-29).
+  ** A node counts if it was written as a dead key and still is one (a
+  ** '__persist' function or a collection may have changed a table since it
+  ** was written). Keys are matched by address, so nothing dereferences
+  ** them, against candidate objects sorted by address: with fewer keys
+  ** than objects, the objects that pass a filter of the keys' addresses;
+  ** otherwise every object. A filter of the candidates picks the keys to
+  ** look up.
   */
   void dead_keys()
   {
@@ -674,32 +696,32 @@ private:
       var(0);
       return;
     }
-    bool few_keys = nkeys <= nstrings_;
+    bool few_keys = nkeys <= static_cast<size_t>(refcount_);
     AddressFilter keys(L_, !host_, few_keys ? nkeys : 0);
     if (few_keys)
       each_dead_key([&](const void* p, const Table*, lua_Integer) { keys.add(p); });
     auto candidate = [&](const void* p) { return !few_keys || keys.maybe(p); };
     size_t ncand = 0;
-    each_string([&](const void* p, lua_Integer) { if (candidate(p)) ncand++; });
+    each_object([&](const void* p, lua_Integer) { if (candidate(p)) ncand++; });
     if (ncand == 0)
     {
       var(0);
       return;
     }
-    WorkStack<StringRef> cand(L_, !host_);
-    cand.reserve(ncand); /* nothing below allocates while the strings are read */
-    each_string([&](const void* p, lua_Integer id) { if (candidate(p)) cand.push(StringRef{p, id}); });
-    auto by_address = [](const StringRef& a, const StringRef& b) { return std::less<const void*>()(a.p, b.p); };
+    WorkStack<ObjectRef> cand(L_, !host_);
+    cand.reserve(ncand); /* nothing below allocates while the objects are read */
+    each_object([&](const void* p, lua_Integer id) { if (candidate(p)) cand.push(ObjectRef{p, id}); });
+    auto by_address = [](const ObjectRef& a, const ObjectRef& b) { return std::less<const void*>()(a.p, b.p); };
     cand.sort(by_address);
-    AddressFilter strings(L_, !host_, ncand);
+    AddressFilter objects(L_, !host_, ncand);
     for (size_t i = 0; i < cand.size(); i++)
-      strings.add(cand.get(i).p);
+      objects.add(cand.get(i).p);
     WorkStack<DeadFix> fixes(L_, !host_);
     each_dead_key([&](const void* p, const Table* h, lua_Integer node)
     {
-      if (!strings.maybe(p))
+      if (!objects.maybe(p))
         return;
-      size_t k = cand.lower_bound(StringRef{p, 0}, by_address);
+      size_t k = cand.lower_bound(ObjectRef{p, 0}, by_address);
       if (k < cand.size() && cand.get(k).p == p)
       {
         TValue t{};
@@ -715,7 +737,7 @@ private:
       DeadFix f = fixes.get(i);
       var(f.table);
       var(f.node);
-      var(f.string);
+      var(f.object);
     }
   }
 
@@ -1050,7 +1072,6 @@ private:
     case LUA_TSTRING:
     {
       byte_view s = tsvalue(&v)->data.view();
-      nstrings_++;
       byte(TAG_STRING);
       var(static_cast<lua_Integer>(s.size()));
       raw(s.data(), s.size());
@@ -1133,36 +1154,12 @@ private:
     L_->top++;
   }
 
-  /* keys that hash by content (the same in any state with the same seed) */
-  static bool content_hashed(lu_byte key_tt)
+  /* an object's hash, given when it was created: it hashes by it as a key */
+  void hash(const GCObject* o)
   {
-    switch (novariant(key_tt))
-    {
-    case LUA_TSTRING:
-    case LUA_TNUMBER:
-    case LUA_TBOOLEAN:
-      return true;
-    default:
-      return false;
-    }
-  }
-
-  /*
-  ** A hash part whose keys all hash by content is written slot by slot
-  ** (its layout), so that with the same seed it is restored as it is and
-  ** iterates in the same order; otherwise its entries are written.
-  */
-  static bool layout_ok(const Table* h)
-  {
-    if (allocsizenode(h) == 0)
-      return false;
-    for (int i = 0; i < sizenode(h); i++)
-    {
-      const Node* n = gnode(h, static_cast<size_t>(i));
-      if (!keyisnil(n) && !keyisdead(n) && !content_hashed(n->key_tt))
-        return false;
-    }
-    return true;
+    unsigned int k = (o->hash - L_->l_G->seed) * HASHSTEP_INV;
+    var(static_cast<int>(k - lasthash_));
+    lasthash_ = k;
   }
 
   void table(Table* h)
@@ -1172,8 +1169,13 @@ private:
       return;
     if (tofinalize(h))
       marked_.push(Marked{h, id});
-    bool layout = layout_ok(h);
+    /* a hash part is written slot by slot (its layout): keys hash by the
+       seed and their content, or by the hash of the object, which is
+       written with it, so with the same seed it is restored as it is and
+       iterates in the same order (ADR-22, ADR-30) */
+    bool layout = allocsizenode(h) > 0;
     byte(TAG_TABLE);
+    hash(h);
     var(h->asize());
     var(allocsizenode(h));
     var(h->asize() > 0 ? h->lenhint : 0);
@@ -1299,8 +1301,6 @@ private:
       var(nd->next);
       return;
     }
-    if (!content_hashed(nd->key_tt))
-      fail(lt::a_table_changed_while_being_persisted);
     byte(2);
     TValue k{};
     getnodekey(L_, &k, nd);
@@ -1339,6 +1339,7 @@ private:
   void closure(LClosure* cl)
   {
     byte(TAG_LCLOSURE);
+    hash(cl);
     int nup = static_cast<int>(cl->upvals.size());
     for (int i = nup; i >= 1; i--)
     {
@@ -1474,6 +1475,7 @@ private:
       }
     }
     byte(TAG_THREAD);
+    hash(T);
     byte(static_cast<char>(T->status));
     var(T->top);
     var(maxtop);
@@ -1809,7 +1811,7 @@ public:
   /* stack: 1: permanents (key -> object); 3: refs (id -> object); 4: upvalues */
   Restorer(lua_State* L, byte_view data, bool host)
       : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true),
-        fixes_(L, true)
+        fixes_(L, true), rebuilt_(L, true)
   {
   }
 
@@ -1899,17 +1901,22 @@ public:
   {
     if (next_marked_ != marked_.size())
       r_.invalid();
+    auto by_address = [](Table* a, Table* b) { return std::less<Table*>()(a, b); };
+    rebuilt_.sort(by_address);
     for (size_t i = 0; i < fixes_.size(); i++)
     {
       DeadFix f = fixes_.get(i);
       lua_rawgeti(L_, REFS, f.table);
       lua_rawgeti(L_, REFS, f.key);
-      if (!lua_istable(L_, -2) || lua_type(L_, -1) != LUA_TSTRING)
-        r_.invalid();
       TValue t = getslot(L_, L_->top - 2);
       TValue k = getslot(L_, L_->top - 1);
+      if (!ttistable(&t) || !iscollectable(&k))
+        r_.invalid();
       Table* h = hvalue(&t);
-      if (same_seed()) /* otherwise the table was rebuilt, with no dead keys */
+      size_t r = rebuilt_.lower_bound(h, by_address);
+      bool was_rebuilt = r < rebuilt_.size() && rebuilt_.get(r) == h;
+      /* a table rebuilt, here or for another seed, has no dead keys */
+      if (same_seed() && !was_rebuilt)
       {
         if (isdummy(h) || f.node >= sizenode(h) || !keyisdead(gnode(h, static_cast<size_t>(f.node))))
           r_.invalid();
@@ -1973,6 +1980,20 @@ private:
   };
   WorkStack<DeadFix> fixes_;
   bool done_ = false;
+
+  WorkStack<Table*> rebuilt_; /* layout tables whose keys did not all fit */
+
+  unsigned int lasthash_ = 0; /* the place of the last hash read */
+
+  /* an object's hash (Walker::hash), in the persisting state's sequence */
+  unsigned int get_hash()
+  {
+    lua_Integer d = r_.get_var();
+    if (d < INT_MIN || d > INT_MAX)
+      r_.invalid();
+    lasthash_ += static_cast<unsigned int>(static_cast<int>(d));
+    return static_cast<unsigned int>(seed_) + lasthash_ * HASHSTEP;
+  }
 
   /* the next reference id, of an object other than a table */
   lua_Integer new_id()
@@ -2082,6 +2103,7 @@ private:
       f.kind = Build::Closure;
       f.part = Part::Proto;
       f.id = new_id();
+      f.a = get_hash();
       frames_.push(f);
       return Next::Advance;
     }
@@ -2146,6 +2168,7 @@ private:
 
   void start_table(lua_Integer id)
   {
+    unsigned int hash = get_hash();
     lua_Integer asize = r_.get_var();
     lua_Integer hsize = r_.get_var();
     lua_Integer lenhint = r_.get_var();
@@ -2171,6 +2194,7 @@ private:
       register_top(id);
     }
     TValue t = getslot(L_, L_->top - 1);
+    hvalue(&t)->hash = hash; /* before it can be a key anywhere */
     Frame f;
     f.kind = Build::Table;
     f.part = Part::Meta;
@@ -2190,6 +2214,37 @@ private:
     return seed_ == static_cast<lua_Integer>(L_->l_G->seed);
   }
 
+  /*
+  ** Every key that hashes by an object's hash sits where a lookup finds it:
+  ** in the chain from its main position. A key the restoring side supplied
+  ** (a permanent, an object a '__persist' closure made, a light userdata
+  ** or C function, which hash by address) can hash otherwise (ADR-30).
+  */
+  bool keys_in_place(const Table* h) const
+  {
+    int size = sizenode(h);
+    for (int i = 0; i < size; i++)
+    {
+      const Node* n = gnode(h, static_cast<size_t>(i));
+      if (keyisnil(n) || keyisdead(n))
+        continue;
+      lu_byte kt = novariant(n->key_tt);
+      if (kt == LUA_TSTRING || kt == LUA_TNUMBER || kt == LUA_TBOOLEAN)
+        continue;
+      TValue k{};
+      getnodekey(L_, &k, n);
+      int j = h->luaH_mainposition(&k);
+      for (int steps = 0; j != i; steps++)
+      {
+        int next = gnode(h, static_cast<size_t>(j))->next;
+        if (next == 0 || steps == size)
+          return false;
+        j += next;
+      }
+    }
+    return true;
+  }
+
   /* the table is complete */
   Next end_table(Frame f)
   {
@@ -2197,7 +2252,17 @@ private:
     if (h->asize() != f.a || allocsizenode(h) != f.b)
       r_.invalid();
     if (f.type == 1 && same_seed())
-      h->lastfree = static_cast<int>(f.d);
+    {
+      if (keys_in_place(h))
+        h->lastfree = static_cast<int>(f.d);
+      else
+      { /* rebuilt with the same sizes: its contents, in another order */
+        rebuilt_.push(h);
+        lua_lock(L_);
+        h->luaH_resize(L_, static_cast<int>(f.a), static_cast<int>(f.b));
+        lua_unlock(L_);
+      }
+    }
     h->lenhint = static_cast<int>(f.c);
     push_table(h);
     return done();
@@ -2282,10 +2347,8 @@ private:
       return Next::Read;
     case Part::NodeKey:
     {
-      int t = lua_type(L_, -1);
       TValue k = getslot(L_, L_->top - 1);
-      if ((t != LUA_TSTRING && t != LUA_TNUMBER && t != LUA_TBOOLEAN) ||
-          (ttisfloat(&k) && fltvalue(&k) != fltvalue(&k)))
+      if (ttisnil(&k) || (ttisfloat(&k) && fltvalue(&k) != fltvalue(&k)))
         r_.invalid();
       f.key = Slot::of(k);
       lua_pop(L_, 1);
@@ -2645,6 +2708,7 @@ private:
       register_top(f.id);
       TValue c = getslot(L_, L_->top - 1);
       LClosure* cl = clLvalue(&c);
+      cl->hash = static_cast<unsigned int>(f.a);
       lua_pop(L_, 1);
       lua_Integer nup = r_.get_var();
       if (nup != static_cast<lua_Integer>(cl->upvals.size()))
@@ -2724,7 +2788,9 @@ private:
   */
   void start_thread(lua_Integer id)
   {
+    unsigned int hash = get_hash();
     lua_State* L1 = lua_newthread(L_);
+    L1->hash = hash;
     register_top(id);
     lua_pop(L_, 1);
     char status = r_.get_byte();
@@ -3081,6 +3147,8 @@ static int host_restore_body(lua_State* L)
     R.r_.invalid();
   unsigned char params[LUA_GCPN];
   R.r_.get_raw(params, sizeof(params));
+  unsigned int nexthash; /* the hash of the next object (ADR-30) */
+  R.r_.get_raw(&nexthash, sizeof(nexthash));
   if (R.r_.pos != R.r_.data.size())
     R.r_.invalid();
   R.finish();
@@ -3096,6 +3164,7 @@ static int host_restore_body(lua_State* L)
   }
   for (int p = 0; p < LUA_GCPN; p++)
     g->gcparams[p] = params[p];
+  g->nexthash = nexthash;
   lua_gc(L, kind ? LUA_GCGEN : LUA_GCINC, 0, 0, 0);
   lua_gc(L, stopped ? LUA_GCSTOP : LUA_GCRESTART, 0, 0, 0);
   return 0;
@@ -3199,6 +3268,7 @@ int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
     }
     hp.marked_objects();
     hp.collector();
+    hp.next_hash();
   });
 }
 

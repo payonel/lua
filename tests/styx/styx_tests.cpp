@@ -433,6 +433,9 @@ static const char* const graph_samples[] = {
   "local t = {} for i = 1, 30 do t['d' .. i] = i end local gone = {} "
   "for i = 1, 30, 3 do t['d' .. i] = nil gone[#gone + 1] = 'd' .. i end "
   "collectgarbage() collectgarbage() return {t, gone}, {}",
+  "local t, gone = {}, {} for i = 1, 40 do t[(i % 2 == 0) and {} or function() end] = i end "
+  "for k, v in pairs(t) do if v % 3 == 0 then t[k] = nil gone[#gone + 1] = k end end "
+  "collectgarbage() collectgarbage() return {t, gone}, {}",
 };
 
 /* host persist of a value is byte for byte the script path's stream */
@@ -1096,6 +1099,126 @@ static void test_dead_keys_across_states()
   }
 }
 
+
+/*
+** Object keys across states (ADR-30): a table, function or thread keeps the
+** hash it was given when created, so a restored table with object keys
+** iterates in the same order in a state with the same seed; keys that are
+** the restoring state's own objects (permanents) keep it when they were
+** made the same way (the libraries, with the same seed).
+*/
+static const char* const object_keys_program =
+  "math.randomseed(7) t, names = {}, {} "
+  "for i = 1, 200 do local r = math.random(3) "
+  "  local k = (r == 1) and {} or (r == 2) and function() return i end or coroutine.create(print) "
+  "  t[k] = i names[k] = 'o' .. i end "
+  "for k in pairs(t) do if math.random() < 0.3 then t[k] = nil end end "
+  "collectgarbage() collectgarbage() "
+  "function order(tt, nn) local o = {} for k in pairs(tt) do o[#o + 1] = nn[k] or '?' end "
+  "  return table.concat(o, ' ') end "
+  "return 'ok'";
+
+static void test_object_key_order_across_states()
+{
+  CountingAlloc a1;
+  lua_State* A = lua_newstate(&a1, 4321);
+  luaL_openlibs(A);
+  CHECK(eval(A, object_keys_program) == "ok");
+  std::string expected = eval(A, "return order(t, names)");
+  CHECK(eval(A, "_P = {[print] = 'print'} _V = {t = t, names = names} return 'ok'") == "ok");
+  std::string script_blob = eval(A, "return require('styx').persist(_P, _V)");
+  lua_getglobal(A, "_P");
+  lua_getglobal(A, "_V");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persistvalue(A, 1, 2, &w, &msg) == LUA_OK);
+  CHECK(w.out == script_blob);
+  lua_close(A);
+
+  for (unsigned int seed : {4321u, 4322u})
+  {
+    CountingAlloc a2;
+    lua_State* B = lua_newstate(&a2, seed);
+    luaL_openlibs(B);
+    CHECK(eval(B, "_BACK = {print = print} "
+                  "function order(tt, nn) local o = {} for k in pairs(tt) do o[#o + 1] = nn[k] or '?' end "
+                  "  return table.concat(o, ' ') end return 'ok'") == "ok");
+    lua_getglobal(B, "_BACK");
+    CHECK(luaL_unpersistvalue(B, 1, byte_view(script_blob.data(), script_blob.size()), &msg) == LUA_OK);
+    lua_setglobal(B, "v");
+    lua_settop(B, 0);
+    push_string(B, expected);
+    lua_setglobal(B, "expected");
+    if (seed == 4321u)
+      CHECK(eval(B, "return order(v.t, v.names)") == expected);
+    /* with another seed: the same entries */
+    CHECK(eval(B, "local n = 0 for k, i in pairs(v.t) do assert(v.names[k] == 'o' .. i) n = n + 1 end "
+                  "local m = 0 for _ in expected:gmatch('%S+') do m = m + 1 end return tostring(n == m)")
+          == "true");
+    lua_close(B);
+  }
+}
+
+/* library objects as keys: made the same way with the same seed, they hash the same */
+static void test_library_keys_across_states()
+{
+  CountingAlloc a1;
+  lua_State* A = lua_newstate(&a1, 99);
+  luaL_openlibs(A);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, "t = {} local i = 0 "
+                "for _, k in ipairs{io.stdout, io.stderr, io.stdin, print, string.format, math.floor, "
+                "                   coroutine.yield, table.insert} do i = i + 1 t[k] = i end "
+                "for i = 1, 30 do t[{}] = 100 + i end "
+                "local o = {} for k, v in pairs(t) do o[#o + 1] = v end expected = table.concat(o, ' ') "
+                "return 'ok'") == "ok");
+  std::string expected = eval(A, "return expected");
+  lua_settop(A, 0);
+  lua_getglobal(A, "_PERMS");
+  lua_getglobal(A, "t");
+  StringWriter w;
+  HostString msg;
+  int st = luaL_persistvalue(A, 1, 2, &w, &msg);
+  if (st != LUA_OK)
+    std::printf("      host persist error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = new_state_for(&a2, w.out);
+  CHECK(eval(B, build_perms) == "ok");
+  lua_getglobal(B, "_BACK");
+  CHECK(luaL_unpersistvalue(B, 1, byte_view(w.out.data(), w.out.size()), &msg) == LUA_OK);
+  lua_setglobal(B, "r");
+  lua_settop(B, 0);
+  CHECK(eval(B, "local o = {} for k, v in pairs(r) do o[#o + 1] = v end return table.concat(o, ' ')") == expected);
+  CHECK(eval(B, "return tostring(r[io.stdout] == 1 and r[print] == 4 and r[table.insert] == 8)") == "true");
+  lua_close(B);
+}
+
+/* a whole state goes on giving new objects the hashes the original would */
+static void test_state_next_hash()
+{
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, "function make() local u = {} for i = 1, 60 do u[(i % 2 == 0) and {} or function() end] = i end "
+                "  local o = {} for k, v in pairs(u) do o[#o + 1] = v end return table.concat(o, ' ') end "
+                "return 'ok'") == "ok");
+  std::string blob = persist_state(A);
+  lua_getglobal(A, "make");
+  CHECK(lua_pcall(A, 0, 1, 0) == LUA_OK);
+  std::string expected = to_string(A, -1);
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  lua_getglobal(B, "make");
+  CHECK(lua_pcall(B, 0, 1, 0) == LUA_OK);
+  CHECK(to_string(B, -1) == expected);
+  lua_close(B);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -1136,6 +1259,9 @@ static void run_cpp_tests()
       {"host_state_collector_settings", test_host_state_collector_settings},
       {"host_state_garbage_userdata", test_host_state_garbage_userdata},
       {"dead_keys_across_states", test_dead_keys_across_states},
+      {"object_key_order_across_states", test_object_key_order_across_states},
+      {"library_keys_across_states", test_library_keys_across_states},
+      {"state_next_hash", test_state_next_hash},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)
