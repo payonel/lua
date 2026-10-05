@@ -417,8 +417,6 @@ static void persist_thread(Persist& P)
     persist_error(P, lt::cannot_persist_a_running_thread);
   if (T->status != LUA_OK && T->status != LUA_YIELD)
     cannot_persist_thread_with(P, lt::an_error_status);
-  if (T->ntbc != 0)
-    cannot_persist_thread_with(P, lt::to_be_closed_variables);
 
   lua_Integer nframes = 0;
   StkId maxtop = T->top;
@@ -469,6 +467,9 @@ static void persist_thread(Persist& P)
         break;
     }
   }
+  put_i64(&P.B, T->ntbc);
+  for (int k = 0; k < T->ntbc; k++)
+    put_i64(&P.B, T->tbc[k]);
 }
 
 static void persist(Persist& P)
@@ -785,6 +786,10 @@ static bool valid_frame(lua_State* L1, const CallInfo* ci)
   return ci->savedpc >= 0 && ci->savedpc <= static_cast<int>(p->code.size());
 }
 
+static void unpersist_frames(Unpersist& U, lua_State* L1, lua_Integer nframes,
+                             lua_Integer top, lua_Integer maxtop, int need);
+static void unpersist_tbc(Unpersist& U, lua_State* L1, lua_Integer nframes, lua_Integer top);
+
 /*
 ** The thread is valid at every point a collection can see it: its stack is
 ** filled while it has only its base frame, then the frames are read into
@@ -819,11 +824,17 @@ static void unpersist_thread(Unpersist& U, lua_Integer id)
   lua_Integer nframes = U.r.get_i64();
   if (nframes < 0 || (nframes > 0 && status != LUA_YIELD))
     U.r.invalid();
-  if (nframes == 0)
-  {
-    L1->status = static_cast<TStatus>(status);
-    return;
-  }
+  if (nframes > 0)
+    unpersist_frames(U, L1, nframes, top, maxtop, need);
+  unpersist_tbc(U, L1, nframes, top);
+  L1->status = static_cast<TStatus>(status);
+}
+
+/* frames are read into spare CallInfos and attached in one step */
+static void unpersist_frames(Unpersist& U, lua_State* L1, lua_Integer nframes,
+                             lua_Integer top, lua_Integer maxtop, int need)
+{
+  lua_State* L = U.r.L;
   /* a collection may have shrunk the stack while the values were read */
   if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
     memory_error(L);
@@ -857,7 +868,47 @@ static void unpersist_thread(Unpersist& U, lua_Integer id)
     last = ci;
   }
   L1->ci = last;
-  L1->status = static_cast<TStatus>(status);
+}
+
+/* registers a to-be-closed variable of a thread (run protected) */
+struct NewTbc : ProtectedCall
+{
+  StkId level = 0;
+  void run(lua_State* L1) override
+  {
+    luaF_newtbcupval(L1, level);
+  }
+};
+
+/*
+** To-be-closed variables are registered once the thread's stack and frames
+** are complete, with the engine's own luaF_newtbcupval, run protected on
+** the thread; an error there is raised on the caller.
+*/
+static void unpersist_tbc(Unpersist& U, lua_State* L1, lua_Integer nframes, lua_Integer top)
+{
+  lua_State* L = U.r.L;
+  lua_Integer ntbc = U.r.get_i64();
+  if (ntbc < 0 || ntbc > top || (ntbc > 0 && nframes == 0))
+    U.r.invalid();
+  StkId prev = 0;
+  for (lua_Integer k = 0; k < ntbc; k++)
+  {
+    lua_Integer level = U.r.get_i64();
+    if (level <= prev || level >= top)
+      U.r.invalid();
+    prev = level;
+    NewTbc nt;
+    nt.level = level;
+    TStatus st = luaD_rawrunprotected(L1, &nt);
+    if (st == LUA_ERRMEM)
+      memory_error(L);
+    if (st != LUA_OK)
+    {
+      lua_xmove(L1, L, 1);
+      lua_error(L);
+    }
+  }
 }
 
 static void unpersist(Unpersist& U)

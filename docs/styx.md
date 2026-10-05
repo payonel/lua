@@ -61,7 +61,8 @@ local x = styx.settings(name [, value])    -- query or change a setting
     feeds every proper prefix of a stream to unpersist.
   - `*.lua`: Lua script tests, one per area: `primitives`, `strings`,
     `tables`, `closures`, `open_upvalues`, `threads`, `permanents`,
-    `special` (`__persist`), `paths` (error paths), `errors`, `memory`
+    `special` (`__persist`), `paths` (error paths), `tbc`
+    (to-be-closed variables), `errors`, `memory`
     (accounting and allocation failures), `processes` (unpersist in a
     separate interpreter process), `resume_print`.
   - Debug builds (`make debug styx-test`) also open the test library `T`,
@@ -94,7 +95,8 @@ local x = styx.settings(name [, value])    -- query or change a setting
      as in Eris; any value, userdata included, can be a permanent)
   7. Lua closures, closed and open upvalues, including shared upvalues
      (done: `closures.lua`, `open_upvalues.lua`, ADR-16)
-  8. coroutines (first cut done: `threads.lua`, C++ cross-state tests)
+  8. coroutines (first cut done: `threads.lua`, C++ cross-state tests),
+     with to-be-closed variables (done: `tbc.lua`, ADR-20)
   9. userdata (not supported yet; see below)
   10. error reporting with a path to the offending value (done:
       `paths.lua`, ADR-19)
@@ -107,8 +109,10 @@ of them is a limit of the design. "Today" says what happens now; every one
 of these raises a clear error unless it says otherwise.
 
 ### Threads
-- **To-be-closed variables** in a suspended thread. Today: error ("a
-  thread with to-be-closed variables").
+- **To-be-closed variables of C functions** (a C function that called
+  `lua_toclose` and yielded). Today: error ("a thread with a hook or
+  finalizer call", the frame flag check). Lua to-be-closed variables work
+  (ADR-20).
 - **Yields through continuations**, for example a yield inside `pcall`,
   `xpcall`, a metamethod or an iterator called from C, or any C function
   that yields with a continuation. Only a plain `coroutine.yield` from Lua
@@ -235,8 +239,9 @@ raw little-endian bytes (the engine is little-endian only). Output is built
 in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a missing
 header, unknown tags, truncation and trailing bytes.
 A thread is written as its status, stack top and maximum frame top, then
-its stack values, then its frames, so that unpersist can fill the stack
-before any frame exists (see ADR-15).
+its stack values, then its frames, then its to-be-closed list (stack
+levels), so that unpersist can fill the stack before any frame exists
+(see ADR-15, ADR-20).
 Non-basic values (strings, tables, functions, threads) get a reference id in
 first-seen order; a repeat is written as a back reference, which preserves
 sharing and cycles. An object found in the permanents table is written as
@@ -362,6 +367,16 @@ Unpersist errors about the stream give the byte offset where the problem
 was found: `invalid persisted data (at byte N)`.
 Memory errors stay "not enough memory", and errors raised by a `__persist`
 function pass through unchanged.
+
+### ADR-20: To-be-closed variables
+**Status:** accepted
+A suspended thread's to-be-closed variables are persisted as their stack
+levels. Unpersist registers them, once the stack and frames are complete,
+with the engine's own `luaF_newtbcupval` (which also checks each value
+still has a `__close` metamethod), run protected on the restored thread;
+an error there is raised on the caller (ADR-15). After restore they are
+closed exactly as in the original: on leaving their scope, on return, and
+by `coroutine.close`, in reverse order across frames.
 
 ### Required tests for later work
 - Host-side persist (from the C API, on a state that is not running) of a

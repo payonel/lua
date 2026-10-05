@@ -18,6 +18,7 @@ local function sample(with_thread)
   if with_thread then
     co = coroutine.create(function(a)
       local t = {a, "local"}
+      local closing <close> = setmetatable({}, {__close = function() end})
       coroutine.yield(function() return t end)
       return a
     end)
