@@ -1734,6 +1734,11 @@ global (C0). Wrapping them left 37 close/reopen fragments. The API
 package *is* the global scope: unwrap both files (their `static` helpers
 keep internal linkage).
 
+**Status: done** (`7f538223`). `lapi.cpp`/`lauxlib.cpp` are unwrapped, so
+their static helpers sit at global scope with internal linkage, and
+`lapi.h` keeps `lua::api`. Java maps both files to `LuaApi`/`LuaAuxLib`
+as before. `make full` passes, including the sealed-archive link.
+
 ### R6. Chunk I/O without templates
 C0 allows no new templates, but L9 added `loadVector`/`loadVar`/
 `getaddr`/`checknum` and `dumpVector`/`dumpVar`/`dumpNumInfo`. Replace
