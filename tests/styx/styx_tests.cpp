@@ -418,6 +418,8 @@ static const char* const graph_samples[] = {
   "return {print, string.format, io.stdout}, "
   "{[print] = 'print', [string.format] = 'fmt', [io.stdout] = 1}",
   "return {setmetatable({1}, {__persist = true}), 'x'}, {}",
+  "local co = coroutine.create(function() local function f() error('boom') end f() end) "
+  "coroutine.resume(co) return co, {[error] = 'error', [_ENV] = 'env'}",
   "local t = {} for i = 1, 50 do t['k' .. i] = i end "
   "for i = 1, 50, 2 do t['k' .. i] = nil end return t, {}",
 };

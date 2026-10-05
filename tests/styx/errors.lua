@@ -25,12 +25,6 @@ case("the running thread cannot be persisted", function()
   fails("cannot persist a running thread", styx.persist, (coroutine.running()))
 end)
 
-case("a thread in an error state cannot be persisted", function()
-  local co = coroutine.create(function() error("boom") end)
-  coroutine.resume(co)
-  fails("cannot persist a thread with an error status", styx.persist, co)
-end)
-
 case("argument checking", function()
   fails(nil, styx.persist)
   fails(nil, styx.unpersist)

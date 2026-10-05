@@ -126,7 +126,6 @@ of these raises a clear error unless it says otherwise.
   normal), and the main thread while it runs. Today: error. An open
   upvalue owned by such a thread is persisted as its current value
   (ADR-16).
-- **Threads in an error state** (dead after an error). Today: error.
 - **Hooks, `allowhook`, per-thread counters**. Today: not persisted; a
   restored thread starts with the defaults of a new thread.
 
@@ -251,7 +250,9 @@ followed by one value: a tag byte and a payload. Integers and floats are 8
 raw little-endian bytes (the engine is little-endian only). Output is built
 in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a missing
 header, unknown tags, truncation and trailing bytes.
-A thread is written as its status, stack top and maximum frame top, then
+A thread is written as its status (unstarted or dead, suspended, or dead
+after an error, which keeps its frames and error value), stack top and
+maximum frame top, then
 its stack values, then its frames, then its to-be-closed list (stack
 levels), so that unpersist can fill the stack before any frame exists
 (see ADR-15, ADR-20).

@@ -188,6 +188,63 @@ case("frames that do not match the stack are rejected", function()
   H.checkheap()
 end)
 
+-- a thread that died with an error keeps its frames, its error value and
+-- its pending to-be-closed variables; the restored one behaves the same
+local function compare_dead(make, perms_extra, back_extra)
+  local function observe(co, log)
+    local r = {coroutine.status(co), debug.traceback(co)}
+    local ok, err = coroutine.resume(co)
+    r[#r + 1] = tostring(ok) .. " " .. tostring(err)
+    local cok, cerr = coroutine.close(co)
+    r[#r + 1] = tostring(cok) .. " " .. tostring(cerr)
+    r[#r + 1] = table.concat(log, ",")
+    r[#r + 1] = coroutine.status(co)
+    return r
+  end
+  local log1, log2 = {}, {}
+  local original = make(log1)
+  local p, b = {}, {}
+  for k, v in pairs(perms) do p[k] = v end
+  for k, v in pairs(back) do b[k] = v end
+  p[log1] = "log"; b.log = log2
+  for k, v in pairs(perms_extra or {}) do p[k] = v end
+  for k, v in pairs(back_extra or {}) do b[k] = v end
+  local restored = styx.unpersist(b, styx.persist(p, original))
+  local a, c = observe(original, log1), observe(restored, log2)
+  for i = 1, #a do
+    assert(a[i] == c[i], "step " .. i .. ":\n" .. tostring(a[i]) .. "\nvs\n" .. tostring(c[i]))
+  end
+end
+
+case("a thread dead after error() behaves the same after restore", function()
+  compare_dead(function(log)
+    local co = coroutine.create(function()
+      local x <close> = setmetatable({}, {__close = function(_, e) log[#log + 1] = "closed:" .. tostring(e) end})
+      local function inner() error("boom") end
+      inner()
+    end)
+    assert(not coroutine.resume(co))
+    return co
+  end, {[error] = "error"}, {error = error})
+end)
+
+case("a thread dead after a runtime error behaves the same after restore", function()
+  compare_dead(function(log)
+    local co = coroutine.create(function() local t = nil; return t.x end)
+    assert(not coroutine.resume(co))
+    return co
+  end)
+end)
+
+case("a thread dead with a table as error value keeps that value", function()
+  local co = coroutine.create(function() error({code = 42}) end)
+  coroutine.resume(co)
+  local r = styx.unpersist({env = _ENV, yield = coroutine.yield, error = error},
+                            styx.persist({[_ENV] = "env", [coroutine.yield] = "yield", [error] = "error"}, co))
+  local ok, err = coroutine.close(r)
+  assert(not ok and type(err) == "table" and err.code == 42)
+end)
+
 case("rejects truncation of a thread stream", function()
   local co = coroutine.create(function(a) local t = {a}; coroutine.yield(t); return a end)
   coroutine.resume(co, 3)

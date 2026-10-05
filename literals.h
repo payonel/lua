@@ -119,7 +119,6 @@ namespace lt
   constexpr byte_view cannot_persist_a_thread_with_s("cannot persist a thread with %s");
   constexpr byte_view a_continuation_function("a continuation function");
   constexpr byte_view a_hook_or_finalizer_call("a hook or finalizer call");
-  constexpr byte_view an_error_status("an error status");
   constexpr byte_view bad_permanent_value_for_key_s("bad permanent value for key '%s'");
   constexpr byte_view bad_permanent_value_s_expected_got_s("bad permanent value (%s expected, got %s)");
   constexpr byte_view persisted_data_is_nested_too_deeply("persisted data is nested too deeply");

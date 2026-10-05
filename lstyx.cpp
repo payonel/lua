@@ -488,8 +488,6 @@ static void persist_thread(Persist& P)
   luaL_checkstacki(L, 3, std::nullopt);
   if (is_running(L, T))
     persist_error(P, lt::cannot_persist_a_running_thread);
-  if (T->status != LUA_OK && T->status != LUA_YIELD)
-    cannot_persist_thread_with(P, lt::an_error_status);
 
   lua_Integer nframes = 0;
   StkId maxtop = T->top;
@@ -1012,6 +1010,27 @@ static void unpersist_lclosure(Unpersist& U, lua_Integer id)
   }
 }
 
+/*
+** A thread is persisted with its status: not started or dead (LUA_OK, no
+** frames), suspended (LUA_YIELD) or dead after an error (an error status,
+** keeping its frames for tracebacks and its error value).
+*/
+static bool valid_status(char status)
+{
+  switch (status)
+  {
+  case LUA_OK:
+  case LUA_YIELD:
+  case LUA_ERRRUN:
+  case LUA_ERRSYNTAX:
+  case LUA_ERRMEM:
+  case LUA_ERRERR:
+    return true;
+  default:
+    return false;
+  }
+}
+
 /* the frame's function slot holds what its call status says it calls */
 static bool valid_frame(lua_State* L1, const CallInfo* ci)
 {
@@ -1044,7 +1063,7 @@ static void unpersist_thread(Unpersist& U, lua_Integer id)
   char status = U.r.get_byte();
   lua_Integer top = U.r.get_i64();
   lua_Integer maxtop = U.r.get_i64();
-  if ((status != LUA_OK && status != LUA_YIELD) || top < 1 || maxtop < top ||
+  if (!valid_status(status) || top < 1 || maxtop < top ||
       maxtop >= LUAI_MAXSTACK - LUA_MINSTACK)
     U.r.invalid();
 
@@ -1060,7 +1079,7 @@ static void unpersist_thread(Unpersist& U, lua_Integer id)
   }
 
   lua_Integer nframes = U.r.get_i64();
-  if (nframes < 0 || (nframes > 0 && status != LUA_YIELD))
+  if (nframes < 0 || (nframes > 0 && status == LUA_OK))
     U.r.invalid();
   if (nframes > 0)
     unpersist_frames(U, L1, nframes, top, maxtop, need);
@@ -1828,8 +1847,6 @@ private:
     }
     if (is_running(T))
       fail("cannot persist a running thread", p);
-    if (T->status != LUA_OK && T->status != LUA_YIELD)
-      fail("cannot persist a thread with an error status", p);
     StkId maxtop = T->top;
     if (T->ci != &T->base_ci)
     {
