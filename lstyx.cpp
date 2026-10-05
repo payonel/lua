@@ -50,6 +50,7 @@ constexpr char TAG_PROTO_NEW = 15;  /* a prototype, written the first time it is
 constexpr char TAG_PROTO_REF = 16;  /* a prototype already written */
 constexpr char TAG_STATE = 17;      /* a whole state: seed, registry, type metatables */
 constexpr char TAG_MAINTHREAD = 18; /* the main thread of the state being restored */
+constexpr char TAG_UPVAL_PERM = 19; /* a variable that is a permanent: its key */
 
 constexpr int MAX_DEPTH = 10000;
 
@@ -473,6 +474,17 @@ static void persist_lclosure(Persist& P)
     lua_pushinteger(L, ++P.refcount);
     lua_rawset(L, P.refs);
     PathStep step(P, Step::Upvalue, f, i);
+    lua_pushlightuserdata(L, id);
+    lua_rawget(L, P.perms);
+    if (!lua_isnil(L, -1)) /* the variable is a permanent */
+    {
+      luaL_addchar(&P.B, TAG_UPVAL_PERM);
+      PathStep key(P, Step::PermKey);
+      persist(P);
+      lua_pop(L, 1);
+      continue;
+    }
+    lua_pop(L, 1);
     UpVal* uv = cl->upvals[i - 1];
     if (upisopen(uv) && !is_running(L, uv->owner))
     {
@@ -979,6 +991,35 @@ static void push_new_closure(lua_State* L, Proto* p)
   lua_unlock(L);
 }
 
+/*
+** A variable that is a permanent: the permanents give, for its key, a Lua
+** function whose first upvalue is the variable to share; upvalue 'i' of the
+** closure at 'f' is joined to it.
+*/
+static void unpersist_perm_upvalue(Unpersist& U, int f, int i)
+{
+  lua_State* L = U.r.L;
+  luaL_checkstacki(L, 4, std::nullopt);
+  unpersist(U); /* the key */
+  lua_pushvalue(L, -1);
+  lua_rawget(L, U.perms);
+  if (lua_isnil(L, -1))
+  {
+    luaL_tolstring(L, -2);
+    luaL_errori(L, lt::bad_permanent_value_for_key_s);
+  }
+  if (lua_type(L, -1) != LUA_TFUNCTION || lua_iscfunction(L, -1) ||
+      lua_getupvaluei(L, -1, 1) == nullptr)
+  {
+    lua_pushistringref(L, lt::a_function_capturing_the_variable);
+    lua_pushstring(L, luaL_typename(L, -2));
+    luaL_errori(L, lt::bad_permanent_value_s_expected_got_s);
+  }
+  lua_pop(L, 1); /* the upvalue's value */
+  lua_upvaluejoin(L, f, i, lua_gettop(L), 1);
+  lua_pop(L, 2);
+}
+
 static void unpersist_lclosure(Unpersist& U, lua_Integer id)
 {
   lua_State* L = U.r.L;
@@ -996,7 +1037,7 @@ static void unpersist_lclosure(Unpersist& U, lua_Integer id)
   for (int i = 1; i <= nup; i++)
   {
     char tag = U.r.get_byte();
-    if (tag == TAG_UPVAL_NEW || tag == TAG_UPVAL_OPEN)
+    if (tag == TAG_UPVAL_NEW || tag == TAG_UPVAL_OPEN || tag == TAG_UPVAL_PERM)
     {
       lua_Integer uid = ++U.refcount;
       lua_pushvalue(L, f);
@@ -1005,6 +1046,8 @@ static void unpersist_lclosure(Unpersist& U, lua_Integer id)
       lua_rawseti(L, U.ups, -uid);
       if (tag == TAG_UPVAL_OPEN)
         unpersist_open_upvalue(U, f, i);
+      else if (tag == TAG_UPVAL_PERM)
+        unpersist_perm_upvalue(U, f, i);
       else
       {
         unpersist(U);
@@ -1773,6 +1816,18 @@ private:
       return;
     }
     refs_.emplace(uv, ++refcount_);
+    if (perms_ != nullptr) /* the variable may be a permanent */
+    {
+      TValue id, key;
+      setpvalue(&id, static_cast<void*>(uv));
+      lu_byte tag = perms_->luaH_get(&id, &key);
+      if (!tagisempty(tag) && !ttisnil(&key))
+      {
+        byte(TAG_UPVAL_PERM);
+        push_value(key, path(p, Step::PermKey));
+        return;
+      }
+    }
     if (upisopen(uv) && !is_running(uv->owner))
     {
       byte(TAG_UPVAL_OPEN);

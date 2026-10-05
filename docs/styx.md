@@ -132,10 +132,6 @@ of these raises a clear error unless it says otherwise.
 ### Functions
 - **C functions and C closures** other than through the permanents table.
   Today: error ("cannot persist a C function").
-- **Variables (upvalues) as permanents**: today a permanent is a value;
-  a captured variable can be kept shared only through a table that is a
-  permanent (ADR-23). A permanents entry keyed by an upvalue
-  (`debug.upvalueid`) could make the variable itself a permanent.
 
 ### Userdata
 - **Full userdata** (bytes, metatable, user values, host objects), and
@@ -452,9 +448,9 @@ of the whole state. What the coroutine captured from outside is written
 by value unless it is a permanent; a permanent (table, function, userdata,
 thread) is written as its key and restored as the object supplied for that
 key, so the restored child stays connected to the restoring side's
-objects. Permanents are values, not variables: a captured variable owned
-by a scope that is not persisted is restored as its value; to keep it
-shared, keep it in a table that is a permanent. Tested from script
+objects. A captured variable owned by a scope that is not persisted is
+restored as its value, unless the variable itself is a permanent (ADR-25)
+or it is kept in a table that is a permanent. Tested from script
 (`children.lua`) and from the host (`host_persists_child_thread`).
 
 ### ADR-24: Host side restore
@@ -479,6 +475,17 @@ strings hash as before), opens what it provides, and restores into it.
   again; a restore that runs out of memory; value restores; streams of one
   kind refused by the other. Scripts cannot reach any of this, so it gives
   them no way around their memory limit.
+
+### ADR-25: Variables as permanents
+**Status:** accepted
+A captured variable (an upvalue) can be a permanent: on persist,
+`perms[debug.upvalueid(f, i)] = key` writes the variable as its key; on
+unpersist, `back[key]` must be a Lua function whose first upvalue is the
+variable to share (for example `function() return x end`), and the
+restored closures' upvalue is joined to it. Closures that shared the
+variable share the supplied one. A missing key, or a value that is not a
+Lua function with an upvalue, is an error. Both walkers support it; tested
+in `permanents.lua` and among the host/script byte-identity samples.
 
 ## Open questions
 

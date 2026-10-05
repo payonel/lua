@@ -88,3 +88,56 @@ case("permanents do not change the caller's tables", function()
   for _ in pairs(perms) do n = n + 1 end
   assert(n == 1)
 end)
+
+-- variables as permanents: perms[debug.upvalueid(f, i)] = key on persist;
+-- on unpersist back[key] is a function whose first upvalue is the variable
+-- the restored closures then share
+
+local function counter()
+  local n = 0
+  return function() n = n + 1; return n end, function() return n end
+end
+
+case("a captured variable restores as the variable supplied", function()
+  local inc, get = counter()
+  inc()
+  local x = 100
+  local blob = styx.persist({[debug.upvalueid(inc, 1)] = "count"}, {inc, get})
+  local r = styx.unpersist({count = function() return x end}, blob)
+  assert(r[2]() == 100, "the restored closures read the supplied variable")
+  r[1]()
+  assert(x == 101, "and write it")
+  x = 7
+  assert(r[2]() == 7)
+  assert(get() == 1, "the original variable is untouched")
+end)
+
+case("a variable of the running scope stays connected", function()
+  local count = 0
+  local co = coroutine.create(function()
+    while true do coroutine.yield(); count = count + 1 end
+  end)
+  coroutine.resume(co)
+  local fn = debug.getinfo(co, 1, "f").func
+  local idx
+  for i = 1, debug.getinfo(fn, "u").nups do
+    if debug.getupvalue(fn, i) == "count" then idx = i end
+  end
+  local perms = {[_ENV] = "env", [coroutine.yield] = "yield", [debug.upvalueid(fn, idx)] = "count"}
+  local back = {env = _ENV, yield = coroutine.yield, count = function() return count end}
+  local r = styx.unpersist(back, styx.persist(perms, co))
+  coroutine.resume(r)
+  coroutine.resume(r)
+  assert(count == 2, "the restored coroutine updates this scope's variable")
+end)
+
+case("a missing or unusable variable permanent is an error", function()
+  local inc = counter()
+  local blob = styx.persist({[debug.upvalueid(inc, 1)] = "count"}, inc)
+  local ok, err = pcall(styx.unpersist, {}, blob)
+  assert(not ok and err:find("count", 1, true), err)
+  ok, err = pcall(styx.unpersist, {count = 5}, blob)
+  assert(not ok and err:find("function", 1, true), err)
+  ok, err = pcall(styx.unpersist, {count = function() end}, blob)
+  assert(not ok and err:find("function", 1, true), err)
+end)

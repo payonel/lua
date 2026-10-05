@@ -123,6 +123,7 @@ namespace lt
   constexpr byte_view bad_permanent_value_s_expected_got_s("bad permanent value (%s expected, got %s)");
   constexpr byte_view persisted_data_is_nested_too_deeply("persisted data is nested too deeply");
   constexpr byte_view mm_persist("__persist");
+  constexpr byte_view a_function_capturing_the_variable("a function capturing the variable");
   constexpr byte_view s_at_s("%s (at %s)");
   constexpr byte_view invalid_persisted_data_at_byte_d("invalid persisted data (at byte %d)");
   constexpr byte_view path_root("root");
