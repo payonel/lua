@@ -184,9 +184,6 @@ of these raises a clear error unless it says otherwise.
   data you do not trust.
 - **Compact output**: integers and counts are fixed 8-byte values; sizes
   and the format version are not final.
-- **Paths for errors raised by user code**: an error raised inside a
-  `__persist` function reaches the caller as it was raised, without the
-  path (ADR-19).
 - **`settings`**. Today: error ("not implemented").
 
 ## ADRs
@@ -389,8 +386,9 @@ object keys, `<key T>` when the key itself fails, `<metatable>`,
 `<__persist>`, `<permanent key>`.
 Unpersist errors about the stream give the byte offset where the problem
 was found: `invalid persisted data (at byte N)`.
-Memory errors stay "not enough memory", and errors raised by a `__persist`
-function pass through unchanged.
+Memory errors stay "not enough memory". A `__persist` function is called
+protected: a message it raises gets the path appended, any other error
+value passes through unchanged.
 
 ### ADR-20: To-be-closed variables
 **Status:** accepted

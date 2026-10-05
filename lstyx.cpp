@@ -280,9 +280,24 @@ static bool persist_special(Persist& P)
     return false;
   }
   case LUA_TFUNCTION:
+  {
     lua_remove(L, -2);       /* the metatable */
     lua_pushvalue(L, -2);    /* the table */
-    lua_call(L, 1, 1);
+    int st = lua_pcall(L, 1, 1, 0);
+    if (st == LUA_ERRMEM)
+    {
+      lua_lock(L);
+      luaD_throw(L, LUA_ERRMEM);
+    }
+    if (st != LUA_OK)
+    {
+      if (lua_type(L, -1) == LUA_TSTRING)  /* a message gets the path */
+      {
+        push_path(L, P.path);
+        luaL_errori(L, lt::s_at_s);
+      }
+      lua_error(L);                        /* any other value as it is */
+    }
     if (!lua_isfunction(L, -1))
       persist_error(P, lt::mm_persist_must_return_a_function);
     luaL_addchar(&P.B, TAG_SPECIAL);
@@ -293,6 +308,7 @@ static bool persist_special(Persist& P)
     }
     lua_pop(L, 1);
     return true;
+  }
   default:
     persist_error(P, lt::mm_persist_must_be_a_boolean_or_a_function);
   }

@@ -122,6 +122,21 @@ if T then
     assert(n > 0)
   end)
 
+  case("a __persist function survives an allocation failure at every point", function()
+    local function make_mt()
+      return {__persist = function(t)
+        local copy = {}
+        for k, v in pairs(t) do copy[k] = v end
+        return function() return copy end
+      end}
+    end
+    local v = {a = setmetatable({1, 2, "three", {4}}, make_mt()), b = "after"}
+    local expected = styx.persist(v)
+    local blob
+    local n = fails_cleanly_at_every_allocation(function() blob = styx.persist(v) end)
+    assert(n > 0 and #blob == #expected)
+  end)
+
   case("an error with a path survives an allocation failure at every point", function()
     local value = {a = {b = {c = io.stdout}}, list = {1, 2, 3}}
     local n = 0
