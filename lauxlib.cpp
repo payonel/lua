@@ -4,8 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-
-
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,9 +27,6 @@
 #include "lstate.h"
 #include "lmem.h"
 #include "literals.h"
-
-namespace lua::api
-{
 
 /*
 ** {======================================================
@@ -150,14 +145,11 @@ static int lastlevel(lua_State* L)
   return le - 1;
 }
 
-}
-
 void luaL_traceback(lua_State* L, lua_State* L1,
                                const std::optional<HostString>& msg, int level)
 {
   luaL_tracebacki(L, L1, msg ? std::optional<byte_view>(msg->to_utf8()) : std::nullopt, level);
 }
-
 
 void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<byte_view> msg, int level)
 {
@@ -207,9 +199,6 @@ void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<byte_view> msg, 
   luaL_pushresult(&b);
 }
 
-namespace lua::api
-{
-
 /* }====================================================== */
 
 /*
@@ -218,13 +207,10 @@ namespace lua::api
 ** =======================================================
 */
 
-}
-
 int luaL_argerror(lua_State* L, int arg, const HostString& extramsg)
 {
   return luaL_argerrori(L, arg, extramsg.to_utf8());
 }
-
 
 int luaL_argerrori(lua_State* L, int arg, byte_view extramsg)
 {
@@ -263,12 +249,10 @@ int luaL_argerrori(lua_State* L, int arg, byte_view extramsg)
   return luaL_errori(L, lt::bad_s_d_to_s_s);
 }
 
-
 int luaL_typeerror(lua_State* L, int arg, const HostString& tname)
 {
   return luaL_typeerrori(L, arg, tname.to_utf8());
 }
-
 
 int luaL_typeerrori(lua_State* L, int arg, byte_view tname)
 {
@@ -285,9 +269,6 @@ int luaL_typeerrori(lua_State* L, int arg, byte_view tname)
   return luaL_argerrori(L, arg, msg->view());
 }
 
-namespace lua::api
-{
-
 static void tag_error(lua_State* L, int arg, int tag)
 {
   luaL_typeerrori(L, arg, lua_typenamei(L, tag));
@@ -297,7 +278,6 @@ static void tag_error(lua_State* L, int arg, int tag)
 ** The use of 'lua_pushfstring' ensures this function does not
 ** need reserved stack space when called.
 */
-}
 
 void luaL_where(lua_State* L, int level)
 {
@@ -317,12 +297,10 @@ void luaL_where(lua_State* L, int level)
   lua_pushfstringi(L, lt::empty_str); /* else, no information available... */
 }
 
-
 int luaL_error(lua_State* L, const HostString& fmt)
 {
   return luaL_errori(L, fmt.to_utf8());
 }
-
 
 int luaL_errori(lua_State* L, byte_view fmt)
 {
@@ -332,7 +310,6 @@ int luaL_errori(lua_State* L, byte_view fmt)
   lua_concat(L, 2);
   return lua_error(L);
 }
-
 
 int luaL_fileresulti(lua_State* L, int stat, std::optional<byte_view> fname, int en)
 {
@@ -358,18 +335,15 @@ int luaL_fileresulti(lua_State* L, int stat, std::optional<byte_view> fname, int
   }
 }
 
-
 int luaL_fileresult(lua_State* L, int stat, const std::optional<HostString>& fname)
 {
   return luaL_fileresulti(L, stat, fname ? std::optional<byte_view>(fname->to_utf8()) : std::nullopt, errno);
 }
 
-
 int luaL_execresult(lua_State* L, int stat)
 {
   return luaL_execresulti(L, stat, errno);
 }
-
 
 int luaL_execresulti(lua_State* L, int stat, int en)
 {
@@ -389,9 +363,6 @@ int luaL_execresulti(lua_State* L, int stat, int en)
   }
 }
 
-namespace lua::api
-{
-
 /* }====================================================== */
 
 /*
@@ -400,13 +371,10 @@ namespace lua::api
 ** =======================================================
 */
 
-}
-
 int luaL_newmetatable(lua_State* L, const HostString& tname)
 {
   return luaL_newmetatablei(L, tname.to_utf8());
 }
-
 
 int luaL_newmetatablei(lua_State* L, byte_view tname)
 {
@@ -421,12 +389,10 @@ int luaL_newmetatablei(lua_State* L, byte_view tname)
   return 1;
 }
 
-
 void luaL_setmetatable(lua_State* L, const HostString& tname)
 {
   luaL_setmetatablei(L, tname.to_utf8());
 }
-
 
 void luaL_setmetatablei(lua_State* L, byte_view tname)
 {
@@ -434,12 +400,10 @@ void luaL_setmetatablei(lua_State* L, byte_view tname)
   lua_setmetatable(L, -2);
 }
 
-
 void* luaL_testudata(lua_State* L, int ud, const HostString& tname)
 {
   return luaL_testudatai(L, ud, tname.to_utf8());
 }
-
 
 void* luaL_testudatai(lua_State* L, int ud, byte_view tname)
 {
@@ -458,12 +422,10 @@ void* luaL_testudatai(lua_State* L, int ud, byte_view tname)
   return nullptr; /* value is not a userdata with a metatable */
 }
 
-
 void* luaL_checkudata(lua_State* L, int ud, const HostString& tname)
 {
   return luaL_checkudatai(L, ud, tname.to_utf8());
 }
-
 
 void* luaL_checkudatai(lua_State* L, int ud, byte_view tname)
 {
@@ -472,12 +434,10 @@ void* luaL_checkudatai(lua_State* L, int ud, byte_view tname)
   return p;
 }
 
-
 lua_UserObject* luaL_testuserobject(lua_State* L, int ud, const HostString& tname)
 {
   return luaL_testuserobjecti(L, ud, tname.to_utf8());
 }
-
 
 lua_UserObject* luaL_testuserobjecti(lua_State* L, int ud, byte_view tname)
 {
@@ -486,12 +446,10 @@ lua_UserObject* luaL_testuserobjecti(lua_State* L, int ud, byte_view tname)
   return lua_touserobject(L, ud);
 }
 
-
 lua_UserObject* luaL_checkuserobject(lua_State* L, int ud, const HostString& tname)
 {
   return luaL_checkuserobjecti(L, ud, tname.to_utf8());
 }
-
 
 lua_UserObject* luaL_checkuserobjecti(lua_State* L, int ud, byte_view tname)
 {
@@ -500,9 +458,6 @@ lua_UserObject* luaL_checkuserobjecti(lua_State* L, int ud, byte_view tname)
   return p;
 }
 
-namespace lua::api
-{
-
 /* }====================================================== */
 
 /*
@@ -510,8 +465,6 @@ namespace lua::api
 ** Argument check functions
 ** =======================================================
 */
-
-}
 
 int luaL_checkoptioni(lua_State* L, int arg,
                       std::optional<byte_view> def,
@@ -528,7 +481,6 @@ int luaL_checkoptioni(lua_State* L, int arg,
   return luaL_argerrori(L, arg, msg->view());
 }
 
-
 int luaL_checkoption(lua_State* L, int arg,
                                 const std::optional<HostString>& def,
                                 const std::span<const HostString>& lst)
@@ -544,9 +496,6 @@ int luaL_checkoption(lua_State* L, int arg,
   return luaL_argerrori(L, arg, msg->view());
 }
 
-namespace lua::api
-{
-
 /*
 ** Ensures the stack has at least 'space' extra slots, raising an error
 ** if it cannot fulfill the request. (The error handling needs a few
@@ -554,13 +503,11 @@ namespace lua::api
 ** this extra space, Lua will generate the same 'stack overflow' error,
 ** but without 'msg'.)
 */
-}
 
 void luaL_checkstack(lua_State* L, int space, const std::optional<HostString>& msg)
 {
   luaL_checkstacki(L, space, msg ? std::optional<byte_view>(msg->to_utf8()) : std::nullopt);
 }
-
 
 void luaL_checkstacki(lua_State* L, int space, std::optional<byte_view> msg)
 {
@@ -576,20 +523,17 @@ void luaL_checkstacki(lua_State* L, int space, std::optional<byte_view> msg)
   }
 }
 
-
 void luaL_checktype(lua_State* L, int arg, int t)
 {
   if (l_unlikely(lua_type(L, arg) != t))
     tag_error(L, arg, t);
 }
 
-
 void luaL_checkany(lua_State* L, int arg)
 {
   if (l_unlikely(lua_type(L, arg) == LUA_TNONE))
     luaL_argerrori(L, arg, lt::value_expected);
 }
-
 
 byte_view luaL_checklstring(lua_State* L, int arg)
 {
@@ -598,7 +542,6 @@ byte_view luaL_checklstring(lua_State* L, int arg)
     tag_error(L, arg, LUA_TSTRING);
   return *s;
 }
-
 
 byte_view luaL_optlstring(
     lua_State* L, int arg, byte_view def)
@@ -609,7 +552,6 @@ byte_view luaL_optlstring(
     return luaL_checklstring(L, arg);
 }
 
-
 const InternalString* luaL_checkistring(lua_State* L, int arg)
 {
   const InternalString* s = lua_toistring(L, arg);
@@ -617,7 +559,6 @@ const InternalString* luaL_checkistring(lua_State* L, int arg)
     tag_error(L, arg, LUA_TSTRING);
   return s;
 }
-
 
 const InternalString* luaL_optistring(lua_State* L, int arg, const InternalString* def)
 {
@@ -627,7 +568,6 @@ const InternalString* luaL_optistring(lua_State* L, int arg, const InternalStrin
     return luaL_checkistring(L, arg);
 }
 
-
 lua_Number luaL_checknumber(lua_State* L, int arg)
 {
   std::optional<lua_Number> d = lua_tonumberx(L, arg);
@@ -636,14 +576,10 @@ lua_Number luaL_checknumber(lua_State* L, int arg)
   return *d;
 }
 
-
 lua_Number luaL_optnumber(lua_State* L, int arg, lua_Number def)
 {
   return (lua_isnoneornil(L, arg) ? def : luaL_checknumber(L, arg));
 }
-
-namespace lua::api
-{
 
 static void interror(lua_State* L, int arg)
 {
@@ -651,8 +587,6 @@ static void interror(lua_State* L, int arg)
     luaL_argerrori(L, arg, lt::number_has_no_integer_representation);
   else
     tag_error(L, arg, LUA_TNUMBER);
-}
-
 }
 
 lua_Integer luaL_checkinteger(lua_State* L, int arg)
@@ -665,15 +599,11 @@ lua_Integer luaL_checkinteger(lua_State* L, int arg)
   return *d;
 }
 
-
 lua_Integer luaL_optinteger(lua_State* L, int arg,
                                        lua_Integer def)
 {
   return (lua_isnoneornil(L, arg) ? def : luaL_checkinteger(L, arg));
 }
-
-namespace lua::api
-{
 
 /* }====================================================== */
 
@@ -731,8 +661,6 @@ static InternalString bb_release(luaL_Buffer* B)
   return out;
 }
 
-}
-
 luaL_Buffer::~luaL_Buffer()
 {
   if (reserved != 0 && L != nullptr)
@@ -740,9 +668,6 @@ luaL_Buffer::~luaL_Buffer()
 
   bb_dealloc(this);
 }
-
-namespace lua::api
-{
 
 static size_t newbuffsize(luaL_Buffer* B, size_t sz)
 {
@@ -778,13 +703,10 @@ static size_t prepbuff(luaL_Buffer* B, size_t sz)
   return B->used;
 }
 
-}
-
 size_t luaL_prepbuffsize(luaL_Buffer* B, size_t sz)
 {
   return prepbuff(B, sz);
 }
-
 
 void luaL_addlstring(luaL_Buffer* B, byte_view s, size_t pos, size_t l)
 {
@@ -795,13 +717,11 @@ void luaL_addlstring(luaL_Buffer* B, byte_view s, size_t pos, size_t l)
   }
 }
 
-
 void luaL_addstring(luaL_Buffer* B, const HostString& s)
 {
   byte_view sv = s.to_utf8();
   luaL_addlstring(B, sv, 0, sv.size());
 }
-
 
 void luaL_pushresult(luaL_Buffer* B)
 {
@@ -813,13 +733,11 @@ void luaL_pushresult(luaL_Buffer* B)
   lua_pushistring(L, bb_release(B));
 }
 
-
 void luaL_pushresultsize(luaL_Buffer* B, size_t sz)
 {
   luaL_addsize(B, sz);
   luaL_pushresult(B);
 }
-
 
 void luaL_addvalue(luaL_Buffer* B)
 {
@@ -830,7 +748,6 @@ void luaL_addvalue(luaL_Buffer* B)
   lua_pop(L, 1); /* pop string */
 }
 
-
 void luaL_buffinit(lua_State* L, luaL_Buffer* B)
 {
   assert(B->bytes.empty() || L == B->L);
@@ -838,15 +755,11 @@ void luaL_buffinit(lua_State* L, luaL_Buffer* B)
   B->used = 0;
 }
 
-
 size_t luaL_buffinitsize(lua_State* L, luaL_Buffer* B, size_t sz)
 {
   luaL_buffinit(L, B);
   return prepbuff(B, sz);
 }
-
-namespace lua::api
-{
 
 /* }====================================================== */
 
@@ -861,7 +774,6 @@ namespace lua::api
 ** of a first free index, t[t[1]] is the index of the second element,
 ** etc. A zero signals the end of the list.
 */
-}
 
 int luaL_ref(lua_State* L, int t)
 {
@@ -893,7 +805,6 @@ int luaL_ref(lua_State* L, int t)
   return ref;
 }
 
-
 void luaL_unref(lua_State* L, int t, int ref)
 {
   if (ref >= 0)
@@ -906,9 +817,6 @@ void luaL_unref(lua_State* L, int t, int ref)
     lua_rawseti(L, t, 1); /* t[1] = ref */
   }
 }
-
-namespace lua::api
-{
 
 /* }====================================================== */
 
@@ -1017,8 +925,6 @@ static FirstChar skipcomment(OsFile* f)
     return {0, c}; /* no comment */
 }
 
-}
-
 int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode)
 {
   LoadF lf;
@@ -1071,16 +977,12 @@ int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optiona
   return status;
 }
 
-
 int luaL_loadfilex(lua_State* L, const std::optional<HostString>& filename, const std::optional<HostString>& mode)
 {
   std::optional<byte_view> fn = filename.has_value() ? std::optional<byte_view>(filename->to_utf8()) : std::nullopt;
   std::optional<byte_view> m = mode.has_value() ? std::optional<byte_view>(mode->to_utf8()) : std::nullopt;
   return luaL_loadfilei(L, fn, m);
 }
-
-namespace lua::api
-{
 
 struct LoadS : lua_Reader
 {
@@ -1102,15 +1004,12 @@ std::optional<byte_view> LoadS::read(lua_State* L)
   return getS(L, this);
 }
 
-}
-
 int luaL_loadbufferi(lua_State* L, byte_view buff, std::optional<byte_view> name, std::optional<byte_view> mode)
 {
   LoadS ls;
   ls.chunk = buff;
   return lua_loadi(L, &ls, name, mode);
 }
-
 
 int luaL_loadbufferx(lua_State* L, byte_view buff, const std::optional<HostString>& name, const std::optional<HostString>& mode)
 {
@@ -1119,24 +1018,17 @@ int luaL_loadbufferx(lua_State* L, byte_view buff, const std::optional<HostStrin
                           mode.has_value() ? std::optional<byte_view>(mode->to_utf8()) : std::nullopt);
 }
 
-
 int luaL_loadstring(lua_State* L, const HostString& s)
 {
   return luaL_loadbufferi(L, s.to_utf8(), s.to_utf8(), lt::t_char);
 }
 
-namespace lua::api
-{
-
 /* }====================================================== */
-
-}
 
 int luaL_getmetafield(lua_State* L, int obj, const HostString& event)
 {
   return luaL_getmetafieldi(L, obj, event.to_utf8());
 }
-
 
 int luaL_getmetafieldi(lua_State* L, int obj, byte_view event)
 {
@@ -1155,12 +1047,10 @@ int luaL_getmetafieldi(lua_State* L, int obj, byte_view event)
   }
 }
 
-
 int luaL_callmeta(lua_State* L, int obj, const HostString& event)
 {
   return luaL_callmetai(L, obj, event.to_utf8());
 }
-
 
 int luaL_callmetai(lua_State* L, int obj, byte_view event)
 {
@@ -1172,7 +1062,6 @@ int luaL_callmetai(lua_State* L, int obj, byte_view event)
   return 1;
 }
 
-
 lua_Integer luaL_len(lua_State* L, int idx)
 {
   lua_len(L, idx);
@@ -1182,7 +1071,6 @@ lua_Integer luaL_len(lua_State* L, int idx)
   lua_pop(L, 1); /* remove object */
   return *l;
 }
-
 
 const InternalString* luaL_toistring(lua_State* L, int idx)
 {
@@ -1240,21 +1128,16 @@ const InternalString* luaL_toistring(lua_State* L, int idx)
   return lua_toistring(L, -1);
 }
 
-
 byte_view luaL_tolstring(lua_State* L, int idx)
 {
   return luaL_toistring(L, idx)->view();
 }
-
-namespace lua::api
-{
 
 /*
 ** set functions from list 'l' into table at top - 'nup'; each
 ** function gets the 'nup' elements at the top as upvalues.
 ** Returns with only the table at the stack.
 */
-}
 
 void luaL_setfuncsi(lua_State* L, std::span<const luaL_Regi> funcs, int nup)
 {
@@ -1274,14 +1157,12 @@ void luaL_setfuncsi(lua_State* L, std::span<const luaL_Regi> funcs, int nup)
   lua_pop(L, nup); /* remove upvalues */
 }
 
-
 void luaL_newlibi(lua_State* L, std::span<const luaL_Regi> funcs)
 {
   luaL_checkversion(L);
   lua_createtable(L, 0, (int)funcs.size());
   luaL_setfuncsi(L, funcs, 0);
 }
-
 
 void luaL_setfuncscfi(lua_State* L, std::span<const luaL_RegCFI> funcs)
 {
@@ -1295,14 +1176,12 @@ void luaL_setfuncscfi(lua_State* L, std::span<const luaL_RegCFI> funcs)
   }
 }
 
-
 void luaL_newlibcfi(lua_State* L, std::span<const luaL_RegCFI> funcs)
 {
   luaL_checkversion(L);
   lua_createtable(L, 0, (int)funcs.size());
   luaL_setfuncscfi(L, funcs);
 }
-
 
 void luaL_setfuncs(lua_State* L, const std::span<const luaL_Reg>& funcs, int nup)
 {
@@ -1322,12 +1201,10 @@ void luaL_setfuncs(lua_State* L, const std::span<const luaL_Reg>& funcs, int nup
   lua_pop(L, nup); /* remove upvalues */
 }
 
-
 void luaL_newlibtable(lua_State* L, const std::span<const luaL_Reg>& funcs)
 {
   lua_createtable(L, 0, (int)funcs.size());
 }
-
 
 void luaL_newlib(lua_State* L, const std::span<const luaL_Reg>& funcs)
 {
@@ -1336,20 +1213,15 @@ void luaL_newlib(lua_State* L, const std::span<const luaL_Reg>& funcs)
   luaL_setfuncs(L, funcs, 0);
 }
 
-namespace lua::api
-{
-
 /*
 ** ensure that stack[idx][fname] has a table and push that table
 ** into the stack
 */
-}
 
 int luaL_getsubtable(lua_State* L, int idx, const HostString& fname)
 {
   return luaL_getsubtablei(L, idx, fname.to_utf8());
 }
-
 
 int luaL_getsubtablei(lua_State* L, int idx, byte_view fname)
 {
@@ -1366,23 +1238,18 @@ int luaL_getsubtablei(lua_State* L, int idx, byte_view fname)
   }
 }
 
-namespace lua::api
-{
-
 /*
 ** Stripped-down 'require': After checking "loaded" table, calls 'openf'
 ** to open a module, registers the result in 'package.loaded' table and,
 ** if 'glb' is true, also registers the result in the global table.
 ** Leaves resulting module on the top.
 */
-}
 
 void luaL_requiref(lua_State* L, const HostString& modname,
                               lua_CFunction openf, int glb)
 {
   luaL_requirefi(L, modname.to_utf8(), openf, glb);
 }
-
 
 void luaL_requirefi(lua_State* L, byte_view modname,
                     lua_CFunction openf, int glb)
@@ -1406,7 +1273,6 @@ void luaL_requirefi(lua_State* L, byte_view modname,
   }
 }
 
-
 void luaL_addgsubi(luaL_Buffer* b, byte_view s,
                    byte_view p, byte_view r)
 {
@@ -1421,12 +1287,10 @@ void luaL_addgsubi(luaL_Buffer* b, byte_view s,
   luaL_addlstring(b, s, pos, s.size() - pos); /* push last suffix */
 }
 
-
 void luaL_addgsub(luaL_Buffer* b, const HostString& s, const HostString& p, const HostString& r)
 {
   luaL_addgsubi(b, s.to_utf8(), p.to_utf8(), r.to_utf8());
 }
-
 
 byte_view luaL_gsubi(lua_State* L, byte_view s, byte_view p, byte_view r)
 {
@@ -1437,14 +1301,10 @@ byte_view luaL_gsubi(lua_State* L, byte_view s, byte_view p, byte_view r)
   return *lua_tolstring(L, -1);
 }
 
-
 HostString luaL_gsub(lua_State* L, const HostString& s, const HostString& p, const HostString& r)
 {
   return HostString(luaL_gsubi(L, s.to_utf8(), p.to_utf8(), r.to_utf8()));
 }
-
-namespace lua::api
-{
 
 static struct AuxAlloc : lua_Alloc
 {
@@ -1567,21 +1427,15 @@ static unsigned int luai_makeseed(void)
   return res;
 }
 
-}
-
 unsigned int luaL_makeseed(lua_State*)
 {
   return luai_makeseed();
 }
 
-namespace lua::api
-{
-
 /*
 ** Use the name with parentheses so that headers can redefine it
 ** as a macro.
 */
-}
 
 lua_State*(luaL_newstate) (void)
 {
@@ -1593,7 +1447,6 @@ lua_State*(luaL_newstate) (void)
   }
   return L;
 }
-
 
 void luaL_checkversion_(lua_State* L, lua_Number ver, size_t sz)
 {
@@ -1608,12 +1461,10 @@ void luaL_checkversion_(lua_State* L, lua_Number ver, size_t sz)
   }
 }
 
-
 void luaL_checkversion(lua_State* L)
 {
   luaL_checkversion_(L, LUA_VERSION_NUM, LUAL_NUMSIZES);
 }
-
 
 int luaL_loadfile(lua_State* L, const std::optional<HostString>& filename)
 {
@@ -1624,13 +1475,11 @@ int luaL_loadfile(lua_State* L, const std::optional<HostString>& filename)
   return luaL_loadfilei(L, sv, std::nullopt);
 }
 
-
 void luaL_argcheck(lua_State* L, bool cond, int arg, const HostString& extramsg)
 {
   if (luai_unlikely(!cond))
     luaL_argerrori(L, arg, extramsg.to_utf8());
 }
-
 
 void luaL_argchecki(lua_State* L, bool cond, int arg, byte_view extramsg)
 {
@@ -1638,13 +1487,11 @@ void luaL_argchecki(lua_State* L, bool cond, int arg, byte_view extramsg)
     luaL_argerrori(L, arg, extramsg);
 }
 
-
 void luaL_argexpected(lua_State* L, bool cond, int arg, const HostString& tname)
 {
   if (luai_unlikely(!cond))
     luaL_typeerrori(L, arg, tname.to_utf8());
 }
-
 
 void luaL_argexpectedi(lua_State* L, bool cond, int arg, byte_view tname)
 {
@@ -1652,12 +1499,10 @@ void luaL_argexpectedi(lua_State* L, bool cond, int arg, byte_view tname)
     luaL_typeerrori(L, arg, tname);
 }
 
-
 HostString luaL_checkstring(lua_State* L, int arg)
 {
   return HostString(luaL_checklstring(L, arg));
 }
-
 
 std::optional<HostString> luaL_optstring(lua_State* L, int arg,
                                                     const std::optional<HostString>& d)
@@ -1667,12 +1512,10 @@ std::optional<HostString> luaL_optstring(lua_State* L, int arg,
   return luaL_checkstring(L, arg);
 }
 
-
 HostString luaL_typename(lua_State* L, int idx)
 {
   return lua_typename(L, lua_type(L, idx));
 }
-
 
 int luaL_dofile(lua_State* L, const std::optional<HostString>& filename)
 {
@@ -1682,7 +1525,6 @@ int luaL_dofile(lua_State* L, const std::optional<HostString>& filename)
   return status;
 }
 
-
 int luaL_dostring(lua_State* L, const HostString& str)
 {
   int status = luaL_loadstring(L, str);
@@ -1691,18 +1533,15 @@ int luaL_dostring(lua_State* L, const HostString& str)
   return status;
 }
 
-
 int luaL_getmetatable(lua_State* L, const HostString& tname)
 {
   return luaL_getmetatablei(L, tname.to_utf8());
 }
 
-
 int luaL_getmetatablei(lua_State* L, byte_view tname)
 {
   return lua_getfieldi(L, LUA_REGISTRYINDEX, tname);
 }
-
 
 int luaL_loadbuffer(lua_State* L, byte_view buff, const std::optional<HostString>& name)
 {
@@ -1711,45 +1550,35 @@ int luaL_loadbuffer(lua_State* L, byte_view buff, const std::optional<HostString
                           std::nullopt);
 }
 
-
 void luaL_pushfail(lua_State* L)
 {
   lua_pushnil(L);
 }
-
 
 size_t luaL_bufflen(const luaL_Buffer* bf)
 {
   return bf->used;
 }
 
-
 byte_span luaL_buffaddr(luaL_Buffer* bf)
 {
   return bf->bytes;
 }
-
 
 void luaL_addsize(luaL_Buffer* B, size_t s)
 {
   B->used += s;
 }
 
-
 void luaL_buffsub(luaL_Buffer* B, size_t s)
 {
   B->used -= s;
 }
-
 
 size_t luaL_prepbuffer(luaL_Buffer* B)
 {
   return luaL_prepbuffsize(B, LUAL_BUFFERSIZE);
 }
 
-namespace lua::api
-{
-
 /* }====================================================================== */
 
-}
