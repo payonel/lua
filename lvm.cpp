@@ -27,6 +27,7 @@
 #include "ltable.h"
 #include "ltm.h"
 #include "lvm.h"
+#include "lzio.h"
 #include "os_api.h"
 #include "literals.h"
 
@@ -833,10 +834,10 @@ void luaV_concat(lua_State* L, int total)
       }
       else
       {
-        byte_owner buff = luaM_alloc_char_span(L->l_G, L, {}, tl, true);
-        copy2buff(L, top, n, buff);
-        ts = TString::luaS_createstr(L, buff.view());
-        luaM_alloc_char_span(L->l_G, L, buff, 0, false);
+        MBuffer buff(L);
+        buff.growTo(tl);
+        copy2buff(L, top, n, buff.area());
+        ts = TString::luaS_createstr(L, buff.area().view().substr(0, tl));
       }
       setslots(L, top - n, ts); /* create result */
     }

@@ -1892,6 +1892,36 @@ struct SizeDeny : lua_Alloc
   }
 };
 
+/*
+** A long concatenation whose result cannot be created (the state's memory
+** limit) releases what it reserved for its temporary buffer: after repeated
+** failures a collection brings the count back to where it was, and the
+** state closes cleanly (closing checks that everything was released).
+*/
+static void test_oom_long_concat()
+{
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+  int st = luaL_dostring(L,
+    "local big = ('x'):rep(100000) "
+    "local parts = {} "
+    "collectgarbage() collectgarbage() "
+    "local before = collectgarbage('count') "
+    "collectgarbage('setlimit', math.floor(before * 1024) + 150000) "
+    "for i = 1, 20 do "
+    "  local ok, err = pcall(function() parts[#parts + 1] = big .. 'tail' end) "
+    "  assert(not ok and tostring(err):find('not enough memory'), tostring(err)) "
+    "end "
+    "collectgarbage('setlimit', 0) "
+    "collectgarbage() collectgarbage() "
+    "local after = collectgarbage('count') "
+    "assert(after - before < 50, string.format('leaked %.0fK', after - before))");
+  if (st != LUA_OK)
+    std::printf("  %s\n", std::string(lua_tolstring(L, -1)->data(), lua_tolstring(L, -1)->size()).c_str());
+  CHECK(st == LUA_OK);
+  lua_close(L);
+}
+
 static int cf_make_arraytable(lua_State* L)
 {
   lua_createtable(L, 300, 0);
@@ -4781,6 +4811,7 @@ int main()
       {"zero_size_userdata", test_zero_size_userdata},
       {"userobject", test_userobject},
       {"oom_between_array_allocs", test_oom_between_array_allocs},
+      {"oom_long_concat", test_oom_long_concat},
       {"misc", test_misc},
       {"debug_api", test_debug_api},
       {"libraries", test_libraries},
