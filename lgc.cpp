@@ -60,7 +60,7 @@ static inline void makewhite(global_State* g, GCObject* x)
 /* make an object gray (neither white nor black) */
 static inline void set2gray(GCObject* x)
 {
-  x->marked = x->marked & ~maskcolors;
+  x->marked &= ~maskcolors;
 }
 
 /* make an object black (coming from any color) */

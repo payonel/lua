@@ -89,12 +89,6 @@ constexpr int NOVARIANT_MASK = 0x0F;
 
 constexpr int WITHVARIANT_MASK = 0x3F;
 
-/* raw type tag of a TValue */
-static l_forceinline lu_byte rawtt(const TValue* o)
-{
-  return o->tt_;
-}
-
 /* tag with no variants (bits 0-3) */
 constexpr lu_byte novariant(int t)
 {
@@ -109,19 +103,19 @@ constexpr lu_byte withvariant(int t)
 
 static l_forceinline lu_byte ttypetag(const TValue* o)
 {
-  return withvariant(rawtt(o));
+  return withvariant(o->tt_);
 }
 
 /* type of a TValue */
 static l_forceinline lu_byte ttype(const TValue* o)
 {
-  return novariant(rawtt(o));
+  return novariant(o->tt_);
 }
 
 /* Macros to test type */
 static l_forceinline bool checktag(const TValue* o, int t)
 {
-  return rawtt(o) == t;
+  return o->tt_ == t;
 }
 
 static l_forceinline bool checktype(const TValue* o, int t)
@@ -294,7 +288,7 @@ constexpr lu_byte ctb(lu_byte t)
 
 static l_forceinline bool iscollectable(const TValue* o)
 {
-  return rawtt(o) & BIT_ISCOLLECTABLE;
+  return o->tt_ & BIT_ISCOLLECTABLE;
 }
 
 static l_forceinline bool ttisthread(const TValue* o)
@@ -875,24 +869,19 @@ static l_forceinline Proto* getproto(const TValue* o)
 }
 
 
-static l_forceinline lu_byte keytt(const Node* node)
-{
-  return node->key_tt;
-}
-
 static l_forceinline bool keyisnil(const Node* node)
 {
-  return keytt(node) == LUA_TNIL;
+  return node->key_tt == LUA_TNIL;
 }
 
 static l_forceinline bool keyisinteger(const Node* node)
 {
-  return keytt(node) == LUA_VNUMINT;
+  return node->key_tt == LUA_VNUMINT;
 }
 
 static l_forceinline bool keyisshrstr(const Node* node)
 {
-  return keytt(node) == ctb(LUA_VSHRSTR);
+  return node->key_tt == ctb(LUA_VSHRSTR);
 }
 
 static l_forceinline void setnilkey(Node* node)
@@ -902,7 +891,7 @@ static l_forceinline void setnilkey(Node* node)
 
 static l_forceinline bool keyiscollectable(const Node* n)
 {
-  return keytt(n) & BIT_ISCOLLECTABLE;
+  return n->key_tt & BIT_ISCOLLECTABLE;
 }
 
 static l_forceinline void setdeadkey(Node* node)
@@ -912,7 +901,7 @@ static l_forceinline void setdeadkey(Node* node)
 
 static l_forceinline bool keyisdead(const Node* node)
 {
-  return keytt(node) == LUA_TDEADKEY;
+  return node->key_tt == LUA_TDEADKEY;
 }
 
 static l_forceinline GCObject* gckey(const Node* n)

@@ -120,7 +120,7 @@ static l_forceinline int isdead(global_State* g, const GCObject* v)
 
 static l_forceinline void changewhite(GCObject* x)
 {
-  x->marked = x->marked ^ WHITEBITS;
+  x->marked ^= WHITEBITS;
 }
 static l_forceinline void nw2black(GCObject* x)
 {

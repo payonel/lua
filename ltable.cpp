@@ -252,7 +252,7 @@ inline int Table::mainpositionfromnode(int nd) const
 */
 static int equalkey(const TValue* k1, const Node* n2, int deadok)
 {
-  if (rawtt(k1) != keytt(n2))
+  if (k1->tt_ != n2->key_tt)
   { /* not the same variants? */
     if (keyisshrstr(n2) && ttisstring(k1))
     {
@@ -271,7 +271,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
   }
   else
   { /* equal variants */
-    switch (keytt(n2))
+    switch (n2->key_tt)
     {
     case LUA_VNIL:
     case LUA_VFALSE:
