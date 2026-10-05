@@ -243,7 +243,8 @@ enum class Op : char
   Var,        /* write 'i' as a variable-length integer */
   Proto,      /* write prototype 'p' */
   Upvalue,    /* write upvalue 'i' of closure 'p' */
-  TableNext,  /* write the entries of table 'p' from position 'i' */
+  TableNext,  /* write the entries of table 'p' from position 'i' ('n': array only) */
+  NodeNext,   /* write node 'i' on of table 'p', which has 'n' nodes */
   TableValue, /* write the value at position 'i' of table 'p' */
   ThreadSlot, /* write slots 'i' to 'n' of thread 'p' */
   ThreadTail, /* write the frames, to-be-closed list and hook of thread 'p' */
@@ -430,7 +431,10 @@ private:
         upvalue(static_cast<const LClosure*>(t.p), static_cast<int>(t.i));
         break;
       case Op::TableNext:
-        table_next(static_cast<Table*>(const_cast<void*>(t.p)), t.i);
+        table_next(static_cast<Table*>(const_cast<void*>(t.p)), t.i, t.n != 0);
+        break;
+      case Op::NodeNext:
+        node_next(static_cast<Table*>(const_cast<void*>(t.p)), t.i, t.n);
         break;
       case Op::TableValue:
       {
@@ -757,16 +761,53 @@ private:
     L_->top++;
   }
 
+  /* keys that hash by content (the same in any state with the same seed) */
+  static bool content_hashed(lu_byte key_tt)
+  {
+    switch (novariant(key_tt))
+    {
+    case LUA_TSTRING:
+    case LUA_TNUMBER:
+    case LUA_TBOOLEAN:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  /*
+  ** A hash part whose keys all hash by content is written slot by slot
+  ** (its layout), so that with the same seed it is restored as it is and
+  ** iterates in the same order; otherwise its entries are written.
+  */
+  static bool layout_ok(const Table* h)
+  {
+    if (allocsizenode(h) == 0)
+      return false;
+    for (int i = 0; i < sizenode(h); i++)
+    {
+      const Node* n = gnode(h, static_cast<size_t>(i));
+      if (!keyisnil(n) && !keyisdead(n) && !content_hashed(n->key_tt))
+        return false;
+    }
+    return true;
+  }
+
   void table(Table* h)
   {
     if (special(h))
       return;
+    bool layout = layout_ok(h);
     byte(TAG_TABLE);
     var(h->asize());
     var(allocsizenode(h));
     var(h->asize() > 0 ? h->lenhint : 0);
-    /* the metatable, then the entries in the order of 'next' */
-    push_op(Op::TableNext, 0, h);
+    byte(layout ? 1 : 0);
+    /* the metatable, then the entries in the order of 'next' (in layout
+       mode the array part's, then the free-slot position and the nodes) */
+    if (layout)
+      push_op(Op::NodeNext, 0, h, sizenode(h));
+    push_op(Op::TableNext, 0, h, layout ? 1 : 0);
     if (h->metatable != nullptr)
     {
       TValue mt{};
@@ -778,7 +819,7 @@ private:
   }
 
   /* the next entry from position 'pos' (array part, then hash part) */
-  void table_next(Table* h, lua_Integer pos)
+  void table_next(Table* h, lua_Integer pos, bool array_only)
   {
     int asize = h->asize();
     for (;; pos++)
@@ -793,7 +834,7 @@ private:
       else
       {
         lua_Integer j = pos - asize;
-        if (j >= sizenode(h))
+        if (array_only || j >= sizenode(h))
         {
           byte(TAG_NIL); /* end of entries */
           return;
@@ -803,7 +844,7 @@ private:
           continue;
         getnodekey(L_, &k, n);
       }
-      push_op(Op::TableNext, pos + 1, h);
+      push_op(Op::TableNext, pos + 1, h, array_only ? 1 : 0);
       Task tv;
       tv.op = Op::TableValue;
       tv.step.step = Step::Value;
@@ -814,6 +855,44 @@ private:
       push_value(k, Step::Key, &k);
       return;
     }
+  }
+
+  /*
+  ** Node 'j' of a table written slot by slot: a state byte (0: no key, 1: a
+  ** dead key, 2: a key, then its key and value), then its chain link. The
+  ** nodes are read when their turn comes; a table whose hash part changed
+  ** meanwhile (by a '__persist' function) is an error.
+  */
+  void node_next(Table* h, lua_Integer j, lua_Integer n)
+  {
+    if (sizenode(h) != n)
+      fail(lt::a_table_changed_while_being_persisted);
+    if (j == 0)
+      var(h->lastfree);
+    if (j == n)
+      return;
+    push_op(Op::NodeNext, j + 1, h, n);
+    const Node* nd = gnode(h, static_cast<size_t>(j));
+    if (keyisnil(nd) || keyisdead(nd))
+    {
+      byte(keyisnil(nd) ? 0 : 1);
+      var(nd->next);
+      return;
+    }
+    if (!content_hashed(nd->key_tt))
+      fail(lt::a_table_changed_while_being_persisted);
+    byte(2);
+    TValue k{};
+    getnodekey(L_, &k, nd);
+    push_op(Op::Var, nd->next);
+    Task tv;
+    tv.op = Op::TableValue;
+    tv.step.step = Step::Value;
+    tv.step.key = Slot::of(k);
+    tv.i = h->asize() + j;
+    tv.p = h;
+    tasks_.push(tv);
+    push_value(k, Step::Key, &k);
   }
 
   /* the value at position 'pos', as it is now (nil if it is gone) */
@@ -1267,6 +1346,9 @@ enum class Part : char
   Meta,      /* Table: the metatable */
   Key,       /* Table: a key, or nil for the end */
   Val,       /* Table: the value of 'key' */
+  Nodes,     /* Table: node 'i' (raw part) */
+  NodeKey,   /* Table: the key of node 'i' */
+  NodeVal,   /* Table: the value of node 'i' */
   End,       /* Table: all entries read */
   Object,    /* Perm: the key; Special: the restore closure */
   Proto,     /* Closure: its prototype */
@@ -1288,14 +1370,14 @@ struct Frame
 {
   Build kind = Build::Table;
   Part part = Part::Meta;
-  char type = 0;      /* Perm, Special: the expected type; Thread: status */
+  char type = 0;      /* Perm, Special: the expected type; Thread: status; Table: layout */
   int i = 0;          /* the part being read */
   int n = 0;          /* number of parts */
   lua_Integer id = 0; /* reference id */
   lua_Integer a = 0;  /* Table: asize; Thread: top;  hook: mask */
   lua_Integer b = 0;  /* Table: hsize; Thread: maxtop; hook: base count */
   lua_Integer c = 0;  /* Table: length hint; hook: current count */
-  lua_Integer d = 0;  /* hook: last traced pc */
+  lua_Integer d = 0;  /* hook: last traced pc; Table: lastfree */
   lua_Integer e = 0;  /* hook: allowhook */
   void* p = nullptr;  /* Table*, LClosure* (a Proto's holder, or the closure), lua_State* */
   Slot key;           /* Table: the key waiting for its value */
@@ -1308,6 +1390,7 @@ public:
   Restorer(lua_State* L, byte_view data, bool host) : r_{L, data}, L_(L), host_(host), frames_(L, true) {}
 
   Reader r_;
+  lua_Integer seed_ = 0; /* the hash seed of the persisting state */
 
   /* reads one value and pushes it */
   void value()
@@ -1502,6 +1585,8 @@ private:
       return proto_advance(f);
     case Build::Thread:
       return thread_advance(f);
+    case Build::Table:
+      return table_advance(f);
     default:
       return Next::Read;
     }
@@ -1514,8 +1599,10 @@ private:
     lua_Integer asize = r_.get_var();
     lua_Integer hsize = r_.get_var();
     lua_Integer lenhint = r_.get_var();
+    char layout = r_.get_byte();
     if (asize < 0 || asize > INT_MAX || hsize < 0 || hsize > INT_MAX ||
-        (hsize & (hsize - 1)) != 0 || lenhint < 0 || lenhint > asize)
+        (hsize & (hsize - 1)) != 0 || lenhint < 0 || lenhint > asize ||
+        (layout != 0 && layout != 1) || (layout == 1 && hsize == 0))
       r_.invalid();
     /* same sizes as the original (the table limits are checked by
        lua_createtable): entries go where they were, with no rehash */
@@ -1528,9 +1615,60 @@ private:
     f.a = asize;
     f.b = hsize;
     f.c = lenhint;
+    f.type = layout;
     f.p = hvalue(&t);
     lua_pop(L_, 1);
     frames_.push(f);
+  }
+
+  /* with the persisting state's seed, keys hash as they did: nodes go in
+     their slots; otherwise their entries are inserted */
+  bool same_seed() const
+  {
+    return seed_ == static_cast<lua_Integer>(L_->l_G->seed);
+  }
+
+  /* the table is complete */
+  Next end_table(Frame f)
+  {
+    Table* h = static_cast<Table*>(f.p);
+    if (h->asize() != f.a || allocsizenode(h) != f.b)
+      r_.invalid();
+    if (f.type == 1 && same_seed())
+      h->lastfree = static_cast<int>(f.d);
+    h->lenhint = static_cast<int>(f.c);
+    push_table(h);
+    return done();
+  }
+
+  Next table_advance(Frame f)
+  {
+    Table* h = static_cast<Table*>(f.p);
+    while (f.i < f.b)
+    {
+      char state = r_.get_byte();
+      if (state == 2)
+      {
+        f.part = Part::NodeKey;
+        frames_.set_top(f);
+        return Next::Read;
+      }
+      if (state != 0 && state != 1)
+        r_.invalid();
+      int link = node_link(f);
+      if (same_seed())
+        h->luaH_setnode(L_, f.i, nullptr, state == 1, nullptr, link);
+      f.i++;
+    }
+    return end_table(f);
+  }
+
+  int node_link(const Frame& f)
+  {
+    lua_Integer link = r_.get_var();
+    if (f.i + link < 0 || f.i + link >= f.b)
+      r_.invalid();
+    return static_cast<int>(link);
   }
 
   Next table_part(Frame f)
@@ -1557,11 +1695,15 @@ private:
       if (lua_isnil(L_, -1))
       {
         lua_pop(L_, 1);
-        if (h->asize() != f.a || allocsizenode(h) != f.b)
+        if (f.type == 0)
+          return end_table(f);
+        f.d = r_.get_var(); /* lastfree */
+        if (f.d < 0 || f.d > f.b)
           r_.invalid();
-        h->lenhint = static_cast<int>(f.c);
-        push_table(h);
-        return done();
+        f.i = 0;
+        f.part = Part::Nodes;
+        frames_.set_top(f);
+        return Next::Advance;
       }
       {
         TValue k = getslot(L_, L_->top - 1);
@@ -1571,6 +1713,45 @@ private:
       f.part = Part::Val;
       frames_.set_top(f);
       return Next::Read;
+    case Part::NodeKey:
+    {
+      int t = lua_type(L_, -1);
+      TValue k = getslot(L_, L_->top - 1);
+      if ((t != LUA_TSTRING && t != LUA_TNUMBER && t != LUA_TBOOLEAN) ||
+          (ttisfloat(&k) && fltvalue(&k) != fltvalue(&k)))
+        r_.invalid();
+      f.key = Slot::of(k);
+      lua_pop(L_, 1);
+      f.part = Part::NodeVal;
+      frames_.set_top(f);
+      return Next::Read;
+    }
+    case Part::NodeVal:
+    {
+      TValue k = f.key.get();
+      int link = node_link(f);
+      if (same_seed())
+      {
+        TValue v = getslot(L_, L_->top - 1);
+        h->luaH_setnode(L_, f.i, &k, false, &v, link);
+        lua_pop(L_, 1);
+      }
+      else if (lua_isnil(L_, -1))
+        lua_pop(L_, 1);
+      else
+      {
+        push_table(h);
+        setslot(L_, L_->top, &k);
+        L_->top++;
+        lua_rotate(L_, -3, 2); /* table, key, value */
+        lua_rawset(L_, -3);
+        lua_pop(L_, 1);
+      }
+      f.i++;
+      f.part = Part::Nodes;
+      frames_.set_top(f);
+      return Next::Advance;
+    }
     default: /* Part::Val */
     {
       push_table(h);
@@ -2144,13 +2325,17 @@ private:
 
 /* }====================================================== */
 
-/* checks the header and sets up the stack for a Restorer (3: refs; 4: upvalues) */
+/*
+** Checks the header, reads the persisting state's hash seed and sets up the
+** stack for a Restorer (3: refs; 4: upvalues)
+*/
 static void begin_restore(lua_State* L, Restorer& R)
 {
   const byte_view header = lt::styx_header;
   if (R.r_.data.size() < header.size() || R.r_.data.substr(0, header.size()) != header)
     R.r_.invalid();
   R.r_.pos = header.size();
+  R.seed_ = R.r_.get_i64();
   lua_createtable(L, 0, 0);
   lua_createtable(L, 0, 0);
 }
@@ -2176,6 +2361,7 @@ static int styx_persist(lua_State* L)
   luaL_addlstring(&B, lt::styx_header, 0, lt::styx_header.size());
   {
     Walker w(L, hvalue(&perms), &B, 3);
+    w.i64(L->l_G->seed);
     TValue v = getslot(L, L->ci->func + 2);
     w.root(v, &lt::path_root);
   }
@@ -2260,6 +2446,7 @@ static int host_persist(lua_State* L, int perms, lua_Writer* w, HostString* msg,
     }
     Walker hp(L, pt, w);
     hp.raw(lt::styx_header.data(), lt::styx_header.size());
+    hp.i64(L->l_G->seed);
     body(hp);
     hp.finish();
     return LUA_OK;
@@ -2299,8 +2486,7 @@ static int host_restore_body(lua_State* L)
   }
   if (R.r_.get_byte() != TAG_STATE)
     R.r_.invalid();
-  R.r_.get_i64(); /* the seed: the host created the state (luaL_persistedseed) */
-  R.value();      /* the registry, at 5 */
+  R.value(); /* the registry, at 5 */
   if (!lua_istable(L, -1))
     R.r_.invalid();
   for (int t = 0; t < LUA_NUMTYPES; t++) /* the type metatables, at 6... */
@@ -2371,12 +2557,11 @@ int luaL_persistedseed(byte_view data, unsigned int* seed)
 {
   using namespace lua::lib;
   const byte_view header = lt::styx_header;
-  size_t need = header.size() + 1 + sizeof(lua_Integer);
-  if (data.size() < need || data.substr(0, header.size()) != header ||
-      data[header.size()] != TAG_STATE)
+  size_t need = header.size() + sizeof(lua_Integer);
+  if (data.size() < need || data.substr(0, header.size()) != header)
     return 0;
   lua_Integer v;
-  std::memcpy(&v, data.substr(header.size() + 1, sizeof(v)).data(), sizeof(v));
+  std::memcpy(&v, data.substr(header.size(), sizeof(v)).data(), sizeof(v));
   *seed = static_cast<unsigned int>(v);
   return 1;
 }
@@ -2410,7 +2595,6 @@ int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
   {
     global_State* g = L->l_G;
     hp.byte(TAG_STATE);
-    hp.i64(g->seed);
     hp.root(g->l_registry, &lt::path_registry);
     for (int t = 0; t < LUA_NUMTYPES; t++)
     {

@@ -245,6 +245,75 @@ if T then
   end)
 end
 
+-- order: a restored table iterates as the original (the same hash seed in
+-- one state; keys that hash by content)
+local function churned(n, seed)
+  math.randomseed(seed)
+  local t = {}
+  for i = 1, n do t["key" .. math.random(n * 10)] = i end
+  for k in pairs(t) do if math.random() < 0.3 then t[k] = nil end end
+  for i = 1, n // 4 do t["new" .. math.random(n * 10)] = i end
+  t[1.5], t[true], t[-7] = "f", "b", "n"
+  return t
+end
+
+local function order(t)
+  local o = {}
+  for k in pairs(t) do o[#o + 1] = tostring(k) end
+  return table.concat(o, " ")
+end
+
+case("a churned table iterates in the same order after restore", function()
+  for seed = 1, 100 do
+    local t = churned(64, seed)
+    local r = roundtrip(t)
+    assert(order(r) == order(t), "seed " .. seed)
+  end
+end)
+
+case("deleted keys keep the order (after a collection)", function()
+  for seed = 1, 30 do
+    local t = churned(64, seed)
+    for k in pairs(t) do if math.random() < 0.5 then t[k] = nil end end
+    collectgarbage(); collectgarbage()
+    local r = roundtrip(t)
+    assert(order(r) == order(t), "seed " .. seed)
+    r["added"] = true
+    assert(r.added and r["key" .. 1] == t["key" .. 1])
+  end
+end)
+
+case("a coroutine suspended in a pairs loop neither skips nor repeats", function()
+  local perms = {[_ENV] = "env", [coroutine.yield] = "yield", [pairs] = "pairs", [next] = "next"}
+  local back = {env = _ENV, yield = coroutine.yield, pairs = pairs, next = next}
+  for seed = 1, 100 do
+    local t = churned(64, seed)
+    local n = 0
+    for _ in pairs(t) do n = n + 1 end
+    local co = coroutine.create(function(tt)
+      local seen = {}
+      for k in pairs(tt) do seen[#seen + 1] = k; coroutine.yield() end
+      return seen
+    end)
+    coroutine.resume(co, t)
+    for _ = 1, n // 2 do coroutine.resume(co) end
+    local r = styx.unpersist(back, styx.persist(perms, co))
+    local ok, seen
+    repeat ok, seen = coroutine.resume(r); assert(ok, seen) until coroutine.status(r) == "dead"
+    local distinct = {}
+    for _, k in ipairs(seen) do assert(not distinct[k], "repeated " .. tostring(k)); distinct[k] = true end
+    assert(#seen == n, "seed " .. seed .. ": " .. #seen .. " of " .. n)
+  end
+end)
+
+case("a table with object keys is rebuilt (contents kept)", function()
+  local ks = {}
+  local t = {}
+  for i = 1, 30 do ks[i] = {i = i}; t[ks[i]] = i end
+  local r = roundtrip({t = t, ks = ks})
+  for i = 1, 30 do assert(r.t[r.ks[i]] == i) end
+end)
+
 case("rejects truncation of a table stream", function()
   local blob = styx.persist({1, "two", {3}, x = {y = "z"}})
   H.rejects_truncation(blob)

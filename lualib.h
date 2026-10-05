@@ -75,8 +75,9 @@ int(luaL_persiststate)(lua_State* L, int perms, lua_Writer* w, HostString* msg);
 ** state's (create the state with luaL_persistedseed's seed). The state
 ** must not be running; what is restored is charged through its allocator.
 ** On error nothing is pushed or changed and 'msg' says why.
-** luaL_persistedseed returns 1 and the string hash seed of a state stream,
-** or 0 for any other data.
+** luaL_persistedseed returns 1 and the string hash seed of the state that
+** wrote a stream (value or state), or 0 for any other data; a state created
+** with it hashes strings the same way, so restored tables keep their order.
 */
 int(luaL_unpersistvalue)(lua_State* L, int perms, byte_view data, HostString* msg);
 int(luaL_unpersiststate)(lua_State* L, int perms, byte_view data, HostString* msg);

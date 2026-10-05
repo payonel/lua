@@ -27,8 +27,11 @@ local function sample(with_thread)
     local _, open = coroutine.resume(co, 5)
     get_local = open
   end
+  local layout = {}
+  for i = 1, 40 do layout["k" .. i] = i end
+  for i = 1, 40, 3 do layout["k" .. i] = nil end
   local t = {1, 2.5, "string", ("long"):rep(20), inc = inc, get = get, co = co,
-             open = get_local, inc2 = inc2}
+             open = get_local, inc2 = inc2, layout = layout}
   t.self = t
   return setmetatable(t, {__index = {extra = true}})
 end
@@ -79,6 +82,7 @@ end
 if T then
   case("persist survives an allocation failure at every point", function()
     local v = sample(true)
+    collectgarbage(); collectgarbage() -- deleted keys become dead keys, as in each attempt
     local expected = styx.persist(perms, v)
     local blob
     local n = fails_cleanly_at_every_allocation(function() blob = styx.persist(perms, v) end)

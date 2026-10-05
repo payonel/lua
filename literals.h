@@ -127,6 +127,7 @@ namespace lt
   constexpr byte_view invalid_persisted_data_at_byte_d("invalid persisted data (at byte %d)");
   constexpr byte_view path_root("root");
   constexpr byte_view path_at(" (at ");
+  constexpr byte_view a_table_changed_while_being_persisted("a table changed while being persisted");
   constexpr byte_view path_end(")");
   constexpr byte_view persist_output_stopped_by_the_writer("persist output stopped by the writer");
   constexpr byte_view a___persist_function_is_not_supported_yet_in_a_host_persist("a __persist function is not supported yet in a host persist");
@@ -167,7 +168,7 @@ namespace lt
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");
   constexpr byte_view ceil_kw("ceil");
   constexpr byte_view styx("styx");
-  constexpr byte_view styx_header = lit("Styx\x02");
+  constexpr byte_view styx_header = lit("Styx\x03");
   constexpr byte_view char_kw("char");
   constexpr byte_view charpattern("charpattern");
   constexpr byte_view checkmemory("checkmemory");

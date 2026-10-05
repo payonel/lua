@@ -818,7 +818,8 @@ static void test_host_stream_kinds()
   CHECK(call_styx(L, "unpersist", 1, 1) == LUA_ERRRUN);
   lua_settop(L, 0);
   std::string value = persist_in_new_state("return require('styx').persist({1, 2})");
-  CHECK(luaL_persistedseed(byte_view(value.data(), value.size()), &seed) == 0);
+  CHECK(luaL_persistedseed(byte_view(value.data(), value.size()), &seed) == 1);
+  CHECK(luaL_persistedseed(byte_view("garbage", 7), &seed) == 0);
   CHECK(luaL_unpersiststate(L, 0, byte_view(value.data(), value.size()), &msg) != LUA_OK);
   CHECK(luaL_unpersistvalue(L, 0, byte_view(ws.out.data(), ws.out.size()), &msg) != LUA_OK);
   CHECK(lua_gettop(L) == 0);
@@ -846,6 +847,59 @@ static void test_external_hook_not_supported()
   CHECK(luaL_persistvalue(L, 1, 2, &w, &msg) == LUA_ERRRUN);
   CHECK(std::string(msg.to_os()) == "a hook not set by the debug library is not supported yet (at root)");
   lua_close(L);
+}
+
+/*
+** Table order across states: restored with the persisting state's seed, a
+** table iterates in the same order; with another seed its entries are all
+** there (inserted again, in another order).
+*/
+static const char* const churn =
+  "math.randomseed(42) t = {} "
+  "for i = 1, 200 do t['key' .. math.random(2000)] = i end "
+  "for k in pairs(t) do if math.random() < 0.3 then t[k] = nil end end "
+  "for i = 1, 50 do t['new' .. math.random(2000)] = i end "
+  "order = {} for k in pairs(t) do order[#order + 1] = k end "
+  "order = table.concat(order, ' ') return 'ok'";
+
+static void test_table_order_across_states()
+{
+  CountingAlloc a1;
+  lua_State* A = lua_newstate(&a1, 1234);
+  luaL_openlibs(A);
+  CHECK(eval(A, churn) == "ok");
+  std::string expected = eval(A, "return order");
+  std::string script_blob = eval(A, "return require('styx').persist(t)");
+  lua_getglobal(A, "t");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persistvalue(A, 0, lua_gettop(A), &w, &msg) == LUA_OK);
+  lua_close(A);
+
+  for (const std::string* blob : {&w.out, &script_blob})
+  {
+    unsigned int seed = 0;
+    CHECK(luaL_persistedseed(byte_view(blob->data(), blob->size()), &seed) == 1 && seed == 1234);
+    CountingAlloc a2;
+    lua_State* B = lua_newstate(&a2, seed);
+    luaL_openlibs(B);
+    CHECK(luaL_unpersistvalue(B, 0, byte_view(blob->data(), blob->size()), &msg) == LUA_OK);
+    lua_setglobal(B, "t");
+    CHECK(eval(B, "local o = {} for k in pairs(t) do o[#o + 1] = k end return table.concat(o, ' ')") == expected);
+    lua_close(B);
+
+    CountingAlloc a3;
+    lua_State* C = lua_newstate(&a3, seed + 1);
+    luaL_openlibs(C);
+    CHECK(luaL_unpersistvalue(C, 0, byte_view(blob->data(), blob->size()), &msg) == LUA_OK);
+    lua_setglobal(C, "t");
+    push_string(C, expected);
+    lua_setglobal(C, "expected");
+    CHECK(eval(C, "local n = 0 for k, v in pairs(t) do n = n + 1 end "
+                  "local m = 0 for k in expected:gmatch('%S+') do assert(t[k] ~= nil, k) m = m + 1 end "
+                  "return tostring(n == m)") == "true");
+    lua_close(C);
+  }
 }
 
 static void run_cpp_tests()
@@ -882,6 +936,7 @@ static void run_cpp_tests()
       {"host_value_restore", test_host_value_restore},
       {"host_stream_kinds", test_host_stream_kinds},
       {"external_hook_not_supported", test_external_hook_not_supported},
+      {"table_order_across_states", test_table_order_across_states},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

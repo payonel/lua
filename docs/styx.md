@@ -141,15 +141,17 @@ of these raises a clear error unless it says otherwise.
 - **Light userdata** other than as permanents. Today: the same error.
 
 ### Tables
-- **Iteration order (confirmed bug)**: a restored table has the original's
-  array size, hash size and length hint (ADR-17), but its hash entries are
-  reinserted, so `pairs` order over the hash part differs once the table
-  has had deletions and reinsertions (200 of 200 trials). A coroutine
-  suspended inside a `pairs` loop then skips or repeats keys after restore
-  (68 of 100 trials). Plan: ADR-22. Keys that are objects (tables,
-  functions, userdata, threads) hash by address, and a restored object has
-  a new address, so a slot-for-slot copy cannot place them; they need
-  either a rebuild (order differs) or a stored per-object hash.
+- **Iteration order with object keys, or another seed**: a table restored
+  with the persisting state's seed whose hash keys all hash by content
+  (strings, numbers, booleans) iterates in the same order (ADR-22). A table
+  with object keys (tables, functions, userdata, threads hash by address),
+  or one restored in a state with another seed, is rebuilt: its contents
+  are kept, its `pairs` order can differ, so a coroutine suspended in a
+  `pairs` loop over it can skip or repeat keys.
+- **`next` from a deleted key**: a deleted key that a collection already
+  marked dead is restored without its identity, so `next(t, k)` from that
+  key (a loop that cleared the current entry before yielding) fails after
+  restore.
 - **A `__persist` restore closure that reaches the value it rebuilds**
   (directly or through its upvalues). Today: unpersist error ("invalid
   persisted data"); the value has no object yet while its closure is read.
@@ -232,15 +234,16 @@ Every capability is covered from script and from C++ for careful testing,
 in `tests/styx/`, run by `make test` with everything else.
 
 ### ADR-10: Stream format
-**Status:** accepted (version 2)
-A persisted string is the header `"Styx\x02"` (name plus format version)
-followed by one value (or, for a whole state, `TAG_STATE`, ADR-21): a tag
-byte and a payload. Integers, reference ids, lengths, counts, table sizes
+**Status:** accepted (version 3)
+A persisted string is the header `"Styx\x03"` (name plus format version),
+the persisting state's string hash seed (8 bytes, ADR-22), then one value
+(or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload. Integers, reference ids, lengths, counts, table sizes
 and prototype fields are variable-length integers (zigzag, 7 bits per byte:
 -64..63 take one byte); floats are 8 raw little-endian bytes (the engine is
 little-endian only), instructions 4 raw bytes each, and a thread's frames,
 to-be-closed list and hook fields fixed 8-byte values. Version 2 made
-streams about 70% smaller than version 1's fixed 8-byte integers. Output
+streams about 70% smaller than version 1's fixed 8-byte integers; version
+3 added the seed and the layout mode of tables (ADR-22). Output
 is built in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a
 missing header (or another version), unknown tags, truncation and trailing
 bytes.
@@ -420,22 +423,31 @@ thread). They are for the host, not for scripts:
 - Errors are returned with their path (`registry...`, `root...`), and the
   writer can stop the persist by returning non zero.
 
-### ADR-22: Table order (planned)
-**Status:** proposed
+### ADR-22: Table order
+**Status:** accepted
 A restored table must iterate in the original's order, or a coroutine
-suspended in a `pairs` loop skips or repeats keys (see "Iteration order").
-Order is the node layout, which depends on the string hash seed, on the
-order of insertions and on deletions, so rebuilding by insertion cannot
-match it. Plan:
-- Persist the hash part slot by slot (key, value and collision link of
-  each node, and the free-slot position) instead of as a list of entries.
-- Engine support: a general table operation that installs a hash part
-  from such a slot list exactly, then checks that every key is found by
-  normal lookup; when the restoring state hashes strings differently
-  (another seed), the check fails and the table is rebuilt by insertion as
-  today.
-- State snapshots carry the seed (ADR-21), so a host restore recreates the
-  state with the same seed and gets the exact order back.
+suspended in a `pairs` loop skips or repeats keys (it did in 68 of 100
+trials before this). Order is the node layout, which depends on the
+string hash seed, on the order of insertions and on deletions, so
+rebuilding by insertion cannot match it.
+- Every stream starts with the persisting state's seed. A table whose hash
+  keys all hash by content (strings, numbers, booleans; dead keys are
+  fine) is written in layout mode: its array entries, then the free-slot
+  position and every node in slot order (no key, a dead key, or a key and
+  its value), each with its chain link.
+- Unpersist with the same seed installs the nodes as they were with the
+  engine's `Table::luaH_setnode` (on `lua-c++`, with `luaH_copyfrom` built on
+  it and tested on its own in `test_engine`); with another seed it inserts
+  the entries. Hosts get the seed with `luaL_persistedseed` and create the
+  restoring state with it.
+- The writer reads the nodes when their turn comes and fails if a
+  `__persist` function changed the table's hash part meanwhile.
+- Tables with object keys (they hash by address) are written as entries.
+  Not supported yet: their order, and the identity of dead keys.
+- Tested: 100 churned tables keep their order; deleted keys after a
+  collection; a coroutine suspended in a `pairs` loop neither skips nor
+  repeats; across states with the same seed (order kept) and another seed
+  (contents kept).
 For comparison, Eris rebuilds every table with `lua_next`/`rawset` and no
 presizing, so it has this problem (and the `#t` one of ADR-17).
 

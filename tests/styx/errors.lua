@@ -77,7 +77,7 @@ end)
 case("table sizes are checked", function()
   local header = styx.persist(nil):sub(1, -2)
   local function table_stream(asize, hsize, lenhint)
-    return header .. "\6" .. H.varint(asize) .. H.varint(hsize) .. H.varint(lenhint) .. "\0\0"
+    return header .. "\6" .. H.varint(asize) .. H.varint(hsize) .. H.varint(lenhint) .. "\0\0\0"
   end
   assert(next(styx.unpersist(table_stream(0, 0, 0))) == nil)
   assert(next(styx.unpersist(table_stream(4, 8, 4))) == nil)
