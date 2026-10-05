@@ -1648,6 +1648,24 @@ The 21 `lcode`/`lparser` sites that spell out
 upstream's `SETARG_A`/`B`/`C`/`k`/`Bx`/`sJ`/`OP` as `lopcodes.h` inline
 functions. **Check:** byte-identical.
 
+**Status: done** (`64146464`).
+- `setarg`, `SET_OPCODE` and `SETARG_A`/`B`/`C`/`k`/`Bx`/`sJ` are
+  `constexpr` functions that return the updated instruction (Java can't
+  take a reference to an array element). The 21 sites read
+  `code[pc] = SETARG_C(code[pc], v);`.
+- **Check:** release object code with asserts off is identical. Only
+  the `-Og` debug objects differ.
+
+### R2b. Macro-expansion remnants (user request)
+This is cosmetic only, with no operational change. Remove the
+parenthesization left by macro expansion (`(((n)->key_tt …`,
+`((fs)->f->code[(&e)->info])`, `(x) = (y)`, …) in favor of direct,
+simple code (`n->key_tt`, `fs->f->code[e.info]`). Finish any remaining
+macro-expansion replacements with the named helpers. Trivial field
+getters that only re-spell `object->field` (`rawtt`, `keytt`) give way
+to the field itself.
+**Check:** object code identical with asserts off.
+
 ### R3. Construction instead of field-by-field initialization
 GC objects (`Proto`, `Table`, `Udata`, `UpVal`, closures, `TString`,
 `CFuncInfo`), `lua_State` (`preinit_thread`), `CallInfo` and
