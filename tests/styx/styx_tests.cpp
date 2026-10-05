@@ -661,12 +661,10 @@ static void test_host_persists_child_thread()
 ** restores into it; what is restored is charged through its allocator.
 */
 
-/* a state with the allocator 'a' and the seed of 'blob' (or 0) */
+/* a state made for 'blob' (luaL_newstatefor), with the libraries open */
 static lua_State* new_state_for(CountingAlloc* a, const std::string& blob)
 {
-  unsigned int seed = 0;
-  luaL_persistedseed(byte_view(blob.data(), blob.size()), &seed);
-  lua_State* L = lua_newstate(a, seed);
+  lua_State* L = luaL_newstatefor(a, byte_view(blob.data(), blob.size()));
   luaL_openlibs(L);
   return L;
 }
@@ -826,14 +824,18 @@ static void test_host_stream_kinds()
   StringWriter ws;
   HostString msg;
   CHECK(luaL_persiststate(L, 1, &ws, &msg) == LUA_OK);
-  unsigned int seed = 12345;
-  CHECK(luaL_persistedseed(byte_view(ws.out.data(), ws.out.size()), &seed) == 1);
+  CountingAlloc a;
+  lua_State* made = luaL_newstatefor(&a, byte_view(ws.out.data(), ws.out.size()));
+  CHECK(made != nullptr);
+  lua_close(made);
   push_string(L, ws.out);
   CHECK(call_styx(L, "unpersist", 1, 1) == LUA_ERRRUN);
   lua_settop(L, 0);
   std::string value = persist_in_new_state("return require('styx').persist({1, 2})");
-  CHECK(luaL_persistedseed(byte_view(value.data(), value.size()), &seed) == 1);
-  CHECK(luaL_persistedseed(byte_view("garbage", 7), &seed) == 0);
+  made = luaL_newstatefor(&a, byte_view(value.data(), value.size()));
+  CHECK(made != nullptr);
+  lua_close(made);
+  CHECK(luaL_newstatefor(&a, byte_view("garbage", 7)) == nullptr);
   CHECK(luaL_unpersiststate(L, 0, byte_view(value.data(), value.size()), &msg) != LUA_OK);
   CHECK(luaL_unpersistvalue(L, 0, byte_view(ws.out.data(), ws.out.size()), &msg) != LUA_OK);
   CHECK(lua_gettop(L) == 0);
@@ -892,10 +894,8 @@ static void test_table_order_across_states()
 
   for (const std::string* blob : {&w.out, &script_blob})
   {
-    unsigned int seed = 0;
-    CHECK(luaL_persistedseed(byte_view(blob->data(), blob->size()), &seed) == 1 && seed == 1234);
     CountingAlloc a2;
-    lua_State* B = lua_newstate(&a2, seed);
+    lua_State* B = luaL_newstatefor(&a2, byte_view(blob->data(), blob->size()));
     luaL_openlibs(B);
     CHECK(luaL_unpersistvalue(B, 0, byte_view(blob->data(), blob->size()), &msg) == LUA_OK);
     lua_setglobal(B, "t");
@@ -903,7 +903,7 @@ static void test_table_order_across_states()
     lua_close(B);
 
     CountingAlloc a3;
-    lua_State* C = lua_newstate(&a3, seed + 1);
+    lua_State* C = lua_newstate(&a3, 1235); /* another seed than the stream's 1234 */
     luaL_openlibs(C);
     CHECK(luaL_unpersistvalue(C, 0, byte_view(blob->data(), blob->size()), &msg) == LUA_OK);
     lua_setglobal(C, "t");
@@ -1219,6 +1219,118 @@ static void test_state_next_hash()
   lua_close(B);
 }
 
+
+/* a whole state is restored only into a state made for its stream */
+static void test_state_restore_needs_its_state()
+{
+  CountingAlloc a1;
+  lua_State* A = lua_newstate(&a1, 31337);
+  luaL_openlibs(A);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, "data = {x = 1, y = 2} return 'ok'") == "ok");
+  std::string blob = persist_state(A);
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = lua_newstate(&a2, 31338);
+  luaL_openlibs(B);
+  CHECK(eval(B, "mine = 'kept' return 'ok'") == "ok");
+  HostString msg;
+  CHECK(restore_state(B, blob, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()) ==
+        "the state does not hash as the persisted one (create it with luaL_newstatefor)");
+  CHECK(eval(B, "return mine") == "kept");
+  lua_close(B);
+
+  CountingAlloc a3;
+  lua_State* C = new_state_for(&a3, blob);
+  CHECK(restore_state(C, blob, &msg) == LUA_OK);
+  CHECK(eval(C, "return tostring(data.x + data.y)") == "3");
+  lua_close(C);
+}
+
+/*
+** A VM persisted and restored anywhere goes on exactly as it would have:
+** the original and a restored copy run the same code after the snapshot
+** and must produce the same transcript (what is deterministic within one
+** run: table order, object hashes, new keys, suspended loops; ADR-31).
+*/
+static const char* const vm_part1 =
+  "P = {} "
+  "P.s = {} for i = 1, 300 do P.s['key' .. (i * 7 % 500)] = i end "
+  "for k in pairs(P.s) do if #k % 2 == 0 then P.s[k] = nil end end "
+  "P.o, P.names = {}, {} "
+  "for i = 1, 200 do local k = (i % 3 == 0) and {} or (i % 3 == 1) and function() return i end "
+  "  or coroutine.create(print) P.o[k] = i P.names[k] = 'o' .. i end "
+  "for k, v in pairs(P.o) do if v % 4 == 0 then P.o[k] = nil end end "
+  "P.gone = {} for k, v in pairs(P.s) do if v % 5 == 0 then P.s[k] = nil P.gone[#P.gone + 1] = k end end "
+  "for i = 1, 100 do local junk = 'later' .. i end "
+  "P.walk_s = coroutine.create(function() for k, v in pairs(P.s) do coroutine.yield(k .. '=' .. v) end end) "
+  "P.walk_o = coroutine.create(function() for k in pairs(P.o) do P.o[k] = nil coroutine.yield(P.names[k]) end end) "
+  "for i = 1, 10 do coroutine.resume(P.walk_s) coroutine.resume(P.walk_o) end "
+  "local n = 0 P.inc = function() n = n + 1 return n end P.get = function() return n end "
+  "P.list = {} for i = 1, 20 do P.list[i] = i * 3 end P.list[25] = 'far' "
+  "P.closer = coroutine.create(function() "
+  "  local res <close> = setmetatable({}, {__close = function() P.closed = 'yes' end}) "
+  "  coroutine.yield('opened') return 'done' end) "
+  "coroutine.resume(P.closer) "
+  "return 'ok'";
+
+static const char* const vm_part2 =
+  "local out = {} local function w(x) out[#out + 1] = tostring(x) end "
+  "for i = 1, 20 do w(select(2, coroutine.resume(P.walk_s))) w(select(2, coroutine.resume(P.walk_o))) end "
+  "for k in pairs(P.s) do w(k) end "
+  "for k in pairs(P.o) do w(P.names[k]) end "
+  "for _, k in ipairs(P.gone) do w(next(P.s, k)) end "
+  "for i = 1, 100 do P.s['later' .. i] = i end "
+  "for i = 1, 60 do local k = (i % 2 == 0) and {} or function() end P.o[k] = 1000 + i P.names[k] = 'n' .. i end "
+  "for k in pairs(P.s) do w(k) end "
+  "for k in pairs(P.o) do w(P.names[k]) end "
+  "local t = {} for i = 1, 40 do t[{}] = i end for _, v in pairs(t) do w(v) end "
+  "w(P.inc()) w(P.inc()) w(P.get()) "
+  "w(#P.list) table.insert(P.list, 1, 'first') w(#P.list) w(table.remove(P.list)) "
+  "local arr = {} for i = 1, 50 do arr[i] = (i * 37) % 101 end table.sort(arr) w(table.concat(arr, ',')) "
+  "w(select(2, coroutine.resume(P.closer))) w(P.closed) "
+  "w(select(2, pcall(function() local x = nil return x.field end))) "
+  "w(string.format('%5.2f %d %q', 3.14159, 42, 'q')) "
+  "for k in pairs(_G) do w(k) end for k in pairs(package.loaded) do w(k) end "
+  "for k in pairs(string) do w(k) end for k in pairs(debug.getregistry()) do w(type(k)) end "
+  "return table.concat(out, ' ')";
+
+static void test_snapshot_continues_identically()
+{
+  CountingAlloc a1;
+  lua_State* A = lua_newstate(&a1, 2024);
+  luaL_openlibs(A);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, vm_part1) == "ok");
+  std::string blob = persist_state(A);
+  std::string expected = eval(A, vm_part2);
+  CHECK(expected.size() > 1000);
+  lua_close(A);
+
+  CountingAlloc a2;
+  lua_State* B = luaL_newstatefor(&a2, byte_view(blob.data(), blob.size()));
+  CHECK(B != nullptr);
+  luaL_openlibs(B);
+  HostString msg;
+  int st = restore_state(B, blob, &msg);
+  if (st != LUA_OK)
+    std::printf("      host restore error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  std::string got = eval(B, vm_part2);
+  if (got != expected)
+  {
+    size_t i = 0;
+    while (i < got.size() && i < expected.size() && got[i] == expected[i])
+      i++;
+    std::printf("      first difference at %zu: '%s' vs '%s'\n", i, expected.substr(i, 40).c_str(),
+                got.substr(i, 40).c_str());
+  }
+  CHECK(got == expected);
+  lua_close(B);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -1262,6 +1374,8 @@ static void run_cpp_tests()
       {"object_key_order_across_states", test_object_key_order_across_states},
       {"library_keys_across_states", test_library_keys_across_states},
       {"state_next_hash", test_state_next_hash},
+      {"state_restore_needs_its_state", test_state_restore_needs_its_state},
+      {"snapshot_continues_identically", test_snapshot_continues_identically},
   };
   std::printf("  styx_tests.cpp\n");
   for (const auto& t : tests)

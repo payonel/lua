@@ -3053,6 +3053,19 @@ static const luaL_RegCFI funcs[] = {
 ** =======================================================
 */
 
+/* the string hash seed of the state that wrote a stream (false: not one) */
+static bool stream_seed(byte_view data, unsigned int* seed)
+{
+  const byte_view header = lt::styx_header;
+  size_t need = header.size() + sizeof(lua_Integer);
+  if (data.size() < need || data.substr(0, header.size()) != header)
+    return false;
+  lua_Integer v;
+  std::memcpy(&v, data.substr(header.size(), sizeof(v)).data(), sizeof(v));
+  *seed = static_cast<unsigned int>(v);
+  return true;
+}
+
 /* the value at a stack index of a state that is not running */
 static bool value_at(lua_State* L, int idx, TValue* v)
 {
@@ -3124,6 +3137,8 @@ static int host_restore_body(lua_State* L)
   }
   if (R.r_.get_byte() != TAG_STATE)
     R.r_.invalid();
+  if (static_cast<unsigned int>(R.seed_) != L->l_G->seed) /* not made by luaL_newstatefor */
+    luaL_errori(L, lt::the_state_does_not_hash_as_the_persisted_one);
   R.value(); /* the registry, at 5 */
   if (!lua_istable(L, -1))
     R.r_.invalid();
@@ -3214,17 +3229,12 @@ static int host_restore(lua_State* L, int perms, byte_view data, bool state, Hos
 
 }
 
-int luaL_persistedseed(byte_view data, unsigned int* seed)
+lua_State* luaL_newstatefor(lua_Alloc* f, byte_view data)
 {
-  using namespace lua::lib;
-  const byte_view header = lt::styx_header;
-  size_t need = header.size() + sizeof(lua_Integer);
-  if (data.size() < need || data.substr(0, header.size()) != header)
-    return 0;
-  lua_Integer v;
-  std::memcpy(&v, data.substr(header.size(), sizeof(v)).data(), sizeof(v));
-  *seed = static_cast<unsigned int>(v);
-  return 1;
+  unsigned int seed;
+  if (!lua::lib::stream_seed(data, &seed))
+    return nullptr;
+  return lua_newstate(f, seed);
 }
 
 int luaL_unpersistvalue(lua_State* L, int perms, byte_view data, HostString* msg)

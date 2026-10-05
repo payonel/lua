@@ -110,6 +110,10 @@ local x = styx.settings(name [, value])    -- query or change a setting
   14. table order with object keys (done: `tables.lua`, C++ tests
       `object_key_order_across_states`, `library_keys_across_states`,
       `state_next_hash`, ADR-30)
+  15. a restored VM goes on as the original would, for what is
+      deterministic within a run (done: C++ tests
+      `snapshot_continues_identically`, `state_restore_needs_its_state`,
+      ADR-31; what is not deterministic yet: "Determinism" below)
 - Items are added or reordered as the tests teach us something.
 
 ## Not supported yet
@@ -188,9 +192,31 @@ of these raises a clear error unless it says otherwise.
   main thread fails (it is the caller or above it); the host API persists
   it as a reference and restores it as the restoring state's main thread
   (ADR-21, ADR-24).
-- **The warning system's state** (`warn("@on")`, `warn("@off")`): it is the
-  host's warning function, not the state's data; a restored state has the
-  restoring host's.
+
+### Determinism
+A restored VM goes on as the original would for what is deterministic
+within one run (ADR-31). These are not deterministic yet, within a run or
+across a restore, and are to be revisited:
+- **`math.random`**: its generator state is an upvalue of a C closure (a
+  permanent), so a restored state draws from the restoring state's
+  generator; and the library seeds it from the time and an address when it
+  is opened.
+- **`table.sort`**: on a badly balanced partition it picks a pivot from the
+  time (arrays over 100 elements).
+- **Addresses** need a portable answer: `tostring` of a table, function,
+  thread or userdata and `%p` show addresses; light C functions and light
+  userdata hash by address as keys, so a table keyed by them is rebuilt in
+  another process (contents kept, order not).
+- **The collector**: when finalizers run, when weak tables lose entries,
+  the collector's progress, `collectgarbage("count")` and where a memory
+  cap is hit depend on its cycle and on the memory accounted, which a
+  restore starts anew (and restored objects are accounted anew: a thread's
+  stack is sized to what it holds, for example). Objects made by
+  finalizers take hashes when the finalizers run.
+- **Host input and output** is outside the persistence layer: `os.time`,
+  `os.clock`, `os.getenv`, files, the host's callbacks, and the warning
+  system's state (`warn("@on")` is the host's warning function, not the
+  state's data).
 
 ### Format and robustness
 - **Untrusted input**: unpersist builds prototypes from the instructions in
@@ -200,6 +226,12 @@ of these raises a clear error unless it says otherwise.
 - **A final format**: the format (version 5, ADR-10) may still change;
   no stream of an earlier version is read.
 - **`settings`**. Today: error ("not implemented").
+- **The hash seed in a script's streams**: every stream starts with the
+  persisting state's string hash seed (`luaL_newstatefor` needs it), so a
+  script can read its own state's seed from what `styx.persist` returns.
+  Lua randomizes the seed so that code cannot craft strings that collide in
+  the state's string table. To do: leave it out of the streams a script
+  gets (host streams keep it).
 
 ## ADRs
 
@@ -468,8 +500,8 @@ rebuilding by insertion cannot match it.
 - Unpersist with the same seed installs the nodes as they were with the
   engine's `Table::luaH_setnode` (on `lua-c++`, with `luaH_copyfrom` built on
   it and tested on its own in `test_engine`); with another seed it inserts
-  the entries. Hosts get the seed with `luaL_persistedseed` and create the
-  restoring state with it.
+  the entries. A host creates the restoring state with `luaL_newstatefor`,
+  which hashes as the persisting state did (ADR-31).
 - The writer reads the nodes when their turn comes and fails if a
   `__persist` function changed the table's hash part meanwhile.
 - Object keys hash by the hash each object was given when made, which is
@@ -500,8 +532,9 @@ or it is kept in a table that is a permanent. Tested from script
 `luaL_unpersistvalue(L, perms, data, msg)` pushes a value and
 `luaL_unpersiststate(L, perms, data, msg)` restores a whole state, with
 `perms` the inverse permanents (key -> object) built in the restoring
-state. The host creates the state (with `luaL_persistedseed`'s seed, so
-strings hash as before), opens what it provides, and restores into it.
+state. The host creates the state with `luaL_newstatefor` (so it hashes as
+the persisting state did, ADR-31), opens what it provides, and restores
+into it.
 - The restore runs in a protected call on the idle state with the
   machinery of `unpersist`; only host restores accept the main thread
   reference.
@@ -652,10 +685,13 @@ have its keys in the same slots, or a coroutine suspended in a `pairs`
 loop (or a script that keeps its last key across ticks) skips or repeats
 keys. Object keys hashed by their address, which a restore cannot give
 back (and which Java does not have).
-- The engine gives every object a hash when it is made (a sequence from
-  the seed, `GCObject::hash`, in the header's padding: no object grew), and
-  object keys hash by it (on `lua-c++`, A/B in its commit; light userdata
-  and light C functions still hash by address). Persist writes the hash of
+- The engine gives every object that hashes by identity (tables, userdata,
+  closures, threads) a hash when it is made (a sequence from the seed,
+  `GCObject::hash`, in the header's padding: no object grew), and object
+  keys hash by it (on `lua-c++`, A/B in its commit; light userdata and
+  light C functions still hash by address). Strings take none: whether a
+  string is new or reused depends on the collector, and the sequence must
+  depend only on what the program makes. Persist writes the hash of
   every table, function and thread (as its place in the sequence, relative
   to the previous one written: mostly one byte) and unpersist gives it to
   the restored object when it is made, before it can be a key anywhere.
@@ -688,6 +724,39 @@ back (and which Java does not have).
   same seed and another, library objects as keys, a snapshot's next
   hash). Without the restored hashes the order tests fail; without the
   check the rebuilt-table tests do.
+
+### ADR-31: A restored VM goes on as the original would
+**Status:** accepted
+A VM persisted and restored anywhere (another machine, another process)
+must go on exactly as it would have without the save: the same code after
+the snapshot does the same things, in the same order. The only things a
+restore may depend on are the persistence library's version and the
+stream.
+- What is deterministic within one run is kept across a restore: values,
+  closures and upvalues, coroutines (suspended loops included), the order
+  of every table (strings by the seed, objects by their hashes, ADR-22,
+  ADR-30), `next` from deleted keys (ADR-29), the hashes of new objects
+  (the snapshot's next hash), `#`, finalizer marks and their order and the
+  collector's settings (ADR-28), hooks (ADR-26).
+- The restoring state is made from the stream: `luaL_newstatefor(f, data)`
+  creates it hashing as the persisting state did (the seed is the stream's,
+  not the host's to supply), and `luaL_unpersiststate` refuses any other
+  state ("the state does not hash as the persisted one"). The host's part:
+  open the same libraries, and make its own permanents, in the same order
+  as for the original, so they get the same hashes.
+- Strings take no object hash (ADR-30): a string reused in one state and
+  new in the other would shift every later object's hash.
+- What is not deterministic yet, within a run or across a restore, is
+  listed under "Determinism" in "Not supported yet".
+- Tested: `snapshot_continues_identically` runs a program to a snapshot,
+  then the same code in the original and in a restored copy (suspended
+  `pairs` loops over strings and objects, new string and object keys,
+  `next` from deleted keys, shared upvalues, `#`, `table.insert` and
+  `remove`, a small sort, a to-be-closed variable, error messages, the
+  order of `_G`, `package.loaded` and the registry) and compares the
+  transcripts; with strings taking hashes, or without the snapshot's next
+  hash, they differ. `state_restore_needs_its_state`: a state with another
+  seed is refused and left as it was.
 
 ## Open questions
 

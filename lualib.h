@@ -72,16 +72,19 @@ int(luaL_persiststate)(lua_State* L, int perms, lua_Writer* w, HostString* msg);
 ** The host side restore. 'perms' is the stack index of the inverse
 ** permanents (key -> object), or 0. luaL_unpersistvalue pushes the value;
 ** luaL_unpersiststate makes the stream's registry and type metatables the
-** state's (create the state with luaL_persistedseed's seed). The state
-** must not be running; what is restored is charged through its allocator.
-** On error nothing is pushed or changed and 'msg' says why.
-** luaL_persistedseed returns 1 and the string hash seed of the state that
-** wrote a stream (value or state), or 0 for any other data; a state created
-** with it hashes strings the same way, so restored tables keep their order.
+** state's. The state must not be running; what is restored is charged
+** through its allocator. On error nothing is pushed or changed and 'msg'
+** says why.
+** luaL_newstatefor creates a state for a stream (value or state), with
+** allocator 'f', that hashes as the persisting state did, so restored
+** tables keep their order (NULL if 'data' is not a stream, or no memory).
+** A whole state is restored only into such a state: it then goes on as
+** the original would have (open the same libraries, and make the host's
+** permanents, in the same order first).
 */
 int(luaL_unpersistvalue)(lua_State* L, int perms, byte_view data, HostString* msg);
 int(luaL_unpersiststate)(lua_State* L, int perms, byte_view data, HostString* msg);
-int(luaL_persistedseed)(byte_view data, unsigned int* seed);
+lua_State*(luaL_newstatefor)(lua_Alloc* f, byte_view data);
 
 /* open selected libraries */
 void(luaL_openselectedlibs)(lua_State* L, int load, int preload);
