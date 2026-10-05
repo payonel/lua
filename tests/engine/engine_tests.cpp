@@ -60,7 +60,7 @@ static int l_setnodes(lua_State* L)
     {
       const Node* n = gnode(src, i);
       TValue key;
-      bool has = !keyisnil(n) && !keyisdead(n);
+      bool has = !keyisnil(n);
       if (has)
         getnodekey(L, &key, n);
       t->luaH_setnode(L, i, has ? &key : nullptr, keyisdead(n), &n->val, n->next);
@@ -143,6 +143,14 @@ static const Case table_copy_cases[] = {
    "for seed = 1, 20 do local t = churned(100, seed) "
    "for k in pairs(t) do if math.random() < 0.5 then t[k] = nil end end "
    "collectgarbage() collectgarbage() local c = copy(t) assert(same(t, c), 'seed ' .. seed) end"},
+  {"next from a deleted key (dead after a collection) continues as on the original",
+   "for seed = 1, 20 do local t = churned(64, seed) local keys = {} "
+   "for k in pairs(t) do keys[#keys + 1] = k end "
+   "local gone = {} for i = 1, #keys, 3 do t[keys[i]] = nil gone[#gone + 1] = keys[i] end "
+   "collectgarbage() collectgarbage() "
+   "for _, c in ipairs{copy(t), setnodes(t)} do for _, k in ipairs(gone) do "
+   "local ok, nk = pcall(next, c, k) assert(ok, 'seed ' .. seed .. ': ' .. tostring(nk)) "
+   "assert(nk == next(t, k), 'seed ' .. seed) end end end"},
   {"object keys (same state, same addresses)",
    "local ks = {} local t = {} for i = 1, 50 do ks[i] = {} t[ks[i]] = i end "
    "for i = 1, 50, 3 do t[ks[i]] = nil end local c = copy(t) assert(same(t, c))"},

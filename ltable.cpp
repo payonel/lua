@@ -897,11 +897,15 @@ void Table::luaH_free(lua_State* L)
 
 /*
 ** Sets node 'i' of the hash part as a node of another table is: its key
-** (none when 'key' is null; a dead key, with no identity, when 'dead'),
-** its value (empty when 'val' is null or nil) and its chain link 'link'.
-** With the same keys in the same slots and links, and the same 'lastfree',
-** a table iterates in the same order. The caller keeps every key in a slot
-** of the chain that starts at its main position.
+** (none when 'key' is null), its value (empty when 'val' is null or nil)
+** and its chain link 'link'. With 'dead', the key is a dead key (an entry
+** removed before a collection): 'key' then gives only its identity, the
+** object it was (a collectable value or a dead key read with
+** 'getnodekey'), which 'next' compares by address and nothing
+** dereferences; with a null 'key' it has none. With the same keys in the
+** same slots and links, and the same 'lastfree', a table iterates in the
+** same order, also from a deleted key. The caller keeps every key in a
+** slot of the chain that starts at its main position.
 */
 void Table::luaH_setnode(lua_State* L, int i, const TValue* key, bool dead,
                          const TValue* val, int link)
@@ -913,8 +917,9 @@ void Table::luaH_setnode(lua_State* L, int i, const TValue* key, bool dead,
   n->next = link;
   if (dead)
   {
+    assert(key == nullptr || iscollectable(key) || key->tt_ == LUA_TDEADKEY);
     setdeadkey(n);
-    n->key_val = Value{0, nullptr};
+    n->key_val = (key != nullptr) ? key->value_ : Value{0, nullptr};
   }
   else if (key == nullptr)
     setnilkey(n);
@@ -937,7 +942,7 @@ void Table::luaH_setnode(lua_State* L, int i, const TValue* key, bool dead,
 ** Copies 'src' into this table, which must be new and empty (and anchored,
 ** as copying allocates): the same array and hash sizes, every node in its
 ** slot, the same 'lastfree' and length hint, and the same metatable, so the
-** copy iterates in the same order as 'src'.
+** copy iterates in the same order as 'src', also from a deleted key.
 */
 void Table::luaH_copyfrom(lua_State* L, Table* src)
 {
@@ -958,8 +963,8 @@ void Table::luaH_copyfrom(lua_State* L, Table* src)
     for (int i = 0; i < sizenode(src); i++)
     {
       const Node* n = gnode(src, i);
-      TValue key;
-      bool hasKey = !keyisnil(n) && !keyisdead(n);
+      TValue key; /* a live key, or a dead key's identity */
+      bool hasKey = !keyisnil(n);
       if (hasKey)
         getnodekey(L, &key, n);
       t->luaH_setnode(L, i, hasKey ? &key : nullptr, keyisdead(n), &n->val, n->next);
