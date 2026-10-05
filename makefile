@@ -75,6 +75,7 @@ DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(STYX
 all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
 all: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
+all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(STYX_TEST_T)
 
 include tests/libs/build.mk
 
@@ -83,11 +84,13 @@ debug: TESTS=-DLUA_DEBUG
 debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
 debug: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
+debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(STYX_TEST_T)
 
 cov: VARIANT=cov
 cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
 cov: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
+cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(STYX_TEST_T)
 	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
 	$(MAKE) test
 	./cov-report.sh
@@ -216,3 +219,4 @@ full:
 .PHONY: all debug cov clean test engine-test gate gate-run full
 .PHONY: all debug cov clean test engine-test full test-styx
 .PHONY: all debug cov clean test engine-test full test-styx styx-test
+.PHONY: all debug cov clean test engine-test styx-test full
