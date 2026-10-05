@@ -52,8 +52,20 @@ local x = styx.settings(name [, value])    -- query or change a setting
 - `tests/styx/`: the Styx tests.
   - `styx_tests.cpp`: C++ tests (using the C API; internals are reachable
     since the test links the raw objects) plus a runner that executes every
-    `tests/styx/*.lua` in a fresh state.
-  - `*.lua`: Lua script tests. Each starts with `require "styx"`.
+    `tests/styx/*.lua`, once per GC mode (incremental, generational, and a
+    constant mode with pause 0), each time in a fresh state. Output lists
+    every test and case, like `tests/deep/all.lua`.
+  - `support/harness.lua`: shared by the scripts (`require "harness"`).
+    `case(name, fn)` runs and reports one case; `roundtrip` persists and
+    unpersists a value and checks it (see ADR-14); `rejects_truncation`
+    feeds every proper prefix of a stream to unpersist.
+  - `*.lua`: Lua script tests, one per area: `primitives`, `strings`,
+    `tables`, `closures`, `threads`, `permanents`, `errors`, `memory`
+    (accounting and allocation failures), `processes` (unpersist in a
+    separate interpreter process), `resume_print`.
+  - Debug builds (`make debug styx-test`) also open the test library `T`,
+    which enables the heap invariant checks and the allocation-failure
+    tests.
 - `make styx-test` builds and runs just the Styx tests (`test_styx`, run
   from `tests/styx`). `make test` is the all-tests target and runs them
   last, after everything else. `make debug styx-test` selects the debug
@@ -116,6 +128,12 @@ clear error unless noted.
 - **Untrusted input**: unpersist loads bytecode through `lua_load` and
   trusts the thread state it reads (only basic sanity checks). Do not
   unpersist data you do not trust.
+- **Known bug: allocation failure while restoring a thread.** If an
+  allocation fails while unpersist grows a restored thread's stack, the
+  error is raised on the new thread, outside the API lock, and the debug
+  lock check aborts (`memory.lua` leaves threads out of its unpersist
+  allocation-failure case until this is fixed). The fix is an engine-native
+  thread restore rather than a patch to `lstyx.cpp`.
 - **Compact output**: integers and counts are fixed 8-byte values; sizes
   and the format version are not yet considered final.
 
@@ -216,6 +234,24 @@ info kept) plus its upvalues, and restored with `lua_load`; the restored
 upvalues replace the freshly created ones, sharing via `lua_upvalueid` and
 `lua_upvaluejoin`. This reuses the engine's existing, tested prototype
 format instead of a second one.
+
+### ADR-14: Bugs fail where they happen
+**Status:** accepted
+Eris's bugs were very hard to find because their symptoms (GC crashes,
+wrong values after a resume) appeared far from their cause. Styx is built
+and tested so that a bug shows up where it happens:
+- No half-built objects: every restored object is valid at every
+  allocation point, and nothing is patched up afterwards through side
+  tables.
+- After every persist and unpersist the tests check the engine's heap
+  invariants (`T.checkmemory` in debug builds).
+- Restored graphs are compared with the original by structure and sharing,
+  and re-persisting a restored value must give a stream of the same size.
+- Every script runs under incremental, generational and constant GC.
+- Every proper prefix of a valid stream must be rejected with an error.
+- Persist and unpersist must fail cleanly (an error, intact heap) when any
+  single allocation fails.
+- Errors name what failed and, in time, where (a path to the value).
 
 ## Open questions
 

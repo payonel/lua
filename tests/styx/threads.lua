@@ -1,31 +1,173 @@
--- coroutines: unstarted, suspended in a loop, with locals on the stack
+-- coroutines: unstarted, suspended (one or more Lua frames), dead
 local styx = require "styx"
+local H = require "harness"
+local case = H.case
+
 local perms = {[_ENV] = "env", [coroutine.yield] = "yield"}
 local back = {env = _ENV, yield = coroutine.yield}
-local function roundtrip(co) return styx.unpersist(back, styx.persist(perms, co)) end
+local function roundtrip(co) return H.roundtrip(co, perms, back) end
 
-local co = coroutine.create(function(a, b)
-  local x = coroutine.yield(a + b)
-  return x * 2
+case("unstarted coroutine with arguments", function()
+  local co = coroutine.create(function(a, b)
+    local x = coroutine.yield(a + b)
+    return x * 2
+  end)
+  local c1 = roundtrip(co)
+  assert(c1 ~= co and coroutine.status(c1) == "suspended")
+  assert(select(2, coroutine.resume(c1, 1, 2)) == 3)
+  assert(select(2, coroutine.resume(c1, 21)) == 42)
+  assert(coroutine.status(c1) == "dead")
+  assert(coroutine.status(co) == "suspended")   -- the original is untouched
 end)
-local c1 = roundtrip(co)
-assert(c1 ~= co and coroutine.status(c1) == "suspended")
-assert(select(2, coroutine.resume(c1, 1, 2)) == 3)
-assert(select(2, coroutine.resume(c1, 21)) == 42)
-assert(coroutine.status(c1) == "dead")
-assert(coroutine.status(co) == "suspended")   -- the original is untouched
 
-local gen = coroutine.create(function()
-  for i = 1, 3 do coroutine.yield(i) end
-  return "end"
+case("suspended inside a loop", function()
+  local gen = coroutine.create(function()
+    for i = 1, 3 do coroutine.yield(i) end
+    return "end"
+  end)
+  coroutine.resume(gen)
+  coroutine.resume(gen)
+  local g2 = roundtrip(gen)
+  assert(select(2, coroutine.resume(g2)) == 3)
+  assert(select(2, coroutine.resume(g2)) == "end")
+  assert(coroutine.status(g2) == "dead")
 end)
-coroutine.resume(gen)
-coroutine.resume(gen)
-local g2 = roundtrip(gen)
-assert(select(2, coroutine.resume(g2)) == 3)
-assert(select(2, coroutine.resume(g2)) == "end")
-assert(coroutine.status(g2) == "dead")
 
-local dead = coroutine.create(function() end)
-coroutine.resume(dead)
-assert(coroutine.status(roundtrip(dead)) == "dead")
+case("dead coroutine", function()
+  local dead = coroutine.create(function() end)
+  coroutine.resume(dead)
+  local r = roundtrip(dead)
+  assert(coroutine.status(r) == "dead")
+  assert(not coroutine.resume(r))
+end)
+
+case("locals of several kinds on the stack", function()
+  local co = coroutine.create(function()
+    local i, f, s, t, b = 1, 2.5, "str", {k = "v"}, false
+    coroutine.yield()
+    return i, f, s, t.k, b
+  end)
+  coroutine.resume(co)
+  local r = roundtrip(co)
+  local _, i, f, s, k, b = coroutine.resume(r)
+  assert(i == 1 and f == 2.5 and s == "str" and k == "v" and b == false)
+end)
+
+case("yield from nested Lua calls", function()
+  local function make()
+    local function inner(n) local got = coroutine.yield(n); return got + n end
+    local function middle(n) return inner(n * 10) + 1 end
+    return coroutine.create(function(n) return middle(n) + 100 end)
+  end
+  local co = make()
+  assert(select(2, coroutine.resume(co, 2)) == 20)
+  local r = roundtrip(co)
+  assert(select(2, coroutine.resume(r, 5)) == 126)
+end)
+
+case("yield from deep recursion", function()
+  local function make()
+    local function rec(n)
+      if n == 0 then return coroutine.yield("bottom") end
+      return rec(n - 1) + 1
+    end
+    return coroutine.create(function() return rec(150) end)
+  end
+  local co = make()
+  assert(select(2, coroutine.resume(co)) == "bottom")
+  local r = roundtrip(co)
+  assert(select(2, coroutine.resume(r, 0)) == 150)
+end)
+
+case("yielding several values and receiving several", function()
+  local co = coroutine.create(function(...)
+    local a, b, c = coroutine.yield(...)
+    return c, b, a
+  end)
+  local _, x, y, z = coroutine.resume(co, 1, 2, 3)
+  assert(x == 1 and y == 2 and z == 3)
+  local r = roundtrip(co)
+  local _, p, q, s = coroutine.resume(r, "a", "b", "c")
+  assert(p == "c" and q == "b" and s == "a")
+end)
+
+case("vararg function suspended", function()
+  local co = coroutine.create(function(...)
+    coroutine.yield()
+    return select("#", ...), ...
+  end)
+  coroutine.resume(co, "x", nil, "z")
+  local r = roundtrip(co)
+  local _, n, a, b, c = coroutine.resume(r)
+  assert(n == 3 and a == "x" and b == nil and c == "z")
+end)
+
+case("many yields after restore", function()
+  local co = coroutine.create(function()
+    local sum = 0
+    while true do sum = sum + coroutine.yield(sum) end
+  end)
+  coroutine.resume(co)
+  local r = roundtrip(co)
+  local last
+  for i = 1, 100 do last = select(2, coroutine.resume(r, i)) end
+  assert(last == 5050)
+end)
+
+case("a coroutine held in a table twice is restored once", function()
+  local co = coroutine.create(function() coroutine.yield() end)
+  coroutine.resume(co)
+  local r = roundtrip({co, co, {co}})
+  assert(r[1] == r[2] and r[3][1] == r[1])
+end)
+
+case("a coroutine whose stack refers back to its container", function()
+  local holder = {}
+  local co = coroutine.create(function(h) coroutine.yield(); return h.name end)
+  holder.co, holder.name = co, "holder"
+  coroutine.resume(co, holder)
+  local r = roundtrip(holder)
+  assert(select(2, coroutine.resume(r.co)) == "holder")
+end)
+
+case("a coroutine holding another suspended coroutine", function()
+  local inner = coroutine.create(function() coroutine.yield("in1"); return "in2" end)
+  coroutine.resume(inner)
+  local outer = coroutine.create(function(c)
+    coroutine.yield()
+    return select(2, coroutine.resume(c))
+  end)
+  coroutine.resume(outer, inner)
+  local r = roundtrip(outer)
+  assert(select(2, coroutine.resume(r)) == "in2")
+end)
+
+case("a restored coroutine can be persisted again", function()
+  local co = coroutine.create(function()
+    for i = 1, 5 do coroutine.yield(i) end
+  end)
+  coroutine.resume(co)
+  local r1 = roundtrip(co)
+  coroutine.resume(r1)
+  local r2 = roundtrip(r1)
+  assert(select(2, coroutine.resume(r2)) == 3)
+end)
+
+case("errors raised after restore are catchable", function()
+  local co = coroutine.create(function()
+    coroutine.yield()
+    error("after restore")
+  end)
+  coroutine.resume(co)
+  local r = styx.unpersist({env = _ENV, yield = coroutine.yield, error = error},
+                            styx.persist({[_ENV] = "env", [coroutine.yield] = "yield", [error] = "error"}, co))
+  local ok, msg = coroutine.resume(r)
+  assert(not ok and msg:find("after restore", 1, true))
+  assert(coroutine.status(r) == "dead")
+end)
+
+case("rejects truncation of a thread stream", function()
+  local co = coroutine.create(function(a) local t = {a}; coroutine.yield(t); return a end)
+  coroutine.resume(co, 3)
+  H.rejects_truncation(styx.persist(perms, co), back)
+end)
