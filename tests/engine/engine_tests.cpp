@@ -122,6 +122,81 @@ static int l_takehash(lua_State* L)
   return 0;
 }
 
+/*
+** chainsok(t): every key of t's hash part is in the chain that starts at
+** its main position (where a lookup looks for it), and no chain loops
+*/
+static int l_chainsok(lua_State* L)
+{
+  Table* t = table_at(L, 1);
+  bool ok = true;
+  if (!isdummy(t))
+  {
+    int size = sizenode(t);
+    for (int i = 0; i < size && ok; i++)
+    {
+      const Node* n = gnode(t, i);
+      if (keyisnil(n) || keyisdead(n))
+        continue;
+      TValue key;
+      getnodekey(L, &key, n);
+      int j = t->luaH_mainposition(&key);
+      for (int steps = 0; j != i; steps++)
+      {
+        int next = gnode(t, j)->next;
+        if (next == 0 || steps == size)
+        {
+          ok = false;
+          break;
+        }
+        j += next;
+      }
+    }
+  }
+  lua_pushboolean(L, ok);
+  return 1;
+}
+
+/* misplace(t): a copy of t's layout whose first key is a new table with a
+   hash whose main position is a free node with no chain (so no lookup
+   reaches the slot it is put in) */
+static int l_misplace(lua_State* L)
+{
+  Table* src = table_at(L, 1);
+  lua_createtable(L, 0, 0);
+  Table* t = table_at(L, -1);
+  t->luaH_resize(L, 0, allocsizenode(src));
+  bool done = false;
+  for (int i = 0; i < sizenode(src); i++)
+  {
+    const Node* n = gnode(src, i);
+    TValue key;
+    bool has = !keyisnil(n);
+    if (has)
+      getnodekey(L, &key, n);
+    if (has && !keyisdead(n) && !done)
+    {
+      lua_createtable(L, 0, 0);
+      TValue nk = getslot(L, L->top - 1);
+      Table* k = hvalue(&nk);
+      for (unsigned int h = 1; h < 100000; h++)
+      {
+        k->hash = h;
+        int mp = t->luaH_mainposition(&nk);
+        const Node* m = gnode(src, mp);
+        if (mp != i && keyisnil(m) && m->next == 0)
+          break;
+      }
+      copyobj(&key, &nk); /* on the stack until 't' holds it */
+      done = true;
+    }
+    t->luaH_setnode(L, i, has ? &key : nullptr, keyisdead(n), &n->val, n->next);
+  }
+  t->lastfree = src->lastfree;
+  lua_pushvalue(L, 2);
+  return 1;
+}
+
 /* layout(t): array size, node count, lastfree and length hint */
 static int l_layout(lua_State* L)
 {
@@ -149,6 +224,10 @@ static lua_State* new_state()
   lua_setglobal(L, "setnodes");
   lua_pushcfunction(L, l_copywith);
   lua_setglobal(L, "copywith");
+  lua_pushcfunction(L, l_chainsok);
+  lua_setglobal(L, "chainsok");
+  lua_pushcfunction(L, l_misplace);
+  lua_setglobal(L, "misplace");
   lua_pushcfunction(L, l_hash);
   lua_setglobal(L, "hash");
   lua_pushcfunction(L, l_takehash);
@@ -172,6 +251,7 @@ static const char* const prelude = R"(
     local la = {layout(a)}
     local lb = {layout(b)}
     for i = 1, 4 do if la[i] ~= lb[i] then return false end end
+    if not chainsok(a) or not chainsok(b) then return false end
     return getmetatable(a) == getmetatable(b)
   end
   function heap() if T then T.checkmemory() end end
@@ -323,6 +403,15 @@ static void test_same_order_in_two_states()
   std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
 }
 
+static const Case chain_cases[] = {
+  {"chains hold after inserts, deletes and rehash, for keys of every kind",
+   "local t = {} for i = 1, 3000 do local k = (i % 4 == 0) and {} or (i % 4 == 1) and ('s' .. i) "
+   "or (i % 4 == 2) and i * 1.5 or function() end t[k] = i assert(chainsok(t), i) end "
+   "for k in pairs(t) do if math.random() < 0.4 then t[k] = nil end end collectgarbage() assert(chainsok(t))"},
+  {"a misplaced key is detected",
+   "local t = {} for i = 1, 5 do t[{}] = i end local u = misplace(t) assert(chainsok(t) and not chainsok(u))"},
+};
+
 static const Case object_key_cases[] = {
   {"every object has a hash, distinct for objects made one after another",
    "local seen = {} for i = 1, 1000 do local h = hash({}) assert(not seen[h]) seen[h] = true end "
@@ -331,7 +420,7 @@ static const Case object_key_cases[] = {
    "local ks, t = {}, {} for i = 1, 50 do ks[i] = {} t[ks[i]] = i end for i = 1, 50, 4 do t[ks[i]] = nil end "
    "local news = {} for i = 1, 50 do news[i] = {} takehash(news[i], ks[i]) end "
    "local map = {} for i = 1, 50 do map[ks[i]] = news[i] end "
-   "local u = copywith(t, map) "
+   "local u = copywith(t, map) assert(chainsok(u)) "
    "for i = 1, 50 do assert(u[news[i]] == t[ks[i]], i) end "
    "local o1, o2 = {}, {} for k in pairs(t) do o1[#o1 + 1] = t[k] end for k in pairs(u) do o2[#o2 + 1] = u[k] end "
    "assert(table.concat(o1, ' ') == table.concat(o2, ' ')) "
@@ -352,6 +441,8 @@ int main()
   std::printf("\n\tStarting engine internals tests\n\n");
   run_cases("Table::luaH_copyfrom (ltable.cpp)", table_copy_cases,
             sizeof(table_copy_cases) / sizeof(table_copy_cases[0]));
+  run_cases("Table::luaH_mainposition: keys sit in their chains (ltable.cpp)", chain_cases,
+            sizeof(chain_cases) / sizeof(chain_cases[0]));
   run_cases("object keys hash by the object's hash (ltable.cpp, lgc.cpp)", object_key_cases,
             sizeof(object_key_cases) / sizeof(object_key_cases[0]));
   test_same_order_in_two_states();

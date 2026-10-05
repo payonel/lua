@@ -1581,16 +1581,15 @@ lua_Integer Table::luaH_getn(lua_State* L)
     return t->hash_search(L, asize);
 }
 
-#if defined(LUA_DEBUG)
-
-/* export this function for the test library */
-
+/*
+** The main position of 'key': the node where a lookup for it starts. Every
+** key of the hash part is in the chain that starts there (the test library
+** and checks of a table's layout use it).
+*/
 int Table::luaH_mainposition(const TValue* key) const
 {
   const Table* t = this;
   return t->mainpositionTV(key);
 }
-
-#endif
 
 }

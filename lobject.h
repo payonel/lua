@@ -699,9 +699,7 @@ struct Table : GCListed
   lua_Integer luaH_getn(lua_State* L);
   int asize() const;
 
-#if defined(LUA_DEBUG)
   int luaH_mainposition(const TValue* key) const;
-#endif
 
   friend void reinserthash(lua_State* L, Table* ot, Table* t);
 
