@@ -129,9 +129,9 @@ yet" below. Four kinds of solution cover them:
 - **State by value**: what sits behind C (bytes, upvalues, library state)
   saved and rebuilt, through an interface the owner of that state provides.
 - **C frames**: a stable description of a C function's frame and its
-  continuation, so a suspended coroutine can resume through it: every
-  internal C function that calls back into Lua becomes *suspendable*
-  (ADR-32).
+  continuation, so a stopped coroutine can go on through it: every
+  internal C function that calls back into Lua becomes *freezable*
+  (ADR-33).
 - **External resources**: a host protocol to reopen, reconnect or replay.
 
 ### Values
@@ -140,6 +140,11 @@ yet" below. Four kinds of solution cover them:
    position, buffered data, mode) or a child process. Today: only as
    permanents; the restoring side's handle is used. Needs: external
    resources (reopen, seek), or the host providing its own file objects.
+   Planned (to discuss): a handle saves its path, its buffer state and its
+   position; a restored handle sees it is not open, reopens the file, seeks
+   and refills its buffer. The restoring host must provide the same files;
+   if it does not, the IO fails then, at no fault of the library or the
+   script.
 2. **C functions**: their identity is a code address. Today: permanents.
    Needs: identity re-bound by the host (done); a stable hash as keys.
 3. **Full userdata**: bytes, a metatable and user values, often a host
@@ -165,14 +170,14 @@ yet" below. Four kinds of solution cover them:
 7. **Running threads**: the coroutine calling `persist`, coroutines that
    resumed another (status normal), the main thread from the script API.
    Today: error. Needs: C frames (they wait inside `coroutine.resume` or
-   inside `persist` itself); with preemption, `coroutine.resume` becomes
-   suspendable (ADR-32).
+   inside `persist` itself); a frozen chain crosses `coroutine.resume`
+   (ADR-33).
 8. **A coroutine suspended inside a C call that continues later**: a yield
    inside `pcall`, `xpcall`, `dofile`, a `__pairs` metamethod, or any C
    function that calls or yields with a continuation (`lua_callk`,
    `lua_pcallk`, `lua_yieldk`). Today: error. Probably the most common
    blocker for real scripts (`pcall` around a loop that yields). Needs: C
-   frames: suspendable C functions (ADR-32), which preemption needs for
+   frames: freezable C functions (ADR-33), which preemption needs for
    every C function that calls back into Lua.
 9. **A coroutine suspended inside a hook or a `__close` handler**. Today:
    error. Needs: C frames.
@@ -201,7 +206,17 @@ yet" below. Four kinds of solution cover them:
 16. **External state**: the clock and time, environment variables, file
     contents, sockets, child processes, the host's event queue, timers and
     world. Outside the persistence layer: the host saves, replays or
-    reconnects it (see "Determinism").
+    reconnects it (see "Determinism"). To discuss:
+    - **Sockets** cannot seek back to an earlier state. A socket read must
+      still be freezable (within one process the socket stays open), but it
+      may keep nothing a stream can carry, so a restored one fails. Either
+      a query reports that the state cannot be persisted while such a read
+      is on a stack (`styx.isPersistable(L)`, which may be messy), or
+      socket reads are an exception that cannot be frozen. Sockets are not
+      in the standard library.
+    - **HTTP** is likely a Lua-script library over standard-library C
+      helpers, made freezable later. Sending a request again after a
+      restore is a bad idea: responses are not static.
 
 ### Refused by design or by choice
 17. **Persistable, but refused**: tables whose `__persist` is `false`;
@@ -866,7 +881,8 @@ stream.
   seed is refused and left as it was.
 
 ### ADR-32: Preemptive persistence and suspendable C functions
-**Status:** proposed (plan)
+**Status:** proposed (plan); its mechanism (decisions 1, 2's use of the
+continuation API for yields, 7, and the phases) is superseded by ADR-33
 Styx will be a preemptive serializer: the host may suspend a VM and
 persist it at any instruction, not only where a script yields. A C
 function that called back into Lua may then be on the stack, with its
@@ -991,6 +1007,192 @@ Persisting then fails (decision 3); a host could instead wait for them:
   when that function returns, and the host's handler persists it there; a
   blocking call can wait for that point. This applies only to opaque
   functions the host chose to allow; the library's own are suspendable.
+
+### ADR-33: Freeze and thaw
+**Status:** proposed (plan); supersedes ADR-32's mechanism
+
+ADR-32 made library C functions yieldable through the continuation API and
+preempted scripts with a yield. Tried on lua-c++ (2026-10-05, not
+committed), it falls short:
+- It changes stock behavior scripts can see: a `string.gsub` callback or a
+  `table.sort` comparator becomes yieldable (`coroutine.isyieldable()`,
+  `coroutine.yield` inside them), which four upstream tests check.
+- A preemption by yield rides the debug hooks: they are per thread (and a
+  `debug.sethook` hook does not carry into a new coroutine), off inside
+  hooks and finalizers, never run inside C, and their yield lands at the
+  nearest resume, so user code sees it.
+- Measured, a script withholds preemption with a finalizer that loops
+  (hooks off, cannot yield), a long C loop (`table.move` over a huge range,
+  `table.insert` with a huge `__len`), a backtracking pattern (time grows
+  like n^4), a loop in a coroutine it creates, or the `__close` of a
+  coroutine closing itself.
+
+**Terms.**
+- **Freeze**: the VM stops where it is. The native C stack unwinds to the
+  call that resumed the coroutine the freeze names; nothing a script can
+  see changes: no values are yielded, no status changes, nothing is
+  closed, and it is not an error (`pcall` does not catch it).
+- **Thaw**: a frozen coroutine goes on exactly where it stopped.
+- **Frozen**: the state of a coroutine stopped by a freeze, and of the
+  coroutines it resumed.
+- **Freezable**: a C function or an engine path that can be frozen in the
+  middle. Its progress is data: a continuation with a stable name, a
+  data-only context, a state box. A frozen VM thaws in this process, or is
+  persisted and thaws in another. (It replaces ADR-32's "suspendable",
+  which collides with Lua's "suspended" status of a yielded coroutine.)
+- **Budget**: the number of steps between two calls of the budget
+  callback.
+- **Step**: the unit of work the budget counts, the same for script and C
+  work (decision 1).
+
+**Decisions.**
+1. **One budget and one callback per VM, set once**: `lua_setbudget(L, n,
+   f)` in C, `debug.setbudget(n, f)` in script (a sandbox hides `debug`;
+   no test enumerates its keys). `n = 0` turns it off: stock behavior.
+   Persisting it is harmless, not required. The budget counts **steps**,
+   one for each of:
+   - a VM instruction;
+   - a C function call, and each hand-off between a C function and Lua (a
+     call back into Lua, a return through a continuation);
+   - an element of C work: what a library function processes, one at a
+     time: a table slot read or written (`table.move`, `insert`, `remove`,
+     `unpack`, `concat`), a comparison (`table.sort`, `math.min`), a
+     pattern-matcher step (`find`, `match`, `gmatch`, `gsub`), a character
+     (`utf8`, `string.byte`, `string.char`), and a chunk of bytes for bulk
+     work (`string.rep`, `upper`, `reverse`, `format`, concatenation; the
+     chunk size is a constant to tune, about 64 bytes).
+   Hand-offs alone would miss the work that holds off a freeze: pure C
+   loops never hand off. C work is charged at check points inside the
+   loops, which are freezable: when the budget runs out there, the
+   callback runs and may freeze the loop in its middle. Work that cannot be
+   split (the parser of `load`, an allocation) is charged when it ends,
+   and a freeze happens at the next check point; its cost is bounded by
+   its input. Counting is deterministic: a program spends the same steps
+   in every run.
+2. **The callback.** Each time `n` instructions are spent, the VM calls the
+   callback on the thread that spent them, with that coroutine as its only
+   argument (others may be added once tests show the need). It runs fully
+   unchecked: no hooks, no budget checks, and its own work is not
+   counted. It may:
+   - return: the budget refills and execution goes on;
+   - call `freeze(co)` (`lua_freeze(L, co)`, `debug.freeze(co)`): when the
+     callback returns, `co` and every coroutine it resumed freeze, and the
+     call that resumed `co` gets control;
+   - raise an error: an ordinary error, which scripts can catch; freezing
+     is the tool for code that may not cooperate.
+3. **Where a freeze lands is named by the callback.** The host names its
+   kernel's thread and lands in its own `lua_resume`; a kernel names a
+   user program and lands in its own `coroutine.resume`. That call returns
+   as an empty yield (`true`, or `{LUA_YIELD, 0}`); the coroutines between
+   pass the freeze through their `coroutine.resume` calls without seeing
+   it. `co` must be in the running chain. The main thread can be frozen
+   too: the freeze lands at the host's entry call (`lua_pcall` returns
+   `LUA_YIELD`). Only a host `lua_call` outside protected mode cannot be
+   frozen, as an error there goes to the panic function.
+4. **States.** `isfrozen(co)` (`lua_isfrozen`, `debug.isfrozen`) tells a
+   freeze from a yield. Statuses stay what they were: the top-most
+   coroutine is "running", those that resumed others are "normal". A frozen
+   coroutine is not "suspended", so `coroutine.resume` refuses it, as it
+   refuses any running coroutine; a restored state machine goes on
+   correctly.
+5. **Thaw**: `thaw(co)` (`lua_thaw(co, from)`, `debug.thaw(co)`) goes on
+   with a frozen coroutine and returns a resume result: values when it
+   yields or returns, an error, or an empty yield with `isfrozen(co)` when
+   it froze again. A restored state needs it.
+6. **Stock behavior does not change.** Yieldability, the coroutine
+   statuses, debug hooks, `pcall` and finalizer semantics and every entry
+   point behave as in stock Lua 5.5; with a budget set, only the freezes
+   are new. The upstream tests run unmodified, and the deep tests pin the
+   stock behavior of every path this touches, checked against stock Lua
+   5.5 built from `master`.
+7. **Freezable everywhere.** Every C function our standard libraries put
+   into a Lua runtime is freezable (ADR-32's decision 2 and inventory, by
+   this mechanism): its continuations record where to thaw, while its
+   calls stay exactly as yieldable as in stock (a `gsub` callback cannot
+   yield). So are the engine's own calls into Lua: metamethods run from C
+   API calls, message handlers, hooks, `__close` handlers (unwinding,
+   `coroutine.close`, a coroutine closing itself), finalizers, and
+   `coroutine.resume`/`coroutine.wrap` (a frozen chain crosses
+   coroutines). Finalizers still run inside the engine, but only where a
+   freeze can happen: between instructions, and in library functions that
+   run them with a continuation (`collectgarbage`). An allocation inside a
+   C function's API call leaves due finalizers for the next such point;
+   the manual leaves finalizer timing unspecified.
+8. **Persistence.** Styx persists every thread state: not started,
+   suspended, frozen (with its chain), dead. A restored thread is in the
+   state it was in; the caller checks `isfrozen` to choose `thaw` or
+   `coroutine.resume`.
+9. **Opaque user C functions** cannot be frozen in their middle (ADR-32's
+   decision 3); a freeze in a coroutine running one waits until it
+   returns (ADR-32's follow-up).
+
+**In practice.** The host:
+
+```cpp
+static lua_State* K;   // the kernel's thread
+
+static void onbudget(lua_State* co)  // co spent the budget
+{
+  if (sliceOver())
+    lua_freeze(co, K);  // K and all it resumed freeze; lua_resume(K) returns
+}
+
+lua_setbudget(L, 10000, onbudget);   // once per VM
+lua_ResumeResult r = lua_resume(K, nullptr, 0);
+for (;;)
+{
+  if (lua_isfrozen(K))               // r is {LUA_YIELD, 0}
+  {
+    if (saveDue())
+      styx_persist(L, &writer);
+    r = lua_thaw(K, nullptr);        // next tick; returns like lua_resume
+  }
+  else if (r.status == LUA_YIELD)    // the kernel's own yield to the host
+    r = lua_resume(K, nullptr, serve(K, r.nres));
+  else
+    break;                           // LUA_OK, or an error
+}
+```
+
+A kernel, in script:
+
+```lua
+local current   -- the user program being run
+debug.setbudget(10000, function(co)
+  if sliceOver() then debug.freeze(current) end
+end)
+
+current = prog
+local r
+if debug.isfrozen(prog) then
+  r = table.pack(debug.thaw(prog))
+else
+  r = table.pack(coroutine.resume(prog, reply))
+end
+if debug.isfrozen(prog) and saveDue() then
+  styx.persist(prog, writer)
+end
+```
+
+**What carries over** from the yield-based work: the library
+continuations, state boxes, the API's continuation variants and their fast
+paths, `table.sort` as an explicit state, the hook and close machinery, and
+`tests/deep/yields.lua` (as freeze tests). The library's call sites go back
+to stock yieldability.
+
+**Not yet**:
+- Callback arguments beyond the coroutine.
+
+**Phases**, each with tests (stock pins, checked against stock Lua) and an
+A/B:
+1. The budget, the callback, freeze and thaw for Lua frames and the main
+   thread, across `coroutine.resume` and `coroutine.wrap`; steps for
+   instructions, calls and hand-offs.
+2. The library's continuations as freezable at stock yieldability, with
+   their C work charged at check points (the pattern matcher as an
+   explicit-stack machine); the engine paths (message handlers, hooks,
+   close, finalizers).
+3. Styx persists frozen states and continuation names.
 
 ## Open questions
 
