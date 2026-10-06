@@ -784,6 +784,37 @@ do
   assert(err == "attempt to yield across a C-call boundary")
 end
 
+-- an error raised after a thaw inside a call that cannot yield, caught
+-- by a protected call further down, leaves the coroutine as yieldable as
+-- before the call
+do
+  local calls = {
+    function(f) return pcall(table.sort, {3, 2, 1}, f) end,
+    function(f) return pcall(string.gsub, "ab", ".", f) end,
+    function(f) return pcall(tostring, setmetatable({}, {__tostring = f})) end,
+    function(f) return pcall(function() for _ in ipairs(setmetatable({}, {__index = f})) do end end) end,
+  }
+  for i, call in ipairs(calls) do
+    local inside = false
+    local co = coroutine.create(function()
+      local ok, err = call(function() inside = true for k = 1, 50 do end error("x", 0) end)
+      inside = false
+      local y = coroutine.isyieldable()
+      return ok, err, y, coroutine.yield("y")
+    end)
+    local froze = 0
+    debug.setbudget(10, function(t)
+      if t == co and inside and debug.freeze(co) then froze = froze + 1 end
+    end)
+    local r = table.pack(coroutine.resume(co))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+    debug.setbudget(0)
+    assert(froze > 0 and r[1] and r[2] == "y", i .. ": " .. show(r))
+    r = table.pack(coroutine.resume(co, "z"))
+    assert(r[1] and r[2] == false and r[3] == "x" and r[4] == true and r[5] == "z", i .. ": " .. show(r))
+  end
+end
+
 -- a frozen coroutine never thawed is collected like any other
 do
   local weak = setmetatable({}, {__mode = "k"})

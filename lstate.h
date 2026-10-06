@@ -278,6 +278,7 @@ struct lua_State : GCListed
   StkId frozenerrfunc = 0;  /* its message handler, */
   int frozennres = 0;       /* its number of results, */
   l_uint32 frozenny = 0;    /* and the non-yieldable calls when it began */
+  l_uint32 basenny = 0;     /* non-yieldable calls under its frames (see 'precover') */
 };
 
 namespace lua::runtime

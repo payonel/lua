@@ -466,6 +466,7 @@ void luaD_runfinalizer(lua_State* F, lua_State* L)
   global_State* g = F->l_G;
   assert(F->ci == &F->base_ci && F->status == LUA_OK && !F->frozen);
   F->nCcalls = getCcalls(L);
+  F->basenny = 1; /* (its call cannot yield) */
   F->nfz = 0;
   F->resumer = L;
   F->resumedk = 0;
@@ -1070,12 +1071,27 @@ struct Resume : ProtectedCall
 ** (status == LUA_YIELD), or an unprotected error ('findpcall' doesn't
 ** find a recover point).
 */
+/*
+** The non-yieldable calls of 'L' from its frames: those under them
+** ('basenny'), and the frames in a call that cannot yield (counted again
+** after a thaw, and after an error goes down to a recovery point).
+*/
+static l_uint32 countnny(lua_State* L)
+{
+  l_uint32 nny = L->basenny;
+  for (CallInfo* ci = L->ci; ci != &L->base_ci; ci = ci->previous)
+    if (ci->callstatus & CIST_NYCALL)
+      nny++;
+  return nny;
+}
+
 static TStatus precover(lua_State* L, TStatus status)
 {
   CallInfo* ci;
   while (errorstatus(status) && (ci = findpcall(L)) != nullptr)
   {
     L->ci = ci;               /* go down to recovery functions */
+    L->nCcalls = getCcalls(L) | (countnny(L) << 16); /* (the calls left) */
     setcistrecst(ci, status); /* status to finish 'pcall' */
     Unroll u;
     status = luaD_rawrunprotected(L, &u);
@@ -1224,6 +1240,7 @@ lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KCont
   if (getCcalls(L) >= LUAI_MAXCCALLS)
     return {resume_error(L, lt::C_stack_overflow, nargs), 1};
   L->nCcalls++;
+  L->basenny = 0;
   L->nfz = 0;
   L->resumer = from;
   L->resumedk = (k != nullptr);
@@ -1263,11 +1280,8 @@ lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_
   L->frozen = 0;
   /* its calls that cannot yield (a finalizer's too) */
   global_State* g = L->l_G;
-  l_uint32 nny = (kind == FZ_RESUME) ? (L == g->finth) : L->frozenny;
-  for (CallInfo* ci = L->ci; ci != &L->base_ci; ci = ci->previous)
-    if (ci->callstatus & CIST_NYCALL)
-      nny++;
-  L->nCcalls += nny << 16;
+  L->basenny = (kind == FZ_RESUME) ? (L == g->finth) : L->frozenny;
+  L->nCcalls += countnny(L) << 16;
   L->nfz = 0;
   L->resumer = from;
   L->resumedk = (k != nullptr);
