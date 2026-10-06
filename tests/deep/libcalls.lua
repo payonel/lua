@@ -111,6 +111,16 @@ local expected = {
 \\9no file './libcases.noso'\", \"L?libcases.p L=libcases.p L?libcases.none P?libcases.none pkg.searchers pkg.path pkg.cpath pkg.cpath\"}, n = 2}",
   ["require errors"] =
     "{true, {\"'package.searchers' must be a table\", \"bad argument #1 to 'require' (string expected, got no value)\", \"bad argument #1 to 'require' (string expected, got table)\"}, n = 2}",
+  ["xpcall: the handler of an error()"] =
+    "{true, {false, \"handled: plain\"}, {false, \"handled: a table\"}, {false, \"handled: nil\"}, n = 4}",
+  ["xpcall: the handler of a runtime error sees the erroring frame"] =
+    "{true, {false, \"attempt to index a nil value (field 'x') @Lua:true\"}, {false, \"attempt to perform arithmetic on a nil value @Lua:true\"}, n = 3}",
+  ["xpcall: a handler returns nothing, or several values"] =
+    "{true, {false, \"<no error object>\"}, {false, \"a\"}, n = 3}",
+  ["xpcall: errors in the handler"] =
+    "{true, {false, \"end 3\"}, 3, \"error in error handling\", n = 4}",
+  ["xpcall: nested, and '__close' after the handler"] =
+    "{true, {false, \"outer inner\"}, \"handler inner; nested deep; close outer inner\", n = 3}",
 }
 
 local dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""

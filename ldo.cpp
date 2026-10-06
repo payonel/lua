@@ -379,8 +379,8 @@ void luaD_hook(lua_State* L, int event, int line,
 ** Call the budget callback: the budget is spent, at a budget point of 'L'
 ** (the running thread: an instruction, or a check point of C work). The
 ** callback runs with no hooks and no budget (and hooks do not see it); the
-** budget refills after it. Returns the coroutine the callback asked to
-** freeze, if any.
+** budget refills after it. It leaves 'L' as it is (see 'lua_Budget').
+** Returns the coroutine the callback asked to freeze, if any.
 */
 lua_State* luaD_budget(lua_State* L)
 {
@@ -402,9 +402,9 @@ lua_State* luaD_budget(lua_State* L)
   } guard{g};
   if (isLua(ci) && L->top < ci->top)
     L->top = ci->top; /* protect entire activation register */
-  luaD_checkstack(L, LUA_MINSTACK); /* ensure minimum stack size */
-  if (ci->top < L->top + LUA_MINSTACK)
-    ci->top = L->top + LUA_MINSTACK;
+  /* (no room is made in the stack of 'L': the callback leaves it, and its
+     C calls, as they are, so that where a stack overflow happens does not
+     depend on where the budget runs out; see 'lua_budgetthread') */
   L->allowhook = 0; /* no hooks inside */
   g->budgetL = L;
   g->budgetnfz = L->nfz;
@@ -433,6 +433,7 @@ lua_State* luaD_budget(lua_State* L)
 {
   assert(L->errorJmp != nullptr);
   L->l_G->freezetarget = co;
+  L->frozencc = L->nCcalls; /* (see 'forgetcalls') */
   luaD_throw(L, LUA_FREEZE);
 }
 
@@ -466,7 +467,7 @@ void luaD_runfinalizer(lua_State* F, lua_State* L)
   global_State* g = F->l_G;
   assert(F->ci == &F->base_ci && F->status == LUA_OK && !F->frozen);
   F->nCcalls = getCcalls(L);
-  F->basenny = 1; /* (its call cannot yield) */
+  F->ccbase = F->nCcalls;
   F->nfz = 0;
   F->resumer = L;
   F->resumedk = 0;
@@ -656,13 +657,15 @@ static inline CallInfo* next_ci(lua_State* L)
 ** CIST_C (if it's a C function), and number of extra arguments.
 ** (All these bit-fields fit in 16-bit values.)
 */
-static inline CallInfo* prepCallInfo(lua_State* L, StkId func, l_uint32 status,
+static l_forceinline CallInfo* prepCallInfo(lua_State* L, StkId func, l_uint32 status,
                                  StkId top)
 {
   CallInfo* ci = L->ci = next_ci(L); /* new frame */
   ci->func = func;
-  assert((status & ~(CIST_NRESULTS | CIST_C | MAX_CCMT)) == 0);
+  assert((status & ~(CIST_NRESULTS | CIST_C | MAX_CCMT | CIST_CCOUNT)) == 0);
   ci->callstatus = status;
+  if (status & CIST_CCOUNT)   /* entered through C? */
+    ci->nccalls = L->nCcalls; /* (see 'forgetcalls') */
   ci->top = top;
   return ci;
 }
@@ -670,7 +673,7 @@ static inline CallInfo* prepCallInfo(lua_State* L, StkId func, l_uint32 status,
 /*
 ** precall for C functions
 */
-static inline int precallC(lua_State* L, StkId func, l_uint32 status,
+static l_forceinline int precallC(lua_State* L, StkId func, l_uint32 status,
                        lua_CFunction f)
 {
   int n; /* number of returns */
@@ -745,10 +748,11 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
   }
 }
 
-CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
+template <l_uint32 CCOUNT>
+static l_forceinline CallInfo* precall(lua_State* L, StkId func, int nresults)
 {
-  l_uint32 status = nresults + 1;
-  assert(status <= MAXRESULTS + 1);
+  assert(nresults + 1 <= MAXRESULTS + 1);
+  l_uint32 status = (l_uint32)(nresults + 1) | CCOUNT;
   for (;;)
   {
     switch (withvariant(slottag(L, func)))
@@ -787,6 +791,11 @@ CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
   }
 }
 
+CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
+{
+  return precall<0>(L, func, nresults);
+}
+
 /*
 ** Call a function (C or Lua) through C. 'inc' can be 1 (increment
 ** number of recursive invocations in the C stack) or nyci (the same
@@ -804,7 +813,7 @@ static inline void ccall(lua_State* L, StkId func, int nResults, l_uint32 inc)
     checkstackp(L, 0, func); /* free any use of EXTRA_STACK */
     luaE_checkcstack(L);
   }
-  if ((ci = luaD_precall(L, func, nResults)) != nullptr)
+  if ((ci = precall<CIST_CCOUNT>(L, func, nResults)) != nullptr)
   {                               /* Lua function? */
     ci->callstatus |= CIST_FRESH; /* mark that it is a "fresh" execute */
     luaV_execute(L, ci);          /* call it */
@@ -912,6 +921,32 @@ static void finishapik(lua_State* L, CallInfo* ci)
 }
 
 /*
+** The C calls and non-yieldable calls of a thread ('nCcalls') are where a
+** C stack overflow happens and whether it can yield: a freeze must not
+** change them. Each frame keeps the count it runs with ('nccalls'); a
+** thaw restores the count where the thread froze ('frozencc'), and the
+** frames going on after it take theirs. Where stock Lua resets the count
+** of a thread (a resume after a yield, an error down to a protected call
+** that the resume recovers), the frames left take the reset count too:
+** they now run with no C calls under them.
+*/
+static void forgetcalls(lua_State* L, CallInfo* ci)
+{
+  for (; ci != &L->base_ci; ci = ci->previous)
+    ci->nccalls = L->ccbase;
+  L->nCcalls = L->ccbase;
+}
+
+/* the count frame 'ci' runs with: that of the frame that entered through
+   C under it (or the thread's base) */
+static l_uint32 framecalls(lua_State* L, CallInfo* ci)
+{
+  while (ci != &L->base_ci && !(ci->callstatus & CIST_CCOUNT))
+    ci = ci->previous;
+  return (ci == &L->base_ci) ? L->ccbase : ci->nccalls;
+}
+
+/*
 ** Completes the execution of a C function interrupted by an yield.
 ** The interruption must have happened while the function was either
 ** closing its tbc variables in 'moveresults' or executing
@@ -927,6 +962,7 @@ static void finishapik(lua_State* L, CallInfo* ci)
 static void finishCcall(lua_State* L, CallInfo* ci)
 {
   int n; /* actual number of results from C function */
+  L->nCcalls = framecalls(L, ci); /* (see 'forgetcalls') */
   if (ci->callstatus & CIST_CLSRET)
   { /* was closing TBC variable? */
     assert(ci->callstatus & CIST_TBC);
@@ -938,11 +974,7 @@ static void finishCcall(lua_State* L, CallInfo* ci)
     TStatus status = LUA_YIELD;   /* default if there were no errors */
     lua_KFunction kf = ci->k; /* continuation function */
     assert(kf != nullptr); /* must have a continuation */
-    if (ci->callstatus & CIST_NYCALL)
-    { /* its call that could not yield ended (after a thaw) */
-      ci->callstatus &= ~CIST_NYCALL;
-      decnny(L);
-    }
+    ci->callstatus &= ~CIST_NYCALL; /* (its call that cannot yield ended) */
     luaE_spend(L, 1); /* a hand-off back to C */
     if (ci->callstatus & CIST_YPCALL) /* was inside a 'lua_pcallk'? */
       status = finishpcallk(L, ci);   /* finish it */
@@ -967,6 +999,11 @@ static void unroll(lua_State* L)
   CallInfo* ci;
   while ((ci = L->ci) != &L->base_ci)
   {                       /* something in the stack */
+    if (l_unlikely(ci->callstatus & CIST_ERRH))
+    { /* its message handler ended (after a thaw): the error goes on */
+      ci->callstatus &= ~CIST_ERRH;
+      luaG_throwerror(L);
+    }
     if (!isLua(ci))       /* C function? */
       finishCcall(L, ci); /* complete its execution */
     else
@@ -975,6 +1012,7 @@ static void unroll(lua_State* L)
         ci->savedpc--;     /* its instruction was not executed yet */
       else
         luaV_finishOp(L);  /* finish interrupted instruction */
+      L->nCcalls = framecalls(L, ci); /* (see 'forgetcalls') */
       luaV_execute(L, ci); /* execute down to higher C 'boundary' */
     }
   }
@@ -1071,27 +1109,16 @@ struct Resume : ProtectedCall
 ** (status == LUA_YIELD), or an unprotected error ('findpcall' doesn't
 ** find a recover point).
 */
-/*
-** The non-yieldable calls of 'L' from its frames: those under them
-** ('basenny'), and the frames in a call that cannot yield (counted again
-** after a thaw, and after an error goes down to a recovery point).
-*/
-static l_uint32 countnny(lua_State* L)
-{
-  l_uint32 nny = L->basenny;
-  for (CallInfo* ci = L->ci; ci != &L->base_ci; ci = ci->previous)
-    if (ci->callstatus & CIST_NYCALL)
-      nny++;
-  return nny;
-}
-
 static TStatus precover(lua_State* L, TStatus status)
 {
   CallInfo* ci;
   while (errorstatus(status) && (ci = findpcall(L)) != nullptr)
   {
     L->ci = ci;               /* go down to recovery functions */
-    L->nCcalls = getCcalls(L) | (countnny(L) << 16); /* (the calls left) */
+    if (ci->callstatus & CIST_NYCALL) /* a protected call that cannot yield? */
+      L->nCcalls = framecalls(L, ci); /* (it recovers in C in stock Lua) */
+    else
+      forgetcalls(L, ci); /* (as the resume does in stock Lua) */
     setcistrecst(ci, status); /* status to finish 'pcall' */
     Unroll u;
     status = luaD_rawrunprotected(L, &u);
@@ -1126,6 +1153,7 @@ static lua_ResumeResult endresume(lua_State* L, lua_State* from, TStatus status,
     assert(from != nullptr && k != nullptr);
     (void)k;
     from->frozenchild = L;
+    from->frozencc = from->nCcalls; /* (see 'forgetcalls') */
     luaD_throw(from, LUA_FREEZE); /* go on freezing 'from' (still locked, as for any throw) */
   }
   if (l_likely(!errorstatus(status)))
@@ -1193,6 +1221,7 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
     assert(from != nullptr && k != nullptr);
     (void)k;
     from->frozenchild = L;
+    from->frozencc = from->nCcalls;
     luaD_throw(from, LUA_FREEZE);
   }
   int nres;
@@ -1240,7 +1269,9 @@ lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KCont
   if (getCcalls(L) >= LUAI_MAXCCALLS)
     return {resume_error(L, lt::C_stack_overflow, nargs), 1};
   L->nCcalls++;
-  L->basenny = 0;
+  L->ccbase = L->nCcalls;
+  if (L->status == LUA_YIELD)
+    forgetcalls(L, L->ci); /* (its frames run with no C calls under them) */
   L->nfz = 0;
   L->resumer = from;
   L->resumedk = (k != nullptr);
@@ -1270,18 +1301,11 @@ lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_
   if (kind == 0)
     return {resume_error(L, lt::cannot_thaw_a_coroutine_that_is_not_frozen, 0), 1};
   l_uint32 hostnCcalls = L->nCcalls;
-  L->nCcalls = (from != nullptr) ? getCcalls(from) : 0;
-  if (getCcalls(L) >= LUAI_MAXCCALLS)
-  {
-    L->nCcalls = hostnCcalls;
+  if (from != nullptr && getCcalls(from) >= LUAI_MAXCCALLS)
     return {resume_error(L, lt::C_stack_overflow, 0), 1};
-  }
-  L->nCcalls++;
   L->frozen = 0;
-  /* its calls that cannot yield (a finalizer's too) */
   global_State* g = L->l_G;
-  L->basenny = (kind == FZ_RESUME) ? (L == g->finth) : L->frozenny;
-  L->nCcalls += countnny(L) << 16;
+  L->nCcalls = L->frozencc; /* its calls, as when it froze */
   L->nfz = 0;
   L->resumer = from;
   L->resumedk = (k != nullptr);

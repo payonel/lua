@@ -76,6 +76,7 @@ static l_forceinline [[noreturn]] void luaG_concaterror(lua_State* L, StkId p1, 
 [[noreturn]] void luaG_runerror(lua_State* L, byte_view fmt);
 byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line);
 [[noreturn]] void luaG_errormsg(lua_State* L);
+[[noreturn]] void luaG_throwerror(lua_State* L);
 int luaG_traceexec(lua_State* L, int pc);
 int luaG_tracecall(lua_State* L);
 

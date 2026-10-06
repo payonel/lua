@@ -552,12 +552,23 @@ static int db_debug(lua_State* L)
 ** =======================================================
 */
 
-/* the budget callback: the Lua function in the registry, with the thread */
+/*
+** The budget callback: the Lua function in the registry, called with the
+** thread that spent the budget, on a thread of its own (so that the
+** thread that spent it keeps its stack and C calls as they are). An error
+** in it is an error where the budget ran out.
+*/
 static void budgetf(lua_State* L)
 {
-  lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
-  lua_pushthread(L);
-  lua_call(L, 1, 0);
+  lua_State* B = lua_budgetthread(L);
+  lua_getfieldi(B, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
+  lua_pushthreadi(B, L);
+  if (lua_pcall(B, 1, 0, 0) != LUA_OK)
+  {
+    luaL_checkstacki(L, 1, std::nullopt);
+    lua_xmove(B, L, 1);
+    lua_error(L);
+  }
 }
 
 static int db_setbudget(lua_State* L)
@@ -573,6 +584,13 @@ static int db_setbudget(lua_State* L)
   {
     luaL_checktype(L, 2, LUA_TFUNCTION);
     lua_pushvalue(L, 2);
+    if (lua_budgetthread(L) == nullptr)
+    { /* the thread the callback runs on (anchored in the registry) */
+      lua_State* B = lua_newthread(L);
+      lua_sethook(B, nullptr, 0, 0); /* (no hooks inherited) */
+      lua_setfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETTHREAD);
+      lua_setbudgetthread(L, B);
+    }
   }
   lua_setfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
   lua_setbudget(L, n, n == 0 ? nullptr : budgetf);

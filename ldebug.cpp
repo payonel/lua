@@ -205,6 +205,21 @@ void lua_setbudget(lua_State* L, lua_Integer n, lua_Budget f)
   lua_unlock(L);
 }
 
+/*
+** A thread to run the budget callback's Lua code on (kept by its owner,
+** such as the debug library: anchored there), so that the thread that
+** spent the budget keeps its stack and C calls as they are.
+*/
+lua_State* lua_budgetthread(lua_State* L)
+{
+  return L->l_G->budgetth;
+}
+
+void lua_setbudgetthread(lua_State* L, lua_State* B)
+{
+  L->l_G->budgetth = B;
+}
+
 lua_Integer lua_getbudget(lua_State* L, lua_Integer* left)
 {
   global_State* g = L->l_G;
@@ -1075,10 +1090,16 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
     copyslot(L, L->top, L->top - 1); /* move argument */
     copyslot(L, L->top - 1, errfunc);  /* push function */
     L->top++;                           /* assume EXTRA_STACK */
-    L->nfz++;                           /* (a handler cannot freeze) */
+    L->ci->callstatus |= CIST_ERRH;     /* (a freeze may pass the handler) */
     luaD_callnoyield(L, L->top - 2, 1); /* call it */
-    L->nfz--;
+    L->ci->callstatus &= ~CIST_ERRH;
   }
+  luaG_throwerror(L);
+}
+
+/* raise the error object at the top */
+[[noreturn]] void luaG_throwerror(lua_State* L)
+{
   if (tagisempty(slottag(L, L->top - 1)))
   { /* error object is nil? */
     /* change it to a proper message */

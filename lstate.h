@@ -112,6 +112,7 @@ struct CallInfo
   int nyield = 0;       /* number of values yielded */
   int nres = 0;         /* number of values returned */
   l_uint32 callstatus = 0;
+  l_uint32 nccalls = 0; /* CIST_CCOUNT: 'nCcalls' while it runs its own code */
   lu_byte apiop = 0;  /* CIST_APIK: how to finish the API call (APIK_*) */
   StkId apifirst = 0; /* CIST_APIK, a concatenation: its first value */
 };
@@ -169,6 +170,13 @@ constexpr l_uint32 CIST_NYCALL = CIST_FROZE << 1;
    in a thread that cannot yield (a library function that keeps the
    yieldability of stock Lua: see 'lua_freezeonly') */
 constexpr l_uint32 CIST_FZONLY = CIST_NYCALL << 1;
+/* function raised an error and is calling the message handler (a call
+   that cannot yield): when the handler ends after a thaw, the error goes
+   on (see 'unroll') */
+constexpr l_uint32 CIST_ERRH = CIST_FZONLY << 1;
+/* frame entered through C ('ccall'): 'nccalls' has the count it runs
+   with (frames entered from Lua code run with their caller's) */
+constexpr l_uint32 CIST_CCOUNT = CIST_ERRH << 1;
 
 /* the budget, in 'hookmask' (not a hook: the hook API never shows it) */
 constexpr int LUA_MASKBUDGET = 1 << 6;
@@ -277,8 +285,8 @@ struct lua_State : GCListed
   StkId frozenfunc = 0;     /* frozen in a host call: the function called, */
   StkId frozenerrfunc = 0;  /* its message handler, */
   int frozennres = 0;       /* its number of results, */
-  l_uint32 frozenny = 0;    /* and the non-yieldable calls when it began */
-  l_uint32 basenny = 0;     /* non-yieldable calls under its frames (see 'precover') */
+  l_uint32 frozencc = 0;    /* its 'nCcalls' where it froze */
+  l_uint32 ccbase = 0;      /* its 'nCcalls' when resumed (see 'forgetcalls') */
 };
 
 namespace lua::runtime
@@ -598,6 +606,7 @@ struct global_State
   l_mem budgetleft = 0;              /* steps left before the next call */
   lua_Budget budgetf = nullptr;      /* the budget callback */
   lua_State* budgetL = nullptr;      /* thread running it, while it runs */
+  lua_State* budgetth = nullptr;     /* a thread for the callback (see 'lua_budgetthread') */
   int budgetnfz = 0;                 /* its 'nfz' when the callback began */
   lua_State* freezereq = nullptr;    /* coroutine the callback asked to freeze */
   lua_State* freezetarget = nullptr; /* coroutine being frozen (unwinding) */

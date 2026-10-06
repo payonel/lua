@@ -15,6 +15,7 @@ namespace lt
   }
 
   constexpr byte_view _BUDGETKEY("_BUDGETKEY");
+  constexpr byte_view _BUDGETTHREAD("_BUDGETTHREAD");
   constexpr byte_view _CLIBS("_CLIBS");
   constexpr byte_view _ENV("_ENV");
   constexpr byte_view _G_dot("_G.");

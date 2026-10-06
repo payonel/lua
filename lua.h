@@ -150,8 +150,9 @@ struct lua_Debug;
 typedef void (*lua_Hook)(lua_State* L, lua_Debug* ar);
 
 /*
-** Budget callback ('lua_setbudget'): called on the thread that spent the
-** budget
+** Budget callback ('lua_setbudget'): called with the thread that spent
+** the budget, which it must leave as it is (no room is made in its stack:
+** to run Lua code, the callback uses a thread of its own)
 */
 typedef void (*lua_Budget)(lua_State* L);
 
@@ -334,10 +335,12 @@ int(lua_status)(lua_State* L);
 
 /*
 ** Budget and freezing. The VM calls the budget callback 'f' each time 'n'
-** steps are spent (a step is a VM instruction, a C function call, or a
-** hand-off between C and Lua), on the thread that spent them; 'n' 0 turns
+** steps are spent (a step is a VM instruction, a C function call, a
+** hand-off between C and Lua, or an element of the work of a library
+** function), with the thread that spent them; 'n' 0 turns
 ** the budget off ('lua_getbudget' gives 'n' and the steps left before the
-** next call). The callback runs with no hooks and no budget. In it,
+** next call). The callback runs with no hooks and no budget, and leaves
+** the thread that spent the budget as it is (see 'lua_Budget'). In it,
 ** 'lua_freeze' asks to freeze coroutine 'co' (a coroutine in the running
 ** chain, or the thread running): when the callback returns, 'co' and every
 ** coroutine it resumed stop where they are, and the call that resumed or

@@ -358,4 +358,46 @@ case("require errors", function(busy)
   end)
 end)
 
+-- message handlers (xpcall)
+
+case("xpcall: the handler of an error()", function(busy)
+  local function h(m) busy() return "handled: " .. (type(m) == "table" and "a table" or tostring(m)) end
+  return {xpcall(error, h, "plain", 0)}, {xpcall(error, h, {})}, {xpcall(error, h)}
+end)
+case("xpcall: the handler of a runtime error sees the erroring frame", function(busy)
+  local function h(m)
+    busy()
+    local info = debug.getinfo(2, "Sl")
+    return (m:gsub("^[^:]*:%d+: ", "")) .. " @" .. info.what .. ":" .. tostring(info.currentline > 0)
+  end
+  local function bad(t) return t.x.y end
+  return {xpcall(bad, h, {})}, {xpcall(function() return 1 + nil end, h)}
+end)
+case("xpcall: a handler returns nothing, or several values", function(busy)
+  local r1 = {xpcall(error, function() busy() end, "x")}
+  local r2 = {xpcall(error, function() busy() return "a", "b" end, "x")}
+  return r1, r2
+end)
+case("xpcall: errors in the handler", function(busy)
+  local n = 0
+  local r1 = {xpcall(error, function(m) busy() n = n + 1 if n < 3 then error("again " .. n, 0) end return "end " .. n end, "x")}
+  local r2 = {xpcall(error, function(m) busy() error(m) end, "y")}
+  return r1, n, (r2[2]:gsub("^[^:]*:%d+: ", ""))
+end)
+case("xpcall: nested, and '__close' after the handler", function(busy)
+  local log = {}
+  local function inner()
+    local x <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "close " .. tostring(e) end})
+    error("inner", 0)
+  end
+  local r = {xpcall(inner, function(m)
+    busy()
+    log[#log + 1] = "handler " .. m
+    local ok, v = xpcall(error, function(m2) busy() return "nested " .. m2 end, "deep", 0)
+    log[#log + 1] = v
+    return "outer " .. m
+  end)}
+  return r, table.concat(log, "; ")
+end)
+
 return cases

@@ -858,6 +858,15 @@ void lua_pushlightuserdata(lua_State* L, void* p)
   lua_unlock(L);
 }
 
+/* pushes thread 'th' */
+void lua_pushthreadi(lua_State* L, lua_State* th)
+{
+  lua_lock(L);
+  setslotth(L, L->top, th);
+  api_incr_top(L);
+  lua_unlock(L);
+}
+
 int lua_pushthread(lua_State* L)
 {
   lua_lock(L);
@@ -1584,7 +1593,7 @@ void CallS::run(lua_State* L)
 ** ('lua_thawk'), and the call returns as if its function returned nothing.
 */
 static void hostfrozen(lua_State* L, lu_byte kind, StkId func, int nresults,
-                       StkId ef, l_uint32 nny)
+                       StkId ef)
 {
   global_State* g = L->l_G;
   assert(g->freezetarget == L);
@@ -1593,7 +1602,6 @@ static void hostfrozen(lua_State* L, lu_byte kind, StkId func, int nresults,
   L->frozenfunc = func;
   L->frozennres = nresults;
   L->frozenerrfunc = ef;
-  L->frozenny = nny;
 }
 
 /*
@@ -1660,11 +1668,10 @@ void lua_callk(lua_State* L, int nargs, int nresults,
     CallS c;
     c.func = func;
     c.nresults = nresults;
-    l_uint32 nny = getnny(L);
     TStatus status = luaD_rawrunprotected(L, &c);
     if (l_unlikely(status == LUA_FREEZE))
     {
-      hostfrozen(L, FZ_CALL, func, nresults, L->errfunc, nny + 1);
+      hostfrozen(L, FZ_CALL, func, nresults, L->errfunc);
       lua_unlock(L);
       return;
     }
@@ -1813,12 +1820,11 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   if (ci == &L->base_ci)
   { /* a call of the host */
     c.nresults = nresults;
-    l_uint32 nny = getnny(L);
     StkId olderrfunc = L->errfunc;
     status = luaD_pcall(L, &c, c.func, func);
     if (l_unlikely(status == LUA_FREEZE))
     {
-      hostfrozen(L, FZ_PCALL, c.func, nresults, func, nny + 1);
+      hostfrozen(L, FZ_PCALL, c.func, nresults, func);
       L->errfunc = olderrfunc;
       lua_unlock(L);
       return LUA_OK;

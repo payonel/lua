@@ -186,7 +186,7 @@ do
     end)
     debug.setbudget(7, function(th)
       if th == co then
-        local info = debug.getinfo(2, "Sl")
+        local info = debug.getinfo(th, 0, "Sl")
         where[#where + 1] = info.short_src .. ":" .. info.currentline
       end
     end)
@@ -240,12 +240,13 @@ do
     if #results == 0 then
       results[1] = debug.freeze(co)        -- suspended
       results[2] = debug.freeze(other)     -- not started
-      results[3] = debug.freeze(coroutine.running()) -- the main thread here
+      results[3] = debug.freeze(t) -- the main thread here
+      results[4] = debug.freeze(coroutine.running()) -- the callback's own
     end
   end)
   for i = 1, 5 do end
   debug.setbudget(0)
-  assert(results[1] == false and results[2] == false)
+  assert(results[1] == false and results[2] == false and results[4] == false)
   -- (the stand-alone interpreter runs the script from a C function that
   -- calls it with plain 'lua_pcall', so the main thread cannot freeze)
   assert(results[3] == false)
@@ -466,9 +467,6 @@ do
     local i = 0
     load(function() busy() i = i + 1 return parts[i] end)
   end)
-  refused("a message handler", function()
-    xpcall(error, function(m) busy() return m end, "x")
-  end)
   refused("a hook", function()
     debug.sethook(function() busy() end, "", 1000)
     for i = 1, 3000 do end
@@ -486,7 +484,7 @@ do
     coroutine.resume(c)
     coroutine.close(c)
   end)
-  assert(inside >= 5)
+  assert(inside >= 4)
 end
 
 -- 'f', run in a coroutine with budgets of several sizes and frozen at
@@ -542,7 +540,7 @@ do
     local co = coroutine.create(work)
     local frozen = 0
     debug.setbudget(5, function(t)
-      if t == co and debug.getinfo(2, "f").func == fn and debug.freeze(co) then
+      if t == co and debug.getinfo(t, 0, "f").func == fn and debug.freeze(co) then
         frozen = frozen + 1
       end
     end)
@@ -812,6 +810,82 @@ do
     assert(froze > 0 and r[1] and r[2] == "y", i .. ": " .. show(r))
     r = table.pack(coroutine.resume(co, "z"))
     assert(r[1] and r[2] == false and r[3] == "x" and r[4] == true and r[5] == "z", i .. ": " .. show(r))
+  end
+end
+
+-- the Lua callback runs on a thread of its own, with the thread that
+-- spent the budget as its argument (which reads "normal" there)
+do
+  local main = coroutine.running()
+  local seen = {}
+  local co = coroutine.create(function() for i = 1, 30 do end end)
+  debug.setbudget(10, function(t)
+    if t == co and not seen.cb then
+      seen.cb = coroutine.running()
+      seen.status = coroutine.status(t)
+      seen.where = debug.getinfo(t, 0, "S").what
+    end
+  end)
+  assert(coroutine.resume(co))
+  debug.setbudget(0)
+  assert(seen.cb ~= co and seen.cb ~= main and type(seen.cb) == "thread")
+  assert(seen.status == "normal" and seen.where == "Lua")
+end
+
+-- a freeze changes nothing about where a C stack overflow or a stack
+-- overflow happens: the same depths with freezes at every budget point
+-- (the callback uses neither the stack nor the C calls of the program)
+do
+  local function depths(work, budget)
+    collectgarbage()
+    local co = coroutine.create(work)
+    if budget then
+      debug.setbudget(budget, function(t) if t == co then debug.freeze(co) end end)
+    end
+    local r = table.pack(coroutine.resume(co))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+    debug.setbudget(0)
+    return r
+  end
+  local works = {
+    function() -- a message handler that fails again and again
+      local depth = 0
+      local ok, err = xpcall(error, function(m) depth = depth + 1 error(m) end, "x")
+      return depth, ok, (tostring(err):gsub("^[^:]*:%d+: ", ""))
+    end,
+    function() -- '__index' calling itself through C
+      local depth = 0
+      local t = setmetatable({}, {__index = function(t, k) depth = depth + 1 return t[k] end})
+      local ok, err = pcall(function() return t.x end)
+      return depth, ok, (tostring(err):gsub("^[^:]*:%d+: ", ""))
+    end,
+    function() -- coroutines resuming coroutines
+      local depth = 0
+      local function nest()
+        depth = depth + 1
+        local w = coroutine.wrap(nest)
+        return w()
+      end
+      local ok, err = pcall(nest)
+      return depth, ok, (tostring(err):gsub("^[^:]*:%d+: ", ""))
+    end,
+    function() -- a deep Lua recursion (big frames: fewer of them)
+      local locals = {}
+      for i = 1, 150 do locals[i] = "l" .. i end
+      local rec = load("local depth = 0 local function rec() depth = depth + 1 local " ..
+                       table.concat(locals, ", ") .. " = 1 return 1 + rec() end " ..
+                       "return function() local ok, err = pcall(rec) return depth, ok, err end")()
+      local depth, ok, err = rec()
+      return depth, ok, (tostring(err):gsub("^[^:]*:%d+: ", ""))
+    end,
+  }
+  for i, work in ipairs(works) do
+    local plain = depths(work)
+    assert(plain[1] and plain[2] > 100 and plain[3] == false, i .. ": " .. show(plain))
+    for _, n in ipairs(i == 4 and {997} or {1, 3, 7}) do
+      local r = depths(work, n)
+      assert(deepeq(r, plain), i .. ", budget " .. n .. ": " .. show(r) .. " vs " .. show(plain))
+    end
   end
 end
 
