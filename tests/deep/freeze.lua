@@ -461,11 +461,6 @@ do
   end
   local inside = 0
   local function busy() inside = inside + 1 for i = 1, 20 do end end
-  refused("a sort comparator", function() table.sort({3, 2, 1}, function(a, b) busy() return a < b end) end)
-  refused("a gsub function", function() string.gsub("ab", ".", function(c) busy() return c end) end)
-  refused("a __tostring for format", function()
-    string.format("%s", setmetatable({}, {__tostring = function() busy() return "x" end}))
-  end)
   refused("a load reader", function()
     local parts = {"return ", "1"}
     local i = 0
@@ -491,12 +486,150 @@ do
     coroutine.resume(c)
     coroutine.close(c)
   end)
-  refused("require", function()
-    package.preload["freeze_mod"] = function() busy() return true end
-    require("freeze_mod")
-    package.preload["freeze_mod"], package.loaded["freeze_mod"] = nil, nil
+  assert(inside >= 5)
+end
+
+-- 'f', run in a coroutine with budgets of several sizes and frozen at
+-- every budget point (whatever thread spent it), is never refused and
+-- ends as a plain run does; 'f' gets 'busy', which its callbacks call
+local everywhere
+do
+  local main = coroutine.running()
+  local inside = 0
+  local function busy() inside = inside + 1 for i = 1, 5 do end end
+  local function run(f, n)
+    local co = coroutine.create(f)
+    local freezes, refusals = 0, 0
+    if n then
+      debug.setbudget(n, function(t)
+        if t ~= main then
+          if debug.freeze(co) then freezes = freezes + 1 else refusals = refusals + 1 end
+        end
+      end)
+    end
+    local r = table.pack(coroutine.resume(co, busy))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+    debug.setbudget(0)
+    return r, freezes, refusals
+  end
+  function everywhere(name, f, budgets)
+    inside = 0
+    local plain = run(f)
+    assert(plain[1], name .. ": " .. tostring(plain[2]))
+    assert(inside > 0, name .. ": no callback ran")
+    for _, n in ipairs(budgets or {1, 2, 3, 7}) do
+      local r, freezes, refusals = run(f, n)
+      assert(refusals == 0, name .. ", budget " .. n .. ": " .. refusals .. " refusals")
+      assert(freezes > 0, name .. ", budget " .. n .. ": no freeze")
+      assert(deepeq(r, plain), name .. ", budget " .. n .. ": " .. show(r) .. " vs " .. show(plain))
+    end
+  end
+end
+
+local function mt(fields) return setmetatable({}, fields) end
+
+-- the cases of 'libcases.lua': code the library calls back
+do
+  local dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
+  for _, c in ipairs(dofile(dir .. "libcases.lua")) do everywhere(c.name, c.f) end
+end
+
+-- the C work of library loops counts, a step an element, and they freeze
+-- in their middle, at their check points: with nothing that calls back
+-- (plain tables, values compared in C), freezing only there
+do
+  local function inside(fn, work)
+    local co = coroutine.create(work)
+    local frozen = 0
+    debug.setbudget(5, function(t)
+      if t == co and debug.getinfo(2, "f").func == fn and debug.freeze(co) then
+        frozen = frozen + 1
+      end
+    end)
+    local r = table.pack(coroutine.resume(co))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+    debug.setbudget(0)
+    assert(r[1], r[2])
+    local plain = table.pack(select(2, coroutine.resume(coroutine.create(work))))
+    table.remove(r, 1)
+    r.n = r.n - 1
+    return frozen, r, plain
+  end
+  local N = 1000
+  local function filled() local t = {} for i = 1, N do t[i] = (i * 37) % 101 end return t end
+  local works = {
+    {table.concat, function() return table.concat(filled(), ",") end},
+    {table.insert, function() local t = filled() table.insert(t, 1, "x") return t[1], t[2], t[N + 1], #t end},
+    {table.remove, function() local t = filled() local v = table.remove(t, 1) return v, t[1], t[N - 1], #t end},
+    {table.move, function() local t = table.move(filled(), 1, N, 3, {}) return t[3], t[N + 2], #t end},
+    {table.move, function() local t = filled() table.move(t, 1, N - 1, 2) return t[1], t[2], t[N] end},
+    {table.unpack, function() return select("#", table.unpack(filled())), (table.unpack(filled(), N)) end},
+    {table.sort, function() local t = filled() table.sort(t) return t[1], t[N // 2], t[N] end},
+  }
+  for i, w in ipairs(works) do
+    local frozen, r, plain = inside(w[1], w[2])
+    assert(frozen >= N // 10, "work " .. i .. ": " .. frozen .. " freezes")
+    assert(deepeq(r, plain), "work " .. i .. ": " .. show(r) .. " vs " .. show(plain))
+  end
+end
+
+-- 'debug.debug' freezes in the commands it runs and in the '__tostring'
+-- of an error it reports (a child interpreter reads the commands)
+if io.popen and arg and arg[-1] then
+  local input = os.tmpname()
+  local f = assert(io.open(input, "w"))
+  f:write("local s = 0 for i = 1, 100 do s = s + i end io.write(s, ' ')\n",
+          "error(setmetatable({}, {__tostring = function() local n = 0 ",
+          "for i = 1, 50 do n = n + i end io.write(n, ' ') return 'x' end}))\n",
+          "cont\n")
+  f:close()
+  local script = [[
+    local co = coroutine.create(function() debug.debug() return "done" end)
+    local freezes = 0
+    debug.setbudget(3, function(t) if t == co and debug.freeze(co) then freezes = freezes + 1 end end)
+    local r = {coroutine.resume(co)}
+    while debug.isfrozen(co) do r = {debug.thaw(co)} end
+    debug.setbudget(0)
+    io.write(tostring(freezes > 50), " ", tostring(r[2]))
+  ]]
+  local p = io.popen(string.format("%q -e %q < %q 2>/dev/null", arg[-1], script, input))
+  local out = p:read("a")
+  p:close()
+  os.remove(input)
+  assert(out == "5050 1275 true done", out)
+end
+
+-- calls that cannot yield stay so through a freeze and a thaw, nested
+-- too; after them the coroutine yields again
+do
+  local log = {}
+  local co = coroutine.create(function()
+    local inner = mt{__index = function(_, i)
+      for k = 1, 20 do end
+      log[#log + 1] = coroutine.isyieldable()
+      log[#log + 1] = select(2, pcall(coroutine.yield))
+      if i <= 2 then return i end
+    end}
+    local s = tostring(mt{__tostring = function()
+      local n = 0
+      for _, v in ipairs(inner) do n = n + v end
+      log[#log + 1] = coroutine.isyieldable()
+      return "n=" .. n
+    end})
+    log[#log + 1] = coroutine.isyieldable()
+    return s, coroutine.yield("after")
   end)
-  assert(inside >= 9)
+  local freezes = 0
+  debug.setbudget(3, function(t) if t == co and debug.freeze(co) then freezes = freezes + 1 end end)
+  local r = table.pack(kresume(co))
+  debug.setbudget(0)
+  assert(r[1] and r[2] == "after", show(r))
+  assert(coroutine.status(co) == "suspended")
+  r = table.pack(coroutine.resume(co, "y"))
+  assert(r[1] and r[2] == "n=3" and r[3] == "y", show(r))
+  assert(freezes > 10)
+  local cannot = "attempt to yield across a C-call boundary"
+  assert(deepeq(log, {false, cannot, false, cannot, false, cannot, false, true}), show(log))
 end
 
 -- a frozen coroutine never thawed is collected like any other

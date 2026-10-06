@@ -734,6 +734,49 @@ void luaL_addvalue(luaL_Buffer* B)
   lua_pop(L, 1); /* pop string */
 }
 
+luaL_Box::~luaL_Box()
+{
+  if (!bytes.empty())
+    luaM_alloc_char_span(g, nullptr, bytes, 0, false); /* an abandoned buffer */
+}
+
+/* pushes a new box */
+luaL_Box* luaL_newbox(lua_State* L)
+{
+  auto box = std::make_unique<luaL_Box>();
+  luaL_Box* p = box.get();
+  p->g = L->l_G;
+  lua_newuserobject(L, std::move(box), sizeof(luaL_Box), 0);
+  return p;
+}
+
+luaL_Box* luaL_tobox(lua_State* L, int idx)
+{
+  luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, idx));
+  assert(box != nullptr);
+  return box;
+}
+
+/* moves the contents of 'B' into 'box' ('B' is left empty) */
+void luaL_buffsave(luaL_Buffer* B, luaL_Box* box)
+{
+  assert(box->bytes.empty());
+  box->bytes = std::move(B->bytes);
+  box->used = B->used;
+  B->bytes = {};
+  B->used = 0;
+}
+
+/* moves the contents saved in 'box' back into 'B' */
+void luaL_buffload(luaL_Buffer* B, luaL_Box* box)
+{
+  assert(B->bytes.empty());
+  B->bytes = std::move(box->bytes);
+  B->used = box->used;
+  box->bytes = {};
+  box->used = 0;
+}
+
 void luaL_buffinit(lua_State* L, luaL_Buffer* B)
 {
   assert(B->bytes.empty() || L == B->L);
@@ -1051,6 +1094,19 @@ int luaL_callmetai(lua_State* L, int obj, byte_view event)
 lua_Integer luaL_len(lua_State* L, int idx)
 {
   lua_len(L, idx);
+  return luaL_lenresult(L);
+}
+
+/* 'luaL_len' with '__len' called with continuation 'k' */
+lua_Integer luaL_lenk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
+{
+  lua_lenk(L, idx, ctx, k);
+  return luaL_lenresult(L);
+}
+
+/* the length 'lua_len' pushed, which must be an integer (popped) */
+lua_Integer luaL_lenresult(lua_State* L)
+{
   std::optional<lua_Integer> l = lua_tointegerx(L, -1);
   if (l_unlikely(!l))
     luaL_errori(L, lt::object_length_is_not_an_integer);
@@ -1058,60 +1114,85 @@ lua_Integer luaL_len(lua_State* L, int idx)
   return *l;
 }
 
-const InternalString* luaL_toistring(lua_State* L, int idx)
+/*
+** Pushes the string form of the value at 'idx': the result of its
+** '__tostring', called with continuation 'k' (unchecked: see
+** 'luaL_tostringresult'), or the default form. Returns whether it called
+** '__tostring'.
+*/
+int luaL_toistringk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
   idx = lua_absindex(L, idx);
-  if (luaL_callmetai(L, idx, lt::mm_tostring))
+  if (luaL_getmetafieldi(L, idx, lt::mm_tostring) != LUA_TNIL)
   { /* metafield? */
-    if (!lua_isstring(L, -1))
-      luaL_errori(L, lt::tostring_must_return_a_string);
+    lua_pushvalue(L, idx);
+    lua_callk(L, 1, 1, ctx, k);
+    return 1;
   }
-  else
+  luaL_tostringdefault(L, idx);
+  return 0;
+}
+
+/* pushes the string form of the value at 'idx' that does not use '__tostring' */
+void luaL_tostringdefault(lua_State* L, int idx)
+{
+  idx = lua_absindex(L, idx);
+  switch (lua_type(L, idx))
   {
-    switch (lua_type(L, idx))
-    {
-    case LUA_TNUMBER:
-    {
-      byte_inline<LUA_N2SBUFFSZ> buff;
-      byte_view n = *lua_numbertocstringi(L, idx, buff);
-      lua_pushlstring(L, n, 0, n.size());
-      break;
-    }
-    case LUA_TSTRING:
-      lua_pushvalue(L, idx);
-      break;
-    case LUA_TBOOLEAN:
-      lua_pushistringref(L, lua_toboolean(L, idx) ? lt::true_kw : lt::false_kw);
-      break;
-    case LUA_TNIL:
-      lua_pushistringref(L, lt::nil);
-      break;
-    default:
-    {
-      int tt = luaL_getmetafieldi(L, idx, lt::mm_name); /* try name */
-      byte_view kind = (tt == LUA_TSTRING)
-                                  ? *lua_tolstring(L, -1)
-                                  : lua_typenamei(L, lua_type(L, idx));
-      if (lua_islightcfunction(L, idx))
-      {
-        InternalString fa = lua_funcaddressi(L, idx);
-        lua_pushlstring(L, kind, 0, kind.size());
-        lua_pushlstring(L, fa.view(), 0, fa.size());
-        lua_pushfstringi(L, lt::fmt_s_colon_s);
-      }
-      else
-      {
-        lua_pushlstring(L, kind, 0, kind.size());
-        lua_pushvalue(L, idx);
-        lua_pushfstringi(L, lt::fmt_s_colon_p);
-      }
-      if (tt != LUA_TNIL)
-        lua_remove(L, -2); /* remove '__name' */
-      break;
-    }
-    }
+  case LUA_TNUMBER:
+  {
+    byte_inline<LUA_N2SBUFFSZ> buff;
+    byte_view n = *lua_numbertocstringi(L, idx, buff);
+    lua_pushlstring(L, n, 0, n.size());
+    break;
   }
+  case LUA_TSTRING:
+    lua_pushvalue(L, idx);
+    break;
+  case LUA_TBOOLEAN:
+    lua_pushistringref(L, lua_toboolean(L, idx) ? lt::true_kw : lt::false_kw);
+    break;
+  case LUA_TNIL:
+    lua_pushistringref(L, lt::nil);
+    break;
+  default:
+  {
+    int tt = luaL_getmetafieldi(L, idx, lt::mm_name); /* try name */
+    byte_view kind = (tt == LUA_TSTRING)
+                                ? *lua_tolstring(L, -1)
+                                : lua_typenamei(L, lua_type(L, idx));
+    if (lua_islightcfunction(L, idx))
+    {
+      InternalString fa = lua_funcaddressi(L, idx);
+      lua_pushlstring(L, kind, 0, kind.size());
+      lua_pushlstring(L, fa.view(), 0, fa.size());
+      lua_pushfstringi(L, lt::fmt_s_colon_s);
+    }
+    else
+    {
+      lua_pushlstring(L, kind, 0, kind.size());
+      lua_pushvalue(L, idx);
+      lua_pushfstringi(L, lt::fmt_s_colon_p);
+    }
+    if (tt != LUA_TNIL)
+      lua_remove(L, -2); /* remove '__name' */
+    break;
+  }
+  }
+}
+
+/* the string 'luaL_toistringk' pushed, which must be a string */
+const InternalString* luaL_tostringresult(lua_State* L)
+{
+  if (!lua_isstring(L, -1))
+    luaL_errori(L, lt::tostring_must_return_a_string);
   return lua_toistring(L, -1);
+}
+
+const InternalString* luaL_toistring(lua_State* L, int idx)
+{
+  luaL_toistringk(L, idx, 0, nullptr);
+  return luaL_tostringresult(L);
 }
 
 byte_view luaL_tolstring(lua_State* L, int idx)

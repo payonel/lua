@@ -4,6 +4,7 @@
 #include "lua.h"
 #include "internal_string.h"
 #include "literals.h"
+#include "lauxlib.h"
 #include <array>
 
 namespace lua::bytes
@@ -30,11 +31,42 @@ int lua_resetthread(lua_State* L);
 const InternalString* luaL_checkistring(lua_State* L, int arg);
 const InternalString* luaL_optistring(lua_State* L, int arg, const InternalString* def);
 const InternalString* luaL_toistring(lua_State* L, int idx);
+int luaL_toistringk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
+const InternalString* luaL_tostringresult(lua_State* L);
+void luaL_tostringdefault(lua_State* L, int idx);
 
 int luaL_loadbufferi(lua_State* L, byte_view buff, std::optional<byte_view> name, std::optional<byte_view> mode);
+
+namespace lua::runtime
+{
+struct global_State;
+}
+
+/*
+** The state of a library function that a freeze may stop in its middle
+** (see 'lua_freezeonly'): integers and the bytes of a string buffer, in a
+** userdata on the stack, where its continuation finds them.
+*/
+struct luaL_Box : lua_UserObject
+{
+  ::lua::runtime::global_State* g = nullptr;
+  std::array<lua_Integer, 4> ints{};
+  byte_owner bytes = {}; /* a buffer saved by 'luaL_buffsave' */
+  size_t used = 0;
+  ~luaL_Box() override;
+};
+
+luaL_Box* luaL_newbox(lua_State* L);
+luaL_Box* luaL_tobox(lua_State* L, int idx);
+void luaL_buffsave(luaL_Buffer* B, luaL_Box* box);
+void luaL_buffload(luaL_Buffer* B, luaL_Box* box);
+lua_Integer luaL_lenk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
+lua_Integer luaL_lenresult(lua_State* L);
 int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode);
 
 int lua_getfieldi(lua_State* L, int idx, byte_view k);
+int lua_getfieldik(lua_State* L, int idx, byte_view key, lua_KContext ctx, lua_KFunction k);
+void lua_setfieldik(lua_State* L, int idx, byte_view key, lua_KContext ctx, lua_KFunction k);
 /* freezing: resume and thaw by a C function with continuation 'k', which
    a freeze passing through goes on with (getting the status of 'L'); the
    number of results of 'L' then; the coroutine a frozen 'L' resumed */
@@ -42,6 +74,17 @@ lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KCont
 lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k);
 int lua_resumenres(lua_State* L, int status);
 lua_State* lua_frozenchild(lua_State* L);
+/* the calls with continuations of the running C function freeze but do
+   not yield; C work of 'n' steps (true when the budget is spent); a check
+   point there (goes on in 'k' after a thaw) */
+void lua_freezeonly(lua_State* L);
+int lua_rawlessthan(lua_State* L, int index1, int index2);
+int lua_isplaintable(lua_State* L, int idx);
+int lua_plaingetrange(lua_State* L, int idx, lua_Integer i, int n);
+lua_Integer lua_plainmove(lua_State* L, int idx1, lua_Integer s, int idx2, lua_Integer d,
+                          lua_Integer n, int up);
+int lua_spend(lua_State* L, int n);
+void lua_checkpointk(lua_State* L, lua_KContext ctx, lua_KFunction k);
 void lua_setfieldi(lua_State* L, int idx, byte_view k);
 
 const InternalString* lua_pushfstringi(lua_State* L, byte_view fmt);

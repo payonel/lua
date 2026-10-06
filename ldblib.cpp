@@ -14,6 +14,7 @@
 
 #include "lua_internal.h"
 #include "lobject.h"
+#include "lstate.h"
 #include "os_api.h"
 
 #include "lauxlib.h"
@@ -480,26 +481,69 @@ static int db_gethook(lua_State* L)
   return 3;
 }
 
-static int db_debug(lua_State* L)
+/*
+** 'debug.debug' runs each command in a protected call, and reports its
+** error with the message's '__tostring': both with a continuation, which
+** goes on from the step 'ctx' says.
+*/
+enum
+{
+  DD_READ,  /* read the next command */
+  DD_RAN,   /* the command ran (or failed: 'status') */
+  DD_ERROR, /* report the error on the top */
+  DD_PRINT  /* print the string on the top */
+};
+
+static int db_debugk(lua_State* L, int status, lua_KContext ctx);
+
+static int db_debug_from(lua_State* L, int step)
 {
   for (;;)
   {
-    byte_owner buffer(LUA_MAXINPUT);
-    os_print_stderr(lt::lua_debug);
-    os_flush_stderr();
-    if (!os_readline(os_stdin(), buffer) || buffer.str_view() == lt::cont_n)
+    switch (step)
     {
-      return 0;
-    }
-    byte_view cmd = buffer.str_view();
-    if (luaL_loadbufferi(L, cmd, lt::debug_command, lt::t_char) || lua_pcall(L, 0, 0, 0))
-    {
-      os_print_stderr(luaL_toistring(L, -1)->view());
+    case DD_ERROR:
+      luaE_freezeonly(L);
+      luaL_toistringk(L, -1, DD_PRINT, db_debugk);
+      [[fallthrough]];
+    case DD_PRINT:
+      os_print_stderr(luaL_tostringresult(L)->view());
       os_print_stderr(lt::n_3);
       os_flush_stderr();
+      [[fallthrough]];
+    case DD_RAN:
+      lua_settop(L, 0); /* remove eventual returns */
+      [[fallthrough]];
+    default: /* DD_READ */
+    {
+      byte_owner buffer(LUA_MAXINPUT);
+      os_print_stderr(lt::lua_debug);
+      os_flush_stderr();
+      if (!os_readline(os_stdin(), buffer) || buffer.str_view() == lt::cont_n)
+        return 0;
+      byte_view cmd = buffer.str_view();
+      luaE_freezeonly(L);
+      if (luaL_loadbufferi(L, cmd, lt::debug_command, lt::t_char) ||
+          lua_pcallk(L, 0, 0, 0, DD_RAN, db_debugk))
+        step = DD_ERROR;
+      else
+        step = DD_RAN;
     }
-    lua_settop(L, 0); /* remove eventual returns */
+    }
   }
+}
+
+static int db_debugk(lua_State* L, int status, lua_KContext ctx)
+{
+  int step = (int)ctx;
+  if (step == DD_RAN && status != LUA_OK && status != LUA_YIELD)
+    step = DD_ERROR; /* the command failed */
+  return db_debug_from(L, step);
+}
+
+static int db_debug(lua_State* L)
+{
+  return db_debug_from(L, DD_READ);
 }
 
 /*

@@ -409,6 +409,19 @@ int lua_compare(lua_State* L, int index1, int index2, int op)
   return i;
 }
 
+/*
+** Whether the value at 'index1' is less than the one at 'index2', where no
+** metamethod can run (two numbers, or two strings); -1 otherwise.
+*/
+int lua_rawlessthan(lua_State* L, int index1, int index2)
+{
+  TValue o1 = index2val(L, index1);
+  TValue o2 = index2val(L, index2);
+  if ((ttisnumber(&o1) && ttisnumber(&o2)) || (ttisstring(&o1) && ttisstring(&o2)))
+    return luaV_lessthan(L, &o1, &o2);
+  return -1;
+}
+
 std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, byte_span buff)
 {
   TValue o = index2val(L, idx);
@@ -855,10 +868,46 @@ int lua_pushthread(lua_State* L)
 }
 
 /*
+** Whether a call with a continuation from 'ci' may yield: the thread can
+** yield and the function does not keep calls from yielding (CIST_FZONLY).
+*/
+static l_forceinline bool yieldablek(lua_State* L, const CallInfo* ci)
+{
+  return yieldable(L) && !(ci->callstatus & CIST_FZONLY);
+}
+
+/*
+** API calls with continuations: while one runs, a metamethod it calls may
+** yield or freeze, and 'finishCcall' finishes the call as 'op' says
+** (APIK_*) before calling the continuation. Where the call cannot yield,
+** the metamethod can still freeze (CIST_NYCALL counts its call). Without
+** a continuation, it is the plain call.
+*/
+static bool armk(lua_State* L, lua_KContext ctx, lua_KFunction k, lu_byte op)
+{
+  CallInfo* ci = L->ci;
+  assert((k == nullptr || !isLua(ci)) && "cannot use continuations inside hooks");
+  if (k == nullptr)
+    return false;
+  ci->k = k;
+  ci->ctx = ctx;
+  ci->apiop = op;
+  ci->callstatus |= yieldablek(L, ci) ? CIST_APIK : (CIST_APIK | CIST_NYCALL);
+  return true;
+}
+
+static void disarmk(lua_State* L, bool armed)
+{
+  if (armed)
+    L->ci->callstatus &= ~(CIST_APIK | CIST_NYCALL);
+}
+
+/*
 ** get functions (Lua -> stack)
 */
 
-static int auxgetstr(lua_State* L, const TValue* t, byte_view k)
+static int auxgetstr(lua_State* L, const TValue* t, byte_view k,
+                     lua_KContext ctx = 0, lua_KFunction kf = nullptr)
 {
   lu_byte tag;
   TValue res;
@@ -879,7 +928,9 @@ static int auxgetstr(lua_State* L, const TValue* t, byte_view k)
     setslots(L, L->top, str);
     api_incr_top(L);
     TValue key = getslot(L, L->top - 1);
+    bool armed = armk(L, ctx, kf, APIK_OVERKEY);
     tag = luaV_finishget(L, t, &key, L->top - 1, tag, NOSLOT);
+    disarmk(L, armed);
   }
   lua_unlock(L);
   return novariant(tag);
@@ -911,7 +962,7 @@ int lua_getglobali(lua_State* L, byte_view name)
   return auxgetstr(L, &gt, name);
 }
 
-int lua_gettable(lua_State* L, int idx)
+static int auxgettable(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
   lu_byte tag;
   lua_lock(L);
@@ -930,10 +981,17 @@ int lua_gettable(lua_State* L, int idx)
   if (tagisempty(tag))
   {
     TValue key = getslot(L, L->top - 1);
+    bool armed = armk(L, ctx, k, APIK_OVERKEY);
     tag = luaV_finishget(L, &t, &key, L->top - 1, tag, NOSLOT);
+    disarmk(L, armed);
   }
   lua_unlock(L);
   return novariant(tag);
+}
+
+int lua_gettable(lua_State* L, int idx)
+{
+  return auxgettable(L, idx, 0, nullptr);
 }
 
 int lua_getfield(lua_State* L, int idx, const HostString& k)
@@ -943,7 +1001,7 @@ int lua_getfield(lua_State* L, int idx, const HostString& k)
   return auxgetstr(L, &t, k.to_utf8());
 }
 
-int lua_geti(lua_State* L, int idx, lua_Integer n)
+static int auxgeti(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k)
 {
   lu_byte tag;
   lua_lock(L);
@@ -968,13 +1026,20 @@ int lua_geti(lua_State* L, int idx, lua_Integer n)
   {
     TValue key;
     setivalue(&key, n);
+    bool armed = armk(L, ctx, k, APIK_PUSH);
     tag = luaV_finishget(L, &t, &key, L->top, tag, NOSLOT);
+    disarmk(L, armed);
   }
   else
     setslot(L, L->top, &res);
   api_incr_top(L);
   lua_unlock(L);
   return novariant(tag);
+}
+
+int lua_geti(lua_State* L, int idx, lua_Integer n)
+{
+  return auxgeti(L, idx, n, 0, nullptr);
 }
 
 static int finishrawget(lua_State* L, lu_byte tag)
@@ -1118,7 +1183,8 @@ int lua_getiuservalue(lua_State* L, int idx, int n)
 /*
 ** t[k] = value at the top of the stack (where 'k' is a string)
 */
-static void auxsetstr(lua_State* L, const TValue* t, byte_view k)
+static void auxsetstr(lua_State* L, const TValue* t, byte_view k,
+                      lua_KContext ctx = 0, lua_KFunction kf = nullptr)
 {
   int hres;
   TString* str = TString::luaS_createstr(L, k);
@@ -1142,7 +1208,9 @@ static void auxsetstr(lua_State* L, const TValue* t, byte_view k)
     api_incr_top(L);
     TValue key = getslot(L, L->top - 1);
     TValue val = getslot(L, L->top - 2);
+    bool armed = armk(L, ctx, kf, APIK_POP2);
     luaV_finishset(L, t, &key, &val, hres, NOSLOT);
+    disarmk(L, armed);
     L->top -= 2; /* pop value and key */
   }
   lua_unlock(L); /* lock done by caller */
@@ -1161,7 +1229,7 @@ void lua_setglobali(lua_State* L, byte_view name)
   auxsetstr(L, &gt, name);
 }
 
-void lua_settable(lua_State* L, int idx)
+static void auxsettable(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
   int hres;
   lua_lock(L);
@@ -1178,9 +1246,18 @@ void lua_settable(lua_State* L, int idx)
   if (hres == HOK)
     luaV_finishfastset(L, &t, &val);
   else
+  {
+    bool armed = armk(L, ctx, k, APIK_POP2);
     luaV_finishset(L, &t, &key, &val, hres, NOSLOT);
+    disarmk(L, armed);
+  }
   L->top -= 2; /* pop index and value */
   lua_unlock(L);
+}
+
+void lua_settable(lua_State* L, int idx)
+{
+  auxsettable(L, idx, 0, nullptr);
 }
 
 void lua_setfield(lua_State* L, int idx, const HostString& k)
@@ -1204,7 +1281,7 @@ void lua_setfieldi(lua_State* L, int idx, byte_view k)
   auxsetstr(L, &t, k);
 }
 
-void lua_seti(lua_State* L, int idx, lua_Integer n)
+static void auxseti(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k)
 {
   int hres;
   lua_lock(L);
@@ -1237,11 +1314,126 @@ void lua_seti(lua_State* L, int idx, lua_Integer n)
   {
     TValue temp;
     setivalue(&temp, n);
+    bool armed = armk(L, ctx, k, APIK_POP1);
     luaV_finishset(L, &t, &temp, &val, hres, NOSLOT);
+    disarmk(L, armed);
   }
   L->top--; /* pop value */
   lua_unlock(L);
 }
+
+void lua_seti(lua_State* L, int idx, lua_Integer n)
+{
+  auxseti(L, idx, n, 0, nullptr);
+}
+
+/*
+** {======================================================
+** Bulk work on plain tables, for the table library: tables with no
+** metatable, whose reads and writes call nothing ('lua_geti' and
+** 'lua_seti' do them the same way). A step of the budget each element;
+** the work stops after the element where the budget is spent (see
+** 'lua_spend').
+** =======================================================
+*/
+
+/* is the value at 'idx' a table with no metatable? */
+int lua_isplaintable(lua_State* L, int idx)
+{
+  TValue o = index2val(L, idx);
+  return ttistable(&o) && hvalue(&o)->metatable == nullptr;
+}
+
+/* t[n], as 'lua_geti' reads a table with no metatable */
+static void plaingeti(Table* h, lua_Integer n, TValue* res)
+{
+  lua_Integer u = l_intsub(n, 1);
+  lu_byte tag;
+  if (l_ult(u, h->asize()))
+  {
+    tag = getArrTag(h, u);
+    if (!tagisempty(tag))
+      farr2val(h, u, tag, res);
+  }
+  else
+    tag = h->luaH_getint(n, res);
+  if (tagisempty(tag))
+    setnilvalue(res);
+}
+
+/* t[n] = val, as 'lua_seti' writes a table with no metatable */
+static void plainseti(lua_State* L, const TValue* t, lua_Integer n, TValue* val)
+{
+  Table* h = hvalue(t);
+  int hres;
+  lua_Integer u = l_intsub(n, 1);
+  if (l_ult(u, h->asize()))
+  {
+    fval2arr(h, u, val); /* (no '__newindex') */
+    hres = HOK;
+  }
+  else
+    hres = h->luaH_psetint(n, val);
+  if (hres == HOK)
+    luaV_finishfastset(L, t, val);
+  else
+  {
+    TValue key;
+    setivalue(&key, n);
+    luaV_finishset(L, t, &key, val, hres, NOSLOT);
+  }
+}
+
+/* pushes t[i], t[i + 1], ... (at most 'n'); returns how many */
+int lua_plaingetrange(lua_State* L, int idx, lua_Integer i, int n)
+{
+  lua_lock(L);
+  TValue t = index2val(L, idx);
+  assert(ttistable(&t) && hvalue(&t)->metatable == nullptr);
+  assert(n <= L->stack_last - L->top && "stack overflow");
+  int k = 0;
+  while (k < n)
+  {
+    TValue v;
+    plaingeti(hvalue(&t), i + k, &v);
+    setslot(L, L->top, &v);
+    L->top++;
+    k++;
+    if (luaE_spent(L, 1))
+      break;
+  }
+  lua_unlock(L);
+  return k;
+}
+
+/*
+** t2[d + k] = t1[s + k], for 'k' from 0 up to 'n' - 1 ('up') or from
+** 'n' - 1 down to 0; returns how many it moved.
+*/
+lua_Integer lua_plainmove(lua_State* L, int idx1, lua_Integer s, int idx2, lua_Integer d,
+                          lua_Integer n, int up)
+{
+  lua_lock(L);
+  TValue t1 = index2val(L, idx1);
+  TValue t2 = index2val(L, idx2);
+  assert(ttistable(&t1) && hvalue(&t1)->metatable == nullptr);
+  assert(ttistable(&t2) && hvalue(&t2)->metatable == nullptr);
+  lua_Integer k = 0;
+  while (k < n)
+  {
+    lua_Integer off = up ? k : n - 1 - k;
+    TValue v;
+    plaingeti(hvalue(&t1), s + off, &v);
+    plainseti(L, &t2, d + off, &v);
+    k++;
+    if (luaE_spent(L, 1))
+      break;
+  }
+  lua_unlock(L);
+  return k;
+}
+
+/* }====================================================== */
 
 static void aux_rawset(lua_State* L, int idx, TValue* key, int n)
 {
@@ -1405,10 +1597,51 @@ static void hostfrozen(lua_State* L, lu_byte kind, StkId func, int nresults,
 }
 
 /*
+** The calls with continuations of the running C function freeze but do
+** not yield: what it calls stays as non-yieldable as in a function without
+** continuations, while a freeze passes through and the continuation goes
+** on after the thaw.
+*/
+void lua_freezeonly(lua_State* L)
+{
+  assert(!isLua(L->ci) && L->ci != &L->base_ci);
+  luaE_freezeonly(L);
+}
+
+/*
+** C work: 'n' steps of the budget. Returns true when the budget is spent:
+** the running C function then calls 'lua_checkpointk' where it can go on
+** after a freeze (or leaves the callback to the next budget point).
+*/
+int lua_spend(lua_State* L, int n)
+{
+  return luaE_spent(L, n);
+}
+
+/*
+** A check point of the running C function, where the budget is spent:
+** the budget callback runs, and when it freezes the thread, the function
+** goes on in 'k' after the thaw (with status LUA_YIELD and 'ctx'), as
+** from a call.
+*/
+void lua_checkpointk(lua_State* L, lua_KContext ctx, lua_KFunction k)
+{
+  lua_lock(L);
+  CallInfo* ci = L->ci;
+  assert(!isLua(ci) && ci != &L->base_ci && k != nullptr);
+  ci->k = k;
+  ci->ctx = ctx;
+  lua_State* co = luaD_budget(L);
+  if (co != nullptr)
+    luaD_freeze(L, co); /* ('finishCcall' goes on with 'k') */
+  lua_unlock(L);
+}
+
+/*
 ** Calls through C that may freeze: a call by the host (from the base level)
 ** ends a freeze; a call with a continuation lets a freeze pass through,
-** even where the thread cannot yield (CIST_NYCALL counts it); a call
-** without one cannot freeze.
+** even where it cannot yield (CIST_NYCALL counts it); a call without one
+** cannot freeze.
 */
 void lua_callk(lua_State* L, int nargs, int nresults,
                        lua_KContext ctx, lua_KFunction k)
@@ -1448,7 +1681,7 @@ void lua_callk(lua_State* L, int nargs, int nresults,
   {
     ci->k = k;     /* save continuation */
     ci->ctx = ctx; /* save context */
-    if (yieldable(L))
+    if (yieldablek(L, ci))
       luaD_call(L, func, nresults); /* do the call */
     else
     {
@@ -1461,81 +1694,66 @@ void lua_callk(lua_State* L, int nargs, int nresults,
   lua_unlock(L);
 }
 
-/*
-** API calls with continuations: while one runs, a metamethod it calls may
-** yield, and 'finishCcall' finishes the call as 'op' says (APIK_*) before
-** calling the continuation. Without a continuation, or where the thread
-** cannot yield, it is the plain call.
-*/
-static bool armk(lua_State* L, lua_KContext ctx, lua_KFunction k, lu_byte op)
-{
-  CallInfo* ci = L->ci;
-  assert((k == nullptr || !isLua(ci)) && "cannot use continuations inside hooks");
-  if (k == nullptr || !yieldable(L))
-    return false;
-  ci->k = k;
-  ci->ctx = ctx;
-  ci->apiop = op;
-  ci->callstatus |= CIST_APIK;
-  return true;
-}
-
-static void disarmk(lua_State* L, bool armed)
-{
-  if (armed)
-    L->ci->callstatus &= ~CIST_APIK;
-}
-
 int lua_gettablek(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
-  bool armed = armk(L, ctx, k, APIK_OVERKEY);
-  int t = lua_gettable(L, idx);
-  disarmk(L, armed);
-  return t;
+  return auxgettable(L, idx, ctx, k);
+}
+
+int lua_getfieldik(lua_State* L, int idx, byte_view key, lua_KContext ctx, lua_KFunction k)
+{
+  lua_lock(L);
+  TValue t = index2val(L, idx);
+  return auxgetstr(L, &t, key, ctx, k);
+}
+
+void lua_setfieldik(lua_State* L, int idx, byte_view key, lua_KContext ctx, lua_KFunction k)
+{
+  lua_lock(L); /* unlock done in 'auxsetstr' */
+  TValue t = index2val(L, idx);
+  auxsetstr(L, &t, key, ctx, k);
 }
 
 int lua_getfieldk(lua_State* L, int idx, const HostString& key, lua_KContext ctx, lua_KFunction k)
 {
-  bool armed = armk(L, ctx, k, APIK_OVERKEY);
-  int t = lua_getfield(L, idx, key);
-  disarmk(L, armed);
-  return t;
+  lua_lock(L);
+  TValue t = index2val(L, idx);
+  return auxgetstr(L, &t, key.to_utf8(), ctx, k);
 }
 
 int lua_getik(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k)
 {
-  bool armed = armk(L, ctx, k, APIK_PUSH);
-  int t = lua_geti(L, idx, n);
-  disarmk(L, armed);
-  return t;
+  return auxgeti(L, idx, n, ctx, k);
 }
 
 void lua_settablek(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
-  bool armed = armk(L, ctx, k, APIK_POP2);
-  lua_settable(L, idx);
-  disarmk(L, armed);
+  auxsettable(L, idx, ctx, k);
 }
 
 void lua_setfieldk(lua_State* L, int idx, const HostString& key, lua_KContext ctx, lua_KFunction k)
 {
-  bool armed = armk(L, ctx, k, APIK_POP2);
-  lua_setfield(L, idx, key);
-  disarmk(L, armed);
+  lua_lock(L); /* unlock done in 'auxsetstr' */
+  TValue t = index2val(L, idx);
+  auxsetstr(L, &t, key.to_utf8(), ctx, k);
 }
 
 void lua_setik(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k)
 {
-  bool armed = armk(L, ctx, k, APIK_POP1);
-  lua_seti(L, idx, n);
-  disarmk(L, armed);
+  auxseti(L, idx, n, ctx, k);
 }
 
 int lua_comparek(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua_KFunction k)
 {
   idx1 = lua_absindex(L, idx1);
   idx2 = lua_absindex(L, idx2);
-  bool armed = armk(L, ctx, k, APIK_BOOL);
+  TValue o1 = index2val(L, idx1);
+  TValue o2 = index2val(L, idx2);
+  bool mayrun; /* may it call a metamethod? */
+  if (op == LUA_OPEQ)
+    mayrun = ttype(&o1) == ttype(&o2) && (ttistable(&o1) || ttisfulluserdata(&o1));
+  else
+    mayrun = !((ttisnumber(&o1) && ttisnumber(&o2)) || (ttisstring(&o1) && ttisstring(&o2)));
+  bool armed = mayrun && armk(L, ctx, k, APIK_BOOL);
   int r = lua_compare(L, idx1, idx2, op);
   disarmk(L, armed);
   lua_pushboolean(L, r);
@@ -1544,7 +1762,9 @@ int lua_comparek(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua
 
 void lua_lenk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
-  bool armed = armk(L, ctx, k, APIK_PUSH);
+  TValue o = index2val(L, idx);
+  bool mayrun = !(ttisstring(&o) || (ttistable(&o) && hvalue(&o)->metatable == nullptr));
+  bool armed = mayrun && armk(L, ctx, k, APIK_PUSH);
   lua_len(L, idx);
   disarmk(L, armed);
 }
@@ -1611,7 +1831,7 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     status = luaD_pcall(L, &c, c.func, func);
     L->nfz--;
   }
-  else if (!yieldable(L))
+  else if (!yieldablek(L, ci))
   { /* a 'conventional' protected call; a freeze passing through makes it
        one the thread recovers itself, as when it can yield */
     ci->k = k;     /* save continuation */

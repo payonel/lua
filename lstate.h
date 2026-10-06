@@ -165,6 +165,10 @@ constexpr l_uint32 CIST_FROZE = CIST_APIK << 1;
    in a thread that cannot yield): after a thaw, its end counts down the
    non-yieldable calls */
 constexpr l_uint32 CIST_NYCALL = CIST_FROZE << 1;
+/* C function whose calls with continuations can freeze but not yield, as
+   in a thread that cannot yield (a library function that keeps the
+   yieldability of stock Lua: see 'lua_freezeonly') */
+constexpr l_uint32 CIST_FZONLY = CIST_NYCALL << 1;
 
 /* the budget, in 'hookmask' (not a hook: the hook API never shows it) */
 constexpr int LUA_MASKBUDGET = 1 << 6;
@@ -622,7 +626,6 @@ static l_forceinline int completestate(global_State* g)
   return ttype(&g->nilvalue) == LUA_TNIL;
 }
 
-/* actual number of total memory allocated */
 /* spend 'n' steps of the budget, if there is one */
 static l_forceinline void luaE_spend(lua_State* L, l_mem n)
 {
@@ -630,6 +633,29 @@ static l_forceinline void luaE_spend(lua_State* L, l_mem n)
     L->l_G->budgetleft -= n;
 }
 
+/* C work of 'n' steps: true when the budget is spent (see 'lua_spend') */
+static l_forceinline bool luaE_spent(lua_State* L, l_mem n)
+{
+  if (!(L->hookmask & LUA_MASKBUDGET))
+    return false;
+  global_State* g = L->l_G;
+  g->budgetleft -= n;
+  return g->budgetleft <= 0;
+}
+
+/* is the budget spent? */
+static l_forceinline bool luaE_budgetout(lua_State* L)
+{
+  return (L->hookmask & LUA_MASKBUDGET) && L->l_G->budgetleft <= 0;
+}
+
+/* see 'lua_freezeonly' */
+static l_forceinline void luaE_freezeonly(lua_State* L)
+{
+  L->ci->callstatus |= CIST_FZONLY;
+}
+
+/* actual number of total memory allocated */
 static l_forceinline l_mem gettotalbytes(global_State* g)
 {
   return g->GCtotalbytes - g->GCdebt;

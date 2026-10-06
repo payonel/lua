@@ -14,6 +14,7 @@
 
 #include "lua_internal.h"
 #include "lobject.h"
+#include "lstate.h"
 #include "os_api.h"
 
 #include "lauxlib.h"
@@ -25,21 +26,42 @@
 namespace lua::lib
 {
 
-static int luaB_print(lua_State* L)
+/*
+** Prints argument 'i', whose string is on the top, and the arguments
+** after it. (The continuation of '__tostring' calls: 'i' in 'ctx'.)
+*/
+static int printk(lua_State* L, int status, lua_KContext ctx)
 {
-  int n = lua_gettop(L); /* number of arguments */
-  int i;
-  for (i = 1; i <= n; i++)
-  { /* for each argument */
-    const InternalString* s = luaL_toistring(L, i); /* convert it to string */
-    if (i > 1)                                      /* not the first element? */
-      os_print_stdout(lt::t);          /* add a tab before it */
+  (void)status;
+  int n = lua_gettop(L) - 1; /* number of arguments (below the string) */
+  int i = (int)ctx;
+  for (;;)
+  {
+    const InternalString* s = luaL_tostringresult(L);
+    if (i > 1)                /* not the first element? */
+      os_print_stdout(lt::t); /* add a tab before it */
     os_print_stdout(s->view());
-    lua_pop(L, 1);                                  /* pop result */
+    lua_pop(L, 1); /* pop result */
+    if (++i > n)
+      break;
+    luaL_toistringk(L, i, i, printk); /* convert it to string */
   }
   os_print_stdout(lt::n_3);
   os_flush_stdout();
   return 0;
+}
+
+static int luaB_print(lua_State* L)
+{
+  if (lua_gettop(L) == 0)
+  {
+    os_print_stdout(lt::n_3);
+    os_flush_stdout();
+    return 0;
+  }
+  luaE_freezeonly(L);
+  luaL_toistringk(L, 1, 1, printk); /* convert it to string */
+  return printk(L, LUA_OK, 1);
 }
 
 /*
@@ -335,12 +357,20 @@ static int luaB_pairs(lua_State* L)
 /*
 ** Traversal function for 'ipairs'
 */
+static int ipairsauxk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  return lua_isnil(L, -1) ? 1 : 2;
+}
+
 static int ipairsaux(lua_State* L)
 {
   lua_Integer i = luaL_checkinteger(L, 2);
   i = l_intadd(i, 1);
   lua_pushinteger(L, i);
-  return (lua_geti(L, 1, i) == LUA_TNIL) ? 1 : 2;
+  luaE_freezeonly(L);
+  return (lua_getik(L, 1, i, 0, ipairsauxk) == LUA_TNIL) ? 1 : 2;
 }
 
 /*
@@ -559,10 +589,20 @@ static int luaB_xpcall(lua_State* L)
   return finishpcall(L, status, 2);
 }
 
+static int tostringk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  luaL_tostringresult(L);
+  return 1;
+}
+
 static int luaB_tostring(lua_State* L)
 {
   luaL_checkany(L, 1);
-  luaL_toistring(L, 1);
+  luaE_freezeonly(L);
+  if (luaL_toistringk(L, 1, 0, tostringk))
+    luaL_tostringresult(L);
   return 1;
 }
 

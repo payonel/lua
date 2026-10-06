@@ -376,10 +376,11 @@ void luaD_hook(lua_State* L, int event, int line,
 */
 
 /*
-** Call the budget callback: the budget is spent, at an instruction of 'L'
-** (the running thread). The callback runs with no hooks and no budget
-** (and hooks do not see it); the budget refills after it. Returns the
-** coroutine the callback asked to freeze, if any.
+** Call the budget callback: the budget is spent, at a budget point of 'L'
+** (the running thread: an instruction, or a check point of C work). The
+** callback runs with no hooks and no budget (and hooks do not see it); the
+** budget refills after it. Returns the coroutine the callback asked to
+** freeze, if any.
 */
 lua_State* luaD_budget(lua_State* L)
 {
@@ -846,7 +847,10 @@ static void finishapik(lua_State* L, CallInfo* ci)
     StkId top = L->top - 1;        /* top when the metamethod was called */
     copyslot(L, top - 2, top);     /* its result, over its first operand */
     L->top = top - 1;
+    if (!yieldable(L) || (ci->callstatus & CIST_FZONLY))
+      ci->callstatus |= CIST_NYCALL; /* (its next metamethods, as in 'armk') */
     luaV_concat(L, static_cast<int>(L->top - ci->apifirst)); /* may yield again */
+    ci->callstatus &= ~CIST_NYCALL;
     luaC_checkGC(L);
     break;
   }

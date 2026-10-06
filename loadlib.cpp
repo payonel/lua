@@ -20,6 +20,7 @@
 #include "llimits.h"
 #include "lua_internal.h"
 #include "lobject.h"
+#include "lstate.h"
 #include "os_api.h"
 #include "lualib.h"
 #include "literals.h"
@@ -339,9 +340,13 @@ static int ll_searchpath(lua_State* L)
   }
 }
 
+/*
+** The searchers read 'package.path' or 'package.cpath', which may call
+** back ('__index' of 'package'), with a continuation: their work goes on
+** from the value read (on the top), with the name at 1.
+*/
 static int findfile(lua_State* L, byte_view name, byte_view pname, byte_view dirsep)
 {
-  lua_getfieldi(L, lua_upvalueindex(1), pname);
   if (l_unlikely(!lua_isstring(L, -1)))
   {
     lua_pushlstring(L, pname, 0, pname.size());
@@ -367,14 +372,24 @@ static int checkload(lua_State* L, int stat, byte_view filename)
   }
 }
 
-static int searcher_Lua(lua_State* L)
+/* (with 'package.path' read) */
+static int searcher_Luak(lua_State* L, int status, lua_KContext ctx)
 {
+  (void)status;
+  (void)ctx;
   byte_view name = luaL_checklstring(L, 1);
   if (!findfile(L, name, lt::path, lt::LUA_DIRSEP))
     return 1;
-
   byte_view filename = lua_toistring(L, -1)->view();
   return checkload(L, luaL_loadfilei(L, filename, std::nullopt) == LUA_OK, filename);
+}
+
+static int searcher_Lua(lua_State* L)
+{
+  luaL_checklstring(L, 1);
+  luaE_freezeonly(L);
+  lua_getfieldik(L, lua_upvalueindex(1), lt::path, 0, searcher_Luak);
+  return searcher_Luak(L, LUA_OK, 0);
 }
 
 /*
@@ -406,8 +421,11 @@ static int loadfunc(lua_State* L, byte_view filename, byte_view modname0)
   return lookforfunc(L, filename, openfunc->view());
 }
 
-static int searcher_C(lua_State* L)
+/* (with 'package.cpath' read) */
+static int searcher_Ck(lua_State* L, int status, lua_KContext ctx)
 {
+  (void)status;
+  (void)ctx;
   byte_view name = luaL_checklstring(L, 1);
   if (!findfile(L, name, lt::cpath, lt::LUA_DIRSEP))
     return 1;
@@ -415,14 +433,22 @@ static int searcher_C(lua_State* L)
   return checkload(L, loadfunc(L, filename->view(), name) == 0, filename->view());
 }
 
-static int searcher_Croot(lua_State* L)
+static int searcher_C(lua_State* L)
 {
+  luaL_checklstring(L, 1);
+  luaE_freezeonly(L);
+  lua_getfieldik(L, lua_upvalueindex(1), lt::cpath, 0, searcher_Ck);
+  return searcher_Ck(L, LUA_OK, 0);
+}
+
+/* (with 'package.cpath' read) */
+static int searcher_Crootk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
   byte_view name = luaL_checklstring(L, 1);
-  size_t p = name.find('.');
+  byte_view prefix = name.substr(0, name.find('.'));
   int stat;
-  if (p == byte_view::npos)
-    return 0; /* is root */
-  byte_view prefix = name.substr(0, p);
   if (!findfile(L, prefix, lt::cpath, lt::LUA_DIRSEP))
     return 1;
   const InternalString* filename = lua_toistring(L, -1);
@@ -442,11 +468,24 @@ static int searcher_Croot(lua_State* L)
   return 2;
 }
 
-static int searcher_preload(lua_State* L)
+static int searcher_Croot(lua_State* L)
 {
   byte_view name = luaL_checklstring(L, 1);
-  lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE);
-  if (lua_getfieldi(L, -1, name) == LUA_TNIL)
+  if (name.find('.') == byte_view::npos)
+    return 0; /* is root */
+  luaE_freezeonly(L);
+  lua_getfieldik(L, lua_upvalueindex(1), lt::cpath, 0, searcher_Crootk);
+  return searcher_Crootk(L, LUA_OK, 0);
+}
+
+/* (with the preload table read: 'ctx' 1; with its field: 2) */
+static int searcher_preloadk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  byte_view name = luaL_checklstring(L, 1);
+  if (ctx == 1)
+    lua_getfieldik(L, -1, name, 2, searcher_preloadk);
+  if (lua_isnil(L, -1))
   { /* not found? */
     lua_pushlstring(L, name, 0, name.size());
     lua_pushfstringi(L, lt::no_field_package_preload_s);
@@ -459,18 +498,117 @@ static int searcher_preload(lua_State* L)
   }
 }
 
-static void findloader(lua_State* L, byte_view name)
+static int searcher_preload(lua_State* L)
 {
-  int i;
+  luaL_checklstring(L, 1);
+  luaE_freezeonly(L);
+  lua_getfieldik(L, LUA_REGISTRYINDEX, LUA_PRELOAD_TABLE, 1, searcher_preloadk);
+  return searcher_preloadk(L, LUA_OK, 1);
+}
+
+/*
+** 'require' calls back (the searchers, the loader, and the metamethods of
+** 'package', 'package.loaded' and the registry), each with a
+** continuation that goes on at a step of it ('REQ_*', with the searcher
+** being tried). The name is at 1, LOADED at 2; while it looks for a
+** loader, 'package.searchers' is at 3 and a box with the error message
+** at 4.
+*/
+enum
+{
+  REQ_LOADED,    /* LOADED read */
+  REQ_GOT,       /* LOADED[name] read */
+  REQ_SEARCHERS, /* 'package.searchers' read */
+  REQ_SEARCHED,  /* a searcher returned */
+  REQ_LOADER,    /* the loader returned */
+  REQ_SET,       /* LOADED[name] set to the loader's result */
+  REQ_RESULT,    /* LOADED[name] read again */
+  REQ_DONE       /* LOADED[name] set to true */
+};
+
+static int ll_requirek(lua_State* L, int status, lua_KContext ctx);
+
+/* (the continuation context: the step, and the searcher) */
+static lua_KContext reqctx(int step, lua_Integer i)
+{
+  return (lua_KContext)(i * 8 + step);
+}
+
+static int require_from(lua_State* L, int step, lua_Integer i)
+{
+  byte_view name = luaL_checklstring(L, 1);
   luaL_Buffer msg; /* to build error message */
-  /* push 'package.searchers' to index 3 in the stack */
-  if (l_unlikely(lua_getfieldi(L, lua_upvalueindex(1), lt::searchers) != LUA_TTABLE))
-    luaL_errori(L, lt::package_searchers_must_be_a_table);
   luaL_buffinit(L, &msg);
-  luaL_addlstring(&msg, lt::n_t, 0, lt::n_t.size()); /* error-message prefix for first message */
-  /*  iterate over available searchers to find a loader */
-  for (i = 1;; i++)
+  for (;;)
   {
+    switch (step)
+    {
+    case REQ_LOADED:
+      lua_getfieldik(L, 2, name, reqctx(REQ_GOT, 0), ll_requirek); /* LOADED[name] */
+      [[fallthrough]];
+    case REQ_GOT:
+      if (lua_toboolean(L, -1)) /* is it there? */
+        return 1;               /* package is already loaded */
+      /* else must load package */
+      lua_pop(L, 1); /* remove 'getfield' result */
+      /* push 'package.searchers' to index 3 in the stack */
+      lua_getfieldik(L, lua_upvalueindex(1), lt::searchers, reqctx(REQ_SEARCHERS, 0), ll_requirek);
+      [[fallthrough]];
+    case REQ_SEARCHERS:
+    {
+      if (l_unlikely(lua_type(L, 3) != LUA_TTABLE))
+        luaL_errori(L, lt::package_searchers_must_be_a_table);
+      luaL_newbox(L); /* at 4 */
+      luaL_addlstring(&msg, lt::n_t, 0, lt::n_t.size()); /* error-message prefix for first message */
+      i = 1;
+      break; /* iterate over available searchers to find a loader */
+    }
+    case REQ_SEARCHED:
+      luaL_buffload(&msg, luaL_tobox(L, 4));
+      if (lua_isfunction(L, -2)) /* did it find a loader? */
+      {                          /* module loader found */
+        lua_remove(L, 4);        /* (the box) */
+        lua_rotate(L, -2, 1); /* function <-> loader data */
+        lua_pushvalue(L, 1);  /* name is 1st argument to module loader */
+        lua_pushvalue(L, -3); /* loader data is 2nd argument */
+        /* stack: ...; loader data; loader function; mod. name; loader data */
+        lua_callk(L, 2, 1, reqctx(REQ_LOADER, 0), ll_requirek); /* run loader to load module */
+        step = REQ_LOADER;
+        continue;
+      }
+      else if (lua_isstring(L, -2))
+      {                               /* searcher returned error message? */
+        lua_pop(L, 1);                /* remove extra return */
+        luaL_addvalue(&msg);          /* concatenate error message */
+        luaL_addlstring(&msg, lt::n_t, 0, lt::n_t.size()); /* prefix for next message */
+      }
+      else             /* no error message */
+        lua_pop(L, 2); /* remove both returns */
+      i++;
+      break;
+    case REQ_LOADER:
+      /* stack: ...; loader data; result from loader */
+      if (!lua_isnil(L, -1)) /* non-nil return? */
+        lua_setfieldik(L, 2, name, reqctx(REQ_SET, 0), ll_requirek); /* LOADED[name] = returned value */
+      else
+        lua_pop(L, 1); /* pop nil */
+      [[fallthrough]];
+    case REQ_SET:
+      lua_getfieldik(L, 2, name, reqctx(REQ_RESULT, 0), ll_requirek);
+      [[fallthrough]];
+    case REQ_RESULT:
+      if (lua_isnil(L, -1))
+      {                        /* module set no value? */
+        lua_pushboolean(L, 1); /* use true as result */
+        lua_copy(L, -1, -2);   /* replace loader result */
+        lua_setfieldik(L, 2, name, reqctx(REQ_DONE, 0), ll_requirek); /* LOADED[name] = true */
+      }
+      [[fallthrough]];
+    default: /* REQ_DONE */
+      lua_rotate(L, -2, 1); /* loader data <-> module result  */
+      return 2;             /* return module result and loader data */
+    }
+    /* try searcher 'i' */
     if (l_unlikely(lua_rawgeti(L, 3, i) == LUA_TNIL))
     {                        /* no more searchers? */
       lua_pop(L, 1);         /* remove nil */
@@ -481,49 +619,25 @@ static void findloader(lua_State* L, byte_view name)
       luaL_errori(L, lt::module_s_not_found_s);
     }
     lua_pushlstring(L, name, 0, name.size());
-    lua_call(L, 1, 2);         /* call it */
-    if (lua_isfunction(L, -2)) /* did it find a loader? */
-      return;                  /* module loader found */
-    else if (lua_isstring(L, -2))
-    {                               /* searcher returned error message? */
-      lua_pop(L, 1);                /* remove extra return */
-      luaL_addvalue(&msg);          /* concatenate error message */
-      luaL_addlstring(&msg, lt::n_t, 0, lt::n_t.size()); /* prefix for next message */
-    }
-    else             /* no error message */
-      lua_pop(L, 2); /* remove both returns */
+    luaL_buffsave(&msg, luaL_tobox(L, 4));
+    lua_callk(L, 1, 2, reqctx(REQ_SEARCHED, i), ll_requirek); /* call it */
+    step = REQ_SEARCHED;
   }
+}
+
+static int ll_requirek(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  return require_from(L, (int)(ctx % 8), (lua_Integer)(ctx / 8));
 }
 
 static int ll_require(lua_State* L)
 {
-  byte_view name = luaL_checklstring(L, 1);
+  luaL_checklstring(L, 1);
   lua_settop(L, 1); /* LOADED table will be at index 2 */
-  lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
-  lua_getfieldi(L, 2, name); /* LOADED[name] */
-  if (lua_toboolean(L, -1)) /* is it there? */
-    return 1;               /* package is already loaded */
-  /* else must load package */
-  lua_pop(L, 1); /* remove 'getfield' result */
-  findloader(L, name);
-  lua_rotate(L, -2, 1); /* function <-> loader data */
-  lua_pushvalue(L, 1);  /* name is 1st argument to module loader */
-  lua_pushvalue(L, -3); /* loader data is 2nd argument */
-  /* stack: ...; loader data; loader function; mod. name; loader data */
-  lua_call(L, 2, 1); /* run loader to load module */
-  /* stack: ...; loader data; result from loader */
-  if (!lua_isnil(L, -1))       /* non-nil return? */
-    lua_setfieldi(L, 2, name); /* LOADED[name] = returned value */
-  else
-    lua_pop(L, 1); /* pop nil */
-  if (lua_getfieldi(L, 2, name) == LUA_TNIL)
-  {                            /* module set no value? */
-    lua_pushboolean(L, 1);     /* use true as result */
-    lua_copy(L, -1, -2);       /* replace loader result */
-    lua_setfieldi(L, 2, name); /* LOADED[name] = true */
-  }
-  lua_rotate(L, -2, 1); /* loader data <-> module result  */
-  return 2;             /* return module result and loader data */
+  luaE_freezeonly(L);
+  lua_getfieldik(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE, reqctx(REQ_LOADED, 0), ll_requirek);
+  return require_from(L, REQ_LOADED, 0);
 }
 
 /* }====================================================== */

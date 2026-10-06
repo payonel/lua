@@ -5211,6 +5211,22 @@ static int fz_pcallk(lua_State* L)
   return 3;
 }
 
+/* reads t[k] with a continuation: the value, and whether it went on in
+   the continuation */
+static int fz_getik_cont(lua_State* L, int status, lua_KContext ctx)
+{
+  CHECK(status == LUA_YIELD && ctx == 55);
+  lua_pushboolean(L, 1);
+  return 2;
+}
+
+static int fz_getik(lua_State* L)
+{
+  lua_getik(L, 1, lua_tointeger(L, 2), 55, fz_getik_cont);
+  lua_pushboolean(L, 0);
+  return 2;
+}
+
 static void test_freeze()
 {
   lua_State* L = new_state();
@@ -5221,6 +5237,8 @@ static void test_freeze()
   lua_setglobal(L, "call");
   lua_pushcfunction(L, fz_pcallk);
   lua_setglobal(L, "pcallk");
+  lua_pushcfunction(L, fz_getik);
+  lua_setglobal(L, "getik");
   int st = luaL_dostring(L, R"(
     function sum(n) local s = 0 for i = 1, n do s = s + i * 3 % 7 end return s end
     function ccalls(n) local ty, s = type, 0 for i = 1, n do if ty(i) == "number" then s = s + 1 end end return s end
@@ -5237,6 +5255,25 @@ static void test_freeze()
     function viapcallk(n)
       local ok, v, st = pcallk(late, n)
       return tostring(ok) .. " " .. tostring(v) .. " " .. tostring(st) .. " " .. tostring(coroutine.isyieldable())
+    end
+    proxy = setmetatable({}, {__index = function(t, k)
+      inyield = coroutine.isyieldable()
+      return k * 1000 + sum(20)
+    end})
+    function viagetik(k) local v, thawed = getik(proxy, k) return v, thawed end
+    function libwork()
+      local t = {5, 3, 9, 1, 7, 2}
+      table.sort(t, function(a, b) local x = sum(3) return a < b end)
+      local g = string.gsub("abc", "%w", function(c) return c:upper() .. sum(2) end)
+      local s = tostring(setmetatable({}, {__tostring = function() return "T" .. sum(2) end}))
+      local p = setmetatable({}, {__index = function(_, i) if i <= 3 then return i * sum(1) end end})
+      local n = 0
+      for _, v in ipairs(p) do n = n + v end
+      local c = table.concat(setmetatable({}, {__index = function(_, i) return tostring(i * sum(1)) end,
+                                               __len = function() return 4 end}), "-")
+      local f = string.format("%s|%5s", s, setmetatable({}, {__tostring = function() return "F" end}))
+      return table.concat(t, ",") .. "|" .. g .. "|" .. f .. "|" .. n .. "|" .. c .. "|" ..
+             tostring(coroutine.isyieldable())
     end
   )");
   CHECK(st == LUA_OK);
@@ -5406,6 +5443,66 @@ static void test_freeze()
   /* (after a thaw, the continuation finishes the call: status LUA_ERRRUN) */
   CHECK(pthawed.substr(0, pthawed.find(" 2 false")) == pplain.substr(0, pplain.find(" -1 false")));
   CHECK(pthawed.rfind("false late ", 0) == 0 && pthawed.find(" 2 false") != std::string::npos);
+  lua_settop(L, 0);
+
+  /* an API call with a continuation where the thread cannot yield: its
+     metamethod freezes, cannot yield, and the continuation goes on */
+  fz_reset(L, 0, nullptr, 0, false);
+  lua_getglobal(L, "viagetik");
+  lua_pushinteger(L, 7);
+  CHECK(lua_pcall(L, 1, 2, 0) == LUA_OK);
+  lua_Integer gplain = lua_tointeger(L, 1);
+  CHECK(gplain > 7000 && lua_toboolean(L, 2) == 0);
+  lua_settop(L, 0);
+  fz_reset(L, 3, L, 1, true);
+  lua_getglobal(L, "viagetik");
+  lua_pushinteger(L, 7);
+  CHECK(lua_pcall(L, 1, 2, 0) == LUA_OK);
+  CHECK(lua_isfrozen(L));
+  while (lua_isfrozen(L))
+    lua_thaw(L, nullptr);
+  CHECK(lua_gettop(L) == 2 && lua_tointeger(L, 1) == gplain && lua_toboolean(L, 2) == 1);
+  lua_getglobal(L, "inyield");
+  CHECK(lua_isboolean(L, -1) && lua_toboolean(L, -1) == 0);
+  lua_settop(L, 0);
+
+  /* library functions that call back, in the main thread (it cannot
+     yield): frozen at each budget point, and at all of them, they end as a
+     plain run does */
+  fz_reset(L, 0, nullptr, 0, false);
+  lua_getglobal(L, "libwork");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  std::string lplain = fz_str(L, -1);
+  lua_settop(L, 0);
+  CHECK(lplain == "1,2,3,5,7,9|A9B9C9|T9|    F|18|3-6-9-12|false"); /* (as stock Lua) */
+  fz_reset(L, 1, nullptr, 0, false);
+  lua_getglobal(L, "libwork");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  lua_settop(L, 0);
+  int lpoints = fz_calls;
+  CHECK(lpoints > 100);
+  int lfroze = 0;
+  for (int at = 1; at <= lpoints; at++)
+  {
+    fz_reset(L, 1, L, at, false);
+    lua_getglobal(L, "libwork");
+    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+    if (lua_isfrozen(L))
+      lfroze++;
+    while (lua_isfrozen(L))
+      lua_thaw(L, nullptr);
+    CHECK(lua_gettop(L) == 1 && fz_str(L, 1) == lplain);
+    CHECK(fz_refusals == 0);
+    lua_settop(L, 0);
+  }
+  CHECK(lfroze == lpoints);
+  fz_reset(L, 1, L, 1, true);
+  lua_getglobal(L, "libwork");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  while (lua_isfrozen(L))
+    lua_thaw(L, nullptr);
+  CHECK(lua_gettop(L) == 1 && fz_str(L, 1) == lplain);
+  CHECK(fz_refusals == 0 && fz_freezes > 100);
   lua_settop(L, 0);
 
   /* an error after a thaw that nothing catches: as 'lua_pcall' reports it */

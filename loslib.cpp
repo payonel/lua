@@ -150,17 +150,13 @@ static void setallfields(lua_State* L, const OsDate* stm)
   setboolfield(L, lt::isdst, stm->isdst);
 }
 
-static int getboolfield(lua_State* L, byte_view key)
+/*
+** The value of field 'key' just read (on the top), as an integer for a
+** date ('d' when absent, -1: no default), checked; it replaces the value.
+*/
+static int checkfield(lua_State* L, byte_view key, int d, int delta)
 {
-  int res;
-  res = (lua_getfieldi(L, -1, key) == LUA_TNIL) ? -1 : lua_toboolean(L, -1);
-  lua_pop(L, 1);
-  return res;
-}
-
-static int getfield(lua_State* L, byte_view key, int d, int delta)
-{
-  int t = lua_getfieldi(L, -1, key); /* get field and its type */
+  int t = lua_type(L, -1);
   std::optional<lua_Integer> ores = lua_tointegerx(L, -1);
   lua_Integer res = ores.value_or(0);
   if (!ores)
@@ -187,6 +183,7 @@ static int getfield(lua_State* L, byte_view key, int d, int delta)
     res -= delta;
   }
   lua_pop(L, 1);
+  lua_pushinteger(L, res);
   return (int) res;
 }
 
@@ -267,30 +264,120 @@ static int os_date(lua_State* L)
   return 1;
 }
 
+/*
+** 'os.time' with a table, which may call back ('__index', '__newindex'):
+** the table at 1, then the fields read, as integers (2 to 8), then the
+** normalized fields to write (2 to 10, with the result at 11, nil if it
+** cannot be represented). 'step' says where it goes on: reading field
+** 'step' (0 to 6), or writing field 'step - 7' (0 to 8).
+*/
+struct TimeField
+{
+  byte_view key;
+  int d;     /* default (-1: none) */
+  int delta; /* (an offset for reads and writes) */
+};
+
+static const TimeField timeread[] = {
+  {lt::year, -1, 1900}, {lt::month, -1, 1}, {lt::day, -1, 0},
+  {lt::hour, 12, 0}, {lt::min, 0, 0}, {lt::sec, 0, 0}};
+
+static const byte_view timewrite[] = {
+  lt::year, lt::month, lt::day, lt::hour, lt::min, lt::sec, lt::yday, lt::wday, lt::isdst};
+
+constexpr int TIME_NREAD = 7;  /* the six fields, and 'isdst' */
+constexpr int TIME_NWRITE = 9;
+
+static int os_timek(lua_State* L, int status, lua_KContext ctx);
+
+/* the field read at 'step' (on the top): check it */
+static void timeread_done(lua_State* L, int step)
+{
+  if (step < TIME_NREAD - 1)
+    checkfield(L, timeread[step].key, timeread[step].d, timeread[step].delta);
+  else
+  { /* 'isdst' */
+    int res = lua_isnil(L, -1) ? -1 : lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    lua_pushinteger(L, res);
+  }
+}
+
+static int os_time_from(lua_State* L, int step)
+{
+  for (; step < TIME_NREAD; step++)
+  {
+    byte_view key = (step < TIME_NREAD - 1) ? timeread[step].key : lt::isdst;
+    lua_getfieldik(L, 1, key, step, os_timek);
+    timeread_done(L, step);
+  }
+  if (step == TIME_NREAD)
+  { /* all read: normalize them */
+    OsDate ts = {};
+    ts.year = (int)lua_tointeger(L, 2);
+    ts.month = (int)lua_tointeger(L, 3);
+    ts.day = (int)lua_tointeger(L, 4);
+    ts.hour = (int)lua_tointeger(L, 5);
+    ts.min = (int)lua_tointeger(L, 6);
+    ts.sec = (int)lua_tointeger(L, 7);
+    ts.isdst = (int)lua_tointeger(L, 8);
+    std::optional<lua_Integer> t = os_mktime(&ts);
+    lua_settop(L, 1);
+    lua_pushinteger(L, (lua_Integer)ts.year + 1900);
+    lua_pushinteger(L, (lua_Integer)ts.month + 1);
+    lua_pushinteger(L, (lua_Integer)ts.day);
+    lua_pushinteger(L, (lua_Integer)ts.hour);
+    lua_pushinteger(L, (lua_Integer)ts.min);
+    lua_pushinteger(L, (lua_Integer)ts.sec);
+    lua_pushinteger(L, (lua_Integer)ts.yday + 1);
+    lua_pushinteger(L, (lua_Integer)ts.wday + 1);
+    lua_pushinteger(L, ts.isdst);
+    if (t.has_value())
+      lua_pushinteger(L, *t);
+    else
+      lua_pushnil(L);
+  }
+  /* update fields with normalized values */
+  for (int w = step - TIME_NREAD; w < TIME_NWRITE; w++)
+  {
+    if (w == TIME_NWRITE - 1)
+    { /* 'isdst' */
+      int isdst = (int)lua_tointeger(L, 2 + w);
+      if (isdst < 0) /* undefined? */
+        break;       /* does not set field */
+      lua_pushboolean(L, isdst);
+    }
+    else
+      lua_pushvalue(L, 2 + w);
+    lua_setfieldik(L, 1, timewrite[w], TIME_NREAD + w + 1, os_timek);
+  }
+  if (lua_isnil(L, 11))
+    return luaL_errori(L, lt::time_result_cannot_be_represented_in_this_installation);
+  lua_pushvalue(L, 11);
+  return 1;
+}
+
+/* 'os.time' goes on after a field read or written */
+static int os_timek(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  int step = (int)ctx;
+  if (step < TIME_NREAD)
+    timeread_done(L, step++);
+  return os_time_from(L, step);
+}
+
 static int os_time(lua_State* L)
 {
-  std::optional<lua_Integer> t;
-  if (lua_isnoneornil(L, 1)) /* called without args? */
-    t = os_now();          /* get current time */
-  else
-  {
-    OsDate ts = {};
-    luaL_checktype(L, 1, LUA_TTABLE);
-    lua_settop(L, 1); /* make sure table is at the top */
-    ts.year = getfield(L, lt::year, -1, 1900);
-    ts.month = getfield(L, lt::month, -1, 1);
-    ts.day = getfield(L, lt::day, -1, 0);
-    ts.hour = getfield(L, lt::hour, 12, 0);
-    ts.min = getfield(L, lt::min, 0, 0);
-    ts.sec = getfield(L, lt::sec, 0, 0);
-    ts.isdst = getboolfield(L, lt::isdst);
-    t = os_mktime(&ts);
-    setallfields(L, &ts); /* update fields with normalized values */
+  if (lua_isnoneornil(L, 1))
+  { /* called without args? */
+    lua_pushinteger(L, os_now()); /* get current time */
+    return 1;
   }
-  if (!t.has_value())
-    return luaL_errori(L, lt::time_result_cannot_be_represented_in_this_installation);
-  lua_pushinteger(L, *t);
-  return 1;
+  luaL_checktype(L, 1, LUA_TTABLE);
+  lua_settop(L, 1); /* make sure table is at the top */
+  luaE_freezeonly(L);
+  return os_time_from(L, 0);
 }
 
 static int os_difftime(lua_State* L)

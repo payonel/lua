@@ -23,6 +23,7 @@
 
 #include "lua_internal.h"
 #include "lobject.h"
+#include "lstate.h"
 
 #include "internal_string.h"
 #include "lauxlib.h"
@@ -296,6 +297,15 @@ static int tonum(lua_State* L, int arg)
 ** doesn't work, the only other option would be for the second
 ** operand to have a different metamethod.
 */
+/* (the other operand's metamethod returned) */
+static int arithk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)L;
+  (void)status;
+  (void)ctx;
+  return 1;
+}
+
 static void trymt(lua_State* L, byte_view mtkey, byte_view opname)
 {
   lua_settop(L, 2); /* back to the original arguments */
@@ -310,7 +320,8 @@ static void trymt(lua_State* L, byte_view mtkey, byte_view opname)
     luaL_errori(L, lt::attempt_to_s_a_s_with_a_s);
   }
   lua_insert(L, -3); /* put metamethod before arguments */
-  lua_call(L, 2, 1); /* call metamethod */
+  luaE_freezeonly(L);
+  lua_callk(L, 2, 1, 0, arithk); /* call metamethod */
 }
 
 static int arith(lua_State* L, int op, byte_view mtname)
@@ -1009,42 +1020,56 @@ static void add_s(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
 }
 
 /*
-** Add the replacement value to the string buffer 'b'.
-** Return true if the original string was changed. (Function calls and
-** table indexing resulting in nil or false do not change the subject.)
+** The arguments of 'gsub' and what follows from them (its continuation
+** gets them again).
 */
-static int add_value(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
-                     ptrdiff_t e, int tr)
+struct GsubArgs
 {
-  lua_State* L = ms->L;
-  switch (tr)
-  {
-  case LUA_TFUNCTION:
-  { /* call the function */
-    int n;
-    lua_pushvalue(L, 3);         /* push the function */
-    n = push_captures(ms, s, e); /* all captures as arguments */
-    lua_call(L, n, 1);           /* call it */
-    break;
-  }
-  case LUA_TTABLE:
-  {                               /* index the table */
-    push_onecapture(ms, 0, s, e); /* first capture is the index */
-    lua_gettable(L, 3);
-    break;
-  }
-  default:
-  {                     /* LUA_TNUMBER or LUA_TSTRING */
-    add_s(ms, b, s, e); /* add value to the buffer */
-    return 1;           /* something changed */
-  }
-  }
+  const InternalString* srcs; /* subject */
+  const InternalString* pat;  /* pattern */
+  int tr;                     /* replacement type */
+  lua_Integer max_s;          /* max replacements */
+  int anchor;
+  ptrdiff_t pinit; /* where the pattern starts (after an anchor) */
+};
+
+static GsubArgs gsubargs(lua_State* L)
+{
+  GsubArgs a;
+  a.srcs = luaL_checkistring(L, 1);
+  a.pat = luaL_checkistring(L, 2);
+  a.tr = lua_type(L, 3);
+  a.max_s = luaL_optinteger(L, 4, (lua_Integer)a.srcs->size() + 1);
+  a.anchor = (a.pat->size() > 0 && a.pat->byteAt(0) == '^');
+  a.pinit = a.anchor ? 1 : 0; /* skip anchor character */
+  return a;
+}
+
+/* where a 'gsub' calling its replacement keeps its state (box at 5) */
+enum
+{
+  GS_S,      /* the match: its start... */
+  GS_E,      /* ...and its end */
+  GS_N,      /* replacement count */
+  GS_CHANGED /* change flag before the match */
+};
+
+static int gsubk(lua_State* L, int status, lua_KContext ctx);
+
+/*
+** The replacement function or table gave the value on the top for the
+** match 's'..'e': add it to the string buffer 'b'. Return true if the
+** original string was changed. (Function calls and table indexing
+** resulting in nil or false do not change the subject.)
+*/
+static int add_result(lua_State* L, luaL_Buffer* b, const InternalString* src,
+                      ptrdiff_t s, ptrdiff_t e)
+{
   if (!lua_toboolean(L, -1))
   {                /* nil or false? */
     lua_pop(L, 1); /* remove value */
-    luaL_addlstring(b, ms->src->view(), s,
-                    e - s); /* keep original text */
-    return 0;                           /* no changes */
+    luaL_addlstring(b, src->view(), s, e - s); /* keep original text */
+    return 0;                                  /* no changes */
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
   {
@@ -1058,52 +1083,132 @@ static int add_value(MatchState* ms, luaL_Buffer* b, ptrdiff_t s,
   }
 }
 
-static int str_gsub(lua_State* L)
+/*
+** Add the replacement value to the string buffer 'b'. A replacement
+** function or table is called with the state in 'box', for 'gsubk' to go
+** on with after a freeze. Return true if the original string was changed.
+*/
+static int add_value(MatchState* ms, luaL_Buffer* b, luaL_Box* box, ptrdiff_t s,
+                     ptrdiff_t e, int tr, lua_Integer n, int changed)
 {
-  const InternalString* srcs = luaL_checkistring(L, 1); /* subject */
-  const InternalString* pat = luaL_checkistring(L, 2);  /* pattern */
-  size_t srcl = srcs->size();
-  size_t lp = pat->size();
-  ptrdiff_t src = 0;             /* current position */
-  ptrdiff_t lastmatch = NOMATCH; /* end of last match */
-  int tr = lua_type(L, 3);       /* replacement type */
-  /* max replacements */
-  lua_Integer max_s = luaL_optinteger(L, 4, (lua_Integer)srcl + 1);
-  int anchor = (lp > 0 && pat->byteAt(0) == '^');
-  ptrdiff_t pinit = anchor ? 1 : 0; /* skip anchor character */
-  lua_Integer n = 0;                /* replacement count */
-  int changed = 0;                  /* change flag */
-  MatchState ms;
-  luaL_Buffer b;
-  luaL_argexpectedi(L, tr == LUA_TNUMBER || tr == LUA_TSTRING || tr == LUA_TFUNCTION || tr == LUA_TTABLE, 3, lt::string_function_table);
-  luaL_buffinit(L, &b);
-  prepstate(&ms, L, srcs, pat);
-  while (n < max_s)
+  lua_State* L = ms->L;
+  switch (tr)
   {
-    ptrdiff_t e;
-    reprepstate(&ms); /* (re)prepare state for new match */
-    if ((e = match(&ms, src, pinit)) != NOMATCH && e != lastmatch)
-    { /* match? */
-      n++;
-      changed = add_value(&ms, &b, src, e, tr) || changed;
-      src = lastmatch = e;
-    }
-    else if (src < ms.src_end) /* otherwise, skip one character */
-      luaL_addchar(&b, (char)srcs->byteAt(src++));
-    else
-      break; /* end of subject */
-    if (anchor)
-      break;
+  case LUA_TFUNCTION:
+  { /* call the function */
+    lua_pushvalue(L, 3);            /* push the function */
+    int nargs = push_captures(ms, s, e); /* all captures as arguments */
+    box->ints[GS_S] = s;
+    box->ints[GS_E] = e;
+    box->ints[GS_N] = n;
+    box->ints[GS_CHANGED] = changed;
+    luaL_buffsave(b, box);
+    lua_callk(L, nargs, 1, 0, gsubk); /* call it */
+    luaL_buffload(b, box);
+    break;
   }
+  case LUA_TTABLE:
+  {                               /* index the table */
+    push_onecapture(ms, 0, s, e); /* first capture is the index */
+    if (box == nullptr)           /* (a table with no metatable: calls nothing) */
+      lua_gettable(L, 3);
+    else
+    {
+      box->ints[GS_S] = s;
+      box->ints[GS_E] = e;
+      box->ints[GS_N] = n;
+      box->ints[GS_CHANGED] = changed;
+      luaL_buffsave(b, box);
+      lua_gettablek(L, 3, 0, gsubk);
+      luaL_buffload(b, box);
+    }
+    break;
+  }
+  default:
+  {                     /* LUA_TNUMBER or LUA_TSTRING */
+    add_s(ms, b, s, e); /* add value to the buffer */
+    return 1;           /* something changed */
+  }
+  }
+  return add_result(L, b, ms->src, s, e);
+}
+
+static int gsub_end(lua_State* L, const GsubArgs& a, MatchState* ms, luaL_Buffer* b,
+                    ptrdiff_t src, lua_Integer n, int changed)
+{
   if (!changed)          /* no changes? */
     lua_pushvalue(L, 1); /* return original string */
   else
   { /* something changed */
-    luaL_addlstring(&b, srcs->view(), src, ms.src_end - src);
-    luaL_pushresult(&b); /* create and return new string */
+    luaL_addlstring(b, a.srcs->view(), src, ms->src_end - src);
+    luaL_pushresult(b); /* create and return new string */
   }
   lua_pushinteger(L, n); /* number of substitutions */
   return 2;
+}
+
+static int gsub_loop(lua_State* L, const GsubArgs& a, MatchState* ms, luaL_Buffer* b,
+                     luaL_Box* box, ptrdiff_t src, ptrdiff_t lastmatch,
+                     lua_Integer n, int changed)
+{
+  while (n < a.max_s)
+  {
+    ptrdiff_t e;
+    reprepstate(ms); /* (re)prepare state for new match */
+    if ((e = match(ms, src, a.pinit)) != NOMATCH && e != lastmatch)
+    { /* match? */
+      n++;
+      changed = add_value(ms, b, box, src, e, a.tr, n, changed) || changed;
+      src = lastmatch = e;
+    }
+    else if (src < ms->src_end) /* otherwise, skip one character */
+      luaL_addchar(b, (char)a.srcs->byteAt(src++));
+    else
+      break; /* end of subject */
+    if (a.anchor)
+      break;
+  }
+  return gsub_end(L, a, ms, b, src, n, changed);
+}
+
+/* 'gsub' goes on after its replacement function or table */
+static int gsubk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  GsubArgs a = gsubargs(L);
+  luaL_Box* box = luaL_tobox(L, 5);
+  MatchState ms;
+  prepstate(&ms, L, a.srcs, a.pat);
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  luaL_buffload(&b, box);
+  ptrdiff_t s = (ptrdiff_t)box->ints[GS_S];
+  ptrdiff_t e = (ptrdiff_t)box->ints[GS_E];
+  lua_Integer n = box->ints[GS_N];
+  int changed = add_result(L, &b, a.srcs, s, e) || (int)box->ints[GS_CHANGED];
+  if (a.anchor)
+    return gsub_end(L, a, &ms, &b, e, n, changed);
+  return gsub_loop(L, a, &ms, &b, box, e, e, n, changed);
+}
+
+static int str_gsub(lua_State* L)
+{
+  GsubArgs a = gsubargs(L);
+  int tr = a.tr;
+  luaL_argexpectedi(L, tr == LUA_TNUMBER || tr == LUA_TSTRING || tr == LUA_TFUNCTION || tr == LUA_TTABLE, 3, lt::string_function_table);
+  luaL_Box* box = nullptr;
+  if (tr == LUA_TFUNCTION || (tr == LUA_TTABLE && !lua_isplaintable(L, 3)))
+  { /* replacements call back: keep the state where a freeze finds it */
+    lua_settop(L, 4);
+    box = luaL_newbox(L);
+    luaE_freezeonly(L);
+  }
+  MatchState ms;
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  prepstate(&ms, L, a.srcs, a.pat);
+  return gsub_loop(L, a, &ms, &b, box, 0, NOMATCH, 0, 0);
 }
 
 /* }====================================================== */
@@ -1639,15 +1744,78 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
                     body.view().substr(0, blen), zeropadok);
 }
 
-static int str_format(lua_State* L)
+/* where a 'format' calling '__tostring' keeps its state (box after the
+   arguments) */
+enum
 {
-  int top = lua_gettop(L);
-  int arg = 1;
-  const InternalString* sf = luaL_checkistring(L, arg);
+  FMT_ITEM, /* the item: where it starts (after its '%')... */
+  FMT_ARG   /* ...and its argument */
+};
+
+static int formatk(lua_State* L, int status, lua_KContext ctx);
+
+/*
+** Whether the value at 'arg' has a '__tostring' to call for a format
+** item: then the state goes into the box (made the first time) before
+** the call, for 'formatk'.
+*/
+static luaL_Box* formatsave(lua_State* L, luaL_Buffer* b, luaL_Box* box, int top,
+                            size_t item, int arg)
+{
+  if (luaL_getmetafieldi(L, arg, lt::mm_tostring) == LUA_TNIL)
+    return nullptr;
+  lua_pop(L, 1);
+  if (box == nullptr)
+  {
+    assert(lua_gettop(L) == top);
+    box = luaL_newbox(L);
+    luaE_freezeonly(L);
+  }
+  box->ints[FMT_ITEM] = (lua_Integer)item;
+  box->ints[FMT_ARG] = arg;
+  luaL_buffsave(b, box);
+  return box;
+}
+
+/* the string 's' of a '%s' item, on the top: add it as the format says */
+static size_t addstringitem(lua_State* L, luaL_Buffer* b, byte_view formv, size_t formlen,
+                            int arg, size_t boff, size_t maxitem, const InternalString* s)
+{
+  size_t nb = 0;
+  byte_view sv = s->view();
+  if (formlen == 2) /* no modifiers? */
+    luaL_addvalue(b); /* keep entire string */
+  else
+  {
+    luaL_argchecki(L, sv.find('\0') == byte_view::npos, arg, lt::string_contains_zeros);
+    checkformat(L, formv, lt::minus_ch, 1);
+    if (formv.find('.') == byte_view::npos && sv.size() >= 100)
+    {
+      /* no precision and string is too long to be formatted */
+      luaL_addvalue(b); /* keep entire string */
+    }
+    else
+    { /* format the string into 'buff' */
+      FormatSpec spec;
+      scanformat(formv, &spec);
+      size_t blen = (spec.precision >= 0 && (size_t)spec.precision < sv.size())
+                        ? spec.precision /* truncate */
+                        : sv.size();
+      nb = packformat(luaL_buffaddr(b), boff, maxitem, &spec, lt::empty_str, sv.substr(0, blen), false);
+      lua_pop(L, 1);
+    }
+  }
+  return nb;
+}
+
+/*
+** Format from position 'i' of 'sf' on, the last argument used being 'arg'
+** (of 'top'), into 'b'. With a box, it is at 'top + 1'.
+*/
+static int format_from(lua_State* L, const InternalString* sf, size_t i, int arg, int top,
+                       luaL_Buffer& b, luaL_Box* box)
+{
   size_t sfl = sf->size();
-  size_t i = 0;
-  luaL_Buffer b;
-  luaL_buffinit(L, &b);
   while (i < sfl)
   {
     if (sf->byteAt(i) != L_ESC)
@@ -1664,6 +1832,7 @@ static int str_format(lua_State* L)
       size_t maxitem = MAX_ITEM;                  /* maximum length for the result */
       size_t boff = luaL_prepbuffsize(&b, maxitem); /* to put result */
       size_t nb = 0;                                   /* number of bytes in result */
+      size_t item = i;
       if (++arg > top)
         return luaL_argerrori(L, arg, lt::no_value);
       i = getformat(L, sf, i, form, &formlen);
@@ -1746,35 +1915,38 @@ static int str_format(lua_State* L)
       {
         if (formlen != 2) /* modifiers? */
           return luaL_errori(L, lt::specifier_q_cannot_have_modifiers);
-        addliteral(L, &b, arg);
+        int t = lua_type(L, arg);
+        luaL_Box* saved;
+        if ((t == LUA_TNIL || t == LUA_TBOOLEAN) &&
+            (saved = formatsave(L, &b, box, top, item, arg)) != nullptr)
+        { /* (a '__tostring' for nil or a boolean) */
+          box = saved;
+          luaL_toistringk(L, arg, 0, formatk);
+          luaL_buffload(&b, box);
+          luaL_tostringresult(L);
+          luaL_addvalue(&b);
+        }
+        else
+          addliteral(L, &b, arg);
         break;
       }
       case 's':
       {
-        const InternalString* s = luaL_toistring(L, arg);
-        byte_view sv = s->view();
-        if (formlen == 2) /* no modifiers? */
-          luaL_addvalue(&b); /* keep entire string */
+        luaL_Box* saved = formatsave(L, &b, box, top, item, arg);
+        const InternalString* str;
+        if (saved != nullptr)
+        {
+          box = saved;
+          luaL_toistringk(L, arg, 0, formatk);
+          luaL_buffload(&b, box);
+          str = luaL_tostringresult(L);
+        }
         else
         {
-          luaL_argchecki(L, sv.find('\0') == byte_view::npos, arg, lt::string_contains_zeros);
-          checkformat(L, formv, lt::minus_ch, 1);
-          if (formv.find('.') == byte_view::npos && sv.size() >= 100)
-          {
-            /* no precision and string is too long to be formatted */
-            luaL_addvalue(&b); /* keep entire string */
-          }
-          else
-          { /* format the string into 'buff' */
-            FormatSpec spec;
-            scanformat(formv, &spec);
-            size_t blen = (spec.precision >= 0 && (size_t)spec.precision < sv.size())
-                              ? spec.precision /* truncate */
-                              : sv.size();
-            nb = packformat(luaL_buffaddr(&b), boff, maxitem, &spec, lt::empty_str, sv.substr(0, blen), false);
-            lua_pop(L, 1);
-          }
+          luaL_tostringdefault(L, arg);
+          str = lua_toistring(L, -1);
         }
+        nb = addstringitem(L, &b, formv, formlen, arg, boff, maxitem, str);
         break;
       }
       default:
@@ -1789,6 +1961,47 @@ static int str_format(lua_State* L)
   }
   luaL_pushresult(&b);
   return 1;
+}
+
+/* 'format' goes on after a '__tostring' */
+static int formatk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  int top = lua_gettop(L) - 2; /* (the arguments, the box, the string) */
+  const InternalString* sf = lua_toistring(L, 1);
+  luaL_Box* box = luaL_tobox(L, top + 1);
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  luaL_buffload(&b, box);
+  int arg = (int)box->ints[FMT_ARG];
+  byte_inline<MAX_FORMAT> form;
+  size_t formlen;
+  size_t i = getformat(L, sf, (size_t)box->ints[FMT_ITEM], form, &formlen);
+  if (sv_byteat(sf->view(), i++) == 'q')
+  {
+    luaL_tostringresult(L);
+    luaL_addvalue(&b);
+  }
+  else
+  { /* 's' */
+    size_t maxitem = MAX_ITEM;
+    size_t boff = luaL_prepbuffsize(&b, maxitem);
+    size_t nb = addstringitem(L, &b, form.view().substr(0, formlen), formlen, arg, boff, maxitem,
+                              luaL_tostringresult(L));
+    assert(nb < maxitem);
+    luaL_addsize(&b, nb);
+  }
+  return format_from(L, sf, i, arg, top, b, box);
+}
+
+static int str_format(lua_State* L)
+{
+  int top = lua_gettop(L);
+  const InternalString* sf = luaL_checkistring(L, 1);
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  return format_from(L, sf, 0, 1, top, b, nullptr);
 }
 
 /* }====================================================== */

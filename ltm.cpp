@@ -119,9 +119,13 @@ void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
   setslot(L, func + 3, p3); /* 3rd argument */
   L->top = func + 4;
   /* metamethod may yield only when called from Lua code, or from an API
-     call with a continuation */
-  if (isLuacode(L->ci) || (L->ci->callstatus & CIST_APIK))
+     call with a continuation that can yield; it may freeze also from one
+     that cannot (CIST_NYCALL counts it) */
+  l_uint32 st = L->ci->callstatus & (CIST_APIK | CIST_NYCALL);
+  if (isLuacode(L->ci) || st == CIST_APIK)
     luaD_call(L, func, 0);
+  else if (st != 0)
+    luaD_callnoyield(L, func, 0);
   else
   { /* (cannot freeze) */
     L->nfz++;
@@ -140,9 +144,13 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
   setslot(L, func + 2, p2); /* 2nd argument */
   L->top += 3;
   /* metamethod may yield only when called from Lua code, or from an API
-     call with a continuation */
-  if (isLuacode(L->ci) || (L->ci->callstatus & CIST_APIK))
+     call with a continuation that can yield; it may freeze also from one
+     that cannot (CIST_NYCALL counts it) */
+  l_uint32 st = L->ci->callstatus & (CIST_APIK | CIST_NYCALL);
+  if (isLuacode(L->ci) || st == CIST_APIK)
     luaD_call(L, func, 1);
+  else if (st != 0)
+    luaD_callnoyield(L, func, 1);
   else
   { /* (cannot freeze) */
     L->nfz++;
