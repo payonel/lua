@@ -632,6 +632,158 @@ do
   assert(deepeq(log, {false, cannot, false, cannot, false, cannot, false, true}), show(log))
 end
 
+-- finalizers run on their own thread (one per state), not on the thread
+-- the collector runs in: there 'coroutine.running' is that thread, the
+-- thread that allocated is "normal", and a yield fails as in a coroutine
+do
+  local main = coroutine.running()
+  local seen = {}
+  setmetatable({}, {__gc = function()
+    seen.th, seen.ismain = coroutine.running()
+    seen.yieldable = coroutine.isyieldable()
+    seen.err = select(2, pcall(coroutine.yield))
+    seen.name = debug.getinfo(1, "n").name
+  end})
+  collectgarbage()
+  local fth = seen.th
+  assert(type(fth) == "thread" and fth ~= main and seen.ismain == false)
+  assert(seen.yieldable == false and seen.err == "attempt to yield across a C-call boundary")
+  assert(seen.name == "__gc")
+  assert(coroutine.status(fth) == "dead") -- (idle: nothing to resume)
+  local co
+  co = coroutine.create(function()
+    setmetatable({}, {__gc = function()
+      seen.th2 = coroutine.running()
+      seen.costatus = coroutine.status(co)
+    end})
+    collectgarbage()
+  end)
+  assert(coroutine.resume(co))
+  assert(seen.th2 == fth and seen.costatus == "normal")
+end
+
+-- a finalizer that loops freezes on its thread: the freeze ends in the
+-- collector, the program goes on, the collector goes on, and no other
+-- finalizer starts until the frozen one ends after a thaw
+do
+  collectgarbage()
+  collectgarbage() -- (no finalizers left from before)
+  local fth, progress, others, froze = nil, 0, 0, 0
+  setmetatable({}, {__gc = function()
+    fth = coroutine.running()
+    for i = 1, 300 do progress = progress + 1 end
+  end})
+  debug.setbudget(10, function(t)
+    if t == fth and froze == 0 and debug.freeze(t) then froze = 1 end
+  end)
+  collectgarbage()
+  debug.setbudget(0)
+  assert(froze == 1 and debug.isfrozen(fth) and progress < 300)
+  assert(coroutine.status(fth) == "running" and not coroutine.resume(fth))
+  setmetatable({}, {__gc = function() others = others + 1 end})
+  collectgarbage()
+  collectgarbage()
+  assert(others == 0)
+  local weak = setmetatable({}, {__mode = "k"})
+  weak[{}] = true
+  collectgarbage()
+  assert(next(weak) == nil) -- (the collector goes on)
+  assert(debug.thaw(fth) == true and progress == 300 and not debug.isfrozen(fth))
+  collectgarbage()
+  assert(others == 1)
+end
+
+-- inside a finalizer, the thread the collector runs in cannot be frozen
+-- (the collector runs inside an allocation); the finalizer thread can
+do
+  collectgarbage()
+  collectgarbage()
+  local co, fth
+  local results = {}
+  co = coroutine.create(function()
+    setmetatable({}, {__gc = function() fth = coroutine.running() for i = 1, 50 do end end})
+    collectgarbage()
+    return "after"
+  end)
+  debug.setbudget(5, function(t)
+    if #results == 0 and t == fth then
+      results[1] = debug.freeze(co)
+      results[2] = debug.freeze(t)
+    end
+  end)
+  local ok, v = coroutine.resume(co)
+  debug.setbudget(0)
+  assert(results[1] == false and results[2] == true)
+  assert(ok and v == "after") -- (the coroutine went on)
+  assert(debug.isfrozen(fth))
+  assert(debug.thaw(fth) == true)
+end
+
+-- a finalizer frozen at every budget point does what it does unfrozen; it
+-- cannot yield after a thaw either
+do
+  local function run(n)
+    collectgarbage()
+    collectgarbage()
+    local log, fth = {}, nil
+    setmetatable({}, {__gc = function()
+      fth = coroutine.running()
+      local t = {}
+      for i = 1, 20 do t[i] = i * i end
+      log[#log + 1] = table.concat(t, ",")
+      log[#log + 1] = select(2, pcall(coroutine.yield))
+      log[#log + 1] = tostring(coroutine.isyieldable())
+    end})
+    local frozen = {}
+    if n then
+      debug.setbudget(n, function(t) if t == fth and debug.freeze(t) then frozen[#frozen + 1] = t end end)
+    end
+    collectgarbage()
+    local thaws = 0
+    while #frozen > 0 do
+      local t = table.remove(frozen)
+      assert(debug.thaw(t) == true)
+      thaws = thaws + 1
+    end
+    debug.setbudget(0)
+    return table.concat(log, "|"), thaws
+  end
+  local plain = run()
+  for _, n in ipairs{1, 2, 5} do
+    local log, thaws = run(n)
+    assert(log == plain and thaws > 10, log)
+  end
+end
+
+-- an error in a finalizer after a thaw is a warning, as without a freeze
+-- (a child interpreter shows it)
+if io.popen and arg and arg[-1] then
+  local script = [[
+    warn("@allow")
+    local fth, froze
+    setmetatable({}, {__gc = function() fth = coroutine.running() for i = 1, 50 do end error("late", 0) end})
+    debug.setbudget(10, function(t) if t == fth and not froze then froze = debug.freeze(t) end end)
+    collectgarbage()
+    debug.setbudget(0)
+    io.stderr:write("frozen ", tostring(debug.isfrozen(fth)), "\n")
+    io.stderr:write("thaw ", tostring(debug.thaw(fth)), "\n")
+  ]]
+  -- (the script is one line for the shell; '@allow' lets test builds warn)
+  local p = io.popen(string.format("%q -W -e %q 2>&1", arg[-1], script))
+  local out = p:read("a")
+  p:close()
+  assert(out == "frozen true\nLua warning: error in __gc (late)\nthaw true\n", out)
+end
+
+-- from the main thread, the yield fails as in a coroutine (stock Lua runs
+-- finalizers on the thread that collects: "from outside a coroutine")
+do
+  local err
+  setmetatable({}, {__gc = function() err = select(2, pcall(coroutine.yield)) end})
+  collectgarbage()
+  assert(err == "attempt to yield across a C-call boundary")
+end
+
 -- a frozen coroutine never thawed is collected like any other
 do
   local weak = setmetatable({}, {__mode = "k"})

@@ -436,6 +436,58 @@ lua_State* luaD_budget(lua_State* L)
   luaD_throw(L, LUA_FREEZE);
 }
 
+/*
+** An error ended the finalizer running on thread 'F': close its
+** variables, and warn, as stock Lua does with an error in a finalizer.
+** 'F' is idle again.
+*/
+static void finalizererror(lua_State* F, TStatus status)
+{
+  status = luaE_resetthread(F, status); /* (error object at 1) */
+  if (status != LUA_OK)
+    luaE_warnerror(F, lt::mm_gc);
+  F->top = 1;
+}
+
+/*
+** Run the finalizer at 1 (its argument at 2) on the finalizer thread 'F'
+** (see 'GCTM'), for the collector running in 'L': a call that cannot
+** yield, in a resume of 'F'. A freeze of 'F' ends here, with 'F' frozen:
+** a thaw goes on with it (see 'lua_thawk'). A freeze of a thread below
+** 'F' cannot pass, as the collector runs inside some allocation.
+*/
+struct RunFinalizer : ProtectedCall
+{
+  void run(lua_State* F) override { luaD_callnoyield(F, 1, 0); }
+};
+
+void luaD_runfinalizer(lua_State* F, lua_State* L)
+{
+  global_State* g = F->l_G;
+  assert(F->ci == &F->base_ci && F->status == LUA_OK && !F->frozen);
+  F->nCcalls = getCcalls(L);
+  F->nfz = 0;
+  F->resumer = L;
+  F->resumedk = 0;
+  luaE_spend(F, 1); /* a hand-off */
+  RunFinalizer r;
+  TStatus status = luaD_rawrunprotected(F, &r);
+  F->resumer = nullptr;
+  if (status == LUA_FREEZE)
+  { /* the freeze of 'F' ends here */
+    assert(g->freezetarget == F);
+    g->freezetarget = nullptr;
+    F->frozen = FZ_RESUME;
+  }
+  else if (l_unlikely(status != LUA_OK))
+  {
+    F->nCcalls = getCcalls(L);
+    finalizererror(F, status);
+  }
+  else
+    F->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */
+}
+
 /* }================================================================== */
 
 /*
@@ -1209,8 +1261,9 @@ lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_
   }
   L->nCcalls++;
   L->frozen = 0;
-  /* its calls that cannot yield */
-  l_uint32 nny = (kind == FZ_RESUME) ? 0 : L->frozenny;
+  /* its calls that cannot yield (a finalizer's too) */
+  global_State* g = L->l_G;
+  l_uint32 nny = (kind == FZ_RESUME) ? (L == g->finth) : L->frozenny;
   for (CallInfo* ci = L->ci; ci != &L->base_ci; ci = ci->previous)
     if (ci->callstatus & CIST_NYCALL)
       nny++;
@@ -1226,12 +1279,21 @@ lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_
   StkId hosterrfunc = L->errfunc;
   if (kind == FZ_PCALL)
     L->errfunc = L->frozenerrfunc;
-  global_State* g = L->l_G;
   if (g->budgetL == nullptr) /* a thaw starts with a whole budget, so that */
     g->budgetleft = g->budget; /* it makes progress before it can freeze */
   Thaw t;
   status = luaD_rawrunprotected(L, &t);
   status = precover(L, status);
+  if (L == g->finth && status != LUA_FREEZE)
+  { /* the finalizer ended */
+    L->resumer = nullptr;
+    if (errorstatus(status))
+      finalizererror(L, status); /* (a warning, as without a freeze) */
+    else
+      L->ci->callstatus &= ~CIST_FIN;
+    lua_unlock(L);
+    return {LUA_OK, 0};
+  }
   if (kind == FZ_RESUME)
     return endresume(L, from, status, k);
   return endhostcall(L, from, status, k, kind, hosterrfunc, hostnCcalls);

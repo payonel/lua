@@ -600,6 +600,7 @@ struct global_State
   int budgetnfz = 0;                 /* its 'nfz' when the callback began */
   lua_State* freezereq = nullptr;    /* coroutine the callback asked to freeze */
   lua_State* freezetarget = nullptr; /* coroutine being frozen (unwinding) */
+  lua_State* finth = nullptr;        /* the thread that runs finalizers */
   InternalString locale_name;
   lua_State mainth;                          /* main thread of this state */
 };

@@ -5227,6 +5227,16 @@ static int fz_getik(lua_State* L)
   return 2;
 }
 
+/* freezes the first thread other than 'fz_main' that spends the budget
+   (a finalizer's thread, in these tests) */
+static lua_State* fz_main = nullptr;
+static lua_State* fz_other = nullptr;
+static void fz_budget_other(lua_State* L)
+{
+  if (L != fz_main && fz_other == nullptr && lua_freeze(L, L))
+    fz_other = L;
+}
+
 static void test_freeze()
 {
   lua_State* L = new_state();
@@ -5503,6 +5513,36 @@ static void test_freeze()
     lua_thaw(L, nullptr);
   CHECK(lua_gettop(L) == 1 && fz_str(L, 1) == lplain);
   CHECK(fz_refusals == 0 && fz_freezes > 100);
+  lua_settop(L, 0);
+
+  /* a finalizer freezes on its own thread: the host's call goes on (the
+     collector runs inside it), the finalizer goes on when the host thaws
+     its thread, and it cannot yield there */
+  fz_reset(L, 0, nullptr, 0, false);
+  st = luaL_dostring(L, R"(
+    fin = {done = false}
+    setmetatable({}, {__gc = function()
+      fin.th = coroutine.running()
+      local s = sum(40)
+      fin.yieldable = coroutine.isyieldable()
+      fin.done = s
+    end})
+  )");
+  CHECK(st == LUA_OK);
+  fz_main = L;
+  fz_other = nullptr;
+  lua_setbudget(L, 7, fz_budget_other);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_setbudget(L, 0, nullptr);
+  CHECK(fz_other != nullptr && fz_other != L && lua_isfrozen(fz_other));
+  CHECK(luaL_dostring(L, "return fin.done") == LUA_OK && lua_toboolean(L, -1) == 0);
+  lua_settop(L, 0);
+  lua_ResumeResult fr = lua_thaw(fz_other, L);
+  CHECK(fr.status == LUA_OK && fr.nres == 0 && !lua_isfrozen(fz_other));
+  CHECK(luaL_dostring(L, "return fin.done, fin.yieldable, fin.th") == LUA_OK);
+  CHECK(lua_isinteger(L, 1) && lua_tointeger(L, 1) > 0);
+  CHECK(lua_isboolean(L, 2) && lua_toboolean(L, 2) == 0);
+  CHECK(lua_tothread(L, 3) == fz_other);
   lua_settop(L, 0);
 
   /* an error after a thaw that nothing catches: as 'lua_pcall' reports it */

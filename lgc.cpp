@@ -479,6 +479,8 @@ static void restartcollection(global_State* g)
   cleargraylists(g);
   g->GCmarked = 0;
   markobject(g, mainthread(g));
+  if (g->finth != nullptr)
+    markobject(g, g->finth);
   markvalue(g, &g->l_registry);
   markmt(g);
   markbeingfnz(g); /* mark any finalizing object left from previous cycle */
@@ -743,6 +745,9 @@ static l_mem traverseLclosure(global_State* g, LClosure* cl)
 ** (which can only happen in generational mode) or if the traverse is in
 ** the propagate phase (which can only happen in incremental mode).
 */
+/* the finalizer thread keeps its stacks while they are this small */
+constexpr int FINRESERVE = 8;
+
 static l_mem traversethread(global_State* g, lua_State* th)
 {
   UpVal* uv;
@@ -764,7 +769,7 @@ static l_mem traversethread(global_State* g, lua_State* th)
     markobject(g, th->frozenchild); /* the coroutine a frozen thread resumed */
   if (g->gcstate == GCSatomic)
   { /* final traversal? */
-    if (!g->gcemergency)
+    if (!g->gcemergency && (th != g->finth || th->nci > FINRESERVE))
       luaD_shrinkstack(th); /* do not change stack in emergency cycle */
     for (o = th->top; o < th->stack_last + EXTRA_STACK; o++)
       setslottag(th, o, LUA_VNIL); /* clear dead stack slice */
@@ -1057,9 +1062,40 @@ struct DoTheCall : ProtectedCall
   void run(lua_State* L) override { dothecall(L); }
 };
 
+/*
+** Finalizers run on the finalizer thread ('g->finth', see
+** 'luaD_runfinalizer'), where their errors become warnings. A finalizer
+** can freeze there: the collector goes on, the frozen finalizer goes on
+** when its thread thaws, and no other finalizer starts until it ends (as
+** in stock Lua, finalizers do not interleave).
+*/
+
+/*
+** Can the finalizer thread run a finalizer for the collector running in
+** 'L'? Not while it is busy with one, nor without room in the stacks of
+** the thread that collects (as in stock Lua) and its own: the finalizer
+** waits.
+*/
+static bool finthready(lua_State* L)
+{
+  lua_State* F = L->l_G->finth;
+  if (F->ci != &F->base_ci || F->frozen)
+    return false;
+  if (F->status != LUA_OK)
+  { /* (an error that ended it) */
+    F->status = LUA_OK;
+    F->top = 1;
+  }
+  if (!luaD_checkminstack(L))
+    return false;
+  F->nCcalls = getCcalls(L);
+  return luaD_checkminstack(F);
+}
+
 static void GCTM(lua_State* L)
 {
   global_State* g = L->l_G;
+  lua_State* F = g->finth;
   const TValue* tm;
   TValue v;
   assert(!g->gcemergency);
@@ -1067,26 +1103,14 @@ static void GCTM(lua_State* L)
   tm = luaT_gettmbyobj(L, &v, TM_GC);
   if (!notm(tm))
   { /* is there a finalizer? */
-    TStatus status;
-    lu_byte oldah = L->allowhook;
     lu_byte oldgcstp = g->gcstp;
-    g->gcstp |= GCSTPGC;           /* avoid GC steps */
-    L->allowhook = 0;              /* stop debug hooks during GC metamethod */
-    setslot(L, L->top++, tm);   /* push finalizer... */
-    setslot(L, L->top++, &v);   /* ... and its argument */
-    L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
-    DoTheCall call;
-    L->nfz++; /* a finalizer cannot freeze */
-    status = luaD_pcall(L, &call, L->top - 2, 0);
-    L->nfz--;
-    L->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */
-    L->allowhook = oldah;           /* restore hooks */
-    g->gcstp = oldgcstp;            /* restore state */
-    if (l_unlikely(status != LUA_OK))
-    { /* error while running __gc? */
-      luaE_warnerror(L, lt::mm_gc);
-      L->top--; /* pops error object */
-    }
+    g->gcstp |= GCSTPGC;            /* avoid GC steps */
+    F->allowhook = 0;               /* stop debug hooks during GC metamethod */
+    setslot(F, F->top++, tm);       /* push finalizer... */
+    setslot(F, F->top++, &v);       /* ... and its argument */
+    F->ci->callstatus |= CIST_FIN;  /* will run a finalizer */
+    luaD_runfinalizer(F, L);
+    g->gcstp = oldgcstp; /* restore state */
   }
 }
 
@@ -1096,7 +1120,7 @@ static void GCTM(lua_State* L)
 static void callallpendingfinalizers(lua_State* L)
 {
   global_State* g = L->l_G;
-  while (g->tobefnz.next)
+  while (g->tobefnz.next && finthready(L))
     GCTM(L);
 }
 
@@ -1411,7 +1435,7 @@ static void finishgencycle(lua_State* L, global_State* g)
   correctgraylists(g);
   checkSizes(L, g);
   g->gcstate = GCSpropagate; /* skip restart */
-  if (g->tobefnz.next != nullptr && !g->gcemergency && luaD_checkminstack(L))
+  if (g->tobefnz.next != nullptr && !g->gcemergency)
     callallpendingfinalizers(L);
 }
 
@@ -1659,7 +1683,18 @@ void luaC_freeallobjects(lua_State* L)
   luaC_changemode(L, KGC_INC);
   separatetobefnz(g, 1); /* separate all objects with finalizers */
   assert(g->finobj.next == nullptr);
-  callallpendingfinalizers(L);
+  if (g->finth != nullptr)
+  {
+    lua_State* F = g->finth;
+    if (F->frozen || F->ci != &F->base_ci)
+    { /* a finalizer stopped in its middle: it is abandoned */
+      F->frozen = 0;
+      F->frozenchild = nullptr;
+      F->nCcalls = getCcalls(L);
+      luaE_resetthread(F, LUA_OK); /* (closes its variables) */
+    }
+    callallpendingfinalizers(L);
+  }
   assert(novariant(mainthread(g)->tt) >= LUA_TSTRING);
   deletelist(L, g->allgc.next, mainthread(g));
   assert(g->finobj.next == nullptr);   /* no new finalizers */
@@ -1805,7 +1840,7 @@ static l_mem singlestep(lua_State* L, int fast)
   }
   case GCScallfin:
   { /* call finalizers */
-    if (g->tobefnz.next && !g->gcemergency && luaD_checkminstack(L))
+    if (g->tobefnz.next && !g->gcemergency && finthready(L))
     {
       g->gcstopem = 0; /* ok collections during finalizers */
       GCTM(L);         /* call one finalizer */
