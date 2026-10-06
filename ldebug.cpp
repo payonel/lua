@@ -164,9 +164,53 @@ void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
   L->hook = func;
   L->basehookcount = count;
   resethookcount(L);
-  L->hookmask = (lu_byte)mask;
+  L->hookmask = (lu_byte)mask | (L->hookmask & LUA_MASKBUDGET);
   if (mask)
     settraps(L->ci); /* to trace inside 'luaV_execute' */
+}
+
+/* set or clear the budget bit of 'th' */
+static void setbudgetmask(lua_State* th, int on)
+{
+  if (on)
+  {
+    th->hookmask |= LUA_MASKBUDGET;
+    settraps(th->ci); /* to count inside 'luaV_execute' */
+  }
+  else
+    th->hookmask &= ~LUA_MASKBUDGET;
+}
+
+/*
+** Set the budget: every thread counts its steps (new threads inherit the
+** bit with the hook mask).
+*/
+void lua_setbudget(lua_State* L, lua_Integer n, lua_Budget f)
+{
+  lua_lock(L);
+  global_State* g = L->l_G;
+  if (n <= 0 || f == nullptr)
+  { /* turn it off */
+    n = 0;
+    f = nullptr;
+  }
+  g->budget = (l_mem)n;
+  g->budgetf = f;
+  if (g->budgetL == nullptr) /* (in the callback, it refills when it ends) */
+    g->budgetleft = (l_mem)n;
+  setbudgetmask(mainthread(g), n > 0);
+  for (GCObject* o = g->allgc.next; o != nullptr; o = o->next)
+    if (o->tt == LUA_VTHREAD)
+      setbudgetmask(static_cast<lua_State*>(o), n > 0);
+  lua_unlock(L);
+}
+
+lua_Integer lua_getbudget(lua_State* L, lua_Integer* left)
+{
+  global_State* g = L->l_G;
+  if (left != nullptr) /* (in the callback, it refills when it ends) */
+    *left = (g->budgetL != nullptr) ? g->budget : g->budgetleft;
+  return g->budget;
 }
 
 
@@ -178,7 +222,7 @@ lua_Hook lua_gethook(lua_State* L)
 
 int lua_gethookmask(lua_State* L)
 {
-  return L->hookmask;
+  return L->hookmask & ~LUA_MASKBUDGET;
 }
 
 
@@ -1031,7 +1075,9 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
     copyslot(L, L->top, L->top - 1); /* move argument */
     copyslot(L, L->top - 1, errfunc);  /* push function */
     L->top++;                           /* assume EXTRA_STACK */
+    L->nfz++;                           /* (a handler cannot freeze) */
     luaD_callnoyield(L, L->top - 2, 1); /* call it */
+    L->nfz--;
   }
   if (tagisempty(slottag(L, L->top - 1)))
   { /* error object is nil? */
@@ -1113,11 +1159,31 @@ int luaG_tracecall(lua_State* L)
   if (ci->savedpc == 0)
   { /* first instruction (not resuming)? */
     if (isvararg(p))
-      return 0;                                  /* hooks will start at VARARGPREP instruction */
-    else if (!(ci->callstatus & CIST_HOOKYIELD)) /* not yielded? */
+    {
+      luaE_spend(L, 1); /* (VARARGPREP runs untraced) */
+      return 0;         /* hooks will start at VARARGPREP instruction */
+    }
+    else if (!(ci->callstatus & (CIST_HOOKYIELD | CIST_FROZE))) /* not yielded or frozen? */
       luaD_hookcall(L, ci);                      /* check 'call' hook */
   }
   return 1; /* keep 'trap' on */
+}
+
+/*
+** The budget is spent before the instruction at 'savedpc - 1': call the
+** budget callback, and freeze there if it asks to (the instruction runs
+** when it thaws).
+*/
+static void budgetpoint(lua_State* L, CallInfo* ci, const Proto* p)
+{
+  if (!luaP_isIT(p->code[ci->savedpc - 1])) /* top not being used? */
+    L->top = ci->top;                 /* correct top */
+  lua_State* co = luaD_budget(L);
+  if (co != nullptr)
+  {
+    ci->callstatus |= CIST_FROZE;
+    luaD_freeze(L, co);
+  }
 }
 
 int luaG_traceexec(lua_State* L, int pc)
@@ -1126,13 +1192,22 @@ int luaG_traceexec(lua_State* L, int pc)
   lu_byte mask = (lu_byte)L->hookmask;
   const Proto* p = ci_func(L, ci)->p;
   int counthook;
-  if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT)))
+  if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT | LUA_MASKBUDGET)))
   {                   /* no hooks? */
     ci->trap = 0; /* don't need to stop again */
     return 0;         /* turn off 'trap' */
   }
   pc++;                 /* reference is always next instruction */
   ci->savedpc = pc; /* save 'pc' */
+  if ((mask & LUA_MASKBUDGET) && !(ci->callstatus & CIST_HOOKYIELD))
+  { /* a step of the budget (after its callback, if it is spent) */
+    global_State* g = L->l_G;
+    if (g->budgetleft <= 0 && g->budgetL == nullptr)
+      budgetpoint(L, ci, p);
+    g->budgetleft--;
+  }
+  if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT)))
+    return 1; /* only the budget */
   counthook = (mask & LUA_MASKCOUNT) && (--L->hookcount == 0);
   if (counthook)
     resethookcount(L); /* reset count */

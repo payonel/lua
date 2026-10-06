@@ -35,6 +35,13 @@ int luaL_loadbufferi(lua_State* L, byte_view buff, std::optional<byte_view> name
 int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode);
 
 int lua_getfieldi(lua_State* L, int idx, byte_view k);
+/* freezing: resume and thaw by a C function with continuation 'k', which
+   a freeze passing through goes on with (getting the status of 'L'); the
+   number of results of 'L' then; the coroutine a frozen 'L' resumed */
+lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KContext ctx, lua_KFunction k);
+lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k);
+int lua_resumenres(lua_State* L, int status);
+lua_State* lua_frozenchild(lua_State* L);
 void lua_setfieldi(lua_State* L, int idx, byte_view k);
 
 const InternalString* lua_pushfstringi(lua_State* L, byte_view fmt);

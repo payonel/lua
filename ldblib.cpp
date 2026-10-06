@@ -502,6 +502,112 @@ static int db_debug(lua_State* L)
   }
 }
 
+/*
+** {======================================================
+** Budget and freezing
+** =======================================================
+*/
+
+/* the budget callback: the Lua function in the registry, with the thread */
+static void budgetf(lua_State* L)
+{
+  lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
+  lua_pushthread(L);
+  lua_call(L, 1, 0);
+}
+
+static int db_setbudget(lua_State* L)
+{
+  lua_Integer n = luaL_checkinteger(L, 1);
+  luaL_argchecki(L, n >= 0, 1, lt::out_of_range);
+  if (n == 0 || lua_isnoneornil(L, 2))
+  { /* turn it off */
+    lua_pushnil(L);
+    n = 0;
+  }
+  else
+  {
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    lua_pushvalue(L, 2);
+  }
+  lua_setfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
+  lua_setbudget(L, n, n == 0 ? nullptr : budgetf);
+  return 0;
+}
+
+static int db_getbudget(lua_State* L)
+{
+  lua_Integer left;
+  lua_Integer n = lua_getbudget(L, &left);
+  if (n == 0)
+  {
+    luaL_pushfail(L);
+    return 1;
+  }
+  lua_pushinteger(L, n);
+  lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
+  lua_pushinteger(L, left);
+  return 3;
+}
+
+static lua_State* checkco(lua_State* L, int arg)
+{
+  lua_State* co = lua_tothread(L, arg);
+  luaL_argexpectedi(L, co, arg, lt::thread);
+  return co;
+}
+
+static int db_freeze(lua_State* L)
+{
+  lua_pushboolean(L, lua_freeze(L, checkco(L, 1)));
+  return 1;
+}
+
+static int db_isfrozen(lua_State* L)
+{
+  lua_pushboolean(L, lua_isfrozen(checkco(L, 1)));
+  return 1;
+}
+
+/* the results of a thaw of 'co', as 'coroutine.resume' gives them */
+static int thaw_end(lua_State* L, lua_State* co, lua_ResumeResult rr)
+{
+  if (l_likely(rr.status == LUA_OK || rr.status == LUA_YIELD))
+  {
+    if (l_unlikely(!lua_checkstack(L, rr.nres + 1)))
+    {
+      lua_pop(co, rr.nres); /* remove results anyway */
+      luaL_pushfail(L);
+      lua_pushistringref(L, lt::too_many_results_to_resume);
+      return 2;
+    }
+    lua_pushboolean(L, 1);
+    lua_xmove(co, L, rr.nres);
+    return rr.nres + 1;
+  }
+  else
+  {
+    lua_pushboolean(L, 0);
+    lua_xmove(co, L, 1); /* move error message */
+    return 2;
+  }
+}
+
+static int thaw_cont(lua_State* L, int status, lua_KContext)
+{
+  lua_State* co = lua_tothread(L, 1);
+  return thaw_end(L, co, {status, lua_resumenres(co, status)});
+}
+
+static int db_thaw(lua_State* L)
+{
+  lua_State* co = checkco(L, 1);
+  lua_settop(L, 1);
+  return thaw_end(L, co, lua_thawk(co, L, 0, thaw_cont));
+}
+
+/* }====================================================== */
+
 static int db_traceback(lua_State* L)
 {
   ThreadArg ta = getthread(L);
@@ -538,6 +644,11 @@ static CFuncInfo cfi_db_setlocal(db_setlocal);
 static CFuncInfo cfi_db_setmetatable(db_setmetatable);
 static CFuncInfo cfi_db_setupvalue(db_setupvalue);
 static CFuncInfo cfi_db_traceback(db_traceback);
+static CFuncInfo cfi_db_setbudget(db_setbudget);
+static CFuncInfo cfi_db_getbudget(db_getbudget);
+static CFuncInfo cfi_db_freeze(db_freeze);
+static CFuncInfo cfi_db_isfrozen(db_isfrozen);
+static CFuncInfo cfi_db_thaw(db_thaw);
 
 static const luaL_RegCFI dblib[] = {
   {lt::debug, &cfi_db_debug},
@@ -556,6 +667,11 @@ static const luaL_RegCFI dblib[] = {
   {lt::setmetatable, &cfi_db_setmetatable},
   {lt::setupvalue, &cfi_db_setupvalue},
   {lt::traceback, &cfi_db_traceback},
+  {lt::setbudget, &cfi_db_setbudget},
+  {lt::getbudget, &cfi_db_getbudget},
+  {lt::freeze, &cfi_db_freeze},
+  {lt::isfrozen, &cfi_db_isfrozen},
+  {lt::thaw, &cfi_db_thaw},
 };
 
 }

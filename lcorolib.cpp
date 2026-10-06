@@ -29,18 +29,11 @@ static lua_State* getco(lua_State* L)
 }
 
 /*
-** Resumes a coroutine. Returns the number of results for non-error
-** cases or -1 for errors.
+** The results of a resume of 'co' that ended with 'rr': the number of
+** results for non-error cases or -1 for errors.
 */
-static int auxresume(lua_State* L, lua_State* co, int narg)
+static int auxresumed(lua_State* L, lua_State* co, lua_ResumeResult rr)
 {
-  if (l_unlikely(!lua_checkstack(co, narg)))
-  {
-    lua_pushistringref(L, lt::too_many_arguments_to_resume);
-    return -1; /* error flag */
-  }
-  lua_xmove(L, co, narg);
-  lua_ResumeResult rr = lua_resume(co, L, narg);
   if (l_likely(rr.status == LUA_OK || rr.status == LUA_YIELD))
   {
     int nres = rr.nres;
@@ -60,11 +53,24 @@ static int auxresume(lua_State* L, lua_State* co, int narg)
   }
 }
 
-static int luaB_coresume(lua_State* L)
+/*
+** Resumes a coroutine. Returns the number of results for non-error
+** cases or -1 for errors. A freeze of a coroutine below passes through
+** the resume; when it thaws, 'k' goes on with the result.
+*/
+static int auxresume(lua_State* L, lua_State* co, int narg, lua_KFunction k)
 {
-  lua_State* co = getco(L);
-  int r;
-  r = auxresume(L, co, lua_gettop(L) - 1);
+  if (l_unlikely(!lua_checkstack(co, narg)))
+  {
+    lua_pushistringref(L, lt::too_many_arguments_to_resume);
+    return -1; /* error flag */
+  }
+  lua_xmove(L, co, narg);
+  return auxresumed(L, co, lua_resumek(co, L, narg, 0, k));
+}
+
+static int coresume_end(lua_State* L, int r)
+{
   if (l_unlikely(r < 0))
   {
     lua_pushboolean(L, 0);
@@ -79,10 +85,20 @@ static int luaB_coresume(lua_State* L)
   }
 }
 
-static int luaB_auxwrap(lua_State* L)
+static int coresume_cont(lua_State* L, int status, lua_KContext)
 {
-  lua_State* co = lua_tothread(L, lua_upvalueindex(1));
-  int r = auxresume(L, co, lua_gettop(L));
+  lua_State* co = lua_tothread(L, 1);
+  return coresume_end(L, auxresumed(L, co, {status, lua_resumenres(co, status)}));
+}
+
+static int luaB_coresume(lua_State* L)
+{
+  lua_State* co = getco(L);
+  return coresume_end(L, auxresume(L, co, lua_gettop(L) - 1, coresume_cont));
+}
+
+static int auxwrap_end(lua_State* L, lua_State* co, int r)
+{
   if (l_unlikely(r < 0))
   { /* error? */
     int stat = lua_status(co);
@@ -102,6 +118,18 @@ static int luaB_auxwrap(lua_State* L)
     return lua_error(L); /* propagate error */
   }
   return r;
+}
+
+static int auxwrap_cont(lua_State* L, int status, lua_KContext)
+{
+  lua_State* co = lua_tothread(L, lua_upvalueindex(1));
+  return auxwrap_end(L, co, auxresumed(L, co, {status, lua_resumenres(co, status)}));
+}
+
+static int luaB_auxwrap(lua_State* L)
+{
+  lua_State* co = lua_tothread(L, lua_upvalueindex(1));
+  return auxwrap_end(L, co, auxresume(L, co, lua_gettop(L), auxwrap_cont));
 }
 
 static int luaB_cocreate(lua_State* L)
@@ -137,6 +165,8 @@ static int auxstatus(lua_State* L, lua_State* co)
 {
   if (L == co)
     return COS_RUN;
+  else if (lua_isfrozen(co)) /* as when it froze */
+    return (lua_frozenchild(co) != nullptr) ? COS_NORM : COS_RUN;
   else
   {
     switch (lua_status(co))
@@ -210,6 +240,11 @@ static int luaB_close(lua_State* L)
     lua_pushistringref(L, statname[status]);
     return luaL_errori(L, lt::cannot_close_a_s_coroutine);
   case COS_RUN:
+    if (co != L)
+    { /* frozen (running where it stopped) */
+      lua_pushistringref(L, statname[status]);
+      return luaL_errori(L, lt::cannot_close_a_s_coroutine);
+    }
     lua_geti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD); /* get main */
     if (lua_tothread(L, -1) == co)
       return luaL_errori(L, lt::cannot_close_main_thread);

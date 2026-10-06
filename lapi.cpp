@@ -1369,6 +1369,47 @@ static inline void checkresults(lua_State* L, int na, int nr)
   assert(LUA_MULTRET <= nr && nr <= MAXRESULTS && "invalid number of results");
 }
 
+struct CallS : ProtectedCall
+{ /* data to 'f_call' */
+  StkId func;
+  int nresults;
+  void run(lua_State* L) override;
+};
+
+static void f_call(lua_State* L, CallS* c)
+{
+  luaD_callnoyield(L, c->func, c->nresults);
+}
+
+void CallS::run(lua_State* L)
+{
+  f_call(L, this);
+}
+
+/*
+** A call or protected call of the host, from the base level of 'L', where
+** a freeze of 'L' ends: 'L' keeps the call, to go on with when it thaws
+** ('lua_thawk'), and the call returns as if its function returned nothing.
+*/
+static void hostfrozen(lua_State* L, lu_byte kind, StkId func, int nresults,
+                       StkId ef, l_uint32 nny)
+{
+  global_State* g = L->l_G;
+  assert(g->freezetarget == L);
+  g->freezetarget = nullptr;
+  L->frozen = kind;
+  L->frozenfunc = func;
+  L->frozennres = nresults;
+  L->frozenerrfunc = ef;
+  L->frozenny = nny;
+}
+
+/*
+** Calls through C that may freeze: a call by the host (from the base level)
+** ends a freeze; a call with a continuation lets a freeze pass through,
+** even where the thread cannot yield (CIST_NYCALL counts it); a call
+** without one cannot freeze.
+*/
 void lua_callk(lua_State* L, int nargs, int nresults,
                        lua_KContext ctx, lua_KFunction k)
 {
@@ -1379,14 +1420,43 @@ void lua_callk(lua_State* L, int nargs, int nresults,
   assert(L->status == LUA_OK && "cannot do calls on non-normal thread");
   checkresults(L, nargs, nresults);
   func = L->top - (nargs + 1);
-  if (k != nullptr && yieldable(L))
-  {                               /* need to prepare continuation? */
-    L->ci->k = k;             /* save continuation */
-    L->ci->ctx = ctx;         /* save context */
-    luaD_call(L, func, nresults); /* do the call */
+  CallInfo* ci = L->ci;
+  luaE_spend(L, 1); /* a hand-off */
+  if (ci == &L->base_ci)
+  { /* a call of the host */
+    CallS c;
+    c.func = func;
+    c.nresults = nresults;
+    l_uint32 nny = getnny(L);
+    TStatus status = luaD_rawrunprotected(L, &c);
+    if (l_unlikely(status == LUA_FREEZE))
+    {
+      hostfrozen(L, FZ_CALL, func, nresults, L->errfunc, nny + 1);
+      lua_unlock(L);
+      return;
+    }
+    if (l_unlikely(status != LUA_OK))
+      luaD_throw(L, status); /* not protected */
   }
-  else                                   /* no continuation or no yieldable */
-    luaD_callnoyield(L, func, nresults); /* just do the call */
+  else if (k == nullptr)
+  { /* a call that cannot freeze */
+    L->nfz++;
+    luaD_callnoyield(L, func, nresults);
+    L->nfz--;
+  }
+  else
+  {
+    ci->k = k;     /* save continuation */
+    ci->ctx = ctx; /* save context */
+    if (yieldable(L))
+      luaD_call(L, func, nresults); /* do the call */
+    else
+    {
+      ci->callstatus |= CIST_NYCALL;
+      luaD_callnoyield(L, func, nresults);
+      ci->callstatus &= ~CIST_NYCALL;
+    }
+  }
   adjustresults(L, nresults);
   lua_unlock(L);
 }
@@ -1498,23 +1568,6 @@ void lua_concatk(lua_State* L, int n, lua_KContext ctx, lua_KFunction k)
 /*
 ** Execute a protected call.
 */
-struct CallS : ProtectedCall
-{ /* data to 'f_call' */
-  StkId func;
-  int nresults;
-  void run(lua_State* L) override;
-};
-
-static void f_call(lua_State* L, CallS* c)
-{
-  luaD_callnoyield(L, c->func, c->nresults);
-}
-
-void CallS::run(lua_State* L)
-{
-  f_call(L, this);
-}
-
 int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
                        lua_KContext ctx, lua_KFunction k)
 {
@@ -1535,14 +1588,50 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     func = o;
   }
   c.func = L->top - (nargs + 1); /* function to be called */
-  if (k == nullptr || !yieldable(L))
-  {                        /* no continuation or no yieldable? */
-    c.nresults = nresults; /* do a 'conventional' protected call */
+  CallInfo* ci = L->ci;
+  luaE_spend(L, 1); /* a hand-off */
+  if (ci == &L->base_ci)
+  { /* a call of the host */
+    c.nresults = nresults;
+    l_uint32 nny = getnny(L);
+    StkId olderrfunc = L->errfunc;
     status = luaD_pcall(L, &c, c.func, func);
+    if (l_unlikely(status == LUA_FREEZE))
+    {
+      hostfrozen(L, FZ_PCALL, c.func, nresults, func, nny + 1);
+      L->errfunc = olderrfunc;
+      lua_unlock(L);
+      return LUA_OK;
+    }
+  }
+  else if (k == nullptr)
+  { /* a call that cannot freeze */
+    c.nresults = nresults;
+    L->nfz++;
+    status = luaD_pcall(L, &c, c.func, func);
+    L->nfz--;
+  }
+  else if (!yieldable(L))
+  { /* a 'conventional' protected call; a freeze passing through makes it
+       one the thread recovers itself, as when it can yield */
+    ci->k = k;     /* save continuation */
+    ci->ctx = ctx; /* save context */
+    c.nresults = nresults;
+    StkId olderrfunc = L->errfunc;
+    lu_byte oldah = L->allowhook;
+    status = luaD_pcall(L, &c, c.func, func);
+    if (l_unlikely(status == LUA_FREEZE))
+    {
+      ci->funcidx = (int)c.func;
+      ci->old_errfunc = olderrfunc;
+      L->errfunc = func;
+      setoah(ci, oldah);
+      ci->callstatus |= CIST_YPCALL | CIST_NYCALL;
+      luaD_throw(L, LUA_FREEZE); /* go on freezing */
+    }
   }
   else
   { /* prepare continuation (call is already protected by 'resume') */
-    CallInfo* ci = L->ci;
     ci->k = k;     /* save continuation */
     ci->ctx = ctx; /* save context */
     /* save information for error recovery */

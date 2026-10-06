@@ -5104,6 +5104,427 @@ static void test_api_continuations()
   lua_close(L);
 }
 
+/*
+** {======================================================
+** Budget and freezing
+** =======================================================
+*/
+
+/* the budget callback of these tests: counts its calls, and freezes
+   'fz_target' from call 'fz_at' on (each time, if 'fz_every') */
+static int fz_calls = 0;
+static int fz_freezes = 0;
+static int fz_refusals = 0;
+static int fz_at = 0;
+static bool fz_every = false;
+static lua_State* fz_target = nullptr;
+
+static void fz_budget(lua_State* L)
+{
+  fz_calls++;
+  if (fz_target != nullptr && fz_calls >= fz_at && (fz_every || fz_calls == fz_at))
+  {
+    if (lua_freeze(L, fz_target))
+      fz_freezes++;
+    else
+      fz_refusals++;
+  }
+}
+
+static void fz_reset(lua_State* L, lua_Integer n, lua_State* target, int at, bool every)
+{
+  fz_calls = fz_freezes = fz_refusals = 0;
+  fz_target = target;
+  fz_at = at;
+  fz_every = every;
+  lua_setbudget(L, n, n > 0 ? fz_budget : nullptr);
+}
+
+static std::string fz_str(lua_State* L, int idx)
+{
+  auto s = lua_tolstring(L, idx);
+  return s ? std::string(s->data(), s->size()) : std::string("(not a string)");
+}
+
+/* the number of VM instructions of global 'name' called with integer 'arg' */
+static int fz_count = 0;
+static void fz_counthook(lua_State*, lua_Debug*) { fz_count++; }
+
+static int fz_instructions(lua_State* L, const char* name, lua_Integer arg)
+{
+  fz_count = 0;
+  lua_sethook(L, fz_counthook, LUA_MASKCOUNT, 1);
+  lua_getglobal(L, name);
+  lua_pushinteger(L, arg);
+  /* (the hook counts from the first instruction of the function called) */
+  int st = lua_pcall(L, 1, 1, 0);
+  lua_sethook(L, nullptr, 0, 0);
+  CHECK(st == LUA_OK);
+  lua_pop(L, 1);
+  return fz_count;
+}
+
+/* a C function calling its first argument with a continuation */
+static int fz_callk_cont(lua_State* L, int status, lua_KContext ctx)
+{
+  CHECK(status == LUA_YIELD && ctx == 77);
+  lua_pushboolean(L, 1); /* (thawed through the continuation) */
+  return 2;
+}
+
+static int fz_callk(lua_State* L)
+{
+  lua_settop(L, 2);
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_callk(L, 1, 1, 77, fz_callk_cont);
+  lua_pushboolean(L, 0);
+  return 2;
+}
+
+/* a C function calling its first argument without a continuation */
+static int fz_call(lua_State* L)
+{
+  lua_settop(L, 2);
+  lua_call(L, 1, 1);
+  return 1;
+}
+
+/* a C function calling its first argument protected, with a continuation */
+static int fz_pcallk_cont(lua_State* L, int status, lua_KContext)
+{
+  lua_pushboolean(L, status == LUA_OK || status == LUA_YIELD);
+  lua_insert(L, -2);
+  lua_pushinteger(L, status);
+  return 3; /* success, its result or error, and the status */
+}
+
+static int fz_pcallk(lua_State* L)
+{
+  lua_settop(L, 2);
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  int st = lua_pcallk(L, 1, 1, 0, 0, fz_pcallk_cont);
+  lua_pushboolean(L, st == LUA_OK);
+  lua_insert(L, -2);
+  lua_pushinteger(L, -1);
+  return 3;
+}
+
+static void test_freeze()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+  lua_pushcfunction(L, fz_callk);
+  lua_setglobal(L, "callk");
+  lua_pushcfunction(L, fz_call);
+  lua_setglobal(L, "call");
+  lua_pushcfunction(L, fz_pcallk);
+  lua_setglobal(L, "pcallk");
+  int st = luaL_dostring(L, R"(
+    function sum(n) local s = 0 for i = 1, n do s = s + i * 3 % 7 end return s end
+    function ccalls(n) local ty, s = type, 0 for i = 1, n do if ty(i) == "number" then s = s + 1 end end return s end
+    function yieldable(n)
+      local s = sum(n)
+      return s, coroutine.isyieldable()
+    end
+    function viacallk(n) local r, thawed = callk(sum, n) return r * 10 + (thawed and 1 or 0) end
+    function viacall(n) return call(sum, n) end
+    function late(n)
+      local r = sum(n)
+      error("late " .. r, 0)
+    end
+    function viapcallk(n)
+      local ok, v, st = pcallk(late, n)
+      return tostring(ok) .. " " .. tostring(v) .. " " .. tostring(st) .. " " .. tostring(coroutine.isyieldable())
+    end
+  )");
+  CHECK(st == LUA_OK);
+  lua_Integer left = 0;
+
+  /* off by default; on; off again */
+  CHECK(lua_getbudget(L, &left) == 0);
+  lua_setbudget(L, 100, fz_budget);
+  CHECK(lua_getbudget(L, &left) == 100 && left == 100);
+  CHECK(lua_gethookmask(L) == 0); /* (not a hook) */
+  lua_setbudget(L, 100, nullptr);
+  CHECK(lua_getbudget(L, nullptr) == 0);
+  lua_setbudget(L, 0, fz_budget);
+  CHECK(lua_getbudget(L, nullptr) == 0);
+
+  /* steps: a hand-off for the host's call, the instructions, the C calls */
+  const lua_Integer HUGE = lua_Integer(1) << 50;
+  int isum = fz_instructions(L, "sum", 50);
+  int iccalls = fz_instructions(L, "ccalls", 50);
+  lua_Integer before = 0;
+  fz_reset(L, HUGE, nullptr, 0, false);
+  lua_getbudget(L, &before);
+  lua_getglobal(L, "sum");
+  lua_pushinteger(L, 50);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+  lua_getbudget(L, &left);
+  CHECK(before - left == 1 + isum);
+  lua_getbudget(L, &before);
+  lua_getglobal(L, "ccalls");
+  lua_pushinteger(L, 50);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_pop(L, 1);
+  lua_getbudget(L, &left);
+  CHECK(before - left == 1 + iccalls + 50);
+  lua_getbudget(L, &before);
+  lua_pushcfunction(L, fz_call);
+  lua_getglobal(L, "sum");
+  lua_pushinteger(L, 50);
+  CHECK(lua_pcall(L, 2, 1, 0) == LUA_OK); /* hand-off, C call, hand-off */
+  lua_pop(L, 1);
+  lua_getbudget(L, &left);
+  CHECK(before - left == 1 + 1 + 1 + isum);
+  CHECK(fz_calls == 0);
+
+  /* a callback every 'n' steps */
+  for (int n = 1; n <= 9; n++)
+  {
+    fz_reset(L, n, nullptr, 0, false);
+    lua_getglobal(L, "sum");
+    lua_pushinteger(L, 50);
+    CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+    lua_pop(L, 1);
+    CHECK(fz_calls == isum / n);
+  }
+
+  /* the main thread, frozen at every budget point of a host 'lua_pcall'
+     and of a host 'lua_call', thaws to the same result */
+  lua_getglobal(L, "sum");
+  lua_pushinteger(L, 50);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_Integer plain = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  for (int callkind = 0; callkind < 2; callkind++)
+  {
+    int frozeat = 0;
+    for (int at = 1; at <= isum; at++)
+    {
+      fz_reset(L, 1, L, at, false);
+      lua_getglobal(L, "sum");
+      lua_pushinteger(L, 50);
+      if (callkind == 0)
+        CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+      else
+        lua_call(L, 1, 1);
+      bool frozen = lua_isfrozen(L);
+      if (frozen)
+        frozeat++;
+      int thaws = 0;
+      lua_ResumeResult r{LUA_OK, 1};
+      while (lua_isfrozen(L))
+      {
+        r = lua_thaw(L, nullptr);
+        thaws++;
+      }
+      CHECK(r.status == LUA_OK && r.nres == 1);
+      CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == plain);
+      CHECK(thaws == (frozen ? 1 : 0));
+      lua_settop(L, 0);
+    }
+    CHECK(frozeat == isum);
+  }
+  /* frozen at every point, again and again */
+  fz_reset(L, 1, L, 1, true);
+  lua_getglobal(L, "sum");
+  lua_pushinteger(L, 50);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  int thaws = 0;
+  while (lua_isfrozen(L))
+  {
+    lua_thaw(L, nullptr);
+    thaws++;
+  }
+  CHECK(thaws == isum && fz_freezes == isum);
+  CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == plain);
+  lua_settop(L, 0);
+
+  /* the main thread cannot yield after a thaw, as before */
+  fz_reset(L, 3, L, 1, true);
+  lua_getglobal(L, "yieldable");
+  lua_pushinteger(L, 20);
+  CHECK(lua_pcall(L, 1, 2, 0) == LUA_OK);
+  while (lua_isfrozen(L))
+    lua_thaw(L, nullptr);
+  CHECK(lua_gettop(L) == 2 && lua_toboolean(L, 2) == 0);
+  CHECK(lua_isyieldable(L) == 0);
+  lua_settop(L, 0);
+
+  /* through a C function with a continuation: its continuation goes on */
+  lua_getglobal(L, "viacallk");
+  lua_pushinteger(L, 30);
+  fz_reset(L, 0, nullptr, 0, false);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_Integer viaplain = lua_tointeger(L, -1); /* (not thawed: ends in 0) */
+  lua_settop(L, 0);
+  CHECK(viaplain % 10 == 0);
+  fz_reset(L, 4, L, 1, true);
+  lua_getglobal(L, "viacallk");
+  lua_pushinteger(L, 30);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  CHECK(lua_isfrozen(L));
+  while (lua_isfrozen(L))
+    lua_thaw(L, nullptr);
+  CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == viaplain + 1);
+  lua_settop(L, 0);
+
+  /* through a C function without one: the freeze is refused, the
+     callback still runs */
+  fz_reset(L, 2, L, 1, true);
+  lua_getglobal(L, "viacall");
+  lua_pushinteger(L, 30);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  while (lua_isfrozen(L))
+    lua_thaw(L, nullptr);
+  CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == lua_tointeger(L, 1));
+  CHECK(fz_refusals > 10 && fz_freezes > 0); /* (it froze outside 'call') */
+  lua_settop(L, 0);
+
+  /* a protected call with a continuation where the thread cannot yield:
+     frozen inside, its error after the thaw is still caught by it */
+  fz_reset(L, 0, nullptr, 0, false);
+  lua_getglobal(L, "viapcallk");
+  lua_pushinteger(L, 30);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  std::string pplain = fz_str(L, -1);
+  lua_settop(L, 0);
+  CHECK(pplain.rfind("false late ", 0) == 0 && pplain.find(" -1 false") != std::string::npos);
+  fz_reset(L, 3, L, 1, true);
+  lua_getglobal(L, "viapcallk");
+  lua_pushinteger(L, 30);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  CHECK(lua_isfrozen(L));
+  while (lua_isfrozen(L))
+    lua_thaw(L, nullptr);
+  CHECK(lua_gettop(L) == 1);
+  std::string pthawed = fz_str(L, 1);
+  /* (after a thaw, the continuation finishes the call: status LUA_ERRRUN) */
+  CHECK(pthawed.substr(0, pthawed.find(" 2 false")) == pplain.substr(0, pplain.find(" -1 false")));
+  CHECK(pthawed.rfind("false late ", 0) == 0 && pthawed.find(" 2 false") != std::string::npos);
+  lua_settop(L, 0);
+
+  /* an error after a thaw that nothing catches: as 'lua_pcall' reports it */
+  fz_reset(L, 3, L, 1, false);
+  lua_getglobal(L, "late");
+  lua_pushinteger(L, 30);
+  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  CHECK(lua_isfrozen(L));
+  lua_ResumeResult er = lua_thaw(L, nullptr);
+  CHECK(er.status == LUA_ERRRUN && er.nres == 1);
+  CHECK(lua_gettop(L) == 1 && fz_str(L, 1).rfind("late ", 0) == 0);
+  lua_settop(L, 0);
+  /* ... and from a host 'lua_call' too (the thaw is protected) */
+  lua_getglobal(L, "late");
+  lua_pushinteger(L, 30);
+  fz_reset(L, 3, L, 1, false);
+  lua_call(L, 1, 1);
+  CHECK(lua_isfrozen(L));
+  er = lua_thaw(L, nullptr);
+  CHECK(er.status == LUA_ERRRUN && lua_gettop(L) == 1);
+  lua_settop(L, 0);
+
+  /* coroutines through 'lua_resume': frozen at every budget point, also
+     inside the coroutines they resume, with their own yields */
+  st = luaL_dostring(L, R"(
+    function body(a)
+      local inner = coroutine.create(function(x)
+        local y = coroutine.yield(x + sum(5))
+        return y * 2
+      end)
+      local _, v = coroutine.resume(inner, a)
+      local w = coroutine.yield(v)
+      local _, z = coroutine.resume(inner, w)
+      local gen = coroutine.wrap(function() for i = 1, 3 do coroutine.yield(i) end end)
+      return z + gen() + gen() + gen() + sum(10)
+    end
+  )");
+  CHECK(st == LUA_OK);
+  auto runbody = [&](lua_Integer n, bool freeze, int& freezes) -> std::string
+  {
+    lua_State* co = lua_newthread(L);
+    lua_getglobal(co, "body");
+    lua_pushinteger(co, 4);
+    fz_reset(L, n, freeze ? co : nullptr, 1, true);
+    std::string log;
+    int nargs = 1;
+    for (;;)
+    {
+      lua_ResumeResult rr = lua_isfrozen(co) ? lua_thaw(co, nullptr) : lua_resume(co, nullptr, nargs);
+      nargs = 0;
+      if (lua_isfrozen(co))
+      {
+        CHECK(rr.status == LUA_OK && rr.nres == 0);
+        continue;
+      }
+      if (rr.status == LUA_YIELD)
+      {
+        CHECK(rr.nres == 1);
+        lua_Integer v = lua_tointeger(co, -1);
+        lua_pop(co, 1);
+        log += "y" + std::to_string(v) + " ";
+        lua_pushinteger(co, v + 1);
+        nargs = 1;
+        continue;
+      }
+      CHECK(rr.status == LUA_OK);
+      log += "r" + std::to_string(lua_tointeger(co, -1));
+      break;
+    }
+    freezes = fz_freezes;
+    lua_setbudget(L, 0, nullptr);
+    lua_pop(L, 1); /* the thread */
+    return log;
+  };
+  int fzs = 0;
+  std::string cplain = runbody(0, false, fzs);
+  for (lua_Integer n : {1, 2, 3, 5, 8})
+  {
+    std::string clog = runbody(n, true, fzs);
+    CHECK(clog == cplain);
+    CHECK(fzs > 5);
+  }
+
+  /* 'lua_freeze' only in the callback, and only for the running chain */
+  CHECK(lua_freeze(L, L) == 0);
+  lua_State* idle = lua_newthread(L);
+  fz_reset(L, 1, idle, 1, true);
+  st = luaL_dostring(L, "for i = 1, 10 do end");
+  CHECK(st == LUA_OK && fz_freezes == 0 && fz_refusals > 5);
+  lua_setbudget(L, 0, nullptr);
+  lua_pop(L, 1);
+
+  /* 'lua_thaw' of a thread that is not frozen */
+  lua_State* nf = lua_newthread(L);
+  lua_ResumeResult tr = lua_thaw(nf, L);
+  CHECK(tr.status == LUA_ERRRUN && fz_str(nf, -1) == "cannot thaw a coroutine that is not frozen");
+  lua_pop(L, 1);
+
+  /* hooks: the budget is not in the hook mask; setting a hook keeps the
+     budget; a thread made after the budget counts too */
+  fz_reset(L, 5, nullptr, 0, false);
+  lua_sethook(L, fz_counthook, LUA_MASKCOUNT, 1000000);
+  CHECK(lua_gethookmask(L) == LUA_MASKCOUNT);
+  lua_sethook(L, nullptr, 0, 0);
+  CHECK(lua_gethookmask(L) == 0);
+  st = luaL_dostring(L, "for i = 1, 100 do end");
+  CHECK(st == LUA_OK && fz_calls > 10);
+  lua_State* later = lua_newthread(L);
+  luaL_loadstring(later, "for i = 1, 100 do end");
+  int calls0 = fz_calls;
+  CHECK(lua_resume(later, L, 0).status == LUA_OK);
+  CHECK(fz_calls > calls0 + 10);
+  lua_setbudget(L, 0, nullptr);
+  lua_settop(L, 0);
+  lua_close(L);
+}
+
+/* }====================================================== */
+
 int main()
 {
   const TestEntry tests[] = {
@@ -5120,6 +5541,7 @@ int main()
       {"load_dump", test_load_dump},
       {"coroutines", test_coroutines},
       {"api_continuations", test_api_continuations},
+      {"freeze", test_freeze},
       {"warnings", test_warnings},
       {"warn_control", test_warn_control},
       {"db_gethook_mask", test_db_gethook_mask},

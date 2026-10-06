@@ -14,6 +14,7 @@ namespace lt
     return byte_view(s, N -1);
   }
 
+  constexpr byte_view _BUDGETKEY("_BUDGETKEY");
   constexpr byte_view _CLIBS("_CLIBS");
   constexpr byte_view _ENV("_ENV");
   constexpr byte_view _G_dot("_G.");
@@ -114,6 +115,7 @@ namespace lt
   constexpr byte_view cannot_resume_non_suspended_coroutine("cannot resume non-suspended coroutine");
   constexpr byte_view cannot_s_s("cannot %s %s");
   constexpr byte_view cannot_s_s_s("cannot %s %s: %s");
+  constexpr byte_view cannot_thaw_a_coroutine_that_is_not_frozen("cannot thaw a coroutine that is not frozen");
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");
   constexpr byte_view ceil_kw("ceil");
   constexpr byte_view char_kw("char");
@@ -273,6 +275,7 @@ namespace lt
   constexpr byte_view format_mismatch("format mismatch");
   constexpr byte_view format_result_too_large("format result too large");
   constexpr byte_view FORPREP("FORPREP");
+  constexpr byte_view freeze("freeze");
   constexpr byte_view frexp("frexp");
   constexpr byte_view ftransfer("ftransfer");
   constexpr byte_view full("full");
@@ -296,6 +299,7 @@ namespace lt
   constexpr byte_view genmajor("genmajor");
   constexpr byte_view genminor("genminor");
   constexpr byte_view get_length_of("get length of");
+  constexpr byte_view getbudget("getbudget");
   constexpr byte_view getenv("getenv");
   constexpr byte_view GETFIELD("GETFIELD");
   constexpr byte_view getfield("getfield");
@@ -391,6 +395,7 @@ namespace lt
   constexpr byte_view IS32INT("IS32INT");
   constexpr byte_view iscfunction("iscfunction");
   constexpr byte_view isdst("isdst");
+  constexpr byte_view isfrozen("isfrozen");
   constexpr byte_view isfunction("isfunction");
   constexpr byte_view isnil("isnil");
   constexpr byte_view isnull("isnull");
@@ -743,6 +748,7 @@ namespace lt
   constexpr byte_view SELF("SELF");
   constexpr byte_view self("self");
   constexpr byte_view set("set");
+  constexpr byte_view setbudget("setbudget");
   constexpr byte_view SETFIELD("SETFIELD");
   constexpr byte_view setfield("setfield");
   constexpr byte_view setglobal("setglobal");
@@ -844,6 +850,7 @@ namespace lt
   constexpr byte_view TFORCALL("TFORCALL");
   constexpr byte_view TFORLOOP("TFORLOOP");
   constexpr byte_view TFORPREP("TFORPREP");
+  constexpr byte_view thaw("thaw");
   constexpr byte_view then("then");
   constexpr byte_view thread("thread");
   constexpr byte_view threadstatus("threadstatus");

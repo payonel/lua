@@ -1221,6 +1221,20 @@ static l_forceinline int l_gei(lua_Integer a, lua_Integer b)
 ** the stack or hooks.)
 */
 
+/*
+** Trace a function as it starts or goes on. With only the budget, there
+** is nothing to trace: just keep the trap on, to count steps.
+*/
+static l_forceinline int tracecall(lua_State* L, CallInfo* ci)
+{
+  if (L->hookmask == LUA_MASKBUDGET)
+  {
+    ci->trap = 1;
+    return 1;
+  }
+  return luaG_tracecall(L);
+}
+
 static inline void luai_threadyield(lua_State* L)
 {
   (void) L;
@@ -1238,22 +1252,29 @@ void luaV_execute(lua_State* L, CallInfo* ci)
   const Instruction* code;
   int pc;
   int trap;
+  global_State* g = L->l_G;
   trap = L->hookmask;
   cl = ci_func(L, ci);
   k = cl->p->k.data();
   code = cl->p->code.data();
   pc = ci->savedpc;
   if (l_unlikely(trap))
-    trap = luaG_tracecall(L);
+    trap = tracecall(L, ci);
+  ci->callstatus &= ~CIST_FROZE; /* (a frozen function goes on: see 'unroll') */
   base = ci->func + 1;
   /* main loop of interpreter */
   for (;;)
   {
     Instruction i; /* instruction being executed */
-    if (l_unlikely(trap)) /* stack reallocation or hooks? */
+    if (l_unlikely(trap)) /* stack reallocation, hooks or budget? */
     {
-      trap = luaG_traceexec(L, pc); /* handle hooks */
-      base = ci->func + 1;          /* correct stack */
+      if (L->hookmask == LUA_MASKBUDGET && g->budgetleft > 0)
+        g->budgetleft--; /* a step of the budget (no hooks) */
+      else
+      {
+        trap = luaG_traceexec(L, pc); /* handle hooks */
+        base = ci->func + 1;          /* correct stack */
+      }
     }
     i = code[pc++];
     assert(base == ci->func + 1);
@@ -2599,7 +2620,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           code = cl->p->code.data();
           pc = ci->savedpc;
           if (l_unlikely(trap))
-            trap = luaG_tracecall(L);
+            trap = tracecall(L, ci);
           base = ci->func + 1;
         }
         break;
@@ -2631,7 +2652,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           code = cl->p->code.data();
           pc = ci->savedpc;
           if (l_unlikely(trap))
-            trap = luaG_tracecall(L);
+            trap = tracecall(L, ci);
           base = ci->func + 1;
         }
         else
@@ -2647,7 +2668,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
           code = cl->p->code.data();
           pc = ci->savedpc;
           if (l_unlikely(trap))
-            trap = luaG_tracecall(L);
+            trap = tracecall(L, ci);
           base = ci->func + 1;
         }
         break;
@@ -2682,13 +2703,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         code = cl->p->code.data();
         pc = ci->savedpc;
         if (l_unlikely(trap))
-          trap = luaG_tracecall(L);
+          trap = tracecall(L, ci);
         base = ci->func + 1;
         break;
       }
       case OP_RETURN0:
       {
-        if (l_unlikely(L->hookmask))
+        if (l_unlikely(L->hookmask & ~LUA_MASKBUDGET))
         {
           StkId ra = base + GETARG_A(i);
           L->top = ra;
@@ -2712,13 +2733,13 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         code = cl->p->code.data();
         pc = ci->savedpc;
         if (l_unlikely(trap))
-          trap = luaG_tracecall(L);
+          trap = tracecall(L, ci);
         base = ci->func + 1;
         break;
       }
       case OP_RETURN1:
       {
-        if (l_unlikely(L->hookmask))
+        if (l_unlikely(L->hookmask & ~LUA_MASKBUDGET))
         {
           StkId ra = base + GETARG_A(i);
           L->top = ra + 1;
@@ -2750,7 +2771,7 @@ void luaV_execute(lua_State* L, CallInfo* ci)
         code = cl->p->code.data();
         pc = ci->savedpc;
         if (l_unlikely(trap))
-          trap = luaG_tracecall(L);
+          trap = tracecall(L, ci);
         base = ci->func + 1;
         break;
       }

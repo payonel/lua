@@ -123,7 +123,11 @@ void luaT_callTM(lua_State* L, const TValue* f, const TValue* p1,
   if (isLuacode(L->ci) || (L->ci->callstatus & CIST_APIK))
     luaD_call(L, func, 0);
   else
+  { /* (cannot freeze) */
+    L->nfz++;
     luaD_callnoyield(L, func, 0);
+    L->nfz--;
+  }
 }
 
 lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
@@ -140,7 +144,11 @@ lu_byte luaT_callTMres(lua_State* L, const TValue* f, const TValue* p1,
   if (isLuacode(L->ci) || (L->ci->callstatus & CIST_APIK))
     luaD_call(L, func, 1);
   else
+  { /* (cannot freeze) */
+    L->nfz++;
     luaD_callnoyield(L, func, 1);
+    L->nfz--;
+  }
   res = (static_cast<StkId>(result));
   copyslot(L, res, --L->top); /* move result to its place */
   return withvariant(slottag(L, res));     /* return tag of the result */

@@ -158,6 +158,21 @@ constexpr l_uint32 CIST_FIN = CIST_HOOKYIELD << 1;
 /* C function is in an API call with a continuation ('lua_getik'...):
    a metamethod the call runs may yield */
 constexpr l_uint32 CIST_APIK = CIST_FIN << 1;
+/* Lua function frozen at a budget point: the instruction before 'savedpc'
+   has not run yet (see 'lua_freeze') */
+constexpr l_uint32 CIST_FROZE = CIST_APIK << 1;
+/* C function is in a call that cannot yield ('lua_callk' or 'lua_pcallk'
+   in a thread that cannot yield): after a thaw, its end counts down the
+   non-yieldable calls */
+constexpr l_uint32 CIST_NYCALL = CIST_FROZE << 1;
+
+/* the budget, in 'hookmask' (not a hook: the hook API never shows it) */
+constexpr int LUA_MASKBUDGET = 1 << 6;
+
+/* how a frozen thread was entered (field 'frozen') */
+constexpr lu_byte FZ_RESUME = 1; /* by 'lua_resume' or 'lua_thaw' */
+constexpr lu_byte FZ_CALL = 2;   /* by a 'lua_call' of the host */
+constexpr lu_byte FZ_PCALL = 3;  /* by a 'lua_pcall' of the host */
 
 /*
 ** How 'finishCcall' finishes an API call with a continuation whose
@@ -249,6 +264,16 @@ struct lua_State : GCListed
     int ntransfer = 0; /* number of values transferred */
   } transferinfo;
   void* extra = nullptr;
+  /* freezing ('lua_freeze') */
+  lua_State* resumer = nullptr;     /* thread resuming this one, while it runs */
+  lua_State* frozenchild = nullptr; /* frozen while resuming this thread */
+  int nfz = 0;              /* number of calls in the stack that cannot freeze */
+  lu_byte resumedk = 0;     /* resumed by a call with a continuation */
+  lu_byte frozen = 0;       /* frozen: how it was entered (FZ_*); 0: not */
+  StkId frozenfunc = 0;     /* frozen in a host call: the function called, */
+  StkId frozenerrfunc = 0;  /* its message handler, */
+  int frozennres = 0;       /* its number of results, */
+  l_uint32 frozenny = 0;    /* and the non-yieldable calls when it began */
 };
 
 namespace lua::runtime
@@ -500,6 +525,12 @@ static l_forceinline void decnny(lua_State* L)
   L->nCcalls -= 0x10000;
 }
 
+/* number of non-yieldable calls */
+static l_forceinline l_uint32 getnny(const lua_State* L)
+{
+  return L->nCcalls >> 16;
+}
+
 static l_forceinline int stacksize(const lua_State* th)
 {
   return (int)th->stack_last;
@@ -557,6 +588,14 @@ struct global_State
   TString* tmname[TM_N] = {};                     /* array with tag-method names */
   Table* mt[LUA_NUMTYPES] = {};            /* metatables for basic types */
   lua_WarnFunction* warnf = nullptr;                    /* warning function */
+  /* the budget ('lua_setbudget') */
+  l_mem budget = 0;                  /* steps between two calls of 'budgetf' */
+  l_mem budgetleft = 0;              /* steps left before the next call */
+  lua_Budget budgetf = nullptr;      /* the budget callback */
+  lua_State* budgetL = nullptr;      /* thread running it, while it runs */
+  int budgetnfz = 0;                 /* its 'nfz' when the callback began */
+  lua_State* freezereq = nullptr;    /* coroutine the callback asked to freeze */
+  lua_State* freezetarget = nullptr; /* coroutine being frozen (unwinding) */
   InternalString locale_name;
   lua_State mainth;                          /* main thread of this state */
 };
@@ -584,6 +623,13 @@ static l_forceinline int completestate(global_State* g)
 }
 
 /* actual number of total memory allocated */
+/* spend 'n' steps of the budget, if there is one */
+static l_forceinline void luaE_spend(lua_State* L, l_mem n)
+{
+  if (L->hookmask & LUA_MASKBUDGET)
+    L->l_G->budgetleft -= n;
+}
+
 static l_forceinline l_mem gettotalbytes(global_State* g)
 {
   return g->GCtotalbytes - g->GCdebt;

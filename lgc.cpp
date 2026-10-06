@@ -760,6 +760,8 @@ static l_mem traversethread(global_State* g, lua_State* th)
   }
   for (uv = th->openupval; uv != nullptr; uv = uv->opennext)
     markobject(g, uv); /* open upvalues cannot be collected */
+  if (th->frozenchild != nullptr)
+    markobject(g, th->frozenchild); /* the coroutine a frozen thread resumed */
   if (g->gcstate == GCSatomic)
   { /* final traversal? */
     if (!g->gcemergency)
@@ -1074,7 +1076,9 @@ static void GCTM(lua_State* L)
     setslot(L, L->top++, &v);   /* ... and its argument */
     L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
     DoTheCall call;
+    L->nfz++; /* a finalizer cannot freeze */
     status = luaD_pcall(L, &call, L->top - 2, 0);
+    L->nfz--;
     L->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */
     L->allowhook = oldah;           /* restore hooks */
     g->gcstp = oldgcstp;            /* restore state */

@@ -150,6 +150,12 @@ struct lua_Debug;
 typedef void (*lua_Hook)(lua_State* L, lua_Debug* ar);
 
 /*
+** Budget callback ('lua_setbudget'): called on the thread that spent the
+** budget
+*/
+typedef void (*lua_Budget)(lua_State* L);
+
+/*
 ** RCS ident string
 */
 extern const byte_view lua_ident;
@@ -325,6 +331,26 @@ struct lua_ResumeResult
 };
 lua_ResumeResult(lua_resume)(lua_State* L, lua_State* from, int narg);
 int(lua_status)(lua_State* L);
+
+/*
+** Budget and freezing. The VM calls the budget callback 'f' each time 'n'
+** steps are spent (a step is a VM instruction, a C function call, or a
+** hand-off between C and Lua), on the thread that spent them; 'n' 0 turns
+** the budget off ('lua_getbudget' gives 'n' and the steps left before the
+** next call). The callback runs with no hooks and no budget. In it,
+** 'lua_freeze' asks to freeze coroutine 'co' (a coroutine in the running
+** chain, or the thread running): when the callback returns, 'co' and every
+** coroutine it resumed stop where they are, and the call that resumed or
+** called 'co' returns as if 'co' had returned nothing (LUA_OK). False if
+** 'co' cannot be frozen now (a call that cannot freeze is in the way).
+** 'lua_thaw' goes on with a frozen coroutine and returns like
+** 'lua_resume'.
+*/
+void(lua_setbudget)(lua_State* L, lua_Integer n, lua_Budget f);
+lua_Integer(lua_getbudget)(lua_State* L, lua_Integer* left);
+int(lua_freeze)(lua_State* L, lua_State* co);
+int(lua_isfrozen)(lua_State* co);
+lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from);
 int(lua_isyieldable)(lua_State* L);
 
 int lua_yield(lua_State* L, int nresults);

@@ -142,7 +142,11 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
   if (yy)
     luaD_call(L, func, 0);
   else
+  { /* (cannot freeze) */
+    L->nfz++;
     luaD_callnoyield(L, func, 0);
+    L->nfz--;
+  }
 }
 
 /*
