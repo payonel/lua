@@ -26,13 +26,15 @@ do
   assert(debug.getbudget(main) == nil)
 end
 
--- 'debug.setbudget' and 'debug.getbudget' take the running thread when
--- they are given none
+-- 'debug.setbudget' and 'debug.getbudget' need a thread: the kernel sets
+-- the budget of another thread
 do
-  debug.setbudget(2, function() end)
-  assert(debug.getbudget() == 2 and debug.getbudget(main) == 2)
-  debug.setbudget(0)
-  assert(debug.getbudget() == nil)
+  assert(not pcall(debug.setbudget, 2, function() end))
+  assert(not pcall(debug.getbudget))
+  debug.setbudget(main, 2, function() end)
+  assert(debug.getbudget(main) == 2)
+  debug.setbudget(main, 0)
+  assert(debug.getbudget(main) == nil)
 end
 
 -- the threads of a group share one counter
@@ -139,4 +141,42 @@ do
   end
   collectgarbage(); collectgarbage()
   assert(collectgarbage("count") < before + 50) -- nothing piles up
+end
+
+-- setbudget is immediate: no thread runs without its budget once it is set
+do
+  -- on a thread that is running, resumed by the kernel
+  local n = 0
+  local T = coroutine.create(function()
+    debug.setbudget(coroutine.running(), 1, function() n = n + 1 end)
+    for i = 1, 50 do end
+  end)
+  assert(coroutine.resume(T))
+  assert(n > 10)
+
+  -- on a thread that is waiting for another it resumed (normal)
+  local m = 0
+  local U
+  U = coroutine.create(function()
+    local c = coroutine.create(function()
+      debug.setbudget(U, 1, function() m = m + 1 end)
+    end)
+    assert(coroutine.resume(c))
+    local before = m
+    for i = 1, 50 do end -- U runs with its budget from here
+    assert(m > before + 10)
+  end)
+  assert(coroutine.resume(U))
+
+  -- on a suspended thread: at its next resume
+  local k = 0
+  local V = coroutine.create(function()
+    coroutine.yield()
+    for i = 1, 50 do end
+  end)
+  assert(coroutine.resume(V))
+  debug.setbudget(V, 1, function() k = k + 1 end)
+  assert(k == 0)
+  assert(coroutine.resume(V))
+  assert(k > 10)
 end

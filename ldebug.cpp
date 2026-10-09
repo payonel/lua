@@ -172,9 +172,10 @@ void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
 /*
 ** Set the budget of thread 'co': a new budget group, which it belongs to
 ** and passes to the threads it creates (and, while they run, to the ones
-** it resumes). 'n' 0 removes it. The group is in effect at once unless
-** the thread is suspended or is being resumed by another (a resume puts
-** one in effect, see 'luaE_enterbudget').
+** it resumes). 'n' 0 removes it. The group is in effect at once, by the
+** rule of a resume ('luaE_enterbudget'), unless the thread is suspended:
+** then at its next resume. So a thread never runs without its budget once
+** it has been set.
 */
 void lua_setbudget(lua_State* co, lua_Integer n, lua_Budget f)
 {
@@ -193,8 +194,8 @@ void lua_setbudget(lua_State* co, lua_Integer n, lua_Budget f)
     bg->root = co;
     co->bown = bg;
   }
-  if (co->resumer == nullptr && co->status != LUA_YIELD)
-    luaE_setbeff(co, co->bown);
+  if (co->status != LUA_YIELD) /* (a suspended thread gets it at its next resume) */
+    luaE_enterbudget(co, co->resumer); /* as at a resume: no thread runs without its budget */
   lua_unlock(co);
 }
 

@@ -33,16 +33,16 @@ local HUGE = 1 << 50
 
 -- 'getbudget': fail with no budget; n, the callback and the steps left
 do
-  assert(debug.getbudget() == nil)
+  assert(debug.getbudget(coroutine.running()) == nil)
   local f = function() end
-  debug.setbudget(1000, f)
-  local n, g, left = debug.getbudget()
+  debug.setbudget(coroutine.running(), 1000, f)
+  local n, g, left = debug.getbudget(coroutine.running())
   assert(n == 1000 and g == f and left > 0 and left <= 1000)
-  debug.setbudget(0)
-  assert(debug.getbudget() == nil)
-  debug.setbudget(10, f)
-  debug.setbudget(10) -- no callback: off
-  assert(debug.getbudget() == nil)
+  debug.setbudget(coroutine.running(), 0)
+  assert(debug.getbudget(coroutine.running()) == nil)
+  debug.setbudget(coroutine.running(), 10, f)
+  debug.setbudget(coroutine.running(), 10) -- no callback: off
+  assert(debug.getbudget(coroutine.running()) == nil)
   assert(not pcall(debug.setbudget, -1, f))
   assert(not pcall(debug.setbudget, 1, 42))
 end
@@ -69,20 +69,20 @@ do
   for _, k in ipairs{0, 1, 5, 40} do
     local co = coroutine.create(work)
     local calls = 0
-    debug.setbudget(1, function(t) if t == co then calls = calls + 1 end end)
+    debug.setbudget(coroutine.running(), 1, function(t) if t == co then calls = calls + 1 end end)
     assert(coroutine.resume(co, k))
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     assert(calls == instructions(work, k), calls .. " vs " .. instructions(work, k))
   end
 end
 
 -- the steps of some code: the steps left before it, after it
 local function spent(f)
-  debug.setbudget(HUGE, function() error("no call expected") end)
-  local _, _, l0 = debug.getbudget()
+  debug.setbudget(coroutine.running(), HUGE, function() error("no call expected") end)
+  local _, _, l0 = debug.getbudget(coroutine.running())
   f()
-  local _, _, l1 = debug.getbudget()
-  debug.setbudget(0)
+  local _, _, l1 = debug.getbudget(coroutine.running())
+  debug.setbudget(coroutine.running(), 0)
   return l0 - l1
 end
 
@@ -112,11 +112,11 @@ end
 -- in every one of them
 do
   local seen = {}
-  debug.setbudget(1, function(t) seen[t] = (seen[t] or 0) + 1 end)
+  debug.setbudget(coroutine.running(), 1, function(t) seen[t] = (seen[t] or 0) + 1 end)
   local inner = coroutine.wrap(function() for i = 1, 30 do end return 1 end)
   local outer = coroutine.create(function() for i = 1, 30 do end return inner() end)
   assert(coroutine.resume(outer))
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   local threads = 0
   for _ in pairs(seen) do threads = threads + 1 end
   assert(threads >= 3) -- main, outer and the wrapped one
@@ -155,14 +155,14 @@ end
 -- budget goes on
 do
   local calls = 0
-  debug.setbudget(3, function()
+  debug.setbudget(coroutine.running(), 3, function()
     calls = calls + 1
     if calls == 2 then error("budget error", 0) end
   end)
   local ok, err = pcall(function() for i = 1, 100 do end end)
   local after = calls
   for i = 1, 30 do end
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(not ok and err == "budget error")
   assert(calls > after) -- it goes on
 end
@@ -170,9 +170,9 @@ end
 -- turning the budget off from the callback
 do
   local calls = 0
-  debug.setbudget(2, function(t) calls = calls + 1 debug.setbudget(t, 0) end)
+  debug.setbudget(coroutine.running(), 2, function(t) calls = calls + 1 debug.setbudget(t, 0) end)
   for i = 1, 100 do end
-  assert(calls == 1 and debug.getbudget() == nil)
+  assert(calls == 1 and debug.getbudget(coroutine.running()) == nil)
 end
 
 -- the same program makes the same callbacks, at the same places
@@ -212,7 +212,7 @@ do
     for i = 1, 100 do s = s + i end
     return s, a, b
   end)
-  debug.setbudget(20, function(t)
+  debug.setbudget(coroutine.running(), 20, function(t)
     if t == co and froze == 0 and debug.freeze(co) then froze = froze + 1 end
   end)
   local r = table.pack(coroutine.resume(co, "x", "y"))
@@ -223,7 +223,7 @@ do
   assert(not ok and err == "cannot resume non-suspended coroutine")
   assert(not pcall(coroutine.close, co))
   r = table.pack(debug.thaw(co))
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(r.n == 4 and r[1] and r[2] == 5050 and r[3] == "x" and r[4] == "y", show(r))
   assert(not debug.isfrozen(co) and coroutine.status(co) == "dead")
   local ok2, err2 = debug.thaw(co)
@@ -237,7 +237,7 @@ do
   assert(coroutine.resume(co)) -- suspended
   local other = coroutine.create(function() end)
   local results = {}
-  debug.setbudget(1, function(t)
+  debug.setbudget(coroutine.running(), 1, function(t)
     if #results == 0 then
       results[1] = debug.freeze(co)        -- suspended
       results[2] = debug.freeze(other)     -- not started
@@ -246,7 +246,7 @@ do
     end
   end)
   for i = 1, 5 do end
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(results[1] == false and results[2] == false and results[4] == false)
   -- (the stand-alone interpreter runs the script from a C function that
   -- calls it with plain 'lua_pcall', so the main thread cannot freeze)
@@ -264,7 +264,7 @@ local function drive(f, n, freeze)
   local co = coroutine.create(f)
   local log, freezes = {}, 0
   if n then
-    debug.setbudget(n, function(t)
+    debug.setbudget(coroutine.running(), n, function(t)
       if freeze(co, t) then freezes = freezes + 1 end
     end)
   end
@@ -282,7 +282,7 @@ local function drive(f, n, freeze)
       break
     end
   end
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   return log, freezes
 end
 
@@ -403,7 +403,7 @@ do
   inner = coroutine.create(function() for i = 1, 100 do end return "in" end)
   middle = coroutine.create(function() return kresume(inner) end)
   outer = coroutine.create(function() return select(2, kresume(middle)) end)
-  debug.setbudget(10, function(t)
+  debug.setbudget(coroutine.running(), 10, function(t)
     if t == inner and not seen and debug.freeze(outer) then seen = true end
   end)
   local r = table.pack(coroutine.resume(outer))
@@ -414,7 +414,7 @@ do
   assert(coroutine.status(inner) == "running")
   collectgarbage() -- (a frozen chain survives a collection)
   r = table.pack(debug.thaw(outer))
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(r[1] == true and r[2] == true and r[3] == "in", show(r))
   assert(coroutine.status(outer) == "dead")
   assert(not debug.isfrozen(middle) and not debug.isfrozen(inner))
@@ -433,11 +433,11 @@ do
     while debug.isfrozen(middle) do r = table.pack(debug.thaw(middle)) end
     return frozen, r[2]
   end)
-  debug.setbudget(10, function(t)
+  debug.setbudget(coroutine.running(), 10, function(t)
     if t == inner and not froze then froze = debug.freeze(middle) end
   end)
   local ok, frozen, v = coroutine.resume(outer)
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(ok and froze and frozen == true and v == "in")
 end
 
@@ -448,7 +448,7 @@ do
     local co = coroutine.create(f)
     local runs, freezes, refusals = 0, 0, 0
     local main = coroutine.running()
-    debug.setbudget(1, function(t)
+    debug.setbudget(coroutine.running(), 1, function(t)
       if t ~= main then -- (co, or a coroutine running inside it)
         runs = runs + 1
         if debug.freeze(co) then freezes = freezes + 1 else refusals = refusals + 1 end
@@ -456,7 +456,7 @@ do
     end)
     local r = table.pack(coroutine.resume(co))
     while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     assert(r[1], name .. ": " .. tostring(r[2]))
     assert(refusals > 0, name .. ": no refusal")
     return r
@@ -500,7 +500,7 @@ do
     local co = coroutine.create(f)
     local freezes, refusals = 0, 0
     if n then
-      debug.setbudget(n, function(t)
+      debug.setbudget(coroutine.running(), n, function(t)
         if t ~= main then
           if debug.freeze(co) then freezes = freezes + 1 else refusals = refusals + 1 end
         end
@@ -508,7 +508,7 @@ do
     end
     local r = table.pack(coroutine.resume(co, busy))
     while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     return r, freezes, refusals
   end
   function everywhere(name, f, budgets)
@@ -540,14 +540,14 @@ do
   local function inside(fn, work)
     local co = coroutine.create(work)
     local frozen = 0
-    debug.setbudget(5, function(t)
+    debug.setbudget(coroutine.running(), 5, function(t)
       if t == co and debug.getinfo(t, 0, "f").func == fn and debug.freeze(co) then
         frozen = frozen + 1
       end
     end)
     local r = table.pack(coroutine.resume(co))
     while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     assert(r[1], r[2])
     local plain = table.pack(select(2, coroutine.resume(coroutine.create(work))))
     table.remove(r, 1)
@@ -585,10 +585,10 @@ if io.popen and arg and arg[-1] then
   local script = [[
     local co = coroutine.create(function() debug.debug() return "done" end)
     local freezes = 0
-    debug.setbudget(3, function(t) if t == co and debug.freeze(co) then freezes = freezes + 1 end end)
+    debug.setbudget(coroutine.running(), 3, function(t) if t == co and debug.freeze(co) then freezes = freezes + 1 end end)
     local r = {coroutine.resume(co)}
     while debug.isfrozen(co) do r = {debug.thaw(co)} end
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     io.write(tostring(freezes > 50), " ", tostring(r[2]))
   ]]
   local p = io.popen(string.format("%q -e %q < %q 2>/dev/null", arg[-1], script, input))
@@ -619,9 +619,9 @@ do
     return s, coroutine.yield("after")
   end)
   local freezes = 0
-  debug.setbudget(3, function(t) if t == co and debug.freeze(co) then freezes = freezes + 1 end end)
+  debug.setbudget(coroutine.running(), 3, function(t) if t == co and debug.freeze(co) then freezes = freezes + 1 end end)
   local r = table.pack(kresume(co))
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(r[1] and r[2] == "after", show(r))
   assert(coroutine.status(co) == "suspended")
   r = table.pack(coroutine.resume(co, "y"))
@@ -672,11 +672,11 @@ do
     fth = coroutine.running()
     for i = 1, 300 do progress = progress + 1 end
   end})
-  debug.setbudget(10, function(t)
+  debug.setbudget(coroutine.running(), 10, function(t)
     if t == fth and froze == 0 and debug.freeze(t) then froze = 1 end
   end)
   collectgarbage()
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(froze == 1 and debug.isfrozen(fth) and progress < 300)
   assert(coroutine.status(fth) == "running" and not coroutine.resume(fth))
   setmetatable({}, {__gc = function() others = others + 1 end})
@@ -704,14 +704,14 @@ do
     collectgarbage()
     return "after"
   end)
-  debug.setbudget(5, function(t)
+  debug.setbudget(coroutine.running(), 5, function(t)
     if #results == 0 and t == fth then
       results[1] = debug.freeze(co)
       results[2] = debug.freeze(t)
     end
   end)
   local ok, v = coroutine.resume(co)
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(results[1] == false and results[2] == true)
   assert(ok and v == "after") -- (the coroutine went on)
   assert(debug.isfrozen(fth))
@@ -735,7 +735,7 @@ do
     end})
     local frozen = {}
     if n then
-      debug.setbudget(n, function(t) if t == fth and debug.freeze(t) then frozen[#frozen + 1] = t end end)
+      debug.setbudget(coroutine.running(), n, function(t) if t == fth and debug.freeze(t) then frozen[#frozen + 1] = t end end)
     end
     collectgarbage()
     local thaws = 0
@@ -744,7 +744,7 @@ do
       assert(debug.thaw(t) == true)
       thaws = thaws + 1
     end
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     return table.concat(log, "|"), thaws
   end
   local plain = run()
@@ -761,9 +761,9 @@ if io.popen and arg and arg[-1] then
     warn("@allow")
     local fth, froze
     setmetatable({}, {__gc = function() fth = coroutine.running() for i = 1, 50 do end error("late", 0) end})
-    debug.setbudget(10, function(t) if t == fth and not froze then froze = debug.freeze(t) end end)
+    debug.setbudget(coroutine.running(), 10, function(t) if t == fth and not froze then froze = debug.freeze(t) end end)
     collectgarbage()
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     io.stderr:write("frozen ", tostring(debug.isfrozen(fth)), "\n")
     io.stderr:write("thaw ", tostring(debug.thaw(fth)), "\n")
   ]]
@@ -802,12 +802,12 @@ do
       return ok, err, y, coroutine.yield("y")
     end)
     local froze = 0
-    debug.setbudget(10, function(t)
+    debug.setbudget(coroutine.running(), 10, function(t)
       if t == co and inside and debug.freeze(co) then froze = froze + 1 end
     end)
     local r = table.pack(coroutine.resume(co))
     while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     assert(froze > 0 and r[1] and r[2] == "y", i .. ": " .. show(r))
     r = table.pack(coroutine.resume(co, "z"))
     assert(r[1] and r[2] == false and r[3] == "x" and r[4] == true and r[5] == "z", i .. ": " .. show(r))
@@ -820,7 +820,7 @@ do
   local main = coroutine.running()
   local seen = {}
   local co = coroutine.create(function() for i = 1, 30 do end end)
-  debug.setbudget(10, function(t)
+  debug.setbudget(coroutine.running(), 10, function(t)
     if t == co and not seen.cb then
       seen.cb = coroutine.running()
       seen.status = coroutine.status(t)
@@ -828,7 +828,7 @@ do
     end
   end)
   assert(coroutine.resume(co))
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(seen.cb ~= co and seen.cb ~= main and type(seen.cb) == "thread")
   assert(seen.status == "normal" and seen.where == "Lua")
 end
@@ -841,11 +841,11 @@ do
     collectgarbage()
     local co = coroutine.create(work)
     if budget then
-      debug.setbudget(budget, function(t) if t == co then debug.freeze(co) end end)
+      debug.setbudget(coroutine.running(), budget, function(t) if t == co then debug.freeze(co) end end)
     end
     local r = table.pack(coroutine.resume(co))
     while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     return r
   end
   local works = {
@@ -897,9 +897,9 @@ do
     local co = coroutine.create(function() for i = 1, 100 do end end)
     weak[co] = true
     local froze
-    debug.setbudget(5, function(t) if t == co and not froze then froze = debug.freeze(co) end end)
+    debug.setbudget(coroutine.running(), 5, function(t) if t == co and not froze then froze = debug.freeze(co) end end)
     coroutine.resume(co)
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     assert(froze and debug.isfrozen(co))
   end
   collectgarbage()
@@ -920,11 +920,11 @@ do
     end)
     debug.sethook(co, function(ev, line) log[#log + 1] = ev .. ":" .. tostring(line) end, "crl", 3)
     if n then
-      debug.setbudget(n, function(t) if t == co then debug.freeze(co) end end)
+      debug.setbudget(coroutine.running(), n, function(t) if t == co then debug.freeze(co) end end)
     end
     local r = table.pack(coroutine.resume(co))
     while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
-    debug.setbudget(0)
+    debug.setbudget(coroutine.running(), 0)
     assert(r[1] and r[2] == 420)
     return log
   end
@@ -948,11 +948,11 @@ do
     return ok, v
   end)
   local freezes = 0
-  debug.setbudget(2, function(t) if t == co and debug.freeze(co) then freezes = freezes + 1 end end)
+  debug.setbudget(coroutine.running(), 2, function(t) if t == co and debug.freeze(co) then freezes = freezes + 1 end end)
   local r = table.pack(kresume(co))
   assert(r[1] and r[2] == "in pcall")
   r = table.pack(kresume(co, "thaw"))
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(r[1] and r[2] == false and r[3] == "after thaw", show(r))
   assert(freezes > 20)
 end
@@ -961,14 +961,14 @@ end
 do
   local co = coroutine.create(function() for i = 1, 300 do end return "end" end)
   local thaws = 0
-  debug.setbudget(10, function(t) if t == co then debug.freeze(co) end end)
+  debug.setbudget(coroutine.running(), 10, function(t) if t == co then debug.freeze(co) end end)
   local r = table.pack(coroutine.resume(co))
   while debug.isfrozen(co) do
     assert(r.n == 1 and r[1] == true)
     r = table.pack(debug.thaw(co))
     thaws = thaws + 1
   end
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(r[1] and r[2] == "end" and thaws > 10)
 end
 
@@ -977,11 +977,11 @@ end
 do
   local co = coroutine.create(function() for i = 1, 100 do end return "x" end)
   local once
-  debug.setbudget(10, function(t) if t == co and not once then once = debug.freeze(co) end end)
+  debug.setbudget(coroutine.running(), 10, function(t) if t == co and not once then once = debug.freeze(co) end end)
   coroutine.resume(co)
   assert(debug.isfrozen(co))
   local other = coroutine.wrap(function() return debug.thaw(co) end)
   local ok, v = other()
-  debug.setbudget(0)
+  debug.setbudget(coroutine.running(), 0)
   assert(ok and v == "x")
 end

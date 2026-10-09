@@ -558,6 +558,8 @@ static int db_debug(lua_State* L)
 ** thread that spent it keeps its stack and C calls as they are). An error
 ** in it is an error where the budget ran out.
 */
+static lua_State* checkco(lua_State* L, int arg);
+
 static void budgetf(lua_State* L)
 {
   lua_State* B = lua_budgetthread(L);
@@ -573,9 +575,8 @@ static void budgetf(lua_State* L)
 
 static int db_setbudget(lua_State* L)
 {
-  ThreadArg ta = getthread(L);
-  lua_State* co = ta.L1;
-  int arg = ta.arg;
+  lua_State* co = checkco(L, 1); /* (the thread is required: the kernel sets it on another) */
+  const int arg = 1;
   lua_Integer n = luaL_checkinteger(L, arg + 1);
   luaL_argchecki(L, n >= 0, arg + 1, lt::out_of_range);
   if (n == 0 || lua_isnoneornil(L, arg + 2))
@@ -600,8 +601,7 @@ static int db_setbudget(lua_State* L)
 
 static int db_getbudget(lua_State* L)
 {
-  ThreadArg ta = getthread(L);
-  lua_State* co = ta.L1;
+  lua_State* co = checkco(L, 1);
   lua_Integer left;
   lua_Integer n = lua_getbudget(co, &left);
   if (n == 0)
