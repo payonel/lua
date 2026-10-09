@@ -13,3 +13,4 @@ test_public_api
 test_engine
 cachegrind.out.*
 vgcore.*
+test_gate

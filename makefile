@@ -137,9 +137,9 @@ $(GATE_T): $(GATE_O) $(CORE_T) $(VARIANT_STAMP)
 # budget point of several sizes (slow: `make gate` is not part of `make full`)
 GATE_STEPS ?= 97 17 3
 gate: $(GATE_T)
-	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
 	for n in $(GATE_STEPS); do \
 	  ( cd tests && ../$(GATE_T) $$n deep/all.lua ) || exit 1; \
+	  mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1; \
 	  ( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd tests; \
 	    cat /dev/null | ../$(GATE_T) $$n all.lua ) || exit 1; \
 	done
