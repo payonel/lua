@@ -307,6 +307,7 @@ struct lua_State : GCListed
   BudgetGroup* bown = nullptr; /* the budget group it belongs to, if any */
   BudgetGroup* beff = nullptr; /* the budget group in effect while it runs */
   lu_byte frozen = 0;       /* frozen: how it was entered (FZ_*); 0: not */
+  bool closeself = false;   /* closing its own variables ('lua_closeself'): a thaw goes on with that */
   lu_byte closestatus = 0;  /* closing its variables ('lua_closethreadk'): the status it closes with */
   StkId frozenfunc = 0;     /* frozen in a host call: the function called, */
   StkId frozenerrfunc = 0;  /* its message handler, */
@@ -625,6 +626,7 @@ struct global_State
   lua_State* twups = nullptr;                   /* list of threads with open upvalues */
   lua_CFunction panic = nullptr;                       /* to be called in unprotected errors */
   TString* memerrmsg = nullptr;                        /* message for memory-allocation errors */
+  TString* nofreezemsg = nullptr;                      /* message of a chain destroyed because it cannot freeze */
   TString* tmname[TM_N] = {};                     /* array with tag-method names */
   Table* mt[LUA_NUMTYPES] = {};            /* metatables for basic types */
   lua_WarnFunction* warnf = nullptr;                    /* warning function */

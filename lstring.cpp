@@ -123,6 +123,8 @@ void luaS_init(lua_State* L)
   g->memerrmsg = TString::luaS_createstr(L, lt::not_enough_memory);
   assert(novariant(g->memerrmsg->tt) >= LUA_TSTRING);
   luaC_fix(L, g->memerrmsg); /* it should never be collected */
+  g->nofreezemsg = TString::luaS_createstr(L, lt::cannot_freeze); /* (made now: destroying a chain allocates nothing) */
+  luaC_fix(L, g->nofreezemsg);
 }
 
 constexpr int LUAI_MAXSHORTLEN = 40;

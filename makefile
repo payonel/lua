@@ -64,7 +64,9 @@ TEST_API_O    =$(OBJ_DIR)/test_public_api.o
 TEST_API_T    =test_public_api
 ENGINE_TEST_O =$(OBJ_DIR)/engine_tests.o
 ENGINE_TEST_T =test_engine
-DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d)
+GATE_O        =$(OBJ_DIR)/gate.o
+GATE_T        =test_gate
+DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(GATE_O:.o=.d)
 
 all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
 
@@ -123,6 +125,25 @@ $(ENGINE_TEST_O): tests/engine/engine_tests.cpp | $(OBJ_DIR)
 $(ENGINE_TEST_T): $(ENGINE_TEST_O) $(OBJ_FILES) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(ENGINE_TEST_O) $(OBJ_FILES) $(LDFLAGS)
 
+# the freeze gate: a script run with a budget that freezes at every budget
+# point, thawed until it ends (tests/gate/gate.cpp)
+$(GATE_O): tests/gate/gate.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -I$(TOP_DIR) -MF $(OBJ_DIR)/gate.d -o $@ -c $<
+
+$(GATE_T): $(GATE_O) $(CORE_T) $(VARIANT_STAMP)
+	$(CXX) -o $@ $(GATE_O) $(CORE_T) $(LDFLAGS)
+
+# the deep tests and the whole upstream suite, frozen and thawed at every
+# budget point of several sizes (slow: `make gate` is not part of `make full`)
+GATE_STEPS ?= 97 17 3
+gate: $(GATE_T)
+	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
+	for n in $(GATE_STEPS); do \
+	  ( cd tests && ../$(GATE_T) $$n deep/all.lua ) || exit 1; \
+	  ( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd tests; \
+	    cat /dev/null | ../$(GATE_T) $$n all.lua ) || exit 1; \
+	done
+
 # just the engine internals tests (`make test` runs them too)
 engine-test: $(ENGINE_TEST_T)
 	./$(ENGINE_TEST_T)
@@ -132,6 +153,7 @@ clean:
 	$(RM) $(LUA_T)
 	$(RM) $(TEST_API_T)
 	$(RM) $(ENGINE_TEST_T)
+	$(RM) $(GATE_T)
 	$(RM) $(TEST_BUILD_FILES)
 	$(RM) $(TEST_DIR)/*.gcno $(TEST_DIR)/*.gcda
 

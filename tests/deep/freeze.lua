@@ -892,6 +892,28 @@ do
   end
 end
 
+-- a count hook (alone, with no line hook) is called as often with freezes
+-- at every budget point, also those inside the hook function
+do
+  local function counts(n, count)
+    local calls = 0
+    local co = coroutine.create(function() for i = 1, 300 do end end)
+    debug.sethook(co, function() calls = calls + 1 end, "", count)
+    if n then debug.setbudget(co, n, function() debug.freeze() end) end
+    local r = table.pack(coroutine.resume(co))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+    assert(r[1])
+    return calls
+  end
+  for _, count in ipairs{1, 4, 25} do
+    local plain = counts(nil, count)
+    assert(plain > 10)
+    for _, n in ipairs{1, 2, 5, 97} do
+      assert(counts(n, count) == plain, "count " .. count .. ", budget " .. n)
+    end
+  end
+end
+
 -- after a thaw, a coroutine can still yield (inside a pcall too), and its
 -- protected calls still catch errors
 do

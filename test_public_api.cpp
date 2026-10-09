@@ -5237,6 +5237,43 @@ static void mh_budget(lua_State*, lua_State* spender)
     lua_freeze(spender);
 }
 
+/* the handler of a host protected call is not in effect inside a protected
+   call of the script that froze before: an error that call catches is not
+   the handler's (the handler used to be put back at a thaw) */
+static void test_handler_in_effect_after_thaw()
+{
+  for (int at = 0; at <= 40; at++)
+  {
+    lua_State* L = new_state();
+    luaL_openlibs(L);
+    CHECK(luaL_loadstring(L, R"(
+      return function(m) return 'H:' .. tostring(m) end,
+             function()
+               local s = 0
+               for i = 1, 10 do s = s + i end
+               local ok, e = pcall(error, 99)
+               for i = 1, 10 do s = s + i end
+               local ok2, e2 = pcall(function() local x = nil; return x.y end)
+               return ok, e, ok2, (tostring(e2):gsub("^.-:%d+: ", "")), s
+             end
+    )") == LUA_OK);
+    lua_call(L, 0, 2); /* the handler at 1, the function at 2 */
+    mh_calls = 0;
+    mh_at = at;
+    lua_setbudget(L, 1, at > 0 ? mh_budget : nullptr);
+    lua_pushvalue(L, 2);
+    int st = lua_pcall(L, 0, 5, 1);
+    while (st == LUA_OK && lua_isfrozen(L))
+      st = lua_thaw(L, nullptr).status;
+    lua_setbudget(L, 0, nullptr);
+    CHECK(st == LUA_OK && lua_gettop(L) == 7);
+    CHECK(lua_toboolean(L, 3) == 0 && lua_tointeger(L, 4) == 99);
+    CHECK(lua_toboolean(L, 5) == 0 && fz_str(L, 6) == "attempt to index a nil value (local 'x')");
+    CHECK(lua_tointeger(L, 7) == 110);
+    lua_close(L);
+  }
+}
+
 /* closing a state whose thread has a budget that freezes at every point:
    the '__gc' of kernel objects all run (a freeze used to stop them and
    abort the close) */
@@ -5853,6 +5890,7 @@ int main()
       {"freeze", test_freeze},
       {"group_gc", test_group_gc},
       {"message_handler_freeze", test_message_handler_freeze},
+      {"handler_in_effect_after_thaw", test_handler_in_effect_after_thaw},
       {"close_with_budget", test_close_with_budget},
       {"warnings", test_warnings},
       {"warn_control", test_warn_control},

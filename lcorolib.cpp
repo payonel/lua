@@ -271,7 +271,7 @@ static int luaB_close(lua_State* L)
     lua_geti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD); /* get main */
     if (lua_tothread(L, -1) == co)
       return luaL_errori(L, lt::cannot_close_main_thread);
-    lua_closethread(co, L);             /* close itself */
+    lua_closeself(L);                   /* close itself (a '__close' can freeze) */
     /* previous call does not return */ /* FALLTHROUGH */
   default:
     assert(0);

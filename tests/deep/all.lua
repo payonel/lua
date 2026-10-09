@@ -48,10 +48,17 @@ local dir = arg and arg[0] and arg[0]:match("^(.*[/\\])") or ""
 print("\n\tStarting deep tests")
 
 local start = os.clock()
+-- (the freeze gate, 'make gate', runs these with a budget on the main
+-- thread: the files that test the budget itself are not run there)
+local ownbudget = {["freeze.lua"] = true, ["budgetgroups.lua"] = true, ["budgetgc.lua"] = true}
 for _, name in ipairs(tests) do
   io.write("  ", name, " ... ")
-  dofile(dir .. name)
-  print("OK")
+  if GATE and ownbudget[name] then
+    print("skipped (it sets budgets itself)")
+  else
+    dofile(dir .. name)
+    print("OK")
+  end
   collectgarbage()
 end
 

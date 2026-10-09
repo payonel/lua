@@ -1840,7 +1840,7 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     }
     if (l_unlikely(status == LUA_FREEZE))
     {
-      hostfrozen(L, FZ_PCALL, c.func, nresults, func);
+      hostfrozen(L, FZ_PCALL, c.func, nresults, L->errfunc); /* (the handler in effect where it froze) */
       L->errfunc = olderrfunc;
       lua_unlock(L);
       return LUA_OK;
@@ -1969,12 +1969,23 @@ int lua_status(lua_State* L)
   return L->status;
 }
 
+/* is the thread running a '__gc' that its group's thread called (see 'gcdrain')? */
+static bool inuserfinalizer(lua_State* L)
+{
+  for (CallInfo* ci = L->ci; ci != nullptr; ci = ci->previous)
+    if (ci->callstatus & CIST_FIN)
+      return true;
+  return false;
+}
+
 int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
 {
   int res = 0;
   global_State* g = L->l_G;
   if (g->gcstp & (GCSTPGC | GCSTPCLS)) /* internal stop? */
     return -1;                         /* all options are invalid when stopped */
+  if (inuserfinalizer(L))              /* (the collector is not stopped for it: it can freeze) */
+    return -1;                         /* but as in stock Lua, the options are invalid there */
   lua_lock(L);
   switch (what)
   {

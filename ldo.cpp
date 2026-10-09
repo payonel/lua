@@ -573,7 +573,7 @@ lua_State* luaD_budget(lua_State* L)
   {
     if (freezable)
       return user;
-    setsvalue(L, &err, TString::luaS_createstr(L, lt::cannot_freeze));
+    setsvalue(L, &err, g->nofreezemsg);
   }
   killchain(L, user, err);
 }
@@ -612,6 +612,7 @@ bool luaD_killed(lua_State* L)
   L->resumer = nullptr;
   luaE_leavebudget(L);
   L->status = LUA_ERRRUN; /* mark thread as 'dead' */
+  L->closeself = false;
   setslot(L, L->top, &g->killerr); /* (twice, as an error leaves it: the second */
   setslot(L, L->top + 1, &g->killerr); /* stays after a resume moves the first) */
   L->top += 2;
@@ -657,8 +658,9 @@ void luaD_hookcall(lua_State* L, CallInfo* ci)
 */
 static void rethook(lua_State* L, CallInfo* ci, int nres, lu_byte ev)
 {
-  if (L->hookmask & LUA_MASKRET)
-  {                                   /* is return hook on? */
+  if ((L->hookmask & LUA_MASKRET) &&
+      !(!isLua(ci) && withvariant(slottag(L, ci->func)) == LUA_VLCF && slotfval(L, ci->func) == luaC_drainfunction()))
+  {                                   /* is return hook on (and not for the call of the waiting '__gc')? */
     StkId firstres = L->top - nres; /* index of first result */
     int delta = 0;                    /* correction for vararg functions */
     int ftransfer;
@@ -826,7 +828,7 @@ static l_forceinline int precallC(lua_State* L, StkId func, l_uint32 status,
                             L->top + LUA_MINSTACK);
   assert(ci->top <= L->stack_last);
   luaE_spend(L, 1); /* a C function call */
-  if (l_unlikely(L->hookmask & LUA_MASKCALL))
+  if (l_unlikely(L->hookmask & LUA_MASKCALL) && f != luaC_drainfunction())
   {
     int narg = (int)(L->top - func) - 1;
     ci->hookev = HE_CALLC;
@@ -1085,9 +1087,17 @@ static void forgetcalls(lua_State* L, CallInfo* ci)
    C under it (or the thread's base) */
 static l_uint32 framecalls(lua_State* L, CallInfo* ci)
 {
+  CallInfo* start = ci;
   while (ci != &L->base_ci && !(ci->callstatus & CIST_CCOUNT))
     ci = ci->previous;
-  return (ci == &L->base_ci) ? L->ccbase : ci->nccalls;
+  l_uint32 n = (ci == &L->base_ci) ? L->ccbase : ci->nccalls;
+  if (ci != start)
+  { /* the frame keeps what it found, so that a deep chain of Lua calls is not
+       walked again and again (a thaw in a deep recursion) */
+    start->nccalls = n;
+    start->callstatus |= CIST_CCOUNT;
+  }
+  return n;
 }
 
 /*
@@ -1118,12 +1128,12 @@ static void finishCcall(lua_State* L, CallInfo* ci)
     TStatus status = LUA_YIELD;   /* default if there were no errors */
     lua_KFunction kf = ci->k; /* continuation function */
     assert(kf != nullptr); /* must have a continuation */
-    ci->callstatus &= ~CIST_NYCALL; /* (its call that cannot yield ended) */
     luaE_spend(L, 1); /* a hand-off back to C */
     if (ci->callstatus & CIST_YPCALL) /* was inside a 'lua_pcallk'? */
-      status = finishpcallk(L, ci);   /* finish it */
+      status = finishpcallk(L, ci);   /* finish it (a '__close' that fails here leaves the mark of the call */
     else if (ci->callstatus & CIST_APIK) /* inside an API call ('lua_getik'...)? */
-      finishapik(L, ci);
+      finishapik(L, ci);              /* that cannot yield: see 'precover') */
+    ci->callstatus &= ~CIST_NYCALL; /* (its call that cannot yield ended) */
     adjustresults(L, LUA_MULTRET);    /* finish 'lua_callk' */
     lua_unlock(L);
     n = (*kf)(L, status, ci->ctx); /* call continuation */
@@ -1198,6 +1208,7 @@ static void unroll(lua_State* L)
   {                       /* something in the stack */
     if (l_unlikely(ci->callstatus & CIST_HOOKED))
     { /* its hook function ended (after a thaw) */
+      L->nCcalls = framecalls(L, ci); /* (see 'forgetcalls') */
       finishhooked(L, ci);
       continue;
     }
@@ -1481,6 +1492,32 @@ static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, 
 }
 
 /*
+** A coroutine that closes its own variables ('lua_closeself') froze in a
+** '__close': after a thaw its handler ends (or fails), and the close goes
+** on with the variables left. Returns how the coroutine ends (the status
+** it would have), or LUA_FREEZE if it froze again.
+*/
+static TStatus selfcloseend(lua_State* L, TStatus status)
+{
+  if (status == LUA_FREEZE)
+    return status; /* (frozen again, in the handler) */
+  TStatus cs = (status == LUA_OK) ? (TStatus)L->closestatus : status;
+  if (status != LUA_OK)
+  { /* the handler failed: the close goes on with its error */
+    L->ci = &L->base_ci;
+    L->allowhook = 1;
+  }
+  CloseRun cr;
+  cr.status = cs;
+  TStatus st = luaD_rawrunprotected(L, &cr);
+  if (st == LUA_FREEZE)
+    return st;
+  L->closeself = false;
+  luaE_endclose(L, cr.status);
+  return cr.status;
+}
+
+/*
 ** End a host call that a thaw went on with: it finished (results from
 ** 'frozenfunc' on), failed (the error at 'frozenfunc', as 'luaD_pcall'
 ** leaves it), or froze again.
@@ -1491,6 +1528,7 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
   L->resumer = nullptr;
   if (status != LUA_FREEZE)
     luaE_leavebudget(L);
+  StkId atfreeze = L->errfunc; /* (the handler in effect where it froze) */
   L->errfunc = hosterrfunc;
   L->nCcalls = hostnCcalls;
   if (status == LUA_FREEZE && L->l_G->freezekill)
@@ -1504,6 +1542,7 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
   {
     global_State* g = L->l_G;
     L->frozen = kind;
+    L->frozenerrfunc = atfreeze;
     if (g->freezetarget == L)
     {
       g->freezetarget = nullptr;
@@ -1560,6 +1599,29 @@ lua_ResumeResult lua_closethreadk(lua_State* L, lua_State* from, lua_KContext ct
   luaE_enterbudget(L, from);
   TStatus status = luaE_beginclose(L);
   return closerun(L, from, status, true);
+}
+
+/*
+** A coroutine closes its own variables and ends ('coroutine.close' of the
+** running coroutine): its frames are gone, the '__close' of all its
+** variables run, and it ends with the status of the close, as by
+** 'luaD_throwbaselevel'. A '__close' can freeze: the coroutine is frozen as
+** by any freeze, and a thaw goes on with the close ('selfcloseend').
+*/
+void lua_closeself(lua_State* L)
+{
+  lua_lock(L);
+  global_State* g = L->l_G;
+  CloseRun cr;
+  cr.status = luaE_beginclose(L);
+  L->closeself = true;
+  TStatus st = luaD_rawrunprotected(L, &cr);
+  if (st == LUA_FREEZE)
+    luaD_throw(L, LUA_FREEZE); /* (a kill is the same: the chain goes on dying) */
+  (void)g;
+  L->closeself = false;
+  luaE_endclose(L, cr.status);
+  luaD_throwbaselevel(L, cr.status);
 }
 
 lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
@@ -1653,6 +1715,8 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
   Thaw t;
   status = luaD_rawrunprotected(L, &t);
   status = precover(L, status);
+  if (L->closeself)
+    status = selfcloseend(L, status);
   if (kind == FZ_RESUME)
     return endresume(L, from, status, k);
   return endhostcall(L, from, status, k, kind, hosterrfunc, hostnCcalls);

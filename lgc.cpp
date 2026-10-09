@@ -14,6 +14,7 @@
 #include "lfunc.h"
 #include "lgc.h"
 #include "lmem.h"
+#include "lua_internal.h"
 #include "lobject.h"
 #include "lstate.h"
 #include "lstring.h"
@@ -1141,7 +1142,7 @@ static void GCTM(lua_State* L)
 ** continuation, so it is ordinary user code: it can freeze, and an error
 ** in it is a warning, as in stock Lua; the object is not tried again.
 */
-static int gcdrain(lua_State* L);
+static int gcdrain_run(lua_State* L, lu_byte oldah);
 
 static void drainfinish(lua_State* L, int status)
 {
@@ -1154,15 +1155,17 @@ static void drainfinish(lua_State* L, int status)
   }
 }
 
-static int gcdrain_cont(lua_State* L, int status, lua_KContext)
+/* after a thaw: 'oldah' is the 'allowhook' of the thread before the calls */
+static int gcdrain_cont(lua_State* L, int status, lua_KContext ctx)
 {
   drainfinish(L, status);
-  return gcdrain(L);
+  return gcdrain_run(L, (lu_byte)ctx);
 }
 
-static int gcdrain(lua_State* L)
+static int gcdrain_run(lua_State* L, lu_byte oldah)
 {
   L->allowhook = 0; /* stop debug hooks during GC metamethod (and no nested drain) */
+  lua_freezeonly(L); /* a '__gc' can freeze but not yield, as in stock Lua */
   for (;;)
   {
     BudgetGroup* bg = L->beff;
@@ -1176,14 +1179,25 @@ static int gcdrain(lua_State* L)
     setslot(L, L->top++, tm);
     setslot(L, L->top++, &v);
     L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
-    drainfinish(L, lua_pcallk(L, 1, 0, 0, 0, gcdrain_cont));
+    drainfinish(L, lua_pcallk(L, 1, 0, 0, oldah, gcdrain_cont));
   }
   L->ci->callstatus &= ~CIST_FIN;
-  L->allowhook = 1;
+  L->allowhook = oldah; /* (the drain can run where hooks are off: in a hook) */
   return 0;
 }
 
+static int gcdrain(lua_State* L)
+{
+  return gcdrain_run(L, L->allowhook);
+}
+
 static CFuncInfo cfi_gcdrain(gcdrain);
+
+/* the function that calls the waiting '__gc' (hooks do not see it) */
+lua_CFunction luaC_drainfunction()
+{
+  return gcdrain;
+}
 
 /* push the function that calls the '__gc' waiting in the group of 'L' */
 void luaC_pushdrain(lua_State* L)

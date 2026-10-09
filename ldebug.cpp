@@ -1329,6 +1329,8 @@ int luaG_traceexec(lua_State* L, int pc)
      done already (the count, which also stays as it is, and the line
      hook), and the hooks left run now. */
   bool refrozen = (ci->hookdone != 0); /* (not a hook that yielded: that is CIST_HOOKYIELD alone) */
+  if (refrozen)
+    ci->callstatus &= ~CIST_HOOKYIELD; /* (it kept the budget from counting the instruction again) */
   counthook = 0;
   if ((mask & LUA_MASKCOUNT) && !(ci->hookdone & HD_COUNT))
   {

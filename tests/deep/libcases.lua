@@ -417,6 +417,15 @@ case("pcall in a call that cannot yield: variables closed after an error", funct
       log[#log + 1] = tostring(ok) .. ":" .. tostring(err)
       local ok2, err2 = xpcall(body, function(m) busy() return "h:" .. tostring(m) end)
       log[#log + 1] = tostring(ok2) .. ":" .. tostring(err2)
+      -- handlers that fail in turn (the call stays one that cannot yield)
+      local function again()
+        local a <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "ga:" .. tostring(e) error("ea", 0) end})
+        local b <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "gb:" .. tostring(e) error("eb", 0) end})
+        local c <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "gc:" .. tostring(e) error("ec", 0) end})
+        return 1
+      end
+      local ok3, err3 = pcall(again)
+      log[#log + 1] = tostring(ok3) .. ":" .. tostring(err3) .. ":" .. tostring(coroutine.isyieldable())
     end
     return a < b
   end)
@@ -449,6 +458,25 @@ case("coroutine.close and coroutine.wrap: variables closed", function(busy)
   end)
   local r3 = {pcall(w)}
   return r1, r2, r3, table.concat(log, ",")
+end)
+
+case("coroutine.close of the running coroutine", function(busy)
+  local log = {}
+  local co
+  co = coroutine.create(function()
+    local a <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "a:" .. tostring(e) end})
+    local b <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "b:" .. tostring(e) end})
+    coroutine.close(co)
+    log[#log + 1] = "not reached"
+  end)
+  local r = {coroutine.resume(co)}
+  local co2 = coroutine.wrap(function()
+    local c <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "c:" .. tostring(e) error("in c", 0) end})
+    local d <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "d:" .. tostring(e) end})
+    coroutine.close(coroutine.running())
+  end)
+  local r2 = {pcall(co2)}
+  return r, r2, table.concat(log, ","), coroutine.status(co)
 end)
 
 -- debug hooks (the hook function runs with the hooked function at level 2)
@@ -486,6 +514,17 @@ case("debug hooks: return after closing variables, and varargs", function(busy)
   local a, b, c = w(1, 2, 3)
   debug.sethook()
   return a, b, c, table.concat(log, ",")
+end)
+case("debug hooks: call and return hooks on yield and resume", function(busy)
+  local log = {}
+  local co = coroutine.create(function(x)
+    local y = coroutine.yield(x + 1)
+    return y * 2
+  end)
+  debug.sethook(co, function(ev) busy() log[#log + 1] = ev end, "cr")
+  local r1 = {coroutine.resume(co, 1)}
+  local r2 = {coroutine.resume(co, 10)}
+  return r1, r2, table.concat(log, ",")
 end)
 case("debug hooks: an error in a hook function", function(busy)
   local n = 0
