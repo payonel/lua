@@ -6268,7 +6268,8 @@ static void test_freeze()
 
 /* }====================================================== */
 
-int main()
+/* with arguments, only the tests whose names they give run (under valgrind) */
+int main(int argc, char** argv)
 {
   const TestEntry tests[] = {
       {"version_and_constants", test_version_and_constants},
@@ -6336,6 +6337,11 @@ int main()
 
   for (const TestEntry& t : tests)
   {
+    bool selected = (argc <= 1);
+    for (int i = 1; i < argc; i++)
+      selected = selected || std::strcmp(argv[i], t.name) == 0;
+    if (!selected)
+      continue;
     g_current = t.name;
     t.fn();
   }
