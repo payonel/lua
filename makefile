@@ -68,16 +68,16 @@ GATE_O        =$(OBJ_DIR)/gate.o
 GATE_T        =test_gate
 DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(GATE_O:.o=.d)
 
-all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
+all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 
 include tests/libs/build.mk
 
 debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
-debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
+debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 
 cov: VARIANT=cov
-cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
+cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
 	$(MAKE) test
 	./cov-report.sh
@@ -134,9 +134,12 @@ $(GATE_T): $(GATE_O) $(CORE_T) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(GATE_O) $(CORE_T) $(LDFLAGS)
 
 # the deep tests and the whole upstream suite, frozen and thawed at every
-# budget point of several sizes (slow: `make gate` is not part of `make full`)
+# budget point of several sizes (`make test` runs it; `make gate
+# GATE_STEPS="1"` runs it alone, with other sizes)
 GATE_STEPS ?= 97 17 3
-gate: $(GATE_T)
+gate: $(GATE_T) gate-run
+
+gate-run:
 	for n in $(GATE_STEPS); do \
 	  ( cd tests && ../$(GATE_T) $$n deep/all.lua ) || exit 1; \
 	  mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1; \
@@ -172,6 +175,7 @@ test:
 		cd tests; \
 		cat /dev/null | /usr/bin/time -v ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 	cd tests && ../$(LUA_T) deep/all.lua
+	$(MAKE) gate-run
 
 full:
 	make clean
@@ -184,4 +188,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: all debug cov clean test engine-test full
+.PHONY: all debug cov clean test engine-test gate gate-run full

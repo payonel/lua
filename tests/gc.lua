@@ -474,7 +474,12 @@ do   -- tests for string keys in weak tables
   assert(next(a) == nil)
   -- make sure will not try to compare with dead key
   assert(a[string.rep("b", 100)] == undef)
-  assert(collectgarbage("count") <= m + 1)   -- everything collected
+  -- (under the freeze gate ('make gate') a '__gc' that waits, here the one
+  -- of the cycle tracer, can be called after 'm' was taken, and grow the
+  -- stack once: some tens of KB; what this test finds is a leak of the
+  -- strings, which is megabytes)
+  local slack = rawget(_G, "GATE") and 64 or 1
+  assert(collectgarbage("count") <= m + slack)   -- everything collected
 end
 
 
