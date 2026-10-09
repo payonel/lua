@@ -219,6 +219,8 @@ constexpr lu_byte APIK_POP2 = 4;    /* pop the value set and its key */
 constexpr lu_byte APIK_BOOL = 5;    /* the result, as a boolean, is on the top */
 constexpr lu_byte APIK_ARITH = 6;   /* the result replaces both operands */
 constexpr lu_byte APIK_CONCAT = 7;  /* the result replaces two values; go on */
+constexpr lu_byte APIK_SETTOP = 8;  /* closing down to 'apifirst'; then it is the top */
+constexpr lu_byte APIK_CLOSESLOT = 9; /* closing 'apifirst'; then its slot is nil */
 
 constexpr int get_nresults(l_uint32 cs)
 {

@@ -47,6 +47,36 @@ void luaL_checkversion(lua_State* L);
 int(luaL_getmetafield)(lua_State* L, int obj, const HostString& e);
 int(luaL_callmeta)(lua_State* L, int obj, const HostString& e);
 byte_view(luaL_tolstring) (lua_State* L, int idx);
+/*
+** Freeze-ready forms of the helpers that can run user code. Like the
+** 'k' calls of lua.h, they return as the plain helper does, unless what
+** they call freezes (or yields): then 'k' is called when it thaws, with
+** the stack as the helper leaves it, and finishes the job as the notes
+** say.
+**  - luaL_callmetak: as luaL_callmeta; 'k' runs only if the metamethod
+**    was called, with its result on the top.
+**  - luaL_tolstringk: pushes the string; 'k' gets the value of
+**    __tostring on the top and calls luaL_tolstringresult for the string
+**    (it checks that it is one).
+**  - luaL_lenk: 'k' gets the length on the top and calls luaL_lenresult
+**    for the integer (it checks and pops it).
+**  - luaL_getsubtablek: as luaL_getsubtable, but it leaves the table and
+**    then a boolean (true if the table was already there) and returns
+**    that boolean; 'k' finds the same two values.
+**  - luaL_requirefk: as luaL_requiref; 'k' finds the module on the top.
+**  - luaL_dofilek, luaL_dostringk: as luaL_dofile and luaL_dostring;
+**    their pcall has the continuation, and 'k' gets the status as for
+**    lua_pcallk.
+*/
+int(luaL_callmetak)(lua_State* L, int obj, const HostString& e, lua_KContext ctx, lua_KFunction k);
+byte_view(luaL_tolstringk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
+byte_view(luaL_tolstringresult)(lua_State* L);
+lua_Integer(luaL_lenk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
+lua_Integer(luaL_lenresult)(lua_State* L);
+int(luaL_getsubtablek)(lua_State* L, int idx, const HostString& fname, lua_KContext ctx, lua_KFunction k);
+void(luaL_requirefk)(lua_State* L, const HostString& modname, lua_CFunction openf, int glb, lua_KContext ctx, lua_KFunction k);
+int(luaL_dofilek)(lua_State* L, const std::optional<HostString>& filename, lua_KContext ctx, lua_KFunction k);
+int(luaL_dostringk)(lua_State* L, const HostString& str, lua_KContext ctx, lua_KFunction k);
 int(luaL_argerror)(lua_State* L, int arg, const HostString& extramsg);
 int(luaL_typeerror)(lua_State* L, int arg, const HostString& tname);
 byte_view(luaL_checklstring) (lua_State* L, int arg);

@@ -1049,6 +1049,20 @@ static void finishapik(lua_State* L, CallInfo* ci)
     copyslot(L, L->top - 3, L->top - 1);
     L->top -= 2;
     break;
+  case APIK_SETTOP:
+  case APIK_CLOSESLOT:
+  { /* the '__close' that was interrupted has returned: close what is left */
+    bool nny = !yieldable(L) || (ci->callstatus & CIST_FZONLY);
+    if (nny)
+      ci->callstatus |= CIST_NYCALL; /* (its next '__close', as in 'armk') */
+    StkId level = luaF_close(L, ci->apifirst, CLOSEKTOP, nny ? 2 : 1); /* may yield again */
+    ci->callstatus &= ~CIST_NYCALL;
+    if (ci->apiop == APIK_SETTOP)
+      L->top = level;
+    else
+      setslottag(L, level, LUA_VNIL);
+    break;
+  }
   default:
   {
     assert(ci->apiop == APIK_CONCAT);

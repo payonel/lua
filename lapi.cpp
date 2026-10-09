@@ -199,7 +199,16 @@ int lua_gettop(lua_State* L)
   return (int)(L->top - (L->ci->func + 1));
 }
 
-void lua_settop(lua_State* L, int idx)
+static bool armk(lua_State* L, lua_KContext ctx, lua_KFunction k, lu_byte op);
+static void disarmk(lua_State* L, bool armed);
+static int closeyy(lua_State* L);
+
+/*
+** 'lua_settop' and 'lua_closeslot' with a continuation 'k' (or none): a
+** '__close' they call may freeze (or yield), and 'finishapik' then
+** closes what is left down to 'apifirst' and finishes the call.
+*/
+static void settopaux(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
   CallInfo* ci;
   StkId func, newtop;
@@ -223,21 +232,49 @@ void lua_settop(lua_State* L, int idx)
   if (diff < 0 && L->tbclist >= newtop)
   {
     assert(ci->callstatus & CIST_TBC);
-    newtop = luaF_close(L, newtop, CLOSEKTOP, 0);
+    bool armed = armk(L, ctx, k, APIK_SETTOP);
+    if (armed)
+      ci->apifirst = newtop;
+    newtop = luaF_close(L, newtop, CLOSEKTOP, armed ? closeyy(L) : 0);
+    disarmk(L, armed);
   }
   L->top = newtop; /* correct top only after closing any upvalue */
   lua_unlock(L);
 }
 
-void lua_closeslot(lua_State* L, int idx)
+void lua_settop(lua_State* L, int idx)
+{
+  settopaux(L, idx, 0, nullptr);
+}
+
+void lua_settopk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
+{
+  settopaux(L, idx, ctx, k);
+}
+
+static void closeslotaux(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
   StkId level;
   lua_lock(L);
   level = index2stack(L, idx);
   assert((L->ci->callstatus & CIST_TBC) && (L->tbclist == level) && "no variable to close at given level");
-  level = luaF_close(L, level, CLOSEKTOP, 0);
+  bool armed = armk(L, ctx, k, APIK_CLOSESLOT);
+  if (armed)
+    L->ci->apifirst = level;
+  level = luaF_close(L, level, CLOSEKTOP, armed ? closeyy(L) : 0);
+  disarmk(L, armed);
   setslottag(L, level, LUA_VNIL);
   lua_unlock(L);
+}
+
+void lua_closeslot(lua_State* L, int idx)
+{
+  closeslotaux(L, idx, 0, nullptr);
+}
+
+void lua_closeslotk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
+{
+  closeslotaux(L, idx, ctx, k);
 }
 
 /*
@@ -911,6 +948,12 @@ static void disarmk(lua_State* L, bool armed)
     L->ci->callstatus &= ~(CIST_APIK | CIST_NYCALL);
 }
 
+/* how an API call armed by 'armk' calls '__close' (see 'luaF_close') */
+static int closeyy(lua_State* L)
+{
+  return (L->ci->callstatus & CIST_NYCALL) ? 2 : 1;
+}
+
 /*
 ** get functions (Lua -> stack)
 */
@@ -969,6 +1012,19 @@ int lua_getglobali(lua_State* L, byte_view name)
   lua_lock(L);
   getGlobalTable(L, &gt);
   return auxgetstr(L, &gt, name);
+}
+
+int lua_getglobalik(lua_State* L, byte_view name, lua_KContext ctx, lua_KFunction k)
+{
+  TValue gt;
+  lua_lock(L);
+  getGlobalTable(L, &gt);
+  return auxgetstr(L, &gt, name, ctx, k);
+}
+
+int lua_getglobalk(lua_State* L, const HostString& name, lua_KContext ctx, lua_KFunction k)
+{
+  return lua_getglobalik(L, name.to_utf8(), ctx, k);
 }
 
 static int auxgettable(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
@@ -1236,6 +1292,19 @@ void lua_setglobali(lua_State* L, byte_view name)
   lua_lock(L); /* unlock done in 'auxsetstr' */
   getGlobalTable(L, &gt);
   auxsetstr(L, &gt, name);
+}
+
+void lua_setglobalik(lua_State* L, byte_view name, lua_KContext ctx, lua_KFunction k)
+{
+  TValue gt;
+  lua_lock(L); /* unlock done in 'auxsetstr' */
+  getGlobalTable(L, &gt);
+  auxsetstr(L, &gt, name, ctx, k);
+}
+
+void lua_setglobalk(lua_State* L, const HostString& name, lua_KContext ctx, lua_KFunction k)
+{
+  lua_setglobalik(L, name.to_utf8(), ctx, k);
 }
 
 static void auxsettable(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)

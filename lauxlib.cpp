@@ -1340,6 +1340,151 @@ void luaL_requirefi(lua_State* L, byte_view modname,
   }
 }
 
+/*
+** The freeze-ready 'luaL_requiref' and 'luaL_getsubtable' are internal C
+** functions that the helpers call with 'lua_callk': each step that can
+** run user code (an '__index', an '__newindex', the opening function) has
+** its own continuation, and the user's 'k' goes on with the results.
+** Stack of 'requireff': modname, openf, glb, then LOADED and the module.
+*/
+static int requireff(lua_State* L, int status, lua_KContext ctx);
+
+static int requireff_start(lua_State* L)
+{
+  return requireff(L, LUA_OK, 0);
+}
+
+static int requireff(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  byte_view modname = *lua_tolstring(L, 1);
+  switch (ctx)
+  {
+  case 0:
+    luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE); /* 4 */
+    lua_getfieldik(L, 4, modname, 1, requireff); /* LOADED[modname] */
+    [[fallthrough]];
+  case 1:
+    if (lua_toboolean(L, -1)) /* package already loaded? */
+      goto loaded;
+    lua_pop(L, 1); /* remove field */
+    lua_pushvalue(L, 2);
+    lua_pushvalue(L, 1); /* argument to open function */
+    lua_callk(L, 1, 1, 2, requireff); /* call 'openf' to open module */
+    [[fallthrough]];
+  case 2:
+    lua_pushvalue(L, -1); /* make copy of module (call result) */
+    lua_setfieldik(L, 4, modname, 3, requireff); /* LOADED[modname] = module */
+    [[fallthrough]];
+  case 3:
+  loaded:
+    lua_remove(L, 4); /* remove LOADED table */
+    if (lua_toboolean(L, 3))
+    {
+      lua_pushvalue(L, -1); /* copy of module */
+      lua_setglobalik(L, modname, 4, requireff); /* _G[modname] = module */
+    }
+    [[fallthrough]];
+  default:
+    return 1;
+  }
+}
+
+static CFuncInfo cfi_requireff(requireff_start);
+
+void luaL_requirefk(lua_State* L, const HostString& modname, lua_CFunction openf, int glb,
+                    lua_KContext ctx, lua_KFunction k)
+{
+  lua_pushcfuncinfo(L, &cfi_requireff);
+  lua_pushlstring(L, modname.to_utf8(), 0, modname.to_utf8().size());
+  lua_pushcfunction(L, openf);
+  lua_pushboolean(L, glb);
+  lua_callk(L, 3, 1, ctx, k);
+}
+
+/* stack of 'getsubtableff': the table, the field name */
+static int getsubtableff(lua_State* L, int status, lua_KContext ctx);
+
+static int getsubtableff_start(lua_State* L)
+{
+  return getsubtableff(L, LUA_OK, 0);
+}
+
+static int getsubtableff(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  byte_view fname = *lua_tolstring(L, 2);
+  switch (ctx)
+  {
+  case 0:
+    lua_getfieldik(L, 1, fname, 1, getsubtableff);
+    [[fallthrough]];
+  case 1:
+    if (lua_type(L, -1) == LUA_TTABLE)
+    { /* table already there */
+      lua_pushboolean(L, 1);
+      return 2;
+    }
+    lua_pop(L, 1); /* remove previous result */
+    lua_newtable(L);
+    lua_pushvalue(L, -1); /* copy to be left at top */
+    lua_setfieldik(L, 1, fname, 2, getsubtableff); /* assign new table to field */
+    [[fallthrough]];
+  default:
+    lua_pushboolean(L, 0); /* did not find table there */
+    return 2;
+  }
+}
+
+static CFuncInfo cfi_getsubtableff(getsubtableff_start);
+
+int luaL_getsubtablek(lua_State* L, int idx, const HostString& fname, lua_KContext ctx, lua_KFunction k)
+{
+  lua_pushcfuncinfo(L, &cfi_getsubtableff);
+  lua_pushvalue(L, idx);
+  lua_pushlstring(L, fname.to_utf8(), 0, fname.to_utf8().size());
+  lua_callk(L, 2, 2, ctx, k);
+  int found = lua_toboolean(L, -1);
+  return found;
+}
+
+int luaL_callmetak(lua_State* L, int obj, const HostString& e, lua_KContext ctx, lua_KFunction k)
+{
+  obj = lua_absindex(L, obj);
+  if (luaL_getmetafieldi(L, obj, e.to_utf8()) == LUA_TNIL) /* no metafield? */
+    return 0;
+  lua_pushvalue(L, obj);
+  lua_callk(L, 1, 1, ctx, k);
+  return 1;
+}
+
+byte_view luaL_tolstringk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
+{
+  luaL_toistringk(L, idx, ctx, k);
+  return luaL_tolstringresult(L);
+}
+
+byte_view luaL_tolstringresult(lua_State* L)
+{
+  return luaL_tostringresult(L)->view();
+}
+
+int luaL_dofilek(lua_State* L, const std::optional<HostString>& filename, lua_KContext ctx, lua_KFunction k)
+{
+  int status = luaL_loadfile(L, filename);
+  if (status == LUA_OK)
+    status = lua_pcallk(L, 0, LUA_MULTRET, 0, ctx, k);
+  return status;
+}
+
+int luaL_dostringk(lua_State* L, const HostString& str, lua_KContext ctx, lua_KFunction k)
+{
+  int status = luaL_loadstring(L, str);
+  if (status == LUA_OK)
+    status = lua_pcallk(L, 0, LUA_MULTRET, 0, ctx, k);
+  return status;
+}
+
 void luaL_addgsubi(luaL_Buffer* b, byte_view s,
                    byte_view p, byte_view r)
 {

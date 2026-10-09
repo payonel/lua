@@ -60,8 +60,6 @@ luaL_Box* luaL_newbox(lua_State* L);
 luaL_Box* luaL_tobox(lua_State* L, int idx);
 void luaL_buffsave(luaL_Buffer* B, luaL_Box* box);
 void luaL_buffload(luaL_Buffer* B, luaL_Box* box);
-lua_Integer luaL_lenk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
-lua_Integer luaL_lenresult(lua_State* L);
 int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode);
 
 int lua_getfieldi(lua_State* L, int idx, byte_view k);
@@ -70,9 +68,7 @@ void lua_setfieldik(lua_State* L, int idx, byte_view key, lua_KContext ctx, lua_
 /* freezing: resume and thaw by a C function with continuation 'k', which
    a freeze passing through goes on with (getting the status of 'L'); the
    number of results of 'L' then; the coroutine a frozen 'L' resumed */
-lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KContext ctx, lua_KFunction k);
 lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k);
-int lua_resumenres(lua_State* L, int status);
 lua_State* lua_frozenchild(lua_State* L);
 /* the calls with continuations of the running C function freeze but do
    not yield; C work of 'n' steps (true when the budget is spent); a check
@@ -101,6 +97,8 @@ void lua_setfieldi(lua_State* L, int idx, byte_view k);
 const InternalString* lua_pushfstringi(lua_State* L, byte_view fmt);
 
 int lua_getglobali(lua_State* L, byte_view name);
+int lua_getglobalik(lua_State* L, byte_view name, lua_KContext ctx, lua_KFunction k);
+void lua_setglobalik(lua_State* L, byte_view name, lua_KContext ctx, lua_KFunction k);
 void lua_setglobali(lua_State* L, byte_view name);
 
 void lua_warningi(lua_State* L, byte_view msg, int tocont);

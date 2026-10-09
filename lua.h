@@ -181,6 +181,7 @@ lua_Number(lua_version)(lua_State* L);
 int(lua_absindex)(lua_State* L, int idx);
 int(lua_gettop)(lua_State* L);
 void(lua_settop)(lua_State* L, int idx);
+void(lua_settopk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
 void(lua_pushvalue)(lua_State* L, int idx);
 void(lua_rotate)(lua_State* L, int idx, int n);
 void(lua_copy)(lua_State* L, int fromidx, int toidx);
@@ -260,6 +261,7 @@ int(lua_pushthread)(lua_State* L);
 ** get functions (Lua -> stack)
 */
 int(lua_getglobal)(lua_State* L, const HostString& name);
+int(lua_getglobalk)(lua_State* L, const HostString& name, lua_KContext ctx, lua_KFunction k);
 int(lua_gettable)(lua_State* L, int idx);
 int(lua_getfield)(lua_State* L, int idx, const HostString& k);
 int(lua_geti)(lua_State* L, int idx, lua_Integer n);
@@ -278,6 +280,7 @@ int(lua_getiuservalue)(lua_State* L, int idx, int n);
 ** set functions (stack -> Lua)
 */
 void(lua_setglobal)(lua_State* L, const HostString& name);
+void(lua_setglobalk)(lua_State* L, const HostString& name, lua_KContext ctx, lua_KFunction k);
 void(lua_settable)(lua_State* L, int idx);
 void(lua_setfield)(lua_State* L, int idx, const HostString& k);
 void(lua_seti)(lua_State* L, int idx, lua_Integer n);
@@ -333,6 +336,16 @@ struct lua_ResumeResult
   int nres;
 };
 lua_ResumeResult(lua_resume)(lua_State* L, lua_State* from, int narg);
+/*
+** 'lua_resume' by a C function with a continuation 'k': if the coroutine
+** (or one it resumed) freezes, the freeze passes through the calling
+** function, and when it thaws, 'k' gets the status of the coroutine and
+** gets its results with 'lua_resumenres' (as the result of 'lua_resume'
+** says in 'status' and 'nres'). Like the other calls with continuations,
+** 'k' runs only after a freeze; otherwise 'lua_resumek' returns.
+*/
+lua_ResumeResult(lua_resumek)(lua_State* L, lua_State* from, int narg, lua_KContext ctx, lua_KFunction k);
+int(lua_resumenres)(lua_State* L, int status);
 lua_ResumeResult(lua_closethreadk)(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k);
 int(lua_status)(lua_State* L);
 
@@ -423,6 +436,7 @@ void(lua_setallocf)(lua_State* L, lua_Alloc* f);
 
 void(lua_toclose)(lua_State* L, int idx);
 void(lua_closeslot)(lua_State* L, int idx);
+void(lua_closeslotk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
 
 /*
 ** {==============================================================

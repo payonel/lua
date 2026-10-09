@@ -5106,6 +5106,403 @@ static void test_api_continuations()
 
 /*
 ** {======================================================
+** The rest of the freeze-ready C API: lua_settopk, lua_closeslotk,
+** lua_getglobalk, lua_setglobalk, the luaL_*k helpers and lua_resumek.
+** Each test function returns its whole stack after the call on both
+** paths (see 'apik_cont'); the Lua driver runs it plainly, through
+** metamethods that yield, and under a budget that freezes at every step.
+** =======================================================
+*/
+
+static int cf_settopk(lua_State* L) /* (a, b) -> closes b, then a (a, b closable) */
+{
+  lua_settop(L, 2);
+  lua_toclose(L, 1);
+  lua_toclose(L, 2);
+  lua_pushinteger(L, 7);
+  lua_settopk(L, 0, 31, apik_cont);
+  CHECK(lua_gettop(L) == 0);
+  return apik_done(L);
+}
+
+static int cf_settopk_keep(lua_State* L) /* (a, b) -> a, 7: closes only b */
+{
+  lua_settop(L, 2);
+  lua_toclose(L, 2);
+  lua_pushinteger(L, 7);
+  lua_settopk(L, 1, 41, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_closeslotk(lua_State* L) /* (a) -> nil (a closed) */
+{
+  lua_settop(L, 1);
+  lua_toclose(L, 1);
+  lua_closeslotk(L, 1, 32, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_getglobalk(lua_State* L) /* () -> zzg */
+{
+  lua_settop(L, 0);
+  lua_getglobalk(L, "zzg", 33, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_setglobalk(lua_State* L) /* (v) -> (zzs = v) */
+{
+  lua_settop(L, 1);
+  lua_setglobalk(L, "zzs", 34, apik_cont);
+  return apik_done(L);
+}
+
+static int cf_callmetak(lua_State* L) /* (o) -> o, o:__foo() if any */
+{
+  lua_settop(L, 1);
+  luaL_callmetak(L, 1, "__foo", 35, apik_cont);
+  return apik_done(L);
+}
+
+static int tostring_cont(lua_State* L, int status, lua_KContext ctx)
+{
+  luaL_tolstringresult(L);
+  return apik_cont(L, status, ctx);
+}
+
+static int cf_tolstringk(lua_State* L) /* (v) -> v, tostring(v) */
+{
+  lua_settop(L, 1);
+  luaL_tolstringk(L, 1, 36, tostring_cont);
+  return apik_done(L);
+}
+
+static int len_cont(lua_State* L, int status, lua_KContext ctx)
+{
+  lua_pushinteger(L, luaL_lenresult(L));
+  return apik_cont(L, status, ctx);
+}
+
+static int cf_luallenk(lua_State* L) /* (v) -> v, #v */
+{
+  lua_settop(L, 1);
+  lua_pushinteger(L, luaL_lenk(L, 1, 37, len_cont));
+  return apik_done(L);
+}
+
+static int cf_getsubtablek(lua_State* L) /* (t) -> t, t.sub, found */
+{
+  lua_settop(L, 1);
+  luaL_getsubtablek(L, 1, "sub", 38, apik_cont);
+  return apik_done(L);
+}
+
+static int openmod_cont(lua_State*, int, lua_KContext)
+{
+  return 1;
+}
+
+static int openmod(lua_State* L) /* (name) -> openmod(name) */
+{
+  lua_getglobal(L, "openmod");
+  lua_pushvalue(L, 1);
+  lua_callk(L, 1, 1, 0, openmod_cont);
+  return 1;
+}
+
+static int cf_requirefk(lua_State* L) /* (name) -> name, module */
+{
+  lua_settop(L, 1);
+  luaL_requirefk(L, "modx", openmod, 1, 39, apik_cont);
+  return apik_done(L);
+}
+
+static int dostring_cont(lua_State* L, int status, lua_KContext ctx)
+{ /* (a pcall that ended in an error gets that status) */
+  CHECK(status != LUA_OK);
+  lua_pushinteger(L, status == LUA_YIELD ? LUA_OK : status);
+  int n = lua_gettop(L);
+  lua_pushboolean(L, 1);
+  lua_pushinteger(L, static_cast<lua_Integer>(ctx));
+  lua_rotate(L, 1, 2);
+  return n + 2;
+}
+
+static int cf_dostringk(lua_State* L) /* (s) -> s, results..., status */
+{
+  lua_settop(L, 1);
+  std::string s(lua_tolstring(L, 1)->data(), lua_tolstring(L, 1)->size());
+  int st = luaL_dostringk(L, s.c_str(), 40, dostring_cont);
+  lua_pushinteger(L, st);
+  return apik_done(L);
+}
+
+static int cf_dofilek(lua_State* L) /* (path) -> path, results..., status */
+{
+  lua_settop(L, 1);
+  std::string s(lua_tolstring(L, 1)->data(), lua_tolstring(L, 1)->size());
+  int st = luaL_dofilek(L, s.c_str(), 42, dostring_cont);
+  lua_pushinteger(L, st);
+  return apik_done(L);
+}
+
+/* lua_resumek: (co) -> true, co's results (or false, message) */
+static int resumek_end(lua_State* L, lua_State* co, lua_ResumeResult rr)
+{
+  if (rr.status == LUA_OK || rr.status == LUA_YIELD)
+  {
+    lua_xmove(co, L, rr.nres);
+    lua_pushboolean(L, 1);
+    lua_insert(L, -(rr.nres + 1));
+    return rr.nres + 1;
+  }
+  lua_xmove(co, L, 1);
+  lua_pushboolean(L, 0);
+  lua_insert(L, -2);
+  return 2;
+}
+
+static int resumek_cont(lua_State* L, int status, lua_KContext ctx)
+{
+  CHECK(ctx == 43);
+  lua_State* co = lua_tothread(L, 1);
+  lua_pushinteger(L, 1);
+  lua_setglobal(L, "resumek_ran");
+  return resumek_end(L, co, {status, lua_resumenres(co, status)});
+}
+
+static int cf_resumek(lua_State* L)
+{
+  lua_State* co = lua_tothread(L, 1);
+  lua_settop(L, 1);
+  return resumek_end(L, co, lua_resumek(co, L, 0, 43, resumek_cont));
+}
+
+static void test_api_freezable()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+  const struct { const char* name; lua_CFunction f; } fs[] = {
+      {"settopk", cf_settopk}, {"settopk_keep", cf_settopk_keep}, {"closeslotk", cf_closeslotk},
+      {"getglobalk", cf_getglobalk}, {"setglobalk", cf_setglobalk}, {"callmetak", cf_callmetak},
+      {"tolstringk", cf_tolstringk}, {"luallenk", cf_luallenk}, {"getsubtablek", cf_getsubtablek},
+      {"requirefk", cf_requirefk}, {"dostringk", cf_dostringk}, {"dofilek", cf_dofilek},
+      {"resumek", cf_resumek}};
+  for (const auto& f : fs)
+  {
+    lua_pushcfunction(L, f.f);
+    lua_setglobal(L, f.name);
+  }
+  int st = luaL_dostring(L, R"LUA(
+    -- run 'f' in a coroutine, resuming every yield (the metamethods yield)
+    local function run(f, ...)
+      local co = coroutine.create(f)
+      local r = table.pack(coroutine.resume(co, ...))
+      local yields = 0
+      while coroutine.status(co) ~= "dead" do
+        assert(r[1], r[2])
+        assert(r[2] == "pause")
+        yields = yields + 1
+        r = table.pack(coroutine.resume(co))
+      end
+      assert(r[1], r[2])
+      return yields, table.unpack(r, 2, r.n)
+    end
+    -- run 'f' in a coroutine with a budget of one step that freezes it
+    -- each time, thawing it until it ends: the number of thaws
+    local function frozen(f, ...)
+      local co = coroutine.create(f)
+      debug.setbudget(co, 1, function() debug.freeze() end)
+      local r = table.pack(coroutine.resume(co, ...))
+      local thaws = 0
+      while debug.isfrozen(co) do
+        thaws = thaws + 1
+        r = table.pack(debug.thaw(co))
+      end
+      assert(r[1], r[2])
+      return thaws, table.unpack(r, 2, r.n)
+    end
+    local function pause() coroutine.yield("pause") end
+    local function noop() local x = 0 for i = 1, 3 do x = x + i end return x end
+
+    -- the stack a test function returns, as {ran, ctx, ...}
+    local function res(...) return {n = select("#", ...), ...} end
+    local log
+    local function closable(name, p)
+      return setmetatable({}, {__close = function() p() log[#log + 1] = name end})
+    end
+
+    for _, mode in ipairs{"yield", "freeze"} do
+      local p = mode == "yield" and pause or noop
+      local function go(f, ...)
+        if mode == "yield" then return run(f, ...) else return frozen(f, ...) end
+      end
+      -- (under the budget, a freeze can come anywhere: the plain stacks are
+      -- compared, not the markers of whether 'k' ran)
+      local function plain(t) return mode ~= "yield" or (t[1] == 0 and t[2] == false) end
+      local function expectsusp(n) -- the continuation ran
+        if mode == "yield" then return n == 2 or n == 1 or n == 4 else return n > 0 end
+      end
+
+      -- lua_settopk: '__close' of each variable, in reverse order
+      log = {}
+      local n, ran, ctx, a = go(settopk, closable("a", p), closable("b", p))
+      assert(expectsusp(n) and ran == true and ctx == 31 and a == nil, mode .. " settopk " .. tostring(n) .. tostring(ran) .. tostring(ctx) .. tostring(a))
+      assert(#log == 2 and log[1] == "b" and log[2] == "a")
+      log = {}
+      n, ran, ctx, a = go(settopk_keep, closable("a", p), closable("b", p))
+      assert(expectsusp(n) and ran == true and ctx == 41, mode .. " keep " .. tostring(n) .. tostring(ran) .. tostring(ctx))
+      assert(#log == 1 and log[1] == "b")
+      assert(a ~= nil) -- the first value is still there
+
+      -- lua_closeslotk
+      log = {}
+      n, ran, ctx, a = go(closeslotk, closable("s", p))
+      assert(expectsusp(n) and ran == true and ctx == 32 and a == nil, mode .. " closeslot " .. tostring(n) .. tostring(ran) .. tostring(ctx) .. tostring(a))
+      assert(#log == 1 and log[1] == "s")
+
+      -- an error in '__close' propagates from either path
+      local bad = setmetatable({}, {__close = function() p() error("close failed", 0) end})
+      local co = coroutine.create(settopk)
+      if mode == "yield" then
+        assert(coroutine.resume(co, bad, closable("x", p)))
+        local ok, err = coroutine.resume(co)
+        while ok and coroutine.status(co) ~= "dead" do ok, err = coroutine.resume(co) end
+        assert(not ok and err == "close failed")
+      else
+        debug.setbudget(co, 1, function() debug.freeze() end)
+        local ok, err = coroutine.resume(co, bad, closable("x", p))
+        while debug.isfrozen(co) do ok, err = debug.thaw(co) end
+        assert(not ok and err == "close failed")
+      end
+
+      -- lua_getglobalk / lua_setglobalk through _G's metamethods
+      setmetatable(_G, {
+        __index = function(t, k) p() return "g:" .. k end,
+        __newindex = function(t, k, v) p() rawset(t, k, tostring(v) .. "!") end})
+      n, ran, ctx, a = go(getglobalk)
+      assert(expectsusp(n) and ran == true and ctx == 33 and a == "g:zzg", a)
+      n, ran, ctx = go(setglobalk, 5)
+      assert(expectsusp(n) and ran == true and ctx == 34 and rawget(_G, "zzs") == "5!")
+      setmetatable(_G, nil)
+      _G.zzs = nil
+
+      -- luaL_callmetak: the metamethod's result; none if no metamethod
+      local o = setmetatable({}, {__foo = function(self) p() return "foo" end})
+      local t = res(go(callmetak, o))
+      assert(expectsusp(t[1]) and t[2] == true and t[3] == 35 and t[4] == o and t[5] == "foo" and t.n == 5)
+      t = res(go(callmetak, {}))
+      assert(plain(t) and t.n == 4)
+
+      -- luaL_tolstringk, luaL_lenk
+      o = setmetatable({}, {__tostring = function() p() return "str" end,
+                            __len = function() p() return 99 end,
+                            __name = "N"})
+      t = res(go(tolstringk, o))
+      assert(expectsusp(t[1]) and t[2] == true and t[3] == 36 and t[4] == o and t[5] == "str" and t.n == 5)
+      t = res(go(tolstringk, 12))
+      assert(plain(t) and t[5] == "12")
+      t = res(go(luallenk, o))
+      assert(expectsusp(t[1]) and t[2] == true and t[3] == 37 and t[5] == 99 and t.n == 5)
+      t = res(go(luallenk, {1, 2, 3}))
+      assert(plain(t) and t[5] == 3)
+      -- a '__tostring' that does not return a string, a '__len' that is no integer
+      local ok, err = pcall(go, tolstringk, setmetatable({}, {__tostring = function() p() return {} end}))
+      assert(not ok and string.find(err, "'__tostring' must return a string"), err)
+      ok, err = pcall(go, luallenk, setmetatable({}, {__len = function() p() return "x" end}))
+      assert(not ok and string.find(err, "object length is not an integer"), err)
+
+      -- luaL_getsubtablek: found, created, and through metamethods
+      t = res(go(getsubtablek, {sub = {1}}))
+      assert(plain(t) and t[5][1] == 1 and t[6] == true and t.n == 6)
+      local store = {}
+      local lazy = setmetatable({}, {
+        __index = function(_, k) p() return rawget(store, k) end,
+        __newindex = function(_, k, v) p() rawset(store, k, v) end})
+      t = res(go(getsubtablek, lazy))
+      assert(expectsusp(t[1]) and t[2] == true and t[3] == 38 and t[6] == false and t.n == 6)
+      assert(store.sub == t[5])
+      t = res(go(getsubtablek, lazy))
+      assert(t[5] == store.sub and t[6] == true)
+
+      -- luaL_requirefk: opens through a function that pauses, once
+      local opened = 0
+      function openmod(name) p() opened = opened + 1 return {name = name} end
+      t = res(go(requirefk, "who"))
+      assert(expectsusp(t[1]) and t[2] == true and t[3] == 39 and t[5].name == "modx" and t.n == 5, t[1])
+      assert(package.loaded.modx == t[5] and modx == t[5] and opened == 1)
+      t = res(go(requirefk, "again")) -- already loaded: openmod is not called
+      assert(t[5] == package.loaded.modx and opened == 1)
+      package.loaded.modx, modx, openmod = nil, nil, nil
+
+      -- luaL_dostringk, luaL_dofilek: pcall with a continuation
+      t = res(go(dostringk, "local p = ... return 1, 2"))
+      assert(plain(t) and t[5] == 1 and t[6] == 2 and t[7] == 0 and t.n == 7)
+      _G.pauser = p
+      t = res(go(dostringk, "pauser() pauser() return 'x', 'y'"))
+      assert(expectsusp(t[1]) and t[2] == true and t[3] == 40 and t[5] == "x" and t[6] == "y" and t[7] == 0, t[1])
+      t = res(go(dostringk, "pauser() error('boom', 0)"))
+      assert(t[5] == "boom" and t[6] == 2 and t.n == 6)
+      t = res(go(dostringk, "x = = 1"))
+      assert(plain(t) and t[6] == 3, t[6]) -- a syntax error
+      local path = os.tmpname()
+      local f = assert(io.open(path, "w"))
+      f:write("pauser() return 'file', 3")
+      f:close()
+      t = res(go(dofilek, path))
+      os.remove(path)
+      assert(expectsusp(t[1]) and t[2] == true and t[3] == 42 and t[5] == "file" and t[6] == 3 and t[7] == 0, t[1])
+      pauser = nil
+    end
+
+    -- lua_resumek: a freeze of the coroutine resumed passes through the
+    -- C function and goes on in the continuation
+    local inner = function(a) local x = a for i = 1, 5 do x = x + i end return "done", x end
+    local co = coroutine.create(function()
+      local c = coroutine.create(inner)
+      return resumek(c)
+    end)
+    -- without a budget: the plain result
+    local t = res(coroutine.resume(co))
+    assert(t[1] == true and t[2] == false) -- resume needs the argument 'a'; the coroutine got none
+    assert(type(t[3]) == "string")
+    local c2 = coroutine.create(function() return resumek(coroutine.create(function() return "done", 15 end)) end)
+    t = res(coroutine.resume(c2))
+    assert(t[1] == true and t[2] == true and t[3] == "done" and t[4] == 15 and t.n == 4)
+    -- under the budget: freezes inside the resumed coroutine, many times
+    resumek_ran = nil
+    local c3 = coroutine.create(function()
+      return resumek(coroutine.create(function() local x = 0 for i = 1, 20 do x = x + i end return "done", x end))
+    end)
+    debug.setbudget(c3, 1, function() debug.freeze() end)
+    local r = table.pack(coroutine.resume(c3))
+    local thaws = 0
+    while debug.isfrozen(c3) do thaws = thaws + 1 r = table.pack(debug.thaw(c3)) end
+    assert(thaws > 20 and r[1] == true and r[2] == true and r[3] == "done" and r[4] == 210 and r.n == 4, thaws)
+    assert(resumek_ran == 1)
+    -- an error in the resumed coroutine
+    local c4 = coroutine.create(function()
+      return resumek(coroutine.create(function() local x = 0 for i = 1, 5 do x = x + i end error("inner", 0) end))
+    end)
+    debug.setbudget(c4, 1, function() debug.freeze() end)
+    r = table.pack(coroutine.resume(c4))
+    while debug.isfrozen(c4) do r = table.pack(debug.thaw(c4)) end
+    assert(r[1] == true and r[2] == false and r[3] == "inner" and r.n == 3)
+    -- a yield of the resumed coroutine comes back as the plain result
+    local c5 = coroutine.create(function()
+      return resumek(coroutine.create(function() coroutine.yield("y", 1) end))
+    end)
+    t = res(coroutine.resume(c5))
+    assert(t[1] == true and t[2] == true and t[3] == "y" and t[4] == 1)
+    return "ok"
+  )LUA");
+  if (st != LUA_OK)
+    std::printf("      %s\n", std::string(lua_tolstring(L, -1)->data(), lua_tolstring(L, -1)->size()).c_str());
+  CHECK(st == LUA_OK);
+  lua_close(L);
+}
+
+/*
+** {======================================================
 ** Budget and freezing
 ** =======================================================
 */
@@ -5887,6 +6284,7 @@ int main()
       {"load_dump", test_load_dump},
       {"coroutines", test_coroutines},
       {"api_continuations", test_api_continuations},
+      {"api_freezable", test_api_freezable},
       {"freeze", test_freeze},
       {"group_gc", test_group_gc},
       {"message_handler_freeze", test_message_handler_freeze},
