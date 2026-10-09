@@ -337,9 +337,10 @@ int(lua_status)(lua_State* L);
 ** Budget and freezing. The VM calls the budget callback 'f' each time 'n'
 ** steps are spent (a step is a VM instruction, a C function call, a
 ** hand-off between C and Lua, or an element of the work of a library
-** function), with the thread that spent them; 'n' 0 turns
-** the budget off ('lua_getbudget' gives 'n' and the steps left before the
-** next call). The callback runs with no hooks and no budget, and leaves
+** function), with the thread that spent them. The budget belongs to
+** thread 'co' and is shared by the threads it creates and, while they
+** run, the ones it resumes (a budget group); 'n' 0 removes it
+** ('lua_getbudget' gives 'n' and the steps left before the next call). The callback runs with no hooks and no budget, and leaves
 ** the thread that spent the budget as it is (see 'lua_Budget'). In it,
 ** 'lua_freeze' asks to freeze coroutine 'co' (a coroutine in the running
 ** chain, or the thread running): when the callback returns, 'co' and every
@@ -349,8 +350,8 @@ int(lua_status)(lua_State* L);
 ** 'lua_thaw' goes on with a frozen coroutine and returns like
 ** 'lua_resume'.
 */
-void(lua_setbudget)(lua_State* L, lua_Integer n, lua_Budget f);
-lua_Integer(lua_getbudget)(lua_State* L, lua_Integer* left);
+void(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
+lua_Integer(lua_getbudget)(lua_State* co, lua_Integer* left);
 int(lua_freeze)(lua_State* L, lua_State* co);
 int(lua_isfrozen)(lua_State* co);
 lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from);

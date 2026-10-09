@@ -504,6 +504,12 @@ UpVal* luaM_malloc_UpVal(lua_State* L)
   return new UpVal;
 }
 
+BudgetGroup* luaM_malloc_BudgetGroup(lua_State* L)
+{
+  take_debt(L, cost::BudgetGroup, novariant(LUA_VBUDGET));
+  return new BudgetGroup;
+}
+
 Proto* luaM_malloc_Proto(lua_State* L)
 {
   take_debt(L, cost::Proto, novariant(LUA_VPROTO));
@@ -519,6 +525,12 @@ lua_State* luaM_malloc_lua_State(lua_State* L)
 void luaM_free_UpVal(lua_State* L, UpVal* p)
 {
   if (p != nullptr) free_debt(L, cost::UpVal, 0);
+  delete p;
+}
+
+void luaM_free_BudgetGroup(lua_State* L, BudgetGroup* p)
+{
+  if (p != nullptr) free_debt(L, cost::BudgetGroup, 0);
   delete p;
 }
 

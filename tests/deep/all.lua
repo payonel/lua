@@ -38,6 +38,7 @@ local tests = {
   "libcalls.lua",
   "finalizers.lua",
   "freeze.lua",
+  "budgetgroups.lua",
 }
 
 -- locate our own directory so the runner works from any cwd

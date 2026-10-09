@@ -391,15 +391,18 @@ lua_State* luaD_budget(lua_State* L)
   lu_byte allowhook = L->allowhook;
   int oldpc = L->oldpc;       /* hooks do not see the callback: their */
   int hookcount = L->hookcount; /* state stays as it is */
+  BudgetGroup* bg = L->beff;
   struct Guard /* the budget goes on also if the callback raises an error */
   {
     global_State* g;
+    BudgetGroup* bg;
     ~Guard()
     {
       g->budgetL = nullptr;
-      g->budgetleft = g->budget;
+      g->budgetg = nullptr;
+      bg->left = bg->budget;
     }
-  } guard{g};
+  } guard{g, bg};
   if (isLua(ci) && L->top < ci->top)
     L->top = ci->top; /* protect entire activation register */
   /* (no room is made in the stack of 'L': the callback leaves it, and its
@@ -407,11 +410,12 @@ lua_State* luaD_budget(lua_State* L)
      depend on where the budget runs out; see 'lua_budgetthread') */
   L->allowhook = 0; /* no hooks inside */
   g->budgetL = L;
+  g->budgetg = bg; /* (kept by the collector while the callback runs) */
   g->budgetnfz = L->nfz;
   g->freezereq = nullptr;
-  g->budgetleft = MAX_LMEM; /* no budget inside */
+  bg->left = MAX_LMEM; /* no budget inside */
   lua_unlock(L);
-  (*g->budgetf)(L);
+  (*bg->f)(L);
   lua_lock(L);
   L->allowhook = allowhook;
   L->oldpc = oldpc;
@@ -471,10 +475,13 @@ void luaD_runfinalizer(lua_State* F, lua_State* L)
   F->nfz = 0;
   F->resumer = L;
   F->resumedk = 0;
+  luaE_enterbudget(F, L);
   luaE_spend(F, 1); /* a hand-off */
   RunFinalizer r;
   TStatus status = luaD_rawrunprotected(F, &r);
   F->resumer = nullptr;
+  if (status != LUA_FREEZE)
+    luaE_leavebudget(F);
   if (status == LUA_FREEZE)
   { /* the freeze of 'F' ends here */
     assert(g->freezetarget == F);
@@ -1140,6 +1147,8 @@ namespace lua::runtime
 static lua_ResumeResult endresume(lua_State* L, lua_State* from, TStatus status, lua_KFunction k)
 {
   L->resumer = nullptr;
+  if (status != LUA_FREEZE)
+    luaE_leavebudget(L);
   if (status == LUA_FREEZE)
   {
     global_State* g = L->l_G;
@@ -1206,6 +1215,8 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
                                     lu_byte kind, StkId hosterrfunc, l_uint32 hostnCcalls)
 {
   L->resumer = nullptr;
+  if (status != LUA_FREEZE)
+    luaE_leavebudget(L);
   L->errfunc = hosterrfunc;
   L->nCcalls = hostnCcalls;
   if (status == LUA_FREEZE)
@@ -1280,6 +1291,7 @@ lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KCont
     from->ci->k = k;
     from->ci->ctx = ctx;
   }
+  luaE_enterbudget(L, from);
   luaE_spend(L, 1); /* a hand-off */
   api_checkpop(L, (L->status == LUA_OK) ? nargs + 1 : nargs);
   Resume r;
@@ -1314,17 +1326,19 @@ lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_
     from->ci->k = k;
     from->ci->ctx = ctx;
   }
+  luaE_enterbudget(L, from);
   StkId hosterrfunc = L->errfunc;
   if (kind == FZ_PCALL)
     L->errfunc = L->frozenerrfunc;
-  if (g->budgetL == nullptr) /* a thaw starts with a whole budget, so that */
-    g->budgetleft = g->budget; /* it makes progress before it can freeze */
+  if (g->budgetL == nullptr && L->beff != nullptr) /* a thaw starts with a whole budget, so that */
+    L->beff->left = L->beff->budget;               /* it makes progress before it can freeze */
   Thaw t;
   status = luaD_rawrunprotected(L, &t);
   status = precover(L, status);
   if (L == g->finth && status != LUA_FREEZE)
   { /* the finalizer ended */
     L->resumer = nullptr;
+    luaE_leavebudget(L);
     if (errorstatus(status))
       finalizererror(L, status); /* (a warning, as without a freeze) */
     else

@@ -166,6 +166,11 @@ static l_mem objsize(GCObject* o)
     res = cost::UpVal;
     break;
   }
+  case LUA_VBUDGET:
+  {
+    res = cost::BudgetGroup;
+    break;
+  }
   case LUA_VLCF:
   {
     res = cost::CFuncInfo;
@@ -364,6 +369,13 @@ static void reallymarkobject(global_State* g, GCObject* o)
     set2black(o); /* CFuncInfo has no internal GC refs */
     break;
   }
+  case LUA_VBUDGET:
+  {
+    BudgetGroup* bg = static_cast<BudgetGroup*>(o);
+    set2black(bg); /* its only reference is the value for the callback */
+    markvalue(g, &bg->cb);
+    break;
+  }
   case LUA_VUPVAL:
   {
     UpVal* uv = static_cast<UpVal*>(o);
@@ -483,6 +495,8 @@ static void restartcollection(global_State* g)
     markobject(g, g->finth);
   markvalue(g, &g->l_registry);
   markmt(g);
+  if (g->budgetg != nullptr)
+    markobject(g, g->budgetg);
   markbeingfnz(g); /* mark any finalizing object left from previous cycle */
 }
 
@@ -767,6 +781,10 @@ static l_mem traversethread(global_State* g, lua_State* th)
     markobject(g, uv); /* open upvalues cannot be collected */
   if (th->frozenchild != nullptr)
     markobject(g, th->frozenchild); /* the coroutine a frozen thread resumed */
+  if (th->bown != nullptr)
+    markobject(g, th->bown); /* its budget groups */
+  if (th->beff != nullptr)
+    markobject(g, th->beff);
   if (g->gcstate == GCSatomic)
   { /* final traversal? */
     if (!g->gcemergency && (th != g->finth || th->nci > FINRESERVE))
@@ -925,6 +943,9 @@ static void freeobj(lua_State* L, GCObject* o)
     break;
   case LUA_VUPVAL:
     freeupval(L, static_cast<UpVal*>(o));
+    break;
+  case LUA_VBUDGET:
+    luaM_free_BudgetGroup(L, static_cast<BudgetGroup*>(o));
     break;
   case LUA_VLCL:
   {
@@ -1714,6 +1735,8 @@ static void atomic(lua_State* L)
   /* registry and global metatables may be changed by API */
   markvalue(g, &g->l_registry);
   markmt(g);       /* mark global metatables */
+  if (g->budgetg != nullptr)
+    markobject(g, g->budgetg); /* the group whose callback runs */
   propagateall(g); /* empties 'gray' list */
   /* remark occasional upvalues of (maybe) dead threads */
   remarkupvals(g);

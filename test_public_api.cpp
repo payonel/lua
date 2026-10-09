@@ -5587,6 +5587,7 @@ static void test_freeze()
     lua_getglobal(co, "body");
     lua_pushinteger(co, 4);
     fz_reset(L, n, freeze ? co : nullptr, 1, true);
+    lua_setbudget(co, n, n > 0 ? fz_budget : nullptr); /* (the thread was made before the budget) */
     std::string log;
     int nargs = 1;
     for (;;)
@@ -5624,6 +5625,25 @@ static void test_freeze()
     std::string clog = runbody(n, true, fzs);
     CHECK(clog == cplain);
     CHECK(fzs > 5);
+  }
+
+  /* the budget belongs to a thread and to the threads it creates */
+  {
+    lua_State* unbudgeted = lua_newthread(L); /* made with no budget in effect */
+    lua_State* owner = lua_newthread(L);
+    lua_setbudget(owner, 5, fz_budget);
+    lua_State* child = lua_newthread(owner); /* made while the group is in effect */
+    lua_Integer steps = -1;
+    CHECK(lua_getbudget(owner, &steps) == 5 && steps == 5);
+    CHECK(lua_getbudget(child, &steps) == 5 && steps == 5);
+    CHECK(lua_getbudget(unbudgeted, nullptr) == 0);
+    CHECK(lua_getbudget(L, nullptr) == 0);
+    lua_setbudget(owner, 0, nullptr);
+    CHECK(lua_getbudget(owner, nullptr) == 0);
+    CHECK(lua_getbudget(child, nullptr) == 5); /* it keeps its group */
+    lua_State* later = lua_newthread(owner);
+    CHECK(lua_getbudget(later, nullptr) == 0);
+    lua_pop(L, 2); /* the threads */
   }
 
   /* 'lua_freeze' only in the callback, and only for the running chain */

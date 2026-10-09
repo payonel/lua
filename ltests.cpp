@@ -513,6 +513,11 @@ static void checkrefs(global_State* g, GCObject* o)
     checkvalref(g, o, &uvv);
     break;
   }
+  case LUA_VBUDGET:
+  {
+    checkvalref(g, o, &static_cast<BudgetGroup*>(o)->cb);
+    break;
+  }
   case LUA_VTABLE:
   {
     checktable(g, static_cast<Table*>(o));

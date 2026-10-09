@@ -1252,7 +1252,6 @@ void luaV_execute(lua_State* L, CallInfo* ci)
   const Instruction* code;
   int pc;
   int trap;
-  global_State* g = L->l_G;
   trap = L->hookmask;
   cl = ci_func(L, ci);
   k = cl->p->k.data();
@@ -1268,8 +1267,8 @@ void luaV_execute(lua_State* L, CallInfo* ci)
     Instruction i; /* instruction being executed */
     if (l_unlikely(trap)) /* stack reallocation, hooks or budget? */
     {
-      if (L->hookmask == LUA_MASKBUDGET && g->budgetleft > 0)
-        g->budgetleft--; /* a step of the budget (no hooks) */
+      if (L->hookmask == LUA_MASKBUDGET && L->beff->left > 0)
+        L->beff->left--; /* a step of the budget (no hooks) */
       else
       {
         trap = luaG_traceexec(L, pc); /* handle hooks */

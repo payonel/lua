@@ -281,6 +281,8 @@ struct lua_State : GCListed
   lua_State* frozenchild = nullptr; /* frozen while resuming this thread */
   int nfz = 0;              /* number of calls in the stack that cannot freeze */
   lu_byte resumedk = 0;     /* resumed by a call with a continuation */
+  BudgetGroup* bown = nullptr; /* the budget group it belongs to, if any */
+  BudgetGroup* beff = nullptr; /* the budget group in effect while it runs */
   lu_byte frozen = 0;       /* frozen: how it was entered (FZ_*); 0: not */
   StkId frozenfunc = 0;     /* frozen in a host call: the function called, */
   StkId frozenerrfunc = 0;  /* its message handler, */
@@ -601,11 +603,9 @@ struct global_State
   TString* tmname[TM_N] = {};                     /* array with tag-method names */
   Table* mt[LUA_NUMTYPES] = {};            /* metatables for basic types */
   lua_WarnFunction* warnf = nullptr;                    /* warning function */
-  /* the budget ('lua_setbudget') */
-  l_mem budget = 0;                  /* steps between two calls of 'budgetf' */
-  l_mem budgetleft = 0;              /* steps left before the next call */
-  lua_Budget budgetf = nullptr;      /* the budget callback */
+  /* the budget callback ('lua_setbudget'); the budget is in each group */
   lua_State* budgetL = nullptr;      /* thread running it, while it runs */
+  BudgetGroup* budgetg = nullptr;    /* the group whose callback runs (kept by the collector) */
   lua_State* budgetth = nullptr;     /* a thread for the callback (see 'lua_budgetthread') */
   int budgetnfz = 0;                 /* its 'nfz' when the callback began */
   lua_State* freezereq = nullptr;    /* coroutine the callback asked to freeze */
@@ -637,11 +637,32 @@ static l_forceinline int completestate(global_State* g)
   return ttype(&g->nilvalue) == LUA_TNIL;
 }
 
+/* put 'bg' (or nothing) in effect for 'th', with the budget bit of its mask */
+void luaE_setbeff(lua_State* th, BudgetGroup* bg);
+
+/*
+** At a resume of 'L' by 'from' (maybe none): the resumer's budget group is
+** in effect if it has one, otherwise the thread's own.
+*/
+static l_forceinline void luaE_enterbudget(lua_State* L, lua_State* from)
+{
+  BudgetGroup* bg = (from != nullptr && from->beff != nullptr) ? from->beff : L->bown;
+  if (L->beff != bg)
+    luaE_setbeff(L, bg);
+}
+
+/* when the resume ends (not in a freeze): back to the thread's own */
+static l_forceinline void luaE_leavebudget(lua_State* L)
+{
+  if (L->beff != L->bown)
+    luaE_setbeff(L, L->bown);
+}
+
 /* spend 'n' steps of the budget, if there is one */
 static l_forceinline void luaE_spend(lua_State* L, l_mem n)
 {
   if (L->hookmask & LUA_MASKBUDGET)
-    L->l_G->budgetleft -= n;
+    L->beff->left -= n;
 }
 
 /* C work of 'n' steps: true when the budget is spent (see 'lua_spend') */
@@ -649,15 +670,15 @@ static l_forceinline bool luaE_spent(lua_State* L, l_mem n)
 {
   if (!(L->hookmask & LUA_MASKBUDGET))
     return false;
-  global_State* g = L->l_G;
-  g->budgetleft -= n;
-  return g->budgetleft <= 0;
+  BudgetGroup* bg = L->beff;
+  bg->left -= n;
+  return bg->left <= 0;
 }
 
 /* is the budget spent? */
 static l_forceinline bool luaE_budgetout(lua_State* L)
 {
-  return (L->hookmask & LUA_MASKBUDGET) && L->l_G->budgetleft <= 0;
+  return (L->hookmask & LUA_MASKBUDGET) && L->beff->left <= 0;
 }
 
 /* see 'lua_freezeonly' */

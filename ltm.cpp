@@ -27,7 +27,7 @@ const byte_view luaT_typenames_[] = {
     lt::no_value,
     lt::nil, lt::boolean, lt::userdata, lt::number_2,
     lt::string_3, lt::table, lt::function, lt::userdata,
-    lt::thread, lt::upvalue, lt::proto /* these last cases are used for tests only */
+    lt::thread, lt::upvalue, lt::proto, lt::budget /* these last cases are used for tests only */
 };
 
 void luaT_init(lua_State* L)

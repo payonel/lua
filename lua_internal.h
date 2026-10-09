@@ -78,6 +78,9 @@ lua_State* lua_frozenchild(lua_State* L);
    not yield; C work of 'n' steps (true when the budget is spent); a check
    point there (goes on in 'k' after a thaw) */
 void lua_freezeonly(lua_State* L);
+lua_State* lua_budgetroot(lua_State* co);
+void lua_setbudgetvalue(lua_State* L, lua_State* co);
+void lua_pushbudgetvalue(lua_State* L, lua_State* co, int effective);
 lua_State* lua_budgetthread(lua_State* L);
 void lua_setbudgetthread(lua_State* L, lua_State* B);
 void lua_pushthreadi(lua_State* L, lua_State* th);

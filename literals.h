@@ -84,6 +84,7 @@ namespace lt
   constexpr byte_view BNOT("BNOT");
   constexpr byte_view bnot("bnot");
   constexpr byte_view boolean("boolean");
+  constexpr byte_view budget("budget");
   constexpr byte_view BOR("BOR");
   constexpr byte_view bor("bor");
   constexpr byte_view BORK("BORK");

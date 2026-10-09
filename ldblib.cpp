@@ -561,7 +561,7 @@ static int db_debug(lua_State* L)
 static void budgetf(lua_State* L)
 {
   lua_State* B = lua_budgetthread(L);
-  lua_getfieldi(B, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
+  lua_pushbudgetvalue(B, L, 1); /* the function of the group in effect */
   lua_pushthreadi(B, L);
   if (lua_pcall(B, 1, 0, 0) != LUA_OK)
   {
@@ -573,43 +573,51 @@ static void budgetf(lua_State* L)
 
 static int db_setbudget(lua_State* L)
 {
-  lua_Integer n = luaL_checkinteger(L, 1);
-  luaL_argchecki(L, n >= 0, 1, lt::out_of_range);
-  if (n == 0 || lua_isnoneornil(L, 2))
-  { /* turn it off */
-    lua_pushnil(L);
-    n = 0;
+  ThreadArg ta = getthread(L);
+  lua_State* co = ta.L1;
+  int arg = ta.arg;
+  lua_Integer n = luaL_checkinteger(L, arg + 1);
+  luaL_argchecki(L, n >= 0, arg + 1, lt::out_of_range);
+  if (n == 0 || lua_isnoneornil(L, arg + 2))
+  { /* no budget */
+    lua_setbudget(co, 0, nullptr);
+    return 0;
   }
-  else
-  {
-    luaL_checktype(L, 2, LUA_TFUNCTION);
-    lua_pushvalue(L, 2);
-    if (lua_budgetthread(L) == nullptr)
-    { /* the thread the callback runs on (anchored in the registry) */
-      lua_State* B = lua_newthread(L);
-      lua_sethook(B, nullptr, 0, 0); /* (no hooks inherited) */
-      lua_setfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETTHREAD);
-      lua_setbudgetthread(L, B);
-    }
+  luaL_checktype(L, arg + 2, LUA_TFUNCTION);
+  if (lua_budgetthread(L) == nullptr)
+  { /* the thread the callback runs on (anchored in the registry) */
+    lua_State* B = lua_newthread(L);
+    lua_sethook(B, nullptr, 0, 0); /* (no hooks inherited) */
+    lua_setbudget(B, 0, nullptr);  /* (and no budget) */
+    lua_setfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETTHREAD);
+    lua_setbudgetthread(L, B);
   }
-  lua_setfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
-  lua_setbudget(L, n, n == 0 ? nullptr : budgetf);
+  lua_pushvalue(L, arg + 2);
+  lua_setbudget(co, n, budgetf);
+  lua_setbudgetvalue(L, co); /* the function goes into the group */
   return 0;
 }
 
 static int db_getbudget(lua_State* L)
 {
+  ThreadArg ta = getthread(L);
+  lua_State* co = ta.L1;
   lua_Integer left;
-  lua_Integer n = lua_getbudget(L, &left);
+  lua_Integer n = lua_getbudget(co, &left);
   if (n == 0)
   {
     luaL_pushfail(L);
     return 1;
   }
   lua_pushinteger(L, n);
-  lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETKEY);
+  lua_pushbudgetvalue(L, co, 0);
   lua_pushinteger(L, left);
-  return 3;
+  lua_State* root = lua_budgetroot(co);
+  if (root != nullptr)
+    lua_pushthreadi(L, root);
+  else
+    lua_pushnil(L);
+  return 4;
 }
 
 static lua_State* checkco(lua_State* L, int arg)

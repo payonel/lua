@@ -169,39 +169,65 @@ void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
     settraps(L->ci); /* to trace inside 'luaV_execute' */
 }
 
-/* set or clear the budget bit of 'th' */
-static void setbudgetmask(lua_State* th, int on)
+/*
+** Set the budget of thread 'co': a new budget group, which it belongs to
+** and passes to the threads it creates (and, while they run, to the ones
+** it resumes). 'n' 0 removes it. The group is in effect at once unless
+** the thread is suspended or is being resumed by another (a resume puts
+** one in effect, see 'luaE_enterbudget').
+*/
+void lua_setbudget(lua_State* co, lua_Integer n, lua_Budget f)
 {
-  if (on)
-  {
-    th->hookmask |= LUA_MASKBUDGET;
-    settraps(th->ci); /* to count inside 'luaV_execute' */
+  lua_lock(co);
+  if (n <= 0 || f == nullptr)
+  { /* no budget */
+    co->bown = nullptr;
   }
   else
-    th->hookmask &= ~LUA_MASKBUDGET;
+  {
+    BudgetGroup* bg = luaM_malloc_BudgetGroup(co);
+    luaC_link(co, bg, LUA_VBUDGET);
+    bg->budget = (l_mem)n;
+    bg->left = (l_mem)n;
+    bg->f = f;
+    bg->root = co;
+    co->bown = bg;
+  }
+  if (co->resumer == nullptr && co->status != LUA_YIELD)
+    luaE_setbeff(co, co->bown);
+  lua_unlock(co);
+}
+
+/* the thread the budget group of 'co' was set on (nothing once freed) */
+lua_State* lua_budgetroot(lua_State* co)
+{
+  return (co->bown != nullptr) ? co->bown->root : nullptr;
 }
 
 /*
-** Set the budget: every thread counts its steps (new threads inherit the
-** bit with the hook mask).
+** The value for the callback of the group of 'co' (its own group, or the
+** one in effect): set it by popping a value from 'L', or push it onto 'L'.
 */
-void lua_setbudget(lua_State* L, lua_Integer n, lua_Budget f)
+void lua_setbudgetvalue(lua_State* L, lua_State* co)
 {
   lua_lock(L);
-  global_State* g = L->l_G;
-  if (n <= 0 || f == nullptr)
-  { /* turn it off */
-    n = 0;
-    f = nullptr;
-  }
-  g->budget = (l_mem)n;
-  g->budgetf = f;
-  if (g->budgetL == nullptr) /* (in the callback, it refills when it ends) */
-    g->budgetleft = (l_mem)n;
-  setbudgetmask(mainthread(g), n > 0);
-  for (GCObject* o = g->allgc.next; o != nullptr; o = o->next)
-    if (o->tt == LUA_VTHREAD)
-      setbudgetmask(static_cast<lua_State*>(o), n > 0);
+  BudgetGroup* bg = co->bown;
+  assert(bg != nullptr && "no budget");
+  bg->cb = getslot(L, L->top - 1);
+  luaC_barrier(L, bg, &bg->cb);
+  L->top--;
+  lua_unlock(L);
+}
+
+void lua_pushbudgetvalue(lua_State* L, lua_State* co, int effective)
+{
+  lua_lock(L);
+  BudgetGroup* bg = effective ? co->beff : co->bown;
+  if (bg != nullptr)
+    setslot(L, L->top, &bg->cb);
+  else
+    setslottag(L, L->top, LUA_VNIL);
+  api_incr_top(L);
   lua_unlock(L);
 }
 
@@ -220,12 +246,19 @@ void lua_setbudgetthread(lua_State* L, lua_State* B)
   L->l_G->budgetth = B;
 }
 
-lua_Integer lua_getbudget(lua_State* L, lua_Integer* left)
+lua_Integer lua_getbudget(lua_State* co, lua_Integer* left)
 {
-  global_State* g = L->l_G;
+  global_State* g = co->l_G;
+  BudgetGroup* bg = co->bown;
+  if (bg == nullptr)
+  {
+    if (left != nullptr)
+      *left = 0;
+    return 0;
+  }
   if (left != nullptr) /* (in the callback, it refills when it ends) */
-    *left = (g->budgetL != nullptr) ? g->budget : g->budgetleft;
-  return g->budget;
+    *left = (g->budgetL != nullptr && g->budgetg == bg) ? bg->budget : bg->left;
+  return bg->budget;
 }
 
 
@@ -1223,9 +1256,10 @@ int luaG_traceexec(lua_State* L, int pc)
   if ((mask & LUA_MASKBUDGET) && !(ci->callstatus & CIST_HOOKYIELD))
   { /* a step of the budget (after its callback, if it is spent) */
     global_State* g = L->l_G;
-    if (g->budgetleft <= 0 && g->budgetL == nullptr)
+    if (L->beff->left <= 0 && g->budgetL == nullptr)
       budgetpoint(L, ci, p);
-    g->budgetleft--;
+    if (L->beff != nullptr) /* (the callback may have removed it) */
+      L->beff->left--;
   }
   if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT)))
     return 1; /* only the budget */

@@ -23,12 +23,13 @@ namespace lua::object
 */
 constexpr int LUA_TUPVAL = LUA_NUMTYPES; /* upvalues */
 constexpr int LUA_TPROTO = LUA_NUMTYPES + 1; /* function prototypes */
-constexpr int LUA_TDEADKEY = LUA_NUMTYPES + 2; /* removed keys in tables */
+constexpr int LUA_TBUDGET = LUA_NUMTYPES + 2; /* budget groups */
+constexpr int LUA_TDEADKEY = LUA_NUMTYPES + 3; /* removed keys in tables */
 
 /*
 ** number of all possible types (including LUA_TNONE but excluding DEADKEY)
 */
-constexpr int LUA_TOTALTYPES = LUA_TPROTO + 2;
+constexpr int LUA_TOTALTYPES = LUA_TBUDGET + 2;
 
 /*
 ** tags for Tagged Values have the following use of bits:
@@ -548,6 +549,7 @@ static l_forceinline void needvatab(Proto* p)
 */
 
 constexpr lu_byte LUA_VUPVAL = makevariant(LUA_TUPVAL, 0);
+constexpr lu_byte LUA_VBUDGET = makevariant(LUA_TBUDGET, 0);
 
 /* Variant tags for functions */
 constexpr lu_byte LUA_VLCL = makevariant(LUA_TFUNCTION, 0); /* Lua closure */
@@ -590,6 +592,21 @@ struct UpVal : GCObject
 
 private:
   static UpVal* newupval(lua_State* L, StkId level, UpVal* prev);
+};
+
+/*
+** A budget group: the budget shared by the threads of one user program
+** ('lua_setbudget'). A thread keeps the group it belongs to ('bown') and
+** the group in effect while it runs ('beff'). Collectable, so that a group
+** that no thread refers to goes away.
+*/
+struct BudgetGroup : GCObject
+{
+  l_mem budget = 0;            /* steps between two calls of 'f' */
+  l_mem left = 0;              /* steps left before the next call */
+  lua_Budget f = nullptr;      /* the callback */
+  lua_State* root = nullptr;   /* the thread it was set on (weak: cleared when that thread is freed) */
+  TValue cb{Value{0, nullptr}, LUA_VNIL}; /* a value for the callback (the debug library keeps its Lua function here) */
 };
 
 struct Closure : GCListed

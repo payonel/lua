@@ -108,12 +108,13 @@ do
   assert(withsort > instructions(sorts) - nobody)
 end
 
--- the budget is shared by all threads and counts in every one of them
+-- the budget belongs to a thread and to the threads it creates, and counts
+-- in every one of them
 do
-  local inner = coroutine.wrap(function() for i = 1, 30 do end return 1 end)
-  local outer = coroutine.create(function() for i = 1, 30 do end return inner() end)
   local seen = {}
   debug.setbudget(1, function(t) seen[t] = (seen[t] or 0) + 1 end)
+  local inner = coroutine.wrap(function() for i = 1, 30 do end return 1 end)
+  local outer = coroutine.create(function() for i = 1, 30 do end return inner() end)
   assert(coroutine.resume(outer))
   debug.setbudget(0)
   local threads = 0
@@ -131,17 +132,17 @@ do
   end
   local co = coroutine.create(body)
   debug.sethook(co, function() hookcalls = hookcalls + 1 end, "l")
-  debug.setbudget(5, function(t)
+  debug.setbudget(co, 5, function(t)
     depth = depth + 1
     maxdepth = math.max(maxdepth, depth)
     calls = calls + 1
     for i = 1, 100 do end -- more than the budget, and lines
-    local n, f, left = debug.getbudget()
+    local n, f, left = debug.getbudget(t)
     assert(n == 5 and left == 5)
     depth = depth - 1
   end)
   assert(coroutine.resume(co))
-  debug.setbudget(0)
+  debug.setbudget(co, 0)
   assert(maxdepth == 1 and calls > 10)
   local plain = 0
   local co2 = coroutine.create(body)
@@ -169,7 +170,7 @@ end
 -- turning the budget off from the callback
 do
   local calls = 0
-  debug.setbudget(2, function() calls = calls + 1 debug.setbudget(0) end)
+  debug.setbudget(2, function(t) calls = calls + 1 debug.setbudget(t, 0) end)
   for i = 1, 100 do end
   assert(calls == 1 and debug.getbudget() == nil)
 end
@@ -184,14 +185,14 @@ do
       table.sort(t, function(a, b) return a > b end)
       return #t
     end)
-    debug.setbudget(7, function(th)
+    debug.setbudget(co, 7, function(th)
       if th == co then
         local info = debug.getinfo(th, 0, "Sl")
         where[#where + 1] = info.short_src .. ":" .. info.currentline
       end
     end)
     assert(coroutine.resume(co))
-    debug.setbudget(0)
+    debug.setbudget(co, 0)
     return where
   end
   local a, b = trace(), trace()

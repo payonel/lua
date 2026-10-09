@@ -290,7 +290,8 @@ lua_State* lua_newthread(lua_State* L)
   setslotth(L, L->top, L1);
   api_incr_top(L);
   preinit_thread(L1, g);
-  L1->hookmask = L->hookmask;
+  L1->hookmask = (lu_byte)(L->hookmask & ~LUA_MASKBUDGET); /* (its budget is set at a resume) */
+  L1->bown = L->beff; /* it belongs to the budget group in effect */
   L1->basehookcount = L->basehookcount;
   L1->hook = L->hook;
   resethookcount(L1);
@@ -305,8 +306,25 @@ lua_State* lua_newthread(lua_State* L)
 namespace lua::runtime
 {
 
+/* put 'bg' (or nothing) in effect for 'th', with the budget bit of its mask */
+void luaE_setbeff(lua_State* th, BudgetGroup* bg)
+{
+  th->beff = bg;
+  if (bg != nullptr)
+  {
+    th->hookmask |= LUA_MASKBUDGET;
+    for (CallInfo* ci = th->ci; ci != nullptr; ci = ci->previous)
+      if (isLua(ci))
+        ci->trap = 1; /* to count inside 'luaV_execute' */
+  }
+  else
+    th->hookmask &= ~LUA_MASKBUDGET;
+}
+
 void luaE_freethread(lua_State* L, lua_State* L1)
 {
+  if (L1->bown != nullptr && L1->bown->root == L1)
+    L1->bown->root = nullptr; /* (a weak reference) */
   luaF_closeupval(L1, 0); /* close all upvalues */
   assert(L1->openupval == nullptr);
   luai_userstatefree(L, L1);
