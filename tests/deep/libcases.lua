@@ -400,4 +400,49 @@ case("xpcall: nested, and '__close' after the handler", function(busy)
   return r, table.concat(log, "; ")
 end)
 
+-- load with a reader function
+case("load with a reader function", function(busy)
+  local parts = {"local a = ", "40 ", "+ 2 ", "return a, ", "...", nil}
+  local i = 0
+  local f = load(function() busy() i = i + 1 return parts[i] end)
+  local r = {f("va")}
+  return r, i
+end)
+case("load with a reader function: chunk name, mode and environment", function(busy)
+  local i = 0
+  local pieces = {"return x", " + y", nil}
+  local env = {x = 1, y = 2}
+  local f = load(function() busy() i = i + 1 return pieces[i] end, "=name", "t", env)
+  local bad = {load(function() busy() return "return +" end, "=bad", "t")}
+  local binary = {load(function() busy() return "return 1" end, "=bin", "b")}
+  return f(), i, bad[1], bad[2], binary[1], binary[2]
+end)
+case("load with a reader function: a binary chunk in pieces", function(busy)
+  local dumped = string.dump(function(a, b) return a * b + 1 end)
+  local pos = 0
+  local f = load(function()
+    busy()
+    if pos >= #dumped then return nil end
+    pos = pos + 3
+    return dumped:sub(pos - 2, pos)
+  end, "=dump", "b")
+  return f(6, 7), pos >= #dumped and pos < #dumped + 3
+end)
+case("load with a reader function: errors", function(busy)
+  local n = 0
+  local r1 = {load(function() busy() n = n + 1 if n == 2 then error("reader failed", 0) end return "x = " end)}
+  local r2 = {load(function() busy() return {} end)}
+  local once = false
+  local r3 = {load(function() busy() if once then return nil end once = true return 42 end, "=num")}
+  return r1[1], r1[2], r2[1], r2[2], r3[1], r3[2]
+end)
+
+-- the math library
+case("math.min and math.max with '__lt'", function(busy)
+  local mt = {__lt = function(a, b) busy() return a.v < b.v end}
+  local function o(v) return setmetatable({v = v}, mt) end
+  return math.min(o(3), o(1), o(2)).v, math.max(o(3), o(9), o(2)).v, math.min(4, 2, 8), math.max(1.5, 2),
+         pcall(math.min, o(1), 5)
+end)
+
 return cases

@@ -545,11 +545,6 @@ do
     assert(ok == false and err == "cannot freeze", name .. ": " .. tostring(ok) .. " " .. tostring(err))
     assert(not caught and coroutine.status(co) == "dead" and not debug.isfrozen(co), name)
   end
-  impossible("a load reader", function(busy)
-    local parts = {"return ", "1"}
-    local i = 0
-    load(function() busy() i = i + 1 return parts[i] end)
-  end)
   impossible("a hook", function(busy)
     debug.sethook(function() busy() end, "", 1000)
     for i = 1, 3000 do end

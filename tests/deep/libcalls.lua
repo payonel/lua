@@ -26,6 +26,16 @@ end
 local expected = {
   ["tostring __tostring"] =
     "{true, \"ts\", n = 2}",
+  ["load with a reader function"] =
+    "{true, {42, \"va\"}, 6, n = 3}",
+  ["load with a reader function: chunk name, mode and environment"] =
+    "{true, 3, 3, nil, \"unexpected symbol near '+'\", nil, \"attempt to load a text chunk (mode is 'b')\", n = 7}",
+  ["load with a reader function: a binary chunk in pieces"] =
+    "{true, 43, true, n = 3}",
+  ["load with a reader function: errors"] =
+    "{true, nil, \"reader failed\", nil, \"reader function must return a string\", nil, \"unexpected symbol near '42'\", n = 7}",
+  ["math.min and math.max with '__lt'"] =
+    "{true, 1, 9, 2, 2, false, \"attempt to index a number value (local 'a')\", n = 7}",
   ["tostring __tostring, not a string"] =
     "{true, false, \"'__tostring' must return a string\", n = 3}",
   ["ipairs __index"] =

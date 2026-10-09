@@ -238,34 +238,72 @@ static int math_ldexp(lua_State* L)
   return 1;
 }
 
+/*
+** 'math.min' and 'math.max' compare with '__lt' when they are given
+** tables and the like, which can freeze: the loop state (the number of
+** arguments, the one being compared, the index of the best so far) is in the
+** continuation's context, 21 bits each.
+*/
+static lua_KContext minmax_pack(int n, int i, int ibest)
+{
+  return (lua_KContext)n | ((lua_KContext)i << 21) | ((lua_KContext)ibest << 42);
+}
+
+static int min_cont(lua_State* L, int, lua_KContext ctx);
+static int max_cont(lua_State* L, int, lua_KContext ctx);
+
+/* compare the arguments from 'i' on with the best so far, 'ibest' */
+static int minmax_loop(lua_State* L, bool ismax, int n, int i, int ibest)
+{
+  for (; i <= n; i++)
+  {
+    lua_KContext ctx = minmax_pack(n, i, ibest);
+    if (ismax)
+      lua_comparek(L, ibest, i, LUA_OPLT, ctx, max_cont);
+    else
+      lua_comparek(L, i, ibest, LUA_OPLT, ctx, min_cont);
+    if (lua_toboolean(L, -1))
+      ibest = i;
+    lua_pop(L, 1);
+  }
+  lua_pushvalue(L, ibest);
+  return 1;
+}
+
+/* the result of comparing argument 'i' is on the top */
+static int minmax_cont(lua_State* L, bool ismax, lua_KContext ctx)
+{
+  int n = (int)(ctx & 0x1FFFFF);
+  int i = (int)((ctx >> 21) & 0x1FFFFF);
+  int ibest = (int)((ctx >> 42) & 0x1FFFFF);
+  if (lua_toboolean(L, -1))
+    ibest = i;
+  lua_pop(L, 1);
+  return minmax_loop(L, ismax, n, i + 1, ibest);
+}
+
+static int min_cont(lua_State* L, int, lua_KContext ctx)
+{
+  return minmax_cont(L, false, ctx);
+}
+
+static int max_cont(lua_State* L, int, lua_KContext ctx)
+{
+  return minmax_cont(L, true, ctx);
+}
+
 static int math_min(lua_State* L)
 {
   int n = lua_gettop(L); /* number of arguments */
-  int imin = 1;          /* index of current minimum value */
-  int i;
   luaL_argchecki(L, n >= 1, 1, lt::value_expected);
-  for (i = 2; i <= n; i++)
-  {
-    if (lua_compare(L, i, imin, LUA_OPLT))
-      imin = i;
-  }
-  lua_pushvalue(L, imin);
-  return 1;
+  return minmax_loop(L, false, n, 2, 1);
 }
 
 static int math_max(lua_State* L)
 {
   int n = lua_gettop(L); /* number of arguments */
-  int imax = 1;          /* index of current maximum value */
-  int i;
   luaL_argchecki(L, n >= 1, 1, lt::value_expected);
-  for (i = 2; i <= n; i++)
-  {
-    if (lua_compare(L, imax, i, LUA_OPLT))
-      imax = i;
-  }
-  lua_pushvalue(L, imax);
-  return 1;
+  return minmax_loop(L, true, n, 2, 1);
 }
 
 static int math_type(lua_State* L)

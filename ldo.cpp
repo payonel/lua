@@ -1771,9 +1771,7 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   p.dyd.gt.size = 0;
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
-  L->nfz++; /* (the reader is a call that cannot freeze) */
   status = luaD_pcall(L, &p, L->top, L->errfunc);
-  L->nfz--;
   luaM_alloc_Vardesc_span(L->l_G, L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);

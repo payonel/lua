@@ -457,33 +457,90 @@ static int luaB_loadfile(lua_State* L)
 */
 
 /*
-** Reader for generic 'load' function.
+** Loading from a reader function. 'load' is below the parser in the C
+** stack, and a freeze in the reader's call unwinds the parser, which
+** cannot be resumed. So the pieces that the function gave are kept in a
+** table (at PIECES), and after a thaw the parse starts over: it reads
+** them again, and calls the function only for the next one. The function
+** is called exactly as in stock (once for each piece, until it gives
+** nil), and cannot yield there, as in stock.
 */
-struct GenericReader : lua_Reader
+constexpr int PIECES = 5;
+
+struct ReplayReader : lua_Reader
 {
-  int firstcall;
+  lua_Integer next = 1; /* the index of the next piece to give */
+  int hasenv;           /* was there an 'env' argument? */
   std::optional<byte_view> read(lua_State* L) override;
 };
 
-static std::optional<byte_view> generic_reader(lua_State* L, GenericReader* r)
+static int load_cont(lua_State* L, int status, lua_KContext ctx);
+
+/*
+** Keep the result of the reader function (on the top) as the next piece
+** (false: the end), and pop it.
+*/
+static void keepPiece(lua_State* L)
 {
-  luaL_checkstacki(L, 2, lt::too_many_nested_functions);
-  if (r->firstcall)
-    r->firstcall = 0;
-  else
-    lua_pop(L, 1);     /* remove previous result */
-  lua_pushvalue(L, 1); /* get function */
-  lua_call(L, 0, 1);   /* call it */
   if (lua_isnil(L, -1))
-    return std::nullopt;
+  {
+    lua_pop(L, 1);
+    lua_pushboolean(L, 0);
+  }
   else if (l_unlikely(!lua_isstring(L, -1)))
     luaL_errori(L, lt::reader_function_must_return_a_string);
-  return *lua_tolstring(L, -1);
+  lua_rawseti(L, PIECES, (lua_Integer)lua_rawlen(L, PIECES) + 1);
 }
 
-std::optional<byte_view> GenericReader::read(lua_State* L)
+std::optional<byte_view> ReplayReader::read(lua_State* L)
 {
-  return generic_reader(L, this);
+  luaL_checkstacki(L, 3, lt::too_many_nested_functions);
+  if (next > (lua_Integer)lua_rawlen(L, PIECES))
+  { /* a new piece */
+    lua_freezeonly(L);
+    lua_pushvalue(L, 1); /* get function */
+    if (l_unlikely(lua_pcallk(L, 0, 1, 0, hasenv, load_cont) != LUA_OK))
+      lua_error(L); /* (the parse fails with it: 'load' gives fail and the message) */
+    keepPiece(L);
+  }
+  lua_rawgeti(L, PIECES, next++);
+  std::optional<byte_view> piece;
+  if (!lua_isboolean(L, -1))
+    piece = *lua_tolstring(L, -1);
+  lua_pop(L, 1); /* (the table keeps the string) */
+  return piece;
+}
+
+static int load_round(lua_State* L, int hasenv)
+{
+  ReplayReader reader;
+  reader.hasenv = hasenv;
+  const InternalString* mode = getMode(L, 3);
+  std::optional<byte_view> optmode = (mode != nullptr) ? std::optional<byte_view>(mode->view()) : std::nullopt;
+  const InternalString* chunkname = luaL_optistring(L, 2, &lt::load_1_i);
+  std::optional<byte_view> optname = (chunkname != nullptr) ? std::optional<byte_view>(chunkname->view()) : std::nullopt;
+  int status = lua_loadi(L, &reader, optname, optmode);
+  return load_aux(L, status, hasenv ? 4 : 0);
+}
+
+/*
+** After a thaw: the function gave a piece, and the parse starts over; or
+** it failed, and so does the parse.
+*/
+static int load_cont(lua_State* L, int status, lua_KContext ctx)
+{
+  if (l_unlikely(status != LUA_OK && status != LUA_YIELD))
+    return load_aux(L, status, 0);
+  if (!lua_isnil(L, -1) && l_unlikely(!lua_isstring(L, -1)))
+  { /* (the parse is gone: 'load' fails with the message, as the parse would) */
+    luaL_where(L, 1);
+    lua_pushistringref(L, lt::reader_function_must_return_a_string);
+    lua_concat(L, 2);
+    return load_aux(L, LUA_ERRRUN, 0);
+  }
+  keepPiece(L);
+  lua_settop(L, PIECES); /* (what the interrupted parse left is gone) */
+  return load_round(L, (int)ctx);
 }
 
 static int luaB_load(lua_State* L)
@@ -501,12 +558,10 @@ static int luaB_load(lua_State* L)
   }
   else
   {                    /* loading from a reader function */
-    GenericReader reader; /* userdata for generic_reader */
-    reader.firstcall = 1;
-    const InternalString* chunkname = luaL_optistring(L, 2, &lt::load_1_i);
-    std::optional<byte_view> optname = (chunkname != nullptr) ? std::optional<byte_view>(chunkname->view()) : std::nullopt;
     luaL_checktype(L, 1, LUA_TFUNCTION);
-    status = lua_loadi(L, &reader, optname, optmode);
+    lua_settop(L, 4);
+    lua_createtable(L, 0, 0); /* the pieces */
+    return load_round(L, env != 0);
   }
   return load_aux(L, status, env);
 }
