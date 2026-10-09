@@ -613,6 +613,49 @@ do
   for _, c in ipairs(dofile(dir .. "libcases.lua")) do everywhere(c.name, c.f) end
 end
 
+-- message handlers that fail, in coroutines, with errors and yields after
+-- them, frozen at every point: a handler that fails leaves nothing behind
+do
+  everywhere("a failing handler, then another error", function(busy)
+    busy()
+    local co = coroutine.create(function()
+      local a, b = xpcall(5, function(m) error("H1") end)
+      local c, d = xpcall(function() error("E2") end, function(m) return "ok:" .. m end)
+      return tostring(a) .. "|" .. tostring(b) .. "|" .. tostring(c) .. "|" .. tostring(d)
+    end)
+    return coroutine.resume(co)
+  end)
+  everywhere("a failing handler of an erroring function", function(busy)
+    busy()
+    local co = coroutine.create(function()
+      local a, b = xpcall(function() error("E1") end, function(m) error("H1") end)
+      local c, d = xpcall(5, function(m) return "ok:" .. m end)
+      return tostring(a) .. "|" .. tostring(b) .. "|" .. tostring(c) .. "|" .. tostring(d)
+    end)
+    return coroutine.resume(co)
+  end)
+  everywhere("a failing handler, then a yield", function(busy)
+    busy()
+    local co = coroutine.create(function()
+      local a, b = xpcall(5, function(m) error("H1") end)
+      coroutine.yield("y")
+      local c, d = pcall(error, "E2")
+      return tostring(a) .. "|" .. tostring(b) .. "|" .. tostring(c) .. "|" .. tostring(d)
+    end)
+    local r1, r2 = coroutine.resume(co)
+    local r3, r4 = coroutine.resume(co)
+    return tostring(r1) .. tostring(r2) .. "//" .. tostring(r3) .. tostring(r4)
+  end)
+  everywhere("a handler that calls nil", function(busy)
+    busy()
+    local co = coroutine.create(function()
+      local a, b = xpcall(5, function(m) local x = nil; x() end)
+      return tostring(a) .. "|" .. tostring(b)
+    end)
+    return coroutine.resume(co)
+  end)
+end
+
 -- the C work of library loops counts, a step an element, and they freeze
 -- in their middle, at their check points: with nothing that calls back
 -- (plain tables, values compared in C), freezing only there

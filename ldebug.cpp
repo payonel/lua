@@ -1159,9 +1159,7 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
     copyslot(L, L->top, L->top - 1); /* move argument */
     copyslot(L, L->top - 1, errfunc);  /* push function */
     L->top++;                           /* assume EXTRA_STACK */
-    L->ci->callstatus |= CIST_ERRH;     /* (a freeze may pass the handler) */
-    luaD_callnoyield(L, L->top - 2, 1); /* call it */
-    L->ci->callstatus &= ~CIST_ERRH;
+    luaD_callerrh(L);                   /* call it */
   }
   luaG_throwerror(L);
 }

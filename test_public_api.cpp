@@ -5226,6 +5226,98 @@ static int fz_getik(lua_State* L)
   return 2;
 }
 
+/* a host protected call with a message handler, frozen at every budget
+   point (in the handler too), ends as the unfrozen call does (the handler
+   frozen at base level used to end in success) */
+static int mh_calls = 0, mh_at = 0;
+static void mh_budget(lua_State*, lua_State* spender)
+{
+  mh_calls++;
+  if (mh_calls == mh_at)
+    lua_freeze(spender);
+}
+
+/* closing a state whose thread has a budget that freezes at every point:
+   the '__gc' of kernel objects all run (a freeze used to stop them and
+   abort the close) */
+static int cl_calls = 0;
+static int cl_gc(lua_State*)
+{
+  cl_calls++;
+  return 0;
+}
+static int cl_budget_calls = 0;
+static void cl_budget(lua_State*, lua_State* spender)
+{
+  cl_budget_calls++;
+  lua_freeze(spender);
+}
+
+static void test_close_with_budget()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+  lua_pushcfunction(L, cl_gc);
+  lua_setglobal(L, "clgc");
+  CHECK(luaL_dostring(L, R"(
+    for i = 1, 5 do
+      setmetatable({}, {__gc = function() local s = 0 for k = 1, 20 do s = s + k end clgc() end})
+    end
+  )") == LUA_OK);
+  lua_setbudget(L, 1, cl_budget);
+  lua_close(L);
+  CHECK(cl_calls == 5);
+  CHECK(cl_budget_calls == 0); /* (no budget point once it is closing) */
+}
+
+static void test_message_handler_freeze()
+{
+  const char* handlers[] = {
+      "function(m) local s=0 for i=1,10 do s=s+i end return 'H:'..tostring(m)..':'..s end",
+      "function(m) local s=0 for i=1,10 do s=s+i end error('H:'..tostring(m)) end"};
+  const char* callees[] = {"5", "nil", "function() error('boom') end", "function() local x = nil; return x.y end"};
+  for (int h = 0; h < 2; h++)
+    for (int c = 0; c < 4; c++)
+    {
+      std::string expect;
+      int expectst = 0;
+      for (int at = 0; at <= 14; at++)
+      {
+        lua_State* L = new_state();
+        luaL_openlibs(L);
+        std::string code = std::string("return ") + handlers[h] + ", " + callees[c];
+        CHECK(luaL_loadstring(L, code.c_str()) == LUA_OK);
+        lua_call(L, 0, 2); /* handler at 1, callee at 2 */
+        mh_calls = 0;
+        mh_at = at;
+        lua_setbudget(L, 1, at > 0 ? mh_budget : nullptr);
+        int st = lua_pcall(L, 0, 1, 1);
+        bool froze = lua_isfrozen(L);
+        int guard = 0;
+        while (lua_isfrozen(L) && guard++ < 100)
+        {
+          lua_ResumeResult r = lua_thaw(L, nullptr);
+          st = r.status;
+        }
+        (void)froze;
+        lua_setbudget(L, 0, nullptr);
+        std::string got = fz_str(L, -1);
+        if (at == 0)
+        { /* the unfrozen run is the reference */
+          expect = got;
+          expectst = st;
+          CHECK(st != LUA_OK);
+        }
+        else
+        {
+          CHECK(st == expectst);
+          CHECK(got == expect);
+        }
+        lua_close(L);
+      }
+    }
+}
+
 /* '__gc' of user objects wait for their group, and a closing state does
    not call them; those of kernel objects are called, as in stock */
 static int gc_user_calls = 0;
@@ -5760,6 +5852,8 @@ int main()
       {"api_continuations", test_api_continuations},
       {"freeze", test_freeze},
       {"group_gc", test_group_gc},
+      {"message_handler_freeze", test_message_handler_freeze},
+      {"close_with_budget", test_close_with_budget},
       {"warnings", test_warnings},
       {"warn_control", test_warn_control},
       {"db_gethook_mask", test_db_gethook_mask},

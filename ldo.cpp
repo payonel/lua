@@ -422,6 +422,29 @@ static lua_State* chaintop(lua_State* L, bool* freezable)
 }
 
 /*
+** Call the message handler at 'L->top - 2' for the error being raised. A
+** freeze may pass the handler: the mark on the frame of the error says
+** that, when the handler ends (after a thaw), the error goes on ('unroll').
+** An error in the handler, or any other way out, leaves no mark.
+*/
+void luaD_callerrh(lua_State* L)
+{
+  CallInfo* ci = L->ci;
+  ci->callstatus |= CIST_ERRH;
+  try
+  {
+    luaD_callnoyield(L, L->top - 2, 1);
+  }
+  catch (LuaError& e)
+  {
+    if (e.status != LUA_FREEZE)
+      ci->callstatus &= ~CIST_ERRH;
+    throw;
+  }
+  ci->callstatus &= ~CIST_ERRH;
+}
+
+/*
 ** Could the chain of the running thread 'L' freeze now? No call that
 ** cannot freeze in the way, and every resume with a continuation.
 */
@@ -1116,6 +1139,11 @@ static void unroll(lua_State* L)
       L->nCcalls = framecalls(L, ci); /* (see 'forgetcalls') */
       luaV_execute(L, ci); /* execute down to higher C 'boundary' */
     }
+  }
+  if (l_unlikely(L->base_ci.callstatus & CIST_ERRH))
+  { /* the handler of an error at base level ended (after a thaw): the error goes on */
+    L->base_ci.callstatus &= ~CIST_ERRH;
+    luaG_throwerror(L);
   }
 }
 
