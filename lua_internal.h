@@ -84,6 +84,8 @@ void lua_pushbudgetvalue(lua_State* L, lua_State* co, int effective);
 lua_State* lua_budgetthread(lua_State* L);
 void lua_setbudgetthread(lua_State* L, lua_State* B);
 int lua_budgeted(lua_State* L);
+int lua_hasdrain(lua_State* L);
+void lua_pushdrain(lua_State* L);
 void lua_pushthreadi(lua_State* L, lua_State* th);
 int lua_rawlessthan(lua_State* L, int index1, int index2);
 int lua_isplaintable(lua_State* L, int idx);

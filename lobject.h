@@ -283,8 +283,11 @@ struct GCObject
   struct GCObject* next;
   lu_byte tt;
   lu_byte marked;
+  unsigned short owner; /* the id of the budget group in effect when its '__gc' was registered (0: none) */
   unsigned int hash; /* as a table key: given when made (luaC_link), if it hashes by identity */
 };
+
+static_assert(sizeof(GCObject) == 16, "the owner id fits in the padding of the header");
 
 struct GCListed : GCObject
 {
@@ -607,6 +610,14 @@ struct BudgetGroup : GCObject
   lua_Budget f = nullptr;      /* the callback */
   lua_State* root = nullptr;   /* the thread it was set on (weak: cleared when that thread is freed) */
   TValue cb{Value{0, nullptr}, LUA_VNIL}; /* a value for the callback (the debug library keeps its Lua function here) */
+  /* the dead objects of the group that wait for their '__gc' (a queue: the
+     collector links them here; the group's threads call them); only 'next'
+     of the head is used */
+  GCObject fnz{};
+  GCObject* fnztail = nullptr; /* its last object (nullptr: the queue is empty) */
+  unsigned short id = 0;       /* its owner id (the objects it owns carry it) */
+  bool qmarked = false;        /* the collector marked its queue in this cycle (the group is alive) */
+  bool nodrain = false;        /* a thaw went on: the next budget point calls no '__gc' */
 };
 
 struct Closure : GCListed
@@ -645,12 +656,12 @@ struct CFuncInfo : GCObject
   lua_CFunction fptr;
 
   CFuncInfo()
-    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */, 0}
+    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */, 0, 0}
     , fptr(nullptr)
   {}
 
   explicit CFuncInfo(lua_CFunction f)
-    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */, 0}
+    : GCObject{nullptr, LUA_VLCF, (1 << 5) | 4 /* BLACK | G_OLD */, 0, 0}
     , fptr(f)
   {}
 

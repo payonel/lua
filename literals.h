@@ -119,6 +119,7 @@ namespace lt
   constexpr byte_view cannot_s_s_s("cannot %s %s: %s");
   constexpr byte_view cannot_thaw_a_coroutine_that_is_not_frozen("cannot thaw a coroutine that is not frozen");
   constexpr byte_view cannot_freeze("cannot freeze");
+  constexpr byte_view too_many_budget_groups("too many budget groups (at most 65534 at once)");
   constexpr byte_view cannot_thaw_a_coroutine_that_is_not_the_freeze_target("cannot thaw a coroutine that is not the freeze target");
   constexpr byte_view cannot_close_a_frozen_coroutine("cannot close a frozen coroutine");
   constexpr byte_view cannot_thaw_from_budgeted_code("cannot thaw from budgeted code");

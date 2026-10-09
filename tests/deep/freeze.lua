@@ -563,14 +563,6 @@ do
     coroutine.resume(c)
     coroutine.close(c)
   end)
-  impossible("a __gc", function(busy)
-    setmetatable({}, {__gc = function() busy() end})
-    collectgarbage()
-  end)
-  -- the collector goes on after the chain died inside a __gc
-  setmetatable({}, {__gc = function() end})
-  collectgarbage()
-  collectgarbage("step")
   -- a nested chain: every budgeted coroutine from the one that spent the
   -- budget to the program's top is dead; the kernel's coroutine is not
   local inner = coroutine.create(function() for i = 1, 50 do end end)
@@ -717,43 +709,12 @@ do
   assert(deepeq(log, {false, cannot, false, cannot, false, cannot, false, true}), show(log))
 end
 
--- finalizers run on their own thread (one per state), not on the thread
--- the collector runs in: there 'coroutine.running' is that thread, the
--- thread that allocated is "normal", and a yield fails as in a coroutine
-do
-  local main = coroutine.running()
-  local seen = {}
-  setmetatable({}, {__gc = function()
-    seen.th, seen.ismain = coroutine.running()
-    seen.yieldable = coroutine.isyieldable()
-    seen.err = select(2, pcall(coroutine.yield))
-    seen.name = debug.getinfo(1, "n").name
-  end})
-  collectgarbage()
-  local fth = seen.th
-  assert(type(fth) == "thread" and fth ~= main and seen.ismain == false)
-  assert(seen.yieldable == false and seen.err == "attempt to yield across a C-call boundary")
-  assert(seen.name == "__gc")
-  assert(coroutine.status(fth) == "dead") -- (idle: nothing to resume)
-  local co
-  co = coroutine.create(function()
-    setmetatable({}, {__gc = function()
-      seen.th2 = coroutine.running()
-      seen.costatus = coroutine.status(co)
-    end})
-    collectgarbage()
-  end)
-  assert(coroutine.resume(co))
-  assert(seen.th2 == fth and seen.costatus == "normal")
-end
-
--- from the main thread, the yield fails as in a coroutine (stock Lua runs
--- finalizers on the thread that collects: "from outside a coroutine")
+-- a kernel '__gc' runs on the thread that collects, as in stock Lua
 do
   local err
   setmetatable({}, {__gc = function() err = select(2, pcall(coroutine.yield)) end})
   collectgarbage()
-  assert(err == "attempt to yield across a C-call boundary")
+  assert(err == "attempt to yield from outside a coroutine")
 end
 
 -- an error raised after a thaw inside a call that cannot yield, caught

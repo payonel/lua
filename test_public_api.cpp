@@ -5226,6 +5226,58 @@ static int fz_getik(lua_State* L)
   return 2;
 }
 
+/* '__gc' of user objects wait for their group, and a closing state does
+   not call them; those of kernel objects are called, as in stock */
+static int gc_user_calls = 0;
+static int gc_kernel_calls = 0;
+
+static int gc_user(lua_State*)
+{
+  gc_user_calls++;
+  return 0;
+}
+
+static int gc_kernel(lua_State*)
+{
+  gc_kernel_calls++;
+  return 0;
+}
+
+static void gc_nobudgetf(lua_State*, lua_State*) {}
+
+static void test_group_gc()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+  lua_pushcfunction(L, gc_user);
+  lua_setglobal(L, "gcuser");
+  lua_pushcfunction(L, gc_kernel);
+  lua_setglobal(L, "gckernel");
+  int st = luaL_dostring(L, R"(
+    local function make(f) setmetatable({}, {__gc = f}) end
+    function makeuser() make(gcuser) end
+    makekernel = function() make(gckernel) end
+    makekernel()
+    function waiting() return coroutine.yield("made") end
+  )");
+  CHECK(st == LUA_OK);
+  lua_State* co = lua_newthread(L);
+  lua_setbudget(co, 1000, gc_nobudgetf);
+  lua_getglobal(co, "makeuser");
+  CHECK(lua_resume(co, L, 0).status == LUA_OK);
+  CHECK(gc_user_calls == 0);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  CHECK(gc_kernel_calls == 1); /* the collector calls a kernel object's at once */
+  CHECK(gc_user_calls == 0);   /* a user object's waits for its group */
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  CHECK(gc_user_calls == 0);
+  /* and when the state closes with it waiting, it is not called */
+  lua_getglobal(L, "makekernel");
+  CHECK(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  lua_close(L);
+  CHECK(gc_user_calls == 0 && gc_kernel_calls == 2);
+}
+
 static void test_freeze()
 {
   lua_State* L = new_state();
@@ -5707,6 +5759,7 @@ int main()
       {"coroutines", test_coroutines},
       {"api_continuations", test_api_continuations},
       {"freeze", test_freeze},
+      {"group_gc", test_group_gc},
       {"warnings", test_warnings},
       {"warn_control", test_warn_control},
       {"db_gethook_mask", test_db_gethook_mask},

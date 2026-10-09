@@ -1267,8 +1267,8 @@ void luaV_execute(lua_State* L, CallInfo* ci)
     Instruction i; /* instruction being executed */
     if (l_unlikely(trap)) /* stack reallocation, hooks or budget? */
     {
-      if (L->hookmask == LUA_MASKBUDGET && L->beff->left > 0)
-        L->beff->left--; /* a step of the budget (no hooks) */
+      if (L->hookmask == LUA_MASKBUDGET && L->beff->left > 0 && L->beff->fnz.next == nullptr)
+        L->beff->left--; /* a step of the budget (no hooks, no '__gc' waiting) */
       else
       {
         trap = luaG_traceexec(L, pc); /* handle hooks */

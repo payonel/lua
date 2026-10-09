@@ -181,6 +181,21 @@ std::span<Value> luaM_alloc_Value_span(global_State* g, lua_State* L, std::span<
   return nb;
 }
 
+std::span<BudgetGroup*> luaM_alloc_BudgetGroup_ptr_span(global_State* g, lua_State* L, std::span<BudgetGroup*> block, size_t count, bool bthrow)
+{
+  if (l_unlikely(!_alloc_span_request(g, L, block.size(), count, cost::Ref, bthrow))) return {};
+  std::span<BudgetGroup*> nb{};
+  if (count > 0)
+  {
+    nb = std::span<BudgetGroup*>(new BudgetGroup*[count](), count);
+    if (!block.empty())
+      for (size_t ci = 0; ci < std::min<size_t>(count, block.size()); ci++)
+        nb[ci] = block[ci];
+  }
+  delete [] block.data();
+  return nb;
+}
+
 std::span<UpVal*> luaM_alloc_UpVal_ptr_span(global_State* g, lua_State* L, std::span<UpVal*> block, size_t count, bool bthrow)
 {
   if (l_unlikely(!_alloc_span_request(g, L, block.size(), count, cost::Ref, bthrow))) return {};

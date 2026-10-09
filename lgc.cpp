@@ -313,6 +313,7 @@ GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt)
 {
   global_State* g = L->l_G;
   o->marked = luaC_white(g);
+  o->owner = 0;
   o->tt = tt;
   /* only objects that hash by identity as table keys take a hash: whether
      a string is new or reused depends on the collector, and the sequence
@@ -431,6 +432,10 @@ static void markbeingfnz(global_State* g)
   GCObject* o;
   for (o = g->tobefnz.next; o != nullptr; o = o->next)
     markobject(g, o);
+  for (BudgetGroup* bg : g->groupbyid)
+    if (bg != nullptr)
+      for (o = bg->fnz.next; o != nullptr; o = o->next)
+        markobject(g, o);
 }
 
 /*
@@ -491,8 +496,6 @@ static void restartcollection(global_State* g)
   cleargraylists(g);
   g->GCmarked = 0;
   markobject(g, mainthread(g));
-  if (g->finth != nullptr)
-    markobject(g, g->finth);
   markvalue(g, &g->l_registry);
   markmt(g);
   if (g->budgetg != nullptr)
@@ -759,9 +762,6 @@ static l_mem traverseLclosure(global_State* g, LClosure* cl)
 ** (which can only happen in generational mode) or if the traverse is in
 ** the propagate phase (which can only happen in incremental mode).
 */
-/* the finalizer thread keeps its stacks while they are this small */
-constexpr int FINRESERVE = 8;
-
 static l_mem traversethread(global_State* g, lua_State* th)
 {
   UpVal* uv;
@@ -789,7 +789,7 @@ static l_mem traversethread(global_State* g, lua_State* th)
     markobject(g, th->beff);
   if (g->gcstate == GCSatomic)
   { /* final traversal? */
-    if (!g->gcemergency && (th != g->finth || th->nci > FINRESERVE))
+    if (!g->gcemergency)
       luaD_shrinkstack(th); /* do not change stack in emergency cycle */
     for (o = th->top; o < th->stack_last + EXTRA_STACK; o++)
       setslottag(th, o, LUA_VNIL); /* clear dead stack slice */
@@ -935,6 +935,8 @@ static void freeupval(lua_State* L, UpVal* uv)
   luaM_free_UpVal(L, uv);
 }
 
+static void freegroup(lua_State* L, BudgetGroup* bg);
+
 static void freeobj(lua_State* L, GCObject* o)
 {
   [[maybe_unused]] l_mem newmem = gettotalbytes(L->l_G) - objsize(o);
@@ -947,6 +949,7 @@ static void freeobj(lua_State* L, GCObject* o)
     freeupval(L, static_cast<UpVal*>(o));
     break;
   case LUA_VBUDGET:
+    freegroup(L, static_cast<BudgetGroup*>(o));
     luaM_free_BudgetGroup(L, static_cast<BudgetGroup*>(o));
     break;
   case LUA_VLCL:
@@ -1086,39 +1089,15 @@ struct DoTheCall : ProtectedCall
 };
 
 /*
-** Finalizers run on the finalizer thread ('g->finth', see
-** 'luaD_runfinalizer'), where their errors become warnings. A finalizer
-** can freeze there: the collector goes on, the frozen finalizer goes on
-** when its thread thaws, and no other finalizer starts until it ends (as
-** in stock Lua, finalizers do not interleave).
+** The collector calls the '__gc' of a kernel or host object (one with no
+** owner) at once, here, as stock Lua does, with the budget of the running
+** thread lifted: no budget point inside it, so nothing can freeze there
+** and the C frames under it need no continuation. What it registers in the
+** meantime is for the kernel too.
 */
-
-/*
-** Can the finalizer thread run a finalizer for the collector running in
-** 'L'? Not while it is busy with one, nor without room in the stacks of
-** the thread that collects (as in stock Lua) and its own: the finalizer
-** waits.
-*/
-static bool finthready(lua_State* L)
-{
-  lua_State* F = L->l_G->finth;
-  if (F->ci != &F->base_ci || F->frozen)
-    return false;
-  if (F->status != LUA_OK)
-  { /* (an error that ended it) */
-    F->status = LUA_OK;
-    F->top = 1;
-  }
-  if (!luaD_checkminstack(L))
-    return false;
-  F->nCcalls = getCcalls(L);
-  return luaD_checkminstack(F);
-}
-
 static void GCTM(lua_State* L)
 {
   global_State* g = L->l_G;
-  lua_State* F = g->finth;
   const TValue* tm;
   TValue v;
   assert(!g->gcemergency);
@@ -1126,19 +1105,97 @@ static void GCTM(lua_State* L)
   tm = luaT_gettmbyobj(L, &v, TM_GC);
   if (!notm(tm))
   { /* is there a finalizer? */
-    struct Restore /* (also if a chain destroyed by the budget callback unwinds through) */
-    {
-      global_State* g;
-      lu_byte oldgcstp;
-      ~Restore() { g->gcstp = oldgcstp; }
-    } restore{g, g->gcstp};
-    g->gcstp |= GCSTPGC;            /* avoid GC steps */
-    F->allowhook = 0;               /* stop debug hooks during GC metamethod */
-    setslot(F, F->top++, tm);       /* push finalizer... */
-    setslot(F, F->top++, &v);       /* ... and its argument */
-    F->ci->callstatus |= CIST_FIN;  /* will run a finalizer */
-    luaD_runfinalizer(F, L);
+    TStatus status;
+    lu_byte oldah = L->allowhook;
+    lu_byte oldgcstp = g->gcstp;
+    BudgetGroup* oldbeff = L->beff;
+    g->gcstp |= GCSTPGC;           /* avoid GC steps */
+    L->allowhook = 0;              /* stop debug hooks during GC metamethod */
+    if (oldbeff != nullptr)
+      luaE_setbeff(L, nullptr);    /* the budget is lifted */
+    setslot(L, L->top++, tm);   /* push finalizer... */
+    setslot(L, L->top++, &v);   /* ... and its argument */
+    L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
+    DoTheCall call;
+    L->nfz++; /* a finalizer cannot freeze */
+    status = luaD_pcall(L, &call, L->top - 2, 0);
+    L->nfz--;
+    L->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */
+    if (oldbeff != nullptr)
+      luaE_setbeff(L, oldbeff);
+    L->allowhook = oldah;           /* restore hooks */
+    g->gcstp = oldgcstp;            /* restore state */
+    if (l_unlikely(status != LUA_OK))
+    { /* error while running __gc? */
+      luaE_warnerror(L, lt::mm_gc);
+      L->top--; /* pops error object */
+    }
   }
+}
+
+/*
+** The '__gc' of a user object waits in the queue of its owner group, and
+** a thread of the group calls them, one after the other, in this C
+** function ('luaD_drain' calls it at a restartable point, and
+** 'collectgarbage' after a collection). Each is a protected call with a
+** continuation, so it is ordinary user code: it can freeze, and an error
+** in it is a warning, as in stock Lua; the object is not tried again.
+*/
+static int gcdrain(lua_State* L);
+
+static void drainfinish(lua_State* L, int status)
+{
+  if (status != LUA_OK && status != LUA_YIELD)
+  { /* error while running __gc? */
+    lua_lock(L); /* (this runs in a C function: the warning expects the lock) */
+    luaE_warnerror(L, lt::mm_gc);
+    lua_unlock(L);
+    L->top--; /* pops error object */
+  }
+}
+
+static int gcdrain_cont(lua_State* L, int status, lua_KContext)
+{
+  drainfinish(L, status);
+  return gcdrain(L);
+}
+
+static int gcdrain(lua_State* L)
+{
+  L->allowhook = 0; /* stop debug hooks during GC metamethod (and no nested drain) */
+  for (;;)
+  {
+    BudgetGroup* bg = L->beff;
+    if (bg == nullptr || bg->fnz.next == nullptr)
+      break;
+    TValue v;
+    setgcovalue(L, &v, luaC_dequeue(L, bg));
+    const TValue* tm = luaT_gettmbyobj(L, &v, TM_GC);
+    if (notm(tm))
+      continue; /* (it lost its '__gc') */
+    setslot(L, L->top++, tm);
+    setslot(L, L->top++, &v);
+    L->ci->callstatus |= CIST_FIN; /* will run a finalizer */
+    drainfinish(L, lua_pcallk(L, 1, 0, 0, 0, gcdrain_cont));
+  }
+  L->ci->callstatus &= ~CIST_FIN;
+  L->allowhook = 1;
+  return 0;
+}
+
+static CFuncInfo cfi_gcdrain(gcdrain);
+
+/* push the function that calls the '__gc' waiting in the group of 'L' */
+void luaC_pushdrain(lua_State* L)
+{
+  setslotf(L, L->top, &cfi_gcdrain);
+  L->top++;
+}
+
+/* do the '__gc' of the group in effect wait? */
+bool luaC_hasdrain(lua_State* L)
+{
+  return L->beff != nullptr && L->beff->fnz.next != nullptr;
 }
 
 /*
@@ -1147,7 +1204,7 @@ static void GCTM(lua_State* L)
 static void callallpendingfinalizers(lua_State* L)
 {
   global_State* g = L->l_G;
-  while (g->tobefnz.next && finthready(L))
+  while (g->tobefnz.next)
     GCTM(L);
 }
 
@@ -1161,6 +1218,22 @@ static GCObject* findlast(GCObject* p)
   return p;
 }
 
+/*
+** The group that owns an object (nullptr: none, or it is gone).
+*/
+static BudgetGroup* ownergroup(global_State* g, unsigned id)
+{
+  return (id < g->groupbyid.size()) ? g->groupbyid[id] : nullptr;
+}
+
+/*
+** Separate the dead objects with a '__gc' from the 'finobj' list. A kernel
+** or host object (no owner) goes to the end of 'tobefnz', and the
+** collector calls its '__gc'. A user object goes to the end of the queue
+** of its group, and a thread of the group calls its '__gc' (see
+** 'luaC_drain'). An object whose group is gone is just dead, without
+** its '__gc': it goes back to the ordinary list, to be swept.
+*/
 static void separatetobefnz(global_State* g, int all)
 {
   GCObject* curr;
@@ -1176,9 +1249,28 @@ static void separatetobefnz(global_State* g, int all)
       if (curr == g->finobjsur)    /* removing 'finobjsur'? */
         g->finobjsur = curr->next; /* correct it */
       p->next = curr->next;             /* remove 'curr' from 'finobj' list */
-      curr->next = lastnext->next;      /* link at the end of 'tobefnz' list */
-      lastnext->next = curr;
-      lastnext = curr;
+      BudgetGroup* bg = (curr->owner != 0) ? ownergroup(g, curr->owner) : nullptr;
+      if (curr->owner == 0)
+      { /* link at the end of 'tobefnz' list */
+        curr->next = lastnext->next;
+        lastnext->next = curr;
+        lastnext = curr;
+      }
+      else if (bg != nullptr)
+      { /* link at the end of the queue of its group */
+        curr->next = nullptr;
+        if (bg->fnztail != nullptr)
+          bg->fnztail->next = curr;
+        else
+          bg->fnz.next = curr;
+        bg->fnztail = curr;
+      }
+      else
+      { /* its group is gone: an ordinary object again */
+        curr->marked &= (lu_byte)(~bitmask(FINALIZEDBIT));
+        curr->next = g->allgc.next;
+        g->allgc.next = curr;
+      }
     }
   }
 }
@@ -1233,7 +1325,136 @@ void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt)
     o->next = g->finobj.next; /* link it in 'finobj' list */
     g->finobj.next = o;
     o->marked = o->marked | bitmask(FINALIZEDBIT); /* mark it as such */
+    o->owner = (L->beff != nullptr) ? L->beff->id : 0; /* its owner: the group in effect */
   }
+}
+
+/*
+** An owner id for the new budget group 'bg': the ids go up, and an id is
+** not given again while an object of an older group may still carry it
+** ('ownerskip', made when the ids ran out). False if there is none.
+*/
+bool luaC_newowner(lua_State* L, BudgetGroup* bg)
+{
+  global_State* g = L->l_G;
+  constexpr unsigned MAXOWNER = 65534;
+  unsigned id = g->nextownerid;
+  while (id <= MAXOWNER && g->ownerskip[id])
+    id++;
+  if (id > MAXOWNER)
+  { /* the round is over: skip the ids of live groups and of objects they owned */
+    g->ownerskip.reset();
+    for (GCObject* o = g->finobj.next; o != nullptr; o = o->next)
+      g->ownerskip.set(o->owner);
+    for (BudgetGroup* other : g->groupbyid)
+      if (other != nullptr)
+        g->ownerskip.set(other->id);
+    id = 1;
+    while (id <= MAXOWNER && g->ownerskip[id])
+      id++;
+    if (id > MAXOWNER)
+      return false;
+  }
+  if (id >= g->groupbyid.size())
+  { /* room for the id (a table by id, growing as the ids do) */
+    size_t n = g->groupbyid.size() == 0 ? 16 : g->groupbyid.size() * 2;
+    while (n <= id)
+      n *= 2;
+    g->groupbyid = luaM_alloc_BudgetGroup_ptr_span(g, L, g->groupbyid, n, true);
+  }
+  bg->id = (unsigned short)id;
+  g->groupbyid[id] = bg;
+  g->nextownerid = id + 1;
+  return true;
+}
+
+/*
+** Take the next object of the queue of group 'bg' (a dead object whose
+** '__gc' has not run), back into the ordinary list, as 'udata2finalize'.
+*/
+GCObject* luaC_dequeue(lua_State* L, BudgetGroup* bg)
+{
+  global_State* g = L->l_G;
+  GCObject* o = bg->fnz.next;
+  assert(o != nullptr && tofinalize(o));
+  bg->fnz.next = o->next;
+  if (bg->fnz.next == nullptr)
+    bg->fnztail = nullptr;
+  o->next = g->allgc.next;
+  g->allgc.next = o;
+  o->marked = luaC_white(g); /* a new object, not finalizable, not old */
+  return o;
+}
+
+/*
+** The queues of the budget groups are not part of the generations: their
+** objects go white and new before the marking of each cycle, and are marked
+** if the group is alive. The queue of a group that nothing but its own
+** objects reaches is dead: nothing could call its '__gc', which are not
+** called, and the objects are swept.
+*/
+static void resetqueues(global_State* g)
+{
+  for (BudgetGroup* bg : g->groupbyid)
+  {
+    if (bg == nullptr)
+      continue;
+    bg->qmarked = false;
+    for (GCObject* o = bg->fnz.next; o != nullptr; o = o->next)
+      o->marked = (o->marked & ~maskgcbits) | bitmask(FINALIZEDBIT) | luaC_white(g);
+  }
+}
+
+static void markgroupqueues(global_State* g)
+{
+  bool again;
+  do
+  {
+    again = false;
+    for (BudgetGroup* bg : g->groupbyid)
+    {
+      if (bg == nullptr || bg->qmarked || iswhite(bg))
+        continue; /* (a group that is not alive does not keep its queue) */
+      bg->qmarked = true;
+      for (GCObject* o = bg->fnz.next; o != nullptr; o = o->next)
+        markobject(g, o);
+      again = true;
+    }
+    if (again)
+    {
+      propagateall(g);
+      convergeephemerons(g);
+    }
+  } while (again);
+  for (BudgetGroup* bg : g->groupbyid)
+  { /* the queues of the groups that are not alive: dead objects */
+    if (bg == nullptr || bg->qmarked || bg->fnz.next == nullptr)
+      continue;
+    GCObject* o = bg->fnz.next;
+    while (o != nullptr)
+    {
+      GCObject* next = o->next;
+      o->marked &= (lu_byte)(~bitmask(FINALIZEDBIT));
+      o->next = g->allgc.next;
+      g->allgc.next = o;
+      o = next;
+    }
+    bg->fnz.next = nullptr;
+    bg->fnztail = nullptr;
+  }
+}
+
+/*
+** A budget group is being freed: it leaves the table of owners. The
+** objects it owned that are not dead yet keep its id, and nothing gives
+** that id again while they may be there (see 'luaC_newowner').
+*/
+static void freegroup(lua_State* L, BudgetGroup* bg)
+{
+  global_State* g = L->l_G;
+  assert(bg->fnz.next == nullptr); /* ('atomic' released it; 'luaC_freeallobjects' deletes it) */
+  if (bg->id != 0 && bg->id < g->groupbyid.size() && g->groupbyid[bg->id] == bg)
+    g->groupbyid[bg->id] = nullptr;
 }
 
 /* }====================================================== */
@@ -1462,7 +1683,7 @@ static void finishgencycle(lua_State* L, global_State* g)
   correctgraylists(g);
   checkSizes(L, g);
   g->gcstate = GCSpropagate; /* skip restart */
-  if (g->tobefnz.next != nullptr && !g->gcemergency)
+  if (g->tobefnz.next != nullptr && !g->gcemergency && luaD_checkminstack(L))
     callallpendingfinalizers(L);
 }
 
@@ -1710,17 +1931,14 @@ void luaC_freeallobjects(lua_State* L)
   luaC_changemode(L, KGC_INC);
   separatetobefnz(g, 1); /* separate all objects with finalizers */
   assert(g->finobj.next == nullptr);
-  if (g->finth != nullptr)
-  {
-    lua_State* F = g->finth;
-    if (F->frozen || F->ci != &F->base_ci)
-    { /* a finalizer stopped in its middle: it is abandoned */
-      F->frozen = 0;
-      F->frozenchild = nullptr;
-      F->nCcalls = getCcalls(L);
-      luaE_resetthread(F, LUA_OK); /* (closes its variables) */
-    }
-    callallpendingfinalizers(L);
+  callallpendingfinalizers(L);
+  for (BudgetGroup* bg : g->groupbyid)
+  { /* what user objects wait for is not called (their threads are not running) */
+    if (bg == nullptr)
+      continue;
+    deletelist(L, bg->fnz.next, nullptr);
+    bg->fnz.next = nullptr;
+    bg->fnztail = nullptr;
   }
   assert(novariant(mainthread(g)->tt) >= LUA_TSTRING);
   deletelist(L, g->allgc.next, mainthread(g));
@@ -1750,6 +1968,7 @@ static void atomic(lua_State* L)
   g->gray.gclist = grayagain;
   propagateall(g); /* traverse 'grayagain' list */
   convergeephemerons(g);
+  resetqueues(g);
   /* at this point, all strongly accessible objects are marked. */
   /* Clear values from weak tables, before checking finalizers */
   clearbyvalues(g, g->weak.gclist, nullptr);
@@ -1760,6 +1979,7 @@ static void atomic(lua_State* L)
   markbeingfnz(g);       /* mark objects that will be finalized */
   propagateall(g);       /* remark, to propagate 'resurrection' */
   convergeephemerons(g);
+  markgroupqueues(g);    /* and the queues of the groups that are alive */
   /* at this point, all resurrected objects are marked. */
   /* remove dead objects from weak tables */
   clearbykeys(g, g->ephemeron.gclist); /* clear keys from all ephemeron */
@@ -1869,7 +2089,7 @@ static l_mem singlestep(lua_State* L, int fast)
   }
   case GCScallfin:
   { /* call finalizers */
-    if (g->tobefnz.next && !g->gcemergency && finthready(L))
+    if (g->tobefnz.next && !g->gcemergency && luaD_checkminstack(L))
     {
       g->gcstopem = 0; /* ok collections during finalizers */
       GCTM(L);         /* call one finalizer */

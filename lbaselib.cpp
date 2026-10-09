@@ -240,6 +240,27 @@ static int pushmode(lua_State* L, int oldmode)
 ** check whether call to 'lua_gc' was valid (not inside a finalizer)
 */
 
+/*
+** A collection of a budgeted thread queues the '__gc' of its group's dead
+** objects: they run before 'collectgarbage' returns (the result is on the
+** top; the calls can freeze, and then the function goes on in its
+** continuation).
+*/
+static int drain_cont(lua_State*, int, lua_KContext)
+{
+  return 1;
+}
+
+static int drainafter(lua_State* L)
+{
+  if (lua_hasdrain(L))
+  {
+    lua_pushdrain(L);
+    lua_callk(L, 0, 0, 0, drain_cont);
+  }
+  return 1;
+}
+
 static int luaB_collectgarbage(lua_State* L)
 {
   static const byte_view opts[] = {
@@ -266,7 +287,7 @@ static int luaB_collectgarbage(lua_State* L)
     int res = lua_gc(L, o, n, 0, 0);
     { if (res == -1) break; };
     lua_pushboolean(L, res);
-    return 1;
+    return drainafter(L);
   }
   case LUA_GCISRUNNING:
   {
@@ -301,7 +322,7 @@ static int luaB_collectgarbage(lua_State* L)
     int res = lua_gc(L, o, 0, 0, 0);
     { if (res == -1) break; };
     lua_pushinteger(L, res);
-    return 1;
+    return drainafter(L);
   }
   }
   luaL_pushfail(L); /* invalid call (inside a finalizer) */

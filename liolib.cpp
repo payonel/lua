@@ -147,6 +147,8 @@ static int f_gc(lua_State* L)
   return 0;
 }
 
+static int io_pclose(lua_State* L);
+
 /*
 ** function to close regular files
 */
@@ -156,6 +158,22 @@ static int io_fclose(lua_State* L)
   errno = 0;
   int err = os_fclose(p->f);
   return luaL_fileresulti(L, err == 0, {}, err);
+}
+
+/*
+** What a handle freed without its '__gc' having run still has open (its
+** group was dropped, or the state closed with the '__gc' waiting): the
+** destructor of 'luaL_Stream' closes it, as the '__gc' would. (The
+** standard files stay open.)
+*/
+static void closeleft(luaL_Stream* p)
+{
+  if (p->closef == nullptr || p->f == nullptr)
+    return;
+  if (p->closef == &io_fclose)
+    os_fclose(p->f);
+  else if (p->closef == &io_pclose)
+    os_pclose(p->f);
 }
 
 static LStream* newfile(lua_State* L)
@@ -806,3 +824,7 @@ LUAMOD_API int luaopen_io(lua_State* L)
   return 1;
 }
 
+luaL_Stream::~luaL_Stream()
+{
+  lua::lib::closeleft(this);
+}

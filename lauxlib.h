@@ -183,6 +183,7 @@ struct luaL_Stream : lua_UserObject
 {
   OsFile* f;
   lua_CFunction closef;
+  ~luaL_Stream() override; /* a handle freed without its '__gc' does not leak its file */
 };
 
 /* }====================================================== */

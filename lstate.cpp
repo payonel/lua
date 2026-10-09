@@ -198,27 +198,6 @@ static void init_registry(lua_State* L, global_State* g)
 */
 static void preinit_thread(lua_State* L, global_State* g);
 
-/*
-** The thread that runs finalizers (see 'GCTM'): finalizers run on it, not
-** on whatever thread the collector happens to run in.
-*/
-static void init_finthread(lua_State* L, global_State* g)
-{
-  lua_State* F = luaM_malloc_lua_State(L);
-  luaC_link(L, F, LUA_TTHREAD);
-  preinit_thread(F, g);
-  F->extra = mainthread(g)->extra;
-  luai_userstatethread(L, F);
-  stack_init(F, L);
-  F->allowhook = 0; /* no debug hooks in finalizers */
-  g->finth = F;
-  /* room to run a finalizer (see 'luaD_checkminstack'), kept by the
-     collector: running one allocates no more than in stock Lua */
-  if (luaE_extendCI(F, 0) == nullptr || luaE_extendCI(F, 0) == nullptr ||
-      !luaD_growstack(F, BASIC_STACK_SIZE, 0))
-    luaD_throw(L, LUA_ERRMEM);
-}
-
 static void f_luaopen(lua_State* L)
 {
   global_State* g = L->l_G;
@@ -227,7 +206,6 @@ static void f_luaopen(lua_State* L)
   luaS_init(L);
   luaT_init(L);
   luaX_init(L);
-  init_finthread(L, g);
   g->gcstp = 0;              /* allow gc */
   setnilvalue(&g->nilvalue); /* now state is complete */
   luai_userstateopen(L);
@@ -259,6 +237,8 @@ l_mem luaE_threadsize(lua_State* L)
 static void close_state(lua_State* L)
 {
   global_State* g = L->l_G;
+  if (L->beff != nullptr)
+    luaE_setbeff(L, nullptr); /* closing: no budget points */
   if (!completestate(g))    /* closing a partially built state? */
     luaC_freeallobjects(L); /* just collect its objects */
   else
@@ -269,6 +249,7 @@ static void close_state(lua_State* L)
     luaC_freeallobjects(L);            /* collect all objects */
     luai_userstateclose(L);
   }
+  g->groupbyid = luaM_alloc_BudgetGroup_ptr_span(g, L, g->groupbyid, 0, false);
   freestack(L);
   assert(gettotalbytes(g) == cost::Global);
   g->frealloc->permit(cost::Global, 0, LUA_TTHREAD); /* free main block */

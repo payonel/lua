@@ -192,6 +192,8 @@ void lua_setbudget(lua_State* co, lua_Integer n, lua_Budget f)
     bg->left = (l_mem)n;
     bg->f = f;
     bg->root = co;
+    if (!luaC_newowner(co, bg))
+      luaG_runerror(co, lt::too_many_budget_groups);
     co->bown = bg;
   }
   if (co->status != LUA_YIELD) /* (a suspended thread gets it at its next resume) */
@@ -258,6 +260,20 @@ void lua_setbudgetthread(lua_State* L, lua_State* B)
     ok = luaE_extendCI(B, 0) != nullptr;
   if (!ok)
     luaD_throw(L, LUA_ERRMEM);
+}
+
+/* do '__gc' of the budget group of 'L' wait to be called? */
+int lua_hasdrain(lua_State* L)
+{
+  return luaC_hasdrain(L);
+}
+
+/* push the function that calls them (see 'luaC_pushdrain') */
+void lua_pushdrain(lua_State* L)
+{
+  lua_lock(L);
+  luaC_pushdrain(L);
+  lua_unlock(L);
 }
 
 /* is 'L' running budgeted code, or the budget callback? */
@@ -1260,6 +1276,28 @@ static void budgetpoint(lua_State* L, CallInfo* ci, const Proto* p)
   }
 }
 
+/*
+** At this instruction boundary of a budgeted thread, call the '__gc' that
+** wait for its group (a restartable point: a freeze inside them goes on
+** here). The thread's hooks are off while they run.
+*/
+static void drainpoint(lua_State* L, CallInfo* ci, const Proto* p)
+{
+  if (!luaP_isIT(p->code[ci->savedpc - 1])) /* top not being used? */
+    L->top = ci->top;                 /* correct top */
+  StkId top = L->top;
+  StkId ci_top = ci->top;
+  luaD_checkstack(L, LUA_MINSTACK + 1);
+  if (ci->top < L->top + LUA_MINSTACK + 1)
+    ci->top = L->top + LUA_MINSTACK + 1;
+  ci->callstatus |= CIST_FROZE; /* (if it freezes, it goes on at this instruction) */
+  luaC_pushdrain(L);
+  luaD_call(L, L->top - 1, 0);
+  ci->callstatus &= ~CIST_FROZE;
+  ci->top = ci_top;
+  L->top = top;
+}
+
 int luaG_traceexec(lua_State* L, int pc)
 {
   CallInfo* ci = L->ci;
@@ -1276,7 +1314,12 @@ int luaG_traceexec(lua_State* L, int pc)
   if ((mask & LUA_MASKBUDGET) && !(ci->callstatus & CIST_HOOKYIELD))
   { /* a step of the budget (after its callback, if it is spent) */
     global_State* g = L->l_G;
-    if (L->beff->left <= 0 && g->budgetL == nullptr)
+    BudgetGroup* bg = L->beff;
+    if (bg->nodrain)
+      bg->nodrain = false;
+    else if (bg->fnz.next != nullptr && L->allowhook && g->budgetL == nullptr && luaD_canfreeze(L))
+      drainpoint(L, ci, p);
+    if (L->beff != nullptr && L->beff->left <= 0 && g->budgetL == nullptr)
       budgetpoint(L, ci, p);
     if (L->beff != nullptr) /* (the callback may have removed it) */
       L->beff->left--;

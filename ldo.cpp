@@ -422,6 +422,26 @@ static lua_State* chaintop(lua_State* L, bool* freezable)
 }
 
 /*
+** Could the chain of the running thread 'L' freeze now? No call that
+** cannot freeze in the way, and every resume with a continuation.
+*/
+bool luaD_canfreeze(lua_State* L)
+{
+  lua_State* T = L;
+  for (;;)
+  {
+    if (T->nfz > 0)
+      return false;
+    lua_State* R = T->resumer;
+    if (R == nullptr || R->beff == nullptr)
+      return true;
+    if (!T->resumedk)
+      return false;
+    T = R;
+  }
+}
+
+/*
 ** Destroy the chain of 'L', which ran out of budget, with error 'err':
 ** the C stack unwinds to the call that resumed or called 'user', the top
 ** of the chain, as in a freeze, but its threads die (see 'luaD_killed').
@@ -569,70 +589,6 @@ bool luaD_killed(lua_State* L)
   g->freezekill = false;
   setnilvalue(&g->killerr);
   return true;
-}
-
-/*
-** An error ended the finalizer running on thread 'F': close its
-** variables, and warn, as stock Lua does with an error in a finalizer.
-** 'F' is idle again.
-*/
-static void finalizererror(lua_State* F, TStatus status)
-{
-  status = luaE_resetthread(F, status); /* (error object at 1) */
-  if (status != LUA_OK)
-    luaE_warnerror(F, lt::mm_gc);
-  F->top = 1;
-}
-
-/*
-** Run the finalizer at 1 (its argument at 2) on the finalizer thread 'F'
-** (see 'GCTM'), for the collector running in 'L': a call that cannot
-** yield, in a resume of 'F'. A freeze of 'F' ends here, with 'F' frozen:
-** a thaw goes on with it (see 'lua_thawk'). A freeze of a thread below
-** 'F' cannot pass, as the collector runs inside some allocation.
-*/
-struct RunFinalizer : ProtectedCall
-{
-  void run(lua_State* F) override { luaD_callnoyield(F, 1, 0); }
-};
-
-void luaD_runfinalizer(lua_State* F, lua_State* L)
-{
-  global_State* g = F->l_G;
-  assert(F->ci == &F->base_ci && F->status == LUA_OK && !F->frozen);
-  F->nCcalls = getCcalls(L);
-  F->ccbase = F->nCcalls;
-  F->nfz = 0;
-  F->resumer = L;
-  F->resumedk = 0;
-  luaE_enterbudget(F, L);
-  luaE_spend(F, 1); /* a hand-off */
-  RunFinalizer r;
-  TStatus status = luaD_rawrunprotected(F, &r);
-  F->resumer = nullptr;
-  if (status != LUA_FREEZE)
-    luaE_leavebudget(F);
-  if (status == LUA_FREEZE && g->freezekill)
-  { /* the chain is destroyed: the error ends the finalizer */
-    F->nCcalls = getCcalls(L);
-    bool landed = luaD_killed(F);
-    finalizererror(F, LUA_ERRRUN);
-    if (!landed)
-      luaD_throw(L, LUA_FREEZE);
-  }
-  else if (status == LUA_FREEZE)
-  { /* the freeze of 'F' ends here */
-    assert(g->freezetarget == F);
-    g->freezetarget = nullptr;
-    F->frozen = FZ_RESUME;
-  }
-  else if (l_unlikely(status != LUA_OK))
-  {
-    F->nCcalls = getCcalls(L);
-    finalizererror(F, status);
-  }
-  else
-    F->ci->callstatus &= ~CIST_FIN; /* not running a finalizer anymore */
 }
 
 /* }================================================================== */
@@ -1489,26 +1445,13 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
   if (kind == FZ_PCALL)
     L->errfunc = L->frozenerrfunc;
   if (g->budgetL == nullptr && L->beff != nullptr) /* a thaw starts with a whole budget, so that */
-    L->beff->left = L->beff->budget;               /* it makes progress before it can freeze */
+  {                                                /* it makes progress before it can freeze, */
+    L->beff->left = L->beff->budget;
+    L->beff->nodrain = true;                       /* and it starts no '__gc' */
+  }
   Thaw t;
   status = luaD_rawrunprotected(L, &t);
   status = precover(L, status);
-  if (L == g->finth && (status != LUA_FREEZE || g->freezekill))
-  { /* the finalizer ended */
-    L->resumer = nullptr;
-    luaE_leavebudget(L);
-    if (status == LUA_FREEZE)
-    { /* (its chain is destroyed: only unbudgeted code thaws) */
-      luaD_killed(L);
-      status = LUA_ERRRUN;
-    }
-    if (errorstatus(status))
-      finalizererror(L, status); /* (a warning, as without a freeze) */
-    else
-      L->ci->callstatus &= ~CIST_FIN;
-    lua_unlock(L);
-    return {LUA_OK, 0};
-  }
   if (kind == FZ_RESUME)
     return endresume(L, from, status, k);
   return endhostcall(L, from, status, k, kind, hosterrfunc, hostnCcalls);

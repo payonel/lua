@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <bitset>
 #include <signal.h>
 #include <vector>
 
@@ -582,6 +583,7 @@ struct global_State
   lu_byte gcemergency = 0; /* true if this is an emergency collection */
   GCObject allgc{};      /* list of all collectable objects */
   GCObject* sweepgc = nullptr;  /* current position of sweep in list */
+  unsigned sweepq = 0;          /* the next group whose queue the sweep takes */
   GCObject finobj{};     /* list of collectable objects with finalizers */
   GCListed gray{};       /* list of gray objects */
   GCListed grayagain{};  /* list of objects to be traversed atomically */
@@ -609,10 +611,12 @@ struct global_State
   BudgetGroup* budgetg = nullptr;    /* the group whose callback runs (kept by the collector) */
   lua_State* budgetth = nullptr;     /* a thread for the callback (see 'lua_budgetthread') */
   int budgetnfz = 0;                 /* its 'nfz' when the callback began */
+  std::span<BudgetGroup*> groupbyid; /* the budget groups by owner id (weak; 0 is not an id) */
+  unsigned nextownerid = 1;          /* the next owner id to give */
+  std::bitset<65536> ownerskip;      /* ids not to give in this round (see 'luaC_newowner') */
   lua_State* freezetarget = nullptr; /* coroutine being frozen (unwinding) */
   bool freezekill = false;           /* ... or whose chain is being destroyed, */
   TValue killerr;                    /* with this error (no collection in between) */
-  lua_State* finth = nullptr;        /* the thread that runs finalizers */
   InternalString locale_name;
   lua_State mainth;                          /* main thread of this state */
 };
