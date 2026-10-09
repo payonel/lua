@@ -60,7 +60,7 @@ do
   end)
   local seen = {}
   local U = coroutine.create(function() assert(coroutine.resume(T)) end)
-  debug.setbudget(U, 10, function(t) seen[t] = (seen[t] or 0) + 1 end)
+  debug.setbudget(U, 10, function(_, t) seen[t] = (seen[t] or 0) + 1 end)
   assert(coroutine.resume(U))
   local during = seen[T]
   assert(during and during > 0) -- it was counted while U resumed it
@@ -76,7 +76,7 @@ do
   local U = coroutine.create(function()
     task = coroutine.create(function() for i = 1, 50 do end end)
   end)
-  debug.setbudget(U, 10, function(t) seen[t] = (seen[t] or 0) + 1 end)
+  debug.setbudget(U, 10, function(_, t) seen[t] = (seen[t] or 0) + 1 end)
   assert(coroutine.resume(U))
   assert(debug.getbudget(task) == 10)
   assert(coroutine.resume(task)) -- resumed by the main thread, which has none
@@ -91,7 +91,7 @@ do
     coroutine.resume(c)
     spenders.c = c
   end)
-  debug.setbudget(U, 5, function(t) spenders[t] = true end)
+  debug.setbudget(U, 5, function(_, t) spenders[t] = true end)
   assert(coroutine.resume(U))
   assert(spenders[U] and spenders[spenders.c])
 end

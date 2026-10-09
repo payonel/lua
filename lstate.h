@@ -608,8 +608,9 @@ struct global_State
   BudgetGroup* budgetg = nullptr;    /* the group whose callback runs (kept by the collector) */
   lua_State* budgetth = nullptr;     /* a thread for the callback (see 'lua_budgetthread') */
   int budgetnfz = 0;                 /* its 'nfz' when the callback began */
-  lua_State* freezereq = nullptr;    /* coroutine the callback asked to freeze */
   lua_State* freezetarget = nullptr; /* coroutine being frozen (unwinding) */
+  bool freezekill = false;           /* ... or whose chain is being destroyed, */
+  TValue killerr;                    /* with this error (no collection in between) */
   lua_State* finth = nullptr;        /* the thread that runs finalizers */
   InternalString locale_name;
   lua_State mainth;                          /* main thread of this state */
@@ -703,5 +704,6 @@ void luaE_incCstack(lua_State* L);
 void luaE_warning(lua_State* L, byte_view msg, int tocont);
 void luaE_warnerror(lua_State* L, byte_view where);
 TStatus luaE_resetthread(lua_State* L, TStatus status);
+TStatus luaE_resetcallbackthread(lua_State* L);
 
 }

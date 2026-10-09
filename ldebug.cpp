@@ -242,9 +242,28 @@ lua_State* lua_budgetthread(lua_State* L)
   return L->l_G->budgetth;
 }
 
+/*
+** The room a callback needs is reserved in its thread (the collector does
+** not trim it): the stack and a number of frames, so that the callback
+** allocates neither, up to a depth that no sane callback reaches.
+*/
+constexpr int BUDGET_STACK = 1000;
+constexpr int BUDGET_FRAMES = 40;
+
 void lua_setbudgetthread(lua_State* L, lua_State* B)
 {
   L->l_G->budgetth = B;
+  bool ok = luaD_growstack(B, BUDGET_STACK, 0);
+  for (int i = 0; ok && i < BUDGET_FRAMES; i++)
+    ok = luaE_extendCI(B, 0) != nullptr;
+  if (!ok)
+    luaD_throw(L, LUA_ERRMEM);
+}
+
+/* is 'L' running budgeted code, or the budget callback? */
+int lua_budgeted(lua_State* L)
+{
+  return L->beff != nullptr || L->l_G->budgetL != nullptr;
 }
 
 lua_Integer lua_getbudget(lua_State* co, lua_Integer* left)

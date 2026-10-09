@@ -36,7 +36,7 @@ namespace lua::runtime
 
 constexpr int errorstatus(TStatus s)
 {
-  return s > LUA_YIELD && s != LUA_FREEZE;
+  return s > LUA_YIELD && s != LUA_FREEZE && s != LUA_CBEXIT;
 }
 
 /*
@@ -51,6 +51,7 @@ struct lua_longjmp
   struct lua_longjmp* previous;
   int level;
   volatile TStatus status; /* error code */
+  bool exitpoint;          /* where the exit of the budget callback ends */
 };
 
 struct LuaError
@@ -67,7 +68,12 @@ static void LUAI_TRY(lua_State* L, lua_longjmp* c, ProtectedCall* f)
   }
   catch (LuaError& e)
   {              /* Lua error */
-    if (e.level != c->level) /* not the correct level? */
+    if (e.status == LUA_CBEXIT)
+    { /* only the call of the callback catches its exit */
+      if (!c->exitpoint)
+        throw;
+    }
+    else if (e.level != c->level) /* not the correct level? */
       throw;     /* rethrow to upper level */
     c->status = e.status;
   }
@@ -133,12 +139,13 @@ void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop)
   luaD_throw(L, errcode);
 }
 
-TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f)
+TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f, bool exitpoint)
 {
   l_uint32 oldnCcalls = L->nCcalls;
   int oldnfz = L->nfz;
   lua_longjmp lj;
   lj.status = LUA_OK;
+  lj.exitpoint = exitpoint;
   lj.previous = L->errorJmp; /* chain new error handler */
   lj.level = (lj.previous != nullptr) ? lj.previous->level + 1 : 1;
   L->errorJmp = &lj;
@@ -309,6 +316,8 @@ static int stackinuse(lua_State* L)
 */
 void luaD_shrinkstack(lua_State* L)
 {
+  if (L == L->l_G->budgetth)
+    return; /* its stack and frames are reserved: a callback never allocates them */
   int inuse = stackinuse(L);
   int max = (inuse > MAXSTACK / 3) ? MAXSTACK : inuse * 3;
   /* if thread is currently not handling a stack overflow and its
@@ -375,12 +384,65 @@ void luaD_hook(lua_State* L, int event, int line,
 ** ===================================================================
 */
 
+struct BudgetCall : ProtectedCall
+{
+  lua_Budget f;
+  lua_State* user;
+  void run(lua_State* L) override
+  {
+    lua_unlock(L);
+    (*f)(user, L);
+    lua_lock(L);
+  }
+};
+
+/*
+** The topmost budgeted thread of the chain 'L' (the thread that spent the
+** budget) runs in, the one a freeze freezes. 'freezable' tells whether the
+** freeze can pass: no call that cannot freeze in the way, and every resume
+** with a continuation.
+*/
+static lua_State* chaintop(lua_State* L, bool* freezable)
+{
+  int nfz = L->l_G->budgetnfz; /* (the callback's own calls do not count) */
+  lua_State* T = L;
+  *freezable = true;
+  for (;;)
+  {
+    if (nfz > 0)
+      *freezable = false;
+    lua_State* R = T->resumer;
+    if (R == nullptr || R->beff == nullptr)
+      return T;
+    if (!T->resumedk)
+      *freezable = false;
+    T = R;
+    nfz = T->nfz;
+  }
+}
+
+/*
+** Destroy the chain of 'L', which ran out of budget, with error 'err':
+** the C stack unwinds to the call that resumed or called 'user', the top
+** of the chain, as in a freeze, but its threads die (see 'luaD_killed').
+*/
+[[noreturn]] static void killchain(lua_State* L, lua_State* user, const TValue& err)
+{
+  global_State* g = L->l_G;
+  setobj(L, &g->killerr, &err);
+  g->freezekill = true;
+  g->freezetarget = user;
+  luaD_throw(L, LUA_FREEZE);
+}
+
 /*
 ** Call the budget callback: the budget is spent, at a budget point of 'L'
 ** (the running thread: an instruction, or a check point of C work). The
 ** callback runs with no hooks and no budget (and hooks do not see it); the
 ** budget refills after it. It leaves 'L' as it is (see 'lua_Budget').
-** Returns the coroutine the callback asked to freeze, if any.
+** Returns the coroutine to freeze, if the callback asked to ('lua_freeze'
+** exits it). When that cannot be, or the callback raises an error, the
+** chain is destroyed (see 'killchain'): no user code catches or sees it.
 */
 lua_State* luaD_budget(lua_State* L)
 {
@@ -391,7 +453,10 @@ lua_State* luaD_budget(lua_State* L)
   lu_byte allowhook = L->allowhook;
   int oldpc = L->oldpc;       /* hooks do not see the callback: their */
   int hookcount = L->hookcount; /* state stays as it is */
+  StkId errfunc = L->errfunc;
   BudgetGroup* bg = L->beff;
+  lua_State* B = g->budgetth;
+  l_uint32 bncalls = (B != nullptr) ? B->nCcalls : 0;
   struct Guard /* the budget goes on also if the callback raises an error */
   {
     global_State* g;
@@ -409,22 +474,64 @@ lua_State* luaD_budget(lua_State* L)
      C calls, as they are, so that where a stack overflow happens does not
      depend on where the budget runs out; see 'lua_budgetthread') */
   L->allowhook = 0; /* no hooks inside */
+  L->errfunc = 0;   /* and no message handler: its errors are not for user code */
   g->budgetL = L;
   g->budgetg = bg; /* (kept by the collector while the callback runs) */
   g->budgetnfz = L->nfz;
-  g->freezereq = nullptr;
+  bool freezable;
+  lua_State* user = chaintop(L, &freezable);
   bg->left = MAX_LMEM; /* no budget inside */
-  lua_unlock(L);
-  (*bg->f)(L);
-  lua_lock(L);
+  BudgetCall bc;
+  bc.f = bg->f;
+  bc.user = user;
+  TStatus status = luaD_rawrunprotected(L, &bc, true);
+  TValue err{}; /* nil */
+  if (status != LUA_OK)
+  { /* the callback left: an exit, or an error */
+    if (status == LUA_ERRMEM)
+      setsvalue(L, &err, g->memerrmsg);
+    else if (status != LUA_CBEXIT)
+    {
+      TValue v = getslot(L, L->top - 1);
+      setobj(L, &err, &v);
+    }
+    if (B != nullptr && B != L)
+    { /* its thread goes back to the base, closing what is pending */
+      B->nCcalls = bncalls;
+      TStatus cs = luaE_resetcallbackthread(B);
+      if (cs != LUA_OK)
+      { /* a '__close' failed */
+        status = cs;
+        TValue v = getslot(B, 1);
+        setobj(L, &err, &v);
+      }
+    }
+    L->ci = ci;
+  }
+  L->errfunc = errfunc;
   L->allowhook = allowhook;
   L->oldpc = oldpc;
   L->hookcount = hookcount;
   ci->top = ci_top;
   L->top = top;
-  lua_State* co = g->freezereq;
-  g->freezereq = nullptr;
-  return co;
+  if (status == LUA_OK)
+    return nullptr;
+  if (status == LUA_CBEXIT)
+  {
+    if (freezable)
+      return user;
+    setsvalue(L, &err, TString::luaS_createstr(L, lt::cannot_freeze));
+  }
+  killchain(L, user, err);
+}
+
+/* leave the budget callback: 'lua_freeze' */
+[[noreturn]] void luaD_exitcallback(lua_State* L)
+{
+  global_State* g = L->l_G;
+  if (g->budgetL == nullptr || (L != g->budgetL && L != g->budgetth))
+    luaG_runerror(L, lt::freeze_outside_the_budget_callback);
+  throw LuaError{LUA_CBEXIT, 0};
 }
 
 /*
@@ -439,6 +546,29 @@ lua_State* luaD_budget(lua_State* L)
   L->l_G->freezetarget = co;
   L->frozencc = L->nCcalls; /* (see 'forgetcalls') */
   luaD_throw(L, LUA_FREEZE);
+}
+
+/*
+** The chain of thread 'L' is being destroyed (see 'killchain'): 'L' dies
+** with the error, as a coroutine does that ended with an error, and
+** leaves the budget it ran with. Returns true if the unwinding ends here.
+*/
+bool luaD_killed(lua_State* L)
+{
+  global_State* g = L->l_G;
+  L->resumer = nullptr;
+  luaE_leavebudget(L);
+  L->status = LUA_ERRRUN; /* mark thread as 'dead' */
+  setslot(L, L->top, &g->killerr); /* (twice, as an error leaves it: the second */
+  setslot(L, L->top + 1, &g->killerr); /* stays after a resume moves the first) */
+  L->top += 2;
+  L->ci->top = L->top;
+  if (g->freezetarget != L)
+    return false;
+  g->freezetarget = nullptr;
+  g->freezekill = false;
+  setnilvalue(&g->killerr);
+  return true;
 }
 
 /*
@@ -482,7 +612,15 @@ void luaD_runfinalizer(lua_State* F, lua_State* L)
   F->resumer = nullptr;
   if (status != LUA_FREEZE)
     luaE_leavebudget(F);
-  if (status == LUA_FREEZE)
+  if (status == LUA_FREEZE && g->freezekill)
+  { /* the chain is destroyed: the error ends the finalizer */
+    F->nCcalls = getCcalls(L);
+    bool landed = luaD_killed(F);
+    finalizererror(F, LUA_ERRRUN);
+    if (!landed)
+      luaD_throw(L, LUA_FREEZE);
+  }
+  else if (status == LUA_FREEZE)
   { /* the freeze of 'F' ends here */
     assert(g->freezetarget == F);
     g->freezetarget = nullptr;
@@ -1149,6 +1287,14 @@ static lua_ResumeResult endresume(lua_State* L, lua_State* from, TStatus status,
   L->resumer = nullptr;
   if (status != LUA_FREEZE)
     luaE_leavebudget(L);
+  if (status == LUA_FREEZE && L->l_G->freezekill)
+  { /* the chain is destroyed: 'L' dies */
+    if (!luaD_killed(L))
+      luaD_throw(from, LUA_FREEZE); /* ('from' dies on its way) */
+    int nres = (int)(L->top - (L->ci->func + 1));
+    lua_unlock(L);
+    return {LUA_ERRRUN, nres};
+  }
   if (status == LUA_FREEZE)
   {
     global_State* g = L->l_G;
@@ -1184,6 +1330,8 @@ static lua_ResumeResult endresume(lua_State* L, lua_State* from, TStatus status,
 ** resuming coroutine 'co', resume 'co' first, then the C function that
 ** resumed it goes on through its continuation, with the result of 'co'.
 */
+static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k);
+
 static void thaw(lua_State* L)
 {
   if (L->frozenchild != nullptr)
@@ -1192,7 +1340,7 @@ static void thaw(lua_State* L)
     CallInfo* ci = L->ci; /* the C function resuming 'co' */
     L->frozenchild = nullptr;
     lua_unlock(L);
-    lua_ResumeResult rr = lua_thawk(co, L, ci->ctx, ci->k);
+    lua_ResumeResult rr = thawcore(co, L, ci->ctx, ci->k);
     int n = (*ci->k)(L, rr.status, ci->ctx);
     lua_lock(L);
     api_checknelems(L, n);
@@ -1219,6 +1367,13 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
     luaE_leavebudget(L);
   L->errfunc = hosterrfunc;
   L->nCcalls = hostnCcalls;
+  if (status == LUA_FREEZE && L->l_G->freezekill)
+  { /* the chain is destroyed: 'L' dies */
+    if (!luaD_killed(L))
+      luaD_throw(from, LUA_FREEZE);
+    lua_unlock(L);
+    return {LUA_ERRRUN, 1};
+  }
   if (status == LUA_FREEZE)
   {
     global_State* g = L->l_G;
@@ -1302,10 +1457,10 @@ lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KCont
   return endresume(L, from, status, k);
 }
 
-/*
-** Go on with frozen coroutine 'L' (see 'lua_resumek' for 'k').
-*/
-lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
+namespace lua::runtime
+{
+
+static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
 {
   TStatus status;
   lua_lock(L);
@@ -1335,10 +1490,15 @@ lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_
   Thaw t;
   status = luaD_rawrunprotected(L, &t);
   status = precover(L, status);
-  if (L == g->finth && status != LUA_FREEZE)
+  if (L == g->finth && (status != LUA_FREEZE || g->freezekill))
   { /* the finalizer ended */
     L->resumer = nullptr;
     luaE_leavebudget(L);
+    if (status == LUA_FREEZE)
+    { /* (its chain is destroyed: only unbudgeted code thaws) */
+      luaD_killed(L);
+      status = LUA_ERRRUN;
+    }
     if (errorstatus(status))
       finalizererror(L, status); /* (a warning, as without a freeze) */
     else
@@ -1349,6 +1509,22 @@ lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_
   if (kind == FZ_RESUME)
     return endresume(L, from, status, k);
   return endhostcall(L, from, status, k, kind, hosterrfunc, hostnCcalls);
+}
+
+}
+
+/*
+** Go on with frozen coroutine 'L' (see 'lua_resumek' for 'k'). Only
+** unbudgeted code can thaw: not the budget callback, nor a thread with a
+** budget.
+*/
+lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
+{
+  lua_lock(L);
+  if (L->l_G->budgetL != nullptr || (from != nullptr && from->beff != nullptr))
+    return {resume_error(L, lt::cannot_thaw_from_budgeted_code, 0), 1};
+  lua_unlock(L);
+  return thawcore(L, from, ctx, k);
 }
 
 lua_ResumeResult lua_thaw(lua_State* L, lua_State* from)
@@ -1378,31 +1554,12 @@ int lua_isfrozen(lua_State* L)
 }
 
 /*
-** Ask, in the budget callback, to freeze 'co' when the callback returns.
-** 'co' must be in the running chain: the thread that spent the budget, or
-** a coroutine below which every coroutine was resumed by a call with a
-** continuation; and no call that cannot freeze may be in the way.
+** Freeze, from the budget callback: leave it (see 'luaD_budget').
 */
-int lua_freeze(lua_State* L, lua_State* co)
+void lua_freeze(lua_State* L)
 {
-  global_State* g = L->l_G;
-  lua_State* T = g->budgetL;
-  if (T == nullptr)
-    return 0; /* not in the budget callback */
-  int nfz = g->budgetnfz; /* (the callback's own calls do not count) */
-  for (;;)
-  {
-    if (nfz > 0)
-      return 0; /* a call that cannot freeze is in the way */
-    if (T == co)
-      break;
-    if (!T->resumedk || T->resumer == nullptr)
-      return 0; /* 'co' is not below, or its resume cannot freeze */
-    T = T->resumer;
-    nfz = T->nfz;
-  }
-  g->freezereq = co;
-  return 1;
+  lua_lock(L); /* (as for any throw: it is caught with the lock held) */
+  luaD_exitcallback(L);
 }
 
 int lua_isyieldable(lua_State* L)
@@ -1486,6 +1643,25 @@ TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status)
     status = luaD_rawrunprotected(L, &pcl);
     if (l_likely(status == LUA_OK)) /* no more errors? */
       return pcl.status;
+    else if (l_unlikely(status == LUA_FREEZE))
+    { /* a '__close' spent the budget, and its chain is destroyed (it is a
+         call that cannot freeze): the unwinding goes on, to where the
+         thread was resumed, or called; for the host, the close fails */
+      global_State* g = L->l_G;
+      assert(g->freezekill);
+      if (L->errorJmp != nullptr)
+        luaD_throw(L, LUA_FREEZE);
+      if (L->resumer != nullptr)
+        luaD_throw(L->resumer, LUA_FREEZE);
+      g->freezekill = false;
+      g->freezetarget = nullptr;
+      L->ci = old_ci;
+      L->allowhook = old_allowhooks;
+      setslot(L, L->top, &g->killerr);
+      L->top++;
+      setnilvalue(&g->killerr);
+      return LUA_ERRRUN;
+    }
     else
     { /* an error occurred; restore saved state and repeat */
       L->ci = old_ci;
@@ -1619,11 +1795,15 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   p.dyd.gt.size = 0;
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
+  L->nfz++; /* (the reader is a call that cannot freeze) */
   status = luaD_pcall(L, &p, L->top, L->errfunc);
+  L->nfz--;
   luaM_alloc_Vardesc_span(L->l_G, L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);
   decnny(L);
+  if (l_unlikely(status == LUA_FREEZE))
+    luaD_throw(L, LUA_FREEZE); /* (the chain is destroyed) */
   return status;
 }
 

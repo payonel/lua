@@ -150,11 +150,13 @@ struct lua_Debug;
 typedef void (*lua_Hook)(lua_State* L, lua_Debug* ar);
 
 /*
-** Budget callback ('lua_setbudget'): called with the thread that spent
-** the budget, which it must leave as it is (no room is made in its stack:
-** to run Lua code, the callback uses a thread of its own)
+** Budget callback ('lua_setbudget'): called with 'user_co', the topmost
+** budgeted thread of the running chain (the one a freeze freezes), and
+** 'spender', the thread that spent the budget, which it must leave as it
+** is (no room is made in its stack: to run Lua code, the callback uses a
+** thread of its own)
 */
-typedef void (*lua_Budget)(lua_State* L);
+typedef void (*lua_Budget)(lua_State* user_co, lua_State* spender);
 
 /*
 ** RCS ident string
@@ -342,17 +344,18 @@ int(lua_status)(lua_State* L);
 ** run, the ones it resumes (a budget group); 'n' 0 removes it
 ** ('lua_getbudget' gives 'n' and the steps left before the next call). The callback runs with no hooks and no budget, and leaves
 ** the thread that spent the budget as it is (see 'lua_Budget'). In it,
-** 'lua_freeze' asks to freeze coroutine 'co' (a coroutine in the running
-** chain, or the thread running): when the callback returns, 'co' and every
-** coroutine it resumed stop where they are, and the call that resumed or
-** called 'co' returns as if 'co' had returned nothing (LUA_OK). False if
-** 'co' cannot be frozen now (a call that cannot freeze is in the way).
+** 'lua_freeze' never returns: it leaves the callback (as an error does,
+** but no pcall catches it), and 'user_co' and every coroutine it resumed
+** stop where they are; the call that resumed or called 'user_co' returns
+** as if it had returned nothing (LUA_OK). If a call that cannot freeze is
+** in the way, or the callback raises an error, the chain is destroyed
+** instead: its threads are dead, and the call returns the error.
 ** 'lua_thaw' goes on with a frozen coroutine and returns like
-** 'lua_resume'.
+** 'lua_resume'; it is an error in the callback or from budgeted code.
 */
 void(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
 lua_Integer(lua_getbudget)(lua_State* co, lua_Integer* left);
-int(lua_freeze)(lua_State* L, lua_State* co);
+[[noreturn]] void(lua_freeze)(lua_State* L);
 int(lua_isfrozen)(lua_State* co);
 lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from);
 int(lua_isyieldable)(lua_State* L);

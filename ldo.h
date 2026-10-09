@@ -58,13 +58,19 @@ void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj);
    result of the API */
 constexpr TStatus LUA_FREEZE = 100;
 
+/* status of the exit of the budget callback (freeze): it unwinds the C
+   stack to the callback's caller, and only that catches it */
+constexpr TStatus LUA_CBEXIT = 101;
+
 lua_State* luaD_budget(lua_State* L);
+[[noreturn]] void luaD_exitcallback(lua_State* L);
+bool luaD_killed(lua_State* L);
 [[noreturn]] void luaD_freeze(lua_State* L, lua_State* co);
 void luaD_runfinalizer(lua_State* F, lua_State* L);
 int luaD_checkminstack(lua_State* L);
 
 [[noreturn]] void luaD_throw(lua_State* L, TStatus errcode);
 [[noreturn]] void luaD_throwbaselevel(lua_State* L, TStatus errcode);
-TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f);
+TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f, bool exitpoint = false);
 
 }

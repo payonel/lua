@@ -5111,29 +5111,28 @@ static void test_api_continuations()
 */
 
 /* the budget callback of these tests: counts its calls, and freezes
-   'fz_target' from call 'fz_at' on (each time, if 'fz_every') */
+   (if 'fz_target' is set) from call 'fz_at' on (each time, if 'fz_every') */
 static int fz_calls = 0;
 static int fz_freezes = 0;
-static int fz_refusals = 0;
 static int fz_at = 0;
 static bool fz_every = false;
 static lua_State* fz_target = nullptr;
+static lua_State* fz_user = nullptr; /* the 'user_co' of the last call */
 
-static void fz_budget(lua_State* L)
+static void fz_budget(lua_State* user_co, lua_State* spender)
 {
   fz_calls++;
+  fz_user = user_co;
   if (fz_target != nullptr && fz_calls >= fz_at && (fz_every || fz_calls == fz_at))
   {
-    if (lua_freeze(L, fz_target))
-      fz_freezes++;
-    else
-      fz_refusals++;
+    fz_freezes++;
+    lua_freeze(spender); /* (never returns) */
   }
 }
 
 static void fz_reset(lua_State* L, lua_Integer n, lua_State* target, int at, bool every)
 {
-  fz_calls = fz_freezes = fz_refusals = 0;
+  fz_calls = fz_freezes = 0;
   fz_target = target;
   fz_at = at;
   fz_every = every;
@@ -5225,16 +5224,6 @@ static int fz_getik(lua_State* L)
   lua_getik(L, 1, lua_tointeger(L, 2), 55, fz_getik_cont);
   lua_pushboolean(L, 0);
   return 2;
-}
-
-/* freezes the first thread other than 'fz_main' that spends the budget
-   (a finalizer's thread, in these tests) */
-static lua_State* fz_main = nullptr;
-static lua_State* fz_other = nullptr;
-static void fz_budget_other(lua_State* L)
-{
-  if (L != fz_main && fz_other == nullptr && lua_freeze(L, L))
-    fz_other = L;
 }
 
 static void test_freeze()
@@ -5420,17 +5409,20 @@ static void test_freeze()
   CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == viaplain + 1);
   lua_settop(L, 0);
 
-  /* through a C function without one: the freeze is refused, the
-     callback still runs */
+  /* through a C function without one: the freeze cannot happen, the
+     chain is destroyed (the thread is dead, with the message) and the
+     host's call fails; closing the thread makes it usable again */
   fz_reset(L, 2, L, 1, true);
   lua_getglobal(L, "viacall");
   lua_pushinteger(L, 30);
-  CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
-  while (lua_isfrozen(L))
-    lua_thaw(L, nullptr);
-  CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == lua_tointeger(L, 1));
-  CHECK(fz_refusals > 10 && fz_freezes > 0); /* (it froze outside 'call') */
+  st = lua_pcall(L, 1, 1, 0);
+  while (st == LUA_OK && lua_isfrozen(L))
+    st = lua_thaw(L, nullptr).status;
+  CHECK(st == LUA_ERRRUN && fz_str(L, -1) == "cannot freeze");
+  CHECK(!lua_isfrozen(L) && lua_status(L) == LUA_ERRRUN);
+  CHECK(lua_closethread(L, nullptr) == LUA_ERRRUN);
   lua_settop(L, 0);
+  CHECK(lua_status(L) == LUA_OK);
 
   /* a protected call with a continuation where the thread cannot yield:
      frozen inside, its error after the thaw is still caught by it */
@@ -5502,7 +5494,6 @@ static void test_freeze()
     while (lua_isfrozen(L))
       lua_thaw(L, nullptr);
     CHECK(lua_gettop(L) == 1 && fz_str(L, 1) == lplain);
-    CHECK(fz_refusals == 0);
     lua_settop(L, 0);
   }
   CHECK(lfroze == lpoints);
@@ -5512,37 +5503,7 @@ static void test_freeze()
   while (lua_isfrozen(L))
     lua_thaw(L, nullptr);
   CHECK(lua_gettop(L) == 1 && fz_str(L, 1) == lplain);
-  CHECK(fz_refusals == 0 && fz_freezes > 100);
-  lua_settop(L, 0);
-
-  /* a finalizer freezes on its own thread: the host's call goes on (the
-     collector runs inside it), the finalizer goes on when the host thaws
-     its thread, and it cannot yield there */
-  fz_reset(L, 0, nullptr, 0, false);
-  st = luaL_dostring(L, R"(
-    fin = {done = false}
-    setmetatable({}, {__gc = function()
-      fin.th = coroutine.running()
-      local s = sum(40)
-      fin.yieldable = coroutine.isyieldable()
-      fin.done = s
-    end})
-  )");
-  CHECK(st == LUA_OK);
-  fz_main = L;
-  fz_other = nullptr;
-  lua_setbudget(L, 7, fz_budget_other);
-  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
-  lua_setbudget(L, 0, nullptr);
-  CHECK(fz_other != nullptr && fz_other != L && lua_isfrozen(fz_other));
-  CHECK(luaL_dostring(L, "return fin.done") == LUA_OK && lua_toboolean(L, -1) == 0);
-  lua_settop(L, 0);
-  lua_ResumeResult fr = lua_thaw(fz_other, L);
-  CHECK(fr.status == LUA_OK && fr.nres == 0 && !lua_isfrozen(fz_other));
-  CHECK(luaL_dostring(L, "return fin.done, fin.yieldable, fin.th") == LUA_OK);
-  CHECK(lua_isinteger(L, 1) && lua_tointeger(L, 1) > 0);
-  CHECK(lua_isboolean(L, 2) && lua_toboolean(L, 2) == 0);
-  CHECK(lua_tothread(L, 3) == fz_other);
+  CHECK(fz_freezes > 100);
   lua_settop(L, 0);
 
   /* an error after a thaw that nothing catches: as 'lua_pcall' reports it */
@@ -5646,14 +5607,55 @@ static void test_freeze()
     lua_pop(L, 2); /* the threads */
   }
 
-  /* 'lua_freeze' only in the callback, and only for the running chain */
-  CHECK(lua_freeze(L, L) == 0);
-  lua_State* idle = lua_newthread(L);
-  fz_reset(L, 1, idle, 1, true);
-  st = luaL_dostring(L, "for i = 1, 10 do end");
-  CHECK(st == LUA_OK && fz_freezes == 0 && fz_refusals > 5);
-  lua_setbudget(L, 0, nullptr);
+  /* 'lua_freeze' only in the callback */
+  lua_pushcfunction(L, [](lua_State* T) -> int { lua_freeze(T); return 0; });
+  CHECK(lua_pcall(L, 0, 0, 0) == LUA_ERRRUN);
+  CHECK(fz_str(L, -1) == "freeze outside the budget callback");
   lua_pop(L, 1);
+
+  /* an error in the callback destroys the chain; a protected call in it
+     does not catch that */
+  {
+    static auto failing = [](lua_State*, lua_State* spender)
+    {
+      lua_checkstack(spender, 1);
+      lua_pushstring(spender, "callback failed");
+      lua_error(spender);
+    };
+    lua_State* co = lua_newthread(L);
+    lua_setbudget(co, 5, failing);
+    CHECK(luaL_loadstring(co, "local ok = pcall(function() for i = 1, 100 do end end) caught = true") == LUA_OK);
+    lua_ResumeResult rr = lua_resume(co, L, 0);
+    CHECK(rr.status == LUA_ERRRUN && fz_str(co, -1) == "callback failed");
+    CHECK(lua_status(co) == LUA_ERRRUN && !lua_isfrozen(co));
+    lua_getglobal(L, "caught");
+    CHECK(lua_isnil(L, -1));
+    lua_pop(L, 2); /* the thread */
+  }
+
+  /* only unbudgeted code can thaw */
+  {
+    lua_State* co = lua_newthread(L);
+    lua_setbudget(co, 5, fz_budget);
+    fz_reset(L, 0, nullptr, 0, false);
+    lua_setbudget(co, 5, fz_budget);
+    fz_target = co;
+    fz_at = 1;
+    fz_every = false;
+    CHECK(luaL_loadstring(co, "for i = 1, 100 do end") == LUA_OK);
+    lua_ResumeResult rr = lua_resume(co, L, 0);
+    CHECK(rr.status == LUA_OK && lua_isfrozen(co));
+    lua_State* budgeted = lua_newthread(L);
+    lua_setbudget(budgeted, 100, fz_budget);
+    CHECK(lua_thaw(co, budgeted).status == LUA_ERRRUN);
+    CHECK(fz_str(co, -1) == "cannot thaw from budgeted code");
+    lua_pop(co, 1);
+    CHECK(lua_isfrozen(co));
+    fz_target = nullptr;
+    rr = lua_thaw(co, L);
+    CHECK(rr.status == LUA_OK && !lua_isfrozen(co));
+    lua_pop(L, 2);
+  }
 
   /* 'lua_thaw' of a thread that is not frozen */
   lua_State* nf = lua_newthread(L);

@@ -346,6 +346,26 @@ TStatus luaE_resetthread(lua_State* L, TStatus status)
   return status;
 }
 
+
+/*
+** After the budget callback left, with a pending exit, the thread it ran
+** on: close its pending variables (with no error) and go back to the base,
+** with no change to its stack, which is reserved. The error of a
+** '__close', if any, is at 1.
+*/
+TStatus luaE_resetcallbackthread(lua_State* L)
+{
+  L->errorJmp = nullptr;
+  L->nfz = 0;
+  resetCI(L);
+  TStatus status = luaD_closeprotected(L, 1, LUA_OK);
+  if (status != LUA_OK)
+    luaD_seterrorobj(L, status, 1);
+  else
+    L->top = 1;
+  return status;
+}
+
 }
 
 int lua_closethread(lua_State* L, lua_State* from)
@@ -353,6 +373,29 @@ int lua_closethread(lua_State* L, lua_State* from)
   TStatus status;
   lua_lock(L);
   L->nCcalls = from ? getCcalls(from) : 0;
+  /* the '__close' of the thread run as a call that cannot freeze, in the
+     chain of the thread that closes it (see 'luaD_closeprotected') */
+  struct Plain
+  {
+    lua_State* L;
+    bool on;
+    ~Plain()
+    {
+      if (on)
+      {
+        L->nfz--;
+        L->resumer = nullptr;
+        luaE_leavebudget(L);
+      }
+    }
+  } plain{L, L != from};
+  if (plain.on)
+  {
+    L->resumer = from;
+    L->resumedk = 0;
+    L->nfz++;
+    luaE_enterbudget(L, from);
+  }
   status = luaE_resetthread(L, L->status);
   if (L == from) /* closing itself? */
     luaD_throwbaselevel(L, status);

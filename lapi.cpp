@@ -1669,6 +1669,13 @@ void lua_callk(lua_State* L, int nargs, int nresults,
     c.func = func;
     c.nresults = nresults;
     TStatus status = luaD_rawrunprotected(L, &c);
+    if (l_unlikely(status == LUA_FREEZE && L->l_G->freezekill))
+    { /* its chain is destroyed: the call fails */
+      [[maybe_unused]] bool landed = luaD_killed(L);
+      assert(landed);
+      L->top--; /* (one error object) */
+      luaD_throw(L, LUA_ERRRUN);
+    }
     if (l_unlikely(status == LUA_FREEZE))
     {
       hostfrozen(L, FZ_CALL, func, nresults, L->errfunc);
@@ -1822,6 +1829,15 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     c.nresults = nresults;
     StkId olderrfunc = L->errfunc;
     status = luaD_pcall(L, &c, c.func, func);
+    if (l_unlikely(status == LUA_FREEZE && L->l_G->freezekill))
+    { /* its chain is destroyed: the call fails */
+      [[maybe_unused]] bool landed = luaD_killed(L);
+      assert(landed);
+      L->top--; /* (one error object) */
+      L->errfunc = olderrfunc;
+      lua_unlock(L);
+      return LUA_ERRRUN;
+    }
     if (l_unlikely(status == LUA_FREEZE))
     {
       hostfrozen(L, FZ_PCALL, c.func, nresults, func);
@@ -1836,6 +1852,8 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     L->nfz++;
     status = luaD_pcall(L, &c, c.func, func);
     L->nfz--;
+    if (l_unlikely(status == LUA_FREEZE))
+      luaD_throw(L, LUA_FREEZE); /* (the chain is destroyed: nothing here freezes) */
   }
   else if (!yieldablek(L, ci))
   { /* a 'conventional' protected call; a freeze passing through makes it

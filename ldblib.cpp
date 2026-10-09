@@ -553,19 +553,22 @@ static int db_debug(lua_State* L)
 */
 
 /*
-** The budget callback: the Lua function in the registry, called with the
-** thread that spent the budget, on a thread of its own (so that the
-** thread that spent it keeps its stack and C calls as they are). An error
-** in it is an error where the budget ran out.
+** The budget callback: the Lua function of the group, called with the
+** topmost budgeted thread and the thread that spent the budget, on a
+** thread of its own (so that the thread that spent it keeps its stack and
+** C calls as they are). An error in it destroys the chain (see
+** 'luaD_budget'): it goes on as an error of the spender, which nothing
+** catches.
 */
 static lua_State* checkco(lua_State* L, int arg);
 
-static void budgetf(lua_State* L)
+static void budgetf(lua_State* user_co, lua_State* L)
 {
   lua_State* B = lua_budgetthread(L);
   lua_pushbudgetvalue(B, L, 1); /* the function of the group in effect */
+  lua_pushthreadi(B, user_co);
   lua_pushthreadi(B, L);
-  if (lua_pcall(B, 1, 0, 0) != LUA_OK)
+  if (lua_pcall(B, 2, 0, 0) != LUA_OK)
   {
     luaL_checkstacki(L, 1, std::nullopt);
     lua_xmove(B, L, 1);
@@ -629,8 +632,7 @@ static lua_State* checkco(lua_State* L, int arg)
 
 static int db_freeze(lua_State* L)
 {
-  lua_pushboolean(L, lua_freeze(L, checkco(L, 1)));
-  return 1;
+  lua_freeze(L);
 }
 
 static int db_isfrozen(lua_State* L)
@@ -672,6 +674,8 @@ static int thaw_cont(lua_State* L, int status, lua_KContext)
 static int db_thaw(lua_State* L)
 {
   lua_State* co = checkco(L, 1);
+  if (lua_budgeted(L))
+    return luaL_error(L, lt::cannot_thaw_from_budgeted_code);
   lua_settop(L, 1);
   return thaw_end(L, co, lua_thawk(co, L, 0, thaw_cont));
 }

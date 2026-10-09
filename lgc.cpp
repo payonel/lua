@@ -1124,14 +1124,18 @@ static void GCTM(lua_State* L)
   tm = luaT_gettmbyobj(L, &v, TM_GC);
   if (!notm(tm))
   { /* is there a finalizer? */
-    lu_byte oldgcstp = g->gcstp;
+    struct Restore /* (also if a chain destroyed by the budget callback unwinds through) */
+    {
+      global_State* g;
+      lu_byte oldgcstp;
+      ~Restore() { g->gcstp = oldgcstp; }
+    } restore{g, g->gcstp};
     g->gcstp |= GCSTPGC;            /* avoid GC steps */
     F->allowhook = 0;               /* stop debug hooks during GC metamethod */
     setslot(F, F->top++, tm);       /* push finalizer... */
     setslot(F, F->top++, &v);       /* ... and its argument */
     F->ci->callstatus |= CIST_FIN;  /* will run a finalizer */
     luaD_runfinalizer(F, L);
-    g->gcstp = oldgcstp; /* restore state */
   }
 }
 
