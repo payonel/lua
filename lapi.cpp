@@ -1863,7 +1863,7 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
     c.nresults = nresults;
     StkId olderrfunc = L->errfunc;
     lu_byte oldah = L->allowhook;
-    status = luaD_pcall(L, &c, c.func, func);
+    status = luaD_pcall(L, &c, c.func, func, false);
     if (l_unlikely(status == LUA_FREEZE))
     {
       ci->funcidx = (int)c.func;
@@ -1872,6 +1872,22 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
       setoah(ci, oldah);
       ci->callstatus |= CIST_YPCALL | CIST_NYCALL;
       luaD_throw(L, LUA_FREEZE); /* go on freezing */
+    }
+    if (l_unlikely(status != LUA_OK))
+    { /* it failed: close its variables so that a '__close' can freeze, with the
+         frame one that recovers, as when the thread can yield (its error is
+         in 'finishpcallk'); a '__close' still cannot yield here */
+      ci->funcidx = (int)c.func;
+      ci->old_errfunc = olderrfunc;
+      setoah(ci, oldah);
+      setcistrecst(ci, status);
+      ci->callstatus |= CIST_YPCALL | CIST_NYCALL;
+      status = luaD_closeprotected(L, c.func, status, 1);
+      luaD_seterrorobj(L, status, c.func);
+      luaD_shrinkstack(L); /* restore stack size in case of overflow */
+      ci->callstatus &= ~(CIST_YPCALL | CIST_NYCALL);
+      setcistrecst(ci, LUA_OK);
+      L->errfunc = olderrfunc;
     }
   }
   else

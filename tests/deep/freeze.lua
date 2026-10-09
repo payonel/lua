@@ -545,14 +545,6 @@ do
     assert(ok == false and err == "cannot freeze", name .. ": " .. tostring(ok) .. " " .. tostring(err))
     assert(not caught and coroutine.status(co) == "dead" and not debug.isfrozen(co), name)
   end
-  impossible("a __close run by coroutine.close", function(busy)
-    local c = coroutine.create(function()
-      local x <close> = setmetatable({}, {__close = function() busy() end})
-      coroutine.yield()
-    end)
-    coroutine.resume(c)
-    coroutine.close(c)
-  end)
   -- a nested chain: every budgeted coroutine from the one that spent the
   -- budget to the program's top is dead; the kernel's coroutine is not
   local inner = coroutine.create(function() for i = 1, 50 do end end)

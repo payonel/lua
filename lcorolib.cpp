@@ -97,25 +97,40 @@ static int luaB_coresume(lua_State* L)
   return coresume_end(L, auxresume(L, co, lua_gettop(L) - 1, coresume_cont));
 }
 
+/* the error of a wrapped coroutine, in the caller's stack: propagate it */
+static int auxwrap_fail(lua_State* L, int stat)
+{
+  if (stat != LUA_ERRMEM && /* not a memory error and ... */
+      lua_type(L, -1) == LUA_TSTRING)
+  {                   /* ... error object is a string? */
+    luaL_where(L, 1); /* add extra info, if available */
+    lua_insert(L, -2);
+    lua_concat(L, 2);
+  }
+  return lua_error(L); /* propagate error */
+}
+
+/* the variables of the coroutine are closed, after a thaw (a '__close' froze) */
+static int auxwrap_closed(lua_State* L, int status, lua_KContext)
+{
+  lua_State* co = lua_tothread(L, lua_upvalueindex(1));
+  assert(status != LUA_OK);
+  lua_xmove(co, L, 1); /* move error message to the caller */
+  return auxwrap_fail(L, status);
+}
+
 static int auxwrap_end(lua_State* L, lua_State* co, int r)
 {
   if (l_unlikely(r < 0))
   { /* error? */
     int stat = lua_status(co);
     if (stat != LUA_OK && stat != LUA_YIELD)
-    {                                /* error in the coroutine? */
-      stat = lua_closethread(co, L); /* close its tbc variables */
+    { /* error in the coroutine? close its tbc variables (a '__close' can freeze) */
+      stat = lua_closethreadk(co, L, 0, auxwrap_closed).status;
       assert(stat != LUA_OK);
       lua_xmove(co, L, 1); /* move error message to the caller */
     }
-    if (stat != LUA_ERRMEM && /* not a memory error and ... */
-        lua_type(L, -1) == LUA_TSTRING)
-    {                   /* ... error object is a string? */
-      luaL_where(L, 1); /* add extra info, if available */
-      lua_insert(L, -2);
-      lua_concat(L, 2);
-    }
-    return lua_error(L); /* propagate error */
+    return auxwrap_fail(L, stat);
   }
   return r;
 }
@@ -214,6 +229,27 @@ static int luaB_corunning(lua_State* L)
   return 2;
 }
 
+static int close_end(lua_State* L, lua_State* co, int status)
+{
+  if (status == LUA_OK)
+  {
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+  else
+  {
+    lua_pushboolean(L, 0);
+    lua_xmove(co, L, 1); /* move error message */
+    return 2;
+  }
+}
+
+/* after a thaw (a '__close' froze) */
+static int close_cont(lua_State* L, int status, lua_KContext)
+{
+  return close_end(L, getoptco(L), status);
+}
+
 static int luaB_close(lua_State* L)
 {
   lua_State* co = getoptco(L);
@@ -222,20 +258,7 @@ static int luaB_close(lua_State* L)
   {
   case COS_DEAD:
   case COS_YIELD:
-  {
-    status = lua_closethread(co, L);
-    if (status == LUA_OK)
-    {
-      lua_pushboolean(L, 1);
-      return 1;
-    }
-    else
-    {
-      lua_pushboolean(L, 0);
-      lua_xmove(co, L, 1); /* move error message */
-      return 2;
-    }
-  }
+    return close_end(L, co, lua_closethreadk(co, L, 0, close_cont).status);
   case COS_NORM:
     lua_pushistringref(L, statname[status]);
     return luaL_errori(L, lt::cannot_close_a_s_coroutine);

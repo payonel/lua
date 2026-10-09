@@ -206,6 +206,7 @@ constexpr int LUA_MASKBUDGET = 1 << 6;
 constexpr lu_byte FZ_RESUME = 1; /* by 'lua_resume' or 'lua_thaw' */
 constexpr lu_byte FZ_CALL = 2;   /* by a 'lua_call' of the host */
 constexpr lu_byte FZ_PCALL = 3;  /* by a 'lua_pcall' of the host */
+constexpr lu_byte FZ_CLOSE = 4;  /* by 'lua_closethreadk' (closing its variables) */
 
 /*
 ** How 'finishCcall' finishes an API call with a continuation whose
@@ -306,6 +307,7 @@ struct lua_State : GCListed
   BudgetGroup* bown = nullptr; /* the budget group it belongs to, if any */
   BudgetGroup* beff = nullptr; /* the budget group in effect while it runs */
   lu_byte frozen = 0;       /* frozen: how it was entered (FZ_*); 0: not */
+  lu_byte closestatus = 0;  /* closing its variables ('lua_closethreadk'): the status it closes with */
   StkId frozenfunc = 0;     /* frozen in a host call: the function called, */
   StkId frozenerrfunc = 0;  /* its message handler, */
   int frozennres = 0;       /* its number of results, */
@@ -729,6 +731,8 @@ void luaE_incCstack(lua_State* L);
 void luaE_warning(lua_State* L, byte_view msg, int tocont);
 void luaE_warnerror(lua_State* L, byte_view where);
 TStatus luaE_resetthread(lua_State* L, TStatus status);
+TStatus luaE_beginclose(lua_State* L);
+void luaE_endclose(lua_State* L, TStatus status);
 TStatus luaE_resetcallbackthread(lua_State* L);
 
 }

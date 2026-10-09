@@ -125,8 +125,11 @@ UpVal* UpVal::luaF_findupval(lua_State* L, StkId level)
 }
 
 /*
-** Call closing method for object 'obj' with error object 'err'. The
-** boolean 'yy' controls whether the call is yieldable.
+** Call closing method for object 'obj' with error object 'err'. 'yy'
+** controls whether the call is yieldable (1), cannot yield but can
+** freeze (2: the caller can recover from a freeze, and it is not under
+** a resume that would catch what the method's own protected calls do),
+** or neither (0).
 ** (This function assumes EXTRA_STACK.)
 */
 static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
@@ -139,8 +142,10 @@ static void callclosemethod(lua_State* L, TValue* obj, TValue* err, int yy)
   if (err != nullptr)           /* if there was an error... */
     setslot(L, top++, err); /* then error object will be 2nd argument */
   L->top = top;            /* add function and arguments */
-  if (yy)
+  if (yy == 1)
     luaD_call(L, func, 0);
+  else if (yy == 2)
+    luaD_callnoyield(L, func, 0);
   else
   { /* (cannot freeze) */
     L->nfz++;

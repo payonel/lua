@@ -26,6 +26,10 @@ end
 local expected = {
   ["tostring __tostring"] =
     "{true, \"ts\", n = 2}",
+  ["pcall in a call that cannot yield: variables closed after an error"] =
+    "{true, \"y:body,x:in y,false:in y,y:h:body,x:h:in y,false:h:in y\", n = 2}",
+  ["coroutine.close and coroutine.wrap: variables closed"] =
+    "{true, {true}, {false, \"b failed\"}, {false, \"wrap err\"}, \"b:nil,a:nil,b:nil,a:b failed,w:wrap err\", n = 5}",
   ["debug hooks: call and return events"] =
     "{true, 2, 3, \"abab\", \"return:C,call:Lua,tail call:Lua,call:C,return:C,return:Lua,call:C,return:C,call:C,return:C,call:C\", n = 5}",
   ["debug hooks: line and count events"] =

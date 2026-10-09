@@ -313,17 +313,35 @@ void luaE_freethread(lua_State* L, lua_State* L1)
   luaM_free_lua_State(L, L1);
 }
 
+/*
+** The start of a close of the variables of a thread: it goes back to the
+** base, with no status, so that a '__close' can run. Returns the status
+** to close with.
+*/
+TStatus luaE_beginclose(lua_State* L)
+{
+  TStatus status = L->status;
+  resetCI(L);
+  return (status == LUA_YIELD) ? LUA_OK : status;
+}
+
+/* its end: the error is at 1 (or there is none) */
+void luaE_endclose(lua_State* L, TStatus status)
+{
+  if (status != LUA_OK) /* errors? */
+    luaD_seterrorobj(L, status, 1);
+  else
+    L->top = 1;
+  luaD_reallocstack(L, (int)L->ci->top, 0);
+}
+
 TStatus luaE_resetthread(lua_State* L, TStatus status)
 {
   resetCI(L);
   if (status == LUA_YIELD)
     status = LUA_OK;
   status = luaD_closeprotected(L, 1, status);
-  if (status != LUA_OK) /* errors? */
-    luaD_seterrorobj(L, status, 1);
-  else
-    L->top = 1;
-  luaD_reallocstack(L, (int)L->ci->top, 0);
+  luaE_endclose(L, status);
   return status;
 }
 

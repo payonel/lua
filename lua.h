@@ -333,6 +333,7 @@ struct lua_ResumeResult
   int nres;
 };
 lua_ResumeResult(lua_resume)(lua_State* L, lua_State* from, int narg);
+lua_ResumeResult(lua_closethreadk)(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k);
 int(lua_status)(lua_State* L);
 
 /*

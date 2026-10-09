@@ -1419,6 +1419,68 @@ struct Thaw : ProtectedCall
 };
 
 /*
+** The close of the variables of thread 'L' for 'from' (see
+** 'lua_closethreadk'). It starts (first), or goes on after a thaw: the
+** hook function of the '__close' that froze ends first. A '__close' that
+** freezes makes 'L' frozen in the close, like a coroutine resumed by
+** 'from' that froze; the close ends with the status and error it has.
+*/
+struct CloseRun : ProtectedCall
+{
+  TStatus status;
+  void run(lua_State* L) override { status = luaD_closeprotected(L, 1, status, 2); }
+};
+
+static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, bool first)
+{
+  global_State* g = L->l_G;
+  CloseRun cr;
+  cr.status = status;
+  TStatus st = LUA_OK;
+  if (!first)
+  { /* the '__close' that froze goes on */
+    Thaw t;
+    st = luaD_rawrunprotected(L, &t);
+    if (st != LUA_OK && st != LUA_FREEZE)
+    { /* it failed: the close goes on with that error */
+      L->ci = &L->base_ci;
+      L->allowhook = 1;
+      cr.status = st;
+      st = LUA_OK;
+    }
+    else if (st == LUA_OK)
+      cr.status = L->closestatus;
+  }
+  if (st == LUA_OK)
+  {
+    st = luaD_rawrunprotected(L, &cr);
+    if (st == LUA_OK)
+      status = cr.status;
+  }
+  if (st == LUA_FREEZE)
+  {
+    if (g->freezekill)
+    { /* the chain is destroyed: 'L' dies with it */
+      L->resumer = nullptr;
+      if (!luaD_killed(L))
+        luaD_throw(from, LUA_FREEZE);
+      lua_unlock(L);
+      return {LUA_ERRRUN, 1};
+    }
+    L->frozen = FZ_CLOSE;
+    from->frozenchild = L;
+    L->frozenparent = from;
+    from->frozencc = from->nCcalls;
+    luaD_throw(from, LUA_FREEZE); /* go on freezing 'from' */
+  }
+  L->resumer = nullptr;
+  luaE_leavebudget(L);
+  luaE_endclose(L, status);
+  lua_unlock(L);
+  return {status, (status != LUA_OK) ? 1 : 0};
+}
+
+/*
 ** End a host call that a thaw went on with: it finished (results from
 ** 'frozenfunc' on), failed (the error at 'frozenfunc', as 'luaD_pcall'
 ** leaves it), or froze again.
@@ -1471,6 +1533,33 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
   return {status, nres};
 }
 
+}
+
+/*
+** Close the variables of thread 'L' for the C function of thread 'from'
+** that calls with continuation 'k': a '__close' can freeze, the freeze
+** passes through 'from', and when it thaws, 'k' gets the status of the
+** close (as 'lua_closethread' gives it, with the error at the top of 'L').
+** Without a continuation, or for a thread that closes itself, it is
+** 'lua_closethread'.
+*/
+lua_ResumeResult lua_closethreadk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
+{
+  if (from == nullptr || L == from || k == nullptr || L->frozen)
+  {
+    int s = lua_closethread(L, from);
+    return {s, (s != LUA_OK) ? 1 : 0};
+  }
+  lua_lock(L);
+  L->nCcalls = getCcalls(from);
+  L->nfz = 0;
+  L->resumer = from;
+  L->resumedk = 1;
+  from->ci->k = k; /* where a freeze passing through goes on */
+  from->ci->ctx = ctx;
+  luaE_enterbudget(L, from);
+  TStatus status = luaE_beginclose(L);
+  return closerun(L, from, status, true);
 }
 
 lua_ResumeResult lua_resume(lua_State* L, lua_State* from, int nargs)
@@ -1547,6 +1636,12 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
     from->ci->ctx = ctx;
   }
   luaE_enterbudget(L, from);
+  if (kind == FZ_CLOSE)
+  {
+    if (g->budgetL == nullptr && L->beff != nullptr)
+      L->beff->left = L->beff->budget; /* (a thaw starts with a whole budget) */
+    return closerun(L, from, L->closestatus, false);
+  }
   StkId hosterrfunc = L->errfunc;
   if (kind == FZ_PCALL)
     L->errfunc = L->frozenerrfunc;
@@ -1679,6 +1774,7 @@ struct CloseP : ProtectedCall
 {
   StkId level;
   TStatus status;
+  int yy; /* can a '__close' freeze? */
   void run(lua_State* L) override;
 };
 
@@ -1687,7 +1783,7 @@ struct CloseP : ProtectedCall
 */
 static void closepaux(lua_State* L, CloseP* pcl)
 {
-  luaF_close(L, pcl->level, pcl->status, 0);
+  luaF_close(L, pcl->level, pcl->status, pcl->yy);
 }
 
 void CloseP::run(lua_State* L)
@@ -1697,9 +1793,11 @@ void CloseP::run(lua_State* L)
 
 /*
 ** Calls 'luaF_close' in protected mode. Return the original status
-** or, in case of errors, the new status.
+** or, in case of errors, the new status. With 'yy', the '__close' can
+** freeze, when the caller made its frame one that recovers (as the one of
+** a protected call with a continuation: see 'lua_pcallk').
 */
-TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status)
+TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status, int yy)
 {
   CallInfo* old_ci = L->ci;
   lu_byte old_allowhooks = L->allowhook;
@@ -1708,19 +1806,26 @@ TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status)
     struct CloseP pcl;
     pcl.level = (static_cast<StkId>(level));
     pcl.status = status;
+    pcl.yy = yy;
+    L->closestatus = (lu_byte)status; /* (if a '__close' freezes, this is how it goes on) */
     status = luaD_rawrunprotected(L, &pcl);
     if (l_likely(status == LUA_OK)) /* no more errors? */
       return pcl.status;
     else if (l_unlikely(status == LUA_FREEZE))
-    { /* a '__close' spent the budget, and its chain is destroyed (it is a
-         call that cannot freeze): the unwinding goes on, to where the
-         thread was resumed, or called; for the host, the close fails */
+    { /* a '__close' spent the budget */
       global_State* g = L->l_G;
-      assert(g->freezekill);
-      if (L->errorJmp != nullptr)
-        luaD_throw(L, LUA_FREEZE);
-      if (L->resumer != nullptr)
-        luaD_throw(L->resumer, LUA_FREEZE);
+      if (!g->freezekill)
+        luaD_throw(L, LUA_FREEZE); /* a freeze: the frame recovers (see 'yy') */
+      /* the chain is destroyed (a call that cannot freeze is in the way):
+         the unwinding goes on to where the chain's top thread was resumed
+         or called; for a close that nothing resumed or called, here, it fails */
+      if (g->freezetarget != L || L->errorJmp != nullptr)
+      {
+        if (L->errorJmp != nullptr)
+          luaD_throw(L, LUA_FREEZE);
+        if (L->resumer != nullptr)
+          luaD_throw(L->resumer, LUA_FREEZE);
+      }
       g->freezekill = false;
       g->freezetarget = nullptr;
       L->ci = old_ci;
@@ -1744,7 +1849,7 @@ TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status)
 ** its stack level in case of errors.
 */
 TStatus luaD_pcall(lua_State* L, ProtectedCall* func, StkId old_top,
-                   StkId ef)
+                   StkId ef, bool close)
 {
   TStatus status;
   CallInfo* old_ci = L->ci;
@@ -1758,6 +1863,8 @@ TStatus luaD_pcall(lua_State* L, ProtectedCall* func, StkId old_top,
   { /* an error occurred? */
     L->ci = old_ci;
     L->allowhook = old_allowhooks;
+    if (!close)
+      return status; /* the caller closes the variables (and restores 'errfunc') */
     status = luaD_closeprotected(L, old_top, status);
     luaD_seterrorobj(L, status, static_cast<StkId>(old_top));
     luaD_shrinkstack(L); /* restore stack size in case of overflow */

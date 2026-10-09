@@ -400,6 +400,57 @@ case("xpcall: nested, and '__close' after the handler", function(busy)
   return r, table.concat(log, "; ")
 end)
 
+-- __close handlers run after an error in a protected call, in a call that
+-- cannot yield (here, in a sort comparator)
+case("pcall in a call that cannot yield: variables closed after an error", function(busy)
+  local log = {}
+  local function body()
+    local x <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "x:" .. tostring(e) end})
+    local y <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "y:" .. tostring(e) error("in y", 0) end})
+    error("body", 0)
+  end
+  local n = 0
+  table.sort({3, 1, 2}, function(a, b)
+    n = n + 1
+    if n == 1 then
+      local ok, err = pcall(body)
+      log[#log + 1] = tostring(ok) .. ":" .. tostring(err)
+      local ok2, err2 = xpcall(body, function(m) busy() return "h:" .. tostring(m) end)
+      log[#log + 1] = tostring(ok2) .. ":" .. tostring(err2)
+    end
+    return a < b
+  end)
+  return table.concat(log, ",")
+end)
+
+-- closing coroutines
+case("coroutine.close and coroutine.wrap: variables closed", function(busy)
+  local log = {}
+  local function mk(fail)
+    return coroutine.create(function()
+      local a <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "a:" .. tostring(e) end})
+      local b <close> = setmetatable({}, {__close = function(_, e)
+        busy()
+        log[#log + 1] = "b:" .. tostring(e)
+        if fail then error("b failed", 0) end
+      end})
+      coroutine.yield(1)
+    end)
+  end
+  local c1 = mk(false)
+  coroutine.resume(c1)
+  local r1 = {coroutine.close(c1)}
+  local c2 = mk(true)
+  coroutine.resume(c2)
+  local r2 = {coroutine.close(c2)}
+  local w = coroutine.wrap(function()
+    local x <close> = setmetatable({}, {__close = function(_, e) busy() log[#log + 1] = "w:" .. tostring(e) end})
+    error("wrap err", 0)
+  end)
+  local r3 = {pcall(w)}
+  return r1, r2, r3, table.concat(log, ",")
+end)
+
 -- debug hooks (the hook function runs with the hooked function at level 2)
 case("debug hooks: call and return events", function(busy)
   local log = {}
