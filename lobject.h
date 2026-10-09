@@ -74,6 +74,12 @@ private:
   friend void copyobj(TValue* dst, const TValue* src);
 };
 
+/* 'copyobj' copies the members by hand: a new member must be added there */
+static_assert(sizeof(Value) == sizeof(lua_Integer) + sizeof(GCObject*),
+              "Value has members that copyobj does not copy");
+static_assert(offsetof(TValue, tt_) == sizeof(Value) && sizeof(TValue) <= sizeof(Value) + alignof(Value),
+              "TValue has members that copyobj does not copy");
+
 static l_forceinline TValue getobj(const TValue* o)
 {
   return *o;
