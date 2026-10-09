@@ -1308,6 +1308,7 @@ static lua_ResumeResult endresume(lua_State* L, lua_State* from, TStatus status,
     assert(from != nullptr && k != nullptr);
     (void)k;
     from->frozenchild = L;
+    L->frozenparent = from;
     from->frozencc = from->nCcalls; /* (see 'forgetcalls') */
     luaD_throw(from, LUA_FREEZE); /* go on freezing 'from' (still locked, as for any throw) */
   }
@@ -1339,6 +1340,7 @@ static void thaw(lua_State* L)
     lua_State* co = L->frozenchild;
     CallInfo* ci = L->ci; /* the C function resuming 'co' */
     L->frozenchild = nullptr;
+    co->frozenparent = nullptr;
     lua_unlock(L);
     lua_ResumeResult rr = thawcore(co, L, ci->ctx, ci->k);
     int n = (*ci->k)(L, rr.status, ci->ctx);
@@ -1387,6 +1389,7 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
     assert(from != nullptr && k != nullptr);
     (void)k;
     from->frozenchild = L;
+    L->frozenparent = from;
     from->frozencc = from->nCcalls;
     luaD_throw(from, LUA_FREEZE);
   }
@@ -1523,6 +1526,8 @@ lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_
   lua_lock(L);
   if (L->l_G->budgetL != nullptr || (from != nullptr && from->beff != nullptr))
     return {resume_error(L, lt::cannot_thaw_from_budgeted_code, 0), 1};
+  if (L->frozenparent != nullptr) /* only the freeze target thaws its chain */
+    return {resume_error(L, lt::cannot_thaw_a_coroutine_that_is_not_the_freeze_target, 0), 1};
   lua_unlock(L);
   return thawcore(L, from, ctx, k);
 }

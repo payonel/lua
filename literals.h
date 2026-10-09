@@ -119,6 +119,8 @@ namespace lt
   constexpr byte_view cannot_s_s_s("cannot %s %s: %s");
   constexpr byte_view cannot_thaw_a_coroutine_that_is_not_frozen("cannot thaw a coroutine that is not frozen");
   constexpr byte_view cannot_freeze("cannot freeze");
+  constexpr byte_view cannot_thaw_a_coroutine_that_is_not_the_freeze_target("cannot thaw a coroutine that is not the freeze target");
+  constexpr byte_view cannot_close_a_frozen_coroutine("cannot close a frozen coroutine");
   constexpr byte_view cannot_thaw_from_budgeted_code("cannot thaw from budgeted code");
   constexpr byte_view freeze_outside_the_budget_callback("freeze outside the budget callback");
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");

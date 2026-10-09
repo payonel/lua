@@ -5651,6 +5651,12 @@ static void test_freeze()
     CHECK(fz_str(co, -1) == "cannot thaw from budgeted code");
     lua_pop(co, 1);
     CHECK(lua_isfrozen(co));
+    /* a frozen thread is read-only: closing it fails and changes nothing */
+    CHECK(lua_closethread(co, L) == LUA_ERRRUN);
+    CHECK(fz_str(co, -1) == "cannot close a frozen coroutine");
+    lua_pop(co, 1);
+    CHECK(lua_isfrozen(co));
+
     fz_target = nullptr;
     rr = lua_thaw(co, L);
     CHECK(rr.status == LUA_OK && !lua_isfrozen(co));

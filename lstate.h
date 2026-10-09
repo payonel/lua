@@ -279,6 +279,7 @@ struct lua_State : GCListed
   /* freezing ('lua_freeze') */
   lua_State* resumer = nullptr;     /* thread resuming this one, while it runs */
   lua_State* frozenchild = nullptr; /* frozen while resuming this thread */
+  lua_State* frozenparent = nullptr; /* the thread that resumed it, in a frozen chain */
   int nfz = 0;              /* number of calls in the stack that cannot freeze */
   lu_byte resumedk = 0;     /* resumed by a call with a continuation */
   BudgetGroup* bown = nullptr; /* the budget group it belongs to, if any */

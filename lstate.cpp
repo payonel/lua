@@ -372,6 +372,13 @@ int lua_closethread(lua_State* L, lua_State* from)
 {
   TStatus status;
   lua_lock(L);
+  if (L->frozen)
+  { /* a frozen thread is read-only: it only thaws */
+    setslots(L, L->top, TString::luaS_createstr(L, lt::cannot_close_a_frozen_coroutine));
+    L->top++;
+    lua_unlock(L);
+    return LUA_ERRRUN;
+  }
   L->nCcalls = from ? getCcalls(from) : 0;
   /* the '__close' of the thread run as a call that cannot freeze, in the
      chain of the thread that closes it (see 'luaD_closeprotected') */

@@ -781,6 +781,8 @@ static l_mem traversethread(global_State* g, lua_State* th)
     markobject(g, uv); /* open upvalues cannot be collected */
   if (th->frozenchild != nullptr)
     markobject(g, th->frozenchild); /* the coroutine a frozen thread resumed */
+  if (th->frozenparent != nullptr)
+    markobject(g, th->frozenparent); /* a frozen chain lives and dies as one */
   if (th->bown != nullptr)
     markobject(g, th->bown); /* its budget groups */
   if (th->beff != nullptr)

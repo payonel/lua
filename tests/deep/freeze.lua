@@ -494,6 +494,14 @@ do
   assert(coroutine.status(middle) == "normal")
   assert(coroutine.status(inner) == "running")
   collectgarbage() -- (a frozen chain survives a collection)
+  -- only the program's top coroutine thaws; the others are read-only
+  for _, t in ipairs{middle, inner} do
+    local ok, err = debug.thaw(t)
+    assert(ok == false and err == "cannot thaw a coroutine that is not the freeze target", err)
+    assert(not pcall(coroutine.close, t))
+    assert(debug.isfrozen(t))
+  end
+  assert(debug.isfrozen(outer))
   r = table.pack(debug.thaw(outer))
   assert(r[1] == true and r[2] == true and r[3] == "in", show(r))
   assert(coroutine.status(outer) == "dead")
