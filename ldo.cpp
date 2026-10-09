@@ -1580,7 +1580,7 @@ void SParser::run(lua_State* L)
 */
 void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
 {
-  TValue v;
+  TValue v{};
   setgcovalue(L, &v, obj);
   setslot(L, L->top, &v); /* temporary anchor in the stack */
   L->top++;

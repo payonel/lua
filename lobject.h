@@ -81,7 +81,12 @@ static l_forceinline TValue getobj(const TValue* o)
 
 static l_forceinline void copyobj(TValue* dst, const TValue* src)
 {
-  *dst = *src;
+  /* field by field, like upstream's setobj: a whole-struct copy becomes one
+     16-byte vector move, which cannot be forwarded from the two narrower
+     stores that wrote the slot */
+  dst->value_.prim = src->value_.prim;
+  dst->value_.ref = src->value_.ref;
+  dst->tt_ = src->tt_;
 }
 
 
