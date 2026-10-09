@@ -953,7 +953,7 @@ static l_forceinline CFuncInfo* keycfuncinfo(const Node* n)
 
 int luaO_checkliveness(struct lua_State* L, const TValue* obj);
 
-static l_forceinline void checkliveness(struct lua_State* L, const TValue* obj)
+static l_forceinline void checkliveness([[maybe_unused]] struct lua_State* L, [[maybe_unused]] const TValue* obj)
 {
   assert(luaO_checkliveness(L, obj));
 }

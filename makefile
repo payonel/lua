@@ -43,7 +43,7 @@ CWARNGCC= \
 	-Wno-aggressive-loop-optimizations \
 
 # enable Linux goodies
-CXXFLAGS.release =-O2
+CXXFLAGS.release =-O2 -DNDEBUG
 CXXFLAGS.debug   =-Og -g3 -ggdb
 CXXFLAGS.cov     =-O0 -g3 -ggdb --coverage
 

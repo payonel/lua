@@ -2305,7 +2305,7 @@ void* lua_upvalueid(lua_State* L, int fidx, int n)
 void lua_upvaluejoin(lua_State* L, int fidx1, int n1,
                              int fidx2, int n2)
 {
-  UpVal* uv1 = getupval(L, fidx1, n1);
+  [[maybe_unused]] UpVal* uv1 = getupval(L, fidx1, n1);
   UpVal* uv2 = getupval(L, fidx2, n2);
   TValue fi1 = index2val(L, fidx1);
   LClosure* f1 = clLvalue(&fi1);

@@ -1245,7 +1245,7 @@ static lua_Number adddigit(byte_span buff, size_t n, lua_Number x)
   return x - dd;                                        /* return what is left */
 }
 
-static size_t num2straux(byte_span area, size_t off, size_t sz, lua_Number x)
+static size_t num2straux(byte_span area, size_t off, [[maybe_unused]] size_t sz, lua_Number x)
 {
   /* if 'inf' or 'NaN', format it like '%g' */
   if (x != x)
@@ -1759,7 +1759,7 @@ static int formatk(lua_State* L, int status, lua_KContext ctx);
 ** item: then the state goes into the box (made the first time) before
 ** the call, for 'formatk'.
 */
-static luaL_Box* formatsave(lua_State* L, luaL_Buffer* b, luaL_Box* box, int top,
+static luaL_Box* formatsave(lua_State* L, luaL_Buffer* b, luaL_Box* box, [[maybe_unused]] int top,
                             size_t item, int arg)
 {
   if (luaL_getmetafieldi(L, arg, lt::mm_tostring) == LUA_TNIL)

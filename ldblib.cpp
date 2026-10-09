@@ -377,7 +377,7 @@ static void hookf(lua_State* L, lua_Debug* ar)
       lua_pushinteger(L, ar->currentline); /* push current line */
     else
       lua_pushnil(L);
-    InternalDebug iar{};
+    [[maybe_unused]] InternalDebug iar{};
     iar.i_ci = ar->i_ci;
     assert(lua_getinfoi(L, lt::lS_chars, iar).has_value());
     lua_call(L, 2, 0); /* call hook function */

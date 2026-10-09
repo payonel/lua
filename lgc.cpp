@@ -917,7 +917,7 @@ static void freeupval(lua_State* L, UpVal* uv)
 
 static void freeobj(lua_State* L, GCObject* o)
 {
-  l_mem newmem = gettotalbytes(L->l_G) - objsize(o);
+  [[maybe_unused]] l_mem newmem = gettotalbytes(L->l_G) - objsize(o);
   switch (o->tt)
   {
   case LUA_VPROTO:
