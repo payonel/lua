@@ -115,6 +115,33 @@ do
   assert(n == 100 and root == nil) -- the group lives on in the task
 end
 
+-- also when the thread was given another budget since (the old group has it
+-- as its root, and lives on in the threads it made), and when the group
+-- dies in the same collection as its root
+do
+  local function make()
+    local task
+    local U = coroutine.create(function()
+      task = coroutine.create(function() end)
+    end)
+    debug.setbudget(U, 100, function() end)
+    assert(coroutine.resume(U))
+    debug.setbudget(U, 50, function() end) -- a new group for U
+    assert(select(4, debug.getbudget(task)) == U)
+    return task
+  end
+  local task = make()
+  collectgarbage(); collectgarbage()
+  local n, _, _, root = debug.getbudget(task)
+  assert(n == 100 and root == nil)
+  for i = 1, 20 do -- the root and its group dying together
+    local c = coroutine.create(function() end)
+    debug.setbudget(c, 10, function() end)
+    debug.setbudget(c, 20, function() end)
+  end
+  collectgarbage(); collectgarbage()
+end
+
 -- a thread given a new budget leaves the threads it already made in the
 -- old group
 do

@@ -7,6 +7,10 @@
 
 #include <string.h>
 
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 #include "lua.h"
 
 #include "ldebug.h"
@@ -1994,6 +1998,9 @@ static void atomic(lua_State* L)
   propagateall(g);       /* remark, to propagate 'resurrection' */
   convergeephemerons(g);
   markgroupqueues(g);    /* and the queues of the groups that are alive */
+  for (BudgetGroup* bg : g->groupbyid)
+    if (bg != nullptr && bg->root != nullptr && iswhite(bg->root))
+      bg->root = nullptr; /* (the thread a group was set on is dead: a weak reference) */
   /* at this point, all resurrected objects are marked. */
   /* remove dead objects from weak tables */
   clearbykeys(g, g->ephemeron.gclist); /* clear keys from all ephemeron */
@@ -2245,5 +2252,6 @@ void luaC_fullgc(lua_State* L, int isemergency)
 }
 
 /* }====================================================== */
+
 
 }

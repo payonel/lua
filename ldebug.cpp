@@ -262,6 +262,16 @@ void lua_setbudgetthread(lua_State* L, lua_State* B)
     luaD_throw(L, LUA_ERRMEM);
 }
 
+/* push onto 'L' the function of the frame 'ar' of thread 'L1' */
+void lua_pushframefunction(lua_State* L, lua_State* L1, const InternalDebug& ar)
+{
+  lua_lock(L);
+  TValue f = getslot(L1, ar.i_ci->func);
+  setslot(L, L->top, &f);
+  api_incr_top(L);
+  lua_unlock(L);
+}
+
 /* do '__gc' of the budget group of 'L' wait to be called? */
 int lua_hasdrain(lua_State* L)
 {

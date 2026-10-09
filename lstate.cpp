@@ -304,8 +304,8 @@ void luaE_setbeff(lua_State* th, BudgetGroup* bg)
 
 void luaE_freethread(lua_State* L, lua_State* L1)
 {
-  if (L1->bown != nullptr && L1->bown->root == L1)
-    L1->bown->root = nullptr; /* (a weak reference) */
+  /* (a group's reference to the thread it was set on is weak: the collector
+     clears it when the thread is dead, see 'atomic') */
   luaF_closeupval(L1, 0); /* close all upvalues */
   assert(L1->openupval == nullptr);
   luai_userstatefree(L, L1);

@@ -40,6 +40,7 @@ local tests = {
   "freeze.lua",
   "budgetgroups.lua",
   "budgetgc.lua",
+  "frozensafety.lua",
 }
 
 -- locate our own directory so the runner works from any cwd
@@ -50,7 +51,8 @@ print("\n\tStarting deep tests")
 local start = os.clock()
 -- (the freeze gate, 'make gate', runs these with a budget on the main
 -- thread: the files that test the budget itself are not run there)
-local ownbudget = {["freeze.lua"] = true, ["budgetgroups.lua"] = true, ["budgetgc.lua"] = true}
+local ownbudget = {["freeze.lua"] = true, ["budgetgroups.lua"] = true, ["budgetgc.lua"] = true,
+                   ["frozensafety.lua"] = true}
 for _, name in ipairs(tests) do
   io.write("  ", name, " ... ")
   if GATE and ownbudget[name] then

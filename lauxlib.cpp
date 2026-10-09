@@ -72,10 +72,10 @@ static int findfield(lua_State* L, int objidx, int level)
 /*
 ** Search for a name for a function in all loaded modules
 */
-static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
+static int pushglobalfuncname(lua_State* L, lua_State* L1, InternalDebug* ar)
 {
   int top = lua_gettop(L);
-  lua_getinfoi(L, lt::f_char, *ar);
+  lua_pushframefunction(L, L1, *ar); /* (the frame is of 'L1': its stack has the function) */
   lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
   luaL_checkstacki(L, 6, lt::not_enough_stack); /* slots for 'findfield' */
   if (findfield(L, top + 1, 2))
@@ -97,7 +97,7 @@ static int pushglobalfuncname(lua_State* L, InternalDebug* ar)
   }
 }
 
-static void pushfuncname(lua_State* L, InternalDebug* ar)
+static void pushfuncname(lua_State* L, lua_State* L1, InternalDebug* ar)
 {
   if (ar->namewhat.has_value())
   {
@@ -107,7 +107,7 @@ static void pushfuncname(lua_State* L, InternalDebug* ar)
   }
   else if (ar->what[0] == 'm')                             /* main? */
     lua_pushistringref(L, lt::main_chunk);
-  else if (pushglobalfuncname(L, ar))
+  else if (pushglobalfuncname(L, L1, ar))
   {                       /* try a global name */
     lua_pushvalue(L, -1);
     lua_pushfstringi(L, lt::function_s);
@@ -190,7 +190,7 @@ void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<byte_view> msg, 
         lua_pushfstringi(L, lt::n_t_s_d_in);
       }
       luaL_addvalue(&b);
-      pushfuncname(L, &ar);
+      pushfuncname(L, L1, &ar);
       luaL_addvalue(&b);
       if (ar.istailcall)
         luaL_addlstring(&b, lt::n_t_tail_calls, 0, lt::n_t_tail_calls.size());
@@ -241,7 +241,7 @@ int luaL_argerrori(lua_State* L, int arg, byte_view extramsg)
     }
   }
   if (!ar.name.has_value())
-    ar.name = pushglobalfuncname(L, &ar) ? *lua_tolstring(L, -1) : lt::qmark;
+    ar.name = pushglobalfuncname(L, L, &ar) ? *lua_tolstring(L, -1) : lt::qmark;
   lua_pushistringref(L, argword);
   lua_pushinteger(L, arg);
   lua_pushlstring(L, ar.name.value(), 0, ar.name->size());
