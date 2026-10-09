@@ -116,7 +116,27 @@ struct CallInfo
   l_uint32 nccalls = 0; /* CIST_CCOUNT: 'nCcalls' while it runs its own code */
   lu_byte apiop = 0;  /* CIST_APIK: how to finish the API call (APIK_*) */
   StkId apifirst = 0; /* CIST_APIK, a concatenation: its first value */
+  /* CIST_HOOKED: what a hook function that freezes needs to be finished
+     after a thaw (see 'luaD_finishhook') */
+  lu_byte hookev = 0;   /* the event the hook runs for (HE_*) */
+  lu_byte hookdone = 0; /* HE_INSTR: the hooks already called for this instruction (HD_*) */
+  StkId hooktop = 0;    /* 'L->top' before the hook */
+  StkId hookcitop = 0;  /* 'top' of the frame before the hook */
+  int hookdelta = 0;    /* a return hook of a vararg function: 'func' was moved this much */
+  StkId hookres = 0;    /* a return hook after closing variables: where the results go */
 };
+
+/* the events a hook runs for ('hookev'): what is left to do when it ends after a thaw */
+constexpr lu_byte HE_INSTR = 1;  /* count or line hook before an instruction: it runs again */
+constexpr lu_byte HE_CALL = 2;   /* call hook at the start of a Lua function: it starts */
+constexpr lu_byte HE_CALLVA = 3; /* call hook of a vararg function, in its VARARGPREP */
+constexpr lu_byte HE_CALLC = 4;  /* call hook of a C function: it runs */
+constexpr lu_byte HE_RET = 5;    /* return hook: the return goes on */
+constexpr lu_byte HE_RETTBC = 6; /* return hook after closing variables */
+
+/* the hooks called already for an instruction ('hookdone') */
+constexpr lu_byte HD_COUNT = 1;
+constexpr lu_byte HD_LINE = 2;
 
 /*
 ** Maximum expected number of results from a function

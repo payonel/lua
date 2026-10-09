@@ -1065,7 +1065,8 @@ void luaV_finishOp(lua_State* L)
     /* only these other opcodes can yield */
     assert(op == OP_TFORCALL || op == OP_CALL ||
                op == OP_TAILCALL || op == OP_SETTABUP || op == OP_SETTABLE ||
-               op == OP_SETI || op == OP_SETFIELD);
+               op == OP_SETI || op == OP_SETFIELD ||
+               op == OP_VARARGPREP); /* (its call hook froze: see 'finishhooked') */
     break;
   }
   }

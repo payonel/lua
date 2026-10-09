@@ -400,6 +400,50 @@ case("xpcall: nested, and '__close' after the handler", function(busy)
   return r, table.concat(log, "; ")
 end)
 
+-- debug hooks (the hook function runs with the hooked function at level 2)
+case("debug hooks: call and return events", function(busy)
+  local log = {}
+  local function hook(ev) busy() log[#log + 1] = ev .. ":" .. debug.getinfo(2, "S").what end
+  local function v(...) return select("#", ...) end
+  local function t(x) return v(x, x) end
+  debug.sethook(hook, "cr")
+  local a = t(1)
+  local b = math.abs(-3)
+  local c = string.rep("ab", 2)
+  debug.sethook()
+  return a, b, c, table.concat(log, ",")
+end)
+case("debug hooks: line and count events", function(busy)
+  local lines, counts = 0, 0
+  local function f()
+    local s = 0
+    for i = 1, 3 do s = s + i end
+    return s
+  end
+  debug.sethook(function(ev) busy() if ev == "line" then lines = lines + 1 else counts = counts + 1 end end, "l", 4)
+  local r = f()
+  debug.sethook()
+  return r, lines, counts
+end)
+case("debug hooks: return after closing variables, and varargs", function(busy)
+  local log = {}
+  local function w(...)
+    local x <close> = setmetatable({}, {__close = function() busy() log[#log + 1] = "closed" end})
+    return ...
+  end
+  debug.sethook(function(ev) busy() log[#log + 1] = ev end, "cr")
+  local a, b, c = w(1, 2, 3)
+  debug.sethook()
+  return a, b, c, table.concat(log, ",")
+end)
+case("debug hooks: an error in a hook function", function(busy)
+  local n = 0
+  debug.sethook(function(ev) busy() n = n + 1 if n == 3 then error("hook failed", 0) end end, "c")
+  local ok, err = pcall(function() local x = math.abs(1) local y = math.abs(2) return x + y end)
+  debug.sethook()
+  return ok, err, n
+end)
+
 -- load with a reader function
 case("load with a reader function", function(busy)
   local parts = {"local a = ", "40 ", "+ 2 ", "return a, ", "...", nil}

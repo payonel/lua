@@ -365,18 +365,28 @@ void luaD_hook(lua_State* L, int event, int line,
       ci->top = L->top + LUA_MINSTACK;
     L->allowhook = 0; /* cannot call hooks inside a hook */
     ci->callstatus |= CIST_HOOKED;
-    L->nfz++; /* a hook cannot be frozen */
-    lua_unlock(L);
+    ci->hooktop = top;     /* (a hook function that calls with 'lua_callhook' */
+    ci->hookcitop = ci_top; /* can freeze: when it ends after a thaw, this is */
+    lua_unlock(L);          /* how it is finished: see 'luaD_finishhook') */
     (*hook)(L, &ar);
     lua_lock(L);
-    L->nfz--;
-    assert(!L->allowhook);
-    L->allowhook = 1;
-    ci->top = ci_top;
-    L->top = top;
-    ci->callstatus &= ~CIST_HOOKED;
+    luaD_finishhook(L, ci);
   }
 }
+
+/*
+** The end of a hook: hooks and the frame go back as they were. (After a
+** thaw, 'unroll' does this when the hook function ends.)
+*/
+void luaD_finishhook(lua_State* L, CallInfo* ci)
+{
+  assert(!L->allowhook);
+  L->allowhook = 1;
+  ci->top = ci->hookcitop;
+  L->top = ci->hooktop;
+  ci->callstatus &= ~CIST_HOOKED;
+}
+
 
 /*
 ** {==================================================================
@@ -629,9 +639,14 @@ void luaD_hookcall(lua_State* L, CallInfo* ci)
     int event = (ci->callstatus & CIST_TAIL) ? LUA_HOOKTAILCALL
                                              : LUA_HOOKCALL;
     Proto* p = ci_func(L, ci)->p;
+    bool entry = (ci->savedpc == 0); /* (otherwise, in its 'VARARGPREP') */
+    ci->hookev = entry ? HE_CALL : HE_CALLVA;
+    if (entry)
+      ci->callstatus |= CIST_FROZE; /* (if it freezes, the function starts again, without the hook) */
     ci->savedpc++; /* hooks assume 'pc' is already incremented */
     luaD_hook(L, event, -1, 1, p->numparams);
     ci->savedpc--; /* correct 'pc' */
+    ci->callstatus &= ~CIST_FROZE;
   }
 }
 
@@ -640,7 +655,7 @@ void luaD_hookcall(lua_State* L, CallInfo* ci)
 ** 'oldpc'. (Note that this correction is needed by the line hook, so it
 ** is done even when return hooks are off.)
 */
-static void rethook(lua_State* L, CallInfo* ci, int nres)
+static void rethook(lua_State* L, CallInfo* ci, int nres, lu_byte ev)
 {
   if (L->hookmask & LUA_MASKRET)
   {                                   /* is return hook on? */
@@ -655,6 +670,9 @@ static void rethook(lua_State* L, CallInfo* ci, int nres)
     }
     ci->func += delta; /* if vararg, back to virtual 'func' */
     ftransfer = (int)(firstres - ci->func);
+    ci->nres = nres; /* (what the return needs, if the hook freezes) */
+    ci->hookdelta = delta;
+    ci->hookev = ev;
     luaD_hook(L, LUA_HOOKRET, -1, ftransfer, nres); /* call it */
     ci->func -= delta;
   }
@@ -739,7 +757,8 @@ static inline void moveresults(lua_State* L, StkId res, int nres,
       if (L->hookmask & ~LUA_MASKBUDGET)
       { /* if needed, call hook after '__close's */
         StkId savedres = res;
-        rethook(L, L->ci, nres);
+        L->ci->hookres = res;
+        rethook(L, L->ci, nres, HE_RETTBC);
         res = savedres;
       }
       if (wanted == LUA_MULTRET)
@@ -761,7 +780,7 @@ void luaD_poscall(lua_State* L, CallInfo* ci, int nres)
 {
   l_uint32 fwanted = ci->callstatus & (CIST_TBC | CIST_NRESULTS);
   if (l_unlikely(L->hookmask & ~LUA_MASKBUDGET) && !(fwanted & CIST_TBC))
-    rethook(L, ci, nres);
+    rethook(L, ci, nres, HE_RET);
   /* move results to proper place */
   moveresults(L, ci->func, nres, fwanted);
   /* function cannot be in any of these cases when returning */
@@ -810,6 +829,7 @@ static l_forceinline int precallC(lua_State* L, StkId func, l_uint32 status,
   if (l_unlikely(L->hookmask & LUA_MASKCALL))
   {
     int narg = (int)(L->top - func) - 1;
+    ci->hookev = HE_CALLC;
     luaD_hook(L, LUA_HOOKCALL, -1, 1, narg);
   }
   lua_unlock(L);
@@ -1114,6 +1134,59 @@ static void finishCcall(lua_State* L, CallInfo* ci)
 }
 
 /*
+** The function of a hook that froze ended, after a thaw: finish the hook,
+** and then what it interrupted. A Lua function interrupted at an
+** instruction or at its start (CIST_FROZE) goes on there; the rest of a
+** call or return is done here.
+*/
+static void finishhooked(lua_State* L, CallInfo* ci)
+{
+  lu_byte ev = ci->hookev;
+  ci->hookev = 0;
+  luaD_finishhook(L, ci);
+  switch (ev)
+  {
+  case HE_CALLVA:
+    ci->savedpc--; /* ('luaD_hookcall' did not get to correct it) */
+    L->oldpc = 1;  /* next opcode will be seen as a "new" line */
+    break;
+  case HE_CALLC:
+  { /* the hook was before the function runs */
+    lua_CFunction f = (withvariant(slottag(L, ci->func)) == LUA_VCCL) ? slotclCval(L, ci->func)->f
+                                                                      : slotfval(L, ci->func);
+    lua_unlock(L);
+    int n = (*f)(L);
+    lua_lock(L);
+    api_checknelems(L, n);
+    luaD_poscall(L, ci, n);
+    break;
+  }
+  case HE_RET:
+  case HE_RETTBC:
+  { /* the hook was before the results move */
+    int nres = ci->nres;
+    ci->func -= ci->hookdelta; /* (back from the virtual 'func' of a vararg function) */
+    if (isLua(ci->previous))
+      L->oldpc = ci->previous->savedpc - 1;
+    l_uint32 fwanted = ci->callstatus & (CIST_TBC | CIST_NRESULTS);
+    if (ev == HE_RET)
+      moveresults(L, ci->func, nres, fwanted);
+    else
+    { /* (the variables are closed already) */
+      int wanted = get_nresults(fwanted);
+      if (wanted == LUA_MULTRET)
+        wanted = nres;
+      genmoveresults(L, ci->hookres, nres, wanted);
+    }
+    L->ci = ci->previous;
+    break;
+  }
+  default: /* HE_INSTR, HE_CALL: the function goes on (see 'CIST_FROZE') */
+    break;
+  }
+}
+
+/*
 ** Executes "full continuation" (everything in the stack) of a
 ** previously interrupted coroutine until the stack is empty (or another
 ** interruption long-jumps out of the loop).
@@ -1123,6 +1196,11 @@ static void unroll(lua_State* L)
   CallInfo* ci;
   while ((ci = L->ci) != &L->base_ci)
   {                       /* something in the stack */
+    if (l_unlikely(ci->callstatus & CIST_HOOKED))
+    { /* its hook function ended (after a thaw) */
+      finishhooked(L, ci);
+      continue;
+    }
     if (l_unlikely(ci->callstatus & CIST_ERRH))
     { /* its message handler ended (after a thaw): the error goes on */
       ci->callstatus &= ~CIST_ERRH;
@@ -1536,6 +1614,20 @@ void lua_freeze(lua_State* L)
 {
   lua_lock(L); /* (as for any throw: it is caught with the lock held) */
   luaD_exitcallback(L);
+}
+
+/*
+** Call the Lua function of a hook (below its arguments), as a hook
+** function that can freeze: it cannot yield, and when it ends after a
+** thaw the hook is finished by 'luaD_finishhook'.
+*/
+void lua_callhook(lua_State* L, int nargs)
+{
+  lua_lock(L);
+  assert(L->ci->callstatus & CIST_HOOKED);
+  luaE_spend(L, 1); /* a hand-off */
+  luaD_callnoyield(L, L->top - (nargs + 1), 0);
+  lua_unlock(L);
 }
 
 int lua_isyieldable(lua_State* L)

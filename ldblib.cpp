@@ -380,7 +380,7 @@ static void hookf(lua_State* L, lua_Debug* ar)
     [[maybe_unused]] InternalDebug iar{};
     iar.i_ci = ar->i_ci;
     assert(lua_getinfoi(L, lt::lS_chars, iar).has_value());
-    lua_call(L, 2, 0); /* call hook function */
+    lua_callhook(L, 2); /* call hook function (it can freeze) */
   }
 }
 

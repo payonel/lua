@@ -84,6 +84,7 @@ void lua_pushbudgetvalue(lua_State* L, lua_State* co, int effective);
 lua_State* lua_budgetthread(lua_State* L);
 void lua_setbudgetthread(lua_State* L, lua_State* B);
 int lua_budgeted(lua_State* L);
+void lua_callhook(lua_State* L, int nargs);
 int lua_hasdrain(lua_State* L);
 void lua_pushdrain(lua_State* L);
 void lua_pushthreadi(lua_State* L, lua_State* th);

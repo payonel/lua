@@ -1324,33 +1324,58 @@ int luaG_traceexec(lua_State* L, int pc)
   }
   if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT)))
     return 1; /* only the budget */
-  counthook = (mask & LUA_MASKCOUNT) && (--L->hookcount == 0);
+  /* A hook function that freezes is finished after a thaw ('unroll'), and
+     this instruction is traced again: 'hookdone' says what of it has been
+     done already (the count, which also stays as it is, and the line
+     hook), and the hooks left run now. */
+  bool refrozen = (ci->hookdone != 0); /* (not a hook that yielded: that is CIST_HOOKYIELD alone) */
+  counthook = 0;
+  if ((mask & LUA_MASKCOUNT) && !(ci->hookdone & HD_COUNT))
+  {
+    counthook = (--L->hookcount == 0);
+    ci->hookdone |= HD_COUNT;
+  }
   if (counthook)
     resethookcount(L); /* reset count */
   else if (!(mask & LUA_MASKLINE))
-    return 1; /* no line hook and count != 0; nothing to be done now */
-  if (ci->callstatus & CIST_HOOKYIELD)
+  { /* no line hook and count != 0; nothing to be done now */
+    ci->hookdone = 0;
+    return 1;
+  }
+  if ((ci->callstatus & CIST_HOOKYIELD) && !refrozen)
   {                                    /* hook yielded last time? */
     ci->callstatus &= ~CIST_HOOKYIELD; /* erase mark */
+    ci->hookdone = 0;
     return 1;                          /* do not call hook again (VM yielded, so it did not move) */
   }
+  ci->callstatus &= ~CIST_HOOKYIELD;
   if (!luaP_isIT(p->code[ci->savedpc - 1])) /* top not being used? */
     L->top = ci->top;                 /* correct top */
+  ci->hookev = HE_INSTR;
   if (counthook)
+  {
+    ci->callstatus |= CIST_FROZE | CIST_HOOKYIELD; /* (if the hook function freezes) */
     luaD_hook(L, LUA_HOOKCOUNT, -1, 0, 0); /* call count hook */
+    ci->callstatus &= ~(CIST_FROZE | CIST_HOOKYIELD);
+  }
   if (mask & LUA_MASKLINE)
   {
     /* 'L->oldpc' may be invalid; use zero in this case */
     int oldpc = (L->oldpc < (int)p->code.size()) ? L->oldpc : 0;
     int npci = pc - 1;
-    if (npci <= oldpc || /* call hook when jump back (loop), */
-        changedline(p, oldpc, npci))
+    if (!(ci->hookdone & HD_LINE) &&
+        (npci <= oldpc || /* call hook when jump back (loop), */
+         changedline(p, oldpc, npci)))
     { /* or when enter new line */
       int newline = luaG_getfuncline(p, npci);
+      ci->hookdone |= HD_LINE;
+      ci->callstatus |= CIST_FROZE | CIST_HOOKYIELD;
       luaD_hook(L, LUA_HOOKLINE, newline, 0, 0); /* call line hook */
+      ci->callstatus &= ~(CIST_FROZE | CIST_HOOKYIELD);
     }
     L->oldpc = npci; /* 'pc' of last call to line hook */
   }
+  ci->hookdone = 0;
   if (L->status == LUA_YIELD)
   { /* did hook yield? */
     if (counthook)

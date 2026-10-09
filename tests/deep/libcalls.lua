@@ -26,6 +26,14 @@ end
 local expected = {
   ["tostring __tostring"] =
     "{true, \"ts\", n = 2}",
+  ["debug hooks: call and return events"] =
+    "{true, 2, 3, \"abab\", \"return:C,call:Lua,tail call:Lua,call:C,return:C,return:Lua,call:C,return:C,call:C,return:C,call:C\", n = 5}",
+  ["debug hooks: line and count events"] =
+    "{true, 6, 10, 5, n = 4}",
+  ["debug hooks: return after closing variables, and varargs"] =
+    "{true, 1, 2, 3, \"return,call,call,return,call,call,return,closed,return,return,call\", n = 5}",
+  ["debug hooks: an error in a hook function"] =
+    "{true, false, \"hook failed\", 4, n = 4}",
   ["load with a reader function"] =
     "{true, {42, \"va\"}, 6, n = 3}",
   ["load with a reader function: chunk name, mode and environment"] =

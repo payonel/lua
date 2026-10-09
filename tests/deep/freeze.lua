@@ -545,11 +545,6 @@ do
     assert(ok == false and err == "cannot freeze", name .. ": " .. tostring(ok) .. " " .. tostring(err))
     assert(not caught and coroutine.status(co) == "dead" and not debug.isfrozen(co), name)
   end
-  impossible("a hook", function(busy)
-    debug.sethook(function() busy() end, "", 1000)
-    for i = 1, 3000 do end
-    debug.sethook()
-  end)
   impossible("a __close run by coroutine.close", function(busy)
     local c = coroutine.create(function()
       local x <close> = setmetatable({}, {__close = function() busy() end})
@@ -890,17 +885,9 @@ do
       for i = 1, 20 do s = s + f(i) end
       return s
     end)
-    local function hookf(ev, line) log[#log + 1] = ev .. ":" .. tostring(line) end
-    debug.sethook(co, hookf, "crl", 3)
+    debug.sethook(co, function(ev, line) log[#log + 1] = ev .. ":" .. tostring(line) end, "crl", 3)
     if n then
-      debug.setbudget(co, n, function(_, spender)
-        -- (a hook cannot freeze yet: it is a plain call)
-        for l = 0, 3 do
-          local info = debug.getinfo(spender, l, "f")
-          if info and info.func == hookf then return end
-        end
-        debug.freeze()
-      end)
+      debug.setbudget(co, n, function() debug.freeze() end) -- (also inside the hook function)
     end
     local r = table.pack(coroutine.resume(co))
     while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
