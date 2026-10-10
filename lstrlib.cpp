@@ -306,6 +306,8 @@ static int arithk(lua_State* L, int status, lua_KContext ctx)
   return 1;
 }
 
+LUA_KNAME("string", arithk);
+
 static void trymt(lua_State* L, byte_view mtkey, byte_view opname)
 {
   lua_settop(L, 2); /* back to the original arguments */
@@ -376,14 +378,14 @@ static int arith_unm(lua_State* L)
   return arith(L, LUA_OPUNM, lt::mm_unm);
 }
 
-static CFuncInfo cfi_arith_add(arith_add);
-static CFuncInfo cfi_arith_sub(arith_sub);
-static CFuncInfo cfi_arith_mul(arith_mul);
-static CFuncInfo cfi_arith_mod(arith_mod);
-static CFuncInfo cfi_arith_pow(arith_pow);
-static CFuncInfo cfi_arith_div(arith_div);
-static CFuncInfo cfi_arith_idiv(arith_idiv);
-static CFuncInfo cfi_arith_unm(arith_unm);
+static CFuncInfo cfi_arith_add(arith_add, "string.arith_add");
+static CFuncInfo cfi_arith_sub(arith_sub, "string.arith_sub");
+static CFuncInfo cfi_arith_mul(arith_mul, "string.arith_mul");
+static CFuncInfo cfi_arith_mod(arith_mod, "string.arith_mod");
+static CFuncInfo cfi_arith_pow(arith_pow, "string.arith_pow");
+static CFuncInfo cfi_arith_div(arith_div, "string.arith_div");
+static CFuncInfo cfi_arith_idiv(arith_idiv, "string.arith_idiv");
+static CFuncInfo cfi_arith_unm(arith_unm, "string.arith_unm");
 
 static const luaL_RegCFI stringmetamethods[] = {
   {lt::mm_add, &cfi_arith_add},
@@ -1192,6 +1194,8 @@ static int gsubk(lua_State* L, int status, lua_KContext ctx)
   return gsub_loop(L, a, &ms, &b, box, e, e, n, changed);
 }
 
+LUA_KNAME("string", gsubk);
+
 static int str_gsub(lua_State* L)
 {
   GsubArgs a = gsubargs(L);
@@ -1995,6 +1999,8 @@ static int formatk(lua_State* L, int status, lua_KContext ctx)
   return format_from(L, sf, i, arg, top, b, box);
 }
 
+LUA_KNAME("string", formatk);
+
 static int str_format(lua_State* L)
 {
   int top = lua_gettop(L);
@@ -2583,23 +2589,23 @@ static int str_unpack(lua_State* L)
 
 /* }====================================================== */
 
-static CFuncInfo cfi_str_byte(str_byte);
-static CFuncInfo cfi_str_char(str_char);
-static CFuncInfo cfi_str_dump(str_dump);
-static CFuncInfo cfi_str_find(str_find);
-static CFuncInfo cfi_str_format(str_format);
-static CFuncInfo cfi_gmatch(gmatch);
-static CFuncInfo cfi_str_gsub(str_gsub);
-static CFuncInfo cfi_str_len(str_len);
-static CFuncInfo cfi_str_lower(str_lower);
-static CFuncInfo cfi_str_match(str_match);
-static CFuncInfo cfi_str_rep(str_rep);
-static CFuncInfo cfi_str_reverse(str_reverse);
-static CFuncInfo cfi_str_sub(str_sub);
-static CFuncInfo cfi_str_upper(str_upper);
-static CFuncInfo cfi_str_pack(str_pack);
-static CFuncInfo cfi_str_packsize(str_packsize);
-static CFuncInfo cfi_str_unpack(str_unpack);
+static CFuncInfo cfi_str_byte(str_byte, "string.str_byte");
+static CFuncInfo cfi_str_char(str_char, "string.str_char");
+static CFuncInfo cfi_str_dump(str_dump, "string.str_dump");
+static CFuncInfo cfi_str_find(str_find, "string.str_find");
+static CFuncInfo cfi_str_format(str_format, "string.str_format");
+static CFuncInfo cfi_gmatch(gmatch, "string.gmatch");
+static CFuncInfo cfi_str_gsub(str_gsub, "string.str_gsub");
+static CFuncInfo cfi_str_len(str_len, "string.str_len");
+static CFuncInfo cfi_str_lower(str_lower, "string.str_lower");
+static CFuncInfo cfi_str_match(str_match, "string.str_match");
+static CFuncInfo cfi_str_rep(str_rep, "string.str_rep");
+static CFuncInfo cfi_str_reverse(str_reverse, "string.str_reverse");
+static CFuncInfo cfi_str_sub(str_sub, "string.str_sub");
+static CFuncInfo cfi_str_upper(str_upper, "string.str_upper");
+static CFuncInfo cfi_str_pack(str_pack, "string.str_pack");
+static CFuncInfo cfi_str_packsize(str_packsize, "string.str_packsize");
+static CFuncInfo cfi_str_unpack(str_unpack, "string.str_unpack");
 
 static const luaL_RegCFI strlib[] = {
   {lt::byte, &cfi_str_byte},

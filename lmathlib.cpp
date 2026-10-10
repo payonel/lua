@@ -282,15 +282,20 @@ static int minmax_cont(lua_State* L, bool ismax, lua_KContext ctx)
   return minmax_loop(L, ismax, n, i + 1, ibest);
 }
 
+
 static int min_cont(lua_State* L, int, lua_KContext ctx)
 {
   return minmax_cont(L, false, ctx);
 }
 
+LUA_KNAME("math", min_cont);
+
 static int max_cont(lua_State* L, int, lua_KContext ctx)
 {
   return minmax_cont(L, true, ctx);
 }
+
+LUA_KNAME("math", max_cont);
 
 static int math_min(lua_State* L)
 {
@@ -522,29 +527,29 @@ static void setrandfunc(lua_State* L)
 */
 /* }================================================================== */
 
-static CFuncInfo cfi_math_abs(math_abs);
-static CFuncInfo cfi_math_acos(math_acos);
-static CFuncInfo cfi_math_asin(math_asin);
-static CFuncInfo cfi_math_atan(math_atan);
-static CFuncInfo cfi_math_ceil(math_ceil);
-static CFuncInfo cfi_math_cos(math_cos);
-static CFuncInfo cfi_math_deg(math_deg);
-static CFuncInfo cfi_math_exp(math_exp);
-static CFuncInfo cfi_math_toint(math_toint);
-static CFuncInfo cfi_math_floor(math_floor);
-static CFuncInfo cfi_math_fmod(math_fmod);
-static CFuncInfo cfi_math_frexp(math_frexp);
-static CFuncInfo cfi_math_ult(math_ult);
-static CFuncInfo cfi_math_ldexp(math_ldexp);
-static CFuncInfo cfi_math_log(math_log);
-static CFuncInfo cfi_math_max(math_max);
-static CFuncInfo cfi_math_min(math_min);
-static CFuncInfo cfi_math_modf(math_modf);
-static CFuncInfo cfi_math_rad(math_rad);
-static CFuncInfo cfi_math_sin(math_sin);
-static CFuncInfo cfi_math_sqrt(math_sqrt);
-static CFuncInfo cfi_math_tan(math_tan);
-static CFuncInfo cfi_math_type(math_type);
+static CFuncInfo cfi_math_abs(math_abs, "math.math_abs");
+static CFuncInfo cfi_math_acos(math_acos, "math.math_acos");
+static CFuncInfo cfi_math_asin(math_asin, "math.math_asin");
+static CFuncInfo cfi_math_atan(math_atan, "math.math_atan");
+static CFuncInfo cfi_math_ceil(math_ceil, "math.math_ceil");
+static CFuncInfo cfi_math_cos(math_cos, "math.math_cos");
+static CFuncInfo cfi_math_deg(math_deg, "math.math_deg");
+static CFuncInfo cfi_math_exp(math_exp, "math.math_exp");
+static CFuncInfo cfi_math_toint(math_toint, "math.math_toint");
+static CFuncInfo cfi_math_floor(math_floor, "math.math_floor");
+static CFuncInfo cfi_math_fmod(math_fmod, "math.math_fmod");
+static CFuncInfo cfi_math_frexp(math_frexp, "math.math_frexp");
+static CFuncInfo cfi_math_ult(math_ult, "math.math_ult");
+static CFuncInfo cfi_math_ldexp(math_ldexp, "math.math_ldexp");
+static CFuncInfo cfi_math_log(math_log, "math.math_log");
+static CFuncInfo cfi_math_max(math_max, "math.math_max");
+static CFuncInfo cfi_math_min(math_min, "math.math_min");
+static CFuncInfo cfi_math_modf(math_modf, "math.math_modf");
+static CFuncInfo cfi_math_rad(math_rad, "math.math_rad");
+static CFuncInfo cfi_math_sin(math_sin, "math.math_sin");
+static CFuncInfo cfi_math_sqrt(math_sqrt, "math.math_sqrt");
+static CFuncInfo cfi_math_tan(math_tan, "math.math_tan");
+static CFuncInfo cfi_math_type(math_type, "math.math_type");
 
 static const luaL_RegCFI mathlib[] = {
   {lt::abs_kw, &cfi_math_abs},

@@ -293,8 +293,8 @@ static int iter_auxlax(lua_State* L)
 static int iter_codes(lua_State* L)
 {
   int lax = lua_toboolean(L, 2);
-  static CFuncInfo cfi_iter_auxlax(iter_auxlax);
-  static CFuncInfo cfi_iter_auxstrict(iter_auxstrict);
+  static CFuncInfo cfi_iter_auxlax(iter_auxlax, "utf8.iter_auxlax");
+  static CFuncInfo cfi_iter_auxstrict(iter_auxstrict, "utf8.iter_auxstrict");
   const InternalString* s = luaL_checkistring(L, 1);
   luaL_argchecki(L, !iscontat(s, 0), 1, lt::invalid_UTF_8_code);
   lua_pushcfuncinfo(L, lax ? &cfi_iter_auxlax : &cfi_iter_auxstrict);
@@ -303,11 +303,11 @@ static int iter_codes(lua_State* L)
   return 3;
 }
 
-static CFuncInfo cfi_byteoffset(byteoffset);
-static CFuncInfo cfi_codepoint(codepoint);
-static CFuncInfo cfi_utfchar(utfchar);
-static CFuncInfo cfi_utflen(utflen);
-static CFuncInfo cfi_iter_codes(iter_codes);
+static CFuncInfo cfi_byteoffset(byteoffset, "utf8.byteoffset");
+static CFuncInfo cfi_codepoint(codepoint, "utf8.codepoint");
+static CFuncInfo cfi_utfchar(utfchar, "utf8.utfchar");
+static CFuncInfo cfi_utflen(utflen, "utf8.utflen");
+static CFuncInfo cfi_iter_codes(iter_codes, "utf8.iter_codes");
 
 static const luaL_RegCFI funcs[] = {
   {lt::offset, &cfi_byteoffset},

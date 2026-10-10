@@ -91,6 +91,8 @@ static int coresume_cont(lua_State* L, int status, lua_KContext)
   return coresume_end(L, auxresumed(L, co, {status, lua_resumenres(co, status)}));
 }
 
+LUA_KNAME("coroutine", coresume_cont);
+
 static int luaB_coresume(lua_State* L)
 {
   lua_State* co = getco(L);
@@ -119,6 +121,8 @@ static int auxwrap_closed(lua_State* L, int status, lua_KContext)
   return auxwrap_fail(L, status);
 }
 
+LUA_KNAME("coroutine", auxwrap_closed);
+
 static int auxwrap_end(lua_State* L, lua_State* co, int r)
 {
   if (l_unlikely(r < 0))
@@ -140,6 +144,8 @@ static int auxwrap_cont(lua_State* L, int status, lua_KContext)
   lua_State* co = lua_tothread(L, lua_upvalueindex(1));
   return auxwrap_end(L, co, auxresumed(L, co, {status, lua_resumenres(co, status)}));
 }
+
+LUA_KNAME("coroutine", auxwrap_cont);
 
 static int luaB_auxwrap(lua_State* L)
 {
@@ -250,6 +256,8 @@ static int close_cont(lua_State* L, int status, lua_KContext)
   return close_end(L, getoptco(L), status);
 }
 
+LUA_KNAME("coroutine", close_cont);
+
 static int luaB_close(lua_State* L)
 {
   lua_State* co = getoptco(L);
@@ -279,14 +287,14 @@ static int luaB_close(lua_State* L)
   }
 }
 
-static CFuncInfo cfi_luaB_cocreate(luaB_cocreate);
-static CFuncInfo cfi_luaB_coresume(luaB_coresume);
-static CFuncInfo cfi_luaB_corunning(luaB_corunning);
-static CFuncInfo cfi_luaB_costatus(luaB_costatus);
-static CFuncInfo cfi_luaB_cowrap(luaB_cowrap);
-static CFuncInfo cfi_luaB_yield(luaB_yield);
-static CFuncInfo cfi_luaB_yieldable(luaB_yieldable);
-static CFuncInfo cfi_luaB_close(luaB_close);
+static CFuncInfo cfi_luaB_cocreate(luaB_cocreate, "coroutine.luaB_cocreate");
+static CFuncInfo cfi_luaB_coresume(luaB_coresume, "coroutine.luaB_coresume");
+static CFuncInfo cfi_luaB_corunning(luaB_corunning, "coroutine.luaB_corunning");
+static CFuncInfo cfi_luaB_costatus(luaB_costatus, "coroutine.luaB_costatus");
+static CFuncInfo cfi_luaB_cowrap(luaB_cowrap, "coroutine.luaB_cowrap");
+static CFuncInfo cfi_luaB_yield(luaB_yield, "coroutine.luaB_yield");
+static CFuncInfo cfi_luaB_yieldable(luaB_yieldable, "coroutine.luaB_yieldable");
+static CFuncInfo cfi_luaB_close(luaB_close, "coroutine.luaB_close");
 
 static const luaL_RegCFI co_funcs[] = {
   {lt::create, &cfi_luaB_cocreate},

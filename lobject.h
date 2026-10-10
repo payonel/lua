@@ -665,6 +665,9 @@ struct CFuncInfo : GCObject
     , fptr(f)
   {}
 
+  /* an engine function: it has a name (see 'lua_cfiname') */
+  CFuncInfo(lua_CFunction f, const char* name);
+
   static CFuncInfo* luaF_newCFuncInfo(lua_State* L, lua_CFunction f);
 };
 

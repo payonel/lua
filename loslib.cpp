@@ -367,6 +367,8 @@ static int os_timek(lua_State* L, int status, lua_KContext ctx)
   return os_time_from(L, step);
 }
 
+LUA_KNAME("os", os_timek);
+
 static int os_time(lua_State* L)
 {
   if (lua_isnoneornil(L, 1))
@@ -430,17 +432,17 @@ static int os_exit(lua_State* L)
   return 0;
 }
 
-static CFuncInfo cfi_os_clock(os_clock);
-static CFuncInfo cfi_os_date(os_date);
-static CFuncInfo cfi_os_difftime(os_difftime);
-static CFuncInfo cfi_os_execute(os_execute);
-static CFuncInfo cfi_os_exit(os_exit);
-static CFuncInfo cfi_os_getenv(os_getenv);
-static CFuncInfo cfi_os_remove(os_remove);
-static CFuncInfo cfi_os_rename(os_rename);
-static CFuncInfo cfi_os_setlocale(os_setlocale);
-static CFuncInfo cfi_os_time(os_time);
-static CFuncInfo cfi_os_tmpname(os_tmpname);
+static CFuncInfo cfi_os_clock(os_clock, "os.os_clock");
+static CFuncInfo cfi_os_date(os_date, "os.os_date");
+static CFuncInfo cfi_os_difftime(os_difftime, "os.os_difftime");
+static CFuncInfo cfi_os_execute(os_execute, "os.os_execute");
+static CFuncInfo cfi_os_exit(os_exit, "os.os_exit");
+static CFuncInfo cfi_os_getenv(os_getenv, "os.os_getenv");
+static CFuncInfo cfi_os_remove(os_remove, "os.os_remove");
+static CFuncInfo cfi_os_rename(os_rename, "os.os_rename");
+static CFuncInfo cfi_os_setlocale(os_setlocale, "os.os_setlocale");
+static CFuncInfo cfi_os_time(os_time, "os.os_time");
+static CFuncInfo cfi_os_tmpname(os_tmpname, "os.os_tmpname");
 
 static const luaL_RegCFI syslib[] = {
   {lt::clock, &cfi_os_clock},

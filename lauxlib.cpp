@@ -1390,7 +1390,9 @@ static int requireff(lua_State* L, int status, lua_KContext ctx)
   }
 }
 
-static CFuncInfo cfi_requireff(requireff_start);
+LUA_KNAME("auxlib", requireff);
+
+static CFuncInfo cfi_requireff(requireff_start, "auxlib.requireff");
 
 void luaL_requirefk(lua_State* L, const HostString& modname, lua_CFunction openf, int glb,
                     lua_KContext ctx, lua_KFunction k)
@@ -1436,7 +1438,9 @@ static int getsubtableff(lua_State* L, int status, lua_KContext ctx)
   }
 }
 
-static CFuncInfo cfi_getsubtableff(getsubtableff_start);
+LUA_KNAME("auxlib", getsubtableff);
+
+static CFuncInfo cfi_getsubtableff(getsubtableff_start, "auxlib.getsubtableff");
 
 int luaL_getsubtablek(lua_State* L, int idx, const HostString& fname, lua_KContext ctx, lua_KFunction k)
 {

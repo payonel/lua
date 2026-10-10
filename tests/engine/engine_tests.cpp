@@ -14,6 +14,7 @@
 #include "lstate.h"
 #include "ltable.h"
 #include "lgc.h"
+#include "lua_internal.h"
 #ifdef LUA_DEBUG
 #include "ltests.h"
 #endif
@@ -477,6 +478,61 @@ static const Case object_key_cases[] = {
    "local t = {[print] = 1, [string.format] = 2} assert(t[print] == 1 and t[string.format] == 2)"},
 };
 
+/*
+** Names of the functions the engine keeps in its state (lnames.cpp): they
+** resolve both ways, and the engine's own continuations, light C functions
+** and budget callback have them.
+*/
+static int test_cont(lua_State*, int, lua_KContext)
+{
+  return 0;
+}
+LUA_KNAME("test", test_cont);
+
+static void test_function_names()
+{
+  CHECK(lua_kname(test_cont) != nullptr && std::string(lua_kname(test_cont)) == "test.test_cont");
+  CHECK(lua_kbyname("test.test_cont") == test_cont);
+  CHECK(lua_kbyname("test.nothing") == nullptr && lua_kname(nullptr) == nullptr);
+  /* the continuations of the libraries */
+  for (const char* n : {"base.finishpcall", "base.printk", "base.load_cont", "coroutine.coresume_cont",
+                        "coroutine.auxwrap_cont", "string.gsubk", "string.formatk", "table.sortk",
+                        "table.tinsertk_loop", "math.min_cont", "gc.gcdrain_cont", "auxlib.requireff",
+                        "debug.thaw_cont", "package.ll_requirek"})
+  {
+    lua_KFunction k = lua_kbyname(n);
+    CHECK(k != nullptr);
+    CHECK(k != nullptr && std::string(lua_kname(k)) == n);
+  }
+  /* the light C functions the engine pushes itself, and one of a library */
+  CHECK(lua_cfibyname("base.next") != nullptr);
+  CHECK(lua_cfibyname("gc.gcdrain") != nullptr);
+  CHECK(lua_cfibyname("auxlib.requireff") != nullptr);
+  CHECK(lua_cfibyname("nowhere.nothing") == nullptr);
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+  /* a function of a library, as the script sees it, has its name */
+  int bad = 0;
+  for (const char* lib : {"string", "table", "math", "os", "io", "coroutine", "debug", "utf8"})
+  {
+    lua_getglobal(L, lib);
+    lua_pushnil(L);
+    while (lua_next(L, -2))
+    {
+      if (lua_iscfunction(L, -1) && lua_islightcfunction(L, -1))
+      {
+        const CFuncInfo* cfi = static_cast<const CFuncInfo*>(lua_topointer(L, -1));
+        if (lua_cfiname(cfi) == nullptr)
+          bad++;
+      }
+      lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+  }
+  CHECK(bad == 0);
+  lua_close(L);
+}
+
 int main()
 {
   std::printf("\n\tStarting engine internals tests\n\n");
@@ -488,6 +544,7 @@ int main()
             sizeof(object_key_cases) / sizeof(object_key_cases[0]));
   test_same_order_in_two_states();
   test_order_independent_of_interned_strings();
+  test_function_names();
   if (g_failures == 0)
     std::printf("\n\tOK - engine: %d checks, 0 failures\n\n", g_checks);
   else

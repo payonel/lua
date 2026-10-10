@@ -541,6 +541,8 @@ static int db_debugk(lua_State* L, int status, lua_KContext ctx)
   return db_debug_from(L, step);
 }
 
+LUA_KNAME("debug", db_debugk);
+
 static int db_debug(lua_State* L)
 {
   return db_debug_from(L, DD_READ);
@@ -575,6 +577,8 @@ static void budgetf(lua_State* user_co, lua_State* L)
     lua_error(L);
   }
 }
+
+LUA_BUDGETNAME("debug", budgetf);
 
 static int db_setbudget(lua_State* L)
 {
@@ -716,6 +720,8 @@ static int thaw_cont(lua_State* L, int status, lua_KContext)
   return thaw_end(L, co, {status, lua_resumenres(co, status)});
 }
 
+LUA_KNAME("debug", thaw_cont);
+
 static int db_thaw(lua_State* L)
 {
   lua_State* co = checkco(L, 1);
@@ -747,29 +753,29 @@ static int db_traceback(lua_State* L)
   return 1;
 }
 
-static CFuncInfo cfi_db_debug(db_debug);
-static CFuncInfo cfi_db_getuservalue(db_getuservalue);
-static CFuncInfo cfi_db_gethook(db_gethook);
-static CFuncInfo cfi_db_getinfo(db_getinfo);
-static CFuncInfo cfi_db_getlocal(db_getlocal);
-static CFuncInfo cfi_db_getregistry(db_getregistry);
-static CFuncInfo cfi_db_getmetatable(db_getmetatable);
-static CFuncInfo cfi_db_getupvalue(db_getupvalue);
-static CFuncInfo cfi_db_upvaluejoin(db_upvaluejoin);
-static CFuncInfo cfi_db_upvalueid(db_upvalueid);
-static CFuncInfo cfi_db_setuservalue(db_setuservalue);
-static CFuncInfo cfi_db_sethook(db_sethook);
-static CFuncInfo cfi_db_setlocal(db_setlocal);
-static CFuncInfo cfi_db_setmetatable(db_setmetatable);
-static CFuncInfo cfi_db_setupvalue(db_setupvalue);
-static CFuncInfo cfi_db_traceback(db_traceback);
-static CFuncInfo cfi_db_setbudget(db_setbudget);
-static CFuncInfo cfi_db_getbudget(db_getbudget);
-static CFuncInfo cfi_db_freeze(db_freeze);
-static CFuncInfo cfi_db_detached(db_detached);
-static CFuncInfo cfi_db_isfrozen(db_isfrozen);
-static CFuncInfo cfi_db_canfreeze(db_canfreeze);
-static CFuncInfo cfi_db_thaw(db_thaw);
+static CFuncInfo cfi_db_debug(db_debug, "debug.db_debug");
+static CFuncInfo cfi_db_getuservalue(db_getuservalue, "debug.db_getuservalue");
+static CFuncInfo cfi_db_gethook(db_gethook, "debug.db_gethook");
+static CFuncInfo cfi_db_getinfo(db_getinfo, "debug.db_getinfo");
+static CFuncInfo cfi_db_getlocal(db_getlocal, "debug.db_getlocal");
+static CFuncInfo cfi_db_getregistry(db_getregistry, "debug.db_getregistry");
+static CFuncInfo cfi_db_getmetatable(db_getmetatable, "debug.db_getmetatable");
+static CFuncInfo cfi_db_getupvalue(db_getupvalue, "debug.db_getupvalue");
+static CFuncInfo cfi_db_upvaluejoin(db_upvaluejoin, "debug.db_upvaluejoin");
+static CFuncInfo cfi_db_upvalueid(db_upvalueid, "debug.db_upvalueid");
+static CFuncInfo cfi_db_setuservalue(db_setuservalue, "debug.db_setuservalue");
+static CFuncInfo cfi_db_sethook(db_sethook, "debug.db_sethook");
+static CFuncInfo cfi_db_setlocal(db_setlocal, "debug.db_setlocal");
+static CFuncInfo cfi_db_setmetatable(db_setmetatable, "debug.db_setmetatable");
+static CFuncInfo cfi_db_setupvalue(db_setupvalue, "debug.db_setupvalue");
+static CFuncInfo cfi_db_traceback(db_traceback, "debug.db_traceback");
+static CFuncInfo cfi_db_setbudget(db_setbudget, "debug.db_setbudget");
+static CFuncInfo cfi_db_getbudget(db_getbudget, "debug.db_getbudget");
+static CFuncInfo cfi_db_freeze(db_freeze, "debug.db_freeze");
+static CFuncInfo cfi_db_detached(db_detached, "debug.db_detached");
+static CFuncInfo cfi_db_isfrozen(db_isfrozen, "debug.db_isfrozen");
+static CFuncInfo cfi_db_canfreeze(db_canfreeze, "debug.db_canfreeze");
+static CFuncInfo cfi_db_thaw(db_thaw, "debug.db_thaw");
 
 static const luaL_RegCFI dblib[] = {
   {lt::debug, &cfi_db_debug},

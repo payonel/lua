@@ -1166,6 +1166,8 @@ static int gcdrain_cont(lua_State* L, int status, lua_KContext ctx)
   return gcdrain_run(L, (lu_byte)ctx);
 }
 
+LUA_KNAME("gc", gcdrain_cont);
+
 static int gcdrain_run(lua_State* L, lu_byte oldah)
 {
   L->allowhook = 0; /* stop debug hooks during GC metamethod (and no nested drain) */
@@ -1195,7 +1197,7 @@ static int gcdrain(lua_State* L)
   return gcdrain_run(L, L->allowhook);
 }
 
-static CFuncInfo cfi_gcdrain(gcdrain);
+static CFuncInfo cfi_gcdrain(gcdrain, "gc.gcdrain");
 
 /* the function that calls the waiting '__gc' (hooks do not see it) */
 lua_CFunction luaC_drainfunction()

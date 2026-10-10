@@ -51,6 +51,8 @@ static int printk(lua_State* L, int status, lua_KContext ctx)
   return 0;
 }
 
+LUA_KNAME("base", printk);
+
 static int luaB_print(lua_State* L)
 {
   if (lua_gettop(L) == 0)
@@ -251,6 +253,8 @@ static int drain_cont(lua_State*, int, lua_KContext)
   return 1;
 }
 
+LUA_KNAME("base", drain_cont);
+
 static int drainafter(lua_State* L)
 {
   if (lua_hasdrain(L))
@@ -355,7 +359,9 @@ static int pairscont(lua_State*, int, lua_KContext)
   return 4; /* __pairs did all the work, just return its results */
 }
 
-static CFuncInfo cfi_next(luaB_next);
+LUA_KNAME("base", pairscont);
+
+static CFuncInfo cfi_next(luaB_next, "base.next");
 
 static int luaB_pairs(lua_State* L)
 {
@@ -385,6 +391,8 @@ static int ipairsauxk(lua_State* L, int status, lua_KContext ctx)
   return lua_isnil(L, -1) ? 1 : 2;
 }
 
+LUA_KNAME("base", ipairsauxk);
+
 static int ipairsaux(lua_State* L)
 {
   lua_Integer i = luaL_checkinteger(L, 2);
@@ -398,7 +406,7 @@ static int ipairsaux(lua_State* L)
 ** 'ipairs' function. Returns 'ipairsaux', given "table", 0.
 ** (The given "table" may not be a table.)
 */
-static CFuncInfo cfi_ipairsaux(ipairsaux);
+static CFuncInfo cfi_ipairsaux(ipairsaux, "base.ipairsaux");
 
 static int luaB_ipairs(lua_State* L)
 {
@@ -543,6 +551,8 @@ static int load_cont(lua_State* L, int status, lua_KContext ctx)
   return load_round(L, (int)ctx);
 }
 
+LUA_KNAME("base", load_cont);
+
 static int luaB_load(lua_State* L)
 {
   int status;
@@ -574,6 +584,8 @@ static int dofilecont(lua_State* L, int d1, lua_KContext d2)
   (void) d2; /* only to match 'lua_Kfunction' prototype */
   return lua_gettop(L) - 1;
 }
+
+LUA_KNAME("base", dofilecont);
 
 static int luaB_dofile(lua_State* L)
 {
@@ -638,6 +650,8 @@ static int finishpcall(lua_State* L, int status, lua_KContext extra)
     return lua_gettop(L) - (int) extra; /* return all results */
 }
 
+LUA_KNAME("base", finishpcall);
+
 static int luaB_pcall(lua_State* L)
 {
   int status;
@@ -673,6 +687,8 @@ static int tostringk(lua_State* L, int status, lua_KContext ctx)
   return 1;
 }
 
+LUA_KNAME("base", tostringk);
+
 static int luaB_tostring(lua_State* L)
 {
   luaL_checkany(L, 1);
@@ -682,28 +698,28 @@ static int luaB_tostring(lua_State* L)
   return 1;
 }
 
-static CFuncInfo cfi_assert(luaB_assert);
-static CFuncInfo cfi_collectgarbage(luaB_collectgarbage);
-static CFuncInfo cfi_dofile(luaB_dofile);
-static CFuncInfo cfi_error(luaB_error);
-static CFuncInfo cfi_getmetatable(luaB_getmetatable);
-static CFuncInfo cfi_ipairs(luaB_ipairs);
-static CFuncInfo cfi_loadfile(luaB_loadfile);
-static CFuncInfo cfi_load(luaB_load);
-static CFuncInfo cfi_pairs(luaB_pairs);
-static CFuncInfo cfi_pcall(luaB_pcall);
-static CFuncInfo cfi_print(luaB_print);
-static CFuncInfo cfi_warn(luaB_warn);
-static CFuncInfo cfi_rawequal(luaB_rawequal);
-static CFuncInfo cfi_rawlen(luaB_rawlen);
-static CFuncInfo cfi_rawget(luaB_rawget);
-static CFuncInfo cfi_rawset(luaB_rawset);
-static CFuncInfo cfi_select(luaB_select);
-static CFuncInfo cfi_setmetatable(luaB_setmetatable);
-static CFuncInfo cfi_tonumber(luaB_tonumber);
-static CFuncInfo cfi_tostring(luaB_tostring);
-static CFuncInfo cfi_type(luaB_type);
-static CFuncInfo cfi_xpcall(luaB_xpcall);
+static CFuncInfo cfi_assert(luaB_assert, "base.assert");
+static CFuncInfo cfi_collectgarbage(luaB_collectgarbage, "base.collectgarbage");
+static CFuncInfo cfi_dofile(luaB_dofile, "base.dofile");
+static CFuncInfo cfi_error(luaB_error, "base.error");
+static CFuncInfo cfi_getmetatable(luaB_getmetatable, "base.getmetatable");
+static CFuncInfo cfi_ipairs(luaB_ipairs, "base.ipairs");
+static CFuncInfo cfi_loadfile(luaB_loadfile, "base.loadfile");
+static CFuncInfo cfi_load(luaB_load, "base.load");
+static CFuncInfo cfi_pairs(luaB_pairs, "base.pairs");
+static CFuncInfo cfi_pcall(luaB_pcall, "base.pcall");
+static CFuncInfo cfi_print(luaB_print, "base.print");
+static CFuncInfo cfi_warn(luaB_warn, "base.warn");
+static CFuncInfo cfi_rawequal(luaB_rawequal, "base.rawequal");
+static CFuncInfo cfi_rawlen(luaB_rawlen, "base.rawlen");
+static CFuncInfo cfi_rawget(luaB_rawget, "base.rawget");
+static CFuncInfo cfi_rawset(luaB_rawset, "base.rawset");
+static CFuncInfo cfi_select(luaB_select, "base.select");
+static CFuncInfo cfi_setmetatable(luaB_setmetatable, "base.setmetatable");
+static CFuncInfo cfi_tonumber(luaB_tonumber, "base.tonumber");
+static CFuncInfo cfi_tostring(luaB_tostring, "base.tostring");
+static CFuncInfo cfi_type(luaB_type, "base.type");
+static CFuncInfo cfi_xpcall(luaB_xpcall, "base.xpcall");
 
 static const luaL_RegCFI base_funcs[] = {
   {lt::assert, &cfi_assert},

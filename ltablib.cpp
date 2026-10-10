@@ -151,17 +151,23 @@ static int tinsertk_get(lua_State* L, int status, lua_KContext ctx)
   return tinsert_move(L, (lua_Integer)ctx, luaL_checkinteger(L, 2), AT_SET);
 }
 
+LUA_KNAME("table", tinsertk_get);
+
 static int tinsertk_set(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   return tinsert_move(L, (lua_Integer)ctx, luaL_checkinteger(L, 2), AT_NEXT);
 }
 
+LUA_KNAME("table", tinsertk_set);
+
 static int tinsertk_loop(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   return tinsert_move(L, (lua_Integer)ctx, luaL_checkinteger(L, 2), AT_LOOP);
 }
+
+LUA_KNAME("table", tinsertk_loop);
 
 static int tinsertk_done(lua_State* L, int status, lua_KContext ctx)
 {
@@ -170,6 +176,8 @@ static int tinsertk_done(lua_State* L, int status, lua_KContext ctx)
   (void)ctx;
   return 0;
 }
+
+LUA_KNAME("table", tinsertk_done);
 
 /* 'insert' with the length 'e' */
 static int tinsert_len(lua_State* L, lua_Integer e)
@@ -205,6 +213,8 @@ static int tinsertk_len(lua_State* L, int status, lua_KContext ctx)
   (void)ctx;
   return tinsert_len(L, luaL_lenresult(L));
 }
+
+LUA_KNAME("table", tinsertk_len);
 
 static int tinsert(lua_State* L)
 {
@@ -263,11 +273,15 @@ static int tremovek_get(lua_State* L, int status, lua_KContext ctx)
   return tremove_move(L, (lua_Integer)ctx, AT_SET);
 }
 
+LUA_KNAME("table", tremovek_get);
+
 static int tremovek_set(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   return tremove_move(L, (lua_Integer)ctx, AT_NEXT);
 }
+
+LUA_KNAME("table", tremovek_set);
 
 static int tremovek_loop(lua_State* L, int status, lua_KContext ctx)
 {
@@ -275,11 +289,15 @@ static int tremovek_loop(lua_State* L, int status, lua_KContext ctx)
   return tremove_move(L, (lua_Integer)ctx, AT_LOOP);
 }
 
+LUA_KNAME("table", tremovek_loop);
+
 static int tremovek_first(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   return tremove_move(L, (lua_Integer)ctx, AT_LOOP);
 }
+
+LUA_KNAME("table", tremovek_first);
 
 static int tremovek_done(lua_State* L, int status, lua_KContext ctx)
 {
@@ -288,6 +306,8 @@ static int tremovek_done(lua_State* L, int status, lua_KContext ctx)
   (void)ctx;
   return 1;
 }
+
+LUA_KNAME("table", tremovek_done);
 
 /* 'remove' with the length 'size' */
 static int tremove_len(lua_State* L, lua_Integer size)
@@ -307,6 +327,8 @@ static int tremovek_len(lua_State* L, int status, lua_KContext ctx)
   (void)ctx;
   return tremove_len(L, luaL_lenresult(L));
 }
+
+LUA_KNAME("table", tremovek_len);
 
 static int tremove(lua_State* L)
 {
@@ -395,6 +417,8 @@ static int tmovek_eq(lua_State* L, int status, lua_KContext ctx)
   lua_pop(L, 1);
   return tmove_dir(L, !eq);
 }
+
+LUA_KNAME("table", tmovek_eq);
 
 static int tmove(lua_State* L)
 {
@@ -531,11 +555,15 @@ static int tconcatk_get(lua_State* L, int status, lua_KContext ctx)
   return tconcat_resume(L, (lua_Integer)ctx, AT_SET);
 }
 
+LUA_KNAME("table", tconcatk_get);
+
 static int tconcatk_loop(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   return tconcat_resume(L, (lua_Integer)ctx, AT_LOOP);
 }
+
+LUA_KNAME("table", tconcatk_loop);
 
 /* 'concat' with the length 'last' */
 static int tconcat_len(lua_State* L, lua_Integer last)
@@ -567,6 +595,8 @@ static int tconcatk_len(lua_State* L, int status, lua_KContext ctx)
   (void)ctx;
   return tconcat_len(L, luaL_lenresult(L));
 }
+
+LUA_KNAME("table", tconcatk_len);
 
 static int tconcat(lua_State* L)
 {
@@ -644,12 +674,16 @@ static int tunpackk_got(lua_State* L, int status, lua_KContext ctx)
   return tunpack_resume(L, AT_NEXT);
 }
 
+LUA_KNAME("table", tunpackk_got);
+
 static int tunpackk_loop(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   (void)ctx;
   return tunpack_resume(L, AT_LOOP);
 }
+
+LUA_KNAME("table", tunpackk_loop);
 
 /* 'unpack' with the length 'len' */
 static int tunpack_len(lua_State* L, lua_Integer len)
@@ -677,6 +711,8 @@ static int tunpackk_len(lua_State* L, int status, lua_KContext ctx)
   (void)ctx;
   return tunpack_len(L, luaL_lenresult(L));
 }
+
+LUA_KNAME("table", tunpackk_len);
 
 static int tunpack(lua_State* L)
 {
@@ -997,6 +1033,8 @@ static int sortk(lua_State* L, int status, lua_KContext ctx)
   return sort_run(L, static_cast<lua_Integer*>(lua_touserdata(L, 3)));
 }
 
+LUA_KNAME("table", sortk);
+
 /* 'sort' with the length 'n' */
 static int sort_len(lua_State* L, lua_Integer n)
 {
@@ -1034,6 +1072,8 @@ static int sortk_len(lua_State* L, int status, lua_KContext ctx)
   return sort_len(L, luaL_lenresult(L));
 }
 
+LUA_KNAME("table", sortk_len);
+
 static int sort(lua_State* L)
 {
   luaE_freezeonly(L);
@@ -1042,14 +1082,14 @@ static int sort(lua_State* L)
 
 /* }====================================================== */
 
-static CFuncInfo cfi_tconcat(tconcat);
-static CFuncInfo cfi_tcreate(tcreate);
-static CFuncInfo cfi_tinsert(tinsert);
-static CFuncInfo cfi_tpack(tpack);
-static CFuncInfo cfi_tunpack(tunpack);
-static CFuncInfo cfi_tremove(tremove);
-static CFuncInfo cfi_tmove(tmove);
-static CFuncInfo cfi_sort(sort);
+static CFuncInfo cfi_tconcat(tconcat, "table.tconcat");
+static CFuncInfo cfi_tcreate(tcreate, "table.tcreate");
+static CFuncInfo cfi_tinsert(tinsert, "table.tinsert");
+static CFuncInfo cfi_tpack(tpack, "table.tpack");
+static CFuncInfo cfi_tunpack(tunpack, "table.tunpack");
+static CFuncInfo cfi_tremove(tremove, "table.tremove");
+static CFuncInfo cfi_tmove(tmove, "table.tmove");
+static CFuncInfo cfi_sort(sort, "table.sort");
 
 static const luaL_RegCFI tab_funcs[] = {
   {lt::concat, &cfi_tconcat},

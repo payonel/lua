@@ -14,6 +14,37 @@ class InternalString;
 
 int lua_islightcfunction(lua_State* L, int idx);
 
+/*
+** Names of the functions the engine keeps in its state, stable from one
+** build to the next (see lnames.cpp): continuations ('LUA_KNAME' names one),
+** the engine's light C functions, and budget callbacks. The lookups answer
+** nullptr for what has no name.
+*/
+void lua_registerk(const char* name, lua_KFunction k);
+const char* lua_kname(lua_KFunction k);
+lua_KFunction lua_kbyname(byte_view name);
+void lua_registerbudget(const char* name, lua_Budget f);
+const char* lua_budgetname(lua_Budget f);
+lua_Budget lua_budgetbyname(byte_view name);
+namespace lua::object
+{
+struct CFuncInfo;
+}
+const char* lua_cfiname(const ::lua::object::CFuncInfo* cfi);
+::lua::object::CFuncInfo* lua_cfibyname(byte_view name);
+
+struct KNamer
+{
+  KNamer(const char* name, lua_KFunction k) { lua_registerk(name, k); }
+};
+struct BudgetNamer
+{
+  BudgetNamer(const char* name, lua_Budget f) { lua_registerbudget(name, f); }
+};
+/* names the continuation (or budget callback) 'fn' of module 'mod' */
+#define LUA_KNAME(mod, fn) static KNamer knamer_##fn(mod "." #fn, fn)
+#define LUA_BUDGETNAME(mod, fn) static BudgetNamer bnamer_##fn(mod "." #fn, fn)
+
 const InternalString* lua_toistring(lua_State* L, int idx);
 
 int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkname, std::optional<byte_view> mode);

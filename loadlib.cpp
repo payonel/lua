@@ -177,7 +177,7 @@ static void createlibstr(lua_State* L, OsLib* plib)
   std::unique_ptr<LibHandle> o = std::make_unique<LibHandle>();
   o->lib = plib;
   lua_newuserobject(L, std::move(o), LIBHANDLE_SIZE, 0);
-  static CFuncInfo cfi_lib_gc(lib_gc);
+  static CFuncInfo cfi_lib_gc(lib_gc, "package.lib_gc");
   luaL_newmetatablei(L, lt::_LOADLIB);
   lua_pushcfuncinfo(L, &cfi_lib_gc);
   lua_setfieldi(L, -2, lt::mm_gc);
@@ -384,6 +384,8 @@ static int searcher_Luak(lua_State* L, int status, lua_KContext ctx)
   return checkload(L, luaL_loadfilei(L, filename, std::nullopt) == LUA_OK, filename);
 }
 
+LUA_KNAME("package", searcher_Luak);
+
 static int searcher_Lua(lua_State* L)
 {
   luaL_checklstring(L, 1);
@@ -433,6 +435,8 @@ static int searcher_Ck(lua_State* L, int status, lua_KContext ctx)
   return checkload(L, loadfunc(L, filename->view(), name) == 0, filename->view());
 }
 
+LUA_KNAME("package", searcher_Ck);
+
 static int searcher_C(lua_State* L)
 {
   luaL_checklstring(L, 1);
@@ -468,6 +472,8 @@ static int searcher_Crootk(lua_State* L, int status, lua_KContext ctx)
   return 2;
 }
 
+LUA_KNAME("package", searcher_Crootk);
+
 static int searcher_Croot(lua_State* L)
 {
   byte_view name = luaL_checklstring(L, 1);
@@ -497,6 +503,8 @@ static int searcher_preloadk(lua_State* L, int status, lua_KContext ctx)
     return 2;
   }
 }
+
+LUA_KNAME("package", searcher_preloadk);
 
 static int searcher_preload(lua_State* L)
 {
@@ -631,6 +639,8 @@ static int ll_requirek(lua_State* L, int status, lua_KContext ctx)
   return require_from(L, (int)(ctx % 8), (lua_Integer)(ctx / 8));
 }
 
+LUA_KNAME("package", ll_requirek);
+
 static int ll_require(lua_State* L)
 {
   luaL_checklstring(L, 1);
@@ -642,8 +652,8 @@ static int ll_require(lua_State* L)
 
 /* }====================================================== */
 
-static CFuncInfo cfi_ll_loadlib(ll_loadlib);
-static CFuncInfo cfi_ll_searchpath(ll_searchpath);
+static CFuncInfo cfi_ll_loadlib(ll_loadlib, "package.ll_loadlib");
+static CFuncInfo cfi_ll_searchpath(ll_searchpath, "package.ll_searchpath");
 
 static const luaL_RegCFI pk_funcs[] = {
   {lt::loadlib, &cfi_ll_loadlib},
