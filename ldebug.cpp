@@ -259,7 +259,10 @@ void lua_setbudgetthread(lua_State* L, lua_State* B)
   for (int i = 0; ok && i < BUDGET_FRAMES; i++)
     ok = luaE_extendCI(B, 0) != nullptr;
   if (!ok)
+  {
+    lua_lock(L); /* (as for any throw) */
     luaD_throw(L, LUA_ERRMEM);
+  }
 }
 
 /* push onto 'L' the function of the frame 'ar' of thread 'L1' */
