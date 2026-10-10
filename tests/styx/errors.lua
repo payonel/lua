@@ -138,6 +138,6 @@ case("an error inside a deep graph does not leak the stack", function()
   for _ = 1, 10 do fails("not supported yet", styx.persist, t) end
 end)
 
-case("settings is not implemented yet", function()
-  fails("not implemented", styx.settings, "path")
+case("there is no settings function", function()
+  assert(styx.settings == nil)
 end)

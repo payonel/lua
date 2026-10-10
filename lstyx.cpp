@@ -3735,19 +3735,12 @@ static int styx_unpersist(lua_State* L)
   return 1;
 }
 
-static int styx_settings(lua_State* L)
-{
-  return luaL_errori(L, lt::not_implemented);
-}
-
 static CFuncInfo cfi_persist(styx_persist, "styx.persist");
 static CFuncInfo cfi_unpersist(styx_unpersist, "styx.unpersist");
-static CFuncInfo cfi_settings(styx_settings, "styx.settings");
 
 static const luaL_RegCFI funcs[] = {
   {lt::persist, &cfi_persist},
   {lt::unpersist, &cfi_unpersist},
-  {lt::settings, &cfi_settings},
 };
 
 /*

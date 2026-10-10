@@ -659,7 +659,6 @@ namespace lt
   constexpr byte_view not_an_integer_in_proper_range("not an integer in proper range");
   constexpr byte_view not_enough_memory("not enough memory");
   constexpr byte_view not_enough_stack("not enough stack");
-  constexpr byte_view not_implemented("not implemented");
   constexpr byte_view NOT_kw("NOT");
   constexpr byte_view not_kw("not");
   constexpr byte_view nparams("nparams");
@@ -822,7 +821,6 @@ namespace lt
   constexpr byte_view setmetatable("setmetatable");
   constexpr byte_view SETTABLE("SETTABLE");
   constexpr byte_view settable("settable");
-  constexpr byte_view settings("settings");
   constexpr byte_view SETTABUP("SETTABUP");
   constexpr byte_view settop("settop");
   constexpr byte_view SETUPVAL("SETUPVAL");

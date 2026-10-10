@@ -30,7 +30,6 @@ persisted one).
 ```lua
 local s = styx.persist([perms,] value)     -- value -> string
 local v = styx.unpersist([perms,] s)       -- string -> value
-local x = styx.settings(name [, value])    -- query or change a setting
 ```
 
 - `perms` is the permanents table: it maps objects to names. On persist an
@@ -39,8 +38,6 @@ local x = styx.settings(name [, value])    -- query or change a setting
 - A metatable field (`__persist`) lets a table (and, once supported,
   userdata) control its own persistence: `true` for literal, `false` for
   forbidden, or a function that returns a restore closure.
-- Settings are the open list; the first candidates are error-path
-  generation, a recursion limit, and the name of the metatable field.
 
 ## Layout and running
 
@@ -48,7 +45,6 @@ local x = styx.settings(name [, value])    -- query or change a setting
   `persist`/`unpersist` handle nil, booleans, numbers, strings, tables
   (with metatables, shared references and cycles), Lua closures with closed
   upvalues, and suspended or unstarted coroutines, plus the permanents table.
-  `settings` raises "not implemented".
 - `tests/styx/`: the Styx tests.
   - `styx_tests.cpp`: C++ tests (using the C API; internals are reachable
     since the test links the raw objects) plus a runner that executes every
@@ -341,13 +337,11 @@ across a restore, and are to be revisited:
   data you do not trust.
 - **A final format**: the format (version 6, ADR-10) may still change;
   no stream of an earlier version is read.
-- **`settings`**. Today: error ("not implemented").
-- **The hash seed in a script's streams**: every stream starts with the
-  persisting state's string hash seed (`luaL_newstatefor` needs it), so a
-  script can read its own state's seed from what `styx.persist` returns.
-  Lua randomizes the seed so that code cannot craft strings that collide in
-  the state's string table. To do: leave it out of the streams a script
-  gets (host streams keep it).
+- **The hash seed in streams** is not hidden: every stream starts with the
+  persisting state's string hash seed (`luaL_newstatefor` needs it), and
+  each object carries a hash derived from it. A script that can call
+  `styx.persist` can read its state's seed. Styx is run by administrators,
+  not by untrusted code, so this is not protected.
 
 ## ADRs
 
@@ -358,7 +352,7 @@ planets); Styx is one of Pluto's moons.
 
 ### ADR-2: Script-facing API follows Eris
 **Status:** accepted
-`persist`, `unpersist`, `settings`, with the optional permanents table as
+`persist` and `unpersist`, with the optional permanents table as
 the first argument. Users of Eris or Pluto should find it familiar.
 
 ### ADR-3: Permanents are registered by the caller
@@ -1263,4 +1257,3 @@ named) and a restore that runs out of memory at many sizes.
 - Format: versioned header or bare bytes.
 - Whether whole-state snapshot is a root kind of Styx or a separate
   library built on the same core.
-- Exact `settings` list and defaults.

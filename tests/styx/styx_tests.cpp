@@ -125,7 +125,7 @@ static void test_api_surface()
   lua_pop(L, 1);
   CHECK(lua_getfield(L, -1, "unpersist") == LUA_TFUNCTION);
   lua_pop(L, 1);
-  CHECK(lua_getfield(L, -1, "settings") == LUA_TFUNCTION);
+  CHECK(lua_getfield(L, -1, "settings") == LUA_TNIL);
   lua_close(L);
 }
 
