@@ -66,31 +66,21 @@ ENGINE_TEST_O =$(OBJ_DIR)/engine_tests.o
 ENGINE_TEST_T =test_engine
 GATE_O        =$(OBJ_DIR)/gate.o
 GATE_T        =test_gate
-DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(GATE_O:.o=.d)
-STYX_TEST_O  =$(OBJ_DIR)/styx_tests.o
-STYX_TEST_T  =test_styx
-STYX_RUN     =cd tests/styx && ../../$(STYX_TEST_T)
-DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(STYX_TEST_O:.o=.d)
+STYX_TEST_O   =$(OBJ_DIR)/styx_tests.o
+STYX_TEST_T   =test_styx
+STYX_RUN      =cd tests/styx && ../../$(STYX_TEST_T)
+DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(GATE_O:.o=.d) $(STYX_TEST_O:.o=.d)
 
-all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
-all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
-all: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
-all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(STYX_TEST_T)
+all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T) $(STYX_TEST_T)
 
 include tests/libs/build.mk
 
 debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
-debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
-debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
-debug: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
-debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(STYX_TEST_T)
+debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T) $(STYX_TEST_T)
 
 cov: VARIANT=cov
-cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
-cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T)
-cov: $(LUA_T) $(TEST_API_T) $(STYX_TEST_T)
-cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(STYX_TEST_T)
+cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T) $(STYX_TEST_T)
 	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
 	$(MAKE) test
 	./cov-report.sh
@@ -163,14 +153,12 @@ gate-run:
 # just the engine internals tests (`make test` runs them too)
 engine-test: $(ENGINE_TEST_T)
 	./$(ENGINE_TEST_T)
-# The styx tests link the raw objects (internals reachable) and are not part
-# of `test`/`full` while Styx is being built test-first.
+
+# the Styx tests link the raw objects (internals reachable)
 $(STYX_TEST_O): tests/styx/styx_tests.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -I$(TOP_DIR) -MF $(OBJ_DIR)/styx_tests.d -o $@ -c $<
 $(STYX_TEST_T): $(STYX_TEST_O) $(OBJ_FILES) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(STYX_TEST_O) $(OBJ_FILES) $(LDFLAGS)
-test-styx: $(STYX_TEST_T)
-	cd tests/styx && ../../$(STYX_TEST_T)
 
 # just the Styx tests (`make test` runs them too, along with everything else)
 styx-test: $(STYX_TEST_T)
@@ -202,7 +190,6 @@ test:
 		cat /dev/null | /usr/bin/time -v ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 	cd tests && ../$(LUA_T) deep/all.lua
 	$(MAKE) gate-run
-	cd tests/styx && ../../$(STYX_TEST_T)
 	$(STYX_RUN)
 
 full:
@@ -216,7 +203,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: all debug cov clean test engine-test gate gate-run full
-.PHONY: all debug cov clean test engine-test full test-styx
-.PHONY: all debug cov clean test engine-test full test-styx styx-test
-.PHONY: all debug cov clean test engine-test styx-test full
+.PHONY: all debug cov clean test engine-test gate gate-run styx-test full

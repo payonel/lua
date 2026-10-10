@@ -14,5 +14,4 @@ test_engine
 cachegrind.out.*
 vgcore.*
 test_gate
-
 test_styx
