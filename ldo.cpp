@@ -1790,6 +1790,26 @@ void lua_freeze(lua_State* L)
 }
 
 /*
+** Would a freeze here freeze the chain of the running thread 'L'? In the
+** budget callback, whether 'lua_freeze' will (instead of destroying the
+** chain); elsewhere, whether the thread runs under a budget and no call
+** that cannot freeze lies in the way.
+*/
+int lua_canfreeze(lua_State* L)
+{
+  global_State* g = L->l_G;
+  if (g->budgetL != nullptr)
+  {
+    if (L != g->budgetL && L != g->budgetth)
+      return 0;
+    bool freezable;
+    chaintop(g->budgetL, &freezable);
+    return freezable;
+  }
+  return L->beff != nullptr && luaD_canfreeze(L);
+}
+
+/*
 ** Call the Lua function of a hook (below its arguments), as a hook
 ** function that can freeze: it cannot yield, and when it ends after a
 ** thaw the hook is finished by 'luaD_finishhook'.

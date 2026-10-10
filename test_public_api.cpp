@@ -5515,11 +5515,13 @@ static int fz_at = 0;
 static bool fz_every = false;
 static lua_State* fz_target = nullptr;
 static lua_State* fz_user = nullptr; /* the 'user_co' of the last call */
+static int fz_cb_can = -1;           /* what 'lua_canfreeze' said in the last call */
 
 static void fz_budget(lua_State* user_co, lua_State* spender)
 {
   fz_calls++;
   fz_user = user_co;
+  fz_cb_can = lua_canfreeze(spender);
   if (fz_target != nullptr && fz_calls >= fz_at && (fz_every || fz_calls == fz_at))
   {
     fz_freezes++;
@@ -5825,6 +5827,9 @@ static void test_freeze()
     end
     function viacallk(n) local r, thawed = callk(sum, n) return r * 10 + (thawed and 1 or 0) end
     function viacall(n) return call(sum, n) end
+    function canf() return debug.canfreeze() end
+    function can_viacallk() return (callk(canf, 0)) end
+    function can_viacall() return call(canf, 0) end
     function late(n)
       local r = sum(n)
       error("late " .. r, 0)
@@ -5985,7 +5990,28 @@ static void test_freeze()
   while (lua_isfrozen(L))
     lua_thaw(L, nullptr);
   CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == viaplain + 1);
+  CHECK(fz_cb_can == 1); /* (and that it can) */
   lua_settop(L, 0);
+
+  /* lua_canfreeze and debug.canfreeze: no budget in effect, none; under a
+     budget, a plain call in the way makes it false, a call with a
+     continuation does not */
+  fz_reset(L, 0, nullptr, 0, false);
+  CHECK(lua_canfreeze(L) == 0);
+  lua_getglobal(L, "canf");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
+  lua_settop(L, 0);
+  fz_reset(L, HUGE, nullptr, 0, false);
+  lua_getglobal(L, "canf");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 1);
+  lua_settop(L, 0);
+  lua_getglobal(L, "can_viacallk");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 1);
+  lua_settop(L, 0);
+  lua_getglobal(L, "can_viacall");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
+  lua_settop(L, 0);
+  fz_reset(L, 0, nullptr, 0, false);
 
   /* through a C function without one: the freeze cannot happen, the
      chain is destroyed (the thread is dead, with the message) and the
@@ -5997,6 +6023,7 @@ static void test_freeze()
   while (st == LUA_OK && lua_isfrozen(L))
     st = lua_thaw(L, nullptr).status;
   CHECK(st == LUA_ERRRUN && fz_str(L, -1) == "cannot freeze");
+  CHECK(fz_cb_can == 0); /* (the callback was told that the freeze cannot happen) */
   CHECK(!lua_isfrozen(L) && lua_status(L) == LUA_ERRRUN);
   CHECK(lua_closethread(L, nullptr) == LUA_ERRRUN);
   lua_settop(L, 0);

@@ -371,6 +371,7 @@ void(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
 lua_Integer(lua_getbudget)(lua_State* co, lua_Integer* left);
 [[noreturn]] void(lua_freeze)(lua_State* L);
 int(lua_isfrozen)(lua_State* co);
+int(lua_canfreeze)(lua_State* L);
 lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from);
 int(lua_isyieldable)(lua_State* L);
 

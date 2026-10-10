@@ -404,6 +404,7 @@ namespace lt
   constexpr byte_view iscfunction("iscfunction");
   constexpr byte_view isdst("isdst");
   constexpr byte_view isfrozen("isfrozen");
+  constexpr byte_view canfreeze("canfreeze");
   constexpr byte_view isfunction("isfunction");
   constexpr byte_view isnil("isnil");
   constexpr byte_view isnull("isnull");

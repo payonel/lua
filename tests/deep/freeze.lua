@@ -557,6 +557,39 @@ do
   assert(coroutine.status(kernel) == "dead") -- (it returned)
 end
 
+-- 'canfreeze': whether a freeze here would happen (a budget in effect and
+-- no call that cannot freeze in the way)
+do
+  assert(debug.canfreeze() == false) -- the kernel runs with no budget
+  local r = {}
+  local co = coroutine.create(function()
+    r.plain = debug.canfreeze()
+    r.pcall = select(2, pcall(debug.canfreeze))
+    r.wrap = coroutine.wrap(function() return debug.canfreeze() end)()
+    r.resume = select(2, coroutine.resume(coroutine.create(debug.canfreeze)))
+    table.sort({3, 2, 1}, function(a, b) r.sort = debug.canfreeze() return a < b end)
+    r.gsub = string.gsub("a", "a", function() r.gsubv = debug.canfreeze() end)
+    r.mm = setmetatable({}, {__index = function() r.index = debug.canfreeze() end}).x
+    r.load = load(function() r.reader = debug.canfreeze() return nil end)
+  end)
+  debug.setbudget(co, 1 << 40, function() end)
+  assert(coroutine.resume(co))
+  for _, k in ipairs{"plain", "pcall", "wrap", "resume", "sort", "gsubv", "index", "reader"} do
+    assert(r[k] == true, k)
+  end
+  -- the same coroutine with no budget: false everywhere
+  local r2 = {}
+  local co2 = coroutine.create(function() r2.plain = debug.canfreeze() end)
+  assert(coroutine.resume(co2) and r2.plain == false)
+  -- in the callback: whether freeze() will freeze, or destroy the chain
+  local told = {}
+  local co3 = coroutine.create(function() for i = 1, 20 do end end)
+  debug.setbudget(co3, 5, function() told[#told + 1] = debug.canfreeze() debug.freeze() end)
+  kresume(co3)
+  assert(#told > 0)
+  for _, v in ipairs(told) do assert(v == true) end
+end
+
 -- 'f', run in a coroutine with budgets of several sizes and frozen at
 -- every budget point, is never destroyed and ends as a plain run does;
 -- 'f' gets 'busy', which its callbacks call

@@ -635,6 +635,12 @@ static int db_freeze(lua_State* L)
   lua_freeze(L);
 }
 
+static int db_canfreeze(lua_State* L)
+{
+  lua_pushboolean(L, lua_canfreeze(L));
+  return 1;
+}
+
 static int db_isfrozen(lua_State* L)
 {
   lua_pushboolean(L, lua_isfrozen(checkco(L, 1)));
@@ -722,6 +728,7 @@ static CFuncInfo cfi_db_setbudget(db_setbudget);
 static CFuncInfo cfi_db_getbudget(db_getbudget);
 static CFuncInfo cfi_db_freeze(db_freeze);
 static CFuncInfo cfi_db_isfrozen(db_isfrozen);
+static CFuncInfo cfi_db_canfreeze(db_canfreeze);
 static CFuncInfo cfi_db_thaw(db_thaw);
 
 static const luaL_RegCFI dblib[] = {
@@ -745,6 +752,7 @@ static const luaL_RegCFI dblib[] = {
   {lt::getbudget, &cfi_db_getbudget},
   {lt::freeze, &cfi_db_freeze},
   {lt::isfrozen, &cfi_db_isfrozen},
+  {lt::canfreeze, &cfi_db_canfreeze},
   {lt::thaw, &cfi_db_thaw},
 };
 
