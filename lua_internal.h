@@ -33,6 +33,16 @@ struct CFuncInfo;
 const char* lua_cfiname(const ::lua::object::CFuncInfo* cfi);
 ::lua::object::CFuncInfo* lua_cfibyname(byte_view name);
 
+/*
+** Kinds of user objects that can be kept outside the process (see
+** 'lua_UserObject::persistkind'): the factory makes the object from its
+** state (nullptr if the state is not valid).
+*/
+typedef std::unique_ptr<lua_UserObject> (*lua_ObjectFactory)(lua_State* L, const lua_Integer* ints, int nints,
+                                                             byte_view bytes);
+void lua_registerobjectkind(const char* name, lua_ObjectFactory f);
+lua_ObjectFactory lua_objectkind(byte_view name);
+
 struct KNamer
 {
   KNamer(const char* name, lua_KFunction k) { lua_registerk(name, k); }
@@ -85,6 +95,8 @@ struct luaL_Box : lua_UserObject
   byte_owner bytes = {}; /* a buffer saved by 'luaL_buffsave' */
   size_t used = 0;
   ~luaL_Box() override;
+  const char* persistkind() const override { return "box"; }
+  int persistsave(lua_Integer* out, byte_view* b) const override;
 };
 
 luaL_Box* luaL_newbox(lua_State* L);

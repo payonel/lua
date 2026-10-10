@@ -740,6 +740,45 @@ luaL_Box::~luaL_Box()
     luaM_alloc_char_span(g, nullptr, bytes, 0, false); /* an abandoned buffer */
 }
 
+/* its state: the four integers, the bytes used, then the bytes */
+int luaL_Box::persistsave(lua_Integer* out, byte_view* b) const
+{
+  for (int i = 0; i < 4; i++)
+    out[i] = ints[i];
+  out[4] = static_cast<lua_Integer>(used);
+  *b = bytes.view().substr(0, used);
+  return 5;
+}
+
+static std::unique_ptr<lua_UserObject> makebox(lua_State* L, const lua_Integer* ints, int nints, byte_view bytes)
+{
+  if (nints != 5 || ints[4] < 0 || static_cast<size_t>(ints[4]) != bytes.size())
+    return nullptr;
+  auto box = std::make_unique<luaL_Box>();
+  box->g = L->l_G;
+  for (int i = 0; i < 4; i++)
+    box->ints[i] = ints[i];
+  if (!bytes.empty())
+  {
+    byte_owner nb = luaM_alloc_char_span(L->l_G, nullptr, {}, bytes.size(), false);
+    if (nb.data() == nullptr)
+    {
+      lua_pushistringref(L, lt::not_enough_memory);
+      lua_error(L); /* raise a memory error */
+    }
+    nb.copy_from(bytes, 0);
+    box->bytes = std::move(nb);
+    box->used = bytes.size();
+  }
+  return box;
+}
+
+struct BoxKind
+{
+  BoxKind() { lua_registerobjectkind("box", makebox); }
+};
+static BoxKind boxkind;
+
 /* pushes a new box */
 luaL_Box* luaL_newbox(lua_State* L)
 {

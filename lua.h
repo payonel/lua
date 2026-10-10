@@ -137,6 +137,15 @@ protected:
 struct lua_UserObject
 {
   virtual ~lua_UserObject() = default;
+
+  /*
+  ** For a tool that keeps a state outside the process: the name of the kind
+  ** the object is registered under ('lua_registerobjectkind'), or nullptr
+  ** if it cannot be kept; and its state as up to 8 integers and a view of
+  ** bytes that stays valid while the object does.
+  */
+  virtual const char* persistkind() const { return nullptr; }
+  virtual int persistsave(lua_Integer* /*ints*/, byte_view* /*bytes*/) const { return 0; }
 };
 
 /*

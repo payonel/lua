@@ -31,6 +31,7 @@ struct Names
   std::map<const CFuncInfo*, std::string> cfinames;
   std::map<std::string, lua_Budget, std::less<>> budgetbyname;
   std::map<std::uintptr_t, std::string> budgetnames;
+  std::map<std::string, lua_ObjectFactory, std::less<>> objectkinds;
 };
 
 Names& names()
@@ -79,6 +80,17 @@ lua_Budget lua_budgetbyname(byte_view name)
 {
   auto it = names().budgetbyname.find(view(name));
   return it == names().budgetbyname.end() ? nullptr : it->second;
+}
+
+void lua_registerobjectkind(const char* name, lua_ObjectFactory f)
+{
+  names().objectkinds[name] = f;
+}
+
+lua_ObjectFactory lua_objectkind(byte_view name)
+{
+  auto it = names().objectkinds.find(view(name));
+  return it == names().objectkinds.end() ? nullptr : it->second;
 }
 
 namespace lua::object

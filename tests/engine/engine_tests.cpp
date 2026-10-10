@@ -533,6 +533,42 @@ static void test_function_names()
   lua_close(L);
 }
 
+/*
+** User objects that can be kept outside the process (lua_UserObject): a box
+** saves its state and the factory of its kind makes an equal one.
+*/
+static void test_object_kinds()
+{
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+  luaL_Box* box = luaL_newbox(L);
+  box->ints = {1, -2, 3, 1000000007};
+  luaL_Buffer B;
+  luaL_buffinit(L, &B);
+  luaL_addlstring(&B, "bytes of a box", 0, 14);
+  luaL_buffsave(&B, box);
+  CHECK(std::string(box->persistkind()) == "box");
+  lua_Integer ints[8];
+  byte_view bytes;
+  int n = box->persistsave(ints, &bytes);
+  CHECK(n == 5 && ints[0] == 1 && ints[1] == -2 && ints[3] == 1000000007 && ints[4] == 14);
+  CHECK(bytes == byte_view("bytes of a box"));
+  lua_ObjectFactory f = lua_objectkind("box");
+  CHECK(f != nullptr && lua_objectkind("nothing") == nullptr);
+  std::unique_ptr<lua_UserObject> copy = f(L, ints, n, bytes);
+  CHECK(copy != nullptr);
+  luaL_Box* c = dynamic_cast<luaL_Box*>(copy.get());
+  CHECK(c != nullptr && c->ints == box->ints && c->used == 14);
+  lua_Integer ints2[8];
+  byte_view bytes2;
+  CHECK(c != nullptr && c->persistsave(ints2, &bytes2) == 5 && bytes2 == bytes);
+  ints[4] = 3; /* the count of the bytes must be the bytes' */
+  CHECK(f(L, ints, n, bytes) == nullptr);
+  CHECK(f(L, ints, 4, bytes) == nullptr);
+  copy.reset(); /* (before its state goes) */
+  lua_close(L);
+}
+
 int main()
 {
   std::printf("\n\tStarting engine internals tests\n\n");
@@ -545,6 +581,7 @@ int main()
   test_same_order_in_two_states();
   test_order_independent_of_interned_strings();
   test_function_names();
+  test_object_kinds();
   if (g_failures == 0)
     std::printf("\n\tOK - engine: %d checks, 0 failures\n\n", g_checks);
   else
