@@ -979,7 +979,7 @@ static void test_host_state_pending_finalizers()
   CHECK(eval(A, build_perms) == "ok");
   CHECK(eval(A, "collectgarbage('incremental') count = 0 "
                 "local mt = {__gc = function() count = count + 1 end} "
-                "for i = 1, 200 do setmetatable({}, mt) end return 'ok'") == "ok");
+                "for i = 1, 3000 do setmetatable({}, mt) end return 'ok'") == "ok");
   /* step the collector until some finalizers ran and the others are due */
   int ran = 0;
   for (int i = 0; i < 100000 && ran == 0; i++)
@@ -989,9 +989,9 @@ static void test_host_state_pending_finalizers()
     ran = static_cast<int>(lua_tointeger(A, -1));
     lua_pop(A, 1);
   }
-  CHECK(ran > 0 && ran < 200);
+  CHECK(ran > 0 && ran < 3000);
   std::string blob = persist_state(A);
-  CHECK(eval(A, "collectgarbage() return tostring(count)") == "200");
+  CHECK(eval(A, "collectgarbage() return tostring(count)") == "3000");
   lua_close(A);
 
   CountingAlloc a2;
@@ -999,7 +999,7 @@ static void test_host_state_pending_finalizers()
   lua_getglobal(B, "count");
   CHECK(lua_tointeger(B, -1) >= ran);
   lua_pop(B, 1);
-  CHECK(eval(B, "collectgarbage() collectgarbage() return tostring(count)") == "200");
+  CHECK(eval(B, "collectgarbage() collectgarbage() return tostring(count)") == "3000");
   lua_close(B);
 }
 
