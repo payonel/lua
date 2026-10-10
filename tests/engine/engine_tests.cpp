@@ -576,6 +576,33 @@ static void test_object_kinds()
   lua_close(L);
 }
 
+/*
+** Objects made due by hand (luaC_makedue): their '__gc' run in the order
+** given, even though they are alive and the collector is stopped; one whose
+** group is gone is ordinary and runs none.
+*/
+static void test_make_due()
+{
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+  CHECK(luaL_dostring(L, "collectgarbage('stop') log = {} keep = {} local mt = {__gc = function(o) log[#log + 1] = o.name end} "
+                         "for _, n in ipairs{'a', 'b', 'c', 'd'} do keep[n] = setmetatable({name = n}, mt) end") == LUA_OK);
+  GCObject* objs[4];
+  const char* names[4] = {"c", "a", "d", "b"};
+  for (int i = 0; i < 4; i++)
+  {
+    lua_getglobal(L, "keep");
+    lua_getfield(L, -1, names[i]);
+    objs[i] = static_cast<GCObject*>(const_cast<void*>(lua_topointer(L, -1)));
+    lua_pop(L, 2);
+  }
+  objs[3]->owner = 65535; /* its group is gone */
+  lua::gc::luaC_makedue(L, objs, 4);
+  CHECK(luaL_dostring(L, "collectgarbage() return table.concat(log, ',')") == LUA_OK);
+  CHECK(std::string(lua_tolstring(L, -1)->data(), lua_tolstring(L, -1)->size()) == "c,a,d");
+  lua_close(L);
+}
+
 int main()
 {
   std::printf("\n\tStarting engine internals tests\n\n");
@@ -589,6 +616,7 @@ int main()
   test_order_independent_of_interned_strings();
   test_function_names();
   test_object_kinds();
+  test_make_due();
   if (g_failures == 0)
     std::printf("\n\tOK - engine: %d checks, 0 failures\n\n", g_checks);
   else

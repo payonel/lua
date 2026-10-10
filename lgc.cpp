@@ -1298,6 +1298,65 @@ static void separatetobefnz(global_State* g, int all)
 }
 
 /*
+** Make the objects 'objs' (n of them, marked for finalization) due now, as
+** if the collector had found them dead, to run in this order: a kernel or
+** host object goes to the end of 'tobefnz', a user object to the end of the
+** queue of its group, and one whose group is gone is an ordinary object
+** again (see 'separatetobefnz').
+*/
+void luaC_makedue(lua_State* L, GCObject* const* objs, size_t n)
+{
+  global_State* g = L->l_G;
+  std::unordered_map<GCObject*, size_t> order;
+  for (size_t i = 0; i < n; i++)
+    order.emplace(objs[i], i);
+  std::vector<GCObject*> taken(n, nullptr);
+  GCObject* p = &g->finobj;
+  GCObject* curr;
+  while ((curr = p->next) != g->finobjold1)
+  { /* take them out of the 'finobj' list */
+    auto it = order.find(curr);
+    if (it == order.end())
+      p = curr;
+    else
+    {
+      if (curr == g->finobjsur)
+        g->finobjsur = curr->next;
+      p->next = curr->next;
+      taken[it->second] = curr;
+    }
+  }
+  GCObject* lastnext = findlast(&g->tobefnz);
+  for (GCObject* o : taken)
+  {
+    if (o == nullptr)
+      continue; /* (not marked, or not in the list the collector is sweeping) */
+    BudgetGroup* bg = (o->owner != 0) ? ownergroup(g, o->owner) : nullptr;
+    if (o->owner == 0)
+    {
+      o->next = lastnext->next;
+      lastnext->next = o;
+      lastnext = o;
+    }
+    else if (bg != nullptr)
+    {
+      o->next = nullptr;
+      if (bg->fnztail != nullptr)
+        bg->fnztail->next = o;
+      else
+        bg->fnz.next = o;
+      bg->fnztail = o;
+    }
+    else
+    {
+      o->marked &= (lu_byte)(~bitmask(FINALIZEDBIT));
+      o->next = g->allgc.next;
+      g->allgc.next = o;
+    }
+  }
+}
+
+/*
 ** If pointer 'p' points to 'o', move it to the next element.
 */
 static GCObject* checkpointer(GCObject* p, GCObject* o)

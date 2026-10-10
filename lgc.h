@@ -299,6 +299,7 @@ static l_forceinline void luaC_barrierback(lua_State* L, GCObject* p, const TVal
     luaC_objbarrierback(L, p, gcvalue(v));
 }
 void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt);
+void luaC_makedue(lua_State* L, GCObject* const* objs, size_t n);
 bool luaC_newowner(lua_State* L, BudgetGroup* bg);
 GCObject* luaC_dequeue(lua_State* L, BudgetGroup* bg);
 void luaC_pushdrain(lua_State* L);
