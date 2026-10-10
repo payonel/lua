@@ -17,6 +17,7 @@
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
+#include "lua_internal.h"
 #ifdef LUA_DEBUG
 #include "ltests.h"
 #endif
@@ -330,13 +331,14 @@ struct CountingAlloc : lua_Alloc
   long grows = 0;
   bool deny = false;
   size_t cap = 0;   /* when non zero, deny growth past this many bytes */
+  long failnth = 0; /* when non zero, deny every growth from this number on (counting from grows = 0) */
   size_t used = 0;
   bool permit(size_t osize, size_t nsize, int) override
   {
     if (nsize > osize)
     {
       grows++;
-      if (deny || (cap != 0 && used + (nsize - osize) > cap))
+      if (deny || (cap != 0 && used + (nsize - osize) > cap) || (failnth != 0 && grows >= failnth))
         return false;
     }
     used = used + nsize - osize;
@@ -1761,6 +1763,261 @@ static void test_frozen_host_called_thread()
   }
 }
 
+
+/*
+** An allocation that fails at each point of a restore, and of a script's
+** persist, of a frozen chain: always a clean error ("not enough memory"), a
+** state that still works, and, once nothing fails, the right result.
+*/
+static void test_frozen_allocation_failures()
+{
+  CountingAlloc a1;
+  lua_State* A = host_state(&a1);
+  CHECK(eval(A, "co = coroutine.create(function() "
+                "  local inner = coroutine.create(function() local t = {} for i = 1, 20 do t[i] = tostring(i) end "
+                "    local s = 0 for _, v in ipairs(t) do s = s + #v end return s end) "
+                "  return coroutine.resume(inner) end) "
+                "fcount = 0 "
+                "debug.setbudget(co, 9, function() fcount = fcount + 1 if fcount == 4 then debug.freeze() end end) "
+                "coroutine.resume(co) return debug.isfrozen(co) and 'frozen' or 'done'") == "frozen");
+  std::string blob = persist_state(A);
+  CHECK(!blob.empty());
+  std::string expected = eval(A, "finish() return tostring(coroutine.status(co))");
+  /* restore: the n-th growth fails */
+  int failures = 0;
+  bool finished = false;
+  for (long n = 1; n < 20000 && !finished; n++)
+  {
+    CountingAlloc a2;
+    lua_State* B = new_state_for(&a2, blob);
+    lua_pushcfunction(B, host_callk);
+    lua_setglobal(B, "callk");
+    CHECK(eval(B, build_perms) == "ok");
+    lua_getglobal(B, "_BACK");
+    a2.grows = 0;
+    a2.failnth = n;
+    HostString msg;
+    int st = luaL_unpersiststate(B, 1, byte_view(blob.data(), blob.size()), &msg);
+    a2.failnth = 0;
+    if (st != LUA_OK)
+    {
+      failures++;
+      CHECK(std::string(msg.to_os()).find("not enough memory") != std::string::npos);
+      CHECK(lua_gettop(B) == 1);
+      lua_settop(B, 0);
+      CHECK(eval(B, "return 'usable'") == "usable");
+    }
+    else
+    {
+      finished = true;
+      lua_settop(B, 0);
+      CHECK(eval(B, "finish() return tostring(coroutine.status(co))") == expected);
+    }
+    lua_close(B);
+  }
+  CHECK(finished && failures > 50);
+  /* a script's persist of the frozen chain: the n-th growth fails */
+  failures = 0;
+  finished = false;
+  for (long n = 1; n < 20000 && !finished; n++)
+  {
+    a1.grows = 0;
+    a1.failnth = n;
+    std::string r = eval(A, "local ok, err = pcall(require('styx').persist, _PERMS, {co = co}) "
+                            "if ok then return 'ok' end return err");
+    a1.failnth = 0;
+    if (r == "ok")
+      finished = true;
+    else
+    {
+      failures++;
+      CHECK(r.find("not enough memory") != std::string::npos || r.empty());
+      CHECK(eval(A, "return 'usable'") == "usable");
+    }
+  }
+  CHECK(finished && failures > 10);
+  lua_close(A);
+}
+
+
+/*
+** A user object of a kind the host registered (ADR-34): its state, its
+** metatable and its user values come back; a finalizer in the metatable is
+** marked; a stream with a bad state, or of a kind nobody registered, is
+** rejected.
+*/
+struct TestObj : lua_UserObject
+{
+  lua_Integer a = 0, b = 0;
+  const char* persistkind() const override { return "styxtest.obj"; }
+  int persistsave(lua_Integer* out, byte_view* bytes) const override
+  {
+    out[0] = a;
+    out[1] = b;
+    *bytes = byte_view("payload");
+    return 2;
+  }
+};
+
+static std::unique_ptr<lua_UserObject> make_testobj(lua_State*, const lua_Integer* ints, int n, byte_view bytes)
+{
+  if (n != 2 || bytes != byte_view("payload") || ints[0] < 0)
+    return nullptr;
+  auto o = std::make_unique<TestObj>();
+  o->a = ints[0];
+  o->b = ints[1];
+  return o;
+}
+
+static int testobj_new(lua_State* L)
+{
+  auto o = std::make_unique<TestObj>();
+  o->a = luaL_checkinteger(L, 1);
+  o->b = luaL_checkinteger(L, 2);
+  lua_newuserobject(L, std::move(o), 64, 2);
+  return 1;
+}
+
+static int testobj_gcs = 0;
+
+static int testobj_note(lua_State*)
+{
+  testobj_gcs++;
+  return 0;
+}
+
+static int testobj_get(lua_State* L)
+{
+  TestObj* o = dynamic_cast<TestObj*>(lua_touserobject(L, 1));
+  luaL_argcheck(L, o != nullptr, 1, "a test object");
+  lua_pushinteger(L, o->a);
+  lua_pushinteger(L, o->b);
+  return 2;
+}
+
+static void test_user_object_kind()
+{
+  lua_registerobjectkind("styxtest.obj", make_testobj);
+  for (int in_state = 0; in_state < 2; in_state++)
+  {
+    CountingAlloc a1;
+    lua_State* A = new_counted_state(&a1);
+    lua_pushcfunction(A, testobj_new);
+    lua_setglobal(A, "newobj");
+    lua_pushcfunction(A, testobj_get);
+    lua_setglobal(A, "getobj");
+    lua_pushcfunction(A, testobj_note);
+    lua_setglobal(A, "note");
+    CHECK(eval(A, build_perms) == "ok");
+    CHECK(eval(A, "mt = {__index = function(u, k) return 'idx:' .. k end, __gc = function(u) note() end} log = {} "
+                  "u = newobj(5, -6) debug.setmetatable(u, mt) debug.setuservalue(u, 'first', 1) "
+                  "debug.setuservalue(u, {2}, 2) same = {u, u} return 'ok'") == "ok");
+    if (in_state == 0)
+    {
+      /* a value, in the same state */
+      CHECK(eval(A, "local styx = require 'styx' local r = styx.unpersist(_BACK, styx.persist(_PERMS, {u = u, mt = mt, same = same})) "
+                    "local a, b = getobj(r.u) "
+                    "return table.concat({type(r.u), a, b, tostring(r.u ~= u), tostring(getmetatable(r.u) == r.mt), r.u.name, "
+                    "debug.getuservalue(r.u, 1), debug.getuservalue(r.u, 2)[1], tostring(r.same[1] == r.same[2] and r.same[1] == r.u)}, ' ')") ==
+              "userdata 5 -6 true true idx:name first 2 true");
+      /* the stream is rejected when its state is not valid or the kind unknown */
+      std::string bad = eval(A, "local blob = require('styx').persist(_PERMS, u) return blob");
+      CHECK(!bad.empty());
+      lua_registerobjectkind("styxtest.obj", [](lua_State*, const lua_Integer*, int, byte_view) -> std::unique_ptr<lua_UserObject> { return nullptr; });
+      push_string(A, bad);
+      lua_setglobal(A, "blob");
+      CHECK(eval(A, "return tostring(pcall(require('styx').unpersist, _BACK, blob))") == "false");
+      lua_registerobjectkind("styxtest.obj", make_testobj);
+      CHECK(eval(A, "return tostring(pcall(require('styx').unpersist, _BACK, blob))") == "true");
+      /* its finalizer was marked: the restored object runs it */
+      CHECK(eval(A, "collectgarbage() collectgarbage() return 'ok'") == "ok");
+      testobj_gcs = 0;
+      CHECK(eval(A, "(function() local r = require('styx').unpersist(_BACK, blob) end)() collectgarbage() collectgarbage() return 'ok'") == "ok");
+      CHECK(testobj_gcs == 1);
+    }
+    else
+    {
+      /* the whole state, restored in another */
+      std::string blob = persist_state(A);
+      CHECK(!blob.empty());
+      CountingAlloc a2;
+      lua_State* B = new_state_for(&a2, blob);
+      lua_pushcfunction(B, testobj_new);
+      lua_setglobal(B, "newobj");
+      lua_pushcfunction(B, testobj_get);
+      lua_setglobal(B, "getobj");
+      lua_pushcfunction(B, testobj_note);
+      lua_setglobal(B, "note");
+      HostString msg;
+      int st = restore_state(B, blob, &msg);
+      if (st != LUA_OK)
+        std::printf("      restore error: %s\n", msg.to_os());
+      CHECK(st == LUA_OK);
+      CHECK(eval(B, "local a, b = getobj(u) return table.concat({a, b, u.name, debug.getuservalue(u, 1), debug.getuservalue(u, 2)[1], "
+                    "tostring(getmetatable(u) == mt)}, ' ')") == "5 -6 idx:name first 2 true");
+      testobj_gcs = 0;
+      CHECK(eval(B, "u = nil same = nil collectgarbage() collectgarbage() return 'ok'") == "ok");
+      CHECK(testobj_gcs == 1);
+      lua_close(B);
+    }
+    lua_close(A);
+  }
+}
+
+
+/*
+** A stream with bytes changed or cut short is not trusted to be valid, but
+** a restore of it must end: with an error, or with a state that closes
+** cleanly. No crash, no hang, no leak (the counting allocator's balance).
+*/
+static void test_frozen_corrupted_streams()
+{
+  lua_registerk("styxtest.host_k", host_k);
+  CountingAlloc a1;
+  lua_State* A = host_state(&a1);
+  CHECK(eval(A, host_program) == "frozen");
+  CHECK(eval(A, "other = coroutine.wrap(function() local t <close> = setmetatable({}, {__close = function() end}) coroutine.yield(1) end) other() "
+                "return 'ok'") == "ok");
+  std::string blob = persist_state(A);
+  CHECK(!blob.empty());
+  lua_close(A);
+  size_t stride = std::getenv("STYX_CORRUPT_ALL") != nullptr ? 1 : blob.size() / 300 + 1;
+  int rejected = 0, accepted = 0;
+  for (size_t at = 0; at < blob.size(); at += stride)
+  {
+    for (int x : {0x01, 0x80, 0xff})
+    {
+      std::string bad = blob;
+      bad[at] = static_cast<char>(static_cast<unsigned>(static_cast<unsigned char>(bad[at])) ^ static_cast<unsigned>(x));
+      CountingAlloc a2;
+      lua_State* B = new_state_for(&a2, blob);
+      lua_pushcfunction(B, host_callk);
+      lua_setglobal(B, "callk");
+      HostString msg;
+      if (restore_state(B, bad, &msg) == LUA_OK)
+        accepted++;
+      else
+        rejected++;
+      lua_close(B);
+      CHECK(a2.used == 0);
+    }
+  }
+  for (size_t len = 0; len < blob.size(); len += stride * 3)
+  {
+    std::string cut = blob.substr(0, len);
+    CountingAlloc a2;
+    lua_State* B = new_state_for(&a2, blob);
+    lua_pushcfunction(B, host_callk);
+    lua_setglobal(B, "callk");
+    HostString msg;
+    CHECK(restore_state(B, cut, &msg) != LUA_OK);
+    lua_close(B);
+    CHECK(a2.used == 0);
+  }
+  CHECK(rejected > 0);
+  std::printf("      corrupted: %d rejected, %d accepted\n", rejected, accepted);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -1813,6 +2070,9 @@ static void run_cpp_tests()
       {"frozen_host_continuation", test_frozen_host_continuation},
       {"frozen_host_budget_callback", test_frozen_host_budget_callback},
       {"frozen_restore_out_of_memory", test_frozen_restore_out_of_memory},
+      {"frozen_allocation_failures", test_frozen_allocation_failures},
+      {"user_object_kind", test_user_object_kind},
+      {"frozen_corrupted_streams", test_frozen_corrupted_streams},
   };
   std::printf("  styx_tests.cpp\n");
   const char* only = std::getenv("STYX_ONLY"); /* (to run one C++ test, under valgrind: no scripts then) */

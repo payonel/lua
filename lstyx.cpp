@@ -2396,7 +2396,7 @@ private:
       f.part = Part::Object;
       f.type = r_.get_byte();
       f.id = new_id();
-      if (f.kind == Build::Special && f.type != LUA_TTABLE)
+      if (f.type < 0 || f.type >= LUA_NUMTYPES || (f.kind == Build::Special && f.type != LUA_TTABLE))
         r_.invalid();
       frames_.push(f);
       return Next::Read;
@@ -2627,7 +2627,11 @@ private:
         r_.invalid();
       int link = node_link(f);
       if (same_seed())
+      {
+        if (allocsizenode(h) != f.b) /* (a corrupted stream made the table something else) */
+          r_.invalid();
         h->luaH_setnode(L_, f.i, nullptr, state == 1, nullptr, link);
+      }
       f.i++;
     }
     return end_table(f);
@@ -2705,6 +2709,8 @@ private:
       int link = node_link(f);
       if (same_seed())
       {
+        if (allocsizenode(h) != f.b)
+          r_.invalid();
         TValue v = getslot(L_, L_->top - 1);
         h->luaH_setnode(L_, f.i, &k, false, &v, link);
         lua_pop(L_, 1);
@@ -3855,7 +3861,7 @@ static int host_restore_body(lua_State* L)
   for (int i = 0; i < nmarked; i++)
   {
     R.value();
-    if (!lua_istable(L, -1))
+    if (!lua_istable(L, -1) && lua_type(L, -1) != LUA_TUSERDATA)
       R.r_.invalid();
     lua_pop(L, 1);
   }
