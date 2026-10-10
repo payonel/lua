@@ -1504,6 +1504,20 @@ static lua_State* host_state(CountingAlloc* a)
   return L;
 }
 
+/* the state restored for a host_state() (it has the host's function too) */
+static lua_State* restored_host_state(CountingAlloc* a, const std::string& blob)
+{
+  lua_State* B = new_state_for(a, blob);
+  lua_pushcfunction(B, host_callk);
+  lua_setglobal(B, "callk");
+  HostString msg;
+  int st = restore_state(B, blob, &msg);
+  if (st != LUA_OK)
+    std::printf("      host restore error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  return B;
+}
+
 static const char* const host_program =
   "function work(n) local s = 0 for i = 1, n do s = s + i end return s end "
   "log = {} "
@@ -1676,6 +1690,77 @@ static void test_frozen_deferred_gc()
   lua_close(B);
 }
 
+
+/*
+** A thread called by the host (lua_call and lua_pcall on it, not resumed by
+** a coroutine): when it freezes, the call has not returned, and the host's
+** function, its message handler and its results are part of the frozen
+** state (FZ_CALL, FZ_PCALL).
+*/
+static int hostcall_calls = 0;
+static void hostcall_budget(lua_State*, lua_State* spender)
+{
+  hostcall_calls++;
+  if (hostcall_calls == 3)
+    lua_freeze(spender);
+}
+
+static void test_frozen_host_called_thread()
+{
+  lua_registerbudget("styxtest.hostcall_budget", hostcall_budget);
+  for (int variant = 0; variant < 2; variant++)
+  {
+    CountingAlloc a1;
+    lua_State* A = host_state(&a1);
+    CHECK(eval(A, "function work(n) local s = 0 for i = 1, n do s = s + i end return s, 'done' end "
+                  "handlers = 0 "
+                  "co = coroutine.create(print) return 'ok'") == "ok");
+    lua_getglobal(A, "co");
+    lua_State* th = lua_tothread(A, -1);
+    lua_pop(A, 1);
+    lua_getglobal(th, "work");
+    lua_pushinteger(th, 200);
+    hostcall_calls = 0;
+    lua_setbudget(th, 11, hostcall_budget);
+    /* the host calls: 'work' (variant 0: lua_call; 1: lua_pcall with a message handler) */
+    if (variant == 0)
+    {
+      lua_call(th, 1, 2);
+    }
+    else
+    {
+      lua_getglobal(th, "debug");
+      lua_getfield(th, -1, "traceback");
+      lua_remove(th, -2);
+      lua_insert(th, 1);
+      CHECK(lua_pcall(th, 1, 2, 1) == LUA_OK);
+    }
+    CHECK(lua_isfrozen(th));
+    std::string blob = persist_state(A);
+    CHECK(!blob.empty());
+    CountingAlloc a2;
+    lua_State* B = restored_host_state(&a2, blob);
+    lua_getglobal(B, "co");
+    lua_State* thb = lua_tothread(B, -1);
+    lua_pop(B, 1);
+    CHECK(lua_isfrozen(thb));
+    /* thaw both: the host's call returns with its results */
+    for (lua_State* X : {th, thb})
+    {
+      lua_ResumeResult rr = lua_thaw(X, nullptr);
+      while (rr.status == LUA_OK && lua_isfrozen(X))
+        rr = lua_thaw(X, nullptr);
+      CHECK(rr.status == LUA_OK);
+      CHECK(!lua_isfrozen(X));
+      CHECK(lua_gettop(X) >= 2);
+      CHECK(lua_tointeger(X, lua_gettop(X) - 1) == 20100);
+      CHECK(to_string(X, lua_gettop(X)) == "done");
+    }
+    lua_close(A);
+    lua_close(B);
+  }
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -1724,6 +1809,7 @@ static void run_cpp_tests()
       {"frozen_library_cases", test_frozen_library_cases},
       {"frozen_engine_cases", test_frozen_engine_cases},
       {"frozen_deferred_gc", test_frozen_deferred_gc},
+      {"frozen_host_called_thread", test_frozen_host_called_thread},
       {"frozen_host_continuation", test_frozen_host_continuation},
       {"frozen_host_budget_callback", test_frozen_host_budget_callback},
       {"frozen_restore_out_of_memory", test_frozen_restore_out_of_memory},
