@@ -2087,6 +2087,8 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   struct SParser p;
   TStatus status;
   incnny(L); /* cannot yield during parsing */
+  CallInfo* oldci = L->ci;
+  StkId oldtop = L->top;
   p.z = z;
   p.buff.attach(L);
   p.name = name.value_or(lt::qmark);
@@ -2103,7 +2105,16 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);
   decnny(L);
   if (l_unlikely(status == LUA_FREEZE))
-    luaD_throw(L, LUA_FREEZE); /* (the chain is destroyed) */
+  {
+    /* A freeze in the reader function abandons the parse (it starts over
+       after a thaw): what it left in the stack, below the frames of the
+       reader function, is dead, and a closure or prototype half made must
+       not linger there. */
+    if (L->ci != oldci && oldci->next != nullptr)
+      for (StkId s = oldtop; s < oldci->next->func; s++)
+        setslotnil(L, s);
+    luaD_throw(L, LUA_FREEZE); /* (the chain is destroyed, or goes on freezing) */
+  }
   return status;
 }
 
