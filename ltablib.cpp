@@ -359,6 +359,12 @@ TMOVEK(tmovek_downset, -1, AT_SET)
 TMOVEK(tmovek_downnext, -1, AT_NEXT)
 TMOVEK(tmovek_downloop, -1, AT_LOOP)
 #undef TMOVEK
+LUA_KNAME("table", tmovek_upset);
+LUA_KNAME("table", tmovek_upnext);
+LUA_KNAME("table", tmovek_uploop);
+LUA_KNAME("table", tmovek_downset);
+LUA_KNAME("table", tmovek_downnext);
+LUA_KNAME("table", tmovek_downloop);
 
 static int tmove_loop(lua_State* L, lua_Integer i, int dir, int at)
 {
@@ -796,7 +802,13 @@ static lua_Integer* sort_box(lua_State* L, lua_Integer* s)
   if (s[SO_BOXED])
     return s;
   size_t size = sizeof(lua_Integer) * (size_t)s[SO_NINTS];
-  lua_Integer* box = static_cast<lua_Integer*>(lua_newuserdatauv(L, size, 0));
+  luaL_Box* b = luaL_newbox(L); /* (a box can be kept outside the process) */
+  luaL_Buffer buf;
+  luaL_buffinit(L, &buf);
+  luaL_prepbuffsize(&buf, size);
+  luaL_addsize(&buf, size);
+  luaL_buffsave(&buf, b);
+  lua_Integer* box = reinterpret_cast<lua_Integer*>(b->bytes.data());
   memcpy(box, s, size);
   box[SO_BOXED] = 1;
   lua_replace(L, 3);
@@ -1030,7 +1042,7 @@ static int sortk(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   (void)ctx;
-  return sort_run(L, static_cast<lua_Integer*>(lua_touserdata(L, 3)));
+  return sort_run(L, reinterpret_cast<lua_Integer*>(luaL_tobox(L, 3)->bytes.data()));
 }
 
 LUA_KNAME("table", sortk);
