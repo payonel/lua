@@ -20,10 +20,9 @@ int lua_islightcfunction(lua_State* L, int idx);
 ** the engine's light C functions, and budget callbacks. The lookups answer
 ** nullptr for what has no name.
 */
-void lua_registerk(const char* name, lua_KFunction k);
 const char* lua_kname(lua_KFunction k);
 lua_KFunction lua_kbyname(byte_view name);
-void lua_registerbudget(const char* name, lua_Budget f, void (*prepare)(lua_State*) = nullptr);
+void lua_registerbudget(const char* name, lua_Budget f, void (*prepare)(lua_State*));
 /* what a budget with callback 'f' needs of a state it comes into (such as the thread its callback runs on) */
 void lua_preparebudget(lua_State* L, lua_Budget f);
 const char* lua_budgetname(lua_Budget f);

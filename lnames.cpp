@@ -67,6 +67,11 @@ lua_KFunction lua_kbyname(byte_view name)
   return it == names().kbyname.end() ? nullptr : it->second;
 }
 
+void lua_registerbudget(const char* name, lua_Budget f)
+{
+  lua_registerbudget(name, f, nullptr);
+}
+
 void lua_registerbudget(const char* name, lua_Budget f, void (*prepare)(lua_State*))
 {
   names().budgetbyname[name] = f;

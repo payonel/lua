@@ -489,11 +489,18 @@ static int test_cont(lua_State*, int, lua_KContext)
 }
 LUA_KNAME("test", test_cont);
 
+static void test_budget(lua_State*, lua_State*) {}
+
 static void test_function_names()
 {
   CHECK(lua_kname(test_cont) != nullptr && std::string(lua_kname(test_cont)) == "test.test_cont");
   CHECK(lua_kbyname("test.test_cont") == test_cont);
   CHECK(lua_kbyname("test.nothing") == nullptr && lua_kname(nullptr) == nullptr);
+  /* a host names its own through the public function */
+  lua_registerk("host.my_cont", test_cont);
+  CHECK(lua_kbyname("host.my_cont") == test_cont);
+  lua_registerbudget("host.my_budget", test_budget);
+  CHECK(lua_budgetbyname("host.my_budget") == test_budget && std::string(lua_budgetname(test_budget)) == "host.my_budget");
   /* the continuations of the libraries */
   for (const char* n : {"base.finishpcall", "base.printk", "base.load_cont", "coroutine.coresume_cont",
                         "coroutine.auxwrap_cont", "string.gsubk", "string.formatk", "table.sortk",

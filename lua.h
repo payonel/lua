@@ -376,6 +376,17 @@ int(lua_status)(lua_State* L);
 ** 'lua_thaw' goes on with a frozen coroutine and returns like
 ** 'lua_resume'; it is an error in the callback or from budgeted code.
 */
+/*
+** Names for the host's continuations and budget callbacks. A tool that keeps
+** a state outside the process (a frozen thread has continuations in its
+** frames and a callback in its budget group) cannot keep an address: it
+** keeps the name, and finds the function by it where it restores. The
+** engine's own functions are named already; a name is stable from one run
+** to the next, and not the same as another's.
+*/
+void(lua_registerk)(const char* name, lua_KFunction k);
+void(lua_registerbudget)(const char* name, lua_Budget f);
+
 void(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
 lua_Integer(lua_getbudget)(lua_State* co, lua_Integer* left);
 [[noreturn]] void(lua_freeze)(lua_State* L);
