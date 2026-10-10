@@ -5270,6 +5270,16 @@ static int resumek_cont(lua_State* L, int status, lua_KContext ctx)
   return resumek_end(L, co, {status, lua_resumenres(co, status)});
 }
 
+/* a C function that marks its argument to be closed and returns: the
+   '__close' runs as it returns (and can freeze there) */
+static int cf_tbcret(lua_State* L)
+{
+  lua_settop(L, 1);
+  lua_toclose(L, 1);
+  lua_pushinteger(L, 5);
+  return 1;
+}
+
 static int cf_resumek(lua_State* L)
 {
   lua_State* co = lua_tothread(L, 1);
@@ -5286,7 +5296,7 @@ static void test_api_freezable()
       {"getglobalk", cf_getglobalk}, {"setglobalk", cf_setglobalk}, {"callmetak", cf_callmetak},
       {"tolstringk", cf_tolstringk}, {"luallenk", cf_luallenk}, {"getsubtablek", cf_getsubtablek},
       {"requirefk", cf_requirefk}, {"dostringk", cf_dostringk}, {"dofilek", cf_dofilek},
-      {"resumek", cf_resumek}};
+      {"resumek", cf_resumek}, {"tbcret", cf_tbcret}};
   for (const auto& f : fs)
   {
     lua_pushcfunction(L, f.f);
@@ -5452,6 +5462,64 @@ static void test_api_freezable()
       os.remove(path)
       assert(expectsusp(t[1]) and t[2] == true and t[3] == 42 and t[5] == "file" and t[6] == 3 and t[7] == 0, t[1])
       pauser = nil
+    end
+
+    -- the helpers that complete at once when what they call does not suspend
+    -- (no coroutine, no budget): the plain results
+    do
+      local plain = setmetatable({}, {__foo = function() return "foo" end})
+      local t = res(callmetak(plain))
+      assert(t.n == 4 and t[1] == false and t[2] == 0 and t[3] == plain and t[4] == "foo", "callmetak " .. t.n .. tostring(t[1]) .. tostring(t[2]) .. tostring(t[4]) .. tostring(t[5]))
+      local path = os.tmpname()
+      local f = assert(io.open(path, "w")) f:write("return 7, 8") f:close()
+      t = res(dofilek(path))
+      assert(t.n == 6 and t[4] == 7 and t[5] == 8 and t[6] == 0, "dofilek " .. t.n .. " " .. tostring(t[3]) .. " " .. tostring(t[4]) .. " " .. tostring(t[5]) .. " " .. tostring(t[6]))
+      os.remove(path)
+      t = res(dofilek(path)) -- no such file: the load fails, the status is in the stack
+      assert(t[t.n] ~= 0 and type(t[t.n - 1]) == "string", tostring(t[t.n])) -- the message, then the status
+      t = res(dostringk("return 1"))
+      assert(t.n == 5 and t[4] == 1 and t[5] == 0, t.n)
+    end
+
+    -- in a thread that cannot yield (a comparator of sort): a freeze goes through
+    -- the helper, which then finishes without yielding
+    do
+      local function nny(f)
+        return function(...)
+          local args = table.pack(...)
+          local r
+          table.sort({2, 1}, function() r = table.pack(f(table.unpack(args, 1, args.n))) return false end)
+          return table.unpack(r, 1, r.n)
+        end
+      end
+      local p = noop
+      log = {}
+      local function closable(name)
+        return setmetatable({}, {__close = function() p() log[#log + 1] = name end})
+      end
+      local n, ran, ctx, a = frozen(nny(settopk), closable("a"), closable("b"))
+      assert(n > 0 and ran == true and ctx == 31 and a == nil and #log == 2 and log[1] == "b" and log[2] == "a")
+      log = {}
+      n, ran, ctx, a = frozen(nny(closeslotk), closable("s"))
+      assert(n > 0 and ran == true and ctx == 32 and a == nil and #log == 1)
+      log = {}
+      -- a C function that returns with a variable to close, closed as it returns
+      n, ran, ctx = frozen(tbcret, closable("r"))
+      assert(n > 0 and #log == 1 and log[1] == "r")
+    end
+
+    -- in the callback, canfreeze from another thread: no freeze from there
+    do
+      local seen
+      local co = coroutine.create(function() for i = 1, 40 do end end)
+      debug.setbudget(co, 5, function()
+        local ok, why = coroutine.wrap(debug.canfreeze)()
+        seen = {ok, why}
+        debug.freeze()
+      end)
+      coroutine.resume(co)
+      while debug.isfrozen(co) do debug.thaw(co) end
+      assert(seen[1] == false and seen[2] == "no budget in effect", tostring(seen[2]))
     end
 
     -- lua_resumek: a freeze of the coroutine resumed passes through the

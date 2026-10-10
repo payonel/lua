@@ -207,3 +207,25 @@ do
   assert(coroutine.resume(V))
   assert(k > 10)
 end
+
+-- many groups alive at once (the table of owner ids grows), each with its own
+-- objects that wait for their '__gc'
+do
+  local cos, ran = {}, 0
+  for i = 1, 100 do
+    local c = coroutine.create(function()
+      setmetatable({}, {__gc = function() ran = ran + 1 end})
+      coroutine.yield()
+      for _ = 1, 3 do end
+    end)
+    debug.setbudget(c, i + 1000, function() end)
+    assert(coroutine.resume(c))
+    cos[i] = c
+  end
+  for i = 1, 100 do assert(debug.getbudget(cos[i]) == i + 1000) end
+  collectgarbage()
+  assert(ran == 0) -- (each waits for a thread of its group)
+  for i = 1, 100 do assert(coroutine.resume(cos[i])) end
+  assert(ran == 100, ran)
+  for i = 1, 100 do assert(debug.getbudget(cos[i]) == i + 1000) end
+end

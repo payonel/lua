@@ -131,3 +131,35 @@ do
   assert(debug.isfrozen(co)) -- (nothing changed)
   assert(debug.thaw(co))
 end
+
+-- a userdata (with its metatable) and a C closure (with its upvalue) that the
+-- program shares with the VM, and the permanents written as a list
+do
+  local co = program({yield = coroutine.yield, f = io.stdout, req = require},
+                     "local a, b = f, req yield()")
+  assert(has(co, io.stdout) == "userdata")
+  assert(has(co, require) == "function")
+  assert(has(co, package) == "table") -- (the upvalue of 'require')
+  assert(has(co, io.stdout, {io.stdout}) == nil) -- exempt as the value of a list
+  assert(has(co, require, {require}) == nil and has(co, package, {require}) == "table") -- (what 'package' refers to is still shared)
+end
+
+-- a frozen chain, frozen in the coroutine that was resumed: it is checked too
+do
+  local K = {}
+  local inner
+  local co = coroutine.create(assert(load(
+    "inner = coroutine.create(function() for i = 1, 400 do local x = K end end) coroutine.resume(inner)",
+    "=user", "t", {K = K, coroutine = {create = coroutine.create, resume = coroutine.resume},
+                   set = function(c) inner = c end})))
+  local n = 0
+  debug.setbudget(co, 20, function() n = n + 1 if n == 5 then debug.freeze() end end)
+  assert(coroutine.resume(co))
+  assert(debug.isfrozen(co))
+  local ok, why, list = detached(co)
+  assert(ok == false and why == VM)
+  local found = false
+  for _, e in ipairs(list) do if e.value == K then found = true end end
+  assert(found)
+  assert(debug.thaw(co))
+end

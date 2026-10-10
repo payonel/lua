@@ -581,10 +581,12 @@ static void test_object_kinds()
 ** given, even though they are alive and the collector is stopped; one whose
 ** group is gone is ordinary and runs none.
 */
-static void test_make_due()
+static void test_make_due(bool generational)
 {
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
+  if (generational)
+    CHECK(luaL_dostring(L, "collectgarbage('generational')") == LUA_OK);
   CHECK(luaL_dostring(L, "collectgarbage('stop') log = {} keep = {} local mt = {__gc = function(o) log[#log + 1] = o.name end} "
                          "for _, n in ipairs{'a', 'b', 'c', 'd'} do keep[n] = setmetatable({name = n}, mt) end") == LUA_OK);
   GCObject* objs[4];
@@ -597,7 +599,13 @@ static void test_make_due()
     lua_pop(L, 2);
   }
   objs[3]->owner = 65535; /* its group is gone */
-  lua::gc::luaC_makedue(L, objs, 4);
+  /* (one more that is not marked for finalization: nothing happens to it) */
+  CHECK(luaL_dostring(L, "plain = {name = 'plain'}") == LUA_OK);
+  lua_getglobal(L, "plain");
+  GCObject* notmarked = static_cast<GCObject*>(const_cast<void*>(lua_topointer(L, -1)));
+  lua_pop(L, 1);
+  GCObject* given[5] = {objs[0], objs[1], objs[2], objs[3], notmarked};
+  lua::gc::luaC_makedue(L, given, 5);
   CHECK(luaL_dostring(L, "collectgarbage() return table.concat(log, ',')") == LUA_OK);
   CHECK(std::string(lua_tolstring(L, -1)->data(), lua_tolstring(L, -1)->size()) == "c,a,d");
   lua_close(L);
@@ -616,7 +624,8 @@ int main()
   test_order_independent_of_interned_strings();
   test_function_names();
   test_object_kinds();
-  test_make_due();
+  test_make_due(false);
+  test_make_due(true);
   if (g_failures == 0)
     std::printf("\n\tOK - engine: %d checks, 0 failures\n\n", g_checks);
   else

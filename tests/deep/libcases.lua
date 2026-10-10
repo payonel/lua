@@ -492,6 +492,17 @@ case("debug hooks: call and return events", function(busy)
   debug.sethook()
   return a, b, c, table.concat(log, ",")
 end)
+case("debug hooks: a return hook after the variables of the function are closed", function(busy)
+  local log = {}
+  local function f(...)
+    local v <close> = setmetatable({}, {__close = function() busy() log[#log + 1] = "closed" end})
+    return "r1", "r2", ...
+  end
+  debug.sethook(function(ev) busy() log[#log + 1] = ev end, "r")
+  local a, b, c = f("x")
+  debug.sethook()
+  return a, b, c, table.concat(log, ",")
+end)
 case("debug hooks: line and count events", function(busy)
   local lines, counts = 0, 0
   local function f()
