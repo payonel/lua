@@ -55,6 +55,10 @@ constexpr char TAG_PROTO_REF = 16;  /* a prototype already written */
 constexpr char TAG_STATE = 17;      /* a whole state: seed, registry, type metatables */
 constexpr char TAG_MAINTHREAD = 18; /* the main thread of the state being restored */
 constexpr char TAG_UPVAL_PERM = 19; /* a variable that is a permanent: its key */
+constexpr char TAG_GROUP = 20;      /* a budget group: its limit, steps left, callback, value and thread */
+constexpr char TAG_CFI = 21;        /* a light C function of the engine, by its name */
+constexpr char TAG_USEROBJECT = 22; /* a user object of a registered kind: its state, metatable, user values */
+constexpr char TAG_CCLOSURE = 23;   /* a C closure of a registered kind: its state and upvalues */
 
 /*
 ** An object's hash (ADR-30) is written as its place in the sequence of the
@@ -275,6 +279,10 @@ enum class Step : char
   Special,   /* closure returned by __persist */
   PermKey,   /* key of a permanent */
   Hook,      /* a thread's debug hook function */
+  Group,     /* a thread's budget group, or a group's value */
+  Chain,     /* the thread before or after it in a frozen chain */
+  Meta,      /* a user object's metatable */
+  UserValue, /* a user object's user value 'n' */
 };
 
 struct PathRec
@@ -902,7 +910,7 @@ private:
         break;
       case Step::Upvalue:
       {
-        const TString* name = r.proto->upvalues[static_cast<size_t>(r.n - 1)].name;
+        const TString* name = (r.proto != nullptr) ? r.proto->upvalues[static_cast<size_t>(r.n - 1)].name : nullptr;
         if (name != nullptr && name->data.size() > 0)
           add(format(lt::path_upvalue_s, {text(name->data.view())}));
         else
@@ -920,6 +928,18 @@ private:
         break;
       case Step::Hook:
         add(text(lt::path_hook));
+        break;
+      case Step::Group:
+        add(text(lt::path_budget_group));
+        break;
+      case Step::Chain:
+        add(text(lt::path_frozen_chain));
+        break;
+      case Step::Meta:
+        add(text(lt::path_metatable));
+        break;
+      case Step::UserValue:
+        add(format(lt::path_user_value_d, {std::to_string(r.n)}));
         break;
       }
     }
@@ -1061,6 +1081,7 @@ private:
     case LUA_TFUNCTION:
     case LUA_TTHREAD:
     case LUA_TUSERDATA:
+    case LUA_TBUDGET:
       break;
     default:
       fail(format(lt::cannot_persist_a_s_value, {text(ttypename(ttype(&v)))}));
@@ -1078,19 +1099,148 @@ private:
       return;
     }
     case LUA_TUSERDATA:
-      fail(lt::persisting_a_userdata_value_is_not_supported_yet);
+      userobject(uvalue(&v));
+      return;
     case LUA_TTABLE:
       table(hvalue(&v));
       return;
     case LUA_TFUNCTION:
-      if (!ttisLclosure(&v))
-        fail(lt::cannot_persist_a_C_function);
-      closure(clLvalue(&v));
+      if (ttisLclosure(&v))
+        closure(clLvalue(&v));
+      else
+        cfunction(v);
+      return;
+    case LUA_TBUDGET:
+      group(static_cast<BudgetGroup*>(gcvalue(&v)));
       return;
     default:
       thread(thvalue(&v));
       return;
     }
+  }
+
+  /*
+  ** A user object of a registered kind: the name of its kind, its
+  ** accounting size, its state as integers and bytes, then its metatable and
+  ** user values. Any other userdata is for the permanents.
+  */
+  void userobject(Udata* u)
+  {
+    const char* kind = (u->obj != nullptr) ? u->obj->persistkind() : nullptr;
+    if (kind == nullptr)
+      fail(lt::persisting_a_userdata_value_is_not_supported_yet);
+    lua_Integer ints[8];
+    byte_view bytes;
+    int n = u->obj->persistsave(ints, &bytes);
+    byte(TAG_USEROBJECT);
+    hash(u);
+    name(kind);
+    var(static_cast<lua_Integer>(u->objsize));
+    var(static_cast<lua_Integer>(u->uv.size()));
+    var(n);
+    for (int i = 0; i < n; i++)
+      var(ints[i]);
+    var(static_cast<lua_Integer>(bytes.size()));
+    raw(bytes.data(), bytes.size());
+    for (size_t i = u->uv.size(); i-- > 0;)
+    {
+      TValue v = getobj(&u->uv[i]);
+      Task t;
+      t.op = Op::Value;
+      t.step.step = Step::UserValue;
+      t.step.n = static_cast<int>(i + 1);
+      t.v = Slot::of(v);
+      tasks_.push(t);
+    }
+    TValue mt{};
+    if (u->metatable != nullptr)
+      sethvalue(L_, &mt, u->metatable);
+    else
+      setnilvalue(&mt);
+    push_value(mt, Step::Meta);
+  }
+
+  /* a name, as a length and its bytes */
+  void name(const char* n)
+  {
+    size_t len = std::strlen(n);
+    var(static_cast<lua_Integer>(len));
+    raw(n, len);
+  }
+
+  /*
+  ** A C function that is part of the engine is written by its name (the
+  ** permanents of the persisting host come first, in 'begin_object').
+  */
+  void cfunction(const TValue& v)
+  {
+    if (ttislcf(&v))
+    {
+      const char* n = lua_cfiname(static_cast<const CFuncInfo*>(v.value_.ref));
+      if (n != nullptr)
+      {
+        byte(TAG_CFI);
+        name(n);
+        return;
+      }
+    }
+    if (ttisCclosure(&v))
+    {
+      const CClosure* cl = clCvalue(&v);
+      const lua_CClosureKind* kind = lua_cclosurekind(cl->f);
+      if (kind != nullptr && cl->upvalue.size() == static_cast<size_t>(kind->nup))
+      {
+        lua_Integer ints[8];
+        int n = (kind->save != nullptr) ? kind->save(cl, ints) : 0;
+        int nvals = (kind->save != nullptr) ? kind->nup - 1 : kind->nup;
+        byte(TAG_CCLOSURE);
+        hash(cl);
+        name(kind->name);
+        var(n);
+        for (int i = 0; i < n; i++)
+          var(ints[i]);
+        for (int i = nvals; i-- > 0;)
+        {
+          TValue u = getobj(&cl->upvalue[static_cast<size_t>(i)]);
+          Task t;
+          t.op = Op::Value;
+          t.step.step = Step::Upvalue;
+          t.step.n = i + 1;
+          t.step.proto = nullptr;
+          t.v = Slot::of(u);
+          tasks_.push(t);
+        }
+        return;
+      }
+    }
+    fail(lt::cannot_persist_a_C_function);
+  }
+
+  /*
+  ** A budget group: its limit and steps left, the name of its callback (the
+  ** debug library's, or one the host named), whether a thaw went on, then
+  ** its value and the thread it was set on. The dead objects that wait for
+  ** their '__gc' are not written yet.
+  */
+  void group(BudgetGroup* bg)
+  {
+    if (bg->fnz.next != nullptr)
+      fail(lt::cannot_persist_a_budget_group_with_pending___gc_yet);
+    const char* n = lua_budgetname(bg->f);
+    if (n == nullptr)
+      fail(lt::cannot_persist_a_budget_callback_that_has_no_name);
+    byte(TAG_GROUP);
+    var(bg->budget);
+    var(bg->left);
+    name(n);
+    byte(bg->nodrain ? 1 : 0);
+    TValue root{};
+    if (bg->root != nullptr)
+      setthvalue(L_, &root, bg->root);
+    else
+      setnilvalue(&root);
+    push_value(root, Step::Group);
+    push_value(bg->cb, Step::Group);
   }
 
   /*
@@ -1358,7 +1508,7 @@ private:
 
   bool is_running(lua_State* T)
   {
-    return (!host_ && T == L_) || (T->status == LUA_OK && T->ci != &T->base_ci);
+    return (!host_ && T == L_) || (T->status == LUA_OK && T->ci != &T->base_ci && T->frozen == 0);
   }
 
   void upvalue(const LClosure* cl, int i)
@@ -1464,10 +1614,8 @@ private:
     {
       for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
       {
-        if (ci->k != nullptr)
-          fail(format(lt::cannot_persist_a_thread_with_s, {text(lt::a_continuation_function)}));
-        if (ci->callstatus & (CIST_HOOKED | CIST_HOOKYIELD | CIST_FIN | CIST_TBC | CIST_CLSRET))
-          fail(format(lt::cannot_persist_a_thread_with_s, {text(lt::a_hook_or_finalizer_call)}));
+        if (ci->k != nullptr && lua_kname(ci->k) == nullptr)
+          fail(format(lt::cannot_persist_a_thread_with_s, {text(lt::a_continuation_that_has_no_name)}));
         if (ci->top > maxtop)
           maxtop = ci->top;
         if (ci == T->ci)
@@ -1524,13 +1672,83 @@ private:
         i64(ci->funcidx);
         i64(ci->nyield);
         i64(ci->nres);
+        /* what a freeze keeps in a frame: the continuation (by name), the
+           calls it runs with, how an API call goes on, a hook function in
+           progress */
+        const char* kn = (ci->k != nullptr) ? lua_kname(ci->k) : nullptr;
+        byte(kn != nullptr ? 1 : 0);
+        if (kn != nullptr)
+          name(kn);
+        var(ci->nccalls);
+        /* (an API call's and a hook's state mean something only while they
+           are going on; the rest is stale: not written) */
+        bool api = (ci->callstatus & CIST_APIK) != 0;
+        bool hooked = (ci->callstatus & CIST_HOOKED) != 0;
+        byte(static_cast<char>(api ? ci->apiop : 0));
+        var(api ? ci->apifirst : 0);
+        byte(static_cast<char>(hooked ? ci->hookev : 0));
+        byte(static_cast<char>(hooked ? ci->hookdone : 0));
+        var(hooked ? ci->hooktop : 0);
+        var(hooked ? ci->hookcitop : 0);
+        var(hooked ? ci->hookdelta : 0);
+        var(hooked ? ci->hookres : 0);
         if (ci == T->ci)
           break;
       }
     i64(T->ntbc);
     for (int k = 0; k < T->ntbc; k++)
       i64(T->tbc[k]);
+    /* the extras (after the hook, whose function is a value): the state of a
+       frozen thread, then its budget groups and its places in a chain */
+    push_thread_values(T);
+    thread_extras(T);
     hook(T);
+  }
+
+  /* the values after a thread's extras, pushed to be written in this order:
+     its own group, its group in effect, the thread that resumed it, the
+     thread it resumed (frozen) */
+  void push_thread_values(lua_State* T)
+  {
+    auto thread_or_nil = [&](lua_State* th)
+    {
+      TValue v{};
+      if (th != nullptr)
+        setthvalue(L_, &v, th);
+      else
+        setnilvalue(&v);
+      push_value(v, Step::Chain);
+    };
+    auto group_or_nil = [&](BudgetGroup* bg)
+    {
+      TValue v{};
+      if (bg != nullptr)
+        setgcovalue(L_, &v, bg);
+      else
+        setnilvalue(&v);
+      push_value(v, Step::Group);
+    };
+    thread_or_nil(T->frozenchild);
+    thread_or_nil(T->frozenparent);
+    group_or_nil(T->beff);
+    group_or_nil(T->bown);
+  }
+
+  /* the raw state of a frozen thread (written before the debug hook) */
+  void thread_extras(lua_State* T)
+  {
+    byte(static_cast<char>(T->frozen));
+    if (T->frozen == 0)
+      return;
+    var(T->frozenfunc);
+    var(T->frozenerrfunc);
+    var(T->frozennres);
+    var(T->frozencc);
+    var(T->ccbase);
+    var(T->nCcalls);
+    var(T->errfunc);
+    byte(static_cast<char>(T->closestatus));
+    byte(T->closeself ? 1 : 0);
   }
 
   /*
@@ -1548,7 +1766,7 @@ private:
     if (T->hook != luaL_debughook())
       fail(lt::a_hook_not_set_by_the_debug_library_is_not_supported_yet);
     byte(1);
-    i64(T->hookmask);
+    i64(T->hookmask & ~LUA_MASKBUDGET); /* (the budget is its group's) */
     i64(T->basehookcount);
     i64(T->hookcount);
     i64(T->oldpc);
@@ -1760,6 +1978,9 @@ enum class Build : char
   Closure,
   Proto,
   Thread,
+  Group,
+  Userobject,
+  CClosure,
 };
 
 /* the part a frame waits for */
@@ -1786,6 +2007,15 @@ enum class Part : char
   LocVar,    /* Proto: the name of local variable 'i' */
   Slots,     /* Thread: stack slot 'i' */
   HookFn,    /* Thread: its hook function */
+  Bown,      /* Thread: its own budget group */
+  Beff,      /* Thread: its group in effect */
+  Parent,    /* Thread: the thread that resumed it (frozen) */
+  Child,     /* Thread: the thread it resumed (frozen) */
+  GroupCb,   /* Group: its value */
+  GroupRoot, /* Group: the thread it was set on */
+  UMeta,     /* Userobject: its metatable */
+  UValue,    /* Userobject: user value 'i' */
+  CUp,       /* CClosure: upvalue 'i' */
 };
 
 struct Frame
@@ -2110,6 +2340,25 @@ private:
     case TAG_THREAD:
       start_thread(new_id());
       return Next::Advance;
+    case TAG_GROUP:
+      start_group(new_id());
+      return Next::Read;
+    case TAG_USEROBJECT:
+      start_userobject(new_id());
+      return Next::Read;
+    case TAG_CCLOSURE:
+      return start_cclosure(new_id());
+    case TAG_CFI:
+    {
+      lua_Integer id = new_id();
+      CFuncInfo* cfi = lua_cfibyname(read_name());
+      if (cfi == nullptr)
+        r_.invalid();
+      setslotf(L_, L_->top, cfi);
+      L_->top++;
+      register_top(id);
+      return Next::Ready;
+    }
     case TAG_MAINTHREAD:
     {
       if (!host_) /* a script never gets the main thread from a stream */
@@ -2140,6 +2389,12 @@ private:
       return closure_part(f);
     case Build::Proto:
       return proto_part(f);
+    case Build::Group:
+      return group_part(f);
+    case Build::Userobject:
+      return userobject_part(f);
+    case Build::CClosure:
+      return cclosure_part(f);
     default:
       return thread_part(f);
     }
@@ -2467,11 +2722,13 @@ private:
   {
     global_State* g = L_->l_G;
     lua_lock(L_);
-    Proto* p = Proto::luaF_newproto(L_);
+    /* (the holder first, anchored on the stack: making the prototype can
+       run an emergency collection, which would take it) */
     LClosure* holder = LClosure::luaF_newLclosure(L_, 0);
-    holder->p = p;
     setslotclL(L_, L_->top, holder);
     L_->top++;
+    Proto* p = Proto::luaF_newproto(L_);
+    holder->p = p;
     luaC_objbarrier(L_, holder, p);
     lua_unlock(L_);
     register_top(pid);
@@ -2731,7 +2988,7 @@ private:
     {
       lua_State* L1 = lua_tothread(L_, -1);
       lua_Integer level = r_.get_var();
-      if (L1 == nullptr || L1 == L_ || (L1->status == LUA_OK && L1->ci != &L1->base_ci) ||
+      if (L1 == nullptr || L1 == L_ || (L1->status == LUA_OK && L1->ci != &L1->base_ci && L1->frozen == 0) ||
           level < 0 || level >= L1->top)
         r_.invalid();
       FindUpval fu;
@@ -2819,17 +3076,19 @@ private:
     if (f.i < f.a)
       return Next::Read;
     lua_Integer nframes = r_.get_i64();
-    if (nframes < 0 || (nframes > 0 && f.type == LUA_OK))
+    if (nframes < 0)
       r_.invalid();
     if (nframes > 0)
       read_frames(L1, nframes, f.a, f.b);
     read_tbc(L1, nframes, f.a);
+    read_thread_extras(L1, f.a);
+    if (nframes > 0 && f.type == LUA_OK && L1->frozen == 0)
+      r_.invalid(); /* (frames of a thread not started or dead: only a frozen one has them) */
     char kind = r_.get_byte();
     if (kind == 0)
     {
       L1->status = static_cast<TStatus>(f.type);
-      push_thread(L1);
-      return done();
+      return thread_values(f);
     }
     if (kind != 1)
       r_.invalid();
@@ -2851,6 +3110,8 @@ private:
   Next thread_part(Frame f)
   {
     lua_State* L1 = static_cast<lua_State*>(f.p);
+    if (f.part >= Part::Bown)
+      return thread_chain_part(f);
     if (f.part == Part::Slots)
     {
       copyslot(L1, static_cast<StkId>(f.i), L_, L_->top - 1);
@@ -2882,7 +3143,334 @@ private:
     L1->oldpc = static_cast<int>(f.d);
     L1->allowhook = static_cast<lu_byte>(f.e);
     L1->status = static_cast<TStatus>(f.type);
-    push_thread(L1);
+    return thread_values(f);
+  }
+
+  /* what a frozen thread keeps (see Walker::thread_extras) */
+  void read_thread_extras(lua_State* L1, lua_Integer top)
+  {
+    char fz = r_.get_byte();
+    if (fz < 0 || fz > FZ_CLOSE)
+      r_.invalid();
+    if (fz == 0)
+      return;
+    L1->frozen = static_cast<lu_byte>(fz);
+    L1->frozenfunc = r_.get_var();
+    L1->frozenerrfunc = r_.get_var();
+    L1->frozennres = r_.get_int();
+    L1->frozencc = static_cast<l_uint32>(r_.get_var());
+    L1->ccbase = static_cast<l_uint32>(r_.get_var());
+    L1->nCcalls = static_cast<l_uint32>(r_.get_var());
+    L1->errfunc = r_.get_var();
+    char cs = r_.get_byte();
+    char self = r_.get_byte();
+    if (L1->frozenfunc < 0 || L1->frozenfunc > top || L1->frozenerrfunc < 0 || L1->frozenerrfunc > top ||
+        L1->frozennres < -1 || L1->errfunc < 0 || L1->errfunc > top || cs < 0 || (self != 0 && self != 1))
+      r_.invalid();
+    L1->closestatus = static_cast<lu_byte>(cs);
+    L1->closeself = (self == 1);
+  }
+
+  /* the values after the raw parts of a thread: its groups and chain */
+  Next thread_values(Frame f)
+  {
+    f.part = Part::Bown;
+    frames_.set_top(f);
+    return Next::Read;
+  }
+
+  /* a budget group (or nil) on top of the stack, popped */
+  BudgetGroup* pop_group()
+  {
+    TValue v = getslot(L_, L_->top - 1);
+    BudgetGroup* bg = nullptr;
+    if (!ttisnil(&v))
+    {
+      if (!iscollectable(&v) || gcvalue(&v)->tt != LUA_VBUDGET)
+        r_.invalid();
+      bg = static_cast<BudgetGroup*>(gcvalue(&v));
+    }
+    lua_pop(L_, 1);
+    return bg;
+  }
+
+  /* a thread (or nil) on top of the stack, popped */
+  lua_State* pop_thread()
+  {
+    lua_State* th = nullptr;
+    if (!lua_isnil(L_, -1))
+    {
+      th = lua_tothread(L_, -1);
+      if (th == nullptr)
+        r_.invalid();
+    }
+    lua_pop(L_, 1);
+    return th;
+  }
+
+  Next thread_chain_part(Frame f)
+  {
+    lua_State* L1 = static_cast<lua_State*>(f.p);
+    switch (f.part)
+    {
+    case Part::Bown:
+      L1->bown = pop_group();
+      f.part = Part::Beff;
+      break;
+    case Part::Beff:
+    {
+      BudgetGroup* bg = pop_group();
+      if (L1->frozen != 0 && (bg == nullptr || L1->bown == nullptr))
+        r_.invalid(); /* (a thread frozen by a budget has its groups) */
+      luaE_setbeff(L1, bg);
+      f.part = Part::Parent;
+      break;
+    }
+    case Part::Parent:
+    {
+      /* (the chain is linked from either end, whichever is read first) */
+      lua_State* p = pop_thread();
+      L1->frozenparent = p;
+      if (p != nullptr)
+      {
+        if (p == L1 || (p->frozenchild != nullptr && p->frozenchild != L1))
+          r_.invalid();
+        p->frozenchild = L1;
+      }
+      f.part = Part::Child;
+      break;
+    }
+    default: /* Part::Child */
+    {
+      lua_State* c = pop_thread();
+      if (c != nullptr)
+      {
+        if (c == L1 || (c->frozenparent != nullptr && c->frozenparent != L1) ||
+            (L1->frozenchild != nullptr && L1->frozenchild != c))
+          r_.invalid();
+        c->frozenparent = L1;
+        L1->frozenchild = c;
+      }
+      else if (L1->frozenchild != nullptr)
+        r_.invalid(); /* (a thread says it was resumed by this one, which says it was not) */
+      if ((L1->frozenparent != nullptr || L1->frozenchild != nullptr) && L1->frozen == 0)
+        r_.invalid();
+      push_thread(L1);
+      return done();
+    }
+    }
+    frames_.set_top(f);
+    return Next::Read;
+  }
+
+  /* ---- user objects ---- */
+
+  void start_userobject(lua_Integer id)
+  {
+    unsigned int hash = get_hash();
+    lua_ObjectFactory factory = lua_objectkind(read_name());
+    lua_Integer objsize = r_.get_var();
+    lua_Integer nuv = r_.get_var();
+    int nints = r_.get_count(1);
+    if (factory == nullptr || objsize < 0 || nuv < 0 || nuv > 255 || nints > 8)
+      r_.invalid();
+    lua_Integer ints[8];
+    for (int i = 0; i < nints; i++)
+      ints[i] = r_.get_var();
+    int nbytes = r_.get_count(1);
+    byte_view bytes = r_.get_bytes(static_cast<size_t>(nbytes));
+    std::unique_ptr<lua_UserObject> obj = factory(L_, ints, nints, bytes);
+    if (obj == nullptr)
+      r_.invalid();
+    lua_newuserobject(L_, std::move(obj), static_cast<size_t>(objsize), static_cast<int>(nuv));
+    TValue t = getslot(L_, L_->top - 1);
+    uvalue(&t)->hash = hash;
+    register_top(id);
+    lua_pop(L_, 1);
+    Frame f;
+    f.kind = Build::Userobject;
+    f.part = Part::UMeta;
+    f.id = id;
+    f.n = static_cast<int>(nuv);
+    f.i = 1;
+    f.p = uvalue(&t);
+    frames_.push(f);
+  }
+
+  Next userobject_part(Frame f)
+  {
+    Udata* u = static_cast<Udata*>(f.p);
+    TValue v = getslot(L_, L_->top - 1);
+    if (f.part == Part::UMeta)
+    {
+      if (ttisnil(&v))
+        u->metatable = nullptr;
+      else
+      {
+        if (!ttistable(&v))
+          r_.invalid();
+        u->metatable = hvalue(&v);
+        luaC_objbarrier(L_, u, u->metatable);
+        luaC_checkfinalizer(L_, u, u->metatable);
+      }
+      lua_pop(L_, 1);
+    }
+    else
+    {
+      copyobj(&u->uv[static_cast<size_t>(f.i - 1)], &v);
+      luaC_barrier(L_, u, &u->uv[static_cast<size_t>(f.i - 1)]);
+      lua_pop(L_, 1);
+      f.i++;
+    }
+    if (f.part == Part::UMeta)
+      f.part = Part::UValue;
+    if (f.i <= f.n)
+    {
+      frames_.set_top(f);
+      return Next::Read;
+    }
+    TValue d{};
+    setuvalue(L_, &d, u);
+    setslot(L_, L_->top, &d);
+    L_->top++;
+    return done();
+  }
+
+  /* ---- C closures of a registered kind ---- */
+
+  Next start_cclosure(lua_Integer id)
+  {
+    unsigned int hash = get_hash();
+    const lua_CClosureKind* kind = lua_cclosurekindbyname(read_name());
+    int nints = r_.get_count(1);
+    if (kind == nullptr || nints > 5 || (nints > 0 && kind->save == nullptr))
+      r_.invalid();
+    Frame f;
+    lua_Integer* slots[5] = {&f.a, &f.b, &f.c, &f.d, &f.e};
+    for (int i = 0; i < nints; i++)
+      *slots[i] = r_.get_var();
+    lua_lock(L_);
+    CClosure* cl = CClosure::luaF_newCclosure(L_, kind->nup);
+    for (TValue& u : cl->upvalue)
+      setnilvalue(&u);
+    cl->f = kind->f;
+    cl->hash = hash;
+    TValue cv{};
+    setclCvalue(L_, &cv, cl);
+    setslot(L_, L_->top, &cv);
+    L_->top++;
+    lua_unlock(L_);
+    register_top(id);
+    lua_pop(L_, 1);
+    f.kind = Build::CClosure;
+    f.part = Part::CUp;
+    f.id = id;
+    f.p = const_cast<lua_CClosureKind*>(kind);
+    f.i = 0;
+    f.n = (kind->save != nullptr) ? kind->nup - 1 : kind->nup;
+    f.type = static_cast<char>(nints);
+    frames_.push(f);
+    return f.n > 0 ? Next::Read : finish_cclosure();
+  }
+
+  /* all its upvalues are in: the closure it has under the frame's id is the value */
+  Next finish_cclosure()
+  {
+    Frame f = frames_.top();
+    const lua_CClosureKind* kind = static_cast<const lua_CClosureKind*>(f.p);
+    lua_rawgeti(L_, REFS, f.id);
+    TValue cv = getslot(L_, L_->top - 1);
+    CClosure* cl = clCvalue(&cv);
+    if (kind->make != nullptr)
+    {
+      lua_Integer ints[5] = {f.a, f.b, f.c, f.d, f.e};
+      if (!kind->make(L_, cl, ints, f.type))
+        r_.invalid();
+    }
+    return done();
+  }
+
+  Next cclosure_part(Frame f)
+  {
+    lua_rawgeti(L_, REFS, f.id);
+    TValue cv = getslot(L_, L_->top - 1);
+    CClosure* cl = clCvalue(&cv);
+    lua_pop(L_, 1);
+    TValue v = getslot(L_, L_->top - 1);
+    copyobj(&cl->upvalue[static_cast<size_t>(f.i)], &v);
+    luaC_barrier(L_, cl, &cl->upvalue[static_cast<size_t>(f.i)]);
+    lua_pop(L_, 1);
+    f.i++;
+    frames_.set_top(f);
+    if (f.i < f.n)
+      return Next::Read;
+    return finish_cclosure();
+  }
+
+  /* ---- budget groups ---- */
+
+  byte_view read_name()
+  {
+    lua_Integer n = r_.get_var();
+    if (n < 0 || n > 256)
+      r_.invalid();
+    return r_.get_bytes(static_cast<size_t>(n));
+  }
+
+  void start_group(lua_Integer id)
+  {
+    lua_Integer budget = r_.get_var();
+    lua_Integer left = r_.get_var();
+    lua_Budget fn = lua_budgetbyname(read_name());
+    char nodrain = r_.get_byte();
+    if (budget < 1 || left > budget || fn == nullptr || (nodrain != 0 && nodrain != 1))
+      r_.invalid();
+    lua_lock(L_);
+    BudgetGroup* bg = luaM_malloc_BudgetGroup(L_);
+    luaC_link(L_, bg, LUA_VBUDGET);
+    bg->budget = static_cast<l_mem>(budget);
+    bg->left = static_cast<l_mem>(left);
+    bg->f = fn;
+    bg->nodrain = (nodrain == 1);
+    TValue gv{};
+    setgcovalue(L_, &gv, bg);
+    setslot(L_, L_->top, &gv);
+    L_->top++;
+    bool ok = luaC_newowner(L_, bg);
+    lua_unlock(L_);
+    if (!ok)
+      luaL_errori(L_, lt::too_many_budget_groups);
+    register_top(id);
+    lua_pop(L_, 1);
+    luaL_checkstacki(L_, 3, std::nullopt);
+    lua_preparebudget(L_, fn); /* (what its callback needs of this state) */
+    Frame f;
+    f.kind = Build::Group;
+    f.part = Part::GroupCb;
+    f.id = id;
+    f.p = bg;
+    frames_.push(f);
+  }
+
+  Next group_part(Frame f)
+  {
+    BudgetGroup* bg = static_cast<BudgetGroup*>(f.p);
+    if (f.part == Part::GroupCb)
+    {
+      TValue cbv = getslot(L_, L_->top - 1);
+      copyobj(&bg->cb, &cbv);
+      luaC_barrier(L_, bg, &bg->cb);
+      lua_pop(L_, 1);
+      f.part = Part::GroupRoot;
+      frames_.set_top(f);
+      return Next::Read;
+    }
+    lua_State* th = pop_thread();
+    bg->root = th;
+    TValue gv{};
+    setgcovalue(L_, &gv, bg);
+    setslot(L_, L_->top, &gv);
+    L_->top++;
     return done();
   }
 
@@ -2917,8 +3505,31 @@ private:
       ci->nres = static_cast<int>(r_.get_i64());
       ci->k = nullptr;
       ci->trap = 0;
+      char hask = r_.get_byte();
+      if (hask != 0 && hask != 1)
+        r_.invalid();
+      if (hask == 1)
+      {
+        ci->k = lua_kbyname(read_name());
+        if (ci->k == nullptr)
+          r_.invalid();
+      }
+      ci->nccalls = static_cast<l_uint32>(r_.get_var());
+      ci->apiop = static_cast<lu_byte>(r_.get_byte());
+      ci->apifirst = r_.get_var();
+      ci->hookev = static_cast<lu_byte>(r_.get_byte());
+      ci->hookdone = static_cast<lu_byte>(r_.get_byte());
+      ci->hooktop = r_.get_var();
+      ci->hookcitop = r_.get_var();
+      ci->hookdelta = r_.get_int();
+      ci->hookres = r_.get_var();
       if (ci->func < 0 || ci->func >= top || ci->top < ci->func || ci->top > maxtop ||
-          !valid_frame(L1, ci))
+          !valid_frame(L1, ci) || ci->apiop > APIK_CLOSESLOT || ci->hookev > HE_RETTBC ||
+          ci->apifirst < 0 || ci->apifirst > maxtop || ci->hooktop < 0 || ci->hooktop > maxtop ||
+          ci->hookcitop < 0 || ci->hookcitop > maxtop || ci->hookres < 0 || ci->hookres > maxtop ||
+          ((ci->callstatus & CIST_APIK) == 0 && (ci->apiop != 0 || ci->apifirst != 0)) ||
+          ((ci->callstatus & CIST_HOOKED) == 0 && (ci->hookev != 0 || ci->hookdone != 0 || ci->hooktop != 0 ||
+                                                   ci->hookcitop != 0 || ci->hookdelta != 0 || ci->hookres != 0)))
         r_.invalid();
       last = ci;
     }

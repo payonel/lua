@@ -16,9 +16,13 @@ case("userdata are not supported yet", function()
   fails("persisting a userdata value is not supported yet", styx.persist, {file = io.stdout})
 end)
 
-case("C functions need the permanents table", function()
-  fails("cannot persist a C function", styx.persist, print)
-  fails("cannot persist a C function", styx.persist, {f = string.format})
+case("C functions of the engine persist by name; others need the permanents table", function()
+  -- a function of the engine is found again by its name, whatever the permanents
+  assert(styx.unpersist({}, styx.persist(print)) == print)
+  assert(styx.unpersist({}, styx.persist({f = string.format})).f == string.format)
+  -- one with state in C (math.random's generator) has none
+  fails("cannot persist a C function", styx.persist, math.random)
+  fails("cannot persist a C function", styx.persist, {f = math.random})
 end)
 
 case("the running thread cannot be persisted", function()

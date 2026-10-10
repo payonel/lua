@@ -39,7 +39,7 @@ case("a key that cannot be persisted", function()
 end)
 
 case("metatables", function()
-  local t = setmetatable({}, {__index = {f = print}})
+  local t = setmetatable({}, {__index = {f = math.random}})
   has(error_of(styx.persist, {obj = t}), "cannot persist a C function (at root.obj<metatable>.__index.f)")
 end)
 
@@ -92,7 +92,7 @@ case("deep paths", function()
 end)
 
 case("the path does not change other error text", function()
-  local err = error_of(styx.persist, {x = print})
+  local err = error_of(styx.persist, {x = math.random})
   has(err, "cannot persist a C function (at root.x)")
 end)
 

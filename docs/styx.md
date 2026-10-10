@@ -231,36 +231,28 @@ of them is a limit of the design. "Today" says what happens now; every one
 of these raises a clear error unless it says otherwise.
 
 ### Threads
-- **To-be-closed variables of C functions** (a C function that called
-  `lua_toclose` and yielded). Today: error ("a thread with a hook or
-  finalizer call", the frame flag check). Lua to-be-closed variables work
-  (ADR-20).
-- **Yields through continuations**, for example a yield inside `pcall`,
-  `xpcall`, `dofile`, a `__pairs` metamethod, a metamethod or an iterator
-  called from C, or any C function that calls or yields with a
-  continuation (`lua_callk`, `lua_pcallk`, `lua_yieldk`). Only a plain
-  `coroutine.yield` from Lua code works. Today: error ("a thread with a
-  continuation function").
-- **Hook yields, calls made from hooks or finalizers, and yields inside a
-  `__close` handler** in a suspended thread. Today: error ("a thread with a
-  hook or finalizer call").
-- **Running threads**: the caller, a thread that resumed another (status
-  normal), and the main thread while it runs. Today: error. An open
-  upvalue owned by such a thread is persisted as its current value
-  (ADR-16).
+- **A continuation or context that has no name** (a host's C function that
+  calls with a continuation it did not register). The engine's own are
+  named; a frozen thread with one of the host's fails to persist with
+  "a continuation that has no name" (ADR-34).
+- **Running threads**: the caller, a thread that resumed another and is not
+  frozen (status normal), and the main thread while it runs. Today: error.
+  An open upvalue owned by such a thread is persisted as its current value
+  (ADR-16). A frozen chain is not running (ADR-34).
 - **Hooks set from C** (not by `debug.sethook`) on a persisted thread.
   Today: error ("a hook not set by the debug library is not supported
   yet"). Debug-library hooks work (ADR-26).
 
 ### Functions
-- **C functions and C closures** other than through the permanents table.
-  Today: error ("cannot persist a C function"). Through the permanents
-  table, the restoring side's closure is used, with its own upvalues: for
-  example `math.random`'s generator state is an upvalue of a C closure, so
-  a restored state draws from the restoring state's generator. Library
-  functions that are C closures with state: `coroutine.wrap`'s function
-  (the coroutine), the `string.gmatch` iterator (string, pattern,
-  position), `io.lines` and `file:lines` (the file), `math.random`.
+- **C functions and C closures** the engine does not name (ADR-34). The
+  engine's light C functions persist by name, and the C closures of a few
+  kinds by value (`coroutine.wrap`'s function, the `string.gmatch`
+  iterator, `require` and the package searchers). Others only through the
+  permanents table, where the restoring side's closure is used, with its
+  own upvalues: for example `math.random`'s generator state is an upvalue
+  of a C closure, so a restored state draws from the restoring state's
+  generator (also `io.lines` and `file:lines`, which hold the file).
+  Today: error ("cannot persist a C function").
 - **Loaded C code**: C modules (`require` of a C library,
   `package.loadlib`) and the library handles in the registry's `_CLIBS`.
   Today: their functions only as permanents, the handles as userdata.
@@ -268,7 +260,9 @@ of these raises a clear error unless it says otherwise.
 ### Userdata
 - **Full userdata** (bytes, metatable, user values, host objects), and
   `__persist` on userdata. Today: error ("persisting a userdata value is not
-  supported yet"); userdata work only as permanents.
+  supported yet"); userdata work only as permanents, except the user
+  objects of a registered kind, such as the boxes the library functions
+  keep their state in (ADR-34).
 - **Light userdata** other than as permanents. Today: the same error.
 - **File handles** (`io.open`, the standard files, `io.tmpfile`,
   `io.popen`): userdata over an operating-system file or a child process,
@@ -345,7 +339,7 @@ across a restore, and are to be revisited:
   the stream without verifying them (as with binary chunks), and checks the
   thread state it reads only for consistency with itself. Do not unpersist
   data you do not trust.
-- **A final format**: the format (version 5, ADR-10) may still change;
+- **A final format**: the format (version 6, ADR-10) may still change;
   no stream of an earlier version is read.
 - **`settings`**. Today: error ("not implemented").
 - **The hash seed in a script's streams**: every stream starts with the
@@ -410,8 +404,8 @@ Every capability is covered from script and from C++ for careful testing,
 in `tests/styx/`, run by `make test` with everything else.
 
 ### ADR-10: Stream format
-**Status:** accepted (version 5)
-A persisted string is the header `"Styx\x05"` (name plus format version),
+**Status:** accepted (version 6)
+A persisted string is the header `"Styx\x06"` (name plus format version),
 the persisting state's string hash seed (8 bytes, ADR-22), then one value
 (or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload
 (a table, function or thread starts with its hash, ADR-30);
@@ -425,7 +419,7 @@ little-endian only), instructions 4 raw bytes each, and a thread's frames,
 to-be-closed list and hook fields fixed 8-byte values. Version 2 made
 streams about 70% smaller than version 1's fixed 8-byte integers; version
 3 added the seed and the layout mode of tables (ADR-22); version 4 the
-trailer; version 5 objects' hashes. Output
+trailer; version 5 objects' hashes; version 6 frozen threads (ADR-34). Output
 is built in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a
 missing header (or another version), unknown tags, truncation and trailing
 bytes.
@@ -1193,6 +1187,56 @@ A/B:
    explicit-stack machine); the engine paths (message handlers, hooks,
    close, finalizers).
 3. Styx persists frozen states and continuation names.
+
+### ADR-34: Frozen threads
+**Status:** accepted (supersedes the rejections of ADR-20 and ADR-26 for
+C frames; the specification of freeze and thaw, section 13)
+
+A user program stopped by its budget (a freeze) is persisted, restored in
+the same state or another, and thawed: it goes on exactly as the original.
+What a frozen chain is, to Styx:
+- **Threads.** A frozen thread is not running, whatever its status says
+  (the topmost one stays "running", the others "normal"). The chain is
+  persisted from any of its threads: each has its parent and child
+  (`frozenparent`, `frozenchild`), written as values, so the other threads
+  of the chain come with it, and the restored links are made from either end.
+  A thread also keeps how it froze (`frozen`), the function and message
+  handler of the host call it froze in, its C calls (`nCcalls`, `ccbase`,
+  `frozencc`) and how its variables were being closed.
+- **Frames.** A frame keeps what the freeze needs: its continuation (by
+  name), the C calls it runs with, how an API call with a continuation goes
+  on (`apiop`, `apifirst`) and, while a hook function runs, the state to
+  finish the hook. Only what means something is written (a frame not in an
+  API call or a hook writes zeros), and a stream that has stale or
+  impossible values for a frame is rejected.
+- **Names.** The continuations, the engine's light C functions and the
+  budget callback of the debug library have stable names (`lnames.cpp`:
+  the module and the function). A name resolves in the restoring process,
+  whatever its addresses; a host registers its own continuations and
+  callbacks the same way. A permanent given for a function wins over its
+  name. A frozen thread with a continuation that has no name is not
+  persisted.
+- **State by value.** The state a library function keeps in a box (a user
+  object, `luaL_Box`: integers and bytes) is persisted as that kind of
+  object. A user object of a registered kind (`lua_registerobjectkind`) is
+  persisted as its kind's name, its integers and bytes, its metatable and
+  its user values. The C closures of the kinds in the engine are persisted
+  as the name of the kind, their upvalues, and for the gmatch iterator the
+  position of its match.
+- **Budget groups.** A group is persisted with its limit, its steps left,
+  the name of its callback, its value (the debug library's Lua function)
+  and the thread it was set on; a thread keeps its own group and the one in
+  effect. Restored in a state with no thread for the debug library's
+  callbacks, the group makes one (the callback's `prepare`).
+- **Not yet.** The `__gc` that waits in a group's queue and the owner ids of
+  the objects with a `__gc` (a group with a queue fails to persist), and
+  persisting from inside the budget callback.
+
+Tests: `frozen.lua` (programs frozen at every budget point, persisted,
+restored and thawed beside the original, in one state), and the C++ test
+`frozen_library_cases`, which freezes each library callback case of
+`tests/deep/libcases.lua` at every budget point of 17 steps, persists the
+whole state, restores it in a new one and compares how both end.
 
 ## Open questions
 

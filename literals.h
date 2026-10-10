@@ -117,8 +117,12 @@ namespace lt
   constexpr byte_view cannot_persist_a_C_function("cannot persist a C function");
   constexpr byte_view cannot_persist_a_running_thread("cannot persist a running thread");
   constexpr byte_view cannot_persist_a_thread_with_s("cannot persist a thread with %s");
-  constexpr byte_view a_continuation_function("a continuation function");
-  constexpr byte_view a_hook_or_finalizer_call("a hook or finalizer call");
+  constexpr byte_view a_continuation_that_has_no_name("a continuation that has no name");
+  constexpr byte_view cannot_persist_a_budget_group_with_pending___gc_yet("cannot persist a budget group with pending __gc yet");
+  constexpr byte_view cannot_persist_a_budget_callback_that_has_no_name("cannot persist a budget callback that has no name");
+  constexpr byte_view path_budget_group("<budget group>");
+  constexpr byte_view path_frozen_chain("<frozen chain>");
+  constexpr byte_view path_user_value_d("<user value %d>");
   constexpr byte_view bad_permanent_value_for_key_s("bad permanent value for key '%s'");
   constexpr byte_view bad_permanent_value_s_expected_got_s("bad permanent value (%s expected, got %s)");
   constexpr byte_view mm_persist("__persist");
@@ -171,7 +175,7 @@ namespace lt
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");
   constexpr byte_view ceil_kw("ceil");
   constexpr byte_view styx("styx");
-  constexpr byte_view styx_header = lit("Styx\x05");
+  constexpr byte_view styx_header = lit("Styx\x06");
   constexpr byte_view char_kw("char");
   constexpr byte_view charpattern("charpattern");
   constexpr byte_view checkmemory("checkmemory");

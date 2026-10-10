@@ -166,10 +166,13 @@ case("errors raised after restore are catchable", function()
   assert(coroutine.status(r) == "dead")
 end)
 
--- a thread stream ends with its frames ('nframes' then ten 8-byte fields
--- per frame, the first being the stack slot of the frame's function), its
--- to-be-closed list ('ntbc' then one 8-byte level each; none here) and its
--- hook (one byte, 0: no hook)
+-- a thread stream ends with its frames ('nframes' then, per frame, ten
+-- 8-byte fields (the first being the stack slot of the frame's function) and
+-- ten bytes of what a freeze keeps: no continuation, the C calls, how an API
+-- call goes on, a hook function in progress; all zero here), its
+-- to-be-closed list ('ntbc' then one 8-byte level each; none here), the
+-- state of a frozen thread (one byte, 0: not frozen), its hook (one byte, 0:
+-- no hook) and its groups and chain (four values: nil)
 case("frames that do not match the stack are rejected", function()
   local co = coroutine.create(function(a) coroutine.yield(a) end)
   coroutine.resume(co, 1)
@@ -178,10 +181,11 @@ case("frames that do not match the stack are rejected", function()
   local tail = blob:sub(-3) -- the trailer (empty) and its length
   assert(tail == "\0\0\2", "layout: trailer")
   blob = blob:sub(1, -4)
-  local frame_size = 10 * 8
-  local frames_end = #blob - 8 - 1
+  local frame_size = 10 * 8 + 10
+  local frames_end = #blob - 4 - 1 - 1 - 8
   assert(string.unpack("<i8", blob, frames_end + 1) == 0, "layout: ntbc")
-  assert(blob:byte(-1) == 0, "layout: hook")
+  assert(blob:byte(frames_end + 9) == 0, "layout: frozen")
+  assert(blob:byte(frames_end + 10) == 0, "layout: hook")
   local nframes = string.unpack("<i8", blob, frames_end - 2 * frame_size - 7)
   assert(nframes == 2, "layout: " .. nframes)
   local first = frames_end - 2 * frame_size

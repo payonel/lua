@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -386,11 +387,12 @@ static std::string script_persist(lua_State* L)
    _BACK is the inverse */
 static const char* const build_perms =
   "local perms = {} local seen = {} "
+  "local function upv(f) local _, x = debug.getupvalue(f, 1) return x end "
   "local function walk(t, name) if seen[t] then return end seen[t] = true "
   "local keys = {} for k in pairs(t) do keys[#keys + 1] = k end "
   "table.sort(keys, function(a, b) return tostring(a) < tostring(b) end) "
   "for _, k in ipairs(keys) do local v = t[k] local n = name .. '.' .. tostring(k) "
-  "if (type(v) == 'function' and debug.getinfo(v, 'S').what == 'C') or type(v) == 'userdata' then "
+  "if (type(v) == 'function' and debug.getinfo(v, 'S').what == 'C' and type(upv(v)) ~= 'table') or type(v) == 'userdata' then "
   "if perms[v] == nil then perms[v] = n end "
   "elseif type(v) == 'table' then walk(v, n) end end "
   "local mt = getmetatable(t) if mt then walk(mt, name .. '<mt>') end end "
@@ -1331,6 +1333,281 @@ static void test_snapshot_continues_identically()
   lua_close(B);
 }
 
+
+/*
+** Frozen threads in a whole state (ADR-34): a user program frozen by its
+** budget at a point, persisted with the state and restored in a new one,
+** goes on exactly as the original does. The cases are the library callbacks
+** of tests/deep/libcases.lua (what the standard library calls back from C
+** frames); each is frozen at every one of its budget points of 17 steps.
+*/
+static const char* const frozen_prelude = R"LUA(
+cases = dofile("../deep/libcases.lua")
+busyn = 0
+function busy() busyn = busyn + 1 for i = 1, 3 do end end
+-- a deterministic text of results
+local function show(v, seen)
+  local t = type(v)
+  if t == "string" then return string.format("%q", v) end
+  if t == "table" then
+    local keys = {}
+    for k in pairs(v) do keys[#keys + 1] = k end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    local parts = {}
+    for _, k in ipairs(keys) do parts[#parts + 1] = show(k) .. "=" .. show(v[k]) end
+    return "{" .. table.concat(parts, ",") .. "}"
+  end
+  if t == "function" or t == "thread" or t == "userdata" then return t end
+  return tostring(v)
+end
+function render(...)
+  local parts = {}
+  for i = 1, select("#", ...) do parts[i] = show((select(i, ...))) end
+  return table.concat(parts, " ")
+end
+function start(i, n, k)
+  local c = cases[i]
+  fcount = 0
+  co = coroutine.create(function() return render(c.f(busy)) end)
+  if n > 0 then
+    debug.setbudget(co, n, function() fcount = fcount + 1 if fcount == k then debug.freeze() end end)
+  end
+  local ok, r = coroutine.resume(co)
+  if not ok then result = "ERR " .. tostring(r) return "done" end
+  if debug.isfrozen(co) then return "frozen" end
+  result = r
+  return "done"
+end
+function finish()
+  while debug.isfrozen(co) do
+    local ok, r = debug.thaw(co)
+    if not ok then result = "ERR " .. tostring(r) return end
+    if not debug.isfrozen(co) then result = r end
+  end
+end
+)LUA";
+
+static lua_State* frozen_state(CountingAlloc* a)
+{
+  lua_State* L = new_counted_state(a);
+  CHECK(eval(L, build_perms) == "ok");
+  CHECK(eval(L, frozen_prelude) == "");
+  return L;
+}
+
+static void test_frozen_library_cases()
+{
+  CountingAlloc a0;
+  lua_State* P = frozen_state(&a0);
+  int ncases = std::atoi(eval(P, "return #cases").c_str());
+  CHECK(ncases > 40);
+  int points = 0;
+  for (int i = 1; i <= ncases; i++)
+  {
+    std::string plain = eval(P, ("start(" + std::to_string(i) + ", 0, 0) finish() return result").c_str());
+    std::string name = eval(P, ("return cases[" + std::to_string(i) + "].name").c_str());
+    CHECK(plain.rfind("ERR", 0) != 0);
+    for (int k = 1; k < 400; k++)
+    {
+      CountingAlloc a1;
+      lua_State* A = frozen_state(&a1);
+      std::string st = eval(A, ("return start(" + std::to_string(i) + ", 17, " + std::to_string(k) + ")").c_str());
+      if (st != "frozen")
+      {
+        lua_close(A);
+        break;
+      }
+      points++;
+      std::string blob = persist_state(A);
+      if (blob.empty())
+      { /* (it failed: said so; the first point of the case is enough) */
+        std::printf("      case %d (%s), point %d: not persisted\n", i, name.c_str(), k);
+        lua_close(A);
+        break;
+      }
+      CountingAlloc a2;
+      int before = g_test_failures;
+      lua_State* B = restored_state(&a2, blob);
+      if (g_test_failures != before)
+        std::printf("      (case %d (%s), point %d)\n", i, name.c_str(), k);
+      CHECK(eval(B, "if debug.isfrozen(co) then return 'yes' end return 'no'") == "yes");
+      std::string ra = eval(A, "finish() return result");
+      std::string rb = eval(B, "finish() return result");
+      if (ra != plain || rb != plain || eval(A, "return busyn") != eval(B, "return busyn"))
+        std::printf("      case %d (%s), point %d: plain [%s] original [%s] restored [%s] busy %s/%s\n", i, name.c_str(), k,
+                    plain.c_str(), ra.c_str(), rb.c_str(), eval(A, "return busyn").c_str(), eval(B, "return busyn").c_str());
+      CHECK(ra == plain);
+      CHECK(rb == plain);
+      CHECK(eval(A, "return busyn") == eval(B, "return busyn"));
+      lua_close(A);
+      lua_close(B);
+    }
+  }
+  CHECK(points > 500);
+  lua_close(P);
+}
+
+
+/*
+** Frozen threads with what the host provides (ADR-34): a continuation and a
+** budget callback of its own persist when they have a name, and not before;
+** and a restore that runs out of memory fails cleanly.
+*/
+static int host_k(lua_State* L, int status, lua_KContext ctx)
+{
+  CHECK(status == LUA_YIELD || status == LUA_OK);
+  lua_pushinteger(L, static_cast<lua_Integer>(ctx));
+  return 2; /* (the result of the call, and the context) */
+}
+
+static int host_callk(lua_State* L)
+{
+  lua_settop(L, 2);
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_callk(L, 1, 1, 77, host_k);
+  return host_k(L, LUA_OK, 77);
+}
+
+static int host_budget_calls = 0;
+static void host_budget(lua_State*, lua_State* spender)
+{
+  host_budget_calls++;
+  if (host_budget_calls == 2)
+    lua_freeze(spender);
+}
+
+/* a state with the host's function 'callk' and the permanents */
+static lua_State* host_state(CountingAlloc* a)
+{
+  lua_State* L = new_counted_state(a);
+  lua_pushcfunction(L, host_callk);
+  lua_setglobal(L, "callk");
+  CHECK(eval(L, build_perms) == "ok");
+  CHECK(eval(L, frozen_prelude) == "");
+  return L;
+}
+
+static const char* const host_program =
+  "function work(n) local s = 0 for i = 1, n do s = s + i end return s end "
+  "log = {} "
+  "co = coroutine.create(function() local r, ctx = callk(work, 40) log[#log + 1] = r .. '/' .. ctx return r, ctx end) "
+  "fcount = 0 "
+  "debug.setbudget(co, 7, function() fcount = fcount + 1 if fcount == 3 then debug.freeze() end end) "
+  "coroutine.resume(co) "
+  "return debug.isfrozen(co) and 'frozen' or 'done'";
+
+static void test_frozen_host_continuation()
+{
+  CountingAlloc a1;
+  lua_State* A = host_state(&a1);
+  CHECK(eval(A, host_program) == "frozen");
+  /* the continuation has no name: the state is not persisted */
+  lua_getglobal(A, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(A, lua_gettop(A), &w, &msg) != LUA_OK);
+  CHECK(std::string(msg.to_os()).find("a continuation that has no name") != std::string::npos);
+  lua_pop(A, 1);
+  /* named, it is */
+  lua_registerk("styxtest.host_k", host_k);
+  std::string blob = persist_state(A);
+  CHECK(!blob.empty());
+  CountingAlloc a2;
+  lua_State* B = new_state_for(&a2, blob);
+  lua_pushcfunction(B, host_callk);
+  lua_setglobal(B, "callk");
+  HostString msg2;
+  CHECK(restore_state(B, blob, &msg2) == LUA_OK);
+  CHECK(eval(B, "if debug.isfrozen(co) then return 'yes' end return 'no'") == "yes");
+  CHECK(eval(A, "finish() return table.concat(log, ',')") == "820/77");
+  CHECK(eval(B, "finish() return table.concat(log, ',')") == "820/77");
+  CHECK(eval(A, "return coroutine.status(co)") == "dead" && eval(B, "return coroutine.status(co)") == "dead");
+  lua_close(A);
+  lua_close(B);
+}
+
+static void test_frozen_host_budget_callback()
+{
+  CountingAlloc a1;
+  lua_State* A = host_state(&a1);
+  CHECK(eval(A, "co = coroutine.create(function() local s = 0 for i = 1, 60 do s = s + i end return s end) return 'ok'") == "ok");
+  lua_getglobal(A, "co");
+  lua_State* th = lua_tothread(A, -1);
+  host_budget_calls = 0;
+  lua_setbudget(th, 9, host_budget);
+  lua_pop(A, 1);
+  CHECK(eval(A, "coroutine.resume(co) return debug.isfrozen(co) and 'frozen' or 'done'") == "frozen");
+  lua_getglobal(A, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(A, lua_gettop(A), &w, &msg) != LUA_OK);
+  CHECK(std::string(msg.to_os()).find("a budget callback that has no name") != std::string::npos);
+  lua_pop(A, 1);
+  lua_registerbudget("styxtest.host_budget", host_budget);
+  std::string blob = persist_state(A);
+  CHECK(!blob.empty());
+  CountingAlloc a2;
+  lua_State* B = new_state_for(&a2, blob);
+  lua_pushcfunction(B, host_callk);
+  lua_setglobal(B, "callk");
+  HostString msg2;
+  CHECK(restore_state(B, blob, &msg2) == LUA_OK);
+  int before = host_budget_calls;
+  CHECK(eval(B, "while debug.isfrozen(co) do debug.thaw(co) end return coroutine.status(co)") == "dead");
+  CHECK(host_budget_calls > before); /* (the callback of the restored group ran) */
+  lua_close(A);
+  lua_close(B);
+}
+
+static void test_frozen_restore_out_of_memory()
+{
+  CountingAlloc a1;
+  lua_State* A = host_state(&a1);
+  CHECK(eval(A, "co = coroutine.create(function() "
+                "  local inner = coroutine.create(function() local t = {} for i = 1, 300 do t[i] = i end "
+                "    for i = 1, 100 do local x = string.format('%d', i) end return #t end) "
+                "  return coroutine.resume(inner) end) "
+                "fcount = 0 "
+                "debug.setbudget(co, 40, function() fcount = fcount + 1 if fcount == 3 then debug.freeze() end end) "
+                "coroutine.resume(co) return debug.isfrozen(co) and 'frozen' or 'done'") == "frozen");
+  std::string blob = persist_state(A);
+  CHECK(!blob.empty());
+  std::string expected = eval(A, "finish() return tostring(coroutine.status(co))");
+  /* with less and less room, a restore fails with a memory error and leaves the state usable; with enough, it works */
+  bool failed = false, worked = false;
+  for (size_t extra = 2 * 1024; extra <= 400 * 1024; extra += 6 * 1024)
+  {
+    CountingAlloc a2;
+    lua_State* B = new_state_for(&a2, blob);
+    lua_pushcfunction(B, host_callk);
+    lua_setglobal(B, "callk");
+    CHECK(eval(B, build_perms) == "ok");
+    lua_getglobal(B, "_BACK");
+    a2.cap = a2.used + extra;
+    HostString msg;
+    int st = luaL_unpersiststate(B, 1, byte_view(blob.data(), blob.size()), &msg);
+    a2.cap = 0;
+    if (st != LUA_OK)
+    {
+      failed = true;
+      CHECK(std::string(msg.to_os()).find("not enough memory") != std::string::npos);
+      CHECK(lua_gettop(B) == 1);
+      lua_settop(B, 0);
+      CHECK(eval(B, "return 'usable'") == "usable");
+    }
+    else
+    {
+      worked = true;
+      lua_settop(B, 0);
+      CHECK(eval(B, "finish() return tostring(coroutine.status(co))") == expected);
+    }
+    lua_close(B);
+  }
+  CHECK(failed && worked);
+  lua_close(A);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -1376,10 +1653,17 @@ static void run_cpp_tests()
       {"state_next_hash", test_state_next_hash},
       {"state_restore_needs_its_state", test_state_restore_needs_its_state},
       {"snapshot_continues_identically", test_snapshot_continues_identically},
+      {"frozen_library_cases", test_frozen_library_cases},
+      {"frozen_host_continuation", test_frozen_host_continuation},
+      {"frozen_host_budget_callback", test_frozen_host_budget_callback},
+      {"frozen_restore_out_of_memory", test_frozen_restore_out_of_memory},
   };
   std::printf("  styx_tests.cpp\n");
+  const char* only = std::getenv("STYX_ONLY"); /* (to run one C++ test, under valgrind: no scripts then) */
   for (const auto& t : tests)
   {
+    if (only != nullptr && std::string(only) != t.name)
+      continue;
     g_current = t.name;
     g_test_failures = 0;
     t.fn();
@@ -1457,7 +1741,8 @@ int main()
 {
   std::printf("\n\tStarting styx tests\n\n");
   run_cpp_tests();
-  run_scripts();
+  if (std::getenv("STYX_ONLY") == nullptr)
+    run_scripts();
   if (g_failures == 0)
     std::printf("\n\tOK - styx: %d checks, 0 failures\n\n", g_checks);
   else
