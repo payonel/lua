@@ -564,9 +564,36 @@ static int db_debug(lua_State* L)
 */
 static lua_State* checkco(lua_State* L, int arg);
 
-static void budgetf(lua_State* user_co, lua_State* L)
+/*
+** The thread the callbacks of the debug library run on (anchored in the
+** registry): found, or made when it is not there yet (the first budget set,
+** or a budget that came with a stream into a state that had none).
+*/
+static lua_State* callbackthread(lua_State* L)
 {
   lua_State* B = lua_budgetthread(L);
+  if (B != nullptr)
+    return B;
+  if (lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETTHREAD) == LUA_TTHREAD)
+  {
+    B = lua_tothread(L, -1);
+    lua_pop(L, 1);
+  }
+  else
+  {
+    lua_pop(L, 1);
+    B = lua_newthread(L);
+    lua_sethook(B, nullptr, 0, 0); /* (no hooks inherited) */
+    lua_setbudget(B, 0, nullptr);  /* (and no budget) */
+    lua_setfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETTHREAD);
+  }
+  lua_setbudgetthread(L, B);
+  return B;
+}
+
+static void budgetf(lua_State* user_co, lua_State* L)
+{
+  lua_State* B = callbackthread(L);
   lua_pushbudgetvalue(B, L, 1); /* the function of the group in effect */
   lua_pushthreadi(B, user_co);
   lua_pushthreadi(B, L);
@@ -592,14 +619,7 @@ static int db_setbudget(lua_State* L)
     return 0;
   }
   luaL_checktype(L, arg + 2, LUA_TFUNCTION);
-  if (lua_budgetthread(L) == nullptr)
-  { /* the thread the callback runs on (anchored in the registry) */
-    lua_State* B = lua_newthread(L);
-    lua_sethook(B, nullptr, 0, 0); /* (no hooks inherited) */
-    lua_setbudget(B, 0, nullptr);  /* (and no budget) */
-    lua_setfieldi(L, LUA_REGISTRYINDEX, lt::_BUDGETTHREAD);
-    lua_setbudgetthread(L, B);
-  }
+  callbackthread(L); /* (the thread the callback runs on) */
   lua_pushvalue(L, arg + 2);
   lua_setbudget(co, n, budgetf);
   lua_setbudgetvalue(L, co); /* the function goes into the group */
