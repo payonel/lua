@@ -58,6 +58,7 @@ constexpr char TAG_UPVAL_PERM = 19; /* a variable that is a permanent: its key *
 constexpr char TAG_GROUP = 20;      /* a budget group: its limit, steps left, callback, value and thread */
 constexpr char TAG_CFI = 21;        /* a light C function of the engine, by its name */
 constexpr char TAG_USEROBJECT = 22; /* a user object of a registered kind: its state, metatable, user values */
+constexpr unsigned short GROUP_GONE = 65535; /* an owner id no group has */
 constexpr char TAG_CCLOSURE = 23;   /* a C closure of a registered kind: its state and upvalues */
 
 /*
@@ -463,7 +464,7 @@ public:
   void marked_objects()
   {
     std::vector<GCObject*> list; /* host memory: a state persist is a host's */
-    each_marked([&](GCObject* o)
+    each_marked([&](GCObject* o, bool)
     {
       TValue v, key;
       setgcovalue(L_, &v, o);
@@ -596,9 +597,35 @@ private:
   {
     global_State* g = L_->l_G;
     for (GCObject* o = g->tobefnz.next; o != nullptr; o = o->next)
-      f(o);
+      f(o, true);
+    for (const BudgetGroup* bg : g->groupbyid) /* (and the ones due in a group) */
+      if (bg != nullptr)
+        for (GCObject* o = bg->fnz.next; o != nullptr; o = o->next)
+          f(o, true);
     for (GCObject* o = g->finobj.next; o != nullptr; o = o->next)
-      f(o);
+      f(o, false);
+  }
+
+  /*
+  ** Who a marked object belongs to, in the trailer: 0 for the kernel and the
+  ** host, 1 for a group that is gone (the object is then an ordinary one
+  ** when it is collected, as in the persisting state), and 2 plus the
+  ** reference id of its group.
+  */
+  lua_Integer owner_code(const GCObject* o)
+  {
+    if (o->owner == 0)
+      return 0;
+    global_State* g = L_->l_G;
+    BudgetGroup* bg = (o->owner < g->groupbyid.size()) ? g->groupbyid[o->owner] : nullptr;
+    if (bg == nullptr)
+      return 1;
+    TValue v{};
+    setgcovalue(L_, &v, bg);
+    lua_Integer found;
+    if (!ref_find(v, bg, &found))
+      return 1; /* (a group nothing persisted refers to is gone, as far as the restored state can tell) */
+    return 2 + found;
   }
 
   /* the persisted tables marked for finalization, oldest mark first */
@@ -611,7 +638,13 @@ private:
     {
       var(static_cast<lua_Integer>(n));
       if (n == 1)
+      {
         var(marked_.get(0).id);
+        var(owner_code(marked_.get(0).o));
+        bool due = false;
+        each_marked([&](GCObject* o, bool d) { due = due || (o == marked_.get(0).o && d); });
+        var(due ? 1 : 0);
+      }
       return;
     }
     /* their order is the collector's: nothing below allocates while its
@@ -619,16 +652,28 @@ private:
     auto by_object = [](const Marked& a, const Marked& b) { return std::less<const GCObject*>()(a.o, b.o); };
     marked_.sort(by_object);
     WorkStack<lua_Integer> order(L_, !host_);
+    WorkStack<lua_Integer> owners(L_, !host_);
+    WorkStack<lua_Integer> dues(L_, !host_);
     order.reserve(n);
-    each_marked([&](GCObject* o)
+    owners.reserve(n);
+    dues.reserve(n);
+    each_marked([&](GCObject* o, bool due)
     {
       size_t i = marked_.lower_bound(Marked{o, 0}, by_object);
       if (i < marked_.size() && marked_.get(i).o == o)
+      {
         order.push(marked_.get(i).id);
+        owners.push(owner_code(o));
+        dues.push(due ? 1 : 0);
+      }
     });
     var(static_cast<lua_Integer>(order.size()));
     for (size_t i = order.size(); i > 0; i--)
       var(order.get(i - 1));
+    for (size_t i = owners.size(); i > 0; i--)
+      var(owners.get(i - 1));
+    for (size_t i = dues.size(); i > 0; i--)
+      var(dues.get(i - 1));
   }
 
   /* every node written as a dead key that still is one: f(key, table, node) */
@@ -1220,12 +1265,10 @@ private:
   ** A budget group: its limit and steps left, the name of its callback (the
   ** debug library's, or one the host named), whether a thaw went on, then
   ** its value and the thread it was set on. The dead objects that wait for
-  ** their '__gc' are not written yet.
+  ** their '__gc' are part of a state's marked objects (the trailer).
   */
   void group(BudgetGroup* bg)
   {
-    if (bg->fnz.next != nullptr)
-      fail(lt::cannot_persist_a_budget_group_with_pending___gc_yet);
     const char* n = lua_budgetname(bg->f);
     if (n == nullptr)
       fail(lt::cannot_persist_a_budget_callback_that_has_no_name);
@@ -1737,6 +1780,7 @@ private:
   /* the raw state of a frozen thread (written before the debug hook) */
   void thread_extras(lua_State* T)
   {
+    byte(static_cast<char>(T->allowhook)); /* (off while a drained '__gc' or a hook function runs) */
     byte(static_cast<char>(T->frozen));
     if (T->frozen == 0)
       return;
@@ -2040,7 +2084,7 @@ class Restorer
 public:
   /* stack: 1: permanents (key -> object); 3: refs (id -> object); 4: upvalues */
   Restorer(lua_State* L, byte_view data, bool host)
-      : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true),
+      : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true), owners_(L, true), dues_(L, true),
         fixes_(L, true), rebuilt_(L, true)
   {
   }
@@ -2109,6 +2153,21 @@ public:
       }
       lua_pop(L_, 1);
       marked_.sort([](lua_Integer a, lua_Integer b) { return a < b; });
+      /* who they belong to, in the same order: the groups come with the value */
+      for (int i = 0; i < n; i++)
+      {
+        lua_Integer code = t.get_var();
+        if (code < 0)
+          t.invalid();
+        owners_.push(code);
+      }
+      for (int i = 0; i < n; i++)
+      {
+        lua_Integer due = t.get_var();
+        if (due != 0 && due != 1)
+          t.invalid();
+        dues_.push(due);
+      }
     }
     int m = t.get_count(3);
     for (int i = 0; i < m; i++)
@@ -2131,6 +2190,33 @@ public:
   {
     if (next_marked_ != marked_.size())
       r_.invalid();
+    /* the owners of the marked tables: their groups are made now */
+    for (size_t i = 0; i < made_.size(); i++)
+    {
+      lua_Integer code = owners_.get(i);
+      unsigned short owner = 0;
+      if (code == 1)
+        owner = GROUP_GONE;
+      else if (code >= 2)
+      {
+        lua_rawgeti(L_, REFS, code - 2);
+        TValue v = getslot(L_, L_->top - 1);
+        if (!iscollectable(&v) || gcvalue(&v)->tt != LUA_VBUDGET)
+          r_.invalid();
+        owner = static_cast<BudgetGroup*>(gcvalue(&v))->id;
+        lua_pop(L_, 1);
+      }
+      made_.get(i)->owner = owner;
+    }
+    /* those whose '__gc' was due are due again, in the order they had in their queues */
+    {
+      std::vector<GCObject*> due; /* (host memory, a short time) */
+      for (size_t i = made_.size(); i > 0; i--)
+        if (dues_.get(i - 1) != 0)
+          due.push_back(made_.get(i - 1));
+      if (!due.empty())
+        luaC_makedue(L_, due.data(), due.size());
+    }
     auto by_address = [](Table* a, Table* b) { return std::less<Table*>()(a, b); };
     rebuilt_.sort(by_address);
     for (size_t i = 0; i < fixes_.size(); i++)
@@ -2200,6 +2286,8 @@ private:
   WorkStack<Frame> frames_;
   WorkStack<lua_Integer> marked_; /* ids of the tables made for the trailer, sorted */
   WorkStack<Table*> made_;        /* those tables */
+  WorkStack<lua_Integer> owners_; /* their owners (see Walker::owner_code), in the order they were made */
+  WorkStack<lua_Integer> dues_;   /* whether their '__gc' was due (waiting in a queue) */
   size_t next_marked_ = 0;        /* the next of them the value meets */
 
   struct DeadFix
@@ -3149,6 +3237,10 @@ private:
   /* what a frozen thread keeps (see Walker::thread_extras) */
   void read_thread_extras(lua_State* L1, lua_Integer top)
   {
+    char ah = r_.get_byte();
+    if (ah != 0 && ah != 1)
+      r_.invalid();
+    L1->allowhook = static_cast<lu_byte>(ah);
     char fz = r_.get_byte();
     if (fz < 0 || fz > FZ_CLOSE)
       r_.invalid();
@@ -3642,9 +3734,9 @@ static int styx_settings(lua_State* L)
   return luaL_errori(L, lt::not_implemented);
 }
 
-static CFuncInfo cfi_persist(styx_persist);
-static CFuncInfo cfi_unpersist(styx_unpersist);
-static CFuncInfo cfi_settings(styx_settings);
+static CFuncInfo cfi_persist(styx_persist, "styx.persist");
+static CFuncInfo cfi_unpersist(styx_unpersist, "styx.unpersist");
+static CFuncInfo cfi_settings(styx_settings, "styx.settings");
 
 static const luaL_RegCFI funcs[] = {
   {lt::persist, &cfi_persist},
@@ -3796,7 +3888,7 @@ static int host_restore_body(lua_State* L)
   return 0;
 }
 
-static CFuncInfo cfi_host_restore(host_restore_body);
+static CFuncInfo cfi_host_restore(host_restore_body, "styx.host_restore");
 
 static int host_restore(lua_State* L, int perms, byte_view data, bool state, HostString* msg)
 {

@@ -284,3 +284,23 @@ case("a stream of a frozen chain is rejected when cut", function()
   local blob = styx.persist(perms, {co = co, state = state})
   H.rejects_truncation(blob, back)
 end)
+
+case("a thread of the chain cannot be persisted from inside the budget callback; after the freeze it can", function()
+  local seen
+  local co = coroutine.create(function() for i = 1, 100 do end return "end" end)
+  local n = 0
+  debug.setbudget(co, 5, function(user_co)
+    n = n + 1
+    if n == 2 then
+      seen = {pcall(styx.persist, perms, user_co)}
+      debug.freeze()
+    end
+  end)
+  assert(coroutine.resume(co))
+  assert(debug.isfrozen(co))
+  assert(seen[1] == false and seen[2]:find("cannot persist a running thread", 1, true), tostring(seen[2]))
+  local r = styx.unpersist(back, styx.persist(perms, {co = co, n = n}))
+  assert(debug.isfrozen(r.co))
+  finish(r.co)
+  assert(coroutine.status(r.co) == "dead")
+end)

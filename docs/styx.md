@@ -1228,15 +1228,35 @@ What a frozen chain is, to Styx:
   and the thread it was set on; a thread keeps its own group and the one in
   effect. Restored in a state with no thread for the debug library's
   callbacks, the group makes one (the callback's `prepare`).
-- **Not yet.** The `__gc` that waits in a group's queue and the owner ids of
-  the objects with a `__gc` (a group with a queue fails to persist), and
-  persisting from inside the budget callback.
+- **Deferred `__gc`.** An object marked for finalization keeps its owner:
+  the trailer says, for each marked object, whether it belongs to the
+  kernel, to a group (the reference of the group in the stream) or to a
+  group that is gone (it is then an ordinary object when it dies, as in the
+  persisting state), and whether its `__gc` was already due (waiting in
+  `tobefnz` or in a group's queue). A state persists the objects waiting in
+  the queues of its groups with the other marked objects, and unpersist makes
+  the due ones due again in their original order (`luaC_makedue`), so each
+  `__gc` runs once after the restore: a deferred one when a thread of its
+  group goes on. The thread keeps `allowhook`, which is off while a drained
+  `__gc` or a hook function runs (the drain must not nest). The collector's
+  timing is not the original's (the debt of a restored state is another,
+  see "Determinism"), so a program's `__gc` order that depends on when an
+  automatic step comes can differ; the tests stop the collector where it
+  matters.
+- **Inside the budget callback.** A thread of the chain that spent the budget
+  is still running there, so persisting it is refused ("a running thread");
+  once the callback has frozen it, it persists. (Specification 13.4 asks for
+  the same state from inside the callback; to settle.)
 
 Tests: `frozen.lua` (programs frozen at every budget point, persisted,
-restored and thawed beside the original, in one state), and the C++ test
-`frozen_library_cases`, which freezes each library callback case of
-`tests/deep/libcases.lua` at every budget point of 17 steps, persists the
-whole state, restores it in a new one and compares how both end.
+restored and thawed beside the original, in one state), and the C++ tests
+`frozen_library_cases` and `frozen_engine_cases`, which freeze each case of
+`tests/deep/libcases.lua` and `frozencases.lua` (library callbacks; drained
+`__gc`, message handlers, `__close`, wrapped coroutines, `gmatch`, `sort`,
+hooks) at every budget point of 17 steps, persist the whole state, restore it
+in a new one and compare how both end; `frozen_deferred_gc` (a queue of a
+group), a host's own continuation and budget callback (not persisted until
+named) and a restore that runs out of memory at many sizes.
 
 ## Open questions
 

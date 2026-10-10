@@ -1342,7 +1342,7 @@ static void test_snapshot_continues_identically()
 ** frames); each is frozen at every one of its budget points of 17 steps.
 */
 static const char* const frozen_prelude = R"LUA(
-cases = dofile("../deep/libcases.lua")
+cases = dofile(CASES_FILE)
 busyn = 0
 function busy() busyn = busyn + 1 for i = 1, 3 do end end
 -- a deterministic text of results
@@ -1387,20 +1387,23 @@ function finish()
 end
 )LUA";
 
+static const char* g_cases_file = "../deep/libcases.lua";
+
 static lua_State* frozen_state(CountingAlloc* a)
 {
   lua_State* L = new_counted_state(a);
   CHECK(eval(L, build_perms) == "ok");
+  CHECK(eval(L, (std::string("CASES_FILE = '") + g_cases_file + "'").c_str()) == "");
   CHECK(eval(L, frozen_prelude) == "");
   return L;
 }
 
-static void test_frozen_library_cases()
+static void frozen_cases(int mincases, int minpoints)
 {
   CountingAlloc a0;
   lua_State* P = frozen_state(&a0);
   int ncases = std::atoi(eval(P, "return #cases").c_str());
-  CHECK(ncases > 40);
+  CHECK(ncases >= mincases);
   int points = 0;
   for (int i = 1; i <= ncases; i++)
   {
@@ -1443,8 +1446,20 @@ static void test_frozen_library_cases()
       lua_close(B);
     }
   }
-  CHECK(points > 500);
+  CHECK(points >= minpoints);
   lua_close(P);
+}
+
+static void test_frozen_library_cases()
+{
+  g_cases_file = "../deep/libcases.lua";
+  frozen_cases(40, 500);
+}
+
+static void test_frozen_engine_cases()
+{
+  g_cases_file = "frozencases.lua";
+  frozen_cases(8, 200);
 }
 
 
@@ -1484,6 +1499,7 @@ static lua_State* host_state(CountingAlloc* a)
   lua_pushcfunction(L, host_callk);
   lua_setglobal(L, "callk");
   CHECK(eval(L, build_perms) == "ok");
+  CHECK(eval(L, "CASES_FILE = 'frozencases.lua'") == "");
   CHECK(eval(L, frozen_prelude) == "");
   return L;
 }
@@ -1608,6 +1624,58 @@ static void test_frozen_restore_out_of_memory()
   lua_close(A);
 }
 
+
+/*
+** The '__gc' that waits for a budget group (ADR-34): objects of a user
+** program that died while no thread of its group ran wait in the group's
+** queue, and run, once each and in the same order, when a thread of the
+** group goes on after a restore; the objects marked and not yet dead keep
+** their group; an object whose group is gone does not run its '__gc'.
+*/
+static void test_frozen_deferred_gc()
+{
+  const char* const script =
+    "log = {} "
+    "co = coroutine.create(function() "
+    "  do local mt = {__gc = function(o) log[#log + 1] = 'gc' .. o.id end} "
+    "     for i = 1, 3 do setmetatable({id = i}, mt) end "
+    "     alive = setmetatable({id = 9}, mt) end "
+    "  coroutine.yield('made') "
+    "  for i = 1, 5 do end "
+    "  coroutine.yield('ran') "
+    "  alive = nil "
+    "  return 'end' "
+    "end) "
+    "debug.setbudget(co, 1000000, function() end) "
+    "assert(coroutine.resume(co)) "
+    "kernel = setmetatable({}, {__gc = function() log[#log + 1] = 'kernel' end}) "
+    "kernel = nil "
+    "collectgarbage() " /* (the kernel runs: the dead objects of the group wait in its queue) */
+    "return #log";
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, script) == "1");              /* only the kernel's ran */
+  CHECK(eval(A, "return log[1]") == "kernel");
+  std::string blob = persist_state(A);
+  CHECK(!blob.empty());
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(eval(B, "return #log") == "1");
+  /* the group goes on: its queue is drained when it runs */
+  CHECK(eval(A, "assert(coroutine.resume(co)) return table.concat(log, ',')") ==
+        eval(B, "assert(coroutine.resume(co)) return table.concat(log, ',')"));
+  CHECK(eval(A, "return #log") == "4");
+  CHECK(eval(A, "return table.concat(log, ',', 2)").find("gc") != std::string::npos);
+  /* the live one dies with the program, in both alike: the thread is dead,
+     so nobody drains its group's queue */
+  CHECK(eval(A, "assert(coroutine.resume(co)) collectgarbage() return table.concat(log, ',')") ==
+        eval(B, "assert(coroutine.resume(co)) collectgarbage() return table.concat(log, ',')"));
+  CHECK(eval(A, "return #log") == eval(B, "return #log"));
+  lua_close(A);
+  lua_close(B);
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -1654,6 +1722,8 @@ static void run_cpp_tests()
       {"state_restore_needs_its_state", test_state_restore_needs_its_state},
       {"snapshot_continues_identically", test_snapshot_continues_identically},
       {"frozen_library_cases", test_frozen_library_cases},
+      {"frozen_engine_cases", test_frozen_engine_cases},
+      {"frozen_deferred_gc", test_frozen_deferred_gc},
       {"frozen_host_continuation", test_frozen_host_continuation},
       {"frozen_host_budget_callback", test_frozen_host_budget_callback},
       {"frozen_restore_out_of_memory", test_frozen_restore_out_of_memory},
