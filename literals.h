@@ -902,6 +902,12 @@ namespace lt
   constexpr byte_view truncated_chunk("truncated chunk");
   constexpr byte_view truncated_fixed_buffer("truncated fixed buffer");
   constexpr byte_view TValue("TValue");
+  constexpr byte_view detached("detached");
+  constexpr byte_view no_budget_in_effect("no budget in effect");
+  constexpr byte_view a_call_that_cannot_freeze_is_in_the_way("a call that cannot freeze is in the way");
+  constexpr byte_view a_resume_that_cannot_freeze_is_in_the_way("a resume that cannot freeze is in the way");
+  constexpr byte_view refers_to_an_object_the_VM_also_holds("refers to an object the VM also holds");
+  constexpr byte_view refers_to_an_object_another_thread_also_holds("refers to an object another thread also holds");
   constexpr byte_view type("type");
   constexpr byte_view udataval("udataval");
   constexpr byte_view ult("ult");
@@ -926,6 +932,7 @@ namespace lt
   constexpr byte_view unsigned_overflow("unsigned overflow");
   constexpr byte_view until("until");
   constexpr byte_view upper("upper");
+  constexpr byte_view from("from");
   constexpr byte_view upvalue("upvalue");
   constexpr byte_view upvalueid("upvalueid");
   constexpr byte_view upvaluejoin("upvaluejoin");
@@ -933,6 +940,7 @@ namespace lt
   constexpr byte_view usage("usage: ");
   constexpr byte_view userdata("userdata");
   constexpr byte_view UTF_8_value_too_large("UTF-8 value too large");
+  constexpr byte_view value_2("value");
   constexpr byte_view value_expected("value expected");
   constexpr byte_view value_has_no_literal_form("value has no literal form");
   constexpr byte_view value_out_of_range("value out of range");

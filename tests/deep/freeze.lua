@@ -560,10 +560,13 @@ end
 -- 'canfreeze': whether a freeze here would happen (a budget in effect and
 -- no call that cannot freeze in the way)
 do
-  assert(debug.canfreeze() == false) -- the kernel runs with no budget
+  local can, why = debug.canfreeze() -- the kernel runs with no budget
+  assert(can == false and why == "no budget in effect")
+  assert(select("#", debug.canfreeze()) == 2)
   local r = {}
   local co = coroutine.create(function()
     r.plain = debug.canfreeze()
+    assert(select("#", debug.canfreeze()) == 1) -- (true alone)
     r.pcall = select(2, pcall(debug.canfreeze))
     r.wrap = coroutine.wrap(function() return debug.canfreeze() end)()
     r.resume = select(2, coroutine.resume(coroutine.create(debug.canfreeze)))
@@ -579,8 +582,8 @@ do
   end
   -- the same coroutine with no budget: false everywhere
   local r2 = {}
-  local co2 = coroutine.create(function() r2.plain = debug.canfreeze() end)
-  assert(coroutine.resume(co2) and r2.plain == false)
+  local co2 = coroutine.create(function() r2.plain, r2.why = debug.canfreeze() end)
+  assert(coroutine.resume(co2) and r2.plain == false and r2.why == "no budget in effect")
   -- in the callback: whether freeze() will freeze, or destroy the chain
   local told = {}
   local co3 = coroutine.create(function() for i = 1, 20 do end end)

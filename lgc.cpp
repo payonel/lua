@@ -2253,5 +2253,254 @@ void luaC_fullgc(lua_State* L, int isemergency)
 
 /* }====================================================== */
 
+/*
+** {======================================================
+** Detached check
+** =======================================================
+*/
 
+/*
+** Call 'f' with each collectable object that 'o' refers to. (Strings are
+** leaves. A budget group's callback is not followed: it is the kernel's.)
+*/
+template <class F>
+static void forrefs(GCObject* o, F f)
+{
+  auto val = [&](const TValue* v)
+  {
+    if (iscollectable(v))
+      f(gcvalue(v));
+  };
+  switch (o->tt)
+  {
+  case LUA_VTABLE:
+  {
+    Table* h = static_cast<Table*>(o);
+    if (h->metatable != nullptr)
+      f(h->metatable);
+    for (int i = 0; i < h->asize(); i++)
+      if (GCObject* c = gcvalarr(h, i))
+        f(c);
+    for (int i = 0; i < sizenode(h); i++)
+    {
+      Node* n = gnode(h, i);
+      if (isempty(&n->val))
+        continue;
+      if (GCObject* k = gckeyN(n))
+        f(k);
+      val(&n->val);
+    }
+    break;
+  }
+  case LUA_VUSERDATA:
+  {
+    Udata* u = static_cast<Udata*>(o);
+    if (u->metatable != nullptr)
+      f(u->metatable);
+    for (size_t i = 0; i < u->uv.size(); i++)
+      val(&u->uv[i]);
+    break;
+  }
+  case LUA_VLCL:
+  {
+    LClosure* cl = static_cast<LClosure*>(o);
+    for (size_t i = 0; i < cl->upvals.size(); i++)
+      if (cl->upvals[i] != nullptr)
+        f(cl->upvals[i]);
+    break;
+  }
+  case LUA_VCCL:
+  {
+    CClosure* cl = static_cast<CClosure*>(o);
+    for (size_t i = 0; i < cl->upvalue.size(); i++)
+      val(&cl->upvalue[i]);
+    break;
+  }
+  case LUA_VUPVAL:
+  {
+    TValue v = upvalgetval(static_cast<UpVal*>(o));
+    val(&v);
+    break;
+  }
+  case LUA_VTHREAD:
+  {
+    lua_State* th = static_cast<lua_State*>(o);
+    for (StkId s = 0; s < th->top; s++)
+    {
+      TValue v = getslot(th, s);
+      val(&v);
+    }
+    for (UpVal* uv = th->openupval; uv != nullptr; uv = uv->opennext)
+      f(uv);
+    if (th->frozenchild != nullptr)
+      f(th->frozenchild);
+    break;
+  }
+  default:
+    break;
+  }
+}
+
+/* values that are not shared state: they are exempt from the report */
+static bool detachedleaf(GCObject* o)
+{
+  return o->tt == LUA_VSHRSTR || o->tt == LUA_VLNGSTR || o->tt == LUA_VLCF || o->tt == LUA_VPROTO ||
+         o->tt == LUA_VBUDGET;
+}
+
+/*
+** The objects that thread 'co' holds and the rest of the VM also holds:
+** reachable both from 'co' and from outside it. "Outside" is the VM (the
+** registry, the global metatables, the main thread: what they hold, not
+** through another thread) and the other threads (every thread that 'co'
+** does not reach, and what they hold). Strings, light C functions and
+** what the table at 'permidx' has (as a key or as a value: names for
+** values, as a persistence would write them) are exempt, and so is 'co'.
+** Pushes a table with one entry for each, {value = the shared object (for
+** an upvalue, its value), from = an object inside that refers to it, type
+** = its type}, in the order they are found inside; returns their number.
+** '*why' is 1 for the first of them if the VM also holds it, 2 if only
+** other threads do (0 if none).
+*/
+int luaC_detached(lua_State* L, lua_State* co, int permidx, int* why)
+{
+  global_State* g = L->l_G;
+  std::unordered_set<GCObject*> permanents;
+  if (permidx != 0)
+  {
+    permidx = lua_absindex(L, permidx);
+    TValue pv = getslot(L, L->ci->func + permidx);
+    Table* pt = hvalue(&pv);
+    for (int i = 0; i < pt->asize(); i++)
+      if (GCObject* c = gcvalarr(pt, i))
+        permanents.insert(c);
+    for (int i = 0; i < sizenode(pt); i++)
+    {
+      Node* n = gnode(pt, i);
+      if (isempty(&n->val))
+        continue;
+      if (GCObject* k = gckeyN(n))
+        permanents.insert(k);
+      if (iscollectable(&n->val))
+        permanents.insert(gcvalue(&n->val));
+    }
+  }
+  /* what is inside: reachable from 'co' (in the order found, each with the
+     object that referred to it first) */
+  std::unordered_set<GCObject*> inside;
+  std::unordered_map<GCObject*, GCObject*> from;
+  std::vector<GCObject*> order, stack;
+  inside.insert(co);
+  stack.push_back(co);
+  while (!stack.empty())
+  {
+    GCObject* o = stack.back();
+    stack.pop_back();
+    order.push_back(o);
+    forrefs(o,
+            [&](GCObject* c)
+            {
+              if (inside.insert(c).second)
+              {
+                from[c] = o;
+                stack.push_back(c);
+              }
+            });
+  }
+  /* what is outside: reachable from the VM's roots, or from the other
+     threads, not through a thread of the program */
+  std::unordered_set<GCObject*> outvm, outthr;
+  auto spread = [&](std::unordered_set<GCObject*>& out, const std::vector<GCObject*>& roots, bool intothreads)
+  {
+    std::vector<GCObject*> work;
+    auto add = [&](GCObject* r)
+    {
+      if (r != nullptr && out.insert(r).second)
+        work.push_back(r);
+    };
+    for (GCObject* r : roots)
+      add(r);
+    while (!work.empty())
+    {
+      GCObject* o = work.back();
+      work.pop_back();
+      if (inside.count(o) != 0 && o->tt == LUA_VTHREAD)
+        continue; /* (a handle to a thread of the program: not followed into it) */
+      if (!intothreads && o->tt == LUA_VTHREAD && o != mainthread(g))
+        continue; /* (what only another thread holds is for the other category) */
+      forrefs(o, add);
+    }
+  };
+  std::vector<GCObject*> vmroots, threads;
+  if (iscollectable(&g->l_registry))
+    vmroots.push_back(gcvalue(&g->l_registry));
+  for (int i = 0; i < LUA_NUMTYPES; i++)
+    vmroots.push_back(g->mt[i]);
+  vmroots.push_back(mainthread(g));
+  for (GCObject* o = g->allgc.next; o != nullptr; o = o->next)
+    if (o->tt == LUA_VTHREAD && inside.count(o) == 0)
+      threads.push_back(o);
+  spread(outvm, vmroots, false);
+  spread(outthr, threads, true);
+  /* the crossings (the collector stays off while the answer is built) */
+  struct NoGC
+  {
+    global_State* g;
+    lu_byte old;
+    ~NoGC() { g->gcstp = old; }
+  } nogc{g, g->gcstp};
+  g->gcstp |= GCSTPGC;
+  lua_createtable(L, 0, 0);
+  int n = 0;
+  *why = 0;
+  for (GCObject* o : order)
+  {
+    bool byvm = outvm.count(o) != 0;
+    if (o == co || detachedleaf(o) || (!byvm && outthr.count(o) == 0) || permanents.count(o) != 0)
+      continue;
+    if (n == 0)
+      *why = byvm ? 1 : 2;
+    lua_createtable(L, 0, 3);
+    {
+      TValue v{};
+      if (o->tt == LUA_VUPVAL)
+        v = upvalgetval(static_cast<UpVal*>(o));
+      else
+        setgcovalue(L, &v, o);
+      setslot(L, L->top, &v);
+      luaD_inctop(L);
+      lua_setfieldi(L, -2, lt::value_2);
+    }
+    GCObject* ref = nullptr;
+    for (auto it = from.find(o); it != from.end(); it = from.find(ref))
+    { /* (an upvalue is not a value: the closure that has it is the referrer) */
+      ref = it->second;
+      if (ref->tt != LUA_VUPVAL)
+        break;
+    }
+    if (ref != nullptr && ref->tt != LUA_VUPVAL)
+    {
+      TValue v{};
+      setgcovalue(L, &v, ref);
+      setslot(L, L->top, &v);
+      luaD_inctop(L);
+      lua_setfieldi(L, -2, lt::from);
+    }
+    if (o->tt == LUA_VUPVAL)
+      lua_pushistringref(L, lt::upvalue);
+    else
+      lua_pushistringref(L, lua_typenamei(L, novariant(o->tt)));
+    lua_setfieldi(L, -2, lt::type);
+    lua_rawseti(L, -2, ++n);
+  }
+  return n;
+}
+
+/* }====================================================== */
+
+}
+
+int lua_detached(lua_State* L, lua_State* co, int permanents, int* why)
+{
+  return lua::gc::luaC_detached(L, co, permanents, why); /* (it uses the API to build its answer: unlocked) */
 }

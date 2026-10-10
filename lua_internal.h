@@ -182,6 +182,7 @@ struct InternalDebug
 
 std::optional<InternalDebug> lua_getstacki(lua_State* L, int level);
 void lua_pushframefunction(lua_State* L, lua_State* L1, const InternalDebug& ar);
+int lua_detached(lua_State* L, lua_State* co, int permanents, int* why);
 std::optional<InternalDebug> lua_getinfoi(lua_State* L, byte_view options, const InternalDebug& ar);
 const InternalString* lua_getlocali(lua_State* L, const InternalDebug* ar, int n);
 const InternalString* lua_setlocali(lua_State* L, const InternalDebug* ar, int n);

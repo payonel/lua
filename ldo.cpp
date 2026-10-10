@@ -412,20 +412,28 @@ struct BudgetCall : ProtectedCall
 ** freeze can pass: no call that cannot freeze in the way, and every resume
 ** with a continuation.
 */
-static lua_State* chaintop(lua_State* L, bool* freezable)
+static lua_State* chaintop(lua_State* L, bool* freezable, int* why = nullptr)
 {
   int nfz = L->l_G->budgetnfz; /* (the callback's own calls do not count) */
   lua_State* T = L;
   *freezable = true;
+  if (why != nullptr)
+    *why = 0;
+  auto block = [&](int w)
+  { /* (the innermost thing in the way is the reason) */
+    if (why != nullptr && *freezable)
+      *why = w;
+    *freezable = false;
+  };
   for (;;)
   {
     if (nfz > 0)
-      *freezable = false;
+      block(LUA_NOFREEZE_CALL);
     lua_State* R = T->resumer;
     if (R == nullptr || R->beff == nullptr)
       return T;
     if (!T->resumedk)
-      *freezable = false;
+      block(LUA_NOFREEZE_RESUME);
     T = R;
     nfz = T->nfz;
   }
@@ -458,18 +466,26 @@ void luaD_callerrh(lua_State* L)
 ** Could the chain of the running thread 'L' freeze now? No call that
 ** cannot freeze in the way, and every resume with a continuation.
 */
-bool luaD_canfreeze(lua_State* L)
+bool luaD_canfreeze(lua_State* L, int* why)
 {
   lua_State* T = L;
   for (;;)
   {
     if (T->nfz > 0)
+    {
+      if (why != nullptr)
+        *why = LUA_NOFREEZE_CALL;
       return false;
+    }
     lua_State* R = T->resumer;
     if (R == nullptr || R->beff == nullptr)
       return true;
     if (!T->resumedk)
+    {
+      if (why != nullptr)
+        *why = LUA_NOFREEZE_RESUME;
       return false;
+    }
     T = R;
   }
 }
@@ -1793,20 +1809,33 @@ void lua_freeze(lua_State* L)
 ** Would a freeze here freeze the chain of the running thread 'L'? In the
 ** budget callback, whether 'lua_freeze' will (instead of destroying the
 ** chain); elsewhere, whether the thread runs under a budget and no call
-** that cannot freeze lies in the way.
+** that cannot freeze lies in the way. If not, 'why' (if given) says which
+** of the things in the way it is (LUA_NOFREEZE_*).
 */
-int lua_canfreeze(lua_State* L)
+int lua_canfreeze(lua_State* L, int* why)
 {
   global_State* g = L->l_G;
+  int dummy;
+  if (why == nullptr)
+    why = &dummy;
+  *why = 0;
   if (g->budgetL != nullptr)
   {
     if (L != g->budgetL && L != g->budgetth)
+    { /* (nothing freezes from there) */
+      *why = LUA_NOFREEZE_BUDGET;
       return 0;
+    }
     bool freezable;
-    chaintop(g->budgetL, &freezable);
+    chaintop(g->budgetL, &freezable, why);
     return freezable;
   }
-  return L->beff != nullptr && luaD_canfreeze(L);
+  if (L->beff == nullptr)
+  {
+    *why = LUA_NOFREEZE_BUDGET;
+    return 0;
+  }
+  return luaD_canfreeze(L, why);
 }
 
 /*

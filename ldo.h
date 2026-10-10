@@ -65,7 +65,7 @@ constexpr TStatus LUA_CBEXIT = 101;
 lua_State* luaD_budget(lua_State* L);
 [[noreturn]] void luaD_exitcallback(lua_State* L);
 bool luaD_killed(lua_State* L);
-bool luaD_canfreeze(lua_State* L);
+bool luaD_canfreeze(lua_State* L, int* why = nullptr);
 void luaD_callerrh(lua_State* L);
 void luaD_finishhook(lua_State* L, CallInfo* ci);
 [[noreturn]] void luaD_freeze(lua_State* L, lua_State* co);

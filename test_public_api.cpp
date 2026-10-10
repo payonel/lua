@@ -5516,12 +5516,13 @@ static bool fz_every = false;
 static lua_State* fz_target = nullptr;
 static lua_State* fz_user = nullptr; /* the 'user_co' of the last call */
 static int fz_cb_can = -1;           /* what 'lua_canfreeze' said in the last call */
+static int fz_cb_why = -1;           /* and why not */
 
 static void fz_budget(lua_State* user_co, lua_State* spender)
 {
   fz_calls++;
   fz_user = user_co;
-  fz_cb_can = lua_canfreeze(spender);
+  fz_cb_can = lua_canfreeze(spender, &fz_cb_why);
   if (fz_target != nullptr && fz_calls >= fz_at && (fz_every || fz_calls == fz_at))
   {
     fz_freezes++;
@@ -5585,6 +5586,17 @@ static int fz_call(lua_State* L)
 {
   lua_settop(L, 2);
   lua_call(L, 1, 1);
+  return 1;
+}
+
+/* a C function resuming its first argument (a thread) without a continuation:
+   its first yielded value */
+static int fz_plainresume(lua_State* L)
+{
+  lua_State* co = lua_tothread(L, 1);
+  lua_ResumeResult r = lua_resume(co, L, 0);
+  CHECK(r.status == LUA_YIELD && r.nres == 1);
+  lua_xmove(co, L, 1);
   return 1;
 }
 
@@ -5814,6 +5826,8 @@ static void test_freeze()
   lua_setglobal(L, "callk");
   lua_pushcfunction(L, fz_call);
   lua_setglobal(L, "call");
+  lua_pushcfunction(L, fz_plainresume);
+  lua_setglobal(L, "plainresume");
   lua_pushcfunction(L, fz_pcallk);
   lua_setglobal(L, "pcallk");
   lua_pushcfunction(L, fz_getik);
@@ -5830,6 +5844,10 @@ static void test_freeze()
     function canf() return debug.canfreeze() end
     function can_viacallk() return (callk(canf, 0)) end
     function can_viacall() return call(canf, 0) end
+    function can_viaresume()
+      return plainresume(coroutine.create(function() local _, w = debug.canfreeze() coroutine.yield(w) end))
+    end
+    function can_viacall_why() local w call(function() local _ _, w = debug.canfreeze() end) return w end
     function late(n)
       local r = sum(n)
       error("late " .. r, 0)
@@ -5990,14 +6008,16 @@ static void test_freeze()
   while (lua_isfrozen(L))
     lua_thaw(L, nullptr);
   CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == viaplain + 1);
-  CHECK(fz_cb_can == 1); /* (and that it can) */
+  CHECK(fz_cb_can == 1 && fz_cb_why == 0); /* (and that it can) */
   lua_settop(L, 0);
 
   /* lua_canfreeze and debug.canfreeze: no budget in effect, none; under a
      budget, a plain call in the way makes it false, a call with a
      continuation does not */
   fz_reset(L, 0, nullptr, 0, false);
+  int why = -1;
   CHECK(lua_canfreeze(L) == 0);
+  CHECK(lua_canfreeze(L, &why) == 0 && why == LUA_NOFREEZE_BUDGET);
   lua_getglobal(L, "canf");
   CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
   lua_settop(L, 0);
@@ -6011,6 +6031,14 @@ static void test_freeze()
   lua_getglobal(L, "can_viacall");
   CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
   lua_settop(L, 0);
+  lua_getglobal(L, "can_viaresume");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  CHECK(fz_str(L, -1) == "a resume that cannot freeze is in the way");
+  lua_settop(L, 0);
+  lua_getglobal(L, "can_viacall_why");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  CHECK(fz_str(L, -1) == "a call that cannot freeze is in the way");
+  lua_settop(L, 0);
   fz_reset(L, 0, nullptr, 0, false);
 
   /* through a C function without one: the freeze cannot happen, the
@@ -6023,7 +6051,7 @@ static void test_freeze()
   while (st == LUA_OK && lua_isfrozen(L))
     st = lua_thaw(L, nullptr).status;
   CHECK(st == LUA_ERRRUN && fz_str(L, -1) == "cannot freeze");
-  CHECK(fz_cb_can == 0); /* (the callback was told that the freeze cannot happen) */
+  CHECK(fz_cb_can == 0 && fz_cb_why == LUA_NOFREEZE_CALL); /* (the callback was told that the freeze cannot happen) */
   CHECK(!lua_isfrozen(L) && lua_status(L) == LUA_ERRRUN);
   CHECK(lua_closethread(L, nullptr) == LUA_ERRRUN);
   lua_settop(L, 0);

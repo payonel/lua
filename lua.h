@@ -371,7 +371,16 @@ void(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
 lua_Integer(lua_getbudget)(lua_State* co, lua_Integer* left);
 [[noreturn]] void(lua_freeze)(lua_State* L);
 int(lua_isfrozen)(lua_State* co);
-int(lua_canfreeze)(lua_State* L);
+/*
+** Whether a freeze at this point would freeze the chain (see
+** 'debug.canfreeze'); if not, '*why' (if given) is the reason: no budget is
+** in effect, a call that cannot freeze is in the way, or a resume that
+** cannot freeze is in the way.
+*/
+constexpr int LUA_NOFREEZE_BUDGET = 1;
+constexpr int LUA_NOFREEZE_CALL = 2;
+constexpr int LUA_NOFREEZE_RESUME = 3;
+int(lua_canfreeze)(lua_State* L, int* why = nullptr);
 lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from);
 int(lua_isyieldable)(lua_State* L);
 

@@ -302,6 +302,7 @@ void luaC_checkfinalizer(lua_State* L, GCObject* o, Table* mt);
 bool luaC_newowner(lua_State* L, BudgetGroup* bg);
 GCObject* luaC_dequeue(lua_State* L, BudgetGroup* bg);
 void luaC_pushdrain(lua_State* L);
+int luaC_detached(lua_State* L, lua_State* co, int permidx, int* why);
 lua_CFunction luaC_drainfunction();
 bool luaC_hasdrain(lua_State* L);
 void luaC_changemode(lua_State* L, int newmode);
