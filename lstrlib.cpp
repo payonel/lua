@@ -24,6 +24,7 @@
 #include "lua_internal.h"
 #include "lobject.h"
 #include "lstate.h"
+#include "lgc.h"
 
 #include "internal_string.h"
 #include "lauxlib.h"
@@ -968,6 +969,42 @@ static int gmatch_aux(lua_State* L)
   }
   return 0; /* not found */
 }
+
+/* the state of a gmatch iterator, kept outside the process: where it is */
+static int gmatch_save(const CClosure* cl, lua_Integer* ints)
+{
+  const Udata* u = uvalue(&cl->upvalue[2]);
+  const GMatchState* gm = dynamic_cast<const GMatchState*>(u->obj.get());
+  ints[0] = gm->src;
+  ints[1] = gm->p;
+  ints[2] = gm->lastmatch;
+  return 3;
+}
+
+static bool gmatch_make(lua_State* L, CClosure* cl, const lua_Integer* ints, int nints)
+{
+  if (nints != 3 || !ttisstring(&cl->upvalue[0]) || !ttisstring(&cl->upvalue[1]))
+    return false;
+  const InternalString* s = &tsvalue(&cl->upvalue[0])->data;
+  const InternalString* p = &tsvalue(&cl->upvalue[1])->data;
+  if (ints[0] < 0 || ints[0] > static_cast<lua_Integer>(s->size()) + 1 || ints[1] < 0 ||
+      ints[1] > static_cast<lua_Integer>(p->size()))
+    return false;
+  std::unique_ptr<GMatchState> o = std::make_unique<GMatchState>();
+  GMatchState* gm = o.get();
+  lua_newuserobject(L, std::move(o), GMATCHSTATE_SIZE, 0);
+  prepstate(&gm->ms, L, s, p);
+  gm->src = ints[0];
+  gm->p = ints[1];
+  gm->lastmatch = ints[2];
+  TValue u = getslot(L, L->top - 1);
+  copyobj(&cl->upvalue[2], &u);
+  luaC_barrier(L, cl, &cl->upvalue[2]);
+  lua_pop(L, 1);
+  return true;
+}
+
+static CClosureNamer gmatch_kind(lua_CClosureKind{"string.gmatch_aux", gmatch_aux, 3, gmatch_save, gmatch_make});
 
 static int gmatch(lua_State* L)
 {

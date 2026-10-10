@@ -593,7 +593,7 @@ static lua_State* callbackthread(lua_State* L)
 
 static void budgetf(lua_State* user_co, lua_State* L)
 {
-  lua_State* B = callbackthread(L);
+  lua_State* B = lua_budgetthread(L); /* (made when a budget is set or comes in: no room is made in 'L') */
   lua_pushbudgetvalue(B, L, 1); /* the function of the group in effect */
   lua_pushthreadi(B, user_co);
   lua_pushthreadi(B, L);
@@ -605,7 +605,13 @@ static void budgetf(lua_State* user_co, lua_State* L)
   }
 }
 
-LUA_BUDGETNAME("debug", budgetf);
+/* a budget of this callback comes into a state (see 'lua_preparebudget') */
+static void budgetprepare(lua_State* L)
+{
+  callbackthread(L);
+}
+
+LUA_BUDGETNAME("debug", budgetf, budgetprepare);
 
 static int db_setbudget(lua_State* L)
 {

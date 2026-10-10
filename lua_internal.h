@@ -23,7 +23,9 @@ int lua_islightcfunction(lua_State* L, int idx);
 void lua_registerk(const char* name, lua_KFunction k);
 const char* lua_kname(lua_KFunction k);
 lua_KFunction lua_kbyname(byte_view name);
-void lua_registerbudget(const char* name, lua_Budget f);
+void lua_registerbudget(const char* name, lua_Budget f, void (*prepare)(lua_State*) = nullptr);
+/* what a budget with callback 'f' needs of a state it comes into (such as the thread its callback runs on) */
+void lua_preparebudget(lua_State* L, lua_Budget f);
 const char* lua_budgetname(lua_Budget f);
 lua_Budget lua_budgetbyname(byte_view name);
 namespace lua::object
@@ -43,17 +45,44 @@ typedef std::unique_ptr<lua_UserObject> (*lua_ObjectFactory)(lua_State* L, const
 void lua_registerobjectkind(const char* name, lua_ObjectFactory f);
 lua_ObjectFactory lua_objectkind(byte_view name);
 
+/*
+** Kinds of C closures that can be kept outside the process: the function,
+** the number of upvalues, and for one that keeps a state object in its last
+** upvalue, how to save the object as integers (the number, up to 8) and how
+** to make it again from them and the other upvalues (false if they are not
+** valid). The other upvalues are values.
+*/
+namespace lua::object
+{
+struct CClosure;
+}
+struct lua_CClosureKind
+{
+  const char* name;
+  lua_CFunction f;
+  int nup;
+  int (*save)(const ::lua::object::CClosure* cl, lua_Integer* ints);
+  bool (*make)(lua_State* L, ::lua::object::CClosure* cl, const lua_Integer* ints, int nints);
+};
+void lua_registercclosure(const lua_CClosureKind& kind);
+const lua_CClosureKind* lua_cclosurekind(lua_CFunction f);
+const lua_CClosureKind* lua_cclosurekindbyname(byte_view name);
+struct CClosureNamer
+{
+  CClosureNamer(const lua_CClosureKind& kind) { lua_registercclosure(kind); }
+};
+
 struct KNamer
 {
   KNamer(const char* name, lua_KFunction k) { lua_registerk(name, k); }
 };
 struct BudgetNamer
 {
-  BudgetNamer(const char* name, lua_Budget f) { lua_registerbudget(name, f); }
+  BudgetNamer(const char* name, lua_Budget f, void (*prepare)(lua_State*) = nullptr) { lua_registerbudget(name, f, prepare); }
 };
 /* names the continuation (or budget callback) 'fn' of module 'mod' */
 #define LUA_KNAME(mod, fn) static KNamer knamer_##fn(mod "." #fn, fn)
-#define LUA_BUDGETNAME(mod, fn) static BudgetNamer bnamer_##fn(mod "." #fn, fn)
+#define LUA_BUDGETNAME(mod, fn, ...) static BudgetNamer bnamer_##fn(mod "." #fn, fn, ##__VA_ARGS__)
 
 const InternalString* lua_toistring(lua_State* L, int idx);
 

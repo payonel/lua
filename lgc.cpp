@@ -505,6 +505,8 @@ static void restartcollection(global_State* g)
   markmt(g);
   if (g->budgetg != nullptr)
     markobject(g, g->budgetg);
+  if (g->budgetth != nullptr)
+    markobject(g, g->budgetth); /* (the thread of the callbacks stays while the state points to it) */
   markbeingfnz(g); /* mark any finalizing object left from previous cycle */
 }
 

@@ -153,6 +153,8 @@ static int luaB_auxwrap(lua_State* L)
   return auxwrap_end(L, co, auxresume(L, co, lua_gettop(L), auxwrap_cont));
 }
 
+static CClosureNamer auxwrap_kind(lua_CClosureKind{"coroutine.auxwrap", luaB_auxwrap, 1, nullptr, nullptr});
+
 static int luaB_cocreate(lua_State* L)
 {
   lua_State* NL;

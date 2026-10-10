@@ -669,6 +669,12 @@ static const luaL_Regi ll_funcs[] = {
   {lt::require, ll_require},
 };
 
+static CClosureNamer searcher_preload_kind(lua_CClosureKind{"package.searcher_preload", searcher_preload, 1, nullptr, nullptr});
+static CClosureNamer searcher_Lua_kind(lua_CClosureKind{"package.searcher_Lua", searcher_Lua, 1, nullptr, nullptr});
+static CClosureNamer searcher_C_kind(lua_CClosureKind{"package.searcher_C", searcher_C, 1, nullptr, nullptr});
+static CClosureNamer searcher_Croot_kind(lua_CClosureKind{"package.searcher_Croot", searcher_Croot, 1, nullptr, nullptr});
+
+static CClosureNamer require_kind(lua_CClosureKind{"package.ll_require", ll_require, 1, nullptr, nullptr});
 static void createsearcherstable(lua_State* L)
 {
   static const lua_CFunction searchers[] = {
