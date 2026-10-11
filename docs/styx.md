@@ -1188,9 +1188,9 @@ A/B:
    thread, across `coroutine.resume` and `coroutine.wrap`; steps for
    instructions, calls and hand-offs.
 2. The library's continuations as freezable at stock yieldability, with
-   their C work charged at check points (the pattern matcher as an
-   explicit-stack machine); the engine paths (message handlers, hooks,
-   close, finalizers).
+   their C work charged at check points (the pattern matcher records its
+   calls as a freeze leaves them and makes them again after the thaw); the
+   engine paths (message handlers, hooks, close, finalizers).
 3. Styx persists frozen states and continuation names.
 
 ### ADR-34: Frozen threads
@@ -1227,7 +1227,10 @@ What a frozen chain is, to Styx:
   persisted as its kind's name, its integers and bytes, its metatable and
   its user values. The C closures of the kinds in the engine are persisted
   as the name of the kind, their upvalues, and for the gmatch iterator the
-  position of its match.
+  position of its match. A pattern match stopped at one of its check points
+  keeps itself in a match box (`string.match`: where the stopped call began,
+  the captures, and a frame for each call of the matcher waiting), and goes
+  on from it after a restore as in the original.
 - **Budget groups.** A group is persisted with its limit, its steps left,
   the name of its callback, its value (the debug library's Lua function),
   the thread it was set on and its queue of waiting `__gc`; a thread keeps
@@ -1273,7 +1276,8 @@ What a frozen chain is, to Styx:
   the same state from inside the callback; to settle.)
 
 Tests: `frozen.lua` (programs frozen at every budget point, persisted,
-restored and thawed beside the original, in one state), and the C++ tests
+restored and thawed beside the original, in one state, a find frozen deep
+in its backtracking among them), and the C++ tests
 `frozen_library_cases` and `frozen_engine_cases`, which freeze each case of
 `tests/deep/libcases.lua` and `frozencases.lua` (library callbacks; drained
 `__gc`, message handlers, `__close`, wrapped coroutines, `gmatch`, `sort`,

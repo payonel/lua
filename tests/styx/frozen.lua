@@ -221,6 +221,38 @@ case("a metamethod, an iterator, a library callback", function()
   end, 7)
 end)
 
+case("matches stopped at their check points: find, match, gmatch, gsub", function()
+  local points = everywhere("patterns", function(out)
+    return function()
+      local subj = string.rep("a", 8) .. "b(x(y)z)ab"
+      out[#out + 1] = select(2, subj:find("a-a-a-b"))
+      out[#out + 1] = select(2, (subj .. subj):find("aaaab(", 1, true))
+      out[#out + 1] = table.concat({subj:match("((a-)(a*)b)(%b())")}, "|")
+      for a, b in subj:gmatch("(a-)(b)") do out[#out + 1] = #a .. b end
+      out[#out + 1] = (subj:gsub("(a?a?)b", "<%1>"))
+      out[#out + 1] = (subj:gsub("a-b", function(m) return #m end))
+      return #out
+    end
+  end, 3, 2000)
+  assert(points > 50, points)
+end)
+
+case("a find frozen deep in its backtracking persists, and both go on to the same end", function()
+  local co = coroutine.create(function() return (string.rep("a", 14) .. "bac"):find("(a-)a-(a-)c") end)
+  local n = 0
+  debug.setbudget(co, 3, permcb(function(user_co, spender)
+    if debug.getinfo(spender, 0, "f").func == string.find then
+      n = n + 1
+      if n == 1000 then debug.freeze() end
+    end
+  end))
+  assert(coroutine.resume(co))
+  assert(debug.isfrozen(co) and n == 1000)
+  local r = styx.unpersist(back, styx.persist(perms, co))
+  local ra, rb = finish(co), finish(r)
+  assert(show(ra) == show(rb) and show(ra) == show(table.pack(true, 16, 17, "", "a")), show(ra) .. " vs " .. show(rb))
+end)
+
 case("to-be-closed variables", function()
   everywhere("tbc", function(out)
     return function()
