@@ -499,6 +499,7 @@ public:
     raw(&L_->l_G->nexthash, sizeof(L_->l_G->nexthash));
   }
 
+  bool check_ = false; /* (only checks what it could write, while the kernel runs) */
 private:
   lua_State* L_;
   bool host_;
@@ -1643,6 +1644,11 @@ private:
     if (main && host_ && T->frozen == 0)
     {
       byte(TAG_MAINTHREAD); /* (the restoring state's own, idle) */
+      return;
+    }
+    if (check_ && is_running(T))
+    { /* (a check while the kernel runs: the host persists it at rest) */
+      byte(TAG_MAINTHREAD);
       return;
     }
     if (is_running(T))
@@ -4066,6 +4072,52 @@ static int host_restore(lua_State* L, int perms, byte_view data, bool state, Hos
 
 /* }====================================================== */
 
+}
+
+/* a writer that keeps nothing: a walk that only checks */
+namespace lua::lib
+{
+struct NullWriter : lua_Writer
+{
+  int write(lua_State*, std::optional<byte_view>) override { return 0; }
+};
+}
+
+/*
+** Can a persist of the state write all that the value at 'idx' holds
+** ('perms': the stack index of the permanents, or 0)? The walk of a host
+** persist, writing nothing: no Lua code runs and nothing is allocated in
+** the state, so a running kernel can ask it of a user program. If not,
+** 'msg' says why, with the path of what cannot be written.
+*/
+int lua_styxcheck(lua_State* L, int idx, int perms, HostString* msg)
+{
+  using namespace lua::lib;
+  try
+  {
+    TValue v{};
+    if (!value_at(L, idx, &v))
+      throw HostError{text(lt::invalid_value_index)};
+    Table* pt = nullptr;
+    if (perms != 0)
+    {
+      TValue pv{};
+      if (!value_at(L, perms, &pv) || !ttistable(&pv))
+        throw HostError{text(lt::the_permanents_must_be_a_table)};
+      pt = hvalue(&pv);
+    }
+    NullWriter w;
+    Walker hp(L, pt, &w);
+    hp.check_ = true;
+    hp.root(v, &lt::path_root);
+    hp.finish();
+    return LUA_OK;
+  }
+  catch (HostError& e)
+  {
+    *msg = HostString::from_bytes(byte_view(e.message.data(), e.message.size()));
+    return LUA_ERRRUN;
+  }
 }
 
 int lua_styxunpersistvalue(lua_State* L, int perms, byte_view data, HostString* msg)

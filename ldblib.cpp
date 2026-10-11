@@ -688,6 +688,34 @@ static int db_canfreeze(lua_State* L)
   return 2;
 }
 
+/*
+** debug.persistable(v [, permanents]): true if a persist of the state can
+** write all that 'v' holds (a kernel asks it of a user program, to find the
+** one that keeps what cannot be persisted); otherwise false and why, with
+** the path of what cannot be written. 'permanents' is the kernel's table
+** of permanents (object -> name), as the host gives it to its persist.
+*/
+static int db_persistable(lua_State* L)
+{
+  luaL_checkany(L, 1);
+  int perms = 0;
+  if (!lua_isnoneornil(L, 2))
+  {
+    luaL_checktype(L, 2, LUA_TTABLE);
+    perms = 2;
+  }
+  HostString msg;
+  if (lua_styxcheck(L, 1, perms, &msg) == LUA_OK)
+  {
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+  lua_pushboolean(L, 0);
+  byte_view m = msg.to_utf8();
+  lua_pushlstring(L, m, 0, m.size());
+  return 2;
+}
+
 static int db_isfrozen(lua_State* L)
 {
   lua_pushboolean(L, lua_isfrozen(checkco(L, 1)));
@@ -779,6 +807,7 @@ static CFuncInfo cfi_db_traceback(db_traceback, "debug.db_traceback");
 static CFuncInfo cfi_db_setbudget(db_setbudget, "debug.db_setbudget");
 static CFuncInfo cfi_db_getbudget(db_getbudget, "debug.db_getbudget");
 static CFuncInfo cfi_db_freeze(db_freeze, "debug.db_freeze");
+static CFuncInfo cfi_db_persistable(db_persistable, "debug.db_persistable");
 static CFuncInfo cfi_db_isfrozen(db_isfrozen, "debug.db_isfrozen");
 static CFuncInfo cfi_db_canfreeze(db_canfreeze, "debug.db_canfreeze");
 static CFuncInfo cfi_db_thaw(db_thaw, "debug.db_thaw");
@@ -804,6 +833,7 @@ static const luaL_RegCFI dblib[] = {
   {lt::getbudget, &cfi_db_getbudget},
   {lt::freeze, &cfi_db_freeze},
   {lt::isfrozen, &cfi_db_isfrozen},
+  {lt::persistable, &cfi_db_persistable},
   {lt::canfreeze, &cfi_db_canfreeze},
   {lt::thaw, &cfi_db_thaw},
 };
