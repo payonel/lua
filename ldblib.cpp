@@ -713,7 +713,10 @@ static int thaw_end(lua_State* L, lua_State* co, lua_ResumeResult rr)
   else
   {
     lua_pushboolean(L, 0);
-    lua_xmove(co, L, 1); /* move error message */
+    if (co == L)
+      lua_insert(L, -2); /* (a thread thawing itself: its message is on its top) */
+    else
+      lua_xmove(co, L, 1); /* move error message */
     return 2;
   }
 }

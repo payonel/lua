@@ -50,6 +50,16 @@ do
   for k in pairs(debug) do assert(known[k], k) end
 end
 
+-- a thread cannot thaw itself: false and the message, as a refused resume
+-- gives them (B12)
+do
+  local ok, msg = debug.thaw(coroutine.running())
+  assert(ok == false and type(msg) == "string", tostring(ok))
+  local co = coroutine.create(function() return debug.thaw(coroutine.running()) end)
+  local _, ok2, msg2 = coroutine.resume(co)
+  assert(ok2 == false and type(msg2) == "string", tostring(ok2))
+end
+
 ------------------------------------------------------------------------
 -- the budget
 ------------------------------------------------------------------------
