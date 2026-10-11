@@ -2239,6 +2239,178 @@ static void test_frozen_corrupted_streams()
   std::printf("      corrupted: %d rejected, %d accepted\n", rejected, accepted);
 }
 
+/*
+** The kernel's persistence, as a host does it: a kernel coroutine runs the
+** user programs, each with its budget, freezes them in its callback or
+** lets them suspend, and yields back to the host; the host persists the
+** whole state there, and restores it with luaL_restorestate into a new
+** state (which hashes as the original: no seed to give), where it resumes
+** the kernel from its anchor in the registry. Both go on exactly as a run
+** with no persist: tables with churn iterate in their order, a load and a
+** match stopped in their middle go on.
+*/
+static const char* const kernel_script = R"LUA(
+local function user1()
+  local t = {}
+  for i = 1, 120 do t["k" .. (i * 7 % 200)] = i end
+  for k, v in pairs(t) do if v % 3 == 0 then t[k] = nil end end
+  for k, v in pairs(t) do coroutine.yield(k .. "=" .. v) end
+  return "u1 done"
+end
+local function user2()
+  local o, names = {}, {}
+  for i = 1, 60 do
+    local k = (i % 2 == 0) and {} or function() return i end
+    o[k], names[k] = i, "o" .. i
+  end
+  for k, v in pairs(o) do if v % 5 == 0 then o[k] = nil end end
+  local n = 0
+  local function inc() n = n + 1 return n end
+  for k in pairs(o) do inc() coroutine.yield(names[k]) end
+  local s = string.rep("ab", 50):gsub("b", function(c) return c:upper() end)
+  coroutine.yield(s:sub(1, 20) .. "#" .. n)
+  return "u2 done"
+end
+local function user3()
+  local src = "local a = {} for i = 1, 30 do a[i] = (i * 13) % 31 end return a"
+  local pos = 0
+  local f = load(function()
+    pos = pos + 5
+    if pos - 5 >= #src then return nil end
+    return src:sub(pos - 4, pos)
+  end)
+  local a = f()
+  table.sort(a, function(x, y) return x > y end)
+  coroutine.yield(table.concat(a, ","))
+  coroutine.yield(tostring(("hello world from styx " .. string.rep("w", 40)):find("w(o)r")))
+  return "u3 done"
+end
+local kernel = coroutine.create(function()
+  local users = {}
+  for u, f in ipairs{user1, user2, user3} do
+    local co = coroutine.create(f)
+    debug.setbudget(co, 40 + u * 7, function() debug.freeze() end)
+    users[u] = {co = co, out = {}}
+  end
+  local tick = 0
+  repeat
+    local alive = false
+    for _, user in ipairs(users) do
+      local co = user.co
+      if coroutine.status(co) ~= "dead" then
+        alive = true
+        local ok, r
+        if debug.isfrozen(co) then ok, r = debug.thaw(co) else ok, r = coroutine.resume(co) end
+        if not ok then
+          user.out[#user.out + 1] = "error:" .. tostring(r)
+        elseif not debug.isfrozen(co) then
+          user.out[#user.out + 1] = tostring(r)
+        end
+      end
+    end
+    tick = tick + 1
+    coroutine.yield(tick)
+  until not alive
+  local parts = {}
+  for u, user in ipairs(users) do parts[u] = table.concat(user.out, ",") end
+  return table.concat(parts, " | ")
+end)
+debug.getregistry().kernel = kernel -- (the host's anchor)
+)LUA";
+
+/* the host's setup of a state to restore into: the same libraries and permanents */
+static void kernel_setup(lua_State* L, void*)
+{
+  luaL_openlibs(L);
+  eval(L, build_perms);
+  lua_getglobal(L, "_BACK");
+}
+
+static lua_State* kernel_state(CountingAlloc* a, unsigned int seed)
+{
+  lua_State* L = lua_newstate(a, seed);
+  luaL_openlibs(L);
+  CHECK(eval(L, build_perms) == "ok");
+  eval(L, kernel_script);
+  return L;
+}
+
+/* the host resumes the kernel once: true when it ended (its transcript) */
+static bool kernel_step(lua_State* L, std::string* transcript)
+{
+  lua_getfield(L, LUA_REGISTRYINDEX, "kernel");
+  lua_State* K = lua_tothread(L, -1);
+  lua_pop(L, 1);
+  lua_ResumeResult r = lua_resume(K, L, 0);
+  if (r.status == LUA_YIELD)
+  {
+    lua_pop(K, r.nres);
+    return false;
+  }
+  CHECK(r.status == LUA_OK);
+  *transcript = (r.status == LUA_OK ? "" : "ERR ") + to_string(K, -1);
+  lua_pop(K, r.nres);
+  return true;
+}
+
+static std::string persist_kernel(lua_State* L)
+{
+  lua_getglobal(L, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  int st = luaL_persiststate(L, lua_gettop(L), &w, &msg);
+  if (st != LUA_OK)
+    std::printf("      host persist error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  lua_pop(L, 1);
+  return w.out;
+}
+
+static void push_one(lua_State* L, void*)
+{
+  luaL_openlibs(L);
+  lua_pushinteger(L, 1);
+}
+
+static void raise_error(lua_State* L, void*)
+{
+  lua_pushstring(L, "no setup here");
+  lua_error(L);
+}
+
+/* luaL_restorestate fails as a whole: a message, and nothing left allocated */
+static void test_restore_errors()
+{
+  CountingAlloc a1;
+  lua_State* A = kernel_state(&a1, 99);
+  std::string t;
+  kernel_step(A, &t);
+  std::string blob = persist_kernel(A);
+  lua_close(A);
+  struct Bad
+  {
+    std::string data;
+    luaL_RestoreSetup setup;
+    const char* msg;
+  } bad[] = {
+    {"not a stream", kernel_setup, "not a persisted state"},
+    {blob, push_one, "the setup must leave the permanents table (key -> object) or nil"},
+    {blob, raise_error, "no setup here"},
+    {blob.substr(0, blob.size() / 2), kernel_setup, "invalid persisted data"},
+  };
+  for (const Bad& b : bad)
+  {
+    CountingAlloc a;
+    HostString msg;
+    lua_State* L = luaL_restorestate(&a, byte_view(b.data.data(), b.data.size()), b.setup, nullptr, &msg);
+    CHECK(L == nullptr);
+    CHECK(std::string(msg.to_os()).rfind(b.msg, 0) == 0);
+    CHECK(a.used == 0);
+    if (L != nullptr)
+      lua_close(L);
+  }
+}
+
 static void run_cpp_tests()
 {
   struct TestEntry
@@ -2297,6 +2469,7 @@ static void run_cpp_tests()
       {"frozen_main_thread", test_frozen_main_thread},
       {"frozen_main_thread_close", test_frozen_main_thread_close},
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
+      {"restore_errors", test_restore_errors},
   };
   std::printf("  styx_tests.cpp\n");
   const char* only = std::getenv("STYX_ONLY"); /* (to run one C++ test, under valgrind: no scripts then) */

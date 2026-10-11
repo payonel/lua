@@ -140,6 +140,9 @@ namespace lt
   constexpr byte_view the_main_thread_is_frozen_use_another_thread("the main thread is frozen: use another thread of the state");
   constexpr byte_view a_frozen_main_thread_is_restored_into_an_idle_main_thread("a frozen main thread is restored into an idle main thread with an empty stack, from another thread");
   constexpr byte_view the_permanents_must_be_a_table("the permanents must be a table");
+  constexpr byte_view the_setup_must_leave_the_permanents_table_or_nil(
+      "the setup must leave the permanents table (key -> object) or nil");
+  constexpr byte_view not_a_persisted_state("not a persisted state");
   constexpr byte_view invalid_value_index("invalid value index");
   constexpr byte_view path_registry("registry");
   constexpr byte_view path_type_metatable("type metatable");

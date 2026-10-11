@@ -86,6 +86,18 @@ int(luaL_unpersistvalue)(lua_State* L, int perms, byte_view data, HostString* ms
 int(luaL_unpersiststate)(lua_State* L, int perms, byte_view data, HostString* msg);
 lua_State*(luaL_newstatefor)(lua_Alloc* f, byte_view data);
 
+/*
+** The kernel's restore, in one call: a new state with allocator 'f', which
+** hashes as the persisting state did (its tables keep their order), set
+** up by 'setup' (with 'ud'), which opens the same libraries and makes the
+** host's permanents, in the same order as for the persisting state, and
+** pushes the inverse permanents table (key -> object), or nil; then the
+** whole state in 'data' (luaL_persiststate) is restored into it. Returns
+** the state, or NULL with a message in 'msg' (nothing is left open).
+*/
+typedef void (*luaL_RestoreSetup)(lua_State* L, void* ud);
+lua_State*(luaL_restorestate)(lua_Alloc* f, byte_view data, luaL_RestoreSetup setup, void* ud, HostString* msg);
+
 /* open selected libraries */
 void(luaL_openselectedlibs)(lua_State* L, int load, int preload);
 

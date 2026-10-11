@@ -4121,6 +4121,66 @@ int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
   });
 }
 
+namespace lua::lib
+{
+struct RestoreSetup
+{
+  luaL_RestoreSetup setup;
+  void* ud;
+};
+
+/* 1: the RestoreSetup -> the inverse permanents (or nil) */
+static int restore_setup(lua_State* L)
+{
+  RestoreSetup* rs = static_cast<RestoreSetup*>(lua_touserdata(L, 1));
+  lua_pop(L, 1);
+  if (rs->setup != nullptr)
+    rs->setup(L, rs->ud);
+  else
+    lua_pushnil(L);
+  if (lua_gettop(L) != 1 || (!lua_isnil(L, 1) && !lua_istable(L, 1)))
+    luaL_errori(L, lt::the_setup_must_leave_the_permanents_table_or_nil);
+  return 1;
+}
+
+static CFuncInfo cfi_restore_setup(restore_setup, "styx.restore_setup");
+}
+
+lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup setup, void* ud, HostString* msg)
+{
+  using namespace lua::lib;
+  unsigned int seed;
+  if (!stream_seed(data, &seed))
+  {
+    *msg = HostString::from_bytes(lt::not_a_persisted_state);
+    return nullptr;
+  }
+  lua_State* L = lua_newstate(f, seed); /* (hashes as the persisting state) */
+  if (L == nullptr)
+  {
+    *msg = HostString::from_bytes(lt::not_enough_memory);
+    return nullptr;
+  }
+  RestoreSetup rs{setup, ud};
+  lua_pushcfuncinfo(L, &cfi_restore_setup);
+  lua_pushlightuserdata(L, &rs);
+  int st = lua_pcall(L, 1, 1, 0);
+  if (st != LUA_OK)
+  {
+    auto m = lua_tolstring(L, -1);
+    *msg = m ? HostString::from_bytes(*m) : HostString::from_bytes(lt::error_object_is_not_a_string);
+  }
+  else
+    st = host_restore(L, lua_istable(L, 1) ? 1 : 0, data, true, msg);
+  if (st != LUA_OK)
+  {
+    lua_close(L);
+    return nullptr;
+  }
+  lua_settop(L, 0);
+  return L;
+}
+
 LUAMOD_API int luaopen_styx(lua_State* L)
 {
   luaL_newlibcfi(L, lua::lib::funcs);
