@@ -1957,7 +1957,7 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
       setoah(ci, oldah);
       setcistrecst(ci, status);
       ci->callstatus |= CIST_YPCALL | CIST_NYCALL;
-      status = luaD_closeprotected(L, c.func, status, 1);
+      status = luaD_closeprotected(L, c.func, status, 2); /* (freezes, cannot yield) */
       luaD_seterrorobj(L, status, c.func);
       luaD_shrinkstack(L); /* restore stack size in case of overflow */
       ci->callstatus &= ~(CIST_YPCALL | CIST_NYCALL);

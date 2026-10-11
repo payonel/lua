@@ -205,6 +205,43 @@ do
   assert(dropped < 256, dropped)
 end
 
+-- 'collectgarbage' calls the waiting '__gc' of its group only where an
+-- instruction boundary would: not in a hook (nor in a '__gc' being called):
+-- they wait for the next point
+do
+  local log = {}
+  local co = coroutine.create(function()
+    setmetatable({}, {__gc = function() log[#log + 1] = "gc" end})
+    debug.sethook(function()
+      debug.sethook()
+      collectgarbage() -- (in a hook: the '__gc' waits)
+      log[#log + 1] = "hook"
+    end, "", 1)
+    for i = 1, 3 do end
+    log[#log + 1] = "after"
+  end)
+  debug.setbudget(co, 100000, nop)
+  assert(coroutine.resume(co))
+  assert(table.concat(log, " ") == "hook gc after", table.concat(log, " "))
+end
+
+-- a '__close' in a user '__gc' that fails cannot yield, as in stock (where
+-- '__gc' cannot yield), also in a coroutine that could: the yield is the
+-- error of the '__close', the '__gc''s error a warning; the program goes on
+do
+  local co = coroutine.create(function()
+    setmetatable({}, {__gc = function()
+      local x <close> = setmetatable({}, {__close = function() coroutine.yield("from close") end})
+      error("in gc")
+    end})
+    collectgarbage() -- (its '__gc' is called here)
+    return "end"
+  end)
+  debug.setbudget(co, 100000, nop)
+  local ok, v = coroutine.resume(co)
+  assert(ok and v == "end" and coroutine.status(co) == "dead", tostring(v))
+end
+
 -- a waiting object is white between cycles, as swept objects are: one that
 -- an earlier '__gc' stored in an old table (no barrier when it was stored,
 -- black) is not freed under it (debug builds check the collector's invariant)

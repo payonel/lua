@@ -1028,7 +1028,7 @@ static TStatus finishpcallk(lua_State* L, CallInfo* ci)
   { /* error */
     StkId func = (static_cast<StkId>(ci->funcidx));
     L->allowhook = getoah(ci);             /* restore 'allowhook' */
-    func = luaF_close(L, func, status, 1); /* can yield or raise an error */
+    func = luaF_close(L, func, status, (ci->callstatus & CIST_NYCALL) ? 2 : 1); /* can yield (where the call could) or raise an error */
     luaD_seterrorobj(L, status, func);
     luaD_shrinkstack(L);      /* restore stack size in case of overflow */
     setcistrecst(ci, LUA_OK); /* clear original status */

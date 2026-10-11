@@ -315,8 +315,10 @@ void lua_pushframefunction(lua_State* L, lua_State* L1, const InternalDebug& ar)
 
 /* do '__gc' of the budget group of 'L' wait to be called? */
 int lua_hasdrain(lua_State* L)
-{
-  return luaC_hasdrain(L);
+{ /* (and can they be called here: where the chain can freeze, outside hooks
+     and the '__gc' being called (hooks off), outside the budget callback;
+     the same as at an instruction boundary, see 'luaG_traceexec') */
+  return luaC_hasdrain(L) && L->allowhook && L->l_G->budgetL == nullptr && luaD_canfreeze(L);
 }
 
 /* push the function that calls them (see 'luaC_pushdrain') */
