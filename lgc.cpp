@@ -1353,6 +1353,42 @@ void luaC_makedue(lua_State* L, GCObject* const* objs, size_t n)
 }
 
 /*
+** Put objects 'objs' of the young part of 'finobj' (marked for
+** finalization) in the order given, as if they had been marked in it, the
+** last one last ('objs[n - 1]' at the head of the list). A restore marks
+** some objects as it meets them, in another order.
+*/
+void luaC_ordermarked(lua_State* L, GCObject* const* objs, size_t n)
+{
+  global_State* g = L->l_G;
+  std::unordered_map<GCObject*, size_t> where;
+  for (size_t i = 0; i < n; i++)
+    where.emplace(objs[i], i);
+  std::vector<bool> taken(n, false);
+  GCObject* p = &g->finobj;
+  GCObject* curr;
+  while ((curr = p->next) != g->finobjold1)
+  { /* take them out of the 'finobj' list */
+    auto it = where.find(curr);
+    if (it == where.end())
+      p = curr;
+    else
+    {
+      if (curr == g->finobjsur)
+        g->finobjsur = curr->next;
+      p->next = curr->next;
+      taken[it->second] = true;
+    }
+  }
+  for (size_t i = 0; i < n; i++)
+    if (taken[i])
+    { /* (and back at the head, in order) */
+      objs[i]->next = g->finobj.next;
+      g->finobj.next = objs[i];
+    }
+}
+
+/*
 ** If pointer 'p' points to 'o', move it to the next element.
 */
 static GCObject* checkpointer(GCObject* p, GCObject* o)

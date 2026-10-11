@@ -611,6 +611,41 @@ static void test_make_due(bool generational)
   lua_close(L);
 }
 
+/*
+** Objects marked for finalization put in another order by hand
+** (luaC_ordermarked), as if they had been marked in it: when they die
+** together, their '__gc' run in the reverse of that order, as stock runs
+** them in the reverse of their marking. An object in the list that is not
+** marked is left alone.
+*/
+static void test_order_marked(bool generational)
+{
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+  if (generational)
+    CHECK(luaL_dostring(L, "collectgarbage('generational')") == LUA_OK);
+  CHECK(luaL_dostring(L, "collectgarbage('stop') log = {} keep = {} local mt = {__gc = function(o) log[#log + 1] = o.name end} "
+                         "for _, n in ipairs{'a', 'b', 'c', 'd'} do keep[n] = setmetatable({name = n}, mt) end "
+                         "plain = {name = 'plain'}") == LUA_OK);
+  GCObject* objs[5];
+  const char* names[4] = {"c", "a", "d", "b"};
+  for (int i = 0; i < 4; i++)
+  {
+    lua_getglobal(L, "keep");
+    lua_getfield(L, -1, names[i]);
+    objs[i] = static_cast<GCObject*>(const_cast<void*>(lua_topointer(L, -1)));
+    lua_pop(L, 2);
+  }
+  lua_getglobal(L, "plain");
+  objs[4] = static_cast<GCObject*>(const_cast<void*>(lua_topointer(L, -1)));
+  lua_pop(L, 1);
+  lua::gc::luaC_ordermarked(L, objs, 5);
+  CHECK(luaL_dostring(L, "keep = nil plain = nil collectgarbage('restart') collectgarbage() collectgarbage() "
+                         "return table.concat(log, ',')") == LUA_OK);
+  CHECK(std::string(lua_tolstring(L, -1)->data(), lua_tolstring(L, -1)->size()) == "b,d,a,c");
+  lua_close(L);
+}
+
 int main()
 {
   std::printf("\n\tStarting engine internals tests\n\n");
@@ -626,6 +661,8 @@ int main()
   test_object_kinds();
   test_make_due(false);
   test_make_due(true);
+  test_order_marked(false);
+  test_order_marked(true);
   if (g_failures == 0)
     std::printf("\n\tOK - engine: %d checks, 0 failures\n\n", g_checks);
   else
