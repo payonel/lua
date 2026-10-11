@@ -527,7 +527,7 @@ static void test_host_persist_runs_no_lua()
   StringWriter w;
   HostString msg;
   CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
-  CHECK(std::string(msg.to_os()).find("is not supported yet in a host persist (at root.inner)") != std::string::npos);
+  CHECK(std::string(msg.to_os()).find("__persist must be a boolean (at root.inner)") != std::string::npos);
   CHECK(eval(L, "return tostring(calls)") == "0");
   lua_close(L);
 }
@@ -1816,7 +1816,9 @@ static void test_frozen_allocation_failures()
     lua_close(B);
   }
   CHECK(finished && failures > 50);
-  /* a script's persist of the frozen chain: the n-th growth fails */
+  /* a script's persist of the frozen chain: the n-th growth fails (the
+     budget callback, the kernel's, is a permanent) */
+  CHECK(eval(A, "_PERMS[select(2, debug.getbudget(co))] = 'cb' return 'ok'") == "ok");
   failures = 0;
   finished = false;
   for (long n = 1; n < 20000 && !finished; n++)

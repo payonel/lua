@@ -501,14 +501,15 @@ case("keys whose objects the restoring side supplies differently: rebuilt, conte
   for i = 1, 40 do assert(r[others[i]] == i) end
 end)
 
-case("a key rebuilt by __persist: the table is rebuilt, contents kept", function()
-  local special = setmetatable({}, {__persist = function() return function() return {"made"} end end})
+case("a key the restoring side supplies as another object: the table is rebuilt, contents kept", function()
+  local special = {}
   local t = {[special] = "s"}
   for i = 1, 20 do t[{}] = i end
-  local r = styx.unpersist(styx.persist(t))
-  local found
-  for k, v in pairs(r) do if v == "s" then found = k end end
-  assert(found and found[1] == "made" and r[found] == "s")
+  local other = {"made"} -- (the restoring side's object for that name: another hash)
+  local r = styx.unpersist({k = other}, styx.persist({[special] = "k"}, t))
+  local n = 0
+  for k in pairs(r) do n = n + 1 end
+  assert(n == 21 and r[other] == "s")
 end)
 
 case("object keys: lookups through the restored keys", function()

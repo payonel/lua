@@ -25,15 +25,24 @@ end
 for k, v in pairs(perms) do back[v] = back[v] or k end
 back = H.invert(perms)
 
+-- the budget callbacks are the kernel's own functions: a value persist takes
+-- them as permanents (it refuses one that is not)
+local ncb = 0
+local function permcb(f)
+  ncb = ncb + 1
+  perms[f], back["cb" .. ncb] = "cb" .. ncb, f
+  return f
+end
+
 -- run 'f' in a coroutine whose budget freezes it at its k-th callback
 -- (steps of 'n'); returns the coroutine and the state its callback keeps
 local function freezeat(f, k, n, ...)
   local state = {count = 0}
   local co = coroutine.create(f)
-  debug.setbudget(co, n, function()
+  debug.setbudget(co, n, permcb(function()
     state.count = state.count + 1
     if state.count == k then debug.freeze() end
-  end)
+  end))
   local ok, err = coroutine.resume(co, ...)
   assert(ok, err)
   return co, state
@@ -251,7 +260,17 @@ case("a budget group: limit and callback survive", function()
   local n1, f1 = debug.getbudget(co)
   local r = styx.unpersist(back, styx.persist(perms, {co = co, state = state}))
   local n2, f2 = debug.getbudget(r.co)
-  assert(n1 == 9 and n2 == 9 and type(f2) == "function" and f2 ~= f1)
+  assert(n1 == 9 and n2 == 9 and f2 == f1) -- (the kernel's function, as a permanent)
+end)
+
+case("a value persist refuses a budget callback that is not a permanent", function()
+  local co = coroutine.create(function() for i = 1, 100 do end end)
+  local kernelstate = {secret = "of the kernel"}
+  debug.setbudget(co, 5, function() kernelstate.n = 1 debug.freeze() end)
+  assert(coroutine.resume(co) and debug.isfrozen(co))
+  local ok, err = pcall(styx.persist, perms, co)
+  assert(not ok and err:find("cannot persist a budget callback that is not a permanent", 1, true), err)
+  finish(co)
 end)
 
 case("threads of one group stay in one group", function()
@@ -266,7 +285,7 @@ case("threads of one group stay in one group", function()
   end
   local co, getinner = make()
   local state = {count = 0}
-  debug.setbudget(co, 5, function() state.count = state.count + 1 if state.count == 2 then debug.freeze() end end)
+  debug.setbudget(co, 5, permcb(function() state.count = state.count + 1 if state.count == 2 then debug.freeze() end end))
   assert(coroutine.resume(co))
   assert(debug.isfrozen(co))
   local inner = getinner()
@@ -304,7 +323,7 @@ case("a group persisted from inside its own callback has its steps left, as afte
     S5task = coroutine.create(function() coroutine.yield() return "t2" end)
   end)
   S5persist = function() if not S5blob then S5blob = styx.persist(perms, S5task) end end
-  debug.setbudget(user_co, 50, function() S5persist() end)
+  debug.setbudget(user_co, 50, permcb(function() S5persist() end))
   assert(coroutine.resume(user_co)) -- it ends; its tasks are in its group
   assert(coroutine.resume(S5task)) -- suspended
   user_co = nil
@@ -339,13 +358,13 @@ case("a thread of the chain cannot be persisted from inside the budget callback;
   local seen
   local co = coroutine.create(function() for i = 1, 100 do end return "end" end)
   local n = 0
-  debug.setbudget(co, 5, function(user_co)
+  debug.setbudget(co, 5, permcb(function(user_co)
     n = n + 1
     if n == 2 then
       seen = {pcall(styx.persist, perms, user_co)}
       debug.freeze()
     end
-  end)
+  end))
   assert(coroutine.resume(co))
   assert(debug.isfrozen(co))
   assert(seen[1] == false and seen[2]:find("cannot persist a running thread", 1, true), tostring(seen[2]))

@@ -127,24 +127,6 @@ if T then
     assert(n > 0)
   end)
 
-  case("a __persist function survives an allocation failure at every point", function()
-    local function make_mt()
-      return {__persist = function(t)
-        local copy = {}
-        for k, v in pairs(t) do copy[k] = v end
-        return function() return copy end
-      end}
-    end
-    local v = {a = setmetatable({1, 2, "three", {4}}, make_mt()), b = "after"}
-    local blob
-    local n = fails_cleanly_at_every_allocation(function() blob = styx.persist(v) end)
-    assert(n > 0)
-    -- (the closure and copy are new objects at each attempt, with new
-    -- hashes, so the streams differ: the result is checked instead)
-    local r = styx.unpersist(blob)
-    assert(r.a[3] == "three" and r.a[4][1] == 4 and r.b == "after" and getmetatable(r.a) == nil)
-  end)
-
   -- the trailer's parts: tables marked for finalization, dead keys
   local function marked_sample(log)
     local mt = {__gc = function(o) log[#log + 1] = o.name end}

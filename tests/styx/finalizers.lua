@@ -141,33 +141,14 @@ case("an object waiting for its finalizer is restored marked", function()
   assert(table.concat(log, " ") == "a b b", table.concat(log, " "))
 end)
 
-case("permanents and __persist tables keep their own marks", function()
+case("permanents keep their own marks", function()
   local log, gc = logger()
   local p = setmetatable({name = "perm"}, {__gc = gc})
-  local s = setmetatable({name = "special"}, {
-    __gc = gc,
-    __persist = function() return function() return {name = "made"} end end,
-  })
-  local r = styx.unpersist({log = log, p = p}, styx.persist({[log] = "log", [p] = "p"}, {p, s}))
-  assert(r[1] == p and r[2].name == "made" and getmetatable(r[2]) == nil)
+  local r = styx.unpersist({log = log, p = p}, styx.persist({[log] = "log", [p] = "p"}, {p}))
+  assert(r[1] == p)
   r = nil
   collect()
   assert(#log == 0, table.concat(log, " "))
-end)
-
-case("a __persist restore closure can mark what it builds", function()
-  local log, gc = logger()
-  local mt = {__gc = gc}
-  local s = setmetatable({name = "special"}, {
-    __persist = function(t)
-      local name = t.name
-      return function() return setmetatable({name = name .. "!"}, mt) end
-    end,
-  })
-  local r = restore({[log] = "log", [mt] = "mt", [_ENV] = "env"}, {s})
-  r = nil
-  collect()
-  assert(table.concat(log, " ") == "special!", table.concat(log, " "))
 end)
 
 case("an unpersist that fails runs no finalizer of what it built", function()
@@ -176,13 +157,17 @@ case("an unpersist that fails runs no finalizer of what it built", function()
   Class.__index = Class
   local v = {}
   for i = 1, 5 do v[i] = setmetatable({name = "x" .. i}, Class) end
-  -- the restore fails after building the instances
-  v.stop = setmetatable({}, {__persist = function() return function() error("stop", 0) end end})
-  local perms = {[log] = "log", [_ENV] = "env"}
+  -- the restore fails after building the instances: a permanent the
+  -- restoring side does not have
+  local stop = function() end
+  v.stop = stop
+  local perms = {[log] = "log", [_ENV] = "env", [stop] = "stop"}
   local blob = styx.persist(perms, v)
+  local back = H.invert(perms)
+  back.stop = nil
   for _ = 1, 3 do
-    local ok, err = pcall(styx.unpersist, H.invert(perms), blob)
-    assert(not ok and err == "stop", tostring(err))
+    local ok, err = pcall(styx.unpersist, back, blob)
+    assert(not ok and tostring(err):find("stop"), tostring(err))
   end
   collect()
   assert(#log == 0, "finalizers of half-built objects ran: " .. table.concat(log, " "))

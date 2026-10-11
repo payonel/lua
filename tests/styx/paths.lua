@@ -61,26 +61,11 @@ case("thread stack slots", function()
   has(error_of(styx.persist, {[_ENV] = "env", [coroutine.yield] = "y"}, {co = co}), "(at root.co<stack ")
 end)
 
-case("__persist results and refusals", function()
+case("__persist refusals", function()
   local t = setmetatable({}, {__persist = false})
   has(error_of(styx.persist, {a = {b = t}}), "its __persist is false (at root.a.b)")
-  local function make_mt()
-    return {__persist = function() local f = io.stdout; return function() return f end end}
-  end
-  local s = setmetatable({}, make_mt())
-  has(error_of(styx.persist, {s = s}), "(at root.s<__persist><upvalue f>)")
-end)
-
-case("errors raised by a __persist function get the path", function()
-  local t = setmetatable({}, {__persist = function() error("refused", 0) end})
-  has(error_of(styx.persist, {a = {b = t}}), "refused (at root.a.b)")
-end)
-
-case("a non-string error from a __persist function passes unchanged", function()
-  local e = {code = 7}
-  local t = setmetatable({}, {__persist = function() error(e) end})
-  local ok, err = pcall(styx.persist, {x = t})
-  assert(not ok and rawequal(err, e))
+  local f = setmetatable({}, {__persist = function() end})
+  has(error_of(styx.persist, {a = {b = f}}), "__persist must be a boolean (at root.a.b)")
 end)
 
 case("deep paths", function()

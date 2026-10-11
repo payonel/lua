@@ -120,6 +120,7 @@ namespace lt
   constexpr byte_view a_continuation_that_has_no_name("a continuation that has no name");
   constexpr byte_view cannot_persist_a_budget_group_with_pending___gc_yet("cannot persist a budget group with pending __gc yet");
   constexpr byte_view cannot_persist_a_budget_callback_that_has_no_name("cannot persist a budget callback that has no name");
+  constexpr byte_view cannot_persist_a_budget_callback_that_is_not_a_permanent("cannot persist a budget callback that is not a permanent");
   constexpr byte_view path_budget_group("<budget group>");
   constexpr byte_view path_frozen_chain("<frozen chain>");
   constexpr byte_view path_user_value_d("<user value %d>");
@@ -134,7 +135,6 @@ namespace lt
   constexpr byte_view a_table_changed_while_being_persisted("a table changed while being persisted");
   constexpr byte_view path_end(")");
   constexpr byte_view persist_output_stopped_by_the_writer("persist output stopped by the writer");
-  constexpr byte_view a___persist_function_is_not_supported_yet_in_a_host_persist("a __persist function is not supported yet in a host persist");
   constexpr byte_view the_state_is_running("the state is running");
   constexpr byte_view the_permanents_must_be_a_table("the permanents must be a table");
   constexpr byte_view invalid_value_index("invalid value index");
@@ -152,14 +152,11 @@ namespace lt
   constexpr byte_view path_upvalue_s("<upvalue %s>");
   constexpr byte_view path_upvalue_d("<upvalue %d>");
   constexpr byte_view path_stack_d("<stack %d>");
-  constexpr byte_view path_special("<__persist>");
   constexpr byte_view path_permanent_key("<permanent key>");
   constexpr byte_view path_hook("<hook>");
   constexpr byte_view a_hook_not_set_by_the_debug_library_is_not_supported_yet("a hook not set by the debug library is not supported yet");
   constexpr byte_view cannot_persist_a_table_its___persist_is_false("cannot persist a table: its __persist is false");
-  constexpr byte_view mm_persist_must_be_a_boolean_or_a_function("__persist must be a boolean or a function");
-  constexpr byte_view mm_persist_must_return_a_function("__persist must return a function");
-  constexpr byte_view mm_persist_restore_returned_s_s_expected("__persist restore function returned %s, %s expected");
+  constexpr byte_view mm_persist_must_be_a_boolean("__persist must be a boolean");
   constexpr byte_view persisting_a_userdata_value_is_not_supported_yet("persisting a userdata value is not supported yet");
   constexpr byte_view cannot_resume_dead_coroutine("cannot resume dead coroutine");
   constexpr byte_view cannot_resume_non_suspended_coroutine("cannot resume non-suspended coroutine");

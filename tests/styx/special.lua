@@ -1,6 +1,7 @@
 -- __persist: a metatable field that lets a table control how it is
--- persisted (true: literally; false: never; a function: called with the
--- value, it returns a closure that rebuilds the value on unpersist)
+-- persisted: true (or absent), literally; false, never. Nothing else: a
+-- function would be user code that the persist runs (and the closure it
+-- returned, user code that the unpersist runs), outside any budget
 local styx = require "styx"
 local H = require "harness"
 local case = H.case
@@ -26,65 +27,14 @@ case("__persist = false forbids persisting a table", function()
   fails("cannot persist a table: its __persist is false", styx.persist, {inner = t})
 end)
 
-local function make_handle_class()
-  local Handle = {}
-  Handle.__index = Handle
-  -- a handle persists only its name; restoring reopens it by name
-  Handle.__persist = function(h)
-    local name = h.name
-    return function() return setmetatable({name = name, reopened = true}, Handle) end
-  end
-  return Handle
-end
-
-case("a __persist function persists a restore closure instead", function()
-  local Handle = make_handle_class()
-  local h = setmetatable({name = "log", buffer = ("x"):rep(1000)}, Handle)
-  local blob = styx.persist(perms, h)
-  assert(#blob < 1000, "the table's contents are not persisted")
-  local r = styx.unpersist(back, blob)
-  assert(r.name == "log" and r.reopened == true and r.buffer == nil)
-  assert(getmetatable(r) == getmetatable(r))
-end)
-
-case("a value restored through __persist keeps its sharing", function()
-  local Handle = make_handle_class()
-  local h = setmetatable({name = "shared"}, Handle)
-  local r = styx.unpersist(back, styx.persist(perms, {h, h, {h}}))
-  assert(r[1] == r[2] and r[3][1] == r[1] and r[1].reopened)
-end)
-
-case("the __persist function receives the value being persisted", function()
-  local seen
-  local function make_mt(record)
-    return {__persist = function(v) record(v); return function() return {} end end}
-  end
-  local t = setmetatable({}, make_mt(function(v) seen = v end))
-  styx.persist(perms, t)
-  assert(seen == t)
-end)
-
-case("__persist must be a boolean or a function", function()
-  local t = setmetatable({}, {__persist = 42})
-  fails("__persist must be a boolean or a function", styx.persist, t)
-end)
-
-case("a __persist function must return a function", function()
-  local t = setmetatable({}, {__persist = function() return "not a function" end})
-  fails("__persist must return a function", styx.persist, t)
-end)
-
-case("the restore closure must return a value of the original type", function()
-  local function make_mt()
-    return {__persist = function() return function() return 42 end end}
-  end
-  local blob = styx.persist(perms, setmetatable({}, make_mt()))
-  fails("__persist restore function returned number, table expected", styx.unpersist, back, blob)
-end)
-
-case("errors in a __persist function propagate", function()
-  local t = setmetatable({}, {__persist = function() error("refused") end})
-  fails("refused", styx.persist, t)
+case("__persist must be a boolean: a function is refused, and is not called", function()
+  local called = false
+  local t = setmetatable({}, {__persist = function() called = true return function() return {} end end})
+  fails("__persist must be a boolean", styx.persist, t)
+  fails("__persist must be a boolean", styx.persist, {inner = t})
+  assert(not called)
+  fails("__persist must be a boolean", styx.persist, setmetatable({}, {__persist = 42}))
+  fails("__persist must be a boolean", styx.persist, setmetatable({}, {__persist = "yes"}))
 end)
 
 case("__persist is read raw from the metatable", function()
@@ -102,21 +52,8 @@ case("userdata are not supported yet (except as permanents)", function()
   fails("userdata value", styx.persist, io.stdout)
 end)
 
--- not supported yet (docs/styx.md): the restore closure reaching the value
--- it rebuilds; today this is a clean error on unpersist
-case("a restore closure that refers to its own value is an error, not a crash", function()
-  local function make_mt()
-    return {__persist = function(t) return function() return t end end}
-  end
-  local t = setmetatable({}, make_mt())
-  local blob = styx.persist(perms, t)
-  fails("invalid persisted data", styx.unpersist, back, blob)
-  H.checkheap()
-end)
-
-case("rejects truncation of a stream with special and literal values", function()
-  local Handle = make_handle_class()
-  local blob = styx.persist(perms, {setmetatable({name = "n"}, Handle),
+case("rejects truncation of a stream with literal values", function()
+  local blob = styx.persist(perms, {setmetatable({name = "n"}, {__persist = true}),
                                      setmetatable({1, 2}, {__persist = true})})
   H.rejects_truncation(blob, back)
 end)

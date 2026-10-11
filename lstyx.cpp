@@ -49,7 +49,6 @@ constexpr char TAG_PERM = 10;    /* object replaced by its permanent key */
 constexpr char TAG_UPVAL_NEW = 11;
 constexpr char TAG_UPVAL_REF = 12;
 constexpr char TAG_UPVAL_OPEN = 13; /* open upvalue: owner thread, stack level */
-constexpr char TAG_SPECIAL = 14;    /* a value rebuilt by a closure (__persist) */
 constexpr char TAG_PROTO_NEW = 15;  /* a prototype, written the first time it is met */
 constexpr char TAG_PROTO_REF = 16;  /* a prototype already written */
 constexpr char TAG_STATE = 17;      /* a whole state: seed, registry, type metatables */
@@ -277,7 +276,6 @@ enum class Step : char
   Metatable,
   Upvalue,   /* upvalue 'n' of a closure of 'proto' */
   Stack,     /* thread stack slot 'n' */
-  Special,   /* closure returned by __persist */
   PermKey,   /* key of a permanent */
   Hook,      /* a thread's debug hook function */
   Group,     /* a thread's budget group, or a group's value */
@@ -461,6 +459,9 @@ public:
   ** of the state until their finalizers run (ADR-28). Permanents are the
   ** restoring host's own objects.
   */
+  /* a whole state is persisted (the kernel's functions are part of it) */
+  void whole() { whole_ = true; }
+
   void marked_objects()
   {
     std::vector<GCObject*> list; /* host memory: a state persist is a host's */
@@ -501,6 +502,7 @@ private:
   lua_State* L_;
   bool host_;
   Table* perms_;
+  bool whole_ = false; /* a whole state, not a value */
   luaL_Buffer* B_ = nullptr;
   int refs_ = 0;
   lua_Writer* w_ = nullptr;
@@ -971,9 +973,6 @@ private:
       case Step::Stack:
         add(format(lt::path_stack_d, {std::to_string(r.n)}));
         break;
-      case Step::Special:
-        add(text(lt::path_special));
-        break;
       case Step::PermKey:
         add(text(lt::path_permanent_key));
         break;
@@ -1281,6 +1280,9 @@ private:
     const char* n = lua_budgetname(bg->f);
     if (n == nullptr)
       fail(lt::cannot_persist_a_budget_callback_that_has_no_name);
+    TValue key{};
+    if (!whole_ && !ttisnil(&bg->cb) && !perm_key(bg->cb, &key))
+      fail(lt::cannot_persist_a_budget_callback_that_is_not_a_permanent); /* (the kernel's own function) */
     byte(TAG_GROUP);
     var(bg->budget);
     global_State* g = L_->l_G;
@@ -1310,55 +1312,20 @@ private:
 
   /*
   ** The '__persist' field of a table's metatable (read raw): absent or true
-  ** persists the table literally, false forbids it, and a function is called
-  ** with the table and returns a closure that is persisted in its place
-  ** (unpersist calls it to rebuild the table). Returns true if the table was
-  ** written this way.
+  ** persists the table as it is, false forbids it. Nothing else is allowed:
+  ** a function would be user code that the persist runs (and its restore
+  ** closure, user code that the unpersist runs), outside any budget.
   */
-  bool special(Table* h)
+  void special(Table* h)
   {
     if (h->metatable == nullptr)
-      return false;
+      return;
     TValue f = string_field(h->metatable, lt::mm_persist);
-    switch (ttype(&f))
-    {
-    case LUA_TNIL:
-      return false;
-    case LUA_TBOOLEAN:
-      if (tagisfalse(f.tt_))
-        fail(lt::cannot_persist_a_table_its___persist_is_false);
-      return false;
-    case LUA_TFUNCTION:
-      break;
-    default:
-      fail(lt::mm_persist_must_be_a_boolean_or_a_function);
-    }
-    if (host_)
-      fail(lt::a___persist_function_is_not_supported_yet_in_a_host_persist);
-    luaL_checkstacki(L_, 3, std::nullopt);
-    setslot(L_, L_->top, &f);
-    L_->top++;
-    sethvalue2s(h);
-    int st = lua_pcall(L_, 1, 1, 0);
-    if (st == LUA_ERRMEM)
-    {
-      lua_lock(L_);
-      luaD_throw(L_, LUA_ERRMEM);
-    }
-    if (st != LUA_OK)
-    {
-      if (lua_type(L_, -1) == LUA_TSTRING) /* a message gets the path */
-        fail(*lua_tolstring(L_, -1));
-      lua_error(L_); /* any other value as it is */
-    }
-    if (!lua_isfunction(L_, -1))
-      fail(lt::mm_persist_must_return_a_function);
-    byte(TAG_SPECIAL);
-    byte(static_cast<char>(LUA_TTABLE));
-    TValue c = getslot(L_, L_->top - 1);
-    push_value(c, Step::Special);
-    lua_pop(L_, 1);
-    return true;
+    if (ttisnil(&f) || (ttisboolean(&f) && !tagisfalse(f.tt_)))
+      return;
+    if (ttisboolean(&f))
+      fail(lt::cannot_persist_a_table_its___persist_is_false);
+    fail(lt::mm_persist_must_be_a_boolean);
   }
 
   void sethvalue2s(Table* h)
@@ -1380,8 +1347,7 @@ private:
   void table(Table* h)
   {
     lua_Integer id = refcount_; /* the table's, taken just before */
-    if (special(h))
-      return;
+    special(h);
     if (tofinalize(h))
       marked_.push(Marked{h, id});
     /* a hash part is written slot by slot (its layout): keys hash by the
@@ -2040,7 +2006,6 @@ enum class Build : char
 {
   Table,
   Perm,
-  Special,
   Closure,
   Proto,
   Thread,
@@ -2059,7 +2024,7 @@ enum class Part : char
   NodeKey,   /* Table: the key of node 'i' */
   NodeVal,   /* Table: the value of node 'i' */
   End,       /* Table: all entries read */
-  Object,    /* Perm: the key; Special: the restore closure */
+  Object,    /* Perm: the key */
   Proto,     /* Closure: its prototype */
   Upvals,    /* Closure: upvalue 'i' (raw part) */
   UpNew,     /* Closure: the value of upvalue 'i' */
@@ -2089,7 +2054,7 @@ struct Frame
 {
   Build kind = Build::Table;
   Part part = Part::Meta;
-  char type = 0;      /* Perm, Special: the expected type; Thread: status; Table: layout */
+  char type = 0;      /* Perm: the expected type; Thread: status; Table: layout */
   int i = 0;          /* the part being read */
   int n = 0;          /* number of parts */
   lua_Integer id = 0; /* reference id */
@@ -2454,14 +2419,13 @@ private:
       return Next::Ready;
     }
     case TAG_PERM:
-    case TAG_SPECIAL:
     {
       Frame f;
-      f.kind = (tag == TAG_PERM) ? Build::Perm : Build::Special;
+      f.kind = Build::Perm;
       f.part = Part::Object;
       f.type = r_.get_byte();
       f.id = new_id();
-      if (f.type < 0 || f.type >= LUA_NUMTYPES || (f.kind == Build::Special && f.type != LUA_TTABLE))
+      if (f.type < 0 || f.type >= LUA_NUMTYPES)
         r_.invalid();
       frames_.push(f);
       return Next::Read;
@@ -2536,8 +2500,6 @@ private:
       return table_part(f);
     case Build::Perm:
       return perm_part(f);
-    case Build::Special:
-      return special_part(f);
     case Build::Closure:
       return closure_part(f);
     case Build::Proto:
@@ -2838,21 +2800,6 @@ private:
   ** A value rebuilt by the closure its '__persist' function returned. Its
   ** reference id was taken before the closure was read, matching persist.
   */
-  Next special_part(Frame f)
-  {
-    if (!lua_isfunction(L_, -1))
-      r_.invalid();
-    lua_call(L_, 0, 1);
-    if (lua_type(L_, -1) != f.type)
-    {
-      lua_pushstring(L_, luaL_typename(L_, -1));
-      lua_pushstring(L_, lua_typename(L_, f.type));
-      luaL_errori(L_, lt::mm_persist_restore_returned_s_s_expected);
-    }
-    register_top(f.id);
-    return done();
-  }
-
   /* ---- prototypes ---- */
 
   /*
@@ -4075,6 +4022,7 @@ int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
   {
     global_State* g = L->l_G;
     hp.byte(TAG_STATE);
+    hp.whole();
     hp.root(g->l_registry, &lt::path_registry);
     for (int t = 0; t < LUA_NUMTYPES; t++)
     {
