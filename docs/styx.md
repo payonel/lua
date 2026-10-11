@@ -287,9 +287,10 @@ of these raises a clear error unless it says otherwise.
   suspended in a `pairs` loop over it can skip or repeat keys, and `next`
   from a key deleted from it fails. Such keys: a permanent not made the
   same way in the restoring state (library objects made in the same order
-  with the same seed hash the same), and light userdata and light C
-  functions, which hash by address (C functions are the same in one
-  process).
+  with the same seed hash the same), and light userdata and the light C
+  functions of a host that the engine does not name, which hash by
+  address (the same in one process). The engine's light C functions hash
+  by their names, the same in every process.
 - **A finalizer already due whose object a finalizer made reachable
   again** (the object waited to be finalized when it was persisted): it is
   restored marked, so its finalizer runs when it is unreachable again, not
@@ -317,9 +318,10 @@ across a restore, and are to be revisited:
 - **`table.sort`**: on a badly balanced partition it picks a pivot from the
   time (arrays over 100 elements).
 - **Addresses** need a portable answer: `tostring` of a table, function,
-  thread or userdata and `%p` show addresses; light C functions and light
-  userdata hash by address as keys, so a table keyed by them is rebuilt in
-  another process (contents kept, order not).
+  thread or userdata and `%p` show addresses; light userdata and a host's
+  light C functions the engine does not name hash by address as keys, so a
+  table keyed by them is rebuilt in another process (contents kept, order
+  not).
 - **The collector**: when finalizers run, when weak tables lose entries,
   the collector's progress, `collectgarbage("count")` and where a memory
   cap is hit depend on its cycle and on the memory accounted, which a
@@ -815,8 +817,9 @@ back (and which Java does not have).
 - The engine gives every object that hashes by identity (tables, userdata,
   closures, threads) a hash when it is made (a sequence from the seed,
   `GCObject::hash`, in the header's padding: no object grew), and object
-  keys hash by it (on `lua-c++`, A/B in its commit; light userdata and
-  light C functions still hash by address). Strings take none: whether a
+  keys hash by it (on `lua-c++`, A/B in its commit). The engine's light C
+  functions hash by their names; light userdata and a host's unnamed C
+  functions still hash by address. Strings take none: whether a
   string is new or reused depends on the collector, and the sequence must
   depend only on what the program makes. Persist writes the hash of
   every table, function and thread (as its place in the sequence, relative

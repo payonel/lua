@@ -2645,8 +2645,9 @@ private:
   /*
   ** Every key that hashes by an object's hash sits where a lookup finds it:
   ** in the chain from its main position. A key the restoring side supplied
-  ** (a permanent, a light userdata or C function, which hash by address)
-  ** can hash otherwise (ADR-30).
+  ** (a permanent, a light userdata or a host's C function, which hash by
+  ** address) can hash otherwise (ADR-30); an engine C function hashes by
+  ** its name.
   */
   bool keys_in_place(const Table* h) const
   {
