@@ -168,6 +168,18 @@ case("a wrapped coroutine", function()
   end)
 end)
 
+case("a thread with no budget of its own that the program resumes is in the chain, persists and restores", function()
+  everywhere("unbudgeted thread", function(out)
+    -- (made here, by the kernel: no budget group of its own)
+    local k = coroutine.create(function()
+      local s = 0
+      for i = 1, 30 do s = s + i out[#out + 1] = s end
+      return s
+    end)
+    return function() local ok, v = coroutine.resume(k) out[#out + 1] = v return v end
+  end)
+end)
+
 case("a chain of coroutines, frozen in the innermost", function()
   everywhere("chain", function(out)
     return function()
@@ -283,6 +295,28 @@ case("a stream of a frozen chain is rejected when cut", function()
   assert(debug.isfrozen(co))
   local blob = styx.persist(perms, {co = co, state = state})
   H.rejects_truncation(blob, back)
+end)
+
+case("a group persisted from inside its own callback has its steps left, as after the callback", function()
+  local task1
+  local user_co = coroutine.create(function()
+    task1 = coroutine.create(function() for i = 1, 200 do end end)
+    S5task = coroutine.create(function() coroutine.yield() return "t2" end)
+  end)
+  S5persist = function() if not S5blob then S5blob = styx.persist(perms, S5task) end end
+  debug.setbudget(user_co, 50, function() S5persist() end)
+  assert(coroutine.resume(user_co)) -- it ends; its tasks are in its group
+  assert(coroutine.resume(S5task)) -- suspended
+  user_co = nil
+  collectgarbage(); collectgarbage() -- (the group's root is gone: nothing running to refuse)
+  assert(select(4, debug.getbudget(S5task)) == nil)
+  assert(coroutine.resume(task1)) -- the kernel runs a task: the callback persists the other
+  assert(S5blob)
+  local t2 = styx.unpersist(back, S5blob)
+  local n, _, left = debug.getbudget(t2)
+  assert(n == 50 and left == 50, tostring(left))
+  assert(select(2, coroutine.resume(t2)) == "t2")
+  S5task, S5persist, S5blob = nil, nil, nil
 end)
 
 case("a thread of the chain cannot be persisted from inside the budget callback; after the freeze it can", function()

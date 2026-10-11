@@ -1274,7 +1274,8 @@ private:
       fail(lt::cannot_persist_a_budget_callback_that_has_no_name);
     byte(TAG_GROUP);
     var(bg->budget);
-    var(bg->left);
+    global_State* g = L_->l_G;
+    var((g->budgetL != nullptr && g->budgetg == bg) ? bg->budget : bg->left); /* (in its callback, as after it) */
     name(n);
     byte(bg->nodrain ? 1 : 0);
     TValue root{};
@@ -3318,8 +3319,8 @@ private:
     case Part::Beff:
     {
       BudgetGroup* bg = pop_group();
-      if (L1->frozen != 0 && (bg == nullptr || L1->bown == nullptr))
-        r_.invalid(); /* (a thread frozen by a budget has its groups) */
+      if (L1->frozen != 0 && bg == nullptr)
+        r_.invalid(); /* (a thread frozen by a budget had one in effect) */
       luaE_setbeff(L1, bg);
       f.part = Part::Parent;
       break;
@@ -3353,6 +3354,9 @@ private:
         r_.invalid(); /* (a thread says it was resumed by this one, which says it was not) */
       if ((L1->frozenparent != nullptr || L1->frozenchild != nullptr) && L1->frozen == 0)
         r_.invalid();
+      if (L1->frozen != 0 && L1->frozenparent == nullptr && L1->bown == nullptr)
+        r_.invalid(); /* (the freeze target has its own group: a thaw puts it in effect;
+                         the others get their resumer's, which may be all they have) */
       push_thread(L1);
       return done();
     }
