@@ -150,6 +150,47 @@ void luaM_freeobj(lua_State* L, size_t size)
   free_debt(L, size, novariant(LUA_VUSERDATA));
 }
 
+/*
+** The size counted for an object (one block) grows from 'osize' to 'nsize':
+** a memory error if the allocator does not allow it.
+*/
+void luaM_growobj(lua_State* L, size_t osize, size_t nsize)
+{
+  global_State* g = L->l_G;
+  assert(osize <= nsize);
+  if (l_unlikely(!luaM_permit_(g, L, osize, nsize, novariant(LUA_VUSERDATA))))
+    luaD_throw(L, LUA_ERRMEM);
+  g->GCdebt -= static_cast<l_mem>(nsize - osize);
+}
+
+/* ... or goes down to 'nsize' (not 0), if the allocator allows it */
+bool luaM_shrinkobj(lua_State* L, size_t osize, size_t nsize)
+{
+  global_State* g = L->l_G;
+  assert(0 < nsize && nsize <= osize);
+  if (!g->frealloc->permit(osize, nsize, novariant(LUA_VUSERDATA)))
+    return false;
+  g->GCdebt += static_cast<l_mem>(osize - nsize);
+  return true;
+}
+
+/*
+** A block of 'size' bytes (as an array or buffer counts it) that comes to
+** be counted on its own, or no longer: its memory goes from or to an object
+** that counts it in its size (see 'luaM_growobj').
+*/
+void luaM_takeblock(lua_State* L, size_t size)
+{
+  if (size != 0)
+    take_debt(L, size, 0);
+}
+
+void luaM_freeblock(lua_State* L, size_t size)
+{
+  if (size != 0)
+    free_debt(L, size, 0);
+}
+
 // type allocators
 std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L, std::span<TValue> block, size_t count, bool bthrow)
 {

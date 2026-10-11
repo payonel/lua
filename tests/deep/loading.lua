@@ -131,3 +131,26 @@ do
   local f3 = assert(load(string.dump(f2)))
   assert(f3() == "twice")
 end
+
+-- the pieces the reader function of 'load' gives are not kept once read:
+-- only the one being read is (with a budget, as under the freeze gate, the
+-- load keeps the input it read, which a restored copy of it goes over
+-- again: no more than twice the size of what it read)
+do
+  local n = 0
+  local mem = {}
+  local piece = string.rep("x", 100000) .. "\n"
+  local f = load(function()
+    n = n + 1
+    if n > 20 then return nil end
+    collectgarbage()
+    mem[n] = collectgarbage("count")
+    return "--" .. n .. piece -- (a comment, a new string each time)
+  end)
+  assert(f and n == 21)
+  if GATE then
+    assert(mem[20] - mem[3] < 2 * 20 * #piece / 1024 + 400, mem[20] - mem[3])
+  else
+    assert(mem[20] - mem[3] < 400, mem[20] - mem[3])
+  end
+end

@@ -52,6 +52,24 @@ public:
 
   byte_span area() noexcept { return bytes_; }
 
+  /* its bytes (and their count in '*len') go elsewhere; it is left empty */
+  byte_owner release(size_t* len) noexcept
+  {
+    *len = len_;
+    len_ = 0;
+    byte_owner b = std::move(bytes_);
+    bytes_ = {};
+    return b;
+  }
+
+  /* takes bytes given by 'release' */
+  void adopt(byte_owner b, size_t len) noexcept
+  {
+    assert(bytes_.empty());
+    bytes_ = std::move(b);
+    len_ = len;
+  }
+
 private:
   byte_owner bytes_;
   size_t len_ = 0;
@@ -72,12 +90,16 @@ std::span<T> luaZ_overlay(byte_view block)
 
 /* --------- Private Part ------------------ */
 
+struct LoadResume;
+
 struct ZIO
 {
   byte_view chunk {lt::empty_str};
   size_t pos = 0;
   lua_Reader* reader = nullptr;
   lua_State* L = nullptr;
+  LoadResume* rz = nullptr; /* a load that a freeze can stop (see lload.h) */
+  bool resuming = false;    /* (its frames are being made again) */
 };
 
 int luaZ_fill(ZIO* z);

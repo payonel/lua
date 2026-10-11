@@ -1184,3 +1184,134 @@ do
   local r = table.pack(kresume(co))
   assert(r[1] and r[2] == 2001000 and freezes > 4000, show(r) .. " " .. freezes)
 end
+
+-- 'load' stops in its middle, in a call of its reader function or at the
+-- check point of a token (each token read is a step), and goes on as if
+-- nothing had happened: the same function (the same bytes dumped), the
+-- same error, the same calls of the reader
+do
+  local chunks = {
+    "local a, b = 1, 2.5e3 -- c\n return a + b, 'x\\65\\u{48}\\z  \n  y', [==[long\n]]string]==], 0x1p4, #{1, 2, x = 3}",
+    string.rep("local t = {1, 'two', [3] = 3.0, f = function(...) return ... end}\n", 20) .. "return t",
+    "return function(a) if a then return [[\nx]] elseif not a then while false do end else repeat until true end " ..
+      "for i = 1, 2 do end for k, v in pairs({}) do end goto l ::l:: return a end",
+    "local x <const> = 1; local y <close> = nil; return x, ... --[[ long\ncomment ]] ;",
+    "x = = 1",
+    "return '\\q'",
+    "return [==[ unfinished",
+    string.dump(function(a, b) local s = "a long string constant, longer than forty characters" return a + b, s end),
+    string.dump(function() return 1, 2.5, "s", nil, true end, true),
+  }
+  local function loadwith(chunk, piece, ending)
+    local calls = 0
+    if not piece then return calls, load(chunk, "=chunk") end
+    local pos = 1
+    local r = {load(function()
+      calls = calls + 1
+      for i = 1, 3 do end
+      if pos > #chunk then return ending end
+      local p = chunk:sub(pos, pos + piece - 1)
+      pos = pos + piece
+      return p
+    end, "=chunk")}
+    return calls, r[1], r[2]
+  end
+  local function result(calls, f, msg)
+    return {calls = calls, f = f and string.dump(f), msg = msg}
+  end
+  for ci, chunk in ipairs(chunks) do
+    for _, how in ipairs{{false}, {1, nil}, {3, ""}} do
+      local plain = result(loadwith(chunk, how[1], how[2]))
+      for _, n in ipairs{1, 2, 5} do
+        local co = coroutine.create(function() return result(loadwith(chunk, how[1], how[2])) end)
+        local freezes = 0
+        debug.setbudget(co, n, function() freezes = freezes + 1 debug.freeze() end)
+        local r = table.pack(kresume(co))
+        assert(r[1], r[2])
+        assert(freezes > 0 and deepeq(r[2], plain), "chunk " .. ci .. ", budget " .. n .. ": " .. show(r[2]) .. " vs " .. show(plain))
+      end
+    end
+  end
+  -- a long chunk given as a string gets its check points (before, the parse
+  -- was one step)
+  local co = coroutine.create(function() return load(string.rep("x = 1 ", 3000)) end)
+  local inload = 0
+  debug.setbudget(co, 10, function(user_co, spender)
+    if debug.getinfo(spender, 0, "f").func == load then inload = inload + 1 end
+  end)
+  assert(coroutine.resume(co))
+  assert(inload > 500, inload)
+end
+
+-- a message handler that freezes, called for an error of the reader
+-- function of 'load': 'load' gives the handled error, as without a freeze
+do
+  local function run()
+    local n = 0
+    local handler = function(m) for i = 1, 30 do end return "H:" .. tostring(m) end
+    return {xpcall(load, handler, function() n = n + 1 if n == 2 then error("boom", 0) end return "return " end)}
+  end
+  local plain = run()
+  local co = coroutine.create(run)
+  local freezes = 0
+  debug.setbudget(co, 3, function() freezes = freezes + 1 debug.freeze() end)
+  local r = table.pack(kresume(co))
+  assert(r[1] and freezes > 5 and deepeq(r[2], plain), show(r[2]) .. " vs " .. show(plain))
+  assert(deepeq(plain, {true, nil, "H:boom"}), show(plain))
+end
+
+-- an error of the reader function of a load with a budget, with no freeze
+-- in it: 'load' returns it
+do
+  local co = coroutine.create(function()
+    local n = 0
+    return load(function() n = n + 1 if n == 2 then error("bad", 0) end return "return " end)
+  end)
+  debug.setbudget(co, 1000, function() end)
+  local ok, f, msg = coroutine.resume(co)
+  assert(ok and f == nil and msg == "bad", msg)
+end
+
+-- a load stopped by a freeze holds the parser's arrays and buffer; when it
+-- goes on and they cannot be counted again on their own (the test
+-- library's limit of allocations), 'load' gives a memory error, as for any
+-- allocation of a load, and its memory is all given back
+if T then
+  local src = string.rep("do local name = 'a string of some length' goto a ::a:: do goto b end ::b:: end\n", 8) ..
+              "return 1"
+  local plain = string.dump(load(src))
+  local loaded, failed = false, 0
+  for limit = 0, 1000 do
+    local co = coroutine.create(function() return load(src) end)
+    local n = 0
+    debug.setbudget(co, 1, function()
+      n = n + 1
+      if n == 40 then
+        debug.setbudget(co, 1000000)
+        debug.freeze()
+      end
+    end)
+    assert(coroutine.resume(co) and debug.isfrozen(co))
+    local ok, a, b, c = pcall(function()
+      T.alloccount(limit)
+      local a, b, c = debug.thaw(co)
+      T.alloccount()
+      return a, b, c
+    end)
+    T.alloccount()
+    if not ok then
+      assert(a == "not enough memory", a)
+    elseif not a then
+      assert(b == "not enough memory", b)
+    elseif not b then
+      assert(c == "not enough memory", c)
+      failed = failed + 1
+    else
+      assert(string.dump(b) == plain)
+      loaded = true
+      break
+    end
+  end
+  assert(loaded and failed > 0, failed)
+  collectgarbage()
+end

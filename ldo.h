@@ -26,7 +26,8 @@ protected:
 
 [[noreturn]] void luaD_errerr(lua_State* L);
 void luaD_seterrorobj(lua_State* L, TStatus errcode, StkId oldtop);
-TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name, std::optional<byte_view> mode);
+TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name, std::optional<byte_view> mode,
+                             ::lua::bytes::LoadResume* rz = nullptr);
 void luaD_hook(lua_State* L, int event, int line, int fTransfer, int nTransfer);
 void luaD_hookcall(lua_State* L, CallInfo* ci);
 int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func, int narg1, int delta);

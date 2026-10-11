@@ -25,6 +25,7 @@
 #include "lundump.h"
 #include "lvm.h"
 #include "lzio.h"
+#include "lload.h"
 
 #include "lhack.h"
 #include "lauxlib.h"
@@ -2160,36 +2161,85 @@ static void checkmode(lua_State* L, byte_view mode, byte_view x)
 
 /*
 ** Before the first call to the reader function, Lua reserves a slot
-** with a table for anchoring stuff.
+** with a table for anchoring stuff. (A load that a freeze stopped keeps
+** its frame, see lload.h.)
 */
 static void f_parser(lua_State* L, SParser* p)
 {
+  struct
+  {
+    StkId otop; /* original top */
+    Table* anchor;
+    int c;
+    int fixed;
+  } l;
+  LoadResume* rz = p->z->rz;
   LClosure* cl;
   byte_view mode = p->mode;
-  int c;
-  Table* anchor;
-  StkId otop = L->top; /* original top */
-  luaD_checkstack(L, 2);
-  anchor = Table::luaH_new(L);               /* create the anchor table */
-  setsloth(L, L->top++, anchor); /* anchor the anchor table */
-  c = (p->z->pos < p->z->chunk.size())
-          ? (unsigned char)p->z->chunk[p->z->pos++]
-          : luaZ_fill(p->z); /* read first character */
-  if (c == LUA_SIGNATURE[0])
+  if (l_unlikely(p->z->resuming))
   {
-    int fixed = 0;
+    luaZ_unhold(rz, L->ci); /* (the stopped load's arrays and buffer) */
+    switch (luaZ_restore(rz, LF_FPARSER, &l, sizeof(l)))
+    {
+    case 1:
+      goto site_1;
+    case 2:
+      goto site_2;
+    case 3:
+      goto site_3;
+    default:
+      luaZ_badstate(rz);
+    }
+  }
+  l.otop = L->top;
+  luaD_checkstack(L, 2);
+  l.anchor = Table::luaH_new(L);           /* create the anchor table */
+  setsloth(L, L->top++, l.anchor); /* anchor the anchor table */
+site_1:
+  try
+  {
+    l.c = (p->z->pos < p->z->chunk.size())
+              ? (unsigned char)p->z->chunk[p->z->pos++]
+              : luaZ_fill(p->z); /* read first character */
+  }
+  catch (...)
+  {
+    luaZ_record(rz, LF_FPARSER, 1, &l, sizeof(l));
+    throw;
+  }
+  if (l.c == LUA_SIGNATURE[0])
+  {
+    l.fixed = 0;
     if (mode.find('B') != byte_view::npos)
-      fixed = 1;
+      l.fixed = 1;
     else
       checkmode(L, mode, lt::binary);
-    cl = luaU_undump(L, p->z, anchor, p->name, fixed);
+  site_2:
+    try
+    {
+      cl = luaU_undump(L, p->z, l.anchor, &p->buff, p->name, l.fixed);
+    }
+    catch (...)
+    {
+      luaZ_record(rz, LF_FPARSER, 2, &l, sizeof(l));
+      throw;
+    }
   }
   else
   {
     checkmode(L, mode, lt::text);
-    cl = luaY_parser(L, p->z, anchor, &p->buff, &p->dyd, p->name, c);
+  site_3:
+    try
+    {
+      cl = luaY_parser(L, p->z, l.anchor, &p->buff, &p->dyd, p->name, l.c);
+    }
+    catch (...)
+    {
+      luaZ_record(rz, LF_FPARSER, 3, &l, sizeof(l));
+      throw;
+    }
   }
-  L->top = (static_cast<StkId>(otop)); /* restore stack */
+  L->top = (static_cast<StkId>(l.otop)); /* restore stack */
   setslotclL(L, L->top++, cl); /* push closure */
   assert(cl->upvals.size() == cl->p->upvalues.size());
   cl->luaF_initupvals(L);
@@ -2217,7 +2267,8 @@ void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj)
   L->top--;
 }
 
-TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name, std::optional<byte_view> mode)
+TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name, std::optional<byte_view> mode,
+                             LoadResume* rz)
 {
   struct SParser p;
   TStatus status;
@@ -2234,7 +2285,18 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   p.dyd.gt.size = 0;
   p.dyd.label.arr = nullptr;
   p.dyd.label.size = 0;
+  if (rz != nullptr)
+  {
+    rz->dyd = &p.dyd;
+    rz->buff = &p.buff;
+  }
   status = luaD_pcall(L, &p, L->top, L->errfunc);
+  if (l_unlikely(status == LUA_FREEZE) && rz != nullptr && rz->box != nullptr && luaZ_recorded(rz))
+  { /* a freeze stopped the load: its box keeps it, to go on after the thaw */
+    luaZ_hold(rz, oldci, (int)(oldtop - oldci->func));
+    decnny(L);
+    luaD_throw(L, LUA_FREEZE); /* (the chain is destroyed, or goes on freezing) */
+  }
   luaM_alloc_Vardesc_span(L->l_G, L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);

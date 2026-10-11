@@ -87,6 +87,31 @@ const InternalString* lua_toistring(lua_State* L, int idx);
 
 int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkname, std::optional<byte_view> mode);
 
+/*
+** 'load' of the base library: a load that a freeze can stop (in a call of
+** its reader function, or at a check point: each token read is a step) and
+** that goes on in 'k' after the thaw ('lua_loadkresume' there, with the
+** status 'k' got). The chunk is the string at 1 ('readeridx' 0) or what
+** the reader function at 'readeridx' gives; the piece being read is kept
+** at 'pieceidx' and the stopped load in a box at 'boxidx' (slots after the
+** arguments, nil at first). Returns the status: the function on the top,
+** or the error.
+*/
+struct lua_LoadSpec
+{
+  int readeridx;
+  int pieceidx;
+  int boxidx;
+  std::optional<byte_view> name;
+  std::optional<byte_view> mode;
+  lua_KContext ctx;
+  lua_KFunction k;
+};
+int lua_loadk(lua_State* L, const lua_LoadSpec& ls);
+int lua_loadkresume(lua_State* L, int status, const lua_LoadSpec& ls);
+/* a protected call that keeps the message handler in effect (see lapi.cpp) */
+int lua_pcallkeep(lua_State* L, int nargs, int nresults, lua_KContext ctx, lua_KFunction k);
+
 
 void lua_pushistring(lua_State* L, InternalString&& s);
 void lua_pushistringext(lua_State* L, InternalString&& s);

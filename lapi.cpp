@@ -24,6 +24,8 @@
 #include "ltm.h"
 #include "lundump.h"
 #include "lvm.h"
+#include "lzio.h"
+#include "lload.h"
 
 #include "util_cast.h"
 #include "literals.h"
@@ -1877,6 +1879,51 @@ void lua_concatk(lua_State* L, int n, lua_KContext ctx, lua_KFunction k)
 /*
 ** Execute a protected call.
 */
+/*
+** A protected call with a continuation where the thread cannot yield: a
+** 'conventional' protected call; a freeze passing through makes it one the
+** thread recovers itself, as when it can yield.
+*/
+static TStatus pcallnoyield(lua_State* L, CallS* cp, StkId func, int nresults,
+                            lua_KContext ctx, lua_KFunction k)
+{
+  CallS& c = *cp;
+  CallInfo* ci = L->ci;
+  TStatus status;
+  ci->k = k;     /* save continuation */
+  ci->ctx = ctx; /* save context */
+  c.nresults = nresults;
+  StkId olderrfunc = L->errfunc;
+  lu_byte oldah = L->allowhook;
+  status = luaD_pcall(L, &c, c.func, func, false);
+  if (l_unlikely(status == LUA_FREEZE))
+  {
+    ci->funcidx = (int)c.func;
+    ci->old_errfunc = olderrfunc;
+    L->errfunc = func;
+    setoah(ci, oldah);
+    ci->callstatus |= CIST_YPCALL | CIST_NYCALL;
+    luaD_throw(L, LUA_FREEZE); /* go on freezing */
+  }
+  if (l_unlikely(status != LUA_OK))
+  { /* it failed: close its variables so that a '__close' can freeze, with the
+       frame one that recovers, as when the thread can yield (its error is
+       in 'finishpcallk'); a '__close' still cannot yield here */
+    ci->funcidx = (int)c.func;
+    ci->old_errfunc = olderrfunc;
+    setoah(ci, oldah);
+    setcistrecst(ci, status);
+    ci->callstatus |= CIST_YPCALL | CIST_NYCALL;
+    status = luaD_closeprotected(L, c.func, status, 2); /* (freezes, cannot yield) */
+    luaD_seterrorobj(L, status, c.func);
+    luaD_shrinkstack(L); /* restore stack size in case of overflow */
+    ci->callstatus &= ~(CIST_YPCALL | CIST_NYCALL);
+    setcistrecst(ci, LUA_OK);
+    L->errfunc = olderrfunc;
+  }
+  return status;
+}
+
 int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
                        lua_KContext ctx, lua_KFunction k)
 {
@@ -1948,40 +1995,7 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
       luaD_throw(L, LUA_FREEZE); /* (the chain is destroyed: nothing here freezes) */
   }
   else if (!yieldablek(L, ci))
-  { /* a 'conventional' protected call; a freeze passing through makes it
-       one the thread recovers itself, as when it can yield */
-    ci->k = k;     /* save continuation */
-    ci->ctx = ctx; /* save context */
-    c.nresults = nresults;
-    StkId olderrfunc = L->errfunc;
-    lu_byte oldah = L->allowhook;
-    status = luaD_pcall(L, &c, c.func, func, false);
-    if (l_unlikely(status == LUA_FREEZE))
-    {
-      ci->funcidx = (int)c.func;
-      ci->old_errfunc = olderrfunc;
-      L->errfunc = func;
-      setoah(ci, oldah);
-      ci->callstatus |= CIST_YPCALL | CIST_NYCALL;
-      luaD_throw(L, LUA_FREEZE); /* go on freezing */
-    }
-    if (l_unlikely(status != LUA_OK))
-    { /* it failed: close its variables so that a '__close' can freeze, with the
-         frame one that recovers, as when the thread can yield (its error is
-         in 'finishpcallk'); a '__close' still cannot yield here */
-      ci->funcidx = (int)c.func;
-      ci->old_errfunc = olderrfunc;
-      setoah(ci, oldah);
-      setcistrecst(ci, status);
-      ci->callstatus |= CIST_YPCALL | CIST_NYCALL;
-      status = luaD_closeprotected(L, c.func, status, 2); /* (freezes, cannot yield) */
-      luaD_seterrorobj(L, status, c.func);
-      luaD_shrinkstack(L); /* restore stack size in case of overflow */
-      ci->callstatus &= ~(CIST_YPCALL | CIST_NYCALL);
-      setcistrecst(ci, LUA_OK);
-      L->errfunc = olderrfunc;
-    }
-  }
+    status = pcallnoyield(L, &c, func, nresults, ctx, k);
   else
   { /* prepare continuation (call is already protected by 'resume') */
     ci->k = k;     /* save continuation */
@@ -2002,6 +2016,43 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   return status;
 }
 
+/*
+** A protected call from a C function, where the thread cannot yield, that
+** keeps the message handler in effect: an error calls it where it happens,
+** as if the call were not protected (the reader function of 'load', called
+** inside the parse). A freeze can pass through: 'k' goes on after the thaw.
+*/
+int lua_pcallkeep(lua_State* L, int nargs, int nresults, lua_KContext ctx, lua_KFunction k)
+{
+  CallS c;
+  lua_lock(L);
+  api_checkpop(L, nargs + 1);
+  checkresults(L, nargs, nresults);
+  assert(k != nullptr && L->ci != &L->base_ci && !isLua(L->ci) && !yieldablek(L, L->ci));
+  c.func = L->top - (nargs + 1);
+  luaE_spend(L, 1); /* a hand-off */
+  TStatus status = pcallnoyield(L, &c, L->errfunc, nresults, ctx, k);
+  adjustresults(L, nresults);
+  lua_unlock(L);
+  return status;
+}
+
+/* the function a load made, on the top, gets the global table as its environment */
+static void setloadenv(lua_State* L)
+{
+  StkId s = L->top - 1;
+  LClosure* f = slotclLval(L, s); /* get new function */
+  if (f->upvals.size() >= 1)
+  { /* does it have an upvalue? */
+    /* get global table from registry */
+    TValue gt;
+    getGlobalTable(L, &gt);
+    /* set global table as 1st upvalue of 'f' (may be LUA_ENV) */
+    upvalsetval(L, f->upvals[0], &gt);
+    luaC_barrier(L, f->upvals[0], &gt);
+  }
+}
+
 int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkname, std::optional<byte_view> mode)
 {
   ZIO z;
@@ -2010,21 +2061,38 @@ int lua_loadi(lua_State* L, lua_Reader* reader, std::optional<byte_view> chunkna
   luaC_checkGC(L);
   luaZ_init(L, &z, reader);
   status = luaD_protectedparser(L, &z, chunkname, mode);
-  if (status == LUA_OK)
-  {                                            /* no errors? */
-    StkId s = L->top - 1;
-    LClosure* f = slotclLval(L, s); /* get new function */
-    if (f->upvals.size() >= 1)
-    { /* does it have an upvalue? */
-      /* get global table from registry */
-      TValue gt;
-      getGlobalTable(L, &gt);
-      /* set global table as 1st upvalue of 'f' (may be LUA_ENV) */
-      upvalsetval(L, f->upvals[0], &gt);
-      luaC_barrier(L, f->upvals[0], &gt);
-    }
-  }
+  if (status == LUA_OK) /* no errors? */
+    setloadenv(L);
   lua_unlock(L);
+  return status;
+}
+
+int lua_loadk(lua_State* L, const lua_LoadSpec& ls)
+{
+  lua_lock(L);
+  luaC_checkGC(L);
+  lua_unlock(L);
+  int status = luaZ_loadk(L, ls, false); /* (it locks around the parse) */
+  if (status == LUA_OK)
+  {
+    lua_lock(L);
+    setloadenv(L);
+    lua_unlock(L);
+  }
+  return status;
+}
+
+int lua_loadkresume(lua_State* L, int status, const lua_LoadSpec& ls)
+{
+  if (status != LUA_OK && status != LUA_YIELD)
+    return status; /* (the reader function failed after the thaw: its error on the top) */
+  status = luaZ_loadk(L, ls, true);
+  if (status == LUA_OK)
+  {
+    lua_lock(L);
+    setloadenv(L);
+    lua_unlock(L);
+  }
   return status;
 }
 
