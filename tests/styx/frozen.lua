@@ -319,6 +319,22 @@ case("a group persisted from inside its own callback has its steps left, as afte
   S5task, S5persist, S5blob = nil, nil, nil
 end)
 
+case("objects of the program waiting for its '__gc' come with it, and their '__gc' run once after the thaw", function()
+  local co = freezeat(function()
+    local out = {}
+    for i = 1, 3 do setmetatable({}, {__gc = function() out[#out + 1] = "gc" .. i end}) end
+    for i = 1, 300 do end -- (frozen here)
+    return table.concat(out, " ")
+  end, 2, 50)
+  assert(debug.isfrozen(co))
+  collectgarbage() -- (the kernel's collection: they die, and wait for the program)
+  local r = styx.unpersist(back, styx.persist(perms, co))
+  collectgarbage()
+  local a, b = finish(co), finish(r)
+  -- (the last one may still be in a register of the frozen frame, as in stock)
+  assert(a[2]:find("gc2 gc1", 1, true) and b[2] == a[2], tostring(a[2]) .. " / " .. tostring(b[2]))
+end)
+
 case("a thread of the chain cannot be persisted from inside the budget callback; after the freeze it can", function()
   local seen
   local co = coroutine.create(function() for i = 1, 100 do end return "end" end)

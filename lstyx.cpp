@@ -639,6 +639,7 @@ private:
       var(static_cast<lua_Integer>(n));
       if (n == 1)
       {
+        var(marked_.get(0).o->tt == LUA_VTABLE ? 0 : 1);
         var(marked_.get(0).id);
         var(owner_code(marked_.get(0).o));
         bool due = false;
@@ -652,9 +653,11 @@ private:
     auto by_object = [](const Marked& a, const Marked& b) { return std::less<const GCObject*>()(a.o, b.o); };
     marked_.sort(by_object);
     WorkStack<lua_Integer> order(L_, !host_);
+    WorkStack<lua_Integer> kinds(L_, !host_);
     WorkStack<lua_Integer> owners(L_, !host_);
     WorkStack<lua_Integer> dues(L_, !host_);
     order.reserve(n);
+    kinds.reserve(n);
     owners.reserve(n);
     dues.reserve(n);
     each_marked([&](GCObject* o, bool due)
@@ -663,11 +666,14 @@ private:
       if (i < marked_.size() && marked_.get(i).o == o)
       {
         order.push(marked_.get(i).id);
+        kinds.push(o->tt == LUA_VTABLE ? 0 : 1);
         owners.push(owner_code(o));
         dues.push(due ? 1 : 0);
       }
     });
     var(static_cast<lua_Integer>(order.size()));
+    for (size_t i = kinds.size(); i > 0; i--)
+      var(kinds.get(i - 1));
     for (size_t i = order.size(); i > 0; i--)
       var(order.get(i - 1));
     for (size_t i = owners.size(); i > 0; i--)
@@ -1171,9 +1177,12 @@ private:
   */
   void userobject(Udata* u)
   {
+    lua_Integer id = refcount_; /* the object's, taken just before */
     const char* kind = (u->obj != nullptr) ? u->obj->persistkind() : nullptr;
     if (kind == nullptr)
       fail(lt::persisting_a_userdata_value_is_not_supported_yet);
+    if (tofinalize(u))
+      marked_.push(Marked{u, id}); /* (its mark and owner, in the trailer) */
     lua_Integer ints[8];
     byte_view bytes;
     int n = u->obj->persistsave(ints, &bytes);
@@ -1278,6 +1287,18 @@ private:
     var((g->budgetL != nullptr && g->budgetg == bg) ? bg->budget : bg->left); /* (in its callback, as after it) */
     name(n);
     byte(bg->nodrain ? 1 : 0);
+    /* the dead objects waiting for its '__gc' (marked due in the trailer):
+       read after its value and its root, so pushed before them */
+    WorkStack<GCObject*> queue(L_, !host_);
+    for (GCObject* o = bg->fnz.next; o != nullptr; o = o->next)
+      queue.push(o);
+    var(static_cast<lua_Integer>(queue.size()));
+    for (size_t i = queue.size(); i > 0; i--)
+    {
+      TValue v{};
+      setgcovalue(L_, &v, queue.get(i - 1));
+      push_value(v, Step::Group);
+    }
     TValue root{};
     if (bg->root != nullptr)
       setthvalue(L_, &root, bg->root);
@@ -2058,6 +2079,7 @@ enum class Part : char
   Child,     /* Thread: the thread it resumed (frozen) */
   GroupCb,   /* Group: its value */
   GroupRoot, /* Group: the thread it was set on */
+  GroupQueue, /* Group: dead object 'i' waiting for its '__gc' */
   UMeta,     /* Userobject: its metatable */
   UValue,    /* Userobject: user value 'i' */
   CUp,       /* CClosure: upvalue 'i' */
@@ -2085,7 +2107,7 @@ class Restorer
 public:
   /* stack: 1: permanents (key -> object); 3: refs (id -> object); 4: upvalues */
   Restorer(lua_State* L, byte_view data, bool host)
-      : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true), owners_(L, true), dues_(L, true),
+      : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true), umarked_(L, true), owners_(L, true), dues_(L, true),
         fixes_(L, true), rebuilt_(L, true)
   {
   }
@@ -2098,7 +2120,15 @@ public:
   {
     if (!done_)
       for (size_t i = 0; i < made_.size(); i++)
-        made_.get(i)->metatable = nullptr;
+      {
+        GCObject* o = made_.get(i);
+        if (o == nullptr)
+          continue;
+        else if (o->tt == LUA_VTABLE)
+          static_cast<Table*>(o)->metatable = nullptr;
+        else
+          static_cast<Udata*>(o)->metatable = nullptr;
+      }
   }
 
   Reader r_;
@@ -2138,15 +2168,30 @@ public:
       L_->top++;
       lua_pushboolean(L_, 1);
       lua_rawset(L_, -3);
+      WorkStack<lua_Integer> kinds(L_, true);
+      kinds.reserve(static_cast<size_t>(n));
+      for (int i = 0; i < n; i++)
+      {
+        lua_Integer kind = t.get_var();
+        if (kind != 0 && kind != 1)
+          t.invalid();
+        kinds.push(kind);
+      }
       for (int i = 0; i < n; i++)
       {
         lua_Integer id = t.get_var();
         if (id < 1 || lua_rawgeti(L_, REFS, id) != LUA_TNIL)
           t.invalid();
         lua_pop(L_, 1);
+        if (kinds.get(static_cast<size_t>(i)) == 1)
+        { /* a user object: marked when it is read (its kind makes it) */
+          made_.push(nullptr);
+          umarked_.push(UMarked{id, static_cast<size_t>(i)});
+          continue;
+        }
         lua_createtable(L_, 0, 0);
         TValue h = getslot(L_, L_->top - 1);
-        made_.push(hvalue(&h));
+        made_.push(gcvalue(&h));
         marked_.push(id);
         lua_pushvalue(L_, -2);
         lua_setmetatable(L_, -2);
@@ -2154,6 +2199,7 @@ public:
       }
       lua_pop(L_, 1);
       marked_.sort([](lua_Integer a, lua_Integer b) { return a < b; });
+      umarked_.sort([](const UMarked& a, const UMarked& b) { return a.id < b.id; });
       /* who they belong to, in the same order: the groups come with the value */
       for (int i = 0; i < n; i++)
       {
@@ -2191,6 +2237,18 @@ public:
   {
     if (next_marked_ != marked_.size())
       r_.invalid();
+    for (size_t i = 0; i < made_.size(); i++)
+      if (made_.get(i) == nullptr)
+        r_.invalid(); /* (a marked user object the value did not have) */
+    /* in the order they were marked (user objects are marked as they are
+       read): those due go to their queues from it */
+    if (umarked_.size() > 0)
+    {
+      std::vector<GCObject*> order; /* (host memory, a short time) */
+      for (size_t i = 0; i < made_.size(); i++)
+        order.push_back(made_.get(i));
+      luaC_ordermarked(L_, order.data(), order.size());
+    }
     /* the owners of the marked tables: their groups are made now */
     for (size_t i = 0; i < made_.size(); i++)
     {
@@ -2286,7 +2344,13 @@ private:
   lua_Integer refcount_ = 0;
   WorkStack<Frame> frames_;
   WorkStack<lua_Integer> marked_; /* ids of the tables made for the trailer, sorted */
-  WorkStack<Table*> made_;        /* those tables */
+  WorkStack<GCObject*> made_;     /* those objects (user objects as they are read) */
+  struct UMarked
+  {
+    lua_Integer id; /* a marked user object's reference id */
+    size_t made;    /* its place in 'made_' */
+  };
+  WorkStack<UMarked> umarked_;    /* the user objects of the trailer, sorted by id */
   WorkStack<lua_Integer> owners_; /* their owners (see Walker::owner_code), in the order they were made */
   WorkStack<lua_Integer> dues_;   /* whether their '__gc' was due (waiting in a queue) */
   size_t next_marked_ = 0;        /* the next of them the value meets */
@@ -3413,9 +3477,29 @@ private:
           r_.invalid();
         u->metatable = hvalue(&v);
         luaC_objbarrier(L_, u, u->metatable);
-        luaC_checkfinalizer(L_, u, u->metatable);
       }
       lua_pop(L_, 1);
+      size_t at = umarked_.lower_bound(UMarked{f.id, 0}, [](const UMarked& a, const UMarked& b) { return a.id < b.id; });
+      if (at < umarked_.size() && umarked_.get(at).id == f.id)
+      { /* marked for finalization in the persisting state (whatever its
+           metatable says now): marked as a script marks it, by a metatable
+           with '__gc'; its owner is set at the end ('finish') */
+        Table* mt = u->metatable;
+        luaL_checkstacki(L_, 3, std::nullopt);
+        lua_createtable(L_, 0, 1);
+        TValue gc{};
+        setsvalue(L_, &gc, L_->l_G->tmname[TM_GC]);
+        setslot(L_, L_->top, &gc);
+        L_->top++;
+        lua_pushboolean(L_, 1);
+        lua_rawset(L_, -3);
+        TValue mv = getslot(L_, L_->top - 1);
+        u->metatable = hvalue(&mv);
+        luaC_checkfinalizer(L_, u, u->metatable);
+        u->metatable = mt;
+        lua_pop(L_, 1);
+        made_.set(umarked_.get(at).made, u);
+      }
     }
     else
     {
@@ -3525,6 +3609,7 @@ private:
     lua_Integer left = r_.get_var();
     lua_Budget fn = lua_budgetbyname(read_name());
     char nodrain = r_.get_byte();
+    int nqueue = r_.get_count();
     if (budget < 1 || left > budget || fn == nullptr || (nodrain != 0 && nodrain != 1))
       r_.invalid();
     lua_lock(L_);
@@ -3550,6 +3635,7 @@ private:
     f.kind = Build::Group;
     f.part = Part::GroupCb;
     f.id = id;
+    f.n = nqueue;
     f.p = bg;
     frames_.push(f);
   }
@@ -3567,8 +3653,25 @@ private:
       frames_.set_top(f);
       return Next::Read;
     }
-    lua_State* th = pop_thread();
-    bg->root = th;
+    if (f.part == Part::GroupRoot)
+    {
+      bg->root = pop_thread();
+      f.part = Part::GroupQueue;
+      f.i = 0;
+    }
+    else
+    { /* a dead object waiting for its '__gc' (the trailer makes it due) */
+      TValue v = getslot(L_, L_->top - 1);
+      if (!ttistable(&v) && !ttisfulluserdata(&v))
+        r_.invalid();
+      lua_pop(L_, 1);
+      f.i++;
+    }
+    if (f.i < f.n)
+    {
+      frames_.set_top(f);
+      return Next::Read;
+    }
     TValue gv{};
     setgcovalue(L_, &gv, bg);
     setslot(L_, L_->top, &gv);

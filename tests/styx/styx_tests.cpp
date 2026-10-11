@@ -1966,6 +1966,56 @@ static void test_user_object_kind()
 
 
 /*
+** A user object that a program (budgeted code) marked for finalization is
+** the program's: restored, it still is. Its '__gc' runs as user code, where
+** the program can freeze, not at once as a kernel's would (with the budget
+** lifted, where nothing can freeze).
+*/
+static int owner_canfreeze = -1; /* what 'debug.canfreeze' said in the '__gc' */
+
+static int owner_note(lua_State* L)
+{
+  owner_canfreeze = lua_toboolean(L, 1);
+  testobj_gcs++;
+  return 0;
+}
+
+static void test_user_object_owner()
+{
+  lua_registerobjectkind("styxtest.obj", make_testobj);
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  lua_pushcfunction(A, testobj_new);
+  lua_setglobal(A, "newobj");
+  lua_pushcfunction(A, owner_note);
+  lua_setglobal(A, "note");
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, "mt = {__gc = function() note(debug.canfreeze()) end} "
+                "local function program() "
+                "  local o = newobj(1, 2) debug.setmetatable(o, mt) "
+                "  coroutine.yield() "
+                "  o = nil collectgarbage() return 'done' "
+                "end "
+                "prog = coroutine.create(program) "
+                "local cb = function() end _PERMS[cb] = 'cb' _BACK.cb = cb "
+                "debug.setbudget(prog, 100000, cb) "
+                "coroutine.resume(prog) return 'ok'") == "ok");
+  /* the original, as a control: its '__gc' runs in the program, where it
+     can freeze */
+  testobj_gcs = 0;
+  owner_canfreeze = -1;
+  CHECK(eval(A, "local styx = require 'styx' r = styx.unpersist(_BACK, styx.persist(_PERMS, prog)) "
+                "return select(2, coroutine.resume(prog))") == "done");
+  CHECK(testobj_gcs == 1 && owner_canfreeze == 1);
+  /* the restored program: the same */
+  owner_canfreeze = -1;
+  CHECK(eval(A, "return select(2, coroutine.resume(r))") == "done");
+  CHECK(testobj_gcs == 2 && owner_canfreeze == 1);
+  lua_close(A);
+}
+
+
+/*
 ** A stream with bytes changed or cut short is not trusted to be valid, but
 ** a restore of it must end: with an error, or with a state that closes
 ** cleanly. No crash, no hang, no leak (the counting allocator's balance).
@@ -2072,6 +2122,7 @@ static void run_cpp_tests()
       {"frozen_restore_out_of_memory", test_frozen_restore_out_of_memory},
       {"frozen_allocation_failures", test_frozen_allocation_failures},
       {"user_object_kind", test_user_object_kind},
+      {"user_object_owner", test_user_object_owner},
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
   };
   std::printf("  styx_tests.cpp\n");
