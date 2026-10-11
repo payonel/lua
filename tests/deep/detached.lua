@@ -116,6 +116,30 @@ do
   assert(has(co, handle) == "thread")
 end
 
+-- the budget callback of the program is the kernel's: reported (the VM holds
+-- it) unless it is a permanent, as a persistence would refuse it
+do
+  local cb = function() end
+  local co = program({yield = coroutine.yield}, "yield()")
+  debug.setbudget(co, 1000, cb)
+  assert(has(co, cb) == "function")
+  assert(detached(co, {cb}) == true)
+end
+
+-- a thread of the kernel that the program resumed is in its frozen chain:
+-- reported (a freeze race: the kernel can touch it while the program is
+-- frozen)
+do
+  local k = coroutine.create(function() for i = 1, 400 do end end)
+  local co = coroutine.create(assert(load("resume(k)", "=user", "t", {resume = coroutine.resume, k = k})))
+  local cb = function() debug.freeze() end
+  debug.setbudget(co, 20, cb)
+  assert(coroutine.resume(co) and debug.isfrozen(co) and debug.isfrozen(k))
+  assert(has(co, k, {cb}) == "thread")
+  debug.setbudget(co, 0)
+  while debug.isfrozen(co) do assert(debug.thaw(co)) end
+end
+
 -- a frozen program (with a chain of coroutines) can be checked, and what it
 -- shares is still reported afterwards
 do

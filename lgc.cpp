@@ -2407,6 +2407,20 @@ static void forrefs(GCObject* o, F f)
       f(uv);
     if (th->frozenchild != nullptr)
       f(th->frozenchild);
+    if (th->frozenparent != nullptr)
+      f(th->frozenparent);
+    if (th->bown != nullptr)
+      f(th->bown);
+    if (th->beff != nullptr)
+      f(th->beff);
+    break;
+  }
+  case LUA_VBUDGET:
+  {
+    BudgetGroup* bg = static_cast<BudgetGroup*>(o);
+    if (bg->root != nullptr)
+      f(bg->root);
+    val(&bg->cb);
     break;
   }
   default:
@@ -2510,6 +2524,9 @@ int luaC_detached(lua_State* L, lua_State* co, int permidx, int* why)
   for (int i = 0; i < LUA_NUMTYPES; i++)
     vmroots.push_back(g->mt[i]);
   vmroots.push_back(mainthread(g));
+  for (BudgetGroup* bg : g->groupbyid) /* (a budget callback is the kernel's, which set it) */
+    if (bg != nullptr && iscollectable(&bg->cb))
+      vmroots.push_back(gcvalue(&bg->cb));
   for (GCObject* o = g->allgc.next; o != nullptr; o = o->next)
     if (o->tt == LUA_VTHREAD && inside.count(o) == 0)
       threads.push_back(o);
