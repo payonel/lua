@@ -979,7 +979,9 @@ static void test_host_state_marked_garbage()
 
   CountingAlloc a2;
   lua_State* B = restored_state(&a2, blob);
-  CHECK(eval(B, "return tostring(#finalized)") == "0");
+  lua_getglobal(B, "finalized"); /* (read with no allocation: no step of the collector) */
+  CHECK(lua_rawlen(B, -1) == 0); /* (the restore called none: the collector's next step does) */
+  lua_pop(B, 1);
   CHECK(eval(B, "collectgarbage() collectgarbage() return table.concat(finalized, ' ')") == order);
   CHECK(eval(B, "kept = nil collectgarbage() collectgarbage() return finalized[#finalized]") == "kept");
   lua_close(B);
@@ -2619,6 +2621,38 @@ static void raise_error(lua_State* L, void*)
 }
 
 /*
+** A restore ends with a whole cycle of the collector, unless the program
+** stopped it: what was garbage when the state was persisted (an object
+** waiting for its '__gc', a dead entry of a weak table) goes then, so that
+** a program that waits on its collector goes on even when the host
+** restores more often than a cycle takes (a new state's first cycle starts
+** only once its heap has grown by about its size)
+*/
+static void test_restore_collects()
+{
+  const char* prog = "live = {} for i = 1, 200000 do live[i] = {} end collectgarbage() "
+                     "done = false setmetatable({}, {__gc = function() done = true end}) "
+                     "weak = setmetatable({}, {__mode = 'k'}) weak[{}] = 1 return 'ok'";
+  for (int stop = 0; stop < 2; stop++)
+  {
+    CountingAlloc a1;
+    lua_State* A = new_counted_state(&a1);
+    CHECK(eval(A, build_perms) == "ok");
+    CHECK(eval(A, prog) == "ok");
+    if (stop)
+      CHECK(eval(A, "collectgarbage('stop') return 'ok'") == "ok");
+    std::string blob = persist_state(A);
+    CHECK(eval(A, "return tostring(done) .. ' ' .. tostring(next(weak) ~= nil)") == "false true");
+    lua_close(A);
+    CountingAlloc a2;
+    lua_State* B = restored_state(&a2, blob);
+    CHECK(eval(B, "return tostring(done) .. ' ' .. tostring(next(weak) ~= nil)") ==
+          (stop ? "false true" : "true false"));
+    lua_close(B);
+  }
+}
+
+/*
 ** A state is persisted from its main thread or from a thread it holds, and
 ** the restore gives that thread back
 */
@@ -2740,6 +2774,7 @@ static void run_cpp_tests()
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
       {"kernel_persistence", test_kernel_persistence},
       {"kernel_in_another_process", test_kernel_in_another_process},
+      {"restore_collects", test_restore_collects},
       {"persist_from_held_thread", test_persist_from_held_thread},
       {"restore_errors", test_restore_errors},
   };

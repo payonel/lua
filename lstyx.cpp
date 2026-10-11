@@ -4246,6 +4246,22 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
     { /* (the main thread's stack is empty, or a frozen main thread's, which only a thaw changes) */
       lua_State* from = lua_tothread(T, -1);
       lua_pop(T, 1);
+      /* a whole cycle, unless the program stopped the collector: what was
+         garbage when the state was persisted goes now (dead entries of
+         weak tables), or is due (objects waiting for their '__gc': called
+         at the collector's next step, in the program's time, none in the
+         restore), as a cycle of the original would have taken it. A new
+         state's first cycle starts only once its heap has grown by about
+         its size: a host that restores more often than that would
+         otherwise starve a program that waits on its collector. (After
+         the restore's call, so that its table of the objects restored
+         holds nothing.) */
+      if (lua_gc(T, LUA_GCISRUNNING, 0, 0, 0))
+      {
+        lua_lock(T);
+        luaC_fullgcdue(T);
+        lua_unlock(T);
+      }
       return from;
     }
   }
