@@ -146,6 +146,8 @@ struct lua_UserObject
   */
   virtual const char* persistkind() const { return nullptr; }
   virtual int persistsave(lua_Integer* /*ints*/, byte_view* /*bytes*/) const { return 0; }
+  /* are its user values part of its state (else they are kept as nil)? */
+  virtual bool persistuservalues() const { return true; }
 };
 
 /*

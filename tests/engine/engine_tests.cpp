@@ -555,6 +555,7 @@ static void test_object_kinds()
   luaL_addlstring(&B, "bytes of a box", 0, 14);
   luaL_buffsave(&B, box);
   CHECK(std::string(box->persistkind()) == "box");
+  CHECK(box->persistuservalues()); /* (by default, its user values are part of its state) */
   lua_Integer ints[8];
   byte_view bytes;
   int n = box->persistsave(ints, &bytes);
