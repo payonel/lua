@@ -316,11 +316,19 @@ struct lua_State : GCListed
   StkId frozenerrfunc = 0;  /* its message handler, */
   int frozennres = 0;       /* its number of results, */
   l_uint32 frozencc = 0;    /* its 'nCcalls' where it froze */
+  StkId frozentop = 0;      /* its top where it froze (what a refusal pushes on it after is not its) */
   l_uint32 ccbase = 0;      /* its 'nCcalls' when resumed (see 'forgetcalls') */
 };
 
 namespace lua::runtime
 {
+
+/* 'L' is frozen, entered as 'kind' (FZ_*): its stack is as it is now */
+static l_forceinline void luaE_setfrozen(lua_State* L, lu_byte kind)
+{
+  L->frozen = kind;
+  L->frozentop = L->top;
+}
 
 static l_forceinline void setthvalue(lua_State* L, TValue* obj, lua_State* x)
 {

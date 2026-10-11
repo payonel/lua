@@ -5886,6 +5886,49 @@ static void test_group_gc()
   CHECK(gc_user_calls == 0 && gc_kernel_calls == 2);
 }
 
+/*
+** Refusals of a frozen thread (a host's resume or close) push their message
+** onto it, as stock does; a host that leaves the messages there changes
+** nothing of the frozen thread: its thaw drops them (B14)
+*/
+static int b14_calls = 0;
+static void b14_budget(lua_State*, lua_State* spender)
+{
+  if (++b14_calls == 2)
+    lua_freeze(spender);
+}
+
+static void test_frozen_refusals_keep_top()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+  CHECK(luaL_dostring(L, "function work(a, b) local s = 0 for i = 1, 200 do s = s + i end return s + a, b end") ==
+        LUA_OK);
+  lua_State* co = lua_newthread(L);
+  lua_getglobal(co, "work");
+  lua_pushinteger(co, 5);
+  lua_pushstring(co, "x");
+  b14_calls = 0;
+  lua_setbudget(co, 50, b14_budget);
+  lua_ResumeResult r = lua_resume(co, L, 2);
+  CHECK(lua_isfrozen(co));
+  for (int i = 0; i < 300; i++)
+    CHECK(lua_closethread(co, L) == LUA_ERRRUN);
+  for (int i = 0; i < 300; i++)
+  { /* (with no arguments: a frozen thread is read-only, the host pushes nothing on it) */
+    r = lua_resume(co, L, 0);
+    CHECK(r.status == LUA_ERRRUN);
+  }
+  while (lua_isfrozen(co))
+    r = lua_thaw(co, L);
+  CHECK(r.status == LUA_OK && r.nres == 2);
+  CHECK(lua_gettop(co) == 2);
+  CHECK(lua_tointeger(co, 1) == 20105);
+  auto x = lua_tolstring(co, 2);
+  CHECK(x && *x == byte_view("x"));
+  lua_close(L);
+}
+
 static void test_freeze()
 {
   lua_State* L = new_state();
@@ -6590,6 +6633,7 @@ int main(int argc, char** argv)
       {"api_continuations", test_api_continuations},
       {"api_freezable", test_api_freezable},
       {"freeze", test_freeze},
+      {"frozen_refusals_keep_top", test_frozen_refusals_keep_top},
       {"group_gc", test_group_gc},
       {"message_handler_freeze", test_message_handler_freeze},
       {"handler_in_effect_after_thaw", test_handler_in_effect_after_thaw},

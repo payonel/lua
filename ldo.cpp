@@ -1406,7 +1406,7 @@ static lua_ResumeResult endresume(lua_State* L, lua_State* from, TStatus status,
   if (status == LUA_FREEZE)
   {
     global_State* g = L->l_G;
-    L->frozen = FZ_RESUME;
+    luaE_setfrozen(L, FZ_RESUME);
     if (g->freezetarget == L)
     { /* the freeze of 'L' ends here */
       g->freezetarget = nullptr;
@@ -1513,7 +1513,7 @@ static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, 
       lua_unlock(L);
       return {LUA_ERRRUN, 1};
     }
-    L->frozen = FZ_CLOSE;
+    luaE_setfrozen(L, FZ_CLOSE);
     if (g->freezetarget == L)
     { /* the freeze of 'L' ends here: the close is where it lands, as a
          resume is ('from' has no budget: the kernel closed 'L') */
@@ -1627,7 +1627,7 @@ static lua_ResumeResult hostcloserun(lua_State* L, lua_State* from, StkId hoster
       lua_unlock(L);
       return {LUA_ERRRUN, 1};
     }
-    L->frozen = FZ_HOSTCLOSE; /* (frozen again in the close: it lands here) */
+    luaE_setfrozen(L, FZ_HOSTCLOSE); /* (frozen again in the close: it lands here) */
     assert(g->freezetarget == L);
     g->freezetarget = nullptr;
     lua_unlock(L);
@@ -1666,7 +1666,7 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
   if (status == LUA_FREEZE)
   {
     global_State* g = L->l_G;
-    L->frozen = kind;
+    luaE_setfrozen(L, kind);
     L->frozenerrfunc = atfreeze;
     if (g->freezetarget == L)
     {
@@ -1704,7 +1704,7 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
           lua_unlock(L);
           return {LUA_ERRRUN, 1};
         }
-        L->frozen = FZ_HOSTCLOSE;
+        luaE_setfrozen(L, FZ_HOSTCLOSE);
         L->frozenerrfunc = atfreeze;
         assert(g->freezetarget == L);
         g->freezetarget = nullptr;
@@ -1844,6 +1844,7 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
   if (from != nullptr && getCcalls(from) >= LUAI_MAXCCALLS)
     return {resume_error(L, lt::C_stack_overflow, 0), 1};
   L->frozen = 0;
+  L->top = L->frozentop; /* (what a refused resume or close left on it is not its) */
   global_State* g = L->l_G;
   L->nCcalls = L->frozencc; /* its calls, as when it froze */
   L->nfz = 0;

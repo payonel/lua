@@ -3339,7 +3339,7 @@ private:
       r_.invalid();
     if (fz == 0)
       return;
-    L1->frozen = static_cast<lu_byte>(fz);
+    luaE_setfrozen(L1, static_cast<lu_byte>(fz));
     L1->frozenfunc = r_.get_var();
     L1->frozenerrfunc = r_.get_var();
     L1->frozennres = r_.get_int();

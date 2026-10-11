@@ -387,7 +387,8 @@ int luaE_closethreadplain(lua_State* L, lua_State* from)
   TStatus status;
   lua_lock(L);
   if (L->frozen)
-  { /* a frozen thread is read-only: it only thaws */
+  { /* a frozen thread is read-only: it only thaws (the message is above its frames) */
+    luaD_checkstack(L, 1);
     setslots(L, L->top, TString::luaS_createstr(L, lt::cannot_close_a_frozen_coroutine));
     L->top++;
     lua_unlock(L);

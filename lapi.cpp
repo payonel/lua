@@ -1669,7 +1669,7 @@ static void hostfrozen(lua_State* L, lu_byte kind, StkId func, int nresults,
   global_State* g = L->l_G;
   assert(g->freezetarget == L);
   g->freezetarget = nullptr;
-  L->frozen = kind;
+  luaE_setfrozen(L, kind);
   L->frozenfunc = func;
   L->frozennres = nresults;
   L->frozenerrfunc = ef;
