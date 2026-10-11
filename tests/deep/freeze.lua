@@ -1272,6 +1272,28 @@ do
   assert(ok and f == nil and msg == "bad", msg)
 end
 
+-- what a load with a budget keeps for a freeze (the input it read, room for
+-- its frames and for the parser's arrays) is counted by the host, not in
+-- the Lua heap: 'collectgarbage("count")' sees what it sees without a budget
+do
+  local piece = string.rep("x", 100000) .. "\n"
+  local co = coroutine.create(function()
+    local n, mem = 0, {}
+    local f = load(function()
+      n = n + 1
+      if n > 20 then return nil end
+      collectgarbage()
+      mem[n] = collectgarbage("count")
+      return "--" .. n .. piece -- (a comment, a new string each time)
+    end)
+    assert(f and n == 21)
+    return mem[20] - mem[3]
+  end)
+  debug.setbudget(co, 1000, function() end)
+  local ok, grew = coroutine.resume(co)
+  assert(ok and grew < 400, grew)
+end
+
 -- a load stopped by a freeze holds the parser's arrays and buffer; when it
 -- goes on and they cannot be counted again on their own (the test
 -- library's limit of allocations), 'load' gives a memory error, as for any

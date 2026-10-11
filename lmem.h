@@ -75,8 +75,8 @@ struct global_State;
 
 void luaM_takeobj(lua_State* L, size_t size);
 void luaM_freeobj(lua_State* L, size_t size);
-void luaM_growobj(lua_State* L, size_t osize, size_t nsize);
-bool luaM_shrinkobj(lua_State* L, size_t osize, size_t nsize);
+void luaM_growhost(lua_State* L, size_t osize, size_t nsize);
+bool luaM_shrinkhost(global_State* g, size_t osize, size_t nsize);
 void luaM_takeblock(lua_State* L, size_t size);
 void luaM_freeblock(lua_State* L, size_t size);
 

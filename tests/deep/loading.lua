@@ -133,9 +133,7 @@ do
 end
 
 -- the pieces the reader function of 'load' gives are not kept once read:
--- only the one being read is (with a budget, as under the freeze gate, the
--- load keeps the input it read, which a restored copy of it goes over
--- again: no more than twice the size of what it read)
+-- only the one being read is
 do
   local n = 0
   local mem = {}
@@ -148,9 +146,5 @@ do
     return "--" .. n .. piece -- (a comment, a new string each time)
   end)
   assert(f and n == 21)
-  if GATE then
-    assert(mem[20] - mem[3] < 2 * 20 * #piece / 1024 + 400, mem[20] - mem[3])
-  else
-    assert(mem[20] - mem[3] < 400, mem[20] - mem[3])
-  end
+  assert(mem[20] - mem[3] < 400, mem[20] - mem[3])
 end

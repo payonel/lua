@@ -38,13 +38,13 @@ constexpr lu_byte ZS_INPUT = 3;  /* the input read before a restore, read again 
 constexpr size_t FRAMES_PER_LEVEL = 1024;
 constexpr size_t FRAMES_BASE = 2048;
 
-constexpr size_t LOADBOX_SIZE = 192; /* (its accounted size, its frames and input aside) */
+constexpr size_t LOADBOX_SIZE = 192; /* (its own size, its frames and input aside) */
 
 /*
 ** The box of a load that a freeze can stop, in a stack slot of the C
 ** function that loads (made at its first stop point). What it keeps is
-** counted in the size of its userdata, which the collector gives back when
-** it frees the box (its destructor only releases the memory):
+** counted by the host, not in the Lua heap (a program does not see it):
+** one block, given back when the collector frees the box.
 ** - its frames, recorded when a freeze passes (charged to it), how it
 **   stopped and where the stream was; while stopped, the parser's arrays
 **   and buffer (charged to it as room for them, at a stop point; they are
@@ -56,7 +56,7 @@ constexpr size_t LOADBOX_SIZE = 192; /* (its accounted size, its frames and inpu
 struct LoadBox : lua_UserObject
 {
   global_State* g = nullptr;
-  Udata* u = nullptr; /* its userdata */
+  size_t hosted = 0; /* (the bytes the host counts for it) */
   std::vector<char> frames;
   size_t charged = 0;   /* (the room for its frames) */
   size_t room = 0;      /* (the room for the parser's arrays and buffer) */
@@ -83,23 +83,24 @@ struct LoadBox : lua_UserObject
 LoadBox::~LoadBox()
 {
   if (holds)
-  { /* (counted in its userdata's size) */
+  { /* (counted in its room) */
     delete[] dyd.actvar.arr;
     delete[] dyd.gt.arr;
     delete[] dyd.label.arr;
   }
+  luaM_shrinkhost(g, hosted, 0);
 }
 
 /*
-** 'n' more bytes kept by the box: charged to its userdata. (Called outside
+** 'n' more bytes kept by the box, counted by the host. (Called outside
 ** the parse, which is unlocked: a memory error leaves the state locked, as
 ** an error raised through the API does.)
 */
 static void charge(lua_State* L, LoadBox* box, size_t n)
 {
   lua_lock(L);
-  luaM_growobj(L, box->u->objsize, box->u->objsize + n);
-  box->u->objsize += n;
+  luaM_growhost(L, box->hosted, box->hosted + n);
+  box->hosted += n;
   lua_unlock(L);
 }
 
@@ -165,7 +166,10 @@ static std::unique_ptr<lua_UserObject> makeloadbox(lua_State* L, const lua_Integ
      another is not stopped, and one that did not keep its input cannot go
      on: an error if it is made to) */
   box->replay = (box->anchoridx != 0 && box->complete);
-  box->input.assign(bytes.data(), bytes.data() + bytes.size()); /* (counted in the size kept with it) */
+  luaM_growhost(L, 0, LOADBOX_SIZE + bytes.size()); /* (counted by the host, as in the original) */
+  box->hosted = LOADBOX_SIZE + bytes.size();
+  box->input.reserve(bytes.size());
+  box->input.assign(bytes.data(), bytes.data() + bytes.size());
   return box;
 }
 
@@ -256,11 +260,10 @@ static void prepstop(LoadResume* rz, lu_byte kind)
     box->g = L->l_G;
     box->complete = (rz->pieces == 0);
     box->ends = rz->ends;
-    lua_newuserobject(L, std::move(o), LOADBOX_SIZE, 1);
-    TValue bv = getslot(L, L->top - 1);
-    box->u = uvalue(&bv);
+    lua_newuserobject(L, std::move(o), 0, 1);
     lua_replace(L, rz->boxidx);
     rz->box = box;
+    charge(L, box, LOADBOX_SIZE);
   }
   size_t levels = static_cast<size_t>(getCcalls(L)) - rz->baseccalls;
   size_t bound = FRAMES_BASE + (levels + 1) * FRAMES_PER_LEVEL;
@@ -488,8 +491,6 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
       return LUA_ERRSYNTAX;
     }
     rz.box = box;
-    TValue bv = getslot(L, L->ci->func + ls.boxidx);
-    box->u = uvalue(&bv);
     if (box->replay)
     { /* restored from outside the process: from the start again */
       if (box->anchoridx > lua_gettop(L) || (box->stop == LS_READ) != (lua_gettop(L) > box->anchoridx) ||
@@ -603,9 +604,9 @@ void luaZ_unhold(LoadResume* rz, CallInfo* ci)
   box->dyd = Dyndata{};
   buff->adopt(std::move(box->buff), box->bufflen);
   box->bufflen = 0;
-  if (box->room != 0 && luaM_shrinkobj(L, box->u->objsize, box->u->objsize - box->room))
+  if (box->room != 0 && luaM_shrinkhost(box->g, box->hosted, box->hosted - box->room))
   { /* (else the box keeps its room) */
-    box->u->objsize -= box->room;
+    box->hosted -= box->room;
     box->room = 0;
   }
   TValue bv = getslot(L, ci->func + rz->boxidx);

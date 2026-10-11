@@ -151,33 +151,35 @@ void luaM_freeobj(lua_State* L, size_t size)
 }
 
 /*
-** The size counted for an object (one block) grows from 'osize' to 'nsize':
-** a memory error if the allocator does not allow it.
+** Memory the host counts that is not in the Lua heap (what a freeze keeps,
+** which a program does not see): one block, which grows from 'osize' to
+** 'nsize' (a memory error if the host does not allow it) ...
 */
-void luaM_growobj(lua_State* L, size_t osize, size_t nsize)
+void luaM_growhost(lua_State* L, size_t osize, size_t nsize)
 {
-  global_State* g = L->l_G;
   assert(osize <= nsize);
-  if (l_unlikely(!luaM_permit_(g, L, osize, nsize, novariant(LUA_VUSERDATA))))
+  if (l_unlikely(!luaM_permit_(L->l_G, L, osize, nsize, 0)))
     luaD_throw(L, LUA_ERRMEM);
-  g->GCdebt -= static_cast<l_mem>(nsize - osize);
 }
 
-/* ... or goes down to 'nsize' (not 0), if the allocator allows it */
-bool luaM_shrinkobj(lua_State* L, size_t osize, size_t nsize)
+/* ... or shrinks to 'nsize', if the host allows it (to 0, given back: always) */
+bool luaM_shrinkhost(global_State* g, size_t osize, size_t nsize)
 {
-  global_State* g = L->l_G;
-  assert(0 < nsize && nsize <= osize);
-  if (!g->frealloc->permit(osize, nsize, novariant(LUA_VUSERDATA)))
-    return false;
-  g->GCdebt += static_cast<l_mem>(osize - nsize);
-  return true;
+  assert(nsize <= osize);
+  if (osize == 0)
+    return true;
+  if (nsize == 0)
+  {
+    g->frealloc->permit(osize, 0, 0);
+    return true;
+  }
+  return g->frealloc->permit(osize, nsize, 0);
 }
 
 /*
 ** A block of 'size' bytes (as an array or buffer counts it) that comes to
-** be counted on its own, or no longer: its memory goes from or to an object
-** that counts it in its size (see 'luaM_growobj').
+** be counted on its own, or no longer: its memory goes from or to memory
+** counted another way (see 'luaM_growhost').
 */
 void luaM_takeblock(lua_State* L, size_t size)
 {
