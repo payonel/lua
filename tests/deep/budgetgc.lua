@@ -172,6 +172,73 @@ do
   assert(next(weak) == nil)
 end
 
+-- ... also when a waiting object refers to a thread of the program: the
+-- program's memory is released; while the kernel still holds the program,
+-- its waiting objects stay, and their '__gc' are not called
+do
+  local function program(called)
+    return function()
+      local big = string.rep("x", 1 << 20) -- (1 MB of the program)
+      local me = coroutine.running()
+      setmetatable({me = me}, {__gc = function() called.v = true end})
+      while true do big = big end
+    end
+  end
+  local function run(keep)
+    collectgarbage(); collectgarbage()
+    local base = collectgarbage("count")
+    collectgarbage("stop") -- (no collection while it runs)
+    local called = {}
+    local co = coroutine.create(program(called))
+    debug.setbudget(co, 1000, function() debug.freeze() end)
+    assert(coroutine.resume(co) and debug.isfrozen(co))
+    if not keep then co = nil end
+    collectgarbage("restart")
+    for i = 1, 4 do collectgarbage() end
+    assert(not called.v)
+    return collectgarbage("count") - base, co
+  end
+  local kept, co = run(true)
+  assert(kept > 1024 and debug.isfrozen(co))
+  co = nil
+  local dropped = run(false)
+  assert(dropped < 256, dropped)
+end
+
+-- a waiting object is white between cycles, as swept objects are: one that
+-- an earlier '__gc' stored in an old table (no barrier when it was stored,
+-- black) is not freed under it (debug builds check the collector's invariant)
+do
+  local T = rawget(_G, "T")
+  for _, mode in ipairs{"generational", "incremental"} do
+    collectgarbage(mode)
+    local G = {}
+    collectgarbage(); collectgarbage() -- (G is old)
+    local co = coroutine.create(function()
+      do
+        local B = setmetatable({tag = "B"}, {__gc = nop})
+        local A = setmetatable({b = B}, {__gc = function(o) G.b = o.b end})
+      end
+      coroutine.yield()
+      for i = 1, 5 do end -- (their '__gc' are called here)
+      return "done"
+    end)
+    debug.setbudget(co, 1000000, nop)
+    assert(coroutine.resume(co))
+    collectgarbage("step") -- they die: they wait for the group
+    assert(G.b == nil)
+    assert(coroutine.resume(co))
+    assert(G.b and G.b.tag == "B")
+    if T then T.checkmemory() end
+    for i = 1, 3 do collectgarbage("step") end
+    for i = 1, 1000 do local t = {i, i, i} end
+    collectgarbage()
+    assert(G.b.tag == "B")
+    if T then T.checkmemory() end
+  end
+  collectgarbage("incremental")
+end
+
 -- the owner of an object is the group in effect when it was registered: an
 -- object whose group is gone is dead without its '__gc', and no new group
 -- is given its owner id, however many groups come and go

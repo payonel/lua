@@ -749,6 +749,20 @@ static int lua_checkmemory(lua_State* L)
     assert(tofinalize(o));
     assert(o->tt == LUA_VUSERDATA || o->tt == LUA_VTABLE);
   }
+
+  /* check the queues of the budget groups */
+  for (BudgetGroup* bg : g->groupbyid)
+  {
+    if (bg == nullptr)
+      continue;
+    for (o = bg->fnz.next; o != nullptr; o = o->next)
+    {
+      checkobject(g, o, 0, G_NEW);
+      incifingray(g, o, &totalshould);
+      assert(tofinalize(o));
+      assert(o->tt == LUA_VUSERDATA || o->tt == LUA_VTABLE);
+    }
+  }
   if (keepinvariant(g))
     assert(totalin == totalshould);
   return 0;

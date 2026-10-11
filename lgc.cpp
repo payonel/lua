@@ -437,10 +437,6 @@ static void markbeingfnz(global_State* g)
   GCObject* o;
   for (o = g->tobefnz.next; o != nullptr; o = o->next)
     markobject(g, o);
-  for (BudgetGroup* bg : g->groupbyid)
-    if (bg != nullptr)
-      for (o = bg->fnz.next; o != nullptr; o = o->next)
-        markobject(g, o);
 }
 
 /*
@@ -1463,31 +1459,30 @@ GCObject* luaC_dequeue(lua_State* L, BudgetGroup* bg)
     bg->fnztail = nullptr;
   o->next = g->allgc.next;
   g->allgc.next = o;
-  o->marked = luaC_white(g); /* a new object, not finalizable, not old */
+  o->marked &= (lu_byte)(~bitmask(FINALIZEDBIT)); /* an ordinary object again */
+  if (issweepphase(g))
+    makewhite(g, o); /* "sweep" object (as 'udata2finalize') */
   return o;
 }
 
 /*
-** The queues of the budget groups are not part of the generations: their
-** objects go white and new before the marking of each cycle, and are marked
-** if the group is alive. The queue of a group that nothing but its own
-** objects reaches is dead: nothing could call its '__gc', which are not
-** called, and the objects are swept.
+** The queues of the budget groups (dead user objects that wait for a thread
+** of their group to call their '__gc') are not part of the generations nor
+** of the sweeps. Between cycles their objects are white and new, as swept
+** objects are ('whitequeues'), so that storing one somewhere goes through
+** the barriers. In the atomic phase the queue of a group found alive is
+** marked, as the objects waiting for their finalizers are, before weak
+** values are cleared ('markgroupqueues'); after the objects that died in
+** this cycle joined the queues, again; then the queue of a group that
+** nothing reaches is released ('releasequeues'): nothing could call its
+** '__gc', which are not called, and its objects are ordinary ones again,
+** swept if nothing else reaches them.
 */
-static void resetqueues(global_State* g)
-{
-  for (BudgetGroup* bg : g->groupbyid)
-  {
-    if (bg == nullptr)
-      continue;
-    bg->qmarked = false;
-    for (GCObject* o = bg->fnz.next; o != nullptr; o = o->next)
-      o->marked = (o->marked & ~maskgcbits) | bitmask(FINALIZEDBIT) | luaC_white(g);
-  }
-}
-
 static void markgroupqueues(global_State* g)
 {
+  for (BudgetGroup* bg : g->groupbyid)
+    if (bg != nullptr)
+      bg->qmarked = false;
   bool again;
   do
   {
@@ -1507,8 +1502,12 @@ static void markgroupqueues(global_State* g)
       convergeephemerons(g);
     }
   } while (again);
+}
+
+static void releasequeues(global_State* g)
+{
   for (BudgetGroup* bg : g->groupbyid)
-  { /* the queues of the groups that are not alive: dead objects */
+  { /* the queues of the groups that are not alive */
     if (bg == nullptr || bg->qmarked || bg->fnz.next == nullptr)
       continue;
     GCObject* o = bg->fnz.next;
@@ -1523,6 +1522,15 @@ static void markgroupqueues(global_State* g)
     bg->fnz.next = nullptr;
     bg->fnztail = nullptr;
   }
+}
+
+/* (after the atomic phase flipped the current white) */
+static void whitequeues(global_State* g)
+{
+  for (BudgetGroup* bg : g->groupbyid)
+    if (bg != nullptr)
+      for (GCObject* o = bg->fnz.next; o != nullptr; o = o->next)
+        o->marked = (o->marked & ~maskgcbits) | bitmask(FINALIZEDBIT) | luaC_white(g);
 }
 
 /*
@@ -2049,7 +2057,7 @@ static void atomic(lua_State* L)
   g->gray.gclist = grayagain;
   propagateall(g); /* traverse 'grayagain' list */
   convergeephemerons(g);
-  resetqueues(g);
+  markgroupqueues(g); /* the objects waiting for a group's '__gc' */
   /* at this point, all strongly accessible objects are marked. */
   /* Clear values from weak tables, before checking finalizers */
   clearbyvalues(g, g->weak.gclist, nullptr);
@@ -2060,7 +2068,8 @@ static void atomic(lua_State* L)
   markbeingfnz(g);       /* mark objects that will be finalized */
   propagateall(g);       /* remark, to propagate 'resurrection' */
   convergeephemerons(g);
-  markgroupqueues(g);    /* and the queues of the groups that are alive */
+  markgroupqueues(g);    /* the queues again, with those that died now */
+  releasequeues(g);      /* and those of the groups that are not alive */
   for (BudgetGroup* bg : g->groupbyid)
     if (bg != nullptr && bg->root != nullptr && iswhite(bg->root))
       bg->root = nullptr; /* (the thread a group was set on is dead: a weak reference) */
@@ -2072,6 +2081,7 @@ static void atomic(lua_State* L)
   clearbyvalues(g, g->weak.gclist, origweak);
   clearbyvalues(g, g->allweak.gclist, origall);
   g->currentwhite = otherwhite(g); /* flip current white */
+  whitequeues(g);
   assert(g->gray.gclist == nullptr);
 }
 
