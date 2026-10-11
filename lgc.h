@@ -257,6 +257,7 @@ static l_forceinline void luaC_checkGC(lua_State* L)
 }
 void luaC_runtilstate(lua_State* L, int state, int fast);
 void luaC_fullgc(lua_State* L, int isemergency);
+void luaC_fullgcdue(lua_State* L);
 GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt);
 
 /*

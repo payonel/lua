@@ -525,6 +525,43 @@ static void test_budget_thread_room()
   std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
 }
 
+/*
+** luaC_fullgcdue: a whole cycle that makes no '__gc' call (neither those
+** it finds due nor those of a cycle under way: the collector's next step
+** makes them, in order), frees what is dead and clears weak tables; in
+** both modes of the collector
+*/
+static void test_fullgc_due()
+{
+  std::printf("    a whole cycle leaves its __gc calls to the next step ... ");
+  g_test_failures = 0;
+  const char* modes[] = {"incremental", "generational"};
+  for (const char* mode : modes)
+    for (int underway = 0; underway < 2; underway++)
+    {
+      lua_State* L = luaL_newstate();
+      luaL_openlibs(L);
+      std::string prog = std::string("collectgarbage('") + mode + "') live = {} for i = 1, 20000 do live[i] = {} end "
+                         "fins = {} for i = 1, 3 do setmetatable({}, {__gc = function() fins[#fins + 1] = i end}) end "
+                         "weak = setmetatable({}, {__mode = 'k'}) weak[{}] = 1 " +
+                         (underway ? "collectgarbage('step', 1) " : "") + "return 'ok'";
+      CHECK(run(L, prog.c_str()) == "ok");
+      lua_lock(L);
+      luaC_fullgcdue(L);
+      lua_unlock(L);
+      lua_getglobal(L, "fins"); /* (read with no allocation: no step) */
+      CHECK(lua_rawlen(L, -1) == 0);
+      lua_getglobal(L, "weak");
+      lua_pushnil(L);
+      CHECK(lua_next(L, -2) == 0);
+      lua_settop(L, 0);
+      CHECK(run(L, "return table.concat(fins, ' ') .. ' ' .. collectgarbage('incremental')") ==
+            std::string("3 2 1 ") + mode);
+      lua_close(L);
+    }
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
 static const Case chain_cases[] = {
   {"chains hold after inserts, deletes and rehash, for keys of every kind",
    "local t = {} for i = 1, 3000 do local k = (i % 4 == 0) and {} or (i % 4 == 1) and ('s' .. i) "
@@ -745,6 +782,7 @@ int main()
   test_cfunction_hash_by_name();
   test_load_takes_one_hash();
   test_budget_thread_room();
+  test_fullgc_due();
   test_function_names();
   test_object_kinds();
   test_make_due(false);

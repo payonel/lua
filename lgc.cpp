@@ -2511,6 +2511,34 @@ void luaC_fullgc(lua_State* L, int isemergency)
   g->gcemergency = 0;
 }
 
+/*
+** A whole cycle that makes no '__gc' call: the calls it finds due (and
+** those a cycle under way had found) are left to the collector's next
+** step, which comes at the next allocation, as those of any cycle are
+** (a user object's go to its budget group, made at its points). Dead
+** objects are freed and weak tables cleared now. In generational mode it
+** is a major collection, which is incremental: the collector goes on with
+** it, and returns to minor collections as after any.
+*/
+void luaC_fullgcdue(lua_State* L)
+{
+  global_State* g = L->l_G;
+  assert(!g->gcemergency);
+  bool gen = (g->gckind != KGC_INC);
+  if (g->gckind == KGC_GENMINOR)
+    minor2inc(L, g, KGC_INC);
+  g->gckind = KGC_INC; /* (the cycle runs whole: see 'checkmajorminor') */
+  g->gcemergency = 1;  /* (a cycle under way finishes calling none) */
+  if (keepinvariant(g))
+    entersweep(L);
+  luaC_runtilstate(L, GCSpause, 1);
+  g->gcemergency = 0;
+  luaC_runtilstate(L, GCScallfin, 1); /* (the '__gc' calls are next) */
+  if (gen)
+    g->gckind = KGC_GENMAJOR;
+  luaE_setdebt(g, 0);
+}
+
 /* }====================================================== */
 
 }
