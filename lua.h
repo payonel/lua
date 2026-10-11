@@ -351,7 +351,9 @@ lua_ResumeResult(lua_resume)(lua_State* L, lua_State* from, int narg);
 ** function, and when it thaws, 'k' gets the status of the coroutine and
 ** gets its results with 'lua_resumenres' (as the result of 'lua_resume'
 ** says in 'status' and 'nres'). Like the other calls with continuations,
-** 'k' runs only after a freeze; otherwise 'lua_resumek' returns.
+** 'k' runs only after a freeze; otherwise 'lua_resumek' returns. 'k' goes
+** on in the calling function, of thread 'from': without 'from' it is not
+** used ('lua_resumek' is then 'lua_resume').
 */
 lua_ResumeResult(lua_resumek)(lua_State* L, lua_State* from, int narg, lua_KContext ctx, lua_KFunction k);
 int(lua_resumenres)(lua_State* L, int status);
@@ -364,8 +366,12 @@ int(lua_status)(lua_State* L);
 ** hand-off between C and Lua, or an element of the work of a library
 ** function), with the thread that spent them. The budget belongs to
 ** thread 'co' and is shared by the threads it creates and, while they
-** run, the ones it resumes (a budget group); 'n' 0 removes it
-** ('lua_getbudget' gives 'n' and the steps left before the next call). The callback runs with no hooks and no budget, and leaves
+** run, the ones it resumes (a budget group); setting it again on a thread
+** of a group updates the group, and 'n' 0 removes the thread from it
+** ('lua_getbudget' gives 'n' and the steps left before the next call).
+** 'lua_setbudget' gives LUA_OK, or LUA_ERRMEM or LUA_ERRRUN (too many
+** groups) when it cannot make a group: then nothing changes, and nothing
+** is raised. The callback runs with no hooks and no budget, and leaves
 ** the thread that spent the budget as it is (see 'lua_Budget'). In it,
 ** 'lua_freeze' never returns: it leaves the callback (as an error does,
 ** but no pcall catches it), and 'user_co' and every coroutine it resumed
@@ -387,7 +393,7 @@ int(lua_status)(lua_State* L);
 void(lua_registerk)(const char* name, lua_KFunction k);
 void(lua_registerbudget)(const char* name, lua_Budget f);
 
-void(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
+int(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
 lua_Integer(lua_getbudget)(lua_State* co, lua_Integer* left);
 [[noreturn]] void(lua_freeze)(lua_State* L);
 int(lua_isfrozen)(lua_State* co);

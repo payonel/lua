@@ -170,35 +170,73 @@ void lua_sethook(lua_State* L, lua_Hook func, int mask, int count)
 }
 
 /*
-** Set the budget of thread 'co': a new budget group, which it belongs to
-** and passes to the threads it creates (and, while they run, to the ones
-** it resumes). 'n' 0 removes it. The group is in effect at once, by the
-** rule of a resume ('luaE_enterbudget'), unless the thread is suspended:
-** then at its next resume. So a thread never runs without its budget once
-** it has been set.
+** A new budget group for 'co', made in protected mode on 'co', so that a
+** failure raises nothing on it (see 'lua_setbudget').
 */
-void lua_setbudget(lua_State* co, lua_Integer n, lua_Budget f)
+struct NewGroup : ProtectedCall
+{
+  lua_Integer n = 0;
+  lua_Budget f = nullptr;
+  BudgetGroup* bg = nullptr;
+  void run(lua_State* co) override
+  {
+    BudgetGroup* g1 = luaM_malloc_BudgetGroup(co);
+    luaC_link(co, g1, LUA_VBUDGET);
+    g1->budget = (l_mem)n;
+    g1->left = (l_mem)n;
+    g1->f = f;
+    g1->root = co;
+    if (luaC_newowner(co, g1))
+      bg = g1; /* (otherwise too many groups: the new one is garbage) */
+  }
+};
+
+/*
+** Set the budget of thread 'co'. A thread with no budget group gets a new
+** one, which it belongs to and passes to the threads it creates (and,
+** while they run, to the ones it resumes); a thread that has one updates
+** it in place: the limit and the callback are those of every thread of the
+** group, and its steps start anew (in the group's own callback, when the
+** callback ends). 'n' 0 removes the thread from its group. The group is in
+** effect at once, by the rule of a resume ('luaE_enterbudget'), unless the
+** thread is suspended: then at its next resume. So a thread never runs
+** without its budget once it has been set. Returns LUA_OK, or LUA_ERRMEM
+** (no memory for a new group) or LUA_ERRRUN (too many groups at once), and
+** then nothing changed: no error is raised, on 'co' or elsewhere.
+*/
+int lua_setbudget(lua_State* co, lua_Integer n, lua_Budget f)
 {
   lua_lock(co);
+  global_State* g = co->l_G;
   if (n <= 0 || f == nullptr)
   { /* no budget */
     co->bown = nullptr;
   }
+  else if (co->bown != nullptr)
+  { /* the group of the thread, updated */
+    BudgetGroup* bg = co->bown;
+    bg->budget = (l_mem)n;
+    bg->f = f;
+    if (!(g->budgetL != nullptr && g->budgetg == bg)) /* (its callback refills it as it ends) */
+      bg->left = (l_mem)n;
+  }
   else
   {
-    BudgetGroup* bg = luaM_malloc_BudgetGroup(co);
-    luaC_link(co, bg, LUA_VBUDGET);
-    bg->budget = (l_mem)n;
-    bg->left = (l_mem)n;
-    bg->f = f;
-    bg->root = co;
-    if (!luaC_newowner(co, bg))
-      luaG_runerror(co, lt::too_many_budget_groups);
-    co->bown = bg;
+    NewGroup ng;
+    ng.n = n;
+    ng.f = f;
+    TStatus status = luaD_rawrunprotected(co, &ng);
+    if (status != LUA_OK || ng.bg == nullptr)
+    {
+      lua_unlock(co);
+      return (status != LUA_OK) ? LUA_ERRMEM : LUA_ERRRUN;
+    }
+    co->bown = ng.bg;
   }
   if (co->status != LUA_YIELD) /* (a suspended thread gets it at its next resume) */
     luaE_enterbudget(co, co->resumer); /* as at a resume: no thread runs without its budget */
   lua_unlock(co);
+  return LUA_OK;
 }
 
 /* the thread the budget group of 'co' was set on (nothing once freed) */

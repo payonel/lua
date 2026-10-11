@@ -6308,6 +6308,60 @@ static void test_freeze()
     lua_pop(L, 2); /* the threads */
   }
 
+  /* setting a budget that needs a new group, with no memory for it, gives
+     LUA_ERRMEM and raises nothing, on the thread or elsewhere: the thread is
+     as it was; with memory, it is set */
+  {
+    CapDeny cd;
+    lua_State* S = lua_newstate(&cd, 0);
+    luaL_openlibs(S);
+    lua_State* co = lua_newthread(S);
+    CHECK(luaL_loadstring(co, "coroutine.yield(1) return 2") == LUA_OK);
+    CHECK(lua_resume(co, S, 0).status == LUA_YIELD);
+    lua_pop(co, 1);
+    lua_gc(S, LUA_GCCOLLECT, 0, 0, 0);
+    cd.cap = cd.used + 1; /* (no room for a group) */
+    CHECK(lua_setbudget(co, 100, fz_budget) == LUA_ERRMEM);
+    cd.cap = 0;
+    CHECK(lua_status(co) == LUA_YIELD && lua_getbudget(co, nullptr) == 0);
+    CHECK(lua_setbudget(co, 100, fz_budget) == LUA_OK && lua_getbudget(co, nullptr) == 100);
+    lua_ResumeResult rr = lua_resume(co, S, 0);
+    CHECK(rr.status == LUA_OK && rr.nres == 1 && lua_tointeger(co, -1) == 2);
+    lua_close(S);
+    CHECK(cd.used == 0);
+  }
+
+  /* closing the state with the main thread frozen runs none of its pending
+     '__close' (a frozen thread runs none), and frees everything */
+  {
+    static bool closed = false;
+    closed = false;
+    CapDeny cd;
+    lua_State* S = lua_newstate(&cd, 0);
+    luaL_openlibs(S);
+    lua_pushcfunction(S, [](lua_State*) -> int { closed = true; return 0; });
+    lua_setglobal(S, "mark");
+    fz_reset(S, 50, S, 1, false);
+    CHECK(luaL_loadstring(S, "local x <close> = setmetatable({}, {__close = mark}) while true do end") == LUA_OK);
+    CHECK(lua_pcall(S, 0, 0, 0) == LUA_OK && lua_isfrozen(S));
+    lua_close(S);
+    CHECK(!closed && cd.used == 0);
+  }
+
+  /* a continuation with no calling thread is not used: 'lua_resumek' with
+     no 'from' is 'lua_resume' */
+  {
+    lua_State* co = lua_newthread(L);
+    CHECK(luaL_loadstring(co, "coroutine.yield(1) return 2") == LUA_OK);
+    static auto k = [](lua_State*, int, lua_KContext) -> int { CHECK(false); return 0; };
+    lua_ResumeResult rr = lua_resumek(co, nullptr, 0, 0, k);
+    CHECK(rr.status == LUA_YIELD && rr.nres == 1 && lua_tointeger(co, -1) == 1);
+    lua_pop(co, 1);
+    rr = lua_resumek(co, nullptr, 0, 0, k);
+    CHECK(rr.status == LUA_OK && rr.nres == 1 && lua_tointeger(co, -1) == 2);
+    lua_pop(L, 1); /* the thread */
+  }
+
   /* 'lua_freeze' only in the callback */
   lua_pushcfunction(L, [](lua_State* T) -> int { lua_freeze(T); return 0; });
   CHECK(lua_pcall(L, 0, 0, 0) == LUA_ERRRUN);

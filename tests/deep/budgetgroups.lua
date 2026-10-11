@@ -115,9 +115,8 @@ do
   assert(n == 100 and root == nil) -- the group lives on in the task
 end
 
--- also when the thread was given another budget since (the old group has it
--- as its root, and lives on in the threads it made), and when the group
--- dies in the same collection as its root
+-- also when the thread was given its budget again since (the same group,
+-- updated), and when the group dies in the same collection as its root
 do
   local function make()
     local task
@@ -126,14 +125,14 @@ do
     end)
     debug.setbudget(U, 100, function() end)
     assert(coroutine.resume(U))
-    debug.setbudget(U, 50, function() end) -- a new group for U
+    debug.setbudget(U, 50, function() end) -- the group of U, updated
     assert(select(4, debug.getbudget(task)) == U)
     return task
   end
   local task = make()
   collectgarbage(); collectgarbage()
   local n, _, _, root = debug.getbudget(task)
-  assert(n == 100 and root == nil)
+  assert(n == 50 and root == nil)
   for i = 1, 20 do -- the root and its group dying together
     local c = coroutine.create(function() end)
     debug.setbudget(c, 10, function() end)
@@ -142,8 +141,10 @@ do
   collectgarbage(); collectgarbage()
 end
 
--- a thread given a new budget leaves the threads it already made in the
--- old group
+-- a thread given its budget again updates its group: the limit and the
+-- callback of every thread of the group, the threads it made too, from
+-- any of them; the steps start anew (in the group's own callback, when it
+-- ends); removing the budget of a thread leaves the others in the group
 do
   local U = coroutine.create(function() end)
   debug.setbudget(U, 7, function() end)
@@ -153,10 +154,27 @@ do
   local V = coroutine.create(function()
     c1 = coroutine.create(function() end)
   end)
-  debug.setbudget(V, 11, function() end)
+  local f11, f13, f17 = function() end, function() end, function() end
+  debug.setbudget(V, 11, f11)
   assert(coroutine.resume(V))
-  debug.setbudget(V, 13, function() end)
-  assert(debug.getbudget(c1) == 11 and debug.getbudget(V) == 13)
+  debug.setbudget(V, 13, f13)
+  local n, f, left, root = debug.getbudget(c1)
+  assert(n == 13 and f == f13 and left == 13 and root == V)
+  assert(debug.getbudget(V) == 13)
+  debug.setbudget(c1, 17, f17) -- (from any thread of the group)
+  assert(debug.getbudget(V) == 17 and select(2, debug.getbudget(V)) == f17)
+  -- in the group's callback: the new limit holds from its end
+  local calls, steps = 0, {}
+  local W = coroutine.create(function() for i = 1, 200 do end end)
+  debug.setbudget(W, 50, function(user_co)
+    calls = calls + 1
+    if calls == 1 then debug.setbudget(user_co, 20, function() calls = calls + 1 end) end
+  end)
+  assert(coroutine.resume(W))
+  assert(calls > 5 and debug.getbudget(W) == 20, calls)
+  -- removing the budget of one thread of a group
+  debug.setbudget(c1, 0)
+  assert(debug.getbudget(c1) == nil and debug.getbudget(V) == 17)
 end
 
 -- the groups and their callbacks are collected like any object

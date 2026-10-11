@@ -294,24 +294,32 @@ do
   os.remove(name)
 end
 
--- at most 65534 groups at once, with a clear error; room again when they go
+-- at most 65534 groups at once, with a clear error, raised on the caller
+-- (a kernel coroutine here), not on the thread given the budget, which is
+-- as it was; room again when they go
 do
   local live = {}
-  local ok, err
-  for i = 1, 65540 do
-    local co = coroutine.create(nop)
-    ok, err = pcall(debug.setbudget, co, 100, nop)
-    if not ok then break end
-    live[i] = co
-  end
+  local ok, err, target
+  local kernel = coroutine.wrap(function()
+    for i = 1, 65540 do
+      local co = coroutine.create(nop)
+      ok, err = pcall(debug.setbudget, co, 100, nop)
+      if not ok then target = co break end
+      live[i] = co
+    end
+    return "the kernel goes on"
+  end)
+  assert(kernel() == "the kernel goes on")
   assert(not ok and tostring(err):find("too many budget groups"), tostring(err))
   assert(#live >= 65000 and #live <= 65534, #live)
+  assert(coroutine.status(target) == "suspended" and debug.getbudget(target) == nil)
   live = nil
   collectgarbage()
   collectgarbage()
   local co = coroutine.create(nop)
   debug.setbudget(co, 100, nop)
   assert(debug.getbudget(co) == 100)
+  assert(coroutine.resume(target)) -- (it runs, as it would have)
 end
 
 -- an error in a user '__gc' is a warning, as in stock, and the object is

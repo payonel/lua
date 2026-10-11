@@ -1680,6 +1680,8 @@ lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KCont
 {
   TStatus status;
   lua_lock(L);
+  if (from == nullptr)
+    k = nullptr; /* (a continuation goes on in the caller, 'from': none, no continuation) */
   if (L->status == LUA_OK)
   {                           /* may be starting a coroutine */
     if (L->ci != &L->base_ci) /* not in base level? */
@@ -1774,6 +1776,8 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
 lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
 {
   lua_lock(L);
+  if (from == nullptr)
+    k = nullptr; /* (as in 'lua_resumek') */
   if (L->l_G->budgetL != nullptr || (from != nullptr && from->beff != nullptr))
     return {resume_error(L, lt::cannot_thaw_from_budgeted_code, 0), 1};
   if (L->frozenparent != nullptr) /* only the freeze target thaws its chain */

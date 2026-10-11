@@ -244,7 +244,14 @@ static void close_state(lua_State* L)
   else
   { /* closing a fully built state */
     resetCI(L);
-    luaD_closeprotected(L, 1, LUA_OK); /* close all upvalues */
+    if (L->frozen)
+    { /* (a frozen thread runs none of its '__close': they are dropped) */
+      luaF_closeupval(L, 1);
+      L->tbclist = 0;
+      L->ntbc = 0;
+    }
+    else
+      luaD_closeprotected(L, 1, LUA_OK); /* close all upvalues */
     L->top = 1;         /* empty the stack to run finalizers */
     luaC_freeallobjects(L);            /* collect all objects */
     luai_userstateclose(L);

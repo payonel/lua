@@ -626,8 +626,15 @@ static int db_setbudget(lua_State* L)
   }
   luaL_checktype(L, arg + 2, LUA_TFUNCTION);
   callbackthread(L); /* (the thread the callback runs on) */
+  int status = lua_setbudget(co, n, budgetf);
+  if (status == LUA_ERRMEM)
+  { /* (raised here, on the caller) */
+    lua_pushistringref(L, lt::not_enough_memory);
+    return lua_error(L);
+  }
+  if (status != LUA_OK)
+    return luaL_errori(L, lt::too_many_budget_groups);
   lua_pushvalue(L, arg + 2);
-  lua_setbudget(co, n, budgetf);
   lua_setbudgetvalue(L, co); /* the function goes into the group */
   return 0;
 }
