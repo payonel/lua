@@ -1240,14 +1240,18 @@ What a frozen chain is, to Styx:
 - **A load stopped in its middle.** `load` stops in a call of its reader
   function or at the check point of a token (each token read is a step),
   and its box (`load`) keeps what a restore needs: the input read so far
-  (kept while the load has a budget) and the stop points passed. The parse
-  itself, half made, is not persisted (its anchor table is in the box, a
-  user value that is not part of its state). Restored, the load goes again
-  over its input from the start, taking no step, making no check point and
-  not calling the reader, up to where it stopped (in a call of the reader:
-  the piece that call gave comes next), and goes on as the original: the
-  same function, the same calls of the reader. In the process that froze
-  it, a load goes on from its frames, with no second parse.
+  (kept while the load has a budget) and the stop points passed. `loadfile`,
+  `dofile` and `require` stop at the check points of tokens only: with a
+  budget, the file is read whole first, and the box keeps it (a restored
+  load does not read the file again). What the box keeps is counted by the
+  host, not in the Lua heap, which a restore leaves as the program saw it.
+  The parse itself, half made, is not persisted (its anchor table is in
+  the box, a user value that is not part of its state). Restored, the load
+  goes again over its input from the start, taking no step, making no check
+  point and not calling the reader, up to where it stopped (in a call of
+  the reader: the piece that call gave comes next), and goes on as the
+  original: the same function, the same calls of the reader. In the process
+  that froze it, a load goes on from its frames, with no second parse.
 - **Budget groups.** A group is persisted with its limit, its steps left,
   the name of its callback, its value (the debug library's Lua function),
   the thread it was set on and its queue of waiting `__gc`; a thread keeps
@@ -1294,7 +1298,8 @@ What a frozen chain is, to Styx:
 
 Tests: `frozen.lua` (programs frozen at every budget point, persisted,
 restored and thawed beside the original, in one state, a find frozen deep
-in its backtracking and loads stopped at every point among them), and the C++ tests
+in its backtracking and loads stopped at every point among them, of
+strings, readers and files), and the C++ tests
 `frozen_library_cases` and `frozen_engine_cases`, which freeze each case of
 `tests/deep/libcases.lua` and `frozencases.lua` (library callbacks; drained
 `__gc`, message handlers, `__close`, wrapped coroutines, `gmatch`, `sort`,

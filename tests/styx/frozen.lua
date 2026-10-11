@@ -7,7 +7,7 @@ local case = H.case
 
 -- the standard libraries by name (their functions are the host's permanents)
 local perms, back = {[_G] = "_G"}, {_G = _G}
-for _, name in ipairs{"string", "table", "math", "os", "io", "coroutine", "debug", "utf8"} do
+for _, name in ipairs{"string", "table", "math", "os", "io", "coroutine", "debug", "utf8", "package"} do
   local lib = _G[name]
   perms[lib], back["lib:" .. name] = "lib:" .. name, lib
   for k, v in pairs(lib) do
@@ -21,6 +21,8 @@ for _, name in ipairs{"pcall", "xpcall", "error", "select", "tostring", "tonumbe
                       "type", "setmetatable", "getmetatable", "rawget", "rawset", "assert", "print"} do
   perms[_G[name]], back["base." .. name] = "base." .. name, _G[name]
 end
+-- (the tables of 'require', which a program stopped in it holds)
+for _, k in ipairs{"loaded", "preload", "searchers"} do perms[package[k]] = "package." .. k end
 -- (only functions persist by name, so the libraries' tables too)
 for k, v in pairs(perms) do back[v] = back[v] or k end
 back = H.invert(perms)
@@ -275,6 +277,27 @@ case("a load stopped in its middle (a token's check point, a call of its reader)
       return table.concat({f1()}, "|") .. ";" .. table.concat({f2()}, "|") .. ";" .. table.concat({f3()}, "|")
     end
   end, 2, 3000)
+  assert(points > 100, points)
+end)
+
+case("a file load stopped in its middle (loadfile, dofile, require) persists, and both end the same", function()
+  local name = os.tmpname()
+  local f = assert(io.open(name, "wb"))
+  f:write("local t = {} for i = 1, 6 do t[i] = i * 2 end -- a comment\nreturn t[3] + #t, [[long\nstring]], 'esc\\65', ...")
+  f:close()
+  local path = package.path
+  package.path = name -- (a template with no '?': this file, whatever the name)
+  local points = everywhere("file loads", function(out)
+    return function()
+      local f1 = loadfile(name)
+      local r2 = table.pack(dofile(name))
+      package.loaded.frozenfile = nil
+      local r3 = require("frozenfile")
+      return table.concat({f1("a")}, "|") .. ";" .. table.concat(r2, "|", 1, r2.n) .. ";" .. tostring(r3)
+    end
+  end, 2, 3000)
+  package.path, package.loaded.frozenfile = path, nil
+  os.remove(name)
   assert(points > 100, points)
 end)
 
