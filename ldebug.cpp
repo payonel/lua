@@ -1366,9 +1366,11 @@ int luaG_traceexec(lua_State* L, int pc)
   { /* a step of the budget (after its callback, if it is spent) */
     global_State* g = L->l_G;
     BudgetGroup* bg = L->beff;
-    if (bg->nodrain)
-      bg->nodrain = false;
-    else if (bg->fnz.next != nullptr && L->allowhook && g->budgetL == nullptr && luaD_canfreeze(L))
+    /* (the first point after a thaw calls no '__gc': if no step was taken
+       since, the VM passed no other point; else that one was the first) */
+    bool first = bg->nodrain && bg->left == bg->budget;
+    bg->nodrain = false;
+    if (!first && bg->fnz.next != nullptr && L->allowhook && g->budgetL == nullptr && luaD_canfreeze(L))
       drainpoint(L, ci, p);
     if (L->beff != nullptr && L->beff->left <= 0 && g->budgetL == nullptr)
       budgetpoint(L, ci, p);

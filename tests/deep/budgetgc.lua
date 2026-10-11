@@ -398,3 +398,37 @@ if io.popen and arg and arg[-1] then
   p:close()
   assert(out == "kernel gc\nend\n" or out == "end\nkernel gc\n", out)
 end
+
+-- the first budget point after a thaw calls no waiting '__gc'; when the VM
+-- went past that point (nothing was waiting then), a '__gc' that waits
+-- later runs at its first point, as with no freeze (B17)
+do
+  local function run(freezefirst)
+    local seen
+    local co = coroutine.create(function()
+      local stage -- (a register: 'stage = 1' is one instruction)
+      for i = 1, 1200 do end
+      local o = setmetatable({}, {__gc = function() seen = stage end})
+      o = nil
+      coroutine.yield()
+      stage = 1
+      stage = 2
+    end)
+    local n = 0
+    debug.setbudget(co, 1000, function()
+      n = n + 1
+      if freezefirst and n == 1 then debug.freeze() end
+    end)
+    coroutine.resume(co)
+    while debug.isfrozen(co) do debug.thaw(co) end
+    assert(coroutine.status(co) == "suspended" and n == 1)
+    collectgarbage()
+    collectgarbage()
+    coroutine.resume(co)
+    assert(coroutine.status(co) == "dead")
+    return seen
+  end
+  assert(run(false) == nil)
+  local seen = run(true)
+  assert(seen == nil, tostring(seen))
+end

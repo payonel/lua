@@ -1885,7 +1885,10 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
   if (kind == FZ_CLOSE)
   {
     if (g->budgetL == nullptr && L->beff != nullptr)
-      L->beff->left = L->beff->budget; /* (a thaw starts with a whole budget) */
+    { /* (a thaw starts with a whole budget, and no '__gc' at its first point) */
+      L->beff->left = L->beff->budget;
+      L->beff->nodrain = true;
+    }
     return closerun(L, from, L->closestatus, false);
   }
   StkId hosterrfunc = L->errfunc;
@@ -1893,7 +1896,10 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
   {
     L->errfunc = L->frozenerrfunc;
     if (g->budgetL == nullptr && L->beff != nullptr)
-      L->beff->left = L->beff->budget; /* (a thaw starts with a whole budget) */
+    { /* (a thaw starts with a whole budget, and no '__gc' at its first point) */
+      L->beff->left = L->beff->budget;
+      L->beff->nodrain = true;
+    }
     return hostcloserun(L, from, hosterrfunc, hostnCcalls);
   }
   if (kind == FZ_PCALL)
