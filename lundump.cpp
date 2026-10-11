@@ -759,6 +759,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, MBuffer* buff, byte_v
   l.S.nstr = 0;
   LZ_SITE(2, l.nup = loadByte(S));
   l.cl = LClosure::luaF_newLclosure(L, l.nup);
+  luaZ_madefunction(Z->rz, l.cl);
   assert(novariant(l.cl->tt) >= LUA_TSTRING);
   luaD_anchorobj(L, anchor, l.cl);
   l.cl->p = Proto::luaF_newproto(L);

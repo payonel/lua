@@ -68,6 +68,7 @@ struct LoadBox : lua_UserObject
   bool complete = true;  /* is 'input' all the input read? */
   bool replay = false;   /* restored from outside the process: frames gone */
   size_t points = 0;     /* the stop points passed when it stopped */
+  unsigned int clhash = 0; /* the hash its function was given (0: not made when it stopped) */
   size_t ends = 0;       /* the reads that gave the end (nil or an empty piece) */
   int anchoridx = 0;     /* the stack slot of the anchor table */
   Dyndata dyd{};
@@ -161,6 +162,7 @@ enum
   LB_ANCHOR, /* (0: it never stopped, a box left from a load that ended) */
   LB_ENDS,
   LB_COMPLETE,
+  LB_CLHASH,
   LB_NINTS
 };
 
@@ -172,6 +174,7 @@ int LoadBox::persistsave(lua_Integer* out, byte_view* b) const
   out[LB_ANCHOR] = anchoridx;
   out[LB_ENDS] = static_cast<lua_Integer>(ends);
   out[LB_COMPLETE] = complete;
+  out[LB_CLHASH] = clhash;
   *b = byte_view(input.data(), input.size());
   return LB_NINTS;
 }
@@ -180,7 +183,8 @@ static std::unique_ptr<lua_UserObject> makeloadbox(lua_State* L, const lua_Integ
 {
   if (nints != LB_NINTS || (ints[LB_STOP] != LS_READ && ints[LB_STOP] != LS_CHECK) || ints[LB_POINTS] < 0 ||
       (ints[LB_GIVEN] != 0 && ints[LB_GIVEN] != 1) || ints[LB_ANCHOR] < 0 || ints[LB_ANCHOR] > INT_MAX ||
-      ints[LB_ENDS] < 0 || (ints[LB_COMPLETE] != 0 && ints[LB_COMPLETE] != 1))
+      ints[LB_ENDS] < 0 || (ints[LB_COMPLETE] != 0 && ints[LB_COMPLETE] != 1) || ints[LB_CLHASH] < 0 ||
+      ints[LB_CLHASH] > static_cast<lua_Integer>(UINT_MAX))
     return nullptr;
   auto box = std::make_unique<LoadBox>();
   box->g = L->l_G;
@@ -190,6 +194,7 @@ static std::unique_ptr<lua_UserObject> makeloadbox(lua_State* L, const lua_Integ
   box->anchoridx = static_cast<int>(ints[LB_ANCHOR]);
   box->ends = static_cast<size_t>(ints[LB_ENDS]);
   box->complete = ints[LB_COMPLETE] != 0;
+  box->clhash = static_cast<unsigned int>(ints[LB_CLHASH]);
   /* (a load that stopped goes again over its input, if it kept all of it;
      another is not stopped, and one that did not keep its input cannot go
      on: an error if it is made to) */
@@ -302,6 +307,7 @@ static void prepstop(LoadResume* rz, lu_byte kind)
   box->frames.reserve(bound);
   box->stop = kind;
   box->points = rz->points;
+  box->clhash = rz->clhash;
   ZIO* z = rz->z;
   const char* d = z->chunk.data();
   std::optional<byte_view> s;
@@ -492,6 +498,24 @@ void luaZ_loadread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source)
   }
 }
 
+/*
+** The function of the load is made. A load restored from outside the
+** process makes it again as it goes over its input: it takes the hash the
+** original's had (and none of the sequence, which the restored state has
+** past it), so the objects made after it hash as in the original.
+*/
+void luaZ_madefunction(LoadResume* rz, GCObject* cl)
+{
+  if (rz == nullptr)
+    return;
+  if (rz->replaying && rz->box->clhash != 0)
+  {
+    luaC_givebackhash(rz->L->l_G, cl);
+    cl->hash = rz->box->clhash;
+  }
+  rz->clhash = cl->hash;
+}
+
 /* the load ended, with status 'st': what its box keeps is given back */
 static int ended(lua_State* L, LoadResume* rz, int st)
 {
@@ -560,6 +584,8 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
       return LUA_ERRSYNTAX;
     }
     rz.box = box;
+    if (!box->replay)
+      rz.clhash = box->clhash; /* (its function is held: made) */
     if (box->replay)
     { /* restored from outside the process: from the start again */
       if (box->anchoridx > lua_gettop(L) || (box->stop == LS_READ) != (lua_gettop(L) > box->anchoridx) ||

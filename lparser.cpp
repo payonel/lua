@@ -3189,6 +3189,7 @@ LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndat
   }
   l.lexstate.h = anchor;                    /* table for scanner */
   l.cl = LClosure::luaF_newLclosure(L, 1); /* create main closure */
+  luaZ_madefunction(z->rz, l.cl);
   assert(novariant(l.cl->tt) >= LUA_TSTRING);
   luaD_anchorobj(L, anchor, l.cl); /* anchor it in scanner table */
   l.funcstate.f = l.cl->p = Proto::luaF_newproto(L);

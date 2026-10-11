@@ -2366,6 +2366,61 @@ static std::string persist_kernel(lua_State* L)
   return w.out;
 }
 
+static void test_kernel_persistence()
+{
+  std::string plain;
+  {
+    CountingAlloc a;
+    lua_State* L = kernel_state(&a, 777);
+    while (!kernel_step(L, &plain))
+    {
+    }
+    lua_close(L);
+  }
+  CHECK(plain.find("u1 done") != std::string::npos && plain.find("u3 done") != std::string::npos);
+  int persisted = 0;
+  for (int k = 1; k < 10000; k++)
+  {
+    CountingAlloc a1;
+    lua_State* A = kernel_state(&a1, 777);
+    std::string ta, tb;
+    bool done = false;
+    for (int i = 0; i < k && !done; i++)
+      done = kernel_step(A, &ta);
+    if (done)
+    {
+      lua_close(A);
+      break;
+    }
+    persisted++;
+    std::string blob = persist_kernel(A);
+    CountingAlloc a2;
+    HostString msg;
+    lua_State* B = luaL_restorestate(&a2, byte_view(blob.data(), blob.size()), kernel_setup, nullptr, &msg);
+    CHECK(B != nullptr);
+    if (B == nullptr)
+    {
+      std::printf("      restore error at tick %d: %s\n", k, msg.to_os());
+      lua_close(A);
+      break;
+    }
+    while (!kernel_step(A, &ta))
+    {
+    }
+    while (!kernel_step(B, &tb))
+    {
+    }
+    if (ta != plain || tb != plain)
+      std::printf("      tick %d:\n        plain    %s\n        original %s\n        restored %s\n", k, plain.c_str(),
+                  ta.c_str(), tb.c_str());
+    CHECK(ta == plain);
+    CHECK(tb == plain);
+    lua_close(A);
+    lua_close(B);
+  }
+  CHECK(persisted > 10);
+}
+
 static void push_one(lua_State* L, void*)
 {
   luaL_openlibs(L);
@@ -2469,6 +2524,7 @@ static void run_cpp_tests()
       {"frozen_main_thread", test_frozen_main_thread},
       {"frozen_main_thread_close", test_frozen_main_thread_close},
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
+      {"kernel_persistence", test_kernel_persistence},
       {"restore_errors", test_restore_errors},
   };
   std::printf("  styx_tests.cpp\n");

@@ -17,6 +17,10 @@ namespace lua::compiler
 {
 struct Dyndata;
 }
+namespace lua::object
+{
+struct GCObject;
+}
 namespace lua::runtime
 {
 struct CallInfo;
@@ -164,6 +168,7 @@ struct LoadResume
   size_t pieces = 0;      /* the pieces read before it had a box */
   size_t ends = 0;        /* the reads that gave the end before it had a box */
   bool replaying = false; /* restored from outside the process: going again to where it stopped */
+  unsigned int clhash = 0; /* the hash its function was given (0: not made yet) */
 };
 
 /* a frame of function 'fn' at 'site', its locals at 'l' ('n' bytes), as a freeze leaves it */
@@ -185,6 +190,8 @@ void luaZ_checkpoint(LoadResume* rz);
 void luaZ_replaypoint(LoadResume* rz);
 /* the load with spec 'ls' starts, or goes on after a thaw */
 int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume);
+/* the function of the load is made ('cl', by the parser or the binary loader) */
+void luaZ_madefunction(LoadResume* rz, ::lua::object::GCObject* cl);
 /* the chunk of a load from a reader that calls no code, read whole into its box */
 void luaZ_loadread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source);
 /* the parser's arrays and buffer, held by the box while the load is stopped */
