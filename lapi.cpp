@@ -1704,6 +1704,12 @@ int lua_spend(lua_State* L, int n)
 void lua_checkpointk(lua_State* L, lua_KContext ctx, lua_KFunction k)
 {
   lua_lock(L);
+  if (L->l_G->budgetL != nullptr)
+  { /* (a thread the callback runs: no callback inside the callback, as at
+       the budget points of instructions; its budget is seen to later) */
+    lua_unlock(L);
+    return;
+  }
   CallInfo* ci = L->ci;
   assert(!isLua(ci) && ci != &L->base_ci && k != nullptr);
   ci->k = k;

@@ -172,6 +172,39 @@ do
   assert(hookcalls == plain) -- no line events from the callback's code
 end
 
+-- a program that the callback runs (another budget group) gets no callback
+-- of its own inside it, also where C work of the table functions spends its
+-- budget; the outer callback can still freeze its own program after it
+do
+  local incallback, nested, othercalls = false, 0, 0
+  local other = coroutine.create(function()
+    while true do
+      table.move({}, 1, 50, 1) -- (C work, with check points)
+      table.insert({}, 1, 0)
+      for i = 1, 20 do end
+      coroutine.yield()
+    end
+  end)
+  debug.setbudget(other, 3, function()
+    othercalls = othercalls + 1
+    if incallback then nested = nested + 1 end
+  end)
+  local calls = 0
+  local co = coroutine.create(function() for i = 1, 100 do end return "end" end)
+  debug.setbudget(co, 7, function()
+    calls = calls + 1
+    incallback = true
+    for i = 1, 5 do assert(coroutine.resume(other)) end
+    incallback = false
+    if calls == 2 then debug.freeze() end
+  end)
+  assert(coroutine.resume(co))
+  assert(debug.isfrozen(co) and calls == 2 and nested == 0, nested)
+  assert(select(2, debug.thaw(co)) == "end")
+  assert(coroutine.resume(other)) -- its own callbacks come back outside
+  assert(othercalls > 0)
+end
+
 -- the callback's thread has its stack and frames reserved, and the
 -- collector does not trim them: a callback that calls deep allocates
 -- neither (the memory in use does not change), also after collections

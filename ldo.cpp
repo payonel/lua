@@ -516,6 +516,7 @@ bool luaD_canfreeze(lua_State* L, int* why)
 lua_State* luaD_budget(lua_State* L)
 {
   global_State* g = L->l_G;
+  assert(g->budgetL == nullptr); /* (a callback never runs inside another) */
   CallInfo* ci = L->ci;
   StkId top = L->top;     /* preserve original 'top' */
   StkId ci_top = ci->top; /* idem for 'ci->top' */
