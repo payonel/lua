@@ -261,6 +261,22 @@ do
   assert(select(2, coroutine.resume(co3)) == "fine")
 end
 
+-- the pending '__close' of the callback run as it leaves, when the callback
+-- is already over: a 'freeze' there is an error, which destroys the chain
+-- (as any error of those '__close' does)
+do
+  local closed = 0
+  local co = coroutine.create(function() for i = 1, 100 do end end)
+  debug.setbudget(co, 5, function()
+    local x <close> = setmetatable({}, {__close = function() closed = closed + 1 debug.freeze() end})
+    local y <close> = setmetatable({}, {__close = function() closed = closed + 1 end})
+    debug.freeze()
+  end)
+  local ok, err = coroutine.resume(co)
+  assert(not ok and err:find("freeze outside the budget callback", 1, true), err)
+  assert(closed == 2 and coroutine.status(co) == "dead" and not debug.isfrozen(co))
+end
+
 -- turning the budget off from the callback
 do
   local calls = 0

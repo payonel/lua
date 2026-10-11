@@ -535,6 +535,7 @@ lua_State* luaD_budget(lua_State* L)
     {
       g->budgetL = nullptr;
       g->budgetg = nullptr;
+      g->budgetexit = false;
       bg->left = bg->budget;
     }
   } guard{g, bg};
@@ -568,7 +569,9 @@ lua_State* luaD_budget(lua_State* L)
     if (B != nullptr && B != L)
     { /* its thread goes back to the base, closing what is pending */
       B->nCcalls = bncalls;
+      g->budgetexit = true; /* (a 'freeze' in them is outside the callback) */
       TStatus cs = luaE_resetcallbackthread(B);
+      g->budgetexit = false;
       if (cs != LUA_OK)
       { /* a '__close' failed */
         status = cs;
@@ -599,7 +602,7 @@ lua_State* luaD_budget(lua_State* L)
 [[noreturn]] void luaD_exitcallback(lua_State* L)
 {
   global_State* g = L->l_G;
-  if (g->budgetL == nullptr || (L != g->budgetL && L != g->budgetth))
+  if (g->budgetL == nullptr || g->budgetexit || (L != g->budgetL && L != g->budgetth))
     luaG_runerror(L, lt::freeze_outside_the_budget_callback);
   throw LuaError{LUA_CBEXIT, 0};
 }

@@ -637,6 +637,7 @@ struct global_State
   BudgetGroup* budgetg = nullptr;    /* the group whose callback runs (kept by the collector) */
   lua_State* budgetth = nullptr;     /* a thread for the callback (see 'lua_budgetthread') */
   int budgetnfz = 0;                 /* its 'nfz' when the callback began */
+  bool budgetexit = false;           /* the callback left: its pending '__close' run */
   std::span<BudgetGroup*> groupbyid; /* the budget groups by owner id (weak; 0 is not an id) */
   unsigned nextownerid = 1;          /* the next owner id to give */
   std::bitset<65536> ownerskip;      /* ids not to give in this round (see 'luaC_newowner') */
