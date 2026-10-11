@@ -36,8 +36,8 @@ local v = styx.unpersist([perms,] s)       -- string -> value
   object found in `perms` is written as its name; on unpersist the name is
   resolved back to the object in the `perms` supplied to that call.
 - A metatable field (`__persist`) lets a table (and, once supported,
-  userdata) control its own persistence: `true` for literal, `false` for
-  forbidden, or a function that returns a restore closure.
+  userdata) control its own persistence: `true` (or absent) for literal,
+  `false` for forbidden. Nothing else is accepted (ADR-18).
 
 ## Layout and running
 
@@ -167,16 +167,18 @@ yet" below. Four kinds of solution cover them:
    resumed another (status normal), the main thread from the script API.
    Today: error. Needs: C frames (they wait inside `coroutine.resume` or
    inside `persist` itself); a frozen chain crosses `coroutine.resume`
-   (ADR-33).
+   (ADR-33), and a frozen main thread persists from the host (ADR-34).
 8. **A coroutine suspended inside a C call that continues later**: a yield
    inside `pcall`, `xpcall`, `dofile`, a `__pairs` metamethod, or any C
    function that calls or yields with a continuation (`lua_callk`,
-   `lua_pcallk`, `lua_yieldk`). Today: error. Probably the most common
-   blocker for real scripts (`pcall` around a loop that yields). Needs: C
-   frames: freezable C functions (ADR-33), which preemption needs for
-   every C function that calls back into Lua.
+   `lua_pcallk`, `lua_yieldk`). Today: persisted when the continuation has
+   a name (the engine's and the library's have, ADR-34); a host's C
+   function needs its continuation registered. Freezable C functions
+   (ADR-33) are what preemption needs for every C function that calls back
+   into Lua.
 9. **A coroutine suspended inside a hook or a `__close` handler**. Today:
-   error. Needs: C frames.
+   persisted as other C frames (ADR-34), a `__close` frozen at a host call
+   or at the host's close of a thread included.
 10. **To-be-closed variables of C functions** (`lua_toclose`). Today:
     error (Lua's own work, ADR-20). Needs: C frames.
 11. **Hooks set from C** (not by `debug.sethook`). Today: error. Needs:
@@ -192,7 +194,8 @@ yet" below. Four kinds of solution cover them:
     `table.sort`'s time-based pivot. Needs: state by value; see
     "Determinism".
 14. **The host's API stack** on the main thread. Today: not part of a
-    snapshot; the host manages it.
+    snapshot of an idle state; the host manages it. A frozen main thread
+    is persisted whole, its frames and stack included (ADR-34).
 15. **Opaque user C functions** (calling back into Lua with plain
     `lua_call`) on the stack of a thread being persisted. Allowed in the
     VM; persisting fails, by design (ADR-32), with a follow-up to wait for
@@ -216,9 +219,9 @@ yet" below. Four kinds of solution cover them:
 
 ### Refused by design or by choice
 17. **Persistable, but refused**: tables whose `__persist` is `false`;
-    `__persist` functions in a host persist (they would run Lua code during
-    a snapshot); a `__persist` restore closure that refers to the value it
-    rebuilds.
+    a `__persist` that is not a boolean (a function would be user code
+    run by persist and unpersist outside any budget, ADR-18); a budget
+    callback that is not a permanent in a value persist (ADR-34).
 
 ## Not supported yet
 
@@ -234,7 +237,8 @@ of these raises a clear error unless it says otherwise.
 - **Running threads**: the caller, a thread that resumed another and is not
   frozen (status normal), and the main thread while it runs. Today: error.
   An open upvalue owned by such a thread is persisted as its current value
-  (ADR-16). A frozen chain is not running (ADR-34).
+  (ADR-16). A frozen chain is not running (ADR-34), and a frozen main
+  thread persists from the host, from another thread of the state.
 - **Hooks set from C** (not by `debug.sethook`) on a persisted thread.
   Today: error ("a hook not set by the debug library is not supported
   yet"). Debug-library hooks work (ADR-26).
@@ -279,30 +283,24 @@ of these raises a clear error unless it says otherwise.
   suspended in a `pairs` loop over it can skip or repeat keys, and `next`
   from a key deleted from it fails. Such keys: a permanent not made the
   same way in the restoring state (library objects made in the same order
-  with the same seed hash the same), an object a `__persist` closure
-  makes, and light userdata and light C functions, which hash by address
-  (C functions are the same in one process).
-- **A `__persist` restore closure that reaches the value it rebuilds**
-  (directly or through its upvalues). Today: unpersist error ("invalid
-  persisted data"); the value has no object yet while its closure is read.
+  with the same seed hash the same), and light userdata and light C
+  functions, which hash by address (C functions are the same in one
+  process).
 - **A finalizer already due whose object a finalizer made reachable
   again** (the object waited to be finalized when it was persisted): it is
   restored marked, so its finalizer runs when it is unreachable again, not
   at the next collection step (ADR-28).
-- **A table marked for finalization by a `__persist` function after the
-  table was written**: the copy is not marked (marks are read as tables are
-  written).
 
 ### States and memory
-- **The main thread's API stack** is not part of a state snapshot; the host
-  manages it. Today: not persisted.
-- **A `__persist` function in a host persist**: it would run Lua code in
-  the state being snapshotted. Today: error ("not supported yet in a host
-  persist"); `true` and `false` work.
+- **The main thread's API stack** of an idle state is not part of a state
+  snapshot; the host manages it. Today: not persisted. A frozen main
+  thread's stack is (ADR-34).
 - **The main thread from the script API**: `styx.persist` reaching the
-  main thread fails (it is the caller or above it); the host API persists
-  it as a reference and restores it as the restoring state's main thread
-  (ADR-21, ADR-24).
+  main thread fails: as a running thread when it is the caller or above
+  it, otherwise with "cannot persist the main thread from a script". The
+  host API persists an idle main thread as a reference and restores it as
+  the restoring state's main thread (ADR-21, ADR-24), and a frozen one
+  whole (ADR-34).
 
 ### Determinism
 A restored VM goes on as the original would for what is deterministic
@@ -335,7 +333,7 @@ across a restore, and are to be revisited:
   the stream without verifying them (as with binary chunks), and checks the
   thread state it reads only for consistency with itself. Do not unpersist
   data you do not trust.
-- **A final format**: the format (version 6, ADR-10) may still change;
+- **A final format**: the format (version 7, ADR-10) may still change;
   no stream of an earlier version is read.
 - **The hash seed in streams** is not hidden: every stream starts with the
   persisting state's string hash seed (`luaL_newstatefor` needs it), and
@@ -398,8 +396,8 @@ Every capability is covered from script and from C++ for careful testing,
 in `tests/styx/`, run by `make test` with everything else.
 
 ### ADR-10: Stream format
-**Status:** accepted (version 6)
-A persisted string is the header `"Styx\x06"` (name plus format version),
+**Status:** accepted (version 7)
+A persisted string is the header `"Styx\x07"` (name plus format version),
 the persisting state's string hash seed (8 bytes, ADR-22), then one value
 (or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload
 (a table, function or thread starts with its hash, ADR-30);
@@ -413,7 +411,10 @@ little-endian only), instructions 4 raw bytes each, and a thread's frames,
 to-be-closed list and hook fields fixed 8-byte values. Version 2 made
 streams about 70% smaller than version 1's fixed 8-byte integers; version
 3 added the seed and the layout mode of tables (ADR-22); version 4 the
-trailer; version 5 objects' hashes; version 6 frozen threads (ADR-34). Output
+trailer; version 5 objects' hashes; version 6 frozen threads (ADR-34);
+version 7 a budget group's queue of waiting `__gc`, the kinds of marked
+user objects in the trailer and a frozen main thread written whole, and
+dropped the tag of a table rebuilt by a `__persist` function. Output
 is built in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a
 missing header (or another version), unknown tags, truncation and trailing
 bytes.
@@ -530,15 +531,19 @@ could report a different length. Sizes are checked; the table limits
 themselves are left to `lua_createtable`.
 
 ### ADR-18: `__persist` for tables
-**Status:** accepted
-As in Eris, a table's metatable may hold `__persist` (read raw): absent or
-`true` persists the table literally, `false` forbids it, and a function is
-called with the table and must return a closure. That closure is persisted
-in the table's place; unpersist calls it with no arguments and it must
-return a table, which takes the table's reference id (reserved before the
-closure is read, so sharing is kept). Any other `__persist` value is an
-error. Userdata are not supported yet, so `__persist` on userdata has no
-effect today.
+**Status:** accepted (boolean only since version 7)
+A table's metatable may hold `__persist` (read raw): absent or `true`
+persists the table literally, `false` forbids it ("cannot persist a table:
+its __persist is false"). Any other value is an error ("__persist must be
+a boolean"), and is not called.
+- Eris also accepts a function, called with the table at persist, that
+  returns a closure persisted in the table's place and called at
+  unpersist to rebuild it. Both are user code that persist and unpersist
+  would run outside any budget (they are not freezable points of a
+  program), so a program could run there without limit; the function form
+  was removed.
+- Userdata are not supported yet, so `__persist` on userdata has no effect
+  today.
 
 ### ADR-19: Errors say where
 **Status:** accepted
@@ -546,18 +551,15 @@ Every error persist raises ends with the path from the root to the value
 that failed, for example
 `persisting a userdata value is not supported yet (at root.config.output)`.
 Each step of the walk records how it reached the value (table key, the key
-itself, metatable, upvalue, thread stack slot, `__persist` closure,
-permanent key) in a node on the C stack, so nothing is allocated unless an
-error is raised. Path syntax: `.name` for string keys that are names,
+itself, metatable, upvalue, thread stack slot, permanent key) in a node
+on the C stack, so nothing is allocated unless an error is raised. Path syntax: `.name` for string keys that are names,
 `["text"]` for other strings, `[3]`, `[2.5]`, `[true]`, `[<table>]` for
 object keys, `<key T>` when the key itself fails, `<metatable>`,
 `<upvalue name>` (or `<upvalue N>` without debug names), `<stack N>`,
-`<__persist>`, `<permanent key>`.
+`<permanent key>`.
 Unpersist errors about the stream give the byte offset where the problem
 was found: `invalid persisted data (at byte N)`.
-Memory errors stay "not enough memory". A `__persist` function is called
-protected: a message it raises gets the path appended, any other error
-value passes through unchanged.
+Memory errors stay "not enough memory".
 
 ### ADR-20: To-be-closed variables
 **Status:** accepted
@@ -592,6 +594,12 @@ thread). They are for the host, not for scripts:
   `TAG_MAINTHREAD` (restored as the restoring state's main thread); a
   script's unpersist rejects that tag, so a stream cannot hand a script the
   main thread.
+- A main thread frozen by its budget (a program the host runs on it,
+  ADR-34) is not running: the host persists the state, or a value that
+  reaches it, from another thread of the state (the main thread's own
+  stack is the frozen program's: "the main thread is frozen: use another
+  thread of the state"). It is written whole as `TAG_MAINTHREAD_FROZEN`:
+  its stack, frames and freeze, as any frozen thread.
 - Errors are returned with their path (`registry...`, `root...`), and the
   writer can stop the persist by returning non zero.
 
@@ -612,8 +620,8 @@ rebuilding by insertion cannot match it.
   it and tested on its own in `test_engine`); with another seed it inserts
   the entries. A host creates the restoring state with `luaL_newstatefor`,
   which hashes as the persisting state did (ADR-31).
-- The writer reads the nodes when their turn comes and fails if a
-  `__persist` function changed the table's hash part meanwhile.
+- The writer reads the nodes when their turn comes and fails if a `__gc`
+  run by the collector changed the table's hash part meanwhile.
 - Object keys hash by the hash each object was given when made, which is
   persisted with it (ADR-30), so every hash part is written slot by slot.
 - Tested: 100 churned tables keep their order; deleted keys after a
@@ -648,6 +656,12 @@ into it.
 - The restore runs in a protected call on the idle state with the
   machinery of `unpersist`; only host restores accept the main thread
   reference.
+- A frozen main thread (ADR-21) is restored into the restoring state's
+  main thread, which must be idle with an empty stack, from another thread
+  of the state ("a frozen main thread is restored into an idle main thread
+  with an empty stack, from another thread"); the host then thaws it as
+  any frozen thread. A restore that fails leaves the main thread idle and
+  empty, as it was.
 - Everything restored is charged to the state through its allocator, so
   the host's allocator is the memory policy: a restore that it denies fails
   with "not enough memory". The state's registry and type metatables are
@@ -696,8 +710,8 @@ it waits for), so there is no depth limit, a limit stock Lua does not have
 - Script persist and unpersist keep these stacks in memory charged to the
   state (a byte buffer grown under the API lock); a host persist keeps them
   in host memory and allocates nothing in the state.
-- A script's persist may run Lua code (`__persist` functions), and with it
-  the collector, so table entries, thread slots and upvalues are read when
+- A script's persist allocates, so the collector may run, and with it
+  `__gc` metamethods (Lua code), so table entries, thread slots and upvalues are read when
   their turn comes rather than copied ahead; pending work never points at a
   value that may have been collected. Every key on the error path has a
   reference id, so it stays alive too.
@@ -722,8 +736,7 @@ finalized, an object already finalized was finalized again, one whose
 not, and a failed unpersist finalized what it had half built.
 - Persist writes the marks in the trailer: the persisted tables that are
   marked (also those whose finalizer is already due), oldest mark first, in
-  the order the collector holds them. Permanents and tables rebuilt by
-  `__persist` keep their own marks.
+  the order the collector holds them. Permanents keep their own marks.
 - Unpersist reads the trailer first and makes those tables before anything
   else, in that order, each marked as a script marks one (a metatable with
   `__gc`, replaced later); the value's table records fill them. Other
@@ -745,8 +758,8 @@ not, and a failed unpersist finalized what it had half built.
   far weak tables were cleared (a restored state starts a new cycle).
 - Tested: `finalizers.lua` (a class listing its instances, an instance
   restored first, finalized once, `__gc` set late, marked with `__gc` or
-  the metatable removed, the order, a finalizer already due, permanents and
-  `__persist`, a failing unpersist, truncation, a second round trip),
+  the metatable removed, the order, a finalizer already due, permanents, a
+  failing unpersist, truncation, a second round trip),
   allocation failure at every point in both directions with no finalizer
   run by a failed attempt, trailer checks in `errors.lua`, and the C++
   `host_state_*` tests (garbage and finalizers due, the order, settings in
@@ -806,8 +819,8 @@ back (and which Java does not have).
   to the previous one written: mostly one byte) and unpersist gives it to
   the restored object when it is made, before it can be a key anywhere.
   Every hash part is then written slot by slot (ADR-22).
-- Keys the restoring side supplies (permanents, objects made by `__persist`
-  closures, light userdata, light C functions) keep their own hashes, and
+- Keys the restoring side supplies (permanents, light userdata, light C
+  functions) keep their own hashes, and
   a restored object cannot take another's in their place: after a table
   is read, unpersist checks that every key of its hash part is in the
   chain from its main position (`Table::luaH_mainposition`, now in every
@@ -819,8 +832,6 @@ back (and which Java does not have).
 - A whole-state snapshot carries the hash of the next object, so a
   restored state goes on giving new objects the hashes the original would
   have.
-- Objects made by `__persist` closures keep the hash they were made with:
-  the closure may already have used them as keys.
 - Cost (A/B, 20000 records): streams +3.6% for records of small tables,
   +12% when each record also has a table with object keys (written slot by
   slot, as string-keyed tables are since version 3); persist +1.6% and
@@ -828,8 +839,8 @@ back (and which Java does not have).
 - Tested: `tables.lua` (tables, functions and threads as keys in order;
   deleted object keys and `next`; a suspended `pairs` loop; a loop that
   clears object keys; mixed keys; weak keys; permanents as the same
-  objects keep the order, as other objects or `__persist` objects the
-  table is rebuilt with its contents), allocation failure at every point
+  objects keep the order, as other objects the table is rebuilt with its
+  contents), allocation failure at every point
   for both paths, and the C++ tests across states (object keys with the
   same seed and another, library objects as keys, a snapshot's next
   hash). Without the restored hashes the order tests fail; without the
@@ -1218,25 +1229,44 @@ What a frozen chain is, to Styx:
   as the name of the kind, their upvalues, and for the gmatch iterator the
   position of its match.
 - **Budget groups.** A group is persisted with its limit, its steps left,
-  the name of its callback, its value (the debug library's Lua function)
-  and the thread it was set on; a thread keeps its own group and the one in
+  the name of its callback, its value (the debug library's Lua function),
+  the thread it was set on and its queue of waiting `__gc`; a thread keeps
+  its own group and the one in effect. A thread of the chain with no group
+  of its own (a kernel thread the program resumed) keeps only the one in
   effect. Restored in a state with no thread for the debug library's
   callbacks, the group makes one (the callback's `prepare`).
+- **The callback is the kernel's.** In a value persist (`styx.persist`,
+  `luaL_persistvalue`) the callback's value must be a permanent ("cannot
+  persist a budget callback that is not a permanent"): copied, it would be
+  another function, with copies of the kernel's upvalues. A whole-state
+  snapshot persists it as it does every function of the state.
+- **Steps left inside the callback.** A group persisted while its callback
+  runs is written with its full limit, which is what it has when the
+  callback returns without a freeze.
 - **Deferred `__gc`.** An object marked for finalization keeps its owner:
   the trailer says, for each marked object, whether it belongs to the
   kernel, to a group (the reference of the group in the stream) or to a
   group that is gone (it is then an ordinary object when it dies, as in the
   persisting state), and whether its `__gc` was already due (waiting in
-  `tobefnz` or in a group's queue). A state persists the objects waiting in
-  the queues of its groups with the other marked objects, and unpersist makes
-  the due ones due again in their original order (`luaC_makedue`), so each
-  `__gc` runs once after the restore: a deferred one when a thread of its
-  group goes on. The thread keeps `allowhook`, which is off while a drained
+  `tobefnz` or in a group's queue). The same holds for the user objects of
+  a registered kind, whose kind the trailer also names. A group's queue is
+  persisted with the group, in a value persist as in a state, and
+  unpersist makes the due ones due again in their original order
+  (`luaC_makedue`), so each `__gc` runs once after the restore: a deferred
+  one when a thread of its group goes on. The thread keeps `allowhook`, which is off while a drained
   `__gc` or a hook function runs (the drain must not nest). The collector's
   timing is not the original's (the debt of a restored state is another,
   see "Determinism"), so a program's `__gc` order that depends on when an
   automatic step comes can differ; the tests stop the collector where it
   matters.
+- **The main thread.** A program the host runs on the main thread freezes
+  as on any thread, and persists and restores from another thread of the
+  state (ADR-21, ADR-24).
+- **A freeze in a `__close` at a host call.** A `__close` run as a host's
+  `lua_pcall` fails, or by the host's `lua_closethread` with no `from`, can
+  freeze; the thread keeps that kind of freeze (and the status being
+  closed with), and is persisted and thawed as any frozen thread: the
+  thaw finishes the close.
 - **Inside the budget callback.** A thread of the chain that spent the budget
   is still running there, so persisting it is refused ("a running thread");
   once the callback has frozen it, it persists. (Specification 13.4 asks for

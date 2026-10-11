@@ -253,12 +253,12 @@ static TValue string_field(const Table* t, byte_view name)
 ** reads the objects directly and keeps a stack of work; the path from the
 ** root to the value at hand is a stack too, turned into text only when an
 ** error is raised. A script's persist writes to a buffer and keeps its
-** references in a table, all charged to the state, and calls '__persist'
-** functions; a host persist writes to a writer, keeps everything in host
-** memory and runs no Lua code (nothing is allocated in the state and no
-** collection starts). Table entries, thread slots and upvalues are read
-** when their turn comes, so Lua code run by a '__persist' function cannot
-** leave pending work pointing at a collected value.
+** references in a table, all charged to the state, so the collector may
+** run, and with it '__gc' metamethods; a host persist writes to a writer,
+** keeps everything in host memory and runs no Lua code (nothing is
+** allocated in the state and no collection starts). Table entries, thread
+** slots and upvalues are read when their turn comes, so Lua code run by a
+** '__gc' cannot leave pending work pointing at a collected value.
 ** =======================================================
 */
 
@@ -739,8 +739,8 @@ private:
   /*
   ** The dead keys whose objects are persisted: their identities (ADR-29).
   ** A node counts if it was written as a dead key and still is one (a
-  ** '__persist' function or a collection may have changed a table since it
-  ** was written). Keys are matched by address, so nothing dereferences
+  ** '__gc' or a collection may have changed a table since it was
+  ** written). Keys are matched by address, so nothing dereferences
   ** them, against candidate objects sorted by address: with fewer keys
   ** than objects, the objects that pass a filter of the keys' addresses;
   ** otherwise every object. A filter of the candidates picks the keys to
@@ -1454,7 +1454,7 @@ private:
   ** Node 'j' of a table written slot by slot: a state byte (0: no key, 1: a
   ** dead key, 2: a key, then its key and value), then its chain link. The
   ** nodes are read when their turn comes; a table whose hash part changed
-  ** meanwhile (by a '__persist' function) is an error. Dead keys are noted
+  ** meanwhile (by a '__gc') is an error. Dead keys are noted
   ** for the trailer (ADR-29).
   */
   void node_next(Task t)
@@ -2640,8 +2640,8 @@ private:
   /*
   ** Every key that hashes by an object's hash sits where a lookup finds it:
   ** in the chain from its main position. A key the restoring side supplied
-  ** (a permanent, an object a '__persist' closure made, a light userdata
-  ** or C function, which hash by address) can hash otherwise (ADR-30).
+  ** (a permanent, a light userdata or C function, which hash by address)
+  ** can hash otherwise (ADR-30).
   */
   bool keys_in_place(const Table* h) const
   {
@@ -2827,7 +2827,7 @@ private:
     }
   }
 
-  /* ---- permanents and __persist ---- */
+  /* ---- permanents ---- */
 
   Next perm_part(Frame f)
   {
@@ -2849,10 +2849,6 @@ private:
     return done();
   }
 
-  /*
-  ** A value rebuilt by the closure its '__persist' function returned. Its
-  ** reference id was taken before the closure was read, matching persist.
-  */
   /* ---- prototypes ---- */
 
   /*
