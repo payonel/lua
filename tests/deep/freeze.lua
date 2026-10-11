@@ -1332,6 +1332,76 @@ do
   os.remove(name)
 end
 
+-- a collection does not hold off a freeze for long: a chain of entries in
+-- a weak table (each value the key of the next, in a shuffled order) is
+-- converged in time linear in it, as a weak table of as many entries with
+-- no chain (stock goes over the table again for each step of the chain)
+do
+  local n = 40000
+  local function longest(make)
+    local co = coroutine.create(function()
+      local e = make()
+      collectgarbage()
+      collectgarbage()
+      return e
+    end)
+    local last, worst
+    debug.setbudget(co, 1000, function()
+      local now = os.clock()
+      if last and now - last > worst then worst = now - last end
+      last = now
+    end)
+    collectgarbage()
+    worst = 0
+    assert(coroutine.resume(co))
+    return math.max(worst, os.clock() - last) -- (to its end)
+  end
+  local base = longest(function()
+    local e = setmetatable({}, {__mode = "k"})
+    local keys = {}
+    for i = 1, n do keys[i] = {} e[keys[i]] = {} end
+    return {e, keys}
+  end)
+  local chained = longest(function()
+    local e = setmetatable({}, {__mode = "k"})
+    local keys = {}
+    for i = 1, n do keys[i] = {} end
+    local p, x = {}, 7
+    for i = 1, n - 1 do p[i] = i end
+    for i = n - 1, 2, -1 do
+      x = (x * 1103515245 + 12345) % 2147483648
+      local j = x % i + 1
+      p[i], p[j] = p[j], p[i]
+    end
+    for _, i in ipairs(p) do e[keys[i]] = keys[i + 1] end
+    return {e, keys[1]}
+  end)
+  assert(chained < 10 * base + 0.05, chained .. " vs " .. base)
+end
+
+-- if the host does not allow the memory of the entries that wait (the
+-- test library's limit of allocations), their values are marked: what
+-- they hold lives one collection more, though an entry whose key is not
+-- marked is cleared as ever (a chain loses its first entry, then the rest)
+if T then
+  local e = setmetatable({}, {__mode = "k"})
+  local keys = {}
+  for i = 1, 100 do keys[i] = {} end
+  for i = 1, 99 do e[keys[i]] = keys[i + 1] end
+  keys = nil
+  local function count()
+    local n = 0
+    for _ in pairs(e) do n = n + 1 end
+    return n
+  end
+  T.alloccount(0)
+  collectgarbage()
+  T.alloccount()
+  assert(count() == 98, count())
+  collectgarbage()
+  assert(count() == 0, count())
+end
+
 -- what the box of a load keeps (here, a file read whole) is given back to
 -- the host when the load ends, not when the collector frees the box
 if T then

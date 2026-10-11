@@ -26,6 +26,25 @@
 #include "ltm.h"
 #include "literals.h"
 
+namespace lua::runtime
+{
+/* the entries of ephemerons that wait for their keys (see 'convergeephemerons') */
+struct EphIndex
+{
+  struct Entry
+  {
+    GCObject* key; /* (nullptr: an empty slot) */
+    GCObject* value;
+  };
+  Entry* slots = nullptr;
+  size_t cap = 0; /* the slots (a power of 2; at most half of them used) */
+  size_t n = 0;
+  GCObject** ready = nullptr; /* keys marked, whose entries wait ('cap / 2' of room) */
+  size_t nready = 0;
+  bool strong = false; /* (the host did not allow more room) */
+};
+}
+
 namespace lua::gc
 {
 
@@ -360,8 +379,13 @@ GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt)
 ** for at most two levels: An upvalue cannot refer to another upvalue
 ** (only closures can), and a userdata's metatable must be a table.
 */
+static void ephmarked(global_State* g, GCObject* o);
+static void ephwait(global_State* g, GCObject* key, GCObject* value);
+
 static void reallymarkobject(global_State* g, GCObject* o)
 {
+  if (l_unlikely(g->ephidx != nullptr))
+    ephmarked(g, o);
   g->GCmarked += objsize(o);
   switch (o->tt)
   {
@@ -622,8 +646,12 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
     else if (iscleared(g, gckeyN(n)))
     {                          /* key is not marked (yet)? */
       hasclears = 1;           /* table must be cleared */
-      if (iscollectable(&n->val) && iswhite(gcvalue(&n->val))) /* value not marked yet? */
-        hasww = 1;             /* white-white entry */
+      if (iscollectable(&n->val) && iswhite(gcvalue(&n->val)))
+      {           /* value not marked yet? */
+        hasww = 1; /* white-white entry */
+        if (g->ephidx != nullptr)
+          ephwait(g, gckeyN(n), gcvalue(&n->val)); /* (converging: it waits for its key) */
+      }
     }
     else if (iscollectable(&n->val) && iswhite(gcvalue(&n->val)))
     { /* value not marked yet? */
@@ -632,7 +660,9 @@ static int traverseephemeron(global_State* g, Table* h, int inv)
     }
   }
   /* link table into proper list */
-  if (g->gcstate == GCSpropagate)
+  if (g->ephidx != nullptr)
+    linkgclist_(h, &g->ephemeron); /* (converging: sorted out at its end) */
+  else if (g->gcstate == GCSpropagate)
     linkgclist_(h, &g->grayagain); /* must retraverse it in atomic phase */
   else if (hasww)                /* table has white->white entries? */
     linkgclist_(h, &g->ephemeron); /* have to propagate again */
@@ -842,35 +872,156 @@ static void propagateall(global_State* g)
 }
 
 /*
-** Traverse all ephemeron tables propagating marks from keys to values.
-** Repeat until it converges, that is, nothing new is marked. 'dir'
-** inverts the direction of the traversals, trying to speed up
-** convergence on chains in the same table.
+** The marks of the ephemeron tables converge in one propagation, in time
+** linear in their entries and in what they mark: an entry whose key is
+** not marked yet, and whose value is not either, waits in an index by its
+** key's hash (the one each object is given when made, not its address),
+** and when its key is marked, its value is. Stock goes over every table
+** again until nothing changes, which a chain of entries makes quadratic:
+** a program could hold off a freeze for long in the atomic phase. The
+** index is memory counted by the host; if the host does not allow more,
+** the entries that do not fit have their values marked: what those hold
+** lives one cycle more (an entry is cleared as ever when its key is not
+** marked).
 */
+static size_t ephroom(size_t cap)
+{
+  return cap * sizeof(EphIndex::Entry) + (cap / 2) * sizeof(GCObject*);
+}
+
+/* the objects that can be keys of entries that wait (strings are never) */
+static bool ephkey(const GCObject* o)
+{
+  switch (o->tt)
+  {
+  case LUA_VTABLE:
+  case LUA_VUSERDATA:
+  case LUA_VLCL:
+  case LUA_VCCL:
+  case LUA_VTHREAD:
+  case LUA_VLCF:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static void ephput(EphIndex* x, GCObject* key, GCObject* value)
+{
+  size_t mask = x->cap - 1;
+  size_t i = key->hash & mask;
+  while (x->slots[i].key != nullptr)
+    i = (i + 1) & mask;
+  x->slots[i].key = key;
+  x->slots[i].value = value;
+}
+
+/* the index grows to 'cap' slots, if the host allows it */
+static bool ephgrow(global_State* g, EphIndex* x, size_t cap)
+{
+  if (!g->frealloc->permit(x->cap != 0 ? ephroom(x->cap) : 0, ephroom(cap), 0))
+    return false;
+  EphIndex old = *x;
+  x->slots = new EphIndex::Entry[cap]();
+  x->ready = new GCObject*[cap / 2];
+  x->cap = cap;
+  for (size_t i = 0; i < old.cap; i++)
+    if (old.slots[i].key != nullptr)
+      ephput(x, old.slots[i].key, old.slots[i].value);
+  for (size_t i = 0; i < old.nready; i++)
+    x->ready[i] = old.ready[i];
+  delete[] old.slots;
+  delete[] old.ready;
+  return true;
+}
+
+/* an entry whose key and value are not marked waits for its key */
+static void ephwait(global_State* g, GCObject* key, GCObject* value)
+{
+  EphIndex* x = g->ephidx;
+  if (!x->strong && 2 * (x->n + 1) > x->cap && !ephgrow(g, x, x->cap != 0 ? 2 * x->cap : 64))
+    x->strong = true;
+  if (x->strong)
+    reallymarkobject(g, value); /* (no room: it lives one cycle more) */
+  else
+  {
+    ephput(x, key, value);
+    x->n++;
+  }
+}
+
+/* 'o' is being marked: if entries wait for it, they are ready */
+static void ephmarked(global_State* g, GCObject* o)
+{
+  EphIndex* x = g->ephidx;
+  if (x->n == 0 || !ephkey(o))
+    return;
+  size_t mask = x->cap - 1;
+  for (size_t i = o->hash & mask; x->slots[i].key != nullptr; i = (i + 1) & mask)
+    if (x->slots[i].key == o)
+    {
+      x->ready[x->nready++] = o; /* (a key is marked once: no more than its entries) */
+      return;
+    }
+}
+
+/* marks propagate, and the values of the entries whose keys were marked are marked, until none is left */
+static void ephdrain(global_State* g)
+{
+  EphIndex* x = g->ephidx;
+  for (;;)
+  {
+    if (g->gray.gclist != nullptr)
+      propagatemark(g);
+    else if (x->nready > 0)
+    {
+      GCObject* k = x->ready[--x->nready];
+      size_t mask = x->cap - 1;
+      for (size_t i = k->hash & mask; x->slots[i].key != nullptr; i = (i + 1) & mask)
+        if (x->slots[i].key == k && iswhite(x->slots[i].value))
+          reallymarkobject(g, x->slots[i].value);
+    }
+    else
+      break;
+  }
+}
+
 static void convergeephemerons(global_State* g)
 {
-  int changed;
-  int dir = 0;
-  do
+  if (g->ephemeron.gclist == nullptr)
+    return;
+  EphIndex x;
+  g->ephidx = &x;
+  GCObject* w;
+  GCObject* next = g->ephemeron.gclist;
+  g->ephemeron.gclist = nullptr;
+  while ((w = next) != nullptr)
+  { /* each table: an entry marks its value, or waits for its key */
+    assert(w->tt == LUA_VTABLE);
+    Table* h = static_cast<Table*>(w);
+    next = h->gclist;
+    nw2black(h);
+    traverseephemeron(g, h, 0);
+  }
+  ephdrain(g); /* (the tables it finds wait too) */
+  g->ephidx = nullptr;
+  if (x.cap != 0)
   {
-    GCObject* w;
-    GCObject* next = g->ephemeron.gclist; /* get ephemeron list */
-    g->ephemeron.gclist = nullptr;           /* tables may return to this list when traversed */
-    changed = 0;
-    while ((w = next) != nullptr)
-    { /* for each ephemeron table */
-      assert(w->tt == LUA_VTABLE);
-      Table* h = static_cast<Table*>(w);
-      next = h->gclist; /* list is rebuilt during loop */
-      nw2black(h);      /* out of the list (for now) */
-      if (traverseephemeron(g, h, dir))
-      {                  /* marked some value? */
-        propagateall(g); /* propagate changes */
-        changed = 1;     /* will have to revisit all ephemeron tables */
-      }
-    }
-    dir = !dir; /* invert direction next time */
-  } while (changed); /* repeat until no more changes */
+    g->frealloc->permit(ephroom(x.cap), 0, 0);
+    delete[] x.slots;
+    delete[] x.ready;
+  }
+  /* the tables go to their lists as stock leaves them (all is marked) */
+  next = g->ephemeron.gclist;
+  g->ephemeron.gclist = nullptr;
+  while ((w = next) != nullptr)
+  {
+    Table* h = static_cast<Table*>(w);
+    next = h->gclist;
+    nw2black(h);
+    [[maybe_unused]] int marked = traverseephemeron(g, h, 0);
+    assert(!marked);
+  }
 }
 
 /* }====================================================== */

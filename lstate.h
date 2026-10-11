@@ -582,6 +582,8 @@ static l_forceinline int stacksize(const lua_State* th)
 /*
 ** 'global state', shared by all threads of this state
 */
+struct EphIndex; /* (see lgc.cpp) */
+
 struct global_State
 {
   lua_Alloc* frealloc = nullptr; /* function to reallocate memory */
@@ -615,6 +617,7 @@ struct global_State
   GCListed grayagain{};  /* list of objects to be traversed atomically */
   GCListed weak{};       /* list of tables with weak values */
   GCListed ephemeron{};  /* list of ephemeron tables (weak keys) */
+  EphIndex* ephidx = nullptr; /* (while ephemerons converge: their entries that wait) */
   GCListed allweak{};    /* list of all-weak tables */
   GCObject tobefnz{};    /* list of userdata to be GC */
   GCObject* fixedgc = nullptr;   /* list of objects not to be collected */

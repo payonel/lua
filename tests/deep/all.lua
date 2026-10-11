@@ -37,6 +37,7 @@ local tests = {
   "yieldability.lua",
   "libcalls.lua",
   "finalizers.lua",
+  "weak.lua",
   "freeze.lua",
   "budgetgroups.lua",
   "budgetgc.lua",
