@@ -60,6 +60,32 @@ do
   assert(ok2 == false and type(msg2) == "string", tostring(ok2))
 end
 
+-- a program dropped while frozen in a library function with a buffer of
+-- its own ('table.concat' here) gives all its memory back: the heap count
+-- comes back to what it was
+do
+  collectgarbage()
+  collectgarbage()
+  local before = collectgarbage("count")
+  local co = coroutine.create(function()
+    local piece = string.rep("x", 1000)
+    local t = setmetatable({}, {__index = function() return piece end, __len = function() return 3000 end})
+    return table.concat(t)
+  end)
+  local calls = 0
+  debug.setbudget(co, 1000, function()
+    calls = calls + 1
+    if calls == 6 then debug.freeze() end
+  end)
+  coroutine.resume(co)
+  assert(debug.isfrozen(co))
+  co = nil
+  collectgarbage()
+  collectgarbage()
+  local grew = collectgarbage("count") - before
+  assert(grew < 100, grew)
+end
+
 ------------------------------------------------------------------------
 -- the budget
 ------------------------------------------------------------------------
