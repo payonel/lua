@@ -2018,6 +2018,154 @@ static void test_user_object_owner()
 
 
 /*
+** A program run on the main thread (the host's lua_pcall at base level),
+** frozen by its budget, persists with the whole state: from another thread
+** of the state, as the frozen main thread's stack is the program's. It is
+** restored into the main thread of a new state (idle and empty, restored
+** from another thread), and lua_thaw on it goes on to the same end as the
+** original. A restore that fails leaves that main thread idle and empty.
+*/
+static int main_calls = 0;
+
+static void main_budget(lua_State*, lua_State* spender)
+{
+  if (++main_calls == 3)
+    lua_freeze(spender);
+}
+
+static void test_frozen_main_thread()
+{
+  lua_registerbudget("styxtest.main_budget", main_budget);
+  const char* prog = "local s = 0 for i = 1, 300 do s = s + i end "
+                     "local t <close> = setmetatable({}, {__close = function() closed = 'yes' end}) "
+                     "return s, 'end'";
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  lua_State* H = lua_newthread(A); /* (the host's other thread, made before) */
+  luaL_ref(A, LUA_REGISTRYINDEX);
+  main_calls = 0;
+  lua_setbudget(A, 50, main_budget);
+  CHECK(luaL_loadstring(A, prog) == LUA_OK);
+  CHECK(lua_pcall(A, 0, 2, 0) == LUA_OK && lua_isfrozen(A));
+  /* persisted with another thread; the frozen main thread itself refuses */
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(A, 0, &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()) == "the main thread is frozen: use another thread of the state");
+  /* a script's persist refuses it (the host persists it) */
+  CHECK(eval(H, "local m = debug.getregistry()[3] "
+                "local ok, e = pcall(require('styx').persist, _PERMS, {m}) "
+                "return tostring(debug.isfrozen(m) and not ok and e)") ==
+        "cannot persist the main thread from a script (at root[1])");
+  lua_getglobal(H, "_PERMS");
+  int st = luaL_persiststate(H, lua_gettop(H), &w, &msg);
+  if (st != LUA_OK)
+    std::printf("      host persist error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  lua_pop(H, 1);
+  std::string blob = w.out;
+  /* the original goes on */
+  while (lua_isfrozen(A))
+    CHECK(lua_thaw(A, nullptr).status == LUA_OK);
+  CHECK(lua_gettop(A) == 2 && lua_tointeger(A, 1) == 45150 && to_string(A, 2) == "end");
+  lua_settop(A, 0);
+  CHECK(eval(A, "return closed") == "yes");
+  /* restored in a new state: into its main thread, from another thread */
+  for (int attempt = 0; attempt < 3; attempt++)
+  {
+    CountingAlloc a2;
+    lua_State* B = new_state_for(&a2, blob);
+    CHECK(eval(B, build_perms) == "ok");
+    lua_State* HB = lua_newthread(B);
+    luaL_ref(B, LUA_REGISTRYINDEX);
+    std::string data = blob;
+    if (attempt == 1)
+      data = blob.substr(0, blob.size() - 9); /* (cut short: the restore fails) */
+    if (attempt == 2)
+      lua_pushinteger(B, 7); /* (the main thread is not empty: refused) */
+    lua_getglobal(HB, "_BACK");
+    st = luaL_unpersiststate(HB, lua_gettop(HB), byte_view(data.data(), data.size()), &msg);
+    lua_pop(HB, 1);
+    if (attempt == 0)
+    {
+      if (st != LUA_OK)
+        std::printf("      restore error: %s\n", msg.to_os());
+      CHECK(st == LUA_OK && lua_isfrozen(B));
+      while (lua_isfrozen(B))
+        CHECK(lua_thaw(B, nullptr).status == LUA_OK);
+      CHECK(lua_gettop(B) == 2 && lua_tointeger(B, 1) == 45150 && to_string(B, 2) == "end");
+      lua_settop(B, 0);
+      CHECK(eval(B, "return closed") == "yes");
+    }
+    else
+    { /* the main thread is as it was, and usable */
+      CHECK(st != LUA_OK && !lua_isfrozen(B));
+      CHECK(lua_gettop(B) == (attempt == 2 ? 1 : 0));
+      lua_settop(B, 0);
+      CHECK(eval(B, "return 'usable'") == "usable");
+    }
+    lua_close(B);
+    CHECK(a2.used == 0);
+  }
+  lua_close(A);
+}
+
+/*
+** A program on the main thread that failed, frozen in a '__close' as its
+** host call closes its variables (FZ_HOSTCLOSE): persisted and restored,
+** the thaw finishes the close and gives the error, in both states.
+*/
+static void test_frozen_main_thread_close()
+{
+  lua_registerbudget("styxtest.main_budget", main_budget);
+  const char* prog = "local x <close> = setmetatable({}, {__close = function(_, e) "
+                     "  local s = 0 for i = 1, 300 do s = s + i end closed = tostring(e) .. ' ' .. s end}) "
+                     "error('boom', 0)";
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  lua_State* H = lua_newthread(A);
+  luaL_ref(A, LUA_REGISTRYINDEX);
+  main_calls = 0;
+  lua_setbudget(A, 50, main_budget);
+  CHECK(luaL_loadstring(A, prog) == LUA_OK);
+  CHECK(lua_pcall(A, 0, 0, 0) == LUA_OK && lua_isfrozen(A));
+  StringWriter w;
+  HostString msg;
+  lua_getglobal(H, "_PERMS");
+  CHECK(luaL_persiststate(H, lua_gettop(H), &w, &msg) == LUA_OK);
+  lua_pop(H, 1);
+  std::string blob = w.out;
+  lua_ResumeResult r{LUA_OK, 0};
+  while (lua_isfrozen(A))
+    r = lua_thaw(A, nullptr);
+  CHECK(r.status == LUA_ERRRUN && to_string(A, -1) == "boom");
+  lua_settop(A, 0);
+  CHECK(eval(A, "return closed") == "boom 45150");
+  CountingAlloc a2;
+  lua_State* B = new_state_for(&a2, blob);
+  CHECK(eval(B, build_perms) == "ok");
+  lua_State* HB = lua_newthread(B);
+  luaL_ref(B, LUA_REGISTRYINDEX);
+  lua_getglobal(HB, "_BACK");
+  int st = luaL_unpersiststate(HB, lua_gettop(HB), byte_view(blob.data(), blob.size()), &msg);
+  if (st != LUA_OK)
+    std::printf("      restore error: %s\n", msg.to_os());
+  lua_pop(HB, 1);
+  CHECK(st == LUA_OK && lua_isfrozen(B));
+  r = {LUA_OK, 0};
+  while (lua_isfrozen(B))
+    r = lua_thaw(B, nullptr);
+  CHECK(r.status == LUA_ERRRUN && to_string(B, -1) == "boom");
+  lua_settop(B, 0);
+  CHECK(eval(B, "return closed") == "boom 45150");
+  lua_close(B);
+  CHECK(a2.used == 0);
+  lua_close(A);
+}
+
+/*
 ** A stream with bytes changed or cut short is not trusted to be valid, but
 ** a restore of it must end: with an error, or with a state that closes
 ** cleanly. No crash, no hang, no leak (the counting allocator's balance).
@@ -2125,6 +2273,8 @@ static void run_cpp_tests()
       {"frozen_allocation_failures", test_frozen_allocation_failures},
       {"user_object_kind", test_user_object_kind},
       {"user_object_owner", test_user_object_owner},
+      {"frozen_main_thread", test_frozen_main_thread},
+      {"frozen_main_thread_close", test_frozen_main_thread_close},
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
   };
   std::printf("  styx_tests.cpp\n");

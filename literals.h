@@ -116,6 +116,7 @@ namespace lt
   constexpr byte_view cannot_persist_a_s_value("cannot persist a %s value");
   constexpr byte_view cannot_persist_a_C_function("cannot persist a C function");
   constexpr byte_view cannot_persist_a_running_thread("cannot persist a running thread");
+  constexpr byte_view cannot_persist_the_main_thread_from_a_script("cannot persist the main thread from a script");
   constexpr byte_view cannot_persist_a_thread_with_s("cannot persist a thread with %s");
   constexpr byte_view a_continuation_that_has_no_name("a continuation that has no name");
   constexpr byte_view cannot_persist_a_budget_group_with_pending___gc_yet("cannot persist a budget group with pending __gc yet");
@@ -136,6 +137,8 @@ namespace lt
   constexpr byte_view path_end(")");
   constexpr byte_view persist_output_stopped_by_the_writer("persist output stopped by the writer");
   constexpr byte_view the_state_is_running("the state is running");
+  constexpr byte_view the_main_thread_is_frozen_use_another_thread("the main thread is frozen: use another thread of the state");
+  constexpr byte_view a_frozen_main_thread_is_restored_into_an_idle_main_thread("a frozen main thread is restored into an idle main thread with an empty stack, from another thread");
   constexpr byte_view the_permanents_must_be_a_table("the permanents must be a table");
   constexpr byte_view invalid_value_index("invalid value index");
   constexpr byte_view path_registry("registry");

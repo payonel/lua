@@ -59,6 +59,7 @@ constexpr char TAG_CFI = 21;        /* a light C function of the engine, by its 
 constexpr char TAG_USEROBJECT = 22; /* a user object of a registered kind: its state, metatable, user values */
 constexpr unsigned short GROUP_GONE = 65535; /* an owner id no group has */
 constexpr char TAG_CCLOSURE = 23;   /* a C closure of a registered kind: its state and upvalues */
+constexpr char TAG_MAINTHREAD_FROZEN = 24; /* the main thread, frozen: its frames, into the restoring state's */
 
 /*
 ** An object's hash (ADR-30) is written as its place in the sequence of the
@@ -1633,13 +1634,16 @@ private:
 
   void thread(lua_State* T)
   {
-    if (host_ && T == mainthread(L_->l_G))
+    bool main = T == mainthread(L_->l_G);
+    if (main && host_ && T->frozen == 0)
     {
-      byte(TAG_MAINTHREAD);
+      byte(TAG_MAINTHREAD); /* (the restoring state's own, idle) */
       return;
     }
     if (is_running(T))
       fail(lt::cannot_persist_a_running_thread);
+    if (main && !host_) /* (the host persists it: idle, by reference; frozen, whole) */
+      fail(lt::cannot_persist_the_main_thread_from_a_script);
     StkId maxtop = T->top;
     if (T->ci != &T->base_ci)
     {
@@ -1653,8 +1657,13 @@ private:
           break;
       }
     }
-    byte(TAG_THREAD);
-    hash(T);
+    if (main)
+      byte(TAG_MAINTHREAD_FROZEN); /* (a program runs on it: its frames go with it) */
+    else
+    {
+      byte(TAG_THREAD);
+      hash(T);
+    }
     byte(static_cast<char>(T->status));
     var(T->top);
     var(maxtop);
@@ -2080,9 +2089,35 @@ public:
   Restorer(const Restorer&) = delete;
   Restorer& operator=(const Restorer&) = delete;
 
-  /* a failed restore leaves no finalizer to run on what it built (ADR-28) */
+  /* a failed restore leaves no finalizer to run on what it built (ADR-28),
+     and the main thread, if it went into it, idle and empty as it was */
   ~Restorer()
   {
+    if (!done_ && mainrestored_)
+    {
+      lua_State* M = mainthread(L_->l_G);
+      luaF_closeupval(M, 0);
+      M->ci = &M->base_ci;
+      M->top = 1;
+      M->tbclist = 0;
+      M->ntbc = 0;
+      M->frozen = 0;
+      M->frozenchild = nullptr;
+      M->frozenparent = nullptr;
+      M->closeself = false;
+      M->hook = mainsaved_.hook;
+      M->hookmask = mainsaved_.hookmask;
+      M->basehookcount = mainsaved_.basehookcount;
+      M->hookcount = mainsaved_.hookcount;
+      M->oldpc = mainsaved_.oldpc;
+      M->allowhook = mainsaved_.allowhook;
+      M->errfunc = mainsaved_.errfunc;
+      M->nCcalls = mainsaved_.nCcalls;
+      M->ccbase = mainsaved_.ccbase;
+      M->status = mainsaved_.status;
+      M->bown = mainsaved_.bown;
+      luaE_setbeff(M, mainsaved_.beff);
+    }
     if (!done_)
       for (size_t i = 0; i < made_.size(); i++)
       {
@@ -2328,6 +2363,19 @@ private:
   };
   WorkStack<DeadFix> fixes_;
   bool done_ = false;
+  bool mainrestored_ = false; /* a frozen main thread is being restored into this state's */
+  struct MainSaved
+  { /* what the main thread had (idle and empty) before the restore went into it */
+    lua_Hook hook;
+    l_signalT hookmask;
+    int basehookcount, hookcount, oldpc;
+    lu_byte allowhook;
+    StkId errfunc;
+    l_uint32 nCcalls, ccbase;
+    TStatus status;
+    BudgetGroup* bown;
+    BudgetGroup* beff;
+  } mainsaved_{};
 
   WorkStack<Table*> rebuilt_; /* layout tables whose keys did not all fit */
 
@@ -2456,6 +2504,11 @@ private:
     }
     case TAG_THREAD:
       start_thread(new_id());
+      return Next::Advance;
+    case TAG_MAINTHREAD_FROZEN:
+      if (!host_) /* (as TAG_MAINTHREAD) */
+        r_.invalid();
+      start_thread(new_id(), true);
       return Next::Advance;
     case TAG_GROUP:
       start_group(new_id());
@@ -3149,13 +3202,31 @@ private:
   ** spare CallInfos past 'ci' (only an emergency collection, which keeps
   ** them, can run meanwhile) and become part of the thread in one step.
   */
-  void start_thread(lua_Integer id)
+  void start_thread(lua_Integer id, bool main = false)
   {
-    unsigned int hash = get_hash();
-    lua_State* L1 = lua_newthread(L_);
-    L1->hash = hash;
-    register_top(id);
-    lua_pop(L_, 1);
+    lua_State* L1;
+    if (main)
+    { /* a frozen main thread: into this state's, which must be idle and
+         empty, and not the thread restoring (whose stack is in use) */
+      L1 = mainthread(L_->l_G);
+      if (L1 == L_ || L1->ci != &L1->base_ci || L1->top != 1 || mainrestored_)
+        luaL_errori(L_, lt::a_frozen_main_thread_is_restored_into_an_idle_main_thread);
+      push_thread(L1);
+      register_top(id);
+      lua_pop(L_, 1);
+      mainrestored_ = true;
+      mainsaved_ = MainSaved{L1->hook, L1->hookmask, L1->basehookcount, L1->hookcount, L1->oldpc,
+                             L1->allowhook, L1->errfunc, L1->nCcalls, L1->ccbase, L1->status,
+                             L1->bown, L1->beff};
+    }
+    else
+    {
+      unsigned int hash = get_hash();
+      L1 = lua_newthread(L_);
+      L1->hash = hash;
+      register_top(id);
+      lua_pop(L_, 1);
+    }
     char status = r_.get_byte();
     lua_Integer top = r_.get_var();
     lua_Integer maxtop = r_.get_var();
@@ -3165,6 +3236,8 @@ private:
     int need = static_cast<int>(maxtop) + LUA_MINSTACK;
     if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
       memory_error(L_);
+    for (StkId i = L1->top; i < top; i++)
+      setslotnil(L1, i); /* (what was above the main thread's top is stale) */
     L1->top = top;
     Frame f;
     f.kind = Build::Thread;
@@ -3260,7 +3333,7 @@ private:
       r_.invalid();
     L1->allowhook = static_cast<lu_byte>(ah);
     char fz = r_.get_byte();
-    if (fz < 0 || fz > FZ_CLOSE)
+    if (fz < 0 || fz > FZ_HOSTCLOSE)
       r_.invalid();
     if (fz == 0)
       return;
@@ -3839,7 +3912,9 @@ static int host_persist(lua_State* L, int perms, lua_Writer* w, HostString* msg,
   try
   {
     lua_State* main = mainthread(L->l_G);
-    if (main->ci != &main->base_ci || L->ci != &L->base_ci)
+    if (L == main && main->frozen != 0)
+      throw HostError{text(lt::the_main_thread_is_frozen_use_another_thread)};
+    if ((main->ci != &main->base_ci && main->frozen == 0) || L->ci != &L->base_ci)
       throw HostError{text(lt::the_state_is_running)};
     Table* pt = nullptr;
     if (perms != 0)
@@ -3946,7 +4021,12 @@ static CFuncInfo cfi_host_restore(host_restore_body, "styx.host_restore");
 static int host_restore(lua_State* L, int perms, byte_view data, bool state, HostString* msg)
 {
   lua_State* main = mainthread(L->l_G);
-  if (main->ci != &main->base_ci || L->ci != &L->base_ci)
+  if (L == main && main->frozen != 0)
+  {
+    *msg = HostString::from_bytes(lt::the_main_thread_is_frozen_use_another_thread);
+    return LUA_ERRRUN;
+  }
+  if ((main->ci != &main->base_ci && main->frozen == 0) || L->ci != &L->base_ci)
   {
     *msg = HostString::from_bytes(lt::the_state_is_running);
     return LUA_ERRRUN;
