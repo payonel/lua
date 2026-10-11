@@ -3970,7 +3970,7 @@ static int host_restore_body(lua_State* L)
   }
   if (R.r_.get_byte() != TAG_STATE)
     R.r_.invalid();
-  if (static_cast<unsigned int>(R.seed_) != L->l_G->seed) /* not made by luaL_newstatefor */
+  if (static_cast<unsigned int>(R.seed_) != L->l_G->seed) /* (luaL_restorestate makes it with the seed) */
     luaL_errori(L, lt::the_state_does_not_hash_as_the_persisted_one);
   R.value(); /* the registry, at 5 */
   if (!lua_istable(L, -1))
@@ -4067,25 +4067,12 @@ static int host_restore(lua_State* L, int perms, byte_view data, bool state, Hos
 
 }
 
-lua_State* luaL_newstatefor(lua_Alloc* f, byte_view data)
-{
-  unsigned int seed;
-  if (!lua::lib::stream_seed(data, &seed))
-    return nullptr;
-  return lua_newstate(f, seed);
-}
-
-int luaL_unpersistvalue(lua_State* L, int perms, byte_view data, HostString* msg)
+int lua_styxunpersistvalue(lua_State* L, int perms, byte_view data, HostString* msg)
 {
   return lua::lib::host_restore(L, perms, data, false, msg);
 }
 
-int luaL_unpersiststate(lua_State* L, int perms, byte_view data, HostString* msg)
-{
-  return lua::lib::host_restore(L, perms, data, true, msg);
-}
-
-int luaL_persistvalue(lua_State* L, int perms, int idx, lua_Writer* w, HostString* msg)
+int lua_styxpersistvalue(lua_State* L, int perms, int idx, lua_Writer* w, HostString* msg)
 {
   using namespace lua::lib;
   TValue v{};
@@ -4129,7 +4116,10 @@ struct RestoreSetup
   void* ud;
 };
 
-/* 1: the RestoreSetup -> the inverse permanents (or nil) */
+/*
+** 1: the RestoreSetup -> the inverse permanents (or nil), and the thread
+** the restore runs on (anchored in the registry the restore replaces)
+*/
 static int restore_setup(lua_State* L)
 {
   RestoreSetup* rs = static_cast<RestoreSetup*>(lua_touserdata(L, 1));
@@ -4140,7 +4130,10 @@ static int restore_setup(lua_State* L)
     lua_pushnil(L);
   if (lua_gettop(L) != 1 || (!lua_isnil(L, 1) && !lua_istable(L, 1)))
     luaL_errori(L, lt::the_setup_must_leave_the_permanents_table_or_nil);
-  return 1;
+  lua_newthread(L);
+  lua_pushvalue(L, -1);
+  luaL_ref(L, LUA_REGISTRYINDEX);
+  return 2;
 }
 
 static CFuncInfo cfi_restore_setup(restore_setup, "styx.restore_setup");
@@ -4164,14 +4157,21 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
   RestoreSetup rs{setup, ud};
   lua_pushcfuncinfo(L, &cfi_restore_setup);
   lua_pushlightuserdata(L, &rs);
-  int st = lua_pcall(L, 1, 1, 0);
+  int st = lua_pcall(L, 1, 2, 0);
   if (st != LUA_OK)
   {
     auto m = lua_tolstring(L, -1);
     *msg = m ? HostString::from_bytes(*m) : HostString::from_bytes(lt::error_object_is_not_a_string);
   }
   else
-    st = host_restore(L, lua_istable(L, 1) ? 1 : 0, data, true, msg);
+  { /* (restored from another thread, so that a frozen main thread is
+       restored into the main thread, idle and with an empty stack) */
+    lua_State* T = lua_tothread(L, 2);
+    lua_pop(L, 1);
+    bool perms = lua_istable(L, 1);
+    lua_xmove(L, T, 1);
+    st = host_restore(T, perms ? 1 : 0, data, true, msg);
+  }
   if (st != LUA_OK)
   {
     lua_close(L);
@@ -4181,7 +4181,7 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
   return L;
 }
 
-LUAMOD_API int luaopen_styx(lua_State* L)
+int lua_styxtestmodule(lua_State* L)
 {
   luaL_newlibcfi(L, lua::lib::funcs);
   return 1;

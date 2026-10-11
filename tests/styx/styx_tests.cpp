@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@
 #include "lualib.h"
 #include "lauxlib.h"
 #include "lua_internal.h"
+#include "lstate.h"
 #ifdef LUA_DEBUG
 #include "ltests.h"
 #endif
@@ -39,10 +41,21 @@ static void check_impl(bool ok, const char* expr, int line)
 }
 #define CHECK(cond) check_impl((cond), #cond, __LINE__)
 
+/* the module of the test scripts (Styx's value round trip: the engine's
+   libraries have none), requirable as "styx" */
+static void preload_styx(lua_State* L)
+{
+  lua_getfield(L, LUA_REGISTRYINDEX, "_PRELOAD");
+  lua_pushcfunction(L, lua_styxtestmodule);
+  lua_setfield(L, -2, "styx");
+  lua_pop(L, 1);
+}
+
 static lua_State* new_state()
 {
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
+  preload_styx(L);
 #ifdef LUA_DEBUG
   luaL_requiref(L, "T", luaB_opentests, 1);
   lua_pop(L, 1);
@@ -107,11 +120,16 @@ static std::string eval(lua_State* L, const char* code)
   return r;
 }
 
-static void test_requirable_not_global()
+/* a script cannot persist: the engine's libraries have no "styx" (the
+   module of the test scripts is the tests' own) */
+static void test_no_script_library()
 {
-  lua_State* L = new_state();
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+  CHECK(eval(L, "return tostring(pcall(require, 'styx'))") == "false");
   CHECK(lua_getglobal(L, "styx") == LUA_TNIL);
-  lua_pop(L, 1);
+  lua_close(L);
+  L = new_state();
   CHECK(push_styx(L));
   CHECK(lua_type(L, -1) == LUA_TTABLE);
   lua_close(L);
@@ -305,7 +323,7 @@ static void test_light_userdata()
 }
 
 /*
-** Host side persist (luaL_persistvalue, luaL_persiststate): called by the
+** Host side persist (lua_styxpersistvalue, luaL_persiststate): called by the
 ** host on a state that is not running; it allocates nothing in the state.
 */
 
@@ -350,6 +368,7 @@ static lua_State* new_counted_state(CountingAlloc* a)
 {
   lua_State* L = lua_newstate(a, 0);
   luaL_openlibs(L);
+  preload_styx(L);
   return L;
 }
 
@@ -456,7 +475,7 @@ static void test_host_value_matches_script()
     std::string script = script_persist(L);
     StringWriter w;
     HostString msg;
-    int st = luaL_persistvalue(L, lua_gettop(L), lua_gettop(L) - 1, &w, &msg);
+    int st = lua_styxpersistvalue(L, lua_gettop(L), lua_gettop(L) - 1, &w, &msg);
     if (st != LUA_OK)
       std::printf("      host persist error: %s\n", msg.to_os());
     CHECK(st == LUA_OK);
@@ -484,7 +503,7 @@ static void test_host_persist_allocates_nothing()
   a.deny = true;
   StringWriter w1, w2;
   HostString msg;
-  CHECK(luaL_persistvalue(L, 2, 1, &w1, &msg) == LUA_OK);
+  CHECK(lua_styxpersistvalue(L, 2, 1, &w1, &msg) == LUA_OK);
   CHECK(luaL_persiststate(L, 3, &w2, &msg) == LUA_OK);
   a.deny = false;
   CHECK(a.grows == 0);
@@ -526,7 +545,7 @@ static void test_host_persist_runs_no_lua()
     "return function() return {} end end}) return {inner = t}, {}"));
   StringWriter w;
   HostString msg;
-  CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
+  CHECK(lua_styxpersistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
   CHECK(std::string(msg.to_os()).find("__persist must be a boolean (at root.inner)") != std::string::npos);
   CHECK(eval(L, "return tostring(calls)") == "0");
   lua_close(L);
@@ -539,7 +558,7 @@ static void test_host_persist_errors()
   CHECK(push_value_and_perms(L, "return {a = {file = io.stdout}}, {}"));
   StringWriter w;
   HostString msg;
-  CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
+  CHECK(lua_styxpersistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
   CHECK(std::string(msg.to_os()) == "persisting a userdata value is not supported yet (at root.a.file)");
   CHECK(lua_gettop(L) == 2);
   lua_close(L);
@@ -554,10 +573,10 @@ static void test_host_persist_deep()
     "cur.last = true return t, {}"));
   StringWriter w;
   HostString msg;
-  CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_OK);
+  CHECK(lua_styxpersistvalue(L, 2, 1, &w, &msg) == LUA_OK);
   CHECK(w.out.size() > 200000);
   lua_settop(L, 0);
-  CHECK(luaL_unpersistvalue(L, 0, byte_view(w.out.data(), w.out.size()), &msg) == LUA_OK);
+  CHECK(lua_styxunpersistvalue(L, 0, byte_view(w.out.data(), w.out.size()), &msg) == LUA_OK);
   lua_setglobal(L, "r");
   CHECK(eval(L, "local n, cur = 0, r while cur.n do n = n + 1 cur = cur.n end "
                 "return tostring(n == 200000 and cur.last)") == "true");
@@ -573,7 +592,7 @@ static void test_host_persist_writer_stops()
   StringWriter w;
   w.stop_after = 1;
   HostString msg;
-  CHECK(luaL_persistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
+  CHECK(lua_styxpersistvalue(L, 2, 1, &w, &msg) == LUA_ERRRUN);
   CHECK(std::string(msg.to_os()).find("writer") != std::string::npos);
   lua_close(L);
 }
@@ -582,7 +601,7 @@ static int call_host_persist(lua_State* L)
 {
   StringWriter w;
   HostString msg;
-  lua_pushinteger(L, luaL_persistvalue(L, 0, 1, &w, &msg));
+  lua_pushinteger(L, lua_styxpersistvalue(L, 0, 1, &w, &msg));
   lua_pushstring(L, msg.to_os());
   return 2;
 }
@@ -641,7 +660,7 @@ static void test_host_persists_child_thread()
     "            [callback] = 'callback', [io.stdout] = 'out'}"));
   StringWriter w;
   HostString msg;
-  int st = luaL_persistvalue(A, 2, 1, &w, &msg);
+  int st = lua_styxpersistvalue(A, 2, 1, &w, &msg);
   if (st != LUA_OK)
     std::printf("      host persist error: %s\n", msg.to_os());
   CHECK(st == LUA_OK);
@@ -660,26 +679,64 @@ static void test_host_persists_child_thread()
 }
 
 /*
-** Host side restore (luaL_unpersiststate, luaL_unpersistvalue): the host
-** creates a state (with the persisted seed), opens what it provides, and
-** restores into it; what is restored is charged through its allocator.
+** Host side restore (luaL_restorestate): the host's setup opens the
+** libraries, makes its own functions ('before') and the permanents, and
+** leaves the inverse permanents; 'limit' then limits the allocator for
+** the restore itself. What is restored is charged through the allocator.
 */
-
-/* a state made for 'blob' (luaL_newstatefor), with the libraries open */
-static lua_State* new_state_for(CountingAlloc* a, const std::string& blob)
+struct Setup
 {
-  lua_State* L = luaL_newstatefor(a, byte_view(blob.data(), blob.size()));
+  std::function<void(lua_State*)> before;
+  std::function<void()> limit;
+};
+
+static void test_setup(lua_State* L, void* ud)
+{
+  const Setup* s = static_cast<const Setup*>(ud);
   luaL_openlibs(L);
-  return L;
-}
-
-static int restore_state(lua_State* L, const std::string& blob, HostString* msg)
-{
+  preload_styx(L);
+  if (s != nullptr && s->before)
+    s->before(L);
   eval(L, build_perms);
   lua_getglobal(L, "_BACK");
-  int st = luaL_unpersiststate(L, lua_gettop(L), byte_view(blob.data(), blob.size()), msg);
-  lua_pop(L, 1);
-  return st;
+  if (s != nullptr && s->limit)
+    s->limit();
+}
+
+/* the state 'blob' is restored into (NULL, with 'msg', if it fails) */
+static lua_State* restore(CountingAlloc* a, const std::string& blob, const Setup* s = nullptr,
+                          HostString* msg = nullptr)
+{
+  HostString m;
+  return luaL_restorestate(a, byte_view(blob.data(), blob.size()), test_setup, const_cast<Setup*>(s),
+                           msg != nullptr ? msg : &m);
+}
+
+/* the state 'blob' is restored into ('s': the host's own setup); if it
+   fails, says so, and gives a plain state for the test to go on with */
+static lua_State* restored_state(CountingAlloc* a, const std::string& blob, const Setup* s = nullptr)
+{
+  HostString msg;
+  lua_State* B = restore(a, blob, s, &msg);
+  CHECK(B != nullptr);
+  if (B != nullptr)
+    return B;
+  std::printf("      host restore error: %s\n", msg.to_os());
+  return new_counted_state(a);
+}
+
+/* the whole state, persisted with its permanents (_PERMS) */
+static std::string persist_state(lua_State* A)
+{
+  lua_getglobal(A, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  int st = luaL_persiststate(A, lua_gettop(A), &w, &msg);
+  if (st != LUA_OK)
+    std::printf("      host persist error: %s\n", msg.to_os());
+  CHECK(st == LUA_OK);
+  lua_pop(A, 1);
+  return w.out;
 }
 
 /* a running program, persisted whole by the host and restored in a new state */
@@ -714,11 +771,7 @@ static void test_host_state_roundtrip()
   lua_close(A);
 
   CountingAlloc a2;
-  lua_State* B = new_state_for(&a2, w.out);
-  int st = restore_state(B, w.out, &msg);
-  if (st != LUA_OK)
-    std::printf("      host restore error: %s\n", msg.to_os());
-  CHECK(st == LUA_OK);
+  lua_State* B = restored_state(&a2, w.out);
   CHECK(lua_gettop(B) == 0);
   CHECK(eval(B, "return data.name .. #data.list") == "state3");
   CHECK(eval(B, "inc() return tostring(get())") == "2");
@@ -750,8 +803,7 @@ static void test_host_restore_of_capped_state()
   lua_close(A);
 
   CountingAlloc a2;
-  lua_State* B = new_state_for(&a2, w.out);
-  CHECK(restore_state(B, w.out, &msg) == LUA_OK);
+  lua_State* B = restored_state(&a2, w.out);
   lua_gc(B, LUA_GCCOLLECT, 0, 0, 0);
   int count_b = lua_gc(B, LUA_GCCOUNT, 0, 0, 0);
   CHECK(count_b > count_a / 2 && count_b < count_a * 2);
@@ -765,7 +817,7 @@ static void test_host_restore_of_capped_state()
   lua_close(B);
 }
 
-/* a restore that runs out of memory fails cleanly and leaves the state as it was */
+/* a restore that runs out of memory fails as a whole: a message, nothing left */
 static void test_host_restore_out_of_memory()
 {
   CountingAlloc a1;
@@ -779,20 +831,14 @@ static void test_host_restore_out_of_memory()
   lua_close(A);
 
   CountingAlloc a2;
-  lua_State* B = new_state_for(&a2, w.out);
-  CHECK(eval(B, "mine = 'still here' return 'ok'") == "ok");
-  CHECK(eval(B, build_perms) == "ok");
-  lua_getglobal(B, "_BACK");
-  a2.cap = a2.used + 64 * 1024;
-  int st = luaL_unpersiststate(B, 1, byte_view(w.out.data(), w.out.size()), &msg);
+  Setup s{{}, [&a2] { a2.cap = a2.used + 64 * 1024; }};
+  lua_State* B = restore(&a2, w.out, &s, &msg);
   a2.cap = 0;
-  CHECK(st != LUA_OK);
+  CHECK(B == nullptr);
   CHECK(std::string(msg.to_os()).find("not enough memory") != std::string::npos);
-  CHECK(lua_gettop(B) == 1);
-  lua_settop(B, 0);
-  CHECK(eval(B, "return mine") == "still here");
-  CHECK(eval(B, "return tostring(big)") == "nil");
-  lua_close(B);
+  CHECK(a2.used == 0);
+  if (B != nullptr)
+    lua_close(B);
 }
 
 /* values: host restore takes the inverse permanents and may restore the main thread */
@@ -804,13 +850,13 @@ static void test_host_value_restore()
     "return {t, coroutine.running(), print}, {[print] = 'print'}"));
   StringWriter w;
   HostString msg;
-  CHECK(luaL_persistvalue(A, 2, 1, &w, &msg) == LUA_OK);
+  CHECK(lua_styxpersistvalue(A, 2, 1, &w, &msg) == LUA_OK);
   lua_close(A);
 
   lua_State* B = new_state();
   CHECK(eval(B, "_BACK = {print = tostring} return 'ok'") == "ok");
   lua_getglobal(B, "_BACK");
-  CHECK(luaL_unpersistvalue(B, 1, byte_view(w.out.data(), w.out.size()), &msg) == LUA_OK);
+  CHECK(lua_styxunpersistvalue(B, 1, byte_view(w.out.data(), w.out.size()), &msg) == LUA_OK);
   CHECK(lua_gettop(B) == 2 && lua_type(B, 2) == LUA_TTABLE);
   lua_setglobal(B, "v");
   lua_settop(B, 0);
@@ -819,7 +865,8 @@ static void test_host_value_restore()
   lua_close(B);
 }
 
-/* the formats keep apart: scripts cannot read state streams, values are not states */
+/* the formats keep apart: scripts cannot read state streams, a state is
+   restored neither from a value's stream nor from what is not a stream */
 static void test_host_stream_kinds()
 {
   lua_State* L = new_state();
@@ -828,20 +875,17 @@ static void test_host_stream_kinds()
   StringWriter ws;
   HostString msg;
   CHECK(luaL_persiststate(L, 1, &ws, &msg) == LUA_OK);
-  CountingAlloc a;
-  lua_State* made = luaL_newstatefor(&a, byte_view(ws.out.data(), ws.out.size()));
-  CHECK(made != nullptr);
-  lua_close(made);
   push_string(L, ws.out);
   CHECK(call_styx(L, "unpersist", 1, 1) == LUA_ERRRUN);
   lua_settop(L, 0);
   std::string value = persist_in_new_state("return require('styx').persist({1, 2})");
-  made = luaL_newstatefor(&a, byte_view(value.data(), value.size()));
-  CHECK(made != nullptr);
-  lua_close(made);
-  CHECK(luaL_newstatefor(&a, byte_view("garbage", 7)) == nullptr);
-  CHECK(luaL_unpersiststate(L, 0, byte_view(value.data(), value.size()), &msg) != LUA_OK);
-  CHECK(luaL_unpersistvalue(L, 0, byte_view(ws.out.data(), ws.out.size()), &msg) != LUA_OK);
+  CountingAlloc a;
+  CHECK(restore(&a, value, nullptr, &msg) == nullptr);
+  CHECK(std::string(msg.to_os()).rfind("invalid persisted data", 0) == 0);
+  CHECK(restore(&a, "garbage", nullptr, &msg) == nullptr);
+  CHECK(std::string(msg.to_os()) == "not a persisted state");
+  CHECK(a.used == 0);
+  CHECK(lua_styxunpersistvalue(L, 0, byte_view(ws.out.data(), ws.out.size()), &msg) != LUA_OK);
   CHECK(lua_gettop(L) == 0);
   lua_close(L);
 }
@@ -864,7 +908,7 @@ static void test_external_hook_not_supported()
   lua_getglobal(L, "co");
   StringWriter w;
   HostString msg;
-  CHECK(luaL_persistvalue(L, 1, 2, &w, &msg) == LUA_ERRRUN);
+  CHECK(lua_styxpersistvalue(L, 1, 2, &w, &msg) == LUA_ERRRUN);
   CHECK(std::string(msg.to_os()) == "a hook not set by the debug library is not supported yet (at root)");
   lua_close(L);
 }
@@ -887,37 +931,16 @@ static void test_table_order_across_states()
   CountingAlloc a1;
   lua_State* A = lua_newstate(&a1, 1234);
   luaL_openlibs(A);
+  preload_styx(A);
+  CHECK(eval(A, build_perms) == "ok");
   CHECK(eval(A, churn) == "ok");
   std::string expected = eval(A, "return order");
-  std::string script_blob = eval(A, "return require('styx').persist(t)");
-  lua_getglobal(A, "t");
-  StringWriter w;
-  HostString msg;
-  CHECK(luaL_persistvalue(A, 0, lua_gettop(A), &w, &msg) == LUA_OK);
+  std::string blob = persist_state(A);
   lua_close(A);
-
-  for (const std::string* blob : {&w.out, &script_blob})
-  {
-    CountingAlloc a2;
-    lua_State* B = luaL_newstatefor(&a2, byte_view(blob->data(), blob->size()));
-    luaL_openlibs(B);
-    CHECK(luaL_unpersistvalue(B, 0, byte_view(blob->data(), blob->size()), &msg) == LUA_OK);
-    lua_setglobal(B, "t");
-    CHECK(eval(B, "local o = {} for k in pairs(t) do o[#o + 1] = k end return table.concat(o, ' ')") == expected);
-    lua_close(B);
-
-    CountingAlloc a3;
-    lua_State* C = lua_newstate(&a3, 1235); /* another seed than the stream's 1234 */
-    luaL_openlibs(C);
-    CHECK(luaL_unpersistvalue(C, 0, byte_view(blob->data(), blob->size()), &msg) == LUA_OK);
-    lua_setglobal(C, "t");
-    push_string(C, expected);
-    lua_setglobal(C, "expected");
-    CHECK(eval(C, "local n = 0 for k, v in pairs(t) do n = n + 1 end "
-                  "local m = 0 for k in expected:gmatch('%S+') do assert(t[k] ~= nil, k) m = m + 1 end "
-                  "return tostring(n == m)") == "true");
-    lua_close(C);
-  }
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(eval(B, "local o = {} for k in pairs(t) do o[#o + 1] = k end return table.concat(o, ' ')") == expected);
+  lua_close(B);
 }
 
 
@@ -929,29 +952,6 @@ static void test_table_order_across_states()
 ** parameters and running state are restored.
 */
 
-static std::string persist_state(lua_State* A)
-{
-  lua_getglobal(A, "_PERMS");
-  StringWriter w;
-  HostString msg;
-  int st = luaL_persiststate(A, lua_gettop(A), &w, &msg);
-  if (st != LUA_OK)
-    std::printf("      host persist error: %s\n", msg.to_os());
-  CHECK(st == LUA_OK);
-  lua_pop(A, 1);
-  return w.out;
-}
-
-static lua_State* restored_state(CountingAlloc* a, const std::string& blob)
-{
-  lua_State* B = new_state_for(a, blob);
-  HostString msg;
-  int st = restore_state(B, blob, &msg);
-  if (st != LUA_OK)
-    std::printf("      host restore error: %s\n", msg.to_os());
-  CHECK(st == LUA_OK);
-  return B;
-}
 
 static void test_host_state_marked_garbage()
 {
@@ -1040,11 +1040,11 @@ static void test_host_state_collector_settings()
   blob = persist_state(C);
   lua_close(C);
   CountingAlloc a4;
-  lua_State* D = new_state_for(&a4, blob);
-  CHECK(eval(D, "collectgarbage('generational') collectgarbage('param', 'pause', 400) "
-                "collectgarbage('stop') return 'ok'") == "ok");
-  HostString msg;
-  CHECK(restore_state(D, blob, &msg) == LUA_OK);
+  Setup s{[](lua_State* L) {
+            eval(L, "collectgarbage('generational') collectgarbage('param', 'pause', 400) collectgarbage('stop')");
+          },
+          {}};
+  lua_State* D = restored_state(&a4, blob, &s);
   CHECK(eval(D, read_settings) == defaults);
   lua_close(D);
 }
@@ -1079,6 +1079,7 @@ static void test_dead_keys_across_states()
   CountingAlloc a1;
   lua_State* A = lua_newstate(&a1, 77);
   luaL_openlibs(A);
+  preload_styx(A);
   CHECK(eval(A, "t = {} for i = 1, 40 do t['k' .. i] = i end gone = {} "
                 "for i = 1, 40, 3 do t['k' .. i] = nil gone[#gone + 1] = 'k' .. i end "
                 "collectgarbage() collectgarbage() "
@@ -1093,7 +1094,8 @@ static void test_dead_keys_across_states()
     CountingAlloc a2;
     lua_State* B = lua_newstate(&a2, seed);
     luaL_openlibs(B);
-    CHECK(luaL_unpersistvalue(B, 0, byte_view(blob.data(), blob.size()), &msg) == LUA_OK);
+    preload_styx(B);
+    CHECK(lua_styxunpersistvalue(B, 0, byte_view(blob.data(), blob.size()), &msg) == LUA_OK);
     lua_setglobal(B, "v");
     CHECK(eval(B, "local n = 0 for _ in pairs(v.t) do n = n + 1 end return tostring(n == 26 and v.t.k2 == 2)") == "true");
     if (seed == 77)
@@ -1127,40 +1129,16 @@ static void test_object_key_order_across_states()
   CountingAlloc a1;
   lua_State* A = lua_newstate(&a1, 4321);
   luaL_openlibs(A);
+  preload_styx(A);
+  CHECK(eval(A, build_perms) == "ok");
   CHECK(eval(A, object_keys_program) == "ok");
   std::string expected = eval(A, "return order(t, names)");
-  CHECK(eval(A, "_P = {[print] = 'print'} _V = {t = t, names = names} return 'ok'") == "ok");
-  std::string script_blob = eval(A, "return require('styx').persist(_P, _V)");
-  lua_getglobal(A, "_P");
-  lua_getglobal(A, "_V");
-  StringWriter w;
-  HostString msg;
-  CHECK(luaL_persistvalue(A, 1, 2, &w, &msg) == LUA_OK);
-  CHECK(w.out == script_blob);
+  std::string blob = persist_state(A);
   lua_close(A);
-
-  for (unsigned int seed : {4321u, 4322u})
-  {
-    CountingAlloc a2;
-    lua_State* B = lua_newstate(&a2, seed);
-    luaL_openlibs(B);
-    CHECK(eval(B, "_BACK = {print = print} "
-                  "function order(tt, nn) local o = {} for k in pairs(tt) do o[#o + 1] = nn[k] or '?' end "
-                  "  return table.concat(o, ' ') end return 'ok'") == "ok");
-    lua_getglobal(B, "_BACK");
-    CHECK(luaL_unpersistvalue(B, 1, byte_view(script_blob.data(), script_blob.size()), &msg) == LUA_OK);
-    lua_setglobal(B, "v");
-    lua_settop(B, 0);
-    push_string(B, expected);
-    lua_setglobal(B, "expected");
-    if (seed == 4321u)
-      CHECK(eval(B, "return order(v.t, v.names)") == expected);
-    /* with another seed: the same entries */
-    CHECK(eval(B, "local n = 0 for k, i in pairs(v.t) do assert(v.names[k] == 'o' .. i) n = n + 1 end "
-                  "local m = 0 for _ in expected:gmatch('%S+') do m = m + 1 end return tostring(n == m)")
-          == "true");
-    lua_close(B);
-  }
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(eval(B, "return order(t, names)") == expected);
+  lua_close(B);
 }
 
 /* library objects as keys: made the same way with the same seed, they hash the same */
@@ -1169,6 +1147,7 @@ static void test_library_keys_across_states()
   CountingAlloc a1;
   lua_State* A = lua_newstate(&a1, 99);
   luaL_openlibs(A);
+  preload_styx(A);
   CHECK(eval(A, build_perms) == "ok");
   CHECK(eval(A, "t = {} local i = 0 "
                 "for _, k in ipairs{io.stdout, io.stderr, io.stdin, print, string.format, math.floor, "
@@ -1177,26 +1156,12 @@ static void test_library_keys_across_states()
                 "local o = {} for k, v in pairs(t) do o[#o + 1] = v end expected = table.concat(o, ' ') "
                 "return 'ok'") == "ok");
   std::string expected = eval(A, "return expected");
-  lua_settop(A, 0);
-  lua_getglobal(A, "_PERMS");
-  lua_getglobal(A, "t");
-  StringWriter w;
-  HostString msg;
-  int st = luaL_persistvalue(A, 1, 2, &w, &msg);
-  if (st != LUA_OK)
-    std::printf("      host persist error: %s\n", msg.to_os());
-  CHECK(st == LUA_OK);
+  std::string blob = persist_state(A);
   lua_close(A);
-
   CountingAlloc a2;
-  lua_State* B = new_state_for(&a2, w.out);
-  CHECK(eval(B, build_perms) == "ok");
-  lua_getglobal(B, "_BACK");
-  CHECK(luaL_unpersistvalue(B, 1, byte_view(w.out.data(), w.out.size()), &msg) == LUA_OK);
-  lua_setglobal(B, "r");
-  lua_settop(B, 0);
-  CHECK(eval(B, "local o = {} for k, v in pairs(r) do o[#o + 1] = v end return table.concat(o, ' ')") == expected);
-  CHECK(eval(B, "return tostring(r[io.stdout] == 1 and r[print] == 4 and r[table.insert] == 8)") == "true");
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(eval(B, "local o = {} for k, v in pairs(t) do o[#o + 1] = v end return table.concat(o, ' ')") == expected);
+  CHECK(eval(B, "return tostring(t[io.stdout] == 1 and t[print] == 4 and t[table.insert] == 8)") == "true");
   lua_close(B);
 }
 
@@ -1225,32 +1190,22 @@ static void test_state_next_hash()
 
 
 /* a whole state is restored only into a state made for its stream */
-static void test_state_restore_needs_its_state()
+/* the restore makes its state with the persisted seed: the host gives none */
+static void test_restore_takes_the_seed()
 {
   CountingAlloc a1;
   lua_State* A = lua_newstate(&a1, 31337);
   luaL_openlibs(A);
+  preload_styx(A);
   CHECK(eval(A, build_perms) == "ok");
   CHECK(eval(A, "data = {x = 1, y = 2} return 'ok'") == "ok");
   std::string blob = persist_state(A);
   lua_close(A);
-
   CountingAlloc a2;
-  lua_State* B = lua_newstate(&a2, 31338);
-  luaL_openlibs(B);
-  CHECK(eval(B, "mine = 'kept' return 'ok'") == "ok");
-  HostString msg;
-  CHECK(restore_state(B, blob, &msg) == LUA_ERRRUN);
-  CHECK(std::string(msg.to_os()) ==
-        "the state does not hash as the persisted one (create it with luaL_newstatefor)");
-  CHECK(eval(B, "return mine") == "kept");
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(B->l_G->seed == 31337u);
+  CHECK(eval(B, "return tostring(data.x + data.y)") == "3");
   lua_close(B);
-
-  CountingAlloc a3;
-  lua_State* C = new_state_for(&a3, blob);
-  CHECK(restore_state(C, blob, &msg) == LUA_OK);
-  CHECK(eval(C, "return tostring(data.x + data.y)") == "3");
-  lua_close(C);
 }
 
 /*
@@ -1306,6 +1261,7 @@ static void test_snapshot_continues_identically()
   CountingAlloc a1;
   lua_State* A = lua_newstate(&a1, 2024);
   luaL_openlibs(A);
+  preload_styx(A);
   CHECK(eval(A, build_perms) == "ok");
   CHECK(eval(A, vm_part1) == "ok");
   std::string blob = persist_state(A);
@@ -1314,14 +1270,7 @@ static void test_snapshot_continues_identically()
   lua_close(A);
 
   CountingAlloc a2;
-  lua_State* B = luaL_newstatefor(&a2, byte_view(blob.data(), blob.size()));
-  CHECK(B != nullptr);
-  luaL_openlibs(B);
-  HostString msg;
-  int st = restore_state(B, blob, &msg);
-  if (st != LUA_OK)
-    std::printf("      host restore error: %s\n", msg.to_os());
-  CHECK(st == LUA_OK);
+  lua_State* B = restored_state(&a2, blob);
   std::string got = eval(B, vm_part2);
   if (got != expected)
   {
@@ -1506,18 +1455,18 @@ static lua_State* host_state(CountingAlloc* a)
   return L;
 }
 
+/* the host's function, made before a restore */
+static void add_callk(lua_State* L)
+{
+  lua_pushcfunction(L, host_callk);
+  lua_setglobal(L, "callk");
+}
+
 /* the state restored for a host_state() (it has the host's function too) */
 static lua_State* restored_host_state(CountingAlloc* a, const std::string& blob)
 {
-  lua_State* B = new_state_for(a, blob);
-  lua_pushcfunction(B, host_callk);
-  lua_setglobal(B, "callk");
-  HostString msg;
-  int st = restore_state(B, blob, &msg);
-  if (st != LUA_OK)
-    std::printf("      host restore error: %s\n", msg.to_os());
-  CHECK(st == LUA_OK);
-  return B;
+  Setup s{add_callk, {}};
+  return restored_state(a, blob, &s);
 }
 
 static const char* const host_program =
@@ -1546,11 +1495,7 @@ static void test_frozen_host_continuation()
   std::string blob = persist_state(A);
   CHECK(!blob.empty());
   CountingAlloc a2;
-  lua_State* B = new_state_for(&a2, blob);
-  lua_pushcfunction(B, host_callk);
-  lua_setglobal(B, "callk");
-  HostString msg2;
-  CHECK(restore_state(B, blob, &msg2) == LUA_OK);
+  lua_State* B = restored_host_state(&a2, blob);
   CHECK(eval(B, "if debug.isfrozen(co) then return 'yes' end return 'no'") == "yes");
   CHECK(eval(A, "finish() return table.concat(log, ',')") == "820/77");
   CHECK(eval(B, "finish() return table.concat(log, ',')") == "820/77");
@@ -1580,11 +1525,7 @@ static void test_frozen_host_budget_callback()
   std::string blob = persist_state(A);
   CHECK(!blob.empty());
   CountingAlloc a2;
-  lua_State* B = new_state_for(&a2, blob);
-  lua_pushcfunction(B, host_callk);
-  lua_setglobal(B, "callk");
-  HostString msg2;
-  CHECK(restore_state(B, blob, &msg2) == LUA_OK);
+  lua_State* B = restored_host_state(&a2, blob);
   int before = host_budget_calls;
   CHECK(eval(B, "while debug.isfrozen(co) do debug.thaw(co) end return coroutine.status(co)") == "dead");
   CHECK(host_budget_calls > before); /* (the callback of the restored group ran) */
@@ -1606,35 +1547,27 @@ static void test_frozen_restore_out_of_memory()
   std::string blob = persist_state(A);
   CHECK(!blob.empty());
   std::string expected = eval(A, "finish() return tostring(coroutine.status(co))");
-  /* with less and less room, a restore fails with a memory error and leaves the state usable; with enough, it works */
+  /* with less and less room, a restore fails with a memory error and leaves nothing; with enough, it works */
   bool failed = false, worked = false;
   for (size_t extra = 2 * 1024; extra <= 400 * 1024; extra += 6 * 1024)
   {
     CountingAlloc a2;
-    lua_State* B = new_state_for(&a2, blob);
-    lua_pushcfunction(B, host_callk);
-    lua_setglobal(B, "callk");
-    CHECK(eval(B, build_perms) == "ok");
-    lua_getglobal(B, "_BACK");
-    a2.cap = a2.used + extra;
+    Setup s{add_callk, [&a2, extra] { a2.cap = a2.used + extra; }};
     HostString msg;
-    int st = luaL_unpersiststate(B, 1, byte_view(blob.data(), blob.size()), &msg);
+    lua_State* B = restore(&a2, blob, &s, &msg);
     a2.cap = 0;
-    if (st != LUA_OK)
+    if (B == nullptr)
     {
       failed = true;
       CHECK(std::string(msg.to_os()).find("not enough memory") != std::string::npos);
-      CHECK(lua_gettop(B) == 1);
-      lua_settop(B, 0);
-      CHECK(eval(B, "return 'usable'") == "usable");
+      CHECK(a2.used == 0);
     }
     else
     {
       worked = true;
-      lua_settop(B, 0);
       CHECK(eval(B, "finish() return tostring(coroutine.status(co))") == expected);
+      lua_close(B);
     }
-    lua_close(B);
   }
   CHECK(failed && worked);
   lua_close(A);
@@ -1789,31 +1722,25 @@ static void test_frozen_allocation_failures()
   for (long n = 1; n < 20000 && !finished; n++)
   {
     CountingAlloc a2;
-    lua_State* B = new_state_for(&a2, blob);
-    lua_pushcfunction(B, host_callk);
-    lua_setglobal(B, "callk");
-    CHECK(eval(B, build_perms) == "ok");
-    lua_getglobal(B, "_BACK");
-    a2.grows = 0;
-    a2.failnth = n;
+    Setup s{add_callk, [&a2, n] {
+              a2.grows = 0;
+              a2.failnth = n;
+            }};
     HostString msg;
-    int st = luaL_unpersiststate(B, 1, byte_view(blob.data(), blob.size()), &msg);
+    lua_State* B = restore(&a2, blob, &s, &msg);
     a2.failnth = 0;
-    if (st != LUA_OK)
+    if (B == nullptr)
     {
       failures++;
       CHECK(std::string(msg.to_os()).find("not enough memory") != std::string::npos);
-      CHECK(lua_gettop(B) == 1);
-      lua_settop(B, 0);
-      CHECK(eval(B, "return 'usable'") == "usable");
+      CHECK(a2.used == 0);
     }
     else
     {
       finished = true;
-      lua_settop(B, 0);
       CHECK(eval(B, "finish() return tostring(coroutine.status(co))") == expected);
+      lua_close(B);
     }
-    lua_close(B);
   }
   CHECK(finished && failures > 50);
   /* a script's persist of the frozen chain: the n-th growth fails (the
@@ -1964,18 +1891,16 @@ static void test_user_object_kind()
       std::string blob = persist_state(A);
       CHECK(!blob.empty());
       CountingAlloc a2;
-      lua_State* B = new_state_for(&a2, blob);
-      lua_pushcfunction(B, testobj_new);
-      lua_setglobal(B, "newobj");
-      lua_pushcfunction(B, testobj_get);
-      lua_setglobal(B, "getobj");
-      lua_pushcfunction(B, testobj_note);
-      lua_setglobal(B, "note");
-      HostString msg;
-      int st = restore_state(B, blob, &msg);
-      if (st != LUA_OK)
-        std::printf("      restore error: %s\n", msg.to_os());
-      CHECK(st == LUA_OK);
+      Setup s{[](lua_State* L) {
+                lua_pushcfunction(L, testobj_new);
+                lua_setglobal(L, "newobj");
+                lua_pushcfunction(L, testobj_get);
+                lua_setglobal(L, "getobj");
+                lua_pushcfunction(L, testobj_note);
+                lua_setglobal(L, "note");
+              },
+              {}};
+      lua_State* B = restored_state(&a2, blob, &s);
       CHECK(eval(B, "local a, b = getobj(u) return table.concat({a, b, u.name, debug.getuservalue(u, 1), debug.getuservalue(u, 2)[1], "
                     "tostring(getmetatable(u) == mt)}, ' ')") == "5 -6 idx:name first 2 true");
       testobj_gcs = 0;
@@ -2092,41 +2017,30 @@ static void test_frozen_main_thread()
   CHECK(lua_gettop(A) == 2 && lua_tointeger(A, 1) == 45150 && to_string(A, 2) == "end");
   lua_settop(A, 0);
   CHECK(eval(A, "return closed") == "yes");
-  /* restored in a new state: into its main thread, from another thread */
-  for (int attempt = 0; attempt < 3; attempt++)
+  /* restored in a new state, into its main thread (and a stream cut short is refused) */
+  for (int attempt = 0; attempt < 2; attempt++)
   {
     CountingAlloc a2;
-    lua_State* B = new_state_for(&a2, blob);
-    CHECK(eval(B, build_perms) == "ok");
-    lua_State* HB = lua_newthread(B);
-    luaL_ref(B, LUA_REGISTRYINDEX);
-    std::string data = blob;
-    if (attempt == 1)
-      data = blob.substr(0, blob.size() - 9); /* (cut short: the restore fails) */
-    if (attempt == 2)
-      lua_pushinteger(B, 7); /* (the main thread is not empty: refused) */
-    lua_getglobal(HB, "_BACK");
-    st = luaL_unpersiststate(HB, lua_gettop(HB), byte_view(data.data(), data.size()), &msg);
-    lua_pop(HB, 1);
+    std::string data = (attempt == 1) ? blob.substr(0, blob.size() - 9) : blob;
+    HostString rmsg;
+    lua_State* B = restore(&a2, data, nullptr, &rmsg);
     if (attempt == 0)
     {
-      if (st != LUA_OK)
-        std::printf("      restore error: %s\n", msg.to_os());
-      CHECK(st == LUA_OK && lua_isfrozen(B));
-      while (lua_isfrozen(B))
-        CHECK(lua_thaw(B, nullptr).status == LUA_OK);
-      CHECK(lua_gettop(B) == 2 && lua_tointeger(B, 1) == 45150 && to_string(B, 2) == "end");
-      lua_settop(B, 0);
-      CHECK(eval(B, "return closed") == "yes");
+      if (B == nullptr)
+        std::printf("      restore error: %s\n", rmsg.to_os());
+      CHECK(B != nullptr && lua_isfrozen(B));
+      if (B != nullptr)
+      {
+        while (lua_isfrozen(B))
+          CHECK(lua_thaw(B, nullptr).status == LUA_OK);
+        CHECK(lua_gettop(B) == 2 && lua_tointeger(B, 1) == 45150 && to_string(B, 2) == "end");
+        lua_settop(B, 0);
+        CHECK(eval(B, "return closed") == "yes");
+        lua_close(B);
+      }
     }
     else
-    { /* the main thread is as it was, and usable */
-      CHECK(st != LUA_OK && !lua_isfrozen(B));
-      CHECK(lua_gettop(B) == (attempt == 2 ? 1 : 0));
-      lua_settop(B, 0);
-      CHECK(eval(B, "return 'usable'") == "usable");
-    }
-    lua_close(B);
+      CHECK(B == nullptr);
     CHECK(a2.used == 0);
   }
   lua_close(A);
@@ -2165,16 +2079,8 @@ static void test_frozen_main_thread_close()
   lua_settop(A, 0);
   CHECK(eval(A, "return closed") == "boom 45150");
   CountingAlloc a2;
-  lua_State* B = new_state_for(&a2, blob);
-  CHECK(eval(B, build_perms) == "ok");
-  lua_State* HB = lua_newthread(B);
-  luaL_ref(B, LUA_REGISTRYINDEX);
-  lua_getglobal(HB, "_BACK");
-  int st = luaL_unpersiststate(HB, lua_gettop(HB), byte_view(blob.data(), blob.size()), &msg);
-  if (st != LUA_OK)
-    std::printf("      restore error: %s\n", msg.to_os());
-  lua_pop(HB, 1);
-  CHECK(st == LUA_OK && lua_isfrozen(B));
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(lua_isfrozen(B));
   r = {LUA_OK, 0};
   while (lua_isfrozen(B))
     r = lua_thaw(B, nullptr);
@@ -2211,15 +2117,16 @@ static void test_frozen_corrupted_streams()
       std::string bad = blob;
       bad[at] = static_cast<char>(static_cast<unsigned>(static_cast<unsigned char>(bad[at])) ^ static_cast<unsigned>(x));
       CountingAlloc a2;
-      lua_State* B = new_state_for(&a2, blob);
-      lua_pushcfunction(B, host_callk);
-      lua_setglobal(B, "callk");
+      Setup s{add_callk, {}};
       HostString msg;
-      if (restore_state(B, bad, &msg) == LUA_OK)
+      lua_State* B = restore(&a2, bad, &s, &msg);
+      if (B != nullptr)
+      {
         accepted++;
+        lua_close(B);
+      }
       else
         rejected++;
-      lua_close(B);
       CHECK(a2.used == 0);
     }
   }
@@ -2227,12 +2134,12 @@ static void test_frozen_corrupted_streams()
   {
     std::string cut = blob.substr(0, len);
     CountingAlloc a2;
-    lua_State* B = new_state_for(&a2, blob);
-    lua_pushcfunction(B, host_callk);
-    lua_setglobal(B, "callk");
+    Setup s{add_callk, {}};
     HostString msg;
-    CHECK(restore_state(B, cut, &msg) != LUA_OK);
-    lua_close(B);
+    lua_State* B = restore(&a2, cut, &s, &msg);
+    CHECK(B == nullptr);
+    if (B != nullptr)
+      lua_close(B);
     CHECK(a2.used == 0);
   }
   CHECK(rejected > 0);
@@ -2285,9 +2192,18 @@ local function user3()
   coroutine.yield(tostring(("hello world from styx " .. string.rep("w", 40)):find("w(o)r")))
   return "u3 done"
 end
+local function user4()
+  local t, names = {}, {}
+  for name, f in pairs{print = print, type = type, pairs = pairs, format = string.format, insert = table.insert,
+                       floor = math.floor, yield = coroutine.yield, next = next, find = string.find} do
+    t[f], names[f] = true, name
+  end
+  for f in pairs(t) do coroutine.yield(names[f]) end
+  return "u4 done"
+end
 local kernel = coroutine.create(function()
   local users = {}
-  for u, f in ipairs{user1, user2, user3} do
+  for u, f in ipairs{user1, user2, user3, user4} do
     local co = coroutine.create(f)
     debug.setbudget(co, 40 + u * 7, function() debug.freeze() end)
     users[u] = {co = co, out = {}}
@@ -2322,6 +2238,7 @@ debug.getregistry().kernel = kernel -- (the host's anchor)
 static void kernel_setup(lua_State* L, void*)
 {
   luaL_openlibs(L);
+  preload_styx(L);
   eval(L, build_perms);
   lua_getglobal(L, "_BACK");
 }
@@ -2330,6 +2247,7 @@ static lua_State* kernel_state(CountingAlloc* a, unsigned int seed)
 {
   lua_State* L = lua_newstate(a, seed);
   luaL_openlibs(L);
+  preload_styx(L);
   CHECK(eval(L, build_perms) == "ok");
   eval(L, kernel_script);
   return L;
@@ -2421,9 +2339,97 @@ static void test_kernel_persistence()
   CHECK(persisted > 10);
 }
 
+/*
+** The kernel's state restored in another process (its own addresses, the
+** same library): the host persists it to a file and the child restores it
+** with luaL_restorestate and runs the kernel to its end; a table keyed by
+** library functions keeps its order there (they hash by name).
+*/
+static const char* g_self = "../../test_styx";
+
+/* the child: restores the kernel's state in 'file' and prints its transcript */
+static int restore_kernel_child(const char* file)
+{
+  std::FILE* f = std::fopen(file, "rb");
+  if (f == nullptr)
+    return 2;
+  std::string blob;
+  char buf[4096];
+  size_t n;
+  while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0)
+    blob.append(buf, n);
+  std::fclose(f);
+  CountingAlloc a;
+  HostString msg;
+  lua_State* L = luaL_restorestate(&a, byte_view(blob.data(), blob.size()), kernel_setup, nullptr, &msg);
+  if (L == nullptr)
+  {
+    std::printf("restore error: %s", msg.to_os());
+    return 1;
+  }
+  std::string t;
+  while (!kernel_step(L, &t))
+  {
+  }
+  std::printf("%s", t.c_str());
+  lua_close(L);
+  return 0;
+}
+
+static void test_kernel_in_another_process()
+{
+  std::string plain;
+  {
+    CountingAlloc a;
+    lua_State* L = kernel_state(&a, 4242);
+    while (!kernel_step(L, &plain))
+    {
+    }
+    lua_close(L);
+  }
+  CHECK(plain.find("u4 done") != std::string::npos);
+  std::filesystem::path dir = std::filesystem::temp_directory_path();
+  for (int k : {1, 3, 8})
+  {
+    CountingAlloc a;
+    lua_State* A = kernel_state(&a, 4242);
+    std::string t;
+    for (int i = 0; i < k; i++)
+      kernel_step(A, &t);
+    std::string blob = persist_kernel(A);
+    lua_close(A);
+    std::string file = (dir / ("styx_kernel_" + std::to_string(k) + ".bin")).string();
+    std::string out = (dir / ("styx_kernel_" + std::to_string(k) + ".txt")).string();
+    std::FILE* f = std::fopen(file.c_str(), "wb");
+    CHECK(f != nullptr);
+    if (f == nullptr)
+      continue;
+    std::fwrite(blob.data(), 1, blob.size(), f);
+    std::fclose(f);
+    std::string cmd = std::string(g_self) + " --restore-kernel " + file + " > " + out;
+    CHECK(std::system(cmd.c_str()) == 0);
+    std::string got;
+    if (std::FILE* o = std::fopen(out.c_str(), "rb"))
+    {
+      char buf[4096];
+      size_t n;
+      while ((n = std::fread(buf, 1, sizeof(buf), o)) > 0)
+        got.append(buf, n);
+      std::fclose(o);
+    }
+    if (got != plain)
+      std::printf("      tick %d in another process:\n        plain %s\n        got   %s\n", k, plain.c_str(),
+                  got.c_str());
+    CHECK(got == plain);
+    std::remove(file.c_str());
+    std::remove(out.c_str());
+  }
+}
+
 static void push_one(lua_State* L, void*)
 {
   luaL_openlibs(L);
+  preload_styx(L);
   lua_pushinteger(L, 1);
 }
 
@@ -2474,7 +2480,7 @@ static void run_cpp_tests()
     void (*fn)();
   };
   const TestEntry tests[] = {
-      {"requirable_not_global", test_requirable_not_global},
+      {"no_script_library", test_no_script_library},
       {"api_surface", test_api_surface},
       {"primitives_roundtrip", test_primitives_roundtrip},
       {"string_bytes", test_string_bytes},
@@ -2509,7 +2515,7 @@ static void run_cpp_tests()
       {"object_key_order_across_states", test_object_key_order_across_states},
       {"library_keys_across_states", test_library_keys_across_states},
       {"state_next_hash", test_state_next_hash},
-      {"state_restore_needs_its_state", test_state_restore_needs_its_state},
+      {"restore_takes_the_seed", test_restore_takes_the_seed},
       {"snapshot_continues_identically", test_snapshot_continues_identically},
       {"frozen_library_cases", test_frozen_library_cases},
       {"frozen_engine_cases", test_frozen_engine_cases},
@@ -2525,6 +2531,7 @@ static void run_cpp_tests()
       {"frozen_main_thread_close", test_frozen_main_thread_close},
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
       {"kernel_persistence", test_kernel_persistence},
+      {"kernel_in_another_process", test_kernel_in_another_process},
       {"restore_errors", test_restore_errors},
   };
   std::printf("  styx_tests.cpp\n");
@@ -2606,8 +2613,12 @@ static void run_scripts()
   }
 }
 
-int main()
+int main(int argc, char** argv)
 {
+  if (argc == 3 && std::string(argv[1]) == "--restore-kernel")
+    return restore_kernel_child(argv[2]);
+  if (argc >= 1)
+    g_self = argv[0];
   std::printf("\n\tStarting styx tests\n\n");
   run_cpp_tests();
   if (std::getenv("STYX_ONLY") == nullptr)

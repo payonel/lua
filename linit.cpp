@@ -32,8 +32,7 @@ static const luaL_Regi stdlibs[] = {
   {LUA_OSLIBNAME, luaopen_os},
   {LUA_STRLIBNAME, luaopen_string},
   {LUA_TABLIBNAME, luaopen_table},
-  {LUA_UTF8LIBNAME, luaopen_utf8},
-  {LUA_STYXLIBNAME, luaopen_styx}
+  {LUA_UTF8LIBNAME, luaopen_utf8}
 };
 
 /*
@@ -59,14 +58,13 @@ void luaL_openselectedlibs(lua_State* L, int load, int preload)
     }
     mask <<= 1;
   }
-  assert((mask >> 1) == LUA_STYXLIBK);
+  assert((mask >> 1) == LUA_UTF8LIBK);
   lua_pop(L, 1); /* remove PRELOAD table */
 }
 
 
 void luaL_openlibs(lua_State* L)
 {
-  /* styx is requirable but not a global */
-  luaL_openselectedlibs(L, ~LUA_STYXLIBK, LUA_STYXLIBK);
+  luaL_openselectedlibs(L, ~0, 0);
 }
 

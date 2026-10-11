@@ -54,37 +54,20 @@ inline constexpr byte_view LUA_UTF8LIBNAME = "utf8";
 constexpr int LUA_UTF8LIBK = LUA_TABLIBK << 1;
 LUAMOD_API int(luaopen_utf8)(lua_State* L);
 
-inline constexpr byte_view LUA_STYXLIBNAME = "styx";
-constexpr int LUA_STYXLIBK = LUA_UTF8LIBK << 1;
-LUAMOD_API int(luaopen_styx)(lua_State* L);
-
 /*
-** Styx on the host side: persist a value, or the whole state, of a state
-** that is not running Lua code. Nothing is allocated in the state and no
-** Lua code runs; 'perms' is the stack index of the permanents table
-** (object -> key), or 0 for none. The stream goes to 'w'. Returns LUA_OK,
-** or an error status with a message in 'msg'.
+** Styx: the kernel's persistence. The host persists the whole state while
+** it is at rest (no Lua code runs: the kernel has frozen or suspended its
+** programs and yielded back to the host) and restores it into a new
+** state; what it needs back it anchors in the registry (the main thread's
+** stack is not part of a state). Scripts cannot persist.
+**
+** luaL_persiststate writes the state to 'w'; 'perms' is the stack index of
+** the permanents table (object -> key), or 0 for none. Nothing is
+** allocated in the state and no Lua code runs; a frozen main thread is
+** persisted from another thread of the state. Returns LUA_OK, or an error
+** status with a message in 'msg'.
 */
-int(luaL_persistvalue)(lua_State* L, int perms, int idx, lua_Writer* w, HostString* msg);
 int(luaL_persiststate)(lua_State* L, int perms, lua_Writer* w, HostString* msg);
-
-/*
-** The host side restore. 'perms' is the stack index of the inverse
-** permanents (key -> object), or 0. luaL_unpersistvalue pushes the value;
-** luaL_unpersiststate makes the stream's registry and type metatables the
-** state's. The state must not be running; what is restored is charged
-** through its allocator. On error nothing is pushed or changed and 'msg'
-** says why.
-** luaL_newstatefor creates a state for a stream (value or state), with
-** allocator 'f', that hashes as the persisting state did, so restored
-** tables keep their order (NULL if 'data' is not a stream, or no memory).
-** A whole state is restored only into such a state: it then goes on as
-** the original would have (open the same libraries, and make the host's
-** permanents, in the same order first).
-*/
-int(luaL_unpersistvalue)(lua_State* L, int perms, byte_view data, HostString* msg);
-int(luaL_unpersiststate)(lua_State* L, int perms, byte_view data, HostString* msg);
-lua_State*(luaL_newstatefor)(lua_Alloc* f, byte_view data);
 
 /*
 ** The kernel's restore, in one call: a new state with allocator 'f', which
@@ -92,8 +75,9 @@ lua_State*(luaL_newstatefor)(lua_Alloc* f, byte_view data);
 ** up by 'setup' (with 'ud'), which opens the same libraries and makes the
 ** host's permanents, in the same order as for the persisting state, and
 ** pushes the inverse permanents table (key -> object), or nil; then the
-** whole state in 'data' (luaL_persiststate) is restored into it. Returns
-** the state, or NULL with a message in 'msg' (nothing is left open).
+** whole state in 'data' (luaL_persiststate) is restored into it (a frozen
+** main thread into its main thread). Returns the state, or NULL with a
+** message in 'msg' (nothing is left open).
 */
 typedef void (*luaL_RestoreSetup)(lua_State* L, void* ud);
 lua_State*(luaL_restorestate)(lua_Alloc* f, byte_view data, luaL_RestoreSetup setup, void* ud, HostString* msg);

@@ -147,8 +147,7 @@ namespace lt
   constexpr byte_view path_registry("registry");
   constexpr byte_view path_type_metatable("type metatable");
   constexpr byte_view path_finalizer_list("finalizer list");
-  constexpr byte_view the_state_does_not_hash_as_the_persisted_one(
-      "the state does not hash as the persisted one (create it with luaL_newstatefor)");
+  constexpr byte_view the_state_does_not_hash_as_the_persisted_one("the state does not hash as the persisted one");
   constexpr byte_view path_field_s(".%s");
   constexpr byte_view path_index_s("[%s]");
   constexpr byte_view path_string_key_s("[\"%s\"]");

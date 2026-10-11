@@ -1,50 +1,65 @@
 # Styx
 
-Styx is the persistence library for this Lua: it turns Lua values (and, in
-time, whole states) into a string and back, callable from Lua script with no
-C API involvement.
+Styx is the persistence of this Lua's kernel: the host persists a whole
+state at rest into a string, and restores it into a new state that goes on
+exactly as the original would have. Scripts cannot persist (ADR-35).
 
 Lineage: Pluto (Lua 5.1) -> Eris (a rewrite of Pluto for Lua 5.2, later
-5.3) -> Styx. We take Eris's API as the inspiration and design the
-internals for this codebase.
+5.3) -> Styx. It started from Eris's API (a script library that persists
+any value); it is now the kernel's persistence only, which lets a restore
+keep what Pluto and Eris could not, such as the order of every table
+(ADR-22, ADR-35).
 
 This file records plans and ADRs. It is the place to put decisions as they
 are made; keep entries short.
 
 ## Terminology
 
-The API names are `persist` and `unpersist`. In design docs, chat and code
-comments, "save" and "load" are synonyms for them (a "saved state" is a
-persisted one).
+The API names are `persist` and `unpersist` (restore). In design docs, chat
+and code comments, "save" and "load" are synonyms for them (a "saved
+state" is a persisted one).
 
 ## Goals
 
-- Persist a Lua value graph (tables, strings, numbers, closures with their
-  upvalues, coroutines, userdata) to a string and restore it fully.
-- Extremely easy to use from script: one call to persist, one to restore.
+- Persist a whole state (every value it holds: tables, strings, numbers,
+  closures with their upvalues, coroutines, programs frozen with their C
+  frames, user objects of registered kinds) and restore it so that it goes
+  on exactly as the original would have (ADR-31).
+- One call each for the host.
 - Everything is assumed possible. Problems are solved as they are met, one
   at a time, driven by tests.
 
-## Script API (inspired by Eris)
+## Host API
 
-```lua
-local s = styx.persist([perms,] value)     -- value -> string
-local v = styx.unpersist([perms,] s)       -- string -> value
+```cpp
+int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg);
+lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup setup, void* ud,
+                             HostString* msg);
 ```
 
+- The kernel's workflow: the kernel (a coroutine the host resumes) freezes
+  or suspends its programs and yields back to the host; the host persists
+  the state there, with no Lua code running. To restore, the host calls
+  `luaL_restorestate`: it makes a new state with the stream's seed, runs
+  the host's `setup` (the same libraries and the host's permanents, in the
+  same order as for the original; it leaves the inverse permanents table,
+  or nil) and restores the state into it. The host anchors in the registry
+  what it needs back, such as the kernel coroutine (the main thread's stack
+  is not part of a state).
 - `perms` is the permanents table: it maps objects to names. On persist an
-  object found in `perms` is written as its name; on unpersist the name is
-  resolved back to the object in the `perms` supplied to that call.
+  object found in `perms` is written as its name; on restore the name is
+  resolved back to the object in the inverse table the setup leaves.
 - A metatable field (`__persist`) lets a table (and, once supported,
   userdata) control its own persistence: `true` (or absent) for literal,
   `false` for forbidden. Nothing else is accepted (ADR-18).
 
 ## Layout and running
 
-- `lstyx.cpp`: the library (`lua::lib`, `luaopen_styx`). Today
-  `persist`/`unpersist` handle nil, booleans, numbers, strings, tables
-  (with metatables, shared references and cycles), Lua closures with closed
-  upvalues, and suspended or unstarted coroutines, plus the permanents table.
+- `lstyx.cpp`: the library (`lua::lib`). The round trip of one value
+  (`lua_styxpersistvalue`, `lua_styxunpersistvalue`, and the module the
+  test scripts require as `styx`, `lua_styxtestmodule`) stays inside the
+  engine for the tests of the serializer: a state is persisted as the
+  values it holds (ADR-35).
 - `tests/styx/`: the Styx tests.
   - `styx_tests.cpp`: C++ tests (using the C API; internals are reachable
     since the test links the raw objects) plus a runner that executes every
@@ -60,8 +75,10 @@ local v = styx.unpersist([perms,] s)       -- string -> value
     `special` (`__persist`), `paths` (error paths), `tbc`
     (to-be-closed variables), `protos` (shared prototypes), `children`
     (child coroutines and permanents), `errors`, `memory`
-    (accounting and allocation failures), `processes` (unpersist in a
-    separate interpreter process), `resume_print`.
+    (accounting and allocation failures), `resume_print`. A kernel's state
+    restored in another process is the C++ test
+    `kernel_in_another_process` (the test restores it in a child of
+    itself).
   - Debug builds (`make debug styx-test`) also open the test library `T`,
     which enables the heap invariant checks and the allocation-failure
     tests.
@@ -69,10 +86,6 @@ local v = styx.unpersist([perms,] s)       -- string -> value
   from `tests/styx`). `make test` is the all-tests target and runs them
   last, after everything else. `make debug styx-test` selects the debug
   variant, like the other targets.
-- The engine provides Styx by default but not as a global:
-  `luaL_openlibs` puts it in `package.preload`, so `require "styx"` works
-  and `_G.styx` is nil. A host that wants it global can call
-  `luaL_requiref(L, "styx", luaopen_styx, 1)`.
 
 ## Development approach
 
@@ -221,7 +234,8 @@ yet" below. Four kinds of solution cover them:
 17. **Persistable, but refused**: tables whose `__persist` is `false`;
     a `__persist` that is not a boolean (a function would be user code
     run by persist and unpersist outside any budget, ADR-18); a budget
-    callback that is not a permanent in a value persist (ADR-34).
+    callback that is not a permanent in a value round trip (the tests',
+    ADR-34).
 
 ## Not supported yet
 
@@ -300,12 +314,12 @@ of these raises a clear error unless it says otherwise.
 - **The main thread's API stack** of an idle state is not part of a state
   snapshot; the host manages it. Today: not persisted. A frozen main
   thread's stack is (ADR-34).
-- **The main thread from the script API**: `styx.persist` reaching the
+- **The main thread in a value round trip** (the tests'): reaching the
   main thread fails: as a running thread when it is the caller or above
-  it, otherwise with "cannot persist the main thread from a script". The
-  host API persists an idle main thread as a reference and restores it as
-  the restoring state's main thread (ADR-21, ADR-24), and a frozen one
-  whole (ADR-34).
+  it, otherwise with "cannot persist the main thread from a script". A
+  state persists an idle main thread as a reference and restores it as the
+  restoring state's main thread (ADR-21, ADR-24), and a frozen one whole
+  (ADR-34).
 
 ### Determinism
 A restored VM goes on as the original would for what is deterministic
@@ -342,10 +356,10 @@ across a restore, and are to be revisited:
 - **A final format**: the format (version 7, ADR-10) may still change;
   no stream of an earlier version is read.
 - **The hash seed in streams** is not hidden: every stream starts with the
-  persisting state's string hash seed (`luaL_newstatefor` needs it), and
-  each object carries a hash derived from it. A script that can call
-  `styx.persist` can read its state's seed. Styx is run by administrators,
-  not by untrusted code, so this is not protected.
+  persisting state's string hash seed (`luaL_restorestate` makes the state
+  with it), and each object carries a hash derived from it. Whoever can
+  read a stream can read the seed. Scripts cannot persist; the host keeps
+  its streams.
 
 ## ADRs
 
@@ -391,10 +405,10 @@ unpersisting script decides what a key means (for example, mapping
 originally described was never implemented and is dropped.
 
 ### ADR-8: Styx is requirable by default, not a global
-**Status:** accepted
-`luaL_openlibs` preloads Styx (`LUA_STYXLIBK` in the `linit` library
-list), so `require "styx"` works in every default state while `_G.styx`
-stays nil. Scripts and tests load it with `require`.
+**Status:** superseded by ADR-35
+`luaL_openlibs` preloaded Styx, so `require "styx"` worked in every
+default state. Styx is no longer a library of the engine: scripts cannot
+persist, and the test scripts require the tests' own module.
 
 ### ADR-9: Tests are Lua scripts and C++, in `tests/styx/`
 **Status:** accepted
@@ -579,10 +593,10 @@ by `coroutine.close`, in reverse order across frames.
 
 ### ADR-21: Host side persist
 **Status:** accepted
-`luaL_persistvalue(L, perms, idx, w, msg)` and
-`luaL_persiststate(L, perms, w, msg)` (in `lualib.h`) persist a value, or
-the whole state, of a state that is not running (no Lua frame on the main
-thread). They are for the host, not for scripts:
+`luaL_persiststate(L, perms, w, msg)` (in `lualib.h`) persists the whole
+state, which is not running (no Lua frame on the main thread); the round
+trip of one value (`lua_styxpersistvalue`) is the tests' (ADR-35). They
+are for the host, not for scripts:
 - The walk reads the objects directly. Its bookkeeping (reference ids,
   pending work, error paths) is host memory and the stream goes to a
   `lua_Writer` in 64K pieces, then `nullopt`; nothing is allocated in the
@@ -624,8 +638,9 @@ rebuilding by insertion cannot match it.
 - Unpersist with the same seed installs the nodes as they were with the
   engine's `Table::luaH_setnode` (on `lua-c++`, with `luaH_copyfrom` built on
   it and tested on its own in `test_engine`); with another seed it inserts
-  the entries. A host creates the restoring state with `luaL_newstatefor`,
-  which hashes as the persisting state did (ADR-31).
+  the entries (a value restored in a state of another seed: only in the
+  tests). `luaL_restorestate` makes the restoring state with the stream's
+  seed (ADR-31, ADR-35).
 - The writer reads the nodes when their turn comes and fails if a `__gc`
   run by the collector changed the table's hash part meanwhile.
 - Object keys hash by the hash each object was given when made, which is
@@ -635,14 +650,15 @@ rebuilding by insertion cannot match it.
   repeats; across states with the same seed (order kept) and another seed
   (contents kept).
 For comparison, Eris rebuilds every table with `lua_next`/`rawset` and no
-presizing, so it has this problem (and the `#t` one of ADR-17).
+presizing, so it has this problem (and the `#t` one of ADR-17), as Pluto
+does: with each, a coroutine suspended in a `pairs` loop skipped or
+repeated keys after a restore in 100 of 100 trials (ADR-35).
 
 ### ADR-23: Persisting a child coroutine; permanents are values
 **Status:** accepted
-Both APIs persist any coroutine that is not running (unstarted, suspended
-or dead), on its own or inside a larger value: the script API takes it as
-the value, the host API from a stack slot (`luaL_persistvalue`) or as part
-of the whole state. What the coroutine captured from outside is written
+A coroutine that is not running (unstarted, suspended or dead) is
+persisted on its own or inside a larger value: as part of the whole state,
+or as the value of a round trip (the tests'). What the coroutine captured from outside is written
 by value unless it is a permanent; a permanent (table, function, userdata,
 thread) is written as its key and restored as the object supplied for that
 key, so the restored child stays connected to the restoring side's
@@ -653,33 +669,31 @@ or it is kept in a table that is a permanent. Tested from script
 
 ### ADR-24: Host side restore
 **Status:** accepted
-`luaL_unpersistvalue(L, perms, data, msg)` pushes a value and
-`luaL_unpersiststate(L, perms, data, msg)` restores a whole state, with
-`perms` the inverse permanents (key -> object) built in the restoring
-state. The host creates the state with `luaL_newstatefor` (so it hashes as
-the persisting state did, ADR-31), opens what it provides, and restores
-into it.
+`luaL_restorestate(f, data, setup, ud, msg)` makes a new state with
+allocator `f` and the stream's seed (it hashes as the persisting state
+did, ADR-31), runs the host's `setup` protected (it opens what the host
+provides and leaves the inverse permanents, key -> object, or nil), and
+restores the whole state into it; it returns the state, or NULL with a
+message and nothing left allocated. (The round trip of one value,
+`lua_styxunpersistvalue`, is the tests', ADR-35.)
 - The restore runs in a protected call on the idle state with the
   machinery of `unpersist`; only host restores accept the main thread
   reference.
-- A frozen main thread (ADR-21) is restored into the restoring state's
-  main thread, which must be idle with an empty stack, from another thread
-  of the state ("a frozen main thread is restored into an idle main thread
-  with an empty stack, from another thread"); the host then thaws it as
-  any frozen thread. A restore that fails leaves the main thread idle and
-  empty, as it was.
+- The restore runs from another thread of the new state, so that a frozen
+  main thread (ADR-21) is restored into its main thread, idle and with an
+  empty stack; the host then thaws it as any frozen thread.
 - Everything restored is charged to the state through its allocator, so
   the host's allocator is the memory policy: a restore that it denies fails
-  with "not enough memory". The state's registry and type metatables are
-  replaced only after the whole stream was read, so a failed restore leaves
-  the state as it was; the collector's settings are applied last (ADR-28).
+  with "not enough memory" (and the state is closed). The state's registry
+  and type metatables are replaced only after the whole stream was read;
+  the collector's settings are applied last (ADR-28).
 - Tested: a running program (closures with shared upvalues, a suspended
   coroutine with an open upvalue and a to-be-closed variable, string and
   number metatables, the main thread) restored whole in a new state; a
   state persisted at its memory cap restored and running on under the cap
-  again; a restore that runs out of memory; value restores; streams of one
-  kind refused by the other. Scripts cannot reach any of this, so it gives
-  them no way around their memory limit.
+  again; a restore that runs out of memory; a value's stream, or what is
+  not a stream, refused; a setup that fails. Scripts cannot reach any of
+  this, so it gives them no way around their memory limit.
 
 ### ADR-25: Variables as permanents
 **Status:** accepted
@@ -866,12 +880,11 @@ stream.
   ADR-30), `next` from deleted keys (ADR-29), the hashes of new objects
   (the snapshot's next hash), `#`, finalizer marks and their order and the
   collector's settings (ADR-28), hooks (ADR-26).
-- The restoring state is made from the stream: `luaL_newstatefor(f, data)`
-  creates it hashing as the persisting state did (the seed is the stream's,
-  not the host's to supply), and `luaL_unpersiststate` refuses any other
-  state ("the state does not hash as the persisted one"). The host's part:
-  open the same libraries, and make its own permanents, in the same order
-  as for the original, so they get the same hashes.
+- The restoring state is made from the stream: `luaL_restorestate` creates
+  it hashing as the persisting state did (the seed is the stream's, not the
+  host's to supply). The host's part, in its setup: open the same
+  libraries, and make its own permanents, in the same order as for the
+  original, so they get the same hashes.
 - Strings take no object hash (ADR-30): a string reused in one state and
   new in the other would shift every later object's hash.
 - What is not deterministic yet, within a run or across a restore, is
@@ -883,8 +896,8 @@ stream.
   `remove`, a small sort, a to-be-closed variable, error messages, the
   order of `_G`, `package.loaded` and the registry) and compares the
   transcripts; with strings taking hashes, or without the snapshot's next
-  hash, they differ. `state_restore_needs_its_state`: a state with another
-  seed is refused and left as it was.
+  hash, they differ. `restore_takes_the_seed`: the restored state has the
+  persisted seed, with no seed from the host.
 
 ### ADR-32: Preemptive persistence and suspendable C functions
 **Status:** proposed (plan); its mechanism (decisions 1, 2's use of the
@@ -1151,7 +1164,7 @@ for (;;)
   if (lua_isfrozen(K))               // r is {LUA_YIELD, 0}
   {
     if (saveDue())
-      styx_persist(L, &writer);
+      luaL_persiststate(L, perms, &writer, &msg);
     r = lua_thaw(K, nullptr);        // next tick; returns like lua_resume
   }
   else if (r.status == LUA_YIELD)    // the kernel's own yield to the host
@@ -1177,7 +1190,7 @@ else
   r = table.pack(coroutine.resume(prog, reply))
 end
 if debug.isfrozen(prog) and saveDue() then
-  styx.persist(prog, writer)
+  coroutine.yield("save") -- the host persists the whole state (ADR-35)
 end
 ```
 
@@ -1262,8 +1275,8 @@ What a frozen chain is, to Styx:
   of its own (a kernel thread the program resumed) keeps only the one in
   effect. Restored in a state with no thread for the debug library's
   callbacks, the group makes one (the callback's `prepare`).
-- **The callback is the kernel's.** In a value persist (`styx.persist`,
-  `luaL_persistvalue`) the callback's value must be a permanent ("cannot
+- **The callback is the kernel's.** In a value round trip (the tests',
+  `lua_styxpersistvalue`) the callback's value must be a permanent ("cannot
   persist a budget callback that is not a permanent"): copied, it would be
   another function, with copies of the kernel's upvalues. A whole-state
   snapshot persists it as it does every function of the state.
@@ -1277,7 +1290,7 @@ What a frozen chain is, to Styx:
   persisting state), and whether its `__gc` was already due (waiting in
   `tobefnz` or in a group's queue). The same holds for the user objects of
   a registered kind, whose kind the trailer also names. A group's queue is
-  persisted with the group, in a value persist as in a state, and
+  persisted with the group, in a state as in a value round trip, and
   unpersist makes the due ones due again in their original order
   (`luaC_makedue`), so each `__gc` runs once after the restore: a deferred
   one when a thread of its group goes on. The thread keeps `allowhook`, which is off while a drained
@@ -1312,6 +1325,47 @@ in a new one and compare how both end; `frozen_deferred_gc` (a queue of a
 group), a host's own continuation and budget callback (not persisted until
 named) and a restore that runs out of memory at many sizes.
 
+
+### ADR-35: The kernel's persistence only
+**Status:** accepted (2026-10-11)
+Styx persists one thing: a whole state at rest, which the host persists
+and restores. Scripts cannot persist, and no value is persisted or
+restored apart from the state it lives in.
+- The workflow: the kernel (a coroutine the host resumes) freezes or
+  suspends its programs and yields back to the host; the host then
+  persists the state (`luaL_persiststate`), with no Lua code running. To
+  restore, `luaL_restorestate` makes a new state with the stream's seed,
+  runs the host's setup, restores the state into it, and the host resumes
+  the kernel from where it anchored it in the registry. A kernel running
+  several programs persists them all with it.
+- Why: the order of a table depends on the state's hash seed, which every
+  string and table of the state shares, the kernel's and the programs'
+  alike. A value restored into a state with another seed cannot keep its
+  order, and a state cannot change its seed while anything in it may be
+  iterating. A whole state restored into a state made for it keeps every
+  order: the restore makes the state, so the seed cannot be wrong, and the
+  host has no step to forget. Pluto and Eris persist values and rebuild
+  every table on restore: a coroutine suspended in a `pairs` loop over a
+  table with inserts and deletes, persisted after 40 keys and restored in
+  the same state, skipped or repeated keys in 100 of 100 trials with each
+  (Eris on Lua 5.2: 5684 keys skipped and 1089 repeated in all; Pluto on
+  Lua 5.1: 5774 and 1095).
+- Gone: `luaL_persistvalue`, `luaL_unpersistvalue`, `luaL_unpersiststate`
+  and `luaL_newstatefor`, and the script library (`require "styx"`,
+  ADR-8). The round trip of one value stays inside the engine for the
+  tests of the serializer (`lua_styxpersistvalue`, `lua_styxunpersistvalue`
+  and the module the test scripts require as `styx`): a state is persisted
+  as the values it holds, so each kind of value is tested on its own there.
+- Tested: `kernel_persistence` runs a kernel coroutine with three user
+  programs (tables with churn iterated by `pairs`, object keys, closures,
+  a load with a reader, a sort with a comparator, a match), each with its
+  budget, frozen in their callbacks or suspended; the host persists the
+  whole state at every one of the kernel's yields, restores it with
+  `luaL_restorestate` and resumes the kernel, and the original and the
+  copy end as a run with no persist; `kernel_in_another_process` restores
+  it in another process (its own addresses: a table keyed by library
+  functions keeps its order there), replacing `processes.lua`.
+  `restore_errors`, `restore_takes_the_seed`, `no_script_library`.
 ## Open questions
 
 - Format: versioned header or bare bytes.
