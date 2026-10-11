@@ -2083,6 +2083,120 @@ static void test_frozen_main_thread()
 }
 
 /*
+** A frozen main thread restored is as it was persisted until the host
+** thaws it: the restore closes none of its variables, and a collection
+** before the thaw keeps all of its stack (frozen in the program's own
+** frame, with a to-be-closed variable; and in 'table.unpack', a C
+** function with values of its own on the stack).
+*/
+static int rest_calls = 0;
+static int rest_at = 0;
+static int rest_closes = 0;
+
+static void rest_budget(lua_State*, lua_State* spender)
+{
+  if (++rest_calls == rest_at)
+    lua_freeze(spender);
+}
+
+static int rest_close(lua_State*)
+{
+  rest_closes++;
+  return 0;
+}
+
+static void add_rest_close(lua_State* L)
+{
+  lua_pushcfunction(L, rest_close);
+  lua_setglobal(L, "rest_close");
+}
+
+/* the main thread of a new state, frozen at the 'at'-th budget point of
+   'prog' ('other': the host's other thread of the state; 'ctop': whether
+   the main thread's top frame is a C function's) */
+static lua_State* frozen_main(CountingAlloc* a, const char* prog, int at, lua_State** other, bool* ctop)
+{
+  lua_State* A = new_counted_state(a);
+  add_rest_close(A);
+  CHECK(eval(A, build_perms) == "ok");
+  *other = lua_newthread(A);
+  luaL_ref(A, LUA_REGISTRYINDEX);
+  rest_calls = 0;
+  rest_at = at;
+  lua_setbudget(A, 100, rest_budget);
+  CHECK(luaL_loadstring(A, prog) == LUA_OK);
+  CHECK(lua_pcall(A, 0, 2, 0) == LUA_OK);
+  *ctop = false;
+  if (lua_isfrozen(A))
+  {
+    std::optional<lua_Debug> ar = lua_getstack(A, 0);
+    std::optional<lua_Debug> in = ar ? lua_getinfo(A, "S", *ar) : std::nullopt;
+    *ctop = in && in->what == "C";
+  }
+  return A;
+}
+
+static void test_frozen_main_thread_restored_at_rest()
+{
+  lua_registerbudget("styxtest.rest_budget", rest_budget);
+  const char* progs[] = {
+    "local s = 0 for i = 1, 300 do s = s + i end "
+    "local t <close> = setmetatable({}, {__close = rest_close}) "
+    "for i = 1, 3000 do s = s + i end return s, 'end'",
+    "local t = {} for i = 1, 20000 do t[i] = i end local r = table.pack(table.unpack(t)) "
+    "local same = true for i = 1, r.n do same = same and r[i] == i end return r.n, same",
+  };
+  for (int which = 0; which < 2; which++)
+  {
+    /* frozen after the variable is made (the first), in 'table.unpack' (the second) */
+    lua_State* A = nullptr;
+    lua_State* other = nullptr;
+    bool ctop = false;
+    for (int at = 2; at < 400; at++)
+    {
+      CountingAlloc probe;
+      A = frozen_main(&probe, progs[which], at, &other, &ctop);
+      bool want = lua_isfrozen(A) && (which == 0 ? rest_calls > 40 : ctop);
+      lua_close(A);
+      A = nullptr;
+      if (want)
+      {
+        rest_at = at;
+        break;
+      }
+    }
+    CHECK(rest_at < 400);
+    CountingAlloc a1;
+    A = frozen_main(&a1, progs[which], rest_at, &other, &ctop);
+    CHECK(lua_isfrozen(A));
+    /* persisted from the host's other thread */
+    StringWriter w;
+    HostString msg;
+    lua_getglobal(other, "_PERMS");
+    CHECK(luaL_persiststate(other, lua_gettop(other), &w, &msg) == LUA_OK);
+    lua_pop(other, 1);
+    lua_close(A);
+    rest_closes = 0;
+    CountingAlloc a2;
+    Setup s{add_rest_close, {}};
+    lua_State* B = restored_state(&a2, w.out, &s);
+    CHECK(lua_isfrozen(B));
+    CHECK(rest_closes == 0); /* (the restore closed nothing) */
+    lua_gc(B, LUA_GCCOLLECT, 0, 0, 0);
+    lua_gc(B, LUA_GCCOLLECT, 0, 0, 0);
+    lua_ResumeResult r{LUA_OK, 0};
+    while (r.status == LUA_OK && lua_isfrozen(B))
+      r = lua_thaw(B, nullptr);
+    CHECK(r.status == LUA_OK && lua_gettop(B) == 2);
+    if (which == 0)
+      CHECK(lua_tointeger(B, 1) == 45150 + 4501500 && to_string(B, 2) == "end" && rest_closes == 1);
+    else
+      CHECK(lua_tointeger(B, 1) == 20000 && lua_toboolean(B, 2));
+    lua_close(B);
+  }
+}
+
+/*
 ** A program on the main thread that failed, frozen in a '__close' as its
 ** host call closes its variables (FZ_HOSTCLOSE): persisted and restored,
 ** the thaw finishes the close and gives the error, in both states.
@@ -2565,6 +2679,7 @@ static void run_cpp_tests()
       {"user_object_kind", test_user_object_kind},
       {"user_object_owner", test_user_object_owner},
       {"frozen_main_thread", test_frozen_main_thread},
+      {"frozen_main_thread_restored_at_rest", test_frozen_main_thread_restored_at_rest},
       {"frozen_main_thread_close", test_frozen_main_thread_close},
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
       {"kernel_persistence", test_kernel_persistence},

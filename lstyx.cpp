@@ -4230,8 +4230,7 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
     lua_close(L);
     return nullptr;
   }
-  lua_settop(L, 0);
-  return L;
+  return L; /* (its stack is empty, or a frozen main thread's, which only a thaw changes) */
 }
 
 int lua_styxtestmodule(lua_State* L)
