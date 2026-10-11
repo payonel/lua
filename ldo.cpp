@@ -1513,6 +1513,14 @@ static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, 
       return {LUA_ERRRUN, 1};
     }
     L->frozen = FZ_CLOSE;
+    if (g->freezetarget == L)
+    { /* the freeze of 'L' ends here: the close is where it lands, as a
+         resume is ('from' has no budget: the kernel closed 'L') */
+      g->freezetarget = nullptr;
+      L->resumer = nullptr;
+      lua_unlock(L);
+      return {LUA_OK, 0};
+    }
     from->frozenchild = L;
     L->frozenparent = from;
     from->frozencc = from->nCcalls;

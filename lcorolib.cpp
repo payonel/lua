@@ -131,6 +131,8 @@ static int auxwrap_end(lua_State* L, lua_State* co, int r)
     if (stat != LUA_OK && stat != LUA_YIELD)
     { /* error in the coroutine? close its tbc variables (a '__close' can freeze) */
       stat = lua_closethreadk(co, L, 0, auxwrap_closed).status;
+      if (stat == LUA_OK && lua_isfrozen(co))
+        return 0; /* the close froze here, as a resume can: no values */
       assert(stat != LUA_OK);
       lua_xmove(co, L, 1); /* move error message to the caller */
     }

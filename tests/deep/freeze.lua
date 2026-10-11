@@ -577,6 +577,48 @@ do
   assert(ok and froze and frozen == true and v == "in")
 end
 
+-- the kernel closes a program's coroutine: its '__close' runs under the
+-- program's budget, and a freeze there lands in the kernel's close as in a
+-- resume (the close gives true; isfrozen tells); a thaw finishes the close
+do
+  local closed, inclose = 0, false
+  local co = coroutine.create(function()
+    local x <close> = setmetatable({}, {__close = function()
+      inclose = true
+      for i = 1, 100 do end
+      closed = closed + 1
+    end})
+    coroutine.yield()
+  end)
+  debug.setbudget(co, 5, function() if inclose then inclose = false debug.freeze() end end)
+  assert(coroutine.resume(co))
+  assert(coroutine.close(co) == true)
+  assert(debug.isfrozen(co) and closed == 0)
+  assert(coroutine.status(co) == "running")
+  local r = table.pack(debug.thaw(co))
+  assert(r.n == 1 and r[1] == true)
+  assert(not debug.isfrozen(co) and coroutine.status(co) == "dead" and closed == 1)
+  -- the same in the close of a wrapped coroutine that failed: the function
+  -- from 'coroutine.wrap' gives no values, as when a resume lands there
+  local w
+  closed = 0
+  local maker = coroutine.create(function()
+    w = coroutine.wrap(function()
+      local x <close> = setmetatable({}, {__close = function()
+        inclose = true
+        for i = 1, 100 do end
+        closed = closed + 1
+      end})
+      error("boom")
+    end)
+  end)
+  debug.setbudget(maker, 5, function() if inclose then inclose = false debug.freeze() end end)
+  assert(coroutine.resume(maker)) -- ('w''s coroutine is in maker's group)
+  r = table.pack(w())
+  assert(r.n == 0 and closed == 0)
+  assert(not pcall(w)) -- (frozen: it cannot be resumed)
+end
+
 -- a freeze that cannot happen destroys the chain: where a call that cannot
 -- freeze is in the way, the coroutines of the chain are dead, the kernel
 -- gets "cannot freeze" from its resume, and nothing in the chain catches it
