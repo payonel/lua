@@ -242,6 +242,10 @@ of these raises a clear error unless it says otherwise.
 - **Hooks set from C** (not by `debug.sethook`) on a persisted thread.
   Today: error ("a hook not set by the debug library is not supported
   yet"). Debug-library hooks work (ADR-26).
+- **A load that read before it had a budget** (a budget set on its thread
+  while it was reading): it did not keep that input, so a restored copy
+  cannot go again to where it stopped. Today: its thaw fails with "invalid
+  state of a stopped load" (`load` returns it as an error).
 
 ### Functions
 - **C functions and C closures** the engine does not name (ADR-34). The
@@ -1063,10 +1067,11 @@ committed), it falls short:
    Hand-offs alone would miss the work that holds off a freeze: pure C
    loops never hand off. C work is charged at check points inside the
    loops, which are freezable: when the budget runs out there, the
-   callback runs and may freeze the loop in its middle. Work that cannot be
-   split (the parser of `load`, an allocation) is charged when it ends,
-   and a freeze happens at the next check point; its cost is bounded by
-   its input. Counting is deterministic: a program spends the same steps
+   callback runs and may freeze the loop in its middle (the parser of
+   `load` has one at each token, the binary loader at each function,
+   constant and debug entry). Work that cannot be split (an allocation) is
+   charged when it ends, and a freeze happens at the next check point; its
+   cost is bounded by its input. Counting is deterministic: a program spends the same steps
    in every run.
 2. **The callback.** Each time `n` instructions are spent, the VM calls the
    callback on the thread that spent them, with that coroutine as its only
@@ -1225,12 +1230,24 @@ What a frozen chain is, to Styx:
   object, `luaL_Box`: integers and bytes) is persisted as that kind of
   object. A user object of a registered kind (`lua_registerobjectkind`) is
   persisted as its kind's name, its integers and bytes, its metatable and
-  its user values. The C closures of the kinds in the engine are persisted
+  its user values (as nil if it says they are not part of its state,
+  `persistuservalues`). The C closures of the kinds in the engine are persisted
   as the name of the kind, their upvalues, and for the gmatch iterator the
   position of its match. A pattern match stopped at one of its check points
   keeps itself in a match box (`string.match`: where the stopped call began,
   the captures, and a frame for each call of the matcher waiting), and goes
   on from it after a restore as in the original.
+- **A load stopped in its middle.** `load` stops in a call of its reader
+  function or at the check point of a token (each token read is a step),
+  and its box (`load`) keeps what a restore needs: the input read so far
+  (kept while the load has a budget) and the stop points passed. The parse
+  itself, half made, is not persisted (its anchor table is in the box, a
+  user value that is not part of its state). Restored, the load goes again
+  over its input from the start, taking no step, making no check point and
+  not calling the reader, up to where it stopped (in a call of the reader:
+  the piece that call gave comes next), and goes on as the original: the
+  same function, the same calls of the reader. In the process that froze
+  it, a load goes on from its frames, with no second parse.
 - **Budget groups.** A group is persisted with its limit, its steps left,
   the name of its callback, its value (the debug library's Lua function),
   the thread it was set on and its queue of waiting `__gc`; a thread keeps
@@ -1277,7 +1294,7 @@ What a frozen chain is, to Styx:
 
 Tests: `frozen.lua` (programs frozen at every budget point, persisted,
 restored and thawed beside the original, in one state, a find frozen deep
-in its backtracking among them), and the C++ tests
+in its backtracking and loads stopped at every point among them), and the C++ tests
 `frozen_library_cases` and `frozen_engine_cases`, which freeze each case of
 `tests/deep/libcases.lua` and `frozencases.lua` (library callbacks; drained
 `__gc`, message handlers, `__close`, wrapped coroutines, `gmatch`, `sort`,

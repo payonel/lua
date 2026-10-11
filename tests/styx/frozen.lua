@@ -253,6 +253,31 @@ case("a find frozen deep in its backtracking persists, and both go on to the sam
   assert(show(ra) == show(rb) and show(ra) == show(table.pack(true, 16, 17, "", "a")), show(ra) .. " vs " .. show(rb))
 end)
 
+case("a load stopped in its middle (a token's check point, a call of its reader) persists, and both end the same", function()
+  local src = "local t = {} for i = 1, 6 do t[i] = i * 2 end -- a comment\nreturn t[3] + #t, [[long\nstring]], 'esc\\65'"
+  local bin = string.dump(load(src))
+  local points = everywhere("loads", function(out)
+    return function()
+      local f1 = load(src, "=s")
+      local pos = 0
+      local f2 = load(function()
+        out[#out + 1] = pos
+        pos = pos + 2
+        if pos - 2 >= #src then return nil end
+        return src:sub(pos - 1, pos)
+      end, "=r")
+      local bpos = 0
+      local f3 = load(function()
+        bpos = bpos + 7
+        if bpos - 7 >= #bin then return "" end
+        return bin:sub(bpos - 6, bpos)
+      end, "=b", "b")
+      return table.concat({f1()}, "|") .. ";" .. table.concat({f2()}, "|") .. ";" .. table.concat({f3()}, "|")
+    end
+  end, 2, 3000)
+  assert(points > 100, points)
+end)
+
 case("to-be-closed variables", function()
   everywhere("tbc", function(out)
     return function()
