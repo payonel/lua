@@ -1293,8 +1293,9 @@ What a frozen chain is, to Styx:
   thaw finishes the close.
 - **Inside the budget callback.** A thread of the chain that spent the budget
   is still running there, so persisting it is refused ("a running thread");
-  once the callback has frozen it, it persists. (Specification 13.4 asks for
-  the same state from inside the callback; to settle.)
+  once the callback has frozen it, it persists. This is by design (not a
+  workflow, specification 13.4): a kernel persists a thread once
+  `debug.isfrozen(co)` is true.
 
 Tests: `frozen.lua` (programs frozen at every budget point, persisted,
 restored and thawed beside the original, in one state, a find frozen deep
