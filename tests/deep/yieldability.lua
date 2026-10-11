@@ -70,6 +70,14 @@ check("string arithmetic, the other operand's __add", function(probe)
   local s = mt{__add = function() probe() return 1 end}
   return "10" + s -- (the string's __add, from the library, calls it)
 end, false)
+check("math.min __lt", function(probe)
+  local m = {__lt = function(a, b) probe() return a.v < b.v end}
+  return math.min(setmetatable({v = 2}, m), setmetatable({v = 1}, m))
+end, false)
+check("math.max __lt", function(probe)
+  local m = {__lt = function(a, b) probe() return a.v < b.v end}
+  return math.max(setmetatable({v = 1}, m), setmetatable({v = 2}, m))
+end, false)
 check("table.sort comparator", function(probe)
   table.sort({3, 2, 1}, function(a, b) probe() return a < b end)
 end, false)

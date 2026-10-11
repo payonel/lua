@@ -246,6 +246,7 @@ static int math_ldexp(lua_State* L)
 */
 static lua_KContext minmax_pack(int n, int i, int ibest)
 {
+  static_assert(sizeof(lua_KContext) >= 8, "three 21-bit fields");
   return (lua_KContext)n | ((lua_KContext)i << 21) | ((lua_KContext)ibest << 42);
 }
 
@@ -301,6 +302,7 @@ static int math_min(lua_State* L)
 {
   int n = lua_gettop(L); /* number of arguments */
   luaL_argchecki(L, n >= 1, 1, lt::value_expected);
+  lua_freezeonly(L); /* ('__lt' cannot yield, as in stock) */
   return minmax_loop(L, false, n, 2, 1);
 }
 
@@ -308,6 +310,7 @@ static int math_max(lua_State* L)
 {
   int n = lua_gettop(L); /* number of arguments */
   luaL_argchecki(L, n >= 1, 1, lt::value_expected);
+  lua_freezeonly(L); /* ('__lt' cannot yield, as in stock) */
   return minmax_loop(L, true, n, 2, 1);
 }
 
