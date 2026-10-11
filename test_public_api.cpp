@@ -6348,6 +6348,132 @@ static void test_freeze()
     CHECK(!closed && cd.used == 0);
   }
 
+  /* a host call that fails closes its variables where a '__close' can
+     freeze: a freeze lands at the host call (LUA_OK, frozen), and the thaw
+     finishes the close and gives the error, as the call would have; also
+     when the error comes after a thaw, and when the close freezes again */
+  for (int every = 0; every < 2; every++)
+  {
+    lua_State* S = luaL_newstate();
+    luaL_openlibs(S);
+    CHECK(luaL_dostring(S, "log = {}") == LUA_OK);
+    CHECK(luaL_loadstring(S, "for i = 1, 100 do end "
+                             "local x <close> = setmetatable({}, {__close = function(_, e) "
+                             "log[#log + 1] = 'start' for i = 1, 300 do end log[#log + 1] = 'end ' .. tostring(e) end}) "
+                             "error('boom', 0)") == LUA_OK);
+    fz_reset(S, 50, S, every ? 1 : 5, every != 0); /* (the 5th: in the close) */
+    int pst = lua_pcall(S, 0, 0, 0);
+    CHECK(pst == LUA_OK && lua_isfrozen(S));
+    lua_ResumeResult r{LUA_OK, 0};
+    int nthaws = 0;
+    while (lua_isfrozen(S))
+    {
+      r = lua_thaw(S, nullptr);
+      nthaws++;
+    }
+    fz_reset(S, 0, nullptr, 0, false);
+    CHECK(r.status == LUA_ERRRUN && r.nres == 1 && fz_str(S, -1) == "boom");
+    CHECK(every ? nthaws > 5 : nthaws == 1);
+    lua_settop(S, 0);
+    CHECK(luaL_dostring(S, "return table.concat(log, ',')") == LUA_OK && fz_str(S, -1) == "start,end boom");
+    lua_close(S);
+  }
+
+  /* the host's close of a coroutine: its '__close' run under its budget,
+     and a freeze there lands at lua_closethread (LUA_OK, frozen); the thaw
+     finishes the close, with its status */
+  for (int failed = 0; failed < 2; failed++)
+  {
+    lua_State* S = luaL_newstate();
+    luaL_openlibs(S);
+    CHECK(luaL_dostring(S, "log = {}") == LUA_OK);
+    lua_State* co = lua_newthread(S);
+    CHECK(luaL_loadstring(co, "local x <close> = setmetatable({}, {__close = function(_, e) "
+                              "log[#log + 1] = 'start' for i = 1, 300 do end log[#log + 1] = 'end ' .. tostring(e) end}) "
+                              "local fail = ... coroutine.yield() if fail then error('boom', 0) end") == LUA_OK);
+    lua_pushboolean(co, failed);
+    CHECK(lua_resume(co, S, 1).status == LUA_YIELD);
+    lua_settop(co, 0);
+    if (failed)
+      CHECK(lua_resume(co, S, 0).status == LUA_ERRRUN); /* (dead, its variable not closed) */
+    fz_reset(S, 0, nullptr, 0, false);
+    lua_setbudget(co, 50, fz_budget);
+    fz_target = co;
+    fz_at = 2;
+    int cst = lua_closethread(co, nullptr);
+    CHECK(cst == LUA_OK && lua_isfrozen(co));
+    lua_ResumeResult r{LUA_OK, 0};
+    while (lua_isfrozen(co))
+      r = lua_thaw(co, nullptr);
+    CHECK(r.status == (failed ? LUA_ERRRUN : LUA_OK));
+    if (failed)
+      CHECK(fz_str(co, -1) == "boom");
+    fz_reset(S, 0, nullptr, 0, false);
+    CHECK(luaL_dostring(S, "return table.concat(log, ',')") == LUA_OK);
+    CHECK(fz_str(S, -1) == (failed ? "start,end boom" : "start,end nil"));
+    lua_close(S);
+  }
+
+  /* and where such a close cannot freeze (a C function without a
+     continuation is in the way), the chain is destroyed: the host call
+     fails, the thread is dead with the message; whether the close began at
+     the host call (0), after a thaw (1) or was thawed itself (2) */
+  for (int mode = 0; mode < 3; mode++)
+  {
+    lua_State* S = luaL_newstate();
+    luaL_openlibs(S);
+    lua_pushcfunction(S, fz_call);
+    lua_setglobal(S, "call");
+    CHECK(luaL_dostring(S, "log = {}") == LUA_OK);
+    CHECK(luaL_loadstring(S, "local pre, mid = ... for i = 1, pre do end "
+                             "local x <close> = setmetatable({}, {__close = function(_, e) "
+                             "log[#log + 1] = 'start' for i = 1, mid do end "
+                             "call(function() for i = 1, 300 do end end) log[#log + 1] = 'end' end}) "
+                             "error('boom', 0)") == LUA_OK);
+    lua_pushinteger(S, mode == 1 ? 200 : 0);
+    lua_pushinteger(S, mode == 2 ? 200 : 0);
+    fz_reset(S, 50, S, 1, true);
+    int pst = lua_pcall(S, 2, 0, 0);
+    int nthaws = 0;
+    while (pst == LUA_OK && lua_isfrozen(S))
+    {
+      pst = lua_thaw(S, nullptr).status;
+      nthaws++;
+    }
+    fz_reset(S, 0, nullptr, 0, false);
+    CHECK(pst == LUA_ERRRUN && fz_str(S, -1) == "cannot freeze");
+    CHECK(mode == 0 ? nthaws == 0 : nthaws > 0);
+    CHECK(!lua_isfrozen(S) && lua_status(S) == LUA_ERRRUN);
+    CHECK(lua_closethread(S, nullptr) == LUA_ERRRUN);
+    lua_settop(S, 0);
+    CHECK(lua_status(S) == LUA_OK);
+    CHECK(luaL_dostring(S, "return table.concat(log, ',')") == LUA_OK && fz_str(S, -1) == "start");
+    lua_close(S);
+  }
+  {
+    lua_State* S = luaL_newstate();
+    luaL_openlibs(S);
+    lua_pushcfunction(S, fz_call);
+    lua_setglobal(S, "call");
+    CHECK(luaL_dostring(S, "log = {}") == LUA_OK);
+    lua_State* co = lua_newthread(S);
+    CHECK(luaL_loadstring(co, "local x <close> = setmetatable({}, {__close = function(_, e) "
+                              "log[#log + 1] = 'start' call(function() for i = 1, 300 do end end) "
+                              "log[#log + 1] = 'end' end}) coroutine.yield()") == LUA_OK);
+    CHECK(lua_resume(co, S, 0).status == LUA_YIELD);
+    lua_settop(co, 0);
+    fz_reset(S, 0, nullptr, 0, false);
+    lua_setbudget(co, 50, fz_budget);
+    fz_target = co;
+    fz_at = 1;
+    fz_every = true;
+    CHECK(lua_closethread(co, nullptr) == LUA_ERRRUN && fz_str(co, -1) == "cannot freeze");
+    CHECK(!lua_isfrozen(co) && lua_status(co) == LUA_ERRRUN);
+    fz_reset(S, 0, nullptr, 0, false);
+    CHECK(luaL_dostring(S, "return table.concat(log, ',')") == LUA_OK && fz_str(S, -1) == "start");
+    lua_close(S);
+  }
+
   /* a continuation with no calling thread is not used: 'lua_resumek' with
      no 'from' is 'lua_resume' */
   {

@@ -381,6 +381,11 @@ int(lua_status)(lua_State* L);
 ** instead: its threads are dead, and the call returns the error.
 ** 'lua_thaw' goes on with a frozen coroutine and returns like
 ** 'lua_resume'; it is an error in the callback or from budgeted code.
+** A '__close' can freeze too: when a call of the host fails, its variables
+** close and a freeze there lands at the call, which also returns LUA_OK
+** ('lua_thaw' finishes the close and returns the error); the host's
+** 'lua_closethread' (with no 'from') is where a freeze of the thread's
+** '__close' lands, and returns LUA_OK ('lua_thaw' finishes the close).
 */
 /*
 ** Names for the host's continuations and budget callbacks. A tool that keeps

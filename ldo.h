@@ -35,6 +35,7 @@ void luaD_call(lua_State* L, StkId func, int nResults);
 void luaD_callnoyield(lua_State* L, StkId func, int nResults);
 TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status, int yy = 0);
 TStatus luaD_pcall(lua_State* L, ProtectedCall* func, StkId oldtop, StkId ef, bool close = true);
+TStatus luaD_hostclose(lua_State* L, StkId level, TStatus status);
 void luaD_poscall(lua_State* L, CallInfo* ci, int nres);
 int luaD_reallocstack(lua_State* L, int newsize, int raiseerror);
 int luaD_growstack(lua_State* L, int n, int raiseerror);

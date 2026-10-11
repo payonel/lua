@@ -1560,6 +1560,88 @@ static TStatus selfcloseend(lua_State* L, TStatus status)
 }
 
 /*
+** A host call failed ('lua_pcall' at base level, also after a thaw): the
+** variables of its function close here, where a '__close' can freeze (it
+** runs at the thread's base: a thaw finishes it, see FZ_HOSTCLOSE).
+** Returns the status the close ends with, or LUA_FREEZE when a freeze
+** passes (it lands at the host call), or the chain is destroyed.
+*/
+struct HostClose : ProtectedCall
+{
+  StkId level;
+  TStatus status;
+  void run(lua_State* L) override { status = luaD_closeprotected(L, level, status, 2); }
+};
+
+TStatus luaD_hostclose(lua_State* L, StkId level, TStatus status)
+{
+  HostClose hc;
+  hc.level = level;
+  hc.status = status;
+  TStatus st = luaD_rawrunprotected(L, &hc);
+  if (st == LUA_OK)
+    return hc.status;
+  assert(st == LUA_FREEZE);
+  return st;
+}
+
+/*
+** The close of a failed host call, frozen in a '__close' (FZ_HOSTCLOSE),
+** goes on: that '__close' finishes, the others run, and the host call
+** ends with its error, as 'lua_pcall' gives it (at 'frozenfunc'); or it
+** freezes again.
+*/
+static lua_ResumeResult hostcloserun(lua_State* L, lua_State* from, StkId hosterrfunc,
+                                     l_uint32 hostnCcalls)
+{
+  global_State* g = L->l_G;
+  Thaw t;
+  TStatus st = luaD_rawrunprotected(L, &t);
+  TStatus status = (TStatus)L->closestatus;
+  if (st != LUA_OK && st != LUA_FREEZE)
+  { /* it failed: the close goes on with that error */
+    L->ci = &L->base_ci;
+    L->allowhook = 1;
+    status = st;
+    st = LUA_OK;
+  }
+  if (st == LUA_OK)
+  {
+    st = luaD_hostclose(L, L->frozenfunc, status);
+    if (st != LUA_FREEZE)
+    {
+      status = st;
+      st = LUA_OK;
+    }
+  }
+  L->resumer = nullptr;
+  L->errfunc = hosterrfunc;
+  L->nCcalls = hostnCcalls;
+  if (st == LUA_FREEZE)
+  {
+    if (g->freezekill)
+    { /* the chain is destroyed: 'L' dies */
+      if (!luaD_killed(L))
+        luaD_throw(from, LUA_FREEZE);
+      lua_unlock(L);
+      return {LUA_ERRRUN, 1};
+    }
+    L->frozen = FZ_HOSTCLOSE; /* (frozen again in the close: it lands here) */
+    assert(g->freezetarget == L);
+    g->freezetarget = nullptr;
+    lua_unlock(L);
+    return {LUA_OK, 0};
+  }
+  luaE_leavebudget(L);
+  L->ci = &L->base_ci;
+  L->allowhook = 1;
+  luaD_seterrorobj(L, status, L->frozenfunc);
+  luaD_shrinkstack(L);
+  lua_unlock(L);
+  return {status, 1};
+}
+
+/*
 ** End a host call that a thaw went on with: it finished (results from
 ** 'frozenfunc' on), failed (the error at 'frozenfunc', as 'luaD_pcall'
 ** leaves it), or froze again.
@@ -1602,10 +1684,36 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
   if (!errorstatus(status))
     nres = (int)(L->top - L->frozenfunc); /* the results */
   else
-  { /* an error that nothing inside recovered */
+  { /* an error that nothing inside recovered: the call's variables close
+       (a '__close' can freeze, and lands here) */
     L->ci = &L->base_ci;
     L->allowhook = 1;
-    status = luaD_closeprotected(L, L->frozenfunc, status);
+    if (kind == FZ_PCALL)
+    {
+      luaE_enterbudget(L, nullptr); /* (as the host call runs) */
+      TStatus cs = luaD_hostclose(L, L->frozenfunc, status);
+      luaE_leavebudget(L);
+      if (cs == LUA_FREEZE)
+      {
+        global_State* g = L->l_G;
+        if (g->freezekill)
+        {
+          [[maybe_unused]] bool landed = luaD_killed(L);
+          assert(landed);
+          lua_unlock(L);
+          return {LUA_ERRRUN, 1};
+        }
+        L->frozen = FZ_HOSTCLOSE;
+        L->frozenerrfunc = atfreeze;
+        assert(g->freezetarget == L);
+        g->freezetarget = nullptr;
+        lua_unlock(L);
+        return {LUA_OK, 0};
+      }
+      status = cs;
+    }
+    else
+      status = luaD_closeprotected(L, L->frozenfunc, status);
     luaD_seterrorobj(L, status, L->frozenfunc);
     luaD_shrinkstack(L);
     nres = 1;
@@ -1626,18 +1734,22 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
 */
 lua_ResumeResult lua_closethreadk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
 {
-  if (from == nullptr || L == from || k == nullptr || L->frozen)
+  if (L == from || L->frozen || (from != nullptr && k == nullptr))
   {
-    int s = lua_closethread(L, from);
+    int s = luaE_closethreadplain(L, from);
     return {s, (s != LUA_OK) ? 1 : 0};
   }
   lua_lock(L);
-  L->nCcalls = getCcalls(from);
+  L->nCcalls = (from != nullptr) ? getCcalls(from) : 0;
   L->nfz = 0;
   L->resumer = from;
-  L->resumedk = 1;
-  from->ci->k = k; /* where a freeze passing through goes on */
-  from->ci->ctx = ctx;
+  L->resumedk = (from != nullptr);
+  if (from != nullptr)
+  { /* where a freeze passing through goes on (the host's close, with no
+       'from', is where a freeze of 'L' lands) */
+    from->ci->k = k;
+    from->ci->ctx = ctx;
+  }
   luaE_enterbudget(L, from);
   TStatus status = luaE_beginclose(L);
   return closerun(L, from, status, true);
@@ -1749,6 +1861,13 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
     return closerun(L, from, L->closestatus, false);
   }
   StkId hosterrfunc = L->errfunc;
+  if (kind == FZ_HOSTCLOSE)
+  {
+    L->errfunc = L->frozenerrfunc;
+    if (g->budgetL == nullptr && L->beff != nullptr)
+      L->beff->left = L->beff->budget; /* (a thaw starts with a whole budget) */
+    return hostcloserun(L, from, hosterrfunc, hostnCcalls);
+  }
   if (kind == FZ_PCALL)
     L->errfunc = L->frozenerrfunc;
   if (g->budgetL == nullptr && L->beff != nullptr) /* a thaw starts with a whole budget, so that */

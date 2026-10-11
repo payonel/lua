@@ -207,6 +207,7 @@ constexpr lu_byte FZ_RESUME = 1; /* by 'lua_resume' or 'lua_thaw' */
 constexpr lu_byte FZ_CALL = 2;   /* by a 'lua_call' of the host */
 constexpr lu_byte FZ_PCALL = 3;  /* by a 'lua_pcall' of the host */
 constexpr lu_byte FZ_CLOSE = 4;  /* by 'lua_closethreadk' (closing its variables) */
+constexpr lu_byte FZ_HOSTCLOSE = 5; /* by a 'lua_pcall' of the host that failed (closing its variables) */
 
 /*
 ** How 'finishCcall' finishes an API call with a continuation whose
@@ -736,6 +737,7 @@ void luaE_incCstack(lua_State* L);
 void luaE_warning(lua_State* L, byte_view msg, int tocont);
 void luaE_warnerror(lua_State* L, byte_view where);
 TStatus luaE_resetthread(lua_State* L, TStatus status);
+int luaE_closethreadplain(lua_State* L, lua_State* from);
 TStatus luaE_beginclose(lua_State* L);
 void luaE_endclose(lua_State* L, TStatus status);
 TStatus luaE_resetcallbackthread(lua_State* L);

@@ -374,7 +374,15 @@ TStatus luaE_resetcallbackthread(lua_State* L)
 
 }
 
-int lua_closethread(lua_State* L, lua_State* from)
+namespace lua::runtime
+{
+
+/*
+** Close the variables of 'L' as a plain call (see 'lua_closethread'): for a
+** C function with no continuation, a thread closing itself, or a frozen
+** thread (refused).
+*/
+int luaE_closethreadplain(lua_State* L, lua_State* from)
 {
   TStatus status;
   lua_lock(L);
@@ -414,6 +422,21 @@ int lua_closethread(lua_State* L, lua_State* from)
     luaD_throwbaselevel(L, status);
   lua_unlock(L);
   return status;
+}
+
+}
+
+/*
+** The host's close of a thread (no 'from'): its '__close' run under its
+** budget, and a freeze there lands here, as at a resume ('lua_isfrozen'
+** tells; 'lua_thaw' finishes the close). From a C function, with no
+** continuation, they run as a plain call.
+*/
+int lua_closethread(lua_State* L, lua_State* from)
+{
+  if (from == nullptr && !L->frozen)
+    return lua_closethreadk(L, nullptr, 0, nullptr).status;
+  return ::lua::runtime::luaE_closethreadplain(L, from);
 }
 
 

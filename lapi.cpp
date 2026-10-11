@@ -1903,7 +1903,24 @@ int lua_pcallk(lua_State* L, int nargs, int nresults, int errfunc,
   { /* a call of the host */
     c.nresults = nresults;
     StkId olderrfunc = L->errfunc;
-    status = luaD_pcall(L, &c, c.func, func);
+    status = luaD_pcall(L, &c, c.func, func, false);
+    if (l_unlikely(status != LUA_OK && status != LUA_FREEZE))
+    { /* it failed: its variables close, where a '__close' can freeze */
+      status = luaD_hostclose(L, c.func, status);
+      if (status != LUA_FREEZE)
+      {
+        luaD_seterrorobj(L, status, c.func);
+        luaD_shrinkstack(L); /* restore stack size in case of overflow */
+        L->errfunc = olderrfunc;
+      }
+      else if (!L->l_G->freezekill)
+      { /* a freeze lands here: frozen in the close, which a thaw finishes */
+        hostfrozen(L, FZ_HOSTCLOSE, c.func, nresults, L->errfunc);
+        L->errfunc = olderrfunc;
+        lua_unlock(L);
+        return LUA_OK;
+      }
+    }
     if (l_unlikely(status == LUA_FREEZE && L->l_G->freezekill))
     { /* its chain is destroyed: the call fails */
       [[maybe_unused]] bool landed = luaD_killed(L);
