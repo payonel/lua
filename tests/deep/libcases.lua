@@ -582,6 +582,21 @@ case("load with a reader function: errors", function(busy)
   return r1[1], r1[2], r2[1], r2[2], r3[1], r3[2]
 end)
 
+-- patterns that backtrack (their matcher has check points)
+case("patterns that backtrack: find, match, gmatch, gsub", function(busy)
+  local subj = string.rep("a", 12) .. "b" .. string.rep("ab", 4) .. "(x(y)z)"
+  local t = {}
+  for a, b in subj:gmatch("(a-)(b)") do t[#t + 1] = #a .. b end
+  return {subj:find("a-a-a-b")}, {subj:find("((a-)(a*)b)(%b())", 3)}, {subj:match("^(a+)(.-)%f[%(](.-)$")},
+         {subj:match("(a?a?a?b)()(ab)%3%3")}, table.concat(t, ","), {subj:gsub("(a*)(b?)", "%2%1", 5)},
+         {subj:gsub("a-b", function(m) busy() return #m end)}
+end)
+case("patterns that backtrack: errors", function(busy)
+  busy()
+  return {pcall(string.match, string.rep("a", 12) .. "b", "a-a-a-b%2")},
+         {pcall(string.find, string.rep("a", 205), string.rep("a?", 205) .. "$")}
+end)
+
 -- the math library
 case("math.min and math.max with '__lt'", function(busy)
   local mt = {__lt = function(a, b) busy() return a.v < b.v end}

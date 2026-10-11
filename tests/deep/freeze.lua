@@ -804,6 +804,87 @@ do
   end
 end
 
+-- pattern matching counts a step for each call of its matcher (the
+-- calls a backtracking pattern makes are its work), and freezes there, deep
+-- in the backtracking too; a thawed match ends as one that did not freeze,
+-- also with an error
+do
+  local function infind(fn, work)
+    local co = coroutine.create(work)
+    local frozen = 0
+    debug.setbudget(co, 3, function(user_co, spender)
+      if debug.getinfo(spender, 0, "f").func == fn then
+        frozen = frozen + 1
+        debug.freeze()
+      end
+    end)
+    local r = table.pack(coroutine.resume(co))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+    local plain = table.pack(coroutine.resume(coroutine.create(work)))
+    return frozen, r, plain
+  end
+  local subj = string.rep("a", 16) .. "b" .. string.rep("ab", 6) .. "(x(y)z)"
+  local deep = string.rep("a", 180)
+  local it
+  local works = {
+    {string.find, function() return subj:find("a-a-a-a-b") end},
+    {string.find, function() return subj:find("((a-)(a*)b)(%b())", 3) end},
+    {string.find, function() return (string.rep("a", 3000) .. "b"):find(string.rep("a", 300) .. "b", 1, true) end},
+    {string.find, function() return (string.rep("ab", 1500)):find(string.rep("ab", 100) .. "c") end},
+    {string.match, function() return subj:match("^(a+)(.-)%f[%(](.-)$") end},
+    {string.match, function() return subj:match("(a?a?a?b)()(ab)%3%3") end},
+    {string.match, function() return ("x"):rep(30):match("(x*)(x*)(x*)y") end},
+    {string.match, function() return deep:match(string.rep("a?", 180) .. "$") end},
+    {string.match, function() return pcall(string.match, deep, string.rep("a?", 200) .. "$") end},
+    {string.match, function() return pcall(string.match, subj, "a-a-a-a-b%2") end},
+    {string.gsub, function() return subj:gsub("(a-)b", "<%1>") end},
+    {string.gsub, function() return subj:gsub("(a*)(b?)", "%2%1", 5) end},
+    {string.gsub, function() return subj:gsub("a-b", function(m) return #m end) end},
+    {string.gsub, function() return subj:gsub("(a+)b", {aaaa = "4", ab = "1"}) end},
+    {"gmatch", function()
+      local t = {}
+      it = subj:gmatch("(a-)(b)")
+      for a, b in it do t[#t + 1] = #a .. b end
+      return table.concat(t, ",")
+    end},
+  }
+  for i, w in ipairs(works) do
+    local fn = w[1]
+    if fn == "gmatch" then
+      fn = nil
+      local inner = w[2]
+      w[2] = function() return inner() end
+      local co = coroutine.create(w[2])
+      local frozen = 0
+      debug.setbudget(co, 3, function(user_co, spender)
+        if debug.getinfo(spender, 0, "f").func == it then
+          frozen = frozen + 1
+          debug.freeze()
+        end
+      end)
+      local r = table.pack(coroutine.resume(co))
+      while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+      local plain = table.pack(coroutine.resume(coroutine.create(inner)))
+      assert(frozen >= 10, "gmatch: " .. frozen .. " freezes")
+      assert(deepeq(r, plain), "gmatch: " .. show(r) .. " vs " .. show(plain))
+    else
+      local frozen, r, plain = infind(fn, w[2])
+      assert(frozen >= 10, "match work " .. i .. ": " .. frozen .. " freezes")
+      assert(deepeq(r, plain), "match work " .. i .. ": " .. show(r) .. " vs " .. show(plain))
+    end
+  end
+  -- the budget runs out in a match that backtracks (or a plain search that
+  -- compares at many places): before check points it ran to its end with no
+  -- callback at all
+  local co = coroutine.create(function() return string.rep("a", 22):find("a-a-a-a-a-b") end)
+  local calls = 0
+  debug.setbudget(co, 100, function(user_co, spender)
+    if debug.getinfo(spender, 0, "f").func == string.find then calls = calls + 1 end
+  end)
+  assert(coroutine.resume(co))
+  assert(calls > 500, calls)
+end
+
 -- 'debug.debug' freezes in the commands it runs and in the '__tostring'
 -- of an error it reports (a child interpreter reads the commands)
 if io.popen and arg and arg[-1] then

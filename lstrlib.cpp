@@ -413,6 +413,8 @@ constexpr int CAP_POSITION = -2;
 
 constexpr ptrdiff_t NOMATCH = -1;
 
+struct MatchBox;
+
 struct MatchState
 {
   const InternalString* src;
@@ -422,11 +424,24 @@ struct MatchState
   lua_State* L;
   int matchdepth; /* control for recursive depth (to avoid C stack overflow) */
   int level;      /* total number of captures (finished or unfinished) */
+  bool budgeted;  /* is there a budget (the calls of 'match' are its steps)? */
+  bool goingon;   /* is the next call of 'match' one going on ('goon')? */
   struct
   {
     ptrdiff_t init;
     ptrdiff_t len; /* length or special value (CAP_*) */
   } capture[LUA_MAXCAPTURES];
+  /* where a check point keeps the match ('match_checkpoint') */
+  int boxidx;            /* the stack index of its match box */
+  MatchBox* box;         /* the box, once made */
+  MatchBox* rec;         /* the box a freeze records the frames in, or nullptr */
+  int nrec;              /* the frames left to record */
+  lua_KFunction k;       /* the caller's continuation */
+  lua_KContext ctx;
+  ptrdiff_t origin;      /* where the caller's match started */
+  luaL_Buffer* b;        /* 'gsub': its buffer, kept in a box below the match box... */
+  luaL_Box* bbox;        /* ...this one, once made */
+  lua_Integer loop[3];   /* 'gsub': its last match, count and change flag */
 };
 
 /* recursive function */
@@ -444,6 +459,157 @@ static inline int patbyte(const MatchState* ms, ptrdiff_t i)
 
 /* maximum recursion depth for 'match' */
 constexpr int MAXCCALLS = 200;
+
+/*
+** A match goes through check points: each call of 'match' is a step of the
+** budget, and where the budget is spent the callback runs and may freeze.
+** The match then stops where it is, kept in a match box (a user object at
+** 'boxidx', made at the first check point): the position the call of
+** 'match' began with, the captures, and a frame for each call of 'match'
+** waiting for the one it made (outermost first), recorded as the freeze
+** leaves them. After the thaw, the caller's continuation makes those calls
+** again from their frames ('match_resume') and the match goes on as if
+** nothing had happened.
+*/
+enum : char
+{
+  MF_START = 1, /* 'start_capture': undoes its capture if the match fails */
+  MF_END,       /* 'end_capture' of capture 'a': undoes its close */
+  MF_OPT,       /* '?' at 'a' (subject), 'b' (its class end): goes on without it */
+  MF_MAX,       /* 'max_expand' at 'a', 'b' with 'c' repetitions: tries fewer */
+  MF_MIN        /* 'min_expand' at 'a', class 'b' to 'c': tries one more */
+};
+constexpr size_t MF_SIZE = 1 + 3 * sizeof(lua_Integer);   /* kind, a, b, c */
+constexpr size_t MB_CAPSIZE = 2 * sizeof(lua_Integer); /* init, len */
+constexpr size_t MB_BYTES = LUA_MAXCAPTURES * MB_CAPSIZE + MAXCCALLS * MF_SIZE;
+enum
+{
+  MB_S,       /* the position the stopped call of 'match' began with... */
+  MB_P,       /* ...in the subject and in the pattern */
+  MB_LEVEL,   /* the captures (as many) */
+  MB_NFRAMES, /* the calls waiting */
+  MB_ORIGIN,  /* where the caller's match started */
+  MB_NINTS
+};
+constexpr size_t MATCHBOX_SIZE = 6800; /* (its accounted size) */
+
+struct MatchBox : lua_UserObject
+{
+  lua_Integer ints[MB_NINTS]{};
+  std::array<char, MB_BYTES> data{}; /* the captures, then the frames */
+  size_t used() const
+  {
+    return static_cast<size_t>(ints[MB_LEVEL]) * MB_CAPSIZE + static_cast<size_t>(ints[MB_NFRAMES]) * MF_SIZE;
+  }
+  const char* persistkind() const override { return "string.match"; }
+  int persistsave(lua_Integer* out, byte_view* b) const override
+  {
+    for (int i = 0; i < MB_NINTS; i++)
+      out[i] = ints[i];
+    *b = byte_view(data.data(), used());
+    return MB_NINTS;
+  }
+};
+static_assert(sizeof(MatchBox) <= MATCHBOX_SIZE);
+
+static void putint(char* d, lua_Integer v)
+{
+  memcpy(d, &v, sizeof(v));
+}
+
+static lua_Integer getint(const char* d)
+{
+  lua_Integer v;
+  memcpy(&v, d, sizeof(v));
+  return v;
+}
+
+/* a match box from its state, checked to be one (not yet against its subject) */
+static std::unique_ptr<lua_UserObject> makematchbox(lua_State*, const lua_Integer* ints, int nints,
+                                                    byte_view bytes)
+{
+  if (nints != MB_NINTS || ints[MB_LEVEL] < 0 || ints[MB_LEVEL] > LUA_MAXCAPTURES ||
+      ints[MB_NFRAMES] < 0 || ints[MB_NFRAMES] >= MAXCCALLS)
+    return nullptr;
+  auto mb = std::make_unique<MatchBox>();
+  for (int i = 0; i < MB_NINTS; i++)
+    mb->ints[i] = ints[i];
+  if (bytes.size() != mb->used())
+    return nullptr;
+  memcpy(mb->data.data(), bytes.data(), bytes.size());
+  return mb;
+}
+
+struct MatchBoxKind
+{
+  MatchBoxKind() { lua_registerobjectkind("string.match", makematchbox); }
+};
+static MatchBoxKind matchboxkind;
+
+/* records the frame of a call of 'match' a freeze leaves (see 'match_checkpoint') */
+static void record(MatchState* ms, char kind, ptrdiff_t a, ptrdiff_t b, ptrdiff_t c)
+{
+  MatchBox* mb = ms->rec;
+  if (mb == nullptr || ms->nrec == 0)
+    return; /* (not a freeze of a check point) */
+  ms->nrec--;
+  char* d = mb->data.data() + static_cast<size_t>(mb->ints[MB_LEVEL]) * MB_CAPSIZE +
+            static_cast<size_t>(ms->nrec) * MF_SIZE;
+  d[0] = kind;
+  putint(d + 1, a);
+  putint(d + 1 + sizeof(lua_Integer), b);
+  putint(d + 1 + 2 * sizeof(lua_Integer), c);
+}
+
+/*
+** A check point at the start of a call of 'match' at 's', 'p': the budget is
+** spent. The match box (and, for 'gsub', the box of its buffer below it)
+** is made at its index the first time. The callback runs; if it freezes,
+** the calls of 'match' record their frames as the freeze leaves them.
+*/
+static void match_checkpoint(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
+{
+  lua_State* L = ms->L;
+  if (ms->b != nullptr && ms->bbox == nullptr)
+  { /* (the caller's arguments stay below the boxes) */
+    lua_settop(L, ms->boxidx - 2);
+    ms->bbox = luaL_newbox(L);
+  }
+  if (ms->box == nullptr)
+  {
+    lua_settop(L, ms->boxidx - 1);
+    auto o = std::make_unique<MatchBox>();
+    MatchBox* nb = o.get();
+    lua_newuserobject(L, std::move(o), MATCHBOX_SIZE, 0);
+    ms->box = nb;
+  }
+  MatchBox* mb = ms->box;
+  luaL_Box* bb = (ms->b != nullptr) ? ms->bbox : nullptr;
+  int nframes = MAXCCALLS - 1 - ms->matchdepth;
+  mb->ints[MB_S] = s;
+  mb->ints[MB_P] = p;
+  mb->ints[MB_LEVEL] = ms->level;
+  mb->ints[MB_NFRAMES] = nframes;
+  mb->ints[MB_ORIGIN] = ms->origin;
+  for (int i = 0; i < ms->level; i++)
+  {
+    putint(mb->data.data() + i * MB_CAPSIZE, ms->capture[i].init);
+    putint(mb->data.data() + i * MB_CAPSIZE + sizeof(lua_Integer), ms->capture[i].len);
+  }
+  if (bb != nullptr)
+  {
+    bb->ints[0] = ms->origin;
+    for (int i = 0; i < 3; i++)
+      bb->ints[i + 1] = ms->loop[i];
+    luaL_buffsave(ms->b, bb);
+  }
+  ms->rec = mb;
+  ms->nrec = nframes;
+  lua_checkpointk(L, ms->ctx, ms->k);
+  ms->rec = nullptr; /* (no freeze) */
+  if (bb != nullptr)
+    luaL_buffload(ms->b, bb);
+}
 
 constexpr char L_ESC = '%';
 
@@ -588,16 +754,21 @@ static ptrdiff_t matchbalance(MatchState* ms, ptrdiff_t s,
   return NOMATCH; /* string ends out of balance */
 }
 
-static ptrdiff_t max_expand(MatchState* ms, ptrdiff_t s,
-                            ptrdiff_t p, ptrdiff_t ep)
+/* keeps trying to match with 'i' repetitions, then fewer */
+static l_forceinline ptrdiff_t max_expand_from(MatchState* ms, ptrdiff_t s, ptrdiff_t ep, ptrdiff_t i)
 {
-  ptrdiff_t i = 0; /* counts maximum expand for item */
-  while (singlematch(ms, s + i, p, ep))
-    i++;
-  /* keeps trying to match with the maximum repetitions */
   while (i >= 0)
   {
-    ptrdiff_t res = match(ms, s + i, ep + 1);
+    ptrdiff_t res;
+    try
+    {
+      res = match(ms, s + i, ep + 1);
+    }
+    catch (...)
+    {
+      record(ms, MF_MAX, s, ep, i);
+      throw;
+    }
     if (res != NOMATCH)
       return res;
     i--; /* else didn't match; reduce 1 repetition to try again */
@@ -605,12 +776,31 @@ static ptrdiff_t max_expand(MatchState* ms, ptrdiff_t s,
   return NOMATCH;
 }
 
-static ptrdiff_t min_expand(MatchState* ms, ptrdiff_t s,
+static ptrdiff_t max_expand(MatchState* ms, ptrdiff_t s,
+                            ptrdiff_t p, ptrdiff_t ep)
+{
+  ptrdiff_t i = 0; /* counts maximum expand for item */
+  while (singlematch(ms, s + i, p, ep))
+    i++;
+  /* keeps trying to match with the maximum repetitions */
+  return max_expand_from(ms, s, ep, i);
+}
+
+static l_forceinline ptrdiff_t min_expand(MatchState* ms, ptrdiff_t s,
                             ptrdiff_t p, ptrdiff_t ep)
 {
   for (;;)
   {
-    ptrdiff_t res = match(ms, s, ep + 1);
+    ptrdiff_t res;
+    try
+    {
+      res = match(ms, s, ep + 1);
+    }
+    catch (...)
+    {
+      record(ms, MF_MIN, s, p, ep);
+      throw;
+    }
     if (res != NOMATCH)
       return res;
     else if (singlematch(ms, s, p, ep))
@@ -620,7 +810,7 @@ static ptrdiff_t min_expand(MatchState* ms, ptrdiff_t s,
   }
 }
 
-static ptrdiff_t start_capture(MatchState* ms, ptrdiff_t s,
+static l_forceinline ptrdiff_t start_capture(MatchState* ms, ptrdiff_t s,
                                ptrdiff_t p, int what)
 {
   ptrdiff_t res;
@@ -630,19 +820,37 @@ static ptrdiff_t start_capture(MatchState* ms, ptrdiff_t s,
   ms->capture[level].init = s;
   ms->capture[level].len = what;
   ms->level = level + 1;
-  if ((res = match(ms, s, p)) == NOMATCH) /* match failed? */
-    ms->level--;                          /* undo capture */
+  try
+  {
+    res = match(ms, s, p);
+  }
+  catch (...)
+  {
+    record(ms, MF_START, 0, 0, 0);
+    throw;
+  }
+  if (res == NOMATCH) /* match failed? */
+    ms->level--;      /* undo capture */
   return res;
 }
 
-static ptrdiff_t end_capture(MatchState* ms, ptrdiff_t s,
+static l_forceinline ptrdiff_t end_capture(MatchState* ms, ptrdiff_t s,
                              ptrdiff_t p)
 {
   int l = capture_to_close(ms);
   ptrdiff_t res;
   ms->capture[l].len = s - ms->capture[l].init; /* close capture */
-  if ((res = match(ms, s, p)) == NOMATCH)       /* match failed? */
-    ms->capture[l].len = CAP_UNFINISHED;        /* undo capture */
+  try
+  {
+    res = match(ms, s, p);
+  }
+  catch (...)
+  {
+    record(ms, MF_END, l, 0, 0);
+    throw;
+  }
+  if (res == NOMATCH)                    /* match failed? */
+    ms->capture[l].len = CAP_UNFINISHED; /* undo capture */
   return res;
 }
 
@@ -662,6 +870,13 @@ static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
 {
   if (l_unlikely(ms->matchdepth-- == 0))
     luaL_errori(ms->L, lt::pattern_too_complex);
+  if (l_unlikely(ms->budgeted))
+  {
+    if (ms->goingon)
+      ms->goingon = false; /* (a call going on after a freeze: see 'goon') */
+    else if (luaE_spent(ms->L, 1))
+      match_checkpoint(ms, s, p);
+  }
   for (;;)
   {
     if (p == ms->p_end) /* end of pattern? */
@@ -741,7 +956,16 @@ static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
         case '?':
         { /* optional */
           ptrdiff_t res;
-          if ((res = match(ms, s + 1, ep + 1)) != NOMATCH)
+          try
+          {
+            res = match(ms, s + 1, ep + 1);
+          }
+          catch (...)
+          {
+            record(ms, MF_OPT, s, ep, 0);
+            throw;
+          }
+          if (res != NOMATCH)
             s = res;
           else
           {
@@ -772,7 +996,200 @@ static ptrdiff_t match(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
   return s;
 }
 
-static size_t lmemfind(byte_view s1, size_t off1, size_t l1,
+/*
+** A call of 'match' goes on from 's', 'p' after its start (its check point
+** behind it): 'match' runs again, as that same call (at its depth, with no
+** step taken).
+*/
+static ptrdiff_t goon(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
+{
+  ms->matchdepth++; /* ('match' takes it again) */
+  ms->goingon = true;
+  s = match(ms, s, p);
+  ms->matchdepth--;
+  return s;
+}
+
+/*
+** A match stopped at a check point goes on (see 'match_checkpoint'): the
+** call of 'match' of frame 'k' gets the result of the one it made (frame
+** 'k + 1', or the stopped one, which goes on from where it began) and goes
+** on as it would have. Returns the result of that call.
+*/
+static ptrdiff_t resume_call(MatchState* ms, const char* frames, int k, int n,
+                             ptrdiff_t s, ptrdiff_t p)
+{
+  if (k == n)
+  { /* the stopped call: its check point is behind it */
+    s = goon(ms, s, p);
+    ms->matchdepth++;
+    return s;
+  }
+  const char* d = frames + static_cast<size_t>(k) * MF_SIZE;
+  char kind = d[0];
+  ptrdiff_t a = (ptrdiff_t)getint(d + 1);
+  ptrdiff_t b = (ptrdiff_t)getint(d + 1 + sizeof(lua_Integer));
+  ptrdiff_t c = (ptrdiff_t)getint(d + 1 + 2 * sizeof(lua_Integer));
+  ptrdiff_t res;
+  try
+  {
+    res = resume_call(ms, frames, k + 1, n, s, p);
+  }
+  catch (...)
+  {
+    record(ms, kind, a, b, c);
+    throw;
+  }
+  switch (kind)
+  {
+  case MF_START:
+    if (res == NOMATCH)
+      ms->level--; /* undo capture */
+    break;
+  case MF_END:
+    if (res == NOMATCH)
+      ms->capture[a].len = CAP_UNFINISHED; /* undo capture */
+    break;
+  case MF_OPT:
+    if (res == NOMATCH)
+      res = goon(ms, a, b + 1); /* without the optional item */
+    break;
+  case MF_MAX:
+    if (res == NOMATCH)
+      res = max_expand_from(ms, a, b, c - 1);
+    break;
+  default: /* MF_MIN */
+    if (res == NOMATCH)
+      res = singlematch(ms, a, b, c) ? min_expand(ms, a + 1, b, c) : NOMATCH;
+    break;
+  }
+  ms->matchdepth++;
+  return res;
+}
+
+/*
+** Checks the stopped match in box 'mb' against the subject and pattern of
+** 'ms' (a box made from outside the process is not trusted to fit them).
+*/
+static bool match_fits(const MatchState* ms, const MatchBox* mb)
+{
+  const lua_Integer* v = mb->ints;
+  int level = static_cast<int>(v[MB_LEVEL]);
+  int n = static_cast<int>(v[MB_NFRAMES]);
+  if (v[MB_S] < 0 || v[MB_S] > ms->src_end || v[MB_P] < 0 || v[MB_P] > ms->p_end ||
+      v[MB_ORIGIN] < 0 || v[MB_ORIGIN] > ms->src_end)
+    return false;
+  for (int i = 0; i < level; i++)
+  {
+    lua_Integer init = getint(mb->data.data() + i * MB_CAPSIZE);
+    lua_Integer len = getint(mb->data.data() + i * MB_CAPSIZE + sizeof(lua_Integer));
+    if (init < 0 || init > ms->src_end ||
+        (len != CAP_UNFINISHED && len != CAP_POSITION && (len < 0 || len > ms->src_end - init)))
+      return false;
+  }
+  int starts = 0;
+  const char* frames = mb->data.data() + static_cast<size_t>(level) * MB_CAPSIZE;
+  for (int k = 0; k < n; k++)
+  {
+    const char* d = frames + static_cast<size_t>(k) * MF_SIZE;
+    lua_Integer a = getint(d + 1);
+    lua_Integer b = getint(d + 1 + sizeof(lua_Integer));
+    lua_Integer c = getint(d + 1 + 2 * sizeof(lua_Integer));
+    switch (d[0])
+    {
+    case MF_START:
+      starts++;
+      break;
+    case MF_END:
+      if (a < 0 || a >= level)
+        return false;
+      break;
+    case MF_OPT:
+      if (a < 0 || a >= ms->src_end || b < 0 || b >= ms->p_end)
+        return false;
+      break;
+    case MF_MAX:
+      if (a < 0 || a > ms->src_end || b < 0 || b >= ms->p_end || c < 0 || c > ms->src_end - a)
+        return false;
+      break;
+    case MF_MIN:
+      if (a < 0 || a > ms->src_end || b < 0 || c <= b || c >= ms->p_end)
+        return false;
+      break;
+    default:
+      return false;
+    }
+  }
+  return starts <= level;
+}
+
+/*
+** The match in the box at 'ms->boxidx', stopped by a freeze, goes on:
+** returns what the caller's call of 'match' returns.
+*/
+static ptrdiff_t match_resume(MatchState* ms)
+{
+  MatchBox* mb = dynamic_cast<MatchBox*>(lua_touserobject(ms->L, ms->boxidx));
+  if (mb == nullptr || !match_fits(ms, mb))
+    luaL_errori(ms->L, lt::invalid_match_state);
+  ms->box = mb;
+  ms->budgeted = true; /* (it was) */
+  ms->goingon = false;
+  ms->origin = (ptrdiff_t)mb->ints[MB_ORIGIN];
+  ms->level = static_cast<int>(mb->ints[MB_LEVEL]);
+  for (int i = 0; i < ms->level; i++)
+  {
+    ms->capture[i].init = (ptrdiff_t)getint(mb->data.data() + i * MB_CAPSIZE);
+    ms->capture[i].len = (ptrdiff_t)getint(mb->data.data() + i * MB_CAPSIZE + sizeof(lua_Integer));
+  }
+  int n = static_cast<int>(mb->ints[MB_NFRAMES]);
+  ms->matchdepth = MAXCCALLS - 1 - n;
+  /* (each call reads its frame before the next is made, so all are read
+     before a check point can write the box again) */
+  const char* frames = mb->data.data() + static_cast<size_t>(ms->level) * MB_CAPSIZE;
+  return resume_call(ms, frames, 0, n, (ptrdiff_t)mb->ints[MB_S], (ptrdiff_t)mb->ints[MB_P]);
+}
+
+static int str_findk(lua_State* L, int status, lua_KContext ctx);
+
+/*
+** The plain search of 'lmemfind' from 'p' on, with 'l1' places left for
+** the first character of 's2' ('l2' the length of the rest). Each place it
+** compares at is a step of the budget, and where the budget is spent a
+** check point of 'find' (the place kept in a box at 5, made there then).
+*/
+static size_t lmemfind_from(lua_State* L, byte_view s1, size_t p, size_t l1,
+                            byte_view s2, size_t l2, luaL_Box* box)
+{
+  while (l1 > 0)
+  {
+    size_t init = s1.find(s2[0], p);
+    if (init == byte_view::npos || init >= p + l1)
+      break;
+    init++; /* 1st char is already checked */
+    if (s1.substr(init, l2).equals(s2.substr(1, l2)))
+      return init - 1;
+    else
+    {
+      l1 -= init - p;
+      p = init;
+    }
+    if (l_unlikely(luaE_spent(L, 1)))
+    {
+      if (box == nullptr)
+      {
+        lua_settop(L, 4); /* (the arguments stay below it) */
+        box = luaL_newbox(L);
+      }
+      box->ints[0] = static_cast<lua_Integer>(p);
+      box->ints[1] = static_cast<lua_Integer>(l1);
+      lua_checkpointk(L, 2, str_findk);
+    }
+  }
+  return byte_view::npos; /* not found */
+}
+
+static size_t lmemfind(lua_State* L, byte_view s1, size_t off1, size_t l1,
                        byte_view s2, size_t l2)
 {
   if (l2 == 0)
@@ -781,24 +1198,9 @@ static size_t lmemfind(byte_view s1, size_t off1, size_t l1,
     return byte_view::npos; /* avoids a negative 'l1' */
   else
   {
-    size_t p = off1;
     l2--;
-    l1 = l1 - l2;         /* 's2' cannot be found after that */
-    while (l1 > 0)
-    {
-      size_t init = s1.find(s2[0], p);
-      if (init == byte_view::npos || init >= p + l1)
-        break;
-      init++; /* 1st char is already checked */
-      if (s1.substr(init, l2).equals(s2.substr(1, l2)))
-        return init - 1;
-      else
-      {
-        l1 -= init - p;
-        p = init;
-      }
-    }
-    return byte_view::npos; /* not found */
+    l1 = l1 - l2; /* 's2' cannot be found after that */
+    return lmemfind_from(L, s1, off1, l1, s2, l2, nullptr);
   }
 }
 
@@ -867,6 +1269,18 @@ static void prepstate(MatchState* ms, lua_State* L,
   ms->src_end = s->size();
   ms->p = p;
   ms->p_end = p->size();
+  ms->box = nullptr;
+  ms->rec = nullptr;
+  ms->b = nullptr;
+  ms->bbox = nullptr;
+}
+
+/* where the check points of a match keep it, and how its caller goes on */
+static void prepcheck(MatchState* ms, int boxidx, lua_KFunction k, lua_KContext ctx)
+{
+  ms->boxidx = boxidx;
+  ms->k = k;
+  ms->ctx = ctx;
 }
 
 /*
@@ -877,7 +1291,13 @@ static void reprepstate(MatchState* ms)
 {
   ms->matchdepth = MAXCCALLS;
   ms->level = 0;
+  /* (no Lua code runs in a match, but at its check points: a match with
+     no budget gets none) */
+  ms->budgeted = (ms->L->hookmask & LUA_MASKBUDGET) != 0;
+  ms->goingon = false;
 }
+
+static int find_loop(lua_State* L, MatchState* ms, int find, ptrdiff_t s1, ptrdiff_t res, bool first);
 
 static int str_find_aux(lua_State* L, int find)
 {
@@ -895,7 +1315,7 @@ static int str_find_aux(lua_State* L, int find)
   if (find && (lua_toboolean(L, 4) || nospecials(p->view())))
   {
     /* do a plain search */
-    size_t pos = lmemfind(s->view(), init, ls - init, p->view(), lp);
+    size_t pos = lmemfind(L, s->view(), init, ls - init, p->view(), lp);
     if (pos != byte_view::npos)
     {
       lua_pushinteger(L, (lua_Integer)pos + 1);
@@ -906,30 +1326,84 @@ static int str_find_aux(lua_State* L, int find)
   else
   {
     MatchState ms;
-    ptrdiff_t s1 = init;
-    int anchor = (lp > 0 && p->byteAt(0) == '^');
-    ptrdiff_t pinit = anchor ? 1 : 0; /* skip anchor character */
     prepstate(&ms, L, s, p);
-    do
-    {
-      ptrdiff_t res;
-      reprepstate(&ms);
-      if ((res = match(&ms, s1, pinit)) != NOMATCH)
-      {
-        if (find)
-        {
-          lua_pushinteger(L, (lua_Integer)s1 + 1); /* start */
-          lua_pushinteger(L, res);    /* end */
-          return push_captures(&ms, NOMATCH, 0) + 2;
-        }
-        else
-          return push_captures(&ms, s1, res);
-      }
-    } while (s1++ < ms.src_end && !anchor);
+    prepcheck(&ms, 5, str_findk, find); /* (a match box at 5, after the arguments) */
+    return find_loop(L, &ms, find, init, NOMATCH, false);
   }
   luaL_pushfail(L); /* not found */
   return 1;
 }
+
+/*
+** The matches of 'find' and 'match' from 's1' on ('first' when the match
+** from 's1' is already 'res').
+*/
+static int find_loop(lua_State* L, MatchState* ms, int find, ptrdiff_t s1, ptrdiff_t res, bool first)
+{
+  int anchor = (ms->p_end > 0 && ms->p->byteAt(0) == '^');
+  ptrdiff_t pinit = anchor ? 1 : 0; /* skip anchor character */
+  do
+  {
+    if (!first)
+    {
+      reprepstate(ms);
+      ms->origin = s1;
+      res = match(ms, s1, pinit);
+    }
+    first = false;
+    if (res != NOMATCH)
+    {
+      if (find)
+      {
+        lua_pushinteger(L, (lua_Integer)s1 + 1); /* start */
+        lua_pushinteger(L, res);                 /* end */
+        return push_captures(ms, NOMATCH, 0) + 2;
+      }
+      else
+        return push_captures(ms, s1, res);
+    }
+  } while (s1++ < ms->src_end && !anchor);
+  luaL_pushfail(L); /* not found */
+  return 1;
+}
+
+/*
+** 'find' and 'match' go on after a freeze in a match (context: 'find'), or
+** 'find' after a freeze in a plain search (context 2, its place in a box
+** at 5)
+*/
+static int str_findk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  if (ctx == 2)
+  {
+    const InternalString* s = luaL_checkistring(L, 1);
+    const InternalString* p = luaL_checkistring(L, 2);
+    luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, 5));
+    size_t ls = s->size();
+    size_t l2 = p->size() - 1;
+    if (box == nullptr || p->size() == 0 || box->ints[0] < 0 || box->ints[1] < 0 ||
+        box->ints[0] + box->ints[1] != static_cast<lua_Integer>(ls - l2))
+      luaL_errori(L, lt::invalid_match_state);
+    size_t pos = lmemfind_from(L, s->view(), static_cast<size_t>(box->ints[0]),
+                               static_cast<size_t>(box->ints[1]), p->view(), l2, box);
+    if (pos == byte_view::npos)
+    {
+      luaL_pushfail(L); /* not found */
+      return 1;
+    }
+    lua_pushinteger(L, (lua_Integer)pos + 1);
+    lua_pushinteger(L, pos + p->size());
+    return 2;
+  }
+  MatchState ms;
+  prepstate(&ms, L, luaL_checkistring(L, 1), luaL_checkistring(L, 2));
+  prepcheck(&ms, 5, str_findk, ctx);
+  ptrdiff_t res = match_resume(&ms);
+  return find_loop(L, &ms, (int)ctx, ms.origin, res, true);
+}
+
+LUA_KNAME("string", str_findk);
 
 static int str_find(lua_State* L)
 {
@@ -952,16 +1426,21 @@ struct GMatchState : lua_UserObject
   MatchState ms;       /* match state */
 };
 
-static int gmatch_aux(lua_State* L)
+static int gmatchk(lua_State* L, int status, lua_KContext ctx);
+
+/* the matches of a 'gmatch' iterator from 'src' on ('first': see 'find_loop') */
+static int gmatch_loop(GMatchState* gm, ptrdiff_t src, ptrdiff_t e, bool first)
 {
-  GMatchState* gm = static_cast<GMatchState*>(lua_touserobject(L, lua_upvalueindex(3)));
-  ptrdiff_t src;
-  gm->ms.L = L;
-  for (src = gm->src; src <= gm->ms.src_end; src++)
+  for (; src <= gm->ms.src_end; src++)
   {
-    ptrdiff_t e;
-    reprepstate(&gm->ms);
-    if ((e = match(&gm->ms, src, gm->p)) != NOMATCH && e != gm->lastmatch)
+    if (!first)
+    {
+      reprepstate(&gm->ms);
+      gm->ms.origin = src;
+      e = match(&gm->ms, src, gm->p);
+    }
+    first = false;
+    if (e != NOMATCH && e != gm->lastmatch)
     {
       gm->src = gm->lastmatch = e;
       return push_captures(&gm->ms, src, e);
@@ -969,6 +1448,31 @@ static int gmatch_aux(lua_State* L)
   }
   return 0; /* not found */
 }
+
+static int gmatch_aux(lua_State* L)
+{
+  GMatchState* gm = static_cast<GMatchState*>(lua_touserobject(L, lua_upvalueindex(3)));
+  gm->ms.L = L;
+  gm->ms.box = nullptr;
+  gm->ms.rec = nullptr;
+  prepcheck(&gm->ms, 1, gmatchk, 0); /* (a match box at 1: its arguments are not used) */
+  return gmatch_loop(gm, gm->src, NOMATCH, false);
+}
+
+/* a 'gmatch' iterator goes on after a freeze in a match */
+static int gmatchk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  GMatchState* gm = static_cast<GMatchState*>(lua_touserobject(L, lua_upvalueindex(3)));
+  gm->ms.L = L;
+  gm->ms.rec = nullptr;
+  prepcheck(&gm->ms, 1, gmatchk, 0);
+  ptrdiff_t e = match_resume(&gm->ms);
+  return gmatch_loop(gm, gm->ms.origin, e, true);
+}
+
+LUA_KNAME("string", gmatchk);
 
 /* the state of a gmatch iterator, kept outside the process: where it is */
 static int gmatch_save(const CClosure* cl, lua_Integer* ints)
@@ -1186,15 +1690,24 @@ static int gsub_end(lua_State* L, const GsubArgs& a, MatchState* ms, luaL_Buffer
   return 2;
 }
 
+/* the matches of 'gsub' from 'src' on ('first': see 'find_loop') */
 static int gsub_loop(lua_State* L, const GsubArgs& a, MatchState* ms, luaL_Buffer* b,
                      luaL_Box* box, ptrdiff_t src, ptrdiff_t lastmatch,
-                     lua_Integer n, int changed)
+                     lua_Integer n, int changed, ptrdiff_t e, bool first)
 {
   while (n < a.max_s)
   {
-    ptrdiff_t e;
-    reprepstate(ms); /* (re)prepare state for new match */
-    if ((e = match(ms, src, a.pinit)) != NOMATCH && e != lastmatch)
+    if (!first)
+    {
+      reprepstate(ms); /* (re)prepare state for new match */
+      ms->origin = src;
+      ms->loop[0] = lastmatch;
+      ms->loop[1] = n;
+      ms->loop[2] = changed;
+      e = match(ms, src, a.pinit);
+    }
+    first = false;
+    if (e != NOMATCH && e != lastmatch)
     { /* match? */
       n++;
       changed = add_value(ms, b, box, src, e, a.tr, n, changed) || changed;
@@ -1210,25 +1723,48 @@ static int gsub_loop(lua_State* L, const GsubArgs& a, MatchState* ms, luaL_Buffe
   return gsub_end(L, a, ms, b, src, n, changed);
 }
 
-/* 'gsub' goes on after its replacement function or table */
+/*
+** 'gsub' goes on after its replacement function or table (context 0), or
+** after a freeze in a match (context 1, a match box at 6). The box at 5
+** keeps its buffer and where it is (for a match: from where, its last
+** match, count and change flag).
+*/
 static int gsubk(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
-  (void)ctx;
   GsubArgs a = gsubargs(L);
   luaL_Box* box = luaL_tobox(L, 5);
   MatchState ms;
   prepstate(&ms, L, a.srcs, a.pat);
+  prepcheck(&ms, 6, gsubk, 1);
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   luaL_buffload(&b, box);
+  ms.b = &b;
+  ms.bbox = box;
+  if (ctx == 1)
+  { /* (a check point of the match going on keeps these again) */
+    ptrdiff_t lastmatch = (ptrdiff_t)box->ints[GS_E];
+    lua_Integer n = box->ints[GS_N];
+    int changed = (box->ints[GS_CHANGED] != 0);
+    ms.loop[0] = lastmatch;
+    ms.loop[1] = n;
+    ms.loop[2] = changed;
+    ptrdiff_t e = match_resume(&ms);
+    bool calls = (a.tr == LUA_TFUNCTION || (a.tr == LUA_TTABLE && !lua_isplaintable(L, 3)));
+    return gsub_loop(L, a, &ms, &b, calls ? box : nullptr, ms.origin, lastmatch, n, changed, e, true);
+  }
   ptrdiff_t s = (ptrdiff_t)box->ints[GS_S];
   ptrdiff_t e = (ptrdiff_t)box->ints[GS_E];
+  if (s < 0 || s > e || e > ms.src_end)
+    luaL_errori(L, lt::invalid_match_state);
   lua_Integer n = box->ints[GS_N];
   int changed = add_result(L, &b, a.srcs, s, e) || (int)box->ints[GS_CHANGED];
+  if (lua_gettop(L) == 6)
+    ms.box = dynamic_cast<MatchBox*>(lua_touserobject(L, 6)); /* (made by a check point before) */
   if (a.anchor)
     return gsub_end(L, a, &ms, &b, e, n, changed);
-  return gsub_loop(L, a, &ms, &b, box, e, e, n, changed);
+  return gsub_loop(L, a, &ms, &b, box, e, e, n, changed, NOMATCH, false);
 }
 
 LUA_KNAME("string", gsubk);
@@ -1249,7 +1785,10 @@ static int str_gsub(lua_State* L)
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   prepstate(&ms, L, a.srcs, a.pat);
-  return gsub_loop(L, a, &ms, &b, box, 0, NOMATCH, 0, 0);
+  prepcheck(&ms, 6, gsubk, 1); /* (boxes at 5 and 6, after the arguments) */
+  ms.b = &b;
+  ms.bbox = box;
+  return gsub_loop(L, a, &ms, &b, box, 0, NOMATCH, 0, 0, NOMATCH, false);
 }
 
 /* }====================================================== */
