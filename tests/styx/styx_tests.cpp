@@ -1851,7 +1851,9 @@ static void test_frozen_allocation_failures()
 struct TestObj : lua_UserObject
 {
   lua_Integer a = 0, b = 0;
+  bool values = true; /* are its user values part of its state? */
   const char* persistkind() const override { return "styxtest.obj"; }
+  bool persistuservalues() const override { return values; }
   int persistsave(lua_Integer* out, byte_view* bytes) const override
   {
     out[0] = a;
@@ -1876,6 +1878,17 @@ static int testobj_new(lua_State* L)
   auto o = std::make_unique<TestObj>();
   o->a = luaL_checkinteger(L, 1);
   o->b = luaL_checkinteger(L, 2);
+  lua_newuserobject(L, std::move(o), 64, 2);
+  return 1;
+}
+
+/* one whose user values are not part of its state */
+static int testobj_newnouv(lua_State* L)
+{
+  auto o = std::make_unique<TestObj>();
+  o->a = luaL_checkinteger(L, 1);
+  o->b = luaL_checkinteger(L, 2);
+  o->values = false;
   lua_newuserobject(L, std::move(o), 64, 2);
   return 1;
 }
@@ -1931,6 +1944,14 @@ static void test_user_object_kind()
       CHECK(eval(A, "return tostring(pcall(require('styx').unpersist, _BACK, blob))") == "false");
       lua_registerobjectkind("styxtest.obj", make_testobj);
       CHECK(eval(A, "return tostring(pcall(require('styx').unpersist, _BACK, blob))") == "true");
+      /* an object whose user values are not part of its state: they come back nil */
+      lua_pushcfunction(A, testobj_newnouv);
+      lua_setglobal(A, "newnouv");
+      CHECK(eval(A, "local v = newnouv(7, 8) debug.setuservalue(v, 'gone', 1) debug.setuservalue(v, {3}, 2) "
+                    "local r = require('styx').unpersist(_BACK, require('styx').persist(_PERMS, {v})) "
+                    "local a, b = getobj(r[1]) "
+                    "return table.concat({a, b, tostring(debug.getuservalue(r[1], 1)), tostring(debug.getuservalue(r[1], 2))}, ' ')") ==
+            "7 8 nil nil");
       /* its finalizer was marked: the restored object runs it */
       CHECK(eval(A, "collectgarbage() collectgarbage() return 'ok'") == "ok");
       testobj_gcs = 0;

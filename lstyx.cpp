@@ -1196,9 +1196,14 @@ private:
       var(ints[i]);
     var(static_cast<lua_Integer>(bytes.size()));
     raw(bytes.data(), bytes.size());
+    bool values = u->obj->persistuservalues();
     for (size_t i = u->uv.size(); i-- > 0;)
     {
-      TValue v = getobj(&u->uv[i]);
+      TValue v{};
+      if (values)
+        v = getobj(&u->uv[i]);
+      else
+        setnilvalue(&v);
       Task t;
       t.op = Op::Value;
       t.step.step = Step::UserValue;
