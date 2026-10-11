@@ -185,6 +185,8 @@ void luaZ_checkpoint(LoadResume* rz);
 void luaZ_replaypoint(LoadResume* rz);
 /* the load with spec 'ls' starts, or goes on after a thaw */
 int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume);
+/* the chunk of a load from a reader that calls no code, read whole into its box */
+void luaZ_loadread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source);
 /* the parser's arrays and buffer, held by the box while the load is stopped */
 void luaZ_hold(LoadResume* rz, ::lua::runtime::CallInfo* ci, int anchoridx);
 void luaZ_unhold(LoadResume* rz, ::lua::runtime::CallInfo* ci);

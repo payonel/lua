@@ -109,6 +109,14 @@ struct lua_LoadSpec
 };
 int lua_loadk(lua_State* L, const lua_LoadSpec& ls);
 int lua_loadkresume(lua_State* L, int status, const lua_LoadSpec& ls);
+/* 'readeridx' of a load whose chunk is in its box (see 'lua_loadkread') */
+constexpr int LUA_LOADBOXED = -1;
+/* a load from a reader that calls no code (a file): with a budget, its
+   chunk is read whole from 'source' into the box at 'ls.boxidx' (counted
+   by the host) and the load reads it from there ('ls.readeridx' is
+   LUA_LOADBOXED); returns 0 with no budget (the load reads 'source' as it
+   goes, in one step, as stock) */
+int lua_loadkread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source);
 /* a protected call that keeps the message handler in effect (see lapi.cpp) */
 int lua_pcallkeep(lua_State* L, int nargs, int nresults, lua_KContext ctx, lua_KFunction k);
 
@@ -157,6 +165,11 @@ luaL_Box* luaL_tobox(lua_State* L, int idx);
 void luaL_buffsave(luaL_Buffer* B, luaL_Box* box);
 void luaL_buffload(luaL_Buffer* B, luaL_Box* box);
 int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode);
+/* 'luaL_loadfilei' in a C function with continuation 'k' (see lauxlib.cpp) */
+int luaL_loadfileik(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode, lua_KContext ctx,
+                    lua_KFunction k);
+int luaL_loadfileikresume(lua_State* L, int status, std::optional<byte_view> mode, int base, lua_KContext ctx,
+                          lua_KFunction k);
 
 int lua_getfieldi(lua_State* L, int idx, byte_view k);
 int lua_getfieldik(lua_State* L, int idx, byte_view key, lua_KContext ctx, lua_KFunction k);

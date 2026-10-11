@@ -993,7 +993,50 @@ static FirstChar skipcomment(OsFile* f)
     return {0, c}; /* no comment */
 }
 
+/*
+** A file load in a C function with continuation 'k' and 'ctx' ('loadfile',
+** 'dofile' and 'require'): with a budget, a file named is read whole first
+** (see 'lua_loadkread'), and its parse has check points, where a freeze
+** stops it; it goes on in 'k', which ends it with 'luaL_loadfileikresume'
+** and 'base', the slot after the stack the load began with (its chunk name
+** is there while it loads, its box above). It ends as 'luaL_loadfilei':
+** the function, or the error message, at 'base'. (No continuation, or
+** stdin: the file is read as the parse goes, in one step.)
+*/
+static lua_LoadSpec filespec(lua_State* L, std::optional<byte_view> mode, int base, lua_KContext ctx,
+                             lua_KFunction k)
+{
+  lua_LoadSpec ls;
+  ls.readeridx = LUA_LOADBOXED;
+  ls.pieceidx = 0;
+  ls.boxidx = base + 1;
+  ls.name = lua_toistring(L, base)->view();
+  ls.mode = mode;
+  ls.ctx = ctx;
+  ls.k = k;
+  return ls;
+}
+
+static int loadfileend(lua_State* L, int status, int base)
+{
+  lua_replace(L, base); /* the function or the message */
+  lua_settop(L, base);
+  return status;
+}
+
+int luaL_loadfileikresume(lua_State* L, int status, std::optional<byte_view> mode, int base, lua_KContext ctx,
+                          lua_KFunction k)
+{
+  return loadfileend(L, lua_loadkresume(L, status, filespec(L, mode, base, ctx, k)), base);
+}
+
 int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode)
+{
+  return luaL_loadfileik(L, filename, mode, 0, nullptr);
+}
+
+int luaL_loadfileik(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode, lua_KContext ctx,
+                    lua_KFunction k)
 {
   LoadF lf;
   int status, readstatus;
@@ -1032,6 +1075,33 @@ int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optiona
   }
   if (c != OS_EOF)
     lf.buff[lf.n++] = (char)c; /* 'c' is the first character */
+  if (k != nullptr && !bNullname)
+  {
+    lua_pushnil(L); /* its box */
+    lua_LoadSpec ls = filespec(L, mode, fnameindex, ctx, k);
+    int boxed;
+    try
+    {
+      boxed = lua_loadkread(L, ls, &lf);
+    }
+    catch (...)
+    {
+      os_fclose(lf.f);
+      throw;
+    }
+    if (boxed)
+    {
+      readstatus = os_ferror(lf.f) ? 1 : 0;
+      os_fclose(lf.f);
+      if (readstatus)
+      {
+        lua_settop(L, fnameindex);
+        return errfile(L, lt::read_kw, fnameindex, 0);
+      }
+      return loadfileend(L, lua_loadk(L, ls), fnameindex);
+    }
+    lua_pop(L, 1); /* (no budget) */
+  }
   status = lua_loadi(L, &lf, lua_toistring(L, -1)->view(), mode);
   readstatus = os_ferror(lf.f) ? 1 : 0;
   if (!bNullname)

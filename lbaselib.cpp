@@ -448,13 +448,27 @@ static const InternalString* getMode(lua_State* L, int idx)
   return mode;
 }
 
+static std::optional<byte_view> filemode(lua_State* L)
+{
+  const InternalString* modestr = getMode(L, 2);
+  return modestr ? std::optional<byte_view>(modestr->view()) : std::nullopt;
+}
+
+/* (a load stopped by a freeze goes on: the chunk name at 4, see 'luaL_loadfileik') */
+static int loadfile_cont(lua_State* L, int status, lua_KContext ctx)
+{
+  return load_aux(L, luaL_loadfileikresume(L, status, filemode(L), 4, ctx, loadfile_cont), (int)ctx);
+}
+
+LUA_KNAME("base", loadfile_cont);
+
 static int luaB_loadfile(lua_State* L)
 {
   std::optional<byte_view> fname = lua_isnoneornil(L, 1) ? std::nullopt : std::optional<byte_view>(luaL_checkistring(L, 1)->view());
-  const InternalString* modestr = getMode(L, 2);
-  std::optional<byte_view> mode = modestr ? std::optional<byte_view>(modestr->view()) : std::nullopt;
+  std::optional<byte_view> mode = filemode(L);
   int env = (!lua_isnone(L, 3) ? 3 : 0); /* 'env' index or 0 if no 'env' */
-  int status = luaL_loadfilei(L, fname, mode);
+  lua_settop(L, 3);
+  int status = luaL_loadfileik(L, fname, mode, env, loadfile_cont);
   return load_aux(L, status, env);
 }
 
@@ -535,14 +549,27 @@ static int dofilecont(lua_State* L, int d1, lua_KContext d2)
 
 LUA_KNAME("base", dofilecont);
 
+static int dofile_call(lua_State* L, int status)
+{
+  if (l_unlikely(status != LUA_OK))
+    return lua_error(L);
+  lua_callk(L, 0, LUA_MULTRET, 0, dofilecont);
+  return dofilecont(L, 0, 0);
+}
+
+/* (a load stopped by a freeze goes on: the chunk name at 2, see 'luaL_loadfileik') */
+static int dofile_loadcont(lua_State* L, int status, lua_KContext ctx)
+{
+  return dofile_call(L, luaL_loadfileikresume(L, status, std::nullopt, 2, ctx, dofile_loadcont));
+}
+
+LUA_KNAME("base", dofile_loadcont);
+
 static int luaB_dofile(lua_State* L)
 {
   std::optional<byte_view> fname = lua_isnoneornil(L, 1) ? std::nullopt : std::optional<byte_view>(luaL_checkistring(L, 1)->view());
   lua_settop(L, 1);
-  if (l_unlikely(luaL_loadfilei(L, fname, std::nullopt) != LUA_OK))
-    return lua_error(L);
-  lua_callk(L, 0, LUA_MULTRET, 0, dofilecont);
-  return dofilecont(L, 0, 0);
+  return dofile_call(L, luaL_loadfileik(L, fname, std::nullopt, 0, dofile_loadcont));
 }
 
 static int luaB_assert(lua_State* L)

@@ -372,16 +372,25 @@ static int checkload(lua_State* L, int stat, byte_view filename)
   }
 }
 
-/* (with 'package.path' read) */
+/*
+** (with 'package.path' read: 'ctx' 0; or a load of the file stopped by a
+** freeze goes on: 'ctx' is the slot of its chunk name, see
+** 'luaL_loadfileik', with the file name below)
+*/
 static int searcher_Luak(lua_State* L, int status, lua_KContext ctx)
 {
-  (void)status;
-  (void)ctx;
+  if (ctx != 0)
+  {
+    int base = (int)ctx;
+    byte_view filename = lua_toistring(L, base - 1)->view();
+    return checkload(L, luaL_loadfileikresume(L, status, std::nullopt, base, ctx, searcher_Luak) == LUA_OK, filename);
+  }
   byte_view name = luaL_checklstring(L, 1);
   if (!findfile(L, name, lt::path, lt::LUA_DIRSEP))
     return 1;
   byte_view filename = lua_toistring(L, -1)->view();
-  return checkload(L, luaL_loadfilei(L, filename, std::nullopt) == LUA_OK, filename);
+  int base = lua_gettop(L) + 1;
+  return checkload(L, luaL_loadfileik(L, filename, std::nullopt, base, searcher_Luak) == LUA_OK, filename);
 }
 
 LUA_KNAME("package", searcher_Luak);

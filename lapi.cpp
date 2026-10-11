@@ -2082,6 +2082,14 @@ int lua_loadk(lua_State* L, const lua_LoadSpec& ls)
   return status;
 }
 
+int lua_loadkread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source)
+{
+  if (!(L->hookmask & LUA_MASKBUDGET))
+    return 0;
+  luaZ_loadread(L, ls, source);
+  return 1;
+}
+
 int lua_loadkresume(lua_State* L, int status, const lua_LoadSpec& ls)
 {
   if (status != LUA_OK && status != LUA_YIELD)

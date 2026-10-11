@@ -104,6 +104,34 @@ static void charge(lua_State* L, LoadBox* box, size_t n)
   lua_unlock(L);
 }
 
+/* a new box, at slot 'boxidx' (outside the parse) */
+static LoadBox* newbox(lua_State* L, int boxidx)
+{
+  lua_lock(L);
+  luaD_checkstack(L, 1);
+  lua_unlock(L);
+  auto o = std::make_unique<LoadBox>();
+  LoadBox* box = o.get();
+  box->g = L->l_G;
+  lua_newuserobject(L, std::move(o), 0, 1);
+  lua_replace(L, boxidx);
+  charge(L, box, LOADBOX_SIZE);
+  return box;
+}
+
+/* 'b' kept at the end of the box's input (charged as it grows) */
+static void keep(lua_State* L, LoadBox* box, byte_view b)
+{
+  std::vector<char>& in = box->input;
+  if (b.size() > in.capacity() - in.size())
+  {
+    size_t cap = std::max(in.size() + b.size(), 2 * in.capacity());
+    charge(L, box, cap - in.capacity());
+    in.reserve(cap);
+  }
+  in.insert(in.end(), b.data(), b.data() + b.size());
+}
+
 /* the blocks of the parser's arrays and buffer (bytes, as counted when made) */
 enum
 {
@@ -252,18 +280,10 @@ static void prepstop(LoadResume* rz, lu_byte kind)
   LoadBox* box = rz->box;
   if (box == nullptr)
   {
-    lua_lock(L);
-    luaD_checkstack(L, 1);
-    lua_unlock(L);
-    auto o = std::make_unique<LoadBox>();
-    box = o.get();
-    box->g = L->l_G;
+    box = newbox(L, rz->boxidx);
     box->complete = (rz->pieces == 0);
     box->ends = rz->ends;
-    lua_newuserobject(L, std::move(o), 0, 1);
-    lua_replace(L, rz->boxidx);
     rz->box = box;
-    charge(L, box, LOADBOX_SIZE);
   }
   size_t levels = static_cast<size_t>(getCcalls(L)) - rz->baseccalls;
   size_t bound = FRAMES_BASE + (levels + 1) * FRAMES_PER_LEVEL;
@@ -295,7 +315,7 @@ static void prepstop(LoadResume* rz, lu_byte kind)
   }
   else if (rz->readeridx == 0 && (s = lua_tolstring(L, 1)) && d == s->data())
     box->zsrc = ZS_STRING;
-  else if (rz->readeridx != 0 && (s = lua_tolstring(L, rz->pieceidx)) && d == s->data())
+  else if (rz->readeridx > 0 && (s = lua_tolstring(L, rz->pieceidx)) && d == s->data())
     box->zsrc = ZS_PIECE;
   else if (d == box->input.data())
     box->zsrc = ZS_INPUT;
@@ -337,16 +357,7 @@ static std::optional<byte_view> readerresult(lua_State* L, LoadResume* rz)
   else if (box == nullptr)
     rz->pieces++;
   else if (box->complete)
-  {
-    std::vector<char>& in = box->input;
-    if (piece.size() > in.capacity() - in.size())
-    { /* (charged as it grows) */
-      size_t cap = std::max(in.size() + piece.size(), 2 * in.capacity());
-      charge(L, box, cap - in.capacity());
-      in.reserve(cap);
-    }
-    in.insert(in.end(), piece.data(), piece.data() + piece.size());
-  }
+    keep(L, box, piece);
   return piece;
 }
 
@@ -398,15 +409,18 @@ struct FunctionReader : lua_Reader
   }
 };
 
-/* a chunk that is a string (at 1), read at once */
+/* a chunk that is a string (at 1), or that is in the box ('boxed'), read at once */
 struct StringReader : lua_Reader
 {
   bool given = false;
+  const LoadResume* boxed = nullptr;
   std::optional<byte_view> read(lua_State* L) override
   {
     if (given)
       return std::nullopt;
     given = true;
+    if (boxed != nullptr)
+      return byte_view(boxed->box->input.data(), boxed->box->input.size());
     return lua_tolstring(L, 1);
   }
 };
@@ -453,6 +467,50 @@ struct ReplayReader : lua_Reader
 };
 
 /*
+** The chunk of a load from a reader that calls no code (a file), read
+** whole into a new box at 'ls.boxidx' (with a budget: see 'lua_loadkread';
+** outside the parse). It is kept as it is, perhaps long: its room is trimmed.
+*/
+void luaZ_loadread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source)
+{
+  LoadBox* box = newbox(L, ls.boxidx);
+  for (;;)
+  {
+    std::optional<byte_view> b = source->read(L);
+    if (!b.has_value() || b->empty())
+      break;
+    keep(L, box, *b);
+  }
+  std::vector<char>& in = box->input;
+  size_t cap = in.capacity();
+  if (cap > in.size())
+  {
+    charge(L, box, in.size()); /* (the trimmed copy, before it is made) */
+    std::vector<char>(in.begin(), in.end()).swap(in);
+    if (luaM_shrinkhost(L->l_G, box->hosted, box->hosted - cap))
+      box->hosted -= cap;
+  }
+}
+
+/* the load ended, with status 'st': what its box keeps is given back */
+static int ended(lua_State* L, LoadResume* rz, int st)
+{
+  LoadBox* box = rz->box;
+  if (box != nullptr && !box->holds)
+  {
+    std::vector<char>().swap(box->frames);
+    std::vector<char>().swap(box->input);
+    box->anchoridx = 0; /* (not stopped: inert, if kept outside the process) */
+    if (luaM_shrinkhost(L->l_G, box->hosted, LOADBOX_SIZE))
+    {
+      box->hosted = LOADBOX_SIZE;
+      box->charged = box->room = 0;
+    }
+  }
+  return st;
+}
+
+/*
 ** A load with spec 'ls' starts, or goes on after a thaw ('resume': its box
 ** at 'ls.boxidx', the result of the reader function on the top if it
 ** stopped in a call of it):
@@ -477,12 +535,23 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
   ReplayReader rreader;
   freader.rz = &rz;
   rz.given = &sreader.given;
-  lua_Reader* reader = (ls.readeridx != 0) ? static_cast<lua_Reader*>(&freader) : &sreader;
+  if (ls.readeridx < 0)
+    sreader.boxed = &rz;
+  lua_Reader* reader = (ls.readeridx > 0) ? static_cast<lua_Reader*>(&freader) : &sreader;
   ZIO z;
   luaZ_init(L, &z, reader);
   z.rz = &rz;
   rz.z = &z;
-  if (resume)
+  if (!resume && ls.readeridx < 0)
+  { /* (its box, made by 'luaZ_loadread') */
+    rz.box = dynamic_cast<LoadBox*>(lua_touserobject(L, ls.boxidx));
+    if (rz.box == nullptr)
+    {
+      lua_pushistringref(L, lt::invalid_state_of_a_stopped_load);
+      return LUA_ERRSYNTAX;
+    }
+  }
+  else if (resume)
   {
     LoadBox* box = dynamic_cast<LoadBox*>(lua_touserobject(L, ls.boxidx));
     if (box == nullptr || (!box->holds && !box->replay))
@@ -504,14 +573,14 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
       lua_settop(L, box->anchoridx - 1);
       box->replay = false;
       rz.replaying = true;
-      sreader.given = false;
+      sreader.given = (ls.readeridx < 0); /* (a chunk in the box: the replay gives it first) */
       rreader.rz = &rz;
       rreader.next = reader;
       z.reader = &rreader;
       lua_lock(L);
       int st = luaD_protectedparser(L, &z, ls.name, ls.mode, &rz);
       lua_unlock(L);
-      return st;
+      return ended(L, &rz, st);
     }
     z.resuming = true;
     rz.rpos = box->frames.size();
@@ -539,7 +608,7 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
   lua_lock(L);
   int st = luaD_protectedparser(L, &z, ls.name, ls.mode, &rz);
   lua_unlock(L);
-  return st;
+  return ended(L, &rz, st);
 }
 
 /*

@@ -1272,6 +1272,87 @@ do
   assert(ok and f == nil and msg == "bad", msg)
 end
 
+-- 'loadfile', 'dofile' and 'require' read a file through a reader that
+-- calls no code: with a budget, the file is read whole first, and its parse
+-- has the check points of 'load' (each token read is a step), where it
+-- stops and goes on as if nothing had happened
+do
+  local name = os.tmpname()
+  local function write(s)
+    local f = assert(io.open(name, "wb"))
+    f:write(s)
+    f:close()
+  end
+  local function result(...)
+    local r = table.pack(...)
+    for i = 1, r.n do
+      if type(r[i]) == "function" then r[i] = string.dump(r[i]) end
+    end
+    return r
+  end
+  -- runs 'f' with a budget of 'n' that freezes (or not) at every point;
+  -- the results, and the budget points that were in 'fn'
+  local function budgeted(f, n, freeze)
+    local co = coroutine.create(f)
+    local inside = 0
+    debug.setbudget(co, n, function(user_co, spender)
+      if debug.getinfo(spender, 0, "f").func == freeze.fn then inside = inside + 1 end
+      if freeze.on then debug.freeze() end
+    end)
+    local r = table.pack(kresume(co))
+    assert(r[1], r[2])
+    return r[2], inside
+  end
+  local long = "#!/usr/bin/lua\n" ..
+               string.rep("local t = {1, 'two', [3] = 3.0, f = function(...) return ... end}\n", 30) ..
+               "return t.f(1, 2)"
+  local chunks = {long, "\xEF\xBB\xBFreturn 'bom', ...", "x = = 1",
+                  string.dump(function(a) return a, "binary" end), ""}
+  for ci, src in ipairs(chunks) do
+    write(src)
+    local plain = result(loadfile(name))
+    for _, n in ipairs{1, 3} do
+      for _, on in ipairs{false, true} do
+        local r, inside = budgeted(function() return result(loadfile(name)) end, n, {fn = loadfile, on = on})
+        assert(deepeq(r, plain), "chunk " .. ci .. ": " .. show(r) .. " vs " .. show(plain))
+        if src == long then assert(inside > 100, inside) end
+      end
+    end
+  end
+  write(long)
+  local plain = table.pack(dofile(name))
+  local r, inside = budgeted(function() return table.pack(dofile(name)) end, 2, {fn = dofile, on = true})
+  assert(deepeq(r, plain) and inside > 100, inside)
+  local path = package.path
+  package.path = name -- (a template with no '?': this file, whatever the name)
+  local r, inside = budgeted(function() return table.pack(require("frozenfile")) end, 2,
+                             {fn = package.searchers[2], on = true})
+  package.path, package.loaded.frozenfile = path, nil
+  assert(r[1] == 1 and r[2] == name and inside > 100, inside)
+  os.remove(name)
+end
+
+-- what the box of a load keeps (here, a file read whole) is given back to
+-- the host when the load ends, not when the collector frees the box
+if T then
+  local name = os.tmpname()
+  local f = assert(io.open(name, "wb"))
+  f:write("--", string.rep("x", 1000000), "\nreturn 1")
+  f:close()
+  local co = coroutine.create(function()
+    collectgarbage("stop")
+    local before = T.totalmem()
+    local fn = loadfile(name)
+    local grew = T.totalmem() - before
+    collectgarbage("restart")
+    return fn, grew
+  end)
+  debug.setbudget(co, 1000, function() end)
+  local ok, fn, grew = coroutine.resume(co)
+  os.remove(name)
+  assert(ok and fn() == 1 and grew < 100000, grew)
+end
+
 -- what a load with a budget keeps for a freeze (the input it read, room for
 -- its frames and for the parser's arrays) is counted by the host, not in
 -- the Lua heap: 'collectgarbage("count")' sees what it sees without a budget
