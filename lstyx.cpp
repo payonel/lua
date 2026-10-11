@@ -482,6 +482,19 @@ public:
     }
   }
 
+  /* the thread the state is persisted from, which luaL_restorestate gives
+     back restored: the main thread, or a thread the state holds (the
+     host's other thread, for a frozen main thread) */
+  void persisting_thread()
+  {
+    TValue v{};
+    setthvalue(L_, &v, L_);
+    lua_Integer found = 0;
+    if (L_ != mainthread(L_->l_G) && !ref_find(v, gcvalue(&v), &found))
+      throw HostError{text(lt::persist_from_the_main_thread_or_a_thread_the_state_holds)}; /* (no path: not a value's) */
+    root(v, &lt::path_persisting_thread);
+  }
+
   /* the collector's settings that a script sees: its mode, whether it is
      stopped, and its parameters (as stored, so they read back the same) */
   void collector()
@@ -3996,6 +4009,9 @@ static int host_restore_body(lua_State* L)
       R.r_.invalid();
     lua_pop(L, 1);
   }
+  R.value(); /* the thread it was persisted from, at 6 + LUA_NUMTYPES */
+  if (!lua_isthread(L, -1))
+    R.r_.invalid();
   char kind = R.r_.get_byte(); /* the collector's settings */
   char stopped = R.r_.get_byte();
   if ((kind != 0 && kind != 1) || (stopped != 0 && stopped != 1))
@@ -4022,7 +4038,8 @@ static int host_restore_body(lua_State* L)
   g->nexthash = nexthash;
   lua_gc(L, kind ? LUA_GCGEN : LUA_GCINC, 0, 0, 0);
   lua_gc(L, stopped ? LUA_GCSTOP : LUA_GCRESTART, 0, 0, 0);
-  return 0;
+  lua_pushvalue(L, 6 + LUA_NUMTYPES);
+  return 1;
 }
 
 static CFuncInfo cfi_host_restore(host_restore_body, "styx.host_restore");
@@ -4060,7 +4077,7 @@ static int host_restore(lua_State* L, int perms, byte_view data, bool state, Hos
   else
     lua_pushnil(L);
   lua_pushlightuserdata(L, &hr);
-  int st = lua_pcall(L, 2, state ? 0 : 1, 0);
+  int st = lua_pcall(L, 2, 1, 0); /* (the value, or the thread a state was persisted from) */
   if (st != LUA_OK)
   {
     auto m = lua_tolstring(L, -1);
@@ -4156,6 +4173,7 @@ int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
       hp.root(mt, &lt::path_type_metatable);
     }
     hp.marked_objects();
+    hp.persisting_thread();
     hp.collector();
     hp.next_hash();
   });
@@ -4224,13 +4242,15 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
     bool perms = lua_istable(L, 1);
     lua_xmove(L, T, 1);
     st = host_restore(T, perms ? 1 : 0, data, true, msg);
+    if (st == LUA_OK)
+    { /* (the main thread's stack is empty, or a frozen main thread's, which only a thaw changes) */
+      lua_State* from = lua_tothread(T, -1);
+      lua_pop(T, 1);
+      return from;
+    }
   }
-  if (st != LUA_OK)
-  {
-    lua_close(L);
-    return nullptr;
-  }
-  return L; /* (its stack is empty, or a frozen main thread's, which only a thaw changes) */
+  lua_close(L);
+  return nullptr;
 }
 
 int lua_styxtestmodule(lua_State* L)

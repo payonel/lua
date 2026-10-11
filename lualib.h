@@ -63,9 +63,10 @@ LUAMOD_API int(luaopen_utf8)(lua_State* L);
 **
 ** luaL_persiststate writes the state to 'w'; 'perms' is the stack index of
 ** the permanents table (object -> key), or 0 for none. Nothing is
-** allocated in the state and no Lua code runs; a frozen main thread is
-** persisted from another thread of the state. Returns LUA_OK, or an error
-** status with a message in 'msg'.
+** allocated in the state and no Lua code runs. 'L' is the main thread, or
+** a thread the state holds (for a frozen main thread, the host's other
+** thread, anchored before): luaL_restorestate gives it back. Returns
+** LUA_OK, or an error status with a message in 'msg'.
 */
 int(luaL_persiststate)(lua_State* L, int perms, lua_Writer* w, HostString* msg);
 
@@ -76,8 +77,9 @@ int(luaL_persiststate)(lua_State* L, int perms, lua_Writer* w, HostString* msg);
 ** host's permanents, in the same order as for the persisting state, and
 ** pushes the inverse permanents table (key -> object), or nil; then the
 ** whole state in 'data' (luaL_persiststate) is restored into it (a frozen
-** main thread into its main thread). Returns the state, or NULL with a
-** message in 'msg' (nothing is left open).
+** main thread into its main thread). Returns the restored thread the state
+** was persisted from (its main thread, or the host's other thread), or
+** NULL with a message in 'msg' (nothing is left open).
 */
 typedef void (*luaL_RestoreSetup)(lua_State* L, void* ud);
 lua_State*(luaL_restorestate)(lua_Alloc* f, byte_view data, luaL_RestoreSetup setup, void* ud, HostString* msg);

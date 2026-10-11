@@ -739,6 +739,15 @@ static std::string persist_state(lua_State* A)
   return w.out;
 }
 
+/* the main thread of the state of 'L' */
+static lua_State* main_of(lua_State* L)
+{
+  lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
+  lua_State* M = lua_tothread(L, -1);
+  lua_pop(L, 1);
+  return M;
+}
+
 /* a running program, persisted whole by the host and restored in a new state */
 static const char* const program =
   "data = {list = {1, 2, 3}, name = 'state'} "
@@ -2059,12 +2068,13 @@ static void test_frozen_main_thread()
     CountingAlloc a2;
     std::string data = (attempt == 1) ? blob.substr(0, blob.size() - 9) : blob;
     HostString rmsg;
-    lua_State* B = restore(&a2, data, nullptr, &rmsg);
+    lua_State* Bh = restore(&a2, data, nullptr, &rmsg); /* (the host's other thread, restored) */
     if (attempt == 0)
     {
-      if (B == nullptr)
+      if (Bh == nullptr)
         std::printf("      restore error: %s\n", rmsg.to_os());
-      CHECK(B != nullptr && lua_isfrozen(B));
+      lua_State* B = Bh != nullptr ? main_of(Bh) : nullptr;
+      CHECK(B != nullptr && B != Bh && !lua_isfrozen(Bh) && lua_isfrozen(B));
       if (B != nullptr)
       {
         while (lua_isfrozen(B))
@@ -2076,7 +2086,7 @@ static void test_frozen_main_thread()
       }
     }
     else
-      CHECK(B == nullptr);
+      CHECK(Bh == nullptr);
     CHECK(a2.used == 0);
   }
   lua_close(A);
@@ -2087,7 +2097,9 @@ static void test_frozen_main_thread()
 ** thaws it: the restore closes none of its variables, and a collection
 ** before the thaw keeps all of its stack (frozen in the program's own
 ** frame, with a to-be-closed variable; and in 'table.unpack', a C
-** function with values of its own on the stack).
+** function with values of its own on the stack). The restore gives back
+** the host's other thread, from which the state persists again: restores
+** of restores go on as the first.
 */
 static int rest_calls = 0;
 static int rest_at = 0;
@@ -2176,14 +2188,31 @@ static void test_frozen_main_thread_restored_at_rest()
     CHECK(luaL_persiststate(other, lua_gettop(other), &w, &msg) == LUA_OK);
     lua_pop(other, 1);
     lua_close(A);
+    /* restored, collected, persisted again from the thread the restore
+       gives back (the host's other thread), three times over */
     rest_closes = 0;
-    CountingAlloc a2;
     Setup s{add_rest_close, {}};
-    lua_State* B = restored_state(&a2, w.out, &s);
-    CHECK(lua_isfrozen(B));
-    CHECK(rest_closes == 0); /* (the restore closed nothing) */
-    lua_gc(B, LUA_GCCOLLECT, 0, 0, 0);
-    lua_gc(B, LUA_GCCOLLECT, 0, 0, 0);
+    std::string blob = w.out;
+    CountingAlloc a2[3];
+    lua_State* Bh = nullptr;
+    for (int round = 0; round < 3; round++)
+    {
+      if (Bh != nullptr)
+      {
+        StringWriter w2;
+        lua_getglobal(Bh, "_PERMS");
+        CHECK(luaL_persiststate(Bh, lua_gettop(Bh), &w2, &msg) == LUA_OK);
+        lua_pop(Bh, 1);
+        lua_close(Bh);
+        blob = w2.out;
+      }
+      Bh = restored_state(&a2[round], blob, &s);
+      CHECK(Bh != main_of(Bh) && !lua_isfrozen(Bh) && lua_isfrozen(main_of(Bh)));
+      CHECK(rest_closes == 0); /* (the restore closed nothing) */
+      lua_gc(Bh, LUA_GCCOLLECT, 0, 0, 0);
+      lua_gc(Bh, LUA_GCCOLLECT, 0, 0, 0);
+    }
+    lua_State* B = main_of(Bh);
     lua_ResumeResult r{LUA_OK, 0};
     while (r.status == LUA_OK && lua_isfrozen(B))
       r = lua_thaw(B, nullptr);
@@ -2229,7 +2258,7 @@ static void test_frozen_main_thread_close()
   lua_settop(A, 0);
   CHECK(eval(A, "return closed") == "boom 45150");
   CountingAlloc a2;
-  lua_State* B = restored_state(&a2, blob);
+  lua_State* B = main_of(restored_state(&a2, blob));
   CHECK(lua_isfrozen(B));
   r = {LUA_OK, 0};
   while (lua_isfrozen(B))
@@ -2589,6 +2618,33 @@ static void raise_error(lua_State* L, void*)
   lua_error(L);
 }
 
+/*
+** A state is persisted from its main thread or from a thread it holds, and
+** the restore gives that thread back
+*/
+static void test_persist_from_held_thread()
+{
+  CountingAlloc a;
+  lua_State* L = new_counted_state(&a);
+  StringWriter w;
+  HostString msg;
+  CHECK(eval(L, build_perms) == "ok");
+  lua_State* loose = lua_newthread(L);
+  lua_State* held = lua_newthread(L);
+  lua_setglobal(L, "held");
+  lua_getglobal(loose, "_PERMS");
+  CHECK(luaL_persiststate(loose, lua_gettop(loose), &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()) == "persist from the main thread or from a thread the state holds");
+  lua_getglobal(held, "_PERMS");
+  w.out.clear();
+  CHECK(luaL_persiststate(held, lua_gettop(held), &w, &msg) == LUA_OK);
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, w.out);
+  CHECK(B != main_of(B) && eval(B, "return tostring(held == select(1, coroutine.running()))") == "true");
+  lua_close(B);
+  lua_close(L);
+}
+
 /* luaL_restorestate fails as a whole: a message, and nothing left allocated */
 static void test_restore_errors()
 {
@@ -2684,6 +2740,7 @@ static void run_cpp_tests()
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
       {"kernel_persistence", test_kernel_persistence},
       {"kernel_in_another_process", test_kernel_in_another_process},
+      {"persist_from_held_thread", test_persist_from_held_thread},
       {"restore_errors", test_restore_errors},
   };
   std::printf("  styx_tests.cpp\n");
