@@ -38,6 +38,18 @@ local function kresume(co, ...)
   return table.unpack(r, 1, r.n)
 end
 
+-- the debug library has stock's functions and those of the budget and
+-- freezing, no others
+do
+  local stock = {"debug", "gethook", "getinfo", "getlocal", "getmetatable", "getregistry", "getupvalue",
+                 "getuservalue", "sethook", "setlocal", "setmetatable", "setupvalue", "setuservalue",
+                 "traceback", "upvalueid", "upvaluejoin"}
+  local ours = {"setbudget", "getbudget", "freeze", "isfrozen", "canfreeze", "thaw"}
+  local known = {}
+  for _, list in ipairs{stock, ours} do for _, k in ipairs(list) do known[k] = true end end
+  for k in pairs(debug) do assert(known[k], k) end
+end
+
 ------------------------------------------------------------------------
 -- the budget
 ------------------------------------------------------------------------

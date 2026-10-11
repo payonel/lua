@@ -957,12 +957,9 @@ namespace lt
   constexpr byte_view truncated_chunk("truncated chunk");
   constexpr byte_view truncated_fixed_buffer("truncated fixed buffer");
   constexpr byte_view TValue("TValue");
-  constexpr byte_view detached("detached");
   constexpr byte_view no_budget_in_effect("no budget in effect");
   constexpr byte_view a_call_that_cannot_freeze_is_in_the_way("a call that cannot freeze is in the way");
   constexpr byte_view a_resume_that_cannot_freeze_is_in_the_way("a resume that cannot freeze is in the way");
-  constexpr byte_view refers_to_an_object_the_VM_also_holds("refers to an object the VM also holds");
-  constexpr byte_view refers_to_an_object_another_thread_also_holds("refers to an object another thread also holds");
   constexpr byte_view type("type");
   constexpr byte_view udataval("udataval");
   constexpr byte_view ult("ult");

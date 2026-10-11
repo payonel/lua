@@ -688,35 +688,6 @@ static int db_canfreeze(lua_State* L)
   return 2;
 }
 
-/*
-** debug.detached(co [, permanents]): true if the thread holds nothing that
-** the rest of the VM also holds (see 'luaC_detached'); otherwise false, why
-** (one of two reasons) and the list of what is shared. 'permanents' is a
-** table of values that are exempt (as keys or as values).
-*/
-static int db_detached(lua_State* L)
-{
-  lua_State* co = checkco(L, 1);
-  int perm = 0;
-  if (!lua_isnoneornil(L, 2))
-  {
-    luaL_checktype(L, 2, LUA_TTABLE);
-    perm = 2;
-  }
-  int why;
-  if (lua_detached(L, co, perm, &why) == 0)
-  {
-    lua_pop(L, 1); /* (the empty list) */
-    lua_pushboolean(L, 1);
-    return 1;
-  }
-  lua_pushboolean(L, 0);
-  lua_pushistringref(L, why == 1 ? lt::refers_to_an_object_the_VM_also_holds
-                                 : lt::refers_to_an_object_another_thread_also_holds);
-  lua_pushvalue(L, -3); /* the list */
-  return 3;
-}
-
 static int db_isfrozen(lua_State* L)
 {
   lua_pushboolean(L, lua_isfrozen(checkco(L, 1)));
@@ -805,7 +776,6 @@ static CFuncInfo cfi_db_traceback(db_traceback, "debug.db_traceback");
 static CFuncInfo cfi_db_setbudget(db_setbudget, "debug.db_setbudget");
 static CFuncInfo cfi_db_getbudget(db_getbudget, "debug.db_getbudget");
 static CFuncInfo cfi_db_freeze(db_freeze, "debug.db_freeze");
-static CFuncInfo cfi_db_detached(db_detached, "debug.db_detached");
 static CFuncInfo cfi_db_isfrozen(db_isfrozen, "debug.db_isfrozen");
 static CFuncInfo cfi_db_canfreeze(db_canfreeze, "debug.db_canfreeze");
 static CFuncInfo cfi_db_thaw(db_thaw, "debug.db_thaw");
@@ -832,7 +802,6 @@ static const luaL_RegCFI dblib[] = {
   {lt::freeze, &cfi_db_freeze},
   {lt::isfrozen, &cfi_db_isfrozen},
   {lt::canfreeze, &cfi_db_canfreeze},
-  {lt::detached, &cfi_db_detached},
   {lt::thaw, &cfi_db_thaw},
 };
 
