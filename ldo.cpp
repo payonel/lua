@@ -599,12 +599,38 @@ lua_State* luaD_budget(lua_State* L)
   killchain(L, user, err);
 }
 
+/*
+** Is 'X' a thread of the chain whose budget callback runs (from the thread
+** that spent the budget up to the topmost budgeted one), or the thread the
+** callback runs on? A freeze from the callback freezes the whole chain.
+*/
+static bool incallbackchain(global_State* g, lua_State* X)
+{
+  if (X == g->budgetth)
+    return true;
+  for (lua_State* T = g->budgetL; T != nullptr;)
+  {
+    if (T == X)
+      return true;
+    lua_State* R = T->resumer;
+    if (R == nullptr || R->beff == nullptr)
+      break;
+    T = R;
+  }
+  return false;
+}
+
 /* leave the budget callback: 'lua_freeze' */
 [[noreturn]] void luaD_exitcallback(lua_State* L)
 {
   global_State* g = L->l_G;
-  if (g->budgetL == nullptr || g->budgetexit || (L != g->budgetL && L != g->budgetth))
+  if (g->budgetL == nullptr)
     luaG_runerror(L, lt::freeze_outside_the_budget_callback);
+  if (g->budgetexit || !incallbackchain(g, L))
+  { /* (raised on the thread that runs: a Lua callback's or a C callback's, given another) */
+    lua_State* R = (L == g->budgetth || L == g->budgetL) ? L : g->budgetL;
+    luaG_runerror(R, lt::freeze_outside_the_budget_callback);
+  }
   throw LuaError{LUA_CBEXIT, 0};
 }
 
@@ -1958,7 +1984,7 @@ int lua_canfreeze(lua_State* L, int* why)
   *why = 0;
   if (g->budgetL != nullptr)
   {
-    if (L != g->budgetL && L != g->budgetth)
+    if (!incallbackchain(g, L))
     { /* (nothing freezes from there) */
       *why = LUA_NOFREEZE_BUDGET;
       return 0;

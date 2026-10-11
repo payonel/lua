@@ -5929,6 +5929,43 @@ static void test_frozen_refusals_keep_top()
   lua_close(L);
 }
 
+/*
+** A host's budget callback given 'user_co' (the topmost budgeted thread of
+** the chain) and a 'spender' that is another thread of the chain: asked of
+** 'user_co', 'lua_canfreeze' answers for the chain, and 'lua_freeze'
+** freezes it (B15)
+*/
+static int b15_can = -1;
+static void b15_budget(lua_State* user_co, lua_State* spender)
+{
+  if (user_co == spender || b15_can != -1)
+    return;
+  int why = 0;
+  b15_can = lua_canfreeze(user_co, &why);
+  if (b15_can)
+    lua_freeze(user_co);
+}
+
+static void test_freeze_given_user_co()
+{
+  lua_State* L = new_state();
+  luaL_openlibs(L);
+  CHECK(luaL_dostring(L, "function outer() local co = coroutine.create(function() local s = 0 "
+                         "for i = 1, 500 do s = s + i end return s end) "
+                         "local ok, s = coroutine.resume(co) return s end") == LUA_OK);
+  lua_State* co = lua_newthread(L);
+  lua_getglobal(co, "outer");
+  b15_can = -1;
+  lua_setbudget(co, 20, b15_budget);
+  lua_ResumeResult r = lua_resume(co, L, 0);
+  CHECK(b15_can == 1);
+  CHECK(lua_isfrozen(co));
+  while (lua_isfrozen(co))
+    r = lua_thaw(co, L);
+  CHECK(r.status == LUA_OK && lua_tointeger(co, -1) == 125250);
+  lua_close(L);
+}
+
 static void test_freeze()
 {
   lua_State* L = new_state();
@@ -6634,6 +6671,7 @@ int main(int argc, char** argv)
       {"api_freezable", test_api_freezable},
       {"freeze", test_freeze},
       {"frozen_refusals_keep_top", test_frozen_refusals_keep_top},
+      {"freeze_given_user_co", test_freeze_given_user_co},
       {"group_gc", test_group_gc},
       {"message_handler_freeze", test_message_handler_freeze},
       {"handler_in_effect_after_thaw", test_handler_in_effect_after_thaw},
