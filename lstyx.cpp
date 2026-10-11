@@ -1649,7 +1649,8 @@ private:
       fail(lt::cannot_persist_a_running_thread);
     if (main && !host_) /* (the host persists it: idle, by reference; frozen, whole) */
       fail(lt::cannot_persist_the_main_thread_from_a_script);
-    StkId maxtop = T->top;
+    StkId top = T->frozen ? T->frozentop : T->top; /* (a frozen thread's own: see 'luaE_setfrozen') */
+    StkId maxtop = top;
     if (T->ci != &T->base_ci)
     {
       for (CallInfo* ci = T->base_ci.next;; ci = ci->next)
@@ -1670,10 +1671,10 @@ private:
       hash(T);
     }
     byte(static_cast<char>(T->status));
-    var(T->top);
+    var(top);
     var(maxtop);
     push_op(Op::ThreadTail, 0, T);
-    push_op(Op::ThreadSlot, 0, T, T->top);
+    push_op(Op::ThreadSlot, 0, T, top);
   }
 
   /* slots 'i' to 'n' (a slot no longer in use is written as nil) */

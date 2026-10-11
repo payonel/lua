@@ -1533,6 +1533,42 @@ static void test_frozen_host_budget_callback()
   lua_close(B);
 }
 
+/*
+** What the host's refused closes of a frozen thread left on it (their
+** messages) is not the thread's: the state is persisted without them, and
+** the restored thread thaws to its own results only (frozen in a C
+** function, 'table.unpack', that goes on from the top of its stack)
+*/
+static void test_frozen_refusals_not_persisted()
+{
+  CountingAlloc a1;
+  lua_State* A = host_state(&a1);
+  CHECK(eval(A, "for k = 1, 200 do "
+                "  co = coroutine.create(function(a) local t = {} for i = 1, 20000 do t[i] = i end "
+                "    local r = table.pack(table.unpack(t)) local same = true "
+                "    for i = 1, r.n do same = same and r[i] == i end return r.n + a, same end) "
+                "  fcount = 0 "
+                "  debug.setbudget(co, 1000, function() fcount = fcount + 1 if fcount == k then debug.freeze() end end) "
+                "  coroutine.resume(co, 5) "
+                "  if debug.isfrozen(co) and debug.getinfo(co, 0, 'S').what == 'C' then return 'frozen' end "
+                "end return 'none'") == "frozen");
+  lua_getglobal(A, "co");
+  lua_State* th = lua_tothread(A, -1);
+  lua_pop(A, 1);
+  for (int i = 0; i < 3; i++)
+    CHECK(lua_closethread(th, A) == LUA_ERRRUN); /* (each leaves its message on 'th') */
+  std::string blob = persist_state(A);
+  CHECK(!blob.empty());
+  CountingAlloc a2;
+  lua_State* B = restored_host_state(&a2, blob);
+  const char* thaw = "local r repeat r = table.pack(debug.thaw(co)) until not debug.isfrozen(co) "
+                     "return r.n .. ' ' .. tostring(r[1]) .. ' ' .. tostring(r[2]) .. ' ' .. tostring(r[3])";
+  CHECK(eval(B, thaw) == "3 true 20005 true");
+  CHECK(eval(A, thaw) == "3 true 20005 true");
+  lua_close(A);
+  lua_close(B);
+}
+
 static void test_frozen_restore_out_of_memory()
 {
   CountingAlloc a1;
@@ -2523,6 +2559,7 @@ static void run_cpp_tests()
       {"frozen_host_called_thread", test_frozen_host_called_thread},
       {"frozen_host_continuation", test_frozen_host_continuation},
       {"frozen_host_budget_callback", test_frozen_host_budget_callback},
+      {"frozen_refusals_not_persisted", test_frozen_refusals_not_persisted},
       {"frozen_restore_out_of_memory", test_frozen_restore_out_of_memory},
       {"frozen_allocation_failures", test_frozen_allocation_failures},
       {"user_object_kind", test_user_object_kind},
