@@ -137,6 +137,11 @@ CFuncInfo::CFuncInfo(lua_CFunction f, const char* name)
 {
   names().cfibyname[name] = this;
   names().cfinames[this] = name;
+  /* as a table key, it hashes by its name: the same in every process (FNV-1a; never 0) */
+  unsigned int h = 2166136261u;
+  for (const char* c = name; *c != '\0'; c++)
+    h = (h ^ static_cast<unsigned char>(*c)) * 16777619u;
+  hash = (h != 0) ? h : 1;
 }
 }
 

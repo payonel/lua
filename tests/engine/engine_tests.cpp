@@ -441,6 +441,37 @@ static void test_same_order_in_two_states()
   std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
 }
 
+/* an engine C function hashes as a key by its name, not by its address
+   (which another process has elsewhere): a copy of it at another address
+   has the same main position */
+static void test_cfunction_hash_by_name()
+{
+  std::printf("    an engine C function as a key hashes by its name, not its address ... ");
+  g_test_failures = 0;
+  lua_State* L = seeded_state(5);
+  lua_createtable(L, 0, 4096);
+  Table* t = table_at(L, -1);
+  int n = 0, same = 0;
+  for (const char* name : {"base.next", "base.assert", "base.collectgarbage", "base.load", "base.ipairsaux",
+                           "table.tconcat", "table.tinsert", "table.sort"})
+  {
+    CFuncInfo* f = lua_cfibyname(byte_view(name));
+    CHECK(f != nullptr);
+    if (f == nullptr)
+      continue;
+    CFuncInfo copy = *f; /* (at another address) */
+    TValue a, b;
+    setfvalue(&a, f);
+    setfvalue(&b, &copy);
+    n++;
+    if (t->luaH_mainposition(&a) == t->luaH_mainposition(&b))
+      same++;
+  }
+  CHECK(n == 8 && same == n);
+  lua_close(L);
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
 static const Case chain_cases[] = {
   {"chains hold after inserts, deletes and rehash, for keys of every kind",
    "local t = {} for i = 1, 3000 do local k = (i % 4 == 0) and {} or (i % 4 == 1) and ('s' .. i) "
@@ -658,6 +689,7 @@ int main()
             sizeof(object_key_cases) / sizeof(object_key_cases[0]));
   test_same_order_in_two_states();
   test_order_independent_of_interned_strings();
+  test_cfunction_hash_by_name();
   test_function_names();
   test_object_kinds();
   test_make_due(false);

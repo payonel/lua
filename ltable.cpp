@@ -217,8 +217,11 @@ int Table::mainpositionTV(const TValue* key) const
     void* p = pvalue(key);
     return t->hashpointer(p);
   }
-  case LUA_VLCF: /* shared by all states (often static): by address */
-    return t->hashpointer(gcvalue(key));
+  case LUA_VLCF:
+  { /* an engine function by its name (the same in every process); another by address */
+    const GCObject* o = gcvalue(key);
+    return (o->hash != 0) ? t->hashmod(o->hash) : t->hashpointer(o);
+  }
   default:
   {
     /* an object hashes by the hash it was given when created, not by its
