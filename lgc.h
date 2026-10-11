@@ -272,6 +272,18 @@ static l_forceinline unsigned int luaC_newhash(global_State* g)
   g->nexthash = h + HASHSTEP;
   return h;
 }
+
+/*
+** An object made just now that is never a program's key (a table of the
+** parser's own) gives its hash back: the sequence depends only on what the
+** program makes.
+*/
+static l_forceinline void luaC_givebackhash(global_State* g, GCObject* o)
+{
+  assert(o->hash + HASHSTEP == g->nexthash);
+  g->nexthash = o->hash;
+  o->hash = 0;
+}
 void luaC_barrier_(lua_State* L, GCObject* o, GCObject* v);
 void luaC_barrierback_(lua_State* L, GCObject* o);
 

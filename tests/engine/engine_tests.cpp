@@ -472,6 +472,27 @@ static void test_cfunction_hash_by_name()
   std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
 }
 
+/* a load takes one hash of the sequence, its function's, however many
+   functions its chunk has: the parser's own tables (its anchor, a cache of
+   constants for each function) are never a program's keys, and the
+   sequence depends only on what the program makes */
+static void test_load_takes_one_hash()
+{
+  std::printf("    a load takes one hash of the sequence (its function's) ... ");
+  g_test_failures = 0;
+  lua_State* L = seeded_state(9);
+  for (const char* chunk : {"return 1", "local function a() return function() end end local b = function() end return a, b",
+                            "local t = {f = function() end, g = function() return function() end end} return t"})
+  {
+    unsigned int before = L->l_G->nexthash;
+    CHECK(luaL_loadstring(L, chunk) == LUA_OK);
+    CHECK(L->l_G->nexthash - before == lua::gc::HASHSTEP);
+    lua_pop(L, 1);
+  }
+  lua_close(L);
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
 static const Case chain_cases[] = {
   {"chains hold after inserts, deletes and rehash, for keys of every kind",
    "local t = {} for i = 1, 3000 do local k = (i % 4 == 0) and {} or (i % 4 == 1) and ('s' .. i) "
@@ -690,6 +711,7 @@ int main()
   test_same_order_in_two_states();
   test_order_independent_of_interned_strings();
   test_cfunction_hash_by_name();
+  test_load_takes_one_hash();
   test_function_names();
   test_object_kinds();
   test_make_due(false);

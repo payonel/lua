@@ -2194,6 +2194,7 @@ static void f_parser(lua_State* L, SParser* p)
   l.otop = L->top;
   luaD_checkstack(L, 2);
   l.anchor = Table::luaH_new(L);           /* create the anchor table */
+  luaC_givebackhash(L->l_G, l.anchor);     /* (the parser's own) */
   setsloth(L, L->top++, l.anchor); /* anchor the anchor table */
 site_1:
   try

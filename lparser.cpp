@@ -896,6 +896,7 @@ static void open_func(LexState* ls, FuncState* fs, BlockCnt* bl)
   luaC_objbarrier(L, f, f->source);
   f->maxstacksize = 2;                           /* registers 0/1 are always valid */
   fs->kcache = Table::luaH_new(L);                      /* create table for function */
+  luaC_givebackhash(L->l_G, fs->kcache);                /* (the parser's own) */
   assert(novariant(fs->kcache->tt) >= LUA_TSTRING);
   luaD_anchorobj(L, ls->h, fs->kcache); /* anchor it */
   enterblock(fs, bl, 0);
