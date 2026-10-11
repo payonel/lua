@@ -432,3 +432,27 @@ do
   local seen = run(true)
   assert(seen == nil, tostring(seen))
 end
+
+-- a '__gc' that waits is called at a budget point only when its call finds
+-- room (stack, frames, C calls) without allocating or failing: else it
+-- waits for another point, and the program sees no error (B18; the test
+-- library's limit of allocations, and frames of every size up to one that
+-- leaves the stack no room for the call)
+if T then
+  for k = 26, 46 do
+    local names = {}
+    for i = 1, k do names[i] = "a" .. i end
+    local body = load("local " .. table.concat(names, ", ") .. " = 1 " ..
+                      "local o = setmetatable({}, {__gc = function() end}) o = nil " ..
+                      "coroutine.yield() local r = 1 return r")
+    local co = coroutine.create(body)
+    debug.setbudget(co, 100000, function() end)
+    coroutine.resume(co)
+    collectgarbage()
+    collectgarbage()
+    T.alloccount(0)
+    local ok, r = coroutine.resume(co)
+    T.alloccount()
+    assert(ok and r == 1, k .. ": " .. tostring(r))
+  end
+end

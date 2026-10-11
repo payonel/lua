@@ -1338,7 +1338,12 @@ static void drainpoint(lua_State* L, CallInfo* ci, const Proto* p)
     L->top = ci->top;                 /* correct top */
   StkId top = L->top;
   StkId ci_top = ci->top;
-  luaD_checkstack(L, LUA_MINSTACK + 1);
+  /* (the call of the '__gc' needs room: if it cannot be had here without an
+     error, they wait for another point; the program sees no error) */
+  if (L->stack_last - L->top <= LUA_MINSTACK + 1 && !luaD_growstack(L, LUA_MINSTACK + 1, 0))
+    return;
+  if ((ci->next == nullptr && luaE_extendCI(L, 0) == nullptr) || getCcalls(L) + 2 >= LUAI_MAXCCALLS)
+    return;
   if (ci->top < L->top + LUA_MINSTACK + 1)
     ci->top = L->top + LUA_MINSTACK + 1;
   ci->callstatus |= CIST_FROZE; /* (if it freezes, it goes on at this instruction) */
