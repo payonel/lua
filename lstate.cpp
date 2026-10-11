@@ -339,7 +339,8 @@ void luaE_endclose(lua_State* L, TStatus status)
     luaD_seterrorobj(L, status, 1);
   else
     L->top = 1;
-  luaD_reallocstack(L, (int)L->ci->top, 0);
+  if (L != L->l_G->budgetth) /* (the thread of callbacks keeps its room) */
+    luaD_reallocstack(L, (int)L->ci->top, 0);
 }
 
 TStatus luaE_resetthread(lua_State* L, TStatus status)

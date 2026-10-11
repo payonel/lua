@@ -292,15 +292,15 @@ constexpr int BUDGET_FRAMES = 40;
 
 void lua_setbudgetthread(lua_State* L, lua_State* B)
 {
-  L->l_G->budgetth = B;
   bool ok = luaD_growstack(B, BUDGET_STACK, 0);
-  for (int i = 0; ok && i < BUDGET_FRAMES; i++)
+  while (ok && B->nci < BUDGET_FRAMES)
     ok = luaE_extendCI(B, 0) != nullptr;
   if (!ok)
-  {
+  { /* (not the state's thread of callbacks yet: the next budget set tries again) */
     lua_lock(L); /* (as for any throw) */
     luaD_throw(L, LUA_ERRMEM);
   }
+  L->l_G->budgetth = B;
 }
 
 /* push onto 'L' the function of the frame 'ar' of thread 'L1' */

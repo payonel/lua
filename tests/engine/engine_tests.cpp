@@ -493,6 +493,38 @@ static void test_load_takes_one_hash()
   std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
 }
 
+/* an allocator that refuses large growths when told to */
+struct DenyLargeAlloc : lua_Alloc
+{
+  bool deny = false;
+  bool permit(size_t o, size_t n, int) override { return !(deny && n > o && n - o >= 8192); }
+};
+
+/*
+** The budget thread keeps the room its callbacks need (B16): a reservation
+** that found no memory is made again the next time a budget is set, and a
+** close of the thread ('coroutine.close') keeps it
+*/
+static void test_budget_thread_room()
+{
+  std::printf("    the budget thread keeps the room of its callbacks ... ");
+  g_test_failures = 0;
+  DenyLargeAlloc a;
+  lua_State* L = lua_newstate(&a, 1);
+  luaL_openlibs(L);
+  CHECK(run(L, "co = coroutine.create(function() end) return 'ok'") == "ok");
+  a.deny = true;
+  CHECK(run(L, "return tostring(pcall(debug.setbudget, co, 10, function() end))") == "false");
+  a.deny = false;
+  CHECK(run(L, "debug.setbudget(co, 10, function() end) return 'ok'") == "ok");
+  lua_State* B = L->l_G->budgetth;
+  CHECK(B != nullptr && stacksize(B) >= 1000 && B->nci >= 40);
+  CHECK(run(L, "coroutine.close(debug.getregistry()._BUDGETTHREAD) return 'ok'") == "ok");
+  CHECK(B != nullptr && B == L->l_G->budgetth && stacksize(B) >= 1000);
+  lua_close(L);
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
 static const Case chain_cases[] = {
   {"chains hold after inserts, deletes and rehash, for keys of every kind",
    "local t = {} for i = 1, 3000 do local k = (i % 4 == 0) and {} or (i % 4 == 1) and ('s' .. i) "
@@ -712,6 +744,7 @@ int main()
   test_order_independent_of_interned_strings();
   test_cfunction_hash_by_name();
   test_load_takes_one_hash();
+  test_budget_thread_room();
   test_function_names();
   test_object_kinds();
   test_make_due(false);
