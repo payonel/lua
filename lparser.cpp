@@ -2549,7 +2549,6 @@ static void repeatstat(LexState* ls, int line)
     luaZ_record(ls->z->rz, LF_REPEATSTAT, l);
     throw;
   }
-  leaveblock(fs); /* finish scope */
   if (l.bl2.upval)
   {                                   /* upvalues? */
     int exit = luaK_jump(fs);         /* normal exit must jump over fix */
@@ -2559,6 +2558,7 @@ static void repeatstat(LexState* ls, int line)
     luaK_patchtohere(fs, exit); /* normal exit comes to here */
   }
   luaK_patchlist(fs, l.condexit, l.repeat_init); /* close the loop */
+  leaveblock(fs);                                /* finish scope */
   leaveblock(fs);                                /* finish loop */
 }
 
