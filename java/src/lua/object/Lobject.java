@@ -806,6 +806,7 @@ public final class Lobject
   {
     int m = p & 0xF;  /* mantissa */
     int e = p >> 4; /* exponent */
+    assert x >= 0;
     if (e > 0)
     {            /* normalized? */
       e--;       /* correct exponent */

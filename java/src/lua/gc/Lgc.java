@@ -2438,7 +2438,8 @@ public final class Lgc
     { /* generational mode? */
       long numbytes = gettotalbytes(g);
       long addedbytes = numbytes - g.GCmajorminor;
-      long limit = luaO_applyparam(g.gcparams[LUA_GCPMAJORMINOR], addedbytes);
+      long limit = (addedbytes < 0) ? 0
+                                     : luaO_applyparam(g.gcparams[LUA_GCPMAJORMINOR], addedbytes);
       long tobecollected = numbytes - g.GCmarked;
       if (tobecollected > limit)
       {
