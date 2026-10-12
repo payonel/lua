@@ -300,7 +300,7 @@ enum class Op : char
   PopPath,    /* the value whose step is on top of the path stack is done */
   Byte,       /* write 'i' as one byte */
   I64,        /* write 'i' */
-  Raw,        /* write 'i' bytes at 'p' */
+  LineInfo,   /* write the line information of prototype 'p' */
   Var,        /* write 'i' as a variable-length integer */
   Proto,      /* write prototype 'p' */
   Upvalue,    /* write upvalue 'i' of closure 'p' */
@@ -401,25 +401,53 @@ public:
     run();
   }
 
-  void byte(char c) { out(&c, 1); }
-  void i64(lua_Integer v) { out(&v, sizeof(v)); }
-  void raw(const void* p, size_t n) { out(p, n); }
+  /* the stream's fixed widths (little-endian, ADR-10) */
+  static constexpr size_t W_INT = 8;  /* an integer or a float */
+  static constexpr size_t W_HASH = 4; /* a hash */
+
+  void byte(char c)
+  {
+    if (host_)
+      buf_.push_back(c);
+    else
+      luaL_addchar(B_, c);
+  }
+
+  void raw(byte_view b) { out(b); }
+
+  void i64(lua_Integer v)
+  {
+    byte_inline<W_INT> b;
+    b.write_int64(v, 0);
+    out(b.view());
+  }
+
+  void f64(lua_Number n)
+  {
+    byte_inline<W_INT> b;
+    b.write_double(n, 0);
+    out(b.view());
+  }
+
+  void u32(unsigned int v)
+  {
+    byte_inline<W_HASH> b;
+    b.write_int32(static_cast<int32_t>(v), 0);
+    out(b.view());
+  }
 
   /* an integer in as few bytes as it needs (zigzag, 7 bits per byte) */
   void var(lua_Integer v)
   {
     lua_Unsigned u = (static_cast<lua_Unsigned>(v) << 1) ^ static_cast<lua_Unsigned>(v >> 63);
-    char b[10];
-    size_t n = 0;
     do
     {
       char c = static_cast<char>(u & 0x7F);
       u >>= 7;
       if (u != 0)
         c = static_cast<char>(c | 0x80);
-      b[n++] = c;
+      byte(c);
     } while (u != 0);
-    out(b, n);
   }
 
   void finish()
@@ -509,7 +537,7 @@ public:
   /* the hash the state's next object gets (ADR-30) */
   void next_hash()
   {
-    raw(&L_->l_G->nexthash, sizeof(L_->l_G->nexthash));
+    u32(L_->l_G->nexthash);
   }
 
   bool check_ = false; /* (only checks what it could write, while the kernel runs) */
@@ -577,12 +605,12 @@ private:
 
   static constexpr size_t FLUSH_SIZE = 64 * 1024;
 
-  void out(const void* p, size_t n)
+  void out(byte_view b)
   {
     if (host_)
-      buf_.append(static_cast<const char*>(p), n);
+      buf_.append(b.data(), b.size());
     else
-      luaL_addlstring(B_, byte_view(static_cast<const char*>(p), n), 0, n);
+      luaL_addlstring(B_, b, 0, b.size());
   }
 
   void flush(bool end)
@@ -889,8 +917,8 @@ private:
       case Op::Var:
         var(t.i);
         break;
-      case Op::Raw:
-        raw(t.p, static_cast<size_t>(t.i));
+      case Op::LineInfo:
+        out(as_byte_view(std::as_bytes(static_cast<const Proto*>(t.p)->lineinfo)));
         break;
       case Op::Proto:
         proto(static_cast<const Proto*>(t.p));
@@ -1150,7 +1178,7 @@ private:
       {
         lua_Number n = fltvalue(&v);
         byte(TAG_FLOAT);
-        raw(&n, sizeof(n));
+        f64(n);
       }
       return;
     case LUA_TLIGHTUSERDATA:
@@ -1175,7 +1203,7 @@ private:
       byte_view s = tsvalue(&v)->data.view();
       byte(TAG_STRING);
       var(static_cast<lua_Integer>(s.size()));
-      raw(s.data(), s.size());
+      out(s);
       return;
     }
     case LUA_TUSERDATA:
@@ -1224,7 +1252,7 @@ private:
     for (int i = 0; i < n; i++)
       var(ints[i]);
     var(static_cast<lua_Integer>(bytes.size()));
-    raw(bytes.data(), bytes.size());
+    out(bytes);
     bool values = u->obj->persistuservalues();
     for (size_t i = u->uv.size(); i-- > 0;)
     {
@@ -1253,7 +1281,7 @@ private:
   {
     size_t len = std::strlen(n);
     var(static_cast<lua_Integer>(len));
-    raw(n, len);
+    out(byte_view(n, len));
   }
 
   /*
@@ -1634,7 +1662,7 @@ private:
     byte(static_cast<char>(f->flag & ~PF_FIXED));
     var(f->maxstacksize);
     var(static_cast<lua_Integer>(f->code.size()));
-    raw(f->code.data(), f->code.size() * sizeof(Instruction));
+    out(as_byte_view(std::as_bytes(f->code)));
     var(static_cast<lua_Integer>(f->k.size()));
     /* the rest, pushed from last to first */
     for (size_t j = f->locvars.size(); j-- > 0;)
@@ -1650,7 +1678,7 @@ private:
       push_op(Op::Var, f->abslineinfo[j].pc);
     }
     push_op(Op::Var, static_cast<lua_Integer>(f->abslineinfo.size()));
-    push_op(Op::Raw, static_cast<lua_Integer>(f->lineinfo.size()), f->lineinfo.data());
+    push_op(Op::LineInfo, 0, f);
     push_op(Op::Var, static_cast<lua_Integer>(f->lineinfo.size()));
     push_name(f->source);
     for (size_t j = f->p.size(); j-- > 0;)
@@ -1911,17 +1939,27 @@ struct Reader
     return data[pos++];
   }
 
-  void get_raw(void* p, size_t n)
-  {
-    need(n);
-    std::memcpy(p, data.substr(pos, n).data(), n);
-    pos += n;
-  }
-
   lua_Integer get_i64()
   {
-    lua_Integer v;
-    get_raw(&v, sizeof(v));
+    need(8);
+    lua_Integer v = data.toInt64(pos);
+    pos += 8;
+    return v;
+  }
+
+  lua_Number get_f64()
+  {
+    need(8);
+    lua_Number n = data.toDouble(pos);
+    pos += 8;
+    return n;
+  }
+
+  unsigned int get_u32()
+  {
+    need(4);
+    unsigned int v = static_cast<unsigned int>(data.toInt32(pos));
+    pos += 4;
     return v;
   }
 
@@ -2510,9 +2548,7 @@ private:
       return Next::Ready;
     case TAG_FLOAT:
     {
-      lua_Number n;
-      r_.get_raw(&n, sizeof(n));
-      lua_pushnumber(L_, n);
+      lua_pushnumber(L_, r_.get_f64());
       return Next::Ready;
     }
     case TAG_REF:
@@ -2959,7 +2995,7 @@ private:
     lua_lock(L_);
     p->code = luaM_alloc_Instruction_span(g, L_, {}, static_cast<size_t>(n), true);
     lua_unlock(L_);
-    std::memcpy(p->code.data(), code.data(), code.size());
+    copy_bytes(std::as_writable_bytes(p->code), code);
     n = r_.get_count();
     lua_lock(L_);
     p->k = luaM_alloc_TValue_span(g, L_, {}, static_cast<size_t>(n), true);
@@ -3090,8 +3126,7 @@ private:
       lua_lock(L_);
       p->lineinfo = luaM_alloc_ls_byte_span(g, L_, {}, static_cast<size_t>(n), true);
       lua_unlock(L_);
-      if (!lines.empty())
-        std::memcpy(p->lineinfo.data(), lines.data(), lines.size());
+      copy_bytes(std::as_writable_bytes(p->lineinfo), lines);
       n = r_.get_count(2);
       lua_lock(L_);
       p->abslineinfo = luaM_alloc_AbsLineInfo_span(g, L_, {}, static_cast<size_t>(n), true);
@@ -4035,7 +4070,7 @@ static luaL_StyxResult host_persist(lua_State* L, int perms, lua_Writer* w,
       pt = hvalue(&pv);
     }
     Walker hp(L, pt, w);
-    hp.raw(lt::styx_header.data(), lt::styx_header.size());
+    hp.raw(lt::styx_header);
     hp.i64(L->l_G->seed);
     body(hp);
     hp.trailer();
@@ -4104,9 +4139,9 @@ static int host_restore_body(lua_State* L)
   if ((kind != 0 && kind != 1) || (stopped != 0 && stopped != 1))
     R.r_.invalid();
   unsigned char params[LUA_GCPN];
-  R.r_.get_raw(params, sizeof(params));
-  unsigned int nexthash; /* the hash of the next object (ADR-30) */
-  R.r_.get_raw(&nexthash, sizeof(nexthash));
+  for (unsigned char& c : params)
+    c = static_cast<unsigned char>(R.r_.get_byte());
+  unsigned int nexthash = R.r_.get_u32(); /* the hash of the next object (ADR-30) */
   if (R.r_.pos != R.r_.data.size())
     R.r_.invalid();
   R.finish();
