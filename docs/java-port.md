@@ -69,6 +69,8 @@ idiom its one Java form. The ones every file meets:
   `lua_Alloc`, `lua_UserObject`, `ProtectedCall`, …) → Java interfaces or
   abstract classes; `lua_CFunction` → a functional interface.
 - Inlining hints, branch hints and `lhack.h` disappear.
+- A C++ name that is a Java keyword gets `_kw` (`lt::assert` →
+  `Lt.assert_kw`), as the C++ did for its own keywords; `lt::x` → `Lt.x`.
 
 ## Order
 
