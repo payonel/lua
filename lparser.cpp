@@ -31,30 +31,15 @@ namespace lua::compiler
 {
 
 /*
-** A load that a freeze can stop (see lload.h): a call at site 'n' of a
-** function's frame records the frame (its locals, 'l') if a freeze passes
-** through it; the function made again goes to the site of its frame.
+** A load that a freeze can stop (see lload.h): a function with calls a
+** freeze can pass through runs as a state machine, its state and its
+** locals in its frame ('l'). Each such call is made at a state of its own,
+** the one its function goes to again when it is made again after the
+** thaw (the call made again, which goes on where it stopped); a freeze
+** passing records the frame. A function's frame may hold pointers into
+** its callers' frames (a chain of blocks or functions, the table of a
+** constructor): made again, it links them again.
 */
-#define LZ_SITE(n, ...)                            \
-  site_##n:                                        \
-  try                                              \
-  {                                                \
-    __VA_ARGS__;                                   \
-  }                                                \
-  catch (...)                                      \
-  {                                                \
-    luaZ_record(ls->z->rz, FN, n, &l, sizeof(l));  \
-    throw;                                         \
-  }
-
-#define LZ_RESUMING() l_unlikely(ls->z->resuming)
-#define LZ_SITENO() luaZ_restore(ls->z->rz, FN, &l, sizeof(l))
-#define LZ_BADSITE() luaZ_badstate(ls->z->rz)
-
-struct NoLocals
-{
-  char none = 0;
-};
 
 /* maximum number of variable declarations per function (must be
    smaller than 250, due to the bytecode format) */
@@ -956,71 +941,107 @@ static int block_follow(LexState* ls, int withuntil)
 static void statlist(LexState* ls)
 {
   /* statlist -> { stat [';'] } */
-  constexpr int FN = LF_STATLIST;
-  NoLocals l;
-  if (LZ_RESUMING())
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_STATLIST);
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0: /* the loop */
+        if (block_follow(ls, 1))
+          return;
+        l.site = (ls->t.token == TK_RETURN) ? 1 : 2;
+        continue;
+      case 1:
+        statement(ls);
+        return; /* 'return' must be last statement */
+      case 2:
+        statement(ls);
+        l.site = 0;
+        continue;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  while (!block_follow(ls, 1))
+  catch (...)
   {
-    if (ls->t.token == TK_RETURN)
-    {
-      LZ_SITE(1, statement(ls));
-      return; /* 'return' must be last statement */
-    }
-    LZ_SITE(2, statement(ls));
+    luaZ_record(ls->z->rz, LF_STATLIST, l);
+    throw;
   }
 }
 
 static void fieldsel(LexState* ls, expdesc* v)
 {
   /* fieldsel -> ['.' | ':'] NAME */
-  constexpr int FN = LF_FIELDSEL;
-  struct
-  {
-    expdesc key;
-  } l;
+  LoadFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_FIELDSEL);
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+      luaK_exp2anyregup(fs, v);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      luaX_next(ls); /* skip the dot or colon */
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+    {
+      expdesc key;
+      codename(ls, &key);
+      luaK_indexed(fs, v, &key);
+      break;
+    }
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  luaK_exp2anyregup(fs, v);
-  LZ_SITE(1, luaX_next(ls)); /* skip the dot or colon */
-  LZ_SITE(2, codename(ls, &l.key));
-  luaK_indexed(fs, v, &l.key);
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_FIELDSEL, l);
+    throw;
+  }
 }
 
 static void yindex(LexState* ls, expdesc* v)
 {
   /* index -> '[' expr ']' */
-  constexpr int FN = LF_YINDEX;
-  NoLocals l;
-  if (LZ_RESUMING())
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_YINDEX);
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    default: LZ_BADSITE();
+    case 0:
+      luaX_next(ls); /* skip the '[' */
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      expr(ls, v);
+      luaK_exp2val(ls->fs, v);
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      checknext(ls, ']');
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, luaX_next(ls)); /* skip the '[' */
-  LZ_SITE(2, expr(ls, v));
-  luaK_exp2val(ls->fs, v);
-  LZ_SITE(3, checknext(ls, ']'));
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_YINDEX, l);
+    throw;
+  }
 }
 
 /*
@@ -1049,43 +1070,65 @@ constexpr int MAX_CNST = ((INT_MAX / 2) / (MAXARG_vC + 1) > MAXARG_Ax)
                              ? MAXARG_Ax * (MAXARG_vC + 1)
                              : INT_MAX / 2;
 
+/* the frame of 'recfield' (see lload.h) */
+struct RecfieldFrame : LoadFrame
+{
+  int reg = 0;
+  expdesc tab{}, key{}, val{};
+  LoadFrame* copy() const override { return new (std::nothrow) RecfieldFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void recfield(LexState* ls, ConsControl* cc)
 {
   /* recfield -> (NAME | '['exp']') = exp */
-  constexpr int FN = LF_RECFIELD;
-  struct
-  {
-    int reg;
-    expdesc tab, key, val;
-  } l;
+  RecfieldFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const RecfieldFrame&>(luaZ_restore(ls->z->rz, LF_RECFIELD));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.reg = ls->fs->freereg;
+        l.site = (ls->t.token == TK_NAME) ? 1 : 2; /* (else '[') */
+        continue;
+      case 1:
+        codename(ls, &l.key);
+        l.site = 3;
+        continue;
+      case 2:
+        yindex(ls, &l.key);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        cc->nh++;
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        checknext(ls, '=');
+        l.tab = *cc->t;
+        luaK_indexed(fs, &l.tab, &l.key);
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        expr(ls, &l.val);
+        luaK_storevar(fs, &l.tab, &l.val);
+        fs->freereg = l.reg; /* free registers */
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.reg = ls->fs->freereg;
-  if (ls->t.token == TK_NAME)
+  catch (...)
   {
-    LZ_SITE(1, codename(ls, &l.key));
+    luaZ_record(ls->z->rz, LF_RECFIELD, l);
+    throw;
   }
-  else /* ls->t.token == '[' */
-  {
-    LZ_SITE(2, yindex(ls, &l.key));
-  }
-  cc->nh++;
-  LZ_SITE(3, checknext(ls, '='));
-  l.tab = *cc->t;
-  luaK_indexed(fs, &l.tab, &l.key);
-  LZ_SITE(4, expr(ls, &l.val));
-  luaK_storevar(fs, &l.tab, &l.val);
-  fs->freereg = l.reg; /* free registers */
 }
 
 static void closelistfield(FuncState* fs, ConsControl* cc)
@@ -1130,48 +1173,47 @@ static void listfield(LexState* ls, ConsControl* cc)
 static void field(LexState* ls, ConsControl* cc)
 {
   /* field -> listfield | recfield */
-  constexpr int FN = LF_FIELD;
-  struct
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_FIELD);
+  try
   {
-    int r;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        switch (ls->t.token)
+        {
+        case TK_NAME: /* may be 'listfield' or 'recfield' */
+          l.site = 1;
+          break;
+        case '[':
+          l.site = 3;
+          break;
+        default:
+          l.site = 2;
+          break;
+        }
+        continue;
+      case 1:
+        l.site = (luaX_lookahead(ls) != '=') ? 2 : 3; /* expression? */
+        continue;
+      case 2:
+        listfield(ls, cc);
+        return;
+      case 3:
+        recfield(ls, cc);
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  switch (ls->t.token)
+  catch (...)
   {
-  case TK_NAME:
-  { /* may be 'listfield' or 'recfield' */
-    LZ_SITE(1, l.r = luaX_lookahead(ls));
-    if (l.r != '=') /* expression? */
-    {
-      LZ_SITE(2, listfield(ls, cc));
-    }
-    else
-    {
-      LZ_SITE(3, recfield(ls, cc));
-    }
-    break;
-  }
-  case '[':
-  {
-    LZ_SITE(4, recfield(ls, cc));
-    break;
-  }
-  default:
-  {
-    LZ_SITE(5, listfield(ls, cc));
-    break;
-  }
+    luaZ_record(ls->z->rz, LF_FIELD, l);
+    throw;
   }
 }
 
@@ -1191,62 +1233,95 @@ static int maxtostore(FuncState* fs)
     return 1;
 }
 
+/* the frame of 'constructor' (see lload.h) */
+struct ConstructorFrame : LoadFrame
+{
+  int line = 0;
+  int pc = 0;
+  ConsControl cc{};
+  LoadFrame* copy() const override { return new (std::nothrow) ConstructorFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void constructor(LexState* ls, expdesc* t)
 {
   /* constructor -> '{' [ field { sep field } [sep] ] '}'
      sep -> ',' | ';' */
-  constexpr int FN = LF_CONSTRUCTOR;
-  struct
-  {
-    int line;
-    int pc;
-    int r;
-    ConsControl cc;
-  } l;
+  ConstructorFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
   {
-    int site = LZ_SITENO();
-    l.cc.t = t;
-    switch (site)
+    l = static_cast<const ConstructorFrame&>(luaZ_restore(ls->z->rz, LF_CONSTRUCTOR));
+    l.cc.t = t; /* (again its table) */
+  }
+  try
+  {
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.line = ls->linenumber;
+        l.pc = luaK_codevABCk(fs, OP_NEWTABLE, 0, 0, 0, 0);
+        luaK_code(fs, 0); /* space for extra arg. */
+        l.cc.na = l.cc.nh = l.cc.tostore = 0;
+        l.cc.t = t;
+        init_exp(t, VNONRELOC, fs->freereg); /* table will be at stack top */
+        luaK_reserveregs(fs, 1);
+        init_exp(&l.cc.v, VVOID, 0); /* no value (yet) */
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        checknext(ls, '{' /*}*/);
+        l.cc.maxtostore = maxtostore(fs);
+        l.site = 2;
+        [[fallthrough]];
+      case 2: /* the loop */
+        if (ls->t.token == /*{*/ '}')
+        {
+          l.site = 6;
+          continue;
+        }
+        if (l.cc.v.k != VVOID)       /* is there a previous list item? */
+          closelistfield(fs, &l.cc); /* close it */
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        field(ls, &l.cc);
+        luaY_checklimit(fs, l.cc.tostore + l.cc.na + l.cc.nh, MAX_CNST, lt::items_in_a_constructor);
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        if (testnext(ls, ','))
+        {
+          l.site = 2;
+          continue;
+        }
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        if (testnext(ls, ';'))
+        {
+          l.site = 2;
+          continue;
+        }
+        l.site = 6;
+        [[fallthrough]];
+      case 6:
+        check_match(ls, /*{*/ '}', '{' /*}*/, l.line);
+        lastlistfield(fs, &l.cc);
+        luaK_settablesize(fs, l.pc, t->info, l.cc.na, l.cc.nh);
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.line = ls->linenumber;
-  l.pc = luaK_codevABCk(fs, OP_NEWTABLE, 0, 0, 0, 0);
-  luaK_code(fs, 0); /* space for extra arg. */
-  l.cc.na = l.cc.nh = l.cc.tostore = 0;
-  l.cc.t = t;
-  init_exp(t, VNONRELOC, fs->freereg); /* table will be at stack top */
-  luaK_reserveregs(fs, 1);
-  init_exp(&l.cc.v, VVOID, 0); /* no value (yet) */
-  LZ_SITE(1, checknext(ls, '{' /*}*/));
-  l.cc.maxtostore = maxtostore(fs);
-  for (;;)
+  catch (...)
   {
-    if (ls->t.token == /*{*/ '}')
-      break;
-    if (l.cc.v.k != VVOID)       /* is there a previous list item? */
-      closelistfield(fs, &l.cc); /* close it */
-    LZ_SITE(2, field(ls, &l.cc));
-    luaY_checklimit(fs, l.cc.tostore + l.cc.na + l.cc.nh, MAX_CNST, lt::items_in_a_constructor);
-    LZ_SITE(3, l.r = testnext(ls, ','));
-    if (!l.r)
-    {
-      LZ_SITE(4, l.r = testnext(ls, ';'));
-      if (!l.r)
-        break;
-    }
+    luaZ_record(ls->z->rz, LF_CONSTRUCTOR, l);
+    throw;
   }
-  LZ_SITE(5, check_match(ls, /*{*/ '}', '{' /*}*/, l.line));
-  lastlistfield(fs, &l.cc);
-  luaK_settablesize(fs, l.pc, t->info, l.cc.na, l.cc.nh);
 }
 
 /* }====================================================================== */
@@ -1257,70 +1332,91 @@ static void setvararg(FuncState* fs)
   luaK_codeABC(fs, OP_VARARGPREP, 0, 0, 0);
 }
 
+/* the frame of 'parlist' (see lload.h) */
+struct ParlistFrame : LoadFrame
+{
+  int nparams = 0;
+  int varargk = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) ParlistFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void parlist(LexState* ls)
 {
   /* parlist -> [ {NAME ','} (NAME | '...') ] */
-  constexpr int FN = LF_PARLIST;
-  struct
-  {
-    int nparams;
-    int varargk;
-    int r;
-    TString* name;
-  } l;
+  ParlistFrame l;
   FuncState* fs = ls->fs;
   Proto* f = fs->f;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const ParlistFrame&>(luaZ_restore(ls->z->rz, LF_PARLIST));
+  try
   {
-    switch (LZ_SITENO())
-    {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    default: LZ_BADSITE();
-    }
-  }
-  l.nparams = 0;
-  l.varargk = 0;
-  if (ls->t.token != ')')
-  { /* is 'parlist' not empty? */
     for (;;)
     {
-      switch (ls->t.token)
+      switch (l.site)
       {
-      case TK_NAME:
-      {
-        LZ_SITE(1, l.name = str_checkname(ls));
-        new_localvar(ls, l.name);
-        l.nparams++;
-        break;
-      }
-      case TK_DOTS:
-      {
-        l.varargk = 1;
-        LZ_SITE(2, luaX_next(ls)); /* skip '...' */
-        if (ls->t.token == TK_NAME)
+      case 0:
+        l.nparams = 0;
+        l.varargk = 0;
+        if (ls->t.token == ')') /* is 'parlist' empty? */
+          break;
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop */
+        switch (ls->t.token)
         {
-          LZ_SITE(3, l.name = str_checkname(ls));
-          new_varkind(ls, l.name, RDKVAVAR);
+        case TK_NAME:
+          l.site = 2;
+          break;
+        case TK_DOTS:
+          l.varargk = 1;
+          l.site = 3;
+          break;
+        default:
+          luaX_syntaxerror(ls, lt::name_or_expected);
         }
-        else
+        continue;
+      case 2:
+      {
+        TString* name = str_checkname(ls);
+        new_localvar(ls, name);
+        l.nparams++;
+        l.site = 5;
+        continue;
+      }
+      case 3:
+        luaX_next(ls); /* skip '...' */
+        if (ls->t.token != TK_NAME)
         {
           byte_view name = lt::vararg_table;
           new_localvar(ls, luaX_newstring(ls, name, 0, name.size()));
+          break;
+        }
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+      {
+        TString* name = str_checkname(ls);
+        new_varkind(ls, name, RDKVAVAR);
+        break;
+      }
+      case 5:
+        if (testnext(ls, ','))
+        {
+          l.site = 1;
+          continue;
         }
         break;
-      }
       default:
-        luaX_syntaxerror(ls, lt::name_or_expected);
+        luaZ_badstate(ls->z->rz);
       }
-      if (l.varargk)
-        break;
-      LZ_SITE(4, l.r = testnext(ls, ','));
-      if (!l.r)
-        break;
+      break; /* (the list is read) */
     }
+  }
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_PARLIST, l);
+    throw;
   }
   adjustlocalvars(ls, l.nparams);
   f->numparams = fs->nactvar;
@@ -1333,140 +1429,203 @@ static void parlist(LexState* ls)
   luaK_reserveregs(fs, fs->nactvar);
 }
 
+/* the frame of 'body' (see lload.h) */
+struct BodyFrame : LoadFrame
+{
+  FuncState new_fs{};
+  BlockCnt bl{};
+  LoadFrame* copy() const override { return new (std::nothrow) BodyFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void body(LexState* ls, expdesc* e, int ismethod, int line)
 {
   /* body ->  '(' parlist ')' block END */
-  constexpr int FN = LF_BODY;
-  struct
-  {
-    FuncState new_fs;
-    BlockCnt bl;
-  } l;
-  if (LZ_RESUMING())
+  BodyFrame l;
+  if (l_unlikely(ls->z->resuming))
   { /* (its function and block again in the chains) */
-    int site = LZ_SITENO();
+    l = static_cast<const BodyFrame&>(luaZ_restore(ls->z->rz, LF_BODY));
     l.new_fs.prev = ls->fs;
     l.new_fs.ls = ls;
     ls->fs = &l.new_fs;
     l.bl.previous = nullptr;
     l.new_fs.bl = &l.bl;
-    switch (site)
+  }
+  try
+  {
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+    case 0:
+      l.new_fs.f = addprototype(ls);
+      l.new_fs.f->linedefined = line;
+      open_func(ls, &l.new_fs, &l.bl);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      checknext(ls, '(');
+      if (ismethod)
+      {
+        byte_view self = lt::self;
+        new_localvar(ls, luaX_newstring(ls, self, 0, self.size())); /* create 'self' parameter */
+        adjustlocalvars(ls, 1);
+      }
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      parlist(ls);
+      l.site = 3;
+      [[fallthrough]];
+    case 3:
+      checknext(ls, ')');
+      l.site = 4;
+      [[fallthrough]];
+    case 4:
+      statlist(ls);
+      l.new_fs.f->lastlinedefined = ls->linenumber;
+      l.site = 5;
+      [[fallthrough]];
+    case 5:
+      check_match(ls, TK_END, TK_FUNCTION, line);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  l.new_fs.f = addprototype(ls);
-  l.new_fs.f->linedefined = line;
-  open_func(ls, &l.new_fs, &l.bl);
-  LZ_SITE(1, checknext(ls, '('));
-  if (ismethod)
+  catch (...)
   {
-    byte_view self = lt::self;
-    new_localvar(ls, luaX_newstring(ls, self, 0, self.size())); /* create 'self' parameter */
-    adjustlocalvars(ls, 1);
+    luaZ_record(ls->z->rz, LF_BODY, l);
+    throw;
   }
-  LZ_SITE(2, parlist(ls));
-  LZ_SITE(3, checknext(ls, ')'));
-  LZ_SITE(4, statlist(ls));
-  l.new_fs.f->lastlinedefined = ls->linenumber;
-  LZ_SITE(5, check_match(ls, TK_END, TK_FUNCTION, line));
   codeclosure(ls, e);
   close_func(ls);
 }
 
+/* the frame of 'explist' (see lload.h) */
+struct ExplistFrame : LoadFrame
+{
+  int n = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) ExplistFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static int explist(LexState* ls, expdesc* v)
 {
   /* explist -> expr { ',' expr } */
-  constexpr int FN = LF_EXPLIST;
-  struct
+  ExplistFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const ExplistFrame&>(luaZ_restore(ls->z->rz, LF_EXPLIST));
+  try
   {
-    int n;
-    int r;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.n = 1; /* at least one expression */
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        expr(ls, v);
+        l.site = 2;
+        [[fallthrough]];
+      case 2: /* the loop */
+        if (!testnext(ls, ','))
+          return l.n;
+        luaK_exp2nextreg(ls->fs, v);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        expr(ls, v);
+        l.n++;
+        l.site = 2;
+        continue;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.n = 1; /* at least one expression */
-  LZ_SITE(1, expr(ls, v));
-  for (;;)
+  catch (...)
   {
-    LZ_SITE(2, l.r = testnext(ls, ','));
-    if (!l.r)
-      break;
-    luaK_exp2nextreg(ls->fs, v);
-    LZ_SITE(3, expr(ls, v));
-    l.n++;
+    luaZ_record(ls->z->rz, LF_EXPLIST, l);
+    throw;
   }
-  return l.n;
 }
+
+/* the frame of 'funcargs' (see lload.h) */
+struct FuncargsFrame : LoadFrame
+{
+  expdesc args{};
+  int line = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) FuncargsFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void funcargs(LexState* ls, expdesc* f)
 {
-  constexpr int FN = LF_FUNCARGS;
-  struct
-  {
-    expdesc args;
-    int line;
-  } l;
+  FuncargsFrame l;
   FuncState* fs = ls->fs;
   int base, nparams;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const FuncargsFrame&>(luaZ_restore(ls->z->rz, LF_FUNCARGS));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.line = ls->linenumber;
+        switch (ls->t.token)
+        {
+        case '(': /* funcargs -> '(' [ explist ] ')' */
+          l.site = 1;
+          break;
+        case '{' /*}*/: /* funcargs -> constructor */
+          l.site = 4;
+          break;
+        case TK_STRING: /* funcargs -> STRING */
+          codestring(&l.args, ls->t.ts);
+          l.site = 5;
+          break;
+        default:
+          luaX_syntaxerror(ls, lt::function_arguments_expected);
+        }
+        continue;
+      case 1:
+        luaX_next(ls);
+        if (ls->t.token == ')') /* arg list is empty? */
+        {
+          l.args.k = VVOID;
+          l.site = 3;
+          continue;
+        }
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        explist(ls, &l.args);
+        if (hasmultret(l.args.k))
+          luaK_setmultret(fs, &l.args);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        check_match(ls, ')', '(', l.line);
+        break;
+      case 4:
+        constructor(ls, &l.args);
+        break;
+      case 5:
+        luaX_next(ls); /* must use 'seminfo' before 'next' */
+        break;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
+      break; /* (the arguments are read) */
     }
   }
-  l.line = ls->linenumber;
-  switch (ls->t.token)
+  catch (...)
   {
-  case '(':
-  { /* funcargs -> '(' [ explist ] ')' */
-    LZ_SITE(1, luaX_next(ls));
-    if (ls->t.token == ')') /* arg list is empty? */
-      l.args.k = VVOID;
-    else
-    {
-      LZ_SITE(2, explist(ls, &l.args));
-      if (hasmultret(l.args.k))
-        luaK_setmultret(fs, &l.args);
-    }
-    LZ_SITE(3, check_match(ls, ')', '(', l.line));
-    break;
-  }
-  case '{' /*}*/:
-  { /* funcargs -> constructor */
-    LZ_SITE(4, constructor(ls, &l.args));
-    break;
-  }
-  case TK_STRING:
-  { /* funcargs -> STRING */
-    codestring(&l.args, ls->t.ts);
-    LZ_SITE(5, luaX_next(ls)); /* must use 'seminfo' before 'next' */
-    break;
-  }
-  default:
-  {
-    luaX_syntaxerror(ls, lt::function_arguments_expected);
-    return; /* to avoid warnings */
-  }
+    luaZ_record(ls->z->rz, LF_FUNCARGS, l);
+    throw;
   }
   assert(f->k == VNONRELOC);
   base = f->info; /* base register for call */
@@ -1491,108 +1650,147 @@ static void funcargs(LexState* ls, expdesc* f)
 ** =======================================================================
 */
 
+/* the frame of a function with a line to keep (see lload.h) */
+struct LineFrame : LoadFrame
+{
+  int line = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) LineFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void primaryexp(LexState* ls, expdesc* v)
 {
   /* primaryexp -> NAME | '(' expr ')' */
-  constexpr int FN = LF_PRIMARYEXP;
-  struct
+  LineFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const LineFrame&>(luaZ_restore(ls->z->rz, LF_PRIMARYEXP));
+  try
   {
-    int line;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        switch (ls->t.token)
+        {
+        case '(':
+          l.line = ls->linenumber;
+          l.site = 1;
+          break;
+        case TK_NAME:
+          l.site = 4;
+          break;
+        default:
+          luaX_syntaxerror(ls, lt::unexpected_symbol);
+        }
+        continue;
+      case 1:
+        luaX_next(ls);
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        expr(ls, v);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        check_match(ls, ')', '(', l.line);
+        luaK_dischargevars(ls->fs, v);
+        return;
+      case 4:
+        singlevar(ls, v);
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  switch (ls->t.token)
+  catch (...)
   {
-  case '(':
-  {
-    l.line = ls->linenumber;
-    LZ_SITE(1, luaX_next(ls));
-    LZ_SITE(2, expr(ls, v));
-    LZ_SITE(3, check_match(ls, ')', '(', l.line));
-    luaK_dischargevars(ls->fs, v);
-    return;
-  }
-  case TK_NAME:
-  {
-    LZ_SITE(4, singlevar(ls, v));
-    return;
-  }
-  default:
-  {
-    luaX_syntaxerror(ls, lt::unexpected_symbol);
-  }
+    luaZ_record(ls->z->rz, LF_PRIMARYEXP, l);
+    throw;
   }
 }
+
+/* the frame of a function with a key to keep (see lload.h) */
+struct KeyFrame : LoadFrame
+{
+  expdesc key{};
+  LoadFrame* copy() const override { return new (std::nothrow) KeyFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void suffixedexp(LexState* ls, expdesc* v)
 {
   /* suffixedexp ->
        primaryexp { '.' NAME | '[' exp ']' | ':' NAME funcargs | funcargs } */
-  constexpr int FN = LF_SUFFIXEDEXP;
-  struct
-  {
-    expdesc key;
-  } l;
+  KeyFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const KeyFrame&>(luaZ_restore(ls->z->rz, LF_SUFFIXEDEXP));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        primaryexp(ls, v);
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop */
+        switch (ls->t.token)
+        {
+        case '.': /* fieldsel */
+          l.site = 2;
+          break;
+        case '[': /* '[' exp ']' */
+          luaK_exp2anyregup(fs, v);
+          l.site = 3;
+          break;
+        case ':': /* ':' NAME funcargs */
+          l.site = 4;
+          break;
+        case '(':
+        case TK_STRING:
+        case '{' /*}*/: /* funcargs */
+          luaK_exp2nextreg(fs, v);
+          l.site = 6;
+          break;
+        default:
+          return;
+        }
+        continue;
+      case 2:
+        fieldsel(ls, v);
+        l.site = 1;
+        continue;
+      case 3:
+        yindex(ls, &l.key);
+        luaK_indexed(fs, v, &l.key);
+        l.site = 1;
+        continue;
+      case 4:
+        luaX_next(ls);
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        codename(ls, &l.key);
+        luaK_self(fs, v, &l.key);
+        l.site = 6;
+        [[fallthrough]];
+      case 6:
+        funcargs(ls, v);
+        l.site = 1;
+        continue;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  LZ_SITE(1, primaryexp(ls, v));
-  for (;;)
+  catch (...)
   {
-    switch (ls->t.token)
-    {
-    case '.':
-    { /* fieldsel */
-      LZ_SITE(2, fieldsel(ls, v));
-      break;
-    }
-    case '[':
-    { /* '[' exp ']' */
-      luaK_exp2anyregup(fs, v);
-      LZ_SITE(3, yindex(ls, &l.key));
-      luaK_indexed(fs, v, &l.key);
-      break;
-    }
-    case ':':
-    { /* ':' NAME funcargs */
-      LZ_SITE(4, luaX_next(ls));
-      LZ_SITE(5, codename(ls, &l.key));
-      luaK_self(fs, v, &l.key);
-      LZ_SITE(6, funcargs(ls, v));
-      break;
-    }
-    case '(':
-    case TK_STRING:
-    case '{' /*}*/:
-    { /* funcargs */
-      luaK_exp2nextreg(fs, v);
-      LZ_SITE(7, funcargs(ls, v));
-      break;
-    }
-    default:
-      return;
-    }
+    luaZ_record(ls->z->rz, LF_SUFFIXEDEXP, l);
+    throw;
   }
 }
 
@@ -1600,83 +1798,96 @@ static void simpleexp(LexState* ls, expdesc* v)
 {
   /* simpleexp -> FLT | INT | STRING | NIL | TRUE | FALSE | ... |
                   constructor | FUNCTION body | suffixedexp */
-  constexpr int FN = LF_SIMPLEEXP;
-  struct
+  LineFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const LineFrame&>(luaZ_restore(ls->z->rz, LF_SIMPLEEXP));
+  try
   {
-    int line;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        switch (ls->t.token)
+        {
+        case TK_FLT:
+        {
+          init_exp(v, VKFLT, 0);
+          v->nval = ls->t.r;
+          break;
+        }
+        case TK_INT:
+        {
+          init_exp(v, VKINT, 0);
+          v->ival = ls->t.i;
+          break;
+        }
+        case TK_STRING:
+        {
+          codestring(v, ls->t.ts);
+          break;
+        }
+        case TK_NIL:
+        {
+          init_exp(v, VNIL, 0);
+          break;
+        }
+        case TK_TRUE:
+        {
+          init_exp(v, VTRUE, 0);
+          break;
+        }
+        case TK_FALSE:
+        {
+          init_exp(v, VFALSE, 0);
+          break;
+        }
+        case TK_DOTS:
+        { /* vararg */
+          FuncState* fs = ls->fs;
+          check_condition(ls, isvararg(fs->f), lt::cannot_use_outside_a_vararg_function);
+          init_exp(v, VVARARG, luaK_codeABC(fs, OP_VARARG, 0, fs->f->numparams, 1));
+          break;
+        }
+        case '{' /*}*/: /* constructor */
+          l.site = 2;
+          continue;
+        case TK_FUNCTION:
+          l.site = 3;
+          continue;
+        default:
+          l.site = 5;
+          continue;
+        }
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        luaX_next(ls);
+        return;
+      case 2:
+        constructor(ls, v);
+        return;
+      case 3:
+        luaX_next(ls);
+        l.line = ls->linenumber;
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        body(ls, v, 0, l.line);
+        return;
+      case 5:
+        suffixedexp(ls, v);
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  switch (ls->t.token)
+  catch (...)
   {
-  case TK_FLT:
-  {
-    init_exp(v, VKFLT, 0);
-    v->nval = ls->t.r;
-    break;
+    luaZ_record(ls->z->rz, LF_SIMPLEEXP, l);
+    throw;
   }
-  case TK_INT:
-  {
-    init_exp(v, VKINT, 0);
-    v->ival = ls->t.i;
-    break;
-  }
-  case TK_STRING:
-  {
-    codestring(v, ls->t.ts);
-    break;
-  }
-  case TK_NIL:
-  {
-    init_exp(v, VNIL, 0);
-    break;
-  }
-  case TK_TRUE:
-  {
-    init_exp(v, VTRUE, 0);
-    break;
-  }
-  case TK_FALSE:
-  {
-    init_exp(v, VFALSE, 0);
-    break;
-  }
-  case TK_DOTS:
-  { /* vararg */
-    FuncState* fs = ls->fs;
-    check_condition(ls, isvararg(fs->f), lt::cannot_use_outside_a_vararg_function);
-    init_exp(v, VVARARG, luaK_codeABC(fs, OP_VARARG, 0, fs->f->numparams, 1));
-    break;
-  }
-  case '{' /*}*/:
-  { /* constructor */
-    LZ_SITE(1, constructor(ls, v));
-    return;
-  }
-  case TK_FUNCTION:
-  {
-    LZ_SITE(2, luaX_next(ls));
-    l.line = ls->linenumber;
-    LZ_SITE(3, body(ls, v, 0, l.line));
-    return;
-  }
-  default:
-  {
-    LZ_SITE(4, suffixedexp(ls, v));
-    return;
-  }
-  }
-  LZ_SITE(5, luaX_next(ls));
 }
 
 static UnOpr getunopr(int op)
@@ -1781,60 +1992,95 @@ static const struct
 
 constexpr int UNARY_PRIORITY = 12; /* priority for unary operators */
 
+/* the frame of 'subexpr' (see lload.h) */
+struct SubexprFrame : LoadFrame
+{
+  BinOpr op = OPR_NOBINOPR;
+  UnOpr uop = OPR_NOUNOPR;
+  int line = 0;
+  expdesc v2{};
+  LoadFrame* copy() const override { return new (std::nothrow) SubexprFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 /*
 ** subexpr -> (simpleexp | unop subexpr) { binop subexpr }
 ** where 'binop' is any binary operator with a priority higher than 'limit'
 */
 static BinOpr subexpr(LexState* ls, expdesc* v, int limit)
 {
-  constexpr int FN = LF_SUBEXPR;
-  struct
-  {
-    BinOpr op;
-    UnOpr uop;
-    int line;
-    BinOpr nextop;
-    expdesc v2;
-  } l;
+  SubexprFrame l;
   enterlevel(ls);
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const SubexprFrame&>(luaZ_restore(ls->z->rz, LF_SUBEXPR));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.uop = getunopr(ls->t.token);
+        if (l.uop == OPR_NOUNOPR)
+        {
+          l.site = 3;
+          continue;
+        }
+        /* prefix (unary) operator */
+        l.line = ls->linenumber;
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        luaX_next(ls); /* skip operator */
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        subexpr(ls, v, UNARY_PRIORITY);
+        luaK_prefix(ls->fs, l.uop, v, l.line);
+        l.site = 4;
+        continue;
+      case 3:
+        simpleexp(ls, v);
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        /* expand while operators have priorities higher than 'limit' */
+        l.op = getbinopr(ls->t.token);
+        l.site = 5;
+        [[fallthrough]];
+      case 5: /* the loop */
+        if (l.op == OPR_NOBINOPR || priority[l.op].left <= limit)
+        {
+          leavelevel(ls);
+          return l.op; /* return first untreated operator */
+        }
+        l.line = ls->linenumber;
+        l.site = 6;
+        [[fallthrough]];
+      case 6:
+        luaX_next(ls); /* skip operator */
+        luaK_infix(ls->fs, l.op, v);
+        l.site = 7;
+        [[fallthrough]];
+      case 7:
+      {
+        /* read sub-expression with higher priority */
+        BinOpr nextop = subexpr(ls, &l.v2, priority[l.op].right);
+        luaK_posfix(ls->fs, l.op, v, &l.v2, l.line);
+        l.op = nextop;
+        l.site = 5;
+        continue;
+      }
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.uop = getunopr(ls->t.token);
-  if (l.uop != OPR_NOUNOPR)
-  { /* prefix (unary) operator? */
-    l.line = ls->linenumber;
-    LZ_SITE(1, luaX_next(ls)); /* skip operator */
-    LZ_SITE(2, subexpr(ls, v, UNARY_PRIORITY));
-    luaK_prefix(ls->fs, l.uop, v, l.line);
-  }
-  else
+  catch (...)
   {
-    LZ_SITE(3, simpleexp(ls, v));
+    luaZ_record(ls->z->rz, LF_SUBEXPR, l);
+    throw;
   }
-  /* expand while operators have priorities higher than 'limit' */
-  l.op = getbinopr(ls->t.token);
-  while (l.op != OPR_NOBINOPR && priority[l.op].left > limit)
-  {
-    l.line = ls->linenumber;
-    LZ_SITE(4, luaX_next(ls)); /* skip operator */
-    luaK_infix(ls->fs, l.op, v);
-    /* read sub-expression with higher priority */
-    LZ_SITE(5, l.nextop = subexpr(ls, &l.v2, priority[l.op].right));
-    luaK_posfix(ls->fs, l.op, v, &l.v2, l.line);
-    l.op = l.nextop;
-  }
-  leavelevel(ls);
-  return l.op; /* return first untreated operator */
 }
 
 static void expr(LexState* ls, expdesc* v)
@@ -1850,25 +2096,45 @@ static void expr(LexState* ls, expdesc* v)
 ** =======================================================================
 */
 
+/* the frame of a function with a block (see lload.h) */
+struct BlockFrame : LoadFrame
+{
+  BlockCnt bl{};
+  LoadFrame* copy() const override { return new (std::nothrow) BlockFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void block(LexState* ls)
 {
   /* block -> statlist */
-  constexpr int FN = LF_BLOCK;
-  struct
-  {
-    BlockCnt bl;
-  } l;
+  BlockFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
   {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
+    l = static_cast<const BlockFrame&>(luaZ_restore(ls->z->rz, LF_BLOCK));
     l.bl.previous = fs->bl; /* (again in the chain) */
     fs->bl = &l.bl;
-    goto site_1;
   }
-  enterblock(fs, &l.bl, 0);
-  LZ_SITE(1, statlist(ls));
+  try
+  {
+    switch (l.site)
+    {
+    case 0:
+      enterblock(fs, &l.bl, 0);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      statlist(ls);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
+    }
+  }
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_BLOCK, l);
+    throw;
+  }
   leaveblock(fs);
 }
 
@@ -1942,6 +2208,15 @@ static void storevartop(FuncState* fs, expdesc* var)
   luaK_storevar(fs, var, &e); /* will also free the top register */
 }
 
+/* the frame of 'restassign' (see lload.h) */
+struct RestassignFrame : LoadFrame
+{
+  expdesc e{};
+  struct LHS_assign nv{};
+  LoadFrame* copy() const override { return new (std::nothrow) RestassignFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 /*
 ** Parse and compile a multiple assignment. The first "variable"
 ** (a 'suffixedexp') was already read by the caller.
@@ -1951,72 +2226,105 @@ static void storevartop(FuncState* fs, expdesc* var)
 */
 static void restassign(LexState* ls, struct LHS_assign* lh, int nvars)
 {
-  constexpr int FN = LF_RESTASSIGN;
-  struct
+  RestassignFrame l;
+  if (l_unlikely(ls->z->resuming))
   {
-    int nexps;
-    int r;
-    expdesc e;
-    struct LHS_assign nv;
-  } l;
-  if (LZ_RESUMING())
-  {
-    int site = LZ_SITENO();
+    l = static_cast<const RestassignFrame&>(luaZ_restore(ls->z->rz, LF_RESTASSIGN));
     l.nv.prev = lh; /* (again in the chain) */
-    switch (site)
+  }
+  try
+  {
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        check_condition(ls, vkisvar(lh->v.k), lt::syntax_error);
+        check_readonly(ls, &lh->v);
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        if (!testnext(ls, ','))
+        { /* restassign -> '=' explist */
+          l.site = 4;
+          continue;
+        }
+        /* restassign -> ',' suffixedexp restassign */
+        l.nv.prev = lh;
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        suffixedexp(ls, &l.nv.v);
+        if (!vkisindexed(l.nv.v.k))
+          check_conflict(ls, lh, &l.nv.v);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        enterlevel(ls); /* control recursion depth */
+        restassign(ls, &l.nv, nvars + 1);
+        leavelevel(ls);
+        break;
+      case 4:
+        checknext(ls, '=');
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+      {
+        int nexps = explist(ls, &l.e);
+        if (nexps != nvars)
+          adjust_assign(ls, nvars, nexps, &l.e);
+        else
+        {
+          luaK_setoneret(ls->fs, &l.e); /* close last expression */
+          luaK_storevar(ls->fs, &lh->v, &l.e);
+          return; /* avoid default */
+        }
+        break;
+      }
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
+      break; /* (the assignment is read) */
     }
   }
-  check_condition(ls, vkisvar(lh->v.k), lt::syntax_error);
-  check_readonly(ls, &lh->v);
-  LZ_SITE(1, l.r = testnext(ls, ','));
-  if (l.r)
-  { /* restassign -> ',' suffixedexp restassign */
-    l.nv.prev = lh;
-    LZ_SITE(2, suffixedexp(ls, &l.nv.v));
-    if (!vkisindexed(l.nv.v.k))
-      check_conflict(ls, lh, &l.nv.v);
-    LZ_SITE(3, enterlevel(ls); /* control recursion depth */
-               restassign(ls, &l.nv, nvars + 1));
-    leavelevel(ls);
-  }
-  else
-  { /* restassign -> '=' explist */
-    LZ_SITE(4, checknext(ls, '='));
-    LZ_SITE(5, l.nexps = explist(ls, &l.e));
-    if (l.nexps != nvars)
-      adjust_assign(ls, nvars, l.nexps, &l.e);
-    else
-    {
-      luaK_setoneret(ls->fs, &l.e); /* close last expression */
-      luaK_storevar(ls->fs, &lh->v, &l.e);
-      return; /* avoid default */
-    }
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_RESTASSIGN, l);
+    throw;
   }
   storevartop(ls->fs, &lh->v); /* default assignment */
 }
 
+/* the frame of a function with an expression to keep (see lload.h) */
+struct ExpFrame : LoadFrame
+{
+  expdesc v{};
+  LoadFrame* copy() const override { return new (std::nothrow) ExpFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static int cond(LexState* ls)
 {
   /* cond -> exp */
-  constexpr int FN = LF_COND;
-  struct
+  ExpFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const ExpFrame&>(luaZ_restore(ls->z->rz, LF_COND));
+  try
   {
-    expdesc v;
-  } l;
-  if (LZ_RESUMING())
-  {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
+    switch (l.site)
+    {
+    case 0:
+      expr(ls, &l.v); /* read condition */
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
+    }
   }
-  LZ_SITE(1, expr(ls, &l.v)); /* read condition */
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_COND, l);
+    throw;
+  }
   if (l.v.k == VNIL)
     l.v.k = VFALSE; /* 'falses' are all equal here */
   luaK_goiftrue(ls->fs, &l.v);
@@ -2034,24 +2342,39 @@ static void gotostat(LexState* ls, int line)
 */
 static void breakstat(LexState* ls, int line)
 {
-  constexpr int FN = LF_BREAKSTAT;
-  NoLocals l;
-  BlockCnt* bl; /* to look for an enclosing loop */
-  if (LZ_RESUMING())
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_BREAKSTAT);
+  try
   {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
-  }
-  for (bl = ls->fs->bl; bl != nullptr; bl = bl->previous)
-  {
-    if (bl->isloop) /* found one? */
+    switch (l.site)
+    {
+    case 0:
+    {
+      BlockCnt* bl; /* to look for an enclosing loop */
+      for (bl = ls->fs->bl; bl != nullptr; bl = bl->previous)
+      {
+        if (bl->isloop) /* found one? */
+          break;
+      }
+      if (bl == nullptr)
+        luaX_syntaxerror(ls, lt::break_outside_loop);
+      bl->isloop = 2; /* signal that block has pending breaks */
+      l.site = 1;
+      [[fallthrough]];
+    }
+    case 1:
+      luaX_next(ls); /* skip break */
       break;
+    default:
+      luaZ_badstate(ls->z->rz);
+    }
   }
-  if (bl == nullptr)
-    luaX_syntaxerror(ls, lt::break_outside_loop);
-  bl->isloop = 2; /* signal that block has pending breaks */
-  LZ_SITE(1, luaX_next(ls)); /* skip break */
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_BREAKSTAT, l);
+    throw;
+  }
   newgotoentry(ls, ls->brkn, line);
 }
 
@@ -2070,101 +2393,163 @@ static void checkrepeated(LexState* ls, TString* name)
 static void labelstat(LexState* ls, TString* name, int line)
 {
   /* label -> '::' NAME '::' */
-  constexpr int FN = LF_LABELSTAT;
-  NoLocals l;
-  if (LZ_RESUMING())
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_LABELSTAT);
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        checknext(ls, TK_DBCOLON); /* skip double colon */
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop */
+        if (ls->t.token != ';' && ls->t.token != TK_DBCOLON)
+          break;
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        statement(ls); /* skip other no-op statements */
+        l.site = 1;
+        continue;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
+      break; /* (the no-op statements are skipped) */
     }
   }
-  LZ_SITE(1, checknext(ls, TK_DBCOLON)); /* skip double colon */
-  while (ls->t.token == ';' || ls->t.token == TK_DBCOLON)
+  catch (...)
   {
-    LZ_SITE(2, statement(ls)); /* skip other no-op statements */
+    luaZ_record(ls->z->rz, LF_LABELSTAT, l);
+    throw;
   }
   checkrepeated(ls, name); /* check for repeated labels */
   createlabel(ls, name, line, block_follow(ls, 0));
 }
 
+/* the frame of 'whilestat' (see lload.h) */
+struct WhileFrame : LoadFrame
+{
+  int whileinit = 0;
+  int condexit = 0;
+  BlockCnt bl{};
+  LoadFrame* copy() const override { return new (std::nothrow) WhileFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void whilestat(LexState* ls, int line)
 {
   /* whilestat -> WHILE cond DO block END */
-  constexpr int FN = LF_WHILESTAT;
-  struct
-  {
-    int whileinit;
-    int condexit;
-    BlockCnt bl;
-  } l;
+  WhileFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
   {
-    int site = LZ_SITENO();
-    if (site >= 3)
+    l = static_cast<const WhileFrame&>(luaZ_restore(ls->z->rz, LF_WHILESTAT));
+    if (l.site >= 2)
     { /* (its block again in the chain) */
       l.bl.previous = fs->bl;
       fs->bl = &l.bl;
     }
-    switch (site)
+  }
+  try
+  {
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+    case 0:
+      luaX_next(ls); /* skip WHILE */
+      l.whileinit = luaK_getlabel(fs);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      l.condexit = cond(ls);
+      enterblock(fs, &l.bl, 1);
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      checknext(ls, TK_DO);
+      l.site = 3;
+      [[fallthrough]];
+    case 3:
+      block(ls);
+      luaK_jumpto(fs, l.whileinit);
+      l.site = 4;
+      [[fallthrough]];
+    case 4:
+      check_match(ls, TK_END, TK_WHILE, line);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, luaX_next(ls)); /* skip WHILE */
-  l.whileinit = luaK_getlabel(fs);
-  LZ_SITE(2, l.condexit = cond(ls));
-  enterblock(fs, &l.bl, 1);
-  LZ_SITE(3, checknext(ls, TK_DO));
-  LZ_SITE(4, block(ls));
-  luaK_jumpto(fs, l.whileinit);
-  LZ_SITE(5, check_match(ls, TK_END, TK_WHILE, line));
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_WHILESTAT, l);
+    throw;
+  }
   leaveblock(fs);
   luaK_patchtohere(fs, l.condexit); /* false conditions finish the loop */
 }
 
+/* the frame of 'repeatstat' (see lload.h) */
+struct RepeatFrame : LoadFrame
+{
+  int condexit = 0;
+  int repeat_init = 0;
+  BlockCnt bl1{}, bl2{};
+  LoadFrame* copy() const override { return new (std::nothrow) RepeatFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void repeatstat(LexState* ls, int line)
 {
   /* repeatstat -> REPEAT block UNTIL cond */
-  constexpr int FN = LF_REPEATSTAT;
-  struct
-  {
-    int condexit;
-    int repeat_init;
-    BlockCnt bl1, bl2;
-  } l;
+  RepeatFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
   {
-    int site = LZ_SITENO();
+    l = static_cast<const RepeatFrame&>(luaZ_restore(ls->z->rz, LF_REPEATSTAT));
     l.bl1.previous = fs->bl; /* (its blocks again in the chain) */
     l.bl2.previous = &l.bl1;
     fs->bl = &l.bl2;
-    switch (site)
+  }
+  try
+  {
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    default: LZ_BADSITE();
+    case 0:
+      l.repeat_init = luaK_getlabel(fs);
+      enterblock(fs, &l.bl1, 1); /* loop block */
+      enterblock(fs, &l.bl2, 0); /* scope block */
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      luaX_next(ls); /* skip REPEAT */
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      statlist(ls);
+      l.site = 3;
+      [[fallthrough]];
+    case 3:
+      check_match(ls, TK_UNTIL, TK_REPEAT, line);
+      l.site = 4;
+      [[fallthrough]];
+    case 4:
+      l.condexit = cond(ls); /* read condition (inside scope block) */
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  l.repeat_init = luaK_getlabel(fs);
-  enterblock(fs, &l.bl1, 1); /* loop block */
-  enterblock(fs, &l.bl2, 0); /* scope block */
-  LZ_SITE(1, luaX_next(ls)); /* skip REPEAT */
-  LZ_SITE(2, statlist(ls));
-  LZ_SITE(3, check_match(ls, TK_UNTIL, TK_REPEAT, line));
-  LZ_SITE(4, l.condexit = cond(ls)); /* read condition (inside scope block) */
-  leaveblock(fs);                    /* finish scope */
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_REPEATSTAT, l);
+    throw;
+  }
+  leaveblock(fs); /* finish scope */
   if (l.bl2.upval)
   {                                   /* upvalues? */
     int exit = luaK_jump(fs);         /* normal exit must jump over fix */
@@ -2184,20 +2569,27 @@ static void repeatstat(LexState* ls, int line)
 */
 static void exp1(LexState* ls)
 {
-  constexpr int FN = LF_EXP1;
-  struct
+  ExpFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const ExpFrame&>(luaZ_restore(ls->z->rz, LF_EXP1));
+  try
   {
-    expdesc e;
-  } l;
-  if (LZ_RESUMING())
-  {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
+    switch (l.site)
+    {
+    case 0:
+      expr(ls, &l.v);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
+    }
   }
-  LZ_SITE(1, expr(ls, &l.e));
-  luaK_exp2nextreg(ls->fs, &l.e);
-  assert(l.e.k == VNONRELOC);
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_EXP1, l);
+    throw;
+  }
+  luaK_exp2nextreg(ls->fs, &l.v);
+  assert(l.v.k == VNONRELOC);
 }
 
 /*
@@ -2216,6 +2608,15 @@ static void fixforjump(FuncState* fs, int pc, int dest, int back)
   code[pc] = SETARG_Bx(code[pc], offset);
 }
 
+/* the frame of 'forbody' (see lload.h) */
+struct ForbodyFrame : LoadFrame
+{
+  int prep = 0;
+  BlockCnt bl{};
+  LoadFrame* copy() const override { return new (std::nothrow) ForbodyFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 /*
 ** Generate code for a 'for' loop.
 */
@@ -2224,35 +2625,42 @@ static void forbody(LexState* ls, int base, int line, int nvars, int isgen)
   /* forbody -> DO block */
   static const OpCode forprep[2] = {OP_FORPREP, OP_TFORPREP};
   static const OpCode forloop[2] = {OP_FORLOOP, OP_TFORLOOP};
-  constexpr int FN = LF_FORBODY;
-  struct
-  {
-    int prep;
-    BlockCnt bl;
-  } l;
+  ForbodyFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
   {
-    int site = LZ_SITENO();
-    if (site == 2)
+    l = static_cast<const ForbodyFrame&>(luaZ_restore(ls->z->rz, LF_FORBODY));
+    if (l.site == 1)
     { /* (its block again in the chain) */
       l.bl.previous = fs->bl;
       fs->bl = &l.bl;
     }
-    switch (site)
+  }
+  try
+  {
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+      checknext(ls, TK_DO);
+      l.prep = luaK_codeABx(fs, forprep[isgen], base, 0);
+      fs->freereg--;            /* both 'forprep' remove one register from the stack */
+      enterblock(fs, &l.bl, 0); /* scope for declared variables */
+      adjustlocalvars(ls, nvars);
+      luaK_reserveregs(fs, nvars);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      block(ls);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, checknext(ls, TK_DO));
-  l.prep = luaK_codeABx(fs, forprep[isgen], base, 0);
-  fs->freereg--;            /* both 'forprep' remove one register from the stack */
-  enterblock(fs, &l.bl, 0); /* scope for declared variables */
-  adjustlocalvars(ls, nvars);
-  luaK_reserveregs(fs, nvars);
-  LZ_SITE(2, block(ls));
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_FORBODY, l);
+    throw;
+  }
   leaveblock(fs); /* end of scope for declared variables */
   fixforjump(fs, l.prep, luaK_getlabel(fs), 0);
   if (isgen)
@@ -2265,174 +2673,280 @@ static void forbody(LexState* ls, int base, int line, int nvars, int isgen)
   luaK_fixline(fs, line);
 }
 
+/* the frame of 'fornum' (see lload.h) */
+struct FornumFrame : LoadFrame
+{
+  int base = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) FornumFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void fornum(LexState* ls, TString* varname, int line)
 {
   /* fornum -> NAME = exp,exp[,exp] forbody */
-  constexpr int FN = LF_FORNUM;
-  struct
-  {
-    int base;
-    int r;
-  } l;
+  FornumFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const FornumFrame&>(luaZ_restore(ls->z->rz, LF_FORNUM));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.base = fs->freereg;
+        new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));
+        new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));
+        new_varkind(ls, varname, RDKCONST);
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        checknext(ls, '=');
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        exp1(ls); /* initial value */
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        checknext(ls, ',');
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        exp1(ls); /* limit */
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        if (!testnext(ls, ','))
+        { /* default step = 1 */
+          luaK_int(fs, fs->freereg, 1);
+          luaK_reserveregs(fs, 1);
+          l.site = 7;
+          continue;
+        }
+        l.site = 6;
+        [[fallthrough]];
+      case 6:
+        exp1(ls); /* optional step */
+        l.site = 7;
+        [[fallthrough]];
+      case 7:
+        adjustlocalvars(ls, 2); /* start scope for internal variables */
+        l.site = 8;
+        [[fallthrough]];
+      case 8:
+        forbody(ls, l.base, line, 1, 0);
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.base = fs->freereg;
-  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));
-  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));
-  new_varkind(ls, varname, RDKCONST);
-  LZ_SITE(1, checknext(ls, '='));
-  LZ_SITE(2, exp1(ls)); /* initial value */
-  LZ_SITE(3, checknext(ls, ','));
-  LZ_SITE(4, exp1(ls)); /* limit */
-  LZ_SITE(5, l.r = testnext(ls, ','));
-  if (l.r)
+  catch (...)
   {
-    LZ_SITE(6, exp1(ls)); /* optional step */
+    luaZ_record(ls->z->rz, LF_FORNUM, l);
+    throw;
   }
-  else
-  { /* default step = 1 */
-    luaK_int(fs, fs->freereg, 1);
-    luaK_reserveregs(fs, 1);
-  }
-  adjustlocalvars(ls, 2); /* start scope for internal variables */
-  LZ_SITE(7, forbody(ls, l.base, line, 1, 0));
 }
+
+/* the frame of 'forlist' (see lload.h) */
+struct ForlistFrame : LoadFrame
+{
+  int nvars = 0; /* function, state, closing, control */
+  int line = 0;
+  int base = 0;
+  expdesc e{};
+  LoadFrame* copy() const override { return new (std::nothrow) ForlistFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void forlist(LexState* ls, TString* indexname)
 {
   /* forlist -> NAME {,NAME} IN explist forbody */
-  constexpr int FN = LF_FORLIST;
-  struct
-  {
-    int nvars; /* function, state, closing, control */
-    int line;
-    int base;
-    int r;
-    int nexps;
-    TString* name;
-    expdesc e;
-  } l;
+  ForlistFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const ForlistFrame&>(luaZ_restore(ls->z->rz, LF_FORLIST));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.nvars = 4;
+        l.base = fs->freereg;
+        /* create internal variables */
+        new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* iterator function */
+        new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* state */
+        new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* closing var. (after swap) */
+        new_varkind(ls, indexname, RDKCONST);
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop: other declared variables */
+        if (!testnext(ls, ','))
+        {
+          l.site = 3;
+          continue;
+        }
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+      {
+        TString* name = str_checkname(ls);
+        new_localvar(ls, name);
+        l.nvars++;
+        l.site = 1;
+        continue;
+      }
+      case 3:
+        checknext(ls, TK_IN);
+        l.line = ls->linenumber;
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+      {
+        int nexps = explist(ls, &l.e);
+        adjust_assign(ls, 4, nexps, &l.e);
+        adjustlocalvars(ls, 3); /* start scope for internal variables */
+        marktobeclosed(fs);     /* last internal var. must be closed */
+        luaK_checkstack(fs, 2); /* extra space to call iterator */
+        l.site = 5;
+        [[fallthrough]];
+      }
+      case 5:
+        forbody(ls, l.base, l.line, l.nvars - 3, 1);
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.nvars = 4;
-  l.base = fs->freereg;
-  /* create internal variables */
-  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* iterator function */
-  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* state */
-  new_localvar(ls, luaX_newstring(ls, lt::for_state, 0, lt::for_state.size()));  /* closing var. (after swap) */
-  new_varkind(ls, indexname, RDKCONST);
-  /* other declared variables */
-  for (;;)
+  catch (...)
   {
-    LZ_SITE(1, l.r = testnext(ls, ','));
-    if (!l.r)
-      break;
-    LZ_SITE(2, l.name = str_checkname(ls));
-    new_localvar(ls, l.name);
-    l.nvars++;
+    luaZ_record(ls->z->rz, LF_FORLIST, l);
+    throw;
   }
-  LZ_SITE(3, checknext(ls, TK_IN));
-  l.line = ls->linenumber;
-  LZ_SITE(4, l.nexps = explist(ls, &l.e));
-  adjust_assign(ls, 4, l.nexps, &l.e);
-  adjustlocalvars(ls, 3); /* start scope for internal variables */
-  marktobeclosed(fs);     /* last internal var. must be closed */
-  luaK_checkstack(fs, 2); /* extra space to call iterator */
-  LZ_SITE(5, forbody(ls, l.base, l.line, l.nvars - 3, 1));
 }
+
+/* the frame of 'forstat' (see lload.h) */
+struct ForstatFrame : LoadFrame
+{
+  TString* varname = nullptr;
+  BlockCnt bl{};
+  LoadFrame* copy() const override { return new (std::nothrow) ForstatFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void forstat(LexState* ls, int line)
 {
   /* forstat -> FOR (fornum | forlist) END */
-  constexpr int FN = LF_FORSTAT;
-  struct
-  {
-    TString* varname;
-    BlockCnt bl;
-  } l;
+  ForstatFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
   {
-    int site = LZ_SITENO();
+    l = static_cast<const ForstatFrame&>(luaZ_restore(ls->z->rz, LF_FORSTAT));
     l.bl.previous = fs->bl; /* (its block again in the chain) */
     fs->bl = &l.bl;
-    switch (site)
+  }
+  try
+  {
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        enterblock(fs, &l.bl, 1); /* scope for loop and control variables */
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        luaX_next(ls); /* skip 'for' */
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        l.varname = str_checkname(ls); /* first variable name */
+        switch (ls->t.token)
+        {
+        case '=':
+          l.site = 3;
+          break;
+        case ',':
+        case TK_IN:
+          l.site = 4;
+          break;
+        default:
+          luaX_syntaxerror(ls, lt::or_in_expected);
+        }
+        continue;
+      case 3:
+        fornum(ls, l.varname, line);
+        l.site = 5;
+        continue;
+      case 4:
+        forlist(ls, l.varname);
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        check_match(ls, TK_END, TK_FOR, line);
+        break;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
+      break; /* (the loop is read) */
     }
   }
-  enterblock(fs, &l.bl, 1);                /* scope for loop and control variables */
-  LZ_SITE(1, luaX_next(ls));               /* skip 'for' */
-  LZ_SITE(2, l.varname = str_checkname(ls)); /* first variable name */
-  switch (ls->t.token)
+  catch (...)
   {
-  case '=':
-    LZ_SITE(3, fornum(ls, l.varname, line));
-    break;
-  case ',':
-  case TK_IN:
-    LZ_SITE(4, forlist(ls, l.varname));
-    break;
-  default:
-    luaX_syntaxerror(ls, lt::or_in_expected);
+    luaZ_record(ls->z->rz, LF_FORSTAT, l);
+    throw;
   }
-  LZ_SITE(5, check_match(ls, TK_END, TK_FOR, line));
   leaveblock(fs); /* loop scope ('break' jumps to this point) */
 }
+
+/* the frame of 'test_then_block' (see lload.h) */
+struct TestThenFrame : LoadFrame
+{
+  int condtrue = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) TestThenFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static int test_then_block(LexState* ls, int escapelist)
 {
   /* test_then_block -> [IF | ELSEIF] cond THEN block */
-  constexpr int FN = LF_TESTTHEN;
-  struct
-  {
-    int condtrue;
-  } l;
+  TestThenFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const TestThenFrame&>(luaZ_restore(ls->z->rz, LF_TESTTHEN));
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    default: LZ_BADSITE();
+    case 0:
+      luaX_next(ls); /* skip IF or ELSEIF */
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      l.condtrue = cond(ls); /* read condition */
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      checknext(ls, TK_THEN);
+      l.site = 3;
+      [[fallthrough]];
+    case 3:
+      block(ls); /* 'then' part */
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, luaX_next(ls));          /* skip IF or ELSEIF */
-  LZ_SITE(2, l.condtrue = cond(ls)); /* read condition */
-  LZ_SITE(3, checknext(ls, TK_THEN));
-  LZ_SITE(4, block(ls)); /* 'then' part */
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_TESTTHEN, l);
+    throw;
+  }
   if (ls->t.token == TK_ELSE ||
       ls->t.token == TK_ELSEIF)                 /* followed by 'else'/'elseif'? */
     escapelist = luaK_concat(fs, escapelist, luaK_jump(fs)); /* must jump over it */
@@ -2440,105 +2954,163 @@ static int test_then_block(LexState* ls, int escapelist)
   return escapelist;
 }
 
+/* the frame of 'ifstat' (see lload.h) */
+struct IfFrame : LoadFrame
+{
+  int escapelist = 0; /* exit list for finished parts */
+  LoadFrame* copy() const override { return new (std::nothrow) IfFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void ifstat(LexState* ls, int line)
 {
   /* ifstat -> IF cond THEN block {ELSEIF cond THEN block} [ELSE block] END */
-  constexpr int FN = LF_IFSTAT;
-  struct
-  {
-    int escapelist; /* exit list for finished parts */
-    int r;
-  } l;
+  IfFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const IfFrame&>(luaZ_restore(ls->z->rz, LF_IFSTAT));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.escapelist = NO_JUMP;
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        l.escapelist = test_then_block(ls, l.escapelist); /* IF cond THEN block, or ELSEIF cond THEN block */
+        l.site = 2;
+        [[fallthrough]];
+      case 2: /* the loop */
+        if (ls->t.token == TK_ELSEIF)
+        {
+          l.site = 1;
+          continue;
+        }
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        if (!testnext(ls, TK_ELSE))
+        {
+          l.site = 5;
+          continue;
+        }
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        block(ls); /* 'else' part */
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        check_match(ls, TK_END, TK_IF, line);
+        luaK_patchtohere(fs, l.escapelist); /* patch escape list to 'if' end */
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.escapelist = NO_JUMP;
-  LZ_SITE(1, l.escapelist = test_then_block(ls, l.escapelist)); /* IF cond THEN block */
-  while (ls->t.token == TK_ELSEIF)
+  catch (...)
   {
-    LZ_SITE(2, l.escapelist = test_then_block(ls, l.escapelist)); /* ELSEIF cond THEN block */
+    luaZ_record(ls->z->rz, LF_IFSTAT, l);
+    throw;
   }
-  LZ_SITE(3, l.r = testnext(ls, TK_ELSE));
-  if (l.r)
-  {
-    LZ_SITE(4, block(ls)); /* 'else' part */
-  }
-  LZ_SITE(5, check_match(ls, TK_END, TK_IF, line));
-  luaK_patchtohere(fs, l.escapelist); /* patch escape list to 'if' end */
 }
+
+/* the frame of 'localfunc' (see lload.h) */
+struct LocalfuncFrame : LoadFrame
+{
+  int fvar = 0; /* function's variable index */
+  int line = 0;
+  expdesc b{};
+  LoadFrame* copy() const override { return new (std::nothrow) LocalfuncFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void localfunc(LexState* ls)
 {
-  constexpr int FN = LF_LOCALFUNC;
-  struct
-  {
-    int fvar; /* function's variable index */
-    int line;
-    TString* name;
-    expdesc b;
-  } l;
+  LocalfuncFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const LocalfuncFrame&>(luaZ_restore(ls->z->rz, LF_LOCALFUNC));
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+    {
+      l.fvar = fs->nactvar;
+      TString* name = str_checkname(ls);
+      new_localvar(ls, name); /* new local variable */
+      adjustlocalvars(ls, 1); /* enter its scope */
+      l.line = ls->linenumber;
+      l.site = 1;
+      [[fallthrough]];
+    }
+    case 1:
+      body(ls, &l.b, 0, l.line); /* function created in next register */
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  l.fvar = fs->nactvar;
-  LZ_SITE(1, l.name = str_checkname(ls));
-  new_localvar(ls, l.name); /* new local variable */
-  adjustlocalvars(ls, 1);   /* enter its scope */
-  l.line = ls->linenumber;
-  LZ_SITE(2, body(ls, &l.b, 0, l.line)); /* function created in next register */
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_LOCALFUNC, l);
+    throw;
+  }
   /* debug information will only see the variable after this point! */
   localdebuginfo(fs, l.fvar)->startpc = fs->pc;
 }
 
+/* the frame of 'getvarattribute' (see lload.h) */
+struct VarAttribFrame : LoadFrame
+{
+  TString* ts = nullptr;
+  LoadFrame* copy() const override { return new (std::nothrow) VarAttribFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static lu_byte getvarattribute(LexState* ls, lu_byte df)
 {
   /* attrib -> ['<' NAME '>'] */
-  constexpr int FN = LF_VARATTRIB;
-  struct
+  VarAttribFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const VarAttribFrame&>(luaZ_restore(ls->z->rz, LF_VARATTRIB));
+  try
   {
-    int r;
-    TString* ts;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    default: LZ_BADSITE();
+    case 0:
+      if (!testnext(ls, '<'))
+        return df; /* return default value */
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      l.ts = str_checkname(ls);
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      checknext(ls, '>');
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, l.r = testnext(ls, '<'));
-  if (l.r)
+  catch (...)
   {
-    LZ_SITE(2, l.ts = str_checkname(ls));
-    LZ_SITE(3, checknext(ls, '>'));
-    byte_view attr = l.ts->data.view();
-    if (attr == lt::const_kw)
-      return RDKCONST; /* read-only variable */
-    else if (attr == lt::close_kw)
-      return RDKTOCLOSE; /* to-be-closed variable */
-    else
-      luaK_semerror(ls, lt::unknown_attribute_s, FmtArgs().str(l.ts->data.view()));
+    luaZ_record(ls->z->rz, LF_VARATTRIB, l);
+    throw;
   }
+  byte_view attr = l.ts->data.view();
+  if (attr == lt::const_kw)
+    return RDKCONST; /* read-only variable */
+  else if (attr == lt::close_kw)
+    return RDKTOCLOSE; /* to-be-closed variable */
+  else
+    luaK_semerror(ls, lt::unknown_attribute_s, FmtArgs().str(l.ts->data.view()));
   return df; /* return default value */
 }
 
@@ -2551,66 +3123,92 @@ static void checktoclose(FuncState* fs, int level)
   }
 }
 
+/* the frame of 'localstat' (see lload.h) */
+struct LocalstatFrame : LoadFrame
+{
+  int toclose = 0; /* index of to-be-closed variable (if any) */
+  int vidx = 0;    /* index of last variable */
+  int nvars = 0;
+  int nexps = 0;
+  lu_byte defkind = 0;
+  TString* vname = nullptr;
+  expdesc e{};
+  LoadFrame* copy() const override { return new (std::nothrow) LocalstatFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void localstat(LexState* ls)
 {
   /* stat -> LOCAL NAME attrib { ',' NAME attrib } ['=' explist] */
-  constexpr int FN = LF_LOCALSTAT;
-  struct
-  {
-    int toclose; /* index of to-be-closed variable (if any) */
-    int vidx;    /* index of last variable */
-    int nvars;
-    int nexps;
-    int r;
-    lu_byte defkind;
-    lu_byte kind;
-    TString* vname;
-    expdesc e;
-  } l;
+  LocalstatFrame l;
   FuncState* fs = ls->fs;
   Vardesc* var; /* last variable */
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const LocalstatFrame&>(luaZ_restore(ls->z->rz, LF_LOCALSTAT));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.toclose = -1;
+        l.nvars = 0;
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        /* get prefixed attribute (if any); default is regular local variable */
+        l.defkind = getvarattribute(ls, VDKREG);
+        l.site = 2;
+        [[fallthrough]];
+      case 2:                          /* the loop: for each variable */
+        l.vname = str_checkname(ls); /* get its name */
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+      {
+        lu_byte kind = getvarattribute(ls, l.defkind); /* postfixed attribute */
+        l.vidx = new_varkind(ls, l.vname, kind);       /* predeclare it */
+        if (kind == RDKTOCLOSE)
+        {                      /* to-be-closed? */
+          if (l.toclose != -1) /* one already present? */
+            luaK_semerror(ls, lt::multiple_to_be_closed_variables_in_local_list, FmtArgs());
+          l.toclose = fs->nactvar + l.nvars;
+        }
+        l.nvars++;
+        l.site = 4;
+        [[fallthrough]];
+      }
+      case 4:
+        if (testnext(ls, ','))
+        {
+          l.site = 2;
+          continue;
+        }
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        if (!testnext(ls, '='))
+        {
+          l.e.k = VVOID;
+          l.nexps = 0;
+          break;
+        }
+        l.site = 6; /* initialization */
+        [[fallthrough]];
+      case 6:
+        l.nexps = explist(ls, &l.e);
+        break;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
+      break; /* (the declaration is read) */
     }
   }
-  l.toclose = -1;
-  l.nvars = 0;
-  /* get prefixed attribute (if any); default is regular local variable */
-  LZ_SITE(1, l.defkind = getvarattribute(ls, VDKREG));
-  for (;;)
-  { /* for each variable */
-    LZ_SITE(2, l.vname = str_checkname(ls));            /* get its name */
-    LZ_SITE(3, l.kind = getvarattribute(ls, l.defkind)); /* postfixed attribute */
-    l.vidx = new_varkind(ls, l.vname, l.kind);           /* predeclare it */
-    if (l.kind == RDKTOCLOSE)
-    {                      /* to-be-closed? */
-      if (l.toclose != -1) /* one already present? */
-        luaK_semerror(ls, lt::multiple_to_be_closed_variables_in_local_list, FmtArgs());
-      l.toclose = fs->nactvar + l.nvars;
-    }
-    l.nvars++;
-    LZ_SITE(4, l.r = testnext(ls, ','));
-    if (!l.r)
-      break;
-  }
-  LZ_SITE(5, l.r = testnext(ls, '='));
-  if (l.r) /* initialization? */
+  catch (...)
   {
-    LZ_SITE(6, l.nexps = explist(ls, &l.e));
-  }
-  else
-  {
-    l.e.k = VVOID;
-    l.nexps = 0;
+    luaZ_record(ls->z->rz, LF_LOCALSTAT, l);
+    throw;
   }
   var = getlocalvardesc(fs, l.vidx); /* retrieve last variable */
   if (l.nvars == l.nexps &&          /* no adjustments? */
@@ -2654,6 +3252,16 @@ static void checkglobal(LexState* ls, TString* varname, int line)
   luaK_codecheckglobal(fs, &var, k, line);
 }
 
+/* the frame of 'initglobal' (see lload.h) */
+struct InitglobalFrame : LoadFrame
+{
+  TString* varname = nullptr;
+  expdesc e{};
+  expdesc var{};
+  LoadFrame* copy() const override { return new (std::nothrow) InitglobalFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 /*
 ** Recursively traverse list of globals to be initalized. When
 ** going, generate table description for the global. In the end,
@@ -2665,147 +3273,212 @@ static void checkglobal(LexState* ls, TString* varname, int line)
 static void initglobal(LexState* ls, int nvars, int firstidx, int n,
                        int line)
 {
-  constexpr int FN = LF_INITGLOBAL;
-  struct
-  {
-    int nexps;
-    TString* varname;
-    expdesc e;
-    expdesc var;
-  } l;
+  InitglobalFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const InitglobalFrame&>(luaZ_restore(ls->z->rz, LF_INITGLOBAL));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        if (n != nvars)
+        { /* handle variable 'n' */
+          l.varname = getlocalvardesc(fs, firstidx + n)->name;
+          buildglobal(ls, l.varname, &l.var); /* create global variable in 'var' */
+          l.site = 2;
+          continue;
+        }
+        /* traversed all variables */
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+      {
+        int nexps = explist(ls, &l.e); /* read list of expressions */
+        adjust_assign(ls, nvars, nexps, &l.e);
+        return;
+      }
+      case 2:
+        enterlevel(ls); /* control recursion depth */
+        initglobal(ls, nvars, firstidx, n + 1, line);
+        leavelevel(ls);
+        checkglobal(ls, l.varname, line);
+        storevartop(fs, &l.var);
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  if (n == nvars)
-  { /* traversed all variables? */
-    LZ_SITE(1, l.nexps = explist(ls, &l.e)); /* read list of expressions */
-    adjust_assign(ls, nvars, l.nexps, &l.e);
-  }
-  else
-  { /* handle variable 'n' */
-    l.varname = getlocalvardesc(fs, firstidx + n)->name;
-    buildglobal(ls, l.varname, &l.var); /* create global variable in 'var' */
-    LZ_SITE(2, enterlevel(ls); /* control recursion depth */
-               initglobal(ls, nvars, firstidx, n + 1, line));
-    leavelevel(ls);
-    checkglobal(ls, l.varname, line);
-    storevartop(fs, &l.var);
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_INITGLOBAL, l);
+    throw;
   }
 }
 
+/* the frame of 'globalnames' (see lload.h) */
+struct GlobalnamesFrame : LoadFrame
+{
+  int nvars = 0;
+  int lastidx = 0; /* index of last registered variable */
+  int line = 0;
+  TString* vname = nullptr;
+  LoadFrame* copy() const override { return new (std::nothrow) GlobalnamesFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void globalnames(LexState* ls, lu_byte defkind)
 {
-  constexpr int FN = LF_GLOBALNAMES;
-  struct
-  {
-    int nvars;
-    int lastidx; /* index of last registered variable */
-    int r;
-    int line;
-    lu_byte kind;
-    TString* vname;
-  } l;
+  GlobalnamesFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const GlobalnamesFrame&>(luaZ_restore(ls->z->rz, LF_GLOBALNAMES));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.nvars = 0;
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop: for each name */
+        l.vname = str_checkname(ls);
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+      {
+        lu_byte kind = getglobalattribute(ls, defkind);
+        l.lastidx = new_varkind(ls, l.vname, kind);
+        l.nvars++;
+        l.site = 3;
+        [[fallthrough]];
+      }
+      case 3:
+        if (testnext(ls, ','))
+        {
+          l.site = 1;
+          continue;
+        }
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        if (!testnext(ls, '='))
+          break;
+        /* initialization */
+        l.line = ls->linenumber;
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        initglobal(ls, l.nvars, l.lastidx - l.nvars + 1, 0, l.line);
+        break;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
+      break; /* (the names are read) */
     }
   }
-  l.nvars = 0;
-  for (;;)
-  { /* for each name */
-    LZ_SITE(1, l.vname = str_checkname(ls));
-    LZ_SITE(2, l.kind = getglobalattribute(ls, defkind));
-    l.lastidx = new_varkind(ls, l.vname, l.kind);
-    l.nvars++;
-    LZ_SITE(3, l.r = testnext(ls, ','));
-    if (!l.r)
-      break;
-  }
-  LZ_SITE(4, l.r = testnext(ls, '='));
-  if (l.r) /* initialization? */
+  catch (...)
   {
-    l.line = ls->linenumber;
-    LZ_SITE(5, initglobal(ls, l.nvars, l.lastidx - l.nvars + 1, 0, l.line));
+    luaZ_record(ls->z->rz, LF_GLOBALNAMES, l);
+    throw;
   }
   fs->nactvar = (short)(fs->nactvar + l.nvars); /* activate declaration */
 }
+
+/* the frame of 'globalstat' (see lload.h) */
+struct GlobalstatFrame : LoadFrame
+{
+  lu_byte defkind = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) GlobalstatFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void globalstat(LexState* ls)
 {
   /* globalstat -> (GLOBAL) attrib '*'
      globalstat -> (GLOBAL) attrib NAME attrib {',' NAME attrib} */
-  constexpr int FN = LF_GLOBALSTAT;
-  struct
-  {
-    lu_byte defkind;
-    int r;
-  } l;
+  GlobalstatFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const GlobalstatFrame&>(luaZ_restore(ls->z->rz, LF_GLOBALSTAT));
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    default: LZ_BADSITE();
+    case 0:
+      /* get prefixed attribute (if any); default is regular global variable */
+      l.defkind = getglobalattribute(ls, GDKREG);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      if (testnext(ls, '*'))
+      {
+        new_varkind(ls, nullptr, l.defkind);
+        fs->nactvar++; /* activate declaration */
+        break;
+      }
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      globalnames(ls, l.defkind);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  /* get prefixed attribute (if any); default is regular global variable */
-  LZ_SITE(1, l.defkind = getglobalattribute(ls, GDKREG));
-  LZ_SITE(2, l.r = testnext(ls, '*'));
-  if (!l.r)
+  catch (...)
   {
-    LZ_SITE(3, globalnames(ls, l.defkind));
-  }
-  else
-  {
-    new_varkind(ls, nullptr, l.defkind);
-    fs->nactvar++; /* activate declaration */
+    luaZ_record(ls->z->rz, LF_GLOBALSTAT, l);
+    throw;
   }
 }
+
+/* the frame of 'globalfunc' (see lload.h) */
+struct GlobalfuncFrame : LoadFrame
+{
+  int bline = 0;
+  TString* fname = nullptr;
+  expdesc var{}, b{};
+  LoadFrame* copy() const override { return new (std::nothrow) GlobalfuncFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void globalfunc(LexState* ls, int line)
 {
   /* globalfunc -> (GLOBAL FUNCTION) NAME body */
-  constexpr int FN = LF_GLOBALFUNC;
-  struct
-  {
-    int bline;
-    TString* fname;
-    expdesc var, b;
-  } l;
+  GlobalfuncFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const GlobalfuncFrame&>(luaZ_restore(ls->z->rz, LF_GLOBALFUNC));
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+      l.fname = str_checkname(ls);
+      new_varkind(ls, l.fname, GDKREG); /* declare global variable */
+      fs->nactvar++;                    /* enter its scope */
+      buildglobal(ls, l.fname, &l.var);
+      l.bline = ls->linenumber;
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      body(ls, &l.b, 0, l.bline); /* compile and return closure in 'b' */
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, l.fname = str_checkname(ls));
-  new_varkind(ls, l.fname, GDKREG); /* declare global variable */
-  fs->nactvar++;                    /* enter its scope */
-  buildglobal(ls, l.fname, &l.var);
-  l.bline = ls->linenumber;
-  LZ_SITE(2, body(ls, &l.b, 0, l.bline)); /* compile and return closure in 'b' */
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_GLOBALFUNC, l);
+    throw;
+  }
   checkglobal(ls, l.fname, line);
   luaK_storevar(fs, &l.var, &l.b);
   luaK_fixline(fs, line); /* definition "happens" in the first line */
@@ -2814,306 +3487,417 @@ static void globalfunc(LexState* ls, int line)
 static void globalstatfunc(LexState* ls, int line)
 {
   /* stat -> GLOBAL globalfunc | GLOBAL globalstat */
-  constexpr int FN = LF_GLOBALSTATFUNC;
-  struct
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_GLOBALSTATFUNC);
+  try
   {
-    int r;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        luaX_next(ls); /* skip 'global' */
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        l.site = testnext(ls, TK_FUNCTION) ? 2 : 3;
+        continue;
+      case 2:
+        globalfunc(ls, line);
+        return;
+      case 3:
+        globalstat(ls);
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  LZ_SITE(1, luaX_next(ls)); /* skip 'global' */
-  LZ_SITE(2, l.r = testnext(ls, TK_FUNCTION));
-  if (l.r)
+  catch (...)
   {
-    LZ_SITE(3, globalfunc(ls, line));
-  }
-  else
-  {
-    LZ_SITE(4, globalstat(ls));
+    luaZ_record(ls->z->rz, LF_GLOBALSTATFUNC, l);
+    throw;
   }
 }
+
+/* the frame of 'funcname' (see lload.h) */
+struct FuncnameFrame : LoadFrame
+{
+  int ismethod = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) FuncnameFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static int funcname(LexState* ls, expdesc* v)
 {
   /* funcname -> NAME {fieldsel} [':' NAME] */
-  constexpr int FN = LF_FUNCNAME;
-  struct
+  FuncnameFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const FuncnameFrame&>(luaZ_restore(ls->z->rz, LF_FUNCNAME));
+  try
   {
-    int ismethod;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.ismethod = 0;
+        singlevar(ls, v);
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop */
+        if (ls->t.token == '.')
+          l.site = 2;
+        else if (ls->t.token == ':')
+        {
+          l.ismethod = 1;
+          l.site = 3;
+        }
+        else
+          return l.ismethod;
+        continue;
+      case 2:
+        fieldsel(ls, v);
+        l.site = 1;
+        continue;
+      case 3:
+        fieldsel(ls, v);
+        return l.ismethod;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.ismethod = 0;
-  LZ_SITE(1, singlevar(ls, v));
-  while (ls->t.token == '.')
+  catch (...)
   {
-    LZ_SITE(2, fieldsel(ls, v));
+    luaZ_record(ls->z->rz, LF_FUNCNAME, l);
+    throw;
   }
-  if (ls->t.token == ':')
-  {
-    l.ismethod = 1;
-    LZ_SITE(3, fieldsel(ls, v));
-  }
-  return l.ismethod;
 }
+
+/* the frame of 'funcstat' (see lload.h) */
+struct FuncstatFrame : LoadFrame
+{
+  int ismethod = 0;
+  expdesc v{}, b{};
+  LoadFrame* copy() const override { return new (std::nothrow) FuncstatFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void funcstat(LexState* ls, int line)
 {
   /* funcstat -> FUNCTION funcname body */
-  constexpr int FN = LF_FUNCSTAT;
-  struct
+  FuncstatFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const FuncstatFrame&>(luaZ_restore(ls->z->rz, LF_FUNCSTAT));
+  try
   {
-    int ismethod;
-    expdesc v, b;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    default: LZ_BADSITE();
+    case 0:
+      luaX_next(ls); /* skip FUNCTION */
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      l.ismethod = funcname(ls, &l.v);
+      check_readonly(ls, &l.v);
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      body(ls, &l.b, l.ismethod, line);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, luaX_next(ls)); /* skip FUNCTION */
-  LZ_SITE(2, l.ismethod = funcname(ls, &l.v));
-  check_readonly(ls, &l.v);
-  LZ_SITE(3, body(ls, &l.b, l.ismethod, line));
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_FUNCSTAT, l);
+    throw;
+  }
   luaK_storevar(ls->fs, &l.v, &l.b);
   luaK_fixline(ls->fs, line); /* definition "happens" in the first line */
 }
 
+/* the frame of 'exprstat' (see lload.h) */
+struct ExprstatFrame : LoadFrame
+{
+  struct LHS_assign v{};
+  LoadFrame* copy() const override { return new (std::nothrow) ExprstatFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 static void exprstat(LexState* ls)
 {
   /* stat -> func | assignment */
-  constexpr int FN = LF_EXPRSTAT;
-  struct
-  {
-    struct LHS_assign v;
-  } l;
+  ExprstatFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const ExprstatFrame&>(luaZ_restore(ls->z->rz, LF_EXPRSTAT));
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+      suffixedexp(ls, &l.v.v);
+      if (ls->t.token != '=' && ls->t.token != ',')
+      { /* stat -> func */
+        std::span<Instruction> code = fs->f->code;
+        check_condition(ls, l.v.v.k == VCALL, lt::syntax_error);
+        int pc = l.v.v.info;
+        code[pc] = SETARG_C(code[pc], 1); /* call statement uses no results */
+        break;
+      }
+      /* stat -> assignment */
+      l.v.prev = nullptr;
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      restassign(ls, &l.v, 1);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, suffixedexp(ls, &l.v.v));
-  if (ls->t.token == '=' || ls->t.token == ',')
-  { /* stat -> assignment ? */
-    l.v.prev = nullptr;
-    LZ_SITE(2, restassign(ls, &l.v, 1));
-  }
-  else
-  { /* stat -> func */
-    std::span<Instruction> code = fs->f->code;
-    check_condition(ls, l.v.v.k == VCALL, lt::syntax_error);
-    int pc = l.v.v.info;
-    code[pc] = SETARG_C(code[pc], 1); /* call statement uses no results */
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_EXPRSTAT, l);
+    throw;
   }
 }
+
+/* the frame of 'retstat' (see lload.h) */
+struct RetstatFrame : LoadFrame
+{
+  int nret = 0;  /* number of values being returned */
+  int first = 0; /* first slot to be returned */
+  expdesc e{};
+  LoadFrame* copy() const override { return new (std::nothrow) RetstatFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void retstat(LexState* ls)
 {
   /* stat -> RETURN [explist] [';'] */
-  constexpr int FN = LF_RETSTAT;
-  struct
-  {
-    int nret;  /* number of values being returned */
-    int first; /* first slot to be returned */
-    expdesc e;
-  } l;
+  RetstatFrame l;
   FuncState* fs = ls->fs;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const RetstatFrame&>(luaZ_restore(ls->z->rz, LF_RETSTAT));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.first = luaY_nvarstack(fs);
+        if (block_follow(ls, 1) || ls->t.token == ';')
+        {
+          l.nret = 0; /* return no values */
+          l.site = 2;
+          continue;
+        }
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        l.nret = explist(ls, &l.e); /* optional return values */
+        if (hasmultret(l.e.k))
+        {
+          luaK_setmultret(fs, &l.e);
+          if (l.e.k == VCALL && l.nret == 1 && !fs->bl->insidetbc)
+          { /* tail call? */
+            fs->f->code[l.e.info] = SET_OPCODE(fs->f->code[l.e.info], OP_TAILCALL);
+            assert(GETARG_A(fs->f->code[l.e.info]) == luaY_nvarstack(fs));
+          }
+          l.nret = LUA_MULTRET; /* return all values */
+        }
+        else
+        {
+          if (l.nret == 1)                       /* only one single value? */
+            l.first = luaK_exp2anyreg(fs, &l.e); /* can use original slot */
+          else
+          { /* values must go to the top of the stack */
+            luaK_exp2nextreg(fs, &l.e);
+            assert(l.nret == fs->freereg - l.first);
+          }
+        }
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        luaK_ret(fs, l.first, l.nret);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        testnext(ls, ';'); /* skip optional semicolon */
+        return;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.first = luaY_nvarstack(fs);
-  if (block_follow(ls, 1) || ls->t.token == ';')
-    l.nret = 0; /* return no values */
-  else
+  catch (...)
   {
-    LZ_SITE(1, l.nret = explist(ls, &l.e)); /* optional return values */
-    if (hasmultret(l.e.k))
-    {
-      luaK_setmultret(fs, &l.e);
-      if (l.e.k == VCALL && l.nret == 1 && !fs->bl->insidetbc)
-      { /* tail call? */
-        fs->f->code[l.e.info] = SET_OPCODE(fs->f->code[l.e.info], OP_TAILCALL);
-        assert(GETARG_A(fs->f->code[l.e.info]) == luaY_nvarstack(fs));
-      }
-      l.nret = LUA_MULTRET; /* return all values */
-    }
-    else
-    {
-      if (l.nret == 1)                       /* only one single value? */
-        l.first = luaK_exp2anyreg(fs, &l.e); /* can use original slot */
-      else
-      { /* values must go to the top of the stack */
-        luaK_exp2nextreg(fs, &l.e);
-        assert(l.nret == fs->freereg - l.first);
-      }
-    }
+    luaZ_record(ls->z->rz, LF_RETSTAT, l);
+    throw;
   }
-  luaK_ret(fs, l.first, l.nret);
-  LZ_SITE(2, testnext(ls, ';')); /* skip optional semicolon */
 }
+
+/* the frame of 'statement' (see lload.h) */
+struct StatementFrame : LoadFrame
+{
+  int line = 0; /* may be needed for error messages */
+  TString* name = nullptr;
+  LoadFrame* copy() const override { return new (std::nothrow) StatementFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
 
 static void statement(LexState* ls)
 {
-  constexpr int FN = LF_STATEMENT;
-  struct
-  {
-    int line; /* may be needed for error messages */
-    int r;
-    TString* name;
-  } l;
+  StatementFrame l;
   enterlevel(ls);
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const StatementFrame&>(luaZ_restore(ls->z->rz, LF_STATEMENT));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    case 8: goto site_8;
-    case 9: goto site_9;
-    case 10: goto site_10;
-    case 11: goto site_11;
-    case 12: goto site_12;
-    case 13: goto site_13;
-    case 14: goto site_14;
-    case 15: goto site_15;
-    case 16: goto site_16;
-    case 17: goto site_17;
-    case 18: goto site_18;
-    case 19: goto site_19;
-    case 20: goto site_20;
-    case 21: goto site_21;
-    case 22: goto site_22;
-    case 23: goto site_23;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.line = ls->linenumber;
+        switch (ls->t.token)
+        {
+        case ';': /* stat -> ';' (empty statement) */
+          l.site = 1;
+          break;
+        case TK_IF: /* stat -> ifstat */
+          l.site = 2;
+          break;
+        case TK_WHILE: /* stat -> whilestat */
+          l.site = 3;
+          break;
+        case TK_DO: /* stat -> DO block END */
+          l.site = 4;
+          break;
+        case TK_FOR: /* stat -> forstat */
+          l.site = 7;
+          break;
+        case TK_REPEAT: /* stat -> repeatstat */
+          l.site = 8;
+          break;
+        case TK_FUNCTION: /* stat -> funcstat */
+          l.site = 9;
+          break;
+        case TK_LOCAL: /* stat -> localstat */
+          l.site = 10;
+          break;
+        case TK_GLOBAL: /* stat -> globalstatfunc */
+          l.site = 14;
+          break;
+        case TK_DBCOLON: /* stat -> label */
+          l.site = 15;
+          break;
+        case TK_RETURN: /* stat -> retstat */
+          l.site = 18;
+          break;
+        case TK_BREAK: /* stat -> breakstat */
+          l.site = 20;
+          break;
+        case TK_GOTO: /* stat -> 'goto' NAME */
+          l.site = 21;
+          break;
+        default: /* stat -> func | assignment */
+          l.site = 23;
+          break;
+        }
+        continue;
+      case 1:
+        luaX_next(ls); /* skip ';' */
+        break;
+      case 2:
+        ifstat(ls, l.line);
+        break;
+      case 3:
+        whilestat(ls, l.line);
+        break;
+      case 4:
+        luaX_next(ls); /* skip DO */
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        block(ls);
+        l.site = 6;
+        [[fallthrough]];
+      case 6:
+        check_match(ls, TK_END, TK_DO, l.line);
+        break;
+      case 7:
+        forstat(ls, l.line);
+        break;
+      case 8:
+        repeatstat(ls, l.line);
+        break;
+      case 9:
+        funcstat(ls, l.line);
+        break;
+      case 10:
+        luaX_next(ls); /* skip LOCAL */
+        l.site = 11;
+        [[fallthrough]];
+      case 11:
+        l.site = testnext(ls, TK_FUNCTION) ? 12 : 13; /* local function? */
+        continue;
+      case 12:
+        localfunc(ls);
+        break;
+      case 13:
+        localstat(ls);
+        break;
+      case 14:
+        globalstatfunc(ls, l.line);
+        break;
+      case 15:
+        luaX_next(ls); /* skip double colon */
+        l.site = 16;
+        [[fallthrough]];
+      case 16:
+        l.name = str_checkname(ls);
+        l.site = 17;
+        [[fallthrough]];
+      case 17:
+        labelstat(ls, l.name, l.line);
+        break;
+      case 18:
+        luaX_next(ls); /* skip RETURN */
+        l.site = 19;
+        [[fallthrough]];
+      case 19:
+        retstat(ls);
+        break;
+      case 20:
+        breakstat(ls, l.line);
+        break;
+      case 21:
+        luaX_next(ls); /* skip 'goto' */
+        l.site = 22;
+        [[fallthrough]];
+      case 22:
+        gotostat(ls, l.line);
+        break;
+      case 23:
+        exprstat(ls);
+        break;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
+      break; /* (the statement is read) */
     }
   }
-  l.line = ls->linenumber;
-  switch (ls->t.token)
+  catch (...)
   {
-  case ';':
-  {                            /* stat -> ';' (empty statement) */
-    LZ_SITE(1, luaX_next(ls)); /* skip ';' */
-    break;
-  }
-  case TK_IF:
-  { /* stat -> ifstat */
-    LZ_SITE(2, ifstat(ls, l.line));
-    break;
-  }
-  case TK_WHILE:
-  { /* stat -> whilestat */
-    LZ_SITE(3, whilestat(ls, l.line));
-    break;
-  }
-  case TK_DO:
-  {                            /* stat -> DO block END */
-    LZ_SITE(4, luaX_next(ls)); /* skip DO */
-    LZ_SITE(5, block(ls));
-    LZ_SITE(6, check_match(ls, TK_END, TK_DO, l.line));
-    break;
-  }
-  case TK_FOR:
-  { /* stat -> forstat */
-    LZ_SITE(7, forstat(ls, l.line));
-    break;
-  }
-  case TK_REPEAT:
-  { /* stat -> repeatstat */
-    LZ_SITE(8, repeatstat(ls, l.line));
-    break;
-  }
-  case TK_FUNCTION:
-  { /* stat -> funcstat */
-    LZ_SITE(9, funcstat(ls, l.line));
-    break;
-  }
-  case TK_LOCAL:
-  {                                         /* stat -> localstat */
-    LZ_SITE(10, luaX_next(ls));             /* skip LOCAL */
-    LZ_SITE(11, l.r = testnext(ls, TK_FUNCTION)); /* local function? */
-    if (l.r)
-    {
-      LZ_SITE(12, localfunc(ls));
-    }
-    else
-    {
-      LZ_SITE(13, localstat(ls));
-    }
-    break;
-  }
-  case TK_GLOBAL:
-  { /* stat -> globalstatfunc */
-    LZ_SITE(14, globalstatfunc(ls, l.line));
-    break;
-  }
-  case TK_DBCOLON:
-  {                             /* stat -> label */
-    LZ_SITE(15, luaX_next(ls)); /* skip double colon */
-    LZ_SITE(16, l.name = str_checkname(ls));
-    LZ_SITE(17, labelstat(ls, l.name, l.line));
-    break;
-  }
-  case TK_RETURN:
-  {                             /* stat -> retstat */
-    LZ_SITE(18, luaX_next(ls)); /* skip RETURN */
-    LZ_SITE(19, retstat(ls));
-    break;
-  }
-  case TK_BREAK:
-  { /* stat -> breakstat */
-    LZ_SITE(20, breakstat(ls, l.line));
-    break;
-  }
-  case TK_GOTO:
-  {                             /* stat -> 'goto' NAME */
-    LZ_SITE(21, luaX_next(ls)); /* skip 'goto' */
-    LZ_SITE(22, gotostat(ls, l.line));
-    break;
-  }
-  /* FALLTHROUGH */
-  default:
-  { /* stat -> func | assignment */
-    LZ_SITE(23, exprstat(ls));
-    break;
-  }
+    luaZ_record(ls->z->rz, LF_STATEMENT, l);
+    throw;
   }
   assert(ls->fs->f->maxstacksize >= ls->fs->freereg &&
              ls->fs->freereg >= luaY_nvarstack(ls->fs));
@@ -3131,83 +3915,106 @@ static void statement(LexState* ls)
 */
 static void mainfunc(LexState* ls, FuncState* fs)
 {
-  constexpr int FN = LF_MAINFUNC;
-  struct
-  {
-    BlockCnt bl;
-  } l;
-  Upvaldesc* env;
-  if (LZ_RESUMING())
+  BlockFrame l;
+  if (l_unlikely(ls->z->resuming))
   { /* (its function and block again in the chains) */
-    int site = LZ_SITENO();
+    l = static_cast<const BlockFrame&>(luaZ_restore(ls->z->rz, LF_MAINFUNC));
     fs->prev = nullptr;
     fs->ls = ls;
     ls->fs = fs;
     l.bl.previous = nullptr;
     fs->bl = &l.bl;
-    switch (site)
+  }
+  try
+  {
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+    {
+      open_func(ls, fs, &l.bl);
+      setvararg(fs);                      /* main function is always vararg */
+      Upvaldesc* env = allocupvalue(fs); /* ...set environment upvalue */
+      env->instack = 1;
+      env->idx = 0;
+      env->kind = VDKREG;
+      env->name = ls->envn;
+      luaC_objbarrier(ls->L, fs->f, env->name);
+      l.site = 1;
+      [[fallthrough]];
+    }
+    case 1:
+      luaX_next(ls); /* read first token */
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      statlist(ls); /* parse main body */
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  open_func(ls, fs, &l.bl);
-  setvararg(fs);          /* main function is always vararg */
-  env = allocupvalue(fs); /* ...set environment upvalue */
-  env->instack = 1;
-  env->idx = 0;
-  env->kind = VDKREG;
-  env->name = ls->envn;
-  luaC_objbarrier(ls->L, fs->f, env->name);
-  LZ_SITE(1, luaX_next(ls)); /* read first token */
-  LZ_SITE(2, statlist(ls));  /* parse main body */
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_MAINFUNC, l);
+    throw;
+  }
   check(ls, TK_EOS);
   close_func(ls);
 }
 
+/* the frame of 'luaY_parser' (see lload.h) */
+struct ParserFrame : LoadFrame
+{
+  LexState lexstate{};
+  FuncState funcstate{};
+  LClosure* cl = nullptr;
+  LoadFrame* copy() const override { return new (std::nothrow) ParserFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 LClosure* luaY_parser(lua_State* L, ZIO* z, Table* anchor, MBuffer* buff, Dyndata* dyd, byte_view name, int firstchar)
 {
-  constexpr int FN = LF_PARSER;
-  struct
-  {
-    LexState lexstate;
-    FuncState funcstate;
-    LClosure* cl;
-  } l;
+  ParserFrame l;
   if (l_unlikely(z->resuming))
   { /* (the scanner again with this load's stream, buffer and lists) */
-    if (luaZ_restore(z->rz, FN, &l, sizeof(l)) != 1)
-      luaZ_badstate(z->rz);
+    l = static_cast<const ParserFrame&>(luaZ_restore(z->rz, LF_PARSER));
     l.lexstate.L = L;
     l.lexstate.z = z;
     l.lexstate.buff = buff;
     l.lexstate.dyd = dyd;
     l.lexstate.h = anchor;
     l.lexstate.fs = nullptr;
-    goto site_1;
   }
-  l.lexstate.h = anchor;                    /* table for scanner */
-  l.cl = LClosure::luaF_newLclosure(L, 1); /* create main closure */
-  luaZ_madefunction(z->rz, l.cl);
-  assert(novariant(l.cl->tt) >= LUA_TSTRING);
-  luaD_anchorobj(L, anchor, l.cl); /* anchor it in scanner table */
-  l.funcstate.f = l.cl->p = Proto::luaF_newproto(L);
-  luaC_objbarrier(L, l.cl, l.cl->p);
-  l.funcstate.f->source = TString::luaS_createstr(L, name); /* create and anchor TString */
-  luaC_objbarrier(L, l.funcstate.f, l.funcstate.f->source);
-  l.lexstate.buff = buff;
-  l.lexstate.dyd = dyd;
-  dyd->actvar.n = dyd->gt.n = dyd->label.n = 0;
-  luaX_setinput(L, &l.lexstate, z, l.funcstate.f->source, firstchar);
-site_1:
   try
   {
-    mainfunc(&l.lexstate, &l.funcstate);
+    switch (l.site)
+    {
+    case 0:
+      l.lexstate.h = anchor;                    /* table for scanner */
+      l.cl = LClosure::luaF_newLclosure(L, 1); /* create main closure */
+      luaZ_madefunction(z->rz, l.cl);
+      assert(novariant(l.cl->tt) >= LUA_TSTRING);
+      luaD_anchorobj(L, anchor, l.cl); /* anchor it in scanner table */
+      l.funcstate.f = l.cl->p = Proto::luaF_newproto(L);
+      luaC_objbarrier(L, l.cl, l.cl->p);
+      l.funcstate.f->source = TString::luaS_createstr(L, name); /* create and anchor TString */
+      luaC_objbarrier(L, l.funcstate.f, l.funcstate.f->source);
+      l.lexstate.buff = buff;
+      l.lexstate.dyd = dyd;
+      dyd->actvar.n = dyd->gt.n = dyd->label.n = 0;
+      luaX_setinput(L, &l.lexstate, z, l.funcstate.f->source, firstchar);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      mainfunc(&l.lexstate, &l.funcstate);
+      break;
+    default:
+      luaZ_badstate(z->rz);
+    }
   }
   catch (...)
   {
-    luaZ_record(z->rz, FN, 1, &l, sizeof(l));
+    luaZ_record(z->rz, LF_PARSER, l);
     throw;
   }
   assert(!l.funcstate.prev && l.funcstate.nups == 1 && !l.lexstate.fs);
