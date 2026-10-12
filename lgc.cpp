@@ -2143,7 +2143,8 @@ static int checkmajorminor(lua_State* L, global_State* g)
   { /* generational mode? */
     l_mem numbytes = gettotalbytes(g);
     l_mem addedbytes = numbytes - g->GCmajorminor;
-    l_mem limit = luaO_applyparam(g->gcparams[LUA_GCPMAJORMINOR], addedbytes);
+    l_mem limit = (addedbytes < 0) ? 0
+                                   : luaO_applyparam(g->gcparams[LUA_GCPMAJORMINOR], addedbytes);
     l_mem tobecollected = numbytes - g->GCmarked;
     if (tobecollected > limit)
     {

@@ -162,6 +162,51 @@ end
 assert(collectgarbage'isrunning')
 
 
+do
+  -- bug in 5.0: when computing whether it should return from gen-major
+  -- to gen-minor, the difference between the total memory and the
+  -- previous total memory can be negative, which results in that
+  -- negative value being left-shifted (UB)
+
+  local lim = 1e6
+
+  -- make major collections non-incremental
+  local oldsm = collectgarbage("param", "stepmul", 0)
+
+  -- make "majorminor" large enough to force a left-shift
+  -- when applying the parameter (internal details)
+  local oldmm = collectgarbage("param", "majorminor", 2000)
+
+  collectgarbage(); collectgarbage()
+  assert(not T or T.gcquery() == "genminor")
+
+  local M = collectgarbage"count" * 1024
+
+  -- create a large table
+  local t = {}
+  for i = 1, lim do t[i] = true end
+  assert(collectgarbage"count" * 1024 > M + lim * string.packsize"j")
+
+  -- force collector to "generational major" mode, doing several
+  -- minor collections that recover no memory
+  collectgarbage"step"; collectgarbage"step"; collectgarbage"step"
+  assert(not T or T.gcquery() == "genmajor")
+
+  -- shrink the table
+  for i = 1, lim do t[i] = nil end
+  t[2 * lim] = true
+  assert(collectgarbage"count" < M * 5/4)
+
+  -- bug was here, an assert violation when checking whether to
+  -- return to 'genminor'
+  collectgarbage"step"
+
+  -- restore previous parameters
+  collectgarbage("param", "stepmul", oldsm)
+  collectgarbage("param", "majorminor", oldmm)
+end
+
+
 do  print"testing stop-the-world collection"
   local step = collectgarbage("param", "stepsize", 0);
   collectgarbage("incremental")
