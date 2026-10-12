@@ -2851,7 +2851,6 @@ public final class Lparser
       luaZ_record(ls.z.rz, LF_REPEATSTAT, l);
       throw ex;
     }
-    leaveblock(fs); /* finish scope */
     if (l.bl2.upval != 0)
     {                                   /* upvalues? */
       int exit = luaK_jump(fs);         /* normal exit must jump over fix */
@@ -2861,6 +2860,7 @@ public final class Lparser
       luaK_patchtohere(fs, exit); /* normal exit comes to here */
     }
     luaK_patchlist(fs, l.condexit, l.repeat_init); /* close the loop */
+    leaveblock(fs);                                /* finish scope */
     leaveblock(fs);                                /* finish loop */
   }
 
