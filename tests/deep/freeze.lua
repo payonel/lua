@@ -1355,6 +1355,34 @@ return f(a)
   assert(inload > 500, inload)
 end
 
+-- deep nesting, up to and past the limit of C levels, loaded with a freeze
+-- at every token: the most frames a stopped load keeps (their room is
+-- checked in a debug build), and the same function or the same error
+do
+  for _, src in ipairs{
+    "return " .. string.rep("(", 100) .. "1" .. string.rep(")", 100),
+    "return " .. string.rep("- ", 150) .. "1",
+    "return " .. string.rep("(", 250) .. "1" .. string.rep(")", 250),
+    "return " .. string.rep("{", 100) .. string.rep("}", 100),
+    string.rep("do ", 100) .. string.rep("end ", 100),
+    string.rep("do ", 250) .. string.rep("end ", 250),
+    string.rep("if x then ", 80) .. string.rep("end ", 80),
+    "return " .. string.rep("function() return ", 40) .. "1" .. string.rep(" end", 40),
+    "local a = " .. string.rep("1 + ", 1000) .. "1",
+  } do
+    local function run()
+      local f, e = load(src)
+      return f and string.dump(f) or e
+    end
+    local _, plain = coroutine.resume(coroutine.create(run))
+    local co = coroutine.create(run)
+    local freezes = 0
+    debug.setbudget(co, 1, function() freezes = freezes + 1 debug.freeze() end)
+    local r = table.pack(kresume(co))
+    assert(r[1] and r[2] == plain and freezes > 80, src:sub(1, 30))
+  end
+end
+
 -- a message handler that freezes, called for an error of the reader
 -- function of 'load': 'load' gives the handled error, as without a freeze
 do
