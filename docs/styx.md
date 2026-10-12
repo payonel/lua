@@ -379,7 +379,7 @@ across a restore, and are to be revisited:
   the stream without verifying them (as with binary chunks), and checks the
   thread state it reads only for consistency with itself. Do not unpersist
   data you do not trust.
-- **A final format**: the format (version 8, ADR-10) may still change;
+- **A final format**: the format (version 9, ADR-10) may still change;
   no stream of an earlier version is read.
 - **The hash seed in streams** is not hidden: every stream starts with the
   persisting state's string hash seed (`luaL_restorestate` makes the state
@@ -442,8 +442,8 @@ Every capability is covered from script and from C++ for careful testing,
 in `tests/styx/`, run by `make test` with everything else.
 
 ### ADR-10: Stream format
-**Status:** accepted (version 8)
-A persisted string is the header `"Styx\x08"` (name plus format version),
+**Status:** accepted (version 9)
+A persisted string is the header `"Styx\x09"` (name plus format version),
 the persisting state's string hash seed (8 bytes, ADR-22), then one value
 (or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload
 (a table, function or thread starts with its hash, ADR-30);
@@ -461,7 +461,8 @@ trailer; version 5 objects' hashes; version 6 frozen threads (ADR-34);
 version 7 a budget group's queue of waiting `__gc`, the kinds of marked
 user objects in the trailer and a frozen main thread written whole, and
 dropped the tag of a table rebuilt by a `__persist` function; version 8
-the thread a whole state was persisted from (ADR-24). Output
+the thread a whole state was persisted from (ADR-24); version 9 a frozen
+`table.sort`'s state as its own kind of user object ("table.sort"). Output
 is built in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a
 missing header (or another version), unknown tags, truncation and trailing
 bytes.
