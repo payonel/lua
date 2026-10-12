@@ -1824,16 +1824,14 @@ each says what Java could not express and what it is now.
 | `LoadResume::given` (`bool*`); `ref_find(…, lua_Integer*)`; pointers to fields; lambdas setting locals | A field; an optional; an array; fields | Java prep: a load's 'given'…; Styx Java prep: an optional reference… |
 | The Restorer's destructor undoing a failed restore; lookups by address; a label by pointer | `abandon()` in its owners' catch; by reference id; by value | Styx Java prep: the restore's cleanup is a call… |
 | Uncounted lists in the restore's finish | Counted | Styx Java prep: the restore's lists of marked objects are counted |
+| A stopped load's functions (`llex`, `lparser`, `lundump`, `lzio`, `f_parser`) going back with about 330 `goto`s into their loops and `case`s, their locals recorded as raw bytes | State machines (`for (;;) switch (l.site)`, a loop's head a state of its own); a frame type per function, its locals as fields; a stack of typed frames in the load's box; a function whose call goes the same way when made again keeps no frame | Loads: a stopped load's frames are a stack of typed records; Lexer, Binary loader, Parser: its functions run as state machines…; Loads: the stream and 'f_parser'…; Loads: no frame is recorded as bytes any more |
 
 **Results (A/B):**
 - Strings (B24's storage): `all.lua` 0.82 s both. New short strings kept as table keys are about 12% slower (0.71 → 0.79 s), because each now has its own block where `std::string` held up to 15 bytes inline; a Java string is an object plus a `byte[]` too. Other short strings are 2% faster, and long results are faster (no copy).
 - `table.sort`, 300,000 elements: numbers unchanged (0.133 s), strings +3%, with a comparison function about +11% (the loops' back edges go through the switch, as in Java). Measured on a loaded machine.
+- Loads as state machines (the upstream suite's sources, 448 KB, 50 times, release build): text loads take 5.2% more instructions (the lexer 2.9%, the parser 2.3%) and 4% to 6% more time: the state each call stores and goes to through its switch, and the frame each call makes (frames without virtual functions would save about a fifth of it, a C++-only gain). Binary loads take 1.9% fewer instructions (four of its functions keep no frame now), the same time. The frozen-load tests now cross every state of the lexer, the parser and the binary loader that a freeze can reach (one parser state cannot be reached: a constructor field's name, whose next token is always the look-ahead already read).
 
-**Open, for the user:**
-- **The resumable load's re-entry.** `llex`, `lparser`, `lundump`, `lzio` and `f_parser` record a stopped function's locals as raw bytes (`luaZ_record`/`luaZ_restore`) and resume with `goto` into the middle of loops and `case`s (about 330 `goto`s). Java has no form for either. The options:
-  1. Java parks a stopped load on its own (virtual) thread, and the C++ keeps its frames as the stand-in (a port-time note).
-  2. Rewrite each of about 60 functions as a state machine (a `site` tested on every path to a site: the normal path pays).
-  3. Always replay: a thaw parses the kept input again from the start (no frames, no `goto`; O(input) per thaw).
+**Decided (the user, 2026-10-11):** the resumable load's re-entry is state machines with a stack of frames, proved in C++ before the port (done, above). Parking a stopped load on a Java thread was dropped: a parked thread cannot be persisted. Styx still persists a stopped load as its kept input and the count of stop points it passed, and a restored load goes over that input again; frames never leave the process.
 
 **New checklist rows** (with C12's Port checklist):
 
@@ -1853,6 +1851,9 @@ each says what Java could not express and what it is now.
 | `luaE_freezeonly` (a header `static` the libraries call) | `public static` |
 | Copying a struct holding a `byte_inline` (`InternalDebug`) | a copy that clones the array |
 | 16-bit unsigned owner ids | `int` masked with `0xFFFF` |
+| A load function's state machine (`for (;;) switch (l.site)`, `continue` to a state, `break` out of the machine) and its one `try`/`catch` recording the frame | the same `switch` and `try`/`catch` |
+| A load function's frame type (`LoadFrame` with its locals as fields; `copy()`, `size()`) and the box's stack of them | a class per function with a copy constructor; the stack a linked list or `ArrayDeque`; `new` at record (no memory: the load fails when it would go on) |
+| A frame holding pointers into its callers' frames (the `FuncState` and `BlockCnt` chains, a constructor's table, an assignment's variables), linked again when made again | references, linked again the same way |
 
 ---
 

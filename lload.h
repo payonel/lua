@@ -36,11 +36,14 @@ struct ZIO;
 /*
 ** A load (a parse or a binary load) that a freeze can stop: in a call of
 ** its reader function, or at a check point (each token read is a step of
-** the budget). The functions of the load on the C stack keep their shape;
-** when a freeze passes, each records its frame (where it was and its
-** locals) as the freeze leaves it, innermost first. After the thaw, the
+** the budget). Each function of the load with a call a freeze can pass
+** through runs as a state machine, each such call at a state of its own;
+** when a freeze passes, each records its frame (its state and its locals)
+** as the freeze leaves it, innermost first. After the thaw, the
 ** continuation of the C function that loads makes the calls again from
-** the frames, outermost first, and the load goes on where it stopped.
+** the frames, outermost first, each function going to its state, and the
+** load goes on where it stopped. (A function with nothing to keep before
+** its call keeps no frame: made again, it goes the same way.)
 */
 
 /*
