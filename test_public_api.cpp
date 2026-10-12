@@ -16,6 +16,9 @@
 #include "lualib.h"
 #include "lauxlib.h"
 #include "lobject.h"
+#ifdef LUA_DEBUG
+#include "ltests.h"
+#endif
 
 static int g_checks = 0;
 static int g_failures = 0;
@@ -4874,7 +4877,11 @@ static void test_cfunc_stress_group5()
 static void test_cfunc_stress_group6()
 {
   lua_State* L = luaL_newstate();
+#ifdef LUA_DEBUG
+  luai_openlibstest(L);
+#else
   luaL_openlibs(L);
+#endif
 
   /* Need to run from tests/ directory */
   char oldcwd[1024];
