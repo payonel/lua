@@ -1281,6 +1281,14 @@ do
     "return [==[ unfinished",
     string.dump(function(a, b) local s = "a long string constant, longer than forty characters" return a + b, s end),
     string.dump(function() return 1, 2.5, "s", nil, true end, true),
+    -- every token and escape the lexer reads
+    "local s = '\\x41\\x4a\\65\\066\\a\\b\\f\\n\\r\\t\\v\\\\\\\"\\'\\\r\n\\\n\\z \r\n \t x\\u{7FFFFFFF}' " ..
+      "local a = 1 << 2 >> 1 // 1 ~= 2 and 3 <= 4 and 5 >= 6 or 7 == 8 or ~9 or 2 ^ 3 % 1 .. 'c'\r\n" ..
+      "--[==[ long\r\ncomment ]] ]==] -- short\n--\n--[ x\n--[=x\n" ..
+      "local t = {.5, 3., 0x.8p1, 1e-2, 1E+2, 0xA.8P-1, 3 - -4} ::k:: return s, a, t, ...",
+    "return 1 .. 2x",
+    "x = [=",
+    "return '\\xZ'", "return '\\u48'", "return '\\u{48'", "return '\\u{800000000}'", "return '\\256'",
   }
   local function loadwith(chunk, piece, ending)
     local calls = 0
