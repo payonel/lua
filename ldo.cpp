@@ -2157,6 +2157,17 @@ static void checkmode(lua_State* L, byte_view mode, byte_view x)
   }
 }
 
+/* the frame of 'f_parser' (see lload.h) */
+struct FParserFrame : LoadFrame
+{
+  StkId otop = 0; /* original top */
+  Table* anchor = nullptr;
+  int c = 0;
+  int fixed = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) FParserFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 /*
 ** Before the first call to the reader function, Lua reserves a slot
 ** with a table for anchoring stuff. (A load that a freeze stopped keeps
@@ -2164,79 +2175,64 @@ static void checkmode(lua_State* L, byte_view mode, byte_view x)
 */
 static void f_parser(lua_State* L, SParser* p)
 {
-  struct
-  {
-    StkId otop; /* original top */
-    Table* anchor;
-    int c;
-    int fixed;
-  } l;
+  FParserFrame l;
   LoadResume* rz = p->z->rz;
-  LClosure* cl;
+  LClosure* cl = nullptr;
   byte_view mode = p->mode;
   if (l_unlikely(p->z->resuming))
   {
     luaZ_unhold(rz, L->ci); /* (the stopped load's arrays and buffer) */
-    switch (luaZ_restore(rz, LF_FPARSER, &l, sizeof(l)))
-    {
-    case 1:
-      goto site_1;
-    case 2:
-      goto site_2;
-    case 3:
-      goto site_3;
-    default:
-      luaZ_badstate(rz);
-    }
+    l = static_cast<const FParserFrame&>(luaZ_restore(rz, LF_FPARSER));
   }
-  l.otop = L->top;
-  luaD_checkstack(L, 2);
-  l.anchor = Table::luaH_new(L);           /* create the anchor table */
-  luaC_givebackhash(L->l_G, l.anchor);     /* (the parser's own) */
-  setsloth(L, L->top++, l.anchor); /* anchor the anchor table */
-site_1:
   try
   {
-    l.c = (p->z->pos < p->z->chunk.size())
-              ? (unsigned char)p->z->chunk[p->z->pos++]
-              : luaZ_fill(p->z); /* read first character */
+    for (;;)
+    {
+      switch (l.site)
+      {
+      case 0:
+        l.otop = L->top;
+        luaD_checkstack(L, 2);
+        l.anchor = Table::luaH_new(L);       /* create the anchor table */
+        luaC_givebackhash(L->l_G, l.anchor); /* (the parser's own) */
+        setsloth(L, L->top++, l.anchor);     /* anchor the anchor table */
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        l.c = (p->z->pos < p->z->chunk.size())
+                  ? (unsigned char)p->z->chunk[p->z->pos++]
+                  : luaZ_fill(p->z); /* read first character */
+        if (l.c == LUA_SIGNATURE[0])
+        {
+          l.fixed = 0;
+          if (mode.find('B') != byte_view::npos)
+            l.fixed = 1;
+          else
+            checkmode(L, mode, lt::binary);
+          l.site = 2;
+        }
+        else
+        {
+          checkmode(L, mode, lt::text);
+          l.site = 3;
+        }
+        continue;
+      case 2:
+        cl = luaU_undump(L, p->z, l.anchor, &p->buff, p->name, l.fixed);
+        break;
+      case 3:
+        cl = luaY_parser(L, p->z, l.anchor, &p->buff, &p->dyd, p->name, l.c);
+        break;
+      default:
+        luaZ_badstate(rz);
+      }
+      break; /* (the function is made) */
+    }
   }
   catch (...)
   {
-    luaZ_record(rz, LF_FPARSER, 1, &l, sizeof(l));
+    luaZ_record(rz, LF_FPARSER, l);
     throw;
-  }
-  if (l.c == LUA_SIGNATURE[0])
-  {
-    l.fixed = 0;
-    if (mode.find('B') != byte_view::npos)
-      l.fixed = 1;
-    else
-      checkmode(L, mode, lt::binary);
-  site_2:
-    try
-    {
-      cl = luaU_undump(L, p->z, l.anchor, &p->buff, p->name, l.fixed);
-    }
-    catch (...)
-    {
-      luaZ_record(rz, LF_FPARSER, 2, &l, sizeof(l));
-      throw;
-    }
-  }
-  else
-  {
-    checkmode(L, mode, lt::text);
-  site_3:
-    try
-    {
-      cl = luaY_parser(L, p->z, l.anchor, &p->buff, &p->dyd, p->name, l.c);
-    }
-    catch (...)
-    {
-      luaZ_record(rz, LF_FPARSER, 3, &l, sizeof(l));
-      throw;
-    }
   }
   L->top = (static_cast<StkId>(l.otop)); /* restore stack */
   setslotclL(L, L->top++, cl); /* push closure */

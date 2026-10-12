@@ -24,8 +24,8 @@ int luaZ_fill(ZIO* z)
   lua_State* L = z->L;
   std::optional<byte_view> chunk;
   if (l_unlikely(z->resuming))
-  { /* the read a freeze stopped: the reader function gave its piece */
-    luaZ_restore(z->rz, LF_FILL, nullptr, 0);
+  { /* the read a freeze stopped (the leaf of the frames): the reader function gave its piece */
+    luaZ_restore(z->rz, LF_FILL);
     luaZ_resumed(z->rz);
     lua_unlock(L);
     chunk = luaZ_resumeread(z->rz);
@@ -33,6 +33,7 @@ int luaZ_fill(ZIO* z)
   }
   else
   {
+    LoadFrame l;
     lua_unlock(L);
     try
     {
@@ -40,7 +41,7 @@ int luaZ_fill(ZIO* z)
     }
     catch (...)
     {
-      luaZ_record(z->rz, LF_FILL, 1, nullptr, 0);
+      luaZ_record(z->rz, LF_FILL, l);
       throw;
     }
     lua_lock(L);
@@ -62,96 +63,81 @@ void luaZ_init(lua_State* L, ZIO* z, lua_Reader* reader)
 
 /* --------------------------------------------------------------- read --- */
 
+/*
+** (With no frame of its own, in a load that a freeze can stop: made
+** again, it goes the same way, the buffer empty, see lload.h.)
+*/
 static int checkbuffer(ZIO* z)
 {
-  struct
-  {
-    int c;
-  } l;
-  if (l_unlikely(z->resuming))
-  {
-    luaZ_restore(z->rz, LF_CHECKBUFFER, &l, sizeof(l));
-    goto site_1;
-  }
   if (z->pos == z->chunk.size())
-  { /* no bytes in buffer? */
-  site_1:
-    try
-    {
-      l.c = luaZ_fill(z); /* try to read more */
-    }
-    catch (...)
-    {
-      luaZ_record(z->rz, LF_CHECKBUFFER, 1, &l, sizeof(l));
-      throw;
-    }
-    if (l.c == EOZ)
-      return 0; /* no more input */
+  {                        /* no bytes in buffer? */
+    if (luaZ_fill(z) == EOZ) /* try to read more */
+      return 0;            /* no more input */
     else
       z->pos--; /* luaZ_fill consumed first byte; put it back */
   }
   return 1; /* now buffer has something */
 }
 
+/* the frame of 'luaZ_read' (see lload.h) */
+struct ReadFrame : LoadFrame
+{
+  size_t n = 0;
+  size_t outpos = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) ReadFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
 size_t luaZ_read(ZIO* z, std::span<std::byte> b)
 {
-  struct
-  {
-    size_t n, outpos;
-  } l;
-  int more;
+  ReadFrame l;
   if (l_unlikely(z->resuming))
-  {
-    luaZ_restore(z->rz, LF_ZREAD, &l, sizeof(l));
-    goto site_1;
-  }
-  l.n = b.size();
-  l.outpos = 0;
-  while (l.n)
-  {
-    size_t m;
-  site_1:
-    try
-    {
-      more = checkbuffer(z);
-    }
-    catch (...)
-    {
-      luaZ_record(z->rz, LF_ZREAD, 1, &l, sizeof(l));
-      throw;
-    }
-    if (!more)
-      return l.n; /* no more input; return number of missing bytes */
-    size_t avail = z->chunk.size() - z->pos;
-    m = (l.n <= avail) ? l.n : avail;
-    copy_bytes(b.subspan(l.outpos, m), z->chunk.substr(z->pos, m));
-    z->pos += m;
-    l.outpos += m;
-    l.n -= m;
-  }
-  return 0;
-}
-
-std::optional<byte_view> luaZ_getaddr(ZIO* z, size_t n)
-{
-  byte_view res;
-  int more;
-  if (l_unlikely(z->resuming))
-  {
-    luaZ_restore(z->rz, LF_GETADDR, nullptr, 0);
-    goto site_1;
-  }
-site_1:
+    l = static_cast<const ReadFrame&>(luaZ_restore(z->rz, LF_ZREAD));
   try
   {
-    more = checkbuffer(z);
+    for (;;)
+    {
+      switch (l.site)
+      {
+      case 0:
+        l.n = b.size();
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop */
+        if (l.n == 0)
+          return 0;
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+      {
+        if (!checkbuffer(z))
+          return l.n; /* no more input; return number of missing bytes */
+        size_t avail = z->chunk.size() - z->pos;
+        size_t m = (l.n <= avail) ? l.n : avail;
+        copy_bytes(b.subspan(l.outpos, m), z->chunk.substr(z->pos, m));
+        z->pos += m;
+        l.outpos += m;
+        l.n -= m;
+        l.site = 1;
+        continue;
+      }
+      default:
+        luaZ_badstate(z->rz);
+      }
+    }
   }
   catch (...)
   {
-    luaZ_record(z->rz, LF_GETADDR, 1, nullptr, 0);
+    luaZ_record(z->rz, LF_ZREAD, l);
     throw;
   }
-  if (!more)
+}
+
+/* (with no frame of its own: see 'checkbuffer') */
+std::optional<byte_view> luaZ_getaddr(ZIO* z, size_t n)
+{
+  byte_view res;
+  if (!checkbuffer(z))
     return std::nullopt; /* no more input */
   if (z->chunk.size() - z->pos < n) /* not enough bytes? */
     return std::nullopt; /* block not whole; cannot give an address */
