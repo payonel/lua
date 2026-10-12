@@ -31,29 +31,83 @@ namespace lua::compiler
 {
 
 /*
-** A load that a freeze can stop (see lload.h): a call at site 'n' of a
-** function's frame records the frame (its locals, 'l') if a freeze passes
-** through it; the function made again goes to the site of its frame.
+** A load that a freeze can stop (see lload.h): a function with calls a
+** freeze can pass through runs as a state machine, its state and its
+** locals in its frame ('l'). Each such call is made at a state of its own,
+** the one its function goes to again when it is made again after the
+** thaw (the call made again, which goes on where it stopped); a freeze
+** passing records the frame. A call with no frame of its own (as
+** 'check_next1') goes the same way when made again.
 */
-#define LZ_SITE(n, ...)                            \
-  site_##n:                                        \
-  try                                              \
-  {                                                \
-    __VA_ARGS__;                                   \
-  }                                                \
-  catch (...)                                      \
-  {                                                \
-    luaZ_record(ls->z->rz, FN, n, &l, sizeof(l));  \
-    throw;                                         \
-  }
 
-#define LZ_RESUMING() l_unlikely(ls->z->resuming)
-#define LZ_SITENO() luaZ_restore(ls->z->rz, FN, &l, sizeof(l))
-#define LZ_BADSITE() luaZ_badstate(ls->z->rz)
-
-struct NoLocals
+/* the frames of the lexer's functions (see lload.h) */
+struct InclineFrame : LoadFrame
 {
-  char none = 0;
+  int old = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) InclineFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct NumeralFrame : LoadFrame
+{
+  int first = 0;
+  int hex = 0; /* exponent mark 'Pp' (else 'Ee') */
+  LoadFrame* copy() const override { return new (std::nothrow) NumeralFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct SepFrame : LoadFrame
+{
+  size_t count = 0;
+  int s = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) SepFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct LongStringFrame : LoadFrame
+{
+  int line = 0; /* initial line (for error message) */
+  size_t r = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) LongStringFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct HexaEscFrame : LoadFrame
+{
+  int r = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) HexaEscFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct Utf8EscFrame : LoadFrame
+{
+  int r = 0;
+  int i = 0; /* number of chars to be removed: start with #"\u{X" */
+  LoadFrame* copy() const override { return new (std::nothrow) Utf8EscFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct DecEscFrame : LoadFrame
+{
+  int i = 0;
+  int r = 0; /* result accumulator */
+  LoadFrame* copy() const override { return new (std::nothrow) DecEscFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct StringFrame : LoadFrame
+{
+  int c = 0; /* final character to be saved */
+  LoadFrame* copy() const override { return new (std::nothrow) StringFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct LexFrame : LoadFrame
+{
+  size_t sep = 0;
+  int c = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) LexFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
 };
 
 static l_forceinline void next(LexState* ls)
@@ -210,26 +264,35 @@ TString* luaX_newstring(LexState* ls, byte_view str, size_t off, size_t len)
 */
 static void inclinenumber(LexState* ls)
 {
-  constexpr int FN = LF_INCLINE;
-  struct
+  InclineFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const InclineFrame&>(luaZ_restore(ls->z->rz, LF_INCLINE));
+  try
   {
-    int old;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+      l.old = ls->current;
+      assert(currIsNewline(ls));
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      next(ls); /* skip '\n' or '\r' */
+      if (!(currIsNewline(ls) && ls->current != l.old))
+        break;
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      next(ls); /* skip '\n\r' or '\r\n' */
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  l.old = ls->current;
-  assert(currIsNewline(ls));
-  LZ_SITE(1, next(ls)); /* skip '\n' or '\r' */
-  if (currIsNewline(ls) && ls->current != l.old)
+  catch (...)
   {
-    LZ_SITE(2, next(ls)); /* skip '\n\r' or '\r\n' */
+    luaZ_record(ls->z->rz, LF_INCLINE, l);
+    throw;
   }
   if (++ls->linenumber >= INT_MAX)
     lexerror(ls, lt::chunk_has_too_many_lines, 0);
@@ -289,76 +352,102 @@ static int check_next1(LexState* ls, int c)
 */
 static int read_numeral(LexState* ls, Token* seminfo)
 {
-  constexpr int FN = LF_NUMERAL;
-  struct
+  NumeralFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const NumeralFrame&>(luaZ_restore(ls->z->rz, LF_NUMERAL));
+  try
   {
-    int first;
-    int hex; /* exponent mark 'Pp' (else 'Ee') */
-  } l;
-  TValue obj;
-  byte_view expo;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    default: LZ_BADSITE();
-    }
-  }
-  l.first = ls->current;
-  assert(lisdigit(ls->current));
-  save(ls, ls->current);
-  LZ_SITE(1, next(ls));
-  l.hex = 0;
-  if (l.first == '0' && (ls->current == 'x' || ls->current == 'X')) /* hexadecimal? */
-  {
-    save(ls, ls->current);
-    LZ_SITE(2, next(ls));
-    l.hex = 1;
-  }
-  for (;;)
-  {
-    expo = l.hex ? lt::Pp_chars : lt::Ee_chars;
-    if (ls->current == expo[0] || ls->current == expo[1]) /* exponent mark? */
-    {
-      save(ls, ls->current);
-      LZ_SITE(3, next(ls));
-      if (ls->current == '-' || ls->current == '+') /* optional exponent sign */
+      switch (l.site)
       {
+      case 0:
+        l.first = ls->current;
+        assert(lisdigit(ls->current));
         save(ls, ls->current);
-        LZ_SITE(4, next(ls));
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        next(ls);
+        if (l.first == '0' && (ls->current == 'x' || ls->current == 'X')) /* hexadecimal? */
+        {
+          save(ls, ls->current);
+          l.site = 2;
+          continue;
+        }
+        l.site = 3;
+        continue;
+      case 2:
+        next(ls);
+        l.hex = 1;
+        l.site = 3;
+        [[fallthrough]];
+      case 3: /* the loop */
+      {
+        byte_view expo = l.hex ? lt::Pp_chars : lt::Ee_chars;
+        if (ls->current == expo[0] || ls->current == expo[1]) /* exponent mark? */
+        {
+          save(ls, ls->current);
+          l.site = 4;
+        }
+        else if (lisxdigit(ls->current) || ls->current == '.') /* '%x|%.' */
+        {
+          save(ls, ls->current);
+          l.site = 5;
+        }
+        else if (lislalpha(ls->current)) /* is numeral touching a letter? */
+        {
+          save(ls, ls->current); /* force an error */
+          l.site = 6;
+        }
+        else
+          l.site = 7;
+        continue;
+      }
+      case 4:
+        next(ls);
+        if (ls->current == '-' || ls->current == '+') /* optional exponent sign */
+        {
+          save(ls, ls->current);
+          l.site = 5;
+        }
+        else
+          l.site = 3;
+        continue;
+      case 5:
+        next(ls);
+        l.site = 3;
+        continue;
+      case 6:
+        next(ls);
+        l.site = 7;
+        [[fallthrough]];
+      case 7:
+      {
+        TValue obj;
+        if (luaO_str2num(ls->buff->view(), &obj) == 0) /* format error? */
+          lexerror(ls, lt::malformed_number, TK_FLT);
+        if (ttisinteger(&obj))
+        {
+          seminfo->i = ivalue(&obj);
+          return TK_INT;
+        }
+        else
+        {
+          assert(ttisfloat(&obj));
+          seminfo->r = fltvalue(&obj);
+          return TK_FLT;
+        }
+      }
+      default:
+        luaZ_badstate(ls->z->rz);
       }
     }
-    else if (lisxdigit(ls->current) || ls->current == '.') /* '%x|%.' */
-    {
-      save(ls, ls->current);
-      LZ_SITE(5, next(ls));
-    }
-    else
-      break;
   }
-  if (lislalpha(ls->current)) /* is numeral touching a letter? */
+  catch (...)
   {
-    save(ls, ls->current); /* force an error */
-    LZ_SITE(6, next(ls));
-  }
-  if (luaO_str2num(ls->buff->view(), &obj) == 0) /* format error? */
-    lexerror(ls, lt::malformed_number, TK_FLT);
-  if (ttisinteger(&obj))
-  {
-    seminfo->i = ivalue(&obj);
-    return TK_INT;
-  }
-  else
-  {
-    assert(ttisfloat(&obj));
-    seminfo->r = fltvalue(&obj);
-    return TK_FLT;
+    luaZ_record(ls->z->rz, LF_NUMERAL, l);
+    throw;
   }
 }
 
@@ -370,177 +459,224 @@ static int read_numeral(LexState* ls, Token* seminfo)
 */
 static size_t skip_sep(LexState* ls)
 {
-  constexpr int FN = LF_SKIPSEP;
-  struct
+  SepFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const SepFrame&>(luaZ_restore(ls->z->rz, LF_SKIPSEP));
+  try
   {
-    size_t count;
-    int s;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.s = ls->current;
+        assert(l.s == '[' || l.s == ']');
+        save(ls, ls->current);
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        next(ls);
+        l.site = 2;
+        [[fallthrough]];
+      case 2: /* the loop */
+        if (ls->current != '=')
+          return (ls->current == l.s) ? l.count + 2
+                 : (l.count == 0)     ? 1
+                                      : 0;
+        save(ls, ls->current);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        next(ls);
+        l.count++;
+        l.site = 2;
+        continue;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.count = 0;
-  l.s = ls->current;
-  assert(l.s == '[' || l.s == ']');
-  save(ls, ls->current);
-  LZ_SITE(1, next(ls));
-  while (ls->current == '=')
+  catch (...)
   {
-    save(ls, ls->current);
-    LZ_SITE(2, next(ls));
-    l.count++;
+    luaZ_record(ls->z->rz, LF_SKIPSEP, l);
+    throw;
   }
-  return (ls->current == l.s) ? l.count + 2
-         : (l.count == 0)     ? 1
-                              : 0;
 }
 
 static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
 {
-  constexpr int FN = LF_LONGSTRING;
-  struct
+  LongStringFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const LongStringFrame&>(luaZ_restore(ls->z->rz, LF_LONGSTRING));
+  try
   {
-    int line; /* initial line (for error message) */
-    size_t r;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    default: LZ_BADSITE();
-    }
-  }
-  l.line = ls->linenumber;
-  save(ls, ls->current);
-  LZ_SITE(1, next(ls));  /* skip 2nd '[' */
-  if (currIsNewline(ls)) /* string starts with a newline? */
-  {
-    LZ_SITE(2, inclinenumber(ls)); /* skip it */
-  }
-  for (;;)
-  {
-    switch (ls->current)
-    {
-    case EOZ:
-    { /* error */
-      byte_view what = seminfo ? lt::string_3 : lt::comment;
-      const InternalString* msg = luaO_pushfstring(ls->L, lt::unfinished_long_s_starting_at_line_d, FmtArgs().str(what).num(l.line));
-      lexerror(ls, msg->view(), TK_EOS);
-      break; /* to avoid warnings */
-    }
-    case ']':
-    {
-      LZ_SITE(3, l.r = skip_sep(ls));
-      if (l.r == sep)
+      switch (l.site)
       {
+      case 0:
+        l.line = ls->linenumber;
         save(ls, ls->current);
-        LZ_SITE(4, next(ls)); /* skip 2nd ']' */
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        next(ls);                             /* skip 2nd '[' */
+        l.site = currIsNewline(ls) ? 2 : 3; /* string starts with a newline? */
+        continue;
+      case 2:
+        inclinenumber(ls); /* skip it */
+        l.site = 3;
+        [[fallthrough]];
+      case 3: /* the loop */
+        switch (ls->current)
+        {
+        case EOZ:
+        { /* error */
+          byte_view what = seminfo ? lt::string_3 : lt::comment;
+          const InternalString* msg = luaO_pushfstring(ls->L, lt::unfinished_long_s_starting_at_line_d, FmtArgs().str(what).num(l.line));
+          lexerror(ls, msg->view(), TK_EOS);
+          break; /* to avoid warnings */
+        }
+        case ']':
+          l.site = 4;
+          break;
+        case '\n':
+        case '\r':
+          save(ls, '\n');
+          l.site = 6;
+          break;
+        default:
+          if (seminfo)
+            save(ls, ls->current);
+          l.site = 7;
+        }
+        continue;
+      case 4:
+        l.r = skip_sep(ls);
+        if (l.r != sep)
+        {
+          l.site = 3;
+          continue;
+        }
+        save(ls, ls->current);
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        next(ls); /* skip 2nd ']' */
         if (seminfo)
           seminfo->ts = luaX_newstring(ls, ls->buff->view(), sep,
                                        ls->buff->size() - 2 * sep);
         return;
-      }
-      break;
-    }
-    case '\n':
-    case '\r':
-    {
-      save(ls, '\n');
-      LZ_SITE(5, inclinenumber(ls));
-      if (!seminfo)
-        ls->buff->reset(); /* avoid wasting space */
-      break;
-    }
-    default:
-    {
-      if (seminfo)
-      {
-        save(ls, ls->current);
-        LZ_SITE(6, next(ls));
-      }
-      else
-      {
-        LZ_SITE(7, next(ls));
+      case 6:
+        inclinenumber(ls);
+        if (!seminfo)
+          ls->buff->reset(); /* avoid wasting space */
+        l.site = 3;
+        continue;
+      case 7:
+        next(ls);
+        l.site = 3;
+        continue;
+      default:
+        luaZ_badstate(ls->z->rz);
       }
     }
-    }
+  }
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_LONGSTRING, l);
+    throw;
   }
 }
 
 static void esccheck(LexState* ls, int c, byte_view msg)
 {
-  constexpr int FN = LF_ESCCHECK;
-  NoLocals l;
-  if (LZ_RESUMING())
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_ESCCHECK);
+  try
   {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
-  }
-  if (!c)
-  {
-    if (ls->current != EOZ)
+    switch (l.site)
     {
+    case 0:
+      if (c)
+        return;
+      if (ls->current == EOZ)
+        break;
       save(ls, ls->current); /* add current to buffer for error message */
-      LZ_SITE(1, next(ls));
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      next(ls);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
-    lexerror(ls, msg, TK_STRING);
   }
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_ESCCHECK, l);
+    throw;
+  }
+  lexerror(ls, msg, TK_STRING);
 }
 
 static int gethexa(LexState* ls)
 {
-  constexpr int FN = LF_GETHEXA;
-  NoLocals l;
-  if (LZ_RESUMING())
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_GETHEXA);
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+      save(ls, ls->current);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      next(ls);
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      esccheck(ls, lisxdigit(ls->current), lt::hexadecimal_digit_expected);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  save(ls, ls->current);
-  LZ_SITE(1, next(ls));
-  LZ_SITE(2, esccheck(ls, lisxdigit(ls->current), lt::hexadecimal_digit_expected));
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_GETHEXA, l);
+    throw;
+  }
   return luaO_hexavalue(ls->current);
 }
 
 static int readhexaesc(LexState* ls)
 {
-  constexpr int FN = LF_HEXAESC;
-  struct
+  HexaEscFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const HexaEscFrame&>(luaZ_restore(ls->z->rz, LF_HEXAESC));
+  try
   {
-    int r;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+      l.r = gethexa(ls);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      l.r = (l.r << 4) + gethexa(ls);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
     }
   }
-  LZ_SITE(1, l.r = gethexa(ls));
+  catch (...)
   {
-    int h;
-    LZ_SITE(2, h = gethexa(ls));
-    l.r = (l.r << 4) + h;
+    luaZ_record(ls->z->rz, LF_HEXAESC, l);
+    throw;
   }
   ls->buff->drop(2); /* remove saved chars from buffer */
   return l.r;
@@ -553,224 +689,305 @@ static int readhexaesc(LexState* ls)
 */
 static int readutf8esc(LexState* ls)
 {
-  constexpr int FN = LF_UTF8ESC;
-  struct
+  Utf8EscFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const Utf8EscFrame&>(luaZ_restore(ls->z->rz, LF_UTF8ESC));
+  try
   {
-    int r;
-    int i; /* number of chars to be removed: start with #"\u{X" */
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.i = 4;
+        save(ls, ls->current);
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        next(ls); /* skip 'u' */
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        esccheck(ls, ls->current == '{', lt::missing_1);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        l.r = gethexa(ls); /* must have at least one digit */
+        l.site = 4;
+        [[fallthrough]];
+      case 4: /* the loop */
+        save(ls, ls->current);
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        next(ls);
+        if (!lisxdigit(ls->current))
+        {
+          l.site = 7;
+          continue;
+        }
+        l.i++;
+        l.site = 6;
+        [[fallthrough]];
+      case 6:
+        esccheck(ls, l.r <= (0x7FFFFFFF >> 4), lt::UTF_8_value_too_large);
+        l.r = (l.r << 4) + luaO_hexavalue(ls->current);
+        l.site = 4;
+        continue;
+      case 7:
+        esccheck(ls, ls->current == '}', lt::missing_2);
+        l.site = 8;
+        [[fallthrough]];
+      case 8:
+        next(ls);            /* skip '}' */
+        ls->buff->drop(l.i); /* remove saved chars from buffer */
+        return l.r;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.i = 4;
-  save(ls, ls->current);
-  LZ_SITE(1, next(ls)); /* skip 'u' */
-  LZ_SITE(2, esccheck(ls, ls->current == '{', lt::missing_1));
-  LZ_SITE(3, l.r = gethexa(ls)); /* must have at least one digit */
-  for (;;)
+  catch (...)
   {
-    save(ls, ls->current);
-    LZ_SITE(4, next(ls));
-    if (!lisxdigit(ls->current))
-      break;
-    l.i++;
-    LZ_SITE(5, esccheck(ls, l.r <= (0x7FFFFFFF >> 4), lt::UTF_8_value_too_large));
-    l.r = (l.r << 4) + luaO_hexavalue(ls->current);
+    luaZ_record(ls->z->rz, LF_UTF8ESC, l);
+    throw;
   }
-  LZ_SITE(6, esccheck(ls, ls->current == '}', lt::missing_2));
-  LZ_SITE(7, next(ls));  /* skip '}' */
-  ls->buff->drop(l.i); /* remove saved chars from buffer */
-  return l.r;
 }
 
 static void utf8esc(LexState* ls)
 {
-  constexpr int FN = LF_UTF8;
-  NoLocals l;
+  LoadFrame l;
   byte_inline<UTF8BUFFSZ> buff;
-  int c;
-  if (LZ_RESUMING())
+  int c = 0;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_UTF8);
+  try
   {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
+    switch (l.site)
+    {
+    case 0:
+      c = readutf8esc(ls);
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
+    }
   }
-  LZ_SITE(1, c = readutf8esc(ls));
+  catch (...)
   {
-    int n = luaO_utf8esc(buff, c);
-    for (; n > 0; n--) /* add 'buff' to string */
-      save(ls, buff[UTF8BUFFSZ - n]);
+    luaZ_record(ls->z->rz, LF_UTF8, l);
+    throw;
   }
+  int n = luaO_utf8esc(buff, c);
+  for (; n > 0; n--) /* add 'buff' to string */
+    save(ls, buff[UTF8BUFFSZ - n]);
 }
 
 static int readdecesc(LexState* ls)
 {
-  constexpr int FN = LF_DECESC;
-  struct
+  DecEscFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const DecEscFrame&>(luaZ_restore(ls->z->rz, LF_DECESC));
+  try
   {
-    int i;
-    int r; /* result accumulator */
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0: /* the loop: read up to 3 digits */
+        if (l.i < 3 && lisdigit(ls->current))
+        {
+          l.r = 10 * l.r + ls->current - '0';
+          save(ls, ls->current);
+          l.site = 1;
+        }
+        else
+          l.site = 2;
+        continue;
+      case 1:
+        next(ls);
+        l.i++;
+        l.site = 0;
+        continue;
+      case 2:
+        esccheck(ls, l.r <= UCHAR_MAX, lt::decimal_escape_too_large);
+        ls->buff->drop(l.i); /* remove read digits from buffer */
+        return l.r;
+      default:
+        luaZ_badstate(ls->z->rz);
+      }
     }
   }
-  l.r = 0;
-  for (l.i = 0; l.i < 3 && lisdigit(ls->current); l.i++)
-  { /* read up to 3 digits */
-    l.r = 10 * l.r + ls->current - '0';
-    save(ls, ls->current);
-    LZ_SITE(1, next(ls));
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_DECESC, l);
+    throw;
   }
-  LZ_SITE(2, esccheck(ls, l.r <= UCHAR_MAX, lt::decimal_escape_too_large));
-  ls->buff->drop(l.i); /* remove read digits from buffer */
-  return l.r;
 }
 
 static void read_string(LexState* ls, int del, Token* seminfo)
 {
-  constexpr int FN = LF_STRING;
-  struct
+  StringFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = static_cast<const StringFrame&>(luaZ_restore(ls->z->rz, LF_STRING));
+  try
   {
-    int c; /* final character to be saved */
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    case 8: goto site_8;
-    case 9: goto site_9;
-    case 10: goto site_10;
-    case 11: goto site_11;
-    case 12: goto site_12;
-    case 13: goto site_13;
-    default: LZ_BADSITE();
-    }
-  }
-  save(ls, ls->current);
-  LZ_SITE(1, next(ls)); /* keep delimiter (for error messages) */
-  while (ls->current != del)
-  {
-    switch (ls->current)
-    {
-    case EOZ:
-      lexerror(ls, lt::unfinished_string, TK_EOS);
-      break; /* to avoid warnings */
-    case '\n':
-    case '\r':
-      lexerror(ls, lt::unfinished_string, TK_STRING);
-      break; /* to avoid warnings */
-    case '\\':
-    { /* escape sequences */
-      save(ls, ls->current);
-      LZ_SITE(2, next(ls)); /* keep '\\' for error messages */
-      switch (ls->current)
+      switch (l.site)
       {
-      case 'a':
-        l.c = '\a';
-        goto read_save;
-      case 'b':
-        l.c = '\b';
-        goto read_save;
-      case 'f':
-        l.c = '\f';
-        goto read_save;
-      case 'n':
-        l.c = '\n';
-        goto read_save;
-      case 'r':
-        l.c = '\r';
-        goto read_save;
-      case 't':
-        l.c = '\t';
-        goto read_save;
-      case 'v':
-        l.c = '\v';
-        goto read_save;
-      case 'x':
-        LZ_SITE(3, l.c = readhexaesc(ls));
-        goto read_save;
-      case 'u':
-        LZ_SITE(4, utf8esc(ls));
-        goto no_save;
-      case '\n':
-      case '\r':
-        LZ_SITE(5, inclinenumber(ls));
-        l.c = '\n';
-        goto only_save;
-      case '\\':
-      case '\"':
-      case '\'':
-        l.c = ls->current;
-        goto read_save;
-      case EOZ:
-        goto no_save; /* will raise an error next loop */
-      case 'z':
-      {                    /* zap following span of spaces */
-        ls->buff->drop(1); /* remove '\\' */
-        LZ_SITE(6, next(ls)); /* skip the 'z' */
-        while (lisspace(ls->current))
+      case 0:
+        save(ls, ls->current); /* keep delimiter (for error messages) */
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        next(ls);
+        l.site = 2;
+        [[fallthrough]];
+      case 2: /* the loop */
+        if (ls->current == del)
         {
-          if (currIsNewline(ls))
-          {
-            LZ_SITE(7, inclinenumber(ls));
-          }
-          else
-          {
-            LZ_SITE(8, next(ls));
-          }
+          save(ls, ls->current);
+          l.site = 14;
+          continue;
         }
-        goto no_save;
-      }
+        switch (ls->current)
+        {
+        case EOZ:
+          lexerror(ls, lt::unfinished_string, TK_EOS);
+          break; /* to avoid warnings */
+        case '\n':
+        case '\r':
+          lexerror(ls, lt::unfinished_string, TK_STRING);
+          break; /* to avoid warnings */
+        case '\\': /* escape sequences */
+          save(ls, ls->current);
+          l.site = 3;
+          break;
+        default:
+          save(ls, ls->current);
+          l.site = 1;
+        }
+        continue;
+      case 3:
+        next(ls); /* keep '\\' for error messages */
+        switch (ls->current)
+        {
+        case 'a':
+          l.c = '\a';
+          l.site = 12;
+          break;
+        case 'b':
+          l.c = '\b';
+          l.site = 12;
+          break;
+        case 'f':
+          l.c = '\f';
+          l.site = 12;
+          break;
+        case 'n':
+          l.c = '\n';
+          l.site = 12;
+          break;
+        case 'r':
+          l.c = '\r';
+          l.site = 12;
+          break;
+        case 't':
+          l.c = '\t';
+          l.site = 12;
+          break;
+        case 'v':
+          l.c = '\v';
+          l.site = 12;
+          break;
+        case 'x':
+          l.site = 4;
+          break;
+        case 'u':
+          l.site = 5;
+          break;
+        case '\n':
+        case '\r':
+          l.site = 6;
+          break;
+        case '\\':
+        case '\"':
+        case '\'':
+          l.c = ls->current;
+          l.site = 12;
+          break;
+        case EOZ:
+          l.site = 2; /* will raise an error next loop */
+          break;
+        case 'z':            /* zap following span of spaces */
+          ls->buff->drop(1); /* remove '\\' */
+          l.site = 7;
+          break;
+        default:
+          l.site = 10;
+        }
+        continue;
+      case 4:
+        l.c = readhexaesc(ls);
+        l.site = 12;
+        continue;
+      case 5:
+        utf8esc(ls);
+        l.site = 2;
+        continue;
+      case 6:
+        inclinenumber(ls);
+        l.c = '\n';
+        l.site = 13;
+        continue;
+      case 7:
+        next(ls); /* skip the 'z', or a space */
+        l.site = 8;
+        [[fallthrough]];
+      case 8: /* the span of spaces */
+        if (!lisspace(ls->current))
+          l.site = 2;
+        else if (currIsNewline(ls))
+          l.site = 9;
+        else
+          l.site = 7;
+        continue;
+      case 9:
+        inclinenumber(ls);
+        l.site = 8;
+        continue;
+      case 10:
+        esccheck(ls, lisdigit(ls->current), lt::invalid_escape_sequence);
+        l.site = 11;
+        [[fallthrough]];
+      case 11:
+        l.c = readdecesc(ls); /* digital escape '\ddd' */
+        l.site = 13;
+        continue;
+      case 12: /* read and save */
+        next(ls);
+        l.site = 13;
+        [[fallthrough]];
+      case 13:               /* only save */
+        ls->buff->drop(1); /* remove '\\' */
+        save(ls, l.c);
+        l.site = 2;
+        continue;
+      case 14:
+        next(ls); /* skip delimiter */
+        seminfo->ts = luaX_newstring(ls, ls->buff->view(), 1,
+                                     ls->buff->size() - 2);
+        return;
       default:
-      {
-        LZ_SITE(9, esccheck(ls, lisdigit(ls->current), lt::invalid_escape_sequence));
-        LZ_SITE(10, l.c = readdecesc(ls)); /* digital escape '\ddd' */
-        goto only_save;
+        luaZ_badstate(ls->z->rz);
       }
-      }
-    read_save:
-      LZ_SITE(11, next(ls));
-      /* go through */
-    only_save:
-      ls->buff->drop(1); /* remove '\\' */
-      save(ls, l.c);
-      /* go through */
-    no_save:
-      break;
-    }
-    default:
-      save(ls, ls->current);
-      LZ_SITE(12, next(ls));
     }
   }
-  save(ls, ls->current);
-  LZ_SITE(13, next(ls)); /* skip delimiter */
-  seminfo->ts = luaX_newstring(ls, ls->buff->view(), 1,
-                               ls->buff->size() - 2);
+  catch (...)
+  {
+    luaZ_record(ls->z->rz, LF_STRING, l);
+    throw;
+  }
 }
 
 /*
@@ -780,242 +997,271 @@ static void read_string(LexState* ls, int del, Token* seminfo)
 */
 static int llex(LexState* ls, Token* seminfo)
 {
-  constexpr int FN = LF_LLEX;
-  struct
-  {
-    size_t sep;
-    int c;
-    int r;
-  } l;
+  LexFrame l;
   LoadResume* rz = ls->z->rz;
-  if (LZ_RESUMING())
+  if (l_unlikely(ls->z->resuming))
   {
-    switch (LZ_SITENO())
-    {
-    case 1:
-      luaZ_resumed(rz); /* (the check point is behind) */
-      goto checked;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    case 8: goto site_8;
-    case 9: goto site_9;
-    case 10: goto site_10;
-    case 11: goto site_11;
-    case 12: goto site_12;
-    case 13: goto site_13;
-    case 14: goto site_14;
-    case 15: goto site_15;
-    case 16: goto site_16;
-    case 17: goto site_17;
-    case 18: goto site_18;
-    case 19: goto site_19;
-    case 20: goto site_20;
-    case 21: goto site_21;
-    case 22: goto site_22;
-    case 23: goto site_23;
-    case 24: goto site_24;
-    case 25: goto site_25;
-    case 26: goto site_26;
-    case 27: goto site_27;
-    case 28: goto site_28;
-    case 29: goto site_29;
-    case 30: goto site_30;
-    case 31: goto site_31;
-    case 32: goto site_32;
-    default: LZ_BADSITE();
+    l = static_cast<const LexFrame&>(luaZ_restore(rz, LF_LLEX));
+    if (l.site == 1)
+    { /* (the check point, the leaf of the frames: behind it now) */
+      luaZ_resumed(rz);
+      l.site = 2;
     }
   }
-  if (l_unlikely(rz != nullptr) && luaZ_checkdue(rz, ls->L))
+  try
   {
-    try
+    for (;;)
     {
-      luaZ_checkpoint(rz);
-    }
-    catch (...)
-    {
-      luaZ_record(rz, FN, 1, &l, sizeof(l));
-      throw;
-    }
-  }
-checked:
-  ls->buff->reset();
-  for (;;)
-  {
-    switch (ls->current)
-    {
-    case '\n':
-    case '\r':
-    { /* line breaks */
-      LZ_SITE(2, inclinenumber(ls));
-      break;
-    }
-    case ' ':
-    case '\f':
-    case '\t':
-    case '\v':
-    { /* spaces */
-      LZ_SITE(3, next(ls));
-      break;
-    }
-    case '-':
-    { /* '-' or '--' (comment) */
-      LZ_SITE(4, next(ls));
-      if (ls->current != '-')
-        return '-';
-      /* else is a comment */
-      LZ_SITE(5, next(ls));
-      if (ls->current == '[')
-      { /* long comment? */
-        LZ_SITE(6, l.sep = skip_sep(ls));
-        ls->buff->reset(); /* 'skip_sep' may dirty the buffer */
-        if (l.sep >= 2)
+      switch (l.site)
+      {
+      case 0:
+        if (l_unlikely(rz != nullptr) && luaZ_checkdue(rz, ls->L))
         {
-          LZ_SITE(7, read_long_string(ls, nullptr, l.sep)); /* skip long comment */
-          ls->buff->reset();      /* previous call may dirty the buff. */
-          break;
+          l.site = 1;
+          luaZ_checkpoint(rz);
         }
-      }
-      /* else short comment */
-      while (!currIsNewline(ls) && ls->current != EOZ)
-      {
-        LZ_SITE(8, next(ls)); /* skip until end of line (or end of file) */
-      }
-      break;
-    }
-    case '[':
-    { /* long string or simply '[' */
-      LZ_SITE(9, l.sep = skip_sep(ls));
-      if (l.sep >= 2)
-      {
-        LZ_SITE(10, read_long_string(ls, seminfo, l.sep));
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        ls->buff->reset();
+        l.site = 3;
+        [[fallthrough]];
+      case 3: /* the loop */
+        switch (ls->current)
+        {
+        case '\n':
+        case '\r': /* line breaks */
+          l.site = 4;
+          break;
+        case ' ':
+        case '\f':
+        case '\t':
+        case '\v': /* spaces */
+          l.site = 5;
+          break;
+        case '-': /* '-' or '--' (comment) */
+          l.site = 6;
+          break;
+        case '[': /* long string or simply '[' */
+          l.site = 12;
+          break;
+        case '=':
+          l.site = 14;
+          break;
+        case '<':
+          l.site = 16;
+          break;
+        case '>':
+          l.site = 19;
+          break;
+        case '/':
+          l.site = 22;
+          break;
+        case '~':
+          l.site = 24;
+          break;
+        case ':':
+          l.site = 26;
+          break;
+        case '"':
+        case '\'': /* short literal strings */
+          l.c = ls->current;
+          l.site = 28;
+          break;
+        case '.': /* '.', '..', '...', or number */
+          save(ls, ls->current);
+          l.site = 29;
+          break;
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+          l.site = 32;
+          break;
+        case EOZ:
+          return TK_EOS;
+        default:
+          if (lislalpha(ls->current)) /* identifier or reserved word? */
+            l.site = 33;
+          else
+          { /* single-char tokens ('+', '*', '%', '{', '}', ...) */
+            l.c = ls->current;
+            l.site = 35;
+          }
+        }
+        continue;
+      case 4:
+        inclinenumber(ls);
+        l.site = 3;
+        continue;
+      case 5:
+        next(ls);
+        l.site = 3;
+        continue;
+      case 6:
+        next(ls);
+        if (ls->current != '-')
+          return '-';
+        /* else is a comment */
+        l.site = 7;
+        [[fallthrough]];
+      case 7:
+        next(ls);
+        if (ls->current != '[') /* not a long comment? */
+        {
+          l.site = 10;
+          continue;
+        }
+        l.site = 8;
+        [[fallthrough]];
+      case 8:
+        l.sep = skip_sep(ls);
+        ls->buff->reset(); /* 'skip_sep' may dirty the buffer */
+        if (l.sep < 2)
+        {
+          l.site = 10;
+          continue;
+        }
+        l.site = 9;
+        [[fallthrough]];
+      case 9:
+        read_long_string(ls, nullptr, l.sep); /* skip long comment */
+        ls->buff->reset();                    /* previous call may dirty the buff. */
+        l.site = 3;
+        continue;
+      case 10: /* short comment */
+        if (currIsNewline(ls) || ls->current == EOZ)
+        {
+          l.site = 3;
+          continue;
+        }
+        l.site = 11;
+        [[fallthrough]];
+      case 11:
+        next(ls); /* skip until end of line (or end of file) */
+        l.site = 10;
+        continue;
+      case 12:
+        l.sep = skip_sep(ls);
+        if (l.sep < 2)
+        {
+          if (l.sep == 0) /* '[=...' missing second bracket? */
+            lexerror(ls, lt::invalid_long_string_delimiter, TK_STRING);
+          return '[';
+        }
+        l.site = 13;
+        [[fallthrough]];
+      case 13:
+        read_long_string(ls, seminfo, l.sep);
         return TK_STRING;
-      }
-      else if (l.sep == 0) /* '[=...' missing second bracket? */
-        lexerror(ls, lt::invalid_long_string_delimiter, TK_STRING);
-      return '[';
-    }
-    case '=':
-    {
-      LZ_SITE(11, next(ls));
-      LZ_SITE(12, l.r = check_next1(ls, '='));
-      if (l.r)
-        return TK_EQ; /* '==' */
-      else
-        return '=';
-    }
-    case '<':
-    {
-      LZ_SITE(13, next(ls));
-      LZ_SITE(14, l.r = check_next1(ls, '='));
-      if (l.r)
-        return TK_LE; /* '<=' */
-      LZ_SITE(15, l.r = check_next1(ls, '<'));
-      if (l.r)
-        return TK_SHL; /* '<<' */
-      else
-        return '<';
-    }
-    case '>':
-    {
-      LZ_SITE(16, next(ls));
-      LZ_SITE(17, l.r = check_next1(ls, '='));
-      if (l.r)
-        return TK_GE; /* '>=' */
-      LZ_SITE(18, l.r = check_next1(ls, '>'));
-      if (l.r)
-        return TK_SHR; /* '>>' */
-      else
-        return '>';
-    }
-    case '/':
-    {
-      LZ_SITE(19, next(ls));
-      LZ_SITE(20, l.r = check_next1(ls, '/'));
-      if (l.r)
-        return TK_IDIV; /* '//' */
-      else
-        return '/';
-    }
-    case '~':
-    {
-      LZ_SITE(21, next(ls));
-      LZ_SITE(22, l.r = check_next1(ls, '='));
-      if (l.r)
-        return TK_NE; /* '~=' */
-      else
-        return '~';
-    }
-    case ':':
-    {
-      LZ_SITE(23, next(ls));
-      LZ_SITE(24, l.r = check_next1(ls, ':'));
-      if (l.r)
-        return TK_DBCOLON; /* '::' */
-      else
-        return ':';
-    }
-    case '"':
-    case '\'':
-    { /* short literal strings */
-      l.c = ls->current;
-      LZ_SITE(25, read_string(ls, l.c, seminfo));
-      return TK_STRING;
-    }
-    case '.':
-    { /* '.', '..', '...', or number */
-      save(ls, ls->current);
-      LZ_SITE(26, next(ls));
-      LZ_SITE(27, l.r = check_next1(ls, '.'));
-      if (l.r)
-      {
-        LZ_SITE(28, l.r = check_next1(ls, '.'));
-        if (l.r)
+      case 14:
+        next(ls);
+        l.site = 15;
+        [[fallthrough]];
+      case 15:
+        if (check_next1(ls, '='))
+          return TK_EQ; /* '==' */
+        else
+          return '=';
+      case 16:
+        next(ls);
+        l.site = 17;
+        [[fallthrough]];
+      case 17:
+        if (check_next1(ls, '='))
+          return TK_LE; /* '<=' */
+        l.site = 18;
+        [[fallthrough]];
+      case 18:
+        if (check_next1(ls, '<'))
+          return TK_SHL; /* '<<' */
+        else
+          return '<';
+      case 19:
+        next(ls);
+        l.site = 20;
+        [[fallthrough]];
+      case 20:
+        if (check_next1(ls, '='))
+          return TK_GE; /* '>=' */
+        l.site = 21;
+        [[fallthrough]];
+      case 21:
+        if (check_next1(ls, '>'))
+          return TK_SHR; /* '>>' */
+        else
+          return '>';
+      case 22:
+        next(ls);
+        l.site = 23;
+        [[fallthrough]];
+      case 23:
+        if (check_next1(ls, '/'))
+          return TK_IDIV; /* '//' */
+        else
+          return '/';
+      case 24:
+        next(ls);
+        l.site = 25;
+        [[fallthrough]];
+      case 25:
+        if (check_next1(ls, '='))
+          return TK_NE; /* '~=' */
+        else
+          return '~';
+      case 26:
+        next(ls);
+        l.site = 27;
+        [[fallthrough]];
+      case 27:
+        if (check_next1(ls, ':'))
+          return TK_DBCOLON; /* '::' */
+        else
+          return ':';
+      case 28:
+        read_string(ls, l.c, seminfo);
+        return TK_STRING;
+      case 29:
+        next(ls);
+        l.site = 30;
+        [[fallthrough]];
+      case 30:
+        if (check_next1(ls, '.'))
+        {
+          l.site = 31;
+          continue;
+        }
+        else if (!lisdigit(ls->current))
+          return '.';
+        l.site = 32;
+        continue;
+      case 31:
+        if (check_next1(ls, '.'))
           return TK_DOTS; /* '...' */
         else
           return TK_CONCAT; /* '..' */
-      }
-      else if (!lisdigit(ls->current))
-        return '.';
-      else
+      case 32:
+        return read_numeral(ls, seminfo);
+      case 33: /* identifier or reserved word */
+        save(ls, ls->current);
+        l.site = 34;
+        [[fallthrough]];
+      case 34:
       {
-        LZ_SITE(29, l.r = read_numeral(ls, seminfo));
-        return l.r;
-      }
-    }
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-    {
-      LZ_SITE(30, l.r = read_numeral(ls, seminfo));
-      return l.r;
-    }
-    case EOZ:
-    {
-      return TK_EOS;
-    }
-    default:
-    {
-      if (lislalpha(ls->current))
-      { /* identifier or reserved word? */
-        TString* ts;
-        do
+        next(ls);
+        if (lislalnum(ls->current))
         {
-          save(ls, ls->current);
-          LZ_SITE(31, next(ls));
-        } while (lislalnum(ls->current));
+          l.site = 33;
+          continue;
+        }
         /* find or create string */
-        ts = TString::luaS_createstr(ls->L, ls->buff->view());
+        TString* ts = TString::luaS_createstr(ls->L, ls->buff->view());
         if (isreserved(ts)) /* reserved word? */
           return ts->extra - 1 + FIRST_RESERVED;
         else
@@ -1024,36 +1270,51 @@ checked:
           return TK_NAME;
         }
       }
-      else
-      { /* single-char tokens ('+', '*', '%', '{', '}', ...) */
-        l.c = ls->current;
-        LZ_SITE(32, next(ls));
+      case 35:
+        next(ls);
         return l.c;
+      default:
+        luaZ_badstate(rz);
       }
     }
-    }
+  }
+  catch (...)
+  {
+    luaZ_record(rz, LF_LLEX, l);
+    throw;
   }
 }
 
 void luaX_next(LexState* ls)
 {
-  constexpr int FN = LF_NEXT;
-  NoLocals l;
-  if (LZ_RESUMING())
+  LoadFrame l;
+  if (l_unlikely(ls->z->resuming))
+    l = luaZ_restore(ls->z->rz, LF_NEXT);
+  try
   {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
+    switch (l.site)
+    {
+    case 0:
+      ls->lastline = ls->linenumber;
+      if (ls->lookahead.token != TK_EOS)
+      {                               /* is there a look-ahead token? */
+        ls->t = ls->lookahead;        /* use this one */
+        ls->lookahead.token = TK_EOS; /* and discharge it */
+        break;
+      }
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      ls->t.token = llex(ls, &ls->t); /* read next token */
+      break;
+    default:
+      luaZ_badstate(ls->z->rz);
+    }
   }
-  ls->lastline = ls->linenumber;
-  if (ls->lookahead.token != TK_EOS)
-  {                               /* is there a look-ahead token? */
-    ls->t = ls->lookahead;        /* use this one */
-    ls->lookahead.token = TK_EOS; /* and discharge it */
-  }
-  else
+  catch (...)
   {
-    LZ_SITE(1, ls->t.token = llex(ls, &ls->t)); /* read next token */
+    luaZ_record(ls->z->rz, LF_NEXT, l);
+    throw;
   }
 }
 
