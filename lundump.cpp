@@ -307,9 +307,7 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
   {
     S->buff->growTo(l.size + 1);
     LZ_SITE(4, loadVector(S, std::span<char>(S->buff->area().data(), l.size + 1)));
-    byte_view tmpsv{S->buff->area().data(), l.size};
-    ts = TString::luaS_createstr(L, tmpsv);
-    S->buff->growTo(0);
+    ts = TString::luaS_takeblock(L, S->buff->handover(), l.size); /* the buffer's bytes are the string's */
     setslot(ts);
     luaC_objbarrier(L, p, ts);
   }

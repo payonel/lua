@@ -833,11 +833,9 @@ void luaV_concat(lua_State* L, int total)
         ts = TString::luaS_createstr(L, buff.view());
       }
       else
-      {
-        MBuffer buff(L);
-        buff.growTo(tl);
-        copy2buff(L, top, n, buff.area());
-        ts = TString::luaS_createstr(L, buff.area().view().substr(0, tl));
+      { /* long string; copy strings directly to final result */
+        ts = TString::luaS_createlngstrobj(L, tl);
+        copy2buff(L, top, n, ts->data.area());
       }
       setslots(L, top - n, ts); /* create result */
     }

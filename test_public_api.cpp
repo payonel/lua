@@ -1955,6 +1955,33 @@ static void test_strings_through_allocator()
   CHECK(cd.used == 0);
 }
 
+/*
+** A long string made by '..' or loaded from a binary chunk is made in its
+** final place (B23): under a cap it needs room for itself once, as in stock
+** (before, a work buffer for its bytes was counted with it, so a result
+** larger than about half the free room failed)
+*/
+static void test_long_strings_made_in_place()
+{
+  CapDeny cd;
+  lua_State* L = lua_newstate(&cd, 0);
+  luaL_openlibs(L);
+  CHECK(luaL_dostring(L, "a = ('a'):rep(2 << 20) "
+                         "chunk = string.dump(load('return ' .. string.format('%q', ('b'):rep(2 << 20)), '=c'))") == LUA_OK);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  cd.cap = cd.used + (7 << 20); /* room for 'a .. a .. a' once */
+  CHECK(luaL_dostring(L, "return #(a .. a .. a)") == LUA_OK && lua_tointeger(L, -1) == (6 << 20));
+  lua_settop(L, 0);
+  cd.cap = 0;
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  cd.cap = cd.used + (3 << 20); /* room for the loaded string once */
+  CHECK(luaL_dostring(L, "return #load(chunk, 'chunk', 'b')()") == LUA_OK && lua_tointeger(L, -1) == (2 << 20));
+  lua_settop(L, 0);
+  cd.cap = 0;
+  lua_close(L);
+  CHECK(cd.used == 0);
+}
+
 /* denies the first request for at least 'size' bytes with tag 'tag', once */
 struct DenyOnce : lua_Alloc
 {
@@ -1996,10 +2023,10 @@ static void test_string_emergency_collection()
 }
 
 /*
-** A long concatenation whose result cannot be created releases what it
-** reserved for its temporary buffer: after repeated failures a collection
-** brings the count back to where it was, and the state closes cleanly
-** (closing checks that everything was released).
+** A long concatenation whose result cannot be created leaves nothing
+** counted: after repeated failures a collection brings the count back to
+** where it was, and the state closes cleanly (closing checks that
+** everything was released).
 */
 static void test_oom_long_concat()
 {
@@ -2009,8 +2036,8 @@ static void test_oom_long_concat()
   CHECK(luaL_dostring(L, "big = ('x'):rep(100000) parts = {}") == LUA_OK);
   lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
   int before = lua_gc(L, LUA_GCCOUNT, 0, 0, 0);
-  /* room for the concatenation's buffer but not also for its result */
-  cd.cap = cd.used + 150000;
+  /* no room for the result */
+  cd.cap = cd.used + 50000;
   for (int i = 0; i < 20; i++)
   {
     CHECK(luaL_loadstring(L, "parts[#parts + 1] = big .. 'tail'") == LUA_OK);
@@ -6687,6 +6714,7 @@ int main(int argc, char** argv)
       {"oom_between_array_allocs", test_oom_between_array_allocs},
       {"oom_long_concat", test_oom_long_concat},
       {"strings_through_allocator", test_strings_through_allocator},
+      {"long_strings_made_in_place", test_long_strings_made_in_place},
       {"string_emergency_collection", test_string_emergency_collection},
       {"misc", test_misc},
       {"debug_api", test_debug_api},

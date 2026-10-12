@@ -62,6 +62,9 @@ public:
     return b;
   }
 
+  /* its bytes go elsewhere, counted no more as its own; it is left empty */
+  byte_owner handover();
+
   /* takes bytes given by 'release' */
   void adopt(byte_owner b, size_t len) noexcept
   {
