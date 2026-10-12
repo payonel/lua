@@ -508,8 +508,7 @@ public:
   {
     TValue v{};
     setthvalue(L_, &v, L_);
-    lua_Integer found = 0;
-    if (L_ != mainthread(L_->l_G) && !ref_find(v, gcvalue(&v), &found))
+    if (L_ != mainthread(L_->l_G) && !ref_find(v, gcvalue(&v)))
       throw HostError{text(lt::persist_from_the_main_thread_or_a_thread_the_state_holds)}; /* (no path: not a value's) */
     root(v, &lt::path_persisting_thread);
   }
@@ -532,6 +531,8 @@ public:
   }
 
   bool check_ = false; /* (only checks what it could write, while the kernel runs) */
+  bool found_ = false;  /* (what a walk of the collector's lists found) */
+  size_t count_ = 0;    /* (and counted) */
 private:
   lua_State* L_;
   bool host_;
@@ -658,10 +659,10 @@ private:
       return 1;
     TValue v{};
     setgcovalue(L_, &v, bg);
-    lua_Integer found;
-    if (!ref_find(v, bg, &found))
+    std::optional<lua_Integer> found = ref_find(v, bg);
+    if (!found)
       return 1; /* (a group nothing persisted refers to is gone, as far as the restored state can tell) */
-    return 2 + found;
+    return 2 + *found;
   }
 
   /* the persisted tables marked for finalization, oldest mark first */
@@ -678,9 +679,9 @@ private:
         var(marked_.get(0).o->tt == LUA_VTABLE ? 0 : 1);
         var(marked_.get(0).id);
         var(owner_code(marked_.get(0).o));
-        bool due = false;
-        each_marked([&](GCObject* o, bool d) { due = due || (o == marked_.get(0).o && d); });
-        var(due ? 1 : 0);
+        found_ = false; /* (a field, set by the walk: in Java, a lambda sets no local) */
+        each_marked([&](GCObject* o, bool d) { if (o == marked_.get(0).o && d) found_ = true; });
+        var(found_ ? 1 : 0);
       }
       return;
     }
@@ -796,8 +797,9 @@ private:
     if (few_keys)
       each_dead_key([&](const void* p, Table*, lua_Integer) { keys.add(p); });
     auto candidate = [&](const void* p) { return !few_keys || keys.maybe(p); };
-    size_t ncand = 0;
-    each_object([&](const void* p, lua_Integer) { if (candidate(p)) ncand++; });
+    count_ = 0; /* (a field, counted by the walk) */
+    each_object([&](const void* p, lua_Integer) { if (candidate(p)) count_++; });
+    size_t ncand = count_;
     if (ncand == 0)
     {
       var(0);
@@ -821,9 +823,7 @@ private:
       {
         TValue t{};
         sethvalue(L_, &t, h);
-        lua_Integer table = 0;
-        ref_find(t, h, &table);
-        fixes.push(DeadFix{table, node, cand.get(k).id});
+        fixes.push(DeadFix{ref_find(t, h).value_or(0), node, cand.get(k).id});
       }
     });
     var(static_cast<lua_Integer>(fixes.size()));
@@ -1058,23 +1058,21 @@ private:
 
   /* ---- references ---- */
 
-  bool ref_find(const TValue& key, const void* id, lua_Integer* found)
+  std::optional<lua_Integer> ref_find(const TValue& key, const void* id)
   {
     if (host_)
     {
       auto it = map_.find(id);
       if (it == map_.end())
-        return false;
-      *found = it->second.id;
-      return true;
+        return std::nullopt;
+      return it->second.id;
     }
     TValue rt = getslot(L_, L_->ci->func + refs_);
     TValue r{};
     lu_byte tag = hvalue(&rt)->luaH_get(&key, &r);
     if (tagisempty(tag) || !ttisinteger(&r))
-      return false;
-    *found = ivalue(&r);
-    return true;
+      return std::nullopt;
+    return ivalue(&r);
   }
 
   void ref_add(const TValue& key, const void* id)
@@ -1112,11 +1110,10 @@ private:
   bool begin_object(const TValue& v)
   {
     const void* id = v.value_.ref;
-    lua_Integer found;
-    if (ref_find(v, id, &found))
+    if (std::optional<lua_Integer> found = ref_find(v, id))
     {
       byte(TAG_REF);
-      var(found);
+      var(*found);
       return true;
     }
     ref_add(v, id);
@@ -1602,11 +1599,10 @@ private:
   {
     UpVal* uv = cl->upvals[static_cast<size_t>(i - 1)];
     TValue id = pointer_key(uv);
-    lua_Integer found;
-    if (ref_find(id, uv, &found))
+    if (std::optional<lua_Integer> found = ref_find(id, uv))
     {
       byte(TAG_UPVAL_REF);
-      var(found);
+      var(*found);
       return;
     }
     ref_add(id, uv);
@@ -1638,11 +1634,10 @@ private:
   void proto(Proto* f)
   {
     TValue id = pointer_key(f);
-    lua_Integer found;
-    if (ref_find(id, f, &found))
+    if (std::optional<lua_Integer> found = ref_find(id, f))
     {
       byte(TAG_PROTO_REF);
-      var(found);
+      var(*found);
       return;
     }
     ref_add(id, f);
@@ -3671,9 +3666,14 @@ private:
     if (kind == nullptr || nints > 5 || (nints > 0 && kind->save == nullptr))
       r_.invalid();
     Frame f;
-    lua_Integer* slots[5] = {&f.a, &f.b, &f.c, &f.d, &f.e};
+    lua_Integer ints[5] = {0, 0, 0, 0, 0};
     for (int i = 0; i < nints; i++)
-      *slots[i] = r_.get_var();
+      ints[i] = r_.get_var();
+    f.a = ints[0];
+    f.b = ints[1];
+    f.c = ints[2];
+    f.d = ints[3];
+    f.e = ints[4];
     lua_lock(L_);
     CClosure* cl = CClosure::luaF_newCclosure(L_, kind->nup);
     for (TValue& u : cl->upvalue)
