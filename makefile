@@ -150,6 +150,20 @@ gate-run:
 	    cat /dev/null | ../$(GATE_T) $$n all.lua ) || exit 1; \
 	done
 
+# the Styx gate: the deep tests and the upstream suite run as the gate
+# runs them, and at every n-th freeze the whole state is persisted,
+# restored into a new state, and the run goes on there (`make test` runs
+# it; `make styx-gate STYX_GATE_ALL=1000` runs it alone, denser)
+STYX_GATE_DEEP ?= 7
+STYX_GATE_ALL ?= 5000
+styx-gate: $(GATE_T) styx-gate-run
+
+styx-gate-run:
+	( cd tests && ../$(GATE_T) 97 --styx $(STYX_GATE_DEEP) deep/all.lua ) || exit 1
+	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
+	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd tests; \
+	  cat /dev/null | ../$(GATE_T) 97 --styx $(STYX_GATE_ALL) all.lua ) || exit 1
+
 # just the engine internals tests (`make test` runs them too)
 engine-test: $(ENGINE_TEST_T)
 	./$(ENGINE_TEST_T)
@@ -190,6 +204,7 @@ test:
 		cat /dev/null | /usr/bin/time -v ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 	cd tests && ../$(LUA_T) deep/all.lua
 	$(MAKE) gate-run
+	$(MAKE) styx-gate-run
 	$(STYX_RUN)
 
 full:
@@ -203,4 +218,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: all debug cov clean test engine-test gate gate-run styx-test full
+.PHONY: all debug cov clean test engine-test gate gate-run styx-gate styx-gate-run styx-test full

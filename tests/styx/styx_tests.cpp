@@ -403,9 +403,10 @@ static std::string script_persist(lua_State* L)
 /* sets _PERMS: every C function and userdata reachable from _G, the
    registry and the string metatable, named by its path */
 /* sets _PERMS: every C function and userdata reachable from _G, the
-   registry and the string metatable, named by its path; keys are visited
-   in sorted order, so two states with the same libraries agree on names;
-   _BACK is the inverse */
+   registry and the string metatable, and the metatable of each such
+   userdata (see "Host API" in docs/styx.md), named by its path; keys are
+   visited in sorted order, so two states with the same libraries agree on
+   names; _BACK is the inverse */
 static const char* const build_perms =
   "local perms = {} local seen = {} "
   "local function upv(f) local _, x = debug.getupvalue(f, 1) return x end "
@@ -415,6 +416,8 @@ static const char* const build_perms =
   "for _, k in ipairs(keys) do local v = t[k] local n = name .. '.' .. tostring(k) "
   "if (type(v) == 'function' and debug.getinfo(v, 'S').what == 'C' and type(upv(v)) ~= 'table') or type(v) == 'userdata' then "
   "if perms[v] == nil then perms[v] = n end "
+  "local mt = type(v) == 'userdata' and debug.getmetatable(v) "
+  "if mt and perms[mt] == nil then perms[mt] = n .. '<mt>' end "
   "elseif type(v) == 'table' then walk(v, n) end end "
   "local mt = getmetatable(t) if mt then walk(mt, name .. '<mt>') end end "
   "walk(getmetatable(''), 'smt') walk(_G, '_G') walk(debug.getregistry(), 'R') "
