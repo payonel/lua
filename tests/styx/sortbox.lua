@@ -88,9 +88,9 @@ end
 -- a sort frozen at a budget point that has boxed its state: scan the budget
 -- points until a freeze lands inside 'table.sort' and the stream holds its
 -- box (how many steps that takes depends on the build, so the box, not just
--- the kind name, is what is looked for)
-local function frozen_sort_blob()
-  for k = 20, 200 do
+-- the kind name, is what is looked for; 'first': the budget point to start at)
+local function frozen_sort_blob(first)
+  for k = first or 20, 200 do
     local n = 0
     local co = coroutine.create(function()
       local t = {}
@@ -163,5 +163,19 @@ case("a pending count so large its check overflows is refused", function()
   bad = setslot(bad, box, SO_N, 1 << 62)
   local ok, err = rejects(bad)
   assert(ok, "a sort box with a huge n must be refused: " .. tostring(err))
+  H.checkheap()
+end)
+
+case("a sort frozen early persists zeros past its pending entries", function()
+  -- the first budget point inside the sort: nothing pushed or popped yet, so
+  -- every slot of the pending stack past the live entries was never written
+  -- by the sort; it must persist as 0 (not whatever the C stack held), for
+  -- the same stream from the same program, run after run
+  local blob, box = frozen_sort_blob(1)
+  local live = 13 + 4 * slot(blob, box, SO_N) -- SO_PENDING + 4 * SO_N
+  for k = live, box.nslots - 1 do
+    local v = slot(blob, box, k)
+    assert(v == 0, "pending slot " .. k .. " of " .. box.nslots .. " persisted as " .. v)
+  end
   H.checkheap()
 end)

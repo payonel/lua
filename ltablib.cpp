@@ -1297,7 +1297,7 @@ static int sort_len(lua_State* L, lua_Integer n)
     lua_settop(L, 3);                      /* make sure there are two arguments (and room for the state) */
     int depth = (int)std::bit_width((lua_Unsigned)n) + 1;
     assert(depth <= SORT_MAXDEPTH);
-    lua_Integer state[SORT_NINTS];
+    lua_Integer state[SORT_NINTS]{};
     lua_Integer* s = state;
     s[SO_PC] = S_START;
     s[SO_LO] = 1;
