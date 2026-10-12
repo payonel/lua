@@ -863,7 +863,8 @@ static std::unique_ptr<lua_UserObject> makesortbox(lua_State*, const lua_Integer
     box->s[k] = bytes.toInt64(8 * k);
   const lua_Integer* v = box->s;
   if (v[SO_NINTS] != static_cast<lua_Integer>(bytes.size() / 8) || v[SO_BOXED] != 1 || v[SO_PC] < 0 ||
-      v[SO_PC] >= S_NKEPT || v[SO_N] < 0 || SO_PENDING + 4 * v[SO_N] > v[SO_NINTS] ||
+      v[SO_PC] >= S_NKEPT || v[SO_N] < 0 || v[SO_N] >= SORT_MAXDEPTH ||
+      SO_PENDING + 4 * v[SO_N] > v[SO_NINTS] ||
       (v[SO_FN] != 0 && v[SO_FN] != 1) || (v[SO_PLAIN] != 0 && v[SO_PLAIN] != 1) || v[SO_R] < -1 ||
       v[SO_R] > 1)
     return nullptr;
@@ -1296,7 +1297,7 @@ static int sort_len(lua_State* L, lua_Integer n)
     lua_settop(L, 3);                      /* make sure there are two arguments (and room for the state) */
     int depth = (int)std::bit_width((lua_Unsigned)n) + 1;
     assert(depth <= SORT_MAXDEPTH);
-    lua_Integer state[SORT_NINTS];
+    lua_Integer state[SORT_NINTS]{};
     lua_Integer* s = state;
     s[SO_PC] = S_START;
     s[SO_LO] = 1;

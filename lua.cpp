@@ -455,7 +455,7 @@ static l_readlineT l_readline = nullptr;
 typedef void (*l_addhistT)(const char* string);
 static l_addhistT l_addhist = nullptr;
 
-static bool lua_readline(byte_span buff, byte_view prompt)
+static bool lua_readline(lua_State* L, byte_view prompt)
 {
   if (l_readline != nullptr)         /* is there a 'readline'? */
   {
@@ -465,25 +465,23 @@ static bool lua_readline(byte_span buff, byte_view prompt)
       return false;
     }
     byte_view sv(ret);
-    buff.apply(sv);
+    if (sv.ends_with('\n'))
+      sv = sv.substr(0, sv.size() - 1);
+    lua_pushlstring(L, sv, 0, sv.size());
     free(ret);
+    return true;
   }
-  else
+  byte_owner buff(LUA_MAXINPUT);
+  os_print_stdout(prompt);
+  os_flush_stdout();                       /* show prompt */
+  if (!os_readline(os_stdin(), buff))
   {
-    os_print_stdout(prompt);
-    os_flush_stdout();                       /* show prompt */
-    if (!os_readline(os_stdin(), buff))
-    {
-      return false;
-    }
+    return false;
   }
-
   byte_view content = buff.str_view();
   if (content.ends_with('\n'))
-  {
-    buff[content.size() - 1] = '\0';
-  }
-
+    content = content.substr(0, content.size() - 1);
+  lua_pushlstring(L, content, 0, content.size());
   return true;
 }
 
@@ -562,14 +560,14 @@ static int incomplete(lua_State* L, int status)
 */
 static int pushline(lua_State* L, int firstline)
 {
-  byte_owner buffer(LUA_MAXINPUT);
   InternalString prmt = get_prompt(L, firstline);
-  bool ready = lua_readline(buffer, prmt.view());
-  lua_pop(L, 1); /* remove prompt */
+  bool ready = lua_readline(L, prmt.view());
   if (!ready)
-    return 0; /* no input */
-  byte_view buffview = buffer.str_view();
-  lua_pushlstring(L, buffview, 0, buffview.size());
+  {
+    lua_pop(L, 1); /* remove prompt */
+    return 0;      /* no input */
+  }
+  lua_remove(L, -2); /* remove prompt */
   return 1;
 }
 

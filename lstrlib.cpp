@@ -844,11 +844,11 @@ static l_forceinline ptrdiff_t end_capture(MatchState* ms, ptrdiff_t s,
 static ptrdiff_t match_capture(MatchState* ms, ptrdiff_t s, int l)
 {
   l = check_capture(ms, l);
-  ptrdiff_t len = ms->capture[l].len;
+  size_t len = static_cast<size_t>(ms->capture[l].len);
   byte_view msv = ms->src->view();
-  if ((ms->src_end - s) >= len &&
+  if (static_cast<size_t>(ms->src_end - s) >= len &&
       msv.substr(ms->capture[l].init, len).equals(msv.substr(s, len)))
-    return s + len;
+    return s + static_cast<ptrdiff_t>(len);
   else
     return NOMATCH;
 }
@@ -2553,6 +2553,9 @@ static int formatk(lua_State* L, int status, lua_KContext ctx)
   int top = lua_gettop(L) - 2; /* (the arguments, the box, the string) */
   const InternalString* sf = lua_toistring(L, 1);
   luaL_Box* box = luaL_tobox(L, top + 1);
+  if (box->ints[FMT_ITEM] < 1 || box->ints[FMT_ITEM] > static_cast<lua_Integer>(sf->size()) ||
+      box->ints[FMT_ARG] < 1 || box->ints[FMT_ARG] > top)
+    luaL_errori(L, lt::invalid_state_of_a_stopped_format);
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   luaL_buffload(&b, box);
@@ -2880,7 +2883,7 @@ static void packFloat(luaL_Buffer* b, float f, int islittle)
   byte_span buff = luaL_buffaddr(b);
   luaL_addsize(b, SZ_FLOAT);
   buff.write_float(f, pos);
-  if (islittle != nativeendian_little)
+  if (!islittle)
   {
     buff.reverse(pos, SZ_FLOAT);
   }
@@ -2892,7 +2895,7 @@ static void packDouble(luaL_Buffer* b, double f, bool islittle)
   byte_span buff = luaL_buffaddr(b);
   luaL_addsize(b, SZ_DOUBLE);
   buff.write_double(f, pos);
-  if (islittle != nativeendian_little)
+  if (!islittle)
   {
     buff.reverse(pos, SZ_DOUBLE);
   }
@@ -2901,13 +2904,13 @@ static void packDouble(luaL_Buffer* b, double f, bool islittle)
 static double unpackDouble(byte_view data, size_t pos, bool islittle)
 {
   data = data.substr(pos, SZ_DOUBLE);
-  return (islittle == nativeendian_little ? data : byte_owner(data).reverse().view()).toDouble();
+  return (islittle ? data : byte_owner(data).reverse().view()).toDouble();
 }
 
 static float unpackFloat(byte_view data, size_t pos, bool islittle)
 {
   data = data.substr(pos, SZ_FLOAT);
-  return (islittle == nativeendian_little ? data : byte_owner(data).reverse().view()).toFloat();
+  return (islittle ? data : byte_owner(data).reverse().view()).toFloat();
 }
 
 static int str_pack(lua_State* L)

@@ -434,6 +434,7 @@ namespace lt
   constexpr byte_view invalid_capture_index_d("invalid capture index %%%d");
   constexpr byte_view invalid_match_state("invalid state of a stopped match");
   constexpr byte_view invalid_sort_state("invalid state of a stopped sort");
+  constexpr byte_view invalid_state_of_a_stopped_format("invalid state of a stopped format");
   constexpr byte_view invalid_state_of_a_stopped_load("invalid state of a stopped load");
   constexpr byte_view invalid_constant("invalid constant");
   constexpr byte_view invalid_conversion_s_to_format("invalid conversion '%s' to 'format'");
