@@ -1280,6 +1280,8 @@ private:
       {
         lua_Integer ints[8];
         int n = (kind->save != nullptr) ? kind->save(cl, ints) : 0;
+        if (n < 0)
+          fail(format(lt::cannot_persist_a_s_closure_as_it_is, {text(byte_view(kind->name))}));
         int nvals = (kind->save != nullptr) ? kind->nup - 1 : kind->nup;
         byte(TAG_CCLOSURE);
         hash(cl);

@@ -1471,6 +1471,9 @@ static int gmatch_save(const CClosure* cl, lua_Integer* ints)
 {
   const Udata* u = uvalue(&cl->upvalue[2]);
   const GMatchState* gm = dynamic_cast<const GMatchState*>(u->obj.get());
+  if (!ttisstring(&cl->upvalue[0]) || !ttisstring(&cl->upvalue[1]) ||
+      &tsvalue(&cl->upvalue[0])->data != gm->subject || &tsvalue(&cl->upvalue[1])->data != gm->pattern)
+    return -1; /* (its strings were replaced: debug.setupvalue) */
   ints[0] = gm->src;
   ints[1] = gm->p;
   ints[2] = gm->lastmatch;

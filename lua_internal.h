@@ -48,9 +48,10 @@ lua_ObjectFactory lua_objectkind(byte_view name);
 /*
 ** Kinds of C closures that can be kept outside the process: the function,
 ** the number of upvalues, and for one that keeps a state object in its last
-** upvalue, how to save the object as integers (the number, up to 8) and how
-** to make it again from them and the other upvalues (false if they are not
-** valid). The other upvalues are values.
+** upvalue, how to save the object as integers (the number, up to 8, or -1
+** if the closure cannot be kept as it is) and how to make it again from
+** them and the other upvalues (false if they are not valid). The other
+** upvalues are values.
 */
 namespace lua::object
 {

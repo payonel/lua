@@ -114,6 +114,7 @@ namespace lt
   constexpr byte_view cannot_close_standard_file("cannot close standard file");
   constexpr byte_view cannot_open_file_s_s("cannot open file '%s' (%s)");
   constexpr byte_view cannot_persist_a_s_value("cannot persist a %s value");
+  constexpr byte_view cannot_persist_a_s_closure_as_it_is("cannot persist a %s closure as it is (its upvalues were changed)");
   constexpr byte_view cannot_persist_a_C_function("cannot persist a C function");
   constexpr byte_view cannot_persist_a_running_thread("cannot persist a running thread");
   constexpr byte_view cannot_persist_the_main_thread_from_a_script("cannot persist the main thread from a script");

@@ -2789,6 +2789,27 @@ static void test_open_variable_shared_in_its_thread()
   lua_close(B);
 }
 
+/*
+** A gmatch iterator whose strings were replaced (debug.setupvalue) cannot be
+** kept as it is: the persist refuses it (before, it wrote it, and the
+** restore refused the stream)
+*/
+static void test_changed_gmatch_not_persisted()
+{
+  CountingAlloc a;
+  lua_State* L = new_counted_state(&a);
+  CHECK(eval(L, build_perms) == "ok");
+  CHECK(eval(L, "local it = string.gmatch('abc', '%a') debug.setupvalue(it, 1, {}) t = {it} return 'ok'") == "ok");
+  CHECK(eval(L, "local ok, msg = debug.persistable(t) return tostring(ok) .. ' ' .. msg") ==
+        "false cannot persist a string.gmatch_aux closure as it is (its upvalues were changed) (at root[1])");
+  lua_getglobal(L, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(L, lua_gettop(L), &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()).find("cannot persist a string.gmatch_aux closure as it is") != std::string::npos);
+  lua_close(L);
+}
+
 /* luaL_restorestate fails as a whole: a message, and nothing left allocated */
 static void test_restore_errors()
 {
@@ -2889,6 +2910,7 @@ static void run_cpp_tests()
       {"persist_from_held_thread", test_persist_from_held_thread},
       {"upvalue_id_not_persisted", test_upvalue_id_not_persisted},
       {"open_variable_shared_in_its_thread", test_open_variable_shared_in_its_thread},
+      {"changed_gmatch_not_persisted", test_changed_gmatch_not_persisted},
       {"restore_errors", test_restore_errors},
   };
   std::printf("  styx_tests.cpp\n");
