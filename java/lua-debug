@@ -2,7 +2,19 @@
 dir=$(dirname "$0")
 JDK=${JDK:-$(cat "$dir/build/jdk")}
 jar=$dir/build/lua.jar
-if env --default-signal=INT true 2>/dev/null; then
-  exec env --default-signal=INT "$JDK/bin/java" -XX:-DontCompileHugeMethods -ea -Dlua.debug=true -Dlua.progname="$0" -jar "$jar" "$@"
+set -- -jar "$jar" "$@"
+# the JVM converts paths, commands and the environment with the charset of
+# its locale: where that is not UTF-8, it runs in C.UTF-8 and is told the
+# locale's variables as they were, to give them back (Environ.java)
+if [ "$(locale charmap 2>&1)" != UTF-8 ]; then
+  if [ "${LANG+set}" ]; then set -- "-Dlua.env.LANG=$LANG" "$@"; fi
+  if [ "${LC_CTYPE+set}" ]; then set -- "-Dlua.env.LC_CTYPE=$LC_CTYPE" "$@"; fi
+  if [ "${LC_ALL+set}" ]; then set -- "-Dlua.env.LC_ALL=$LC_ALL" "$@"; fi
+  set -- -Dlua.env=LC_ALL,LC_CTYPE,LANG "$@"
+  LC_ALL=C.UTF-8
+  export LC_ALL
 fi
-exec "$JDK/bin/java" -XX:-DontCompileHugeMethods -ea -Dlua.debug=true -Dlua.progname="$0" -jar "$jar" "$@"
+if env --default-signal=INT true 2>/dev/null; then
+  exec env --default-signal=INT "$JDK/bin/java" -XX:-DontCompileHugeMethods --enable-native-access=ALL-UNNAMED -ea -Dlua.debug=true -Dlua.progname="$0" "$@"
+fi
+exec "$JDK/bin/java" -XX:-DontCompileHugeMethods --enable-native-access=ALL-UNNAMED -ea -Dlua.debug=true -Dlua.progname="$0" "$@"

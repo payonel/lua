@@ -1,0 +1,44 @@
+JLine 3.30.17, the line editor of the JVM's readline (lua.platform.Readline)
+
+Artifacts (Maven Central, group org.jline, version 3.30.17, released
+2026-09-08), unmodified:
+
+  jline-reader-3.30.17.jar
+    https://repo1.maven.org/maven2/org/jline/jline-reader/3.30.17/jline-reader-3.30.17.jar
+    SHA-1   d08d58cddeff17fa0348b0697555621a0217ef25
+    SHA-256 6efae5be31bf8abca2c27ce4c406685c7726faff22416fe00932dce78f3cda8e
+
+  jline-terminal-3.30.17.jar
+    https://repo1.maven.org/maven2/org/jline/jline-terminal/3.30.17/jline-terminal-3.30.17.jar
+    SHA-1   39e514a633149dadd0515f13b7a75e2ca3add71a
+    SHA-256 382ee369588cb014592e3bef08fbf3fbe47c8f76bdc5c5a7aeb1efb1506983f0
+
+  jline-terminal-ffm-3.30.17.jar
+    https://repo1.maven.org/maven2/org/jline/jline-terminal-ffm/3.30.17/jline-terminal-ffm-3.30.17.jar
+    SHA-1   04bedee3cf32401395620f18f02ac8582c46ff6e
+    SHA-256 5172adddb1d36dd20f1837f95c1d27b8246278605f3a10e9a7bf9c3c60d03b27
+
+The checksums are Maven Central's published ones (the .sha1 and .sha256
+files beside each jar), checked against the files; each jar's .asc
+signature verifies with key 0181A4828FA27B6BE6F1F5A68611CD28F472E006
+(Guillaume Nodet, JLine's maintainer).
+
+License: BSD 3-Clause (LICENSE-jline.txt, from
+https://github.com/jline/jline3/blob/jline-3.30.17/LICENSE.txt). The
+provider registry files inside jline-terminal and jline-terminal-ffm
+(META-INF/jline/providers/*, META-INF/services/*, META-INF/jline/README.md)
+carry an Apache-2.0 header; the code is BSD-3.
+
+Source: https://github.com/jline/jline3 (tag jline-3.30.17).
+
+Only these three are used: the reader, the terminal, and the FFM terminal
+provider (it calls the C library through Java's foreign function API; the
+JVM needs --enable-native-access=ALL-UNNAMED, which the launchers and
+lua.jar's manifest give). The terminal's 'stty' provider (in
+jline-terminal) is the fallback. jline-terminal's POM also depends on
+jline-native (JNI libraries); it is left out: its classes are loaded only
+for the JNI provider and for file descriptor modes JLine does not use
+here. No Jansi, JNA or JNI.
+
+To update: change JLINE_VERSION in java/Makefile, put the new jars here,
+and give their checksums above.

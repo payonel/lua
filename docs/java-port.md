@@ -37,7 +37,7 @@ these for the port itself:
 | `lua::compiler` | `lua.compiler` | `Llex`, `Lparser`, `Lcode`, `Ldump`, `Lundump` and their records |
 | global API (`lua_*`, `luaL_*`) | `lua.api` | `LuaApi` (lapi.cpp, lua.h), `LuaAuxLib` (lauxlib.cpp), `HostString` |
 | `lua::lib` | `lua.lib` | one class per library (`Lbaselib`, `Lstrlib`, …), `Linit`, `Lstyx` |
-| `lua::platform` | `lua.platform` | `OsApi`, `LocaleUtil`, `Libm`; `Readline` (the JVM's readline library) |
+| `lua::platform` | `lua.platform` | `OsApi`, `LocaleUtil`, `Libm`; `Readline` (the JVM's readline library); `Environ` (the environment as bytes) |
 | `lua::host` | `lua.host` | `Lua` (the standalone interpreter, `main`) |
 | tests | `lua.tests` | `Ltests` (the debug build's `T` library) |
 | tests/libs | `lua.tests.libs` | `Lib1`, `Lib11`, `Lib2`, `Lib21`, `Lib22` (the test C modules), `LibDecls` (lib_decls.h) |
@@ -271,6 +271,18 @@ the Temurin 25 under `~/.gradle/jdks`) into `java/build/lua.jar`.
 by default: the interpreter runs with `-XX:-DontCompileHugeMethods`.
 The debug build is the same jar run with `-ea -Dlua.debug=true`.
 
+The readline's line editor is JLine 3.30.17 from Maven Central
+(`org.jline:jline-reader`, `jline-terminal` and `jline-terminal-ffm`,
+BSD-3), whose jars are in `java/lib` with its license (`LICENSE-jline.txt`)
+and a README that gives their source and checksums. The sources compile
+against them; `lua.jar`'s manifest names them (`Class-Path: ../lib/…`,
+relative to the jar) and enables native access for them
+(`Enable-Native-Access: ALL-UNNAMED`), so that `java -jar
+java/build/lua.jar` runs as the launchers do. The launchers pass
+`--enable-native-access=ALL-UNNAMED`: JLine's FFM terminal calls the C
+library through Java's foreign function API (no native library of its
+own), which the JVM otherwise allows only with a warning.
+
 ## Status
 
 | Step | State |
@@ -288,19 +300,69 @@ The platform layer's dynamic libraries are Java classes, and
 is `lua.tests.libs.Lib22`) if the file exists, whatever it holds
 (`make -C java` makes the test modules' files, dated 1970 so that the C++
 build still makes its own); a name without a `/` loads a registered
-system library (`libreadline.so` is `lua.platform.Readline`: no editing;
-it echoes the line when the input is not a terminal, as GNU readline
-does); `""` is the program. A library's symbols are its class's public
-static fields; its undefined ones (`lib11` takes `lib1_export`) must come
-from a library loaded with global symbols. Errors have glibc's messages.
+system library (`libreadline.so` is `lua.platform.Readline`); `""` is
+the program. A library's symbols are its class's public static fields;
+its undefined ones (`lib11` takes `lib1_export`) must come from a library
+loaded with global symbols. Errors have glibc's messages.
+
+`Readline` stands for GNU readline (`readline`, `add_history`,
+`rl_readline_name`). When the standard input and output are terminals,
+`readline` edits the line with JLine: one line reader for the process,
+made at the first prompt and named by `rl_readline_name`, on the system
+terminal (JLine's FFM provider when native access is enabled, else its
+`stty` one), which it reads and writes as UTF-8. It edits as GNU
+readline's emacs mode: the arrow, Home and End keys in both their ANSI
+forms, Up and Down the previous and next history line; no completion, no
+`!` history expansion, no history file. The history holds the lines
+`add_history` was given, all of them (lua.c gives each statement, its
+lines joined), and no others. Ctrl-D on an empty line ends the input.
+Ctrl-C does as in GNU readline: it echoes `^C`, restores the terminal and
+gives SIGINT to the program's handler, which at lua.c's prompt is the
+default, so the process ends by the signal (the JVM raises a signal only
+for a handler of its own, so a shell sends it). Otherwise (the input or
+the output is not a terminal, or no terminal can be made) `readline`
+shows its prompt and reads the line from the standard input, and echoes
+the line when the input is not a terminal, as GNU readline does.
+
+The JVM converts file names, command lines and the environment between
+its strings and the system's bytes with the charset of the locale it
+starts in (`sun.jnu.encoding`), and no property changes that. The engine's
+strings cross to Java as UTF-8, so the launchers (`java/lua`,
+`java/lua-debug`, `java/test_*`) start the JVM with `LC_ALL=C.UTF-8` when
+the locale's charset is not UTF-8 (`locale charmap`), and pass the values
+`LC_ALL`, `LC_CTYPE` and `LANG` had as properties (`lua.env` lists the
+names, `lua.env.NAME` holds a value; no such property: the variable was
+unset). `Environ` hands the program the environment it was started with:
+`os.getenv` reads it as bytes from `/proc/self/environ` (once;
+`System.getenv` where that cannot be read) with those variables as they
+were, `os.setlocale("")` reads the same, and a command (`os.execute`,
+`io.popen`) gets back the variables the launcher changed, the rest of its
+environment being the JVM's, byte for byte.
 
 Known differences from the C++ build (the JVM's, not the port's):
 - Only the Java libraries load (the test modules and readline); any other
-  C library fails to load. The readline does no line editing or
-  completion.
+  C library fails to load.
+- The readline (JLine) reads no init file (`INPUTRC`, `~/.inputrc`,
+  `/etc/inputrc`), so their bindings and settings do not apply; Tab does
+  not complete file names (GNU readline's default); the terminal is UTF-8
+  in every locale; Ctrl-Z stops the process without echoing `^Z`. The
+  lines read are GNU readline's; the screen updates differ (JLine's
+  redraws, and its keypad and mouse-mode sequences).
 - `os_system`/`io.popen` statuses: a command killed by a signal can show
   as an exit code 128+n.
-- Paths, commands and environment names cross to Java as UTF-8.
+- Paths, commands and the environment are exact in every locale: a path
+  or command reaches the system as its bytes, and `os.getenv` answers
+  with the environment's bytes, valid UTF-8 or not. The limit: a path or
+  command whose bytes are not valid UTF-8 cannot pass through Java's file
+  and process APIs, which take text (each invalid byte becomes U+FFFD);
+  so too an original `LC_ALL` that is not valid UTF-8, which a command
+  gets back as text.
+- `os.setlocale` knows only the "C" and "POSIX" locales (`LocaleUtil`):
+  where the environment names another locale, `os.setlocale("")` answers
+  nil, and the C++ the locale's name.
+- The launchers are `/bin/sh` scripts: an environment variable whose
+  name is not a shell name (`A-B`) does not reach the JVM where the shell
+  drops it (dash does), and `os.getenv` does not see it.
 - Accepted limitation: a table holds at most 2^31 entries (an array
   part of 2^30, `MAXABITS` 30, plus a hash part of 2^30), where stock
   Lua holds 3·2^30 (array part 2^31): a Java array cannot have 2^31

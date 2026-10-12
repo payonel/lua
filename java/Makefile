@@ -6,6 +6,16 @@ JAVA = $(JDK)/bin/java
 SRC := $(shell find src -name '*.java')
 CLASSES = build/classes
 
+# JLine, the line editor of the JVM's readline (lib/README): the sources
+# compile against it, and lua.jar's manifest names its jars (Class-Path,
+# relative to build/) and lets them call C (Enable-Native-Access: the FFM
+# terminal), so that 'java -jar build/lua.jar' runs as the launchers do
+JLINE_VERSION = 3.30.17
+JLINE = $(foreach m, reader terminal terminal-ffm, lib/jline-$(m)-$(JLINE_VERSION).jar)
+empty :=
+space := $(empty) $(empty)
+MANIFEST = build/manifest.txt
+
 # the test C modules (tests/libs/build.mk) as files for 'require': the JVM
 # loads the Java library that a file's name names, whatever the file holds
 # (OsApi's 'os_dlopen'); dated 1970, so that the C++ build makes its own
@@ -14,11 +24,12 @@ TESTLIBS = $(addprefix $(TESTLIBS_DIR)/, lib1.so lib11.so lib2.so lib21.so lib2-
 
 all: build/lua.jar $(TESTLIBS)
 
-build/lua.jar: $(SRC)
+build/lua.jar: $(SRC) $(JLINE)
 	rm -rf $(CLASSES)
 	mkdir -p $(CLASSES)
-	$(JAVAC) --release 21 -encoding UTF-8 -Xlint:all -Xlint:-serial -Xlint:-fallthrough -Xlint:-cast -Xmaxerrs 10000 -d $(CLASSES) $(SRC)
-	$(JAR) --create --file $@ --main-class lua.host.Lua -C $(CLASSES) .
+	$(JAVAC) --release 21 -encoding UTF-8 -Xlint:all -Xlint:-serial -Xlint:-fallthrough -Xlint:-cast -Xmaxerrs 10000 -cp $(subst $(space),:,$(JLINE)) -d $(CLASSES) $(SRC)
+	printf 'Class-Path: %s\nEnable-Native-Access: ALL-UNNAMED\n' "$(addprefix ../,$(JLINE))" > $(MANIFEST)
+	$(JAR) --create --file $@ --main-class lua.host.Lua --manifest $(MANIFEST) -C $(CLASSES) .
 	echo "$(abspath $(JDK))" > build/jdk
 
 $(TESTLIBS_DIR)/%.so: CLASS = $(patsubst lib%,Lib%,$*)
@@ -32,7 +43,7 @@ $(TESTLIBS_DIR)/%.so:
 # build, the same jar with assertions and lua.debug on)
 DEBUG ?=
 LUA = $(if $(DEBUG),lua-debug,lua)
-JFLAGS = -XX:-DontCompileHugeMethods $(if $(DEBUG),-ea -Dlua.debug=true)
+JFLAGS = -XX:-DontCompileHugeMethods --enable-native-access=ALL-UNNAMED $(if $(DEBUG),-ea -Dlua.debug=true)
 TEST_TEMP_DIR ?= 1
 GATE_STEPS ?= 97 17 3
 STYX_GATE_DEEP ?= 7
