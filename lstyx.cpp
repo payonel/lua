@@ -2109,7 +2109,7 @@ struct Frame
   lua_Integer id = 0; /* reference id */
   lua_Integer a = 0;  /* Table: asize; Thread: top;  hook: mask */
   lua_Integer b = 0;  /* Table: hsize; Thread: maxtop; hook: base count */
-  lua_Integer c = 0;  /* Table: length hint; hook: current count */
+  lua_Integer c = 0;  /* Table: length hint; hook: current count; Closure: the variable being made */
   lua_Integer d = 0;  /* hook: last traced pc; Table: lastfree */
   lua_Integer e = 0;  /* hook: allowhook */
   void* p = nullptr;  /* Table*, LClosure* (a Proto's holder, or the closure), lua_State* */
@@ -2122,7 +2122,7 @@ public:
   /* stack: 1: permanents (key -> object); 3: refs (id -> object); 4: upvalues */
   Restorer(lua_State* L, byte_view data, bool host)
       : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true), umarked_(L, true), owners_(L, true), dues_(L, true),
-        fixes_(L, true), rebuilt_(L, true)
+        fixes_(L, true), rebuilt_(L, true), making_(L, true), joins_(L, true)
   {
   }
 
@@ -2418,6 +2418,21 @@ private:
   } mainsaved_{};
 
   WorkStack<Table*> rebuilt_; /* layout tables whose keys did not all fit */
+
+  /*
+  ** A variable that is open (its owner thread is read) or a permanent (its
+  ** key is read) is made after its closure's other parts, so a closure met
+  ** meanwhile (in that thread's stack) that shares it waits: it is joined
+  ** to the variable once the variable is made.
+  */
+  struct Join
+  {
+    lua_Integer uid;     /* the variable */
+    lua_Integer closure; /* the reference id of the closure that shares it */
+    int i;               /* and its upvalue */
+  };
+  WorkStack<lua_Integer> making_; /* the variables being made */
+  WorkStack<Join> joins_;
 
   unsigned int lasthash_ = 0; /* the place of the last hash read */
 
@@ -3114,6 +3129,34 @@ private:
 
   /* ---- closures ---- */
 
+  bool being_made(lua_Integer uid)
+  {
+    for (size_t k = 0; k < making_.size(); k++)
+      if (making_.get(k) == uid)
+        return true;
+    return false;
+  }
+
+  /* variable 'uid' is made, as upvalue 'i' of 'cl': the closures that wait join it */
+  void made_variable(LClosure* cl, int i, lua_Integer uid)
+  {
+    assert(!making_.empty() && making_.top() == uid);
+    making_.pop();
+    size_t k = joins_.size();
+    while (k-- > 0)
+    {
+      Join j = joins_.get(k);
+      if (j.uid != uid)
+        continue;
+      joins_.set(k, joins_.top()); /* (the last takes its place) */
+      joins_.pop();
+      lua_rawgeti(L_, REFS, j.closure);
+      push_closure(cl);
+      lua_upvaluejoin(L_, -2, j.i, -1, i);
+      lua_pop(L_, 2);
+    }
+  }
+
   Next closure_advance(Frame f)
   {
     if (f.part == Part::Proto)
@@ -3129,13 +3172,22 @@ private:
         lua_rawseti(L_, UPS, uid);
         lua_pushinteger(L_, f.i);
         lua_rawseti(L_, UPS, -uid);
+        if (tag != TAG_UPVAL_NEW) /* (a new one is made in place: it is shared as it is) */
+          making_.push(uid);
         f.part = (tag == TAG_UPVAL_NEW) ? Part::UpNew : (tag == TAG_UPVAL_OPEN) ? Part::UpOpen : Part::UpPerm;
+        f.c = uid;
         frames_.set_top(f);
         return Next::Read;
       }
       if (tag != TAG_UPVAL_REF)
         r_.invalid();
       lua_Integer uid = r_.get_var();
+      if (being_made(uid))
+      {
+        joins_.push(Join{uid, f.id, f.i});
+        f.i++;
+        continue;
+      }
       lua_rawgeti(L_, UPS, uid);
       lua_rawgeti(L_, UPS, -uid);
       if (!lua_isfunction(L_, -2) || !lua_isinteger(L_, -1))
@@ -3195,6 +3247,7 @@ private:
       cl->upvals[static_cast<size_t>(f.i - 1)] = fu.uv;
       luaC_objbarrier(L_, cl, fu.uv);
       lua_pop(L_, 1);
+      made_variable(cl, f.i, f.c);
       break;
     }
     default: /* Part::UpPerm */
@@ -3221,6 +3274,7 @@ private:
       push_closure(static_cast<LClosure*>(f.p));
       lua_upvaluejoin(L_, -1, f.i, -2, 1);
       lua_pop(L_, 3);
+      made_variable(static_cast<LClosure*>(f.p), f.i, f.c);
       break;
     }
     }

@@ -2730,6 +2730,34 @@ static void test_upvalue_id_not_persisted()
   lua_close(L);
 }
 
+/*
+** A variable shared by two closures, open in a coroutine, where the walk
+** meets one closure first (a global) and the other in the coroutine's
+** stack, which that first closure's variable writes: both share it after
+** the restore (before, the second one was joined to the first one's
+** variable before it was made, and kept a variable of its own, nil)
+*/
+static void test_open_variable_shared_in_its_thread()
+{
+  const char* prog = "local co co = coroutine.create(function() "
+                     "  local x = 41 local function b() return x end "
+                     "  a = function() x = x + 1 return x, co end "
+                     "  coroutine.yield() return b() end) "
+                     "coroutine.resume(co) return 'ok'";
+  const char* use = "local n, co = a() local ok, r = coroutine.resume(co) return n .. ' ' .. tostring(r)";
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, prog) == "ok");
+  std::string blob = persist_state(A);
+  CHECK(eval(A, use) == "42 42");
+  lua_close(A);
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(eval(B, use) == "42 42");
+  lua_close(B);
+}
+
 /* luaL_restorestate fails as a whole: a message, and nothing left allocated */
 static void test_restore_errors()
 {
@@ -2829,6 +2857,7 @@ static void run_cpp_tests()
       {"restore_collects", test_restore_collects},
       {"persist_from_held_thread", test_persist_from_held_thread},
       {"upvalue_id_not_persisted", test_upvalue_id_not_persisted},
+      {"open_variable_shared_in_its_thread", test_open_variable_shared_in_its_thread},
       {"restore_errors", test_restore_errors},
   };
   std::printf("  styx_tests.cpp\n");
