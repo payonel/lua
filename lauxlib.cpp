@@ -649,18 +649,6 @@ static void bb_dealloc(luaL_Buffer* B) noexcept
   }
 }
 
-static InternalString bb_release(luaL_Buffer* B)
-{
-  InternalString out;
-  if (B->used != 0)
-  {
-    out = InternalString(B->bytes.view().substr(0, B->used));
-  }
-  bb_dealloc(B);
-  B->used = 0;
-  return out;
-}
-
 luaL_Buffer::~luaL_Buffer()
 {
   bb_dealloc(this);
@@ -713,10 +701,17 @@ void luaL_addstring(luaL_Buffer* B, const HostString& s)
   luaL_addlstring(B, sv, 0, sv.size());
 }
 
+/* the buffer's bytes become the string's: they stop counting as the buffer's */
 void luaL_pushresult(luaL_Buffer* B)
 {
   lua_State* L = B->L;
-  lua_pushistring(L, bb_release(B));
+  size_t len = B->used;
+  byte_owner block = std::move(B->bytes);
+  B->bytes = {};
+  B->used = 0;
+  if (!block.empty())
+    luaM_alloc_char_span(L->l_G, nullptr, block, 0, false);
+  lua_pushiblock(L, std::move(block), len);
 }
 
 void luaL_pushresultsize(luaL_Buffer* B, size_t sz)

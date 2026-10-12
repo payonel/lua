@@ -5,6 +5,8 @@
 */
 
 #include <cstdio>
+#include <cstdlib>
+#include <new>
 #include <string>
 
 #include "lua.h"
@@ -501,6 +503,95 @@ struct DenyLargeAlloc : lua_Alloc
 };
 
 /*
+** The C++ heap of this program, as a host's allocator would see it: every
+** new and delete goes through here ('heap_peak' is the most bytes live
+** since it was last set)
+*/
+static size_t heap_live = 0;
+static size_t heap_peak = 0;
+
+void* operator new(std::size_t n)
+{
+  void* p = std::malloc(n + 16);
+  if (p == nullptr)
+    throw std::bad_alloc();
+  *static_cast<std::size_t*>(p) = n;
+  heap_live += n;
+  if (heap_live > heap_peak)
+    heap_peak = heap_live;
+  return static_cast<char*>(p) + 16;
+}
+
+void operator delete(void* p) noexcept
+{
+  if (p == nullptr)
+    return;
+  char* b = static_cast<char*>(p) - 16;
+  heap_live -= *static_cast<std::size_t*>(static_cast<void*>(b));
+  std::free(b);
+}
+
+void operator delete(void* p, std::size_t) noexcept
+{
+  operator delete(p);
+}
+
+/* counts what the engine asks for, and refuses growth past 'cap' (0: none) */
+struct CountAlloc : lua_Alloc
+{
+  size_t used = 0;
+  size_t peak = 0;
+  size_t cap = 0;
+  bool permit(size_t o, size_t n, int) override
+  {
+    if (n > o && cap != 0 && used + (n - o) > cap)
+      return false;
+    used = used + n - o;
+    if (used > peak)
+      peak = used;
+    return true;
+  }
+};
+
+/*
+** A string's bytes are counted before they exist, and a result made in a
+** buffer takes the buffer's bytes (B24): making a string holds of the heap
+** what the allocator counts. Before, a result was copied out of its buffer
+** (held twice, counted once), and a string's bytes were copied before they
+** were counted (a string refused had been made first).
+*/
+static void test_string_bytes_counted()
+{
+  std::printf("    a string's bytes are counted before they are made ... ");
+  g_test_failures = 0;
+  const size_t N = 8 << 20;
+  CountAlloc a;
+  lua_State* L = lua_newstate(&a, 1);
+  luaL_openlibs(L);
+  CHECK(run(L, "s = string.rep('a', 8 << 20) return 'ok'") == "ok");
+  const char* made[] = {"return #string.rep('x', 8 << 20)", "return #s:upper()", "return #s:reverse()"};
+  for (const char* code : made)
+  {
+    lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+    size_t live0 = heap_live;
+    size_t used0 = a.used;
+    heap_peak = heap_live;
+    a.peak = a.used;
+    CHECK(run(L, code) == std::to_string(N));
+    CHECK(heap_peak - live0 < a.peak - used0 + N / 8);
+  }
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  a.cap = a.used + N / 2; /* no room for a copy of 's' */
+  size_t live0 = heap_live;
+  heap_peak = heap_live;
+  CHECK(run(L, "return tostring(pcall(string.sub, s, 2))") == "false");
+  CHECK(heap_peak - live0 < N / 8);
+  a.cap = 0;
+  lua_close(L);
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
+/*
 ** The budget thread keeps the room its callbacks need (B16): a reservation
 ** that found no memory is made again the next time a budget is set, and a
 ** close of the thread ('coroutine.close') keeps it
@@ -828,6 +919,7 @@ int main()
   test_cfunction_hash_by_name();
   test_load_takes_one_hash();
   test_budget_thread_room();
+  test_string_bytes_counted();
   test_fullgc_due();
   test_function_names();
   test_object_kinds();

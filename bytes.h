@@ -330,7 +330,7 @@ struct byte_owner : byte_writes<byte_owner>
 {
   byte_owner() = default;
   explicit byte_owner(size_t n) : p_(new char[n]()), n_(n) {}
-  explicit byte_owner(byte_view view) : byte_owner(view.size()) { apply(view); }
+  explicit byte_owner(byte_view view) : p_(new char[view.size()]), n_(view.size()) { apply(view); }
 
   byte_owner(const byte_owner&) = delete;
   byte_owner& operator=(const byte_owner&) = delete;

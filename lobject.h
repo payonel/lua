@@ -377,13 +377,14 @@ struct TString : GCObject
   static TString* luaS_createstr(lua_State* L, byte_view str);
   static TString* luaS_take(lua_State* L, InternalString&& str);
   static TString* luaS_takeexternal(lua_State* L, InternalString&& str);
+  static TString* luaS_takeblock(lua_State* L, byte_owner&& block, size_t len);
+  static TString* luaS_createlngstrobj(lua_State* L, size_t l);
 
   void luaS_remove(lua_State* L);
   void luaS_forcehash();
 
 private:
-  static TString* createstrobj(lua_State* L, InternalString&& str, size_t h,
-                                int hashed, int external);
+  static TString* createstrobj(lua_State* L, size_t l, size_t h, int hashed, int external);
 };
 
 constexpr lu_byte STREXTRA_EXTERNAL = 0xFF;

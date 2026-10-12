@@ -157,7 +157,8 @@ static void dumpString(DumpState* D, TString* ts)
       byte_view sv = ts->data.view();
       size_t size = sv.size();
       dumpSize(D, size + 1);
-      dumpVector(D, std::span<const char>(sv.data(), size + 1)); /* include ending '\0' */
+      dumpVector(D, std::span<const char>(sv.data(), size));
+      dumpByte(D, 0); /* include ending '\0' */
       D->nstr++;                             /* one more saved string */
       setsvalue(D->L, &key, ts);             /* the string is the key */
       setivalue(&value, D->nstr); /* its index is the value */

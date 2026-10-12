@@ -748,6 +748,16 @@ void lua_pushistring(lua_State* L, InternalString&& s)
   lua_unlock(L);
 }
 
+void lua_pushiblock(lua_State* L, byte_owner&& block, size_t len)
+{
+  lua_lock(L);
+  TString* ts = TString::luaS_takeblock(L, std::move(block), len);
+  setslots(L, L->top, ts);
+  api_incr_top(L);
+  luaC_checkGC(L);
+  lua_unlock(L);
+}
+
 void lua_pushistringext(lua_State* L, InternalString&& s)
 {
   lua_lock(L);

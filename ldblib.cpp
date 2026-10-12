@@ -161,12 +161,16 @@ static int db_getinfo(lua_State* L)
   lua_State* L1 = ta.L1;
   int arg = ta.arg;
   byte_view options = luaL_optlstring(L, arg + 2, lt::flnSrtu);
-  InternalString funcOption = InternalString(lt::gt_op).concat(options);
   checkstack(L, L1, 3);
   luaL_argchecki(L, sv_byteat(options, 0) != '>', arg + 2, lt::invalid_option_2);
   if (lua_isfunction(L, arg + 1))
-  {                                               /* info about a function? */
-    options = funcOption.view();
+  { /* info about a function? */
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+    luaL_addchar(&b, '>');
+    luaL_addlstring(&b, options, 0, options.size());
+    luaL_pushresult(&b); /* add '>' to 'options' */
+    options = *lua_tolstring(L, -1);
     lua_pushvalue(L, arg + 1);                    /* move function to 'L1' stack */
     lua_xmove(L, L1, 1);
   }

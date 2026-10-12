@@ -459,7 +459,7 @@ static bool lua_readline(byte_span buff, byte_view prompt)
 {
   if (l_readline != nullptr)         /* is there a 'readline'? */
   {
-    char* ret = (*l_readline)(prompt.data()); /* use it */
+    char* ret = (*l_readline)(std::string(prompt.data(), prompt.size()).c_str()); /* use it */
     if (ret == nullptr)
     {
       return false;

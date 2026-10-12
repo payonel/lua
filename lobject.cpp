@@ -702,10 +702,16 @@ static void pushbuff(lua_State* L, BuffFS* buff)
 {
   if (buff->err == 1)
     luaD_throw(L, LUA_ERRMEM);
-  InternalString res(byte_view(buff->b.data(), buff->b.size()), 0, buff->blen);
+  byte_view res(buff->b.data(), buff->blen);
+  TString* ts;
   if (buff->err == 2)
-    res = res.concat(lt::ellipsis);
-  TString* ts = TString::luaS_take(L, std::move(res));
+  { /* (too long to be short) */
+    ts = TString::luaS_createlngstrobj(L, res.size() + lt::ellipsis.size());
+    ts->data.area().copy_from(res, 0);
+    ts->data.area().copy_from(lt::ellipsis, res.size());
+  }
+  else
+    ts = TString::luaS_createstr(L, res);
   setslots(L, L->top, ts);
   L->top++;
 }

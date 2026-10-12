@@ -131,6 +131,8 @@ int lua_pcallkeep(lua_State* L, int nargs, int nresults, lua_KContext ctx, lua_K
 
 
 void lua_pushistring(lua_State* L, InternalString&& s);
+/* a string of the first 'len' bytes of 'block', which its maker counts no more */
+void lua_pushiblock(lua_State* L, byte_owner&& block, size_t len);
 void lua_pushistringext(lua_State* L, InternalString&& s);
 void lua_pushistringref(lua_State* L, byte_view bytes);
 

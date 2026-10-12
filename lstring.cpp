@@ -41,17 +41,16 @@ void TString::luaS_forcehash()
   ts->hashed = 1;
 }
 
-TString* TString::createstrobj(lua_State* L, InternalString&& str, size_t h,
-                             int hashed, int external)
+TString* TString::createstrobj(lua_State* L, size_t l, size_t h, int hashed, int external)
 {
-  /* the string and its bytes are charged together, before the string is
-     known to the collector (a refusal may run an emergency collection) */
-  TString* ts = luaM_malloc_TString(L, external ? 0 : str.size());
+  /* the string and its 'l' bytes are charged together, before either exists
+     and before the string is known to the collector (a refusal may run an
+     emergency collection); its maker gives it its bytes */
+  TString* ts = luaM_malloc_TString(L, external ? 0 : l);
   luaC_link(L, ts, LUA_VSTRING);
   ts->hash = (unsigned int)h;
   ts->hashed = (lu_byte)hashed;
   ts->extra = external ? STREXTRA_EXTERNAL : 0;
-  ts->data = std::move(str);
   return ts;
 }
 
@@ -143,11 +142,14 @@ TString* TString::luaS_createstr(lua_State* L, byte_view str)
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    ts = TString::createstrobj(L, InternalString(str, 0, l), h, 1, 0);
+    ts = TString::createstrobj(L, l, h, 1, 0);
+    ts->data = InternalString(str);
     interninsert(g, ts);
     return ts;
   }
-  return TString::createstrobj(L, InternalString(str, 0, l), 0, 0, 0);
+  TString* ts = TString::createstrobj(L, l, 0, 0, 0);
+  ts->data = InternalString(str);
+  return ts;
 }
 
 TString* TString::luaS_take(lua_State* L, InternalString&& str)
@@ -164,18 +166,53 @@ TString* TString::luaS_take(lua_State* L, InternalString&& str)
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    ts = TString::createstrobj(L, std::move(str), h, 1, 0);
+    ts = TString::createstrobj(L, str.size(), h, 1, 0);
+    ts->data = std::move(str);
     interninsert(g, ts);
     return ts;
   }
-  return TString::createstrobj(L, std::move(str), 0, 0, 0);
+  TString* ts = TString::createstrobj(L, str.size(), 0, 0, 0);
+  ts->data = std::move(str);
+  return ts;
 }
 
 TString* TString::luaS_takeexternal(lua_State* L, InternalString&& str)
 {
   if (str.size() <= LUAI_MAXSHORTLEN)
     return TString::luaS_take(L, std::move(str));
-  return TString::createstrobj(L, std::move(str), 0, 0, 1);
+  TString* ts = TString::createstrobj(L, str.size(), 0, 0, 1);
+  ts->data = std::move(str);
+  return ts;
+}
+
+/*
+** A long string of 'l' zero bytes, made in its final place for its maker to
+** write them before it is shared
+*/
+TString* TString::luaS_createlngstrobj(lua_State* L, size_t l)
+{
+  assert(l > LUAI_MAXSHORTLEN);
+  TString* ts = TString::createstrobj(L, l, 0, 0, 0);
+  ts->data = InternalString(byte_owner(l), l);
+  return ts;
+}
+
+/*
+** A string of the first 'len' bytes of 'block', a buffer whose maker no
+** longer counts it: the block becomes the string's bytes, kept with the
+** tail after them when that is at most half the string (a grown buffer's);
+** a longer tail is not kept, the bytes are copied
+*/
+TString* TString::luaS_takeblock(lua_State* L, byte_owner&& block, size_t len)
+{
+  if (len <= LUAI_MAXSHORTLEN)
+    return TString::luaS_createstr(L, byte_view(block.data(), len));
+  TString* ts = TString::createstrobj(L, len, 0, 0, 0);
+  if (block.size() - len > len / 2)
+    ts->data = InternalString(byte_view(block.data(), len));
+  else
+    ts->data = InternalString(std::move(block), len);
+  return ts;
 }
 
 void TString::luaS_remove(lua_State* L)

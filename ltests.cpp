@@ -1535,7 +1535,8 @@ static int checkpanic(lua_State* L)
   lua_State* L1;
   byte_view code = luaL_checklstring(L, 1);
   lua_Alloc* f = lua_getallocf(L);
-  b.paniccode = std::string(luaL_optlstring(L, 2, lt::empty_str).data());
+  byte_view pc = luaL_optlstring(L, 2, lt::empty_str);
+  b.paniccode = std::string(pc.data(), pc.size());
   b.L = L;
   L1 = lua_newstate(f, 0); /* create new state */
   if (L1 == nullptr)

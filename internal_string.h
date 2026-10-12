@@ -61,26 +61,35 @@ public:
   {
     off = std::min(off, src.size());
     len = std::min(len, src.size() - off);
-    byte_view sub = src.substr(off, len);
-    bytes_ = std::string(sub.data(), sub.size());
+    bytes_ = byte_owner(src.substr(off, len));
+    len_ = len;
   }
   InternalString(byte_view src) : InternalString(src, 0, src.size()) {}
 
-  size_t size() const noexcept { return bytes_.size(); }
-  bool empty() const noexcept { return bytes_.empty(); }
+  /* takes 'block' as its bytes: the first 'len' of them */
+  InternalString(byte_owner&& block, size_t len) noexcept : bytes_(std::move(block)), len_(len)
+  {
+    assert(len <= bytes_.size());
+  }
 
-  int byteAt(size_t i) const { return static_cast<unsigned char>(bytes_[i]); }
+  size_t size() const noexcept { return len_; }
+  bool empty() const noexcept { return len_ == 0; }
 
-  byte_view view() const noexcept { return byte_view(bytes_.data(), bytes_.size()); }
+  int byteAt(size_t i) const { return static_cast<unsigned char>(bytes_.data()[i]); }
+
+  byte_view view() const noexcept { return byte_view(bytes_.data(), len_); }
+
+  /* its bytes, for its maker to write before the string is shared */
+  byte_span area() const noexcept { return bytes_.span().subspan(0, len_); }
 
   bool operator==(const InternalString& o) const noexcept
   {
-    return bytes_ == o.bytes_;
+    return view() == o.view();
   }
 
   int compare(const InternalString& o) const noexcept
   {
-    return bytes_.compare(o.bytes_);
+    return std::string_view(bytes_.data(), len_).compare(std::string_view(o.bytes_.data(), o.len_));
   }
 
   static size_t hashBytes(const char* str, size_t l) noexcept
@@ -90,29 +99,25 @@ public:
       h ^= (h << 5) + (h >> 2) + (unsigned char)str[i];
     return h;
   }
-  size_t hash() const noexcept { return hashBytes(bytes_.data(), bytes_.size()); }
+  size_t hash() const noexcept { return hashBytes(bytes_.data(), len_); }
 
   InternalString substr(size_t off, size_t len = byte_view::npos) const
   {
-    assert(off <= bytes_.size());
-    byte_view sv(bytes_.data(), bytes_.size());
-    return InternalString(sv, off, len);
+    assert(off <= len_);
+    return InternalString(view(), off, len);
   }
 
   InternalString concat(byte_view o) const
   {
-    return InternalString::take(bytes_ + std::string(o.data(), o.size()));
+    byte_owner b(len_ + o.size());
+    b.copy_from(view(), 0);
+    b.copy_from(o, len_);
+    return InternalString(std::move(b), len_ + o.size());
   }
 
 private:
-  static InternalString take(std::string&& s)
-  {
-    InternalString is;
-    is.bytes_ = std::move(s);
-    return is;
-  }
-
-  std::string bytes_;
+  byte_owner bytes_;
+  size_t len_ = 0;
 };
 
 }
