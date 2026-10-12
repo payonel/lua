@@ -3993,17 +3993,13 @@ static const luaL_RegCFI funcs[] = {
 ** =======================================================
 */
 
-/* the string hash seed of the state that wrote a stream (false: not one) */
-static bool stream_seed(byte_view data, unsigned int* seed)
+/* the string hash seed of the state that wrote a stream (none: not one) */
+static std::optional<unsigned int> stream_seed(byte_view data)
 {
   const byte_view header = lt::styx_header;
-  size_t need = header.size() + sizeof(lua_Integer);
-  if (data.size() < need || data.substr(0, header.size()) != header)
-    return false;
-  lua_Integer v;
-  std::memcpy(&v, data.substr(header.size(), sizeof(v)).data(), sizeof(v));
-  *seed = static_cast<unsigned int>(v);
-  return true;
+  if (data.size() < header.size() + 8 || data.substr(0, header.size()) != header)
+    return std::nullopt;
+  return static_cast<unsigned int>(data.toInt64(header.size()));
 }
 
 /* the value at a stack index of a state that is not running */
@@ -4017,8 +4013,8 @@ static bool value_at(lua_State* L, int idx, TValue* v)
   return true;
 }
 
-static int host_persist(lua_State* L, int perms, lua_Writer* w, HostString* msg,
-                        const std::function<void(Walker&)>& body)
+static luaL_StyxResult host_persist(lua_State* L, int perms, lua_Writer* w,
+                                    const std::function<void(Walker&)>& body)
 {
   try
   {
@@ -4041,12 +4037,11 @@ static int host_persist(lua_State* L, int perms, lua_Writer* w, HostString* msg,
     body(hp);
     hp.trailer();
     hp.finish();
-    return LUA_OK;
+    return {LUA_OK, {}};
   }
   catch (HostError& e)
   {
-    *msg = HostString::from_bytes(byte_view(e.message.data(), e.message.size()));
-    return LUA_ERRRUN;
+    return {LUA_ERRRUN, HostString::from_bytes(byte_view(e.message.data(), e.message.size()))};
   }
 }
 
@@ -4133,32 +4128,20 @@ static int host_restore_body(lua_State* L)
 
 static CFuncInfo cfi_host_restore(host_restore_body, "styx.host_restore");
 
-static int host_restore(lua_State* L, int perms, byte_view data, bool state, HostString* msg)
+static luaL_StyxResult host_restore(lua_State* L, int perms, byte_view data, bool state)
 {
   lua_State* main = mainthread(L->l_G);
   if (L == main && main->frozen != 0)
-  {
-    *msg = HostString::from_bytes(lt::the_main_thread_is_frozen_use_another_thread);
-    return LUA_ERRRUN;
-  }
+    return {LUA_ERRRUN, HostString::from_bytes(lt::the_main_thread_is_frozen_use_another_thread)};
   if ((main->ci != &main->base_ci && main->frozen == 0) || L->ci != &L->base_ci)
-  {
-    *msg = HostString::from_bytes(lt::the_state_is_running);
-    return LUA_ERRRUN;
-  }
+    return {LUA_ERRRUN, HostString::from_bytes(lt::the_state_is_running)};
   int top = lua_gettop(L);
   if (perms < 0)
     perms = top + perms + 1;
   if (perms != 0 && (perms > top || !lua_istable(L, perms)))
-  {
-    *msg = HostString::from_bytes(lt::the_permanents_must_be_a_table);
-    return LUA_ERRRUN;
-  }
+    return {LUA_ERRRUN, HostString::from_bytes(lt::the_permanents_must_be_a_table)};
   if (!lua_checkstack(L, 3))
-  {
-    *msg = HostString::from_bytes(lt::not_enough_memory);
-    return LUA_ERRMEM;
-  }
+    return {LUA_ERRMEM, HostString::from_bytes(lt::not_enough_memory)};
   HostRestore hr{data, state};
   lua_pushcfuncinfo(L, &cfi_host_restore);
   if (perms != 0)
@@ -4167,13 +4150,12 @@ static int host_restore(lua_State* L, int perms, byte_view data, bool state, Hos
     lua_pushnil(L);
   lua_pushlightuserdata(L, &hr);
   int st = lua_pcall(L, 2, 1, 0); /* (the value, or the thread a state was persisted from) */
-  if (st != LUA_OK)
-  {
-    auto m = lua_tolstring(L, -1);
-    *msg = m ? HostString::from_bytes(*m) : HostString::from_bytes(lt::error_object_is_not_a_string);
-    lua_settop(L, top);
-  }
-  return st;
+  if (st == LUA_OK)
+    return {LUA_OK, {}};
+  auto m = lua_tolstring(L, -1);
+  HostString msg = m ? HostString::from_bytes(*m) : HostString::from_bytes(lt::error_object_is_not_a_string);
+  lua_settop(L, top);
+  return {st, msg};
 }
 
 /* }====================================================== */
@@ -4194,9 +4176,9 @@ struct NullWriter : lua_Writer
 ** ('perms': the stack index of the permanents, or 0)? The walk of a host
 ** persist, writing nothing: no Lua code runs and nothing is allocated in
 ** the state, so a running kernel can ask it of a user program. If not,
-** 'msg' says why, with the path of what cannot be written.
+** the message says why, with the path of what cannot be written.
 */
-int lua_styxcheck(lua_State* L, int idx, int perms, HostString* msg)
+luaL_StyxResult lua_styxcheck(lua_State* L, int idx, int perms)
 {
   using namespace lua::lib;
   try
@@ -4217,36 +4199,32 @@ int lua_styxcheck(lua_State* L, int idx, int perms, HostString* msg)
     hp.check_ = true;
     hp.root(v, &lt::path_root);
     hp.finish();
-    return LUA_OK;
+    return {LUA_OK, {}};
   }
   catch (HostError& e)
   {
-    *msg = HostString::from_bytes(byte_view(e.message.data(), e.message.size()));
-    return LUA_ERRRUN;
+    return {LUA_ERRRUN, HostString::from_bytes(byte_view(e.message.data(), e.message.size()))};
   }
 }
 
-int lua_styxunpersistvalue(lua_State* L, int perms, byte_view data, HostString* msg)
+luaL_StyxResult lua_styxunpersistvalue(lua_State* L, int perms, byte_view data)
 {
-  return lua::lib::host_restore(L, perms, data, false, msg);
+  return lua::lib::host_restore(L, perms, data, false);
 }
 
-int lua_styxpersistvalue(lua_State* L, int perms, int idx, lua_Writer* w, HostString* msg)
+luaL_StyxResult lua_styxpersistvalue(lua_State* L, int perms, int idx, lua_Writer* w)
 {
   using namespace lua::lib;
   TValue v{};
   if (!value_at(L, idx, &v))
-  {
-    *msg = HostString::from_bytes(lt::invalid_value_index);
-    return LUA_ERRRUN;
-  }
-  return host_persist(L, perms, w, msg, [&](Walker& hp) { hp.root(v, &lt::path_root); });
+    return {LUA_ERRRUN, HostString::from_bytes(lt::invalid_value_index)};
+  return host_persist(L, perms, w, [&](Walker& hp) { hp.root(v, &lt::path_root); });
 }
 
-int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg)
+luaL_StyxResult luaL_persiststate(lua_State* L, int perms, lua_Writer* w)
 {
   using namespace lua::lib;
-  return host_persist(L, perms, w, msg, [&](Walker& hp)
+  return host_persist(L, perms, w, [&](Walker& hp)
   {
     global_State* g = L->l_G;
     hp.byte(TAG_STATE);
@@ -4272,8 +4250,7 @@ namespace lua::lib
 {
 struct RestoreSetup
 {
-  luaL_RestoreSetup setup;
-  void* ud;
+  luaL_RestoreSetup* setup;
 };
 
 /*
@@ -4285,7 +4262,7 @@ static int restore_setup(lua_State* L)
   RestoreSetup* rs = static_cast<RestoreSetup*>(lua_touserdata(L, 1));
   lua_pop(L, 1);
   if (rs->setup != nullptr)
-    rs->setup(L, rs->ud);
+    rs->setup->setup(L);
   else
     lua_pushnil(L);
   if (lua_gettop(L) != 1 || (!lua_isnil(L, 1) && !lua_istable(L, 1)))
@@ -4299,29 +4276,24 @@ static int restore_setup(lua_State* L)
 static CFuncInfo cfi_restore_setup(restore_setup, "styx.restore_setup");
 }
 
-lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup setup, void* ud, HostString* msg)
+luaL_Restored luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup* setup)
 {
   using namespace lua::lib;
-  unsigned int seed;
-  if (!stream_seed(data, &seed))
-  {
-    *msg = HostString::from_bytes(lt::not_a_persisted_state);
-    return nullptr;
-  }
-  lua_State* L = lua_newstate(f, seed); /* (hashes as the persisting state) */
+  std::optional<unsigned int> seed = stream_seed(data);
+  if (!seed)
+    return {nullptr, HostString::from_bytes(lt::not_a_persisted_state)};
+  lua_State* L = lua_newstate(f, *seed); /* (hashes as the persisting state) */
   if (L == nullptr)
-  {
-    *msg = HostString::from_bytes(lt::not_enough_memory);
-    return nullptr;
-  }
-  RestoreSetup rs{setup, ud};
+    return {nullptr, HostString::from_bytes(lt::not_enough_memory)};
+  RestoreSetup rs{setup};
+  HostString msg;
   lua_pushcfuncinfo(L, &cfi_restore_setup);
   lua_pushlightuserdata(L, &rs);
   int st = lua_pcall(L, 1, 2, 0);
   if (st != LUA_OK)
   {
     auto m = lua_tolstring(L, -1);
-    *msg = m ? HostString::from_bytes(*m) : HostString::from_bytes(lt::error_object_is_not_a_string);
+    msg = m ? HostString::from_bytes(*m) : HostString::from_bytes(lt::error_object_is_not_a_string);
   }
   else
   { /* (restored from another thread, so that a frozen main thread is
@@ -4330,8 +4302,9 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
     lua_pop(L, 1);
     bool perms = lua_istable(L, 1);
     lua_xmove(L, T, 1);
-    st = host_restore(T, perms ? 1 : 0, data, true, msg);
-    if (st == LUA_OK)
+    luaL_StyxResult res = host_restore(T, perms ? 1 : 0, data, true);
+    msg = res.msg;
+    if (res.status == LUA_OK)
     { /* (the main thread's stack is empty, or a frozen main thread's, which only a thaw changes) */
       lua_State* from = lua_tothread(T, -1);
       lua_pop(T, 1);
@@ -4351,11 +4324,11 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
         luaC_fullgcdue(T);
         lua_unlock(T);
       }
-      return from;
+      return {from, {}};
     }
   }
   lua_close(L);
-  return nullptr;
+  return {nullptr, msg};
 }
 
 int lua_styxtestmodule(lua_State* L)

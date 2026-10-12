@@ -32,9 +32,12 @@ state" is a persisted one).
 ## Host API
 
 ```cpp
-int luaL_persiststate(lua_State* L, int perms, lua_Writer* w, HostString* msg);
-lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup setup, void* ud,
-                             HostString* msg);
+struct luaL_StyxResult { int status; HostString msg; };
+luaL_StyxResult luaL_persiststate(lua_State* L, int perms, lua_Writer* w);
+
+struct luaL_RestoreSetup { virtual void setup(lua_State* L) = 0; };
+struct luaL_Restored { lua_State* L; HostString msg; };
+luaL_Restored luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup* setup);
 ```
 
 - The kernel's workflow: the kernel (a coroutine the host resumes) freezes
@@ -617,7 +620,7 @@ by `coroutine.close`, in reverse order across frames.
 
 ### ADR-21: Host side persist
 **Status:** accepted
-`luaL_persiststate(L, perms, w, msg)` (in `lualib.h`) persists the whole
+`luaL_persiststate(L, perms, w)` (in `lualib.h`) persists the whole
 state, which is not running (no Lua frame on the main thread); the round
 trip of one value (`lua_styxpersistvalue`) is the tests' (ADR-35). They
 are for the host, not for scripts:
@@ -693,7 +696,7 @@ or it is kept in a table that is a permanent. Tested from script
 
 ### ADR-24: Host side restore
 **Status:** accepted
-`luaL_restorestate(f, data, setup, ud, msg)` makes a new state with
+`luaL_restorestate(f, data, setup)` makes a new state with
 allocator `f` and the stream's seed (it hashes as the persisting state
 did, ADR-31), runs the host's `setup` protected (it opens what the host
 provides and leaves the inverse permanents, key -> object, or nil), and
@@ -1216,7 +1219,7 @@ for (;;)
   if (lua_isfrozen(K))               // r is {LUA_YIELD, 0}
   {
     if (saveDue())
-      luaL_persiststate(L, perms, &writer, &msg);
+      luaL_persiststate(L, perms, &writer);   // .status, .msg
     r = lua_thaw(K, nullptr);        // next tick; returns like lua_resume
   }
   else if (r.status == LUA_YIELD)    // the kernel's own yield to the host

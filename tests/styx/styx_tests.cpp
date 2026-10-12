@@ -24,6 +24,33 @@
 #include "ltests.h"
 #endif
 
+/* the Styx calls as these tests use them: the status, and the message in '*msg' */
+static int styx_status(luaL_StyxResult r, HostString* msg)
+{
+  *msg = r.msg;
+  return r.status;
+}
+#define luaL_persiststate(L, perms, w, msg) styx_status(luaL_persiststate(L, perms, w), msg)
+#define lua_styxpersistvalue(L, perms, idx, w, msg) styx_status(lua_styxpersistvalue(L, perms, idx, w), msg)
+#define lua_styxunpersistvalue(L, perms, data, msg) styx_status(lua_styxunpersistvalue(L, perms, data), msg)
+
+/* a setup made of a plain function */
+struct FnSetup : luaL_RestoreSetup
+{
+  void (*f)(lua_State*);
+  explicit FnSetup(void (*fn)(lua_State*)) : f(fn) {}
+  void setup(lua_State* L) override { f(L); }
+};
+
+/* a restore as these tests use it: the thread, or NULL and the message in '*msg' */
+static lua_State* restorestate(lua_Alloc* a, byte_view data, void (*setup)(lua_State*), HostString* msg)
+{
+  FnSetup fs(setup);
+  luaL_Restored rd = luaL_restorestate(a, data, &fs);
+  *msg = rd.msg;
+  return rd.L;
+}
+
 static int g_checks = 0;
 static int g_failures = 0;
 static int g_test_failures = 0;
@@ -687,32 +714,33 @@ static void test_host_persists_child_thread()
 ** leaves the inverse permanents; 'limit' then limits the allocator for
 ** the restore itself. What is restored is charged through the allocator.
 */
-struct Setup
+struct Setup : luaL_RestoreSetup
 {
   std::function<void(lua_State*)> before;
   std::function<void()> limit;
+  Setup(std::function<void(lua_State*)> b = {}, std::function<void()> l = {}) : before(b), limit(l) {}
+  void setup(lua_State* L) override
+  {
+    luaL_openlibs(L);
+    preload_styx(L);
+    if (before)
+      before(L);
+    eval(L, build_perms);
+    lua_getglobal(L, "_BACK");
+    if (limit)
+      limit();
+  }
 };
-
-static void test_setup(lua_State* L, void* ud)
-{
-  const Setup* s = static_cast<const Setup*>(ud);
-  luaL_openlibs(L);
-  preload_styx(L);
-  if (s != nullptr && s->before)
-    s->before(L);
-  eval(L, build_perms);
-  lua_getglobal(L, "_BACK");
-  if (s != nullptr && s->limit)
-    s->limit();
-}
 
 /* the state 'blob' is restored into (NULL, with 'msg', if it fails) */
 static lua_State* restore(CountingAlloc* a, const std::string& blob, const Setup* s = nullptr,
                           HostString* msg = nullptr)
 {
-  HostString m;
-  return luaL_restorestate(a, byte_view(blob.data(), blob.size()), test_setup, const_cast<Setup*>(s),
-                           msg != nullptr ? msg : &m);
+  Setup dflt;
+  luaL_Restored rd = luaL_restorestate(a, byte_view(blob.data(), blob.size()), const_cast<Setup*>(s != nullptr ? s : &dflt));
+  if (msg != nullptr)
+    *msg = rd.msg;
+  return rd.L;
 }
 
 /* the state 'blob' is restored into ('s': the host's own setup); if it
@@ -2419,7 +2447,7 @@ debug.getregistry().kernel = kernel -- (the host's anchor)
 )LUA";
 
 /* the host's setup of a state to restore into: the same libraries and permanents */
-static void kernel_setup(lua_State* L, void*)
+static void kernel_setup(lua_State* L)
 {
   luaL_openlibs(L);
   preload_styx(L);
@@ -2498,7 +2526,7 @@ static void test_kernel_persistence()
     std::string blob = persist_kernel(A);
     CountingAlloc a2;
     HostString msg;
-    lua_State* B = luaL_restorestate(&a2, byte_view(blob.data(), blob.size()), kernel_setup, nullptr, &msg);
+    lua_State* B = restorestate(&a2, byte_view(blob.data(), blob.size()), kernel_setup, &msg);
     CHECK(B != nullptr);
     if (B == nullptr)
     {
@@ -2545,7 +2573,7 @@ static int restore_kernel_child(const char* file)
   std::fclose(f);
   CountingAlloc a;
   HostString msg;
-  lua_State* L = luaL_restorestate(&a, byte_view(blob.data(), blob.size()), kernel_setup, nullptr, &msg);
+  lua_State* L = restorestate(&a, byte_view(blob.data(), blob.size()), kernel_setup, &msg);
   if (L == nullptr)
   {
     std::printf("restore error: %s", msg.to_os());
@@ -2610,14 +2638,14 @@ static void test_kernel_in_another_process()
   }
 }
 
-static void push_one(lua_State* L, void*)
+static void push_one(lua_State* L)
 {
   luaL_openlibs(L);
   preload_styx(L);
   lua_pushinteger(L, 1);
 }
 
-static void raise_error(lua_State* L, void*)
+static void raise_error(lua_State* L)
 {
   lua_pushstring(L, "no setup here");
   lua_error(L);
@@ -2773,7 +2801,7 @@ static void test_restore_errors()
   struct Bad
   {
     std::string data;
-    luaL_RestoreSetup setup;
+    void (*setup)(lua_State*);
     const char* msg;
   } bad[] = {
     {"not a stream", kernel_setup, "not a persisted state"},
@@ -2785,7 +2813,7 @@ static void test_restore_errors()
   {
     CountingAlloc a;
     HostString msg;
-    lua_State* L = luaL_restorestate(&a, byte_view(b.data.data(), b.data.size()), b.setup, nullptr, &msg);
+    lua_State* L = restorestate(&a, byte_view(b.data.data(), b.data.size()), b.setup, &msg);
     CHECK(L == nullptr);
     CHECK(std::string(msg.to_os()).rfind(b.msg, 0) == 0);
     CHECK(a.used == 0);

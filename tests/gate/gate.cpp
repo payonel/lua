@@ -78,15 +78,18 @@ static int msghandler(lua_State* L)
 /* what the host provides a state: the libraries, its message handler (in
    the registry, so that it has a name), and the permanents (the inverse
    left on the stack) */
-static void provide(lua_State* L, void*)
+struct Provide : luaL_RestoreSetup
 {
-  luaL_openlibs(L);
-  lua_pushcfunction(L, msghandler);
-  lua_setfield(L, LUA_REGISTRYINDEX, "_GATEMSGH");
-  if (luaL_loadstring(L, perms_walk) != LUA_OK)
-    lua_error(L);
-  lua_call(L, 0, 1);
-}
+  void setup(lua_State* L) override
+  {
+    luaL_openlibs(L);
+    lua_pushcfunction(L, msghandler);
+    lua_setfield(L, LUA_REGISTRYINDEX, "_GATEMSGH");
+    if (luaL_loadstring(L, perms_walk) != LUA_OK)
+      lua_error(L);
+    lua_call(L, 0, 1);
+  }
+};
 
 struct StringWriter : lua_Writer
 {
@@ -113,13 +116,12 @@ static size_t largest = 0;
 static bool persist_restore(lua_State** L, lua_State** H)
 {
   StringWriter w;
-  HostString msg;
   lua_getfield(*H, LUA_REGISTRYINDEX, "_GATEPERMS");
-  int st = luaL_persiststate(*H, lua_gettop(*H), &w, &msg);
+  luaL_StyxResult res = luaL_persiststate(*H, lua_gettop(*H), &w);
   lua_pop(*H, 1);
-  if (st != LUA_OK)
+  if (res.status != LUA_OK)
   {
-    std::string m(msg.to_os());
+    std::string m(res.msg.to_os());
     size_t at = m.find(" (at ");
     std::string kind = at == std::string::npos ? m : m.substr(0, at);
     if (why[kind]++ == 0)
@@ -129,10 +131,12 @@ static bool persist_restore(lua_State** L, lua_State** H)
   }
   if (w.out.size() > largest)
     largest = w.out.size();
-  lua_State* H2 = luaL_restorestate(lua_getallocf(*L), byte_view(w.out.data(), w.out.size()), provide, nullptr, &msg);
+  Provide provide;
+  luaL_Restored rd = luaL_restorestate(lua_getallocf(*L), byte_view(w.out.data(), w.out.size()), &provide);
+  lua_State* H2 = rd.L;
   if (H2 == nullptr)
   {
-    std::fprintf(stderr, "gate: restore failed after %ld freezes: %s\n", freezes, msg.to_os());
+    std::fprintf(stderr, "gate: restore failed after %ld freezes: %s\n", freezes, rd.msg.to_os());
     if (const char* dump = std::getenv("GATE_DUMP")) /* (the stream, to look into) */
       if (FILE* f = std::fopen(dump, "wb"))
       {
@@ -169,7 +173,7 @@ int main(int argc, char** argv)
   long steps = std::atol(argv[1]);
   const char* script = argv[2];
   lua_State* L = luaL_newstate();
-  provide(L, nullptr);
+  Provide().setup(L);
   lua_pop(L, 1);
   lua_State* H = lua_newthread(L); /* (the host's other thread, for a frozen main thread) */
   lua_setfield(L, LUA_REGISTRYINDEX, "_GATEHOST");

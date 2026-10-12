@@ -707,14 +707,14 @@ static int db_persistable(lua_State* L)
     luaL_checktype(L, 2, LUA_TTABLE);
     perms = 2;
   }
-  HostString msg;
-  if (lua_styxcheck(L, 1, perms, &msg) == LUA_OK)
+  luaL_StyxResult res = lua_styxcheck(L, 1, perms);
+  if (res.status == LUA_OK)
   {
     lua_pushboolean(L, 1);
     return 1;
   }
   lua_pushboolean(L, 0);
-  byte_view m = msg.to_utf8();
+  byte_view m = res.msg.to_utf8();
   lua_pushlstring(L, m, 0, m.size());
   return 2;
 }

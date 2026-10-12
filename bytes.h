@@ -121,6 +121,14 @@ struct byte_view
     return { (size_t)(r.ptr - data()), r.ec, out };
   }
 
+  int64_t toInt64(size_t pos = 0) const
+  {
+    uint64_t bits = 0;
+    for (size_t i = 8; i-- > 0;)
+      bits = (bits << 8) | static_cast<unsigned char>(sv[pos + i]);
+    return static_cast<int64_t>(bits);
+  }
+
   double toDouble(size_t pos = 0) const
   {
     uint64_t bits = 0;
@@ -169,6 +177,16 @@ struct byte_writes
   {
     assert(from.size() + pos <= size());
     return std::copy_n(from.data(), from.size(), data() + pos) - data();
+  }
+
+  void write_int64(int64_t v, size_t pos)
+  {
+    uint64_t bits = static_cast<uint64_t>(v);
+    for (size_t i = 0; i < 8; i++)
+    {
+      data()[pos + i] = static_cast<char>(bits & 0xFF);
+      bits >>= 8;
+    }
   }
 
   void write_double(double v, size_t pos)
