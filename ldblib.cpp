@@ -545,7 +545,7 @@ static int db_debugk(lua_State* L, int status, lua_KContext ctx)
   return db_debug_from(L, step);
 }
 
-LUA_KNAME("debug", db_debugk);
+static KNamer knamer_db_debugk("debug.db_debugk", db_debugk);
 
 static int db_debug(lua_State* L)
 {
@@ -615,7 +615,7 @@ static void budgetprepare(lua_State* L)
   callbackthread(L);
 }
 
-LUA_BUDGETNAME("debug", budgetf, budgetprepare);
+static BudgetNamer bnamer_budgetf("debug.budgetf", budgetf, budgetprepare);
 
 static int db_setbudget(lua_State* L)
 {
@@ -758,7 +758,7 @@ static int thaw_cont(lua_State* L, int status, lua_KContext)
   return thaw_end(L, co, {status, lua_resumenres(co, status)});
 }
 
-LUA_KNAME("debug", thaw_cont);
+static KNamer knamer_thaw_cont("debug.thaw_cont", thaw_cont);
 
 static int db_thaw(lua_State* L)
 {

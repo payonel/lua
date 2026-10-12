@@ -151,7 +151,7 @@ static int tinsertk_get(lua_State* L, int status, lua_KContext ctx)
   return tinsert_move(L, (lua_Integer)ctx, luaL_checkinteger(L, 2), AT_SET);
 }
 
-LUA_KNAME("table", tinsertk_get);
+static KNamer knamer_tinsertk_get("table.tinsertk_get", tinsertk_get);
 
 static int tinsertk_set(lua_State* L, int status, lua_KContext ctx)
 {
@@ -159,7 +159,7 @@ static int tinsertk_set(lua_State* L, int status, lua_KContext ctx)
   return tinsert_move(L, (lua_Integer)ctx, luaL_checkinteger(L, 2), AT_NEXT);
 }
 
-LUA_KNAME("table", tinsertk_set);
+static KNamer knamer_tinsertk_set("table.tinsertk_set", tinsertk_set);
 
 static int tinsertk_loop(lua_State* L, int status, lua_KContext ctx)
 {
@@ -167,7 +167,7 @@ static int tinsertk_loop(lua_State* L, int status, lua_KContext ctx)
   return tinsert_move(L, (lua_Integer)ctx, luaL_checkinteger(L, 2), AT_LOOP);
 }
 
-LUA_KNAME("table", tinsertk_loop);
+static KNamer knamer_tinsertk_loop("table.tinsertk_loop", tinsertk_loop);
 
 static int tinsertk_done(lua_State* L, int status, lua_KContext ctx)
 {
@@ -177,7 +177,7 @@ static int tinsertk_done(lua_State* L, int status, lua_KContext ctx)
   return 0;
 }
 
-LUA_KNAME("table", tinsertk_done);
+static KNamer knamer_tinsertk_done("table.tinsertk_done", tinsertk_done);
 
 /* 'insert' with the length 'e' */
 static int tinsert_len(lua_State* L, lua_Integer e)
@@ -214,7 +214,7 @@ static int tinsertk_len(lua_State* L, int status, lua_KContext ctx)
   return tinsert_len(L, luaL_lenresult(L));
 }
 
-LUA_KNAME("table", tinsertk_len);
+static KNamer knamer_tinsertk_len("table.tinsertk_len", tinsertk_len);
 
 static int tinsert(lua_State* L)
 {
@@ -273,7 +273,7 @@ static int tremovek_get(lua_State* L, int status, lua_KContext ctx)
   return tremove_move(L, (lua_Integer)ctx, AT_SET);
 }
 
-LUA_KNAME("table", tremovek_get);
+static KNamer knamer_tremovek_get("table.tremovek_get", tremovek_get);
 
 static int tremovek_set(lua_State* L, int status, lua_KContext ctx)
 {
@@ -281,7 +281,7 @@ static int tremovek_set(lua_State* L, int status, lua_KContext ctx)
   return tremove_move(L, (lua_Integer)ctx, AT_NEXT);
 }
 
-LUA_KNAME("table", tremovek_set);
+static KNamer knamer_tremovek_set("table.tremovek_set", tremovek_set);
 
 static int tremovek_loop(lua_State* L, int status, lua_KContext ctx)
 {
@@ -289,7 +289,7 @@ static int tremovek_loop(lua_State* L, int status, lua_KContext ctx)
   return tremove_move(L, (lua_Integer)ctx, AT_LOOP);
 }
 
-LUA_KNAME("table", tremovek_loop);
+static KNamer knamer_tremovek_loop("table.tremovek_loop", tremovek_loop);
 
 static int tremovek_first(lua_State* L, int status, lua_KContext ctx)
 {
@@ -297,7 +297,7 @@ static int tremovek_first(lua_State* L, int status, lua_KContext ctx)
   return tremove_move(L, (lua_Integer)ctx, AT_LOOP);
 }
 
-LUA_KNAME("table", tremovek_first);
+static KNamer knamer_tremovek_first("table.tremovek_first", tremovek_first);
 
 static int tremovek_done(lua_State* L, int status, lua_KContext ctx)
 {
@@ -307,7 +307,7 @@ static int tremovek_done(lua_State* L, int status, lua_KContext ctx)
   return 1;
 }
 
-LUA_KNAME("table", tremovek_done);
+static KNamer knamer_tremovek_done("table.tremovek_done", tremovek_done);
 
 /* 'remove' with the length 'size' */
 static int tremove_len(lua_State* L, lua_Integer size)
@@ -328,7 +328,7 @@ static int tremovek_len(lua_State* L, int status, lua_KContext ctx)
   return tremove_len(L, luaL_lenresult(L));
 }
 
-LUA_KNAME("table", tremovek_len);
+static KNamer knamer_tremovek_len("table.tremovek_len", tremovek_len);
 
 static int tremove(lua_State* L)
 {
@@ -382,12 +382,12 @@ static int tmovek_downloop(lua_State* L, int status, lua_KContext ctx)
   return tmove_loop(L, (lua_Integer)ctx, -1, AT_LOOP);
 }
 
-LUA_KNAME("table", tmovek_upset);
-LUA_KNAME("table", tmovek_upnext);
-LUA_KNAME("table", tmovek_uploop);
-LUA_KNAME("table", tmovek_downset);
-LUA_KNAME("table", tmovek_downnext);
-LUA_KNAME("table", tmovek_downloop);
+static KNamer knamer_tmovek_upset("table.tmovek_upset", tmovek_upset);
+static KNamer knamer_tmovek_upnext("table.tmovek_upnext", tmovek_upnext);
+static KNamer knamer_tmovek_uploop("table.tmovek_uploop", tmovek_uploop);
+static KNamer knamer_tmovek_downset("table.tmovek_downset", tmovek_downset);
+static KNamer knamer_tmovek_downnext("table.tmovek_downnext", tmovek_downnext);
+static KNamer knamer_tmovek_downloop("table.tmovek_downloop", tmovek_downloop);
 
 static int tmove_loop(lua_State* L, lua_Integer i, int dir, int at)
 {
@@ -447,7 +447,7 @@ static int tmovek_eq(lua_State* L, int status, lua_KContext ctx)
   return tmove_dir(L, !eq);
 }
 
-LUA_KNAME("table", tmovek_eq);
+static KNamer knamer_tmovek_eq("table.tmovek_eq", tmovek_eq);
 
 static int tmove(lua_State* L)
 {
@@ -584,7 +584,7 @@ static int tconcatk_get(lua_State* L, int status, lua_KContext ctx)
   return tconcat_resume(L, (lua_Integer)ctx, AT_SET);
 }
 
-LUA_KNAME("table", tconcatk_get);
+static KNamer knamer_tconcatk_get("table.tconcatk_get", tconcatk_get);
 
 static int tconcatk_loop(lua_State* L, int status, lua_KContext ctx)
 {
@@ -592,7 +592,7 @@ static int tconcatk_loop(lua_State* L, int status, lua_KContext ctx)
   return tconcat_resume(L, (lua_Integer)ctx, AT_LOOP);
 }
 
-LUA_KNAME("table", tconcatk_loop);
+static KNamer knamer_tconcatk_loop("table.tconcatk_loop", tconcatk_loop);
 
 /* 'concat' with the length 'last' */
 static int tconcat_len(lua_State* L, lua_Integer last)
@@ -625,7 +625,7 @@ static int tconcatk_len(lua_State* L, int status, lua_KContext ctx)
   return tconcat_len(L, luaL_lenresult(L));
 }
 
-LUA_KNAME("table", tconcatk_len);
+static KNamer knamer_tconcatk_len("table.tconcatk_len", tconcatk_len);
 
 static int tconcat(lua_State* L)
 {
@@ -703,7 +703,7 @@ static int tunpackk_got(lua_State* L, int status, lua_KContext ctx)
   return tunpack_resume(L, AT_NEXT);
 }
 
-LUA_KNAME("table", tunpackk_got);
+static KNamer knamer_tunpackk_got("table.tunpackk_got", tunpackk_got);
 
 static int tunpackk_loop(lua_State* L, int status, lua_KContext ctx)
 {
@@ -712,7 +712,7 @@ static int tunpackk_loop(lua_State* L, int status, lua_KContext ctx)
   return tunpack_resume(L, AT_LOOP);
 }
 
-LUA_KNAME("table", tunpackk_loop);
+static KNamer knamer_tunpackk_loop("table.tunpackk_loop", tunpackk_loop);
 
 /* 'unpack' with the length 'len' */
 static int tunpack_len(lua_State* L, lua_Integer len)
@@ -741,7 +741,7 @@ static int tunpackk_len(lua_State* L, int status, lua_KContext ctx)
   return tunpack_len(L, luaL_lenresult(L));
 }
 
-LUA_KNAME("table", tunpackk_len);
+static KNamer knamer_tunpackk_len("table.tunpackk_len", tunpackk_len);
 
 static int tunpack(lua_State* L)
 {
@@ -1283,7 +1283,7 @@ static int sortk(lua_State* L, int status, lua_KContext ctx)
   return sort_run(L, box->s);
 }
 
-LUA_KNAME("table", sortk);
+static KNamer knamer_sortk("table.sortk", sortk);
 
 /* 'sort' with the length 'n' */
 static int sort_len(lua_State* L, lua_Integer n)
@@ -1323,7 +1323,7 @@ static int sortk_len(lua_State* L, int status, lua_KContext ctx)
   return sort_len(L, luaL_lenresult(L));
 }
 
-LUA_KNAME("table", sortk_len);
+static KNamer knamer_sortk_len("table.sortk_len", sortk_len);
 
 static int sort(lua_State* L)
 {

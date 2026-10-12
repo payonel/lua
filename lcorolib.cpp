@@ -91,7 +91,7 @@ static int coresume_cont(lua_State* L, int status, lua_KContext)
   return coresume_end(L, auxresumed(L, co, {status, lua_resumenres(co, status)}));
 }
 
-LUA_KNAME("coroutine", coresume_cont);
+static KNamer knamer_coresume_cont("coroutine.coresume_cont", coresume_cont);
 
 static int luaB_coresume(lua_State* L)
 {
@@ -121,7 +121,7 @@ static int auxwrap_closed(lua_State* L, int status, lua_KContext)
   return auxwrap_fail(L, status);
 }
 
-LUA_KNAME("coroutine", auxwrap_closed);
+static KNamer knamer_auxwrap_closed("coroutine.auxwrap_closed", auxwrap_closed);
 
 static int auxwrap_end(lua_State* L, lua_State* co, int r)
 {
@@ -147,7 +147,7 @@ static int auxwrap_cont(lua_State* L, int status, lua_KContext)
   return auxwrap_end(L, co, auxresumed(L, co, {status, lua_resumenres(co, status)}));
 }
 
-LUA_KNAME("coroutine", auxwrap_cont);
+static KNamer knamer_auxwrap_cont("coroutine.auxwrap_cont", auxwrap_cont);
 
 static int luaB_auxwrap(lua_State* L)
 {
@@ -260,7 +260,7 @@ static int close_cont(lua_State* L, int status, lua_KContext)
   return close_end(L, getoptco(L), status);
 }
 
-LUA_KNAME("coroutine", close_cont);
+static KNamer knamer_close_cont("coroutine.close_cont", close_cont);
 
 static int luaB_close(lua_State* L)
 {

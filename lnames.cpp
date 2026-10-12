@@ -6,7 +6,6 @@
 ** the next, so a tool that stores a state outside the process can say which
 ** function a frame or a value holds, and find it again.
 */
-#include <cstdint>
 #include <cstring>
 #include <map>
 #include <string>
@@ -17,23 +16,18 @@
 
 namespace
 {
-template <class F>
-std::uintptr_t key(F f)
-{
-  return reinterpret_cast<std::uintptr_t>(f);
-}
-
+/* (the functions are keys by identity: in Java, IdentityHashMaps of their single instances) */
 struct Names
 {
   std::map<std::string, lua_KFunction, std::less<>> kbyname;
-  std::map<std::uintptr_t, std::string> knames;
+  std::map<lua_KFunction, std::string> knames;
   std::map<std::string, CFuncInfo*, std::less<>> cfibyname;
   std::map<const CFuncInfo*, std::string> cfinames;
   std::map<std::string, lua_Budget, std::less<>> budgetbyname;
-  std::map<std::uintptr_t, std::string> budgetnames;
-  std::map<std::uintptr_t, void (*)(lua_State*)> budgetprepare;
+  std::map<lua_Budget, std::string> budgetnames;
+  std::map<lua_Budget, void (*)(lua_State*)> budgetprepare;
   std::map<std::string, lua_ObjectFactory, std::less<>> objectkinds;
-  std::map<std::uintptr_t, lua_CClosureKind> cclosures;
+  std::map<lua_CFunction, lua_CClosureKind> cclosures;
   std::map<std::string, const lua_CClosureKind*, std::less<>> cclosurebyname;
 };
 
@@ -45,19 +39,19 @@ Names& names()
 
 std::string_view view(byte_view v)
 {
-  return std::string_view(reinterpret_cast<const char*>(v.data()), v.size());
+  return std::string_view(v.data(), v.size());
 }
 }
 
 void lua_registerk(const char* name, lua_KFunction k)
 {
   names().kbyname[name] = k;
-  names().knames[key(k)] = name;
+  names().knames[k] = name;
 }
 
 const char* lua_kname(lua_KFunction k)
 {
-  auto it = names().knames.find(key(k));
+  auto it = names().knames.find(k);
   return it == names().knames.end() ? nullptr : it->second.c_str();
 }
 
@@ -75,21 +69,21 @@ void lua_registerbudget(const char* name, lua_Budget f)
 void lua_registerbudget(const char* name, lua_Budget f, void (*prepare)(lua_State*))
 {
   names().budgetbyname[name] = f;
-  names().budgetnames[key(f)] = name;
+  names().budgetnames[f] = name;
   if (prepare != nullptr)
-    names().budgetprepare[key(f)] = prepare;
+    names().budgetprepare[f] = prepare;
 }
 
 void lua_preparebudget(lua_State* L, lua_Budget f)
 {
-  auto it = names().budgetprepare.find(key(f));
+  auto it = names().budgetprepare.find(f);
   if (it != names().budgetprepare.end())
     it->second(L);
 }
 
 const char* lua_budgetname(lua_Budget f)
 {
-  auto it = names().budgetnames.find(key(f));
+  auto it = names().budgetnames.find(f);
   return it == names().budgetnames.end() ? nullptr : it->second.c_str();
 }
 
@@ -112,14 +106,14 @@ lua_ObjectFactory lua_objectkind(byte_view name)
 
 void lua_registercclosure(const lua_CClosureKind& kind)
 {
-  auto& slot = names().cclosures[key(kind.f)];
+  auto& slot = names().cclosures[kind.f];
   slot = kind;
   names().cclosurebyname[kind.name] = &slot;
 }
 
 const lua_CClosureKind* lua_cclosurekind(lua_CFunction f)
 {
-  auto it = names().cclosures.find(key(f));
+  auto it = names().cclosures.find(f);
   return it == names().cclosures.end() ? nullptr : &it->second;
 }
 

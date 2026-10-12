@@ -367,7 +367,7 @@ static int os_timek(lua_State* L, int status, lua_KContext ctx)
   return os_time_from(L, step);
 }
 
-LUA_KNAME("os", os_timek);
+static KNamer knamer_os_timek("os.os_timek", os_timek);
 
 static int os_time(lua_State* L)
 {

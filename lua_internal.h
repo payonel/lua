@@ -17,7 +17,7 @@ int lua_islightcfunction(lua_State* L, int idx);
 
 /*
 ** Names of the functions the engine keeps in its state, stable from one
-** build to the next (see lnames.cpp): continuations ('LUA_KNAME' names one),
+** build to the next (see lnames.cpp): continuations (a static 'KNamer' names one),
 ** the engine's light C functions, and budget callbacks. The lookups answer
 ** nullptr for what has no name.
 */
@@ -80,9 +80,6 @@ struct BudgetNamer
 {
   BudgetNamer(const char* name, lua_Budget f, void (*prepare)(lua_State*) = nullptr) { lua_registerbudget(name, f, prepare); }
 };
-/* names the continuation (or budget callback) 'fn' of module 'mod' */
-#define LUA_KNAME(mod, fn) static KNamer knamer_##fn(mod "." #fn, fn)
-#define LUA_BUDGETNAME(mod, fn, ...) static BudgetNamer bnamer_##fn(mod "." #fn, fn, ##__VA_ARGS__)
 
 const InternalString* lua_toistring(lua_State* L, int idx);
 

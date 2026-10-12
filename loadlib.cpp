@@ -394,7 +394,7 @@ static int searcher_Luak(lua_State* L, int status, lua_KContext ctx)
   return checkload(L, luaL_loadfileik(L, filename, std::nullopt, base, searcher_Luak) == LUA_OK, filename);
 }
 
-LUA_KNAME("package", searcher_Luak);
+static KNamer knamer_searcher_Luak("package.searcher_Luak", searcher_Luak);
 
 static int searcher_Lua(lua_State* L)
 {
@@ -445,7 +445,7 @@ static int searcher_Ck(lua_State* L, int status, lua_KContext ctx)
   return checkload(L, loadfunc(L, filename->view(), name) == 0, filename->view());
 }
 
-LUA_KNAME("package", searcher_Ck);
+static KNamer knamer_searcher_Ck("package.searcher_Ck", searcher_Ck);
 
 static int searcher_C(lua_State* L)
 {
@@ -482,7 +482,7 @@ static int searcher_Crootk(lua_State* L, int status, lua_KContext ctx)
   return 2;
 }
 
-LUA_KNAME("package", searcher_Crootk);
+static KNamer knamer_searcher_Crootk("package.searcher_Crootk", searcher_Crootk);
 
 static int searcher_Croot(lua_State* L)
 {
@@ -514,7 +514,7 @@ static int searcher_preloadk(lua_State* L, int status, lua_KContext ctx)
   }
 }
 
-LUA_KNAME("package", searcher_preloadk);
+static KNamer knamer_searcher_preloadk("package.searcher_preloadk", searcher_preloadk);
 
 static int searcher_preload(lua_State* L)
 {
@@ -649,7 +649,7 @@ static int ll_requirek(lua_State* L, int status, lua_KContext ctx)
   return require_from(L, (int)(ctx % 8), (lua_Integer)(ctx / 8));
 }
 
-LUA_KNAME("package", ll_requirek);
+static KNamer knamer_ll_requirek("package.ll_requirek", ll_requirek);
 
 static int ll_require(lua_State* L)
 {

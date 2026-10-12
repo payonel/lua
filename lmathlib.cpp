@@ -289,14 +289,14 @@ static int min_cont(lua_State* L, int, lua_KContext ctx)
   return minmax_cont(L, false, ctx);
 }
 
-LUA_KNAME("math", min_cont);
+static KNamer knamer_min_cont("math.min_cont", min_cont);
 
 static int max_cont(lua_State* L, int, lua_KContext ctx)
 {
   return minmax_cont(L, true, ctx);
 }
 
-LUA_KNAME("math", max_cont);
+static KNamer knamer_max_cont("math.max_cont", max_cont);
 
 static int math_min(lua_State* L)
 {

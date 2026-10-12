@@ -1500,7 +1500,7 @@ static int requireff(lua_State* L, int status, lua_KContext ctx)
   }
 }
 
-LUA_KNAME("auxlib", requireff);
+static KNamer knamer_requireff("auxlib.requireff", requireff);
 
 static CFuncInfo cfi_requireff(requireff_start, "auxlib.requireff");
 
@@ -1548,7 +1548,7 @@ static int getsubtableff(lua_State* L, int status, lua_KContext ctx)
   }
 }
 
-LUA_KNAME("auxlib", getsubtableff);
+static KNamer knamer_getsubtableff("auxlib.getsubtableff", getsubtableff);
 
 static CFuncInfo cfi_getsubtableff(getsubtableff_start, "auxlib.getsubtableff");
 

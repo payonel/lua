@@ -51,7 +51,7 @@ static int printk(lua_State* L, int status, lua_KContext ctx)
   return 0;
 }
 
-LUA_KNAME("base", printk);
+static KNamer knamer_printk("base.printk", printk);
 
 static int luaB_print(lua_State* L)
 {
@@ -253,7 +253,7 @@ static int drain_cont(lua_State*, int, lua_KContext)
   return 1;
 }
 
-LUA_KNAME("base", drain_cont);
+static KNamer knamer_drain_cont("base.drain_cont", drain_cont);
 
 static int drainafter(lua_State* L)
 {
@@ -359,7 +359,7 @@ static int pairscont(lua_State*, int, lua_KContext)
   return 4; /* __pairs did all the work, just return its results */
 }
 
-LUA_KNAME("base", pairscont);
+static KNamer knamer_pairscont("base.pairscont", pairscont);
 
 static CFuncInfo cfi_next(luaB_next, "base.next");
 
@@ -391,7 +391,7 @@ static int ipairsauxk(lua_State* L, int status, lua_KContext ctx)
   return lua_isnil(L, -1) ? 1 : 2;
 }
 
-LUA_KNAME("base", ipairsauxk);
+static KNamer knamer_ipairsauxk("base.ipairsauxk", ipairsauxk);
 
 static int ipairsaux(lua_State* L)
 {
@@ -460,7 +460,7 @@ static int loadfile_cont(lua_State* L, int status, lua_KContext ctx)
   return load_aux(L, luaL_loadfileikresume(L, status, filemode(L), 4, ctx, loadfile_cont), (int)ctx);
 }
 
-LUA_KNAME("base", loadfile_cont);
+static KNamer knamer_loadfile_cont("base.loadfile_cont", loadfile_cont);
 
 static int luaB_loadfile(lua_State* L)
 {
@@ -517,7 +517,7 @@ static int load_cont(lua_State* L, int status, lua_KContext ctx)
   return load_aux(L, lua_loadkresume(L, status, loadspec(L, (int)ctx)), (int)ctx);
 }
 
-LUA_KNAME("base", load_cont);
+static KNamer knamer_load_cont("base.load_cont", load_cont);
 
 static int luaB_load(lua_State* L)
 {
@@ -547,7 +547,7 @@ static int dofilecont(lua_State* L, int d1, lua_KContext d2)
   return lua_gettop(L) - 1;
 }
 
-LUA_KNAME("base", dofilecont);
+static KNamer knamer_dofilecont("base.dofilecont", dofilecont);
 
 static int dofile_call(lua_State* L, int status)
 {
@@ -563,7 +563,7 @@ static int dofile_loadcont(lua_State* L, int status, lua_KContext ctx)
   return dofile_call(L, luaL_loadfileikresume(L, status, std::nullopt, 2, ctx, dofile_loadcont));
 }
 
-LUA_KNAME("base", dofile_loadcont);
+static KNamer knamer_dofile_loadcont("base.dofile_loadcont", dofile_loadcont);
 
 static int luaB_dofile(lua_State* L)
 {
@@ -625,7 +625,7 @@ static int finishpcall(lua_State* L, int status, lua_KContext extra)
     return lua_gettop(L) - (int) extra; /* return all results */
 }
 
-LUA_KNAME("base", finishpcall);
+static KNamer knamer_finishpcall("base.finishpcall", finishpcall);
 
 static int luaB_pcall(lua_State* L)
 {
@@ -662,7 +662,7 @@ static int tostringk(lua_State* L, int status, lua_KContext ctx)
   return 1;
 }
 
-LUA_KNAME("base", tostringk);
+static KNamer knamer_tostringk("base.tostringk", tostringk);
 
 static int luaB_tostring(lua_State* L)
 {

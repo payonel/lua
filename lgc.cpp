@@ -1317,7 +1317,7 @@ static int gcdrain_cont(lua_State* L, int status, lua_KContext ctx)
   return gcdrain_run(L, (lu_byte)ctx);
 }
 
-LUA_KNAME("gc", gcdrain_cont);
+static KNamer knamer_gcdrain_cont("gc.gcdrain_cont", gcdrain_cont);
 
 static int gcdrain_run(lua_State* L, lu_byte oldah)
 {

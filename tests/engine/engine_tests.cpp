@@ -715,7 +715,7 @@ static int test_cont(lua_State*, int, lua_KContext)
 {
   return 0;
 }
-LUA_KNAME("test", test_cont);
+static KNamer knamer_test_cont("test.test_cont", test_cont);
 
 static void test_budget(lua_State*, lua_State*) {}
 

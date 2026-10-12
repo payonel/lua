@@ -307,7 +307,7 @@ static int arithk(lua_State* L, int status, lua_KContext ctx)
   return 1;
 }
 
-LUA_KNAME("string", arithk);
+static KNamer knamer_arithk("string.arithk", arithk);
 
 static void trymt(lua_State* L, byte_view mtkey, byte_view opname)
 {
@@ -1390,7 +1390,7 @@ static int str_findk(lua_State* L, int status, lua_KContext ctx)
   return find_loop(L, &ms, (int)ctx, ms.origin, res, true);
 }
 
-LUA_KNAME("string", str_findk);
+static KNamer knamer_str_findk("string.str_findk", str_findk);
 
 static int str_find(lua_State* L)
 {
@@ -1464,7 +1464,7 @@ static int gmatchk(lua_State* L, int status, lua_KContext ctx)
   return gmatch_loop(gm, &ms, ms.origin, e, true);
 }
 
-LUA_KNAME("string", gmatchk);
+static KNamer knamer_gmatchk("string.gmatchk", gmatchk);
 
 /* the state of a gmatch iterator, kept outside the process: where it is */
 static int gmatch_save(const CClosure* cl, lua_Integer* ints)
@@ -1761,7 +1761,7 @@ static int gsubk(lua_State* L, int status, lua_KContext ctx)
   return gsub_loop(L, a, &ms, &b, box, e, e, n, changed, NOMATCH, false);
 }
 
-LUA_KNAME("string", gsubk);
+static KNamer knamer_gsubk("string.gsubk", gsubk);
 
 static int str_gsub(lua_State* L)
 {
@@ -2574,7 +2574,7 @@ static int formatk(lua_State* L, int status, lua_KContext ctx)
   return format_from(L, sf, i, arg, top, b, box);
 }
 
-LUA_KNAME("string", formatk);
+static KNamer knamer_formatk("string.formatk", formatk);
 
 static int str_format(lua_State* L)
 {
