@@ -3252,12 +3252,9 @@ private:
     char status = r_.get_byte();
     lua_Integer top = r_.get_var();
     lua_Integer maxtop = r_.get_var();
-    if (!valid_status(status) || top < 1 || maxtop < top ||
-        maxtop >= LUAI_MAXSTACK - LUA_MINSTACK)
+    if (!valid_status(status) || top < 1 || maxtop < top || maxtop > ERRORSTACKSIZE)
       r_.invalid();
-    int need = static_cast<int>(maxtop) + LUA_MINSTACK;
-    if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
-      memory_error(L_);
+    thread_room(L1, maxtop);
     for (StkId i = L1->top; i < top; i++)
       setslotnil(L1, i); /* (what was above the main thread's top is stale) */
     L1->top = top;
@@ -3722,12 +3719,35 @@ private:
   }
 
   /* frames are read into spare CallInfos and attached in one step */
+  /*
+  ** Room for a restored thread's stack up to 'maxtop', and LUA_MINSTACK
+  ** more where the stack's limit allows: a thread can use its stack up to
+  ** the limit (a C function that checked it for that many values), and a
+  ** thread handling a stack overflow has the room for errors past it (a
+  ** stack of ERRORSTACKSIZE, as the original's while it uses it).
+  */
+  void thread_room(lua_State* L1, lua_Integer maxtop)
+  {
+    bool ok;
+    if (maxtop > MAXSTACK)
+    {
+      lua_lock(L1);
+      ok = stacksize(L1) == ERRORSTACKSIZE || luaD_reallocstack(L1, ERRORSTACKSIZE, 0);
+      lua_unlock(L1);
+    }
+    else
+    {
+      lua_Integer need = std::min<lua_Integer>(maxtop + LUA_MINSTACK, MAXSTACK);
+      ok = lua_checkstack(L1, static_cast<int>(need) - static_cast<int>(L1->top));
+    }
+    if (!ok)
+      memory_error(L_);
+  }
+
   void read_frames(lua_State* L1, lua_Integer nframes, lua_Integer top, lua_Integer maxtop)
   {
-    int need = static_cast<int>(maxtop) + LUA_MINSTACK;
     /* a collection may have shrunk the stack while the values were read */
-    if (!lua_checkstack(L1, need - static_cast<int>(L1->top)))
-      memory_error(L_);
+    thread_room(L1, maxtop);
     CallInfo* last = L1->ci;
     for (lua_Integer k = 0; k < nframes; k++)
     {

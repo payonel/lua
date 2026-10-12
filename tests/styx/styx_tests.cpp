@@ -2621,6 +2621,35 @@ static void raise_error(lua_State* L, void*)
 }
 
 /*
+** A thread whose frames reach the stack's limit (a C function that checked
+** the stack for that many values: here 'coroutine.yield' called with as
+** many values as fit) is persisted and restored, and goes on
+*/
+static void test_thread_at_stack_limit()
+{
+  CountingAlloc a1;
+  lua_State* A = new_counted_state(&a1);
+  CHECK(eval(A, build_perms) == "ok");
+  CHECK(eval(A, "big = {} for i = 1, 1100000 do big[i] = i end "
+                "local n = 1 while pcall(table.unpack, big, 1, n * 2) do n = n * 2 end "
+                "local hi = n * 2 while hi - n > 1 do local m = (n + hi) // 2 "
+                "  if pcall(table.unpack, big, 1, m) then n = m else hi = m end end "
+                "for k = n, 1, -1 do "
+                "  co = coroutine.create(function() return select('#', coroutine.yield(table.unpack(big, 1, k))) end) "
+                "  coroutine.resume(co) "
+                "  if coroutine.status(co) == 'suspended' then big = nil return 'ok' end "
+                "end return 'none'") == "ok");
+  std::string blob = persist_state(A);
+  CHECK(!blob.empty());
+  CountingAlloc a2;
+  lua_State* B = restored_state(&a2, blob);
+  CHECK(eval(B, "return tostring(select(2, coroutine.resume(co, 1, 2, 3)))") == "3");
+  CHECK(eval(A, "return tostring(select(2, coroutine.resume(co, 1, 2, 3)))") == "3");
+  lua_close(B);
+  lua_close(A);
+}
+
+/*
 ** A restore ends with a whole cycle of the collector, unless the program
 ** stopped it: what was garbage when the state was persisted (an object
 ** waiting for its '__gc', a dead entry of a weak table) goes then, so that
@@ -2774,6 +2803,7 @@ static void run_cpp_tests()
       {"frozen_corrupted_streams", test_frozen_corrupted_streams},
       {"kernel_persistence", test_kernel_persistence},
       {"kernel_in_another_process", test_kernel_in_another_process},
+      {"thread_at_stack_limit", test_thread_at_stack_limit},
       {"restore_collects", test_restore_collects},
       {"persist_from_held_thread", test_persist_from_held_thread},
       {"restore_errors", test_restore_errors},
