@@ -496,7 +496,7 @@ constexpr size_t MATCHBOX_SIZE = 6800; /* (its accounted size) */
 struct MatchBox : lua_UserObject
 {
   lua_Integer ints[MB_NINTS]{};
-  std::array<char, MB_BYTES> data{}; /* the captures, then the frames */
+  byte_inline<MB_BYTES> data; /* the captures, then the frames */
   size_t used() const
   {
     return static_cast<size_t>(ints[MB_LEVEL]) * MB_CAPSIZE + static_cast<size_t>(ints[MB_NFRAMES]) * MF_SIZE;
@@ -508,21 +508,9 @@ struct MatchBox : lua_UserObject
       out[i] = ints[i];
     return MB_NINTS;
   }
-  byte_view persistbytes() const override { return byte_view(data.data(), used()); }
+  byte_view persistbytes() const override { return data.view().substr(0, used()); }
 };
 static_assert(sizeof(MatchBox) <= MATCHBOX_SIZE);
-
-static void putint(char* d, lua_Integer v)
-{
-  memcpy(d, &v, sizeof(v));
-}
-
-static lua_Integer getint(const char* d)
-{
-  lua_Integer v;
-  memcpy(&v, d, sizeof(v));
-  return v;
-}
 
 /* a match box from its state, checked to be one (not yet against its subject) */
 static std::unique_ptr<lua_UserObject> makematchbox(lua_State*, const lua_Integer* ints, int nints,
@@ -536,7 +524,7 @@ static std::unique_ptr<lua_UserObject> makematchbox(lua_State*, const lua_Intege
     mb->ints[i] = ints[i];
   if (bytes.size() != mb->used())
     return nullptr;
-  memcpy(mb->data.data(), bytes.data(), bytes.size());
+  mb->data.copy_from(bytes, 0);
   return mb;
 }
 
@@ -553,12 +541,11 @@ static void record(MatchState* ms, char kind, ptrdiff_t a, ptrdiff_t b, ptrdiff_
   if (mb == nullptr || ms->nrec == 0)
     return; /* (not a freeze of a check point) */
   ms->nrec--;
-  char* d = mb->data.data() + static_cast<size_t>(mb->ints[MB_LEVEL]) * MB_CAPSIZE +
-            static_cast<size_t>(ms->nrec) * MF_SIZE;
-  d[0] = kind;
-  putint(d + 1, a);
-  putint(d + 1 + sizeof(lua_Integer), b);
-  putint(d + 1 + 2 * sizeof(lua_Integer), c);
+  size_t d = static_cast<size_t>(mb->ints[MB_LEVEL]) * MB_CAPSIZE + static_cast<size_t>(ms->nrec) * MF_SIZE;
+  mb->data[d] = kind;
+  mb->data.write_int64(a, d + 1);
+  mb->data.write_int64(b, d + 1 + sizeof(lua_Integer));
+  mb->data.write_int64(c, d + 1 + 2 * sizeof(lua_Integer));
 }
 
 /*
@@ -593,8 +580,8 @@ static void match_checkpoint(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
   mb->ints[MB_ORIGIN] = ms->origin;
   for (int i = 0; i < ms->level; i++)
   {
-    putint(mb->data.data() + i * MB_CAPSIZE, ms->capture[i].init);
-    putint(mb->data.data() + i * MB_CAPSIZE + sizeof(lua_Integer), ms->capture[i].len);
+    mb->data.write_int64(ms->capture[i].init, i * MB_CAPSIZE);
+    mb->data.write_int64(ms->capture[i].len, i * MB_CAPSIZE + sizeof(lua_Integer));
   }
   if (bb != nullptr)
   {
@@ -1016,7 +1003,7 @@ static ptrdiff_t goon(MatchState* ms, ptrdiff_t s, ptrdiff_t p)
 ** 'k + 1', or the stopped one, which goes on from where it began) and goes
 ** on as it would have. Returns the result of that call.
 */
-static ptrdiff_t resume_call(MatchState* ms, const char* frames, int k, int n,
+static ptrdiff_t resume_call(MatchState* ms, byte_view frames, int k, int n,
                              ptrdiff_t s, ptrdiff_t p)
 {
   if (k == n)
@@ -1025,11 +1012,11 @@ static ptrdiff_t resume_call(MatchState* ms, const char* frames, int k, int n,
     ms->matchdepth++;
     return s;
   }
-  const char* d = frames + static_cast<size_t>(k) * MF_SIZE;
-  char kind = d[0];
-  ptrdiff_t a = (ptrdiff_t)getint(d + 1);
-  ptrdiff_t b = (ptrdiff_t)getint(d + 1 + sizeof(lua_Integer));
-  ptrdiff_t c = (ptrdiff_t)getint(d + 1 + 2 * sizeof(lua_Integer));
+  size_t d = static_cast<size_t>(k) * MF_SIZE;
+  char kind = frames[d];
+  ptrdiff_t a = (ptrdiff_t)frames.toInt64(d + 1);
+  ptrdiff_t b = (ptrdiff_t)frames.toInt64(d + 1 + sizeof(lua_Integer));
+  ptrdiff_t c = (ptrdiff_t)frames.toInt64(d + 1 + 2 * sizeof(lua_Integer));
   ptrdiff_t res;
   try
   {
@@ -1081,21 +1068,21 @@ static bool match_fits(const MatchState* ms, const MatchBox* mb)
     return false;
   for (int i = 0; i < level; i++)
   {
-    lua_Integer init = getint(mb->data.data() + i * MB_CAPSIZE);
-    lua_Integer len = getint(mb->data.data() + i * MB_CAPSIZE + sizeof(lua_Integer));
+    lua_Integer init = mb->data.view().toInt64(i * MB_CAPSIZE);
+    lua_Integer len = mb->data.view().toInt64(i * MB_CAPSIZE + sizeof(lua_Integer));
     if (init < 0 || init > ms->src_end ||
         (len != CAP_UNFINISHED && len != CAP_POSITION && (len < 0 || len > ms->src_end - init)))
       return false;
   }
   int starts = 0;
-  const char* frames = mb->data.data() + static_cast<size_t>(level) * MB_CAPSIZE;
+  byte_view frames = mb->data.view().substr(static_cast<size_t>(level) * MB_CAPSIZE);
   for (int k = 0; k < n; k++)
   {
-    const char* d = frames + static_cast<size_t>(k) * MF_SIZE;
-    lua_Integer a = getint(d + 1);
-    lua_Integer b = getint(d + 1 + sizeof(lua_Integer));
-    lua_Integer c = getint(d + 1 + 2 * sizeof(lua_Integer));
-    switch (d[0])
+    size_t d = static_cast<size_t>(k) * MF_SIZE;
+    lua_Integer a = frames.toInt64(d + 1);
+    lua_Integer b = frames.toInt64(d + 1 + sizeof(lua_Integer));
+    lua_Integer c = frames.toInt64(d + 1 + 2 * sizeof(lua_Integer));
+    switch (frames[d])
     {
     case MF_START:
       starts++;
@@ -1139,14 +1126,14 @@ static ptrdiff_t match_resume(MatchState* ms)
   ms->level = static_cast<int>(mb->ints[MB_LEVEL]);
   for (int i = 0; i < ms->level; i++)
   {
-    ms->capture[i].init = (ptrdiff_t)getint(mb->data.data() + i * MB_CAPSIZE);
-    ms->capture[i].len = (ptrdiff_t)getint(mb->data.data() + i * MB_CAPSIZE + sizeof(lua_Integer));
+    ms->capture[i].init = (ptrdiff_t)mb->data.view().toInt64(i * MB_CAPSIZE);
+    ms->capture[i].len = (ptrdiff_t)mb->data.view().toInt64(i * MB_CAPSIZE + sizeof(lua_Integer));
   }
   int n = static_cast<int>(mb->ints[MB_NFRAMES]);
   ms->matchdepth = MAXCCALLS - 1 - n;
   /* (each call reads its frame before the next is made, so all are read
      before a check point can write the box again) */
-  const char* frames = mb->data.data() + static_cast<size_t>(ms->level) * MB_CAPSIZE;
+  byte_view frames = mb->data.view().substr(static_cast<size_t>(ms->level) * MB_CAPSIZE);
   return resume_call(ms, frames, 0, n, (ptrdiff_t)mb->ints[MB_S], (ptrdiff_t)mb->ints[MB_P]);
 }
 
@@ -1383,7 +1370,7 @@ static int str_findk(lua_State* L, int status, lua_KContext ctx)
     size_t ls = s->size();
     size_t l2 = p->size() - 1;
     if (box == nullptr || p->size() == 0 || box->ints[0] < 0 || box->ints[1] < 0 ||
-        box->ints[0] + box->ints[1] != static_cast<lua_Integer>(ls - l2))
+        l_intadd(box->ints[0], box->ints[1]) != static_cast<lua_Integer>(ls - l2))
       luaL_errori(L, lt::invalid_match_state);
     size_t pos = lmemfind_from(L, s->view(), static_cast<size_t>(box->ints[0]),
                                static_cast<size_t>(box->ints[1]), p->view(), l2, box);

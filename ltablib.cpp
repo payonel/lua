@@ -346,19 +346,42 @@ static int tremove(lua_State* L)
 */
 /* (continuations: going up or down, at a place in the element 'ctx') */
 static int tmove_loop(lua_State* L, lua_Integer i, int dir, int at);
-#define TMOVEK(name, dir, at)                                   \
-  static int name(lua_State* L, int status, lua_KContext ctx)   \
-  {                                                             \
-    (void)status;                                               \
-    return tmove_loop(L, (lua_Integer)ctx, dir, at);            \
-  }
-TMOVEK(tmovek_upset, 1, AT_SET)
-TMOVEK(tmovek_upnext, 1, AT_NEXT)
-TMOVEK(tmovek_uploop, 1, AT_LOOP)
-TMOVEK(tmovek_downset, -1, AT_SET)
-TMOVEK(tmovek_downnext, -1, AT_NEXT)
-TMOVEK(tmovek_downloop, -1, AT_LOOP)
-#undef TMOVEK
+static int tmovek_upset(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  return tmove_loop(L, (lua_Integer)ctx, 1, AT_SET);
+}
+
+static int tmovek_upnext(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  return tmove_loop(L, (lua_Integer)ctx, 1, AT_NEXT);
+}
+
+static int tmovek_uploop(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  return tmove_loop(L, (lua_Integer)ctx, 1, AT_LOOP);
+}
+
+static int tmovek_downset(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  return tmove_loop(L, (lua_Integer)ctx, -1, AT_SET);
+}
+
+static int tmovek_downnext(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  return tmove_loop(L, (lua_Integer)ctx, -1, AT_NEXT);
+}
+
+static int tmovek_downloop(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  return tmove_loop(L, (lua_Integer)ctx, -1, AT_LOOP);
+}
+
 LUA_KNAME("table", tmovek_upset);
 LUA_KNAME("table", tmovek_upnext);
 LUA_KNAME("table", tmovek_uploop);
@@ -786,33 +809,88 @@ enum
    which recurs on intervals at most half as big (n < INT_MAX) */
 constexpr int SORT_MAXDEPTH = 33;
 
-/* where it goes on: after a read or a write, or after a comparison */
+/*
+** Where it goes on: after a read or a write, or after a comparison (these
+** are kept outside the process); and the heads of its loops and branches,
+** where it is never kept.
+*/
 enum
 {
   S_START, S_LO1, S_LO2, S_LO3, S_LO4, S_P1, S_P2, S_P3, S_P4, S_P5, S_P6,
   S_P7, S_P8, S_P9, S_P10, S_P11, S_I1, S_J1, S_SW1, S_SW2, S_SW3, S_SW4,
-  S_LT1, S_LT2, S_LT3, S_LT4, S_LT5 /* (comparisons last) */
+  S_LT1, S_LT2, S_LT3, S_LT4, S_LT5, /* (comparisons last) */
+  S_NKEPT,
+  S_WHILE = S_NKEPT, /* the head of the loop over an interval */
+  S_PIVOT,           /* after 'lo' and 'up' are in order */
+  S_ELSEP,           /* a[p] >= a[lo]: compare a[up] with a[p] */
+  S_PIVOTED,         /* 'lo', 'p' and 'up' are in order */
+  S_ILOOP,           /* repeat ++i while a[i] < P */
+  S_JLOOP,           /* repeat --j while P < a[j] */
+  S_PARTED,          /* no elements out of place */
+  S_NEXT             /* an interval is sorted */
 };
+
+/* the most integers of a sort's state */
+constexpr int SORT_NINTS = SO_PENDING + 4 * SORT_MAXDEPTH;
+constexpr size_t SORTBOX_SIZE = 8 * SORT_NINTS + 16; /* (its accounted size) */
+
+/*
+** The state of a sort that can call back, in its own userdata (at 3); kept
+** outside the process as the bytes of its integers, little-endian
+*/
+struct SortBox : lua_UserObject
+{
+  lua_Integer s[SORT_NINTS]{};
+  mutable byte_inline<8 * SORT_NINTS> image;
+  const char* persistkind() const override { return "table.sort"; }
+  byte_view persistbytes() const override
+  {
+    size_t n = static_cast<size_t>(s[SO_NINTS]);
+    for (size_t k = 0; k < n; k++)
+      image.write_int64(s[k], 8 * k);
+    return image.view().substr(0, 8 * n);
+  }
+};
+
+/* a sort box from its state, checked to be one */
+static std::unique_ptr<lua_UserObject> makesortbox(lua_State*, const lua_Integer*, int nints, byte_view bytes)
+{
+  if (nints != 0 || bytes.size() % 8 != 0 || bytes.size() < 8 * (SO_PENDING + 4) ||
+      bytes.size() > 8 * SORT_NINTS)
+    return nullptr;
+  auto box = std::make_unique<SortBox>();
+  for (size_t k = 0; k < bytes.size() / 8; k++)
+    box->s[k] = bytes.toInt64(8 * k);
+  const lua_Integer* v = box->s;
+  if (v[SO_NINTS] != static_cast<lua_Integer>(bytes.size() / 8) || v[SO_BOXED] != 1 || v[SO_PC] < 0 ||
+      v[SO_PC] >= S_NKEPT || v[SO_N] < 0 || SO_PENDING + 4 * v[SO_N] > v[SO_NINTS] ||
+      (v[SO_FN] != 0 && v[SO_FN] != 1) || (v[SO_PLAIN] != 0 && v[SO_PLAIN] != 1) || v[SO_R] < -1 ||
+      v[SO_R] > 1)
+    return nullptr;
+  return box;
+}
+
+struct SortBoxKind
+{
+  SortBoxKind() { lua_registerobjectkind("table.sort", makesortbox); }
+};
+static SortBoxKind sortboxkind;
 
 static int sortk(lua_State* L, int status, lua_KContext ctx);
 
-/* the state in the userdata at 3 (moved there the first time) */
+/* the state moved into a new userdata at 3 (the first time it can call back) */
 static lua_Integer* sort_box(lua_State* L, lua_Integer* s)
 {
   if (s[SO_BOXED])
     return s;
-  size_t size = sizeof(lua_Integer) * (size_t)s[SO_NINTS];
-  luaL_Box* b = luaL_newbox(L); /* (a box can be kept outside the process) */
-  luaL_Buffer buf;
-  luaL_buffinit(L, &buf);
-  luaL_prepbuffsize(&buf, size);
-  luaL_addsize(&buf, size);
-  luaL_buffsave(&buf, b);
-  lua_Integer* box = reinterpret_cast<lua_Integer*>(b->bytes.data());
-  memcpy(box, s, size);
-  box[SO_BOXED] = 1;
+  auto o = std::make_unique<SortBox>();
+  SortBox* box = o.get();
+  lua_newuserobject(L, std::move(o), SORTBOX_SIZE, 0);
   lua_replace(L, 3);
-  return box;
+  for (lua_Integer k = 0; k < s[SO_NINTS]; k++)
+    box->s[k] = s[k];
+  box->s[SO_BOXED] = 1;
+  return box->s;
 }
 
 /*
@@ -857,104 +935,205 @@ static IdxT choosePivot(IdxT lo, IdxT up, unsigned int rnd)
   return p;
 }
 
-/* save the variables, to go on at 'pc' (the state in the userdata) */
-#define SORT_SAVE(pc)                                                  \
-  (s = boxed ? s : sort_box(L, s), boxed = true, s[SO_PC] = (pc),      \
-   s[SO_LO] = lo, s[SO_UP] = up, s[SO_RND] = rnd, s[SO_P] = p,         \
-   s[SO_I] = i, s[SO_J] = j)
+/* the variables kept, to go on at 'pc' (the state in its userdata) */
+static l_forceinline lua_Integer* sort_save(lua_State* L, lua_Integer* s, int pc, lua_Integer lo, lua_Integer up,
+                                           lua_Integer rnd, lua_Integer p, lua_Integer i, lua_Integer j)
+{
+  s = sort_box(L, s);
+  s[SO_PC] = pc;
+  s[SO_LO] = lo;
+  s[SO_UP] = up;
+  s[SO_RND] = rnd;
+  s[SO_P] = p;
+  s[SO_I] = i;
+  s[SO_J] = j;
+  return s;
+}
 
-/* push a[n]; go on at 'pc' after it */
-#define SORT_GETI(n, pc)                \
-  if (boxed || !plain)                  \
-    SORT_SAVE(pc);                      \
-  lua_getik(L, 1, (n), 0, sortk);       \
-  case pc:;
-
-/* a[n] = top (popped); go on at 'pc' after it */
-#define SORT_SETI(n, pc)                \
-  if (boxed || !plain)                  \
-    SORT_SAVE(pc);                      \
-  lua_setik(L, 1, (n), 0, sortk);       \
-  case pc:;
-
-/* 'res' = stack[a] < stack[b] (a step of the budget); go on at 'pc' */
-#define SORT_LT(a, b, pc)                                         \
-  if (fn || (res = lua_rawlessthan(L, (a), (b))) < 0)             \
-  { /* it calls back */                                           \
-    SORT_SAVE(pc);                                                \
-    s[SO_R] = -1; /* (after a freeze, the result is on the stack) */ \
-    res = sort_call(L, fn, (a), (b));                             \
-  }                                                               \
-  if (luaE_spent(L, 1))                                           \
-  {                                                               \
-    SORT_SAVE(pc);                                                \
-    s[SO_R] = res;                                                \
-    lua_checkpointk(L, 0, sortk);                                 \
-  }                                                               \
-  case pc:;
-
+/*
+** Stock Lua's 'auxsort', as steps: each read, write or comparison that can
+** call back keeps the variables first, and the continuation goes on at the
+** step after it (a comparison by '__lt' of plain values, or of numbers or
+** strings, calls nothing). Each step falls through to the next; a loop or
+** a branch goes on at the step it names.
+*/
 static int sort_run(lua_State* L, lua_Integer* s)
 {
-  bool boxed = (s[SO_BOXED] != 0);
   int fn = (int)s[SO_FN];
   bool plain = (s[SO_PLAIN] != 0);
   lua_Integer lo = s[SO_LO], up = s[SO_UP], p = s[SO_P], i = s[SO_I], j = s[SO_J];
   lua_Integer rnd = s[SO_RND];
   int res = 0;
-  if (s[SO_PC] >= S_LT1)
+  int pc = (int)s[SO_PC];
+  if (pc >= S_LT1)
     res = sort_result(L, s);
-  switch (s[SO_PC])
-  {
-  case S_START:
   for (;;)
   {
-    while (lo < up)
-    { /* loop for tail recursion */
-      /* sort elements 'lo', 'p', and 'up' */
-      SORT_GETI(lo, S_LO1)
-      SORT_GETI(up, S_LO2)
-      SORT_LT(-1, -2, S_LT1) /* a[up] < a[lo]? */
-      if (res)
+    switch (pc)
+    {
+    case S_START:
+    case S_WHILE: /* loop for tail recursion */
+      if (lo >= up)
       {
-        SORT_SETI(lo, S_LO3) /* swap a[lo] - a[up] */
-        SORT_SETI(up, S_LO4)
+        pc = S_NEXT;
+        continue;
       }
-      else
+      /* sort elements 'lo', 'p', and 'up' */
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_LO1, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, lo, 0, sortk);
+      [[fallthrough]];
+    case S_LO1:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_LO2, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, up, 0, sortk);
+      [[fallthrough]];
+    case S_LO2:
+      if (fn || (res = lua_rawlessthan(L, -1, -2)) < 0) /* a[up] < a[lo]? */
+      { /* it calls back */
+        s = sort_save(L, s, S_LT1, lo, up, rnd, p, i, j);
+        s[SO_R] = -1; /* (after a freeze, the result is on the stack) */
+        res = sort_call(L, fn, -1, -2);
+      }
+      if (luaE_spent(L, 1))
+      {
+        s = sort_save(L, s, S_LT1, lo, up, rnd, p, i, j);
+        s[SO_R] = res;
+        lua_checkpointk(L, 0, sortk);
+      }
+      [[fallthrough]];
+    case S_LT1:
+      if (!res)
+      {
         lua_pop(L, 2); /* remove both values */
+        pc = S_PIVOT;
+        continue;
+      }
+      if (s[SO_BOXED] || !plain) /* swap a[lo] - a[up] */
+        s = sort_save(L, s, S_LO3, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, lo, 0, sortk);
+      [[fallthrough]];
+    case S_LO3:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_LO4, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, up, 0, sortk);
+      [[fallthrough]];
+    case S_LO4:
+    case S_PIVOT:
       if (up - lo == 1) /* only 2 elements? */
-        break;          /* already sorted */
+      {               /* already sorted */
+        pc = S_NEXT;
+        continue;
+      }
       if (up - lo < RANLIMIT || rnd == 0) /* small interval or no randomize? */
         p = lo + (up - lo) / 2; /* middle element is a good pivot */
       else /* for larger intervals, it is worth a random pivot */
         p = choosePivot((IdxT)lo, (IdxT)up, (unsigned int)rnd);
-      SORT_GETI(p, S_P1)
-      SORT_GETI(lo, S_P2)
-      SORT_LT(-2, -1, S_LT2) /* a[p] < a[lo]? */
-      if (res)
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_P1, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, p, 0, sortk);
+      [[fallthrough]];
+    case S_P1:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_P2, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, lo, 0, sortk);
+      [[fallthrough]];
+    case S_P2:
+      if (fn || (res = lua_rawlessthan(L, -2, -1)) < 0) /* a[p] < a[lo]? */
       {
-        SORT_SETI(p, S_P3) /* swap a[p] - a[lo] */
-        SORT_SETI(lo, S_P4)
+        s = sort_save(L, s, S_LT2, lo, up, rnd, p, i, j);
+        s[SO_R] = -1;
+        res = sort_call(L, fn, -2, -1);
       }
-      else
+      if (luaE_spent(L, 1))
+      {
+        s = sort_save(L, s, S_LT2, lo, up, rnd, p, i, j);
+        s[SO_R] = res;
+        lua_checkpointk(L, 0, sortk);
+      }
+      [[fallthrough]];
+    case S_LT2:
+      if (!res)
       {
         lua_pop(L, 1); /* remove a[lo] */
-        SORT_GETI(up, S_P5)
-        SORT_LT(-1, -2, S_LT3) /* a[up] < a[p]? */
-        if (res)
-        {
-          SORT_SETI(p, S_P6) /* swap a[up] - a[p] */
-          SORT_SETI(up, S_P7)
-        }
-        else
-          lua_pop(L, 2);
+        pc = S_ELSEP;
+        continue;
       }
+      if (s[SO_BOXED] || !plain) /* swap a[p] - a[lo] */
+        s = sort_save(L, s, S_P3, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, p, 0, sortk);
+      [[fallthrough]];
+    case S_P3:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_P4, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, lo, 0, sortk);
+      [[fallthrough]];
+    case S_P4:
+      pc = S_PIVOTED;
+      continue;
+    case S_ELSEP:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_P5, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, up, 0, sortk);
+      [[fallthrough]];
+    case S_P5:
+      if (fn || (res = lua_rawlessthan(L, -1, -2)) < 0) /* a[up] < a[p]? */
+      {
+        s = sort_save(L, s, S_LT3, lo, up, rnd, p, i, j);
+        s[SO_R] = -1;
+        res = sort_call(L, fn, -1, -2);
+      }
+      if (luaE_spent(L, 1))
+      {
+        s = sort_save(L, s, S_LT3, lo, up, rnd, p, i, j);
+        s[SO_R] = res;
+        lua_checkpointk(L, 0, sortk);
+      }
+      [[fallthrough]];
+    case S_LT3:
+      if (!res)
+      {
+        lua_pop(L, 2);
+        pc = S_PIVOTED;
+        continue;
+      }
+      if (s[SO_BOXED] || !plain) /* swap a[up] - a[p] */
+        s = sort_save(L, s, S_P6, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, p, 0, sortk);
+      [[fallthrough]];
+    case S_P6:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_P7, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, up, 0, sortk);
+      [[fallthrough]];
+    case S_P7:
+    case S_PIVOTED:
       if (up - lo == 2) /* only 3 elements? */
-        break;          /* already sorted */
-      SORT_GETI(p, S_P8) /* get middle element (Pivot) */
+      {               /* already sorted */
+        pc = S_NEXT;
+        continue;
+      }
+      if (s[SO_BOXED] || !plain) /* get middle element (Pivot) */
+        s = sort_save(L, s, S_P8, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, p, 0, sortk);
+      [[fallthrough]];
+    case S_P8:
       lua_pushvalue(L, -1); /* push Pivot */
-      SORT_GETI(up - 1, S_P9) /* push a[up - 1] */
-      SORT_SETI(p, S_P10) /* swap Pivot (a[p]) with a[up - 1] */
-      SORT_SETI(up - 1, S_P11)
+      if (s[SO_BOXED] || !plain) /* push a[up - 1] */
+        s = sort_save(L, s, S_P9, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, up - 1, 0, sortk);
+      [[fallthrough]];
+    case S_P9:
+      if (s[SO_BOXED] || !plain) /* swap Pivot (a[p]) with a[up - 1] */
+        s = sort_save(L, s, S_P10, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, p, 0, sortk);
+      [[fallthrough]];
+    case S_P10:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_P11, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, up - 1, 0, sortk);
+      [[fallthrough]];
+    case S_P11:
       /* the partition: Pivot P is at the top of the stack.
          precondition: a[lo] <= P == a[up-1] <= a[up],
          so it only needs to do the partition from lo + 1 to up - 2.
@@ -962,87 +1141,146 @@ static int sort_run(lua_State* L, lua_Integer* s)
          loop invariant: a[lo .. i] <= P <= a[j .. up] */
       i = lo;     /* will be incremented before first use */
       j = up - 1; /* will be decremented before first use */
-      for (;;)
+      [[fallthrough]];
+    case S_ILOOP: /* repeat ++i while a[i] < P */
+      i++;
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_I1, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, i, 0, sortk);
+      [[fallthrough]];
+    case S_I1:
+      if (fn || (res = lua_rawlessthan(L, -1, -2)) < 0)
       {
-        for (;;)
-        { /* repeat ++i while a[i] < P */
-          i++;
-          SORT_GETI(i, S_I1)
-          SORT_LT(-1, -2, S_LT4)
-          if (!res)
-            break;
-          if (l_unlikely(i == up - 1)) /* a[up - 1] < P == a[up - 1] */
-            luaL_errori(L, lt::invalid_order_function_for_sorting);
-          lua_pop(L, 1); /* remove a[i] */
-        }
-        /* after the loop, a[i] >= P and a[lo .. i - 1] < P  (a) */
-        for (;;)
-        { /* repeat --j while P < a[j] */
-          j--;
-          SORT_GETI(j, S_J1)
-          SORT_LT(-3, -1, S_LT5)
-          if (!res)
-            break;
-          if (l_unlikely(j < i)) /* j <= i - 1 and a[j] > P, contradicts (a) */
-            luaL_errori(L, lt::invalid_order_function_for_sorting);
-          lua_pop(L, 1); /* remove a[j] */
-        }
-        /* after the loop, a[j] <= P and a[j + 1 .. up] >= P */
-        if (j < i)
-        { /* no elements out of place? */
-          /* a[lo .. i - 1] <= P <= a[j + 1 .. i .. up] */
-          lua_pop(L, 1); /* pop a[j] */
-          /* swap pivot (a[up - 1]) with a[i] to satisfy pos-condition */
-          SORT_SETI(up - 1, S_SW1)
-          SORT_SETI(i, S_SW2)
-          break;
-        }
-        /* otherwise, swap a[i] - a[j] to restore invariant and repeat */
-        SORT_SETI(i, S_SW3)
-        SORT_SETI(j, S_SW4)
+        s = sort_save(L, s, S_LT4, lo, up, rnd, p, i, j);
+        s[SO_R] = -1;
+        res = sort_call(L, fn, -1, -2);
       }
+      if (luaE_spent(L, 1))
+      {
+        s = sort_save(L, s, S_LT4, lo, up, rnd, p, i, j);
+        s[SO_R] = res;
+        lua_checkpointk(L, 0, sortk);
+      }
+      [[fallthrough]];
+    case S_LT4:
+      if (res)
+      {
+        if (l_unlikely(i == up - 1)) /* a[up - 1] < P == a[up - 1] */
+          luaL_errori(L, lt::invalid_order_function_for_sorting);
+        lua_pop(L, 1); /* remove a[i] */
+        pc = S_ILOOP;
+        continue;
+      }
+      /* after the loop, a[i] >= P and a[lo .. i - 1] < P  (a) */
+      [[fallthrough]];
+    case S_JLOOP: /* repeat --j while P < a[j] */
+      j--;
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_J1, lo, up, rnd, p, i, j);
+      lua_getik(L, 1, j, 0, sortk);
+      [[fallthrough]];
+    case S_J1:
+      if (fn || (res = lua_rawlessthan(L, -3, -1)) < 0)
+      {
+        s = sort_save(L, s, S_LT5, lo, up, rnd, p, i, j);
+        s[SO_R] = -1;
+        res = sort_call(L, fn, -3, -1);
+      }
+      if (luaE_spent(L, 1))
+      {
+        s = sort_save(L, s, S_LT5, lo, up, rnd, p, i, j);
+        s[SO_R] = res;
+        lua_checkpointk(L, 0, sortk);
+      }
+      [[fallthrough]];
+    case S_LT5:
+      if (res)
+      {
+        if (l_unlikely(j < i)) /* j <= i - 1 and a[j] > P, contradicts (a) */
+          luaL_errori(L, lt::invalid_order_function_for_sorting);
+        lua_pop(L, 1); /* remove a[j] */
+        pc = S_JLOOP;
+        continue;
+      }
+      /* after the loop, a[j] <= P and a[j + 1 .. up] >= P */
+      if (j < i)
+      { /* no elements out of place? */
+        pc = S_PARTED;
+        continue;
+      }
+      /* otherwise, swap a[i] - a[j] to restore invariant and repeat */
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_SW3, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, i, 0, sortk);
+      [[fallthrough]];
+    case S_SW3:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_SW4, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, j, 0, sortk);
+      [[fallthrough]];
+    case S_SW4:
+      pc = S_ILOOP;
+      continue;
+    case S_PARTED:
+      /* a[lo .. i - 1] <= P <= a[j + 1 .. i .. up] */
+      lua_pop(L, 1); /* pop a[j] */
+      /* swap pivot (a[up - 1]) with a[i] to satisfy pos-condition */
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_SW1, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, up - 1, 0, sortk);
+      [[fallthrough]];
+    case S_SW1:
+      if (s[SO_BOXED] || !plain)
+        s = sort_save(L, s, S_SW2, lo, up, rnd, p, i, j);
+      lua_setik(L, 1, i, 0, sortk);
+      [[fallthrough]];
+    case S_SW2:
+    {
       p = i; /* a[lo .. p - 1] <= a[p] == P <= a[p + 1 .. up] */
-      lua_Integer* pend = s + SO_PENDING + 4 * s[SO_N]++;
+      size_t pend = static_cast<size_t>(SO_PENDING + 4 * s[SO_N]++);
       if (p - lo < up - p)
       { /* lower interval is smaller? sort it first, then [p + 1 .. up] */
-        pend[0] = p + 1;
-        pend[1] = up;
-        pend[2] = p - lo; /* size of smaller interval */
+        s[pend] = p + 1;
+        s[pend + 1] = up;
+        s[pend + 2] = p - lo; /* size of smaller interval */
         up = p - 1;
       }
       else
       { /* sort [p + 1 .. up] first, then [lo .. p - 1] */
-        pend[0] = lo;
-        pend[1] = p - 1;
-        pend[2] = up - p; /* size of smaller interval */
+        s[pend] = lo;
+        s[pend + 1] = p - 1;
+        s[pend + 2] = up - p; /* size of smaller interval */
         lo = p + 1;
       }
-      pend[3] = rnd;
+      s[pend + 3] = rnd;
+      pc = S_WHILE;
+      continue;
     }
-    /* an interval is sorted: go on with the one pending */
-    if (s[SO_N] == 0)
-      return 0;
-    lua_Integer* pend = s + SO_PENDING + 4 * --s[SO_N];
-    lo = pend[0];
-    up = pend[1];
-    rnd = pend[3];
-    if ((up - lo) / 128 > pend[2]) /* partition too imbalanced? */
-      rnd = luaL_makeseed(L);       /* try a new randomization */
+    default: /* S_NEXT: an interval is sorted: go on with the one pending */
+    {
+      if (s[SO_N] == 0)
+        return 0;
+      size_t pend = static_cast<size_t>(SO_PENDING + 4 * --s[SO_N]);
+      lo = s[pend];
+      up = s[pend + 1];
+      rnd = s[pend + 3];
+      if ((up - lo) / 128 > s[pend + 2]) /* partition too imbalanced? */
+        rnd = luaL_makeseed(L);           /* try a new randomization */
+      pc = S_WHILE;
+      continue;
+    }
+    }
   }
-  }
-  return 0; /* (not reached) */
 }
-
-#undef SORT_SAVE
-#undef SORT_GETI
-#undef SORT_SETI
-#undef SORT_LT
 
 static int sortk(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   (void)ctx;
-  return sort_run(L, reinterpret_cast<lua_Integer*>(luaL_tobox(L, 3)->bytes.data()));
+  SortBox* box = dynamic_cast<SortBox*>(lua_touserobject(L, 3));
+  if (box == nullptr)
+    luaL_errori(L, lt::invalid_sort_state);
+  return sort_run(L, box->s);
 }
 
 LUA_KNAME("table", sortk);
@@ -1058,7 +1296,7 @@ static int sort_len(lua_State* L, lua_Integer n)
     lua_settop(L, 3);                      /* make sure there are two arguments (and room for the state) */
     int depth = (int)std::bit_width((lua_Unsigned)n) + 1;
     assert(depth <= SORT_MAXDEPTH);
-    lua_Integer state[SO_PENDING + 4 * SORT_MAXDEPTH];
+    lua_Integer state[SORT_NINTS];
     lua_Integer* s = state;
     s[SO_PC] = S_START;
     s[SO_LO] = 1;
@@ -1067,6 +1305,7 @@ static int sort_len(lua_State* L, lua_Integer n)
     s[SO_FN] = !lua_isnil(L, 2);
     s[SO_PLAIN] = lua_isplaintable(L, 1);
     s[SO_P] = s[SO_I] = s[SO_J] = 0;
+    s[SO_R] = 0;
     s[SO_BOXED] = 0;
     s[SO_NINTS] = SO_PENDING + 4 * depth;
     s[SO_N] = 0;
