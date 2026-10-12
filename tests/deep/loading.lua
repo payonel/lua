@@ -148,3 +148,46 @@ do
   assert(f and n == 21)
   assert(mem[20] - mem[3] < 400, mem[20] - mem[3])
 end
+
+-- 'global' is a reserved word only in the test build (T), as in stock's
+-- test build; elsewhere it is a name, and it starts a declaration only at
+-- the start of a statement, followed by a name, '<', '*' or 'function'
+-- (the gate has no T in either build: there only what both builds share
+-- is checked)
+do
+  local src = [[
+    global = 1
+    local t = {global = 2}
+    t.global = t.global + global
+    local global = 3
+    global = global + 1
+    return global, t.global, _ENV.global
+  ]]
+  local decl = [[
+    global x, y = 1, 2
+    global function gf () return x + y end
+    global <const> z
+    do global * end
+    return gf()
+  ]]
+  local calls = "global(1) global.x = 2 global[1] = 3 global:m() global 's' global {} return global"
+  local env = {}
+  if T then
+    for _, s in ipairs{src, calls, "global\n= 3", "local function global () end",
+                       "return function (global) end"} do
+      local f, msg = load(s)
+      assert(not f and string.find(msg, "expected near"), msg)
+    end
+  elseif not GATE then
+    local a, b, c = assert(load(src, "=src", "t", env))()
+    assert(a == 4 and b == 3 and c == 1 and env["global"] == 1)
+    assert(load("global\n= 3 return global", "=g", "t", env)() == 3)
+    assert(load("local function global () return 5 end return global()")() == 5)
+    assert(load("return function (global) return global end")()(6) == 6)
+    assert(load(calls))
+  end
+  assert(load(decl, "=decl", "t", env)() == 3 and env.gf and env.x == 1)
+  for _, s in ipairs{"global", "global ;", "global = = 1", "global function"} do
+    assert(not load(s))
+  end
+end

@@ -1298,6 +1298,7 @@ local function g(...t) return t end
 do global function gf(p) return p end end
 do global gx, gy <const> = 1, 2 end
 do global <const> * end
+do global * end
 do local c = (a + 2) * -a; c = not c; c = #"x" .. 'y' .. (c) end
 function T.m.n:o(s) return self, s end
 function T.p(s) return s end
@@ -1313,6 +1314,9 @@ t = {a = 1; [2] = 2, 3,}
 return f(a)
 ]==],
     "return '\\xZ'", "return '\\u48'", "return '\\u{48'", "return '\\u{800000000}'", "return '\\256'",
+    -- 'global' as a name (a syntax error where it is reserved, in the test build)
+    "global = 1 global.x = 2 global[1] = 3 global(4) global:m() global 's' global {} " ..
+      "local t = {global = 1, t.global} global\n= global return global",
   }
   local function loadwith(chunk, piece, ending)
     local calls = 0
