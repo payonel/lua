@@ -491,20 +491,19 @@ static l_forceinline int testTMode(int m)
 {
   return luaP_opmodes[m] & (1 << 4);
 }
-static l_forceinline int testITMode(int m)
-{
-  return luaP_opmodes[m] & (1 << 5);
-}
-static l_forceinline int testOTMode(int m)
-{
-  return luaP_opmodes[m] & (1 << 6);
-}
 static l_forceinline int testMMMode(int m)
 {
   return luaP_opmodes[m] & (1 << 7);
 }
 
-int luaP_isOT(Instruction i);
+/* Check whether instruction sets top for next instruction, that is,
+** it results in multiple values. Used only for tests.
+*/
+static l_forceinline int luaP_isOT(Instruction i)
+{
+  return GET_OPCODE(i) == OP_TAILCALL || ((luaP_opmodes[GET_OPCODE(i)] & (1 << 6)) && GETARG_C(i) == 0);
+}
+
 int luaP_isIT(Instruction i);
 
 }
