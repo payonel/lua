@@ -195,8 +195,14 @@ $(OBJ_DIR)/%.o: %.cpp | $(OBJ_DIR)
 $(OBJ_DIR):
 	mkdir -p $@
 
+# test_public_api runs the upstream suite too (its cfunc_stress group 6), as
+# the interpreter runs it below: with the temporary directory, the stack
+# limit and a pipe for stdin
 test:
-	./$(TEST_API_T)
+	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
+	( trap "rm -rf tests/libs/_$(TEST_TEMP_DIR)" EXIT; \
+		ulimit -S -s 8192; \
+		cat /dev/null | ./$(TEST_API_T) )
 	./$(ENGINE_TEST_T)
 	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
