@@ -301,5 +301,8 @@ Known differences from the C++ build (the JVM's, not the port's):
 - `os_system`/`io.popen` statuses: a command killed by a signal can show
   as an exit code 128+n.
 - Paths, commands and environment names cross to Java as UTF-8.
-- A string or buffer longer than the JVM's largest array is refused as
-  memory (`MAX_JARRAY`).
+- Accepted limitation: a string or buffer holds at most
+  `Integer.MAX_VALUE - 8` bytes (about 2 GiB), the JVM's largest array
+  (`MAX_JARRAY`); a longer one is refused as memory ("not enough
+  memory"), where the C++ is bound only by `MAX_SIZE` (2^63 - 1) and the
+  memory there is.
