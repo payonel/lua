@@ -1135,6 +1135,8 @@ static void freeobj(lua_State* L, GCObject* o)
       (void)luaM_alloc_char_span(L->l_G, L, u->data, 0, false);
       u->data = {};
     }
+    if (u->obj != nullptr)
+      u->obj->freed(L);
     if (u->objsize != 0)
       luaM_freeobj(L, u->objsize);
     luaM_free_Udata(L, u);

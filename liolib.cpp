@@ -162,9 +162,9 @@ static int io_fclose(lua_State* L)
 
 /*
 ** What a handle freed without its '__gc' having run still has open (its
-** group was dropped, or the state closed with the '__gc' waiting): the
-** destructor of 'luaL_Stream' closes it, as the '__gc' would. (The
-** standard files stay open.)
+** group was dropped, or the state closed with the '__gc' waiting):
+** 'luaL_Stream::freed' closes it, as the '__gc' would. (The standard files
+** stay open.)
 */
 static void closeleft(luaL_Stream* p)
 {
@@ -824,7 +824,8 @@ LUAMOD_API int luaopen_io(lua_State* L)
   return 1;
 }
 
-luaL_Stream::~luaL_Stream()
+void luaL_Stream::freed(lua_State*)
 {
   lua::lib::closeleft(this);
+  f = nullptr;
 }

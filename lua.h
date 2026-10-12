@@ -139,6 +139,13 @@ struct lua_UserObject
   virtual ~lua_UserObject() = default;
 
   /*
+  ** Gives back what the object holds outside its memory (counted bytes, an
+  ** open file): called once, when the userdata holding it is freed, or when
+  ** that userdata could not be made.
+  */
+  virtual void freed(lua_State* /*L*/) {}
+
+  /*
   ** For a tool that keeps a state outside the process: the name of the kind
   ** the object is registered under ('lua_registerobjectkind'), or nullptr
   ** if it cannot be kept; and its state as up to 8 integers and a view of

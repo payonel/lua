@@ -801,7 +801,8 @@ static void test_object_kinds()
   ints[4] = 3; /* the count of the bytes must be the bytes' */
   CHECK(f(L, ints, n, bytes) == nullptr);
   CHECK(f(L, ints, 4, bytes) == nullptr);
-  copy.reset(); /* (before its state goes) */
+  copy->freed(L); /* (made outside a userdata, it gives back what it holds itself) */
+  copy.reset();
   lua_close(L);
 }
 

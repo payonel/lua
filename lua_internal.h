@@ -162,11 +162,10 @@ struct global_State;
 */
 struct luaL_Box : lua_UserObject
 {
-  ::lua::runtime::global_State* g = nullptr;
   std::array<lua_Integer, 4> ints{};
   byte_owner bytes = {}; /* a buffer saved by 'luaL_buffsave' */
   size_t used = 0;
-  ~luaL_Box() override;
+  void freed(lua_State* L) override;
   const char* persistkind() const override { return "box"; }
   int persistsave(lua_Integer* out, byte_view* b) const override;
 };

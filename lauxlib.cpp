@@ -729,10 +729,11 @@ void luaL_addvalue(luaL_Buffer* B)
   lua_pop(L, 1); /* pop string */
 }
 
-luaL_Box::~luaL_Box()
+void luaL_Box::freed(lua_State* L)
 {
   if (!bytes.empty())
-    luaM_alloc_char_span(g, nullptr, bytes, 0, false); /* an abandoned buffer */
+    luaM_alloc_char_span(L->l_G, nullptr, bytes, 0, false); /* an abandoned buffer */
+  bytes = {};
 }
 
 /* its state: the four integers, the bytes used, then the bytes */
@@ -750,7 +751,6 @@ static std::unique_ptr<lua_UserObject> makebox(lua_State* L, const lua_Integer* 
   if (nints != 5 || ints[4] < 0 || static_cast<size_t>(ints[4]) != bytes.size())
     return nullptr;
   auto box = std::make_unique<luaL_Box>();
-  box->g = L->l_G;
   for (int i = 0; i < 4; i++)
     box->ints[i] = ints[i];
   if (!bytes.empty())
@@ -774,13 +774,15 @@ struct BoxKind
 };
 static BoxKind boxkind;
 
+/* what a box is counted, besides the bytes it keeps */
+constexpr size_t LUAL_BOX_SIZE = 72;
+
 /* pushes a new box */
 luaL_Box* luaL_newbox(lua_State* L)
 {
   auto box = std::make_unique<luaL_Box>();
   luaL_Box* p = box.get();
-  p->g = L->l_G;
-  lua_newuserobject(L, std::move(box), sizeof(luaL_Box), 0);
+  lua_newuserobject(L, std::move(box), LUAL_BOX_SIZE, 0);
   return p;
 }
 

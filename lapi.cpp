@@ -2363,10 +2363,18 @@ void lua_newuserobject(lua_State* L, std::unique_ptr<lua_UserObject> obj, size_t
   Udata* u;
   lua_lock(L);
   assert(0 <= nuvalue && nuvalue < SHRT_MAX && "invalid value");
-  u = Udata::luaS_newudata(L, 0, nuvalue);
-  setslotu(L, L->top, u);
-  api_incr_top(L);
-  luaM_takeobj(L, size);
+  try
+  {
+    u = Udata::luaS_newudata(L, 0, nuvalue);
+    setslotu(L, L->top, u);
+    api_incr_top(L);
+    luaM_takeobj(L, size);
+  }
+  catch (...)
+  {
+    obj->freed(L);
+    throw;
+  }
   u->objsize = size;
   u->obj = std::move(obj);
   luaC_checkGC(L);

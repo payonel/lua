@@ -76,6 +76,7 @@ struct LoadBox : lua_UserObject
   size_t bufflen = 0;
   std::vector<char> input; /* (charged to it) */
   ~LoadBox() override;
+  void freed(lua_State* L) override;
   const char* persistkind() const override { return "load"; }
   int persistsave(lua_Integer* out, byte_view* b) const override;
   bool persistuservalues() const override { return false; }
@@ -89,7 +90,12 @@ LoadBox::~LoadBox()
     delete[] dyd.gt.arr;
     delete[] dyd.label.arr;
   }
-  luaM_shrinkhost(g, hosted, 0);
+}
+
+void LoadBox::freed(lua_State* L)
+{
+  luaM_shrinkhost(L->l_G, hosted, 0);
+  hosted = 0;
 }
 
 /*
