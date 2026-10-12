@@ -3090,7 +3090,8 @@ private:
       lua_lock(L_);
       p->lineinfo = luaM_alloc_ls_byte_span(g, L_, {}, static_cast<size_t>(n), true);
       lua_unlock(L_);
-      std::memcpy(p->lineinfo.data(), lines.data(), lines.size());
+      if (!lines.empty())
+        std::memcpy(p->lineinfo.data(), lines.data(), lines.size());
       n = r_.get_count(2);
       lua_lock(L_);
       p->abslineinfo = luaM_alloc_AbsLineInfo_span(g, L_, {}, static_cast<size_t>(n), true);
