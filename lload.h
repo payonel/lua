@@ -68,21 +68,16 @@ struct LoadFrame
 constexpr lu_byte LS_READ = 1;  /* in a call of its reader function */
 constexpr lu_byte LS_CHECK = 2; /* at a check point */
 
-/* the functions with frames ('luaZ_record'): a frame is checked to be the one expected */
+/* the functions with frames ('luaZ_record'): a frame made again is checked to be its function's */
 enum : lu_byte
 {
   LF_FILL = 1,
-  LF_CHECKBUFFER,
   LF_ZREAD,
-  LF_GETADDR,
   LF_FPARSER,
   /* the lexer */
   LF_LLEX,
   LF_NEXT,
-  LF_LOOKAHEAD,
   LF_INCLINE,
-  LF_CHECKNEXT1,
-  LF_CHECKNEXT2,
   LF_NUMERAL,
   LF_SKIPSEP,
   LF_LONGSTRING,
@@ -96,18 +91,11 @@ enum : lu_byte
   /* the parser */
   LF_PARSER,
   LF_MAINFUNC,
-  LF_TESTNEXT,
-  LF_CHECKNEXT,
-  LF_CHECKMATCH,
-  LF_CHECKNAME,
-  LF_CODENAME,
-  LF_SINGLEVAR,
   LF_INITGLOBAL,
   LF_STATLIST,
   LF_FIELDSEL,
   LF_YINDEX,
   LF_RECFIELD,
-  LF_LISTFIELD,
   LF_FIELD,
   LF_CONSTRUCTOR,
   LF_PARLIST,
@@ -118,11 +106,9 @@ enum : lu_byte
   LF_SUFFIXEDEXP,
   LF_SIMPLEEXP,
   LF_SUBEXPR,
-  LF_EXPR,
   LF_BLOCK,
   LF_RESTASSIGN,
   LF_COND,
-  LF_GOTOSTAT,
   LF_BREAKSTAT,
   LF_LABELSTAT,
   LF_WHILESTAT,
@@ -137,7 +123,6 @@ enum : lu_byte
   LF_LOCALFUNC,
   LF_VARATTRIB,
   LF_LOCALSTAT,
-  LF_GLOBALATTRIB,
   LF_GLOBALNAMES,
   LF_GLOBALSTAT,
   LF_GLOBALFUNC,
@@ -149,9 +134,6 @@ enum : lu_byte
   LF_STATEMENT,
   /* the binary loader */
   LF_UNDUMP,
-  LF_LOADBLOCK,
-  LF_LOADALIGN,
-  LF_LOADBYTE,
   LF_LOADVARINT,
   LF_LOADNUMBER,
   LF_LOADSTRING,
@@ -162,10 +144,8 @@ enum : lu_byte
   LF_LOADDEBUG,
   LF_LOADFUNCTION,
   LF_CHECKLITERAL,
-  LF_CHECKNUMSIZE,
   LF_CHECKNUM,
-  LF_CHECKHEADER,
-  LF_LAST
+  LF_CHECKHEADER
 };
 
 struct LoadBox;
@@ -197,10 +177,6 @@ struct LoadResume
 void luaZ_record(LoadResume* rz, int fn, const LoadFrame& l);
 /* the frame of 'fn' made again (its type is the one 'fn' records) */
 const LoadFrame& luaZ_restore(LoadResume* rz, int fn);
-/* a frame of function 'fn' at 'site', its locals at 'l' ('n' bytes), as a freeze leaves it */
-void luaZ_record(LoadResume* rz, int fn, int site, const void* l, size_t n);
-/* the frame of 'fn' made again: its locals into 'l'; returns its site */
-int luaZ_restore(LoadResume* rz, int fn, void* l, size_t n);
 
 /* the piece the reader function gave to the read a freeze stopped (see 'luaZ_fill') */
 std::optional<byte_view> luaZ_resumeread(LoadResume* rz);

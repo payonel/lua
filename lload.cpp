@@ -276,45 +276,6 @@ const LoadFrame& luaZ_restore(LoadResume* rz, int fn)
   return *f;
 }
 
-/* a frame recorded as the bytes of its locals */
-struct ByteFrame : LoadFrame
-{
-  std::vector<char> bytes;
-  size_t size() const override { return sizeof(*this) + bytes.capacity() + FRAME_HEADER; }
-};
-
-void luaZ_record(LoadResume* rz, int fn, int site, const void* l, size_t n)
-{
-  if (rz == nullptr || !rz->recording || rz->box == nullptr)
-    return; /* (not a freeze of a stop point) */
-  ByteFrame* f = new (std::nothrow) ByteFrame;
-  if (f != nullptr)
-  {
-    try
-    {
-      f->bytes.assign(static_cast<const char*>(l), static_cast<const char*>(l) + n);
-    }
-    catch (...)
-    {
-      delete f;
-      f = nullptr;
-    }
-  }
-  if (f != nullptr)
-    f->site = site;
-  pushframe(rz->box, fn, f);
-}
-
-int luaZ_restore(LoadResume* rz, int fn, void* l, size_t n)
-{
-  const ByteFrame& f = static_cast<const ByteFrame&>(luaZ_restore(rz, fn));
-  if (f.bytes.size() != n)
-    luaZ_badstate(rz);
-  if (n != 0)
-    memcpy(l, f.bytes.data(), n);
-  return f.site;
-}
-
 void luaZ_resumed(LoadResume* rz)
 {
   if (rz->rframe != nullptr)
