@@ -1281,6 +1281,8 @@ do
     "return [==[ unfinished",
     string.dump(function(a, b) local s = "a long string constant, longer than forty characters" return a + b, s end),
     string.dump(function() return 1, 2.5, "s", nil, true end, true),
+    -- a nested function, upvalues and their names, an integer constant, absolute line information
+    string.dump(load("local up = 1099511627776 local function g(x) return x + up, G end" .. string.rep("\n", 300) .. "return g, up")),
     -- every token and escape the lexer reads
     "local s = '\\x41\\x4a\\65\\066\\a\\b\\f\\n\\r\\t\\v\\\\\\\"\\'\\\r\n\\\n\\z \r\n \t x\\u{7FFFFFFF}' " ..
       "local a = 1 << 2 >> 1 // 1 ~= 2 and 3 <= 4 and 5 >= 6 or 7 == 8 or ~9 or 2 ^ 3 % 1 .. 'c'\r\n" ..
