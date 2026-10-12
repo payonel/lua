@@ -112,4 +112,22 @@ case("a hook function frozen at line events", function(busy)
   return lines > 0, s
 end)
 
+case("call and return hooks frozen, reading the values transferred", function(busy)
+  local log = {}
+  local function f(a, b, c) return a + b, c end
+  debug.sethook(function(event)
+    busy()
+    local ar = debug.getinfo(2, "r")
+    local t = {}
+    for i = ar.ftransfer, ar.ftransfer + ar.ntransfer - 1 do
+      local _, v = debug.getlocal(2, i)
+      t[#t + 1] = tostring(v)
+    end
+    log[#log + 1] = event .. ":" .. table.concat(t, " ")
+  end, "cr")
+  local x, y = f(1, 2, "z")
+  debug.sethook()
+  return table.concat(log, ";"), x, y
+end)
+
 return cases

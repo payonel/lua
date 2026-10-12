@@ -171,9 +171,9 @@ end)
 -- ten bytes of what a freeze keeps: no continuation, the C calls, how an API
 -- call goes on, a hook function in progress; all zero here), its
 -- to-be-closed list ('ntbc' then one 8-byte level each; none here), the
--- hooks allowed (one byte), the state of a frozen thread (one byte, 0: not
--- frozen), its hook (one byte, 0:
--- no hook) and its groups and chain (four values: nil)
+-- hooks allowed (one byte), the values a hook is given (two, one byte each
+-- here: 0), the state of a frozen thread (one byte, 0: not frozen), its
+-- hook (one byte, 0: no hook) and its groups and chain (four values: nil)
 case("frames that do not match the stack are rejected", function()
   local co = coroutine.create(function(a) coroutine.yield(a) end)
   coroutine.resume(co, 1)
@@ -183,11 +183,12 @@ case("frames that do not match the stack are rejected", function()
   assert(tail == "\0\0\2", "layout: trailer")
   blob = blob:sub(1, -4)
   local frame_size = 10 * 8 + 10
-  local frames_end = #blob - 4 - 1 - 1 - 1 - 8
+  local frames_end = #blob - 4 - 1 - 1 - 2 - 1 - 8
   assert(string.unpack("<i8", blob, frames_end + 1) == 0, "layout: ntbc")
   assert(blob:byte(frames_end + 9) == 1, "layout: allowhook")
-  assert(blob:byte(frames_end + 10) == 0, "layout: frozen")
-  assert(blob:byte(frames_end + 11) == 0, "layout: hook")
+  assert(blob:byte(frames_end + 10) == 0 and blob:byte(frames_end + 11) == 0, "layout: transferred values")
+  assert(blob:byte(frames_end + 12) == 0, "layout: frozen")
+  assert(blob:byte(frames_end + 13) == 0, "layout: hook")
   local nframes = string.unpack("<i8", blob, frames_end - 2 * frame_size - 7)
   assert(nframes == 2, "layout: " .. nframes)
   local first = frames_end - 2 * frame_size

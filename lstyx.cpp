@@ -1840,6 +1840,8 @@ private:
   void thread_extras(lua_State* T)
   {
     byte(static_cast<char>(T->allowhook)); /* (off while a drained '__gc' or a hook function runs) */
+    var(T->transferinfo.ftransfer); /* (what a call or return hook that runs reads: 'debug.getinfo' "r") */
+    var(T->transferinfo.ntransfer);
     byte(static_cast<char>(T->frozen));
     if (T->frozen == 0)
       return;
@@ -3449,6 +3451,12 @@ private:
     if (ah != 0 && ah != 1)
       r_.invalid();
     L1->allowhook = static_cast<lu_byte>(ah);
+    lua_Integer ft = r_.get_var();
+    lua_Integer nt = r_.get_var();
+    if (ft < 0 || ft > MAXSTACK || nt < 0 || nt > MAXSTACK)
+      r_.invalid();
+    L1->transferinfo.ftransfer = static_cast<int>(ft);
+    L1->transferinfo.ntransfer = static_cast<int>(nt);
     char fz = r_.get_byte();
     if (fz < 0 || fz > FZ_HOSTCLOSE)
       r_.invalid();
