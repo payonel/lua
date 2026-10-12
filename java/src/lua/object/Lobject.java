@@ -1469,7 +1469,7 @@ public final class Lobject
     if (buff.blen + slen > buff.b.size())
     {
       global_State g = buff.L.l_G;
-      int newsize = Math.max(buff.blen + slen, 256);
+      long newsize = Math.max((long) buff.blen + slen, 256);
       ByteOwner nb = luaM_alloc_char_span(g, null, buff.b.span(), newsize, false);
       if (!nb.held())
       {

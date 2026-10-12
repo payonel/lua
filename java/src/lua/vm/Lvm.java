@@ -957,7 +957,7 @@ public final class Lvm
       else
       {
         /* at least two string values; get as many as possible */
-        int tl = tsslen(slottsval(L, v2)); /* total length */
+        long tl = tsslen(slottsval(L, v2)); /* total length */
         TString ts;
         /* collect total length and number of strings */
         for (n = 1; n < total && tostring(L, top - n - 1) != 0; n++)
@@ -974,7 +974,7 @@ public final class Lvm
         }
         if (tl <= 40)
         {
-          ByteOwner buff = new ByteOwner(tl);
+          ByteOwner buff = new ByteOwner((int) tl);
           copy2buff(L, top, n, buff.span());
           ts = TString.luaS_createstr(L, buff.view());
         }

@@ -31,6 +31,15 @@ public final class UtilCast
     return userdatas.get(v) == v;
   }
 
+  public static long as_integer(Object p)
+  {
+    if (p == null)
+      return 0;
+    if (p instanceof Long v && isuserdata(v))
+      return v;
+    return Integer.toUnsignedLong(System.identityHashCode(p));
+  }
+
   public static synchronized Object as_userdata(long val)
   {
     if (val == 0)

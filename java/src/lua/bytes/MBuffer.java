@@ -31,7 +31,7 @@ public final class MBuffer
     L_ = L;
   }
 
-  public void growTo(int cap)
+  public void growTo(long cap)
   {
     if (cap == bytes_.size())
       return;

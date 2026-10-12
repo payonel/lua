@@ -2039,8 +2039,10 @@ public final class OsApi
   /*
   ** C's 'fcntl(fileno(f), F_SETFL, O_NONBLOCK)' (for the tests): reads of a
   ** pipe or a standard stream then take only what is there, failing with
-  ** EAGAIN when nothing is. (Writes still block: Java's streams cannot
-  ** write part of a block; files are not affected, as on Linux.)
+  ** EAGAIN when nothing is; an unbuffered write to a pipe takes at most
+  ** NONBLOCKROOM bytes, then fails with EAGAIN (Java's streams cannot tell
+  ** how full the pipe is; that much never fills Linux's 64K); files are
+  ** not affected, as on Linux.
   */
   public static int os_setnonblock(OsFile f)
   {

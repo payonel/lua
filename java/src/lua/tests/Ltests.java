@@ -4,6 +4,7 @@ import static lua.api.LuaApi.*;
 import static lua.api.LuaAuxLib.*;
 import static lua.bytes.InternalString.sv_byteat;
 import static lua.bytes.Lctype.lisdigit;
+import static lua.bytes.UtilCast.as_integer;
 import static lua.bytes.UtilCast.as_userdata;
 import static lua.bytes.UtilCast.func_to_string;
 import static lua.gc.Lgc.*;
@@ -1489,7 +1490,7 @@ public final class Ltests
 
   private static int newuserdata(lua_State L)
   {
-    int size = ((int) (luaL_optinteger(L, 1, 0)));
+    long size = luaL_optinteger(L, 1, 0);
     int nuv = ((int) (luaL_optinteger(L, 2, 0)));
     byte[] p = (byte[]) lua_newuserdatauv(L, size, nuv);
     int pi = 0;
@@ -1511,7 +1512,7 @@ public final class Ltests
 
   private static int udataval(lua_State L)
   {
-    lua_pushinteger(L, Integer.toUnsignedLong(point2uint(lua_touserdata(L, 1))));
+    lua_pushinteger(L, as_integer(lua_touserdata(L, 1)));
     return 1;
   }
 
@@ -1993,7 +1994,7 @@ public final class Ltests
       else if (inst.equals(Lt.func2num))
       {
         lua_CFunction func = lua_tocfunction(L1, getindex_aux(L, L1, sc));
-        lua_pushinteger(L1, Integer.toUnsignedLong(point2uint(func)));
+        lua_pushinteger(L1, as_integer(func));
       }
       else if (inst.equals(Lt.getfield))
       {
@@ -2106,7 +2107,7 @@ public final class Ltests
       }
       else if (inst.equals(Lt.newuserdata))
       {
-        lua_newuserdata(L1, ((int) (getnum_aux(L, L1, sc))));
+        lua_newuserdata(L1, getnum_aux(L, L1, sc));
       }
       else if (inst.equals(Lt.next_kw))
       {

@@ -30,7 +30,7 @@ public final class TString extends GCObject
     ts.hashed = 1;
   }
 
-  private static TString createstrobj(lua_State L, int l, int h, int hashed, int external)
+  private static TString createstrobj(lua_State L, long l, int h, int hashed, int external)
   {
     /* the string and its 'l' bytes are charged together, before either exists
        and before the string is known to the collector (a refusal may run an
@@ -104,11 +104,11 @@ public final class TString extends GCObject
   ** A long string of 'l' zero bytes, made in its final place for its maker to
   ** write them before it is shared
   */
-  public static TString luaS_createlngstrobj(lua_State L, int l)
+  public static TString luaS_createlngstrobj(lua_State L, long l)
   {
     assert l > LUAI_MAXSHORTLEN;
     TString ts = TString.createstrobj(L, l, 0, 0, 0);
-    ts.data = new InternalString(new ByteOwner(l), l);
+    ts.data = new InternalString(new ByteOwner((int) l), (int) l);
     return ts;
   }
 

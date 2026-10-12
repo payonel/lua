@@ -270,6 +270,7 @@ public final class OsFile
   boolean err = false;
   boolean open = true;
   boolean nonblock = false;      /* O_NONBLOCK (see 'os_setnonblock') */
+  static final int NONBLOCKROOM = 32768; /* what an unbuffered write to a pipe takes before EAGAIN */
   final ReentrantLock lock = new ReentrantLock();
 
   OsFile(Device dev, boolean canread, boolean canwrite, int bufmode)
@@ -564,6 +565,11 @@ public final class OsFile
           return 0;
         try
         {
+          if (nonblock && dev instanceof PipeDevice && n > NONBLOCKROOM)
+          {
+            dev.write(src, off, NONBLOCKROOM);
+            throw new WriteError(NONBLOCKROOM, new IOException("Resource temporarily unavailable"));
+          }
           dev.write(src, off, n);
           return n;
         }

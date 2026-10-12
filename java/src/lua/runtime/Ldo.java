@@ -114,6 +114,10 @@ public final class Ldo
     {
       throw e;
     }
+    catch (OutOfMemoryError e)
+    {
+      c.status = LUA_ERRMEM;
+    }
     catch (Throwable e)
     {                 /* non-Lua exception */
       c.status = -1; /* create some error code */

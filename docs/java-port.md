@@ -177,12 +177,11 @@ Methods of the type classes are called on the object
 - Tags (`LUA_V*`) are compile-time constants, so a C++ `switch` on a
   tag stays a `switch`; a `case ctb(LUA_VLNGSTR):` label is
   `case LUA_VLNGSTR | BIT_ISCOLLECTABLE:`.
-- `size_t` of a string, userdata or buffer is a Java array length, so
-  `MAX_SIZE` (llimits.h: representable as a `lua_Integer` and as a
-  `size_t`) is the largest array the JVM makes, `Integer.MAX_VALUE - 8`,
-  as on a platform whose `size_t` has 32 bits: the C++'s own checks
-  against it raise Lua's errors ("string length overflow", "resulting
-  string too large", …) where Java would fail.
+- A Java array holds at most `Integer.MAX_VALUE - 8` elements
+  (`Llimits.MAX_JARRAY`). `MAX_SIZE` stays the C++'s; a length that can
+  pass the array limit is computed in `long`, and Lmem refuses a request
+  past it as the allocator refuses one (Lua's "not enough memory"), so
+  the narrowing to `int` comes after the refusal.
 - Bit casts: `std::bit_cast<lua_Number>(i)` →
   `Double.longBitsToDouble(i)`; the reverse →
   `Double.doubleToRawLongBits(d)`.
@@ -230,6 +229,10 @@ header; the base `LoadFrame` is 24). `X l;` is
   never `null`; a count of 0 gives back the block and returns an empty
   array; `luaM_free_*` and span releases are only the accounting (the
   caller drops the reference).
+- The JVM running out of heap (`OutOfMemoryError`) is the allocator
+  refusing: Lmem's span allocators give back the charge and refuse (as
+  a refusal does), and a protected call catches a stray one as
+  `LUA_ERRMEM`.
 - C's math functions are `Libm`'s, with the C names: `StrictMath`, with
   C's special cases where Java's differ (`pow(1, y)` and
   `pow(-1, ±inf)` are 1), so results do not depend on the JVM.
@@ -283,4 +286,5 @@ Known differences from the C++ build (the JVM's, not the port's):
 - `os_system`/`io.popen` statuses: a command killed by a signal can show
   as an exit code 128+n.
 - Paths, commands and environment names cross to Java as UTF-8.
-- Strings and buffers end at the JVM's largest array (see `MAX_SIZE`).
+- A string or buffer longer than the JVM's largest array is refused as
+  memory (`MAX_JARRAY`).

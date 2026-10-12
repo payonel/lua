@@ -23,12 +23,12 @@ public final class Udata extends GCListed
   public lua_UserObject obj = null;
   public long objsize = 0;
 
-  public static Udata luaS_newudata(lua_State L, int s, int nuvalue)
+  public static Udata luaS_newudata(lua_State L, long s, int nuvalue)
   {
     global_State g = L.l_G;
     Udata u;
     int i;
-    if (s >= MAX_SIZE - Cost.Udata)
+    if (Long.compareUnsigned(s, MAX_SIZE - Cost.Udata) >= 0)
       luaM_toobig(L);
     u = luaM_malloc_Udata(L);
     luaC_link(L, u, LUA_VUSERDATA);

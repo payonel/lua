@@ -384,7 +384,7 @@ public final class Llex
       lexerror(ls, Lt.lexical_element_too_long, 0);
     if (b.size() + 1 > b.capacity())
     {
-      int newsize = b.capacity() + (b.capacity() >> 1);
+      long newsize = b.capacity() + (long) (b.capacity() >> 1);
       if (newsize < LUA_MINBUFFER)
         newsize = LUA_MINBUFFER;
       b.growTo(newsize);

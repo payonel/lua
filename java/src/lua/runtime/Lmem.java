@@ -72,6 +72,12 @@ public final class Lmem
   {
     if (Long.compareUnsigned(newCount + 1, Long.divideUnsigned(MAX_SIZET, esize)) > 0)
       luaM_toobig(L);
+    if (newCount > MAX_JARRAY)
+    {
+      if (bthrow && L != null)
+        luaD_throw(L, (byte) LUA_ERRMEM);
+      return false;
+    }
     long osz = oldCount * esize;
     long nsz = newCount * esize;
     if (luaM_permit_(g, L, osz, nsz, 0) || newCount == 0) // always allow release
@@ -90,18 +96,39 @@ public final class Lmem
     return true;
   }
 
-  public static ByteOwner luaM_alloc_char_span(global_State g, lua_State L, ByteWrites block, int count, boolean bthrow)
+  private static void _alloc_span_undo(global_State g, lua_State L, long oldCount, long newCount, long esize, boolean bthrow)
+  {
+    long osz = oldCount * esize;
+    long nsz = newCount * esize;
+    g.frealloc.permit(nsz, osz, 0);
+    if (L != null)
+    {
+      g.GCdebt += nsz - osz;
+      if (bthrow)
+        luaD_throw(L, (byte) LUA_ERRMEM);
+    }
+  }
+
+  public static ByteOwner luaM_alloc_char_span(global_State g, lua_State L, ByteWrites block, long count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.size(), count, Cost.Byte, bthrow)) return new ByteOwner();
-    ByteOwner nb = new ByteOwner();
-    if (count > 0)
+    try
     {
-      nb = new ByteOwner(count);
-      if (!block.empty())
-        for (int ci = 0; ci < Math.min(count, block.size()); ci++)
-          nb.set(ci, block.get(ci));
+      ByteOwner nb = new ByteOwner();
+      if (count > 0)
+      {
+        nb = new ByteOwner((int) count);
+        if (!block.empty())
+          for (int ci = 0; ci < Math.min(count, block.size()); ci++)
+            nb.set(ci, block.get(ci));
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.size(), count, Cost.Byte, bthrow);
+      return new ByteOwner();
+    }
   }
 
   private static void free_debt(lua_State L, long size, int tag)
@@ -222,31 +249,47 @@ public final class Lmem
   public static TValue[] luaM_alloc_TValue_span(global_State g, lua_State L, TValue[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.TValue, bthrow)) return null;
-    TValue[] nb = new TValue[0];
-    if (count > 0)
+    try
     {
-      nb = new TValue[count];
-      for (int ci = 0; ci < count; ci++)
-        nb[ci] = new TValue();
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          copyobj(nb[ci], block[ci]);
+      TValue[] nb = new TValue[0];
+      if (count > 0)
+      {
+        nb = new TValue[count];
+        for (int ci = 0; ci < count; ci++)
+          nb[ci] = new TValue();
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            copyobj(nb[ci], block[ci]);
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.TValue, bthrow);
+      return null;
+    }
   }
 
   public static long[] luaM_alloc_TValue_span(global_State g, lua_State L, long[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.TValue, bthrow)) return null;
-    long[] nb = new long[0];
-    if (count > 0)
+    try
     {
-      nb = new long[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      long[] nb = new long[0];
+      if (count > 0)
+      {
+        nb = new long[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.TValue, bthrow);
+      return null;
+    }
   }
 
   public static Object[] luaM_alloc_TValue_span(Object[] block, int count)
@@ -278,15 +321,23 @@ public final class Lmem
   public static long[] luaM_alloc_Value_span(global_State g, lua_State L, long[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Value, bthrow)) return null;
-    long[] nb = new long[0];
-    if (count > 0)
+    try
     {
-      nb = new long[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      long[] nb = new long[0];
+      if (count > 0)
+      {
+        nb = new long[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Value, bthrow);
+      return null;
+    }
   }
 
   public static Object[] luaM_alloc_Value_span(Object[] block, int count)
@@ -305,43 +356,67 @@ public final class Lmem
   public static BudgetGroup[] luaM_alloc_BudgetGroup_ptr_span(global_State g, lua_State L, BudgetGroup[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Ref, bthrow)) return null;
-    BudgetGroup[] nb = new BudgetGroup[0];
-    if (count > 0)
+    try
     {
-      nb = new BudgetGroup[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      BudgetGroup[] nb = new BudgetGroup[0];
+      if (count > 0)
+      {
+        nb = new BudgetGroup[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Ref, bthrow);
+      return null;
+    }
   }
 
   public static UpVal[] luaM_alloc_UpVal_ptr_span(global_State g, lua_State L, UpVal[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Ref, bthrow)) return null;
-    UpVal[] nb = new UpVal[0];
-    if (count > 0)
+    try
     {
-      nb = new UpVal[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      UpVal[] nb = new UpVal[0];
+      if (count > 0)
+      {
+        nb = new UpVal[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Ref, bthrow);
+      return null;
+    }
   }
 
   public static byte[] luaM_alloc_lu_byte_span(global_State g, lua_State L, byte[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Byte, bthrow)) return null;
-    byte[] nb = new byte[0];
-    if (count > 0)
+    try
     {
-      nb = new byte[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      byte[] nb = new byte[0];
+      if (count > 0)
+      {
+        nb = new byte[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Byte, bthrow);
+      return null;
+    }
   }
 
   public static CallInfo luaM_alloc_CallInfo(lua_State L)
@@ -357,21 +432,29 @@ public final class Lmem
   public static LocVar[] luaM_alloc_LocVar_span(global_State g, lua_State L, LocVar[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.LocVar, bthrow)) return null;
-    LocVar[] nb = new LocVar[0];
-    if (count > 0)
+    try
     {
-      nb = new LocVar[count];
-      for (int ci = 0; ci < count; ci++)
-        nb[ci] = new LocVar();
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-        {
-          nb[ci].varname = block[ci].varname;
-          nb[ci].startpc = block[ci].startpc;
-          nb[ci].endpc = block[ci].endpc;
-        }
+      LocVar[] nb = new LocVar[0];
+      if (count > 0)
+      {
+        nb = new LocVar[count];
+        for (int ci = 0; ci < count; ci++)
+          nb[ci] = new LocVar();
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+          {
+            nb[ci].varname = block[ci].varname;
+            nb[ci].startpc = block[ci].startpc;
+            nb[ci].endpc = block[ci].endpc;
+          }
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.LocVar, bthrow);
+      return null;
+    }
   }
 
   public static LocVar[] luaM_safegrow_LocVar_span(lua_State L, LocVar[] block, int nelems)
@@ -386,23 +469,31 @@ public final class Lmem
   public static Vardesc[] luaM_alloc_Vardesc_span(global_State g, lua_State L, Vardesc[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Vardesc, bthrow)) return null;
-    Vardesc[] nb = new Vardesc[0];
-    if (count > 0)
+    try
     {
-      nb = new Vardesc[count];
-      for (int ci = 0; ci < count; ci++)
-        nb[ci] = new Vardesc();
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-        {
-          copyobj(nb[ci].k, block[ci].k);
-          nb[ci].kind = block[ci].kind;
-          nb[ci].ridx = block[ci].ridx;
-          nb[ci].pidx = block[ci].pidx;
-          nb[ci].name = block[ci].name;
-        }
+      Vardesc[] nb = new Vardesc[0];
+      if (count > 0)
+      {
+        nb = new Vardesc[count];
+        for (int ci = 0; ci < count; ci++)
+          nb[ci] = new Vardesc();
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+          {
+            copyobj(nb[ci].k, block[ci].k);
+            nb[ci].kind = block[ci].kind;
+            nb[ci].ridx = block[ci].ridx;
+            nb[ci].pidx = block[ci].pidx;
+            nb[ci].name = block[ci].name;
+          }
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Vardesc, bthrow);
+      return null;
+    }
   }
 
   public static Vardesc[] luaM_safegrow_Vardesc_span(lua_State L, Vardesc[] block, int nelems)
@@ -417,22 +508,30 @@ public final class Lmem
   public static Upvaldesc[] luaM_alloc_Upvaldesc_span(global_State g, lua_State L, Upvaldesc[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Upvaldesc, bthrow)) return null;
-    Upvaldesc[] nb = new Upvaldesc[0];
-    if (count > 0)
+    try
     {
-      nb = new Upvaldesc[count];
-      for (int ci = 0; ci < count; ci++)
-        nb[ci] = new Upvaldesc();
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-        {
-          nb[ci].name = block[ci].name;
-          nb[ci].instack = block[ci].instack;
-          nb[ci].idx = block[ci].idx;
-          nb[ci].kind = block[ci].kind;
-        }
+      Upvaldesc[] nb = new Upvaldesc[0];
+      if (count > 0)
+      {
+        nb = new Upvaldesc[count];
+        for (int ci = 0; ci < count; ci++)
+          nb[ci] = new Upvaldesc();
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+          {
+            nb[ci].name = block[ci].name;
+            nb[ci].instack = block[ci].instack;
+            nb[ci].idx = block[ci].idx;
+            nb[ci].kind = block[ci].kind;
+          }
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Upvaldesc, bthrow);
+      return null;
+    }
   }
 
   public static Upvaldesc[] luaM_safegrow_Upvaldesc_span(lua_State L, Upvaldesc[] block, int nelems)
@@ -447,23 +546,31 @@ public final class Lmem
   public static Labeldesc[] luaM_alloc_Labeldesc_span(global_State g, lua_State L, Labeldesc[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Labeldesc, bthrow)) return null;
-    Labeldesc[] nb = new Labeldesc[0];
-    if (count > 0)
+    try
     {
-      nb = new Labeldesc[count];
-      for (int ci = 0; ci < count; ci++)
-        nb[ci] = new Labeldesc();
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-        {
-          nb[ci].name = block[ci].name;
-          nb[ci].pc = block[ci].pc;
-          nb[ci].line = block[ci].line;
-          nb[ci].nactvar = block[ci].nactvar;
-          nb[ci].close = block[ci].close;
-        }
+      Labeldesc[] nb = new Labeldesc[0];
+      if (count > 0)
+      {
+        nb = new Labeldesc[count];
+        for (int ci = 0; ci < count; ci++)
+          nb[ci] = new Labeldesc();
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+          {
+            nb[ci].name = block[ci].name;
+            nb[ci].pc = block[ci].pc;
+            nb[ci].line = block[ci].line;
+            nb[ci].nactvar = block[ci].nactvar;
+            nb[ci].close = block[ci].close;
+          }
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Labeldesc, bthrow);
+      return null;
+    }
   }
 
   public static Labeldesc[] luaM_safegrow_Labeldesc_span(lua_State L, Labeldesc[] block, int nelems)
@@ -478,15 +585,23 @@ public final class Lmem
   public static Proto[] luaM_alloc_Proto_ptr_span(global_State g, lua_State L, Proto[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Ref, bthrow)) return null;
-    Proto[] nb = new Proto[0];
-    if (count > 0)
+    try
     {
-      nb = new Proto[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      Proto[] nb = new Proto[0];
+      if (count > 0)
+      {
+        nb = new Proto[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Ref, bthrow);
+      return null;
+    }
   }
 
   public static Proto[] luaM_safegrow_Proto_ptr_span(lua_State L, Proto[] block, int nelems)
@@ -501,20 +616,28 @@ public final class Lmem
   public static AbsLineInfo[] luaM_alloc_AbsLineInfo_span(global_State g, lua_State L, AbsLineInfo[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.AbsLineInfo, bthrow)) return null;
-    AbsLineInfo[] nb = new AbsLineInfo[0];
-    if (count > 0)
+    try
     {
-      nb = new AbsLineInfo[count];
-      for (int ci = 0; ci < count; ci++)
-        nb[ci] = new AbsLineInfo();
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-        {
-          nb[ci].pc = block[ci].pc;
-          nb[ci].line = block[ci].line;
-        }
+      AbsLineInfo[] nb = new AbsLineInfo[0];
+      if (count > 0)
+      {
+        nb = new AbsLineInfo[count];
+        for (int ci = 0; ci < count; ci++)
+          nb[ci] = new AbsLineInfo();
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+          {
+            nb[ci].pc = block[ci].pc;
+            nb[ci].line = block[ci].line;
+          }
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.AbsLineInfo, bthrow);
+      return null;
+    }
   }
 
   public static AbsLineInfo[] luaM_safegrow_AbsLineInfo_span(lua_State L, AbsLineInfo[] block, int nelems)
@@ -529,15 +652,23 @@ public final class Lmem
   public static byte[] luaM_alloc_ls_byte_span(global_State g, lua_State L, byte[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Byte, bthrow)) return null;
-    byte[] nb = new byte[0];
-    if (count > 0)
+    try
     {
-      nb = new byte[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      byte[] nb = new byte[0];
+      if (count > 0)
+      {
+        nb = new byte[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Byte, bthrow);
+      return null;
+    }
   }
 
   public static byte[] luaM_safegrow_ls_byte_span(lua_State L, byte[] block, int nelems)
@@ -552,15 +683,23 @@ public final class Lmem
   public static int[] luaM_alloc_Instruction_span(global_State g, lua_State L, int[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Instruction, bthrow)) return null;
-    int[] nb = new int[0];
-    if (count > 0)
+    try
     {
-      nb = new int[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      int[] nb = new int[0];
+      if (count > 0)
+      {
+        nb = new int[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Instruction, bthrow);
+      return null;
+    }
   }
 
   public static int[] luaM_safegrow_Instruction_span(lua_State L, int[] block, int nelems)
@@ -584,15 +723,23 @@ public final class Lmem
   public static int[] luaM_alloc_StkId_span(global_State g, lua_State L, int[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Ref, bthrow)) return null;
-    int[] nb = new int[0];
-    if (count > 0)
+    try
     {
-      nb = new int[count];
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          nb[ci] = block[ci];
+      int[] nb = new int[0];
+      if (count > 0)
+      {
+        nb = new int[count];
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            nb[ci] = block[ci];
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Ref, bthrow);
+      return null;
+    }
   }
 
   public static int[] luaM_safegrow_StkId_span(lua_State L, int[] block, int nelems)
@@ -608,22 +755,32 @@ public final class Lmem
   public static Node[] luaM_alloc_Node_span(global_State g, lua_State L, Node[] block, int count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.length, count, Cost.Node, bthrow)) return null;
-    Node[] nb = new Node[0];
-    if (count > 0)
+    try
     {
-      nb = new Node[count];
-      for (int ci = 0; ci < count; ci++)
-        nb[ci] = new Node();
-      if (block.length != 0)
-        for (int ci = 0; ci < Math.min(count, block.length); ci++)
-          copynode(nb[ci], block[ci]);
+      Node[] nb = new Node[0];
+      if (count > 0)
+      {
+        nb = new Node[count];
+        for (int ci = 0; ci < count; ci++)
+          nb[ci] = new Node();
+        if (block.length != 0)
+          for (int ci = 0; ci < Math.min(count, block.length); ci++)
+            copynode(nb[ci], block[ci]);
+      }
+      return nb;
     }
-    return nb;
+    catch (OutOfMemoryError e)
+    {
+      _alloc_span_undo(g, L, block.length, count, Cost.Node, bthrow);
+      return null;
+    }
   }
 
   // typed GC-object allocators (throwing, fixed-size per type)
   public static TString luaM_malloc_TString(lua_State L, long bytes)
   {
+    if (bytes > MAX_JARRAY)
+      luaD_throw(L, (byte) LUA_ERRMEM);
     take_debt(L, Cost.TString + bytes, novariant(LUA_VSTRING));
     return new TString();
   }

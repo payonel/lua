@@ -2527,7 +2527,7 @@ public final class LuaApi
     return uvalue(o).obj;
   }
 
-  public static Object lua_newuserdatauv(lua_State L, int size, int nuvalue)
+  public static Object lua_newuserdatauv(lua_State L, long size, int nuvalue)
   {
     Udata u;
     lua_lock(L);
@@ -2844,7 +2844,7 @@ public final class LuaApi
     lua_pop(L, 1);
   }
 
-  public static Object lua_newuserdata(lua_State L, int sz)
+  public static Object lua_newuserdata(lua_State L, long sz)
   {
     return lua_newuserdatauv(L, sz, 1);
   }

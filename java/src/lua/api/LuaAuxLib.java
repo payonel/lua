@@ -700,7 +700,7 @@ public final class LuaAuxLib
   ** =======================================================
   */
 
-  private static void bb_growTo(luaL_Buffer B, int cap)
+  private static void bb_growTo(luaL_Buffer B, long cap)
   {
     if (cap == B.bytes.size())
       return;
@@ -720,7 +720,7 @@ public final class LuaAuxLib
     if (!b.empty())
     {
       if (b.size() > B.bytes.size() - B.used)
-        bb_growTo(B, B.used + b.size());
+        bb_growTo(B, (long) B.used + b.size());
       B.bytes.copy_from(b, B.used);
       B.used += b.size();
     }
@@ -736,16 +736,16 @@ public final class LuaAuxLib
     }
   }
 
-  private static int newbuffsize(luaL_Buffer B, long sz)
+  private static long newbuffsize(luaL_Buffer B, long sz)
   {
-    int newsize = B.bytes.size();
+    long newsize = B.bytes.size();
     int len = B.used;
     if (Long.compareUnsigned(sz, MAX_SIZE - len) >= 0)
       return luaL_errori(B.L, Lt.resulting_string_too_large);
     if (newsize <= MAX_SIZE / 3 * 2) /* no overflow? */
       newsize += newsize >> 1;     /* new size *= 1.5 */
     if (newsize < len + sz)          /* not big enough? */
-      newsize = (int) (len + sz);
+      newsize = len + sz;
     if (newsize < LUAL_BUFFERSIZE)
       newsize = LUAL_BUFFERSIZE;
     return newsize;
@@ -755,7 +755,7 @@ public final class LuaAuxLib
   {
     if (Long.compareUnsigned(sz, B.bytes.size() - B.used) > 0)
     {
-      int newsize = newbuffsize(B, sz);
+      long newsize = newbuffsize(B, sz);
       bb_growTo(B, newsize);
     }
 

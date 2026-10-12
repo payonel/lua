@@ -11,7 +11,8 @@ public final class Llimits
 
   public static final long MAX_LMEM = Long.MAX_VALUE;
   public static final long MAX_SIZET = -1L;
-  public static final long MAX_SIZE = Integer.MAX_VALUE - 8;
+  public static final long MAX_SIZE = LuaConf.LUA_MAXINTEGER;
+  public static final int MAX_JARRAY = Integer.MAX_VALUE - 8;
 
   public static boolean ispow2(long x)
   {
