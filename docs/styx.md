@@ -45,10 +45,18 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
   same order as for the original; it leaves the inverse permanents table,
   or nil) and restores the state into it. The host anchors in the registry
   what it needs back, such as the kernel coroutine (the main thread's stack
-  is not part of a state).
+  is not part of a state). The restore gives back the thread the state was
+  persisted from: the main thread, or, for a main thread frozen by its
+  budget, the host's other thread (ADR-24).
 - `perms` is the permanents table: it maps objects to names. On persist an
   object found in `perms` is written as its name; on restore the name is
-  resolved back to the object in the inverse table the setup leaves.
+  resolved back to the object in the inverse table the setup leaves. A
+  permanent comes back as the restoring side's object, with what it holds
+  there: a permanent userdata has the setup's metatable, so the metatable
+  is a permanent too wherever the state names it (a library checks its
+  userdata against the metatable in the registry: `luaL_checkudata` on
+  `io.stdin` fails, "FILE* expected, got FILE*", when `registry["FILE*"]`
+  was persisted as a copy).
 - A metatable field (`__persist`) lets a table (and, once supported,
   userdata) control its own persistence: `true` (or absent) for literal,
   `false` for forbidden. Nothing else is accepted (ADR-18).
@@ -86,6 +94,21 @@ lua_State* luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup set
   from `tests/styx`). `make test` is the all-tests target and runs them
   last, after everything else. `make debug styx-test` selects the debug
   variant, like the other targets.
+- The Styx gate (`make styx-gate`, `tests/gate/gate.cpp --styx <n>`; `make
+  test` runs it): the deep tests and the upstream suite run on the main
+  thread with a budget that freezes at every budget point, as the freeze
+  gate runs them, and at every n-th freeze the host persists the whole
+  state, restores it into a new state (`luaL_restorestate`, which gives
+  back the host's other thread), closes the old one and goes on in the
+  new one; a freeze where the state holds what cannot be persisted is
+  counted and the next one tried. The scripts must end as with no
+  persist. Its permanents are every C function and userdata reachable
+  from the registry and the string metatable, and each such userdata's
+  metatable (see "Host API"). The deep tests run with a persist at every
+  7th freeze (about 1900 restores); the upstream suite at every 5000th
+  (about 210), in its portable mode (`_port`): the C libraries its other
+  tests load hold C functions that have no names, after which nothing
+  could be persisted (the freeze gate runs those tests).
 
 ## Development approach
 
@@ -353,7 +376,7 @@ across a restore, and are to be revisited:
   the stream without verifying them (as with binary chunks), and checks the
   thread state it reads only for consistency with itself. Do not unpersist
   data you do not trust.
-- **A final format**: the format (version 7, ADR-10) may still change;
+- **A final format**: the format (version 8, ADR-10) may still change;
   no stream of an earlier version is read.
 - **The hash seed in streams** is not hidden: every stream starts with the
   persisting state's string hash seed (`luaL_restorestate` makes the state
@@ -416,8 +439,8 @@ Every capability is covered from script and from C++ for careful testing,
 in `tests/styx/`, run by `make test` with everything else.
 
 ### ADR-10: Stream format
-**Status:** accepted (version 7)
-A persisted string is the header `"Styx\x07"` (name plus format version),
+**Status:** accepted (version 8)
+A persisted string is the header `"Styx\x08"` (name plus format version),
 the persisting state's string hash seed (8 bytes, ADR-22), then one value
 (or, for a whole state, `TAG_STATE`, ADR-21): a tag byte and a payload
 (a table, function or thread starts with its hash, ADR-30);
@@ -434,7 +457,8 @@ streams about 70% smaller than version 1's fixed 8-byte integers; version
 trailer; version 5 objects' hashes; version 6 frozen threads (ADR-34);
 version 7 a budget group's queue of waiting `__gc`, the kinds of marked
 user objects in the trailer and a frozen main thread written whole, and
-dropped the tag of a table rebuilt by a `__persist` function. Output
+dropped the tag of a table rebuilt by a `__persist` function; version 8
+the thread a whole state was persisted from (ADR-24). Output
 is built in a `luaL_Buffer` so it is memory-accounted. Unpersist rejects a
 missing header (or another version), unknown tags, truncation and trailing
 bytes.
@@ -673,15 +697,25 @@ or it is kept in a table that is a permanent. Tested from script
 allocator `f` and the stream's seed (it hashes as the persisting state
 did, ADR-31), runs the host's `setup` protected (it opens what the host
 provides and leaves the inverse permanents, key -> object, or nil), and
-restores the whole state into it; it returns the state, or NULL with a
-message and nothing left allocated. (The round trip of one value,
-`lua_styxunpersistvalue`, is the tests', ADR-35.)
+restores the whole state into it; it returns the restored thread the
+state was persisted from, or NULL with a message and nothing left
+allocated. (The round trip of one value, `lua_styxunpersistvalue`, is the
+tests', ADR-35.)
+- The thread the state was persisted from (`luaL_persiststate`'s `L`) is
+  written with the state: the main thread, or a thread the state holds
+  (else the persist fails: "persist from the main thread or from a thread
+  the state holds"). For a main thread frozen by its budget that is the
+  host's other thread, anchored before; the restore gives it back, so the
+  host reaches the restored state, and persists it again, without touching
+  the frozen main thread.
 - The restore runs in a protected call on the idle state with the
   machinery of `unpersist`; only host restores accept the main thread
   reference.
 - The restore runs from another thread of the new state, so that a frozen
   main thread (ADR-21) is restored into its main thread, idle and with an
-  empty stack; the host then thaws it as any frozen thread.
+  empty stack; it is left as persisted (no variable closed, its stack
+  whole through collections) until the host thaws it as any frozen
+  thread.
 - Everything restored is charged to the state through its allocator, so
   the host's allocator is the memory policy: a restore that it denies fails
   with "not enough memory" (and the state is closed). The state's registry
@@ -692,8 +726,13 @@ message and nothing left allocated. (The round trip of one value,
   number metatables, the main thread) restored whole in a new state; a
   state persisted at its memory cap restored and running on under the cap
   again; a restore that runs out of memory; a value's stream, or what is
-  not a stream, refused; a setup that fails. Scripts cannot reach any of
-  this, so it gives them no way around their memory limit.
+  not a stream, refused; a setup that fails; a frozen main thread
+  (frozen in its own frame with a to-be-closed variable, and in
+  `table.unpack`) restored, collected and persisted again from the thread
+  the restore gives back, three times over, then thawed to the original's
+  end; a persist from a thread the state does not hold, refused. Scripts
+  cannot reach any of this, so it gives them no way around their memory
+  limit.
 
 ### ADR-25: Variables as permanents
 **Status:** accepted
@@ -775,7 +814,17 @@ not, and a failed unpersist finalized what it had half built.
   same); a host restore applies them last.
 - Not persisted, as stock Lua promises nothing about them: when within a
   cycle a finalizer runs, the collector's phase, colors and ages, and how
-  far weak tables were cleared (a restored state starts a new cycle).
+  far weak tables were cleared.
+- A host restore ends with a whole cycle of the collector, unless the
+  program stopped it (`luaC_fullgcdue`): what was garbage when the state
+  was persisted goes then (dead entries of weak tables are cleared), and
+  the `__gc` calls it finds due are made at the collector's next step, in
+  the program's time (a user object's at its budget group's points), none
+  in the restore itself. A new state's first cycle starts only once its
+  heap has grown by about its size, so without it a host that restores
+  more often than that starved a program that waits on its collector (a
+  loop waiting for its own `__gc` never ended). In generational mode the
+  cycle is a major collection, as the mode's own are.
 - Tested: `finalizers.lua` (a class listing its instances, an instance
   restored first, finalized once, `__gc` set late, marked with `__gc` or
   the metatable removed, the order, a finalizer already due, permanents, a
@@ -783,7 +832,10 @@ not, and a failed unpersist finalized what it had half built.
   allocation failure at every point in both directions with no finalizer
   run by a failed attempt, trailer checks in `errors.lua`, and the C++
   `host_state_*` tests (garbage and finalizers due, the order, settings in
-  both directions, a garbage userdata).
+  both directions, a garbage userdata), `restore_collects` (a `__gc`
+  due and a dead weak entry after a restore, and neither with the
+  collector stopped), and the Styx gate (a program waiting for its `__gc`
+  with a restore at every freeze).
 - Cost: none for values without marked tables; otherwise one pass over the
   collector's lists for their order.
 
@@ -1228,7 +1280,13 @@ What a frozen chain is, to Styx:
   of the chain come with it, and the restored links are made from either end.
   A thread also keeps how it froze (`frozen`), the function and message
   handler of the host call it froze in, its C calls (`nCcalls`, `ccbase`,
-  `frozencc`) and how its variables were being closed.
+  `frozencc`) and how its variables were being closed. Its stack is
+  written up to the top it froze at (`frozentop`): the messages a host's
+  refused resume or close left above it are not its, as its thaw drops
+  them. A thread's stack is restored with room for its frames' tops, to
+  the stack's limit (a C function may have checked the stack for that
+  many values) and past it for a thread handling a stack overflow (its
+  room for errors, `ERRORSTACKSIZE`).
 - **Frames.** A frame keeps what the freeze needs: its continuation (by
   name), the C calls it runs with, how an API call with a continuation goes
   on (`apiop`, `apifirst`) and, while a hook function runs, the state to
@@ -1366,6 +1424,18 @@ restored apart from the state it lives in.
   it in another process (its own addresses: a table keyed by library
   functions keeps its order there), replacing `processes.lua`.
   `restore_errors`, `restore_takes_the_seed`, `no_script_library`.
+- A kernel keeps its programs clear of what Styx cannot persist (a
+  userdata with no `__persist`, a C function or continuation with no
+  name, a hook set from C). `debug.persistable(v [, permanents])` tells it
+  before the host persists: true, or false and why, with the path of what
+  cannot be written ("persisting a userdata value is not supported yet (at
+  root<stack 2>)"), so that a failure in production names the program and
+  what it holds. It is the host persist's walk with a writer that keeps
+  nothing: no Lua code runs and nothing is allocated in the state; threads
+  running now (the kernel's own) are taken as the host will find them, at
+  rest. (`debug.detached`, which checked a thread for a persist apart from
+  its state, is gone.)
+
 ## Open questions
 
 - Format: versioned header or bare bytes.
