@@ -301,6 +301,13 @@ Known differences from the C++ build (the JVM's, not the port's):
 - `os_system`/`io.popen` statuses: a command killed by a signal can show
   as an exit code 128+n.
 - Paths, commands and environment names cross to Java as UTF-8.
+- Accepted limitation: a table holds at most 2^31 entries (an array
+  part of 2^30, `MAXABITS` 30, plus a hash part of 2^30), where stock
+  Lua holds 3·2^30 (array part 2^31): a Java array cannot have 2^31
+  elements, and the C++ keeps the same limit so that both engines agree.
+  Past it, a table raises "table overflow". The JVM's heap (by default a
+  quarter of the machine's memory; `-Xmx` sets it) usually ends a table
+  sooner, with "not enough memory".
 - Accepted limitation: a string or buffer holds at most
   `Integer.MAX_VALUE - 8` bytes (about 2 GiB), the JVM's largest array
   (`MAX_JARRAY`); a longer one is refused as memory ("not enough
