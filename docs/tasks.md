@@ -1794,6 +1794,68 @@ b_fmt 4.18s → 4.15s, b_alloc 0.79s → 0.78s. RSS is unchanged.
 
 ---
 
+## Phase J — Java prep after freeze and Styx
+
+The freeze and Styx work added about 13,000 lines after C12's audit, and
+some of them were C++-only shapes again. A sweep (2026-10-11) re-ran every
+**Done when** check and read the new code: `lstyx`/`lload`, the engine
+diff, `lstrlib`/`ltablib`, and the parser and libraries. This phase fixes
+what Java cannot express and adds checklist rows for what transcribes in
+one line. Its commits are titled "Java prep: …" or "Styx Java prep: …";
+each says what Java could not express and what it is now.
+
+**Done:**
+
+| Shape | Now | Commit (title) |
+|---|---|---|
+| A string's bytes in a `std::string`, copied out of a result's buffer | Bytes plus a length (Java: `byte[]` + `int`); a buffer's block becomes its result's | A string's bytes are counted before they exist… |
+| User objects' destructors giving back counts or closing files | `lua_UserObject::freed(L)`, called when the userdata is freed | Java prep: a user object gives back… |
+| Out-parameters (`lua_canfreeze(int*)`, `lua_getbudget(lua_Integer*)`, `persistsave(…, byte_view*)`, `MBuffer::release(size_t*)`, `getformat(…, size_t*)`) | `lua_nofreeze`, `lua_getbudget`/`lua_budgetleft`, `persistints`/`persistbytes`, results | Java prep: results instead of out-parameters… |
+| Styx's `HostString* msg` and its `void*` setup | `luaL_StyxResult`, `luaL_Restored`, the `luaL_RestoreSetup` interface | Styx Java prep: results instead of message out-parameters… |
+| `table.sort` resuming into its loops (Duff's device); its state read through `reinterpret_cast` | A flat `for (;;) switch`; a `SortBox` user object | Java prep: table.sort resumes in a flat switch… |
+| The match box's `memcpy` at `char*` offsets | `byte_inline` and little-endian helpers at offsets | (same commit) |
+| `TMOVEK`, `LUA_KNAME`, `LUA_BUDGETNAME` macros | Written out | (sort and name registry commits) |
+| The name registry keyed by `reinterpret_cast<uintptr_t>` | Keyed by the function types (Java: `IdentityHashMap`) | Java prep: the name registry keys functions by identity… |
+| The ephemeron index: structs, `GCObject**`, `sizeof` counts | Parallel vectors, named costs | Java prep: the ephemeron index is parallel vectors… |
+| `requireff`'s `goto`; the parser buffer freed by a destructor; loader lambdas capturing by reference; `precall<CCOUNT>` | Flat switch; freed by its owner; by value; a parameter | Java prep: requireff without goto… |
+| Styx stream values through `&v`/`sizeof`/`memcpy` | Named widths, little-endian helpers | Styx Java prep: the stream's fixed-width values… |
+| Styx records: a union, `void*`, seven `const_cast`s | Fields, `GCObject*`, a typed kind field, none | Styx Java prep: typed object fields… |
+| Styx work stacks: `memcpy` storage, `sizeof` counts, `reinterpret_cast` | Vectors of items, named costs, one counted block (`luaM_resizeblock`) | Styx Java prep: work stacks hold their items… |
+| `LoadResume::given` (`bool*`); `ref_find(…, lua_Integer*)`; pointers to fields; lambdas setting locals | A field; an optional; an array; fields | Java prep: a load's 'given'…; Styx Java prep: an optional reference… |
+| The Restorer's destructor undoing a failed restore; lookups by address; a label by pointer | `abandon()` in its owners' catch; by reference id; by value | Styx Java prep: the restore's cleanup is a call… |
+| Uncounted lists in the restore's finish | Counted | Styx Java prep: the restore's lists of marked objects are counted |
+
+**Results (A/B):**
+- Strings (B24's storage): `all.lua` 0.82 s both. New short strings kept as table keys are about 12% slower (0.71 → 0.79 s), because each now has its own block where `std::string` held up to 15 bytes inline; a Java string is an object plus a `byte[]` too. Other short strings are 2% faster, and long results are faster (no copy).
+- `table.sort`, 300,000 elements: numbers unchanged (0.133 s), strings +3%, with a comparison function about +11% (the loops' back edges go through the switch, as in Java). Measured on a loaded machine.
+
+**Open, for the user:**
+- **The resumable load's re-entry.** `llex`, `lparser`, `lundump`, `lzio` and `f_parser` record a stopped function's locals as raw bytes (`luaZ_record`/`luaZ_restore`) and resume with `goto` into the middle of loops and `case`s (about 330 `goto`s). Java has no form for either. The options:
+  1. Java parks a stopped load on its own (virtual) thread, and the C++ keeps its frames as the stand-in (a port-time note).
+  2. Rewrite each of about 60 functions as a state machine (a `site` tested on every path to a site: the normal path pays).
+  3. Always replay: a thaw parses the kept input again from the start (no frames, no `goto`; O(input) per thaw).
+
+**New checklist rows** (with C12's Port checklist):
+
+| C++ | Java |
+|---|---|
+| `InternalString` (bytes plus a length) | `byte[]` + length; a buffer's array is taken as it is |
+| `lua_UserObject::freed(L)` | an interface method the collector's free calls |
+| A scope-bound owner whose destructor gives back a count (`luaL_Buffer`, `MBuffer`, Styx's `WorkStack`) | `try`/`finally` at the owner, calling its release |
+| Scope guards (`ldo` `Guard`, `lstate` `Plain`) | `try`/`finally` |
+| A function used as a value (continuation, budget callback, C closure kind, C function) | one `static final` field holding the method reference; registries are `IdentityHashMap`s of them |
+| Namespace-scope registrations (`KNamer`, `BudgetNamer`, `CClosureNamer`, `CFuncInfo`, `…Kind`) | a static initializer per class; the names registry initializes every library class before a restore looks a name up |
+| A forward `goto` to a shared tail (`llex` `read_string`, upstream's) | nested labeled blocks and `break label` |
+| A local struct whose address is kept for a while (`lgc`'s ephemeron index) | an object made there |
+| Address-only matching that must not dereference (Styx's dead keys, `AddressFilter`) | an `IdentityHashMap` of the persisted objects |
+| Host maps keyed by objects (`luaC_ordermarked`, `luaC_makedue`, Styx's `map_`) | `IdentityHashMap` |
+| Member templates taking lambdas (`each_marked`, `each_dead_key`, `each_object`, `key_text`, `path_text`) | functional interfaces; lambdas set fields, never locals |
+| `luaE_freezeonly` (a header `static` the libraries call) | `public static` |
+| Copying a struct holding a `byte_inline` (`InternalDebug`) | a copy that clones the array |
+| 16-bit unsigned owner ids | `int` masked with `0xFFFF` |
+
+---
+
 ## Port-time notes (no C++ action)
 
 - **Interrupts:** `lua.cpp`'s SIGINT handler already uses upstream's
