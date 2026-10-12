@@ -936,6 +936,23 @@ do
       assert(deepeq(r, plain), "match work " .. i .. ": " .. show(r) .. " vs " .. show(plain))
     end
   end
+  -- a gmatch iterator called again from the budget callback, in the middle
+  -- of one of its matches, makes a match of its own (B27): the inner call
+  -- takes the first match, and the call it was called in goes on with its
+  -- own state to the next one (before, both used the iterator's state, and
+  -- the outer call returned what the inner one left of it)
+  do
+    local s = string.rep("a", 40) .. "b ab"
+    local it = s:gmatch("(a-)(b)")
+    local inner
+    local co = coroutine.create(function() return it() end)
+    debug.setbudget(co, 3, function(user_co, spender)
+      if inner == nil and debug.getinfo(spender, 0, "f").func == it then inner = table.pack(it()) end
+    end)
+    local r = table.pack(coroutine.resume(co))
+    assert(inner and inner.n == 2 and inner[1] == string.rep("a", 40) and inner[2] == "b", "inner: " .. show(inner))
+    assert(r[1] and r.n == 3 and r[2] == "a" and r[3] == "b", "outer: " .. show(r))
+  end
   -- the budget runs out in a match that backtracks (or a plain search that
   -- compares at many places): before check points it ran to its end with no
   -- callback at all

@@ -1418,32 +1418,38 @@ static int str_match(lua_State* L)
 /* state for 'gmatch' */
 constexpr size_t GMATCHSTATE_SIZE = 584;
 
+/*
+** The state of a 'gmatch' iterator is where it is; each call makes its
+** matches with a state of its own (the budget callback, called in a match,
+** can call the iterator again)
+*/
 struct GMatchState : lua_UserObject
 {
+  const InternalString* subject; /* (kept by the closure's first two upvalues) */
+  const InternalString* pattern;
   ptrdiff_t src;       /* current position */
   ptrdiff_t p;
   ptrdiff_t lastmatch;
-  MatchState ms;       /* match state */
 };
 
 static int gmatchk(lua_State* L, int status, lua_KContext ctx);
 
 /* the matches of a 'gmatch' iterator from 'src' on ('first': see 'find_loop') */
-static int gmatch_loop(GMatchState* gm, ptrdiff_t src, ptrdiff_t e, bool first)
+static int gmatch_loop(GMatchState* gm, MatchState* ms, ptrdiff_t src, ptrdiff_t e, bool first)
 {
-  for (; src <= gm->ms.src_end; src++)
+  for (; src <= ms->src_end; src++)
   {
     if (!first)
     {
-      reprepstate(&gm->ms);
-      gm->ms.origin = src;
-      e = match(&gm->ms, src, gm->p);
+      reprepstate(ms);
+      ms->origin = src;
+      e = match(ms, src, gm->p);
     }
     first = false;
     if (e != NOMATCH && e != gm->lastmatch)
     {
       gm->src = gm->lastmatch = e;
-      return push_captures(&gm->ms, src, e);
+      return push_captures(ms, src, e);
     }
   }
   return 0; /* not found */
@@ -1452,11 +1458,10 @@ static int gmatch_loop(GMatchState* gm, ptrdiff_t src, ptrdiff_t e, bool first)
 static int gmatch_aux(lua_State* L)
 {
   GMatchState* gm = static_cast<GMatchState*>(lua_touserobject(L, lua_upvalueindex(3)));
-  gm->ms.L = L;
-  gm->ms.box = nullptr;
-  gm->ms.rec = nullptr;
-  prepcheck(&gm->ms, 1, gmatchk, 0); /* (a match box at 1: its arguments are not used) */
-  return gmatch_loop(gm, gm->src, NOMATCH, false);
+  MatchState ms;
+  prepstate(&ms, L, gm->subject, gm->pattern);
+  prepcheck(&ms, 1, gmatchk, 0); /* (a match box at 1: its arguments are not used) */
+  return gmatch_loop(gm, &ms, gm->src, NOMATCH, false);
 }
 
 /* a 'gmatch' iterator goes on after a freeze in a match */
@@ -1465,11 +1470,11 @@ static int gmatchk(lua_State* L, int status, lua_KContext ctx)
   (void)status;
   (void)ctx;
   GMatchState* gm = static_cast<GMatchState*>(lua_touserobject(L, lua_upvalueindex(3)));
-  gm->ms.L = L;
-  gm->ms.rec = nullptr;
-  prepcheck(&gm->ms, 1, gmatchk, 0);
-  ptrdiff_t e = match_resume(&gm->ms);
-  return gmatch_loop(gm, gm->ms.origin, e, true);
+  MatchState ms;
+  prepstate(&ms, L, gm->subject, gm->pattern);
+  prepcheck(&ms, 1, gmatchk, 0);
+  ptrdiff_t e = match_resume(&ms);
+  return gmatch_loop(gm, &ms, ms.origin, e, true);
 }
 
 LUA_KNAME("string", gmatchk);
@@ -1497,7 +1502,8 @@ static bool gmatch_make(lua_State* L, CClosure* cl, const lua_Integer* ints, int
   std::unique_ptr<GMatchState> o = std::make_unique<GMatchState>();
   GMatchState* gm = o.get();
   lua_newuserobject(L, std::move(o), GMATCHSTATE_SIZE, 0);
-  prepstate(&gm->ms, L, s, p);
+  gm->subject = s;
+  gm->pattern = p;
   gm->src = ints[0];
   gm->p = ints[1];
   gm->lastmatch = ints[2];
@@ -1523,7 +1529,8 @@ static int gmatch(lua_State* L)
   lua_newuserobject(L, std::move(o), GMATCHSTATE_SIZE, 0);
   if (init > ls)   /* start after string's end? */
     init = ls + 1;
-  prepstate(&gm->ms, L, s, p);
+  gm->subject = s;
+  gm->pattern = p;
   gm->src = init;
   gm->p = 0;
   gm->lastmatch = NOMATCH;
