@@ -50,7 +50,9 @@ STYX_GATE_DEEP ?= 7
 STYX_GATE_ALL ?= 5000
 
 test: all
-	cd .. && $(JAVA) $(JFLAGS) -cp java/build/lua.jar lua.tests.PublicApi
+	mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1
+	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd ../tests; \
+		cat /dev/null | $(JAVA) $(JFLAGS) -Dpublicapi.lua=../java/$(LUA) -cp ../java/build/lua.jar lua.tests.PublicApi )
 	LUA_JAVA_DEBUG=$(DEBUG) ./test_engine
 	mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd ../tests; \

@@ -1260,7 +1260,8 @@ public final class StyxTests
     lua_close(C);
     CountingAlloc a4 = new CountingAlloc();
     Setup s = new Setup(L -> {
-                          eval(L, "collectgarbage('generational') collectgarbage('param', 'pause', 400) collectgarbage('stop')");
+                          CHECK(eval(L, "collectgarbage('generational') collectgarbage('param', 'pause', 400) " +
+                                        "collectgarbage('stop') return 'ok'").equals("ok"));
                         },
                         null);
     lua_State D = restored_state(a4, blob, s);
@@ -3231,8 +3232,7 @@ debug.getregistry().kernel = kernel -- (the host's anchor)
     lua_setglobal(L, new HostString("STYX_MODE"));
     lua_pushboolean(L, verbose ? 1 : 0);
     lua_setglobal(L, new HostString("STYX_VERBOSE"));
-    eval(L, mode.setup);
-    boolean ok = luaL_dofile(L, new HostString(path.toString())) == LUA_OK;
+    boolean ok = luaL_dostring(L, new HostString(mode.setup)) == LUA_OK && luaL_dofile(L, new HostString(path.toString())) == LUA_OK;
     if (!ok)
       printf("    FAIL [%s] script error: %s\n", mode.name, to_string(L, -1));
     if (lua_getglobal(L, new HostString("STYX_RESULT")) == LUA_TTABLE)

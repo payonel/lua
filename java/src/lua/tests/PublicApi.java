@@ -129,7 +129,7 @@ public final class PublicApi
       g_source = new ArrayList<>();
       try
       {
-        g_source = Files.readAllLines(Path.of("java/src/lua/tests/PublicApi.java"), StandardCharsets.UTF_8);
+        g_source = Files.readAllLines(Path.of("../java/src/lua/tests/PublicApi.java"), StandardCharsets.UTF_8);
       }
       catch (IOException | RuntimeException e)
       {
@@ -5204,15 +5204,18 @@ public final class PublicApi
     lua_State L = luaL_newstate();
     luaL_openlibs(L);
 
-    /* Need to run from tests/ directory */
+    /* Need to run from tests/ directory (the JVM cannot chdir: the test
+       target starts this program there) */
     String oldcwd = System.getProperty("user.dir");
     if (oldcwd == null)
       oldcwd = "";
     if (chdir("tests") != 0)
       { /* ignore: best-effort chdir for test setup */ }
 
-    /* Set up environment like the lua binary does */
-    luaL_dostring(L, hs("_TMP='_1'; arg={[0]='../lua'}"));
+    /* Set up environment like the lua binary does (arg[0], the interpreter
+       the suite runs: the Java launcher, given as 'publicapi.lua') */
+    String lua = System.getProperty("publicapi.lua", "../lua");
+    CHECK(luaL_dostring(L, hs("_TMP='_1'; arg={[0]='" + lua + "'}")) == LUA_OK);
 
     double start = os_cpuclock();
 
@@ -5224,6 +5227,7 @@ public final class PublicApi
         printf("  group6 ERROR: %s\n", msg.to_utf8().toString());
       lua_pop(L, 1);
     }
+    CHECK(status == LUA_OK);
 
     double end = os_cpuclock();
     double ms = (end - start) * 1000.0;
