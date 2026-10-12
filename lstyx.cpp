@@ -116,6 +116,7 @@ public:
   }
 
   T get(size_t i) const { return items_[i]; }
+  const T* data() const { return items_.data(); } /* (the items, for a call that takes an array) */
   void set(size_t i, const T& v) { items_[i] = v; }
   T top() const { return items_.back(); }
   void set_top(const T& v) { items_.back() = v; }
@@ -2317,12 +2318,7 @@ public:
     /* in the order they were marked (user objects are marked as they are
        read): those due go to their queues from it */
     if (umarked_.size() > 0)
-    {
-      std::vector<GCObject*> order; /* (host memory, a short time) */
-      for (size_t i = 0; i < made_.size(); i++)
-        order.push_back(made_.get(i));
-      luaC_ordermarked(L_, order.data(), order.size());
-    }
+      luaC_ordermarked(L_, made_.data(), made_.size());
     /* the owners of the marked tables: their groups are made now */
     for (size_t i = 0; i < made_.size(); i++)
     {
@@ -2343,10 +2339,10 @@ public:
     }
     /* those whose '__gc' was due are due again, in the order they had in their queues */
     {
-      std::vector<GCObject*> due; /* (host memory, a short time) */
+      WorkStack<GCObject*> due(L_, true, WS_WORD);
       for (size_t i = made_.size(); i > 0; i--)
         if (dues_.get(i - 1) != 0)
-          due.push_back(made_.get(i - 1));
+          due.push(made_.get(i - 1));
       if (!due.empty())
         luaC_makedue(L_, due.data(), due.size());
     }
