@@ -69,7 +69,6 @@ constexpr int MAXSTACK = (LUAI_MAXSTACK < MAXSTACK_BYSIZET ? LUAI_MAXSTACK : MAX
 constexpr int ERRORSTACKSIZE = MAXSTACK + STACKERRSPACE;
 
 void luaD_shrinkstack(lua_State* L);
-void luaD_inctop(lua_State* L);
 void luaD_anchorobj(lua_State* L, Table* anchor, GCObject* obj);
 
 /* status of a freeze unwinding the C stack: not an error, and never a
