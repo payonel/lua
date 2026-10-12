@@ -160,7 +160,7 @@ struct LoadResume
   ZIO* z = nullptr;
   ::lua::compiler::Dyndata* dyd = nullptr; /* the parser's arrays and buffer (held by the box while stopped) */
   MBuffer* buff = nullptr;
-  bool* given = nullptr; /* (a string chunk: did its reader give it?) */
+  bool given = false; /* (a string chunk: did its reader give it?) */
   LoadBox* box = nullptr;
   bool recording = false; /* a freeze passes: the frames record themselves */
   size_t rpos = 0;        /* (the end of the next frame to make again) */

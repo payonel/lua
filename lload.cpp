@@ -318,7 +318,7 @@ static void prepstop(LoadResume* rz, lu_byte kind)
   const char* d = z->chunk.data();
   std::optional<byte_view> s;
   box->zpos = z->pos;
-  box->given = (rz->given != nullptr && *rz->given);
+  box->given = rz->given;
   if (z->pos == z->chunk.size())
   { /* (all read: what the piece was does not matter; an empty piece, which
        ends the stream, leaves the one before it, no longer kept) */
@@ -424,15 +424,15 @@ struct FunctionReader : lua_Reader
 /* a chunk that is a string (at 1), or that is in the box ('boxed'), read at once */
 struct StringReader : lua_Reader
 {
-  bool given = false;
-  const LoadResume* boxed = nullptr;
+  LoadResume* rz = nullptr;
+  bool boxed = false;
   std::optional<byte_view> read(lua_State* L) override
   {
-    if (given)
+    if (rz->given)
       return std::nullopt;
-    given = true;
-    if (boxed != nullptr)
-      return byte_view(boxed->box->input.data(), boxed->box->input.size());
+    rz->given = true;
+    if (boxed)
+      return byte_view(rz->box->input.data(), rz->box->input.size());
     return lua_tolstring(L, 1);
   }
 };
@@ -564,9 +564,8 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
   StringReader sreader;
   ReplayReader rreader;
   freader.rz = &rz;
-  rz.given = &sreader.given;
-  if (ls.readeridx < 0)
-    sreader.boxed = &rz;
+  sreader.rz = &rz;
+  sreader.boxed = (ls.readeridx < 0);
   lua_Reader* reader = (ls.readeridx > 0) ? static_cast<lua_Reader*>(&freader) : &sreader;
   ZIO z;
   luaZ_init(L, &z, reader);
@@ -605,7 +604,7 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
       lua_settop(L, box->anchoridx - 1);
       box->replay = false;
       rz.replaying = true;
-      sreader.given = (ls.readeridx < 0); /* (a chunk in the box: the replay gives it first) */
+      rz.given = (ls.readeridx < 0); /* (a chunk in the box: the replay gives it first) */
       rreader.rz = &rz;
       rreader.next = reader;
       z.reader = &rreader;
@@ -617,7 +616,7 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
     z.resuming = true;
     rz.rpos = box->frames.size();
     std::optional<byte_view> s;
-    sreader.given = box->given;
+    rz.given = box->given;
     if (box->zsrc == ZS_STRING && ls.readeridx == 0 && (s = lua_tolstring(L, 1)))
       z.chunk = *s;
     else if (box->zsrc == ZS_PIECE && ls.readeridx != 0 && (s = lua_tolstring(L, ls.pieceidx)))
