@@ -125,9 +125,10 @@ std::optional<OsDate> os_localtime(long long t)
 std::optional<long long> os_mktime(OsDate* d)
 {
   struct tm r = totm(*d);
+  r.tm_wday = -1; /* if call succeeds, it will set this value */
   time_t t = mktime(&r);
   *d = fromtm(r);
-  if (t == (time_t) (-1))
+  if (r.tm_wday == -1) /* error if tm_wday was not set */
     return std::nullopt;
   return t;
 }

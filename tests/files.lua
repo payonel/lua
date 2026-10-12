@@ -862,6 +862,13 @@ local function checkDateTable (t)
   _G.D = nil
 end
 
+
+do   -- testing mktime returning -1
+  local t = os.date("*t", -1)
+  assert(os.time(t) == -1)
+end
+
+
 checkDateTable(os.time())
 if not _port then
   -- assume that time_t can represent these values
