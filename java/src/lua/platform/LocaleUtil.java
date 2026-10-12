@@ -117,10 +117,12 @@ public final class LocaleUtil
     return name.equals("C") || name.equals("POSIX");
   }
 
+  /* (the environment the program was started with: 'getenv''s, not the
+     locale the launcher may have given the JVM) */
   private static String fromenv(String var)
   {
-    String v = System.getenv(var);
-    return (v == null || v.isEmpty()) ? null : v;
+    ByteView v = OsApi.os_getenv(ByteView.of(var));
+    return (v == null || v.size() == 0) ? null : v.toString();
   }
 
   /* the locale "" names for 'category' (as glibc reads the environment) */

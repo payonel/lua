@@ -48,9 +48,10 @@ import lua.bytes.Lt;
 ** The operating system as the engine sees it (os_api.h), on the JVM: what
 ** the C++ takes from the C library and POSIX, with the same results and
 ** the same error conventions (errno codes, and the messages glibc's
-** 'strerror' gives on Linux). Paths, commands and environment names cross
-** to Java as UTF-8 (HostString's conversion), cut at their first '\0' as
-** a C string is.
+** 'strerror' gives on Linux). Paths and commands cross to Java as UTF-8
+** (HostString's conversion), cut at their first '\0' as a C string is,
+** and the JVM converts them to the system's bytes as UTF-8 (the launchers
+** see to that: Environ); the environment is read as bytes (Environ).
 */
 public final class OsApi
 {
@@ -421,11 +422,8 @@ public final class OsApi
 
   public static ByteView os_getenv(ByteView name)
   {
-    String n = cstr(name);
-    String v = n.isEmpty() ? null : System.getenv(n);
-    if (v == null)
-      return null;
-    return new ByteView(v.getBytes(StandardCharsets.UTF_8));
+    int z = name.find(0);
+    return Environ.getenv((z == ByteView.npos) ? name : name.substr(0, z));
   }
 
   public static ByteView os_strerror(int err)
@@ -1606,6 +1604,7 @@ public final class OsApi
       }
     }
     ProcessBuilder pb = new ProcessBuilder(SHELL, "-c", script, "sh");
+    Environ.restore(pb);
     pb.redirectInput(in);
     pb.redirectOutput(out);
     pb.redirectError(ProcessBuilder.Redirect.INHERIT);
