@@ -416,8 +416,9 @@ static void test_order_independent_of_interned_strings()
   {
     lua_State* L = seeded_state(77);
     /* the same program, but the second state has the strings already */
-    run(L, i == 0 ? "keep = {} for i = 1, 300 do keep[i] = 'other' .. i end return 'ok'"
-                  : "keep = {} for i = 1, 300 do keep[i] = 'name' .. i end return 'ok'");
+    const char* keep = i == 0 ? "keep = {} for i = 1, 300 do keep[i] = 'other' .. i end return 'ok'"
+                              : "keep = {} for i = 1, 300 do keep[i] = 'name' .. i end return 'ok'";
+    CHECK(run(L, keep) == "ok");
     order[i] = run(L, "local t, names = {}, {} "
                       "for i = 1, 300 do local n = 'name' .. i local k = {} t[k] = i names[k] = n end "
                       "local o = {} for k in pairs(t) do o[#o + 1] = names[k] end return table.concat(o, ' ')");
@@ -435,7 +436,7 @@ static void test_same_order_in_two_states()
   for (int i = 0; i < 2; i++)
   {
     lua_State* L = seeded_state(1234); /* the second state's objects live elsewhere */
-    run(L, object_keys);
+    CHECK(run(L, object_keys) != "<error>");
     order[i] = run(L, "local o = {} for k in pairs(t) do o[#o + 1] = names[k] end return table.concat(o, ' ')");
     lua_close(L);
   }
