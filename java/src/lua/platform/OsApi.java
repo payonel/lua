@@ -4,6 +4,8 @@ import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
@@ -26,6 +28,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.zone.ZoneRules;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -39,6 +42,7 @@ import lua.api.lua_CFunction;
 import lua.bytes.ByteSpan;
 import lua.bytes.ByteView;
 import lua.bytes.InternalString;
+import lua.bytes.Lt;
 
 /*
 ** The operating system as the engine sees it (os_api.h), on the JVM: what
@@ -1487,6 +1491,36 @@ public final class OsApi
   private static final String TMPLETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
   /* 'mkstemp' of "<dir>/<prefix>XXXXXX": the file made (mode 0600), or null */
+  /* a named pipe for a command's standard stream: its end here is not the
+     JVM's, so it stays open until every writer closes it, as a pipe from C's
+     'popen' does (the JVM closes a process's own pipes when it exits) */
+  private static Path mkfifo() throws IOException
+  {
+    ThreadLocalRandom rnd = ThreadLocalRandom.current();
+    for (int attempt = 0; attempt < 100; attempt++)
+    {
+      StringBuilder sb = new StringBuilder(System.getProperty("java.io.tmpdir", "/tmp") + "/lua_pp_");
+      for (int i = 0; i < 6; i++)
+        sb.append(TMPLETTERS.charAt(rnd.nextInt(TMPLETTERS.length())));
+      Path p = Path.of(sb.toString());
+      Process mk = new ProcessBuilder("mkfifo", "-m", "600", p.toString()).redirectErrorStream(true).start();
+      try
+      {
+        mk.getInputStream().readAllBytes();
+        if (mk.waitFor() == 0)
+          return p;
+      }
+      catch (InterruptedException e)
+      {
+        Thread.currentThread().interrupt();
+        throw new IOException(e);
+      }
+      if (!Files.exists(p))
+        throw new IOException("mkfifo failed");
+    }
+    throw new FileAlreadyExistsException("mkfifo");
+  }
+
   private static Path mkstemp(String prefix)
   {
     ThreadLocalRandom rnd = ThreadLocalRandom.current();
@@ -1672,35 +1706,282 @@ public final class OsApi
 
   /*
   ** {======================================================
-  ** Dynamic libraries: the JVM loads none (as stock Lua built without
-  ** them: every load fails with its message)
+  ** Dynamic libraries. The JVM loads no C code: a library is a Java class
+  ** that stands in for a C one, and its symbols are the class's public
+  ** static fields (a 'lua_CFunction' for a C function). 'os_dlopen'
+  ** answers as glibc's 'dlopen' (RTLD_NOW) does: a path with a '/' loads
+  ** the Java library that its file's base name (no directory, no
+  ** extension) names, if the file exists (what it holds does not matter:
+  ** a C build's library serves); a name without a '/', the system library
+  ** of that name; "", the program. The undefined symbols of a library must
+  ** be defined by the program or by a library loaded with global symbols.
+  ** Errors have glibc's messages.
   ** =======================================================
   */
 
-  private static final ByteView DLMSG = ByteView.of("dynamic libraries not enabled; check your Lua installation");
+  /* the Java libraries: base name, class, undefined symbols */
+  private static final String[][] dllibs = {
+    {"lib1", "lua.tests.libs.Lib1"},
+    {"lib11", "lua.tests.libs.Lib11", "lib1_export"},
+    {"lib2", "lua.tests.libs.Lib2"},
+    {"lib21", "lua.tests.libs.Lib21", "luaopen_lib2"},
+    {"lib2-v2", "lua.tests.libs.Lib22"},
+    {"libreadline", "lua.platform.Readline"},
+  };
+
+  /* the system libraries: name, base name of its Java library */
+  private static final String[][] dlsyslibs = {
+    {"libreadline.so", "libreadline"},
+    {"libreadline.so.8", "libreadline"},
+  };
+
+  /* the program's own symbols: name, class */
+  private static final String[][] dlprogsyms = {
+    {"luaopen_base", "lua.lib.Lbaselib"},
+    {"luaopen_coroutine", "lua.lib.Lcorolib"},
+    {"luaopen_debug", "lua.lib.Ldblib"},
+    {"luaopen_io", "lua.lib.Liolib"},
+    {"luaopen_math", "lua.lib.Lmathlib"},
+    {"luaopen_os", "lua.lib.Loslib"},
+    {"luaopen_package", "lua.lib.Loadlib"},
+    {"luaopen_string", "lua.lib.Lstrlib"},
+    {"luaopen_table", "lua.lib.Ltablib"},
+    {"luaopen_utf8", "lua.lib.Lutf8lib"},
+  };
+
+  /* the program's name, as the error messages give it (its 'argv[0]') */
+  private static byte[] dlprogname()
+  {
+    String n = System.getProperty("lua.progname");
+    if (n == null)
+      n = ProcessHandle.current().info().command().orElse("");
+    return n.getBytes(StandardCharsets.UTF_8);
+  }
+
+  /* the program */
+  private static final OsLib dlprogram = new OsLib(dlprogname(), null, null);
+
+  /* the loaded libraries, by what they were loaded from */
+  private static final HashMap<Object, OsLib> dlloaded = new HashMap<>();
+
+  /* the libraries loaded with global symbols, in the order they got them */
+  private static final ArrayList<OsLib> dlglobals = new ArrayList<>();
+
+  /* the last error ('os_dlerror' gives it once) */
+  private static byte[] dlerr = null;
+
+  /* the bytes of a C string (up to its first '\0') */
+  private static byte[] cbytes(ByteView v)
+  {
+    int z = v.find(0);
+    return ((z == ByteView.npos) ? v : v.substr(0, z)).toArray();
+  }
+
+  private static <T> T dlfail(byte[] name, String what, byte[] sym)
+  {
+    byte[] w = (": " + what).getBytes(StandardCharsets.UTF_8);
+    byte[] e = Arrays.copyOf(name, name.length + w.length + sym.length);
+    System.arraycopy(w, 0, e, name.length, w.length);
+    System.arraycopy(sym, 0, e, name.length + w.length, sym.length);
+    dlerr = e;
+    return null;
+  }
+
+  private static String dlstrerror(int err)
+  {
+    return os_strerror(err).toString();
+  }
+
+  private static String[] dlentry(String[][] table, String name)
+  {
+    for (String[] e : table)
+      if (e[0].equals(name))
+        return e;
+    return null;
+  }
+
+  /* the public static field 'sym' of class 'cls' (null if none) */
+  private static Object dlfield(Class<?> cls, String sym)
+  {
+    try
+    {
+      Field f = cls.getField(sym);
+      return Modifier.isStatic(f.getModifiers()) ? f.get(null) : null;
+    }
+    catch (ReflectiveOperationException e)
+    {
+      return null;
+    }
+  }
+
+  /* a symbol of the global scope: the program's, then the global libraries' */
+  private static Object dlglobal(String sym)
+  {
+    String[] ps = dlentry(dlprogsyms, sym);
+    if (ps != null)
+    {
+      try
+      {
+        return dlfield(Class.forName(ps[1]), sym);
+      }
+      catch (ClassNotFoundException e)
+      {
+        return null;
+      }
+    }
+    for (OsLib lib : dlglobals)
+    {
+      Object o = dlfield(lib.cls, sym);
+      if (o != null)
+        return o;
+    }
+    return null;
+  }
+
+  /* why a file that names no Java library does not load */
+  private static String dlnotjava(Path f)
+  {
+    byte[] h = new byte[64]; /* an ELF header */
+    int n;
+    try (java.io.InputStream in = Files.newInputStream(f))
+    {
+      n = in.readNBytes(h, 0, h.length);
+    }
+    catch (IOException e)
+    {
+      return "cannot read file data: " + dlstrerror(errnoOf(e));
+    }
+    if (n < h.length)
+      return "file too short";
+    if (h[0] != 0x7F || h[1] != 'E' || h[2] != 'L' || h[3] != 'F')
+      return "invalid ELF header";
+    return "cannot load C code into the JVM";
+  }
+
+  private static OsLib dlload(byte[] name)
+  {
+    String p = new String(name, StandardCharsets.UTF_8);
+    String[] e;
+    Object key;
+    byte[] none = new byte[0];
+    if (p.isEmpty())
+      return dlprogram;
+    else if (p.indexOf('/') < 0)
+    { /* a name: the system's libraries */
+      String[] s = dlentry(dlsyslibs, p);
+      if (s == null)
+        return dlfail(name, "cannot open shared object file: " + dlstrerror(ENOENT), none);
+      e = dlentry(dllibs, s[1]);
+      key = e;
+    }
+    else
+    { /* a file */
+      Path f;
+      try
+      {
+        f = Path.of(p).toRealPath();
+      }
+      catch (IOException | java.nio.file.InvalidPathException x)
+      {
+        return dlfail(name, "cannot open shared object file: " + dlstrerror(errnoOf(x)), none);
+      }
+      if (Files.isDirectory(f))
+        return dlfail(name, "cannot read file data: " + dlstrerror(EISDIR), none);
+      if (!Files.isReadable(f))
+        return dlfail(name, "cannot open shared object file: " + dlstrerror(EACCES), none);
+      String base = p.substring(p.lastIndexOf('/') + 1);
+      if (base.indexOf('.') >= 0)
+        base = base.substring(0, base.indexOf('.'));
+      e = dlentry(dllibs, base);
+      if (e == null)
+        return dlfail(name, dlnotjava(f), none);
+      key = f;
+    }
+    OsLib lib = dlloaded.get(key);
+    if (lib != null)
+      return lib; /* already loaded */
+    Class<?> cls;
+    try
+    {
+      cls = Class.forName(e[1]);
+    }
+    catch (ClassNotFoundException x)
+    {
+      return dlfail(name, "cannot load C code into the JVM", none);
+    }
+    for (int i = 2; i < e.length; i++) /* bind its undefined symbols */
+      if (dlglobal(e[i]) == null)
+        return dlfail(name, "undefined symbol: ", e[i].getBytes(StandardCharsets.UTF_8));
+    lib = new OsLib(name, key, cls);
+    dlloaded.put(key, lib);
+    return lib;
+  }
 
   public static OsLib os_dlopen(ByteView path, boolean global)
   {
-    return null;
+    synchronized (dlloaded)
+    {
+      OsLib lib = dlload(cbytes(path));
+      if (lib != null && lib != dlprogram)
+      {
+        lib.refs++;
+        if (global && !lib.global)
+        {
+          lib.global = true;
+          dlglobals.add(lib);
+        }
+      }
+      return lib;
+    }
   }
 
   public static Object os_dlsym(OsLib lib, ByteView sym)
   {
-    return null;
+    byte[] s = cbytes(sym);
+    String n = new String(s, StandardCharsets.UTF_8);
+    synchronized (dlloaded)
+    {
+      Object o = (lib == dlprogram) ? dlglobal(n) : dlfield(lib.cls, n);
+      if (o == null)
+        return dlfail(lib.name, "undefined symbol: ", s);
+      return o;
+    }
   }
 
+  /* (a symbol that is not a 'lua_CFunction' is not one the JVM can call as one) */
   public static lua_CFunction os_dlfunc(OsLib lib, ByteView sym)
   {
-    return (lua_CFunction) os_dlsym(lib, sym);
+    Object f = os_dlsym(lib, sym);
+    if (f == null || f instanceof lua_CFunction)
+      return (lua_CFunction) f;
+    synchronized (dlloaded)
+    {
+      return dlfail(lib.name, "not a lua_CFunction: ", cbytes(sym));
+    }
   }
 
   public static void os_dlclose(OsLib lib)
   {
+    synchronized (dlloaded)
+    {
+      if (lib != dlprogram && --lib.refs == 0)
+      { /* unload it */
+        dlloaded.remove(lib.key);
+        dlglobals.remove(lib);
+      }
+    }
   }
 
   public static InternalString os_dlerror()
   {
-    return new InternalString(DLMSG);
+    byte[] e;
+    synchronized (dlloaded)
+    {
+      e = dlerr;
+      dlerr = null;
+    }
+    ByteView sve = (e != null) ? new ByteView(e) : Lt.unknown_dynamic_link_error;
+    return new InternalString(sve);
   }
 
   /* }====================================================== */
@@ -1831,11 +2112,47 @@ public final class OsApi
     boolean reading = m.charAt(0) == 'r';
     try
     {
-      Command c = reading ? launch(cmd, ProcessBuilder.Redirect.INHERIT, ProcessBuilder.Redirect.PIPE)
-                          : launch(cmd, ProcessBuilder.Redirect.PIPE, ProcessBuilder.Redirect.INHERIT);
-      OsFile f = new OsFile(new OsFile.PipeDevice(c.proc, reading, c.marker), reading, !reading, OsFile.IOFBF);
-      remember(f);
-      return new OsOpenResult(f, 0);
+      Path fifo = mkfifo();
+      try
+      {
+        java.io.File ff = fifo.toFile();
+        java.util.concurrent.FutureTask<java.io.Closeable> mine = new java.util.concurrent.FutureTask<>(
+            () -> reading ? new java.io.FileInputStream(ff) : new java.io.FileOutputStream(ff));
+        Thread opener = new Thread(mine, "popen");
+        opener.setDaemon(true);
+        opener.start();
+        Command c;
+        try
+        {
+          c = reading ? launch(cmd, ProcessBuilder.Redirect.INHERIT, ProcessBuilder.Redirect.to(ff))
+                      : launch(cmd, ProcessBuilder.Redirect.from(ff), ProcessBuilder.Redirect.INHERIT);
+        }
+        catch (IOException e)
+        {
+          try (java.io.Closeable other = reading ? new java.io.FileOutputStream(ff) : new java.io.FileInputStream(ff))
+          {
+            mine.get().close();
+          }
+          catch (Exception ignored)
+          {
+          }
+          throw e;
+        }
+        java.io.Closeable end = mine.get();
+        OsFile f = new OsFile(new OsFile.PipeDevice(c.proc, reading ? (java.io.InputStream) end : null,
+                                                    reading ? null : (java.io.OutputStream) end, c.marker),
+                              reading, !reading, OsFile.IOFBF);
+        remember(f);
+        return new OsOpenResult(f, 0);
+      }
+      catch (InterruptedException | java.util.concurrent.ExecutionException e)
+      {
+        throw new IOException(e);
+      }
+      finally
+      {
+        Files.deleteIfExists(fifo);
+      }
     }
     catch (IOException e)
     {

@@ -209,11 +209,11 @@ public final class OsFile
     final Process proc;
     final Path marker;
 
-    PipeDevice(Process proc, boolean reading, Path marker)
+    PipeDevice(Process proc, InputStream in, OutputStream out, Path marker)
     {
       this.proc = proc;
-      this.in = reading ? proc.getInputStream() : null;
-      this.out = reading ? null : proc.getOutputStream();
+      this.in = in;
+      this.out = out;
       this.marker = marker;
     }
 

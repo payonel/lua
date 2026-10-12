@@ -37,9 +37,10 @@ these for the port itself:
 | `lua::compiler` | `lua.compiler` | `Llex`, `Lparser`, `Lcode`, `Ldump`, `Lundump` and their records |
 | global API (`lua_*`, `luaL_*`) | `lua.api` | `LuaApi` (lapi.cpp, lua.h), `LuaAuxLib` (lauxlib.cpp), `HostString` |
 | `lua::lib` | `lua.lib` | one class per library (`Lbaselib`, `Lstrlib`, …), `Linit`, `Lstyx` |
-| `lua::platform` | `lua.platform` | `OsApi`, `LocaleUtil`, `Libm` |
+| `lua::platform` | `lua.platform` | `OsApi`, `LocaleUtil`, `Libm`; `Readline` (the JVM's readline library) |
 | `lua::host` | `lua.host` | `Lua` (the standalone interpreter, `main`) |
 | tests | `lua.tests` | `Ltests` (the debug build's `T` library) |
+| tests/libs | `lua.tests.libs` | `Lib1`, `Lib11`, `Lib2`, `Lib21`, `Lib22` (the test C modules), `LibDecls` (lib_decls.h) |
 
 Type names keep their C names (`lua_State`, `TValue`, `CallInfo`);
 upstream's file prefixes stay on the functions (`Ldo.luaD_call`). Renaming
@@ -123,6 +124,7 @@ methods adds them.
 | C's `<cmath>` (`pow`, `fmod`, `floor`, `frexp`, …) | `lua.platform.Libm` (done) |
 | lua.cpp | `lua.host.Lua` |
 | ltests.h/.cpp | `lua.tests.Ltests` |
+| tests/libs/libN.cpp, lib_decls.h | `lua.tests.libs.LibN`, `lua.tests.libs.LibDecls` |
 
 **Calls keep their C shape.** A file `import static`s the classes whose
 functions it calls (`import static lua.object.Lobject.*;`), so
@@ -275,14 +277,26 @@ The debug build is the same jar run with `-ea -Dlua.debug=true`.
 | 0. Skeleton | done |
 | 1. Core | done: every core file transcribed; `print("hello")` runs |
 | 2. Libraries | done: base, coroutine, table, string, utf8, math, io, os, package, debug |
-| 3. Platform | done: `OsApi` (stdio, time and strftime as glibc, processes), `LocaleUtil` (C locale), `Libm` |
+| 3. Platform | done: `OsApi` (stdio, time and strftime as glibc, processes, dynamic libraries as Java classes), `LocaleUtil` (C locale), `Libm`, `Readline` |
 | 4. Host and tests | `lua.host.Lua` with the `java/lua` and `java/lua-debug` launchers; `Ltests`; suites: in progress |
 | 5. Styx | done: `Lstyx`; its streams are the C++'s byte for byte (the trailer's address fixes aside) |
 
+The platform layer's dynamic libraries are Java classes, and
+`os_dlopen` answers as glibc's `dlopen` (`RTLD_NOW`) does: a path with a
+`/` loads the Java library its file's base name names (`libs/lib2-v2.so`
+is `lua.tests.libs.Lib22`) if the file exists, whatever it holds
+(`make -C java` makes the test modules' files, dated 1970 so that the C++
+build still makes its own); a name without a `/` loads a registered
+system library (`libreadline.so` is `lua.platform.Readline`: no editing;
+it echoes the line when the input is not a terminal, as GNU readline
+does); `""` is the program. A library's symbols are its class's public
+static fields; its undefined ones (`lib11` takes `lib1_export`) must come
+from a library loaded with global symbols. Errors have glibc's messages.
+
 Known differences from the C++ build (the JVM's, not the port's):
-- No C libraries: `package.loadlib` and C modules answer as stock Lua
-  without dynamic libraries; the REPL has no readline (the host warns
-  that it cannot load it, also under `-E`).
+- Only the Java libraries load (the test modules and readline); any other
+  C library fails to load. The readline does no line editing or
+  completion.
 - `os_system`/`io.popen` statuses: a command killed by a signal can show
   as an exit code 128+n.
 - Paths, commands and environment names cross to Java as UTF-8.

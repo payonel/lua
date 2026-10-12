@@ -67,8 +67,6 @@ public final class Loadlib
     return f;
   }
 
-  private static final ByteView LIB_FAIL = ByteView.of("absent");
-
   /* }====================================================== */
 
   /*
@@ -270,7 +268,7 @@ public final class Loadlib
     { /* error; error message is on stack top */
       luaL_pushfail(L);
       lua_insert(L, -2);
-      lua_pushlstring(L, ((stat == ERRLIB) ? LIB_FAIL : Lt.init), 0, ((stat == ERRLIB) ? LIB_FAIL : Lt.init).size());
+      lua_pushlstring(L, ((stat == ERRLIB) ? Lt.open_kw : Lt.init), 0, ((stat == ERRLIB) ? Lt.open_kw : Lt.init).size());
       return 3; /* return fail, error message, and where */
     }
   }

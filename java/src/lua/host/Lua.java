@@ -29,6 +29,8 @@ import lua.bytes.ByteView;
 import lua.bytes.InternalString;
 import lua.bytes.Lt;
 import lua.platform.OsLib;
+import lua.platform.Readline.l_addhistT;
+import lua.platform.Readline.l_readlineT;
 import lua.runtime.lua_State;
 import sun.misc.Signal;
 import sun.misc.SignalHandler;
@@ -475,22 +477,12 @@ public final class Lua
   /* use dynamically loaded readline (or nothing) */
 
   /* pointer to 'readline' function (if any) */
-  private interface l_readlineT
-  {
-    ByteView call(ByteView prompt);
-  }
-
   private static l_readlineT l_readline = null;
 
   /* pointer to 'add_history' function (if any) */
-  private interface l_addhistT
-  {
-    void call(ByteView string);
-  }
-
   private static l_addhistT l_addhist = null;
 
-  private static boolean lua_readline(ByteSpan buff, ByteView prompt)
+  private static boolean lua_readline(lua_State L, ByteView prompt)
   {
     if (l_readline != null)         /* is there a 'readline'? */
     {
@@ -500,24 +492,22 @@ public final class Lua
         return false;
       }
       ByteView sv = ret;
-      buff.apply(sv);
+      if (sv.ends_with('\n'))
+        sv = sv.substr(0, sv.size() - 1);
+      lua_pushlstring(L, sv, 0, sv.size());
+      return true;
     }
-    else
+    ByteOwner buff = new ByteOwner(LUA_MAXINPUT);
+    os_print_stdout(prompt);
+    os_flush_stdout();                       /* show prompt */
+    if (!os_readline(os_stdin(), buff.span()))
     {
-      os_print_stdout(prompt);
-      os_flush_stdout();                       /* show prompt */
-      if (!os_readline(os_stdin(), buff))
-      {
-        return false;
-      }
+      return false;
     }
-
     ByteView content = buff.str_view();
     if (content.ends_with('\n'))
-    {
-      buff.set(content.size() - 1, '\0');
-    }
-
+      content = content.substr(0, content.size() - 1);
+    lua_pushlstring(L, content, 0, content.size());
     return true;
   }
 
@@ -596,14 +586,14 @@ public final class Lua
   */
   private static int pushline(lua_State L, int firstline)
   {
-    ByteOwner buffer = new ByteOwner(LUA_MAXINPUT);
     InternalString prmt = get_prompt(L, firstline);
-    boolean ready = lua_readline(buffer.span(), prmt.view());
-    lua_pop(L, 1); /* remove prompt */
+    boolean ready = lua_readline(L, prmt.view());
     if (!ready)
-      return 0; /* no input */
-    ByteView buffview = buffer.str_view();
-    lua_pushlstring(L, buffview, 0, buffview.size());
+    {
+      lua_pop(L, 1); /* remove prompt */
+      return 0;      /* no input */
+    }
+    lua_remove(L, -2); /* remove prompt */
     return 1;
   }
 
