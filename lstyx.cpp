@@ -1112,6 +1112,22 @@ private:
     return false;
   }
 
+  /*
+  ** A light userdata is written only as a permanent, never as a reference:
+  ** its address can be that of a prototype or a variable written before
+  ** (debug.upvalueid gives one), which are no values
+  */
+  void light_userdata(const TValue& v)
+  {
+    TValue key{};
+    if (!perm_key(v, &key))
+      fail(lt::persisting_a_userdata_value_is_not_supported_yet);
+    ++refcount_; /* (the restore gives each permanent an id) */
+    byte(TAG_PERM);
+    byte(static_cast<char>(ttype(&v)));
+    push_value(key, Step::PermKey);
+  }
+
   /* ---- values ---- */
 
   void value(const TValue& v)
@@ -1138,8 +1154,7 @@ private:
       }
       return;
     case LUA_TLIGHTUSERDATA:
-      if (!begin_object(v))
-        fail(lt::persisting_a_userdata_value_is_not_supported_yet);
+      light_userdata(v);
       return;
     case LUA_TSTRING:
     case LUA_TTABLE:

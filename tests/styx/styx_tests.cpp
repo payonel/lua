@@ -2708,6 +2708,28 @@ static void test_persist_from_held_thread()
   lua_close(L);
 }
 
+/*
+** A light userdata is persisted only as a permanent: one with the address
+** of a variable written before (debug.upvalueid) is refused, not written as
+** a reference to the variable (which the restore rejected)
+*/
+static void test_upvalue_id_not_persisted()
+{
+  CountingAlloc a;
+  lua_State* L = new_counted_state(&a);
+  CHECK(eval(L, build_perms) == "ok");
+  CHECK(eval(L, "local x = 1 local function f() return x end "
+                "t = {f, debug.upvalueid(f, 1)} return 'ok'") == "ok");
+  CHECK(eval(L, "local ok, msg = debug.persistable(t) return tostring(ok) .. ' ' .. msg") ==
+        "false persisting a userdata value is not supported yet (at root[2])");
+  lua_getglobal(L, "_PERMS");
+  StringWriter w;
+  HostString msg;
+  CHECK(luaL_persiststate(L, lua_gettop(L), &w, &msg) == LUA_ERRRUN);
+  CHECK(std::string(msg.to_os()).find("persisting a userdata value is not supported yet") != std::string::npos);
+  lua_close(L);
+}
+
 /* luaL_restorestate fails as a whole: a message, and nothing left allocated */
 static void test_restore_errors()
 {
@@ -2806,6 +2828,7 @@ static void run_cpp_tests()
       {"thread_at_stack_limit", test_thread_at_stack_limit},
       {"restore_collects", test_restore_collects},
       {"persist_from_held_thread", test_persist_from_held_thread},
+      {"upvalue_id_not_persisted", test_upvalue_id_not_persisted},
       {"restore_errors", test_restore_errors},
   };
   std::printf("  styx_tests.cpp\n");
