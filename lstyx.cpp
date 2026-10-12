@@ -79,79 +79,59 @@ static_assert(HASHSTEP * HASHSTEP_INV == 1u);
 
 /*
 ** The walks keep their own work stacks, so they have no depth limit. For a
-** script's persist or unpersist the stacks are memory charged to the state
-** (a byte buffer grown under the API lock, as an API function allocates);
-** for a host persist they are host memory, so the state is not touched.
+** script's persist or unpersist, and a restore, the stacks are counted in
+** the state, at the cost given for an item (under the API lock, as an API
+** function allocates); for a host persist they are host memory, so the
+** state is not touched. What a stack counted is given back by 'release'
+** (at its end in C++; by its owner in Java).
 */
+/* the stream's width of an instruction (prototype code is written as its bytes) */
+constexpr size_t W_INSTRUCTION = 4;
+static_assert(sizeof(Instruction) == W_INSTRUCTION);
+
+constexpr size_t WS_WORD = 8;    /* an integer or an object */
+constexpr size_t WS_PAIR = 16;   /* two of them */
+constexpr size_t WS_TRIPLE = 24; /* three */
+constexpr size_t WS_PATH = 56;   /* a step of a path */
+constexpr size_t WS_TASK = 128;  /* a task of the walk */
+constexpr size_t WS_FRAME = 104; /* a frame of the restore */
+
 template <class T>
 class WorkStack
 {
-  static_assert(std::is_trivially_copyable_v<T>);
-
 public:
-  WorkStack(lua_State* L, bool charged) : L_(L), charged_(charged), bytes_(L) {}
+  WorkStack(lua_State* L, bool charged, size_t cost) : L_(L), charged_(charged), cost_(cost) {}
   WorkStack(const WorkStack&) = delete;
   WorkStack& operator=(const WorkStack&) = delete;
+  ~WorkStack() { release(); }
 
-  size_t size() const { return charged_ ? n_ : host_.size(); }
-  bool empty() const { return size() == 0; }
+  size_t size() const { return items_.size(); }
+  bool empty() const { return items_.empty(); }
 
   void push(const T& v)
   {
-    if (!charged_)
-    {
-      host_.push_back(v);
-      return;
-    }
-    if ((n_ + 1) * sizeof(T) > bytes_.capacity())
-    {
-      size_t cap = std::max<size_t>(16, 2 * (n_ + 1)) * sizeof(T);
-      lua_lock(L_);
-      bytes_.growTo(cap);
-      lua_unlock(L_);
-    }
-    std::memcpy(bytes_.area().data() + n_ * sizeof(T), &v, sizeof(T));
-    n_++;
+    if (items_.size() == items_.capacity())
+      grow(std::max<size_t>(16, 2 * (items_.size() + 1)));
+    items_.push_back(v);
   }
 
-  T get(size_t i)
-  {
-    if (!charged_)
-      return host_[i];
-    T v;
-    std::memcpy(&v, bytes_.area().data() + i * sizeof(T), sizeof(T));
-    return v;
-  }
-
-  void set(size_t i, const T& v)
-  {
-    if (!charged_)
-      host_[i] = v;
-    else
-      std::memcpy(bytes_.area().data() + i * sizeof(T), &v, sizeof(T));
-  }
-
-  T top() { return get(size() - 1); }
-  void set_top(const T& v) { set(size() - 1, v); }
+  T get(size_t i) const { return items_[i]; }
+  void set(size_t i, const T& v) { items_[i] = v; }
+  T top() const { return items_.back(); }
+  void set_top(const T& v) { items_.back() = v; }
+  void pop() { items_.pop_back(); }
 
   /* room for 'n' more items, so that pushing them does not allocate */
   void reserve(size_t n)
   {
-    if (!charged_)
-      host_.reserve(host_.size() + n);
-    else if ((n_ + n) * sizeof(T) > bytes_.capacity())
-    {
-      lua_lock(L_);
-      bytes_.growTo((n_ + n) * sizeof(T));
-      lua_unlock(L_);
-    }
+    if (items_.size() + n > items_.capacity())
+      grow(items_.size() + n);
   }
 
   template <class Less>
   void sort(Less less)
   {
-    T* p = charged_ ? reinterpret_cast<T*>(bytes_.area().data()) : host_.data();
-    std::sort(p, p + size(), less);
+    std::sort(items_.begin(), items_.end(), less);
   }
 
   /* the first position whose item is not less than 'v' (the items are sorted) */
@@ -170,20 +150,34 @@ public:
     return lo;
   }
 
-  void pop()
+  void release()
   {
-    if (!charged_)
-      host_.pop_back();
-    else
-      n_--;
+    if (counted_ != 0)
+    { /* (no lock: it may run as an error passes, with the lock held) */
+      luaM_resizeblock(L_, counted_, 0);
+      counted_ = 0;
+    }
+    items_ = std::vector<T>();
   }
 
 private:
+  void grow(size_t cap)
+  {
+    if (charged_)
+    {
+      lua_lock(L_);
+      luaM_resizeblock(L_, counted_, cap * cost_);
+      lua_unlock(L_);
+      counted_ = cap * cost_;
+    }
+    items_.reserve(cap);
+  }
+
   lua_State* L_;
   bool charged_;
-  MBuffer bytes_;
-  size_t n_ = 0;
-  std::vector<T> host_;
+  size_t cost_;
+  size_t counted_ = 0;
+  std::vector<T> items_;
 };
 
 /* a value as stored in the walks' records (TValue copies are named) */
@@ -337,7 +331,7 @@ struct Task
 class AddressFilter
 {
 public:
-  AddressFilter(lua_State* L, bool charged, size_t n) : words_(L, charged)
+  AddressFilter(lua_State* L, bool charged, size_t n) : words_(L, charged, WS_WORD)
   {
     while ((size_t(1) << lgbits_) < 16 * n && lgbits_ < 40)
       lgbits_++;
@@ -375,15 +369,15 @@ class Walker
 public:
   /* a script's persist: output to 'B', references in the table at 'refs' */
   Walker(lua_State* L, Table* perms, luaL_Buffer* B, int refs)
-      : L_(L), host_(false), perms_(perms), B_(B), refs_(refs), tasks_(L, true), paths_(L, true),
-        marked_(L, true), dead_large_(L, true), dead_(L, true), dead_bits_(L, true)
+      : L_(L), host_(false), perms_(perms), B_(B), refs_(refs), tasks_(L, true, WS_TASK), paths_(L, true, WS_PATH),
+        marked_(L, true, WS_PAIR), dead_large_(L, true, WS_TRIPLE), dead_(L, true, WS_PAIR), dead_bits_(L, true, WS_WORD)
   {
   }
 
   /* a host persist: output to 'w', nothing allocated in the state */
   Walker(lua_State* L, Table* perms, lua_Writer* w)
-      : L_(L), host_(true), perms_(perms), w_(w), tasks_(L, false), paths_(L, false),
-        marked_(L, false), dead_large_(L, false), dead_(L, false), dead_bits_(L, false)
+      : L_(L), host_(true), perms_(perms), w_(w), tasks_(L, false, WS_TASK), paths_(L, false, WS_PATH),
+        marked_(L, false, WS_PAIR), dead_large_(L, false, WS_TRIPLE), dead_(L, false, WS_PAIR), dead_bits_(L, false, WS_WORD)
   {
   }
 
@@ -694,10 +688,10 @@ private:
        lists are read */
     auto by_object = [](const Marked& a, const Marked& b) { return std::less<const GCObject*>()(a.o, b.o); };
     marked_.sort(by_object);
-    WorkStack<lua_Integer> order(L_, !host_);
-    WorkStack<lua_Integer> kinds(L_, !host_);
-    WorkStack<lua_Integer> owners(L_, !host_);
-    WorkStack<lua_Integer> dues(L_, !host_);
+    WorkStack<lua_Integer> order(L_, !host_, WS_WORD);
+    WorkStack<lua_Integer> kinds(L_, !host_, WS_WORD);
+    WorkStack<lua_Integer> owners(L_, !host_, WS_WORD);
+    WorkStack<lua_Integer> dues(L_, !host_, WS_WORD);
     order.reserve(n);
     kinds.reserve(n);
     owners.reserve(n);
@@ -809,7 +803,7 @@ private:
       var(0);
       return;
     }
-    WorkStack<ObjectRef> cand(L_, !host_);
+    WorkStack<ObjectRef> cand(L_, !host_, WS_PAIR);
     cand.reserve(ncand); /* nothing below allocates while the objects are read */
     each_object([&](const void* p, lua_Integer id) { if (candidate(p)) cand.push(ObjectRef{p, id}); });
     auto by_address = [](const ObjectRef& a, const ObjectRef& b) { return std::less<const void*>()(a.p, b.p); };
@@ -817,7 +811,7 @@ private:
     AddressFilter objects(L_, !host_, ncand);
     for (size_t i = 0; i < cand.size(); i++)
       objects.add(cand.get(i).p);
-    WorkStack<DeadFix> fixes(L_, !host_);
+    WorkStack<DeadFix> fixes(L_, !host_, WS_TRIPLE);
     each_dead_key([&](const void* p, Table* h, lua_Integer node)
     {
       if (!objects.maybe(p))
@@ -1353,7 +1347,7 @@ private:
     byte(bg->nodrain ? 1 : 0);
     /* the dead objects waiting for its '__gc' (marked due in the trailer):
        read after its value and its root, so pushed before them */
-    WorkStack<GCObject*> queue(L_, !host_);
+    WorkStack<GCObject*> queue(L_, !host_, WS_WORD);
     for (GCObject* o = bg->fnz.next; o != nullptr; o = o->next)
       queue.push(o);
     var(static_cast<lua_Integer>(queue.size()));
@@ -2159,8 +2153,9 @@ class Restorer
 public:
   /* stack: 1: permanents (key -> object); 3: refs (id -> object); 4: upvalues */
   Restorer(lua_State* L, byte_view data, bool host)
-      : r_{L, data}, L_(L), host_(host), frames_(L, true), marked_(L, true), made_(L, true), umarked_(L, true), owners_(L, true), dues_(L, true),
-        fixes_(L, true), rebuilt_(L, true), making_(L, true), joins_(L, true)
+      : r_{L, data}, L_(L), host_(host), frames_(L, true, WS_FRAME), marked_(L, true, WS_WORD), made_(L, true, WS_WORD),
+        umarked_(L, true, WS_PAIR), owners_(L, true, WS_WORD), dues_(L, true, WS_WORD), fixes_(L, true, WS_TRIPLE),
+        rebuilt_(L, true, WS_WORD), making_(L, true, WS_WORD), joins_(L, true, WS_TRIPLE)
   {
   }
 
@@ -2246,7 +2241,7 @@ public:
       L_->top++;
       lua_pushboolean(L_, 1);
       lua_rawset(L_, -3);
-      WorkStack<lua_Integer> kinds(L_, true);
+      WorkStack<lua_Integer> kinds(L_, true, WS_WORD);
       kinds.reserve(static_cast<size_t>(n));
       for (int i = 0; i < n; i++)
       {
@@ -2988,8 +2983,8 @@ private:
     p->maxstacksize = r_.get_int();
     if (p->numparams < 0 || p->maxstacksize < 0 || p->numparams > p->maxstacksize)
       r_.invalid();
-    int n = r_.get_count(sizeof(Instruction));
-    byte_view code = r_.get_bytes(static_cast<size_t>(n) * sizeof(Instruction));
+    int n = r_.get_count(W_INSTRUCTION);
+    byte_view code = r_.get_bytes(static_cast<size_t>(n) * W_INSTRUCTION);
     lua_lock(L_);
     p->code = luaM_alloc_Instruction_span(g, L_, {}, static_cast<size_t>(n), true);
     lua_unlock(L_);
