@@ -4884,7 +4884,7 @@ static void test_cfunc_stress_group6()
     { /* ignore: best-effort chdir for test setup */ }
 
   /* Set up environment like the lua binary does */
-  luaL_dostring(L, "_TMP='_1'; arg={[0]='../lua'}"_hs);
+  CHECK(luaL_dostring(L, "_TMP='_1'; arg={[0]='../lua'}"_hs) == LUA_OK);
 
   clock_t start = clock();
 
@@ -4896,6 +4896,7 @@ static void test_cfunc_stress_group6()
       std::printf("  group6 ERROR: %s\n", std::string(msg->to_utf8().data()).c_str());
     lua_pop(L, 1);
   }
+  CHECK(status == LUA_OK);
 
   clock_t end = clock();
   double ms = (double)(end - start) * 1000.0 / CLOCKS_PER_SEC;
