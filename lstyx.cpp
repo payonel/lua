@@ -322,15 +322,12 @@ struct NodeWalk
 struct Task
 {
   Op op = Op::Byte;
-  union
-  {
-    PathRec step{}; /* how the value was reached (a node walk has none) */
-    NodeWalk nodes;
-  };
+  PathRec step{};   /* how the value was reached */
+  NodeWalk nodes{}; /* (a node walk's) */
   Slot v;
   lua_Integer i = 0;
   lua_Integer n = 0;
-  const void* p = nullptr;
+  GCObject* p = nullptr; /* a Proto, LClosure, Table or lua_State */
 };
 
 /*
@@ -575,13 +572,13 @@ private:
      bits of 'dead_bits_' from word 'bits' */
   struct DeadNodesLarge
   {
-    const Table* h;
+    Table* h;
     lua_Integer n;
     lua_Integer bits;
   };
   struct DeadNodes
   {
-    const Table* h;
+    Table* h;
     lua_Unsigned bits;
   };
   WorkStack<DeadNodesLarge> dead_large_;
@@ -731,7 +728,7 @@ private:
   template <class F>
   void each_dead_key(F f)
   {
-    auto word = [&](const Table* h, lua_Integer w, lua_Unsigned bits)
+    auto word = [&](Table* h, lua_Integer w, lua_Unsigned bits)
     {
       for (int b = 0; bits != 0; b++, bits >>= 1)
         if (bits & 1)
@@ -803,7 +800,7 @@ private:
     bool few_keys = nkeys <= static_cast<size_t>(refcount_);
     AddressFilter keys(L_, !host_, few_keys ? nkeys : 0);
     if (few_keys)
-      each_dead_key([&](const void* p, const Table*, lua_Integer) { keys.add(p); });
+      each_dead_key([&](const void* p, Table*, lua_Integer) { keys.add(p); });
     auto candidate = [&](const void* p) { return !few_keys || keys.maybe(p); };
     size_t ncand = 0;
     each_object([&](const void* p, lua_Integer) { if (candidate(p)) ncand++; });
@@ -821,7 +818,7 @@ private:
     for (size_t i = 0; i < cand.size(); i++)
       objects.add(cand.get(i).p);
     WorkStack<DeadFix> fixes(L_, !host_);
-    each_dead_key([&](const void* p, const Table* h, lua_Integer node)
+    each_dead_key([&](const void* p, Table* h, lua_Integer node)
     {
       if (!objects.maybe(p))
         return;
@@ -829,7 +826,7 @@ private:
       if (k < cand.size() && cand.get(k).p == p)
       {
         TValue t{};
-        sethvalue(L_, &t, const_cast<Table*>(h));
+        sethvalue(L_, &t, h);
         lua_Integer table = 0;
         ref_find(t, h, &table);
         fixes.push(DeadFix{table, node, cand.get(k).id});
@@ -861,7 +858,7 @@ private:
     tasks_.push(t);
   }
 
-  void push_op(Op op, lua_Integer i = 0, const void* p = nullptr, lua_Integer n = 0)
+  void push_op(Op op, lua_Integer i = 0, GCObject* p = nullptr, lua_Integer n = 0)
   {
     Task t;
     t.op = op;
@@ -918,17 +915,17 @@ private:
         var(t.i);
         break;
       case Op::LineInfo:
-        out(as_byte_view(std::as_bytes(static_cast<const Proto*>(t.p)->lineinfo)));
+        out(as_byte_view(std::as_bytes(static_cast<Proto*>(t.p)->lineinfo)));
         break;
       case Op::Proto:
-        proto(static_cast<const Proto*>(t.p));
+        proto(static_cast<Proto*>(t.p));
         break;
       case Op::Upvalue:
         enter(t.step);
-        upvalue(static_cast<const LClosure*>(t.p), static_cast<int>(t.i));
+        upvalue(static_cast<LClosure*>(t.p), static_cast<int>(t.i));
         break;
       case Op::TableNext:
-        table_next(static_cast<Table*>(const_cast<void*>(t.p)), t.i, t.n != 0);
+        table_next(static_cast<Table*>(t.p), t.i, t.n != 0);
         break;
       case Op::NodeNext:
         node_next(t);
@@ -936,15 +933,15 @@ private:
       case Op::TableValue:
       {
         enter(t.step);
-        TValue v = table_value(static_cast<Table*>(const_cast<void*>(t.p)), t.i);
+        TValue v = table_value(static_cast<Table*>(t.p), t.i);
         value(v);
         break;
       }
       case Op::ThreadSlot:
-        thread_slot(static_cast<lua_State*>(const_cast<void*>(t.p)), t.i, t.n);
+        thread_slot(static_cast<lua_State*>(t.p), t.i, t.n);
         break;
       case Op::ThreadTail:
-        thread_tail(static_cast<lua_State*>(const_cast<void*>(t.p)));
+        thread_tail(static_cast<lua_State*>(t.p));
         break;
       }
       if (host_ && buf_.size() >= FLUSH_SIZE)
@@ -1496,7 +1493,7 @@ private:
   {
     if (t.nodes.bits == 0)
       return;
-    const Table* h = static_cast<const Table*>(t.p);
+    Table* h = static_cast<Table*>(t.p);
     if (t.n <= 64)
       dead_.push(DeadNodes{h, t.nodes.bits});
     else
@@ -1523,7 +1520,7 @@ private:
   */
   void node_next(Task t)
   {
-    Table* h = static_cast<Table*>(const_cast<void*>(t.p));
+    Table* h = static_cast<Table*>(t.p);
     lua_Integer j = t.i, n = t.n;
     if (sizenode(h) != n)
       fail(lt::a_table_changed_while_being_persisted);
@@ -1607,7 +1604,7 @@ private:
     return (!host_ && T == L_) || (T->status == LUA_OK && T->ci != &T->base_ci && T->frozen == 0);
   }
 
-  void upvalue(const LClosure* cl, int i)
+  void upvalue(LClosure* cl, int i)
   {
     UpVal* uv = cl->upvals[static_cast<size_t>(i - 1)];
     TValue id = pointer_key(uv);
@@ -1644,7 +1641,7 @@ private:
   ** id. Its constants and names are values (strings get reference ids like
   ** any other) and its nested prototypes are prototypes too.
   */
-  void proto(const Proto* f)
+  void proto(Proto* f)
   {
     TValue id = pointer_key(f);
     lua_Integer found;
@@ -2152,7 +2149,8 @@ struct Frame
   lua_Integer c = 0;  /* Table: length hint; hook: current count; Closure: the variable being made */
   lua_Integer d = 0;  /* hook: last traced pc; Table: lastfree */
   lua_Integer e = 0;  /* hook: allowhook */
-  void* p = nullptr;  /* Table*, LClosure* (a Proto's holder, or the closure), lua_State* */
+  GCObject* p = nullptr; /* Table, LClosure (a Proto's holder, or the closure), lua_State, Udata, BudgetGroup */
+  const lua_CClosureKind* ckind = nullptr; /* CClosure: its kind */
   Slot key;           /* Table: the key waiting for its value */
 };
 
@@ -3697,7 +3695,7 @@ private:
     f.kind = Build::CClosure;
     f.part = Part::CUp;
     f.id = id;
-    f.p = const_cast<lua_CClosureKind*>(kind);
+    f.ckind = kind;
     f.i = 0;
     f.n = (kind->save != nullptr) ? kind->nup - 1 : kind->nup;
     f.type = static_cast<char>(nints);
@@ -3709,7 +3707,7 @@ private:
   Next finish_cclosure()
   {
     Frame f = frames_.top();
-    const lua_CClosureKind* kind = static_cast<const lua_CClosureKind*>(f.p);
+    const lua_CClosureKind* kind = f.ckind;
     lua_rawgeti(L_, REFS, f.id);
     TValue cv = getslot(L_, L_->top - 1);
     CClosure* cl = clCvalue(&cv);
