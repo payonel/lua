@@ -1,0 +1,12 @@
+#!/bin/sh
+dir=$(dirname "$0")
+JDK=${JDK:-$(cat "$dir/build/jdk")}
+jar=$dir/build/lua.jar
+debug=
+if [ "$LUA_JAVA_DEBUG" = 1 ]; then
+  debug="-ea -Dlua.debug=true"
+fi
+if env --default-signal=INT true 2>/dev/null; then
+  exec env --default-signal=INT "$JDK/bin/java" -XX:-DontCompileHugeMethods $debug -Dlua.progname="$0" -cp "$jar" lua.tests.EngineTests "$@"
+fi
+exec "$JDK/bin/java" -XX:-DontCompileHugeMethods $debug -Dlua.progname="$0" -cp "$jar" lua.tests.EngineTests "$@"

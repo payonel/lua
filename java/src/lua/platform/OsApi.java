@@ -2129,9 +2129,11 @@ public final class OsApi
         }
         catch (IOException e)
         {
-          try (java.io.Closeable other = reading ? new java.io.FileOutputStream(ff) : new java.io.FileInputStream(ff))
+          try
           {
+            java.io.Closeable other = reading ? new java.io.FileOutputStream(ff) : new java.io.FileInputStream(ff);
             mine.get().close();
+            other.close();
           }
           catch (Exception ignored)
           {
