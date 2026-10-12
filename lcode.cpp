@@ -2164,8 +2164,6 @@ void luaK_finish(FuncState* fs)
     p->flag &= (lu_byte)(~PF_VAHID); /* then it will not use hidden args. */
   for (i = 0; i < fs->pc; i++)
   {
-    (void) luaP_isOT;
-    (void) luaP_isIT;
     assert(i == 0 || luaP_isOT(p->code[i - 1]) == luaP_isIT(p->code[i]));
     switch (GET_OPCODE(p->code[i]))
     {

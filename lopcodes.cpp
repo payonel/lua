@@ -185,30 +185,30 @@ const lu_byte luaP_opmodes[NUM_OPCODES] = {
     ,
     opmode(0, 0, 0, 0, 0, iABx) /* OP_ERRNNIL */
     ,
-    opmode(0, 0, 1, 0, 0, iABC) /* OP_VARARGPREP */
+    opmode(0, 0, 0, 0, 0, iABC) /* OP_VARARGPREP */
     ,
     opmode(0, 0, 0, 0, 0, iAx) /* OP_EXTRAARG */
 };
 
-int luaP_isOT(Instruction i)
+static l_forceinline int testITMode(int m)
 {
-  OpCode op = GET_OPCODE(i);
-  switch (op)
-  {
-  case OP_TAILCALL:
-    return 1;
-  default:
-    return testOTMode(op) && GETARG_C(i) == 0;
-  }
+  return luaP_opmodes[m] & (1 << 5);
 }
 
+/*
+** Check whether instruction uses top. That happens for OP_VARARGPREP
+** and for instructions that use multiple values set by the previous
+** instruction.
+*/
 int luaP_isIT(Instruction i)
 {
   OpCode op = GET_OPCODE(i);
   switch (op)
   {
   case OP_SETLIST:
-    return testITMode(GET_OPCODE(i)) && GETARG_vB(i) == 0;
+    return GETARG_vB(i) == 0;
+  case OP_VARARGPREP:
+    return 1;
   default:
     return testITMode(GET_OPCODE(i)) && GETARG_B(i) == 0;
   }
