@@ -52,10 +52,9 @@ public:
 
   byte_span area() noexcept { return bytes_; }
 
-  /* its bytes (and their count in '*len') go elsewhere; it is left empty */
-  byte_owner release(size_t* len) noexcept
+  /* its bytes go elsewhere (their count is its size); it is left empty */
+  byte_owner release() noexcept
   {
-    *len = len_;
     len_ = 0;
     byte_owner b = std::move(bytes_);
     bytes_ = {};

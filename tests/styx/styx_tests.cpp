@@ -1831,13 +1831,13 @@ struct TestObj : lua_UserObject
   bool values = true; /* are its user values part of its state? */
   const char* persistkind() const override { return "styxtest.obj"; }
   bool persistuservalues() const override { return values; }
-  int persistsave(lua_Integer* out, byte_view* bytes) const override
+  int persistints(lua_Integer* out) const override
   {
     out[0] = a;
     out[1] = b;
-    *bytes = byte_view("payload");
     return 2;
   }
+  byte_view persistbytes() const override { return byte_view("payload"); }
 };
 
 static std::unique_ptr<lua_UserObject> make_testobj(lua_State*, const lua_Integer* ints, int n, byte_view bytes)

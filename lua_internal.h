@@ -167,7 +167,8 @@ struct luaL_Box : lua_UserObject
   size_t used = 0;
   void freed(lua_State* L) override;
   const char* persistkind() const override { return "box"; }
-  int persistsave(lua_Integer* out, byte_view* b) const override;
+  int persistints(lua_Integer* out) const override;
+  byte_view persistbytes() const override;
 };
 
 luaL_Box* luaL_newbox(lua_State* L);

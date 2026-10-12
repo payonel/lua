@@ -78,7 +78,8 @@ struct LoadBox : lua_UserObject
   ~LoadBox() override;
   void freed(lua_State* L) override;
   const char* persistkind() const override { return "load"; }
-  int persistsave(lua_Integer* out, byte_view* b) const override;
+  int persistints(lua_Integer* out) const override;
+  byte_view persistbytes() const override { return byte_view(input.data(), input.size()); }
   bool persistuservalues() const override { return false; }
 };
 
@@ -172,7 +173,7 @@ enum
   LB_NINTS
 };
 
-int LoadBox::persistsave(lua_Integer* out, byte_view* b) const
+int LoadBox::persistints(lua_Integer* out) const
 {
   out[LB_STOP] = stop;
   out[LB_POINTS] = static_cast<lua_Integer>(points);
@@ -181,7 +182,6 @@ int LoadBox::persistsave(lua_Integer* out, byte_view* b) const
   out[LB_ENDS] = static_cast<lua_Integer>(ends);
   out[LB_COMPLETE] = complete;
   out[LB_CLHASH] = clhash;
-  *b = byte_view(input.data(), input.size());
   return LB_NINTS;
 }
 
@@ -662,7 +662,8 @@ void luaZ_hold(LoadResume* rz, CallInfo* ci, int anchoridx)
     luaM_freeblock(L, n); /* (counted in the box's room now) */
   box->dyd = *dyd;
   *dyd = Dyndata{};
-  box->buff = buff->release(&box->bufflen);
+  box->bufflen = buff->size();
+  box->buff = buff->release();
   if (box->anchoridx == 0)
     box->anchoridx = anchoridx;
   TValue bv = getslot(L, ci->func + rz->boxidx);

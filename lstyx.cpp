@@ -1213,8 +1213,8 @@ private:
     if (tofinalize(u))
       marked_.push(Marked{u, id}); /* (its mark and owner, in the trailer) */
     lua_Integer ints[8];
-    byte_view bytes;
-    int n = u->obj->persistsave(ints, &bytes);
+    int n = u->obj->persistints(ints);
+    byte_view bytes = u->obj->persistbytes();
     byte(TAG_USEROBJECT);
     hash(u);
     name(kind);

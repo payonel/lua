@@ -785,8 +785,8 @@ static void test_object_kinds()
   CHECK(std::string(box->persistkind()) == "box");
   CHECK(box->persistuservalues()); /* (by default, its user values are part of its state) */
   lua_Integer ints[8];
-  byte_view bytes;
-  int n = box->persistsave(ints, &bytes);
+  int n = box->persistints(ints);
+  byte_view bytes = box->persistbytes();
   CHECK(n == 5 && ints[0] == 1 && ints[1] == -2 && ints[3] == 1000000007 && ints[4] == 14);
   CHECK(bytes == byte_view("bytes of a box"));
   lua_ObjectFactory f = lua_objectkind("box");
@@ -796,8 +796,7 @@ static void test_object_kinds()
   luaL_Box* c = dynamic_cast<luaL_Box*>(copy.get());
   CHECK(c != nullptr && c->ints == box->ints && c->used == 14);
   lua_Integer ints2[8];
-  byte_view bytes2;
-  CHECK(c != nullptr && c->persistsave(ints2, &bytes2) == 5 && bytes2 == bytes);
+  CHECK(c != nullptr && c->persistints(ints2) == 5 && c->persistbytes() == bytes);
   ints[4] = 3; /* the count of the bytes must be the bytes' */
   CHECK(f(L, ints, n, bytes) == nullptr);
   CHECK(f(L, ints, 4, bytes) == nullptr);

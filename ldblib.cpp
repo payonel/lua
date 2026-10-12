@@ -646,8 +646,7 @@ static int db_setbudget(lua_State* L)
 static int db_getbudget(lua_State* L)
 {
   lua_State* co = checkco(L, 1);
-  lua_Integer left;
-  lua_Integer n = lua_getbudget(co, &left);
+  lua_Integer n = lua_getbudget(co);
   if (n == 0)
   {
     luaL_pushfail(L);
@@ -655,7 +654,7 @@ static int db_getbudget(lua_State* L)
   }
   lua_pushinteger(L, n);
   lua_pushbudgetvalue(L, co, 0);
-  lua_pushinteger(L, left);
+  lua_pushinteger(L, lua_budgetleft(co));
   lua_State* root = lua_budgetroot(co);
   if (root != nullptr)
     lua_pushthreadi(L, root);
@@ -679,8 +678,8 @@ static int db_freeze(lua_State* L)
 /* debug.canfreeze(): true, or false and why (a few reasons) */
 static int db_canfreeze(lua_State* L)
 {
-  int why;
-  if (lua_canfreeze(L, &why))
+  int why = lua_nofreeze(L);
+  if (why == 0)
   {
     lua_pushboolean(L, 1);
     return 1;

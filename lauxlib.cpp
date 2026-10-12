@@ -737,13 +737,17 @@ void luaL_Box::freed(lua_State* L)
 }
 
 /* its state: the four integers, the bytes used, then the bytes */
-int luaL_Box::persistsave(lua_Integer* out, byte_view* b) const
+int luaL_Box::persistints(lua_Integer* out) const
 {
   for (int i = 0; i < 4; i++)
     out[i] = ints[i];
   out[4] = static_cast<lua_Integer>(used);
-  *b = bytes.view().substr(0, used);
   return 5;
+}
+
+byte_view luaL_Box::persistbytes() const
+{
+  return bytes.view().substr(0, used);
 }
 
 static std::unique_ptr<lua_UserObject> makebox(lua_State* L, const lua_Integer* ints, int nints, byte_view bytes)

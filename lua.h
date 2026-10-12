@@ -148,11 +148,12 @@ struct lua_UserObject
   /*
   ** For a tool that keeps a state outside the process: the name of the kind
   ** the object is registered under ('lua_registerobjectkind'), or nullptr
-  ** if it cannot be kept; and its state as up to 8 integers and a view of
-  ** bytes that stays valid while the object does.
+  ** if it cannot be kept; and its state as up to 8 integers (put in 'ints',
+  ** their count returned) and bytes that stay valid while the object does.
   */
   virtual const char* persistkind() const { return nullptr; }
-  virtual int persistsave(lua_Integer* /*ints*/, byte_view* /*bytes*/) const { return 0; }
+  virtual int persistints(lua_Integer* /*ints*/) const { return 0; }
+  virtual byte_view persistbytes() const { return {}; }
   /* are its user values part of its state (else they are kept as nil)? */
   virtual bool persistuservalues() const { return true; }
 };
@@ -377,7 +378,8 @@ int(lua_status)(lua_State* L);
 ** thread 'co' and is shared by the threads it creates and, while they
 ** run, the ones it resumes (a budget group); setting it again on a thread
 ** of a group updates the group, and 'n' 0 removes the thread from it
-** ('lua_getbudget' gives 'n' and the steps left before the next call).
+** ('lua_getbudget' gives 'n', 'lua_budgetleft' the steps left before the
+** next call).
 ** 'lua_setbudget' gives LUA_OK, or LUA_ERRMEM or LUA_ERRRUN (too many
 ** groups) when it cannot make a group: then nothing changes, and nothing
 ** is raised. The callback runs with no hooks and no budget, and leaves
@@ -408,19 +410,20 @@ void(lua_registerk)(const char* name, lua_KFunction k);
 void(lua_registerbudget)(const char* name, lua_Budget f);
 
 int(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
-lua_Integer(lua_getbudget)(lua_State* co, lua_Integer* left);
+lua_Integer(lua_getbudget)(lua_State* co);
+lua_Integer(lua_budgetleft)(lua_State* co);
 [[noreturn]] void(lua_freeze)(lua_State* L);
 int(lua_isfrozen)(lua_State* co);
 /*
-** Whether a freeze at this point would freeze the chain (see
-** 'debug.canfreeze'); if not, '*why' (if given) is the reason: no budget is
-** in effect, a call that cannot freeze is in the way, or a resume that
-** cannot freeze is in the way.
+** What keeps a freeze at this point from freezing the chain (see
+** 'debug.canfreeze'): 0 if nothing does, else no budget is in effect, a
+** call that cannot freeze is in the way, or a resume that cannot freeze is
+** in the way.
 */
 constexpr int LUA_NOFREEZE_BUDGET = 1;
 constexpr int LUA_NOFREEZE_CALL = 2;
 constexpr int LUA_NOFREEZE_RESUME = 3;
-int(lua_canfreeze)(lua_State* L, int* why = nullptr);
+int(lua_nofreeze)(lua_State* L);
 lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from);
 int(lua_isyieldable)(lua_State* L);
 

@@ -502,13 +502,13 @@ struct MatchBox : lua_UserObject
     return static_cast<size_t>(ints[MB_LEVEL]) * MB_CAPSIZE + static_cast<size_t>(ints[MB_NFRAMES]) * MF_SIZE;
   }
   const char* persistkind() const override { return "string.match"; }
-  int persistsave(lua_Integer* out, byte_view* b) const override
+  int persistints(lua_Integer* out) const override
   {
     for (int i = 0; i < MB_NINTS; i++)
       out[i] = ints[i];
-    *b = byte_view(data.data(), used());
     return MB_NINTS;
   }
+  byte_view persistbytes() const override { return byte_view(data.data(), used()); }
 };
 static_assert(sizeof(MatchBox) <= MATCHBOX_SIZE);
 
@@ -2085,8 +2085,14 @@ static void checkformat(lua_State* L, byte_view form,
   }
 }
 
-static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
-                        byte_span form, size_t* formlen)
+/* where a conversion spec ends, and the length of its copy in 'form' */
+struct FormSpan
+{
+  size_t end;
+  size_t len;
+};
+
+static FormSpan getformat(lua_State* L, const InternalString* sf, size_t i, byte_span form)
 {
   /* spans flags, width, and precision ('0' is included as a flag) */
   byte_view sv = sf->view();
@@ -2101,8 +2107,7 @@ static size_t getformat(lua_State* L, const InternalString* sf, size_t i,
   form[0] = '%';
   form.copy_from(sv.substr(i, len), 1);
   form[1 + len] = '\0';
-  *formlen = 1 + len;
-  return i + len - 1;
+  return {i + len - 1, 1 + len};
 }
 
 struct FormatSpec
@@ -2415,15 +2420,15 @@ static int format_from(lua_State* L, const InternalString* sf, size_t i, int arg
     else
     {                                              /* format item */
       byte_inline<MAX_FORMAT> form;         /* to store the format ('%...') */
-      size_t formlen;
       size_t maxitem = MAX_ITEM;                  /* maximum length for the result */
       size_t boff = luaL_prepbuffsize(&b, maxitem); /* to put result */
       size_t nb = 0;                                   /* number of bytes in result */
       size_t item = i;
       if (++arg > top)
         return luaL_argerrori(L, arg, lt::no_value);
-      i = getformat(L, sf, i, form, &formlen);
-      byte_view formv = form.view().substr(0, formlen);
+      FormSpan fs = getformat(L, sf, i, form);
+      i = fs.end;
+      byte_view formv = form.view().substr(0, fs.len);
       switch (sv_byteat(sf->view(), i++))
       {
       case 'c':
@@ -2500,7 +2505,7 @@ static int format_from(lua_State* L, const InternalString* sf, size_t i, int arg
       }
       case 'q':
       {
-        if (formlen != 2) /* modifiers? */
+        if (fs.len != 2) /* modifiers? */
           return luaL_errori(L, lt::specifier_q_cannot_have_modifiers);
         int t = lua_type(L, arg);
         luaL_Box* saved;
@@ -2533,7 +2538,7 @@ static int format_from(lua_State* L, const InternalString* sf, size_t i, int arg
           luaL_tostringdefault(L, arg);
           str = lua_toistring(L, -1);
         }
-        nb = addstringitem(L, &b, formv, formlen, arg, boff, maxitem, str);
+        nb = addstringitem(L, &b, formv, fs.len, arg, boff, maxitem, str);
         break;
       }
       default:
@@ -2563,8 +2568,8 @@ static int formatk(lua_State* L, int status, lua_KContext ctx)
   luaL_buffload(&b, box);
   int arg = (int)box->ints[FMT_ARG];
   byte_inline<MAX_FORMAT> form;
-  size_t formlen;
-  size_t i = getformat(L, sf, (size_t)box->ints[FMT_ITEM], form, &formlen);
+  FormSpan fs = getformat(L, sf, (size_t)box->ints[FMT_ITEM], form);
+  size_t i = fs.end;
   if (sv_byteat(sf->view(), i++) == 'q')
   {
     luaL_tostringresult(L);
@@ -2574,7 +2579,7 @@ static int formatk(lua_State* L, int status, lua_KContext ctx)
   { /* 's' */
     size_t maxitem = MAX_ITEM;
     size_t boff = luaL_prepbuffsize(&b, maxitem);
-    size_t nb = addstringitem(L, &b, form.view().substr(0, formlen), formlen, arg, boff, maxitem,
+    size_t nb = addstringitem(L, &b, form.view().substr(0, fs.len), fs.len, arg, boff, maxitem,
                               luaL_tostringresult(L));
     assert(nb < maxitem);
     luaL_addsize(&b, nb);

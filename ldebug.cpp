@@ -318,7 +318,7 @@ int lua_hasdrain(lua_State* L)
 { /* (and can they be called here: where the chain can freeze, outside hooks
      and the '__gc' being called (hooks off), outside the budget callback;
      the same as at an instruction boundary, see 'luaG_traceexec') */
-  return luaC_hasdrain(L) && L->allowhook && L->l_G->budgetL == nullptr && luaD_canfreeze(L);
+  return luaC_hasdrain(L) && L->allowhook && L->l_G->budgetL == nullptr && luaD_nofreeze(L) == 0;
 }
 
 /* push the function that calls them (see 'luaC_pushdrain') */
@@ -335,19 +335,20 @@ int lua_budgeted(lua_State* L)
   return L->beff != nullptr || L->l_G->budgetL != nullptr;
 }
 
-lua_Integer lua_getbudget(lua_State* co, lua_Integer* left)
+lua_Integer lua_getbudget(lua_State* co)
+{
+  BudgetGroup* bg = co->bown;
+  return bg == nullptr ? 0 : bg->budget;
+}
+
+lua_Integer lua_budgetleft(lua_State* co)
 {
   global_State* g = co->l_G;
   BudgetGroup* bg = co->bown;
   if (bg == nullptr)
-  {
-    if (left != nullptr)
-      *left = 0;
     return 0;
-  }
-  if (left != nullptr) /* (in the callback, it refills when it ends) */
-    *left = (g->budgetL != nullptr && g->budgetg == bg) ? bg->budget : bg->left;
-  return bg->budget;
+  /* (in the callback, it refills when it ends) */
+  return (g->budgetL != nullptr && g->budgetg == bg) ? bg->budget : bg->left;
 }
 
 
@@ -1375,7 +1376,7 @@ int luaG_traceexec(lua_State* L, int pc)
        since, the VM passed no other point; else that one was the first) */
     bool first = bg->nodrain && bg->left == bg->budget;
     bg->nodrain = false;
-    if (!first && bg->fnz.next != nullptr && L->allowhook && g->budgetL == nullptr && luaD_canfreeze(L))
+    if (!first && bg->fnz.next != nullptr && L->allowhook && g->budgetL == nullptr && luaD_nofreeze(L) == 0)
       drainpoint(L, ci, p);
     if (L->beff != nullptr && L->beff->left <= 0 && g->budgetL == nullptr)
       budgetpoint(L, ci, p);

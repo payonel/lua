@@ -5610,14 +5610,15 @@ static int fz_at = 0;
 static bool fz_every = false;
 static lua_State* fz_target = nullptr;
 static lua_State* fz_user = nullptr; /* the 'user_co' of the last call */
-static int fz_cb_can = -1;           /* what 'lua_canfreeze' said in the last call */
+static int fz_cb_can = -1;           /* what 'lua_nofreeze' said in the last call: could it */
 static int fz_cb_why = -1;           /* and why not */
 
 static void fz_budget(lua_State* user_co, lua_State* spender)
 {
   fz_calls++;
   fz_user = user_co;
-  fz_cb_can = lua_canfreeze(spender, &fz_cb_why);
+  fz_cb_why = lua_nofreeze(spender);
+  fz_cb_can = fz_cb_why == 0;
   if (fz_target != nullptr && fz_calls >= fz_at && (fz_every || fz_calls == fz_at))
   {
     fz_freezes++;
@@ -5959,7 +5960,7 @@ static void test_frozen_refusals_keep_top()
 /*
 ** A host's budget callback given 'user_co' (the topmost budgeted thread of
 ** the chain) and a 'spender' that is another thread of the chain: asked of
-** 'user_co', 'lua_canfreeze' answers for the chain, and 'lua_freeze'
+** 'user_co', 'lua_nofreeze' answers for the chain, and 'lua_freeze'
 ** freezes it (B15)
 */
 static int b15_can = -1;
@@ -5967,8 +5968,7 @@ static void b15_budget(lua_State* user_co, lua_State* spender)
 {
   if (user_co == spender || b15_can != -1)
     return;
-  int why = 0;
-  b15_can = lua_canfreeze(user_co, &why);
+  b15_can = lua_nofreeze(user_co) == 0;
   if (b15_can)
     lua_freeze(user_co);
 }
@@ -6055,14 +6055,14 @@ static void test_freeze()
   lua_Integer left = 0;
 
   /* off by default; on; off again */
-  CHECK(lua_getbudget(L, &left) == 0);
+  CHECK(lua_getbudget(L) == 0 && lua_budgetleft(L) == 0);
   lua_setbudget(L, 100, fz_budget);
-  CHECK(lua_getbudget(L, &left) == 100 && left == 100);
+  CHECK(lua_getbudget(L) == 100 && lua_budgetleft(L) == 100);
   CHECK(lua_gethookmask(L) == 0); /* (not a hook) */
   lua_setbudget(L, 100, nullptr);
-  CHECK(lua_getbudget(L, nullptr) == 0);
+  CHECK(lua_getbudget(L) == 0);
   lua_setbudget(L, 0, fz_budget);
-  CHECK(lua_getbudget(L, nullptr) == 0);
+  CHECK(lua_getbudget(L) == 0);
 
   /* steps: a hand-off for the host's call, the instructions, the C calls */
   const lua_Integer HUGE = lua_Integer(1) << 50;
@@ -6070,27 +6070,27 @@ static void test_freeze()
   int iccalls = fz_instructions(L, "ccalls", 50);
   lua_Integer before = 0;
   fz_reset(L, HUGE, nullptr, 0, false);
-  lua_getbudget(L, &before);
+  before = lua_budgetleft(L);
   lua_getglobal(L, "sum");
   lua_pushinteger(L, 50);
   CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
-  lua_getbudget(L, &left);
+  left = lua_budgetleft(L);
   CHECK(before - left == 1 + isum);
-  lua_getbudget(L, &before);
+  before = lua_budgetleft(L);
   lua_getglobal(L, "ccalls");
   lua_pushinteger(L, 50);
   CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
   lua_pop(L, 1);
-  lua_getbudget(L, &left);
+  left = lua_budgetleft(L);
   CHECK(before - left == 1 + iccalls + 50);
-  lua_getbudget(L, &before);
+  before = lua_budgetleft(L);
   lua_pushcfunction(L, fz_call);
   lua_getglobal(L, "sum");
   lua_pushinteger(L, 50);
   CHECK(lua_pcall(L, 2, 1, 0) == LUA_OK); /* hand-off, C call, hand-off */
   lua_pop(L, 1);
-  lua_getbudget(L, &left);
+  left = lua_budgetleft(L);
   CHECK(before - left == 1 + 1 + 1 + isum);
   CHECK(fz_calls == 0);
 
@@ -6186,13 +6186,11 @@ static void test_freeze()
   CHECK(fz_cb_can == 1 && fz_cb_why == 0); /* (and that it can) */
   lua_settop(L, 0);
 
-  /* lua_canfreeze and debug.canfreeze: no budget in effect, none; under a
+  /* lua_nofreeze and debug.canfreeze: no budget in effect, none; under a
      budget, a plain call in the way makes it false, a call with a
      continuation does not */
   fz_reset(L, 0, nullptr, 0, false);
-  int why = -1;
-  CHECK(lua_canfreeze(L) == 0);
-  CHECK(lua_canfreeze(L, &why) == 0 && why == LUA_NOFREEZE_BUDGET);
+  CHECK(lua_nofreeze(L) == LUA_NOFREEZE_BUDGET);
   lua_getglobal(L, "canf");
   CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
   lua_settop(L, 0);
@@ -6402,16 +6400,15 @@ static void test_freeze()
     lua_State* owner = lua_newthread(L);
     lua_setbudget(owner, 5, fz_budget);
     lua_State* child = lua_newthread(owner); /* made while the group is in effect */
-    lua_Integer steps = -1;
-    CHECK(lua_getbudget(owner, &steps) == 5 && steps == 5);
-    CHECK(lua_getbudget(child, &steps) == 5 && steps == 5);
-    CHECK(lua_getbudget(unbudgeted, nullptr) == 0);
-    CHECK(lua_getbudget(L, nullptr) == 0);
+    CHECK(lua_getbudget(owner) == 5 && lua_budgetleft(owner) == 5);
+    CHECK(lua_getbudget(child) == 5 && lua_budgetleft(child) == 5);
+    CHECK(lua_getbudget(unbudgeted) == 0);
+    CHECK(lua_getbudget(L) == 0);
     lua_setbudget(owner, 0, nullptr);
-    CHECK(lua_getbudget(owner, nullptr) == 0);
-    CHECK(lua_getbudget(child, nullptr) == 5); /* it keeps its group */
+    CHECK(lua_getbudget(owner) == 0);
+    CHECK(lua_getbudget(child) == 5); /* it keeps its group */
     lua_State* later = lua_newthread(owner);
-    CHECK(lua_getbudget(later, nullptr) == 0);
+    CHECK(lua_getbudget(later) == 0);
     lua_pop(L, 2); /* the threads */
   }
 
@@ -6430,8 +6427,8 @@ static void test_freeze()
     cd.cap = cd.used + 1; /* (no room for a group) */
     CHECK(lua_setbudget(co, 100, fz_budget) == LUA_ERRMEM);
     cd.cap = 0;
-    CHECK(lua_status(co) == LUA_YIELD && lua_getbudget(co, nullptr) == 0);
-    CHECK(lua_setbudget(co, 100, fz_budget) == LUA_OK && lua_getbudget(co, nullptr) == 100);
+    CHECK(lua_status(co) == LUA_YIELD && lua_getbudget(co) == 0);
+    CHECK(lua_setbudget(co, 100, fz_budget) == LUA_OK && lua_getbudget(co) == 100);
     lua_ResumeResult rr = lua_resume(co, S, 0);
     CHECK(rr.status == LUA_OK && rr.nres == 1 && lua_tointeger(co, -1) == 2);
     lua_close(S);
