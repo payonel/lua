@@ -172,12 +172,13 @@ static int lib_gc(lua_State* L)
   return 0;
 }
 
+static CFuncInfo cfi_lib_gc(lib_gc, "package.lib_gc");
+
 static void createlibstr(lua_State* L, OsLib* plib)
 {
   std::unique_ptr<LibHandle> o = std::make_unique<LibHandle>();
   o->lib = plib;
   lua_newuserobject(L, std::move(o), LIBHANDLE_SIZE, 0);
-  static CFuncInfo cfi_lib_gc(lib_gc, "package.lib_gc");
   luaL_newmetatablei(L, lt::_LOADLIB);
   lua_pushcfuncinfo(L, &cfi_lib_gc);
   lua_setfieldi(L, -2, lt::mm_gc);

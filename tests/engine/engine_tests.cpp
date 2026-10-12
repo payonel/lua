@@ -503,6 +503,22 @@ struct DenyLargeAlloc : lua_Alloc
 };
 
 /*
+** Every engine C function is known by its name from the start, before the
+** library function that hands it out is first called (a restore in a new
+** process looks them up by name; before, utf8.codes' iterators and the
+** C library handle's __gc were named at their first use, so a fresh process
+** could not restore a state holding one)
+*/
+static void test_names_known_from_start()
+{
+  std::printf("    engine C functions are named before their first use ... ");
+  g_test_failures = 0;
+  for (const char* name : {"utf8.iter_auxlax", "utf8.iter_auxstrict", "package.lib_gc", "utf8.iter_codes"})
+    CHECK(lua_cfibyname(byte_view(name)) != nullptr);
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
+/*
 ** The C++ heap of this program, as a host's allocator would see it: every
 ** new and delete goes through here ('heap_peak' is the most bytes live
 ** since it was last set)
@@ -908,6 +924,7 @@ static void test_order_marked(bool generational)
 int main()
 {
   std::printf("\n\tStarting engine internals tests\n\n");
+  test_names_known_from_start(); /* (first: before any library function runs) */
   run_cases("Table::luaH_copyfrom (ltable.cpp)", table_copy_cases,
             sizeof(table_copy_cases) / sizeof(table_copy_cases[0]));
   run_cases("Table::luaH_mainposition: keys sit in their chains (ltable.cpp)", chain_cases,
