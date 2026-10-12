@@ -9,6 +9,7 @@ import static lua.object.Llimits.*;
 import static lua.object.Lobject.*;
 import static lua.object.Lstring.*;
 import static lua.runtime.Ldo.*;
+import static lua.runtime.Lhack.*;
 import static lua.runtime.Lstate.*;
 import static lua.vm.Ldebug.*;
 
@@ -551,6 +552,12 @@ public final class Llex
     ls.envn = TString.luaS_createstr(L, Lt._ENV); /* get env string */
     ByteView breakstr = Lt.break_kw;
     ls.brkn = TString.luaS_createstr(L, breakstr); /* get "break" string */
+    if (!LUA_DEBUG)
+    {
+      /* compatibility mode: "global" is not a reserved word */
+      ls.glbn = TString.luaS_createstr(L, Lt.global); /* get "global" string */
+      ls.glbn.extra = 0;                               /* mark it as not reserved */
+    }
     /* initialize buffer */
     ls.buff.reset();
   }

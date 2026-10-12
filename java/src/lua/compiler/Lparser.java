@@ -8,6 +8,7 @@ import static lua.gc.Lgc.*;
 import static lua.object.Lfunc.*;
 import static lua.object.Lobject.*;
 import static lua.runtime.Ldo.*;
+import static lua.runtime.Lhack.*;
 import static lua.runtime.Lmem.*;
 import static lua.runtime.Lstate.*;
 import static lua.vm.Lopcodes.*;
@@ -4446,6 +4447,14 @@ public final class Lparser
           case TK_GOTO: /* stat -> 'goto' NAME */
             l.site = 21;
             break;
+          case TK_NAME:
+            if (!LUA_DEBUG)
+            {
+              /* compatibility code to parse global keyword when "global"
+                 is not reserved */
+              l.site = (ls.t.ts == ls.glbn) ? 24 : 23; /* current = "global"? */
+              break;
+            }
           default: /* stat -> func | assignment */
             l.site = 23;
             break;
@@ -4520,6 +4529,17 @@ public final class Lparser
         case 23:
           exprstat(ls);
           break;
+        case 24:
+          if (!LUA_DEBUG)
+          {
+            int lk = luaX_lookahead(ls);
+            if (lk == '<' || lk == TK_NAME || lk == '*' || lk == TK_FUNCTION)
+              l.site = 14; /* 'global <attrib>' or 'global name' or 'global *' or
+                              'global function' */
+            else
+              l.site = 23; /* else... */
+            continue;
+          }
         default:
           luaZ_badstate(ls.z.rz);
         }
