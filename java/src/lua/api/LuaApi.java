@@ -2344,7 +2344,7 @@ public final class LuaApi
       else if (g.GCdebt >= n - MAX_LMEM) /* no overflow? */
         newdebt = g.GCdebt - n;
       else                   /* overflow */
-        newdebt = -MAX_LMEM; /* set debt to miminum value */
+        newdebt = -MAX_LMEM; /* set debt to mininum value */
       luaE_setdebt(g, newdebt);
       {
         if (L.l_G.GCdebt <= 0)
@@ -2439,9 +2439,9 @@ public final class LuaApi
   public static void lua_concat(lua_State L, int n)
   {
     lua_lock(L);
-    api_checknelems(L, n);
     if (n > 0)
     {
+      api_checkpop(L, n);
       luaV_concat(L, n);
       luaC_checkGC(L);
     }
@@ -2620,7 +2620,7 @@ public final class LuaApi
     UpvalAddr addr = new UpvalAddr(null, null, null);
     lua_lock(L);
     TValue fi = index2val(L, funcindex);
-    api_checknelems(L, 1);
+    api_checkpop(L, 1);
     name = aux_upvalue(fi, n, addr);
     if (name != null)
     {
