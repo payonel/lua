@@ -14,6 +14,7 @@ import static lua.platform.OsApi.*;
 import static lua.runtime.Ldo.*;
 import static lua.runtime.Lhack.*;
 import static lua.runtime.Lstate.*;
+import static lua.tests.Ltests.luai_openlibstest;
 import static lua.vm.Ldebug.*;
 
 import java.io.IOException;
@@ -5202,7 +5203,10 @@ public final class PublicApi
   private static void test_cfunc_stress_group6()
   {
     lua_State L = luaL_newstate();
-    luaL_openlibs(L);
+    if (LUA_DEBUG)
+      luai_openlibstest(L);
+    else
+      luaL_openlibs(L);
 
     /* Need to run from tests/ directory (the JVM cannot chdir: the test
        target starts this program there) */
