@@ -193,6 +193,11 @@ void luaM_freeblock(lua_State* L, size_t size)
     free_debt(L, size, 0);
 }
 
+void luaM_resizeblock(lua_State* L, size_t osize, size_t nsize)
+{
+  _alloc_span_request(L->l_G, L, osize, nsize, 1, true);
+}
+
 // type allocators
 std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L, std::span<TValue> block, size_t count, bool bthrow)
 {

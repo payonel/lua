@@ -79,6 +79,8 @@ void luaM_growhost(lua_State* L, size_t osize, size_t nsize);
 bool luaM_shrinkhost(global_State* g, size_t osize, size_t nsize);
 void luaM_takeblock(lua_State* L, size_t size);
 void luaM_freeblock(lua_State* L, size_t size);
+/* a counted block that is not the state's memory resized, as one block (a memory error if it cannot grow) */
+void luaM_resizeblock(lua_State* L, size_t osize, size_t nsize);
 
 // type allocators
 struct CallInfo;
