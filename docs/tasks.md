@@ -900,7 +900,7 @@ Upstream reference: the `master` branch (stock Lua 5.5 C sources), 64-bit host. 
 | `table.create` / `table.unpack` / `table.concat` index ranges | `INT_MAX` | same (signed form) | = |
 | `string.byte` / `utf8.codepoint` result count | `INT_MAX` | same | = |
 
-**Decision (`MAXASIZE` 2³¹ → 2³⁰, from L7):** kept. Not Lua-visible: a table whose array part would exceed 2³⁰ entries (≥ 9 GB of values) keeps the excess in the hash part, exactly as upstream does past 2³¹; `#t`, `next`, and indexing semantics are unchanged. It makes the array size an `int` (Java array index) and leaves the C++ and Java limits identical.
+**Decision (`MAXASIZE` 2³¹ → 2³⁰, from L7):** kept, an accepted limitation. A table whose array part would exceed 2³⁰ entries (≥ 9 GB of values) keeps the excess in the hash part, as upstream does past 2³¹; `#t`, `next`, and indexing semantics are unchanged. It is Lua-visible only at the limit: with the hash part's 2³⁰, a table holds 2³¹ entries where stock holds 3·2³⁰, and past that raises "table overflow" (heavy.lua reaches it, at about 70 GB). It makes the array size an `int` (Java array index) and leaves the C++ and Java limits identical.
 
 ### M2. Accounting by named cost constants
 
