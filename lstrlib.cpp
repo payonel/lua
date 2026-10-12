@@ -2553,6 +2553,9 @@ static int formatk(lua_State* L, int status, lua_KContext ctx)
   int top = lua_gettop(L) - 2; /* (the arguments, the box, the string) */
   const InternalString* sf = lua_toistring(L, 1);
   luaL_Box* box = luaL_tobox(L, top + 1);
+  if (box->ints[FMT_ITEM] < 1 || box->ints[FMT_ITEM] > static_cast<lua_Integer>(sf->size()) ||
+      box->ints[FMT_ARG] < 1 || box->ints[FMT_ARG] > top)
+    luaL_errori(L, lt::invalid_state_of_a_stopped_format);
   luaL_Buffer b;
   luaL_buffinit(L, &b);
   luaL_buffload(&b, box);
