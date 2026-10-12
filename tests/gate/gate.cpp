@@ -11,6 +11,8 @@
 ** be persisted (an open file) is not persisted: it is counted and the next
 ** freeze is tried. The script must end as it does with no persist ('make
 ** styx-gate'); the upstream suite runs in its portable mode ('_port').
+** Each restore must keep every object: a census of the original's objects
+** and of the restored state's, by type, must match (see 'census').
 **
 ** usage: gate <steps> [--styx <n>] <script.lua> [args...]
 */
@@ -18,11 +20,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <set>
 #include <string>
+#include <vector>
 
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
+#include "lstate.h"
+#include "lgc.h"
 
 static long freezes = 0;
 
@@ -102,6 +108,58 @@ struct StringWriter : lua_Writer
   }
 };
 
+/*
+** The objects a state's collector keeps, by type (a census): live objects
+** and dead ones waiting for their '__gc'. Taken after a whole cycle that
+** calls no '__gc': the restore ends with one, and the original gets one
+** (it is closed next). Not counted, as not persisted: an open upvalue no
+** closure refers to any more (its thread keeps it until its frame
+** returns), and in the original, the half-made parse of a stopped load,
+** held by its box (the restored load makes it again as it parses its
+** kept input again).
+*/
+static std::map<int, long> census(lua_State* L, bool original)
+{
+  using namespace lua::object;
+  lua::runtime::global_State* g = L->l_G;
+  if (original)
+  {
+    for (GCObject* o = g->allgc.next; o != nullptr; o = o->next)
+      if (o->tt == LUA_VUSERDATA)
+      {
+        auto* u = static_cast<Udata*>(o);
+        const char* k = u->obj ? u->obj->persistkind() : nullptr;
+        if (k != nullptr && std::strcmp(k, "load") == 0)
+          for (TValue& v : u->uv)
+            setnilvalue(&v);
+      }
+    lua::gc::luaC_fullgcdue(L);
+  }
+  std::vector<GCObject*> all;
+  auto collect = [&all](GCObject* o) {
+    for (; o != nullptr; o = o->next)
+      all.push_back(o);
+  };
+  collect(g->allgc.next);
+  collect(g->finobj.next);
+  collect(g->tobefnz.next);
+  collect(g->fixedgc);
+  for (BudgetGroup* b : g->groupbyid)
+    if (b != nullptr)
+      collect(b->fnz.next);
+  std::set<GCObject*> used; /* (the upvalues the closures refer to) */
+  for (GCObject* o : all)
+    if (o->tt == LUA_VLCL)
+      for (UpVal* u : static_cast<LClosure*>(o)->upvals)
+        used.insert(u);
+  std::map<int, long> n;
+  for (GCObject* o : all)
+    if (o->tt != LUA_VUPVAL || used.count(o) != 0)
+      n[o->tt]++;
+  return n;
+}
+
+static long censuses = 0;
 static long persists = 0;
 static long unpersistable = 0;
 static std::map<std::string, long> why; /* what could not be persisted, and how often */
@@ -144,6 +202,22 @@ static bool persist_restore(lua_State** L, lua_State** H)
         std::fclose(f);
       }
     std::exit(1);
+  }
+  if (lua_gc(H2, LUA_GCISRUNNING, 0, 0, 0))
+  { /* (the same objects in the original and in the restored state) */
+    std::map<int, long> before = census(*L, true), after = census(H2, false);
+    if (before != after)
+    {
+      std::fprintf(stderr, "gate: a restore lost or gained objects after %ld freezes (type: before after)\n", freezes);
+      for (const auto& [t, k] : before)
+        if (after[t] != k)
+          std::fprintf(stderr, "gate:   %d: %ld %ld\n", t, k, after[t]);
+      for (const auto& [t, k] : after)
+        if (before.count(t) == 0)
+          std::fprintf(stderr, "gate:   %d: 0 %ld\n", t, k);
+      std::exit(1);
+    }
+    censuses++;
   }
   lua_close(*L);
   *H = H2;
@@ -238,6 +312,7 @@ int main(int argc, char** argv)
                 "%ld freezes not persisted\n", persists, every, largest, unpersistable);
     for (const auto& [m, n] : why)
       std::printf("gate:   %ld x %s (first: %s)\n", n, m.c_str(), first[m].c_str());
+    std::printf("gate: census: %ld of %ld restores, every object kept\n", censuses, persists);
   }
   lua_close(L);
   return 0;

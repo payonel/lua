@@ -4382,12 +4382,14 @@ luaL_Restored luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup*
          its size: a host that restores more often than that would
          otherwise starve a program that waits on its collector. (After
          the restore's call, so that its table of the objects restored
-         holds nothing.) */
-      if (lua_gc(T, LUA_GCISRUNNING, 0, 0, 0))
+         holds nothing; and on the main thread: a cycle keeps the thread
+         it runs on, and the thread the restore ran on, with the
+         permanents it held, goes with it.) */
+      if (lua_gc(L, LUA_GCISRUNNING, 0, 0, 0))
       {
-        lua_lock(T);
-        luaC_fullgcdue(T);
-        lua_unlock(T);
+        lua_lock(L);
+        luaC_fullgcdue(L);
+        lua_unlock(L);
       }
       return {from, {}};
     }

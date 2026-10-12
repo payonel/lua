@@ -112,6 +112,15 @@ luaL_Restored luaL_restorestate(lua_Alloc* f, byte_view data, luaL_RestoreSetup*
   (about 210), in its portable mode (`_port`): the C libraries its other
   tests load hold C functions that have no names, after which nothing
   could be persisted (the freeze gate runs those tests).
+- Every restore of the Styx gate keeps every object: a census counts the
+  objects of the original (after a whole cycle that calls no `__gc`; it is
+  closed next) and of the restored state (which ended with such a cycle),
+  by type, and they must match. Not counted, as not persisted: an open
+  upvalue no closure refers to any more (its thread keeps it until its
+  frame returns), and a stopped load's half-made parse (the restored load
+  makes it again from its kept input). A restore where the program stopped
+  its collector is not counted. Memory may differ a little (thread stacks,
+  call lists), objects may not.
 
 ## Development approach
 

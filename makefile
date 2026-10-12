@@ -129,12 +129,13 @@ $(ENGINE_TEST_T): $(ENGINE_TEST_O) $(OBJ_FILES) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(ENGINE_TEST_O) $(OBJ_FILES) $(LDFLAGS)
 
 # the freeze gate: a script run with a budget that freezes at every budget
-# point, thawed until it ends (tests/gate/gate.cpp)
+# point, thawed until it ends (tests/gate/gate.cpp); it links the raw
+# objects: the Styx gate's census of each restore reads the collector's lists
 $(GATE_O): tests/gate/gate.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -I$(TOP_DIR) -MF $(OBJ_DIR)/gate.d -o $@ -c $<
 
-$(GATE_T): $(GATE_O) $(CORE_T) $(VARIANT_STAMP)
-	$(CXX) -o $@ $(GATE_O) $(CORE_T) $(LDFLAGS)
+$(GATE_T): $(GATE_O) $(OBJ_FILES) $(VARIANT_STAMP)
+	$(CXX) -o $@ $(GATE_O) $(OBJ_FILES) $(LDFLAGS)
 
 # the deep tests and the whole upstream suite, frozen and thawed at every
 # budget point of several sizes (`make test` runs it; `make gate
