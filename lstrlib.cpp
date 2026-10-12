@@ -844,11 +844,11 @@ static l_forceinline ptrdiff_t end_capture(MatchState* ms, ptrdiff_t s,
 static ptrdiff_t match_capture(MatchState* ms, ptrdiff_t s, int l)
 {
   l = check_capture(ms, l);
-  ptrdiff_t len = ms->capture[l].len;
+  size_t len = static_cast<size_t>(ms->capture[l].len);
   byte_view msv = ms->src->view();
-  if ((ms->src_end - s) >= len &&
+  if (static_cast<size_t>(ms->src_end - s) >= len &&
       msv.substr(ms->capture[l].init, len).equals(msv.substr(s, len)))
-    return s + len;
+    return s + static_cast<ptrdiff_t>(len);
   else
     return NOMATCH;
 }

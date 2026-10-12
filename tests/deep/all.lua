@@ -34,6 +34,7 @@ local tests = {
   "loading.lua",
   "sort.lua",
   "fmtscan.lua",
+  "patterns.lua",
   "yieldability.lua",
   "libcalls.lua",
   "finalizers.lua",
