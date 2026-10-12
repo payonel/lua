@@ -1083,7 +1083,8 @@ static void test_host_state_collector_settings()
   lua_close(C);
   CountingAlloc a4;
   Setup s{[](lua_State* L) {
-            eval(L, "collectgarbage('generational') collectgarbage('param', 'pause', 400) collectgarbage('stop')");
+            CHECK(eval(L, "collectgarbage('generational') collectgarbage('param', 'pause', 400) "
+                          "collectgarbage('stop') return 'ok'") == "ok");
           },
           {}};
   lua_State* D = restored_state(&a4, blob, &s);
@@ -2953,8 +2954,7 @@ static bool run_script(const std::filesystem::path& path, const GcMode& mode,
   lua_setglobal(L, "STYX_MODE");
   lua_pushboolean(L, verbose);
   lua_setglobal(L, "STYX_VERBOSE");
-  eval(L, mode.setup);
-  bool ok = luaL_dofile(L, path.string().c_str()) == LUA_OK;
+  bool ok = luaL_dostring(L, mode.setup) == LUA_OK && luaL_dofile(L, path.string().c_str()) == LUA_OK;
   if (!ok)
     std::printf("    FAIL [%s] script error: %s\n", mode.name, to_string(L, -1).c_str());
   if (lua_getglobal(L, "STYX_RESULT") == LUA_TTABLE)
