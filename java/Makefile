@@ -33,7 +33,7 @@ $(TESTLIBS_DIR)/%.so:
 DEBUG ?=
 LUA = $(if $(DEBUG),lua-debug,lua)
 JFLAGS = -XX:-DontCompileHugeMethods $(if $(DEBUG),-ea -Dlua.debug=true)
-TEST_TEMP_DIR = java$(if $(DEBUG),d)
+TEST_TEMP_DIR ?= 1
 GATE_STEPS ?= 97 17 3
 STYX_GATE_DEEP ?= 7
 STYX_GATE_ALL ?= 5000
