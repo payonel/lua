@@ -285,7 +285,7 @@ struct PathRec
   Slot key;
   const Proto* proto = nullptr;
   int n = 0;
-  const byte_view* label = nullptr;
+  byte_view label{};
 };
 
 enum class Op : char
@@ -381,7 +381,7 @@ public:
   {
   }
 
-  void root(const TValue& v, const byte_view* label)
+  void root(const TValue& v, byte_view label)
   {
     Task t;
     t.op = Op::Value;
@@ -497,7 +497,7 @@ public:
     {
       TValue v{};
       setgcovalue(L_, &v, o);
-      root(v, &lt::path_finalizer_list);
+      root(v, lt::path_finalizer_list);
     }
   }
 
@@ -510,7 +510,7 @@ public:
     setthvalue(L_, &v, L_);
     if (L_ != mainthread(L_->l_G) && !ref_find(v, gcvalue(&v)))
       throw HostError{text(lt::persist_from_the_main_thread_or_a_thread_the_state_holds)}; /* (no path: not a value's) */
-    root(v, &lt::path_persisting_thread);
+    root(v, lt::path_persisting_thread);
   }
 
   /* the collector's settings that a script sees: its mode, whether it is
@@ -687,8 +687,8 @@ private:
     }
     /* their order is the collector's: nothing below allocates while its
        lists are read */
-    auto by_object = [](const Marked& a, const Marked& b) { return std::less<const GCObject*>()(a.o, b.o); };
-    marked_.sort(by_object);
+    auto by_id = [](const Marked& a, const Marked& b) { return a.id < b.id; };
+    marked_.sort(by_id);
     WorkStack<lua_Integer> order(L_, !host_, WS_WORD);
     WorkStack<lua_Integer> kinds(L_, !host_, WS_WORD);
     WorkStack<lua_Integer> owners(L_, !host_, WS_WORD);
@@ -699,8 +699,13 @@ private:
     dues.reserve(n);
     each_marked([&](GCObject* o, bool due)
     {
-      size_t i = marked_.lower_bound(Marked{o, 0}, by_object);
-      if (i < marked_.size() && marked_.get(i).o == o)
+      TValue v{};
+      setgcovalue(L_, &v, o);
+      std::optional<lua_Integer> id = ref_find(v, o);
+      if (!id)
+        return;
+      size_t i = marked_.lower_bound(Marked{nullptr, *id}, by_id);
+      if (i < marked_.size() && marked_.get(i).id == *id)
       {
         order.push(marked_.get(i).id);
         kinds.push(o->tt == LUA_VTABLE ? 0 : 1);
@@ -984,7 +989,7 @@ private:
       case Step::None:
         break;
       case Step::Root:
-        add(text(*r.label));
+        add(text(r.label));
         break;
       case Step::Value:
         key_text(k, add);
@@ -2158,8 +2163,9 @@ public:
   Restorer& operator=(const Restorer&) = delete;
 
   /* a failed restore leaves no finalizer to run on what it built (ADR-28),
-     and the main thread, if it went into it, idle and empty as it was */
-  ~Restorer()
+     and the main thread, if it went into it, idle and empty as it was
+     (its owners call it as an error leaves the restore) */
+  void abandon()
   {
     if (!done_ && mainrestored_)
     {
@@ -2344,8 +2350,8 @@ public:
       if (!due.empty())
         luaC_makedue(L_, due.data(), due.size());
     }
-    auto by_address = [](Table* a, Table* b) { return std::less<Table*>()(a, b); };
-    rebuilt_.sort(by_address);
+    auto by_id = [](lua_Integer a, lua_Integer b) { return a < b; };
+    rebuilt_.sort(by_id);
     for (size_t i = 0; i < fixes_.size(); i++)
     {
       DeadFix f = fixes_.get(i);
@@ -2356,8 +2362,8 @@ public:
       if (!ttistable(&t) || !iscollectable(&k))
         r_.invalid();
       Table* h = hvalue(&t);
-      size_t r = rebuilt_.lower_bound(h, by_address);
-      bool was_rebuilt = r < rebuilt_.size() && rebuilt_.get(r) == h;
+      size_t r = rebuilt_.lower_bound(f.table, by_id);
+      bool was_rebuilt = r < rebuilt_.size() && rebuilt_.get(r) == f.table;
       /* a table rebuilt, here or for another seed, has no dead keys */
       if (same_seed() && !was_rebuilt)
       {
@@ -2445,7 +2451,7 @@ private:
     BudgetGroup* beff;
   } mainsaved_{};
 
-  WorkStack<Table*> rebuilt_; /* layout tables whose keys did not all fit */
+  WorkStack<lua_Integer> rebuilt_; /* ids of layout tables whose keys did not all fit */
 
   /*
   ** A variable that is open (its owner thread is read) or a permanent (its
@@ -2706,6 +2712,7 @@ private:
     f.b = hsize;
     f.c = lenhint;
     f.type = layout;
+    f.id = id;
     f.p = hvalue(&t);
     lua_pop(L_, 1);
     frames_.push(f);
@@ -2762,7 +2769,7 @@ private:
         h->lastfree = static_cast<int>(f.d);
       else
       { /* rebuilt with the same sizes: its contents, in another order */
-        rebuilt_.push(h);
+        rebuilt_.push(f.id);
         lua_lock(L_);
         h->luaH_resize(L_, static_cast<int>(f.a), static_cast<int>(f.b));
         lua_unlock(L_);
@@ -3975,7 +3982,7 @@ static int styx_persist(lua_State* L)
     Walker w(L, hvalue(&perms), &B, 3);
     w.i64(L->l_G->seed);
     TValue v = getslot(L, L->ci->func + 2);
-    w.root(v, &lt::path_root);
+    w.root(v, lt::path_root);
     w.trailer();
   }
   luaL_pushresult(&B);
@@ -3996,11 +4003,19 @@ static int styx_unpersist(lua_State* L)
     lua_insert(L, 1);
   }
   Restorer R(L, luaL_checklstring(L, 2), false);
-  begin_restore(L, R);
-  R.value();
-  if (R.r_.pos != R.r_.data.size())
-    R.r_.invalid();
-  R.finish();
+  try
+  {
+    begin_restore(L, R);
+    R.value();
+    if (R.r_.pos != R.r_.data.size())
+      R.r_.invalid();
+    R.finish();
+  }
+  catch (...)
+  {
+    R.abandon();
+    throw;
+  }
   return 1;
 }
 
@@ -4082,6 +4097,8 @@ struct HostRestore
   bool state;
 };
 
+static int host_restore_run(lua_State* L, Restorer& R, HostRestore* hr);
+
 /* 1: permanents (key -> object) or nil; 2: the HostRestore */
 static int host_restore_body(lua_State* L)
 {
@@ -4092,6 +4109,19 @@ static int host_restore_body(lua_State* L)
     lua_replace(L, 1);
   }
   Restorer R(L, hr->data, true);
+  try
+  {
+    return host_restore_run(L, R, hr);
+  }
+  catch (...)
+  {
+    R.abandon();
+    throw;
+  }
+}
+
+static int host_restore_run(lua_State* L, Restorer& R, HostRestore* hr)
+{
   begin_restore(L, R);
   if (!hr->state)
   {
@@ -4228,7 +4258,7 @@ luaL_StyxResult lua_styxcheck(lua_State* L, int idx, int perms)
     NullWriter w;
     Walker hp(L, pt, &w);
     hp.check_ = true;
-    hp.root(v, &lt::path_root);
+    hp.root(v, lt::path_root);
     hp.finish();
     return {LUA_OK, {}};
   }
@@ -4249,7 +4279,7 @@ luaL_StyxResult lua_styxpersistvalue(lua_State* L, int perms, int idx, lua_Write
   TValue v{};
   if (!value_at(L, idx, &v))
     return {LUA_ERRRUN, HostString::from_bytes(lt::invalid_value_index)};
-  return host_persist(L, perms, w, [&](Walker& hp) { hp.root(v, &lt::path_root); });
+  return host_persist(L, perms, w, [&](Walker& hp) { hp.root(v, lt::path_root); });
 }
 
 luaL_StyxResult luaL_persiststate(lua_State* L, int perms, lua_Writer* w)
@@ -4260,7 +4290,7 @@ luaL_StyxResult luaL_persiststate(lua_State* L, int perms, lua_Writer* w)
     global_State* g = L->l_G;
     hp.byte(TAG_STATE);
     hp.whole();
-    hp.root(g->l_registry, &lt::path_registry);
+    hp.root(g->l_registry, lt::path_registry);
     for (int t = 0; t < LUA_NUMTYPES; t++)
     {
       TValue mt{};
@@ -4268,7 +4298,7 @@ luaL_StyxResult luaL_persiststate(lua_State* L, int perms, lua_Writer* w)
         sethvalue(L, &mt, g->mt[t]);
       else
         setnilvalue(&mt);
-      hp.root(mt, &lt::path_type_metatable);
+      hp.root(mt, lt::path_type_metatable);
     }
     hp.marked_objects();
     hp.persisting_thread();
