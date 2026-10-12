@@ -1,5 +1,7 @@
 package lua.runtime;
 
+import lua.api.lua_Alloc;
+
 /* the debug build's checks and limits (LUA_DEBUG: the system property 'lua.debug') */
 public final class Lhack
 {
@@ -43,6 +45,27 @@ public final class Lhack
   {
     if (LUA_DEBUG)
       assert --(l.l_G.apilock) == 0;
+  }
+
+  public static void luai_tracegc(lua_State l, int f)
+  {
+    if (LUA_DEBUG)
+      lua.tests.Ltests.luai_tracegctest(l, f);
+  }
+
+  public static lua_State _lua_newstate(lua_Alloc f, int seed)
+  {
+    if (LUA_DEBUG)
+      return lua.tests.Ltests.luai_newstate();
+    return Lstate.lua_newstate(f, seed);
+  }
+
+  public static void luai_openlibs(lua_State L)
+  {
+    if (LUA_DEBUG)
+      lua.tests.Ltests.luai_openlibstest(L);
+    else
+      lua.lib.Linit.luaL_openlibs(L);
   }
 
   public static final int LUAL_BUFFERSIZE = LUA_DEBUG ? 23 : 1024;

@@ -11,7 +11,8 @@ public abstract class ByteWrites
   public int apply(ByteView from, int pos)
   {
     assert from.len + pos <= size();
-    System.arraycopy(from.a, from.off, array(), offset() + pos, from.len);
+    if (from.len != 0)
+      System.arraycopy(from.a, from.off, array(), offset() + pos, from.len);
     return pos + from.len;
   }
 
@@ -80,7 +81,8 @@ public abstract class ByteWrites
   public void move_from(ByteView src, int pos)
   {
     assert pos + src.len <= size();
-    System.arraycopy(src.a, src.off, array(), offset() + pos, src.len);
+    if (src.len != 0)
+      System.arraycopy(src.a, src.off, array(), offset() + pos, src.len);
   }
 
   public void reverse(int pos, int len)

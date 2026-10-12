@@ -1,6 +1,7 @@
 package lua.object;
 
 import lua.api.LuaConf;
+import lua.platform.Libm;
 
 public final class Llimits
 {
@@ -10,7 +11,7 @@ public final class Llimits
 
   public static final long MAX_LMEM = Long.MAX_VALUE;
   public static final long MAX_SIZET = -1L;
-  public static final long MAX_SIZE = LuaConf.LUA_MAXINTEGER;
+  public static final long MAX_SIZE = Integer.MAX_VALUE - 8;
 
   public static boolean ispow2(long x)
   {
@@ -44,7 +45,7 @@ public final class Llimits
 
   public static double luai_numpow(Object L, double a, double b)
   {
-    return (b == 2) ? a * a : Math.pow(a, b);
+    return (b == 2) ? a * a : Libm.pow(a, b);
   }
 
   public static double luai_numidiv(Object L, double a, double b)

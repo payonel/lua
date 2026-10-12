@@ -11,9 +11,11 @@ public final class ByteView
   final int off;
   final int len;
 
+  private static final byte[] NONE = new byte[0];
+
   public ByteView(byte[] a, int off, int len)
   {
-    this.a = a;
+    this.a = (a == null) ? NONE : a;
     this.off = off;
     this.len = len;
   }
@@ -201,9 +203,9 @@ public final class ByteView
 
   public ByteView substr(int pos, int count)
   {
-    if (pos > len)
+    if (pos < 0 || pos > len)
       throw new IndexOutOfBoundsException("substr");
-    int n = (count == npos) ? len - pos : Math.min(count, len - pos);
+    int n = (count < 0) ? len - pos : Math.min(count, len - pos);
     return new ByteView(a, off + pos, n);
   }
 

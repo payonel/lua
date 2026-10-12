@@ -37,7 +37,7 @@ these for the port itself:
 | `lua::compiler` | `lua.compiler` | `Llex`, `Lparser`, `Lcode`, `Ldump`, `Lundump` and their records |
 | global API (`lua_*`, `luaL_*`) | `lua.api` | `LuaApi` (lapi.cpp, lua.h), `LuaAuxLib` (lauxlib.cpp), `HostString` |
 | `lua::lib` | `lua.lib` | one class per library (`Lbaselib`, `Lstrlib`, …), `Linit`, `Lstyx` |
-| `lua::platform` | `lua.platform` | `OsApi`, `LocaleUtil` |
+| `lua::platform` | `lua.platform` | `OsApi`, `LocaleUtil`, `Libm` |
 | `lua::host` | `lua.host` | `Lua` (the standalone interpreter, `main`) |
 | tests | `lua.tests` | `Ltests` (the debug build's `T` library) |
 
@@ -120,6 +120,7 @@ methods adds them.
 | linit.cpp | `lua.lib.Linit` |
 | lstyx.cpp | `lua.lib.Lstyx` |
 | os_api.h/.cpp, locale_util.h/.cpp | `lua.platform.OsApi`, `lua.platform.LocaleUtil` |
+| C's `<cmath>` (`pow`, `fmod`, `floor`, `frexp`, …) | `lua.platform.Libm` (done) |
 | lua.cpp | `lua.host.Lua` |
 | ltests.h/.cpp | `lua.tests.Ltests` |
 
@@ -173,6 +174,15 @@ Methods of the type classes are called on the object
   the key fields `key_tt`, `key_prim`, `key_ref` and `next`: C++
   `&n->val`/`gval(n)` is the node itself; `n->key_val.ref` is
   `n.key_ref`.
+- Tags (`LUA_V*`) are compile-time constants, so a C++ `switch` on a
+  tag stays a `switch`; a `case ctb(LUA_VLNGSTR):` label is
+  `case LUA_VLNGSTR | BIT_ISCOLLECTABLE:`.
+- `size_t` of a string, userdata or buffer is a Java array length, so
+  `MAX_SIZE` (llimits.h: representable as a `lua_Integer` and as a
+  `size_t`) is the largest array the JVM makes, `Integer.MAX_VALUE - 8`,
+  as on a platform whose `size_t` has 32 bits: the C++'s own checks
+  against it raise Lua's errors ("string length overflow", "resulting
+  string too large", …) where Java would fail.
 - Bit casts: `std::bit_cast<lua_Number>(i)` →
   `Double.longBitsToDouble(i)`; the reverse →
   `Double.doubleToRawLongBits(d)`.
@@ -199,10 +209,30 @@ those); `throw;` → rethrow the caught object. `assert(x)` → `assert x;`
 (the debug build runs with `-ea` and `-Dlua.debug=true`). Labeled blocks
 and `break label` replace the few remaining `goto`s.
 
+**A stopped load's frames** (llex, lparser, lundump, lzio, ldo's
+`f_parser`): `lua.bytes.LoadFrame` is the base. A frame type is a
+subclass with the C++ frame's fields, a copy constructor (`X(X o)`:
+`super(o)` and every field, nested value structs such as `expdesc`,
+`FuncState` and `BlockCnt` copied deeply), `copy()` returning
+`new X(this)` and `size()` returning the C++ `sizeof(X)` as g++
+gives it on x86-64 (measure it: a small program that includes the C++
+header; the base `LoadFrame` is 24). `X l;` is
+`X l = new X();`; `l = static_cast<const X&>(luaZ_restore(rz, LF_X))` is
+`l = new X((X) luaZ_restore(rz, LF_X))`; `new (std::nothrow) X(*this)` is
+`new X(this)`.
+
 **Other.**
 - `sizeof(T)` in a charge → the `Cost` constant; `lua_lock`/`lua_unlock`,
   `luai_userstate*`, `LUAI_MAXCCALLS` and the other lhack.h names are in
   `Lhack`.
+- Allocation (`Lmem`): a denied allocation returns `null` (the C++
+  `data() == nullptr`); an empty block argument (`{}`) is `new T[0]`,
+  never `null`; a count of 0 gives back the block and returns an empty
+  array; `luaM_free_*` and span releases are only the accounting (the
+  caller drops the reference).
+- C's math functions are `Libm`'s, with the C names: `StrictMath`, with
+  C's special cases where Java's differ (`pow(1, y)` and
+  `pow(-1, ±inf)` are 1), so results do not depend on the JVM.
 - Templates → a generic method, or one method per instantiation where
   the C++ needs a primitive type.
 - Lambdas → Java lambdas; a lambda that sets a captured local in C++ sets
@@ -231,9 +261,26 @@ Each step is a commit; the tree compiles at every commit.
 
 `make -C java` compiles the sources with the JDK named by `JDK` (default:
 the Temurin 25 under `~/.gradle/jdks`) into `java/build/lua.jar`.
+`luaV_execute` is larger than the 8000 bytes of bytecode HotSpot compiles
+by default: the interpreter runs with `-XX:-DontCompileHugeMethods`.
+The debug build is the same jar run with `-ea -Dlua.debug=true`.
 
 ## Status
 
 | Step | State |
 |---|---|
-| 0. Skeleton | started |
+| 0. Skeleton | done |
+| 1. Core | done: every core file transcribed; `print("hello")` runs |
+| 2. Libraries | done: base, coroutine, table, string, utf8, math, io, os, package, debug |
+| 3. Platform | done: `OsApi` (stdio, time and strftime as glibc, processes), `LocaleUtil` (C locale), `Libm` |
+| 4. Host and tests | `lua.host.Lua` with the `java/lua` and `java/lua-debug` launchers; `Ltests`; suites: in progress |
+| 5. Styx | done: `Lstyx`; its streams are the C++'s byte for byte (the trailer's address fixes aside) |
+
+Known differences from the C++ build (the JVM's, not the port's):
+- No C libraries: `package.loadlib` and C modules answer as stock Lua
+  without dynamic libraries; the REPL has no readline (the host warns
+  that it cannot load it, also under `-E`).
+- `os_system`/`io.popen` statuses: a command killed by a signal can show
+  as an exit code 128+n.
+- Paths, commands and environment names cross to Java as UTF-8.
+- Strings and buffers end at the JVM's largest array (see `MAX_SIZE`).
