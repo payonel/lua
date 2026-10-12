@@ -1067,7 +1067,7 @@ public final class OsApi
     return oktm;
   }
 
-  public static OptionalLong os_mktime(OsDate tp)
+  private static long mktime(OsDate tp)
   {
     int remaining_probes = 6;
     int sec = tp.sec;
@@ -1100,7 +1100,7 @@ public final class OsApi
       long[] tt = {t};
       tm = ranged_convert(tt);
       if (tm == null)
-        return OptionalLong.empty();
+        return -1;
       t = tt[0];
       long dt = tm_diff(year, yday, hour, min, sec, tm);
       if (dt == 0)
@@ -1114,7 +1114,7 @@ public final class OsApi
       if (remaining_probes == 0)
       {
         errno = EOVERFLOW;
-        return OptionalLong.empty();
+        return -1;
       }
       t1 = t2;
       t2 = t;
@@ -1134,7 +1134,7 @@ public final class OsApi
           long[] ott = {ot};
           OsDate otm = ranged_convert(ott);
           if (otm == null)
-            return OptionalLong.empty();
+            return -1;
           ot = ott[0];
           if (!isdst_differ(isdst, otm.isdst))
           {
@@ -1155,7 +1155,7 @@ public final class OsApi
         t += dst_difference * 60L * 60;
         tm = os_localtime(t);
         if (tm == null)
-          return OptionalLong.empty();
+          return -1;
       }
     }
     localtime_offset = (int) (t - t0 - negative_offset_guess);
@@ -1171,11 +1171,11 @@ public final class OsApi
       catch (ArithmeticException e)
       {
         errno = EOVERFLOW;
-        return OptionalLong.empty();
+        return -1;
       }
       tm = os_localtime(t);
       if (tm == null)
-        return OptionalLong.empty();
+        return -1;
     }
     tp.year = tm.year;
     tp.month = tm.month;
@@ -1188,7 +1188,14 @@ public final class OsApi
     tp.isdst = tm.isdst;
     tp.gmtoff = tm.gmtoff;
     tp.zone = tm.zone;
-    if (t == -1)
+    return t;
+  }
+
+  public static OptionalLong os_mktime(OsDate d)
+  {
+    d.wday = -1; /* if call succeeds, it will set this value */
+    long t = mktime(d);
+    if (d.wday == -1) /* error if tm_wday was not set */
       return OptionalLong.empty();
     return OptionalLong.of(t);
   }
