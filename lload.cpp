@@ -37,6 +37,8 @@ constexpr lu_byte ZS_INPUT = 3;  /* the input read before a restore, read again 
 /* the bytes of frames a stopped load may have for each level of C calls it made */
 constexpr size_t FRAMES_PER_LEVEL = 1024;
 constexpr size_t FRAMES_BASE = 2048;
+/* the bytes a frame takes besides its own (the allocator's, as counted here) */
+constexpr size_t FRAME_HEADER = 2 * sizeof(void*);
 
 constexpr size_t LOADBOX_SIZE = 192; /* (its own size, its frames and input aside) */
 
@@ -57,7 +59,9 @@ struct LoadBox : lua_UserObject
 {
   global_State* g = nullptr;
   size_t hosted = 0; /* (the bytes the host counts for it) */
-  std::vector<char> frames;
+  LoadFrame* frames = nullptr; /* (the last one recorded: the outermost) */
+  size_t framebytes = 0; /* (the bytes they take) */
+  bool lost = false;     /* (a frame had no memory to be recorded) */
   size_t charged = 0;   /* (the room for its frames) */
   size_t room = 0;      /* (the room for the parser's arrays and buffer) */
   lu_byte stop = 0;
@@ -83,8 +87,22 @@ struct LoadBox : lua_UserObject
   bool persistuservalues() const override { return false; }
 };
 
+/* the frames of 'box' given back */
+static void freeframes(LoadBox* box)
+{
+  while (box->frames != nullptr)
+  {
+    LoadFrame* f = box->frames;
+    box->frames = f->below;
+    delete f;
+  }
+  box->framebytes = 0;
+  box->lost = false;
+}
+
 LoadBox::~LoadBox()
 {
+  freeframes(this);
   if (holds)
   { /* (counted in its room) */
     delete[] dyd.actvar.arr;
@@ -226,48 +244,87 @@ static LoadBoxKind loadboxkind;
   luaD_throw(rz->L, LUA_ERRSYNTAX);
 }
 
+/* 'f' recorded in the box (nullptr: there was no memory for it) */
+static void pushframe(LoadBox* box, int fn, LoadFrame* f)
+{
+  if (f == nullptr)
+  { /* (the load cannot go on: see 'luaZ_loadk') */
+    box->lost = true;
+    return;
+  }
+  f->fn = fn;
+  f->below = box->frames;
+  box->frames = f;
+  box->framebytes += f->size() + FRAME_HEADER;
+  assert(box->framebytes <= box->charged); /* (the bound of 'prepstop') */
+}
+
+/* (as a freeze passes: no error can be raised, it would take its place) */
+void luaZ_record(LoadResume* rz, int fn, const LoadFrame& l)
+{
+  if (rz == nullptr || !rz->recording || rz->box == nullptr)
+    return; /* (not a freeze of a stop point) */
+  pushframe(rz->box, fn, l.copy());
+}
+
+const LoadFrame& luaZ_restore(LoadResume* rz, int fn)
+{
+  const LoadFrame* f = rz->rframe;
+  if (f == nullptr || f->fn != fn)
+    luaZ_badstate(rz);
+  rz->rframe = f->below;
+  return *f;
+}
+
+/* a frame recorded as the bytes of its locals */
+struct ByteFrame : LoadFrame
+{
+  std::vector<char> bytes;
+  size_t size() const override { return sizeof(*this) + bytes.capacity() + FRAME_HEADER; }
+};
+
 void luaZ_record(LoadResume* rz, int fn, int site, const void* l, size_t n)
 {
   if (rz == nullptr || !rz->recording || rz->box == nullptr)
     return; /* (not a freeze of a stop point) */
-  assert(n < 65536);
-  std::vector<char>& f = rz->box->frames;
-  size_t at = f.size();
-  assert(at + n + 4 <= f.capacity()); /* (the bound of 'prepstop') */
-  f.resize(at + n + 4);
-  if (n != 0)
-    memcpy(&f[at], l, n);
-  f[at + n] = static_cast<char>(fn);
-  f[at + n + 1] = static_cast<char>(site);
-  f[at + n + 2] = static_cast<char>(n & 0xff);
-  f[at + n + 3] = static_cast<char>(n >> 8);
+  ByteFrame* f = new (std::nothrow) ByteFrame;
+  if (f != nullptr)
+  {
+    try
+    {
+      f->bytes.assign(static_cast<const char*>(l), static_cast<const char*>(l) + n);
+    }
+    catch (...)
+    {
+      delete f;
+      f = nullptr;
+    }
+  }
+  if (f != nullptr)
+    f->site = site;
+  pushframe(rz->box, fn, f);
 }
 
 int luaZ_restore(LoadResume* rz, int fn, void* l, size_t n)
 {
-  const std::vector<char>& f = rz->box->frames;
-  size_t p = rz->rpos;
-  if (p < 4)
-    luaZ_badstate(rz);
-  size_t hn = static_cast<unsigned char>(f[p - 2]) | (static_cast<size_t>(static_cast<unsigned char>(f[p - 1])) << 8);
-  if (static_cast<unsigned char>(f[p - 4]) != fn || hn != n || p < 4 + n)
+  const ByteFrame& f = static_cast<const ByteFrame&>(luaZ_restore(rz, fn));
+  if (f.bytes.size() != n)
     luaZ_badstate(rz);
   if (n != 0)
-    memcpy(l, &f[p - 4 - n], n);
-  rz->rpos = p - 4 - n;
-  return static_cast<unsigned char>(f[p - 3]);
+    memcpy(l, f.bytes.data(), n);
+  return f.site;
 }
 
 void luaZ_resumed(LoadResume* rz)
 {
-  if (rz->rpos != 0)
+  if (rz->rframe != nullptr)
     luaZ_badstate(rz);
   rz->z->resuming = false;
 }
 
 bool luaZ_recorded(const LoadResume* rz)
 {
-  return !rz->box->frames.empty();
+  return rz->box->frames != nullptr || rz->box->lost;
 }
 
 /*
@@ -309,8 +366,7 @@ static void prepstop(LoadResume* rz, lu_byte kind)
     charge(L, box, held - box->room);
     box->room = held;
   }
-  box->frames.clear();
-  box->frames.reserve(bound);
+  freeframes(box);
   box->stop = kind;
   box->points = rz->points;
   box->clhash = rz->clhash;
@@ -528,7 +584,7 @@ static int ended(lua_State* L, LoadResume* rz, int st)
   LoadBox* box = rz->box;
   if (box != nullptr && !box->holds)
   {
-    std::vector<char>().swap(box->frames);
+    freeframes(box);
     std::vector<char>().swap(box->input);
     box->anchoridx = 0; /* (not stopped: inert, if kept outside the process) */
     if (luaM_shrinkhost(L->l_G, box->hosted, LOADBOX_SIZE))
@@ -613,8 +669,13 @@ int luaZ_loadk(lua_State* L, const lua_LoadSpec& ls, bool resume)
       lua_unlock(L);
       return ended(L, &rz, st);
     }
+    if (box->lost)
+    { /* (a frame had no memory to be recorded) */
+      lua_pushistringref(L, lt::not_enough_memory);
+      return ended(L, &rz, LUA_ERRMEM);
+    }
     z.resuming = true;
-    rz.rpos = box->frames.size();
+    rz.rframe = box->frames;
     std::optional<byte_view> s;
     rz.given = box->given;
     if (box->zsrc == ZS_STRING && ls.readeridx == 0 && (s = lua_tolstring(L, 1)))

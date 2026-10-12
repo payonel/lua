@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <new>
 #include <vector>
 
 #include "lua.h"
@@ -41,6 +42,27 @@ struct ZIO;
 ** continuation of the C function that loads makes the calls again from
 ** the frames, outermost first, and the load goes on where it stopped.
 */
+
+/*
+** The frame of a function of a load, as a freeze leaves it: where it was
+** (its state, the call it was in, which it makes again after the thaw)
+** and its locals. Each function with locals to keep has its own frame
+** type, with them as its fields; this one has none.
+*/
+struct LoadFrame
+{
+  int fn = 0;                 /* the function ('LF_*', set when recorded) */
+  int site = 0;               /* its state (0: its start) */
+  LoadFrame* below = nullptr; /* (in the box: the frame recorded before it) */
+  LoadFrame() = default;
+  LoadFrame(const LoadFrame&) = default;
+  LoadFrame& operator=(const LoadFrame&) = default;
+  virtual ~LoadFrame() = default;
+  /* a copy, to record (nullptr: no memory for it) */
+  virtual LoadFrame* copy() const { return new (std::nothrow) LoadFrame(*this); }
+  /* its size, counted in the box's room for frames */
+  virtual size_t size() const { return sizeof(*this); }
+};
 
 /* where a load stopped */
 constexpr lu_byte LS_READ = 1;  /* in a call of its reader function */
@@ -163,7 +185,7 @@ struct LoadResume
   bool given = false; /* (a string chunk: did its reader give it?) */
   LoadBox* box = nullptr;
   bool recording = false; /* a freeze passes: the frames record themselves */
-  size_t rpos = 0;        /* (the end of the next frame to make again) */
+  const LoadFrame* rframe = nullptr; /* (the next frame to make again) */
   size_t points = 0;      /* the stop points it passed (tokens read, checks of the binary loader) */
   size_t pieces = 0;      /* the pieces read before it had a box */
   size_t ends = 0;        /* the reads that gave the end before it had a box */
@@ -171,6 +193,10 @@ struct LoadResume
   unsigned int clhash = 0; /* the hash its function was given (0: not made yet) */
 };
 
+/* the frame 'l' of function 'fn', as a freeze leaves it (a copy, kept by the box) */
+void luaZ_record(LoadResume* rz, int fn, const LoadFrame& l);
+/* the frame of 'fn' made again (its type is the one 'fn' records) */
+const LoadFrame& luaZ_restore(LoadResume* rz, int fn);
 /* a frame of function 'fn' at 'site', its locals at 'l' ('n' bytes), as a freeze leaves it */
 void luaZ_record(LoadResume* rz, int fn, int site, const void* l, size_t n);
 /* the frame of 'fn' made again: its locals into 'l'; returns its site */
