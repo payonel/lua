@@ -44,6 +44,18 @@ do
   assert(sealed.x == 1)
 end
 
+do   -- bug since 5.4
+  local oldmode = collectgarbage("generational")
+  local parent = {}
+  parent.__newindex = parent
+  collectgarbage()
+  local child = setmetatable({}, parent)
+  child.__newindex = {x = "hello"}
+  collectgarbage("step")
+  assert(parent.__newindex.x == "hello")
+  collectgarbage(oldmode)
+end
+
 -- __call: callable tables, arguments and returns
 do
   local t = setmetatable({}, {

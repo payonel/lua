@@ -382,20 +382,22 @@ void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
       luaT_callTM(L, tm, t, key, val);
       return;
     }
-    t = tm; /* else repeat assignment over 'tm' */
+    t = tm; /* else must repeat assignment over 'tm' */
     tsrc = NOSLOT;
+    /* do the equivalent to 'luaV_fastset', but saving 'h' */
     if (!ttistable(t))
       hres = HNOTATABLE;
     else
     {
-      hres = hvalue(t)->luaH_pset(key, val);
+      Table* h = hvalue(t); /* next call can change the value at 't' */
+      hres = h->luaH_pset(key, val);
+      if (hres == HOK)
+      {
+        luaC_barrierback(L, h, val); /* luaV_finishfastset */
+        return; /* done */
+      }
     }
-    if (hres == HOK)
-    {
-      luaV_finishfastset(L, t, val);
-      return; /* done */
-    }
-    /* else 'return luaV_finishset(L, t, key, val, slot)' (loop) */
+    /* else 'return luaV_finishset(L, t, key, val, hres)' (loop) */
   }
   luaG_runerror(L, lt::newindex_chain_too_long_possible_loop);
 }
