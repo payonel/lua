@@ -948,7 +948,7 @@ public final class Lstrlib
     l = check_capture(ms, l);
     int len = ms.capture[l].len;
     ByteView msv = ms.src.view();
-    if ((ms.src_end - s) >= len &&
+    if (Integer.compareUnsigned(ms.src_end - s, len) >= 0 &&
         msv.substr(ms.capture[l].init, len).equals(msv.substr(s, len)))
       return s + len;
     else
@@ -2694,6 +2694,9 @@ public final class Lstrlib
     int top = lua_gettop(L) - 2; /* (the arguments, the box, the string) */
     InternalString sf = lua_toistring(L, 1);
     luaL_Box box = luaL_tobox(L, top + 1);
+    if (box.ints[FMT_ITEM] < 1 || box.ints[FMT_ITEM] > (long) sf.size() ||
+        box.ints[FMT_ARG] < 1 || box.ints[FMT_ARG] > top)
+      luaL_errori(L, Lt.invalid_state_of_a_stopped_format);
     luaL_Buffer b = new luaL_Buffer();
     try
     {
@@ -3047,7 +3050,7 @@ public final class Lstrlib
     ByteSpan buff = luaL_buffaddr(b);
     luaL_addsize(b, SZ_FLOAT);
     buff.write_float(f, pos);
-    if (islittle != (nativeendian_little ? 1 : 0))
+    if (islittle == 0)
     {
       buff.reverse(pos, SZ_FLOAT);
     }
@@ -3059,7 +3062,7 @@ public final class Lstrlib
     ByteSpan buff = luaL_buffaddr(b);
     luaL_addsize(b, SZ_DOUBLE);
     buff.write_double(f, pos);
-    if (islittle != nativeendian_little)
+    if (!islittle)
     {
       buff.reverse(pos, SZ_DOUBLE);
     }
@@ -3068,7 +3071,7 @@ public final class Lstrlib
   private static double unpackDouble(ByteView data, int pos, boolean islittle)
   {
     data = data.substr(pos, SZ_DOUBLE);
-    if (islittle != nativeendian_little)
+    if (!islittle)
     {
       ByteOwner r = new ByteOwner(data);
       r.reverse();
@@ -3080,7 +3083,7 @@ public final class Lstrlib
   private static float unpackFloat(ByteView data, int pos, boolean islittle)
   {
     data = data.substr(pos, SZ_FLOAT);
-    if (islittle != nativeendian_little)
+    if (!islittle)
     {
       ByteOwner r = new ByteOwner(data);
       r.reverse();

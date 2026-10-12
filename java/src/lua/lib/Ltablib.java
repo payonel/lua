@@ -886,7 +886,8 @@ public final class Ltablib
       box.s[k] = bytes.toInt64(8 * k);
     long[] v = box.s;
     if (v[SO_NINTS] != (long) (bytes.size() / 8) || v[SO_BOXED] != 1 || v[SO_PC] < 0 ||
-        v[SO_PC] >= S_NKEPT || v[SO_N] < 0 || SO_PENDING + 4 * v[SO_N] > v[SO_NINTS] ||
+        v[SO_PC] >= S_NKEPT || v[SO_N] < 0 || v[SO_N] >= SORT_MAXDEPTH ||
+        SO_PENDING + 4 * v[SO_N] > v[SO_NINTS] ||
         (v[SO_FN] != 0 && v[SO_FN] != 1) || (v[SO_PLAIN] != 0 && v[SO_PLAIN] != 1) || v[SO_R] < -1 ||
         v[SO_R] > 1)
       return null;
