@@ -2,7 +2,7 @@ tests/time.txt
 tests/time-debug.txt
 obj/*
 
-lua
+/lua
 
 .vscode/browse*
 
