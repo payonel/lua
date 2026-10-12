@@ -30,61 +30,90 @@ namespace lua::compiler
 
 struct LoadState
 {
-  lua_State* L;
-  ZIO* Z;
+  lua_State* L = nullptr;
+  ZIO* Z = nullptr;
   byte_view name;
-  Table* h;          /* list for string reuse */
-  size_t offset;     /* current position relative to beginning of dump */
-  lua_Unsigned nstr; /* number of strings in the list */
-  bool fixed;        /* dump is fixed in memory */
-  MBuffer* buff;     /* for long strings (kept with a load a freeze stopped) */
+  Table* h = nullptr;     /* list for string reuse */
+  size_t offset = 0;      /* current position relative to beginning of dump */
+  lua_Unsigned nstr = 0;  /* number of strings in the list */
+  bool fixed = false;     /* dump is fixed in memory */
+  MBuffer* buff = nullptr; /* for long strings (kept with a load a freeze stopped) */
 };
 
 /*
-** A load that a freeze can stop (see lload.h): a call at site 'n' of a
-** function's frame records the frame (its locals, 'l') if a freeze passes
-** through it; the function made again goes to the site of its frame. A
-** check point at site 'n' is a leaf: made again, the load goes on after it.
+** A load that a freeze can stop (see lload.h): a function with calls a
+** freeze can pass through runs as a state machine, its state and its
+** locals in its frame ('l'). Each such call is made at a state of its own,
+** the one its function goes to again when it is made again after the
+** thaw; a freeze passing records the frame. A check point is a leaf: made
+** again, the function goes on after it. A function with no frame of its
+** own (as 'loadByte') goes the same way when made again.
 */
-#define LZ_SITE(n, ...)                            \
-  site_##n:                                        \
-  try                                              \
-  {                                                \
-    __VA_ARGS__;                                   \
-  }                                                \
-  catch (...)                                      \
-  {                                                \
-    luaZ_record(S->Z->rz, FN, n, &l, sizeof(l));   \
-    throw;                                         \
-  }
 
-#define LZ_CHECK(n)                                                                  \
-  if (l_unlikely(S->Z->rz != nullptr) && luaZ_checkdue(S->Z->rz, S->L))              \
-  {                                                                                  \
-    try                                                                              \
-    {                                                                                \
-      luaZ_checkpoint(S->Z->rz);                                                     \
-    }                                                                                \
-    catch (...)                                                                      \
-    {                                                                                \
-      luaZ_record(S->Z->rz, FN, n, &l, sizeof(l));                                   \
-      throw;                                                                         \
-    }                                                                                \
-  }                                                                                  \
-  site_##n:
-
-#define LZ_RESUMING() l_unlikely(S->Z->resuming)
-#define LZ_SITENO() luaZ_restore(S->Z->rz, FN, &l, sizeof(l))
-#define LZ_BADSITE() luaZ_badstate(S->Z->rz)
-#define LZ_LEAF(n)                \
-  case n:                         \
-    luaZ_resumed(S->Z->rz);       \
-    goto site_##n
-
-struct NoLocals
+/* the frames of the binary loader's functions (see lload.h) */
+struct VarintFrame : LoadFrame
 {
-  char none = 0;
+  lua_Unsigned x = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) VarintFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
 };
+
+struct LoadNumberFrame : LoadFrame
+{
+  lua_Number x = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) LoadNumberFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct LoadStringFrame : LoadFrame
+{
+  size_t len = 0; /* (the string's size) */
+  char buff[41] = {};
+  LoadFrame* copy() const override { return new (std::nothrow) LoadStringFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+/* (of the functions with a count and an index) */
+struct CountFrame : LoadFrame
+{
+  int n = 0;
+  int i = 0;
+  LoadFrame* copy() const override { return new (std::nothrow) CountFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct LiteralFrame : LoadFrame
+{
+  char buff[LUA_SIGNATURE.size() + lt::LUAC_DATA.size()] = {}; /* larger than both */
+  LoadFrame* copy() const override { return new (std::nothrow) LiteralFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct CheckNumFrame : LoadFrame
+{
+  std::byte raw[sizeof(lua_Integer) > sizeof(lua_Number) ? sizeof(lua_Integer) : sizeof(lua_Number)] = {}; /* (the bytes read) */
+  LoadFrame* copy() const override { return new (std::nothrow) CheckNumFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+struct UndumpFrame : LoadFrame
+{
+  LoadState S;
+  LClosure* cl = nullptr;
+  LoadFrame* copy() const override { return new (std::nothrow) UndumpFrame(*this); }
+  size_t size() const override { return sizeof(*this); }
+};
+
+/* a check point of the load: a freeze can stop it there (the leaf of the frames) */
+static void checkpoint(LoadState* S, LoadFrame& l, int site)
+{
+  LoadResume* rz = S->Z->rz;
+  if (l_unlikely(rz != nullptr) && luaZ_checkdue(rz, S->L))
+  {
+    l.site = site;
+    luaZ_checkpoint(rz);
+  }
+}
 
 [[noreturn]] static void error(LoadState* S, byte_view why)
 {
@@ -97,21 +126,10 @@ struct NoLocals
 ** adapt to the endianness of the input
 */
 
+/* (with no frame of its own: made again, it reads the rest of 'b') */
 static void loadBlock(LoadState* S, std::span<std::byte> b)
 {
-  constexpr int FN = LF_LOADBLOCK;
-  struct
-  {
-    size_t r;
-  } l;
-  if (LZ_RESUMING())
-  {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
-  }
-  LZ_SITE(1, l.r = luaZ_read(S->Z, b));
-  if (l.r != 0)
+  if (luaZ_read(S->Z, b) != 0)
     error(S, lt::truncated_chunk);
   S->offset += b.size();
 }
@@ -128,24 +146,14 @@ static void loadVar(LoadState* S, T& x)
   loadVector(S, std::span<T>(&x, 1));
 }
 
+/* (with no frame of its own: made again, it goes the same way; the padding's bytes are not kept) */
 static void loadAlign(LoadState* S, size_t align)
 {
-  constexpr int FN = LF_LOADALIGN;
-  struct
-  {
-    size_t padding;
-    std::byte paddingContent[sizeof(lua_Integer)];
-  } l;
-  if (LZ_RESUMING())
-  {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
-  }
-  l.padding = align - S->offset % align;
-  if (l.padding < align)
+  size_t padding = align - S->offset % align;
+  if (padding < align)
   { /* (padding == align) means no padding */
-    LZ_SITE(1, loadBlock(S, std::span<std::byte>(l.paddingContent).first(l.padding)));
+    std::byte paddingContent[sizeof(lua_Integer)];
+    loadBlock(S, std::span<std::byte>(paddingContent).first(padding));
     assert(S->offset % align == 0);
   }
 }
@@ -161,53 +169,50 @@ static std::span<T> getaddr(LoadState* S, int n)
   return luaZ_overlay<T>(*block);
 }
 
+/* (with no frame of its own: made again, it goes the same way) */
 static lu_byte loadByte(LoadState* S)
 {
-  constexpr int FN = LF_LOADBYTE;
-  struct
-  {
-    int b;
-  } l;
-  if (LZ_RESUMING())
-  {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
-  }
-  LZ_SITE(1, l.b = (S->Z->pos < S->Z->chunk.size())
-                       ? (unsigned char)S->Z->chunk[S->Z->pos++]
-                       : luaZ_fill(S->Z));
-  if (l.b == EOZ)
+  int b = (S->Z->pos < S->Z->chunk.size())
+              ? (unsigned char)S->Z->chunk[S->Z->pos++]
+              : luaZ_fill(S->Z);
+  if (b == EOZ)
     error(S, lt::truncated_chunk);
   S->offset++;
-  return (lu_byte)l.b;
+  return (lu_byte)b;
 }
 
 static lua_Unsigned loadVarint(LoadState* S, lua_Unsigned limit)
 {
-  constexpr int FN = LF_LOADVARINT;
-  struct
+  VarintFrame l;
+  if (l_unlikely(S->Z->resuming))
+    l = static_cast<const VarintFrame&>(luaZ_restore(S->Z->rz, LF_LOADVARINT));
+  limit >>= 7;
+  try
   {
-    lua_Unsigned x;
-    lua_Unsigned limit;
-    int b;
-  } l;
-  if (LZ_RESUMING())
-  {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
+    for (;;)
+    {
+      switch (l.site)
+      {
+      case 0: /* the loop */
+      {
+        int b = loadByte(S);
+        if (l.x > limit)
+          error(S, lt::integer_overflow);
+        l.x = (l.x << 7) | (b & 0x7f);
+        if ((b & 0x80) == 0)
+          return l.x;
+        continue;
+      }
+      default:
+        luaZ_badstate(S->Z->rz);
+      }
+    }
   }
-  l.x = 0;
-  l.limit = limit >> 7;
-  do
+  catch (...)
   {
-    LZ_SITE(1, l.b = loadByte(S));
-    if (l.x > l.limit)
-      error(S, lt::integer_overflow);
-    l.x = (l.x << 7) | (l.b & 0x7f);
-  } while ((l.b & 0x80) != 0);
-  return l.x;
+    luaZ_record(S->Z->rz, LF_LOADVARINT, l);
+    throw;
+  }
 }
 
 static size_t loadSize(LoadState* S)
@@ -222,18 +227,25 @@ static int loadInt(LoadState* S)
 
 static lua_Number loadNumber(LoadState* S)
 {
-  constexpr int FN = LF_LOADNUMBER;
-  struct
+  LoadNumberFrame l;
+  if (l_unlikely(S->Z->resuming))
+    l = static_cast<const LoadNumberFrame&>(luaZ_restore(S->Z->rz, LF_LOADNUMBER));
+  try
   {
-    lua_Number x;
-  } l;
-  if (LZ_RESUMING())
-  {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
+    switch (l.site)
+    {
+    case 0:
+      loadVar(S, l.x);
+      break;
+    default:
+      luaZ_badstate(S->Z->rz);
+    }
   }
-  LZ_SITE(1, loadVar(S, l.x));
+  catch (...)
+  {
+    luaZ_record(S->Z->rz, LF_LOADNUMBER, l);
+    throw;
+  }
   return l.x;
 }
 
@@ -256,60 +268,72 @@ static lua_Integer loadInteger(LoadState* S)
 template <typename SetSlot>
 static void loadString(LoadState* S, Proto* p, SetSlot setslot)
 {
-  constexpr int FN = LF_LOADSTRING;
-  struct
-  {
-    size_t size;
-    lua_Unsigned idx;
-    char buff[41];
-  } l;
+  LoadStringFrame l;
   lua_State* L = S->L;
-  TString* ts;
+  TString* ts = nullptr;
   TValue sv;
-  if (LZ_RESUMING())
+  if (l_unlikely(S->Z->resuming))
+    l = static_cast<const LoadStringFrame&>(luaZ_restore(S->Z->rz, LF_LOADSTRING));
+  try
   {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.len = loadSize(S);
+        if (l.len == 0) /* previously saved string? */
+          l.site = 1;
+        else if ((l.len -= 1) <= 40)
+          l.site = 2;
+        else
+        {
+          S->buff->growTo(l.len + 1);
+          l.site = 3;
+        }
+        continue;
+      case 1:
+      {
+        lua_Unsigned idx = loadVarint(S, LUA_MAXUNSIGNED); /* get its index */
+        TValue stv;
+        if (idx == 0)
+        { /* no string? */
+          setslot(nullptr);
+          return;
+        }
+        if (novariant(S->h->luaH_getint(idx, &stv)) != LUA_TSTRING)
+          error(S, lt::invalid_string_index);
+        assert(ttisstring(&stv));
+        ts = tsvalue(&stv); /* get its value */
+        setslot(ts);
+        luaC_objbarrier(L, p, ts);
+        return; /* do not save it again */
+      }
+      case 2:
+      {
+        loadVector(S, std::span<char>(l.buff, l.len + 1)); /* load string into buffer */
+        byte_view buffstr{l.buff, l.len};
+        ts = TString::luaS_createstr(L, buffstr); /* create string */
+        setslot(ts);
+        luaC_objbarrier(L, p, ts);
+        break;
+      }
+      case 3:
+        loadVector(S, std::span<char>(S->buff->area().data(), l.len + 1));
+        ts = TString::luaS_takeblock(L, S->buff->handover(), l.len); /* the buffer's bytes are the string's */
+        setslot(ts);
+        luaC_objbarrier(L, p, ts);
+        break;
+      default:
+        luaZ_badstate(S->Z->rz);
+      }
+      break; /* (the string is made) */
     }
   }
-  LZ_SITE(1, l.size = loadSize(S));
-  if (l.size == 0)
-  {                                                     /* previously saved string? */
-    LZ_SITE(2, l.idx = loadVarint(S, LUA_MAXUNSIGNED)); /* get its index */
-    TValue stv;
-    if (l.idx == 0)
-    { /* no string? */
-      setslot(nullptr);
-      return;
-    }
-    if (novariant(S->h->luaH_getint(l.idx, &stv)) != LUA_TSTRING)
-      error(S, lt::invalid_string_index);
-    assert(ttisstring(&stv));
-    ts = tsvalue(&stv); /* get its value */
-    setslot(ts);
-    luaC_objbarrier(L, p, ts);
-    return; /* do not save it again */
-  }
-  else if ((l.size -= 1) <= 40)
+  catch (...)
   {
-    LZ_SITE(3, loadVector(S, std::span<char>(l.buff, l.size + 1))); /* load string into buffer */
-    byte_view buffstr{l.buff, l.size};
-    ts = TString::luaS_createstr(L, buffstr); /* create string */
-    setslot(ts);
-    luaC_objbarrier(L, p, ts);
-  }
-  else
-  {
-    S->buff->growTo(l.size + 1);
-    LZ_SITE(4, loadVector(S, std::span<char>(S->buff->area().data(), l.size + 1)));
-    ts = TString::luaS_takeblock(L, S->buff->handover(), l.size); /* the buffer's bytes are the string's */
-    setslot(ts);
-    luaC_objbarrier(L, p, ts);
+    luaZ_record(S->Z->rz, LF_LOADSTRING, l);
+    throw;
   }
   /* add string to list of saved strings */
   S->nstr++;
@@ -321,31 +345,38 @@ static void loadString(LoadState* S, Proto* p, SetSlot setslot)
 
 static void loadCode(LoadState* S, Proto* f)
 {
-  constexpr int FN = LF_LOADCODE;
-  struct
+  CountFrame l;
+  if (l_unlikely(S->Z->resuming))
+    l = static_cast<const CountFrame&>(luaZ_restore(S->Z->rz, LF_LOADCODE));
+  try
   {
-    int n;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    default: LZ_BADSITE();
+    case 0:
+      l.n = loadInt(S);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      loadAlign(S, sizeof(f->code[0]));
+      if (S->fixed)
+      {
+        f->code = getaddr<Instruction>(S, l.n);
+        break;
+      }
+      f->code = luaM_alloc_Instruction_span(S->L->l_G, S->L, {}, l.n, true);
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      loadVector(S, f->code);
+      break;
+    default:
+      luaZ_badstate(S->Z->rz);
     }
   }
-  LZ_SITE(1, l.n = loadInt(S));
-  LZ_SITE(2, loadAlign(S, sizeof(f->code[0])));
-  if (S->fixed)
+  catch (...)
   {
-    f->code = getaddr<Instruction>(S, l.n);
-  }
-  else
-  {
-    f->code = luaM_alloc_Instruction_span(S->L->l_G, S->L, {}, l.n, true);
-    LZ_SITE(3, loadVector(S, f->code));
+    luaZ_record(S->Z->rz, LF_LOADCODE, l);
+    throw;
   }
 }
 
@@ -353,101 +384,141 @@ static void loadFunction(LoadState* S, Proto* f);
 
 static void loadConstants(LoadState* S, Proto* f)
 {
-  constexpr int FN = LF_LOADCONSTANTS;
-  struct
+  CountFrame l;
+  if (l_unlikely(S->Z->resuming))
   {
-    int n;
-    int i;
-    int t;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
-    {
-    case 1: goto site_1;
-    LZ_LEAF(2);
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    default: LZ_BADSITE();
+    l = static_cast<const CountFrame&>(luaZ_restore(S->Z->rz, LF_LOADCONSTANTS));
+    if (l.site == 2)
+    { /* (the check point is behind it) */
+      luaZ_resumed(S->Z->rz);
+      l.site = 3;
     }
   }
-  LZ_SITE(1, l.n = loadInt(S));
-  f->k = luaM_alloc_TValue_span(S->L->l_G, S->L, {}, l.n, true);
-  for (l.i = 0; l.i < l.n; l.i++)
-    setnilvalue(&f->k[l.i]);
-  for (l.i = 0; l.i < l.n; l.i++)
+  try
   {
-    LZ_CHECK(2);
-    LZ_SITE(3, l.t = loadByte(S));
-    switch (l.t)
+    for (;;)
     {
-    case LUA_VNIL:
-      setnilvalue(&f->k[l.i]);
-      break;
-    case LUA_VFALSE:
-      (f->k[l.i].tt_ = LUA_VFALSE);
-      break;
-    case LUA_VTRUE:
-      (f->k[l.i].tt_ = LUA_VTRUE);
-      break;
-    case LUA_VNUMFLT:
-    {
-      lua_Number x;
-      LZ_SITE(4, x = loadNumber(S));
-      setfltvalue(&f->k[l.i], x);
-      break;
+      switch (l.site)
+      {
+      case 0:
+        l.n = loadInt(S);
+        f->k = luaM_alloc_TValue_span(S->L->l_G, S->L, {}, l.n, true);
+        for (l.i = 0; l.i < l.n; l.i++)
+          setnilvalue(&f->k[l.i]);
+        l.i = 0;
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop */
+        if (l.i >= l.n)
+          return;
+        checkpoint(S, l, 2);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        switch (loadByte(S))
+        {
+        case LUA_VNIL:
+          setnilvalue(&f->k[l.i]);
+          break;
+        case LUA_VFALSE:
+          (f->k[l.i].tt_ = LUA_VFALSE);
+          break;
+        case LUA_VTRUE:
+          (f->k[l.i].tt_ = LUA_VTRUE);
+          break;
+        case LUA_VNUMFLT:
+          l.site = 4;
+          continue;
+        case LUA_VNUMINT:
+          l.site = 5;
+          continue;
+        case LUA_VSHRSTR:
+          assert(f->source == nullptr);
+          l.site = 6;
+          continue;
+        default:
+          error(S, lt::invalid_constant);
+        }
+        l.i++;
+        l.site = 1;
+        continue;
+      case 4:
+      {
+        lua_Number x = loadNumber(S);
+        setfltvalue(&f->k[l.i], x);
+        l.i++;
+        l.site = 1;
+        continue;
+      }
+      case 5:
+      {
+        lua_Integer x = loadInteger(S);
+        setivalue(&f->k[l.i], x);
+        l.i++;
+        l.site = 1;
+        continue;
+      }
+      case 6:
+        loadString(S, f, [f](TString* ts) { f->source = ts; }); /* use 'source' to anchor string */
+        if (f->source == nullptr)
+          error(S, lt::bad_format_for_constant_string);
+        setsvalue(S->L, &f->k[l.i], f->source); /* save it in the right place */
+        f->source = nullptr;
+        l.i++;
+        l.site = 1;
+        continue;
+      default:
+        luaZ_badstate(S->Z->rz);
+      }
     }
-    case LUA_VNUMINT:
-    {
-      lua_Integer x;
-      LZ_SITE(5, x = loadInteger(S));
-      setivalue(&f->k[l.i], x);
-      break;
-    }
-    case LUA_VSHRSTR:
-    {
-      assert(f->source == nullptr);
-      LZ_SITE(6, loadString(S, f, [f](TString* ts) { f->source = ts; })); /* use 'source' to anchor string */
-      if (f->source == nullptr)
-        error(S, lt::bad_format_for_constant_string);
-      setsvalue(S->L, &f->k[l.i], f->source); /* save it in the right place */
-      f->source = nullptr;
-      break;
-    }
-    default:
-      error(S, lt::invalid_constant);
-    }
+  }
+  catch (...)
+  {
+    luaZ_record(S->Z->rz, LF_LOADCONSTANTS, l);
+    throw;
   }
 }
 
 static void loadProtos(LoadState* S, Proto* f)
 {
-  constexpr int FN = LF_LOADPROTOS;
-  struct
+  CountFrame l;
+  if (l_unlikely(S->Z->resuming))
+    l = static_cast<const CountFrame&>(luaZ_restore(S->Z->rz, LF_LOADPROTOS));
+  try
   {
-    int n;
-    int i;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.n = loadInt(S);
+        f->p = luaM_alloc_Proto_ptr_span(S->L->l_G, S->L, {}, l.n, true);
+        for (l.i = 0; l.i < l.n; l.i++)
+          f->p[l.i] = nullptr;
+        l.i = 0;
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop */
+        if (l.i >= l.n)
+          return;
+        f->p[l.i] = Proto::luaF_newproto(S->L);
+        luaC_objbarrier(S->L, f, f->p[l.i]);
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        loadFunction(S, f->p[l.i]);
+        l.i++;
+        l.site = 1;
+        continue;
+      default:
+        luaZ_badstate(S->Z->rz);
+      }
     }
   }
-  LZ_SITE(1, l.n = loadInt(S));
-  f->p = luaM_alloc_Proto_ptr_span(S->L->l_G, S->L, {}, l.n, true);
-  for (l.i = 0; l.i < l.n; l.i++)
-    f->p[l.i] = nullptr;
-  for (l.i = 0; l.i < l.n; l.i++)
+  catch (...)
   {
-    f->p[l.i] = Proto::luaF_newproto(S->L);
-    luaC_objbarrier(S->L, f, f->p[l.i]);
-    LZ_SITE(2, loadFunction(S, f->p[l.i]));
+    luaZ_record(S->Z->rz, LF_LOADPROTOS, l);
+    throw;
   }
 }
 
@@ -459,161 +530,268 @@ static void loadProtos(LoadState* S, Proto* f)
 */
 static void loadUpvalues(LoadState* S, Proto* f)
 {
-  constexpr int FN = LF_LOADUPVALUES;
-  struct
+  CountFrame l;
+  if (l_unlikely(S->Z->resuming))
+    l = static_cast<const CountFrame&>(luaZ_restore(S->Z->rz, LF_LOADUPVALUES));
+  try
   {
-    int n;
-    int i;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    for (;;)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    default: LZ_BADSITE();
+      switch (l.site)
+      {
+      case 0:
+        l.n = loadInt(S);
+        f->upvalues = luaM_alloc_Upvaldesc_span(S->L->l_G, S->L, {}, l.n, true);
+        for (l.i = 0; l.i < l.n; l.i++) /* make array valid for GC */
+          f->upvalues[l.i].name = nullptr;
+        l.i = 0;
+        l.site = 1;
+        [[fallthrough]];
+      case 1: /* the loop (following calls can raise errors) */
+        if (l.i >= l.n)
+          return;
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        f->upvalues[l.i].instack = loadByte(S);
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        f->upvalues[l.i].idx = loadByte(S);
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        f->upvalues[l.i].kind = loadByte(S);
+        l.i++;
+        l.site = 1;
+        continue;
+      default:
+        luaZ_badstate(S->Z->rz);
+      }
     }
   }
-  LZ_SITE(1, l.n = loadInt(S));
-  f->upvalues = luaM_alloc_Upvaldesc_span(S->L->l_G, S->L, {}, l.n, true);
-  for (l.i = 0; l.i < l.n; l.i++) /* make array valid for GC */
-    f->upvalues[l.i].name = nullptr;
-  for (l.i = 0; l.i < l.n; l.i++)
-  { /* following calls can raise errors */
-    LZ_SITE(2, f->upvalues[l.i].instack = loadByte(S));
-    LZ_SITE(3, f->upvalues[l.i].idx = loadByte(S));
-    LZ_SITE(4, f->upvalues[l.i].kind = loadByte(S));
+  catch (...)
+  {
+    luaZ_record(S->Z->rz, LF_LOADUPVALUES, l);
+    throw;
   }
 }
 
 static void loadDebug(LoadState* S, Proto* f)
 {
-  constexpr int FN = LF_LOADDEBUG;
-  struct
+  CountFrame l;
+  if (l_unlikely(S->Z->resuming))
   {
-    int n;
-    int i;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
-    {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    LZ_LEAF(7);
-    case 8: goto site_8;
-    case 9: goto site_9;
-    case 10: goto site_10;
-    case 11: goto site_11;
-    case 12: goto site_12;
-    default: LZ_BADSITE();
+    l = static_cast<const CountFrame&>(luaZ_restore(S->Z->rz, LF_LOADDEBUG));
+    if (l.site == 7)
+    { /* (the check point is behind it) */
+      luaZ_resumed(S->Z->rz);
+      l.site = 8;
     }
   }
-  LZ_SITE(1, l.n = loadInt(S));
-  if (S->fixed)
+  try
   {
-    f->lineinfo = getaddr<ls_byte>(S, l.n);
-  }
-  else
-  {
-    f->lineinfo = luaM_alloc_ls_byte_span(S->L->l_G, S->L, {}, l.n, true);
-    LZ_SITE(2, loadVector(S, f->lineinfo));
-  }
-  LZ_SITE(3, l.n = loadInt(S));
-  if (l.n > 0)
-  {
-    LZ_SITE(4, loadAlign(S, sizeof(int)));
-    if (S->fixed)
+    for (;;)
     {
-      f->abslineinfo = getaddr<AbsLineInfo>(S, l.n);
-    }
-    else
-    {
-      f->abslineinfo = luaM_alloc_AbsLineInfo_span(S->L->l_G, S->L, {}, l.n, true);
-      LZ_SITE(5, loadVector(S, f->abslineinfo));
+      switch (l.site)
+      {
+      case 0:
+        l.n = loadInt(S);
+        if (S->fixed)
+        {
+          f->lineinfo = getaddr<ls_byte>(S, l.n);
+          l.site = 2;
+          continue;
+        }
+        f->lineinfo = luaM_alloc_ls_byte_span(S->L->l_G, S->L, {}, l.n, true);
+        l.site = 1;
+        [[fallthrough]];
+      case 1:
+        loadVector(S, f->lineinfo);
+        l.site = 2;
+        [[fallthrough]];
+      case 2:
+        l.n = loadInt(S);
+        if (l.n <= 0)
+        {
+          l.site = 5;
+          continue;
+        }
+        l.site = 3;
+        [[fallthrough]];
+      case 3:
+        loadAlign(S, sizeof(int));
+        if (S->fixed)
+        {
+          f->abslineinfo = getaddr<AbsLineInfo>(S, l.n);
+          l.site = 5;
+          continue;
+        }
+        f->abslineinfo = luaM_alloc_AbsLineInfo_span(S->L->l_G, S->L, {}, l.n, true);
+        l.site = 4;
+        [[fallthrough]];
+      case 4:
+        loadVector(S, f->abslineinfo);
+        l.site = 5;
+        [[fallthrough]];
+      case 5:
+        l.n = loadInt(S);
+        f->locvars = luaM_alloc_LocVar_span(S->L->l_G, S->L, {}, l.n, true);
+        for (l.i = 0; l.i < l.n; l.i++)
+          f->locvars[l.i].varname = nullptr;
+        l.i = 0;
+        l.site = 6;
+        [[fallthrough]];
+      case 6: /* the loop */
+        if (l.i >= l.n)
+        {
+          l.site = 11;
+          continue;
+        }
+        checkpoint(S, l, 7);
+        l.site = 8;
+        [[fallthrough]];
+      case 8:
+        loadString(S, f, [f, i = l.i](TString* ts) { f->locvars[i].varname = ts; });
+        l.site = 9;
+        [[fallthrough]];
+      case 9:
+        f->locvars[l.i].startpc = loadInt(S);
+        l.site = 10;
+        [[fallthrough]];
+      case 10:
+        f->locvars[l.i].endpc = loadInt(S);
+        l.i++;
+        l.site = 6;
+        continue;
+      case 11:
+        l.n = loadInt(S);
+        if (l.n != 0)                    /* does it have debug information? */
+          l.n = (int)f->upvalues.size(); /* must be this many */
+        l.i = 0;
+        l.site = 12;
+        [[fallthrough]];
+      case 12: /* the loop */
+        if (l.i >= l.n)
+          return;
+        l.site = 13;
+        [[fallthrough]];
+      case 13:
+        loadString(S, f, [f, i = l.i](TString* ts) { f->upvalues[i].name = ts; });
+        l.i++;
+        l.site = 12;
+        continue;
+      default:
+        luaZ_badstate(S->Z->rz);
+      }
     }
   }
-  LZ_SITE(6, l.n = loadInt(S));
-  f->locvars = luaM_alloc_LocVar_span(S->L->l_G, S->L, {}, l.n, true);
-  for (l.i = 0; l.i < l.n; l.i++)
-    f->locvars[l.i].varname = nullptr;
-  for (l.i = 0; l.i < l.n; l.i++)
+  catch (...)
   {
-    LZ_CHECK(7);
-    LZ_SITE(8, loadString(S, f, [f, i = l.i](TString* ts) { f->locvars[i].varname = ts; }));
-    LZ_SITE(9, f->locvars[l.i].startpc = loadInt(S));
-    LZ_SITE(10, f->locvars[l.i].endpc = loadInt(S));
-  }
-  LZ_SITE(11, l.n = loadInt(S));
-  if (l.n != 0)                    /* does it have debug information? */
-    l.n = (int)f->upvalues.size(); /* must be this many */
-  for (l.i = 0; l.i < l.n; l.i++)
-  {
-    LZ_SITE(12, loadString(S, f, [f, i = l.i](TString* ts) { f->upvalues[i].name = ts; }));
+    luaZ_record(S->Z->rz, LF_LOADDEBUG, l);
+    throw;
   }
 }
 
 static void loadFunction(LoadState* S, Proto* f)
 {
-  constexpr int FN = LF_LOADFUNCTION;
-  NoLocals l;
-  if (LZ_RESUMING())
+  LoadFrame l;
+  if (l_unlikely(S->Z->resuming))
   {
-    switch (LZ_SITENO())
-    {
-    LZ_LEAF(1);
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    case 8: goto site_8;
-    case 9: goto site_9;
-    case 10: goto site_10;
-    case 11: goto site_11;
-    case 12: goto site_12;
-    default: LZ_BADSITE();
+    l = luaZ_restore(S->Z->rz, LF_LOADFUNCTION);
+    if (l.site == 1)
+    { /* (the check point is behind it) */
+      luaZ_resumed(S->Z->rz);
+      l.site = 2;
     }
   }
-  LZ_CHECK(1);
-  LZ_SITE(2, f->linedefined = loadInt(S));
-  LZ_SITE(3, f->lastlinedefined = loadInt(S));
-  LZ_SITE(4, f->numparams = loadByte(S));
-  /* get only the meaningful flags */
-  LZ_SITE(5, f->flag = loadByte(S) & ~PF_FIXED);
-  if (S->fixed)
-    f->flag |= PF_FIXED; /* signal that code is fixed */
-  LZ_SITE(6, f->maxstacksize = loadByte(S));
-  LZ_SITE(7, loadCode(S, f));
-  LZ_SITE(8, loadConstants(S, f));
-  LZ_SITE(9, loadUpvalues(S, f));
-  LZ_SITE(10, loadProtos(S, f));
-  LZ_SITE(11, loadString(S, f, [f](TString* ts) { f->source = ts; }));
-  LZ_SITE(12, loadDebug(S, f));
+  try
+  {
+    switch (l.site)
+    {
+    case 0:
+      checkpoint(S, l, 1);
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      f->linedefined = loadInt(S);
+      l.site = 3;
+      [[fallthrough]];
+    case 3:
+      f->lastlinedefined = loadInt(S);
+      l.site = 4;
+      [[fallthrough]];
+    case 4:
+      f->numparams = loadByte(S);
+      l.site = 5;
+      [[fallthrough]];
+    case 5:
+      /* get only the meaningful flags */
+      f->flag = loadByte(S) & ~PF_FIXED;
+      if (S->fixed)
+        f->flag |= PF_FIXED; /* signal that code is fixed */
+      l.site = 6;
+      [[fallthrough]];
+    case 6:
+      f->maxstacksize = loadByte(S);
+      l.site = 7;
+      [[fallthrough]];
+    case 7:
+      loadCode(S, f);
+      l.site = 8;
+      [[fallthrough]];
+    case 8:
+      loadConstants(S, f);
+      l.site = 9;
+      [[fallthrough]];
+    case 9:
+      loadUpvalues(S, f);
+      l.site = 10;
+      [[fallthrough]];
+    case 10:
+      loadProtos(S, f);
+      l.site = 11;
+      [[fallthrough]];
+    case 11:
+      loadString(S, f, [f](TString* ts) { f->source = ts; });
+      l.site = 12;
+      [[fallthrough]];
+    case 12:
+      loadDebug(S, f);
+      break;
+    default:
+      luaZ_badstate(S->Z->rz);
+    }
+  }
+  catch (...)
+  {
+    luaZ_record(S->Z->rz, LF_LOADFUNCTION, l);
+    throw;
+  }
 }
 
 static void checkliteral(LoadState* S, byte_view s, byte_view msg)
 {
-  constexpr int FN = LF_CHECKLITERAL;
-  struct
-  {
-    char buff[LUA_SIGNATURE.size() + lt::LUAC_DATA.size()]; /* larger than both */
-  } l;
+  LiteralFrame l;
   size_t len = s.size();
-  if (LZ_RESUMING())
+  if (l_unlikely(S->Z->resuming))
+    l = static_cast<const LiteralFrame&>(luaZ_restore(S->Z->rz, LF_CHECKLITERAL));
+  try
   {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
+    switch (l.site)
+    {
+    case 0:
+      loadVector(S, std::span<char>(l.buff, len));
+      break;
+    default:
+      luaZ_badstate(S->Z->rz);
+    }
   }
-  LZ_SITE(1, loadVector(S, std::span<char>(l.buff, len)));
+  catch (...)
+  {
+    luaZ_record(S->Z->rz, LF_CHECKLITERAL, l);
+    throw;
+  }
   if (!s.equals(byte_view(l.buff, len)))
     error(S, msg);
 }
@@ -624,21 +802,10 @@ static void checkliteral(LoadState* S, byte_view s, byte_view msg)
   error(S, msg);
 }
 
+/* (with no frame of its own: made again, it goes the same way) */
 static void checknumsize(LoadState* S, int size, byte_view tname)
 {
-  constexpr int FN = LF_CHECKNUMSIZE;
-  struct
-  {
-    int b;
-  } l;
-  if (LZ_RESUMING())
-  {
-    if (LZ_SITENO() != 1)
-      LZ_BADSITE();
-    goto site_1;
-  }
-  LZ_SITE(1, l.b = loadByte(S));
-  if (size != l.b)
+  if (size != loadByte(S))
     numerror(S, lt::size, tname);
 }
 
@@ -648,64 +815,91 @@ static void checknumformat(LoadState* S, int eq, byte_view tname)
     numerror(S, lt::format, tname);
 }
 
+/* (its frame keeps the bytes read, as they come: the number is made of them at the end) */
 template <typename T>
 static void checknum(LoadState* S, T v, byte_view tname)
 {
-  constexpr int FN = LF_CHECKNUM;
-  struct
+  CheckNumFrame l;
+  if (l_unlikely(S->Z->resuming))
+    l = static_cast<const CheckNumFrame&>(luaZ_restore(S->Z->rz, LF_CHECKNUM));
+  try
   {
-    T i;
-  } l;
-  if (LZ_RESUMING())
-  {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    default: LZ_BADSITE();
+    case 0:
+      checknumsize(S, sizeof(T), tname);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      loadVector(S, std::span<std::byte>(l.raw, sizeof(T)));
+      break;
+    default:
+      luaZ_badstate(S->Z->rz);
     }
   }
-  LZ_SITE(1, checknumsize(S, sizeof(l.i), tname));
-  LZ_SITE(2, loadVar(S, l.i));
-  checknumformat(S, l.i == v, tname);
+  catch (...)
+  {
+    luaZ_record(S->Z->rz, LF_CHECKNUM, l);
+    throw;
+  }
+  T i;
+  memcpy(&i, l.raw, sizeof(T));
+  checknumformat(S, i == v, tname);
 }
 
 static void checkHeader(LoadState* S)
 {
-  constexpr int FN = LF_CHECKHEADER;
-  struct
-  {
-    int b;
-  } l;
+  LoadFrame l;
   /* skip 1st char (already read and checked) */
   byte_view sig_tail = byte_view(LUA_SIGNATURE).substr(1);
-  if (LZ_RESUMING())
+  if (l_unlikely(S->Z->resuming))
+    l = luaZ_restore(S->Z->rz, LF_CHECKHEADER);
+  try
   {
-    switch (LZ_SITENO())
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    case 4: goto site_4;
-    case 5: goto site_5;
-    case 6: goto site_6;
-    case 7: goto site_7;
-    case 8: goto site_8;
-    default: LZ_BADSITE();
+    case 0:
+      checkliteral(S, sig_tail, lt::not_a_binary_chunk);
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+      if (loadByte(S) != LUAC_VERSION)
+        error(S, lt::version_mismatch);
+      l.site = 2;
+      [[fallthrough]];
+    case 2:
+      if (loadByte(S) != LUAC_FORMAT)
+        error(S, lt::format_mismatch);
+      l.site = 3;
+      [[fallthrough]];
+    case 3:
+      checkliteral(S, lt::LUAC_DATA, lt::corrupted_chunk);
+      l.site = 4;
+      [[fallthrough]];
+    case 4:
+      checknum<int>(S, LUAC_INT, lt::int_kw);
+      l.site = 5;
+      [[fallthrough]];
+    case 5:
+      checknum<Instruction>(S, LUAC_INST, lt::instruction);
+      l.site = 6;
+      [[fallthrough]];
+    case 6:
+      checknum<lua_Integer>(S, LUAC_INT, lt::Lua_integer);
+      l.site = 7;
+      [[fallthrough]];
+    case 7:
+      checknum<lua_Number>(S, LUAC_NUM, lt::Lua_number);
+      break;
+    default:
+      luaZ_badstate(S->Z->rz);
     }
   }
-  LZ_SITE(1, checkliteral(S, sig_tail, lt::not_a_binary_chunk));
-  LZ_SITE(2, l.b = loadByte(S));
-  if (l.b != LUAC_VERSION)
-    error(S, lt::version_mismatch);
-  LZ_SITE(3, l.b = loadByte(S));
-  if (l.b != LUAC_FORMAT)
-    error(S, lt::format_mismatch);
-  LZ_SITE(4, checkliteral(S, lt::LUAC_DATA, lt::corrupted_chunk));
-  LZ_SITE(5, checknum<int>(S, LUAC_INT, lt::int_kw));
-  LZ_SITE(6, checknum<Instruction>(S, LUAC_INST, lt::instruction));
-  LZ_SITE(7, checknum<lua_Integer>(S, LUAC_INT, lt::Lua_integer));
-  LZ_SITE(8, checknum<lua_Number>(S, LUAC_NUM, lt::Lua_number));
+  catch (...)
+  {
+    luaZ_record(S->Z->rz, LF_CHECKHEADER, l);
+    throw;
+  }
 }
 
 /*
@@ -713,13 +907,7 @@ static void checkHeader(LoadState* S)
 */
 LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, MBuffer* buff, byte_view name, int fixed)
 {
-  constexpr int FN = LF_UNDUMP;
-  struct
-  {
-    LoadState S;
-    LClosure* cl;
-    int nup;
-  } l;
+  UndumpFrame l;
   int c0 = sv_byteat(name, 0);
   if (c0 == '@' || c0 == '=')
   {
@@ -732,37 +920,56 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, MBuffer* buff, byte_v
   LoadState* S = &l.S;
   if (l_unlikely(Z->resuming))
   { /* (the state again with this load's stream and buffer) */
-    int site = luaZ_restore(Z->rz, FN, &l, sizeof(l));
+    l = static_cast<const UndumpFrame&>(luaZ_restore(Z->rz, LF_UNDUMP));
     l.S.L = L;
     l.S.Z = Z;
     l.S.h = anchor;
     l.S.name = name;
     l.S.buff = buff;
-    switch (site)
+  }
+  else
+  {
+    l.S.name = name;
+    l.S.L = L;
+    l.S.Z = Z;
+    l.S.fixed = fixed != 0;
+    l.S.buff = buff;
+    l.S.offset = 1; /* fist byte was already read */
+  }
+  try
+  {
+    switch (l.site)
     {
-    case 1: goto site_1;
-    case 2: goto site_2;
-    case 3: goto site_3;
-    default: luaZ_badstate(Z->rz);
+    case 0:
+      checkHeader(S);
+      l.S.h = anchor;
+      l.S.nstr = 0;
+      l.site = 1;
+      [[fallthrough]];
+    case 1:
+    {
+      int nup = loadByte(S);
+      l.cl = LClosure::luaF_newLclosure(L, nup);
+      luaZ_madefunction(Z->rz, l.cl);
+      assert(novariant(l.cl->tt) >= LUA_TSTRING);
+      luaD_anchorobj(L, anchor, l.cl);
+      l.cl->p = Proto::luaF_newproto(L);
+      luaC_objbarrier(L, l.cl, l.cl->p);
+      l.site = 2;
+      [[fallthrough]];
+    }
+    case 2:
+      loadFunction(S, l.cl->p);
+      break;
+    default:
+      luaZ_badstate(Z->rz);
     }
   }
-  l.S.name = name;
-  l.S.L = L;
-  l.S.Z = Z;
-  l.S.fixed = fixed != 0;
-  l.S.buff = buff;
-  l.S.offset = 1; /* fist byte was already read */
-  LZ_SITE(1, checkHeader(S));
-  l.S.h = anchor;
-  l.S.nstr = 0;
-  LZ_SITE(2, l.nup = loadByte(S));
-  l.cl = LClosure::luaF_newLclosure(L, l.nup);
-  luaZ_madefunction(Z->rz, l.cl);
-  assert(novariant(l.cl->tt) >= LUA_TSTRING);
-  luaD_anchorobj(L, anchor, l.cl);
-  l.cl->p = Proto::luaF_newproto(L);
-  luaC_objbarrier(L, l.cl, l.cl->p);
-  LZ_SITE(3, loadFunction(S, l.cl->p));
+  catch (...)
+  {
+    luaZ_record(Z->rz, LF_UNDUMP, l);
+    throw;
+  }
   if (l.cl->upvals.size() != l.cl->p->upvalues.size())
     error(S, lt::corrupted_chunk);
   return l.cl;
