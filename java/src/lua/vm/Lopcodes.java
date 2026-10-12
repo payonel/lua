@@ -397,19 +397,17 @@ public final class Lopcodes
     return luaP_opmodes[m] & (1 << 4);
   }
 
-  public static int testITMode(int m)
-  {
-    return luaP_opmodes[m] & (1 << 5);
-  }
-
-  public static int testOTMode(int m)
-  {
-    return luaP_opmodes[m] & (1 << 6);
-  }
-
   public static int testMMMode(int m)
   {
     return luaP_opmodes[m] & (1 << 7);
+  }
+
+  /* Check whether instruction sets top for next instruction, that is,
+  ** it results in multiple values. Used only for tests.
+  */
+  public static int luaP_isOT(int i)
+  {
+    return (GET_OPCODE(i) == OP_TAILCALL || ((luaP_opmodes[GET_OPCODE(i)] & (1 << 6)) != 0 && GETARG_C(i) == 0)) ? 1 : 0;
   }
 
   private static int opmode(int mm, int ot, int it, int t, int a, int m)
@@ -503,29 +501,29 @@ public final class Lopcodes
       opmode(0, 1, 0, 0, 1, iABC), /* OP_VARARG */
       opmode(0, 0, 0, 0, 1, iABC), /* OP_GETVARG */
       opmode(0, 0, 0, 0, 0, iABx), /* OP_ERRNNIL */
-      opmode(0, 0, 1, 0, 0, iABC), /* OP_VARARGPREP */
+      opmode(0, 0, 0, 0, 0, iABC), /* OP_VARARGPREP */
       opmode(0, 0, 0, 0, 0, iAx), /* OP_EXTRAARG */
   };
 
-  public static int luaP_isOT(int i)
+  private static int testITMode(int m)
   {
-    int op = GET_OPCODE(i);
-    switch (op)
-    {
-    case OP_TAILCALL:
-      return 1;
-    default:
-      return (testOTMode(op) != 0 && GETARG_C(i) == 0) ? 1 : 0;
-    }
+    return luaP_opmodes[m] & (1 << 5);
   }
 
+  /*
+  ** Check whether instruction uses top. That happens for OP_VARARGPREP
+  ** and for instructions that use multiple values set by the previous
+  ** instruction.
+  */
   public static int luaP_isIT(int i)
   {
     int op = GET_OPCODE(i);
     switch (op)
     {
     case OP_SETLIST:
-      return (testITMode(GET_OPCODE(i)) != 0 && GETARG_vB(i) == 0) ? 1 : 0;
+      return GETARG_vB(i) == 0 ? 1 : 0;
+    case OP_VARARGPREP:
+      return 1;
     default:
       return (testITMode(GET_OPCODE(i)) != 0 && GETARG_B(i) == 0) ? 1 : 0;
     }
