@@ -279,7 +279,7 @@ The debug build is the same jar run with `-ea -Dlua.debug=true`.
 | 1. Core | done: every core file transcribed; `print("hello")` runs |
 | 2. Libraries | done: base, coroutine, table, string, utf8, math, io, os, package, debug |
 | 3. Platform | done: `OsApi` (stdio, time and strftime as glibc, processes, dynamic libraries as Java classes), `LocaleUtil` (C locale), `Libm`, `Readline` |
-| 4. Host and tests | `lua.host.Lua` (`java/lua`, `java/lua-debug`), `Ltests`, and the C++ build's test programs; `make -C java test` (`DEBUG=1`: the debug build) runs them as the C++ `make test` does: the API and engine tests, the upstream suite, the deep tests, the gate and the Styx gate, the Styx tests |
+| 4. Host and tests | done: `lua.host.Lua` (`java/lua`, `java/lua-debug`), `Ltests`, and the C++ build's test programs; `make -C java test` (`DEBUG=1`: the debug build) runs them as the C++ `make test` does, and passes in both builds: the API and engine tests (the C++'s check counts), the upstream suite, the deep tests, the gate (97, 17, 3), the Styx gate and the Styx tests (36190 and 38292 checks, the C++'s) |
 | 5. Styx | done: `Lstyx`; its streams are the C++'s byte for byte (the trailer's address fixes aside) |
 
 The platform layer's dynamic libraries are Java classes, and
