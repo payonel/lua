@@ -372,12 +372,6 @@ public final class Ldo
     luaE_shrinkCI(L); /* shrink CI list */
   }
 
-  public static void luaD_inctop(lua_State L)
-  {
-    L.top++;
-    luaD_checkstack(L, 1);
-  }
-
   /* }================================================================== */
 
   /*
