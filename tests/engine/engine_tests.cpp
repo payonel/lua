@@ -734,6 +734,52 @@ static void test_make_due(bool generational)
 }
 
 /*
+** Objects a restore makes due for a group's '__gc' (luaC_makedue) are queued
+** white, as the collector keeps its queues (B30): the steps a restore runs
+** can have marked them black, and a queued object that is not white is not
+** traversed by the next cycle, which collected its metatable (its '__gc' was
+** then looked up in freed memory)
+*/
+static void test_make_due_queued_white()
+{
+  std::printf("    objects made due for a group's __gc are queued white ... ");
+  g_test_failures = 0;
+  lua_State* L = luaL_newstate();
+  luaL_openlibs(L);
+  CHECK(run(L, "collectgarbage('stop') log = {} keep = {} "
+               "co = coroutine.create(function() "
+               "  for i = 1, 3 do keep[i] = setmetatable({name = i}, {__gc = function(o) log[#log + 1] = o.name end}) end "
+               "  coroutine.yield() local n = 0 for i = 1, 100 do n = n + i end "
+               "  table.sort(log) return table.concat(log, ',') end) "
+               "debug.setbudget(co, 1000000, function() end) coroutine.resume(co) return 'ok'") == "ok");
+  GCObject* objs[3];
+  for (int i = 0; i < 3; i++)
+  {
+    lua_getglobal(L, "keep");
+    lua_geti(L, -1, i + 1);
+    objs[i] = static_cast<GCObject*>(const_cast<void*>(lua_topointer(L, -1)));
+    lua_pop(L, 2);
+  }
+  lua_lock(L);
+  lua::gc::luaC_runtilstate(L, lua::gc::GCSenteratomic, 0); /* (all reachable is black) */
+  lua_unlock(L);
+  for (GCObject* o : objs)
+    CHECK(!lua::gc::iswhite(o));
+  CHECK(run(L, "keep = nil return 'ok'") == "ok");
+  lua_lock(L);
+  lua::gc::luaC_makedue(L, objs, 3);
+  lua_unlock(L);
+  for (GCObject* o : objs)
+    CHECK(lua::gc::iswhite(o));
+  lua_lock(L);
+  lua::gc::luaC_fullgcdue(L);
+  lua_unlock(L);
+  CHECK(run(L, "return tostring(select(2, coroutine.resume(co)))") == "1,2,3");
+  lua_close(L);
+  std::printf("%s\n", g_test_failures == 0 ? "OK" : "FAIL");
+}
+
+/*
 ** Objects marked for finalization put in another order by hand
 ** (luaC_ordermarked), as if they had been marked in it: when they die
 ** together, their '__gc' run in the reverse of that order, as stock runs
@@ -787,6 +833,7 @@ int main()
   test_object_kinds();
   test_make_due(false);
   test_make_due(true);
+  test_make_due_queued_white();
   test_order_marked(false);
   test_order_marked(true);
   if (g_failures == 0)

@@ -1486,7 +1486,8 @@ void luaC_makedue(lua_State* L, GCObject* const* objs, size_t n)
       lastnext = o;
     }
     else if (bg != nullptr)
-    {
+    { /* (white, as the collector keeps its queues: see 'whitequeues') */
+      o->marked = (o->marked & ~maskgcbits) | bitmask(FINALIZEDBIT) | luaC_white(g);
       o->next = nullptr;
       if (bg->fnztail != nullptr)
         bg->fnztail->next = o;
