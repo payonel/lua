@@ -13,6 +13,7 @@ build/lua.jar: $(SRC)
 	mkdir -p $(CLASSES)
 	$(JAVAC) --release 21 -encoding UTF-8 -Xlint:all -Xlint:-serial -Xlint:-fallthrough -Xlint:-cast -Xmaxerrs 10000 -d $(CLASSES) $(SRC)
 	$(JAR) --create --file $@ --main-class lua.host.Lua -C $(CLASSES) .
+	echo "$(abspath $(JDK))" > build/jdk
 
 clean:
 	rm -rf build

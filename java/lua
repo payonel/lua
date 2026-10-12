@@ -1,6 +1,7 @@
 #!/bin/sh
-JDK=${JDK:-$HOME/.gradle/jdks/eclipse_adoptium-25-amd64-linux.2}
-jar=$(dirname "$0")/build/lua.jar
+dir=$(dirname "$0")
+JDK=${JDK:-$(cat "$dir/build/jdk")}
+jar=$dir/build/lua.jar
 if env --default-signal=INT true 2>/dev/null; then
   exec env --default-signal=INT "$JDK/bin/java" -XX:-DontCompileHugeMethods -Dlua.progname="$0" -jar "$jar" "$@"
 fi
