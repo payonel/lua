@@ -4,13 +4,17 @@
 -- them is not pinned here: see freeze.lua.)
 
 -- in reverse order of marking, when a collection finds them; a full
--- collection runs all of them before it returns
+-- collection runs all of them before it returns (the collector stopped
+-- meanwhile, so that only that collection finds them: no cycle of its own
+-- finds some first, nor the one a restore ends with in the Styx gate)
 do
   local order = {}
+  collectgarbage("stop")
   for i = 1, 5 do
     setmetatable({}, {__gc = function() order[#order + 1] = i end})
   end
   collectgarbage()
+  collectgarbage("restart")
   assert(table.concat(order, ",") == "5,4,3,2,1", table.concat(order, ","))
 end
 
@@ -41,9 +45,12 @@ end
 
 -- inside a finalizer: 'collectgarbage' fails (the collector is stopped),
 -- errors do not leave it, and it cannot yield (a collection made in a
--- coroutine: from the main thread the message differs, see freeze.lua)
+-- coroutine: from the main thread the message differs, see freeze.lua;
+-- the program stops the collector meanwhile, so that only that collection
+-- finds the object, as above)
 do
   local inside = {}
+  collectgarbage("stop")
   setmetatable({}, {__gc = function()
     inside.gc = table.pack(collectgarbage())
     inside.count = table.pack(collectgarbage("count"))
@@ -53,6 +60,7 @@ do
   end})
   local co = coroutine.wrap(function() return pcall(collectgarbage) end)
   assert(co())
+  collectgarbage("restart")
   assert(inside.gc.n == 1 and inside.gc[1] == nil and inside.count.n == 1 and inside.count[1] == nil)
   assert(inside.yieldable == false and inside.err == "attempt to yield across a C-call boundary")
 end
