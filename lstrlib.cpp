@@ -2883,7 +2883,7 @@ static void packFloat(luaL_Buffer* b, float f, int islittle)
   byte_span buff = luaL_buffaddr(b);
   luaL_addsize(b, SZ_FLOAT);
   buff.write_float(f, pos);
-  if (islittle != nativeendian_little)
+  if (!islittle)
   {
     buff.reverse(pos, SZ_FLOAT);
   }
@@ -2895,7 +2895,7 @@ static void packDouble(luaL_Buffer* b, double f, bool islittle)
   byte_span buff = luaL_buffaddr(b);
   luaL_addsize(b, SZ_DOUBLE);
   buff.write_double(f, pos);
-  if (islittle != nativeendian_little)
+  if (!islittle)
   {
     buff.reverse(pos, SZ_DOUBLE);
   }
@@ -2904,13 +2904,13 @@ static void packDouble(luaL_Buffer* b, double f, bool islittle)
 static double unpackDouble(byte_view data, size_t pos, bool islittle)
 {
   data = data.substr(pos, SZ_DOUBLE);
-  return (islittle == nativeendian_little ? data : byte_owner(data).reverse().view()).toDouble();
+  return (islittle ? data : byte_owner(data).reverse().view()).toDouble();
 }
 
 static float unpackFloat(byte_view data, size_t pos, bool islittle)
 {
   data = data.substr(pos, SZ_FLOAT);
-  return (islittle == nativeendian_little ? data : byte_owner(data).reverse().view()).toFloat();
+  return (islittle ? data : byte_owner(data).reverse().view()).toFloat();
 }
 
 static int str_pack(lua_State* L)
