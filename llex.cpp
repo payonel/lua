@@ -314,6 +314,11 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source, int firs
   ls->envn = TString::luaS_createstr(L, lt::_ENV); /* get env string */
   byte_view breakstr = lt::break_kw;
   ls->brkn = TString::luaS_createstr(L, breakstr); /* get "break" string */
+#if !defined(LUA_DEBUG)
+  /* compatibility mode: "global" is not a reserved word */
+  ls->glbn = TString::luaS_createstr(L, lt::global); /* get "global" string */
+  ls->glbn->extra = 0;                               /* mark it as not reserved */
+#endif
   /* initialize buffer */
   ls->buff->reset();
 }

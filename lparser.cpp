@@ -3807,6 +3807,13 @@ static void statement(LexState* ls)
         case TK_GOTO: /* stat -> 'goto' NAME */
           l.site = 21;
           break;
+#if !defined(LUA_DEBUG)
+        case TK_NAME:
+          /* compatibility code to parse global keyword when "global"
+             is not reserved */
+          l.site = (ls->t.ts == ls->glbn) ? 24 : 23; /* current = "global"? */
+          break;
+#endif
         default: /* stat -> func | assignment */
           l.site = 23;
           break;
@@ -3888,6 +3895,18 @@ static void statement(LexState* ls)
       case 23:
         exprstat(ls);
         break;
+#if !defined(LUA_DEBUG)
+      case 24:
+      {
+        int lk = luaX_lookahead(ls);
+        if (lk == '<' || lk == TK_NAME || lk == '*' || lk == TK_FUNCTION)
+          l.site = 14; /* 'global <attrib>' or 'global name' or 'global *' or
+                          'global function' */
+        else
+          l.site = 23; /* else... */
+        continue;
+      }
+#endif
       default:
         luaZ_badstate(ls->z->rz);
       }
