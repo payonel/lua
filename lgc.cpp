@@ -31,15 +31,11 @@ namespace lua::runtime
 /* the entries of ephemerons that wait for their keys (see 'convergeephemerons') */
 struct EphIndex
 {
-  struct Entry
-  {
-    GCObject* key; /* (nullptr: an empty slot) */
-    GCObject* value;
-  };
-  Entry* slots = nullptr;
+  std::vector<GCObject*> keys;   /* the slots' keys (nullptr: an empty slot) */
+  std::vector<GCObject*> values; /* and their values */
   size_t cap = 0; /* the slots (a power of 2; at most half of them used) */
   size_t n = 0;
-  GCObject** ready = nullptr; /* keys marked, whose entries wait ('cap / 2' of room) */
+  std::vector<GCObject*> ready; /* keys marked, whose entries wait ('cap / 2' of room) */
   size_t nready = 0;
   bool strong = false; /* (the host did not allow more room) */
 };
@@ -884,9 +880,12 @@ static void propagateall(global_State* g)
 ** lives one cycle more (an entry is cleared as ever when its key is not
 ** marked).
 */
+constexpr size_t EPH_SLOT = 16; /* (what a slot counts: a key and a value) */
+constexpr size_t EPH_READY = 8;
+
 static size_t ephroom(size_t cap)
 {
-  return cap * sizeof(EphIndex::Entry) + (cap / 2) * sizeof(GCObject*);
+  return cap * EPH_SLOT + (cap / 2) * EPH_READY;
 }
 
 /* the objects that can be keys of entries that wait (strings are never) */
@@ -910,10 +909,10 @@ static void ephput(EphIndex* x, GCObject* key, GCObject* value)
 {
   size_t mask = x->cap - 1;
   size_t i = key->hash & mask;
-  while (x->slots[i].key != nullptr)
+  while (x->keys[i] != nullptr)
     i = (i + 1) & mask;
-  x->slots[i].key = key;
-  x->slots[i].value = value;
+  x->keys[i] = key;
+  x->values[i] = value;
 }
 
 /* the index grows to 'cap' slots, if the host allows it */
@@ -921,17 +920,16 @@ static bool ephgrow(global_State* g, EphIndex* x, size_t cap)
 {
   if (!g->frealloc->permit(x->cap != 0 ? ephroom(x->cap) : 0, ephroom(cap), 0))
     return false;
-  EphIndex old = *x;
-  x->slots = new EphIndex::Entry[cap]();
-  x->ready = new GCObject*[cap / 2];
+  std::vector<GCObject*> oldkeys = std::move(x->keys);
+  std::vector<GCObject*> oldvalues = std::move(x->values);
+  size_t oldcap = x->cap;
+  x->keys = std::vector<GCObject*>(cap, nullptr);
+  x->values = std::vector<GCObject*>(cap, nullptr);
+  x->ready.resize(cap / 2);
   x->cap = cap;
-  for (size_t i = 0; i < old.cap; i++)
-    if (old.slots[i].key != nullptr)
-      ephput(x, old.slots[i].key, old.slots[i].value);
-  for (size_t i = 0; i < old.nready; i++)
-    x->ready[i] = old.ready[i];
-  delete[] old.slots;
-  delete[] old.ready;
+  for (size_t i = 0; i < oldcap; i++)
+    if (oldkeys[i] != nullptr)
+      ephput(x, oldkeys[i], oldvalues[i]);
   return true;
 }
 
@@ -957,8 +955,8 @@ static void ephmarked(global_State* g, GCObject* o)
   if (x->n == 0 || !ephkey(o))
     return;
   size_t mask = x->cap - 1;
-  for (size_t i = o->hash & mask; x->slots[i].key != nullptr; i = (i + 1) & mask)
-    if (x->slots[i].key == o)
+  for (size_t i = o->hash & mask; x->keys[i] != nullptr; i = (i + 1) & mask)
+    if (x->keys[i] == o)
     {
       x->ready[x->nready++] = o; /* (a key is marked once: no more than its entries) */
       return;
@@ -977,9 +975,9 @@ static void ephdrain(global_State* g)
     {
       GCObject* k = x->ready[--x->nready];
       size_t mask = x->cap - 1;
-      for (size_t i = k->hash & mask; x->slots[i].key != nullptr; i = (i + 1) & mask)
-        if (x->slots[i].key == k && iswhite(x->slots[i].value))
-          reallymarkobject(g, x->slots[i].value);
+      for (size_t i = k->hash & mask; x->keys[i] != nullptr; i = (i + 1) & mask)
+        if (x->keys[i] == k && iswhite(x->values[i]))
+          reallymarkobject(g, x->values[i]);
     }
     else
       break;
@@ -1006,11 +1004,7 @@ static void convergeephemerons(global_State* g)
   ephdrain(g); /* (the tables it finds wait too) */
   g->ephidx = nullptr;
   if (x.cap != 0)
-  {
-    g->frealloc->permit(ephroom(x.cap), 0, 0);
-    delete[] x.slots;
-    delete[] x.ready;
-  }
+    g->frealloc->permit(ephroom(x.cap), 0, 0); /* (its vectors go with it) */
   /* the tables go to their lists as stock leaves them (all is marked) */
   next = g->ephemeron.gclist;
   g->ephemeron.gclist = nullptr;
