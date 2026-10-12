@@ -1290,6 +1290,28 @@ do
       "local t = {.5, 3., 0x.8p1, 1e-2, 1E+2, 0xA.8P-1, 3 - -4} ::k:: return s, a, t, ...",
     "return 1 .. 2x",
     "x = [=",
+    -- every kind of statement and expression the parser reads
+    [==[
+local <const> a, b <close> = 1, nil
+local function f(x, y, ...) return x end
+local function g(...t) return t end
+do global function gf(p) return p end end
+do global gx, gy <const> = 1, 2 end
+do global <const> * end
+do local c = (a + 2) * -a; c = not c; c = #"x" .. 'y' .. (c) end
+function T.m.n:o(s) return self, s end
+function T.p(s) return s end
+while a > 2 do local w = 1; break end
+repeat local r = 1; r = r + 1 until r > 0
+for i = 1, 10, 2 do local z = i end
+for k, v in pairs{} do local z = k end
+if a then local q = 1 elseif b then local q = 2 else local q = 3 end
+x, y.z, w[1] = 1, 2, 3
+f{1, 2; x = 3, ['y'] = 4}; f"s"; f(1, 2); obj:m{}; obj:m"s"; obj.p[a]:q(1)
+t = {a = 1; [2] = 2, 3,}
+::lbl:: ;; goto lbl2; ::lbl2::
+return f(a)
+]==],
     "return '\\xZ'", "return '\\u48'", "return '\\u{48'", "return '\\u{800000000}'", "return '\\256'",
   }
   local function loadwith(chunk, piece, ending)
