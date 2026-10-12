@@ -147,6 +147,7 @@ static bool persist_restore(lua_State** L, lua_State** H)
   }
   lua_close(*L);
   *H = H2;
+  lua_pop(H2, 1); /* (its stack is as it was persisted: the permanents pushed for the persist too) */
   lua_rawgeti(H2, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
   *L = lua_tothread(H2, -1);
   lua_pop(H2, 1);
@@ -213,7 +214,14 @@ int main(int argc, char** argv)
   while (st == LUA_OK && lua_isfrozen(L))
   {
     if (every > 0 && freezes >= next)
+    {
       next = freezes + (persist_restore(&L, &H) ? every : 1);
+      if (lua_gettop(H) != 0)
+      { /* (what the host leaves on its thread is persisted with it, every time) */
+        std::fprintf(stderr, "gate: the host's thread holds %d values after %ld persists\n", lua_gettop(H), persists);
+        return 1;
+      }
+    }
     st = lua_thaw(L, nullptr).status;
     thaws++;
   }

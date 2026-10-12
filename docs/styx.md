@@ -711,7 +711,10 @@ tests', ADR-35.)
   the state holds"). For a main thread frozen by its budget that is the
   host's other thread, anchored before; the restore gives it back, so the
   host reaches the restored state, and persists it again, without touching
-  the frozen main thread.
+  the frozen main thread. That thread comes back with its stack as it was
+  persisted, what the host pushed for the persist (the permanents table)
+  included: the host pops it there too, or each restore adds to the stack
+  the next persist keeps.
 - The restore runs in a protected call on the idle state with the
   machinery of `unpersist`; only host restores accept the main thread
   reference.
