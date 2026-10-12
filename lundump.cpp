@@ -546,7 +546,7 @@ static void loadDebug(LoadState* S, Proto* f)
   for (l.i = 0; l.i < l.n; l.i++)
   {
     LZ_CHECK(7);
-    LZ_SITE(8, loadString(S, f, [f, &l](TString* ts) { f->locvars[l.i].varname = ts; }));
+    LZ_SITE(8, loadString(S, f, [f, i = l.i](TString* ts) { f->locvars[i].varname = ts; }));
     LZ_SITE(9, f->locvars[l.i].startpc = loadInt(S));
     LZ_SITE(10, f->locvars[l.i].endpc = loadInt(S));
   }
@@ -555,7 +555,7 @@ static void loadDebug(LoadState* S, Proto* f)
     l.n = (int)f->upvalues.size(); /* must be this many */
   for (l.i = 0; l.i < l.n; l.i++)
   {
-    LZ_SITE(12, loadString(S, f, [f, &l](TString* ts) { f->upvalues[l.i].name = ts; }));
+    LZ_SITE(12, loadString(S, f, [f, i = l.i](TString* ts) { f->upvalues[i].name = ts; }));
   }
 }
 

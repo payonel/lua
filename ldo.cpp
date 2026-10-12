@@ -919,11 +919,10 @@ int luaD_pretailcall(lua_State* L, CallInfo* ci, StkId func,
   }
 }
 
-template <l_uint32 CCOUNT>
-static l_forceinline CallInfo* precall(lua_State* L, StkId func, int nresults)
+static l_forceinline CallInfo* precall(lua_State* L, StkId func, int nresults, l_uint32 ccount)
 {
   assert(nresults + 1 <= MAXRESULTS + 1);
-  l_uint32 status = (l_uint32)(nresults + 1) | CCOUNT;
+  l_uint32 status = (l_uint32)(nresults + 1) | ccount;
   for (;;)
   {
     switch (withvariant(slottag(L, func)))
@@ -964,7 +963,7 @@ static l_forceinline CallInfo* precall(lua_State* L, StkId func, int nresults)
 
 CallInfo* luaD_precall(lua_State* L, StkId func, int nresults)
 {
-  return precall<0>(L, func, nresults);
+  return precall(L, func, nresults, 0);
 }
 
 /*
@@ -984,7 +983,7 @@ static inline void ccall(lua_State* L, StkId func, int nResults, l_uint32 inc)
     checkstackp(L, 0, func); /* free any use of EXTRA_STACK */
     luaE_checkcstack(L);
   }
-  if ((ci = precall<CIST_CCOUNT>(L, func, nResults)) != nullptr)
+  if ((ci = precall(L, func, nResults, CIST_CCOUNT)) != nullptr)
   {                               /* Lua function? */
     ci->callstatus |= CIST_FRESH; /* mark that it is a "fresh" execute */
     luaV_execute(L, ci);          /* call it */
@@ -2300,6 +2299,7 @@ TStatus luaD_protectedparser(lua_State* L, ZIO* z, std::optional<byte_view> name
   luaM_alloc_Vardesc_span(L->l_G, L, std::span<Vardesc>(p.dyd.actvar.arr, p.dyd.actvar.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.gt.arr, p.dyd.gt.size), 0, false);
   luaM_alloc_Labeldesc_span(L->l_G, L, std::span<Labeldesc>(p.dyd.label.arr, p.dyd.label.size), 0, false);
+  p.buff.growTo(0); /* (luaZ_freebuffer) */
   decnny(L);
   if (l_unlikely(status == LUA_FREEZE))
   {

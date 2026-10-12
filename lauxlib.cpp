@@ -1468,35 +1468,41 @@ static int requireff(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   byte_view modname = *lua_tolstring(L, 1);
-  switch (ctx)
+  int at = (int)ctx;
+  for (;;)
   {
-  case 0:
-    luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE); /* 4 */
-    lua_getfieldik(L, 4, modname, 1, requireff); /* LOADED[modname] */
-    [[fallthrough]];
-  case 1:
-    if (lua_toboolean(L, -1)) /* package already loaded? */
-      goto loaded;
-    lua_pop(L, 1); /* remove field */
-    lua_pushvalue(L, 2);
-    lua_pushvalue(L, 1); /* argument to open function */
-    lua_callk(L, 1, 1, 2, requireff); /* call 'openf' to open module */
-    [[fallthrough]];
-  case 2:
-    lua_pushvalue(L, -1); /* make copy of module (call result) */
-    lua_setfieldik(L, 4, modname, 3, requireff); /* LOADED[modname] = module */
-    [[fallthrough]];
-  case 3:
-  loaded:
-    lua_remove(L, 4); /* remove LOADED table */
-    if (lua_toboolean(L, 3))
+    switch (at)
     {
-      lua_pushvalue(L, -1); /* copy of module */
-      lua_setglobalik(L, modname, 4, requireff); /* _G[modname] = module */
+    case 0:
+      luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE); /* 4 */
+      lua_getfieldik(L, 4, modname, 1, requireff); /* LOADED[modname] */
+      [[fallthrough]];
+    case 1:
+      if (lua_toboolean(L, -1)) /* package already loaded? */
+      {
+        at = 3;
+        continue;
+      }
+      lua_pop(L, 1); /* remove field */
+      lua_pushvalue(L, 2);
+      lua_pushvalue(L, 1); /* argument to open function */
+      lua_callk(L, 1, 1, 2, requireff); /* call 'openf' to open module */
+      [[fallthrough]];
+    case 2:
+      lua_pushvalue(L, -1); /* make copy of module (call result) */
+      lua_setfieldik(L, 4, modname, 3, requireff); /* LOADED[modname] = module */
+      [[fallthrough]];
+    case 3:
+      lua_remove(L, 4); /* remove LOADED table */
+      if (lua_toboolean(L, 3))
+      {
+        lua_pushvalue(L, -1); /* copy of module */
+        lua_setglobalik(L, modname, 4, requireff); /* _G[modname] = module */
+      }
+      [[fallthrough]];
+    default:
+      return 1;
     }
-    [[fallthrough]];
-  default:
-    return 1;
   }
 }
 
