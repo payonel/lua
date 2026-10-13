@@ -82,8 +82,6 @@ LUA = $(if $(DEBUG),lua-debug,lua)
 JFLAGS = $(JOPTS) $(if $(DEBUG),-ea -Dlua.debug=true)
 TEST_TEMP_DIR ?= 1
 GATE_STEPS ?= 97 17 3
-STYX_GATE_DEEP ?= 7
-STYX_GATE_ALL ?= 5000
 
 test: all
 	mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1
@@ -95,8 +93,6 @@ test: all
 		cat /dev/null | /usr/bin/time -v ../java/$(LUA) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 	cd ../tests && ../java/$(LUA) deep/all.lua
 	$(MAKE) gate-run
-	$(MAKE) styx-gate-run
-	cd ../tests/styx && LUA_JAVA_DEBUG=$(DEBUG) ../../java/test_styx
 
 gate-run:
 	for n in $(GATE_STEPS); do \
@@ -106,13 +102,7 @@ gate-run:
 	    cat /dev/null | LUA_JAVA_DEBUG=$(DEBUG) ../java/test_gate $$n all.lua ) || exit 1; \
 	done
 
-styx-gate-run:
-	( cd ../tests && LUA_JAVA_DEBUG=$(DEBUG) ../java/test_gate 97 --styx $(STYX_GATE_DEEP) deep/all.lua ) || exit 1
-	mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1
-	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd ../tests; \
-	  cat /dev/null | LUA_JAVA_DEBUG=$(DEBUG) ../java/test_gate 97 --styx $(STYX_GATE_ALL) all.lua ) || exit 1
-
 clean:
 	rm -rf build
 
-.PHONY: all clean test gate-run styx-gate-run
+.PHONY: all clean test gate-run

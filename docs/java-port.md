@@ -25,7 +25,7 @@ these for the port itself:
 - **The C++ is the specification.** Where the Java and the C++ disagree,
   the Java is wrong, unless a test shows the C++ is.
 - **Same behavior, same tests.** The Java engine runs the same Lua tests
-  (`tests/all.lua`, `tests/deep`, the Styx tests, the gates). No Lua-visible
+  (`tests/all.lua`, `tests/deep`, the gate). No Lua-visible
   difference is allowed.
 - **Every allocation is accountable**, as in the C++: the Java engine
   charges what the C++ charges (the `cost::` constants), whatever the JVM
@@ -42,7 +42,7 @@ these for the port itself:
 | `lua::vm` | `com.payonel.lungolua.vm` | `Lvm`, `Ldebug`, `Lopcodes` |
 | `lua::compiler` | `com.payonel.lungolua.compiler` | `Llex`, `Lparser`, `Lcode`, `Ldump`, `Lundump` and their records |
 | global API (`lua_*`, `luaL_*`) | `com.payonel.lungolua.api` | `LuaApi` (lapi.cpp, lua.h), `LuaAuxLib` (lauxlib.cpp), `HostString` |
-| `lua::lib` | `com.payonel.lungolua.lib` | one class per library (`Lbaselib`, `Lstrlib`, …), `Linit`, `Lstyx` |
+| `lua::lib` | `com.payonel.lungolua.lib` | one class per library (`Lbaselib`, `Lstrlib`, …), `Linit` |
 | `lua::platform` | `com.payonel.lungolua.platform` | `OsApi`, `LocaleUtil`, `Libm`; `Readline` (the JVM's readline library); `Environ` (the environment as bytes) |
 | `lua::host` | `com.payonel.lungolua.host` | `Lua` (the standalone interpreter, `main`) |
 | tests | `com.payonel.lungolua.tests` | `Ltests` (the debug build's `T` library, behind `runtime.TestHooks`) and the test programs; `lungolua-tests.jar` |
@@ -125,12 +125,11 @@ methods adds them.
 | lualib.h | `com.payonel.lungolua.lib.Lualib` |
 | lbaselib.cpp, lcorolib.cpp, … | `com.payonel.lungolua.lib.Lbaselib`, `com.payonel.lungolua.lib.Lcorolib`, … |
 | linit.cpp | `com.payonel.lungolua.lib.Linit` |
-| lstyx.cpp | `com.payonel.lungolua.lib.Lstyx` |
 | os_api.h/.cpp, locale_util.h/.cpp | `com.payonel.lungolua.platform.OsApi`, `com.payonel.lungolua.platform.LocaleUtil` |
 | C's `<cmath>` (`pow`, `fmod`, `floor`, `frexp`, …) | `com.payonel.lungolua.platform.Libm` (done) |
 | lua.cpp | `com.payonel.lungolua.host.Lua` |
 | ltests.h/.cpp | `com.payonel.lungolua.tests.Ltests` |
-| test_public_api.cpp, tests/engine/engine_tests.cpp, tests/gate/gate.cpp, tests/styx/styx_tests.cpp | `com.payonel.lungolua.tests.PublicApi`, `EngineTests`, `Gate`, `StyxTests` (launchers `java/test_engine`, `java/test_gate`, `java/test_styx`) |
+| test_public_api.cpp, tests/engine/engine_tests.cpp, tests/gate/gate.cpp | `com.payonel.lungolua.tests.PublicApi`, `EngineTests`, `Gate` (launchers `java/test_engine`, `java/test_gate`) |
 | tests/libs/libN.cpp, lib_decls.h | `com.payonel.lungolua.tests.libs.LibN`, `com.payonel.lungolua.tests.libs.LibDecls` |
 
 **Calls keep their C shape.** A file `import static`s the classes whose
@@ -360,7 +359,7 @@ own), which the JVM otherwise allows only with a warning.
 | 2. Libraries | done: base, coroutine, table, string, utf8, math, io, os, package, debug |
 | 3. Platform | done: `OsApi` (stdio, time and strftime as glibc, processes, dynamic libraries as Java classes), `LocaleUtil` (C locale), `Libm`, `Readline` |
 | 4. Host and tests | done: `com.payonel.lungolua.host.Lua` (`java/lua`, `java/lua-debug`), `Ltests`, and the C++ build's test programs; `make -C java test` (`DEBUG=1`: the debug build) runs them as the C++ `make test` does, and passes in both builds: the API tests (52940 and 53017 checks, with the upstream suite run through the API), the engine tests (147), the upstream suite, the deep tests, the gate (97, 17, 3), the Styx gate and the Styx tests (36191 and 38293 checks): the C++'s counts |
-| 5. Styx | done: `Lstyx`; its streams are the C++'s byte for byte (the trailer's address fixes aside) |
+| 5. Styx | done: `Lstyx`; its streams are the C++'s byte for byte (the trailer's address fixes aside). Moved with the C++'s to payonel/styxlua (2026-10-13): `master` is `com.payonel.styxlua`, built against `com.payonel:lungolua` and `lungolua-tests` |
 
 The platform layer's dynamic libraries are Java classes, and
 `os_dlopen` answers as glibc's `dlopen` (`RTLD_NOW`) does: a path with a

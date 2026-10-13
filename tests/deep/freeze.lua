@@ -44,7 +44,7 @@ do
   local stock = {"debug", "gethook", "getinfo", "getlocal", "getmetatable", "getregistry", "getupvalue",
                  "getuservalue", "sethook", "setlocal", "setmetatable", "setupvalue", "setuservalue",
                  "traceback", "upvalueid", "upvaluejoin"}
-  local ours = {"setbudget", "getbudget", "freeze", "isfrozen", "canfreeze", "thaw", "persistable"}
+  local ours = {"setbudget", "getbudget", "freeze", "isfrozen", "canfreeze", "thaw"}
   local known = {}
   for _, list in ipairs{stock, ours} do for _, k in ipairs(list) do known[k] = true end end
   for k in pairs(debug) do assert(known[k], k) end
@@ -84,21 +84,6 @@ do
   collectgarbage()
   local grew = collectgarbage("count") - before
   assert(grew < 100, grew)
-end
-
--- 'debug.persistable(v [, permanents])': whether a persist of the state can
--- write all that 'v' holds (a kernel asks it of a user program); if not,
--- false and why, with the path of what it cannot write
-do
-  local co = coroutine.create(function(f, y) y() return f end)
-  coroutine.resume(co, io.stdout, coroutine.yield)
-  local ok, msg = debug.persistable(co)
-  assert(ok == false and msg:find("userdata", 1, true) and msg:find("(at root", 1, true), msg)
-  assert(debug.persistable(co, {[io.stdout] = "out"}) == true)
-  assert(debug.persistable({1, 2, {x = "y"}}) == true)
-  -- a thread running now (the kernel) is at rest when the host persists
-  assert(debug.persistable((coroutine.running())) == true)
-  assert(coroutine.wrap(function() return debug.persistable((coroutine.running())) end)() == true)
 end
 
 ------------------------------------------------------------------------

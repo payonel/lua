@@ -35,7 +35,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          version="0.1.0-${GITHUB_SHA::8}"
+          version="1.0.0-${GITHUB_SHA::8}"
           mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file \
             -DgroupId=com.payonel -DartifactId=lungolua -Dversion="$version" -Dpackaging=jar \
             -Dfile=java/build/lungolua.jar -Dsources=java/build/lungolua-sources.jar \

@@ -4,7 +4,6 @@ import static com.payonel.lungolua.api.LuaApi.*;
 import static com.payonel.lungolua.api.LuaAuxLib.*;
 import static com.payonel.lungolua.api.LuaConf.*;
 import static com.payonel.lungolua.bytes.InternalString.sv_byteat;
-import static com.payonel.lungolua.lib.Lstyx.lua_styxcheck;
 import static com.payonel.lungolua.platform.OsApi.*;
 import static com.payonel.lungolua.runtime.Ldo.*;
 import static com.payonel.lungolua.runtime.Lstate.*;
@@ -755,36 +754,6 @@ public final class Ldblib
 
   private static final lua_CFunction db_canfreeze = Ldblib::db_canfreeze;
 
-  /*
-  ** debug.persistable(v [, permanents]): true if a persist of the state can
-  ** write all that 'v' holds (a kernel asks it of a user program, to find the
-  ** one that keeps what cannot be persisted); otherwise false and why, with
-  ** the path of what cannot be written. 'permanents' is the kernel's table
-  ** of permanents (object -> name), as the host gives it to its persist.
-  */
-  private static int db_persistable(lua_State L)
-  {
-    luaL_checkany(L, 1);
-    int perms = 0;
-    if (!lua_isnoneornil(L, 2))
-    {
-      luaL_checktype(L, 2, LUA_TTABLE);
-      perms = 2;
-    }
-    luaL_StyxResult res = lua_styxcheck(L, 1, perms);
-    if (res.status == LUA_OK)
-    {
-      lua_pushboolean(L, true);
-      return 1;
-    }
-    lua_pushboolean(L, false);
-    ByteView m = res.msg.to_utf8();
-    lua_pushlstring(L, m, 0, m.size());
-    return 2;
-  }
-
-  private static final lua_CFunction db_persistable = Ldblib::db_persistable;
-
   private static int db_isfrozen(lua_State L)
   {
     lua_pushboolean(L, lua_isfrozen(checkco(L, 1)));
@@ -884,7 +853,6 @@ public final class Ldblib
   private static final CFuncInfo cfi_db_setbudget = new CFuncInfo(db_setbudget, "debug.db_setbudget");
   private static final CFuncInfo cfi_db_getbudget = new CFuncInfo(db_getbudget, "debug.db_getbudget");
   private static final CFuncInfo cfi_db_freeze = new CFuncInfo(db_freeze, "debug.db_freeze");
-  private static final CFuncInfo cfi_db_persistable = new CFuncInfo(db_persistable, "debug.db_persistable");
   private static final CFuncInfo cfi_db_isfrozen = new CFuncInfo(db_isfrozen, "debug.db_isfrozen");
   private static final CFuncInfo cfi_db_canfreeze = new CFuncInfo(db_canfreeze, "debug.db_canfreeze");
   private static final CFuncInfo cfi_db_thaw = new CFuncInfo(db_thaw, "debug.db_thaw");
@@ -910,7 +878,6 @@ public final class Ldblib
     new luaL_RegCFI(Lt.getbudget, cfi_db_getbudget),
     new luaL_RegCFI(Lt.freeze, cfi_db_freeze),
     new luaL_RegCFI(Lt.isfrozen, cfi_db_isfrozen),
-    new luaL_RegCFI(Lt.persistable, cfi_db_persistable),
     new luaL_RegCFI(Lt.canfreeze, cfi_db_canfreeze),
     new luaL_RegCFI(Lt.thaw, cfi_db_thaw),
   };

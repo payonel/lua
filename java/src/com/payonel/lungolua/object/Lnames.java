@@ -22,7 +22,6 @@ import com.payonel.lungolua.lib.Lmathlib;
 import com.payonel.lungolua.lib.Loadlib;
 import com.payonel.lungolua.lib.Loslib;
 import com.payonel.lungolua.lib.Lstrlib;
-import com.payonel.lungolua.lib.Lstyx;
 import com.payonel.lungolua.lib.Ltablib;
 import com.payonel.lungolua.lib.Lutf8lib;
 import com.payonel.lungolua.runtime.lua_State;
@@ -70,7 +69,7 @@ public final class Lnames
 
   private static final Class<?>[] registrars = {
     LuaAuxLib.class, Lbaselib.class, Lcorolib.class, Ldblib.class, Lgc.class, Liolib.class, Lload.class,
-    Lmathlib.class, Loadlib.class, Loslib.class, Lstrlib.class, Lstyx.class, Ltablib.class, Lutf8lib.class,
+    Lmathlib.class, Loadlib.class, Loslib.class, Lstrlib.class, Ltablib.class, Lutf8lib.class,
   };
 
   private static volatile boolean registered = false;

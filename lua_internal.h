@@ -106,14 +106,6 @@ struct lua_LoadSpec
   lua_KContext ctx;
   lua_KFunction k;
 };
-/* Styx's round trip of one value, for its own tests (the engine persists
-   whole states only: luaL_persiststate, luaL_restorestate); the module of
-   the test scripts ('persist([perms,] v)', 'unpersist([perms,] s)') */
-luaL_StyxResult lua_styxpersistvalue(lua_State* L, int perms, int idx, lua_Writer* w);
-luaL_StyxResult lua_styxunpersistvalue(lua_State* L, int perms, byte_view data);
-int lua_styxtestmodule(lua_State* L);
-/* can a persist of the state write all the value at 'idx' holds? (see lstyx.cpp) */
-luaL_StyxResult lua_styxcheck(lua_State* L, int idx, int perms);
 
 int lua_loadk(lua_State* L, const lua_LoadSpec& ls);
 int lua_loadkresume(lua_State* L, int status, const lua_LoadSpec& ls);
