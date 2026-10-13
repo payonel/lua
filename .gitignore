@@ -15,3 +15,4 @@ cachegrind.out.*
 vgcore.*
 test_gate
 test_styx
+/lungoluacpp*.tar.gz
