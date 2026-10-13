@@ -16,19 +16,19 @@ All of these reach `luaT_callTM`/`luaT_callTMres`. With `isLuacode(L->ci)` those
 
 | # | Area | Function | Call site | Kind | Entry to user code | Resume mechanism | Status | Note |
 |---|---|---|---|---|---|---|---|---|
-| A1 | index get | `luaV_finishget` (`__index` function) | lvm.cpp:319 (ops GETTABUP 1387, GETTABLE 1432, GETI 1468, GETFIELD 1495, SELF 1700) | metamethod from VM | `luaT_callTMres` -> `luaD_call` ltm.cpp:151 | `luaV_finishOp` lvm.cpp:1014-1021 copies result | READY | `__index` table chains loop with no call. |
-| A2 | index set | `luaV_finishset` (`__newindex`) | lvm.cpp:382 (SETTABUP 1522, SETTABLE 1576, SETI 1617, SETFIELD 1644) | metamethod from VM | `luaT_callTM` -> `luaD_call` ltm.cpp:126 | `luaV_finishOp` default case, nothing to finish (lvm.cpp:1063) | READY | |
-| A3 | arith/bitwise | `luaT_trybinTM`, `trybinassocTM`, `trybiniTM` -> `callbinTM` | lvm.cpp:2199, 2213, 2227 (OP_MMBIN, MMBINI, MMBINK); ltm.cpp:174 | metamethod from VM | `luaT_callTMres` -> `luaD_call` | `luaV_finishOp` lvm.cpp:1004-1010 | READY | |
-| A4 | unary | `luaT_trybinTM` for UNM/BNOT | lvm.cpp:2249, 2267 | metamethod from VM | `luaD_call` | `luaV_finishOp` lvm.cpp:1011-1021 | READY | |
-| A5 | length | `luaV_objlen` (`__len`) | lvm.cpp:2287 -> lvm.cpp:880 | metamethod from VM | `luaD_call` | `luaV_finishOp` OP_LEN | READY | |
-| A6 | concat | `luaV_concat` -> `luaT_tryconcatTM` (`__concat`) | lvm.cpp:2297 -> lvm.cpp:804 -> ltm.cpp:212 | metamethod from VM | `luaD_call` | `luaV_finishOp` OP_CONCAT lvm.cpp:1038-1047 re-enters `luaV_concat` (may freeze again) | READY | Same call also runs from `finishOp` itself (lvm.cpp:1045), still a Lua frame. |
-| A7 | equality | `luaV_equalobj` (`__eq`) | lvm.cpp:2340 -> lvm.cpp:734 | metamethod from VM | `luaD_call` | `luaV_finishOp` OP_EQ lvm.cpp:1029-1037 | READY | OP_EQK/EQI cannot call anything. |
-| A8 | order | `luaT_callorderTM`, `luaT_callorderiTM` (`__lt`, `__le`) | lvm.cpp:2352 (LT), 2382 (LE), 2467-2560 (LTI, LEI, GTI, GEI); via `luaV_lessthan` 577 and `luaV_lessequal` 602 | metamethod from VM | `luaD_call` | `luaV_finishOp` lvm.cpp:1023-1037 | READY | |
-| A9 | `__call` | `tryfuncTM` in `luaD_precall`/`luaD_pretailcall`/`ccall` | ldo.cpp:554 (called at 743, 787); OP_CALL lvm.cpp:2612, OP_TAILCALL 2647 | call of a non-function | none: only looks up and shifts the stack, the metamethod then runs as an ordinary callee | the callee is a normal frame | READY | `__call` is not run inside a nested C call. |
-| A10 | Lua->Lua call | OP_CALL / OP_TAILCALL / returns | lvm.cpp:2612-2660 | explicit call | `luaD_precall` reuses the same `luaV_execute` C frame | all state in CallInfo/pc | READY | Lua->C: the C function's own `k` (library). |
-| A11 | generic for | OP_TFORPREP (merged with first TFORCALL) and OP_TFORCALL | lvm.cpp:2836, 2860 | explicit call from VM | `luaD_call` | `luaV_finishOp` default; `savedpc` already points at TFORLOOP (lvm.cpp:2835, 2859) | READY | `luaF_newtbcupval` (2826) only looks up `__close`. |
-| A12 | `__close` | OP_CLOSE -> `luaF_close(...,1)` | lvm.cpp:2314 -> lfunc.cpp:268 -> `callclosemethod` lfunc.cpp:143 | `__close` | `luaD_call` | `luaV_finishOp` OP_CLOSE lvm.cpp:1048 repeats the instruction | READY | `poptbclist` runs before the call, so the repeat only closes what is left. |
-| A13 | `__close` | OP_RETURN with k -> `luaF_close(...,1)` | lvm.cpp:2689 | `__close` | `luaD_call` | `luaV_finishOp` OP_RETURN lvm.cpp:1053 | READY | |
+| A1 | index get | `luaV_finishget` (`__index` function) | lvm.cpp:319 (ops GETTABUP 1349, GETTABLE 1393, GETI 1428, GETFIELD 1454, SELF 1654) | metamethod from VM | `luaT_callTMres` -> `luaD_call` ltm.cpp:151 | `luaV_finishOp` lvm.cpp:1014-1021 copies result | READY | `__index` table chains loop with no call. |
+| A2 | index set | `luaV_finishset` (`__newindex`) | lvm.cpp:382 (SETTABUP 1480, SETTABLE 1533, SETI 1573, SETFIELD 1599) | metamethod from VM | `luaT_callTM` -> `luaD_call` ltm.cpp:126 | `luaV_finishOp` default case, nothing to finish (lvm.cpp:1063) | READY | |
+| A3 | arith/bitwise | `luaT_trybinTM`, `trybinassocTM`, `trybiniTM` -> `callbinTM` | lvm.cpp:2177, 2190, 2203 (OP_MMBIN, MMBINI, MMBINK); ltm.cpp:174 | metamethod from VM | `luaT_callTMres` -> `luaD_call` | `luaV_finishOp` lvm.cpp:1004-1010 | READY | |
+| A4 | unary | `luaT_trybinTM` for UNM/BNOT | lvm.cpp:2224, 2241 | metamethod from VM | `luaD_call` | `luaV_finishOp` lvm.cpp:1011-1021 | READY | |
+| A5 | length | `luaV_objlen` (`__len`) | lvm.cpp:2260 -> lvm.cpp:880 | metamethod from VM | `luaD_call` | `luaV_finishOp` OP_LEN | READY | |
+| A6 | concat | `luaV_concat` -> `luaT_tryconcatTM` (`__concat`) | lvm.cpp:2269 -> lvm.cpp:804 -> ltm.cpp:212 | metamethod from VM | `luaD_call` | `luaV_finishOp` OP_CONCAT lvm.cpp:1038-1047 re-enters `luaV_concat` (may freeze again) | READY | Same call also runs from `finishOp` itself (lvm.cpp:1045), still a Lua frame. |
+| A7 | equality | `luaV_equalobj` (`__eq`) | lvm.cpp:2309 -> lvm.cpp:734 | metamethod from VM | `luaD_call` | `luaV_finishOp` OP_EQ lvm.cpp:1029-1037 | READY | OP_EQK/EQI cannot call anything. |
+| A8 | order | `luaT_callorderTM`, `luaT_callorderiTM` (`__lt`, `__le`) | lvm.cpp:2337 (LT), 2366 (LE), 2433-2523 (LTI, LEI, GTI, GEI); via `luaV_lessthan` 577 and `luaV_lessequal` 602 | metamethod from VM | `luaD_call` | `luaV_finishOp` lvm.cpp:1023-1037 | READY | |
+| A9 | `__call` | `tryfuncTM` in `luaD_precall`/`luaD_pretailcall`/`ccall` | ldo.cpp:554 (called at 743, 787); OP_CALL lvm.cpp:3105, OP_TAILCALL 3140 | call of a non-function | none: only looks up and shifts the stack, the metamethod then runs as an ordinary callee | the callee is a normal frame | READY | `__call` is not run inside a nested C call. |
+| A10 | Lua->Lua call | OP_CALL / OP_TAILCALL / returns | lvm.cpp:3105-3153 | explicit call | `luaD_precall` reuses the same `luaV_execute` C frame | all state in CallInfo/pc | READY | Lua->C: the C function's own `k` (library). |
+| A11 | generic for | OP_TFORPREP (merged with first TFORCALL) and OP_TFORCALL | lvm.cpp:3307, 3331 | explicit call from VM | `luaD_call` | `luaV_finishOp` default; `savedpc` already points at TFORLOOP (lvm.cpp:3306, 3330) | READY | `luaF_newtbcupval` (2826) only looks up `__close`. |
+| A12 | `__close` | OP_CLOSE -> `luaF_close(...,1)` | lvm.cpp:2284 -> lfunc.cpp:268 -> `callclosemethod` lfunc.cpp:143 | `__close` | `luaD_call` | `luaV_finishOp` OP_CLOSE lvm.cpp:1048 repeats the instruction | READY | `poptbclist` runs before the call, so the repeat only closes what is left. |
+| A13 | `__close` | OP_RETURN with k -> `luaF_close(...,1)` | lvm.cpp:3182 | `__close` | `luaD_call` | `luaV_finishOp` OP_RETURN lvm.cpp:1053 | READY | |
 
 ## B. The same metamethods through the C API
 
@@ -87,7 +87,7 @@ Calls with a continuation arm the frame (`armk`, lapi.cpp:895: sets `k`, `ctx`, 
 
 | # | Area | Function | Call site | Kind | Entry to user code | Resume mechanism | Status | Note |
 |---|---|---|---|---|---|---|---|---|
-| E1 | C function returning with tbc | `moveresults` -> `luaF_close(...,1)` | ldo.cpp:613 | `__close` | `luaD_call` | CIST_CLSRET (set at 612); `finishCcall` ldo.cpp:966 redoes `luaD_poscall` | READY | Also reached from OP_TAILCALL C results (lvm.cpp:2661). |
+| E1 | C function returning with tbc | `moveresults` -> `luaF_close(...,1)` | ldo.cpp:613 | `__close` | `luaD_call` | CIST_CLSRET (set at 612); `finishCcall` ldo.cpp:966 redoes `luaD_poscall` | READY | Also reached from OP_TAILCALL C results (lvm.cpp:3154). |
 | E2 | pcall error recovery | `finishpcallk` -> `luaF_close(...,1)` | ldo.cpp:869 | `__close` | `luaD_call` | itself re-entered by `finishCcall` (ldo.cpp:980); CIST_RECST kept | READY | Where a coroutine's pcall catches an error, including after a freeze (NYCALL pcall). |
 | E3 | `lua_settop` | `luaF_close(...,0)` | lapi.cpp:226. Quote: `newtop = luaF_close(L, newtop, CLOSEKTOP, 0);` | `__close` | `callclosemethod` nfz++ + `luaD_callnoyield` | none | NOT READY | Safe: a freeze there destroys the chain. Not yieldable in stock either. `lua_settopk` is the freezable form. |
 | E4 | `lua_closeslot` | `luaF_close(...,0)` | lapi.cpp:238 | `__close` | same | none | NOT READY | Safe: a freeze there destroys the chain. `lua_closeslotk` is the freezable form. |
@@ -117,9 +117,9 @@ Every `luaC_checkGC`/`luaC_step` call site (all lead to F5, so F1-F3 apply). No 
 
 | File | Function | Line |
 |---|---|---|
-| lvm.cpp | `luaV_execute` OP_NEWTABLE | 1673 |
-| lvm.cpp | `luaV_execute` OP_CONCAT | 2302 |
-| lvm.cpp | `luaV_execute` OP_CLOSURE | 2922 |
+| lvm.cpp | `op_newtable` (OP_NEWTABLE) | 1627 |
+| lvm.cpp | `op_concat` (OP_CONCAT) | 2273 |
+| lvm.cpp | `op_closure` (OP_CLOSURE) | 2652 |
 | lapi.cpp | `lua_tolstring` | 495 |
 | lapi.cpp | `lua_toistring` | 516 |
 | lapi.cpp | `lua_pushlstring` | 671 |
@@ -163,7 +163,7 @@ Every `luaC_checkGC`/`luaC_step` call site (all lead to F5, so F1-F3 apply). No 
 
 | # | Area | Function | Call site | Kind | Entry to user code | Resume mechanism | Status | Note |
 |---|---|---|---|---|---|---|---|---|
-| I1 | budget point in Lua code | `luaG_traceexec` -> `budgetpoint` -> `luaD_budget` | ldebug.cpp:1226-1227, 1198-1207; lvm.cpp:1275 | budget callback | `(*g->budgetf)(L)` ldo.cpp:414 (HOST callback; the debug library runs a Lua function on `lua_budgetthread`) | CIST_FROZE on the Lua frame (ldebug.cpp:1205), `unroll` `savedpc--` (ldo.cpp:1011-1012), `luaV_execute` clears the flag (lvm.cpp:1263) | READY | An error in the callback destroys the whole budgeted chain (`killchain`), as a freeze that cannot be does; the budget refills either way (the Guard in `luaD_budget`). |
+| I1 | budget point in Lua code | `luaG_traceexec` -> `budgetpoint` -> `luaD_budget` | ldebug.cpp:1226-1227, 1198-1207; lvm.cpp:2714 | budget callback | `(*g->budgetf)(L)` ldo.cpp:414 (HOST callback; the debug library runs a Lua function on `lua_budgetthread`) | CIST_FROZE on the Lua frame (ldebug.cpp:1205), `unroll` `savedpc--` (ldo.cpp:1011-1012), `luaV_execute` clears the flag (lvm.cpp:2702) | READY | An error in the callback destroys the whole budgeted chain (`killchain`), as a freeze that cannot be does; the budget refills either way (the Guard in `luaD_budget`). |
 | I2 | budget point in C code | `lua_checkpointk` | lapi.cpp:1635-1646 | budget callback | `luaD_budget` | `ci->k`/`ctx`; `luaD_freeze`; `finishCcall` calls `k` with LUA_YIELD | READY | |
 | I3 | freeze request | `lua_freeze`, `luaD_exitcallback`, `luaD_budget`, `luaD_freeze` | ldo.cpp:1945, 596, 489 | freeze | none: `lua_freeze` leaves the callback; `luaD_budget` checks `nfz` and the `resumedk` chain (`chaintop`) and freezes the top of the chain or destroys the chain (`killchain`) | n/a | READY | |
 | I4 | thaw | `lua_thaw`, `lua_thawk` | ldo.cpp:1340, 1296 | thaw | see C11 | see C11 | READY | |
