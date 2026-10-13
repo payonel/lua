@@ -5,6 +5,7 @@ on:
     branches: [lua-java]
     paths:
       - 'java/**'
+      - 'tests/**'
       - '.github/workflows/lungolua.yml'
   workflow_dispatch:
 
@@ -24,8 +25,8 @@ jobs:
           java-version: '25'
           server-id: github
 
-      - name: Build the engine jar and its sources
-        run: make -C java build/lungolua.jar build/lungolua-sources.jar JDK="$JAVA_HOME"
+      - name: Build the engine jar, its sources, and its tests
+        run: make -C java build/lungolua.jar build/lungolua-sources.jar build/lungolua-tests.jar JDK="$JAVA_HOME"
 
       - name: Check that it runs
         run: java -jar java/build/lungolua.jar -e "assert(string.format('%d', 1 + 1) == '2') print(_VERSION)"
@@ -39,4 +40,8 @@ jobs:
             -DgroupId=com.payonel -DartifactId=lungolua -Dversion="$version" -Dpackaging=jar \
             -Dfile=java/build/lungolua.jar -Dsources=java/build/lungolua-sources.jar \
             -DrepositoryId=github -Durl=https://maven.pkg.github.com/payonel/lua
-          echo "Published com.payonel:lungolua:$version" >> "$GITHUB_STEP_SUMMARY"
+          mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file \
+            -DgroupId=com.payonel -DartifactId=lungolua-tests -Dversion="$version" -Dpackaging=jar \
+            -Dfile=java/build/lungolua-tests.jar \
+            -DrepositoryId=github -Durl=https://maven.pkg.github.com/payonel/lua
+          echo "Published com.payonel:lungolua:$version and com.payonel:lungolua-tests:$version" >> "$GITHUB_STEP_SUMMARY"

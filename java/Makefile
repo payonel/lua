@@ -40,10 +40,15 @@ build/lungolua-sources.jar: $(SRC)
 	mkdir -p build
 	$(JAR) --create --file $@ $(foreach f,$(patsubst src/%,%,$(SRC)),-C src $(f))
 
-build/lungolua-tests.jar: build/lungolua.jar $(TESTS_SRC)
+# the test library and the tests, with the test scripts (tests/, as git
+# keeps them) for the projects that run them against the engine
+TESTS_LUA := $(shell cd .. && git ls-files tests 2>/dev/null)
+
+build/lungolua-tests.jar: build/lungolua.jar $(TESTS_SRC) $(addprefix ../,$(TESTS_LUA))
 	rm -rf $(TEST_CLASSES)
 	mkdir -p $(TEST_CLASSES)
 	$(JAVAC) --release 21 -encoding UTF-8 -Xlint:all -Xlint:-serial -Xlint:-fallthrough -Xlint:-cast -Xmaxerrs 10000 -cp build/lungolua.jar:$(subst $(space),:,$(JLINE)) -d $(TEST_CLASSES) $(TESTS_SRC)
+	cd .. && git ls-files -z tests | tar --null -T - -cf - | tar -xf - -C java/$(TEST_CLASSES)
 	$(JAR) --create --file $@ -C $(TEST_CLASSES) .
 
 # the JVM's options (the launchers' too)

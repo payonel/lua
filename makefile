@@ -49,7 +49,8 @@ CXXFLAGS.cov     =-O0 -g3 -ggdb --coverage
 
 LDFLAGS.cov   =--coverage
 
-CXXFLAGS      =-Wall $(CXXFLAGS.$(VARIANT)) $(TESTS) $(CWARNSCPP) $(CWARNGCC) -std=c++23 -fno-stack-protector -fno-common -march=native -MMD -fmax-errors=0
+ARCH         ?= -march=native
+CXXFLAGS      =-Wall $(CXXFLAGS.$(VARIANT)) $(TESTS) $(CWARNSCPP) $(CWARNGCC) -std=c++23 -fno-stack-protector -fno-common $(ARCH) -MMD -fmax-errors=0
 LDFLAGS       =-Wl,-E -lm -ldl -fuse-ld=lld $(LDFLAGS.$(VARIANT))
 AR            =ar rc
 RANLIB        =ranlib
@@ -114,6 +115,32 @@ $(CORE_T): $(OBJ_FILES)
 	$(RM) $@
 	$(AR) $@ $(CORE_O)
 	$(RANLIB) $@
+
+# the packages other projects build against: lungoluacpp (the headers,
+# liblua.a sealed and liblua-internal.a with the internals, and the
+# interpreter) and, from the
+# debug build, lungoluacpp-tests (the same with the test library, and the
+# test scripts); 'make package PKG_VERSION=<v>', 'make package-debug ...'
+PKG_VERSION  ?= dev
+PKG_NAME      = $(if $(filter debug,$(VARIANT)),lungoluacpp-tests,lungoluacpp)
+PKG_DIR       = $(OBJ_DIR)/pkg/$(PKG_NAME)
+INTERNAL_T    = $(OBJ_DIR)/liblua-internal.a
+
+$(INTERNAL_T): $(OBJ_FILES)
+	$(RM) $@
+	$(AR) $@ $(OBJ_FILES)
+	$(RANLIB) $@
+
+package-debug: TESTS=-DLUA_DEBUG
+package package-debug: $(CORE_T) $(INTERNAL_T) $(LUA_T)
+	$(RM) -r $(PKG_DIR)
+	mkdir -p $(PKG_DIR)/include $(PKG_DIR)/lib $(PKG_DIR)/bin
+	cp $(wildcard *.h) $(PKG_DIR)/include/
+	cp $(CORE_T) $(INTERNAL_T) $(PKG_DIR)/lib/
+	cp $(LUA_T) $(PKG_DIR)/bin/
+	printf 'LUNGOLUACPP_VERSION = $(PKG_VERSION)\nLUNGOLUACPP_CXXFLAGS = -std=c++23 $(TESTS)\nLUNGOLUACPP_LDFLAGS = -Wl,-E -lm -ldl\n' > $(PKG_DIR)/flags.mk
+	if [ "$(VARIANT)" = "debug" ]; then git ls-files -z tests | tar --null -T - -cf - | tar -xf - -C $(PKG_DIR); fi
+	tar -czf $(PKG_NAME)-$(PKG_VERSION).tar.gz -C $(OBJ_DIR)/pkg $(PKG_NAME)
 
 $(LUA_T): $(LUA_O) $(OBJ_FILES) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(LUA_O) $(OBJ_FILES) $(LDFLAGS)
@@ -225,4 +252,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: all debug cov clean test engine-test gate gate-run styx-gate styx-gate-run styx-test full
+.PHONY: all debug cov clean test engine-test gate gate-run styx-gate styx-gate-run styx-test full package package-debug
