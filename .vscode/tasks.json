@@ -6,6 +6,8 @@
       "type": "shell",
       "command": "make",
       "args": [
+        "-C",
+        "cpp",
         "debug",
         "-j"
       ],
@@ -15,7 +17,7 @@
       },
       "problemMatcher": {
         "base": "$gcc",
-        "fileLocation": "relative"
+        "fileLocation": ["relative", "${workspaceFolder}/cpp"]
       }
     }
   ]

@@ -1,4 +1,4 @@
-#!../../lua
+#!../../cpp/lua
 -- tests/deep/all.lua
 -- Second test bucket: deep client-API surface tests.
 --
@@ -8,8 +8,8 @@
 -- script API, which must remain literally identical to stock Lua 5.5
 -- regardless of how the consumer (C++) API diverges.
 --
--- Run from tests/:      ../lua deep/all.lua
--- Run from tests/deep/: ../../lua all.lua
+-- Run from tests/:      ../cpp/lua deep/all.lua
+-- Run from tests/deep/: ../../cpp/lua all.lua
 -- Or via makefile:      make test-deep
 
 local version = "Lua 5.5"

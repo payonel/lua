@@ -5,13 +5,14 @@
        "name": "lua",
        "type": "cppdbg",
        "request": "launch",
-       "program": "${workspaceFolder}/test_public_api",
-      //  "program": "${workspaceFolder}/lua",
+       "program": "${workspaceFolder}/cpp/test_public_api",
+      //  "program": "${workspaceFolder}/cpp/lua",
       //  "args": ["attrib.lua"],
-       "cwd": "${workspaceFolder}/",
+       "cwd": "${workspaceFolder}/cpp/run/",
        "MIMode": "gdb",
        "environment": [
-        {"name": "LUA_INIT", "value": "warn('@allow')"}
+        {"name": "LUA_INIT", "value": "warn('@allow')"},
+        {"name": "PUBLICAPI_LUA", "value": "${workspaceFolder}/cpp/lua"}
        ]
      }
    ]

@@ -1468,7 +1468,7 @@ static void test_warnings()
 ** to stderr, so capture it around each emission.
 */
 static int g_stderr_saved = -1;
-static const char* const k_warncap_path = "/tmp/tpa_warncap.txt";
+static const char* const k_warncap_path = "tpa_warncap.txt";
 
 static void stderr_capture_begin()
 {
@@ -1631,7 +1631,7 @@ static void test_db_gethook_mask()
 ** and captures the stderr prompt/error output.
 */
 static int g_stdin_saved = -1;
-static const char* const k_dbgin_path = "/tmp/tpa_dbgin.txt";
+static const char* const k_dbgin_path = "tpa_dbgin.txt";
 
 static void stdin_feed_begin(const char* content)
 {
@@ -2904,7 +2904,7 @@ static void test_auxlib_load()
   CHECK(luaL_loadbuffer(L, "return 4", "=lb2"_hs) == LUA_OK);
   lua_pop(L, 1);
 
-  const char* path = "/tmp/tpa_luaL_chunk.lua";
+  const char* path = "tpa_luaL_chunk.lua";
   {
     std::FILE* f = std::fopen(path, "w");
     CHECK(f != nullptr);
@@ -3532,7 +3532,7 @@ static void test_io_handles()
   lua_pop(L, 4);
 
   CHECK(do_string(L,
-      "local f = assert(io.open('/tmp/tpa_io_probe.txt', 'w'))\n"
+      "local f = assert(io.open('tpa_io_probe.txt', 'w'))\n"
       "local open_str = tostring(f)\n"
       "f:close()\n"
       "local closed_str = tostring(f)\n"
@@ -3551,7 +3551,7 @@ static void test_io_handles()
               "attempt to use a closed file") != byte_view::npos);
   }
   lua_pop(L, 4);
-  std::remove("/tmp/tpa_io_probe.txt");
+  std::remove("tpa_io_probe.txt");
 
   CHECK(do_string(L,
       "local ok, err = io.stdout:close()\n"
@@ -4883,15 +4883,10 @@ static void test_cfunc_stress_group6()
   luaL_openlibs(L);
 #endif
 
-  /* Need to run from tests/ directory */
-  char oldcwd[1024];
-  if (!getcwd(oldcwd, sizeof(oldcwd)))
-    oldcwd[0] = '\0';
-  if (chdir("tests") != 0)
-    { /* ignore: best-effort chdir for test setup */ }
-
   /* Set up environment like the lua binary does */
-  CHECK(luaL_dostring(L, "_TMP='_1'; arg={[0]='../lua'}"_hs) == LUA_OK);
+  const char* lua = std::getenv("PUBLICAPI_LUA");
+  std::string setup = std::string("_TMP='_1'; arg={[0]='") + (lua != nullptr ? lua : "../cpp/lua") + "'}";
+  CHECK(luaL_dostring(L, HostString(setup.c_str())) == LUA_OK);
 
   clock_t start = clock();
 
@@ -4909,8 +4904,6 @@ static void test_cfunc_stress_group6()
   double ms = (double)(end - start) * 1000.0 / CLOCKS_PER_SEC;
   std::printf("  group6 (full test suite): %.0f ms\n", ms);
 
-  if (chdir(oldcwd) != 0)
-    { /* ignore: best-effort restore of original directory */ }
   lua_close(L);
 }
 

@@ -136,7 +136,7 @@ package package-debug: $(CORE_T) $(INTERNAL_T) $(LUA_T)
 	cp $(CORE_T) $(INTERNAL_T) $(PKG_DIR)/lib/
 	cp $(LUA_T) $(PKG_DIR)/bin/
 	printf 'LUNGOLUACPP_VERSION = $(PKG_VERSION)\nLUNGOLUACPP_CXXFLAGS = -std=c++23 $(TESTS)\nLUNGOLUACPP_LDFLAGS = -Wl,-E -lm -ldl\n' > $(PKG_DIR)/flags.mk
-	if [ "$(VARIANT)" = "debug" ]; then git ls-files -z tests | tar --null -T - -cf - | tar -xf - -C $(PKG_DIR); fi
+	if [ "$(VARIANT)" = "debug" ]; then (cd .. && git ls-files -z tests | tar --null -T - -cf -) | tar -xf - -C $(PKG_DIR); fi
 	tar -czf $(PKG_NAME)-$(PKG_VERSION).tar.gz -C $(OBJ_DIR)/pkg $(PKG_NAME)
 
 $(LUA_T): $(LUA_O) $(OBJ_FILES) $(TEST_OBJ_FILES) $(TEST_BUILD_FILES) $(VARIANT_STAMP)
@@ -166,12 +166,12 @@ $(GATE_T): $(GATE_O) $(OBJ_FILES) $(VARIANT_STAMP)
 GATE_STEPS ?= 97 17 3
 gate: $(GATE_T) gate-run
 
-gate-run:
+gate-run: run-dir
 	for n in $(GATE_STEPS); do \
-	  ( cd tests && ../$(GATE_T) $$n deep/all.lua ) || exit 1; \
-	  mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1; \
-	  ( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd tests; \
-	    cat /dev/null | ../$(GATE_T) $$n all.lua ) || exit 1; \
+	  ( cd $(RUN_DIR) && GATE_LUA=$(CURDIR)/$(LUA_T) $(CURDIR)/$(GATE_T) $$n deep/all.lua ) || exit 1; \
+	  mkdir -p $(RUN_DIR)/libs/_$(TEST_TEMP_DIR)/P1; \
+	  ( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd $(RUN_DIR); \
+	    cat /dev/null | GATE_LUA=$(CURDIR)/$(LUA_T) $(CURDIR)/$(GATE_T) $$n all.lua ) || exit 1; \
 	done
 
 # just the engine internals tests (`make test` runs them too)
@@ -194,21 +194,32 @@ $(OBJ_DIR)/%.o: %.cpp | $(OBJ_DIR)
 $(OBJ_DIR):
 	mkdir -p $@
 
+# the tests run in RUN_DIR, a copy of ../tests with the test modules, so
+# that a run of another build (java/) at the same time shares no files;
+# it is kept, with the upstream suite's times of the last runs
+RUN_DIR ?= run
+
+run-dir:
+	mkdir -p $(RUN_DIR)/libs
+	cp -r ../tests/. $(RUN_DIR)/
+	cp $(TEST_BUILD_FILES) $(RUN_DIR)/libs/
+
 # test_public_api runs the upstream suite too (its cfunc_stress group 6), as
 # the interpreter runs it below: with the temporary directory, the stack
 # limit and a pipe for stdin
-test:
-	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
-	( trap "rm -rf tests/libs/_$(TEST_TEMP_DIR)" EXIT; \
-		ulimit -S -s 8192; \
-		cat /dev/null | ./$(TEST_API_T) )
-	./$(ENGINE_TEST_T)
-	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
+test: run-dir
+	mkdir -p $(RUN_DIR)/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
 		ulimit -S -s 8192; \
-		cd tests; \
-		cat /dev/null | /usr/bin/time -v ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
-	cd tests && ../$(LUA_T) deep/all.lua
+		cd $(RUN_DIR); \
+		cat /dev/null | PUBLICAPI_LUA=$(CURDIR)/$(LUA_T) $(CURDIR)/$(TEST_API_T) )
+	./$(ENGINE_TEST_T)
+	mkdir -p $(RUN_DIR)/libs/_$(TEST_TEMP_DIR)/P1
+	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; \
+		ulimit -S -s 8192; \
+		cd $(RUN_DIR); \
+		cat /dev/null | /usr/bin/time -v $(CURDIR)/$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
+	cd $(RUN_DIR) && $(CURDIR)/$(LUA_T) deep/all.lua
 	$(MAKE) gate-run
 
 full:
@@ -222,4 +233,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: all debug cov clean test engine-test gate gate-run full package package-debug
+.PHONY: all debug cov clean test engine-test gate gate-run run-dir full package package-debug

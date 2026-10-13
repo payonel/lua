@@ -1626,7 +1626,7 @@ public final class PublicApi
   */
   private static Object g_stderr_saved = null;
   private static OsFile g_stderr_file = null;
-  private static final String k_warncap_path = "/tmp/tpa_warncap.txt";
+  private static final String k_warncap_path = "tpa_warncap.txt";
 
   /*
   ** dup/dup2 on the JVM: the descriptor under a stream is its device (the
@@ -1831,7 +1831,7 @@ public final class PublicApi
   */
   private static Object g_stdin_saved = null;
   private static OsFile g_stdin_file = null;
-  private static final String k_dbgin_path = "/tmp/tpa_dbgin.txt";
+  private static final String k_dbgin_path = "tpa_dbgin.txt";
 
   private static void stdin_feed_begin(String content)
   {
@@ -3133,7 +3133,7 @@ public final class PublicApi
     CHECK(luaL_loadbuffer(L, bv("return 4"), hs("=lb2")) == LUA_OK);
     lua_pop(L, 1);
 
-    String path = "/tmp/tpa_luaL_chunk.lua";
+    String path = "tpa_luaL_chunk.lua";
     {
       OsFile f = os_fopen(bv(path), bv("w")).f;
       CHECK(f != null);
@@ -3769,7 +3769,7 @@ public final class PublicApi
     lua_pop(L, 4);
 
     CHECK(do_string(L, bv(
-        "local f = assert(io.open('/tmp/tpa_io_probe.txt', 'w'))\n" +
+        "local f = assert(io.open('tpa_io_probe.txt', 'w'))\n" +
         "local open_str = tostring(f)\n" +
         "f:close()\n" +
         "local closed_str = tostring(f)\n" +
@@ -3788,7 +3788,7 @@ public final class PublicApi
                 bv("attempt to use a closed file")) != ByteView.npos);
     }
     lua_pop(L, 4);
-    os_remove(bv("/tmp/tpa_io_probe.txt"));
+    os_remove(bv("tpa_io_probe.txt"));
 
     CHECK(do_string(L, bv(
         "local ok, err = io.stdout:close()\n" +
@@ -5190,12 +5190,6 @@ public final class PublicApi
     lua_close(L);
   }
 
-  /* the JVM cannot change its working directory: 'chdir' always fails */
-  private static int chdir(String path)
-  {
-    return -1;
-  }
-
   /*
   ** Group 6: Full Lua test suite runtime (tests/all.lua).
   ** Measures overall VM performance under realistic mixed workloads.
@@ -5208,17 +5202,9 @@ public final class PublicApi
     else
       luaL_openlibs(L);
 
-    /* Need to run from tests/ directory (the JVM cannot chdir: the test
-       target starts this program there) */
-    String oldcwd = System.getProperty("user.dir");
-    if (oldcwd == null)
-      oldcwd = "";
-    if (chdir("tests") != 0)
-      { /* ignore: best-effort chdir for test setup */ }
-
     /* Set up environment like the lua binary does (arg[0], the interpreter
        the suite runs: the Java launcher, given as 'publicapi.lua') */
-    String lua = System.getProperty("publicapi.lua", "../lua");
+    String lua = System.getProperty("publicapi.lua", "../java/lua");
     CHECK(luaL_dostring(L, hs("_TMP='_1'; arg={[0]='" + lua + "'}")) == LUA_OK);
 
     double start = os_cpuclock();
@@ -5237,8 +5223,6 @@ public final class PublicApi
     double ms = (end - start) * 1000.0;
     printf("  group6 (full test suite): %.0f ms\n", ms);
 
-    if (chdir(oldcwd) != 0)
-      { /* ignore: best-effort restore of original directory */ }
     lua_close(L);
   }
 

@@ -1,10 +1,9 @@
 # Java port
 
-The C++ engine on `lua-c++` was shaped so that it transcribes to Java line
+The C++ engine (`cpp/`) was shaped so that it transcribes to Java line
 by line ([tasks.md](tasks.md): phases L, M, C, R and J, and the port
-checklist in C12). This branch, `lua-java`, holds that transcription. The
-C++ sources stay in the tree as the reference until the Java engine passes
-the same tests; the Java sources are under `java/`.
+checklist in C12). The Java sources, under `java/` beside it on branch
+`lungolua`, are that transcription; both run the test scripts in `tests/`.
 
 The port is named LungoLua: its packages are under `com.payonel.lungolua`
 (the namespace of `com.payonel.modularcomputers`), and its jar is
@@ -46,7 +45,7 @@ these for the port itself:
 | `lua::platform` | `com.payonel.lungolua.platform` | `OsApi`, `LocaleUtil`, `Libm`; `Readline` (the JVM's readline library); `Environ` (the environment as bytes) |
 | `lua::host` | `com.payonel.lungolua.host` | `Lua` (the standalone interpreter, `main`) |
 | tests | `com.payonel.lungolua.tests` | `Ltests` (the debug build's `T` library, behind `runtime.TestHooks`) and the test programs; `lungolua-tests.jar` |
-| tests/libs | `com.payonel.lungolua.tests.libs` | `Lib1`, `Lib11`, `Lib2`, `Lib21`, `Lib22` (the test C modules), `LibDecls` (lib_decls.h) |
+| cpp/tests/libs | `com.payonel.lungolua.tests.libs` | `Lib1`, `Lib11`, `Lib2`, `Lib21`, `Lib22` (the test C modules), `LibDecls` (lib_decls.h) |
 
 Type names keep their C names (`lua_State`, `TValue`, `CallInfo`);
 upstream's file prefixes stay on the functions (`Ldo.luaD_call`). Renaming
@@ -129,8 +128,8 @@ methods adds them.
 | C's `<cmath>` (`pow`, `fmod`, `floor`, `frexp`, …) | `com.payonel.lungolua.platform.Libm` (done) |
 | lua.cpp | `com.payonel.lungolua.host.Lua` |
 | ltests.h/.cpp | `com.payonel.lungolua.tests.Ltests` |
-| test_public_api.cpp, tests/engine/engine_tests.cpp, tests/gate/gate.cpp | `com.payonel.lungolua.tests.PublicApi`, `EngineTests`, `Gate` (launchers `java/test_engine`, `java/test_gate`) |
-| tests/libs/libN.cpp, lib_decls.h | `com.payonel.lungolua.tests.libs.LibN`, `com.payonel.lungolua.tests.libs.LibDecls` |
+| test_public_api.cpp, cpp/tests/engine/engine_tests.cpp, cpp/tests/gate/gate.cpp | `com.payonel.lungolua.tests.PublicApi`, `EngineTests`, `Gate` (launchers `java/test_engine`, `java/test_gate`) |
+| cpp/tests/libs/libN.cpp, lib_decls.h | `com.payonel.lungolua.tests.libs.LibN`, `com.payonel.lungolua.tests.libs.LibDecls` |
 
 **Calls keep their C shape.** A file `import static`s the classes whose
 functions it calls (`import static com.payonel.lungolua.object.Lobject.*;`), so
@@ -327,13 +326,15 @@ jars, the JLine jars, the training or the JDK's `release` file is newer;
 else remove it. `java -jar java/build/lungolua.jar` runs the release
 interpreter without the tests and the cache.
 
-Each push to `lua-java` on payonel/lua that changes `java/` (or a manual
-run from the Actions tab) runs `.github/workflows/lungolua.yml`: it builds
+Each push to `lungolua` on payonel/lua (but one that changes only `docs/`),
+or a manual run from the Actions tab, runs `.github/workflows/lungolua.yml`: it builds
 `build/lungolua.jar` and `build/lungolua-sources.jar` (`make -C java
 build/lungolua-sources.jar`: the engine's sources, without the tests) with
 Temurin 25, runs the jar once, and publishes both to GitHub Packages as
-`com.payonel:lungolua:0.1.0-<the commit's first 8 hex digits>`, with the
-workflow's own token. GitHub Packages asks for a login even to read: a
+`com.payonel:lungolua:1.0.0-<the commit's first 8 hex digits>`, with
+`lungolua-tests.jar` (the test library and the test scripts) as
+`com.payonel:lungolua-tests` of the same version, with the workflow's own
+token. GitHub Packages asks for a login even to read: a
 build that takes the jar from `https://maven.pkg.github.com/payonel/lua`
 needs a classic personal access token with `read:packages`, kept outside
 the build (`~/.gradle/gradle.properties`: `gpr.user`, `gpr.key`).
@@ -365,8 +366,9 @@ The platform layer's dynamic libraries are Java classes, and
 `os_dlopen` answers as glibc's `dlopen` (`RTLD_NOW`) does: a path with a
 `/` loads the Java library its file's base name names (`libs/lib2-v2.so`
 is `com.payonel.lungolua.tests.libs.Lib22`) if the file exists, whatever it holds
-(`make -C java` makes the test modules' files, dated 1970 so that the C++
-build still makes its own); a name without a `/` loads a registered
+(`make -C java test` makes the test modules' files in its own copy of
+`tests/`, `java/run`; the C++ build tests in `cpp/run`, so the two can run
+at once); a name without a `/` loads a registered
 system library (`libreadline.so` is `com.payonel.lungolua.platform.Readline`); `""` is
 the program. A library's symbols are its class's public static fields;
 its undefined ones (`lib11` takes `lib1_export`) must come from a library

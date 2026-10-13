@@ -2,7 +2,7 @@
 
 ## Goal
 
-A C++ fork of Lua 5.5 (branch `lua-c++`), being methodically transformed with
+A C++ fork of Lua 5.5 (`cpp/` on branch `lungolua`), being methodically transformed with
 one end goal: make every construct in the sources translate line-by-line into
 Java, which is the constraining target (no unions, no pointer arithmetic, no
 interior pointers, no operator overloading). The original `.c` files are now
@@ -14,20 +14,39 @@ it should be a near-mechanical transcription rather than a redesign.
 
 A second goal is that a `lua_State` must be fully serializable and
 deserializable; that work is Styx, now its own library in
-[payonel/styxlua](https://github.com/payonel/styxlua) (`styxcpp` for this
-C++ engine, `master` for the Java one), whose design record is its
+[payonel/styxlua](https://github.com/payonel/styxlua) (both ports, on its
+`master`), whose design record is its
 `docs/styx.md`. It drives the
 function-callback design toward object identities (`CFuncInfo`) instead of
 raw function pointers.
 
 The remaining work is tracked in [tasks.md](tasks.md).
 
+## Layout and packages
+
+Branch `lungolua` of payonel/lua (a fork of lua/lua, whose `master` stays
+upstream's) holds both ports:
+
+- `cpp/`: the C++ engine and its test programs (`make -C cpp`, `make -C cpp
+  full`).
+- `java/`: LungoLua, its transcription to Java ([java-port.md](java-port.md)).
+- `tests/`: the test scripts both run. Each build tests in its own copy
+  (`cpp/run`, `java/run`, `java/run-debug`; `RUN_DIR` names another), so
+  they can run at once.
+
+Each push to `lungolua` (but one that changes only `docs/`) publishes to the
+repository's GitHub Packages, as `1.0.0-<the commit's first 8 hex digits>`:
+`com.payonel:lungoluacpp` and `lungoluacpp-tests`
+(`.github/workflows/lungoluacpp.yml`), and `com.payonel:lungolua` and
+`lungolua-tests` (`lungolua.yml`). A version names the same commit in all
+four.
+
 ## Ground rules
 
 - Little-endian only, ASCII only, no logic macros.
-- The Lua test suite (`ltests.cpp` and `tests/all.lua`) is immutable unless
+- The Lua test suite (`cpp/ltests.cpp` and `tests/all.lua`) is immutable unless
   explicitly told to adjust it. Additional custom testing goes in
-  `test_public_api.cpp` and `tests/deep/*.lua`.
+  `cpp/test_public_api.cpp` and `tests/deep/*.lua`.
 - Every commit is independently verified by `make full` (release + debug,
   asserts live in both).
 - Lua-visible language behavior does not change.

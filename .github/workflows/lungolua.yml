@@ -2,11 +2,9 @@ name: lungolua
 
 on:
   push:
-    branches: [lua-java]
-    paths:
-      - 'java/**'
-      - 'tests/**'
-      - '.github/workflows/lungolua.yml'
+    branches: [lungolua]
+    paths-ignore:
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:

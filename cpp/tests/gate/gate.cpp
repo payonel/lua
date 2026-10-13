@@ -56,10 +56,10 @@ int main(int argc, char** argv)
   lua_pushcfunction(L, msghandler);
   lua_setfield(L, LUA_REGISTRYINDEX, "_GATEMSGH");
   /* the 'arg' table, as the standalone interpreter makes it (the tests that
-     run a child interpreter find it in arg[-1]: GATE_LUA, '../lua') */
+     run a child interpreter find it in arg[-1]: GATE_LUA, '../cpp/lua') */
   lua_createtable(L, argc - 3, 2);
   const char* interp = std::getenv("GATE_LUA");
-  lua_pushstring(L, interp != nullptr ? interp : "../lua");
+  lua_pushstring(L, interp != nullptr ? interp : "../cpp/lua");
   lua_rawseti(L, -2, -1);
   for (int i = 2; i < argc; i++)
   {

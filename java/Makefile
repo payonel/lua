@@ -20,13 +20,16 @@ empty :=
 space := $(empty) $(empty)
 MANIFEST = build/manifest.txt
 
-# the test C modules (tests/libs/build.mk) as files for 'require': the JVM
-# loads the Java library that a file's name names, whatever the file holds
-# (OsApi's 'os_dlopen'); dated 1970, so that the C++ build makes its own
-TESTLIBS_DIR = ../tests/libs
-TESTLIBS = $(addprefix $(TESTLIBS_DIR)/, lib1.so lib11.so lib2.so lib21.so lib2-v2.so)
+# the tests run in RUN_DIR, a copy of ../tests with the test C modules
+# (cpp/tests/libs/build.mk) as files for 'require', so that a run of
+# another build (cpp/, or the other of release and DEBUG=1) at the same time
+# shares no files; it is kept, with the upstream suite's times of the last
+# runs. The JVM loads the Java library that a module file's name names,
+# whatever the file holds (OsApi's 'os_dlopen')
+RUN_DIR ?= $(if $(DEBUG),run-debug,run)
+TESTLIBS = $(addprefix $(RUN_DIR)/libs/, lib1.so lib11.so lib2.so lib21.so lib2-v2.so)
 
-all: build/lungolua.jar build/lungolua-tests.jar build/lungolua.aot $(TESTLIBS)
+all: build/lungolua.jar build/lungolua-tests.jar build/lungolua.aot
 
 build/lungolua.jar: $(SRC) $(JLINE)
 	rm -rf $(CLASSES)
@@ -68,12 +71,15 @@ build/lungolua.aot: build/lungolua.jar build/lungolua-tests.jar aot-training.lua
 	rm build/lungolua.aotconf
 	test -s $@
 
-$(TESTLIBS_DIR)/%.so: CLASS = $(patsubst lib%,Lib%,$*)
-$(TESTLIBS_DIR)/lib2-v2.so: CLASS = Lib22
+$(RUN_DIR)/libs/%.so: CLASS = $(patsubst lib%,Lib%,$*)
+$(RUN_DIR)/libs/lib2-v2.so: CLASS = Lib22
 
-$(TESTLIBS_DIR)/%.so:
+$(RUN_DIR)/libs/%.so:
+	mkdir -p $(@D)
 	echo "Java library com.payonel.lungolua.tests.libs.$(CLASS)" > $@
-	touch -d @0 $@
+
+run-dir: $(TESTLIBS)
+	cp -r ../tests/. $(RUN_DIR)/
 
 # the tests, as the C++ build's `make test` runs them (DEBUG=1: the debug
 # build, the same jar with assertions and lua.debug on)
@@ -83,26 +89,26 @@ JFLAGS = $(JOPTS) $(if $(DEBUG),-ea -Dlua.debug=true)
 TEST_TEMP_DIR ?= 1
 GATE_STEPS ?= 97 17 3
 
-test: all
-	mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1
-	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd ../tests; \
-		cat /dev/null | $(JAVA) $(JFLAGS) -Dpublicapi.lua=../java/$(LUA) -cp ../java/build/lungolua.jar:../java/build/lungolua-tests.jar com.payonel.lungolua.tests.PublicApi )
+test: all run-dir
+	mkdir -p $(RUN_DIR)/libs/_$(TEST_TEMP_DIR)/P1
+	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd $(RUN_DIR); \
+		cat /dev/null | $(JAVA) $(JFLAGS) -Dpublicapi.lua=$(CURDIR)/$(LUA) -cp $(CURDIR)/build/lungolua.jar:$(CURDIR)/build/lungolua-tests.jar com.payonel.lungolua.tests.PublicApi )
 	LUA_JAVA_DEBUG=$(DEBUG) ./test_engine
-	mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1
-	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd ../tests; \
-		cat /dev/null | /usr/bin/time -v ../java/$(LUA) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
-	cd ../tests && ../java/$(LUA) deep/all.lua
+	mkdir -p $(RUN_DIR)/libs/_$(TEST_TEMP_DIR)/P1
+	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd $(RUN_DIR); \
+		cat /dev/null | /usr/bin/time -v $(CURDIR)/$(LUA) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
+	cd $(RUN_DIR) && $(CURDIR)/$(LUA) deep/all.lua
 	$(MAKE) gate-run
 
-gate-run:
+gate-run: run-dir
 	for n in $(GATE_STEPS); do \
-	  ( cd ../tests && LUA_JAVA_DEBUG=$(DEBUG) ../java/test_gate $$n deep/all.lua ) || exit 1; \
-	  mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1; \
-	  ( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd ../tests; \
-	    cat /dev/null | LUA_JAVA_DEBUG=$(DEBUG) ../java/test_gate $$n all.lua ) || exit 1; \
+	  ( cd $(RUN_DIR) && LUA_JAVA_DEBUG=$(DEBUG) $(CURDIR)/test_gate $$n deep/all.lua ) || exit 1; \
+	  mkdir -p $(RUN_DIR)/libs/_$(TEST_TEMP_DIR)/P1; \
+	  ( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd $(RUN_DIR); \
+	    cat /dev/null | LUA_JAVA_DEBUG=$(DEBUG) $(CURDIR)/test_gate $$n all.lua ) || exit 1; \
 	done
 
 clean:
 	rm -rf build
 
-.PHONY: all clean test gate-run
+.PHONY: all clean test gate-run run-dir
