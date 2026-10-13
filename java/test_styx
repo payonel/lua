@@ -2,15 +2,16 @@
 dir=$(dirname "$0")
 JDK=${JDK:-$(cat "$dir/build/jdk")}
 jar=$dir/build/lungolua.jar
+tests=$dir/build/lungolua-tests.jar
 debug=
 if [ "$LUA_JAVA_DEBUG" = 1 ]; then
   debug="-ea -Dlua.debug=true"
 fi
-set -- -cp "$jar" com.payonel.lungolua.tests.StyxTests "$@"
+set -- -cp "$jar:$tests" com.payonel.lungolua.tests.StyxTests "$@"
 # the AOT cache ('make -C java'), when it is newer than the jar and the JDK
 # is the build's; where the cache does not match, the JVM starts without it
 # and says nothing
-if [ "$dir/build/lungolua.aot" -nt "$jar" ] && [ "$JDK" = "$(cat "$dir/build/jdk")" ]; then
+if [ "$dir/build/lungolua.aot" -nt "$jar" ] && [ "$dir/build/lungolua.aot" -nt "$tests" ] && [ "$JDK" = "$(cat "$dir/build/jdk")" ]; then
   set -- "-XX:AOTCache=$dir/build/lungolua.aot" "-Xlog:aot*=off" "$@"
 fi
 # the JVM converts paths, commands and the environment with the charset of

@@ -8,7 +8,9 @@ the same tests; the Java sources are under `java/`.
 
 The port is named LungoLua: its packages are under `com.payonel.lungolua`
 (the namespace of `com.payonel.modularcomputers`), and its jar is
-`java/build/lungolua.jar`.
+`java/build/lungolua.jar`. The engine builds without its tests (the
+package `com.payonel.lungolua.tests`, in `lungolua-tests.jar`): only the
+debug build needs them, and it reaches them by name (below, Build).
 
 ## Rules
 
@@ -43,7 +45,7 @@ these for the port itself:
 | `lua::lib` | `com.payonel.lungolua.lib` | one class per library (`Lbaselib`, `Lstrlib`, …), `Linit`, `Lstyx` |
 | `lua::platform` | `com.payonel.lungolua.platform` | `OsApi`, `LocaleUtil`, `Libm`; `Readline` (the JVM's readline library); `Environ` (the environment as bytes) |
 | `lua::host` | `com.payonel.lungolua.host` | `Lua` (the standalone interpreter, `main`) |
-| tests | `com.payonel.lungolua.tests` | `Ltests` (the debug build's `T` library) |
+| tests | `com.payonel.lungolua.tests` | `Ltests` (the debug build's `T` library, behind `runtime.TestHooks`) and the test programs; `lungolua-tests.jar` |
 | tests/libs | `com.payonel.lungolua.tests.libs` | `Lib1`, `Lib11`, `Lib2`, `Lib21`, `Lib22` (the test C modules), `LibDecls` (lib_decls.h) |
 
 Type names keep their C names (`lua_State`, `TValue`, `CallInfo`);
@@ -230,7 +232,13 @@ header; the base `LoadFrame` is 24). `X l;` is
 **Other.**
 - `sizeof(T)` in a charge → the `Cost` constant; `lua_lock`/`lua_unlock`,
   `luai_userstate*`, `LUAI_MAXCCALLS` and the other lhack.h names are in
-  `Lhack`.
+  `Lhack`. Its three calls into `ltests` (`luai_tracegc`, `_lua_newstate`,
+  `luai_openlibs`) go through the interface `TestHooks`, whose instance
+  (`Ltests.hooks`) `Lhack` looks up by name the first time the debug build
+  calls one: the C++ picks them at compile time (`#ifdef LUA_DEBUG`), the
+  Java at run time, so the engine compiles and runs without the tests
+  package, and the debug build without it stops with an error naming
+  `lungolua-tests.jar`.
 - Allocation (`Lmem`): a denied allocation returns `null` (the C++
   `data() == nullptr`); an empty block argument (`{}`) is `new T[0]`,
   never `null`; a count of 0 gives back the block and returns an empty
@@ -269,10 +277,15 @@ Each step is a commit; the tree compiles at every commit.
 
 ## Build
 
-`make -C java` compiles the sources with the JDK named by `JDK` (default:
-the Temurin 25 under `~/.gradle/jdks`) into `java/build/lungolua.jar`, then
-makes the jar's AOT cache, `java/build/lungolua.aot`. The debug build is the
-same jar run with `-ea -Dlua.debug=true`.
+`make -C java` compiles the engine with the JDK named by `JDK` (default:
+the Temurin 25 under `~/.gradle/jdks`) into `java/build/lungolua.jar`,
+without the tests package, so that nothing in the engine can depend on it;
+then the tests package against that jar into
+`java/build/lungolua-tests.jar`; then the AOT cache of both,
+`java/build/lungolua.aot`. The launchers run the interpreter or a test
+program with both jars on the class path (the upstream suite's C modules
+are Java classes of the tests). The debug build is the same jars run with
+`-ea -Dlua.debug=true`; `lungolua.jar` alone is a release build.
 
 The launchers (`java/lua`, `java/lua-debug`, `java/test_*`) and the test
 target's own JVM (`JFLAGS`) run with the JVM's own JIT options.
@@ -299,18 +312,19 @@ options, and without the training's profiles (`-XX:-AOTRecordTraining`, a
 diagnostic option; JEP 515): with them, C2 compiles `luaV_execute` for the
 training's mix of instructions, and loops ran up to twice as slow. A cache
 is valid only for the JVM build that made it, the jars of the class path
-as they were (`lungolua.jar` and the JLine jars its manifest names, by size and
-time), the same module options (`--enable-native-access`) and the same
-compressed-pointer settings. The launchers pass it (`-XX:AOTCache`) only
-when it is newer than `lungolua.jar` and `JDK` is the build's (`build/jdk`; a
+as they were (`lungolua.jar`, `lungolua-tests.jar` and the JLine jars the
+first one's manifest names, by size and time), the same module options
+(`--enable-native-access`) and the same compressed-pointer settings. The
+launchers pass it (`-XX:AOTCache`) only when it is newer than both jars
+and `JDK` is the build's (`build/jdk`; a
 JDK before 24 refuses the option), with the JVM's messages about it off
 (`-Xlog:aot*=off`), since the tests compare outputs. A cache that does not
 match all the same (the tree copied without its times, a JDK updated in
 place) is dropped silently, but the JVM then starts without the JDK's own
 class data too, in about 215 ms: `make -C java` remakes the cache when the
-jar, the JLine jars, the training or the JDK's `release` file is newer;
-else remove it. `java -jar java/build/lungolua.jar` runs without the cache and
-the JIT options.
+jars, the JLine jars, the training or the JDK's `release` file is newer;
+else remove it. `java -jar java/build/lungolua.jar` runs the release
+interpreter without the tests and the cache.
 
 The readline's line editor is JLine 3.30.17 from Maven Central
 (`org.jline:jline-reader`, `jline-terminal` and `jline-terminal-ffm`,

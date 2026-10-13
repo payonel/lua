@@ -52,6 +52,7 @@ import com.payonel.lungolua.object.UpVal;
 import com.payonel.lungolua.platform.OsFile;
 import com.payonel.lungolua.runtime.CallInfo;
 import com.payonel.lungolua.runtime.Cost;
+import com.payonel.lungolua.runtime.TestHooks;
 import com.payonel.lungolua.runtime.global_State;
 import com.payonel.lungolua.runtime.lua_State;
 
@@ -2715,4 +2716,22 @@ public final class Ltests
     luaL_requiref(L, new HostString(Lt.T_char), luaB_opentests, 1);
     lua_pop(L, 1);
   }
+
+  public static final TestHooks hooks = new TestHooks()
+  {
+    public void luai_tracegctest(lua_State L, int first)
+    {
+      Ltests.luai_tracegctest(L, first);
+    }
+
+    public lua_State luai_newstate()
+    {
+      return Ltests.luai_newstate();
+    }
+
+    public void luai_openlibstest(lua_State L)
+    {
+      Ltests.luai_openlibstest(L);
+    }
+  };
 }

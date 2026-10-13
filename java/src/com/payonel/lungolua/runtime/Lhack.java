@@ -11,6 +11,23 @@ public final class Lhack
 
   public static final boolean LUA_DEBUG = Boolean.getBoolean("lua.debug");
 
+  private static final class Tests
+  {
+    static final TestHooks hooks = testhooks();
+
+    private static TestHooks testhooks()
+    {
+      try
+      {
+        return (TestHooks) Class.forName("com.payonel.lungolua.tests.Ltests").getField("hooks").get(null);
+      }
+      catch (ReflectiveOperationException e)
+      {
+        throw new IllegalStateException("lua.debug needs the tests' Ltests (lungolua-tests.jar)", e);
+      }
+    }
+  }
+
   public static void luai_userstateopen(lua_State l)
   {
     if (LUA_DEBUG)
@@ -50,20 +67,20 @@ public final class Lhack
   public static void luai_tracegc(lua_State l, int f)
   {
     if (LUA_DEBUG)
-      com.payonel.lungolua.tests.Ltests.luai_tracegctest(l, f);
+      Tests.hooks.luai_tracegctest(l, f);
   }
 
   public static lua_State _lua_newstate(lua_Alloc f, int seed)
   {
     if (LUA_DEBUG)
-      return com.payonel.lungolua.tests.Ltests.luai_newstate();
+      return Tests.hooks.luai_newstate();
     return Lstate.lua_newstate(f, seed);
   }
 
   public static void luai_openlibs(lua_State L)
   {
     if (LUA_DEBUG)
-      com.payonel.lungolua.tests.Ltests.luai_openlibstest(L);
+      Tests.hooks.luai_openlibstest(L);
     else
       com.payonel.lungolua.lib.Linit.luaL_openlibs(L);
   }
