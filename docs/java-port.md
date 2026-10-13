@@ -6,6 +6,10 @@ checklist in C12). This branch, `lua-java`, holds that transcription. The
 C++ sources stay in the tree as the reference until the Java engine passes
 the same tests; the Java sources are under `java/`.
 
+The port is named LungoLua: its packages are under `com.payonel.lungolua`
+(the namespace of `com.payonel.modularcomputers`), and its jar is
+`java/build/lungolua.jar`.
+
 ## Rules
 
 The rules of [summary.md](summary.md) and [tasks.md](tasks.md) hold, with
@@ -29,18 +33,18 @@ these for the port itself:
 
 | C++ namespace | Java package | Classes (one per C++ file; types of a header are classes of their own) |
 |---|---|---|
-| `lua::bytes` | `lua.bytes` | `ByteView`, `ByteSpan`, `ByteOwner`, `Bytes` (bytes.h); `InternalString`, `FmtScan` (internal_string.h); `Lt` (literals.h); `Lctype`; `Lzio` with `ZIO`, `MBuffer`; `Lload` |
-| `lua::object` | `lua.object` | `TValue`, `GCObject`, `GCListed`, `TString`, `Udata`, `Proto`, `UpVal`, `Closure`, `CClosure`, `LClosure`, `CFuncInfo`, `Table`, `Node`, `BudgetGroup` and the debug-information records (lobject.h); `Lobject`; `Llimits`; `Lstring`; `Lfunc`; `Lnames` |
-| `lua::runtime` | `lua.runtime` | `lua_State`, `global_State`, `CallInfo` (lstate.h); `Lstate`; `Lmem` with `Cost`; `Ldo`; `Ltm` |
-| `lua::gc` | `lua.gc` | `Lgc` |
-| `lua::vm` | `lua.vm` | `Lvm`, `Ldebug`, `Lopcodes` |
-| `lua::compiler` | `lua.compiler` | `Llex`, `Lparser`, `Lcode`, `Ldump`, `Lundump` and their records |
-| global API (`lua_*`, `luaL_*`) | `lua.api` | `LuaApi` (lapi.cpp, lua.h), `LuaAuxLib` (lauxlib.cpp), `HostString` |
-| `lua::lib` | `lua.lib` | one class per library (`Lbaselib`, `Lstrlib`, …), `Linit`, `Lstyx` |
-| `lua::platform` | `lua.platform` | `OsApi`, `LocaleUtil`, `Libm`; `Readline` (the JVM's readline library); `Environ` (the environment as bytes) |
-| `lua::host` | `lua.host` | `Lua` (the standalone interpreter, `main`) |
-| tests | `lua.tests` | `Ltests` (the debug build's `T` library) |
-| tests/libs | `lua.tests.libs` | `Lib1`, `Lib11`, `Lib2`, `Lib21`, `Lib22` (the test C modules), `LibDecls` (lib_decls.h) |
+| `lua::bytes` | `com.payonel.lungolua.bytes` | `ByteView`, `ByteSpan`, `ByteOwner`, `Bytes` (bytes.h); `InternalString`, `FmtScan` (internal_string.h); `Lt` (literals.h); `Lctype`; `Lzio` with `ZIO`, `MBuffer`; `Lload` |
+| `lua::object` | `com.payonel.lungolua.object` | `TValue`, `GCObject`, `GCListed`, `TString`, `Udata`, `Proto`, `UpVal`, `Closure`, `CClosure`, `LClosure`, `CFuncInfo`, `Table`, `Node`, `BudgetGroup` and the debug-information records (lobject.h); `Lobject`; `Llimits`; `Lstring`; `Lfunc`; `Lnames` |
+| `lua::runtime` | `com.payonel.lungolua.runtime` | `lua_State`, `global_State`, `CallInfo` (lstate.h); `Lstate`; `Lmem` with `Cost`; `Ldo`; `Ltm` |
+| `lua::gc` | `com.payonel.lungolua.gc` | `Lgc` |
+| `lua::vm` | `com.payonel.lungolua.vm` | `Lvm`, `Ldebug`, `Lopcodes` |
+| `lua::compiler` | `com.payonel.lungolua.compiler` | `Llex`, `Lparser`, `Lcode`, `Ldump`, `Lundump` and their records |
+| global API (`lua_*`, `luaL_*`) | `com.payonel.lungolua.api` | `LuaApi` (lapi.cpp, lua.h), `LuaAuxLib` (lauxlib.cpp), `HostString` |
+| `lua::lib` | `com.payonel.lungolua.lib` | one class per library (`Lbaselib`, `Lstrlib`, …), `Linit`, `Lstyx` |
+| `lua::platform` | `com.payonel.lungolua.platform` | `OsApi`, `LocaleUtil`, `Libm`; `Readline` (the JVM's readline library); `Environ` (the environment as bytes) |
+| `lua::host` | `com.payonel.lungolua.host` | `Lua` (the standalone interpreter, `main`) |
+| tests | `com.payonel.lungolua.tests` | `Ltests` (the debug build's `T` library) |
+| tests/libs | `com.payonel.lungolua.tests.libs` | `Lib1`, `Lib11`, `Lib2`, `Lib21`, `Lib22` (the test C modules), `LibDecls` (lib_decls.h) |
 
 Type names keep their C names (`lua_State`, `TValue`, `CallInfo`);
 upstream's file prefixes stay on the functions (`Ldo.luaD_call`). Renaming
@@ -88,47 +92,47 @@ methods adds them.
 
 | C++ | Java class |
 |---|---|
-| lobject.h/.cpp | `lua.object.Lobject` (+ `FmtArg`, `FmtArgs`) |
-| llimits.h | `lua.object.Llimits` (done) |
-| lstring.h/.cpp | `lua.object.Lstring`; methods on `TString`, `Udata` |
-| ltable.h/.cpp | `lua.object.Ltable`; methods on `Table` |
-| lfunc.h/.cpp | `lua.object.Lfunc`; methods on `Proto`, `UpVal`, `CClosure`, `LClosure`, `CFuncInfo` |
-| lnames.cpp | `lua.object.Lnames` |
-| lmem.h/.cpp | `lua.runtime.Lmem` (`cost::` is `lua.runtime.Cost`, done) |
-| lstate.h/.cpp | `lua.runtime.Lstate` (the slot accessors over the stack's columns) |
-| ltm.h/.cpp | `lua.runtime.Ltm` |
-| ldo.h/.cpp | `lua.runtime.Ldo` (`LuaError` done) |
-| lhack.h | `lua.runtime.Lhack` (done) |
-| lgc.h/.cpp | `lua.gc.Lgc` (+ `EphIndex`) |
-| lvm.h/.cpp | `lua.vm.Lvm` |
-| ldebug.h/.cpp | `lua.vm.Ldebug` |
-| lopcodes.h/.cpp, lopnames.h | `lua.vm.Lopcodes` |
-| lctype.h/.cpp | `lua.bytes.Lctype` |
-| lzio.h/.cpp | `lua.bytes.Lzio` (+ `ZIO`, `MBuffer`) |
-| lload.h/.cpp | `lua.bytes.Lload` (+ its records) |
-| util_cast.h/.cpp | `lua.bytes.UtilCast` |
-| llex.h/.cpp | `lua.compiler.Llex` (+ `LexState`, `Token`, …) |
-| lparser.h/.cpp | `lua.compiler.Lparser` (+ `FuncState`, `expdesc`, `Dyndata`, …) |
-| lcode.h/.cpp | `lua.compiler.Lcode` |
-| ldump.cpp | `lua.compiler.Ldump` |
-| lundump.h/.cpp | `lua.compiler.Lundump` |
-| lua.h, lapi.h/.cpp | `lua.api.LuaApi` (constants done) |
-| luaconf.h | `lua.api.LuaConf` (done) |
-| lua_internal.h | `lua.api.LuaInternal` (its constants and inline functions; each function goes to the class of the file that defines it) |
-| lauxlib.h/.cpp | `lua.api.LuaAuxLib` |
-| lualib.h | `lua.lib.Lualib` |
-| lbaselib.cpp, lcorolib.cpp, … | `lua.lib.Lbaselib`, `lua.lib.Lcorolib`, … |
-| linit.cpp | `lua.lib.Linit` |
-| lstyx.cpp | `lua.lib.Lstyx` |
-| os_api.h/.cpp, locale_util.h/.cpp | `lua.platform.OsApi`, `lua.platform.LocaleUtil` |
-| C's `<cmath>` (`pow`, `fmod`, `floor`, `frexp`, …) | `lua.platform.Libm` (done) |
-| lua.cpp | `lua.host.Lua` |
-| ltests.h/.cpp | `lua.tests.Ltests` |
-| test_public_api.cpp, tests/engine/engine_tests.cpp, tests/gate/gate.cpp, tests/styx/styx_tests.cpp | `lua.tests.PublicApi`, `EngineTests`, `Gate`, `StyxTests` (launchers `java/test_engine`, `java/test_gate`, `java/test_styx`) |
-| tests/libs/libN.cpp, lib_decls.h | `lua.tests.libs.LibN`, `lua.tests.libs.LibDecls` |
+| lobject.h/.cpp | `com.payonel.lungolua.object.Lobject` (+ `FmtArg`, `FmtArgs`) |
+| llimits.h | `com.payonel.lungolua.object.Llimits` (done) |
+| lstring.h/.cpp | `com.payonel.lungolua.object.Lstring`; methods on `TString`, `Udata` |
+| ltable.h/.cpp | `com.payonel.lungolua.object.Ltable`; methods on `Table` |
+| lfunc.h/.cpp | `com.payonel.lungolua.object.Lfunc`; methods on `Proto`, `UpVal`, `CClosure`, `LClosure`, `CFuncInfo` |
+| lnames.cpp | `com.payonel.lungolua.object.Lnames` |
+| lmem.h/.cpp | `com.payonel.lungolua.runtime.Lmem` (`cost::` is `com.payonel.lungolua.runtime.Cost`, done) |
+| lstate.h/.cpp | `com.payonel.lungolua.runtime.Lstate` (the slot accessors over the stack's columns) |
+| ltm.h/.cpp | `com.payonel.lungolua.runtime.Ltm` |
+| ldo.h/.cpp | `com.payonel.lungolua.runtime.Ldo` (`LuaError` done) |
+| lhack.h | `com.payonel.lungolua.runtime.Lhack` (done) |
+| lgc.h/.cpp | `com.payonel.lungolua.gc.Lgc` (+ `EphIndex`) |
+| lvm.h/.cpp | `com.payonel.lungolua.vm.Lvm` |
+| ldebug.h/.cpp | `com.payonel.lungolua.vm.Ldebug` |
+| lopcodes.h/.cpp, lopnames.h | `com.payonel.lungolua.vm.Lopcodes` |
+| lctype.h/.cpp | `com.payonel.lungolua.bytes.Lctype` |
+| lzio.h/.cpp | `com.payonel.lungolua.bytes.Lzio` (+ `ZIO`, `MBuffer`) |
+| lload.h/.cpp | `com.payonel.lungolua.bytes.Lload` (+ its records) |
+| util_cast.h/.cpp | `com.payonel.lungolua.bytes.UtilCast` |
+| llex.h/.cpp | `com.payonel.lungolua.compiler.Llex` (+ `LexState`, `Token`, …) |
+| lparser.h/.cpp | `com.payonel.lungolua.compiler.Lparser` (+ `FuncState`, `expdesc`, `Dyndata`, …) |
+| lcode.h/.cpp | `com.payonel.lungolua.compiler.Lcode` |
+| ldump.cpp | `com.payonel.lungolua.compiler.Ldump` |
+| lundump.h/.cpp | `com.payonel.lungolua.compiler.Lundump` |
+| lua.h, lapi.h/.cpp | `com.payonel.lungolua.api.LuaApi` (constants done) |
+| luaconf.h | `com.payonel.lungolua.api.LuaConf` (done) |
+| lua_internal.h | `com.payonel.lungolua.api.LuaInternal` (its constants and inline functions; each function goes to the class of the file that defines it) |
+| lauxlib.h/.cpp | `com.payonel.lungolua.api.LuaAuxLib` |
+| lualib.h | `com.payonel.lungolua.lib.Lualib` |
+| lbaselib.cpp, lcorolib.cpp, … | `com.payonel.lungolua.lib.Lbaselib`, `com.payonel.lungolua.lib.Lcorolib`, … |
+| linit.cpp | `com.payonel.lungolua.lib.Linit` |
+| lstyx.cpp | `com.payonel.lungolua.lib.Lstyx` |
+| os_api.h/.cpp, locale_util.h/.cpp | `com.payonel.lungolua.platform.OsApi`, `com.payonel.lungolua.platform.LocaleUtil` |
+| C's `<cmath>` (`pow`, `fmod`, `floor`, `frexp`, …) | `com.payonel.lungolua.platform.Libm` (done) |
+| lua.cpp | `com.payonel.lungolua.host.Lua` |
+| ltests.h/.cpp | `com.payonel.lungolua.tests.Ltests` |
+| test_public_api.cpp, tests/engine/engine_tests.cpp, tests/gate/gate.cpp, tests/styx/styx_tests.cpp | `com.payonel.lungolua.tests.PublicApi`, `EngineTests`, `Gate`, `StyxTests` (launchers `java/test_engine`, `java/test_gate`, `java/test_styx`) |
+| tests/libs/libN.cpp, lib_decls.h | `com.payonel.lungolua.tests.libs.LibN`, `com.payonel.lungolua.tests.libs.LibDecls` |
 
 **Calls keep their C shape.** A file `import static`s the classes whose
-functions it calls (`import static lua.object.Lobject.*;`), so
+functions it calls (`import static com.payonel.lungolua.object.Lobject.*;`), so
 `ttisnil(o)`, `luaD_call(L, f, n)` and `setobj(L, a, b)` read as in C++.
 Methods of the type classes are called on the object
 (`t.luaH_get(key, res)`) or on the class (`TString.luaS_createstr(L, s)`).
@@ -158,8 +162,8 @@ Methods of the type classes are called on the object
   a nullable `Boolean`; `std::unique_ptr<T>` → a reference.
 - `byte_view`, `byte_span`, `byte_owner`, `byte_inline<N>` → `ByteView`,
   `ByteSpan`, `ByteOwner` (`new ByteOwner(N)`); `HostString` →
-  `lua.api.HostString`; `const char*` names (registrations) → `String`;
-  `InternalString` → `lua.bytes.InternalString`; `lt::x` → `Lt.x`.
+  `com.payonel.lungolua.api.HostString`; `const char*` names (registrations) → `String`;
+  `InternalString` → `com.payonel.lungolua.bytes.InternalString`; `lt::x` → `Lt.x`.
 - A `TValue` is never shared: a C++ struct copy (`*a = *b`, `getobj`,
   `copyobj`, `setobj`) copies fields. A C++ local `TValue v;` is
   `TValue v = new TValue();`. `getslot(L, i)` returns a fresh copy.
@@ -212,7 +216,7 @@ those); `throw;` → rethrow the caught object. `assert(x)` → `assert x;`
 and `break label` replace the few remaining `goto`s.
 
 **A stopped load's frames** (llex, lparser, lundump, lzio, ldo's
-`f_parser`): `lua.bytes.LoadFrame` is the base. A frame type is a
+`f_parser`): `com.payonel.lungolua.bytes.LoadFrame` is the base. A frame type is a
 subclass with the C++ frame's fields, a copy constructor (`X(X o)`:
 `super(o)` and every field, nested value structs such as `expdesc`,
 `FuncState` and `BlockCnt` copied deeply), `copy()` returning
@@ -266,8 +270,8 @@ Each step is a commit; the tree compiles at every commit.
 ## Build
 
 `make -C java` compiles the sources with the JDK named by `JDK` (default:
-the Temurin 25 under `~/.gradle/jdks`) into `java/build/lua.jar`, then
-makes the jar's AOT cache, `java/build/lua.aot`. The debug build is the
+the Temurin 25 under `~/.gradle/jdks`) into `java/build/lungolua.jar`, then
+makes the jar's AOT cache, `java/build/lungolua.aot`. The debug build is the
 same jar run with `-ea -Dlua.debug=true`.
 
 The launchers (`java/lua`, `java/lua-debug`, `java/test_*`) and the test
@@ -295,27 +299,27 @@ options, and without the training's profiles (`-XX:-AOTRecordTraining`, a
 diagnostic option; JEP 515): with them, C2 compiles `luaV_execute` for the
 training's mix of instructions, and loops ran up to twice as slow. A cache
 is valid only for the JVM build that made it, the jars of the class path
-as they were (`lua.jar` and the JLine jars its manifest names, by size and
+as they were (`lungolua.jar` and the JLine jars its manifest names, by size and
 time), the same module options (`--enable-native-access`) and the same
 compressed-pointer settings. The launchers pass it (`-XX:AOTCache`) only
-when it is newer than `lua.jar` and `JDK` is the build's (`build/jdk`; a
+when it is newer than `lungolua.jar` and `JDK` is the build's (`build/jdk`; a
 JDK before 24 refuses the option), with the JVM's messages about it off
 (`-Xlog:aot*=off`), since the tests compare outputs. A cache that does not
 match all the same (the tree copied without its times, a JDK updated in
 place) is dropped silently, but the JVM then starts without the JDK's own
 class data too, in about 215 ms: `make -C java` remakes the cache when the
 jar, the JLine jars, the training or the JDK's `release` file is newer;
-else remove it. `java -jar java/build/lua.jar` runs without the cache and
+else remove it. `java -jar java/build/lungolua.jar` runs without the cache and
 the JIT options.
 
 The readline's line editor is JLine 3.30.17 from Maven Central
 (`org.jline:jline-reader`, `jline-terminal` and `jline-terminal-ffm`,
 BSD-3), whose jars are in `java/lib` with its license (`LICENSE-jline.txt`)
 and a README that gives their source and checksums. The sources compile
-against them; `lua.jar`'s manifest names them (`Class-Path: ../lib/…`,
+against them; `lungolua.jar`'s manifest names them (`Class-Path: ../lib/…`,
 relative to the jar) and enables native access for them
 (`Enable-Native-Access: ALL-UNNAMED`), so that `java -jar
-java/build/lua.jar` runs as the launchers do. The launchers pass
+java/build/lungolua.jar` runs as the launchers do. The launchers pass
 `--enable-native-access=ALL-UNNAMED`: JLine's FFM terminal calls the C
 library through Java's foreign function API (no native library of its
 own), which the JVM otherwise allows only with a warning.
@@ -328,16 +332,16 @@ own), which the JVM otherwise allows only with a warning.
 | 1. Core | done: every core file transcribed; `print("hello")` runs |
 | 2. Libraries | done: base, coroutine, table, string, utf8, math, io, os, package, debug |
 | 3. Platform | done: `OsApi` (stdio, time and strftime as glibc, processes, dynamic libraries as Java classes), `LocaleUtil` (C locale), `Libm`, `Readline` |
-| 4. Host and tests | done: `lua.host.Lua` (`java/lua`, `java/lua-debug`), `Ltests`, and the C++ build's test programs; `make -C java test` (`DEBUG=1`: the debug build) runs them as the C++ `make test` does, and passes in both builds: the API tests (52940 and 53017 checks, with the upstream suite run through the API), the engine tests (147), the upstream suite, the deep tests, the gate (97, 17, 3), the Styx gate and the Styx tests (36191 and 38293 checks): the C++'s counts |
+| 4. Host and tests | done: `com.payonel.lungolua.host.Lua` (`java/lua`, `java/lua-debug`), `Ltests`, and the C++ build's test programs; `make -C java test` (`DEBUG=1`: the debug build) runs them as the C++ `make test` does, and passes in both builds: the API tests (52940 and 53017 checks, with the upstream suite run through the API), the engine tests (147), the upstream suite, the deep tests, the gate (97, 17, 3), the Styx gate and the Styx tests (36191 and 38293 checks): the C++'s counts |
 | 5. Styx | done: `Lstyx`; its streams are the C++'s byte for byte (the trailer's address fixes aside) |
 
 The platform layer's dynamic libraries are Java classes, and
 `os_dlopen` answers as glibc's `dlopen` (`RTLD_NOW`) does: a path with a
 `/` loads the Java library its file's base name names (`libs/lib2-v2.so`
-is `lua.tests.libs.Lib22`) if the file exists, whatever it holds
+is `com.payonel.lungolua.tests.libs.Lib22`) if the file exists, whatever it holds
 (`make -C java` makes the test modules' files, dated 1970 so that the C++
 build still makes its own); a name without a `/` loads a registered
-system library (`libreadline.so` is `lua.platform.Readline`); `""` is
+system library (`libreadline.so` is `com.payonel.lungolua.platform.Readline`); `""` is
 the program. A library's symbols are its class's public static fields;
 its undefined ones (`lib11` takes `lib1_export`) must come from a library
 loaded with global symbols. Errors have glibc's messages.

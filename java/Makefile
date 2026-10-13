@@ -7,9 +7,9 @@ SRC := $(shell find src -name '*.java')
 CLASSES = build/classes
 
 # JLine, the line editor of the JVM's readline (lib/README): the sources
-# compile against it, and lua.jar's manifest names its jars (Class-Path,
+# compile against it, and lungolua.jar's manifest names its jars (Class-Path,
 # relative to build/) and lets them call C (Enable-Native-Access: the FFM
-# terminal), so that 'java -jar build/lua.jar' runs as the launchers do
+# terminal), so that 'java -jar build/lungolua.jar' runs as the launchers do
 JLINE_VERSION = 3.30.17
 JLINE = $(foreach m, reader terminal terminal-ffm, lib/jline-$(m)-$(JLINE_VERSION).jar)
 empty :=
@@ -22,14 +22,14 @@ MANIFEST = build/manifest.txt
 TESTLIBS_DIR = ../tests/libs
 TESTLIBS = $(addprefix $(TESTLIBS_DIR)/, lib1.so lib11.so lib2.so lib21.so lib2-v2.so)
 
-all: build/lua.jar build/lua.aot $(TESTLIBS)
+all: build/lungolua.jar build/lungolua.aot $(TESTLIBS)
 
-build/lua.jar: $(SRC) $(JLINE)
+build/lungolua.jar: $(SRC) $(JLINE)
 	rm -rf $(CLASSES)
 	mkdir -p $(CLASSES)
 	$(JAVAC) --release 21 -encoding UTF-8 -Xlint:all -Xlint:-serial -Xlint:-fallthrough -Xlint:-cast -Xmaxerrs 10000 -cp $(subst $(space),:,$(JLINE)) -d $(CLASSES) $(SRC)
 	printf 'Class-Path: %s\nEnable-Native-Access: ALL-UNNAMED\n' "$(addprefix ../,$(JLINE))" > $(MANIFEST)
-	$(JAR) --create --file $@ --main-class lua.host.Lua --manifest $(MANIFEST) -C $(CLASSES) .
+	$(JAR) --create --file $@ --main-class com.payonel.lungolua.host.Lua --manifest $(MANIFEST) -C $(CLASSES) .
 	echo "$(abspath $(JDK))" > build/jdk
 
 # the JVM's options (the launchers' too)
@@ -42,18 +42,18 @@ JOPTS = --enable-native-access=ALL-UNNAMED
 # launchers use it when it is newer than the jar (the JVM then checks that it
 # matches its JDK, jars and options, and starts without it if not); neither
 # step fails when the cache cannot be written, hence the test
-build/lua.aot: build/lua.jar aot-training.lua $(JLINE) $(JDK)/release
+build/lungolua.aot: build/lungolua.jar aot-training.lua $(JLINE) $(JDK)/release
 	rm -f $@
-	$(JAVA) $(JOPTS) -XX:+UnlockDiagnosticVMOptions -XX:-AOTRecordTraining -XX:AOTMode=record -XX:AOTConfiguration=build/lua.aotconf -jar build/lua.jar aot-training.lua > /dev/null
-	$(JAVA) $(JOPTS) -XX:AOTMode=create -XX:AOTConfiguration=build/lua.aotconf -XX:AOTCache=$@ -jar build/lua.jar
-	rm build/lua.aotconf
+	$(JAVA) $(JOPTS) -XX:+UnlockDiagnosticVMOptions -XX:-AOTRecordTraining -XX:AOTMode=record -XX:AOTConfiguration=build/lungolua.aotconf -jar build/lungolua.jar aot-training.lua > /dev/null
+	$(JAVA) $(JOPTS) -XX:AOTMode=create -XX:AOTConfiguration=build/lungolua.aotconf -XX:AOTCache=$@ -jar build/lungolua.jar
+	rm build/lungolua.aotconf
 	test -s $@
 
 $(TESTLIBS_DIR)/%.so: CLASS = $(patsubst lib%,Lib%,$*)
 $(TESTLIBS_DIR)/lib2-v2.so: CLASS = Lib22
 
 $(TESTLIBS_DIR)/%.so:
-	echo "Java library lua.tests.libs.$(CLASS)" > $@
+	echo "Java library com.payonel.lungolua.tests.libs.$(CLASS)" > $@
 	touch -d @0 $@
 
 # the tests, as the C++ build's `make test` runs them (DEBUG=1: the debug
@@ -69,7 +69,7 @@ STYX_GATE_ALL ?= 5000
 test: all
 	mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd ../tests; \
-		cat /dev/null | $(JAVA) $(JFLAGS) -Dpublicapi.lua=../java/$(LUA) -cp ../java/build/lua.jar lua.tests.PublicApi )
+		cat /dev/null | $(JAVA) $(JFLAGS) -Dpublicapi.lua=../java/$(LUA) -cp ../java/build/lungolua.jar com.payonel.lungolua.tests.PublicApi )
 	LUA_JAVA_DEBUG=$(DEBUG) ./test_engine
 	mkdir -p ../tests/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd ../tests; \

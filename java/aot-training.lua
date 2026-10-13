@@ -1,4 +1,4 @@
--- the training run of the AOT cache (Makefile: build/lua.aot): a little of
+-- the training run of the AOT cache (Makefile: build/lungolua.aot): a little of
 -- every library and of the compiler, so that the classes a program uses are
 -- in the cache; it reads no file of the tree and leaves none behind
 

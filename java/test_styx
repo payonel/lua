@@ -1,17 +1,17 @@
 #!/bin/sh
 dir=$(dirname "$0")
 JDK=${JDK:-$(cat "$dir/build/jdk")}
-jar=$dir/build/lua.jar
+jar=$dir/build/lungolua.jar
 debug=
 if [ "$LUA_JAVA_DEBUG" = 1 ]; then
   debug="-ea -Dlua.debug=true"
 fi
-set -- -cp "$jar" lua.tests.StyxTests "$@"
+set -- -cp "$jar" com.payonel.lungolua.tests.StyxTests "$@"
 # the AOT cache ('make -C java'), when it is newer than the jar and the JDK
 # is the build's; where the cache does not match, the JVM starts without it
 # and says nothing
-if [ "$dir/build/lua.aot" -nt "$jar" ] && [ "$JDK" = "$(cat "$dir/build/jdk")" ]; then
-  set -- "-XX:AOTCache=$dir/build/lua.aot" "-Xlog:aot*=off" "$@"
+if [ "$dir/build/lungolua.aot" -nt "$jar" ] && [ "$JDK" = "$(cat "$dir/build/jdk")" ]; then
+  set -- "-XX:AOTCache=$dir/build/lungolua.aot" "-Xlog:aot*=off" "$@"
 fi
 # the JVM converts paths, commands and the environment with the charset of
 # its locale: where that is not UTF-8, it runs in C.UTF-8 and is told the
@@ -25,6 +25,6 @@ if [ "$(locale charmap 2>&1)" != UTF-8 ]; then
   export LC_ALL
 fi
 if env --default-signal=INT true 2>/dev/null; then
-  exec env --default-signal=INT "$JDK/bin/java" --enable-native-access=ALL-UNNAMED $debug -Dstyx.self="$0" -Dstyx.source="$dir/src/lua/tests/StyxTests.java" "$@"
+  exec env --default-signal=INT "$JDK/bin/java" --enable-native-access=ALL-UNNAMED $debug -Dstyx.self="$0" -Dstyx.source="$dir/src/com/payonel/lungolua/tests/StyxTests.java" "$@"
 fi
-exec "$JDK/bin/java" --enable-native-access=ALL-UNNAMED $debug -Dstyx.self="$0" -Dstyx.source="$dir/src/lua/tests/StyxTests.java" "$@"
+exec "$JDK/bin/java" --enable-native-access=ALL-UNNAMED $debug -Dstyx.self="$0" -Dstyx.source="$dir/src/com/payonel/lungolua/tests/StyxTests.java" "$@"

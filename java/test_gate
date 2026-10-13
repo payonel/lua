@@ -1,7 +1,7 @@
 #!/bin/sh
 dir=$(dirname "$0")
 JDK=${JDK:-$(cat "$dir/build/jdk")}
-jar=$dir/build/lua.jar
+jar=$dir/build/lungolua.jar
 debug=
 lua=$dir/lua
 if [ "$LUA_JAVA_DEBUG" = 1 ]; then
@@ -10,12 +10,12 @@ if [ "$LUA_JAVA_DEBUG" = 1 ]; then
 fi
 GATE_LUA=${GATE_LUA:-$lua}
 export GATE_LUA
-set -- -cp "$jar" lua.tests.Gate "$@"
+set -- -cp "$jar" com.payonel.lungolua.tests.Gate "$@"
 # the AOT cache ('make -C java'), when it is newer than the jar and the JDK
 # is the build's; where the cache does not match, the JVM starts without it
 # and says nothing
-if [ "$dir/build/lua.aot" -nt "$jar" ] && [ "$JDK" = "$(cat "$dir/build/jdk")" ]; then
-  set -- "-XX:AOTCache=$dir/build/lua.aot" "-Xlog:aot*=off" "$@"
+if [ "$dir/build/lungolua.aot" -nt "$jar" ] && [ "$JDK" = "$(cat "$dir/build/jdk")" ]; then
+  set -- "-XX:AOTCache=$dir/build/lungolua.aot" "-Xlog:aot*=off" "$@"
 fi
 # the JVM converts paths, commands and the environment with the charset of
 # its locale: where that is not UTF-8, it runs in C.UTF-8 and is told the

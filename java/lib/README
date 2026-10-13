@@ -1,4 +1,4 @@
-JLine 3.30.17, the line editor of the JVM's readline (lua.platform.Readline)
+JLine 3.30.17, the line editor of the JVM's readline (com.payonel.lungolua.platform.Readline)
 
 Artifacts (Maven Central, group org.jline, version 3.30.17, released
 2026-09-08), unmodified:
@@ -34,7 +34,7 @@ Source: https://github.com/jline/jline3 (tag jline-3.30.17).
 Only these three are used: the reader, the terminal, and the FFM terminal
 provider (it calls the C library through Java's foreign function API; the
 JVM needs --enable-native-access=ALL-UNNAMED, which the launchers and
-lua.jar's manifest give). The terminal's 'stty' provider (in
+lungolua.jar's manifest give). The terminal's 'stty' provider (in
 jline-terminal) is the fallback. jline-terminal's POM also depends on
 jline-native (JNI libraries); it is left out: its classes are loaded only
 for the JNI provider and for file descriptor modes JLine does not use
