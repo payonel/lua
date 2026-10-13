@@ -90,37 +90,104 @@ struct IntParse
   lua_Integer value;
 };
 
-static IntParse b_str2int(byte_view s, int base)
+enum
+{
+  B2I_LEAD,
+  B2I_DIGITS,
+  B2I_TRAIL
+};
+
+static int tonumberk(lua_State* L, int status, lua_KContext ctx);
+
+static void str2intpoint(lua_State* L, size_t* work, int phase, size_t p, lua_Unsigned n, bool neg)
+{
+  if (++*work < LUAL_SLICE)
+    return;
+  bool spent = luaL_slicespent(L, *work);
+  *work = 0;
+  if (!spent)
+    return;
+  if (lua_gettop(L) == 2)
+    luaL_newbox(L);
+  luaL_Box* box = luaL_tobox(L, 3);
+  box->ints[0] = phase;
+  box->ints[1] = (lua_Integer)p;
+  box->ints[2] = (lua_Integer)n;
+  box->ints[3] = neg;
+  lua_checkpointk(L, 0, tonumberk);
+}
+
+static IntParse b_str2int(lua_State* L, byte_view s, int base, int phase, size_t p, lua_Unsigned n, bool neg)
 {
   const byte_view spacechars = lt::whitespace_chars;
-  lua_Unsigned n = 0;
-  bool neg = false;
-  size_t p = 0;
-  while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
-    p++; /* skip initial spaces */
-  if (sv_byteat(s, p) == '-')
+  size_t work = 0;
+  switch (phase)
   {
-    p++;
-    neg = true;
-  } /* handle sign */
-  else if (sv_byteat(s, p) == '+')
-    p++;
-  if (!locale_isalnum(sv_byteat(s, p))) /* no digit? */
-    return {byte_view::npos, 0};
-  do
-  {
-    int digit = (locale_isdigit(sv_byteat(s, p))
-                                   ? s[p] - '0'
-                                   : (locale_toupper(sv_byteat(s, p)) - 'A') + 10);
-    if (digit >= base)
-      return {byte_view::npos, 0}; /* invalid numeral */
-    n = n * base + digit;
-    p++;
-  } while (locale_isalnum(sv_byteat(s, p)));
-  while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
-    p++; /* skip trailing spaces */
+  case B2I_LEAD:
+    while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
+    {
+      p++; /* skip initial spaces */
+      str2intpoint(L, &work, B2I_LEAD, p, n, neg);
+    }
+    if (sv_byteat(s, p) == '-')
+    {
+      p++;
+      neg = true;
+    } /* handle sign */
+    else if (sv_byteat(s, p) == '+')
+      p++;
+    if (!locale_isalnum(sv_byteat(s, p))) /* no digit? */
+      return {byte_view::npos, 0};
+    [[fallthrough]];
+  case B2I_DIGITS:
+    while (locale_isalnum(sv_byteat(s, p)))
+    {
+      int digit = (locale_isdigit(sv_byteat(s, p))
+                                     ? s[p] - '0'
+                                     : (locale_toupper(sv_byteat(s, p)) - 'A') + 10);
+      if (digit >= base)
+        return {byte_view::npos, 0}; /* invalid numeral */
+      n = n * base + digit;
+      p++;
+      str2intpoint(L, &work, B2I_DIGITS, p, n, neg);
+    }
+    [[fallthrough]];
+  default:
+    while (p < s.size() && spacechars.find(s[p]) != byte_view::npos)
+    {
+      p++; /* skip trailing spaces */
+      str2intpoint(L, &work, B2I_TRAIL, p, n, neg);
+    }
+  }
   return {p, (lua_Integer) (neg ? (0u - n) : n)};
 }
+
+static int tonumber_base(lua_State* L, int phase, size_t p, lua_Unsigned n, bool neg)
+{
+  byte_view s = *lua_tolstring(L, 1);
+  IntParse r = b_str2int(L, s, (int)lua_tointeger(L, 2), phase, p, n, neg);
+  if (r.end == s.size())
+  {
+    lua_pushinteger(L, r.value);
+    return 1;
+  } /* else not a number */
+  luaL_pushfail(L); /* not a number */
+  return 1;
+}
+
+static int tonumberk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, 3));
+  if (box == nullptr || lua_type(L, 1) != LUA_TSTRING || !lua_isinteger(L, 2) || lua_tointeger(L, 2) < 2 ||
+      lua_tointeger(L, 2) > 36 || box->ints[0] < B2I_LEAD || box->ints[0] > B2I_TRAIL || box->ints[1] < 0 ||
+      box->ints[1] > static_cast<lua_Integer>(lua_rawlen(L, 1)))
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
+  return tonumber_base(L, (int)box->ints[0], (size_t)box->ints[1], (lua_Unsigned)box->ints[2], box->ints[3] != 0);
+}
+
+static KNamer knamer_tonumberk("base.tonumberk", tonumberk);
 
 static int luaB_tonumber(lua_State* L)
 {
@@ -144,14 +211,11 @@ static int luaB_tonumber(lua_State* L)
   {
     lua_Integer base = luaL_checkinteger(L, 2);
     luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
-    byte_view s = *lua_tolstring(L, 1);
     luaL_argchecki(L, 2 <= base && base <= 36, 2, lt::base_out_of_range);
-    IntParse n = b_str2int(s, (int)base);
-    if (n.end == s.size())
-    {
-      lua_pushinteger(L, n.value);
-      return 1;
-    } /* else not a number */
+    lua_settop(L, 2);
+    lua_pushinteger(L, base);
+    lua_replace(L, 2);
+    return tonumber_base(L, B2I_LEAD, 0, 0, false);
   } /* else not a number */
   luaL_pushfail(L); /* not a number */
   return 1;

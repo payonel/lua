@@ -95,6 +95,25 @@ case("rep of long results", function(busy)
           b == string.rep("abc, ", 99999) .. "abc", #c, c:sub(300000, 300003), c:sub(-2),
           #d, d == string.rep("--", 149999) .. "-", string.rep(u, 1) == u}
 end)
+case("upper, lower, reverse and format of long strings", function(busy)
+  busy()
+  local s = string.rep("aB\n\"\\\1z\200", 40000)
+  local u = s:upper()
+  local f = string.format("%q|%s|%d", s, s, 7)
+  local lit = string.format(string.rep("ab%%", 100000))
+  return {#u, {u:byte(1, 16)}, {s:lower():byte(-8, -1)}, {s:reverse():byte(1, 9)}, #f, {f:byte(1, 12)},
+          {f:byte(-12, -1)}, #lit, lit:sub(-6)}
+end)
+case("find, utf8, tonumber and concat on long strings", function(busy)
+  busy()
+  local s = string.rep("x", 600000)
+  local u = string.rep("x€ü", 100000)
+  local c = table.concat({"a", s, "b"}, ",")
+  local c2 = table.concat({"p", "q"}, s)
+  return {tostring(s:find("y", 1, true)), (s .. "y"):find("y", 1, true), utf8.len(u), utf8.offset(u, 150000),
+          utf8.offset(u, -150000), tonumber(string.rep("1", 300000), 2),
+          tonumber(string.rep(" ", 300000) .. "ff", 16), #c, c:sub(-4), #c2, c2:sub(1, 2)}
+end)
 
 -- the table library
 
