@@ -152,6 +152,41 @@ do
   end
 end
 
+-- a '__gc' called at an instruction boundary that freezes leaves the frame
+-- of the function as it was once thawed: frozen at every budget point, a
+-- program that makes thousands of objects with a '__gc' ends with the
+-- memory it has unfrozen (each freeze grew its frame, until it returned)
+do
+  local function run(freeze)
+    local co = coroutine.create(function()
+      local ran = 0
+      local mt = {__gc = function() for j = 1, 3 do ran = ran + 1 end end}
+      for i = 1, 2000 do
+        setmetatable({}, mt)
+        local t = {}
+        for k = 1, 20 do t[k] = {} end
+      end
+      collectgarbage()
+      collectgarbage()
+      return ran, collectgarbage("count")
+    end)
+    local freezes = 0
+    debug.setbudget(co, 2, function()
+      if freeze then freezes = freezes + 1 debug.freeze() end
+    end)
+    local ok, ran, kb = kresume(co)
+    assert(ok, ran)
+    assert(ran == 6000, ran)
+    return kb, freezes
+  end
+  collectgarbage()
+  local plain = run(false)
+  collectgarbage()
+  local frozen, freezes = run(true)
+  assert(freezes > 50000, freezes)
+  assert(frozen < plain + 64, string.format("%.0f KB, frozen %.0f KB", plain, frozen))
+end
+
 -- a chain dropped without being thawed, with '__gc' waiting, is just freed
 do
   local called = false
