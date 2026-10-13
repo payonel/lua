@@ -1314,8 +1314,11 @@ public final class Ldo
         finishCcall(L, ci); /* complete its execution */
       else
       {                      /* Lua function */
-        if ((ci.callstatus & CIST_FROZE) != 0) /* frozen at a budget point? */
+        if ((ci.callstatus & CIST_FROZE) != 0)
+        {                    /* frozen at a budget point? */
           ci.savedpc--;     /* its instruction was not executed yet */
+          ci.top = ci.func + 1 + ci_func(L, ci).p.maxstacksize; /* its frame as before (a drain point raises it) */
+        }
         else
           luaV_finishOp(L);  /* finish interrupted instruction */
         L.nCcalls = framecalls(L, ci); /* (see 'forgetcalls') */

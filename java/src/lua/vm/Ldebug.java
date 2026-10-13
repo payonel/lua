@@ -398,9 +398,14 @@ public final class Ldebug
   /* do '__gc' of the budget group of 'L' wait to be called? */
   public static int lua_hasdrain(lua_State L)
   { /* (and can they be called here: where the chain can freeze, outside hooks
-       and the '__gc' being called (hooks off), outside the budget callback;
-       the same as at an instruction boundary, see 'luaG_traceexec') */
-    return (luaC_hasdrain(L) && L.allowhook != 0 && L.l_G.budgetL == null && luaD_nofreeze(L) == 0) ? 1 : 0;
+       and the '__gc' being called (hooks off), outside the budget callback,
+       with room for the call; the same as at an instruction boundary, see
+       'luaG_traceexec' and 'drainpoint') */
+    lua_lock(L);
+    int has = (luaC_hasdrain(L) && L.allowhook != 0 && L.l_G.budgetL == null && luaD_nofreeze(L) == 0 &&
+               luaD_checkminstack(L) != 0) ? 1 : 0;
+    lua_unlock(L);
+    return has;
   }
 
   /* push the function that calls them (see 'luaC_pushdrain') */
@@ -1404,11 +1409,12 @@ public final class Ldebug
       L.top = ci.top;                 /* correct top */
     int top = L.top;
     int ci_top = ci.top;
-    /* (the call of the '__gc' needs room: if it cannot be had here without an
-       error, they wait for another point; the program sees no error) */
-    if (L.stack_last - L.top <= LUA_MINSTACK + 1 && luaD_growstack(L, LUA_MINSTACK + 1, 0) == 0)
-      return;
-    if ((ci.next == null && luaE_extendCI(L, 0) == null) || getCcalls(L) + 2 >= LUAI_MAXCCALLS)
+    assert ci_top == ci.func + 1 + p.maxstacksize; /* (what 'unroll' gives back if a '__gc' freezes) */
+    /* (the call of the '__gc' needs room, as a finalizer in stock: the frames
+       of the function that calls them and of a '__gc', the stack, C calls; if
+       it cannot be had here without an error, they wait for another point;
+       the program sees no error) */
+    if (luaD_checkminstack(L) == 0)
       return;
     if (ci.top < L.top + LUA_MINSTACK + 1)
       ci.top = L.top + LUA_MINSTACK + 1;
