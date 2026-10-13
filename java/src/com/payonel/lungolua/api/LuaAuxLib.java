@@ -885,6 +885,24 @@ public final class LuaAuxLib
     box.used = 0;
   }
 
+  public static boolean luaL_slicespent(lua_State L, long bytes)
+  {
+    return lua_spend(L, (int) (bytes / LUAL_SLICESTEP));
+  }
+
+  public static void luaL_slicepoint(lua_State L, luaL_Buffer B, int box, long ctx, lua_KFunction k)
+  {
+    if (lua_gettop(L) < box)
+    {
+      assert lua_gettop(L) == box - 1;
+      luaL_newbox(L);
+    }
+    luaL_Box bx = luaL_tobox(L, box);
+    luaL_buffsave(B, bx);
+    lua_checkpointk(L, ctx, k);
+    luaL_buffload(B, bx);
+  }
+
   public static void luaL_buffinit(lua_State L, luaL_Buffer B)
   {
     assert B.bytes.empty() || L == B.L;

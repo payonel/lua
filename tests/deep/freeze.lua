@@ -867,6 +867,37 @@ do
   end
 end
 
+-- work on long strings counts a step for 64 bytes once it is longer than a
+-- slice (256 KB), and freezes between its slices
+do
+  local function inside(fn, work)
+    local co = coroutine.create(work)
+    local frozen = 0
+    debug.setbudget(co, 1000, function(user_co, spender)
+      if debug.getinfo(spender, 0, "f").func == fn then
+        frozen = frozen + 1
+        debug.freeze()
+      end
+    end)
+    local r = table.pack(coroutine.resume(co))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+    assert(r[1], r[2])
+    local plain = table.pack(coroutine.resume(coroutine.create(work)))
+    return frozen, r, plain
+  end
+  local M = 3 << 20
+  local works = {
+    {string.rep, function() local s = string.rep("x", M) return #s, s == string.rep("xxxxxxxx", M // 8) end},
+    {string.rep, function() local s = string.rep("ab", M // 3, ",") return #s, s:sub(-5), s:sub(M // 2, M // 2 + 4) end},
+    {string.rep, function() local s = string.rep(string.rep("q", M // 2) .. "!", 2, "--") return #s, s:sub(M // 2 - 1, M // 2 + 5) end},
+  }
+  for i, w in ipairs(works) do
+    local frozen, r, plain = inside(w[1], w[2])
+    assert(frozen >= 8, "slices " .. i .. ": " .. frozen .. " freezes")
+    assert(deepeq(r, plain), "slices " .. i .. ": " .. show(r) .. " vs " .. show(plain))
+  end
+end
+
 -- pattern matching counts a step for each call of its matcher (the
 -- calls a backtracking pattern makes are its work), and freezes there, deep
 -- in the backtracking too; a thawed match ends as one that did not freeze,

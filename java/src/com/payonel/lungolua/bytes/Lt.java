@@ -424,6 +424,7 @@ public final class Lt
   public static final ByteView invalid_capture_index_d = ByteView.of("invalid capture index %%%d");
   public static final ByteView invalid_match_state = ByteView.of("invalid state of a stopped match");
   public static final ByteView invalid_sort_state = ByteView.of("invalid state of a stopped sort");
+  public static final ByteView invalid_state_of_a_stopped_call = ByteView.of("invalid state of a stopped call");
   public static final ByteView invalid_state_of_a_stopped_format = ByteView.of("invalid state of a stopped format");
   public static final ByteView invalid_state_of_a_stopped_load = ByteView.of("invalid state of a stopped load");
   public static final ByteView invalid_constant = ByteView.of("invalid constant");

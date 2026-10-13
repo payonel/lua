@@ -174,6 +174,10 @@ luaL_Box* luaL_newbox(lua_State* L);
 luaL_Box* luaL_tobox(lua_State* L, int idx);
 void luaL_buffsave(luaL_Buffer* B, luaL_Box* box);
 void luaL_buffload(luaL_Buffer* B, luaL_Box* box);
+constexpr size_t LUAL_SLICE = 256 * 1024;
+constexpr size_t LUAL_SLICESTEP = 64;
+bool luaL_slicespent(lua_State* L, size_t bytes);
+void luaL_slicepoint(lua_State* L, luaL_Buffer* B, int box, lua_KContext ctx, lua_KFunction k);
 int luaL_loadfilei(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode);
 /* 'luaL_loadfilei' in a C function with continuation 'k' (see lauxlib.cpp) */
 int luaL_loadfileik(lua_State* L, std::optional<byte_view> filename, std::optional<byte_view> mode, lua_KContext ctx,

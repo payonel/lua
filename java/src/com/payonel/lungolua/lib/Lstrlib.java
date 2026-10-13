@@ -3,6 +3,7 @@ package com.payonel.lungolua.lib;
 import static com.payonel.lungolua.api.LuaApi.*;
 import static com.payonel.lungolua.api.LuaAuxLib.*;
 import static com.payonel.lungolua.api.LuaConf.*;
+import static com.payonel.lungolua.api.LuaInternal.*;
 import static com.payonel.lungolua.bytes.InternalString.sv_byteat;
 import static com.payonel.lungolua.bytes.UtilCast.pointertext;
 import static com.payonel.lungolua.gc.Lgc.*;
@@ -191,6 +192,76 @@ public final class Lstrlib
   ** MAX_SIZE is limited both by size_t and lua_Integer.
   ** When x <= MAX_SIZE, x can be safely cast to size_t or lua_Integer.
   */
+  private static boolean rep_toolarge(long ls, long lsep, long n)
+  {
+    return ls > MAX_SIZE - lsep || (ls + lsep) > MAX_SIZE / n;
+  }
+
+  private static int repk(lua_State L, int status, long ctx)
+  {
+    luaL_Box box = (lua_touserobject(L, 4) instanceof luaL_Box x) ? x : null;
+    if (box == null || lua_type(L, 1) != LUA_TSTRING || !lua_isinteger(L, 2) ||
+        (!lua_isnil(L, 3) && lua_type(L, 3) != LUA_TSTRING))
+      luaL_errori(L, Lt.invalid_state_of_a_stopped_call);
+    long ls = lua_rawlen(L, 1);
+    long lsep = lua_isnil(L, 3) ? 0 : lua_rawlen(L, 3);
+    long n = lua_tointeger(L, 2);
+    if (n <= 0 || (ls | lsep) == 0 || rep_toolarge(ls, lsep, n) || box.used >= n * (ls + lsep) - lsep)
+      luaL_errori(L, Lt.invalid_state_of_a_stopped_call);
+    luaL_Buffer b = new luaL_Buffer();
+    try
+    {
+      luaL_buffinit(L, b);
+      luaL_buffload(b, box);
+      return str_rep_fill(L, b, b.used);
+    }
+    finally
+    {
+      b.release();
+    }
+  }
+
+  private static final lua_KFunction repk = Lstrlib::repk;
+
+  private static final KNamer knamer_repk = new KNamer("string.repk", repk);
+
+  private static int str_rep_fill(lua_State L, luaL_Buffer b, int pos)
+  {
+    ByteView sv = luaL_checkistring(L, 1).view();
+    long n = luaL_checkinteger(L, 2);
+    ByteView sepsv = luaL_optistring(L, 3, Lt.empty_str_i).view();
+    long unit = (long) sv.size() + sepsv.size();
+    long totallen = (n * unit) - sepsv.size();
+    luaL_prepbuffsize(b, totallen - pos);
+    while (pos < totallen)
+    {
+      ByteSpan p = luaL_buffaddr(b);
+      int k;
+      if (pos < sv.size())
+      {
+        k = Math.min(sv.size() - pos, LUAL_SLICE);
+        p.copy_from(sv.substr(pos, k), pos);
+      }
+      else if (pos < unit)
+      {
+        k = (int) Math.min(unit - pos, LUAL_SLICE);
+        p.copy_from(sepsv.substr(pos - sv.size(), k), pos);
+      }
+      else
+      {
+        int d = (int) (pos - pos % unit);
+        k = (int) Math.min(Math.min(d, totallen - pos), LUAL_SLICE);
+        p.copy_from(p.view().substr(pos - d, k), pos);
+      }
+      pos += k;
+      luaL_addsize(b, k);
+      if (totallen > LUAL_SLICE && luaL_slicespent(L, k) && pos < totallen)
+        luaL_slicepoint(L, b, 4, (long) pos, repk);
+    }
+    luaL_pushresult(b);
+    return 1;
+  }
+
   private static int str_rep(lua_State L)
   {
     InternalString s = luaL_checkistring(L, 1);
@@ -202,31 +273,18 @@ public final class Lstrlib
     {
       lua_pushistringref(L, Lt.empty_str); /* no repetitions or both strings empty */
     }
-    else if (sv.size() > MAX_SIZE - sepsv.size() || ((long) sv.size() + sepsv.size()) > MAX_SIZE / n)
+    else if (rep_toolarge(sv.size(), sepsv.size(), n))
     {
       return luaL_errori(L, Lt.resulting_string_too_large);
     }
     else
     {
-      long totallen = (n * ((long) sv.size() + sepsv.size())) - sepsv.size();
+      lua_settop(L, 3);
       luaL_Buffer b = new luaL_Buffer();
       try
       {
-        int off = luaL_buffinitsize(L, b, totallen);
-        ByteSpan p = luaL_buffaddr(b);
-        int pos = off;
-        while (n-- > 1)
-        { /* first n-1 copies (followed by separator) */
-          p.copy_from(sv, pos);
-          pos += sv.size();
-          if (sepsv.size() > 0)
-          { /* empty 'memcpy' is not that cheap */
-            p.copy_from(sepsv, pos);
-            pos += sepsv.size();
-          }
-        }
-        p.copy_from(sv, pos); /* last copy without separator */
-        luaL_pushresultsize(b, (int) totallen);
+        luaL_buffinit(L, b);
+        return str_rep_fill(L, b, 0);
       }
       finally
       {
