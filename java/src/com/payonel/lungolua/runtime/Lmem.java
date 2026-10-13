@@ -109,24 +109,44 @@ public final class Lmem
     }
   }
 
+  private static ByteOwner copy_char_span(ByteWrites block, long count)
+  {
+    ByteOwner nb = new ByteOwner();
+    if (count > 0)
+    {
+      nb = new ByteOwner((int) count);
+      if (!block.empty())
+        for (int ci = 0; ci < Math.min(count, block.size()); ci++)
+          nb.set(ci, block.get(ci));
+    }
+    return nb;
+  }
+
   public static ByteOwner luaM_alloc_char_span(global_State g, lua_State L, ByteWrites block, long count, boolean bthrow)
   {
     if (!_alloc_span_request(g, L, block.size(), count, Cost.Byte, bthrow)) return new ByteOwner();
     try
     {
-      ByteOwner nb = new ByteOwner();
-      if (count > 0)
-      {
-        nb = new ByteOwner((int) count);
-        if (!block.empty())
-          for (int ci = 0; ci < Math.min(count, block.size()); ci++)
-            nb.set(ci, block.get(ci));
-      }
-      return nb;
+      return copy_char_span(block, count);
     }
     catch (OutOfMemoryError e)
     {
       _alloc_span_undo(g, L, block.size(), count, Cost.Byte, bthrow);
+      return new ByteOwner();
+    }
+  }
+
+  public static ByteOwner luaM_alloc_host_span(lua_State L, ByteWrites block, long count)
+  {
+    if (count > MAX_JARRAY || (!luaM_permit_(L.l_G, L, block.size(), count, 0) && count > 0))
+      return new ByteOwner();
+    try
+    {
+      return copy_char_span(block, count);
+    }
+    catch (OutOfMemoryError e)
+    {
+      L.l_G.frealloc.permit(count, block.size(), 0);
       return new ByteOwner();
     }
   }

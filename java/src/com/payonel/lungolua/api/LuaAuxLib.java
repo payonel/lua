@@ -705,8 +705,7 @@ public final class LuaAuxLib
     if (cap == B.bytes.size())
       return;
     assert B.L != null;
-    global_State g = B.L.l_G;
-    ByteOwner nb = luaM_alloc_char_span(g, null, B.bytes, cap, false);
+    ByteOwner nb = luaM_alloc_host_span(B.L, B.bytes, cap);
     if (!nb.held() && cap > 0)
     {
       lua_pushistringref(B.L, Lt.not_enough_memory);

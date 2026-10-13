@@ -1405,7 +1405,7 @@ public final class Lobject
     global_State g = buff.L.l_G;
     if (buff.b.held())
     {
-      luaM_alloc_char_span(g, null, buff.b.span(), 0, false);
+      luaM_alloc_char_span(g, buff.L, buff.b.span(), 0, false);
       buff.b = new ByteOwner();
     }
   }
@@ -1471,7 +1471,7 @@ public final class Lobject
     {
       global_State g = buff.L.l_G;
       long newsize = Math.max((long) buff.blen + slen, 256);
-      ByteOwner nb = luaM_alloc_char_span(g, null, buff.b.span(), newsize, false);
+      ByteOwner nb = luaM_alloc_char_span(g, buff.L, buff.b.span(), newsize, false);
       if (!nb.held())
       {
         buff.err = 1; /* memory error */

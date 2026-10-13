@@ -2242,6 +2242,28 @@ public final class PublicApi
     lua_close(L);
   }
 
+  private static void test_buffer_collects_at_cap()
+  {
+    CapDeny cd = new CapDeny();
+    lua_State L = lua_newstate(cd, 0);
+    luaL_openlibs(L);
+    CHECK(luaL_dostring(L, hs("function f() return ('y'):rep(100) .. 'z' end f()")) == LUA_OK);
+    lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+    lua_gc(L, LUA_GCSTOP, 0, 0, 0);
+    CHECK(luaL_dostring(L, hs("local t = {} for i = 1, 200 do t[i] = ('x'):rep(1000) .. i end")) == LUA_OK);
+    lua_gc(L, LUA_GCRESTART, 0, 0, 0);
+    long held = cd.used;
+    cd.cap = cd.used;
+    lua_getglobal(L, hs("f"));
+    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+    CHECK(lua_rawlen(L, -1) == 101);
+    CHECK(cd.used + 100000 < held);
+    lua_pop(L, 1);
+    cd.cap = 0;
+    lua_close(L);
+    CHECK(cd.used == 0);
+  }
+
   /*
   ** A long concatenation whose result cannot be created leaves nothing
   ** counted: after repeated failures a collection brings the count back to
@@ -7106,6 +7128,7 @@ public final class PublicApi
         new TestEntry("strings_through_allocator", PublicApi::test_strings_through_allocator),
         new TestEntry("long_strings_made_in_place", PublicApi::test_long_strings_made_in_place),
         new TestEntry("string_emergency_collection", PublicApi::test_string_emergency_collection),
+        new TestEntry("buffer_collects_at_cap", PublicApi::test_buffer_collects_at_cap),
         new TestEntry("misc", PublicApi::test_misc),
         new TestEntry("debug_api", PublicApi::test_debug_api),
         new TestEntry("libraries", PublicApi::test_libraries),
