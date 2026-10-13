@@ -491,3 +491,39 @@ if T then
     assert(ok and r == 1, k .. ": " .. tostring(r))
   end
 end
+
+-- 'collectgarbage' calls the waiting '__gc' only when their call finds room
+-- (the stack, a frame for the function that calls them and one for the
+-- '__gc'), as stock's collector does for a finalizer: else they wait, and
+-- the program sees no error; the '__gc' is not lost (to an error for want of
+-- its frame), it runs at a later point (gc.lua's "stack issues when calling
+-- finalizers" in a budgeted coroutine, with the test library's limit of
+-- allocations)
+if T then
+  for _, case in ipairs{"stack", "frames"} do
+    local co = coroutine.create(function()
+      local X, obj, x1
+      local function loop(n) if n > 0 then loop(n - 1) end end
+      obj = setmetatable({}, {__gc = function() X = (X or 0) + 1 end})
+      if case == "stack" then
+        loop(5)
+        T.reallocstack(0) -- (no extra stack slots)
+      else
+        loop(20)
+        T.resetCI()       -- (no extra frames)
+      end
+      T.alloccount(0)
+      obj = nil
+      collectgarbage()    -- (the '__gc' waits)
+      x1 = X
+      T.alloccount()
+      collectgarbage()
+      return x1, X
+    end)
+    debug.setbudget(co, 1000000, nop)
+    local ok, x1, X = coroutine.resume(co)
+    T.alloccount()
+    assert(ok, x1)
+    assert(x1 == nil and X == 1, case .. ": " .. tostring(x1) .. ", " .. tostring(X))
+  end
+end
