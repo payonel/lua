@@ -71,9 +71,8 @@ static inline bool _alloc_span_request(global_State* g, lua_State* L, size_t old
   return true;
 }
 
-byte_owner luaM_alloc_char_span(global_State* g, lua_State* L, byte_span block, size_t count, bool bthrow)
+static byte_owner copy_char_span(byte_span block, size_t count)
 {
-  if (l_unlikely(!_alloc_span_request(g, L, block.size(), count, cost::Byte, bthrow))) return {};
   byte_owner nb;
   if (count > 0)
   {
@@ -83,6 +82,19 @@ byte_owner luaM_alloc_char_span(global_State* g, lua_State* L, byte_span block, 
         nb[ci] = block[ci];
   }
   return nb;
+}
+
+byte_owner luaM_alloc_char_span(global_State* g, lua_State* L, byte_span block, size_t count, bool bthrow)
+{
+  if (l_unlikely(!_alloc_span_request(g, L, block.size(), count, cost::Byte, bthrow))) return {};
+  return copy_char_span(block, count);
+}
+
+byte_owner luaM_alloc_host_span(lua_State* L, byte_span block, size_t count)
+{
+  if (l_unlikely(!luaM_permit_(L->l_G, L, block.size(), count, 0) && count > 0))
+    return {};
+  return copy_char_span(block, count);
 }
 
 static inline void free_debt(lua_State* L, size_t size, int tag)

@@ -2025,6 +2025,28 @@ static void test_string_emergency_collection()
   lua_close(L);
 }
 
+static void test_buffer_collects_at_cap()
+{
+  CapDeny cd;
+  lua_State* L = lua_newstate(&cd, 0);
+  luaL_openlibs(L);
+  CHECK(luaL_dostring(L, "function f() return ('y'):rep(100) .. 'z' end f()") == LUA_OK);
+  lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
+  lua_gc(L, LUA_GCSTOP, 0, 0, 0);
+  CHECK(luaL_dostring(L, "local t = {} for i = 1, 200 do t[i] = ('x'):rep(1000) .. i end") == LUA_OK);
+  lua_gc(L, LUA_GCRESTART, 0, 0, 0);
+  size_t held = cd.used;
+  cd.cap = cd.used;
+  lua_getglobal(L, "f");
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  CHECK(lua_rawlen(L, -1) == 101u);
+  CHECK(cd.used + 100000 < held);
+  lua_pop(L, 1);
+  cd.cap = 0;
+  lua_close(L);
+  CHECK(cd.used == 0);
+}
+
 /*
 ** A long concatenation whose result cannot be created leaves nothing
 ** counted: after repeated failures a collection brings the count back to
@@ -6714,6 +6736,7 @@ int main(int argc, char** argv)
       {"strings_through_allocator", test_strings_through_allocator},
       {"long_strings_made_in_place", test_long_strings_made_in_place},
       {"string_emergency_collection", test_string_emergency_collection},
+      {"buffer_collects_at_cap", test_buffer_collects_at_cap},
       {"misc", test_misc},
       {"debug_api", test_debug_api},
       {"libraries", test_libraries},

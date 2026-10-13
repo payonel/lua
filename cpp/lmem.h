@@ -85,6 +85,7 @@ void luaM_resizeblock(lua_State* L, size_t osize, size_t nsize);
 // type allocators
 struct CallInfo;
 byte_owner luaM_alloc_char_span(global_State* g, lua_State* L, byte_span block, size_t count, bool bthrow);
+byte_owner luaM_alloc_host_span(lua_State* L, byte_span block, size_t count);
 std::span<TValue> luaM_alloc_TValue_span(global_State* g, lua_State* L, std::span<TValue> block, size_t count, bool bthrow);
 std::span<Value> luaM_alloc_Value_span(global_State* g, lua_State* L, std::span<Value> block, size_t count, bool bthrow);
 std::span<BudgetGroup*> luaM_alloc_BudgetGroup_ptr_span(global_State* g, lua_State* L, std::span<BudgetGroup*> block, size_t count, bool bthrow);

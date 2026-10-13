@@ -618,8 +618,7 @@ static void bb_growTo(luaL_Buffer* B, size_t cap)
   if (cap == B->bytes.size())
     return;
   assert(B->L != nullptr);
-  global_State* g = B->L->l_G;
-  byte_owner nb = luaM_alloc_char_span(g, nullptr, B->bytes, cap, false);
+  byte_owner nb = luaM_alloc_host_span(B->L, B->bytes, cap);
   if (l_unlikely(nb.data() == nullptr && cap > 0))
   {
     lua_pushistringref(B->L, lt::not_enough_memory);
