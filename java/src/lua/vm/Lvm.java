@@ -1388,6 +1388,1445 @@ public final class Lvm
     lua_lock(L);
   }
 
+  private static void op_move(lua_State L, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    copyslot(L, ra, base + GETARG_B(i));
+  }
+
+  private static void op_loadi(lua_State L, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    long b = GETARG_sBx(i);
+    setsloti(L, ra, b);
+  }
+
+  private static void op_loadf(lua_State L, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    int b = GETARG_sBx(i);
+    setslotflt(L, ra, b);
+  }
+
+  private static void op_loadk(lua_State L, TValue[] k, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    TValue rb = k[GETARG_Bx(i)];
+    setslot(L, ra, rb);
+  }
+
+  private static int op_loadkx(lua_State L, TValue[] k, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    TValue rb;
+    rb = k[GETARG_Ax(code[pc])];
+    pc++;
+    setslot(L, ra, rb);
+    return pc;
+  }
+
+  private static void op_loadfalse(lua_State L, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    setslottag(L, ra, LUA_VFALSE);
+  }
+
+  private static int op_lfalseskip(lua_State L, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    setslottag(L, ra, LUA_VFALSE);
+    pc++; /* skip next instruction */
+    return pc;
+  }
+
+  private static void op_loadtrue(lua_State L, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    setslottag(L, ra, LUA_VTRUE);
+  }
+
+  private static void op_loadnil(lua_State L, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    int b = GETARG_B(i);
+    do
+    {
+      setslottag(L, ra++, LUA_VNIL);
+    } while (b-- != 0);
+  }
+
+  private static void op_getupval(lua_State L, LClosure cl, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    int b = GETARG_B(i);
+    TValue v = upvalgetval(cl.upvals[b]);
+    setslot(L, ra, v);
+  }
+
+  private static void op_setupval(lua_State L, LClosure cl, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    UpVal uv = cl.upvals[GETARG_B(i)];
+    TValue rav = getslot(L, ra);
+    upvalsetval(L, uv, rav);
+    luaC_barrier(L, uv, rav);
+  }
+
+  private static void op_gettabup(lua_State L, CallInfo ci, LClosure cl, TValue[] k, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    TValue upval = upvalgetval(cl.upvals[GETARG_B(i)]);
+    TValue rc = k[GETARG_C(i)];
+    assert ttisstring(rc);
+    TString key = tsvalue(rc); /* key must be a short string */
+    byte tag;
+    TValue res = new TValue();
+    if (!ttistable(upval))
+      tag = LUA_VNOTABLE;
+    else
+    {
+      tag = hvalue(upval).luaH_getshortstr(key, res);
+    }
+    if (tagisempty(tag))
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaV_finishget(L, upval, rc, ra, tag, upvalorigin(GETARG_B(i)));
+    }
+    else
+      setslot(L, ra, res);
+  }
+
+  private static void op_gettable(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    int rc = base + GETARG_C(i);
+    byte tag;
+    TValue res = new TValue();
+    if (slottag(L, rc) == LUA_VNUMINT)
+    { /* fast track for integers? */
+      if (slottag(L, rb) != ctb(LUA_VTABLE))
+        tag = LUA_VNOTABLE;
+      else
+      {
+        Table h = slothval(L, rb);
+        long u = l_intsub(slotival(L, rc), 1);
+        if (l_ult(u, h.asize()))
+        {
+          tag = getArrTag(h, u);
+          if (!tagisempty(tag))
+            farr2val(h, u, tag, res);
+        }
+        else
+          tag = h.luaH_getint(slotival(L, rc), res);
+      }
+    }
+    else if (slottag(L, rb) != ctb(LUA_VTABLE))
+      tag = LUA_VNOTABLE;
+    else
+    {
+      TValue rcv = getslot(L, rc);
+      tag = slothval(L, rb).luaH_get(rcv, res);
+    }
+    if (tagisempty(tag))
+    {
+      TValue rbv = getslot(L, rb);
+      TValue rcv = getslot(L, rc);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaV_finishget(L, rbv, rcv, ra, tag, rb);
+    }
+    else
+      setslot(L, ra, res);
+  }
+
+  private static void op_geti(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    int c = GETARG_C(i);
+    byte tag;
+    TValue res = new TValue();
+    if (slottag(L, rb) != ctb(LUA_VTABLE))
+      tag = LUA_VNOTABLE;
+    else
+    {
+      Table h = slothval(L, rb);
+      long u = l_intsub(c, 1);
+      if (l_ult(u, h.asize()))
+      {
+        tag = getArrTag(h, u);
+        if (!tagisempty(tag))
+          farr2val(h, u, tag, res);
+      }
+      else
+        tag = h.luaH_getint(c, res);
+    }
+    if (tagisempty(tag))
+    {
+      TValue key = new TValue();
+      setivalue(key, c);
+      TValue rbv = getslot(L, rb);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaV_finishget(L, rbv, key, ra, tag, rb);
+    }
+    else
+      setslot(L, ra, res);
+  }
+
+  private static void op_getfield(lua_State L, CallInfo ci, TValue[] k, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    TValue rc = k[GETARG_C(i)];
+    assert ttisstring(rc);
+    TString key = tsvalue(rc); /* key must be a short string */
+    byte tag;
+    TValue res = new TValue();
+    if (slottag(L, rb) != ctb(LUA_VTABLE))
+      tag = LUA_VNOTABLE;
+    else
+    {
+      tag = slothval(L, rb).luaH_getshortstr(key, res);
+    }
+    if (tagisempty(tag))
+    {
+      TValue rbv = getslot(L, rb);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaV_finishget(L, rbv, rc, ra, tag, rb);
+    }
+    else
+      setslot(L, ra, res);
+  }
+
+  private static void op_settabup(lua_State L, CallInfo ci, LClosure cl, TValue[] k, int base, int i, int pc)
+  {
+    int hres;
+    TValue upval = upvalgetval(cl.upvals[GETARG_A(i)]);
+    TValue rb = k[GETARG_B(i)];
+    TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
+    assert ttisstring(rb);
+    TString key = tsvalue(rb); /* key must be a short string */
+    if (!ttistable(upval))
+      hres = HNOTATABLE;
+    else
+    {
+      hres = hvalue(upval).luaH_psetshortstr(key, rc);
+    }
+    if (hres == HOK)
+      luaV_finishfastset(L, upval, rc);
+    else
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaV_finishset(L, upval, rb, rc, hres, upvalorigin(GETARG_A(i)));
+    }
+  }
+
+  private static void op_settable(lua_State L, CallInfo ci, TValue[] k, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int hres;
+    int rb = base + GETARG_B(i); /* key (table is in 'ra') */
+    TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i)); /* value */
+    if (slottag(L, rb) == LUA_VNUMINT)
+    { /* fast track for integers? */
+      int t = ra;
+      if (slottag(L, t) != ctb(LUA_VTABLE))
+        hres = HNOTATABLE;
+      else
+      {
+        Table h = slothval(L, t);
+        long u = l_intsub(slotival(L, rb), 1);
+        if (l_ult(u, h.asize()))
+        {
+          byte tag = getArrTag(h, u);
+          if (checknoTM(h.metatable, TM_NEWINDEX) != 0 || !tagisempty(tag))
+          {
+            fval2arr(h, u, rc);
+            hres = HOK;
+          }
+          else
+            hres = ~(int) u;
+        }
+        else
+          hres = h.luaH_psetint(slotival(L, rb), rc);
+      }
+    }
+    else
+    {
+      int t = ra;
+      if (slottag(L, t) != ctb(LUA_VTABLE))
+        hres = HNOTATABLE;
+      else
+      {
+        TValue rbv = getslot(L, rb);
+        hres = slothval(L, t).luaH_pset(rbv, rc);
+      }
+    }
+    if (hres == HOK)
+      luaV_finishfastset(L, ra, rc);
+    else
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      TValue tv = getslot(L, ra);
+      TValue rbv = getslot(L, rb);
+      luaV_finishset(L, tv, rbv, rc, hres, ra);
+    }
+  }
+
+  private static void op_seti(lua_State L, CallInfo ci, TValue[] k, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int hres;
+    int b = GETARG_B(i);
+    TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
+    int t = ra;
+    if (slottag(L, t) != ctb(LUA_VTABLE))
+      hres = HNOTATABLE;
+    else
+    {
+      Table h = slothval(L, t);
+      long u = l_intsub(b, 1);
+      if (l_ult(u, h.asize()))
+      {
+        byte tag = getArrTag(h, u);
+        if (checknoTM(h.metatable, TM_NEWINDEX) != 0 || !tagisempty(tag))
+        {
+          fval2arr(h, u, rc);
+          hres = HOK;
+        }
+        else
+          hres = ~(int) u;
+      }
+      else
+        hres = h.luaH_psetint(b, rc);
+    }
+    if (hres == HOK)
+      luaV_finishfastset(L, ra, rc);
+    else
+    {
+      TValue key = new TValue();
+      setivalue(key, b);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      TValue tv = getslot(L, ra);
+      luaV_finishset(L, tv, key, rc, hres, ra);
+    }
+  }
+
+  private static void op_setfield(lua_State L, CallInfo ci, TValue[] k, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int hres;
+    TValue rb = k[GETARG_B(i)];
+    TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
+    assert ttisstring(rb);
+    TString key = tsvalue(rb); /* key must be a short string */
+    int t = ra;
+    if (slottag(L, t) != ctb(LUA_VTABLE))
+      hres = HNOTATABLE;
+    else
+    {
+      hres = slothval(L, t).luaH_psetshortstr(key, rc);
+    }
+    if (hres == HOK)
+      luaV_finishfastset(L, ra, rc);
+    else
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      TValue tv = getslot(L, ra);
+      luaV_finishset(L, tv, rb, rc, hres, ra);
+    }
+  }
+
+  private static int op_newtable(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int b = GETARG_vB(i); /* log2(hash size) + 1 */
+    int c = GETARG_vC(i); /* array size */
+    Table t;
+    if (b > 0)
+      b = 1 << (b - 1); /* hash size is 2^(b - 1) */
+    if (TESTARG_k(i) != 0)
+    { /* non-zero extra argument? */
+      assert GETARG_Ax(code[pc]) != 0;
+      /* add it to array size */
+      c += GETARG_Ax(code[pc]) * (MAXARG_vC + 1);
+    }
+    pc++;              /* skip extra argument */
+    L.top = ra + 1; /* correct top in case of emergency GC */
+    t = Table.luaH_new(L);   /* memory allocation */
+    setsloth(L, ra, t);
+    if (b != 0 || c != 0)
+      t.luaH_resize(L, c, b); /* idem */
+    if (L.l_G.GCdebt <= 0)
+    {
+      ci.savedpc = pc;
+      L.top = ra + 1;
+      luaC_step(L);
+    }
+    luai_threadyield(L);
+    return pc;
+  }
+
+  private static void op_self(lua_State L, CallInfo ci, TValue[] k, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    byte tag;
+    int rb = base + GETARG_B(i);
+    TValue rc = k[GETARG_C(i)];
+    assert ttisstring(rc);
+    TString key = tsvalue(rc); /* key must be a short string */
+    copyslot(L, ra + 1, rb);
+    TValue res = new TValue();
+    if (slottag(L, rb) != ctb(LUA_VTABLE))
+      tag = LUA_VNOTABLE;
+    else
+    {
+      tag = slothval(L, rb).luaH_getshortstr(key, res);
+    }
+    if (tagisempty(tag))
+    {
+      TValue rbv = getslot(L, rb);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaV_finishget(L, rbv, rc, ra, tag, rb);
+    }
+    else
+      setslot(L, ra, res);
+  }
+
+  private static int op_addi(lua_State L, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int v1 = base + GETARG_B(i);
+    int imm = GETARG_sC(i);
+    if (slottag(L, v1) == LUA_VNUMINT)
+    {
+      long iv1 = slotival(L, v1);
+      pc++;
+      setsloti(L, ra, l_addi(L, iv1, imm));
+    }
+    else if (slottag(L, v1) == LUA_VNUMFLT)
+    {
+      double nb = slotfltval(L, v1);
+      double fimm = imm;
+      pc++;
+      setslotflt(L, ra, luai_numadd(L, nb, fimm));
+    }
+    return pc;
+  }
+
+  private static int op_addk(lua_State L, TValue[] k, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    assert ttisnumber(v2);
+    if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = ivalue(v2);
+      pc++;
+      setsloti(L, ra, l_addi(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luai_numadd(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_subk(lua_State L, TValue[] k, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    assert ttisnumber(v2);
+    if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = ivalue(v2);
+      pc++;
+      setsloti(L, ra, l_subi(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luai_numsub(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_mulk(lua_State L, TValue[] k, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    assert ttisnumber(v2);
+    if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = ivalue(v2);
+      pc++;
+      setsloti(L, ra, l_muli(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luai_nummul(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_modk(lua_State L, CallInfo ci, TValue[] k, int base, int i, int pc)
+  {
+    ci.savedpc = pc; /* in case of division by 0 */
+    L.top = ci.top;
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    assert ttisnumber(v2);
+    if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = ivalue(v2);
+      pc++;
+      setsloti(L, ra, luaV_mod(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luaV_modf(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_powk(lua_State L, TValue[] k, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    assert ttisnumber(v2);
+    NumResult n1 = new NumResult();
+    NumResult n2 = new NumResult();
+    if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setslotflt(L, ra, luai_numpow(L, n1.v, n2.v));
+    }
+    return pc;
+  }
+
+  private static int op_divk(lua_State L, TValue[] k, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    assert ttisnumber(v2);
+    NumResult n1 = new NumResult();
+    NumResult n2 = new NumResult();
+    if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setslotflt(L, ra, luai_numdiv(L, n1.v, n2.v));
+    }
+    return pc;
+  }
+
+  private static int op_idivk(lua_State L, CallInfo ci, TValue[] k, int base, int i, int pc)
+  {
+    ci.savedpc = pc; /* in case of division by 0 */
+    L.top = ci.top;
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    assert ttisnumber(v2);
+    if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = ivalue(v2);
+      pc++;
+      setsloti(L, ra, luaV_idiv(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luai_numidiv(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_bandk(lua_State L, TValue[] k, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    IntResult i1 = new IntResult();
+    long i2 = ivalue(v2);
+    assert ttisinteger(v2);
+    if (tointegerns(L, v1, i1) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setsloti(L, ra, l_band(i1.v, i2));
+    }
+    return pc;
+  }
+
+  private static int op_bork(lua_State L, TValue[] k, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    IntResult i1 = new IntResult();
+    long i2 = ivalue(v2);
+    assert ttisinteger(v2);
+    if (tointegerns(L, v1, i1) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setsloti(L, ra, l_bor(i1.v, i2));
+    }
+    return pc;
+  }
+
+  private static int op_bxork(lua_State L, TValue[] k, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    TValue v2 = k[GETARG_C(i)];
+    IntResult i1 = new IntResult();
+    long i2 = ivalue(v2);
+    assert ttisinteger(v2);
+    if (tointegerns(L, v1, i1) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setsloti(L, ra, l_bxor(i1.v, i2));
+    }
+    return pc;
+  }
+
+  private static int op_shli(lua_State L, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    int ic = GETARG_sC(i);
+    IntResult ib = new IntResult();
+    if (tointegerns(L, rb, ib) != 0)
+    {
+      pc++;
+      setsloti(L, ra, luaV_shiftl(ic, ib.v));
+    }
+    return pc;
+  }
+
+  private static int op_shri(lua_State L, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    int ic = GETARG_sC(i);
+    IntResult ib = new IntResult();
+    if (tointegerns(L, rb, ib) != 0)
+    {
+      pc++;
+      setsloti(L, ra, luaV_shiftl(ib.v, -ic));
+    }
+    return pc;
+  }
+
+  private static int op_add(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = slotival(L, v2);
+      pc++;
+      setsloti(L, ra, l_addi(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luai_numadd(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_sub(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = slotival(L, v2);
+      pc++;
+      setsloti(L, ra, l_subi(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luai_numsub(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_mul(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = slotival(L, v2);
+      pc++;
+      setsloti(L, ra, l_muli(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luai_nummul(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_mod(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    ci.savedpc = pc; /* in case of division by 0 */
+    L.top = ci.top;
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = slotival(L, v2);
+      pc++;
+      setsloti(L, ra, luaV_mod(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luaV_modf(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_pow(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    NumResult n1 = new NumResult();
+    NumResult n2 = new NumResult();
+    if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setslotflt(L, ra, luai_numpow(L, n1.v, n2.v));
+    }
+    return pc;
+  }
+
+  private static int op_div(lua_State L, int base, int i, int pc)
+  { /* float division (always with floats) */
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    NumResult n1 = new NumResult();
+    NumResult n2 = new NumResult();
+    if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setslotflt(L, ra, luai_numdiv(L, n1.v, n2.v));
+    }
+    return pc;
+  }
+
+  private static int op_idiv(lua_State L, CallInfo ci, int base, int i, int pc)
+  { /* floor division */
+    ci.savedpc = pc; /* in case of division by 0 */
+    L.top = ci.top;
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
+    {
+      int ra = base + GETARG_A(i);
+      long i1 = slotival(L, v1);
+      long i2 = slotival(L, v2);
+      pc++;
+      setsloti(L, ra, luaV_idiv(L, i1, i2));
+    }
+    else
+    {
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      {
+        int ra = base + GETARG_A(i);
+        pc++;
+        setslotflt(L, ra, luai_numidiv(L, n1.v, n2.v));
+      }
+    }
+    return pc;
+  }
+
+  private static int op_band(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    IntResult i1 = new IntResult();
+    IntResult i2 = new IntResult();
+    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setsloti(L, ra, l_band(i1.v, i2.v));
+    }
+    return pc;
+  }
+
+  private static int op_bor(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    IntResult i1 = new IntResult();
+    IntResult i2 = new IntResult();
+    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setsloti(L, ra, l_bor(i1.v, i2.v));
+    }
+    return pc;
+  }
+
+  private static int op_bxor(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    IntResult i1 = new IntResult();
+    IntResult i2 = new IntResult();
+    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setsloti(L, ra, l_bxor(i1.v, i2.v));
+    }
+    return pc;
+  }
+
+  private static int op_shl(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    IntResult i1 = new IntResult();
+    IntResult i2 = new IntResult();
+    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setsloti(L, ra, luaV_shiftl(i1.v, i2.v));
+    }
+    return pc;
+  }
+
+  private static int op_shr(lua_State L, int base, int i, int pc)
+  {
+    int v1 = base + GETARG_B(i);
+    int v2 = base + GETARG_C(i);
+    IntResult i1 = new IntResult();
+    IntResult i2 = new IntResult();
+    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    {
+      int ra = base + GETARG_A(i);
+      pc++;
+      setsloti(L, ra, luaV_shiftr(i1.v, i2.v));
+    }
+    return pc;
+  }
+
+  private static void op_mmbin(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int pi = code[pc - 2]; /* original arith. expression */
+    int rb = base + GETARG_B(i);
+    int tm = GETARG_C(i);
+    int result = base + GETARG_A(pi);
+    assert OP_ADD <= GET_OPCODE(pi) && GET_OPCODE(pi) <= OP_SHR;
+    ci.savedpc = pc;
+    L.top = ci.top;
+    luaT_trybinTM(L, ra, rb, result, tm);
+  }
+
+  private static void op_mmbini(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int pi = code[pc - 2]; /* original arith. expression */
+    int imm = GETARG_sB(i);
+    int tm = GETARG_C(i);
+    int flip = GETARG_k(i);
+    int result = base + GETARG_A(pi);
+    ci.savedpc = pc;
+    L.top = ci.top;
+    luaT_trybiniTM(L, ra, imm, flip, result, tm);
+  }
+
+  private static void op_mmbink(lua_State L, CallInfo ci, TValue[] k, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int pi = code[pc - 2]; /* original arith. expression */
+    TValue imm = k[GETARG_B(i)];
+    int tm = GETARG_C(i);
+    int flip = GETARG_k(i);
+    int result = base + GETARG_A(pi);
+    ci.savedpc = pc;
+    L.top = ci.top;
+    luaT_trybinassocTM(L, ra, imm, flip, result, tm);
+  }
+
+  private static void op_unm(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    NumResult nb = new NumResult();
+    if (slottag(L, rb) == LUA_VNUMINT)
+    {
+      long ib = slotival(L, rb);
+      setsloti(L, ra, l_intunm(ib));
+    }
+    else if (tonumberns(L, rb, nb) != 0)
+    {
+      setslotflt(L, ra, -nb.v);
+    }
+    else
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaT_trybinTM(L, rb, rb, ra, TM_UNM);
+    }
+  }
+
+  private static void op_bnot(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    IntResult ib = new IntResult();
+    if (tointegerns(L, rb, ib) != 0)
+    {
+      setsloti(L, ra, l_intbnot(ib.v));
+    }
+    else
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaT_trybinTM(L, rb, rb, ra, TM_BNOT);
+    }
+  }
+
+  private static void op_not(lua_State L, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    if (tagisfalse(slottag(L, rb)))
+      setslottag(L, ra, LUA_VTRUE);
+    else
+      setslottag(L, ra, LUA_VFALSE);
+  }
+
+  private static void op_len(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    ci.savedpc = pc;
+    L.top = ci.top;
+    luaV_objlen(L, ra, base + GETARG_B(i));
+  }
+
+  private static void op_concat(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int n = GETARG_B(i); /* number of elements to concatenate */
+    L.top = ra + n;   /* mark the end of concat operands */
+    ci.savedpc = pc;
+    luaV_concat(L, n);
+    if (L.l_G.GCdebt <= 0)
+    { /* 'luaV_concat' ensures correct top */
+      ci.savedpc = pc;
+      luaC_step(L);
+    }
+    luai_threadyield(L);
+  }
+
+  private static void op_close(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    assert GETARG_B(i) == 0; /* 'close must be alive */
+    ci.savedpc = pc;
+    L.top = ci.top;
+    luaF_close(L, ra, (byte) LUA_OK, 1);
+  }
+
+  private static void op_tbc(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    /* create new to-be-closed upvalue */
+    ci.savedpc = pc;
+    L.top = ci.top;
+    luaF_newtbcupval(L, ra);
+  }
+
+  private static int op_jmp(int i, int pc)
+  {
+    pc += GETARG_sJ(i);
+    return pc;
+  }
+
+  private static int op_eq(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int cond;
+    int rb = base + GETARG_B(i);
+    ci.savedpc = pc;
+    L.top = ci.top;
+    cond = luaV_equalobj(L, ra, rb);
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_lt(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    int cond;
+    if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
+    {
+      long ia = slotival(L, ra);
+      long ib = slotival(L, rb);
+      cond = l_lti(ia, ib);
+    }
+    else if (novariant(slottag(L, ra)) == LUA_TNUMBER && novariant(slottag(L, rb)) == LUA_TNUMBER)
+      cond = LTnum(L, ra, rb);
+    else
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      cond = lessthanothers(L, ra, rb);
+    }
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_le(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    int cond;
+    if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
+    {
+      long ia = slotival(L, ra);
+      long ib = slotival(L, rb);
+      cond = l_lei(ia, ib);
+    }
+    else if (novariant(slottag(L, ra)) == LUA_TNUMBER && novariant(slottag(L, rb)) == LUA_TNUMBER)
+      cond = LEnum(L, ra, rb);
+    else
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      cond = lessequalothers(L, ra, rb);
+    }
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_eqk(lua_State L, TValue[] k, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    TValue rb = k[GETARG_B(i)];
+    /* basic types do not use '__eq'; we can use raw equality */
+    int cond = luaV_rawequalobj(L, ra, rb);
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_eqi(lua_State L, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int cond;
+    int im = GETARG_sB(i);
+    if (slottag(L, ra) == LUA_VNUMINT)
+      cond = (slotival(L, ra) == im) ? 1 : 0;
+    else if (slottag(L, ra) == LUA_VNUMFLT)
+      cond = (slotfltval(L, ra) == im) ? 1 : 0;
+    else
+      cond = 0; /* other types cannot be equal to a number */
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_lti(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int cond;
+    int im = GETARG_sB(i);
+    if (slottag(L, ra) == LUA_VNUMINT)
+      cond = l_lti(slotival(L, ra), im);
+    else if (slottag(L, ra) == LUA_VNUMFLT)
+    {
+      double fa = slotfltval(L, ra);
+      double fim = im;
+      cond = luai_numlt(fa, fim) ? 1 : 0;
+    }
+    else
+    {
+      int isf = GETARG_C(i);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LT);
+    }
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_lei(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int cond;
+    int im = GETARG_sB(i);
+    if (slottag(L, ra) == LUA_VNUMINT)
+      cond = l_lei(slotival(L, ra), im);
+    else if (slottag(L, ra) == LUA_VNUMFLT)
+    {
+      double fa = slotfltval(L, ra);
+      double fim = im;
+      cond = luai_numle(fa, fim) ? 1 : 0;
+    }
+    else
+    {
+      int isf = GETARG_C(i);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LE);
+    }
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_gti(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int cond;
+    int im = GETARG_sB(i);
+    if (slottag(L, ra) == LUA_VNUMINT)
+      cond = l_gti(slotival(L, ra), im);
+    else if (slottag(L, ra) == LUA_VNUMFLT)
+    {
+      double fa = slotfltval(L, ra);
+      double fim = im;
+      cond = luai_numgt(fa, fim) ? 1 : 0;
+    }
+    else
+    {
+      int isf = GETARG_C(i);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LT);
+    }
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_gei(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int cond;
+    int im = GETARG_sB(i);
+    if (slottag(L, ra) == LUA_VNUMINT)
+      cond = l_gei(slotival(L, ra), im);
+    else if (slottag(L, ra) == LUA_VNUMFLT)
+    {
+      double fa = slotfltval(L, ra);
+      double fim = im;
+      cond = luai_numge(fa, fim) ? 1 : 0;
+    }
+    else
+    {
+      int isf = GETARG_C(i);
+      ci.savedpc = pc;
+      L.top = ci.top;
+      cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LE);
+    }
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_test(lua_State L, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int cond = !tagisfalse(slottag(L, ra)) ? 1 : 0;
+    if (cond != GETARG_k(i))
+      pc++;
+    else
+    {
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_testset(lua_State L, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int rb = base + GETARG_B(i);
+    if ((tagisfalse(slottag(L, rb)) ? 1 : 0) == GETARG_k(i))
+      pc++;
+    else
+    {
+      copyslot(L, ra, rb);
+      int ni = code[pc];
+      pc += GETARG_sJ(ni) + 1;
+    }
+    return pc;
+  }
+
+  private static int op_forloop(lua_State L, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    if (slottag(L, ra + 1) == LUA_VNUMINT)
+    { /* integer loop? */
+      assert slottag(L, ra) == LUA_VNUMINT;
+      long count = slotival(L, ra);
+      if (count != 0)
+      { /* still more iterations? */
+        assert slottag(L, ra + 1) == LUA_VNUMINT;
+        long step = slotival(L, ra + 1);
+        assert slottag(L, ra + 2) == LUA_VNUMINT;
+        long idx = slotival(L, ra + 2);    /* control variable */
+        chgsloti(L, ra, l_intsub(count, 1)); /* update counter */
+        idx = l_intadd(idx, step);                /* add step to index */
+        chgsloti(L, ra + 2, idx);              /* update control variable */
+        pc -= GETARG_Bx(i);                       /* jump back */
+      }
+    }
+    else if (floatforloop(L, ra) != 0) /* float loop */
+      pc -= GETARG_Bx(i);         /* jump back */
+    return pc;
+  }
+
+  private static int op_forprep(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    ci.savedpc = pc; /* in case of errors */
+    L.top = ci.top;
+    if (forprep(L, ra) != 0)
+      pc += GETARG_Bx(i) + 1; /* skip the loop */
+    return pc;
+  }
+
+  private static int op_tforloop(lua_State L, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    if (!tagisempty(slottag(L, ra + 3))) /* continue loop? */
+      pc -= GETARG_Bx(i);      /* jump back */
+    return pc;
+  }
+
+  private static int op_setlist(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int n = GETARG_vB(i);
+    int last = GETARG_vC(i);
+    Table h = slothval(L, ra);
+    if (n == 0)
+      n = (int) (L.top - ra) - 1; /* get up to the top */
+    else
+      L.top = ci.top; /* correct top in case of emergency GC */
+    last += n;
+    if (TESTARG_k(i) != 0)
+    {
+      last += GETARG_Ax(code[pc]) * (MAXARG_vC + 1);
+      pc++;
+    }
+    /* when 'n' is known, table should have proper size */
+    if (last > h.asize())
+    { /* needs more space? */
+      /* fixed-size sets should have space preallocated */
+      assert GETARG_vB(i) == 0;
+      h.luaH_resizearray(L, last); /* preallocate it at once */
+    }
+    for (; n > 0; n--)
+    {
+      int val = ra + n;
+      TValue vv = getslot(L, val);
+      obj2arr(h, last - 1, vv);
+      last--;
+      assert novariant(h.tt) >= LUA_TSTRING;
+      luaC_barrierback(L, h, vv);
+    }
+    return pc;
+  }
+
+  private static void op_closure(lua_State L, CallInfo ci, LClosure cl, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    Proto p = cl.p.p[GETARG_Bx(i)];
+    ci.savedpc = pc;
+    L.top = ci.top;
+    pushclosure(L, p, cl.upvals, base, ra);
+    if (L.l_G.GCdebt <= 0)
+    {
+      ci.savedpc = pc;
+      L.top = ra + 1;
+      luaC_step(L);
+    }
+    luai_threadyield(L);
+  }
+
+  private static void op_vararg(lua_State L, CallInfo ci, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    int n = GETARG_C(i) - 1; /* required results (-1 means all) */
+    int vatab = GETARG_k(i) != 0 ? GETARG_B(i) : -1;
+    ci.savedpc = pc;
+    L.top = ci.top;
+    luaT_getvarargs(L, ci, ra, n, vatab);
+  }
+
+  private static void op_getvarg(lua_State L, CallInfo ci, int base, int i)
+  {
+    int ra = base + GETARG_A(i);
+    int rc = base + GETARG_C(i);
+    luaT_getvararg(L, ci, ra, rc);
+  }
+
+  private static void op_errnnil(lua_State L, CallInfo ci, LClosure cl, int base, int i, int pc)
+  {
+    int ra = base + GETARG_A(i);
+    if (!tagisempty(slottag(L, ra)))
+    {
+      ci.savedpc = pc;
+      L.top = ci.top;
+      luaG_errnnil(L, cl, GETARG_Bx(i));
+    }
+  }
+
   /* 'c' is the limit of live values in the stack */
 
   public static void luaV_execute(lua_State L, CallInfo ci)
@@ -1430,1318 +2869,372 @@ public final class Lvm
       {
         case OP_MOVE:
         {
-          int ra = base + GETARG_A(i);
-          copyslot(L, ra, base + GETARG_B(i));
+          op_move(L, base, i);
           break;
         }
         case OP_LOADI:
         {
-          int ra = base + GETARG_A(i);
-          long b = GETARG_sBx(i);
-          setsloti(L, ra, b);
+          op_loadi(L, base, i);
           break;
         }
         case OP_LOADF:
         {
-          int ra = base + GETARG_A(i);
-          int b = GETARG_sBx(i);
-          setslotflt(L, ra, b);
+          op_loadf(L, base, i);
           break;
         }
         case OP_LOADK:
         {
-          int ra = base + GETARG_A(i);
-          TValue rb = k[GETARG_Bx(i)];
-          setslot(L, ra, rb);
+          op_loadk(L, k, base, i);
           break;
         }
         case OP_LOADKX:
         {
-          int ra = base + GETARG_A(i);
-          TValue rb;
-          rb = k[GETARG_Ax(code[pc])];
-          pc++;
-          setslot(L, ra, rb);
+          pc = op_loadkx(L, k, code, base, i, pc);
           break;
         }
         case OP_LOADFALSE:
         {
-          int ra = base + GETARG_A(i);
-          setslottag(L, ra, LUA_VFALSE);
+          op_loadfalse(L, base, i);
           break;
         }
         case OP_LFALSESKIP:
         {
-          int ra = base + GETARG_A(i);
-          setslottag(L, ra, LUA_VFALSE);
-          pc++; /* skip next instruction */
+          pc = op_lfalseskip(L, base, i, pc);
           break;
         }
         case OP_LOADTRUE:
         {
-          int ra = base + GETARG_A(i);
-          setslottag(L, ra, LUA_VTRUE);
+          op_loadtrue(L, base, i);
           break;
         }
         case OP_LOADNIL:
         {
-          int ra = base + GETARG_A(i);
-          int b = GETARG_B(i);
-          do
-          {
-            setslottag(L, ra++, LUA_VNIL);
-          } while (b-- != 0);
+          op_loadnil(L, base, i);
           break;
         }
         case OP_GETUPVAL:
         {
-          int ra = base + GETARG_A(i);
-          int b = GETARG_B(i);
-          TValue v = upvalgetval(cl.upvals[b]);
-          setslot(L, ra, v);
+          op_getupval(L, cl, base, i);
           break;
         }
         case OP_SETUPVAL:
         {
-          int ra = base + GETARG_A(i);
-          UpVal uv = cl.upvals[GETARG_B(i)];
-          TValue rav = getslot(L, ra);
-          upvalsetval(L, uv, rav);
-          luaC_barrier(L, uv, rav);
+          op_setupval(L, cl, base, i);
           break;
         }
         case OP_GETTABUP:
         {
-          int ra = base + GETARG_A(i);
-          TValue upval = upvalgetval(cl.upvals[GETARG_B(i)]);
-          TValue rc = k[GETARG_C(i)];
-          assert ttisstring(rc);
-          TString key = tsvalue(rc); /* key must be a short string */
-          byte tag;
-          TValue res = new TValue();
-          if (!ttistable(upval))
-            tag = LUA_VNOTABLE;
-          else
-          {
-            tag = hvalue(upval).luaH_getshortstr(key, res);
-          }
-          if (tagisempty(tag))
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaV_finishget(L, upval, rc, ra, tag, upvalorigin(GETARG_B(i)));
-            trap = ci.trap;
-          }
-          else
-            setslot(L, ra, res);
+          op_gettabup(L, ci, cl, k, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_GETTABLE:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          int rc = base + GETARG_C(i);
-          byte tag;
-          TValue res = new TValue();
-          if (slottag(L, rc) == LUA_VNUMINT)
-          { /* fast track for integers? */
-            if (slottag(L, rb) != ctb(LUA_VTABLE))
-              tag = LUA_VNOTABLE;
-            else
-            {
-              Table h = slothval(L, rb);
-              long u = l_intsub(slotival(L, rc), 1);
-              if (l_ult(u, h.asize()))
-              {
-                tag = getArrTag(h, u);
-                if (!tagisempty(tag))
-                  farr2val(h, u, tag, res);
-              }
-              else
-                tag = h.luaH_getint(slotival(L, rc), res);
-            }
-          }
-          else if (slottag(L, rb) != ctb(LUA_VTABLE))
-            tag = LUA_VNOTABLE;
-          else
-          {
-            TValue rcv = getslot(L, rc);
-            tag = slothval(L, rb).luaH_get(rcv, res);
-          }
-          if (tagisempty(tag))
-          {
-            TValue rbv = getslot(L, rb);
-            TValue rcv = getslot(L, rc);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaV_finishget(L, rbv, rcv, ra, tag, rb);
-            trap = ci.trap;
-          }
-          else
-            setslot(L, ra, res);
+          op_gettable(L, ci, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_GETI:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          int c = GETARG_C(i);
-          byte tag;
-          TValue res = new TValue();
-          if (slottag(L, rb) != ctb(LUA_VTABLE))
-            tag = LUA_VNOTABLE;
-          else
-          {
-            Table h = slothval(L, rb);
-            long u = l_intsub(c, 1);
-            if (l_ult(u, h.asize()))
-            {
-              tag = getArrTag(h, u);
-              if (!tagisempty(tag))
-                farr2val(h, u, tag, res);
-            }
-            else
-              tag = h.luaH_getint(c, res);
-          }
-          if (tagisempty(tag))
-          {
-            TValue key = new TValue();
-            setivalue(key, c);
-            TValue rbv = getslot(L, rb);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaV_finishget(L, rbv, key, ra, tag, rb);
-            trap = ci.trap;
-          }
-          else
-            setslot(L, ra, res);
+          op_geti(L, ci, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_GETFIELD:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          TValue rc = k[GETARG_C(i)];
-          assert ttisstring(rc);
-          TString key = tsvalue(rc); /* key must be a short string */
-          byte tag;
-          TValue res = new TValue();
-          if (slottag(L, rb) != ctb(LUA_VTABLE))
-            tag = LUA_VNOTABLE;
-          else
-          {
-            tag = slothval(L, rb).luaH_getshortstr(key, res);
-          }
-          if (tagisempty(tag))
-          {
-            TValue rbv = getslot(L, rb);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaV_finishget(L, rbv, rc, ra, tag, rb);
-            trap = ci.trap;
-          }
-          else
-            setslot(L, ra, res);
+          op_getfield(L, ci, k, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_SETTABUP:
         {
-          int hres;
-          TValue upval = upvalgetval(cl.upvals[GETARG_A(i)]);
-          TValue rb = k[GETARG_B(i)];
-          TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
-          assert ttisstring(rb);
-          TString key = tsvalue(rb); /* key must be a short string */
-          if (!ttistable(upval))
-            hres = HNOTATABLE;
-          else
-          {
-            hres = hvalue(upval).luaH_psetshortstr(key, rc);
-          }
-          if (hres == HOK)
-            luaV_finishfastset(L, upval, rc);
-          else
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaV_finishset(L, upval, rb, rc, hres, upvalorigin(GETARG_A(i)));
-            trap = ci.trap;
-          }
+          op_settabup(L, ci, cl, k, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_SETTABLE:
         {
-          int ra = base + GETARG_A(i);
-          int hres;
-          int rb = base + GETARG_B(i); /* key (table is in 'ra') */
-          TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i)); /* value */
-          if (slottag(L, rb) == LUA_VNUMINT)
-          { /* fast track for integers? */
-            int t = ra;
-            if (slottag(L, t) != ctb(LUA_VTABLE))
-              hres = HNOTATABLE;
-            else
-            {
-              Table h = slothval(L, t);
-              long u = l_intsub(slotival(L, rb), 1);
-              if (l_ult(u, h.asize()))
-              {
-                byte tag = getArrTag(h, u);
-                if (checknoTM(h.metatable, TM_NEWINDEX) != 0 || !tagisempty(tag))
-                {
-                  fval2arr(h, u, rc);
-                  hres = HOK;
-                }
-                else
-                  hres = ~(int) u;
-              }
-              else
-                hres = h.luaH_psetint(slotival(L, rb), rc);
-            }
-          }
-          else
-          {
-            int t = ra;
-            if (slottag(L, t) != ctb(LUA_VTABLE))
-              hres = HNOTATABLE;
-            else
-            {
-              TValue rbv = getslot(L, rb);
-              hres = slothval(L, t).luaH_pset(rbv, rc);
-            }
-          }
-          if (hres == HOK)
-            luaV_finishfastset(L, ra, rc);
-          else
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            TValue tv = getslot(L, ra);
-            TValue rbv = getslot(L, rb);
-            luaV_finishset(L, tv, rbv, rc, hres, ra);
-            trap = ci.trap;
-          }
+          op_settable(L, ci, k, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_SETI:
         {
-          int ra = base + GETARG_A(i);
-          int hres;
-          int b = GETARG_B(i);
-          TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
-          int t = ra;
-          if (slottag(L, t) != ctb(LUA_VTABLE))
-            hres = HNOTATABLE;
-          else
-          {
-            Table h = slothval(L, t);
-            long u = l_intsub(b, 1);
-            if (l_ult(u, h.asize()))
-            {
-              byte tag = getArrTag(h, u);
-              if (checknoTM(h.metatable, TM_NEWINDEX) != 0 || !tagisempty(tag))
-              {
-                fval2arr(h, u, rc);
-                hres = HOK;
-              }
-              else
-                hres = ~(int) u;
-            }
-            else
-              hres = h.luaH_psetint(b, rc);
-          }
-          if (hres == HOK)
-            luaV_finishfastset(L, ra, rc);
-          else
-          {
-            TValue key = new TValue();
-            setivalue(key, b);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            TValue tv = getslot(L, ra);
-            luaV_finishset(L, tv, key, rc, hres, ra);
-            trap = ci.trap;
-          }
+          op_seti(L, ci, k, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_SETFIELD:
         {
-          int ra = base + GETARG_A(i);
-          int hres;
-          TValue rb = k[GETARG_B(i)];
-          TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
-          assert ttisstring(rb);
-          TString key = tsvalue(rb); /* key must be a short string */
-          int t = ra;
-          if (slottag(L, t) != ctb(LUA_VTABLE))
-            hres = HNOTATABLE;
-          else
-          {
-            hres = slothval(L, t).luaH_psetshortstr(key, rc);
-          }
-          if (hres == HOK)
-            luaV_finishfastset(L, ra, rc);
-          else
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            TValue tv = getslot(L, ra);
-            luaV_finishset(L, tv, rb, rc, hres, ra);
-            trap = ci.trap;
-          }
+          op_setfield(L, ci, k, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_NEWTABLE:
         {
-          int ra = base + GETARG_A(i);
-          int b = GETARG_vB(i); /* log2(hash size) + 1 */
-          int c = GETARG_vC(i); /* array size */
-          Table t;
-          if (b > 0)
-            b = 1 << (b - 1); /* hash size is 2^(b - 1) */
-          if (TESTARG_k(i) != 0)
-          { /* non-zero extra argument? */
-            assert GETARG_Ax(code[pc]) != 0;
-            /* add it to array size */
-            c += GETARG_Ax(code[pc]) * (MAXARG_vC + 1);
-          }
-          pc++;              /* skip extra argument */
-          L.top = ra + 1; /* correct top in case of emergency GC */
-          t = Table.luaH_new(L);   /* memory allocation */
-          setsloth(L, ra, t);
-          if (b != 0 || c != 0)
-            t.luaH_resize(L, c, b); /* idem */
-          if (L.l_G.GCdebt <= 0)
-          {
-            ci.savedpc = pc;
-            L.top = ra + 1;
-            luaC_step(L);
-            trap = ci.trap;
-          }
-          luai_threadyield(L);
+          pc = op_newtable(L, ci, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_SELF:
         {
-          int ra = base + GETARG_A(i);
-          byte tag;
-          int rb = base + GETARG_B(i);
-          TValue rc = k[GETARG_C(i)];
-          assert ttisstring(rc);
-          TString key = tsvalue(rc); /* key must be a short string */
-          copyslot(L, ra + 1, rb);
-          TValue res = new TValue();
-          if (slottag(L, rb) != ctb(LUA_VTABLE))
-            tag = LUA_VNOTABLE;
-          else
-          {
-            tag = slothval(L, rb).luaH_getshortstr(key, res);
-          }
-          if (tagisempty(tag))
-          {
-            TValue rbv = getslot(L, rb);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaV_finishget(L, rbv, rc, ra, tag, rb);
-            trap = ci.trap;
-          }
-          else
-            setslot(L, ra, res);
+          op_self(L, ci, k, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_ADDI:
         {
-          int ra = base + GETARG_A(i);
-          int v1 = base + GETARG_B(i);
-          int imm = GETARG_sC(i);
-          if (slottag(L, v1) == LUA_VNUMINT)
-          {
-            long iv1 = slotival(L, v1);
-            pc++;
-            setsloti(L, ra, l_addi(L, iv1, imm));
-          }
-          else if (slottag(L, v1) == LUA_VNUMFLT)
-          {
-            double nb = slotfltval(L, v1);
-            double fimm = imm;
-            pc++;
-            setslotflt(L, ra, luai_numadd(L, nb, fimm));
-          }
+          pc = op_addi(L, base, i, pc);
           break;
         }
         case OP_ADDK:
         {
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          assert ttisnumber(v2);
-          if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = ivalue(v2);
-            pc++;
-            setsloti(L, ra, l_addi(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luai_numadd(L, n1.v, n2.v));
-            }
-          }
+          pc = op_addk(L, k, base, i, pc);
           break;
         }
         case OP_SUBK:
         {
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          assert ttisnumber(v2);
-          if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = ivalue(v2);
-            pc++;
-            setsloti(L, ra, l_subi(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luai_numsub(L, n1.v, n2.v));
-            }
-          }
+          pc = op_subk(L, k, base, i, pc);
           break;
         }
         case OP_MULK:
         {
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          assert ttisnumber(v2);
-          if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = ivalue(v2);
-            pc++;
-            setsloti(L, ra, l_muli(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luai_nummul(L, n1.v, n2.v));
-            }
-          }
+          pc = op_mulk(L, k, base, i, pc);
           break;
         }
         case OP_MODK:
         {
-          ci.savedpc = pc; /* in case of division by 0 */
-          L.top = ci.top;
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          assert ttisnumber(v2);
-          if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = ivalue(v2);
-            pc++;
-            setsloti(L, ra, luaV_mod(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luaV_modf(L, n1.v, n2.v));
-            }
-          }
+          pc = op_modk(L, ci, k, base, i, pc);
           break;
         }
         case OP_POWK:
         {
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          assert ttisnumber(v2);
-          NumResult n1 = new NumResult();
-          NumResult n2 = new NumResult();
-          if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setslotflt(L, ra, luai_numpow(L, n1.v, n2.v));
-          }
+          pc = op_powk(L, k, base, i, pc);
           break;
         }
         case OP_DIVK:
         {
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          assert ttisnumber(v2);
-          NumResult n1 = new NumResult();
-          NumResult n2 = new NumResult();
-          if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setslotflt(L, ra, luai_numdiv(L, n1.v, n2.v));
-          }
+          pc = op_divk(L, k, base, i, pc);
           break;
         }
         case OP_IDIVK:
         {
-          ci.savedpc = pc; /* in case of division by 0 */
-          L.top = ci.top;
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          assert ttisnumber(v2);
-          if (slottag(L, v1) == LUA_VNUMINT && ttisinteger(v2))
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = ivalue(v2);
-            pc++;
-            setsloti(L, ra, luaV_idiv(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luai_numidiv(L, n1.v, n2.v));
-            }
-          }
+          pc = op_idivk(L, ci, k, base, i, pc);
           break;
         }
         case OP_BANDK:
         {
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          IntResult i1 = new IntResult();
-          long i2 = ivalue(v2);
-          assert ttisinteger(v2);
-          if (tointegerns(L, v1, i1) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setsloti(L, ra, l_band(i1.v, i2));
-          }
+          pc = op_bandk(L, k, base, i, pc);
           break;
         }
         case OP_BORK:
         {
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          IntResult i1 = new IntResult();
-          long i2 = ivalue(v2);
-          assert ttisinteger(v2);
-          if (tointegerns(L, v1, i1) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setsloti(L, ra, l_bor(i1.v, i2));
-          }
+          pc = op_bork(L, k, base, i, pc);
           break;
         }
         case OP_BXORK:
         {
-          int v1 = base + GETARG_B(i);
-          TValue v2 = k[GETARG_C(i)];
-          IntResult i1 = new IntResult();
-          long i2 = ivalue(v2);
-          assert ttisinteger(v2);
-          if (tointegerns(L, v1, i1) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setsloti(L, ra, l_bxor(i1.v, i2));
-          }
+          pc = op_bxork(L, k, base, i, pc);
           break;
         }
         case OP_SHLI:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          int ic = GETARG_sC(i);
-          IntResult ib = new IntResult();
-          if (tointegerns(L, rb, ib) != 0)
-          {
-            pc++;
-            setsloti(L, ra, luaV_shiftl(ic, ib.v));
-          }
+          pc = op_shli(L, base, i, pc);
           break;
         }
         case OP_SHRI:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          int ic = GETARG_sC(i);
-          IntResult ib = new IntResult();
-          if (tointegerns(L, rb, ib) != 0)
-          {
-            pc++;
-            setsloti(L, ra, luaV_shiftl(ib.v, -ic));
-          }
+          pc = op_shri(L, base, i, pc);
           break;
         }
         case OP_ADD:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = slotival(L, v2);
-            pc++;
-            setsloti(L, ra, l_addi(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luai_numadd(L, n1.v, n2.v));
-            }
-          }
+          pc = op_add(L, base, i, pc);
           break;
         }
         case OP_SUB:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = slotival(L, v2);
-            pc++;
-            setsloti(L, ra, l_subi(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luai_numsub(L, n1.v, n2.v));
-            }
-          }
+          pc = op_sub(L, base, i, pc);
           break;
         }
         case OP_MUL:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = slotival(L, v2);
-            pc++;
-            setsloti(L, ra, l_muli(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luai_nummul(L, n1.v, n2.v));
-            }
-          }
+          pc = op_mul(L, base, i, pc);
           break;
         }
         case OP_MOD:
         {
-          ci.savedpc = pc; /* in case of division by 0 */
-          L.top = ci.top;
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = slotival(L, v2);
-            pc++;
-            setsloti(L, ra, luaV_mod(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luaV_modf(L, n1.v, n2.v));
-            }
-          }
+          pc = op_mod(L, ci, base, i, pc);
           break;
         }
         case OP_POW:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          NumResult n1 = new NumResult();
-          NumResult n2 = new NumResult();
-          if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setslotflt(L, ra, luai_numpow(L, n1.v, n2.v));
-          }
+          pc = op_pow(L, base, i, pc);
           break;
         }
         case OP_DIV:
-        { /* float division (always with floats) */
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          NumResult n1 = new NumResult();
-          NumResult n2 = new NumResult();
-          if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setslotflt(L, ra, luai_numdiv(L, n1.v, n2.v));
-          }
+        {
+          pc = op_div(L, base, i, pc);
           break;
         }
         case OP_IDIV:
-        {                   /* floor division */
-          ci.savedpc = pc; /* in case of division by 0 */
-          L.top = ci.top;
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          if (slottag(L, v1) == LUA_VNUMINT && slottag(L, v2) == LUA_VNUMINT)
-          {
-            int ra = base + GETARG_A(i);
-            long i1 = slotival(L, v1);
-            long i2 = slotival(L, v2);
-            pc++;
-            setsloti(L, ra, luaV_idiv(L, i1, i2));
-          }
-          else
-          {
-            NumResult n1 = new NumResult();
-            NumResult n2 = new NumResult();
-            if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
-            {
-              int ra = base + GETARG_A(i);
-              pc++;
-              setslotflt(L, ra, luai_numidiv(L, n1.v, n2.v));
-            }
-          }
+        {
+          pc = op_idiv(L, ci, base, i, pc);
           break;
         }
         case OP_BAND:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          IntResult i1 = new IntResult();
-          IntResult i2 = new IntResult();
-          if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setsloti(L, ra, l_band(i1.v, i2.v));
-          }
+          pc = op_band(L, base, i, pc);
           break;
         }
         case OP_BOR:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          IntResult i1 = new IntResult();
-          IntResult i2 = new IntResult();
-          if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setsloti(L, ra, l_bor(i1.v, i2.v));
-          }
+          pc = op_bor(L, base, i, pc);
           break;
         }
         case OP_BXOR:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          IntResult i1 = new IntResult();
-          IntResult i2 = new IntResult();
-          if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setsloti(L, ra, l_bxor(i1.v, i2.v));
-          }
+          pc = op_bxor(L, base, i, pc);
           break;
         }
         case OP_SHL:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          IntResult i1 = new IntResult();
-          IntResult i2 = new IntResult();
-          if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setsloti(L, ra, luaV_shiftl(i1.v, i2.v));
-          }
+          pc = op_shl(L, base, i, pc);
           break;
         }
         case OP_SHR:
         {
-          int v1 = base + GETARG_B(i);
-          int v2 = base + GETARG_C(i);
-          IntResult i1 = new IntResult();
-          IntResult i2 = new IntResult();
-          if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
-          {
-            int ra = base + GETARG_A(i);
-            pc++;
-            setsloti(L, ra, luaV_shiftr(i1.v, i2.v));
-          }
+          pc = op_shr(L, base, i, pc);
           break;
         }
         case OP_MMBIN:
         {
-          int ra = base + GETARG_A(i);
-          int pi = code[pc - 2]; /* original arith. expression */
-          int rb = base + GETARG_B(i);
-          int tm = GETARG_C(i);
-          int result = base + GETARG_A(pi);
-          assert OP_ADD <= GET_OPCODE(pi) && GET_OPCODE(pi) <= OP_SHR;
-          ci.savedpc = pc;
-          L.top = ci.top;
-          luaT_trybinTM(L, ra, rb, result, tm);
+          op_mmbin(L, ci, code, base, i, pc);
           trap = ci.trap;
           break;
         }
         case OP_MMBINI:
         {
-          int ra = base + GETARG_A(i);
-          int pi = code[pc - 2]; /* original arith. expression */
-          int imm = GETARG_sB(i);
-          int tm = GETARG_C(i);
-          int flip = GETARG_k(i);
-          int result = base + GETARG_A(pi);
-          ci.savedpc = pc;
-          L.top = ci.top;
-          luaT_trybiniTM(L, ra, imm, flip, result, tm);
+          op_mmbini(L, ci, code, base, i, pc);
           trap = ci.trap;
           break;
         }
         case OP_MMBINK:
         {
-          int ra = base + GETARG_A(i);
-          int pi = code[pc - 2]; /* original arith. expression */
-          TValue imm = k[GETARG_B(i)];
-          int tm = GETARG_C(i);
-          int flip = GETARG_k(i);
-          int result = base + GETARG_A(pi);
-          ci.savedpc = pc;
-          L.top = ci.top;
-          luaT_trybinassocTM(L, ra, imm, flip, result, tm);
+          op_mmbink(L, ci, k, code, base, i, pc);
           trap = ci.trap;
           break;
         }
         case OP_UNM:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          NumResult nb = new NumResult();
-          if (slottag(L, rb) == LUA_VNUMINT)
-          {
-            long ib = slotival(L, rb);
-            setsloti(L, ra, l_intunm(ib));
-          }
-          else if (tonumberns(L, rb, nb) != 0)
-          {
-            setslotflt(L, ra, -nb.v);
-          }
-          else
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaT_trybinTM(L, rb, rb, ra, TM_UNM);
-            trap = ci.trap;
-          }
+          op_unm(L, ci, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_BNOT:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          IntResult ib = new IntResult();
-          if (tointegerns(L, rb, ib) != 0)
-          {
-            setsloti(L, ra, l_intbnot(ib.v));
-          }
-          else
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaT_trybinTM(L, rb, rb, ra, TM_BNOT);
-            trap = ci.trap;
-          }
+          op_bnot(L, ci, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_NOT:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          if (tagisfalse(slottag(L, rb)))
-            setslottag(L, ra, LUA_VTRUE);
-          else
-            setslottag(L, ra, LUA_VFALSE);
+          op_not(L, base, i);
           break;
         }
         case OP_LEN:
         {
-          int ra = base + GETARG_A(i);
-          ci.savedpc = pc;
-          L.top = ci.top;
-          luaV_objlen(L, ra, base + GETARG_B(i));
+          op_len(L, ci, base, i, pc);
           trap = ci.trap;
           break;
         }
         case OP_CONCAT:
         {
-          int ra = base + GETARG_A(i);
-          int n = GETARG_B(i); /* number of elements to concatenate */
-          L.top = ra + n;   /* mark the end of concat operands */
-          ci.savedpc = pc;
-          luaV_concat(L, n);
+          op_concat(L, ci, base, i, pc);
           trap = ci.trap;
-          if (L.l_G.GCdebt <= 0)
-          { /* 'luaV_concat' ensures correct top */
-            ci.savedpc = pc;
-            luaC_step(L);
-            trap = ci.trap;
-          }
-          luai_threadyield(L);
           break;
         }
         case OP_CLOSE:
         {
-          int ra = base + GETARG_A(i);
-          assert GETARG_B(i) == 0; /* 'close must be alive */
-          ci.savedpc = pc;
-          L.top = ci.top;
-          luaF_close(L, ra, (byte) LUA_OK, 1);
+          op_close(L, ci, base, i, pc);
           trap = ci.trap;
           break;
         }
         case OP_TBC:
         {
-          int ra = base + GETARG_A(i);
-          /* create new to-be-closed upvalue */
-          ci.savedpc = pc;
-          L.top = ci.top;
-          luaF_newtbcupval(L, ra);
+          op_tbc(L, ci, base, i, pc);
           break;
         }
         case OP_JMP:
         {
-          pc += GETARG_sJ(i);
+          pc = op_jmp(i, pc);
           trap = ci.trap;
           break;
         }
         case OP_EQ:
         {
-          int ra = base + GETARG_A(i);
-          int cond;
-          int rb = base + GETARG_B(i);
-          ci.savedpc = pc;
-          L.top = ci.top;
-          cond = luaV_equalobj(L, ra, rb);
+          pc = op_eq(L, ci, code, base, i, pc);
           trap = ci.trap;
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
           break;
         }
         case OP_LT:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          int cond;
-          if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
-          {
-            long ia = slotival(L, ra);
-            long ib = slotival(L, rb);
-            cond = l_lti(ia, ib);
-          }
-          else if (novariant(slottag(L, ra)) == LUA_TNUMBER && novariant(slottag(L, rb)) == LUA_TNUMBER)
-            cond = LTnum(L, ra, rb);
-          else
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            cond = lessthanothers(L, ra, rb);
-            trap = ci.trap;
-          }
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_lt(L, ci, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_LE:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          int cond;
-          if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
-          {
-            long ia = slotival(L, ra);
-            long ib = slotival(L, rb);
-            cond = l_lei(ia, ib);
-          }
-          else if (novariant(slottag(L, ra)) == LUA_TNUMBER && novariant(slottag(L, rb)) == LUA_TNUMBER)
-            cond = LEnum(L, ra, rb);
-          else
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            cond = lessequalothers(L, ra, rb);
-            trap = ci.trap;
-          }
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_le(L, ci, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_EQK:
         {
-          int ra = base + GETARG_A(i);
-          TValue rb = k[GETARG_B(i)];
-          /* basic types do not use '__eq'; we can use raw equality */
-          int cond = luaV_rawequalobj(L, ra, rb);
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_eqk(L, k, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_EQI:
         {
-          int ra = base + GETARG_A(i);
-          int cond;
-          int im = GETARG_sB(i);
-          if (slottag(L, ra) == LUA_VNUMINT)
-            cond = (slotival(L, ra) == im) ? 1 : 0;
-          else if (slottag(L, ra) == LUA_VNUMFLT)
-            cond = (slotfltval(L, ra) == im) ? 1 : 0;
-          else
-            cond = 0; /* other types cannot be equal to a number */
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_eqi(L, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_LTI:
         {
-          int ra = base + GETARG_A(i);
-          int cond;
-          int im = GETARG_sB(i);
-          if (slottag(L, ra) == LUA_VNUMINT)
-            cond = l_lti(slotival(L, ra), im);
-          else if (slottag(L, ra) == LUA_VNUMFLT)
-          {
-            double fa = slotfltval(L, ra);
-            double fim = im;
-            cond = luai_numlt(fa, fim) ? 1 : 0;
-          }
-          else
-          {
-            int isf = GETARG_C(i);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LT);
-            trap = ci.trap;
-          }
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_lti(L, ci, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_LEI:
         {
-          int ra = base + GETARG_A(i);
-          int cond;
-          int im = GETARG_sB(i);
-          if (slottag(L, ra) == LUA_VNUMINT)
-            cond = l_lei(slotival(L, ra), im);
-          else if (slottag(L, ra) == LUA_VNUMFLT)
-          {
-            double fa = slotfltval(L, ra);
-            double fim = im;
-            cond = luai_numle(fa, fim) ? 1 : 0;
-          }
-          else
-          {
-            int isf = GETARG_C(i);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LE);
-            trap = ci.trap;
-          }
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_lei(L, ci, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_GTI:
         {
-          int ra = base + GETARG_A(i);
-          int cond;
-          int im = GETARG_sB(i);
-          if (slottag(L, ra) == LUA_VNUMINT)
-            cond = l_gti(slotival(L, ra), im);
-          else if (slottag(L, ra) == LUA_VNUMFLT)
-          {
-            double fa = slotfltval(L, ra);
-            double fim = im;
-            cond = luai_numgt(fa, fim) ? 1 : 0;
-          }
-          else
-          {
-            int isf = GETARG_C(i);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LT);
-            trap = ci.trap;
-          }
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_gti(L, ci, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_GEI:
         {
-          int ra = base + GETARG_A(i);
-          int cond;
-          int im = GETARG_sB(i);
-          if (slottag(L, ra) == LUA_VNUMINT)
-            cond = l_gei(slotival(L, ra), im);
-          else if (slottag(L, ra) == LUA_VNUMFLT)
-          {
-            double fa = slotfltval(L, ra);
-            double fim = im;
-            cond = luai_numge(fa, fim) ? 1 : 0;
-          }
-          else
-          {
-            int isf = GETARG_C(i);
-            ci.savedpc = pc;
-            L.top = ci.top;
-            cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LE);
-            trap = ci.trap;
-          }
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_gei(L, ci, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_TEST:
         {
-          int ra = base + GETARG_A(i);
-          int cond = !tagisfalse(slottag(L, ra)) ? 1 : 0;
-          if (cond != GETARG_k(i))
-            pc++;
-          else
-          {
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_test(L, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_TESTSET:
         {
-          int ra = base + GETARG_A(i);
-          int rb = base + GETARG_B(i);
-          if ((tagisfalse(slottag(L, rb)) ? 1 : 0) == GETARG_k(i))
-            pc++;
-          else
-          {
-            copyslot(L, ra, rb);
-            int ni = code[pc];
-            pc += GETARG_sJ(ni) + 1;
-            trap = ci.trap;
-          }
+          pc = op_testset(L, code, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_CALL:
@@ -2922,35 +3415,13 @@ public final class Lvm
         }
         case OP_FORLOOP:
         {
-          int ra = base + GETARG_A(i);
-          if (slottag(L, ra + 1) == LUA_VNUMINT)
-          { /* integer loop? */
-            assert slottag(L, ra) == LUA_VNUMINT;
-            long count = slotival(L, ra);
-            if (count != 0)
-            { /* still more iterations? */
-              assert slottag(L, ra + 1) == LUA_VNUMINT;
-              long step = slotival(L, ra + 1);
-              assert slottag(L, ra + 2) == LUA_VNUMINT;
-              long idx = slotival(L, ra + 2);    /* control variable */
-              chgsloti(L, ra, l_intsub(count, 1)); /* update counter */
-              idx = l_intadd(idx, step);                /* add step to index */
-              chgsloti(L, ra + 2, idx);              /* update control variable */
-              pc -= GETARG_Bx(i);                       /* jump back */
-            }
-          }
-          else if (floatforloop(L, ra) != 0) /* float loop */
-            pc -= GETARG_Bx(i);         /* jump back */
+          pc = op_forloop(L, base, i, pc);
           trap = ci.trap; /* allows a signal to break the loop */
           break;
         }
         case OP_FORPREP:
         {
-          int ra = base + GETARG_A(i);
-          ci.savedpc = pc; /* in case of errors */
-          L.top = ci.top;
-          if (forprep(L, ra) != 0)
-            pc += GETARG_Bx(i) + 1; /* skip the loop */
+          pc = op_forprep(L, ci, base, i, pc);
           break;
         }
         case OP_TFORPREP:
@@ -3014,89 +3485,34 @@ public final class Lvm
         }
         case OP_TFORLOOP:
         {
-          int ra = base + GETARG_A(i);
-          if (!tagisempty(slottag(L, ra + 3))) /* continue loop? */
-            pc -= GETARG_Bx(i);      /* jump back */
+          pc = op_tforloop(L, base, i, pc);
           break;
         }
         case OP_SETLIST:
         {
-          int ra = base + GETARG_A(i);
-          int n = GETARG_vB(i);
-          int last = GETARG_vC(i);
-          Table h = slothval(L, ra);
-          if (n == 0)
-            n = (int) (L.top - ra) - 1; /* get up to the top */
-          else
-            L.top = ci.top; /* correct top in case of emergency GC */
-          last += n;
-          if (TESTARG_k(i) != 0)
-          {
-            last += GETARG_Ax(code[pc]) * (MAXARG_vC + 1);
-            pc++;
-          }
-          /* when 'n' is known, table should have proper size */
-          if (last > h.asize())
-          { /* needs more space? */
-            /* fixed-size sets should have space preallocated */
-            assert GETARG_vB(i) == 0;
-            h.luaH_resizearray(L, last); /* preallocate it at once */
-          }
-          for (; n > 0; n--)
-          {
-            int val = ra + n;
-            TValue vv = getslot(L, val);
-            obj2arr(h, last - 1, vv);
-            last--;
-            assert novariant(h.tt) >= LUA_TSTRING;
-            luaC_barrierback(L, h, vv);
-          }
+          pc = op_setlist(L, ci, code, base, i, pc);
           break;
         }
         case OP_CLOSURE:
         {
-          int ra = base + GETARG_A(i);
-          Proto p = cl.p.p[GETARG_Bx(i)];
-          ci.savedpc = pc;
-          L.top = ci.top;
-          pushclosure(L, p, cl.upvals, base, ra);
-          if (L.l_G.GCdebt <= 0)
-          {
-            ci.savedpc = pc;
-            L.top = ra + 1;
-            luaC_step(L);
-            trap = ci.trap;
-          }
-          luai_threadyield(L);
+          op_closure(L, ci, cl, base, i, pc);
+          trap = ci.trap;
           break;
         }
         case OP_VARARG:
         {
-          int ra = base + GETARG_A(i);
-          int n = GETARG_C(i) - 1; /* required results (-1 means all) */
-          int vatab = GETARG_k(i) != 0 ? GETARG_B(i) : -1;
-          ci.savedpc = pc;
-          L.top = ci.top;
-          luaT_getvarargs(L, ci, ra, n, vatab);
+          op_vararg(L, ci, base, i, pc);
           trap = ci.trap;
           break;
         }
         case OP_GETVARG:
         {
-          int ra = base + GETARG_A(i);
-          int rc = base + GETARG_C(i);
-          luaT_getvararg(L, ci, ra, rc);
+          op_getvarg(L, ci, base, i);
           break;
         }
         case OP_ERRNNIL:
         {
-          int ra = base + GETARG_A(i);
-          if (!tagisempty(slottag(L, ra)))
-          {
-            ci.savedpc = pc;
-            L.top = ci.top;
-            luaG_errnnil(L, cl, GETARG_Bx(i));
-          }
+          op_errnnil(L, ci, cl, base, i, pc);
           break;
         }
         case OP_VARARGPREP:
