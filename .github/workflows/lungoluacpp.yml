@@ -2,7 +2,7 @@ name: lungoluacpp
 
 on:
   push:
-    branches: [lua-c++]
+    branches: ['lua-c\+\+']
     paths-ignore:
       - 'docs/**'
   workflow_dispatch:
