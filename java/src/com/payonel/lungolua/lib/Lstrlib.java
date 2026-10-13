@@ -16,6 +16,7 @@ import static com.payonel.lungolua.platform.LocaleUtil.*;
 import static com.payonel.lungolua.runtime.Lstate.*;
 
 import java.nio.ByteOrder;
+import java.util.OptionalLong;
 
 import com.payonel.lungolua.api.CClosureNamer;
 import com.payonel.lungolua.api.HostString;
@@ -228,12 +229,13 @@ public final class Lstrlib
   private static int repk(lua_State L, int status, long ctx)
   {
     luaL_Box box = (lua_touserobject(L, 4) instanceof luaL_Box x) ? x : null;
-    if (box == null || lua_type(L, 1) != LUA_TSTRING || !lua_isinteger(L, 2) ||
+    OptionalLong count = lua_tointegerx(L, 2);
+    if (box == null || lua_type(L, 1) != LUA_TSTRING || count.isEmpty() ||
         (!lua_isnil(L, 3) && lua_type(L, 3) != LUA_TSTRING))
       luaL_errori(L, Lt.invalid_state_of_a_stopped_call);
     long ls = lua_rawlen(L, 1);
     long lsep = lua_isnil(L, 3) ? 0 : lua_rawlen(L, 3);
-    long n = lua_tointeger(L, 2);
+    long n = count.getAsLong();
     if (n <= 0 || (ls | lsep) == 0 || rep_toolarge(ls, lsep, n) || box.used >= n * (ls + lsep) - lsep)
       luaL_errori(L, Lt.invalid_state_of_a_stopped_call);
     luaL_Buffer b = new luaL_Buffer();
