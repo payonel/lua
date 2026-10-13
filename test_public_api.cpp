@@ -3621,7 +3621,7 @@ static void test_auxlib_restored()
     CHECK(lua_type(L, -1) == LUA_TTABLE);
     CHECK(lua_rawlen(L, -1) == 0); /* pre-sized but empty */
     lua_pushnil(L);
-    CHECK(!lua_next(L, -2)); /* no entries registered */
+    CHECK(!lua_next(L, -2));     /* no entries registered */
     lua_pop(L, 1);
     luaL_newlib(L, mod);
     CHECK(lua_type(L, -1) == LUA_TTABLE);

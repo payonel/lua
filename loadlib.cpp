@@ -227,9 +227,9 @@ static int lookforfunc(lua_State* L, byte_view path, byte_view sym)
     addtoclib(L, path, reg);
   }
   if (loadlibonly)
-  {                        /* loading only library (no function)? */
+  {                           /* loading only library (no function)? */
     lua_pushboolean(L, true); /* return 'true' */
-    return 0;              /* no errors */
+    return 0;                 /* no errors */
   }
   else
   {
@@ -616,9 +616,9 @@ static int require_from(lua_State* L, int step, lua_Integer i)
       [[fallthrough]];
     case REQ_RESULT:
       if (lua_isnil(L, -1))
-      {                        /* module set no value? */
+      {                           /* module set no value? */
         lua_pushboolean(L, true); /* use true as result */
-        lua_copy(L, -1, -2);   /* replace loader result */
+        lua_copy(L, -1, -2);      /* replace loader result */
         lua_setfieldik(L, 2, name, reqctx(REQ_DONE, 0), ll_requirek); /* LOADED[name] = true */
       }
       [[fallthrough]];

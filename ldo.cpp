@@ -192,7 +192,7 @@ bool luaD_checkminstack(lua_State* L)
     return false; /* unable to allocate second ci */
   if (L->top + BASIC_STACK_SIZE <= L->stack_last)
     return true; /* enough (BASIC_STACK_SIZE) free slots in the Lua stack */
-  else        /* try to grow stack to a size with enough free slots */
+  else           /* try to grow stack to a size with enough free slots */
     return luaD_growstack(L, BASIC_STACK_SIZE, false);
 }
 
@@ -251,7 +251,7 @@ bool luaD_growstack(lua_State* L, int n, bool raiseerror)
     assert(stacksize(L) == ERRORSTACKSIZE);
     if (raiseerror)
       luaD_errerr(L); /* stack error inside message handler */
-    return false;         /* if not 'raiseerror', just signal it */
+    return false;     /* if not 'raiseerror', just signal it */
   }
   else if (n < MAXSTACK)
   {                                   /* avoids arithmetic overflows */
@@ -518,7 +518,7 @@ lua_State* luaD_budget(lua_State* L)
      C calls, as they are, so that where a stack overflow happens does not
      depend on where the budget runs out; see 'lua_budgetthread') */
   L->allowhook = false; /* no hooks inside */
-  L->errfunc = 0;   /* and no message handler: its errors are not for user code */
+  L->errfunc = 0;       /* and no message handler: its errors are not for user code */
   g->budgetL = L;
   g->budgetg = bg; /* (kept by the collector while the callback runs) */
   g->budgetnfz = L->nfz;

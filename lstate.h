@@ -306,7 +306,7 @@ struct lua_State : GCListed
   lua_State* frozenchild = nullptr; /* frozen while resuming this thread */
   lua_State* frozenparent = nullptr; /* the thread that resumed it, in a frozen chain */
   int nfz = 0;              /* number of calls in the stack that cannot freeze */
-  bool resumedk = false;     /* resumed by a call with a continuation */
+  bool resumedk = false;    /* resumed by a call with a continuation */
   BudgetGroup* bown = nullptr; /* the budget group it belongs to, if any */
   BudgetGroup* beff = nullptr; /* the budget group in effect while it runs */
   lu_byte frozen = 0;       /* frozen: how it was entered (FZ_*); 0: not */
@@ -612,10 +612,10 @@ struct global_State
   unsigned int nexthash = 0; /* the hash of the next object created */
   int gcparams[LUA_GCPN] = {};
   lu_byte currentwhite = 0;
-  lu_byte gcstate = 0;     /* state of garbage collector */
-  lu_byte gckind = 0;      /* kind of GC running */
+  lu_byte gcstate = 0;      /* state of garbage collector */
+  lu_byte gckind = 0;       /* kind of GC running */
   bool gcstopem = false;    /* stops emergency collections */
-  lu_byte gcstp = 0;       /* control whether GC is running */
+  lu_byte gcstp = 0;        /* control whether GC is running */
   bool gcemergency = false; /* true if this is an emergency collection */
   GCObject allgc{};      /* list of all collectable objects */
   GCObject* sweepgc = nullptr;  /* current position of sweep in list */

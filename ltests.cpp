@@ -1108,7 +1108,7 @@ static int gc_state(lua_State* L)
       luaL_error(L, HostString(lt::cannot_change_states_in_generational_mode));
     lua_lock(L);
     if (option < g->gcstate)
-    {                                   /* must cross 'pause'? */
+    {                                      /* must cross 'pause'? */
       luaC_runtilstate(L, GCSpause, true); /* run until pause */
     }
     luaC_runtilstate(L, option, false); /* do not skip propagation state */

@@ -910,7 +910,7 @@ static int sort_call(lua_State* L, bool fn, int a, int b)
     lua_callk(L, 2, 1, 0, sortk); /* call function */
   }
   bool res = lua_toboolean(L, -1); /* get result */
-  lua_pop(L, 1);                  /* pop result */
+  lua_pop(L, 1);                   /* pop result */
   return res;
 }
 

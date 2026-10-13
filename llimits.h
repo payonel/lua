@@ -129,12 +129,12 @@ static l_forceinline lua_Number luai_numpow(lua_State* L, lua_Number a, lua_Numb
 static l_forceinline lua_Number luai_numidiv(lua_State* L, lua_Number a, lua_Number b) { return floor(luai_numdiv(L, a, b)); }
 static l_forceinline lua_Number luai_numunm(lua_State* L, lua_Number a) { (void) L; return -a; }
 
-static l_forceinline int luai_numeq(lua_Number a, lua_Number b) { return a == b; }
-static l_forceinline int luai_numlt(lua_Number a, lua_Number b) { return a < b; }
-static l_forceinline int luai_numle(lua_Number a, lua_Number b) { return a <= b; }
-static l_forceinline int luai_numgt(lua_Number a, lua_Number b) { return a > b; }
-static l_forceinline int luai_numge(lua_Number a, lua_Number b) { return a >= b; }
-static l_forceinline int luai_numisnan(lua_Number a) { return !(a == a); }
+static l_forceinline bool luai_numeq(lua_Number a, lua_Number b) { return a == b; }
+static l_forceinline bool luai_numlt(lua_Number a, lua_Number b) { return a < b; }
+static l_forceinline bool luai_numle(lua_Number a, lua_Number b) { return a <= b; }
+static l_forceinline bool luai_numgt(lua_Number a, lua_Number b) { return a > b; }
+static l_forceinline bool luai_numge(lua_Number a, lua_Number b) { return a >= b; }
+static l_forceinline bool luai_numisnan(lua_Number a) { return !(a == a); }
 
 static l_forceinline lua_Number luai_nummod(lua_State* L, lua_Number a, lua_Number b)
 {

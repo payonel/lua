@@ -200,7 +200,7 @@ static lua_Number numarith(lua_State* L, int op, lua_Number v1,
 }
 
 bool luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
-                  TValue* res)
+                   TValue* res)
 {
   switch (op)
   {
@@ -329,8 +329,8 @@ static NumParse lua_strx2number(byte_view s, size_t off)
   int sigdig = 0;               /* number of significant digits */
   int nosigdig = 0;             /* number of non-significant digits */
   int e = 0;                    /* exponent correction */
-  bool neg;                      /* 1 if number is negative */
-  bool hasdot = false;               /* true after seen a dot */
+  bool neg;                     /* 1 if number is negative */
+  bool hasdot = false;          /* true after seen a dot */
   size_t p = off;
   size_t endpos = off;                /* nothing is valid yet */
   while (lisspace(sv_byteat(s, p)))

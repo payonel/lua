@@ -72,7 +72,7 @@ static bool checkbuffer(ZIO* z)
   if (z->pos == z->chunk.size())
   {                        /* no bytes in buffer? */
     if (luaZ_fill(z) == EOZ) /* try to read more */
-      return false;            /* no more input */
+      return false;        /* no more input */
     else
       z->pos--; /* luaZ_fill consumed first byte; put it back */
   }

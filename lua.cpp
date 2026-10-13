@@ -565,7 +565,7 @@ static bool pushline(lua_State* L, bool firstline)
   if (!ready)
   {
     lua_pop(L, 1); /* remove prompt */
-    return false;      /* no input */
+    return false;  /* no input */
   }
   lua_remove(L, -2); /* remove prompt */
   return true;

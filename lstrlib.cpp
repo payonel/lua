@@ -665,7 +665,7 @@ static bool match_class(int c, int cl)
 }
 
 static bool matchbracketclass(MatchState* ms, int c, ptrdiff_t p,
-                             ptrdiff_t ec)
+                              ptrdiff_t ec)
 {
   bool sig = true;
   if (patbyte(ms, p + 1) == '^')
@@ -694,7 +694,7 @@ static bool matchbracketclass(MatchState* ms, int c, ptrdiff_t p,
 }
 
 static bool singlematch(MatchState* ms, ptrdiff_t s, ptrdiff_t p,
-                       ptrdiff_t ep)
+                        ptrdiff_t ep)
 {
   if (s >= ms->src_end)
     return false;
@@ -1603,13 +1603,13 @@ static int gsubk(lua_State* L, int status, lua_KContext ctx);
 ** resulting in nil or false do not change the subject.)
 */
 static bool add_result(lua_State* L, luaL_Buffer* b, const InternalString* src,
-                      ptrdiff_t s, ptrdiff_t e)
+                       ptrdiff_t s, ptrdiff_t e)
 {
   if (!lua_toboolean(L, -1))
   {                /* nil or false? */
     lua_pop(L, 1); /* remove value */
     luaL_addlstring(b, src->view(), s, e - s); /* keep original text */
-    return false;                                  /* no changes */
+    return false;                              /* no changes */
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
   {
@@ -1619,7 +1619,7 @@ static bool add_result(lua_State* L, luaL_Buffer* b, const InternalString* src,
   else
   {
     luaL_addvalue(b); /* add result to accumulator */
-    return true;         /* something changed */
+    return true;      /* something changed */
   }
 }
 
@@ -1629,7 +1629,7 @@ static bool add_result(lua_State* L, luaL_Buffer* b, const InternalString* src,
 ** on with after a freeze. Return true if the original string was changed.
 */
 static bool add_value(MatchState* ms, luaL_Buffer* b, luaL_Box* box, ptrdiff_t s,
-                     ptrdiff_t e, int tr, lua_Integer n, bool changed)
+                      ptrdiff_t e, int tr, lua_Integer n, bool changed)
 {
   lua_State* L = ms->L;
   switch (tr)
@@ -1667,7 +1667,7 @@ static bool add_value(MatchState* ms, luaL_Buffer* b, luaL_Box* box, ptrdiff_t s
   default:
   {                     /* LUA_TNUMBER or LUA_TSTRING */
     add_s(ms, b, s, e); /* add value to the buffer */
-    return true;           /* something changed */
+    return true;        /* something changed */
   }
   }
   return add_result(L, b, ms->src, s, e);

@@ -1538,7 +1538,7 @@ void luaK_indexed(FuncState* fs, expdesc* t, expdesc* k)
       fillidxk(t, luaK_exp2anyreg(fs, k), VINDEXED); /* register */
   }
   t->ind.keystr = keystr; /* string index in 'k' */
-  t->ind.ro = false;          /* by default, not read-only */
+  t->ind.ro = false;      /* by default, not read-only */
 }
 
 /*
@@ -1579,11 +1579,11 @@ static bool validop(int op, TValue* v1, TValue* v2)
 ** (In this case, 'e1' has the final result.)
 */
 static bool constfolding(FuncState* fs, int op, expdesc* e1,
-                        const expdesc* e2)
+                         const expdesc* e2)
 {
   TValue v1, v2, res;
   if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(op, &v1, &v2))
-    return false;                                   /* non-numeric operands or not safe to fold */
+    return false;                               /* non-numeric operands or not safe to fold */
   luaO_rawarith(fs->ls->L, op, &v1, &v2, &res); /* does operation */
   if (ttisinteger(&res))
   {
@@ -1710,7 +1710,7 @@ static void codebinK(FuncState* fs, BinOpr opr,
 ** For the metamethod, 2nd operand must keep its original value.
 */
 static bool finishbinexpneg(FuncState* fs, expdesc* e1, expdesc* e2,
-                           OpCode op, int line, TMS event)
+                            OpCode op, int line, TMS event)
 {
   if (!isKint(e2))
     return false; /* not an integer constant */
@@ -2062,7 +2062,7 @@ void luaK_posfix(FuncState* fs, BinOpr opr,
   {
     if (isSCint(e2))
       codebini(fs, OP_SHRI, e1, e2, false, line, TM_SHR); /* r1 >> I */
-    else                                              /* regular case (two registers) */
+    else                                                  /* regular case (two registers) */
       codebinexpval(fs, opr, e1, e2, line);
     break;
   }
@@ -2179,7 +2179,7 @@ void luaK_finish(FuncState* fs)
     case OP_TAILCALL:
     {
       if (fs->needclose)
-        p->code[i] = SETARG_k(p->code[i], true);                /* signal that it needs to close */
+        p->code[i] = SETARG_k(p->code[i], true);             /* signal that it needs to close */
       if (p->flag & PF_VAHID)            /* does it use hidden arguments? */
         p->code[i] = SETARG_C(p->code[i], p->numparams + 1); /* signal that */
       break;
@@ -2193,7 +2193,7 @@ void luaK_finish(FuncState* fs)
     case OP_VARARG:
     {
       if (p->flag & PF_VATAB) /* function has a vararg table? */
-        p->code[i] = SETARG_k(p->code[i], true);     /* must get vararg there */
+        p->code[i] = SETARG_k(p->code[i], true);  /* must get vararg there */
       break;
     }
     case OP_JMP:
