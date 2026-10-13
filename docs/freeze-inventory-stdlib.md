@@ -9,7 +9,7 @@ Branch lua-c++ at 963b6f8d. Read-only audit; nothing built or modified.
 - luaL_tolstring has none (it calls `luaL_toistringk(..., nullptr)`, a plain call). The k form is internal `luaL_toistringk(L, idx, ctx, k)` plus `luaL_tostringresult`.
 - luaL_len has none public. Internal `luaL_lenk` + `luaL_lenresult` exist.
 - luaL_callmeta and luaL_getmetafield: callmeta has none (plain lua_call); getmetafield is a raw get (no user code).
-- Engine-side "cannot freeze" guard: a plain call (k == nullptr in lua_callk / lua_pcallk, a metamethod run from an API call without continuation, lua_closethread / lua_closeslot, hooks, the message handler's own call) does `L->nfz++`. `lua_freeze` then returns false ("a call that cannot freeze is in the way"). So a NOT READY row below means "refuses the freeze, does not corrupt"; it is not an unsafe unwind.
+- Engine-side "cannot freeze" guard: a plain call (k == nullptr in lua_callk / lua_pcallk, a metamethod run from an API call without continuation, lua_closethread / lua_closeslot, hooks, the message handler's own call) does `L->nfz++`. A `lua_freeze` from the budget callback there does not freeze: the whole budgeted chain is destroyed (`luaD_budget` -> `killchain`, error "cannot freeze"; its threads are dead, and the call that resumed or called the chain's top fails with the error). A callback that should go on checks `lua_nofreeze` (or `debug.canfreeze`) first. So a NOT READY row below means "a freeze there destroys the chain, it does not corrupt"; it is not an unsafe unwind.
 - `luaE_freezeonly(L)` (CIST_FZONLY): the function uses k variants, but what it calls stays non-yieldable (as stock Lua) and can only freeze. State is in the stack, in `ctx`, or in a `luaL_Box` userdata.
 
 ## Cross-cutting paths that are engine code (no per-function rows)
@@ -20,7 +20,7 @@ Branch lua-c++ at 963b6f8d. Read-only audit; nothing built or modified.
 
 ## Table (grouped by file)
 
-Status: READY = continuation set before the user-code call. NOT READY = plain call / no continuation (engine refuses a freeze through it). UNCLEAR = see note.
+Status: READY = continuation set before the user-code call. NOT READY = plain call / no continuation (a freeze through it destroys the chain). UNCLEAR = see note.
 
 ### lbaselib.cpp
 
@@ -198,4 +198,4 @@ NOT READY, by whether a guest script can reach it:
 - Guest-reachable, user code runs with no continuation: B6 `load` with a reader function (lbaselib.cpp:455); C4 `coroutine.close` (lcorolib.cpp:226) and C5 (:251); C3 `coroutine.wrap` function's error path (lcorolib.cpp:107); D1 debug hooks (ldblib.cpp:383, engine refuses to freeze in hooks by design); M1 `math.min` (lmathlib.cpp:249) and M2 `math.max` (:264) with `__lt`; O3 `os.exit(code, true)` (loslib.cpp:427, terminal).
 - Not reachable from a script (no library caller): A1 plain `luaL_toistring` / `luaL_tolstring`, A2 `luaL_len`, A3 `luaL_callmeta`, A4 `luaL_requiref` (init only), A5 `luaL_dofile` / `luaL_dostring`.
 
-The engine's own guard (`nfz`) makes every NOT READY row safe: `lua_freeze` returns false while any of them is on the stack, so a freeze requested in a budget callback is refused rather than the C stack being lost.
+The engine's own guard (`nfz`) makes every NOT READY row safe: while any of them is on the stack, a `lua_freeze` from the budget callback destroys the chain instead of freezing (`killchain`), so the C stack is never lost; `lua_nofreeze` tells the callback beforehand.
