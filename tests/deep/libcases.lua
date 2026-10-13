@@ -95,6 +95,12 @@ case("rep of long results", function(busy)
           b == string.rep("abc, ", 99999) .. "abc", #c, c:sub(300000, 300003), c:sub(-2),
           #d, d == string.rep("--", 149999) .. "-", string.rep(u, 1) == u}
 end)
+case("rep of long results, with counts that are a float and a string", function(busy)
+  busy()
+  local a = string.rep("a", 2^19)
+  local b = string.rep("bc", "200000", "-")
+  return {#a, a:sub(-2), #b, b:sub(-4)}
+end)
 case("upper, lower, reverse and format of long strings", function(busy)
   busy()
   local s = string.rep("aB\n\"\\\1z\200", 40000)

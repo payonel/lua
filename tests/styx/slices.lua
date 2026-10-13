@@ -133,6 +133,8 @@ local inputs = {
   {uoff, "a" .. string.rep("\x80", M), {1}, 1},
   {tonum, string.rep("1", M), {tonumber(string.rep("1", M), 10)}, 1},
   {upper, string.rep("p", M), {M, "PP"}},
+  {function(s) return #string.rep(s, 2.0 ^ 21) end, "q", {1 << 21}},
+  {function(s) return #string.rep(s, "2097152", ",") end, "q", {(1 << 22) - 1}},
 }
 for k, c in ipairs(inputs) do
   local work, arg, expected, int, msg = c[1], c[2], c[3], c[4], c[5]

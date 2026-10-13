@@ -897,6 +897,8 @@ do
     {string.rep, function() local s = string.rep("x", M) return #s, s == string.rep("xxxxxxxx", M // 8) end},
     {string.rep, function() local s = string.rep("ab", M // 3, ",") return #s, s:sub(-5), s:sub(M // 2, M // 2 + 4) end},
     {string.rep, function() local s = string.rep(string.rep("q", M // 2) .. "!", 2, "--") return #s, s:sub(M // 2 - 1, M // 2 + 5) end},
+    {string.rep, function() local s = string.rep("x", 2.0 ^ 21) return #s, s:sub(-3) end},
+    {string.rep, function() local s = string.rep("yz", "1048576", ",") return #s, s:sub(-3) end},
     {string.upper, function() local s = big:upper() return #s, s:sub(1, 20), s:sub(-20) end},
     {string.lower, function() local s = big:lower() return #s, s:sub(1, 20), s:sub(-20) end},
     {string.reverse, function() local s = big:reverse() return #s, s:sub(1, 20), s:sub(M // 2, M // 2 + 9) end},

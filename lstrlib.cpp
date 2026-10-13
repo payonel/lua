@@ -200,12 +200,13 @@ static int repk(lua_State* L, int status, lua_KContext ctx)
   (void)status;
   (void)ctx;
   luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, 4));
-  if (box == nullptr || lua_type(L, 1) != LUA_TSTRING || !lua_isinteger(L, 2) ||
+  std::optional<lua_Integer> count = lua_tointegerx(L, 2);
+  if (box == nullptr || lua_type(L, 1) != LUA_TSTRING || !count ||
       (!lua_isnil(L, 3) && lua_type(L, 3) != LUA_TSTRING))
     luaL_errori(L, lt::invalid_state_of_a_stopped_call);
   size_t ls = lua_rawlen(L, 1);
   size_t lsep = lua_isnil(L, 3) ? 0 : lua_rawlen(L, 3);
-  lua_Integer n = lua_tointeger(L, 2);
+  lua_Integer n = *count;
   if (n <= 0 || (ls | lsep) == 0 || rep_toolarge(ls, lsep, n) || box->used >= (size_t)n * (ls + lsep) - lsep)
     luaL_errori(L, lt::invalid_state_of_a_stopped_call);
   luaL_Buffer b;
