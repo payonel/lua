@@ -149,6 +149,71 @@ static int str_upper(lua_State* L)
 ** MAX_SIZE is limited both by size_t and lua_Integer.
 ** When x <= MAX_SIZE, x can be safely cast to size_t or lua_Integer.
 */
+static int str_rep_fill(lua_State* L, luaL_Buffer* b, size_t pos);
+
+static bool rep_toolarge(size_t ls, size_t lsep, lua_Integer n)
+{
+  return ls > MAX_SIZE - lsep || (lua_Integer)(ls + lsep) > ((lua_Integer)MAX_SIZE) / n;
+}
+
+static int repk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, 4));
+  if (box == nullptr || lua_type(L, 1) != LUA_TSTRING || !lua_isinteger(L, 2) ||
+      (!lua_isnil(L, 3) && lua_type(L, 3) != LUA_TSTRING))
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
+  size_t ls = lua_rawlen(L, 1);
+  size_t lsep = lua_isnil(L, 3) ? 0 : lua_rawlen(L, 3);
+  lua_Integer n = lua_tointeger(L, 2);
+  if (n <= 0 || (ls | lsep) == 0 || rep_toolarge(ls, lsep, n) || box->used >= (size_t)n * (ls + lsep) - lsep)
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  luaL_buffload(&b, box);
+  return str_rep_fill(L, &b, b.used);
+}
+
+static KNamer knamer_repk("string.repk", repk);
+
+static int str_rep_fill(lua_State* L, luaL_Buffer* b, size_t pos)
+{
+  byte_view sv = luaL_checkistring(L, 1)->view();
+  lua_Integer n = luaL_checkinteger(L, 2);
+  byte_view sepsv = luaL_optistring(L, 3, &lt::empty_str_i)->view();
+  size_t unit = sv.size() + sepsv.size();
+  size_t totallen = ((size_t)n * unit) - sepsv.size();
+  luaL_prepbuffsize(b, totallen - pos);
+  while (pos < totallen)
+  {
+    byte_span p = luaL_buffaddr(b);
+    size_t k;
+    if (pos < sv.size())
+    {
+      k = std::min(sv.size() - pos, LUAL_SLICE);
+      p.copy_from(sv.substr(pos, k), pos);
+    }
+    else if (pos < unit)
+    {
+      k = std::min(unit - pos, LUAL_SLICE);
+      p.copy_from(sepsv.substr(pos - sv.size(), k), pos);
+    }
+    else
+    {
+      size_t d = pos - pos % unit;
+      k = std::min(std::min(d, totallen - pos), LUAL_SLICE);
+      p.copy_from(p.view().substr(pos - d, k), pos);
+    }
+    pos += k;
+    luaL_addsize(b, k);
+    if (totallen > LUAL_SLICE && luaL_slicespent(L, k) && pos < totallen)
+      luaL_slicepoint(L, b, 4, (lua_KContext)pos, repk);
+  }
+  luaL_pushresult(b);
+  return 1;
+}
+
 static int str_rep(lua_State* L)
 {
   const InternalString* s = luaL_checkistring(L, 1);
@@ -160,29 +225,16 @@ static int str_rep(lua_State* L)
   {
     lua_pushistringref(L, lt::empty_str); /* no repetitions or both strings empty */
   }
-  else if (l_unlikely(sv.size() > MAX_SIZE - sepsv.size() || (lua_Integer)(sv.size() + sepsv.size()) > ((lua_Integer)MAX_SIZE) / n))
+  else if (l_unlikely(rep_toolarge(sv.size(), sepsv.size(), n)))
   {
     return luaL_errori(L, lt::resulting_string_too_large);
   }
   else
   {
-    size_t totallen = ((size_t)n * (sv.size() + sepsv.size())) - sepsv.size();
+    lua_settop(L, 3);
     luaL_Buffer b;
-    size_t off = luaL_buffinitsize(L, &b, totallen);
-    byte_span p = byte_span(luaL_buffaddr(&b));
-    size_t pos = off;
-    while (n-- > 1)
-    { /* first n-1 copies (followed by separator) */
-      p.copy_from(sv, pos);
-      pos += sv.size();
-      if (sepsv.size() > 0)
-      { /* empty 'memcpy' is not that cheap */
-        p.copy_from(sepsv, pos);
-        pos += sepsv.size();
-      }
-    }
-    p.copy_from(sv, pos); /* last copy without separator */
-    luaL_pushresultsize(&b, totallen);
+    luaL_buffinit(L, &b);
+    return str_rep_fill(L, &b, 0);
   }
   return 1;
 }

@@ -84,6 +84,17 @@ case("string arithmetic, the other operand's metamethod", function(busy)
                __idiv = function(a, b) busy() return "idiv" end}
   return {"10" + o, "3" // o, pcall(function() return "x" * {} end)}
 end)
+case("rep of long results", function(busy)
+  busy()
+  local a = string.rep("x", 600000)
+  local b = string.rep("abc", 100000, ", ")
+  local u = string.rep("y", 300000) .. "z"
+  local c = string.rep(u, 2, "|")
+  local d = string.rep("", 300000, "-")
+  return {#a, a == string.rep(string.rep("x", 600), 1000), #b, b:sub(262140, 262150),
+          b == string.rep("abc, ", 99999) .. "abc", #c, c:sub(300000, 300003), c:sub(-2),
+          #d, d == string.rep("--", 149999) .. "-", string.rep(u, 1) == u}
+end)
 
 -- the table library
 
