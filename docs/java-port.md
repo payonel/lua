@@ -331,7 +331,7 @@ or a manual run from the Actions tab, runs `.github/workflows/lungolua.yml`: it 
 `build/lungolua.jar` and `build/lungolua-sources.jar` (`make -C java
 build/lungolua-sources.jar`: the engine's sources, without the tests) with
 Temurin 25, runs the jar once, and publishes both to GitHub Packages as
-`com.payonel:lungolua:1.0.0-<the commit's first 8 hex digits>`, with
+`com.payonel:lungolua:1.0.<the branch's commit count>-<the commit's first 8 hex digits>`, with
 `lungolua-tests.jar` (the test library and the test scripts) as
 `com.payonel:lungolua-tests` of the same version, with the workflow's own
 token. GitHub Packages asks for a login even to read: a
