@@ -895,7 +895,7 @@ public final class Lobject
   }
 
   public static boolean luaO_rawarith(lua_State L, int op, TValue p1, TValue p2,
-                                  TValue res)
+                                      TValue res)
   {
     switch (op)
     {
@@ -1042,8 +1042,8 @@ public final class Lobject
     int sigdig = 0;               /* number of significant digits */
     int nosigdig = 0;             /* number of non-significant digits */
     int e = 0;                    /* exponent correction */
-    boolean neg;                      /* 1 if number is negative */
-    boolean hasdot = false;               /* true after seen a dot */
+    boolean neg;                  /* 1 if number is negative */
+    boolean hasdot = false;       /* true after seen a dot */
     int p = off;
     int endpos = off;                /* nothing is valid yet */
     while (lisspace(sv_byteat(s, p)))

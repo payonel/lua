@@ -591,7 +591,7 @@ public final class Lua
     if (!ready)
     {
       lua_pop(L, 1); /* remove prompt */
-      return false;      /* no input */
+      return false;  /* no input */
     }
     lua_remove(L, -2); /* remove prompt */
     return true;
@@ -754,7 +754,7 @@ public final class Lua
     lua_gc(L, LUA_GCGEN, 0, 0, 0);                  /* ...in generational mode */
     if (handle_luainit(L) != LUA_OK)       /* run LUA_INIT */
       return 0;                            /* error running LUA_INIT */
-    if (!runargs(L, argv, optlim))     /* execute arguments -e, -l, and -W */
+    if (!runargs(L, argv, optlim))         /* execute arguments -e, -l, and -W */
       return 0;                            /* something failed */
     if (script[0] > 0)
     { /* execute main script (if there is one) */

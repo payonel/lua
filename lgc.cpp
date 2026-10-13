@@ -579,7 +579,7 @@ static void traverseweakvalue(global_State* g, Table* h)
       assert(!keyisnil(n));
       markkey(g, n);
       if (!hasclears && iscleared(g, gcvalueN(&n->val))) /* a white value? */
-        hasclears = true;                                   /* table will have to be cleared */
+        hasclears = true;                                /* table will have to be cleared */
     }
   }
   if (g->gcstate == GCSpropagate)
@@ -641,7 +641,7 @@ static bool traverseephemeron(global_State* g, Table* h, bool inv)
       clearkey(n);        /* clear its key */
     else if (iscleared(g, gckeyN(n)))
     {                          /* key is not marked (yet)? */
-      hasclears = true;           /* table must be cleared */
+      hasclears = true;        /* table must be cleared */
       if (iscollectable(&n->val) && iswhite(gcvalue(&n->val)))
       {           /* value not marked yet? */
         hasww = true; /* white-white entry */
@@ -1260,7 +1260,7 @@ static void GCTM(lua_State* L)
     lu_byte oldgcstp = g->gcstp;
     BudgetGroup* oldbeff = L->beff;
     g->gcstp |= GCSTPGC;           /* avoid GC steps */
-    L->allowhook = false;              /* stop debug hooks during GC metamethod */
+    L->allowhook = false;          /* stop debug hooks during GC metamethod */
     if (oldbeff != nullptr)
       luaE_setbeff(L, nullptr);    /* the budget is lifted */
     setslot(L, L->top++, tm);   /* push finalizer... */
@@ -2096,7 +2096,7 @@ static void entergen(lua_State* L, global_State* g)
 {
   luaC_runtilstate(L, GCSpause, true);     /* prepare to start a new cycle */
   luaC_runtilstate(L, GCSpropagate, true); /* start new cycle */
-  atomic(L);                            /* propagates all and then do the atomic stuff */
+  atomic(L);                               /* propagates all and then do the atomic stuff */
   atomic2gen(L, g);
   setminordebt(g); /* set debt assuming next cycle will be minor */
 }
@@ -2154,7 +2154,7 @@ static bool checkmajorminor(lua_State* L, global_State* g)
     }
   }
   g->GCmajorminor = g->GCmarked; /* prepare for next collection */
-  return false;                      /* stay doing incremental collections */
+  return false;                  /* stay doing incremental collections */
 }
 
 /* }====================================================== */
@@ -2250,8 +2250,8 @@ static void atomic(lua_State* L)
   origweak = g->weak.gclist;
   origall = g->allweak.gclist;
   separatetobefnz(g, false); /* separate objects to be finalized */
-  markbeingfnz(g);       /* mark objects that will be finalized */
-  propagateall(g);       /* remark, to propagate 'resurrection' */
+  markbeingfnz(g);           /* mark objects that will be finalized */
+  propagateall(g);           /* remark, to propagate 'resurrection' */
   convergeephemerons(g);
   markgroupqueues(g);    /* the queues again, with those that died now */
   releasequeues(g);      /* and those of the groups that are not alive */
@@ -2308,7 +2308,7 @@ static l_mem singlestep(lua_State* L, bool fast)
   global_State* g = L->l_G;
   l_mem stepresult;
   assert(!g->gcstopem); /* collector is not reentrant */
-  g->gcstopem = true;          /* no emergency collections while collecting */
+  g->gcstopem = true;       /* no emergency collections while collecting */
   switch (g->gcstate)
   {
   case GCSpause:
@@ -2371,7 +2371,7 @@ static l_mem singlestep(lua_State* L, bool fast)
     if (g->tobefnz.next && !g->gcemergency && luaD_checkminstack(L))
     {
       g->gcstopem = false; /* ok collections during finalizers */
-      GCTM(L);         /* call one finalizer */
+      GCTM(L);             /* call one finalizer */
       stepresult = CWUFIN;
     }
     else
@@ -2491,7 +2491,7 @@ void luaC_fullgc(lua_State* L, bool isemergency)
 {
   global_State* g = L->l_G;
   assert(!g->gcemergency);
-  g->gcemergency = isemergency; /* set flag */
+  g->gcemergency = isemergency;          /* set flag */
   switch (g->gckind)
   {
   case KGC_GENMINOR:
@@ -2525,8 +2525,8 @@ void luaC_fullgcdue(lua_State* L)
   bool gen = (g->gckind != KGC_INC);
   if (g->gckind == KGC_GENMINOR)
     minor2inc(L, g, KGC_INC);
-  g->gckind = KGC_INC; /* (the cycle runs whole: see 'checkmajorminor') */
-  g->gcemergency = true;  /* (a cycle under way finishes calling none) */
+  g->gckind = KGC_INC;   /* (the cycle runs whole: see 'checkmajorminor') */
+  g->gcemergency = true; /* (a cycle under way finishes calling none) */
   if (keepinvariant(g))
     entersweep(L);
   luaC_runtilstate(L, GCSpause, true);

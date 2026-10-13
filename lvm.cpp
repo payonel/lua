@@ -107,7 +107,7 @@ bool luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode)
   if (n != f)
   { /* not an integral value? */
     if (mode == F2Ieq)
-      return false;               /* fails if mode demands integral value */
+      return false;           /* fails if mode demands integral value */
     else if (mode == F2Iceil) /* needs ceiling? */
       f += 1;                 /* convert floor to ceiling (remember: n != f) */
   }
@@ -160,7 +160,7 @@ bool luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode)
 ** an initial value equal to LUA_MININTEGER.)
 */
 static bool forlimit(lua_State* L, lua_Integer init, StkId limslot,
-                    IntResult* p, lua_Integer step)
+                     IntResult* p, lua_Integer step)
 {
   TValue limv = getslot(L, limslot);
   const TValue* lim = &limv;
@@ -174,13 +174,13 @@ static bool forlimit(lua_State* L, lua_Integer init, StkId limslot,
     if (0 < flim.v)
     { /* if it is positive, it is too large */
       if (step < 0)
-        return true;          /* initial value must be less than it */
+        return true;       /* initial value must be less than it */
       p->v = LUA_MAXINTEGER; /* truncate */
     }
     else
     { /* it is less than min integer */
       if (step > 0)
-        return true;          /* initial value must be greater than it */
+        return true;       /* initial value must be greater than it */
       p->v = LUA_MININTEGER; /* truncate */
     }
   }
@@ -278,7 +278,7 @@ static bool floatforloop(lua_State* L, StkId ra)
                           : (limit <= idx))
   {
     chgslotflt(L, ra + 2, idx); /* update control variable */
-    return true;                      /* jump back */
+    return true;                   /* jump back */
   }
   else
     return false; /* finish the loop */
@@ -730,7 +730,7 @@ bool luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       return (gcvalue(t1) == gcvalue(t2));
     }
     if (tm == nullptr) /* no TM? */
-      return false;     /* objects are different */
+      return false; /* objects are different */
     else
     {
       int tag = luaT_callTMres(L, tm, t1, t2, L->top); /* call TM */

@@ -49,7 +49,7 @@ public final class lua_State extends GCListed
   public lua_State frozenchild = null;  /* frozen while resuming this thread */
   public lua_State frozenparent = null; /* the thread that resumed it, in a frozen chain */
   public int nfz = 0;                   /* number of calls in the stack that cannot freeze */
-  public boolean resumedk = false;             /* resumed by a call with a continuation */
+  public boolean resumedk = false;      /* resumed by a call with a continuation */
   public BudgetGroup bown = null;       /* the budget group it belongs to, if any */
   public BudgetGroup beff = null;       /* the budget group in effect while it runs */
   public byte frozen = 0;               /* frozen: how it was entered (FZ_*); 0: not */

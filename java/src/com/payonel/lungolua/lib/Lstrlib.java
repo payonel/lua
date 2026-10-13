@@ -758,16 +758,16 @@ public final class Lstrlib
     boolean res;
     int lower = locale_tolower(cl);
     if (lower == 'z')
-      res = c == 0; /* deprecated option */
+      res = (c == 0); /* deprecated option */
     else
       res = locale_matchclass(c, lower);
     if (!res && lower == cl)
-      return cl == c; /* not a known class and lowercase — literal match */
+      return (cl == c); /* not a known class and lowercase — literal match */
     return (locale_islower(cl) ? res : !res);
   }
 
   private static boolean matchbracketclass(MatchState ms, int c, int p,
-                                       int ec)
+                                           int ec)
   {
     boolean sig = true;
     if (patbyte(ms, p + 1) == '^')
@@ -796,7 +796,7 @@ public final class Lstrlib
   }
 
   private static boolean singlematch(MatchState ms, int s, int p,
-                                 int ep)
+                                     int ep)
   {
     if (s >= ms.src_end)
       return false;
@@ -812,7 +812,7 @@ public final class Lstrlib
       case '[':
         return matchbracketclass(ms, c, p, ep - 1);
       default:
-        return patbyte(ms, p) == c;
+        return (patbyte(ms, p) == c);
       }
     }
   }
@@ -1714,13 +1714,13 @@ public final class Lstrlib
   ** resulting in nil or false do not change the subject.)
   */
   private static boolean add_result(lua_State L, luaL_Buffer b, InternalString src,
-                                int s, int e)
+                                    int s, int e)
   {
     if (!lua_toboolean(L, -1))
     {                /* nil or false? */
       lua_pop(L, 1); /* remove value */
       luaL_addlstring(b, src.view(), s, e - s); /* keep original text */
-      return false;                                 /* no changes */
+      return false;                             /* no changes */
     }
     else if (!lua_isstring(L, -1))
     {
@@ -1730,7 +1730,7 @@ public final class Lstrlib
     else
     {
       luaL_addvalue(b); /* add result to accumulator */
-      return true;         /* something changed */
+      return true;      /* something changed */
     }
   }
 
@@ -1740,7 +1740,7 @@ public final class Lstrlib
   ** on with after a freeze. Return true if the original string was changed.
   */
   private static boolean add_value(MatchState ms, luaL_Buffer b, luaL_Box box, int s,
-                               int e, int tr, long n, boolean changed)
+                                   int e, int tr, long n, boolean changed)
   {
     lua_State L = ms.L;
     switch (tr)
@@ -1778,7 +1778,7 @@ public final class Lstrlib
     default:
     {                     /* LUA_TNUMBER or LUA_TSTRING */
       add_s(ms, b, s, e); /* add value to the buffer */
-      return true;           /* something changed */
+      return true;        /* something changed */
     }
     }
     return add_result(L, b, ms.src, s, e);
@@ -1787,7 +1787,7 @@ public final class Lstrlib
   private static int gsub_end(lua_State L, GsubArgs a, MatchState ms, luaL_Buffer b,
                               int src, long n, boolean changed)
   {
-    if (!changed)      /* no changes? */
+    if (!changed)          /* no changes? */
       lua_pushvalue(L, 1); /* return original string */
     else
     { /* something changed */
@@ -2830,7 +2830,7 @@ public final class Lstrlib
 
   private static long getnum(Header h, long df)
   {
-    if (!digit(fmtbyte(h))) /* no number? */
+    if (!digit(fmtbyte(h)))     /* no number? */
       return df;                /* return default value */
     else
     {

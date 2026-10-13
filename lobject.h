@@ -462,7 +462,7 @@ typedef l_uint32 Instruction;
 struct Upvaldesc
 {
   TString* name;   /* upvalue name (for debug information) */
-  bool instack; /* whether it is in stack (register) */
+  bool instack;    /* whether it is in stack (register) */
   int idx;     /* index of upvalue (in stack or in outer function's list) */
   lu_byte kind;    /* kind of corresponding variable */
 };

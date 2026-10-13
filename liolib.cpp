@@ -335,14 +335,14 @@ static int io_lines(lua_State* L)
     lua_getfieldi(L, LUA_REGISTRYINDEX, lt::_IO_input); /* get default input */
     lua_replace(L, 1);                            /* put it at index 1 */
     tofile(L);                                    /* check that it's a valid file handle */
-    toclose = false;                                  /* do not close it after iteration */
+    toclose = false;                              /* do not close it after iteration */
   }
   else
   { /* open a new file */
     byte_view filename = luaL_checkistring(L, 1)->view();
     opencheck(L, filename, lt::r_mode);
     lua_replace(L, 1); /* put file at index 1 */
-    toclose = true;       /* close it after iteration */
+    toclose = true;    /* close it after iteration */
   }
   aux_lines(L, toclose); /* push iteration function */
   if (toclose)
@@ -382,7 +382,7 @@ static bool nextc(RN* rn)
   if (l_unlikely(rn->n >= L_MAXLENNUM))
   {                     /* buffer overflow? */
     rn->buff[0] = '\0'; /* invalidate result */
-    return false;           /* fail */
+    return false;       /* fail */
   }
   else
   {
@@ -459,7 +459,7 @@ static bool read_number(lua_State* L, OsFile* f)
   else
   {                 /* invalid format */
     lua_pushnil(L); /* "result" to be removed */
-    return false;       /* read fails */
+    return false;   /* read fails */
   }
 }
 
@@ -565,7 +565,7 @@ static int g_read(lua_State* L, OsFile* f, int first)
           break;
         case 'a':         /* file */
           read_all(L, f); /* read entire file */
-          success = true;    /* always success */
+          success = true; /* always success */
           break;
         default:
           return luaL_argerrori(L, n, lt::invalid_format);

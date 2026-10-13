@@ -124,7 +124,7 @@ public final class LuaAuxLib
   private static boolean findfield(lua_State L, int objidx, int level)
   {
     if (level == 0 || !lua_istable(L, -1))
-      return false;     /* not found */
+      return false; /* not found */
     lua_pushnil(L); /* start 'next' loop */
     while (lua_next(L, -2))
     { /* for each pair in table */
@@ -466,7 +466,7 @@ public final class LuaAuxLib
   public static boolean luaL_newmetatablei(lua_State L, ByteView tname)
   {
     if (luaL_getmetatablei(L, tname) != LUA_TNIL) /* name already in use? */
-      return false;                                  /* leave previous value on top, but return 0 */
+      return false;                              /* leave previous value on top, but return 0 */
     lua_pop(L, 1);
     lua_createtable(L, 0, 2);
     lua_pushlstring(L, tname, 0, tname.size());
@@ -1487,7 +1487,7 @@ public final class LuaAuxLib
       lua_newtable(L);
       lua_pushvalue(L, -1);        /* copy to be left at top */
       lua_setfieldi(L, idx, fname); /* assign new table to field */
-      return false;                    /* false, because did not find table there */
+      return false;                /* false, because did not find table there */
     }
   }
 
@@ -1793,7 +1793,7 @@ public final class LuaAuxLib
         lua_setwarnf(L, warnfoff); /* turn warnings off */
       else if (tail.equals(Lt.on_2))
         lua_setwarnf(L, warnfon); /* turn warnings on */
-      return true;                      /* it was a control message */
+      return true;                   /* it was a control message */
     }
   }
 

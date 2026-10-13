@@ -217,7 +217,7 @@ public final class Lvm
     {
       assert ttisstring(obj);
       TString st = tsvalue(obj);
-      return luaO_str2num(st.data.view(), result) == st.data.size() + 1;
+      return (luaO_str2num(st.data.view(), result) == st.data.size() + 1);
     }
   }
 
@@ -253,7 +253,7 @@ public final class Lvm
     if (n != f)
     { /* not an integral value? */
       if (mode == F2Ieq)
-        return false;               /* fails if mode demands integral value */
+        return false;           /* fails if mode demands integral value */
       else if (mode == F2Iceil) /* needs ceiling? */
         f += 1;                 /* convert floor to ceiling (remember: n != f) */
     }
@@ -306,7 +306,7 @@ public final class Lvm
   ** an initial value equal to LUA_MININTEGER.)
   */
   private static boolean forlimit(lua_State L, long init, int limslot,
-                              IntResult p, long step)
+                                  IntResult p, long step)
   {
     TValue limv = getslot(L, limslot);
     TValue lim = limv;
@@ -320,17 +320,17 @@ public final class Lvm
       if (0 < flim.v)
       { /* if it is positive, it is too large */
         if (step < 0)
-          return true;          /* initial value must be less than it */
+          return true;       /* initial value must be less than it */
         p.v = LUA_MAXINTEGER; /* truncate */
       }
       else
       { /* it is less than min integer */
         if (step > 0)
-          return true;          /* initial value must be greater than it */
+          return true;       /* initial value must be greater than it */
         p.v = LUA_MININTEGER; /* truncate */
       }
     }
-    return step > 0 ? init > p.v : init < p.v; /* not to run? */
+    return (step > 0 ? init > p.v : init < p.v); /* not to run? */
   }
 
   /*
@@ -424,7 +424,7 @@ public final class Lvm
                             : (limit <= idx))
     {
       chgslotflt(L, ra + 2, idx); /* update control variable */
-      return true;                      /* jump back */
+      return true;                   /* jump back */
     }
     else
       return false; /* finish the loop */
@@ -588,10 +588,10 @@ public final class Lvm
     else
     { /* i < f <=> i < ceil(f) */
       IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Iceil)) /* fi = ceil(f) */
-        return i < fi.v;                /* compare them as integers */
+      if (luaV_flttointeger(f, fi, F2Iceil))      /* fi = ceil(f) */
+        return i < fi.v;                          /* compare them as integers */
       else                                        /* 'f' is either greater or less than all integers */
-        return f > 0;                   /* greater? */
+        return f > 0;                             /* greater? */
     }
   }
 
@@ -606,10 +606,10 @@ public final class Lvm
     else
     { /* i <= f <=> i <= floor(f) */
       IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Ifloor)) /* fi = floor(f) */
-        return i <= fi.v;                /* compare them as integers */
+      if (luaV_flttointeger(f, fi, F2Ifloor))      /* fi = floor(f) */
+        return i <= fi.v;                          /* compare them as integers */
       else                                         /* 'f' is either greater or less than all integers */
-        return f > 0;                    /* greater? */
+        return f > 0;                              /* greater? */
     }
   }
 
@@ -624,10 +624,10 @@ public final class Lvm
     else
     { /* f < i <=> floor(f) < i */
       IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Ifloor)) /* fi = floor(f) */
-        return fi.v < i;                 /* compare them as integers */
+      if (luaV_flttointeger(f, fi, F2Ifloor))      /* fi = floor(f) */
+        return fi.v < i;                           /* compare them as integers */
       else                                         /* 'f' is either greater or less than all integers */
-        return f < 0;                    /* less? */
+        return f < 0;                              /* less? */
     }
   }
 
@@ -642,10 +642,10 @@ public final class Lvm
     else
     { /* f <= i <=> ceil(f) <= i */
       IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Iceil)) /* fi = ceil(f) */
-        return fi.v <= i;               /* compare them as integers */
+      if (luaV_flttointeger(f, fi, F2Iceil))      /* fi = ceil(f) */
+        return fi.v <= i;                         /* compare them as integers */
       else                                        /* 'f' is either greater or less than all integers */
-        return f < 0;                   /* less? */
+        return f < 0;                             /* less? */
     }
   }
 
@@ -833,10 +833,10 @@ public final class Lvm
         return true;
       case LUA_VNUMINT:
         assert ttisinteger(t2);
-        return ivalue(t1) == ivalue(t2);
+        return (ivalue(t1) == ivalue(t2));
       case LUA_VNUMFLT:
         assert ttisfloat(t2);
-        return fltvalue(t1) == fltvalue(t2);
+        return (fltvalue(t1) == fltvalue(t2));
       case LUA_VLIGHTUSERDATA:
         assert ttislightuserdata(t2);
         return pvalue(t1) == pvalue(t2);
@@ -873,10 +873,10 @@ public final class Lvm
       default: /* functions, threads, and light C functions */
         assert iscollectable(t1);
         assert iscollectable(t2);
-        return gcvalue(t1) == gcvalue(t2);
+        return (gcvalue(t1) == gcvalue(t2));
       }
       if (tm == null) /* no TM? */
-        return false;     /* objects are different */
+        return false; /* objects are different */
       else
       {
         int tag = luaT_callTMres(L, tm, t1, t2, L.top); /* call TM */
@@ -950,7 +950,7 @@ public final class Lvm
       int v2 = top - 1;
       if (!((novariant(slottag(L, v1)) == LUA_TSTRING) || cvt2str(L, v1)) || !tostring(L, v2))
         luaT_tryconcatTM(L);                  /* may invalidate 'top' */
-      else if (isemptystr(L, v2))           /* second operand is empty? */
+      else if (isemptystr(L, v2))                /* second operand is empty? */
         tostring(L, v1);                      /* result is first operand */
       else if (isemptystr(L, v1))
       {                                 /* first operand is empty string? */

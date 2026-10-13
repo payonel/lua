@@ -37,10 +37,10 @@ public final class global_State
   public int nexthash = 0; /* the hash of the next object created */
   public final int[] gcparams = new int[6]; /* LUA_GCPN */
   public byte currentwhite = 0;
-  public byte gcstate = 0;     /* state of garbage collector */
-  public byte gckind = 0;      /* kind of GC running */
+  public byte gcstate = 0;            /* state of garbage collector */
+  public byte gckind = 0;             /* kind of GC running */
   public boolean gcstopem = false;    /* stops emergency collections */
-  public byte gcstp = 0;       /* control whether GC is running */
+  public byte gcstp = 0;              /* control whether GC is running */
   public boolean gcemergency = false; /* true if this is an emergency collection */
   public final GCObject allgc = new GCObject(); /* list of all collectable objects */
   public GCObject sweepgc = null; /* current position of sweep in list */

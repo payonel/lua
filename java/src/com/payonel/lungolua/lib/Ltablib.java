@@ -40,7 +40,7 @@ public final class Ltablib
   private static boolean checkfield(lua_State L, ByteView key, int n)
   {
     lua_pushlstring(L, key, 0, key.size());
-    return lua_rawget(L, -n) != LUA_TNIL;
+    return (lua_rawget(L, -n) != LUA_TNIL);
   }
 
   /*
@@ -937,7 +937,7 @@ public final class Ltablib
       lua_callk(L, 2, 1, 0, sortk); /* call function */
     }
     boolean res = lua_toboolean(L, -1); /* get result */
-    lua_pop(L, 1);                  /* pop result */
+    lua_pop(L, 1);                      /* pop result */
     return res ? 1 : 0;
   }
 
@@ -1302,7 +1302,7 @@ public final class Ltablib
       s[SO_LO] = 1;
       s[SO_UP] = n;
       s[SO_RND] = 0;
-      s[SO_FN] = (!lua_isnil(L, 2)) ? 1 : 0;
+      s[SO_FN] = !lua_isnil(L, 2) ? 1 : 0;
       s[SO_PLAIN] = lua_isplaintable(L, 1) ? 1 : 0;
       s[SO_P] = s[SO_I] = s[SO_J] = 0;
       s[SO_R] = 0;

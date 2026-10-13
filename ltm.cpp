@@ -255,17 +255,17 @@ void luaT_trybiniTM(lua_State* L, StkId p1, lua_Integer i2,
 ** Calls an order tag method.
 */
 bool luaT_callorderTM(lua_State* L, const TValue* p1, const TValue* p2,
-                     TMS event)
+                      TMS event)
 {
   int tag = callbinTM(L, p1, p2, L->top, event); /* try original event */
   if (tag >= 0)                                    /* found tag method? */
     return !(tag == LUA_VFALSE || tagisempty(tag));
   luaG_ordererror(L, p1, p2); /* no metamethod found */
-  return false;                   /* to avoid warnings */
+  return false;               /* to avoid warnings */
 }
 
 bool luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
-                      bool flip, bool isfloat, TMS event)
+                       bool flip, bool isfloat, TMS event)
 {
   TValue aux;
   const TValue* p2;
@@ -286,7 +286,7 @@ bool luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
 }
 
 bool luaT_callorderiTM(lua_State* L, StkId p1, int v2,
-                      bool flip, bool isfloat, TMS event)
+                       bool flip, bool isfloat, TMS event)
 {
   TValue v1 = getslot(L, p1);
   return luaT_callorderiTM(L, &v1, v2, flip, isfloat, event);

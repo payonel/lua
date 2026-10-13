@@ -14,7 +14,7 @@ public final class expdesc
   {                    /* for indexed variables */
     public int idx;    /* index (R or "long" K) */
     public int t;      /* table (register or upvalue) */
-    public boolean ro;    /* true if variable is read-only */
+    public boolean ro; /* true if variable is read-only */
     public int keystr; /* index in 'k' of string key, or -1 if not a string */
   }
 

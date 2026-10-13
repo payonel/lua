@@ -276,7 +276,7 @@ public final class LuaApi
     ci = L.ci;
     assert n >= 0 : "negative 'n'";
     if (L.stack_last - L.top > n) /* stack large enough? */
-      res = true;                          /* yes; check is OK */
+      res = true;                       /* yes; check is OK */
     else                                /* need to grow stack */
       res = luaD_growstack(L, n, false);
     if (res && ci.top < L.top + n)
@@ -493,7 +493,7 @@ public final class LuaApi
   public static boolean lua_iscfunction(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return ttislcf(o) || ttisCclosure(o);
+    return (ttislcf(o) || ttisCclosure(o));
   }
 
   public static boolean lua_islightcfunction(lua_State L, int idx)
@@ -524,7 +524,7 @@ public final class LuaApi
   public static boolean lua_isuserdata(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return ttisfulluserdata(o) || ttislightuserdata(o);
+    return (ttisfulluserdata(o) || ttislightuserdata(o));
   }
 
   public static boolean lua_rawequal(lua_State L, int index1, int index2)
@@ -1054,7 +1054,7 @@ public final class LuaApi
     setslotth(L, L.top, L);
     api_incr_top(L);
     lua_unlock(L);
-    return mainthread(L.l_G) == L;
+    return (mainthread(L.l_G) == L);
   }
 
   /*
@@ -2338,7 +2338,7 @@ public final class LuaApi
       long n = stepsize;
       long newdebt;
       boolean work = false; /* true if GC did some work */
-      g.gcstp = 0;  /* allow GC to run (other bits must be zero here) */
+      g.gcstp = 0;          /* allow GC to run (other bits must be zero here) */
       if (n <= 0)
         newdebt = 0;                      /* force to run one basic step */
       else if (g.GCdebt >= n - MAX_LMEM) /* no overflow? */

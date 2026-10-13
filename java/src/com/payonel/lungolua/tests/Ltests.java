@@ -522,7 +522,7 @@ public final class Ltests
       int f = ci.func;
       Proto p = slotclLval(L, f).p;
       return 0 <= ci.savedpc &&
-              ci.savedpc <= p.code.length;
+             ci.savedpc <= p.code.length;
     }
   }
 
@@ -788,7 +788,7 @@ public final class Ltests
     }
 
     /* check 'allgc' list */
-    maybedead = GCSatomic < g.gcstate && g.gcstate <= GCSswpallgc;
+    maybedead = (GCSatomic < g.gcstate && g.gcstate <= GCSswpallgc);
     totalshould.v = checklist(g, maybedead, false, g.allgc.next,
                               g.survival, g.old1, g.reallyold);
 
@@ -1195,7 +1195,7 @@ public final class Ltests
         luaL_error(L, new HostString(Lt.cannot_change_states_in_generational_mode));
       lua_lock(L);
       if (option < g.gcstate)
-      {                                   /* must cross 'pause'? */
+      {                                      /* must cross 'pause'? */
         luaC_runtilstate(L, GCSpause, true); /* run until pause */
       }
       luaC_runtilstate(L, option, false); /* do not skip propagation state */
@@ -1420,7 +1420,7 @@ public final class Ltests
 
   private static int getreftable(lua_State L)
   {
-    if (lua_istable(L, 2)) /* is there a table as second argument? */
+    if (lua_istable(L, 2))      /* is there a table as second argument? */
       return 2;                 /* use it as the table */
     else
       return LUA_REGISTRYINDEX; /* default is to use the register */

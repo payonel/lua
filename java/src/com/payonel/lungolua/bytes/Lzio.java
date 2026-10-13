@@ -95,7 +95,7 @@ public final class Lzio
     if (z.pos == z.chunk.size())
     {                          /* no bytes in buffer? */
       if (luaZ_fill(z) == EOZ) /* try to read more */
-        return false;              /* no more input */
+        return false;          /* no more input */
       else
         z.pos--; /* luaZ_fill consumed first byte; put it back */
     }

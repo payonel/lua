@@ -132,7 +132,7 @@ public final class Ldo
     }
     else
     {
-      assert errorstatus(errcode);        /* must be a real error */
+      assert errorstatus(errcode);         /* must be a real error */
       assert !tagisempty(slottag(L, L.top - 1)); /* with a non-nil object */
       copyslot(L, oldtop, L.top - 1);      /* move it to 'oldtop' */
     }
@@ -238,7 +238,7 @@ public final class Ldo
       return false; /* unable to allocate second ci */
     if (L.top + BASIC_STACK_SIZE <= L.stack_last)
       return true; /* enough (BASIC_STACK_SIZE) free slots in the Lua stack */
-    else        /* try to grow stack to a size with enough free slots */
+    else           /* try to grow stack to a size with enough free slots */
       return luaD_growstack(L, BASIC_STACK_SIZE, false);
   }
 
@@ -305,7 +305,7 @@ public final class Ldo
       assert stacksize(L) == ERRORSTACKSIZE;
       if (raiseerror)
         luaD_errerr(L); /* stack error inside message handler */
-      return false;         /* if not 'raiseerror', just signal it */
+      return false;     /* if not 'raiseerror', just signal it */
     }
     else if (n < MAXSTACK)
     {                                   /* avoids arithmetic overflows */
@@ -571,7 +571,7 @@ public final class Ldo
          C calls, as they are, so that where a stack overflow happens does not
          depend on where the budget runs out; see 'lua_budgetthread') */
       L.allowhook = false; /* no hooks inside */
-      L.errfunc = 0;   /* and no message handler: its errors are not for user code */
+      L.errfunc = 0;       /* and no message handler: its errors are not for user code */
       g.budgetL = L;
       g.budgetg = bg; /* (kept by the collector while the callback runs) */
       g.budgetnfz = L.nfz;
@@ -1817,7 +1817,7 @@ public final class Ldo
     L.nCcalls = (from != null) ? getCcalls(from) : 0;
     L.nfz = 0;
     L.resumer = from;
-    L.resumedk = from != null;
+    L.resumedk = (from != null);
     if (from != null)
     { /* where a freeze passing through goes on (the host's close, with no
          'from', is where a freeze of 'L' lands) */
@@ -1885,7 +1885,7 @@ public final class Ldo
       forgetcalls(L, L.ci); /* (its frames run with no C calls under them) */
     L.nfz = 0;
     L.resumer = from;
-    L.resumedk = k != null;
+    L.resumedk = (k != null);
     if (k != null)
     { /* where a freeze passing through goes on */
       from.ci.k = k;
@@ -1918,7 +1918,7 @@ public final class Ldo
     L.nCcalls = L.frozencc; /* its calls, as when it froze */
     L.nfz = 0;
     L.resumer = from;
-    L.resumedk = k != null;
+    L.resumedk = (k != null);
     if (k != null)
     { /* where a freeze passing through goes on */
       from.ci.k = k;

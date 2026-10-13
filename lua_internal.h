@@ -122,7 +122,7 @@ constexpr int LUA_LOADBOXED = -1;
 /* a load from a reader that calls no code (a file): with a budget, its
    chunk is read whole from 'source' into the box at 'ls.boxidx' (counted
    by the host) and the load reads it from there ('ls.readeridx' is
-   LUA_LOADBOXED); returns 0 with no budget (the load reads 'source' as it
+   LUA_LOADBOXED); returns false with no budget (the load reads 'source' as it
    goes, in one step, as stock) */
 bool lua_loadkread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source);
 /* a protected call that keeps the message handler in effect (see lapi.cpp) */

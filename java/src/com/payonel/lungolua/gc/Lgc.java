@@ -595,7 +595,7 @@ public final class Lgc
       set2gray(o);               /* make it gray to become touched1 */
     else                         /* link it in 'grayagain' and paint it gray */
       linkgclist_(getgclist(o), g.grayagain);
-    if (isold(o))       /* generational mode? */
+    if (isold(o))            /* generational mode? */
       setage(o, G_TOUCHED1); /* touched in current cycle */
   }
 
@@ -861,7 +861,7 @@ public final class Lgc
         assert !keyisnil(n);
         markkey(g, n);
         if (!hasclears && iscleared(g, gcvalueN(n))) /* a white value? */
-          hasclears = true;                                   /* table will have to be cleared */
+          hasclears = true;                                /* table will have to be cleared */
       }
     }
     if (g.gcstate == GCSpropagate)
@@ -923,7 +923,7 @@ public final class Lgc
         clearkey(n);        /* clear its key */
       else if (iscleared(g, gckeyN(n)))
       {                          /* key is not marked (yet)? */
-        hasclears = true;           /* table must be cleared */
+        hasclears = true;        /* table must be cleared */
         if (iscollectable(n) && iswhite(gcvalue(n)))
         {           /* value not marked yet? */
           hasww = true; /* white-white entry */
@@ -1542,7 +1542,7 @@ public final class Lgc
       byte oldgcstp = g.gcstp;
       BudgetGroup oldbeff = L.beff;
       g.gcstp |= GCSTPGC;           /* avoid GC steps */
-      L.allowhook = false;              /* stop debug hooks during GC metamethod */
+      L.allowhook = false;          /* stop debug hooks during GC metamethod */
       if (oldbeff != null)
         luaE_setbeff(L, null);    /* the budget is lifted */
       setslot(L, L.top++, tm);   /* push finalizer... */
@@ -2196,7 +2196,7 @@ public final class Lgc
       }
       else
       {                                 /* everything else is removed */
-        assert isold(curr);        /* young objects should be white here */
+        assert isold(curr);             /* young objects should be white here */
         if (getage(curr) == G_TOUCHED2) /* advance from TOUCHED2... */
           setage(curr, G_OLD);          /* ... to OLD */
         nw2black(curr);                 /* make object black (to be removed) */
@@ -2282,7 +2282,7 @@ public final class Lgc
     long limit = luaO_applyparam(g.gcparams[LUA_GCPMINORMAJOR], g.GCmajorminor);
     if (limit == 0)
       return false; /* special case: 'minormajor' 0 stops major collections */
-    return g.GCmarked >= limit;
+    return (g.GCmarked >= limit);
   }
 
   /*
@@ -2391,7 +2391,7 @@ public final class Lgc
   {
     luaC_runtilstate(L, GCSpause, true);     /* prepare to start a new cycle */
     luaC_runtilstate(L, GCSpropagate, true); /* start new cycle */
-    atomic(L);                            /* propagates all and then do the atomic stuff */
+    atomic(L);                               /* propagates all and then do the atomic stuff */
     atomic2gen(L, g);
     setminordebt(g); /* set debt assuming next cycle will be minor */
   }
@@ -2449,7 +2449,7 @@ public final class Lgc
       }
     }
     g.GCmajorminor = g.GCmarked; /* prepare for next collection */
-    return false;                      /* stay doing incremental collections */
+    return false;                  /* stay doing incremental collections */
   }
 
   /* }====================================================== */
@@ -2545,8 +2545,8 @@ public final class Lgc
     origweak = g.weak.gclist;
     origall = g.allweak.gclist;
     separatetobefnz(g, false); /* separate objects to be finalized */
-    markbeingfnz(g);       /* mark objects that will be finalized */
-    propagateall(g);       /* remark, to propagate 'resurrection' */
+    markbeingfnz(g);           /* mark objects that will be finalized */
+    propagateall(g);           /* remark, to propagate 'resurrection' */
     convergeephemerons(g);
     markgroupqueues(g);    /* the queues again, with those that died now */
     releasequeues(g);      /* and those of the groups that are not alive */
@@ -2603,7 +2603,7 @@ public final class Lgc
     global_State g = L.l_G;
     long stepresult;
     assert !g.gcstopem; /* collector is not reentrant */
-    g.gcstopem = true;          /* no emergency collections while collecting */
+    g.gcstopem = true;       /* no emergency collections while collecting */
     switch (g.gcstate)
     {
     case GCSpause:
@@ -2820,8 +2820,8 @@ public final class Lgc
     boolean gen = (g.gckind != KGC_INC);
     if (g.gckind == KGC_GENMINOR)
       minor2inc(L, g, (byte) KGC_INC);
-    g.gckind = KGC_INC; /* (the cycle runs whole: see 'checkmajorminor') */
-    g.gcemergency = true;  /* (a cycle under way finishes calling none) */
+    g.gckind = KGC_INC;   /* (the cycle runs whole: see 'checkmajorminor') */
+    g.gcemergency = true; /* (a cycle under way finishes calling none) */
     if (keepinvariant(g))
       entersweep(L);
     luaC_runtilstate(L, GCSpause, true);

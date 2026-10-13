@@ -243,9 +243,9 @@ public final class Loadlib
       addtoclib(L, path, reg);
     }
     if (loadlibonly)
-    {                        /* loading only library (no function)? */
+    {                           /* loading only library (no function)? */
       lua_pushboolean(L, true); /* return 'true' */
-      return 0;              /* no errors */
+      return 0;                 /* no errors */
     }
     else
     {
@@ -654,9 +654,9 @@ public final class Loadlib
           lua_getfieldik(L, 2, name, reqctx(REQ_RESULT, 0), ll_requirek);
         case REQ_RESULT:
           if (lua_isnil(L, -1))
-          {                        /* module set no value? */
+          {                           /* module set no value? */
             lua_pushboolean(L, true); /* use true as result */
-            lua_copy(L, -1, -2);   /* replace loader result */
+            lua_copy(L, -1, -2);      /* replace loader result */
             lua_setfieldik(L, 2, name, reqctx(REQ_DONE, 0), ll_requirek); /* LOADED[name] = true */
           }
         default: /* REQ_DONE */

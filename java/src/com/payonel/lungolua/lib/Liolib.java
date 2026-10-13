@@ -145,7 +145,7 @@ public final class Liolib
 
   private static int io_close(lua_State L)
   {
-    if (lua_isnone(L, 1))                            /* no argument? */
+    if (lua_isnone(L, 1))                                 /* no argument? */
       lua_getfieldi(L, LUA_REGISTRYINDEX, Lt._IO_output); /* use default output */
     return f_close(L);
   }
@@ -362,14 +362,14 @@ public final class Liolib
       lua_getfieldi(L, LUA_REGISTRYINDEX, Lt._IO_input); /* get default input */
       lua_replace(L, 1);                            /* put it at index 1 */
       tofile(L);                                    /* check that it's a valid file handle */
-      toclose = false;                                  /* do not close it after iteration */
+      toclose = false;                              /* do not close it after iteration */
     }
     else
     { /* open a new file */
       ByteView filename = luaL_checkistring(L, 1).view();
       opencheck(L, filename, Lt.r_mode);
       lua_replace(L, 1); /* put file at index 1 */
-      toclose = true;       /* close it after iteration */
+      toclose = true;    /* close it after iteration */
     }
     aux_lines(L, toclose); /* push iteration function */
     if (toclose)
@@ -411,7 +411,7 @@ public final class Liolib
     if (rn.n >= L_MAXLENNUM)
     {                     /* buffer overflow? */
       rn.buff[0] = '\0'; /* invalidate result */
-      return false;           /* fail */
+      return false;       /* fail */
     }
     else
     {
@@ -462,7 +462,7 @@ public final class Liolib
     do
     {
       rn.c = os_getbyte(rn.f);
-    } while (locale_isspace(rn.c)); /* skip spaces */
+    } while (locale_isspace(rn.c));      /* skip spaces */
     test2(rn, Lt.fmt_flags_sign);        /* optional sign */
     if (test2(rn, Lt.zero_zero))
     {
@@ -488,7 +488,7 @@ public final class Liolib
     else
     {                 /* invalid format */
       lua_pushnil(L); /* "result" to be removed */
-      return false;       /* read fails */
+      return false;   /* read fails */
     }
   }
 
@@ -497,7 +497,7 @@ public final class Liolib
     int c = os_getbyte(f);
     os_ungetbyte(f, c);
     lua_pushistringref(L, Lt.empty_str);
-    return c != OS_EOF;
+    return (c != OS_EOF);
   }
 
   private static boolean read_line(lua_State L, OsFile f, boolean chop)
@@ -522,7 +522,7 @@ public final class Liolib
         luaL_addchar(b, (byte) '\n'); /* add ending newline to result */
       luaL_pushresult(b);      /* close buffer */
       /* return ok if read something (either a newline or something else) */
-      return c == '\n' || lua_rawlen(L, -1) > 0;
+      return (c == '\n' || lua_rawlen(L, -1) > 0);
     }
     finally
     {
@@ -564,7 +564,7 @@ public final class Liolib
       nr = os_fread(f, luaL_buffaddr(b), off, (int) n); /* try to read 'n' chars */
       luaL_addsize(b, nr);
       luaL_pushresult(b); /* close buffer */
-      return nr > 0;     /* true iff read something */
+      return (nr > 0);    /* true iff read something */
     }
     finally
     {
@@ -615,7 +615,7 @@ public final class Liolib
             break;
           case 'a':         /* file */
             read_all(L, f); /* read entire file */
-            success = true;    /* always success */
+            success = true; /* always success */
             break;
           default:
             return luaL_argerrori(L, n, Lt.invalid_format);

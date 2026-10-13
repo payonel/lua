@@ -139,7 +139,7 @@ bool lua_checkstack(lua_State* L, int n)
   ci = L->ci;
   assert(n >= 0 && "negative 'n'");
   if (L->stack_last - L->top > n) /* stack large enough? */
-    res = true;                          /* yes; check is OK */
+    res = true;                       /* yes; check is OK */
   else                                /* need to grow stack */
     res = luaD_growstack(L, n, false);
   if (res && ci->top < L->top + n)
@@ -2200,7 +2200,7 @@ int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
     l_mem n = stepsize;
     l_mem newdebt;
     bool work = false; /* true if GC did some work */
-    g->gcstp = 0; /* allow GC to run (other bits must be zero here) */
+    g->gcstp = 0;      /* allow GC to run (other bits must be zero here) */
     if (n <= 0)
       newdebt = 0;                      /* force to run one basic step */
     else if (g->GCdebt >= n - MAX_LMEM) /* no overflow? */

@@ -872,18 +872,18 @@ public final class Ldebug
       case OP_LOADNIL:
       { /* set registers from 'a' to 'a+b' */
         int b = GETARG_B(i);
-        change = a <= reg && reg <= a + b;
+        change = (a <= reg && reg <= a + b);
         break;
       }
       case OP_TFORCALL:
       { /* affect all regs above its base */
-        change = reg >= a + 2;
+        change = (reg >= a + 2);
         break;
       }
       case OP_CALL:
       case OP_TAILCALL:
       { /* affect all registers above base */
-        change = reg >= a;
+        change = (reg >= a);
         break;
       }
       case OP_JMP:
@@ -1347,12 +1347,12 @@ public final class Ldebug
           break; /* cannot compute delta; fall through */
         delta += lineinfo;
         if (pc == newpc)
-          return delta != 0; /* delta computed successfully */
+          return (delta != 0); /* delta computed successfully */
       }
     }
     /* either instructions are too far apart or there is an absolute line
        info in the way; compute line difference explicitly */
-    return luaG_getfuncline(p, oldpc) != luaG_getfuncline(p, newpc);
+    return (luaG_getfuncline(p, oldpc) != luaG_getfuncline(p, newpc));
   }
 
   /*
@@ -1466,7 +1466,7 @@ public final class Ldebug
     counthook = false;
     if ((mask & LUA_MASKCOUNT) != 0 && (ci.hookdone & HD_COUNT) == 0)
     {
-      counthook = --L.hookcount == 0;
+      counthook = (--L.hookcount == 0);
       ci.hookdone |= HD_COUNT;
     }
     if (counthook)

@@ -333,7 +333,7 @@ public final class Lparser
     while (nvar-- > 0)
     {
       Vardesc vd = getlocalvardesc(fs, nvar); /* get previous variable */
-      if (varinreg(vd))                  /* is in a register? */
+      if (varinreg(vd))                       /* is in a register? */
         return vd.ridx + 1;
     }
     return 0; /* no variables in registers */
@@ -647,7 +647,7 @@ public final class Lparser
       buildglobal(ls, varname, var);
       if (info != -1 && ls.dyd.actvar.arr[info].kind == GDKCONST)
         var.ind.ro = true; /* mark variable as read-only */
-      else              /* anyway must be a global */
+      else                 /* anyway must be a global */
         assert info == -1 || ls.dyd.actvar.arr[info].kind == GDKREG;
     }
   }
@@ -838,7 +838,7 @@ public final class Lparser
         /* block has variables to be closed and goto escapes the scope of
            some variable? */
         if (bl.upval && reglevel(fs, gt.nactvar) > outlevel)
-          gt.close = true;          /* jump may need a close */
+          gt.close = true;       /* jump may need a close */
         gt.nactvar = bl.nactvar; /* correct level for outer block */
         igt++;                   /* go to next goto */
       }
@@ -2408,7 +2408,7 @@ public final class Lparser
         { /* table is a register */
           if (v.k == VLOCAL && lh.v.ind.t == v.var.ridx)
           {
-            conflict = true;       /* table is the local being assigned now */
+            conflict = true;    /* table is the local being assigned now */
             lh.v.ind.t = extra; /* assignment will use safe copy */
           }
           /* is index the local being assigned? */

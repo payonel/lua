@@ -299,10 +299,10 @@ public final class Ltable
         return true;
       case LUA_VNUMINT:
         assert ttisinteger(k1);
-        return ivalue(k1) == keyival(n2);
+        return (ivalue(k1) == keyival(n2));
       case LUA_VNUMFLT:
         assert ttisfloat(k1);
-        return fltvalue(k1) == keyfltval(n2);
+        return (fltvalue(k1) == keyfltval(n2));
       case LUA_VLIGHTUSERDATA:
         assert ttislightuserdata(k1);
         return pvalue(k1) == keypval(n2);

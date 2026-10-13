@@ -66,9 +66,9 @@ struct BlockCnt
   int firstlabel;            /* index of first label in this block */
   int firstgoto;             /* index of first pending goto in this block */
   short nactvar;             /* number of active declarations at block entry */
-  bool upval;             /* true if some variable in the block is an upvalue */
+  bool upval;                /* true if some variable in the block is an upvalue */
   lu_byte isloop;            /* 1 if 'block' is a loop; 2 if it has pending breaks */
-  bool insidetbc;         /* true if inside the scope of a to-be-closed var. */
+  bool insidetbc;            /* true if inside the scope of a to-be-closed var. */
 };
 
 /*
@@ -766,7 +766,7 @@ static void solvegotos(FuncState* fs, BlockCnt* bl)
       /* block has variables to be closed and goto escapes the scope of
          some variable? */
       if (bl->upval && reglevel(fs, gt->nactvar) > outlevel)
-        gt->close = true;           /* jump may need a close */
+        gt->close = true;        /* jump may need a close */
       gt->nactvar = bl->nactvar; /* correct level for outer block */
       igt++;                     /* go to next goto */
     }
@@ -2176,7 +2176,7 @@ static void check_conflict(LexState* ls, struct LHS_assign* lh, expdesc* v)
       { /* table is a register */
         if (v->k == VLOCAL && lh->v.ind.t == v->var.ridx)
         {
-          conflict = true;          /* table is the local being assigned now */
+          conflict = true;       /* table is the local being assigned now */
           lh->v.ind.t = extra; /* assignment will use safe copy */
         }
         /* is index the local being assigned? */
