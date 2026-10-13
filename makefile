@@ -16,7 +16,7 @@ OBJ_DIR       = $(OBJ_DIR_BASE)/$(VARIANT)
 OBJ_NAMES     = lapi.o lauxlib.o lbaselib.o lcode.o lcorolib.o lctype.o ldblib.o ldebug.o ldo.o ldump.o lfunc.o lgc.o
 OBJ_NAMES    += linit.o liolib.o llex.o lmathlib.o lmem.o loadlib.o lobject.o lopcodes.o loslib.o lparser.o lstate.o
 OBJ_NAMES    += lstring.o lstrlib.o ltable.o ltablib.o ltests.o ltm.o lundump.o lutf8lib.o lvm.o lzio.o
-OBJ_NAMES    += util_cast.o os_api.o locale_util.o lnames.o lstyx.o lload.o
+OBJ_NAMES    += util_cast.o os_api.o locale_util.o lnames.o lload.o
 OBJ_FILES     = $(addprefix $(OBJ_DIR)/, $(OBJ_NAMES))
 
 DEP_FILES     = $(OBJ_FILES:.o=.d)
@@ -67,21 +67,18 @@ ENGINE_TEST_O =$(OBJ_DIR)/engine_tests.o
 ENGINE_TEST_T =test_engine
 GATE_O        =$(OBJ_DIR)/gate.o
 GATE_T        =test_gate
-STYX_TEST_O   =$(OBJ_DIR)/styx_tests.o
-STYX_TEST_T   =test_styx
-STYX_RUN      =cd tests/styx && ../../$(STYX_TEST_T)
-DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(GATE_O:.o=.d) $(STYX_TEST_O:.o=.d)
+DEP_FILES    += $(LUA_O:.o=.d) $(TEST_API_O:.o=.d) $(ENGINE_TEST_O:.o=.d) $(GATE_O:.o=.d)
 
-all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T) $(STYX_TEST_T)
+all: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 
 include tests/libs/build.mk
 
 debug: VARIANT=debug
 debug: TESTS=-DLUA_DEBUG
-debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T) $(STYX_TEST_T)
+debug: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 
 cov: VARIANT=cov
-cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T) $(STYX_TEST_T)
+cov: $(LUA_T) $(TEST_API_T) $(ENGINE_TEST_T) $(GATE_T)
 	$(RM) $(OBJ_DIR)/*.gcda $(TEST_DIR)/*.gcda
 	$(MAKE) test
 	./cov-report.sh
@@ -156,8 +153,7 @@ $(ENGINE_TEST_T): $(ENGINE_TEST_O) $(OBJ_FILES) $(VARIANT_STAMP)
 	$(CXX) -o $@ $(ENGINE_TEST_O) $(OBJ_FILES) $(LDFLAGS)
 
 # the freeze gate: a script run with a budget that freezes at every budget
-# point, thawed until it ends (tests/gate/gate.cpp); it links the raw
-# objects: the Styx gate's census of each restore reads the collector's lists
+# point, thawed until it ends (tests/gate/gate.cpp)
 $(GATE_O): tests/gate/gate.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -I$(TOP_DIR) -MF $(OBJ_DIR)/gate.d -o $@ -c $<
 
@@ -178,33 +174,9 @@ gate-run:
 	    cat /dev/null | ../$(GATE_T) $$n all.lua ) || exit 1; \
 	done
 
-# the Styx gate: the deep tests and the upstream suite run as the gate
-# runs them, and at every n-th freeze the whole state is persisted,
-# restored into a new state, and the run goes on there (`make test` runs
-# it; `make styx-gate STYX_GATE_ALL=1000` runs it alone, denser)
-STYX_GATE_DEEP ?= 7
-STYX_GATE_ALL ?= 5000
-styx-gate: $(GATE_T) styx-gate-run
-
-styx-gate-run:
-	( cd tests && ../$(GATE_T) 97 --styx $(STYX_GATE_DEEP) deep/all.lua ) || exit 1
-	mkdir -p tests/libs/_$(TEST_TEMP_DIR)/P1
-	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd tests; \
-	  cat /dev/null | ../$(GATE_T) 97 --styx $(STYX_GATE_ALL) all.lua ) || exit 1
-
 # just the engine internals tests (`make test` runs them too)
 engine-test: $(ENGINE_TEST_T)
 	./$(ENGINE_TEST_T)
-
-# the Styx tests link the raw objects (internals reachable)
-$(STYX_TEST_O): tests/styx/styx_tests.cpp | $(OBJ_DIR)
-	$(CXX) $(CXXFLAGS) -I$(TOP_DIR) -MF $(OBJ_DIR)/styx_tests.d -o $@ -c $<
-$(STYX_TEST_T): $(STYX_TEST_O) $(OBJ_FILES) $(VARIANT_STAMP)
-	$(CXX) -o $@ $(STYX_TEST_O) $(OBJ_FILES) $(LDFLAGS)
-
-# just the Styx tests (`make test` runs them too, along with everything else)
-styx-test: $(STYX_TEST_T)
-	$(STYX_RUN)
 
 clean:
 	$(RM) -r $(OBJ_DIR_BASE)
@@ -212,7 +184,7 @@ clean:
 	$(RM) $(TEST_API_T)
 	$(RM) $(ENGINE_TEST_T)
 	$(RM) $(GATE_T)
-	$(RM) $(STYX_TEST_T)
+	$(RM)
 	$(RM) $(TEST_BUILD_FILES)
 	$(RM) $(TEST_DIR)/*.gcno $(TEST_DIR)/*.gcda
 
@@ -238,8 +210,6 @@ test:
 		cat /dev/null | /usr/bin/time -v ../$(LUA_T) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
 	cd tests && ../$(LUA_T) deep/all.lua
 	$(MAKE) gate-run
-	$(MAKE) styx-gate-run
-	$(STYX_RUN)
 
 full:
 	make clean
@@ -252,4 +222,4 @@ full:
 	grep 'total time' /tmp/lua-test-release.log | sed 's/^/  release: /'; \
 	grep 'total time' /tmp/lua-test-debug.log | sed 's/^/  debug:   /'
 
-.PHONY: all debug cov clean test engine-test gate gate-run styx-gate styx-gate-run styx-test full package package-debug
+.PHONY: all debug cov clean test engine-test gate gate-run full package package-debug
