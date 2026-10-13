@@ -225,7 +225,9 @@ do
     collectgarbage("stop") -- (no collection while it runs)
     local called = {}
     local co = coroutine.create(program(called))
-    debug.setbudget(co, 1000, function() debug.freeze() end)
+    debug.setbudget(co, 1000, function(user_co, spender)
+      if debug.getinfo(spender, 0, "f").func ~= string.rep then debug.freeze() end
+    end)
     assert(coroutine.resume(co) and debug.isfrozen(co))
     if not keep then co = nil end
     collectgarbage("restart")

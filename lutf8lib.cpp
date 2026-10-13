@@ -101,16 +101,12 @@ static Utf8Code utf8_decode(const InternalString* s, size_t pos, bool strict)
 ** start in the range [i,j], or nil + current position if 's' is not
 ** well formed in that interval
 */
-static int utflen(lua_State* L)
+static int utflenk(lua_State* L, int status, lua_KContext ctx);
+
+static int utflen_from(lua_State* L, const InternalString* s, lua_Integer posi, lua_Integer posj, bool lax,
+                       lua_Integer n)
 {
-  lua_Integer n = 0; /* counter for the number of characters */
-  const InternalString* s = luaL_checkistring(L, 1);
-  size_t len = s->size(); /* string length in bytes */
-  lua_Integer posi = u_posrelat(luaL_optinteger(L, 2, 1), len);
-  lua_Integer posj = u_posrelat(luaL_optinteger(L, 3, -1), len);
-  bool lax = lua_toboolean(L, 4);
-  luaL_argchecki(L, 1 <= posi && --posi <= (lua_Integer) len, 2, lt::initial_position_out_of_bounds);
-  luaL_argchecki(L, --posj < (lua_Integer) len, 3, lt::final_position_out_of_bounds);
+  lua_Integer mark = posi;
   while (posi <= posj)
   {
     size_t s1 = utf8_decode(s, posi, !lax).next;
@@ -122,9 +118,53 @@ static int utflen(lua_State* L)
     }
     posi = s1;
     n++;
+    if (posi - mark >= (lua_Integer)LUAL_SLICE)
+    {
+      if (luaL_slicespent(L, (size_t)(posi - mark)) && posi <= posj)
+      {
+        if (lua_gettop(L) == 4)
+          luaL_newbox(L);
+        luaL_Box* box = luaL_tobox(L, 5);
+        box->ints[0] = posi;
+        box->ints[1] = n;
+        lua_checkpointk(L, 0, utflenk);
+      }
+      mark = posi;
+    }
   }
   lua_pushinteger(L, n);
   return 1;
+}
+
+static int utflenk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, 5));
+  if (box == nullptr || lua_type(L, 1) != LUA_TSTRING)
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
+  const InternalString* s = lua_toistring(L, 1);
+  size_t len = s->size();
+  lua_Integer posj = u_posrelat(luaL_optinteger(L, 3, -1), len) - 1;
+  if (posj >= (lua_Integer)len || box->ints[0] < 0 || box->ints[0] > posj || box->ints[1] < 0)
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
+  return utflen_from(L, s, box->ints[0], posj, lua_toboolean(L, 4), box->ints[1]);
+}
+
+static KNamer knamer_utflenk("utf8.utflenk", utflenk);
+
+static int utflen(lua_State* L)
+{
+  const InternalString* s = luaL_checkistring(L, 1);
+  size_t len = s->size(); /* string length in bytes */
+  lua_Integer posi = u_posrelat(luaL_optinteger(L, 2, 1), len);
+  lua_Integer posj = u_posrelat(luaL_optinteger(L, 3, -1), len);
+  bool lax = lua_toboolean(L, 4);
+  luaL_argchecki(L, 1 <= posi && --posi <= (lua_Integer) len, 2, lt::initial_position_out_of_bounds);
+  luaL_argchecki(L, --posj < (lua_Integer) len, 3, lt::final_position_out_of_bounds);
+  lua_Integer n = 0; /* counter for the number of characters */
+  lua_settop(L, 4);
+  return utflen_from(L, s, posi, posj, lax, n);
 }
 
 /*
@@ -193,6 +233,113 @@ static int utfchar(lua_State* L)
   return 1;
 }
 
+enum
+{
+  OFS_START,
+  OFS_BACK,
+  OFS_FORWARD,
+  OFS_LAST
+};
+
+static int byteoffsetk(lua_State* L, int status, lua_KContext ctx);
+
+static void byteoffsetpoint(lua_State* L, size_t* work, int phase, lua_Integer posi, lua_Integer n,
+                            lua_Integer first)
+{
+  if (++*work < LUAL_SLICE)
+    return;
+  bool spent = luaL_slicespent(L, *work);
+  *work = 0;
+  if (!spent)
+    return;
+  if (lua_gettop(L) == 3)
+    luaL_newbox(L);
+  luaL_Box* box = luaL_tobox(L, 4);
+  box->ints[0] = phase;
+  box->ints[1] = posi;
+  box->ints[2] = n;
+  box->ints[3] = first;
+  lua_checkpointk(L, 0, byteoffsetk);
+}
+
+static int byteoffset_from(lua_State* L, const InternalString* s, int phase, lua_Integer posi, lua_Integer n,
+                           lua_Integer first)
+{
+  size_t len = s->size();
+  size_t work = 0;
+  switch (phase)
+  {
+  case OFS_START:
+    /* find beginning of current byte sequence */
+    while (posi > 0 && iscontat(s, posi))
+    {
+      posi--;
+      byteoffsetpoint(L, &work, OFS_START, posi, n, first);
+    }
+    break;
+  case OFS_BACK:
+    while (n < 0 && posi > 0)
+    { /* move back */
+      posi--;
+      if (posi == 0 || !iscontat(s, posi))
+        n++;
+      byteoffsetpoint(L, &work, OFS_BACK, posi, n, first);
+    }
+    break;
+  case OFS_FORWARD:
+    while (n > 0 && posi < (lua_Integer) len)
+    {
+      posi++;
+      if (!iscontat(s, posi))
+        n--;
+      byteoffsetpoint(L, &work, OFS_FORWARD, posi, n, first);
+    }
+    break;
+  default:
+    break;
+  }
+  if (phase != OFS_LAST)
+  {
+    if (n != 0)
+    { /* did not find given character? */
+      luaL_pushfail(L);
+      return 1;
+    }
+    first = posi;
+    if ((ubyte(s, posi) & 0x80) == 0)
+    { /* else one-byte character: final position is the initial one */
+      lua_pushinteger(L, first + 1); /* initial position */
+      lua_pushinteger(L, posi + 1);
+      return 2;
+    }
+    if (iscont(ubyte(s, posi)))
+      return luaL_errori(L, lt::initial_position_is_a_continuation_byte);
+  }
+  /* multi-byte character? */
+  while (iscontat(s, (size_t) posi + 1))
+  {
+    posi++; /* skip to last continuation byte */
+    byteoffsetpoint(L, &work, OFS_LAST, posi, n, first);
+  }
+  lua_pushinteger(L, first + 1); /* initial position */
+  lua_pushinteger(L, posi + 1); /* 'posi' now is the final position */
+  return 2;
+}
+
+static int byteoffsetk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  (void)ctx;
+  luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, 4));
+  if (box == nullptr || lua_type(L, 1) != LUA_TSTRING || box->ints[0] < OFS_START || box->ints[0] > OFS_LAST ||
+      box->ints[1] < 0 || box->ints[1] > static_cast<lua_Integer>(lua_rawlen(L, 1)) ||
+      box->ints[3] < 0 || box->ints[3] > box->ints[1])
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
+  return byteoffset_from(L, lua_toistring(L, 1), (int)box->ints[0], box->ints[1], box->ints[2], box->ints[3]);
+}
+
+static KNamer knamer_byteoffsetk("utf8.byteoffsetk", byteoffsetk);
+
 /*
 ** offset(s, n, [i])  -> indices where n-th character counting from
 **   position 'i' starts and ends; 0 means character at 'i'.
@@ -205,56 +352,15 @@ static int byteoffset(lua_State* L)
   lua_Integer posi = (n >= 0) ? 1 : (lua_Integer)len + 1;
   posi = u_posrelat(luaL_optinteger(L, 3, posi), len);
   luaL_argchecki(L, 1 <= posi && --posi <= (lua_Integer) len, 3, lt::position_out_of_bounds);
+  lua_settop(L, 3);
   if (n == 0)
-  {
-    /* find beginning of current byte sequence */
-    while (posi > 0 && iscontat(s, posi))
-      posi--;
-  }
-  else
-  {
-    if (iscontat(s, posi))
-      return luaL_errori(L, lt::initial_position_is_a_continuation_byte);
-    if (n < 0)
-    {
-      while (n < 0 && posi > 0)
-      { /* move back */
-        do
-        { /* find beginning of previous character */
-          posi--;
-        } while (posi > 0 && iscontat(s, posi));
-        n++;
-      }
-    }
-    else
-    {
-      n--; /* do not move for 1st character */
-      while (n > 0 && posi < (lua_Integer) len)
-      {
-        do
-        { /* find beginning of next character */
-          posi++;
-        } while (iscontat(s, posi));
-        n--;
-      }
-    }
-  }
-  if (n != 0)
-  { /* did not find given character? */
-    luaL_pushfail(L);
-    return 1;
-  }
-  lua_pushinteger(L, posi + 1); /* initial position */
-  if ((ubyte(s, posi) & 0x80) != 0)
-  { /* multi-byte character? */
-    if (iscont(ubyte(s, posi)))
-      return luaL_errori(L, lt::initial_position_is_a_continuation_byte);
-    while (iscontat(s, (size_t) posi + 1))
-      posi++; /* skip to last continuation byte */
-  }
-  /* else one-byte character: final position is the initial one */
-  lua_pushinteger(L, posi + 1); /* 'posi' now is the final position */
-  return 2;
+    return byteoffset_from(L, s, OFS_START, posi, n, 0);
+  if (iscontat(s, posi))
+    return luaL_errori(L, lt::initial_position_is_a_continuation_byte);
+  if (n < 0)
+    return byteoffset_from(L, s, OFS_BACK, posi, n, 0);
+  n--; /* do not move for 1st character */
+  return byteoffset_from(L, s, OFS_FORWARD, posi, n, 0);
 }
 
 static int iter_aux(lua_State* L, bool strict)

@@ -2,6 +2,7 @@ package com.payonel.lungolua.lib;
 
 import static com.payonel.lungolua.api.LuaApi.*;
 import static com.payonel.lungolua.api.LuaAuxLib.*;
+import static com.payonel.lungolua.api.LuaInternal.*;
 import static com.payonel.lungolua.bytes.InternalString.sv_byteat;
 import static com.payonel.lungolua.object.Llimits.*;
 import static com.payonel.lungolua.platform.LocaleUtil.*;
@@ -11,6 +12,7 @@ import static com.payonel.lungolua.vm.Ldebug.*;
 
 import com.payonel.lungolua.api.HostString;
 import com.payonel.lungolua.api.KNamer;
+import com.payonel.lungolua.api.luaL_Box;
 import com.payonel.lungolua.api.luaL_RegCFI;
 import com.payonel.lungolua.api.lua_CFunction;
 import com.payonel.lungolua.api.lua_KFunction;
@@ -102,37 +104,97 @@ public final class Lbaselib
     }
   }
 
-  private static IntParse b_str2int(ByteView s, int base)
+  private static final int B2I_LEAD = 0;
+  private static final int B2I_DIGITS = 1;
+  private static final int B2I_TRAIL = 2;
+
+  private static void str2intpoint(lua_State L, int[] work, int phase, int p, long n, boolean neg)
+  {
+    if (++work[0] < LUAL_SLICE)
+      return;
+    boolean spent = luaL_slicespent(L, work[0]);
+    work[0] = 0;
+    if (!spent)
+      return;
+    if (lua_gettop(L) == 2)
+      luaL_newbox(L);
+    luaL_Box box = luaL_tobox(L, 3);
+    box.ints[0] = phase;
+    box.ints[1] = (long) p;
+    box.ints[2] = (long) n;
+    box.ints[3] = neg ? 1 : 0;
+    lua_checkpointk(L, 0, tonumberk);
+  }
+
+  private static IntParse b_str2int(lua_State L, ByteView s, int base, int phase, int p, long n, boolean neg)
   {
     final ByteView spacechars = Lt.whitespace_chars;
-    long n = 0;
-    boolean neg = false;
-    int p = 0;
-    while (p < s.size() && spacechars.find(s.at(p)) != ByteView.npos)
-      p++; /* skip initial spaces */
-    if (sv_byteat(s, p) == '-')
+    int[] work = {0};
+    switch (phase)
     {
-      p++;
-      neg = true;
-    } /* handle sign */
-    else if (sv_byteat(s, p) == '+')
-      p++;
-    if (!locale_isalnum(sv_byteat(s, p))) /* no digit? */
-      return new IntParse(ByteView.npos, 0);
-    do
-    {
-      int digit = ((locale_isdigit(sv_byteat(s, p)))
-                                     ? s.at(p) - '0'
-                                     : (locale_toupper(sv_byteat(s, p)) - 'A') + 10);
-      if (digit >= base)
-        return new IntParse(ByteView.npos, 0); /* invalid numeral */
-      n = n * base + digit;
-      p++;
-    } while (locale_isalnum(sv_byteat(s, p)));
-    while (p < s.size() && spacechars.find(s.at(p)) != ByteView.npos)
-      p++; /* skip trailing spaces */
+    case B2I_LEAD:
+      while (p < s.size() && spacechars.find(s.at(p)) != ByteView.npos)
+      {
+        p++; /* skip initial spaces */
+        str2intpoint(L, work, B2I_LEAD, p, n, neg);
+      }
+      if (sv_byteat(s, p) == '-')
+      {
+        p++;
+        neg = true;
+      } /* handle sign */
+      else if (sv_byteat(s, p) == '+')
+        p++;
+      if (!locale_isalnum(sv_byteat(s, p))) /* no digit? */
+        return new IntParse(ByteView.npos, 0);
+    case B2I_DIGITS:
+      while (locale_isalnum(sv_byteat(s, p)))
+      {
+        int digit = ((locale_isdigit(sv_byteat(s, p)))
+                                       ? s.at(p) - '0'
+                                       : (locale_toupper(sv_byteat(s, p)) - 'A') + 10);
+        if (digit >= base)
+          return new IntParse(ByteView.npos, 0); /* invalid numeral */
+        n = n * base + digit;
+        p++;
+        str2intpoint(L, work, B2I_DIGITS, p, n, neg);
+      }
+    default:
+      while (p < s.size() && spacechars.find(s.at(p)) != ByteView.npos)
+      {
+        p++; /* skip trailing spaces */
+        str2intpoint(L, work, B2I_TRAIL, p, n, neg);
+      }
+    }
     return new IntParse(p, (neg) ? (0L - n) : n);
   }
+
+  private static int tonumber_base(lua_State L, int phase, int p, long n, boolean neg)
+  {
+    ByteView s = lua_tolstring(L, 1);
+    IntParse r = b_str2int(L, s, (int) lua_tointeger(L, 2), phase, p, n, neg);
+    if (r.end == s.size())
+    {
+      lua_pushinteger(L, r.value);
+      return 1;
+    } /* else not a number */
+    luaL_pushfail(L); /* not a number */
+    return 1;
+  }
+
+  private static int tonumberk(lua_State L, int status, long ctx)
+  {
+    luaL_Box box = (lua_touserobject(L, 3) instanceof luaL_Box x) ? x : null;
+    if (box == null || lua_type(L, 1) != LUA_TSTRING || !lua_isinteger(L, 2) || lua_tointeger(L, 2) < 2 ||
+        lua_tointeger(L, 2) > 36 || box.ints[0] < B2I_LEAD || box.ints[0] > B2I_TRAIL || box.ints[1] < 0 ||
+        box.ints[1] > (long) lua_rawlen(L, 1))
+      luaL_errori(L, Lt.invalid_state_of_a_stopped_call);
+    return tonumber_base(L, (int) box.ints[0], (int) box.ints[1], (long) box.ints[2], box.ints[3] != 0);
+  }
+
+  private static final lua_KFunction tonumberk = Lbaselib::tonumberk;
+
+  private static final KNamer knamer_tonumberk = new KNamer("base.tonumberk", tonumberk);
 
   private static int luaB_tonumber(lua_State L)
   {
@@ -156,14 +218,11 @@ public final class Lbaselib
     {
       long base = luaL_checkinteger(L, 2);
       luaL_checktype(L, 1, LUA_TSTRING); /* no numbers as strings */
-      ByteView s = lua_tolstring(L, 1);
       luaL_argchecki(L, 2 <= base && base <= 36, 2, Lt.base_out_of_range);
-      IntParse n = b_str2int(s, (int) base);
-      if (n.end == s.size())
-      {
-        lua_pushinteger(L, n.value);
-        return 1;
-      } /* else not a number */
+      lua_settop(L, 2);
+      lua_pushinteger(L, base);
+      lua_replace(L, 2);
+      return tonumber_base(L, B2I_LEAD, 0, 0, false);
     } /* else not a number */
     luaL_pushfail(L); /* not a number */
     return 1;

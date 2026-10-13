@@ -119,71 +119,99 @@ public final class Lstrlib
 
   private static final lua_CFunction str_sub = Lstrlib::str_sub;
 
-  private static int str_reverse(lua_State L)
+  private static final int MAP_REVERSE = 0;
+  private static final int MAP_LOWER = 1;
+  private static final int MAP_UPPER = 2;
+
+  private static int mapk(lua_State L, int status, long ctx)
   {
-    int i;
+    luaL_Box box = (lua_touserobject(L, 2) instanceof luaL_Box x) ? x : null;
+    if (box == null || lua_type(L, 1) != LUA_TSTRING || ctx < MAP_REVERSE || ctx > MAP_UPPER ||
+        box.used >= lua_rawlen(L, 1))
+      luaL_errori(L, Lt.invalid_state_of_a_stopped_call);
     luaL_Buffer b = new luaL_Buffer();
     try
     {
-      InternalString s = luaL_checkistring(L, 1);
-      int l = s.size();
-      int off = luaL_buffinitsize(L, b, l);
-      ByteSpan p = luaL_buffaddr(b);
-      for (i = 0; i < l; i++)
-        p.set(off + i, (byte) s.byteAt(l - i - 1));
-      luaL_pushresultsize(b, l);
-      return 1;
+      luaL_buffinit(L, b);
+      luaL_buffload(b, box);
+      return str_map(L, b, b.used, (int) ctx);
     }
     finally
     {
       b.release();
     }
+  }
+
+  private static final lua_KFunction mapk = Lstrlib::mapk;
+
+  private static final KNamer knamer_mapk = new KNamer("string.mapk", mapk);
+
+  private static int str_map(lua_State L, luaL_Buffer b, int i, int op)
+  {
+    InternalString s = luaL_checkistring(L, 1);
+    int l = s.size();
+    luaL_prepbuffsize(b, l - i);
+    while (i < l)
+    {
+      int e = i + Math.min(l - i, LUAL_SLICE);
+      int k = e - i;
+      ByteSpan p = luaL_buffaddr(b);
+      switch (op)
+      {
+      case MAP_REVERSE:
+        for (; i < e; i++)
+          p.set(i, (byte) s.byteAt(l - i - 1));
+        break;
+      case MAP_LOWER:
+        for (; i < e; i++)
+          p.set(i, (byte) locale_tolower(s.byteAt(i)));
+        break;
+      default:
+        for (; i < e; i++)
+          p.set(i, (byte) locale_toupper(s.byteAt(i)));
+        break;
+      }
+      luaL_addsize(b, k);
+      if (l > LUAL_SLICE && luaL_slicespent(L, k) && i < l)
+        luaL_slicepoint(L, b, 2, (long) op, mapk);
+    }
+    luaL_pushresult(b);
+    return 1;
+  }
+
+  private static int str_mapentry(lua_State L, int op)
+  {
+    luaL_checkistring(L, 1);
+    lua_settop(L, 1);
+    luaL_Buffer b = new luaL_Buffer();
+    try
+    {
+      luaL_buffinit(L, b);
+      return str_map(L, b, 0, op);
+    }
+    finally
+    {
+      b.release();
+    }
+  }
+
+  private static int str_reverse(lua_State L)
+  {
+    return str_mapentry(L, MAP_REVERSE);
   }
 
   private static final lua_CFunction str_reverse = Lstrlib::str_reverse;
 
   private static int str_lower(lua_State L)
   {
-    int i;
-    luaL_Buffer b = new luaL_Buffer();
-    try
-    {
-      InternalString s = luaL_checkistring(L, 1);
-      int l = s.size();
-      int off = luaL_buffinitsize(L, b, l);
-      ByteSpan p = luaL_buffaddr(b);
-      for (i = 0; i < l; i++)
-        p.set(off + i, (byte) locale_tolower(s.byteAt(i)));
-      luaL_pushresultsize(b, l);
-      return 1;
-    }
-    finally
-    {
-      b.release();
-    }
+    return str_mapentry(L, MAP_LOWER);
   }
 
   private static final lua_CFunction str_lower = Lstrlib::str_lower;
 
   private static int str_upper(lua_State L)
   {
-    int i;
-    luaL_Buffer b = new luaL_Buffer();
-    try
-    {
-      InternalString s = luaL_checkistring(L, 1);
-      int l = s.size();
-      int off = luaL_buffinitsize(L, b, l);
-      ByteSpan p = luaL_buffaddr(b);
-      for (i = 0; i < l; i++)
-        p.set(off + i, (byte) locale_toupper(s.byteAt(i)));
-      luaL_pushresultsize(b, l);
-      return 1;
-    }
-    finally
-    {
-      b.release();
-    }
+    return str_mapentry(L, MAP_UPPER);
   }
 
   private static final lua_CFunction str_upper = Lstrlib::str_upper;
@@ -1303,14 +1331,34 @@ public final class Lstrlib
   ** compares at is a step of the budget, and where the budget is spent a
   ** check point of 'find' (the place kept in a box at 5, made there then).
   */
+  private static luaL_Box findpoint(lua_State L, luaL_Box box, int p, int l1)
+  {
+    if (box == null)
+    {
+      lua_settop(L, 4); /* (the arguments stay below it) */
+      box = luaL_newbox(L);
+    }
+    box.ints[0] = (long) p;
+    box.ints[1] = (long) l1;
+    lua_checkpointk(L, 2, str_findk);
+    return box;
+  }
+
   private static int lmemfind_from(lua_State L, ByteView s1, int p, int l1,
                                    ByteView s2, int l2, luaL_Box box)
   {
     while (l1 > 0)
     {
-      int init = s1.find(s2.at(0), p);
-      if (init == ByteView.npos || init >= p + l1)
-        break;
+      int w = Math.min(l1, LUAL_SLICE);
+      int init = s1.substr(0, p + w).find(s2.at(0), p);
+      if (init == ByteView.npos)
+      {
+        p += w;
+        l1 -= w;
+        if (l1 > 0 && luaL_slicespent(L, w))
+          box = findpoint(L, box, p, l1);
+        continue;
+      }
       init++; /* 1st char is already checked */
       if (s1.substr(init, l2).equals(s2.substr(1, l2)))
         return init - 1;
@@ -1320,16 +1368,7 @@ public final class Lstrlib
         p = init;
       }
       if (luaE_spent(L, 1))
-      {
-        if (box == null)
-        {
-          lua_settop(L, 4); /* (the arguments stay below it) */
-          box = luaL_newbox(L);
-        }
-        box.ints[0] = (long) p;
-        box.ints[1] = (long) l1;
-        lua_checkpointk(L, 2, str_findk);
-      }
+        box = findpoint(L, box, p, l1);
     }
     return ByteView.npos; /* not found */
   }
@@ -2111,12 +2150,9 @@ public final class Lstrlib
   */
   private static final int MAX_FORMAT = 32;
 
-  private static void addquoted(luaL_Buffer b, InternalString s)
+  private static void addquotedpart(luaL_Buffer b, InternalString s, int i, int e)
   {
-    int len = s.size();
-    int i = 0;
-    luaL_addchar(b, (byte) '"');
-    for (; i < len; i++)
+    for (; i < e; i++)
     {
       int c = s.byteAt(i);
       if (c == '"' || c == '\\' || c == '\n')
@@ -2139,6 +2175,12 @@ public final class Lstrlib
       else
         luaL_addchar(b, (byte) c);
     }
+  }
+
+  private static void addquoted(luaL_Buffer b, InternalString s)
+  {
+    luaL_addchar(b, (byte) '"');
+    addquotedpart(b, s, 0, s.size());
     luaL_addchar(b, (byte) '"');
   }
 
@@ -2536,6 +2578,51 @@ public final class Lstrlib
      arguments) */
   private static final int FMT_ITEM = 0; /* the item: where it starts (after its '%')... */
   private static final int FMT_ARG = 1;  /* ...and its argument */
+  private static final int FMT_OFF = 2;
+
+  private static luaL_Box formatbox(lua_State L, int top)
+  {
+    assert lua_gettop(L) == top;
+    luaE_freezeonly(L);
+    return luaL_newbox(L);
+  }
+
+  private static luaL_Box formatpoint(lua_State L, luaL_Buffer b, luaL_Box box, int top, int item, int arg,
+                                      int off, long ctx)
+  {
+    if (box == null)
+      box = formatbox(L, top);
+    box.ints[FMT_ITEM] = (long) item;
+    box.ints[FMT_ARG] = arg;
+    box.ints[FMT_OFF] = (long) off;
+    luaL_buffsave(b, box);
+    lua_checkpointk(L, ctx, formatslicek);
+    luaL_buffload(b, box);
+    return box;
+  }
+
+  private static void addlong(lua_State L, luaL_Buffer b, luaL_Box box, int top, int item, int arg, int off,
+                              boolean quote)
+  {
+    InternalString s = lua_toistring(L, top + 2);
+    int len = s.size();
+    luaL_prepbuffsize(b, len - off + 1);
+    while (off < len)
+    {
+      int e = off + Math.min(len - off, LUAL_SLICE);
+      if (quote)
+        addquotedpart(b, s, off, e);
+      else
+        luaL_addlstring(b, s.view(), off, e - off);
+      int k = e - off;
+      off = e;
+      if (luaL_slicespent(L, k) && off < len)
+        formatpoint(L, b, box, top, item, arg, off, 1);
+    }
+    if (quote)
+      luaL_addchar(b, (byte) '"');
+    lua_pop(L, 1);
+  }
 
   /*
   ** Whether the value at 'arg' has a '__tostring' to call for a format
@@ -2549,11 +2636,7 @@ public final class Lstrlib
       return null;
     lua_pop(L, 1);
     if (box == null)
-    {
-      assert lua_gettop(L) == top;
-      box = luaL_newbox(L);
-      luaE_freezeonly(L);
-    }
+      box = formatbox(L, top);
     box.ints[FMT_ITEM] = (long) item;
     box.ints[FMT_ARG] = arg;
     luaL_buffsave(b, box);
@@ -2561,13 +2644,25 @@ public final class Lstrlib
   }
 
   /* the string 's' of a '%s' item, on the top: add it as the format says */
+  private static void addwhole(lua_State L, luaL_Buffer b, luaL_Box box, int top, int item, int arg)
+  {
+    if (lua_rawlen(L, -1) > LUAL_SLICE)
+    {
+      assert box != null && lua_gettop(L) == top + 2;
+      addlong(L, b, box, top, item, arg, 0, false);
+    }
+    else
+      luaL_addvalue(b);
+  }
+
   private static int addstringitem(lua_State L, luaL_Buffer b, ByteView formv, int formlen,
-                                   int arg, int boff, int maxitem, InternalString s)
+                                   int arg, int boff, int maxitem, InternalString s,
+                                   luaL_Box box, int top, int item)
   {
     int nb = 0;
     ByteView sv = s.view();
-    if (formlen == 2)   /* no modifiers? */
-      luaL_addvalue(b); /* keep entire string */
+    if (formlen == 2) /* no modifiers? */
+      addwhole(L, b, box, top, item, arg); /* keep entire string */
     else
     {
       luaL_argchecki(L, sv.find('\0') == ByteView.npos, arg, Lt.string_contains_zeros);
@@ -2575,7 +2670,7 @@ public final class Lstrlib
       if (formv.find('.') == ByteView.npos && sv.size() >= 100)
       {
         /* no precision and string is too long to be formatted */
-        luaL_addvalue(b); /* keep entire string */
+        addwhole(L, b, box, top, item, arg); /* keep entire string */
       }
       else
       { /* format the string into 'buff' */
@@ -2599,8 +2694,18 @@ public final class Lstrlib
                                  luaL_Buffer b, luaL_Box box)
   {
     int sfl = sf.size();
+    int mark = luaL_bufflen(b);
+    int imark = i;
     while (i < sfl)
     {
+      int work = (luaL_bufflen(b) - mark) + (i - imark);
+      if (work >= LUAL_SLICE)
+      {
+        if (luaL_slicespent(L, work))
+          box = formatpoint(L, b, box, top, i, arg, 0, 0);
+        mark = luaL_bufflen(b);
+        imark = i;
+      }
       if (sf.byteAt(i) != L_ESC)
         luaL_addchar(b, (byte) sf.byteAt(i++));
       else if (sv_byteat(sf.view(), ++i) == L_ESC)
@@ -2709,6 +2814,16 @@ public final class Lstrlib
             luaL_tostringresult(L);
             luaL_addvalue(b);
           }
+          else if (t == LUA_TSTRING && lua_rawlen(L, arg) > LUAL_SLICE)
+          {
+            if (box == null)
+              box = formatbox(L, top);
+            lua_pushvalue(L, arg);
+            luaL_addchar(b, (byte) '"');
+            addlong(L, b, box, top, item, arg, 0, true);
+            mark = luaL_bufflen(b);
+            imark = i;
+          }
           else
             addliteral(L, b, arg);
           break;
@@ -2726,10 +2841,18 @@ public final class Lstrlib
           }
           else
           {
+            if (box == null && lua_type(L, arg) == LUA_TSTRING && lua_rawlen(L, arg) > LUAL_SLICE)
+              box = formatbox(L, top);
             luaL_tostringdefault(L, arg);
             str = lua_toistring(L, -1);
           }
-          nb = addstringitem(L, b, formv, fs.len, arg, boff, maxitem, str);
+          int before = luaL_bufflen(b);
+          nb = addstringitem(L, b, formv, fs.len, arg, boff, maxitem, str, box, top, item);
+          if (luaL_bufflen(b) - before > LUAL_SLICE)
+          {
+            mark = luaL_bufflen(b);
+            imark = i;
+          }
           break;
         }
         default:
@@ -2774,7 +2897,7 @@ public final class Lstrlib
         int maxitem = MAX_ITEM;
         int boff = luaL_prepbuffsize(b, maxitem);
         int nb = addstringitem(L, b, form.view().substr(0, fs.len), fs.len, arg, boff, maxitem,
-                               luaL_tostringresult(L));
+                               luaL_tostringresult(L), box, top, (int) box.ints[FMT_ITEM]);
         assert nb < maxitem;
         luaL_addsize(b, nb);
       }
@@ -2789,6 +2912,49 @@ public final class Lstrlib
   private static final lua_KFunction formatk = Lstrlib::formatk;
 
   private static final KNamer knamer_formatk = new KNamer("string.formatk", formatk);
+
+  private static int formatslicek(lua_State L, int status, long ctx)
+  {
+    int top = lua_gettop(L) - ((ctx == 1) ? 2 : 1);
+    luaL_Box box = (top >= 1) ? ((lua_touserobject(L, top + 1) instanceof luaL_Box x) ? x : null) : null;
+    if (box == null || (ctx != 0 && ctx != 1) || lua_type(L, 1) != LUA_TSTRING)
+      luaL_errori(L, Lt.invalid_state_of_a_stopped_format);
+    InternalString sf = lua_toistring(L, 1);
+    long item = box.ints[FMT_ITEM];
+    long arg = box.ints[FMT_ARG];
+    long off = box.ints[FMT_OFF];
+    luaL_Buffer b = new luaL_Buffer();
+    try
+    {
+      luaL_buffinit(L, b);
+      if (ctx == 0)
+      {
+        if (item < 0 || item > (long) sf.size() || arg < 1 || arg > top)
+          luaL_errori(L, Lt.invalid_state_of_a_stopped_format);
+        luaL_buffload(b, box);
+        return format_from(L, sf, (int) item, (int) arg, top, b, box);
+      }
+      if (item < 1 || item >= (long) sf.size() || arg < 2 || arg > top ||
+          lua_type(L, top + 2) != LUA_TSTRING || off < 1 || off >= (long) lua_rawlen(L, top + 2))
+        luaL_errori(L, Lt.invalid_state_of_a_stopped_format);
+      ByteOwner form = new ByteOwner(MAX_FORMAT);
+      FormSpan fs = getformat(L, sf, (int) item, form);
+      int conv = sv_byteat(sf.view(), fs.end);
+      if (conv != 's' && conv != 'q')
+        luaL_errori(L, Lt.invalid_state_of_a_stopped_format);
+      luaL_buffload(b, box);
+      addlong(L, b, box, top, (int) item, (int) arg, (int) off, conv == 'q');
+      return format_from(L, sf, fs.end + 1, (int) arg, top, b, box);
+    }
+    finally
+    {
+      b.release();
+    }
+  }
+
+  private static final lua_KFunction formatslicek = Lstrlib::formatslicek;
+
+  private static final KNamer knamer_formatslicek = new KNamer("string.formatslicek", formatslicek);
 
   private static int str_format(lua_State L)
   {

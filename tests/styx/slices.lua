@@ -29,6 +29,17 @@ local function writevar(v)
   return table.concat(out)
 end
 
+local function readvar(b, p)
+  local u, shift = 0, 0
+  while true do
+    local c = b:byte(p); p = p + 1
+    u = u | ((c & 0x7f) << shift)
+    if (c & 0x80) == 0 then break end
+    shift = shift + 7
+  end
+  if (u & 1) == 1 then return -((u >> 1) + 1), p else return (u >> 1), p end
+end
+
 local TAG_INTEGER = "\3"
 
 local function frozen(work, arg)
@@ -77,4 +88,66 @@ for _, v in ipairs{2, 0, -5} do
   case("a rep stopped between slices, with a count of " .. v .. ", is refused", function()
     refused(with_int(frozen(rep, REP // 3), REP, v))
   end)
+end
+
+local function with_boxint(blob, which, v)
+  local i = 1
+  while true do
+    i = blob:find("box", i, true)
+    assert(i, "a box in the stream")
+    if blob:byte(i - 1) == 0x06 then
+      local ok, p = pcall(function()
+        local p = i + 3
+        local _, n
+        _, p = readvar(blob, p)
+        _, p = readvar(blob, p)
+        n, p = readvar(blob, p)
+        assert(n == 5)
+        return p
+      end)
+      if ok then
+        local q = p
+        local enc = {}
+        for j = 1, 5 do
+          local x; x, q = readvar(blob, q)
+          enc[j] = writevar(j == which and v or x)
+        end
+        return blob:sub(1, p - 1) .. table.concat(enc) .. blob:sub(q)
+      end
+    end
+    i = i + 1
+  end
+end
+
+local M = 3 << 20
+local function fmt(s) local r = string.format("<%s>", s) return #r, r:sub(-3) end
+local function concat(s) local r = table.concat({"a", s, "b"}, ",") return #r, r:sub(-4) end
+local function ulen(s) return utf8.len(s) end
+local function uoff(s) return utf8.offset(s, 0, #s) end
+local function tonum(s) return tonumber(s, 10) end
+local function upper(s) local r = s:upper() return #r, r:sub(-2) end
+local inputs = {
+  {fmt, string.rep("f", M), {M + 2, "ff>"}, 3, "invalid state of a stopped format"},
+  {concat, string.rep("c", M), {M + 4, "cc,b"}, 2},
+  {ulen, string.rep("u", M), {M}, 1},
+  {uoff, "a" .. string.rep("\x80", M), {1}, 1},
+  {tonum, string.rep("1", M), {tonumber(string.rep("1", M), 10)}, 1},
+  {upper, string.rep("p", M), {M, "PP"}},
+}
+for k, c in ipairs(inputs) do
+  local work, arg, expected, int, msg = c[1], c[2], c[3], c[4], c[5]
+  case("long work " .. k .. " stopped between slices goes on", function()
+    local r = table.pack(goes_on(frozen(work, arg)))
+    assert(r[1], tostring(r[2]))
+    for j, v in ipairs(expected) do assert(r[j + 1] == v, k .. ": " .. tostring(r[j + 1])) end
+    H.checkheap()
+  end)
+  if int then
+    case("long work " .. k .. " stopped with a crafted box is refused", function()
+      local ok, err = goes_on(with_boxint(frozen(work, arg), int, 1 << 40))
+      assert(not ok and tostring(err):find(msg or "invalid state of a stopped call", 1, true),
+             k .. ": " .. tostring(ok) .. " " .. tostring(err))
+      H.checkheap()
+    end)
+  end
 end

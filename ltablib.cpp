@@ -483,11 +483,61 @@ static int tmove(lua_State* L)
 constexpr int CONCATCHUNK = 64; /* elements read at a time from a plain table */
 static int tconcatk_get(lua_State* L, int status, lua_KContext ctx);
 static int tconcatk_loop(lua_State* L, int status, lua_KContext ctx);
+static int tconcatk_slice(lua_State* L, int status, lua_KContext ctx);
+
+enum
+{
+  CONCAT_ELEMENT,
+  CONCAT_SEP
+};
+
+static luaL_Box* tconcat_box(lua_State* L, luaL_Box* box)
+{
+  if (box == nullptr)
+  {
+    lua_settop(L, 4);
+    box = luaL_newbox(L);
+  }
+  return box;
+}
+
+static void tconcat_long(lua_State* L, luaL_Buffer* b, luaL_Box* box, int idx, size_t off, lua_Integer i, int what)
+{
+  byte_view v = *lua_tolstring(L, idx);
+  luaL_prepbuffsize(b, v.size() - off);
+  while (off < v.size())
+  {
+    size_t k = std::min(v.size() - off, LUAL_SLICE);
+    luaL_addlstring(b, v, off, k);
+    off += k;
+    if (luaL_slicespent(L, k) && off < v.size())
+    {
+      box->ints[0] = (lua_Integer)off;
+      box->ints[1] = what;
+      luaL_buffsave(b, box);
+      lua_checkpointk(L, (lua_KContext)i, tconcatk_slice);
+      luaL_buffload(b, box);
+    }
+  }
+}
+
+static luaL_Box* tconcat_sep(lua_State* L, luaL_Buffer* b, luaL_Box* box, lua_Integer i)
+{
+  byte_view sep = *lua_tolstring(L, 2);
+  if (sep.size() > LUAL_SLICE)
+  {
+    box = tconcat_box(L, box);
+    lua_settop(L, 5);
+    tconcat_long(L, b, box, 2, 0, i, CONCAT_SEP);
+  }
+  else
+    luaL_addlstring(b, sep, 0, sep.size());
+  return box;
+}
 
 static int tconcat_loop(lua_State* L, luaL_Buffer* b, luaL_Box* box, lua_Integer i, int at)
 {
   lua_Integer last = lua_tointeger(L, 4);
-  byte_view sep = *lua_tolstring(L, 2);
   if (at == AT_LOOP && i > last) /* empty interval? */
   {
     luaL_pushresult(b);
@@ -501,7 +551,8 @@ static int tconcat_loop(lua_State* L, luaL_Buffer* b, luaL_Box* box, lua_Integer
       int chunk = lua_checkstack(L, CONCATCHUNK + LUA_MINSTACK) ? CONCATCHUNK : 1;
       int got = lua_plaingetrange(L, 1, i, (left < chunk) ? (int)left + 1 : chunk);
       int first = lua_gettop(L) - got + 1;
-      for (int k = 0; k < got; k++, i++)
+      bool reread = false;
+      for (int k = 0; k < got && !reread; k++, i++)
       {
         std::optional<byte_view> v = lua_tolstring(L, first + k);
         if (l_unlikely(!v))
@@ -510,16 +561,37 @@ static int tconcat_loop(lua_State* L, luaL_Buffer* b, luaL_Box* box, lua_Integer
           lua_pushinteger(L, i);
           luaL_errori(L, lt::invalid_value_s_at_index_I_in_table_for_concat);
         }
-        luaL_addlstring(b, *v, 0, v->size());
+        if (v->size() > LUAL_SLICE)
+        {
+          lua_pushvalue(L, first + k);
+          lua_replace(L, first);
+          lua_settop(L, first);
+          if (box == nullptr)
+          {
+            box = luaL_newbox(L);
+            lua_insert(L, 5);
+          }
+          tconcat_long(L, b, box, 6, 0, i, CONCAT_ELEMENT);
+          lua_settop(L, 5);
+          reread = true;
+        }
+        else
+          luaL_addlstring(b, *v, 0, v->size());
         if (i == last)
         {
-          lua_pop(L, got);
+          lua_settop(L, box == nullptr ? 4 : 5);
           luaL_pushresult(b);
           return 1;
         }
-        luaL_addlstring(b, sep, 0, sep.size());
+        if (lua_rawlen(L, 2) > LUAL_SLICE)
+        {
+          lua_settop(L, box == nullptr ? 4 : 5);
+          reread = true;
+        }
+        box = tconcat_sep(L, b, box, i);
       }
-      lua_pop(L, got);
+      if (!reread)
+        lua_pop(L, got);
       if (luaE_budgetout(L))
       {
         if (box == nullptr)
@@ -547,10 +619,21 @@ static int tconcat_loop(lua_State* L, luaL_Buffer* b, luaL_Box* box, lua_Integer
       lua_pushinteger(L, i);
       luaL_errori(L, lt::invalid_value_s_at_index_I_in_table_for_concat);
     }
-    luaL_addvalue(b);
+    if (lua_rawlen(L, -1) > LUAL_SLICE)
+    {
+      if (box == nullptr)
+      {
+        box = luaL_newbox(L);
+        lua_insert(L, 5);
+      }
+      tconcat_long(L, b, box, 6, 0, i, CONCAT_ELEMENT);
+      lua_pop(L, 1);
+    }
+    else
+      luaL_addvalue(b);
     if (i == last)
       break;
-    luaL_addlstring(b, sep, 0, sep.size());
+    box = tconcat_sep(L, b, box, i);
     i++;
     at = AT_LOOP;
     if (luaE_spent(L, 1))
@@ -593,6 +676,37 @@ static int tconcatk_loop(lua_State* L, int status, lua_KContext ctx)
 }
 
 static KNamer knamer_tconcatk_loop("table.tconcatk_loop", tconcatk_loop);
+
+static int tconcatk_slice(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  lua_Integer i = (lua_Integer)ctx;
+  luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, 5));
+  if (box == nullptr || lua_type(L, 2) != LUA_TSTRING || !lua_isinteger(L, 4) || i > lua_tointeger(L, 4) ||
+      (box->ints[1] != CONCAT_ELEMENT && box->ints[1] != CONCAT_SEP))
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
+  int idx = (box->ints[1] == CONCAT_ELEMENT) ? 6 : 2;
+  if (lua_gettop(L) != ((idx == 6) ? 6 : 5) || lua_type(L, idx) != LUA_TSTRING || box->ints[0] < 1 ||
+      box->ints[0] >= static_cast<lua_Integer>(lua_rawlen(L, idx)))
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  luaL_buffload(&b, box);
+  tconcat_long(L, &b, box, idx, (size_t)box->ints[0], i, (int)box->ints[1]);
+  lua_settop(L, 5);
+  if (idx == 6)
+  {
+    if (i == lua_tointeger(L, 4))
+    {
+      luaL_pushresult(&b);
+      return 1;
+    }
+    tconcat_sep(L, &b, box, i);
+  }
+  return tconcat_loop(L, &b, box, i + 1, AT_LOOP);
+}
+
+static KNamer knamer_tconcatk_slice("table.tconcatk_slice", tconcatk_slice);
 
 /* 'concat' with the length 'last' */
 static int tconcat_len(lua_State* L, lua_Integer last)

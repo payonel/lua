@@ -3,6 +3,7 @@ package com.payonel.lungolua.lib;
 import static com.payonel.lungolua.api.LuaApi.*;
 import static com.payonel.lungolua.api.LuaAuxLib.*;
 import static com.payonel.lungolua.api.LuaConf.*;
+import static com.payonel.lungolua.api.LuaInternal.*;
 import static com.payonel.lungolua.object.Llimits.*;
 import static com.payonel.lungolua.object.Lnames.*;
 import static com.payonel.lungolua.runtime.Lstate.*;
@@ -484,10 +485,57 @@ public final class Ltablib
   */
   private static final int CONCATCHUNK = 64; /* elements read at a time from a plain table */
 
+  private static final int
+      CONCAT_ELEMENT = 0,
+      CONCAT_SEP = 1;
+
+  private static luaL_Box tconcat_box(lua_State L, luaL_Box box)
+  {
+    if (box == null)
+    {
+      lua_settop(L, 4);
+      box = luaL_newbox(L);
+    }
+    return box;
+  }
+
+  private static void tconcat_long(lua_State L, luaL_Buffer b, luaL_Box box, int idx, int off, long i, int what)
+  {
+    ByteView v = lua_tolstring(L, idx);
+    luaL_prepbuffsize(b, v.size() - off);
+    while (off < v.size())
+    {
+      int k = Math.min(v.size() - off, LUAL_SLICE);
+      luaL_addlstring(b, v, off, k);
+      off += k;
+      if (luaL_slicespent(L, k) && off < v.size())
+      {
+        box.ints[0] = (long) off;
+        box.ints[1] = what;
+        luaL_buffsave(b, box);
+        lua_checkpointk(L, (long) i, tconcatk_slice);
+        luaL_buffload(b, box);
+      }
+    }
+  }
+
+  private static luaL_Box tconcat_sep(lua_State L, luaL_Buffer b, luaL_Box box, long i)
+  {
+    ByteView sep = lua_tolstring(L, 2);
+    if (sep.size() > LUAL_SLICE)
+    {
+      box = tconcat_box(L, box);
+      lua_settop(L, 5);
+      tconcat_long(L, b, box, 2, 0, i, CONCAT_SEP);
+    }
+    else
+      luaL_addlstring(b, sep, 0, sep.size());
+    return box;
+  }
+
   private static int tconcat_loop(lua_State L, luaL_Buffer b, luaL_Box box, long i, int at)
   {
     long last = lua_tointeger(L, 4);
-    ByteView sep = lua_tolstring(L, 2);
     if (at == AT_LOOP && i > last) /* empty interval? */
     {
       luaL_pushresult(b);
@@ -501,7 +549,8 @@ public final class Ltablib
         int chunk = lua_checkstack(L, CONCATCHUNK + LUA_MINSTACK) ? CONCATCHUNK : 1;
         int got = lua_plaingetrange(L, 1, i, (left < chunk) ? (int) left + 1 : chunk);
         int first = lua_gettop(L) - got + 1;
-        for (int k = 0; k < got; k++, i++)
+        boolean reread = false;
+        for (int k = 0; k < got && !reread; k++, i++)
         {
           ByteView v = lua_tolstring(L, first + k);
           if (v == null)
@@ -510,16 +559,37 @@ public final class Ltablib
             lua_pushinteger(L, i);
             luaL_errori(L, Lt.invalid_value_s_at_index_I_in_table_for_concat);
           }
-          luaL_addlstring(b, v, 0, v.size());
+          if (v.size() > LUAL_SLICE)
+          {
+            lua_pushvalue(L, first + k);
+            lua_replace(L, first);
+            lua_settop(L, first);
+            if (box == null)
+            {
+              box = luaL_newbox(L);
+              lua_insert(L, 5);
+            }
+            tconcat_long(L, b, box, 6, 0, i, CONCAT_ELEMENT);
+            lua_settop(L, 5);
+            reread = true;
+          }
+          else
+            luaL_addlstring(b, v, 0, v.size());
           if (i == last)
           {
-            lua_pop(L, got);
+            lua_settop(L, box == null ? 4 : 5);
             luaL_pushresult(b);
             return 1;
           }
-          luaL_addlstring(b, sep, 0, sep.size());
+          if (lua_rawlen(L, 2) > LUAL_SLICE)
+          {
+            lua_settop(L, box == null ? 4 : 5);
+            reread = true;
+          }
+          box = tconcat_sep(L, b, box, i);
         }
-        lua_pop(L, got);
+        if (!reread)
+          lua_pop(L, got);
         if (luaE_budgetout(L))
         {
           if (box == null)
@@ -547,10 +617,21 @@ public final class Ltablib
         lua_pushinteger(L, i);
         luaL_errori(L, Lt.invalid_value_s_at_index_I_in_table_for_concat);
       }
-      luaL_addvalue(b);
+      if (lua_rawlen(L, -1) > LUAL_SLICE)
+      {
+        if (box == null)
+        {
+          box = luaL_newbox(L);
+          lua_insert(L, 5);
+        }
+        tconcat_long(L, b, box, 6, 0, i, CONCAT_ELEMENT);
+        lua_pop(L, 1);
+      }
+      else
+        luaL_addvalue(b);
       if (i == last)
         break;
-      luaL_addlstring(b, sep, 0, sep.size());
+      box = tconcat_sep(L, b, box, i);
       i++;
       at = AT_LOOP;
       if (luaE_spent(L, 1))
@@ -602,6 +683,45 @@ public final class Ltablib
   private static final lua_KFunction tconcatk_loop = Ltablib::tconcatk_loop;
 
   private static final KNamer knamer_tconcatk_loop = new KNamer("table.tconcatk_loop", tconcatk_loop);
+
+  private static int tconcatk_slice(lua_State L, int status, long ctx)
+  {
+    long i = (long) ctx;
+    luaL_Box box = (lua_touserobject(L, 5) instanceof luaL_Box x) ? x : null;
+    if (box == null || lua_type(L, 2) != LUA_TSTRING || !lua_isinteger(L, 4) || i > lua_tointeger(L, 4) ||
+        (box.ints[1] != CONCAT_ELEMENT && box.ints[1] != CONCAT_SEP))
+      luaL_errori(L, Lt.invalid_state_of_a_stopped_call);
+    int idx = (box.ints[1] == CONCAT_ELEMENT) ? 6 : 2;
+    if (lua_gettop(L) != ((idx == 6) ? 6 : 5) || lua_type(L, idx) != LUA_TSTRING || box.ints[0] < 1 ||
+        box.ints[0] >= (long) lua_rawlen(L, idx))
+      luaL_errori(L, Lt.invalid_state_of_a_stopped_call);
+    luaL_Buffer b = new luaL_Buffer();
+    try
+    {
+      luaL_buffinit(L, b);
+      luaL_buffload(b, box);
+      tconcat_long(L, b, box, idx, (int) box.ints[0], i, (int) box.ints[1]);
+      lua_settop(L, 5);
+      if (idx == 6)
+      {
+        if (i == lua_tointeger(L, 4))
+        {
+          luaL_pushresult(b);
+          return 1;
+        }
+        tconcat_sep(L, b, box, i);
+      }
+      return tconcat_loop(L, b, box, i + 1, AT_LOOP);
+    }
+    finally
+    {
+      b.release();
+    }
+  }
+
+  private static final lua_KFunction tconcatk_slice = Ltablib::tconcatk_slice;
+
+  private static final KNamer knamer_tconcatk_slice = new KNamer("table.tconcatk_slice", tconcatk_slice);
 
   /* 'concat' with the length 'last' */
   private static int tconcat_len(lua_State L, long last)

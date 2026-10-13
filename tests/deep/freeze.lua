@@ -886,14 +886,35 @@ do
     return frozen, r, plain
   end
   local M = 3 << 20
+  local big = string.rep("aB\n\"\\\1z\200\255", M // 10)
+  local utf = string.rep("x€ü", M // 6)
+  local cont = "a" .. string.rep("\x80", M)
+  local digits = string.rep("7", M)
+  local spaced = string.rep(" ", M // 2) .. "-1f" .. string.rep("\t", M // 2)
+  local proxy = setmetatable({}, {__index = function(_, i) return i == 2 and big or "e" .. i end,
+                                  __len = function() return 3 end})
   local works = {
     {string.rep, function() local s = string.rep("x", M) return #s, s == string.rep("xxxxxxxx", M // 8) end},
     {string.rep, function() local s = string.rep("ab", M // 3, ",") return #s, s:sub(-5), s:sub(M // 2, M // 2 + 4) end},
     {string.rep, function() local s = string.rep(string.rep("q", M // 2) .. "!", 2, "--") return #s, s:sub(M // 2 - 1, M // 2 + 5) end},
+    {string.upper, function() local s = big:upper() return #s, s:sub(1, 20), s:sub(-20) end},
+    {string.lower, function() local s = big:lower() return #s, s:sub(1, 20), s:sub(-20) end},
+    {string.reverse, function() local s = big:reverse() return #s, s:sub(1, 20), s:sub(M // 2, M // 2 + 9) end},
+    {string.format, function() local s = string.format("[%q]", big) return #s, s:sub(1, 30), s:sub(-30) end},
+    {string.format, function() local s = string.format("%s|%5s|%-3s", big, big, big) return #s, s:sub(M - 5, M + 15) end},
+    {string.format, function() local s = string.format(big .. "%%%d" .. big, 42) return #s, s:sub(#big - 3, #big + 6) end},
+    {string.find, function() return big:find("y", 1, true), (big .. "yy"):find("yy", 2, true) end, 4},
+    {utf8.len, function() return utf8.len(utf), utf8.len(utf, 3, -4), utf8.len(cont, 1, -1, true) end},
+    {utf8.offset, function() return utf8.offset(utf, M // 3), utf8.offset(utf, -(M // 4)), utf8.offset(cont, 0, #cont) end},
+    {utf8.offset, function() return utf8.offset(cont, 1), utf8.offset("€" .. cont:sub(2), 1) end, 4},
+    {table.concat, function() local s = table.concat({"a", big, "b", big}, ",") return #s, s:sub(#big - 2, #big + 6) end},
+    {table.concat, function() local s = table.concat({"a", "b", "c"}, big) return #s, s:sub(1, 3), s:sub(-3) end},
+    {table.concat, function() local s = table.concat(proxy, "|") return #s, s:sub(1, 5), s:sub(-5) end},
+    {tonumber, function() return tonumber(digits, 8), tonumber(spaced, 16), tonumber(digits .. "9", 9) end},
   }
   for i, w in ipairs(works) do
     local frozen, r, plain = inside(w[1], w[2])
-    assert(frozen >= 8, "slices " .. i .. ": " .. frozen .. " freezes")
+    assert(frozen >= (w[3] or 8), "slices " .. i .. ": " .. frozen .. " freezes")
     assert(deepeq(r, plain), "slices " .. i .. ": " .. show(r) .. " vs " .. show(plain))
   end
 end

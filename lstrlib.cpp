@@ -103,46 +103,85 @@ static int str_sub(lua_State* L)
   return 1;
 }
 
-static int str_reverse(lua_State* L)
+enum
 {
-  size_t i;
+  MAP_REVERSE,
+  MAP_LOWER,
+  MAP_UPPER
+};
+
+static int str_map(lua_State* L, luaL_Buffer* b, size_t i, int op);
+
+static int mapk(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  luaL_Box* box = dynamic_cast<luaL_Box*>(lua_touserobject(L, 2));
+  if (box == nullptr || lua_type(L, 1) != LUA_TSTRING || ctx < MAP_REVERSE || ctx > MAP_UPPER ||
+      box->used >= lua_rawlen(L, 1))
+    luaL_errori(L, lt::invalid_state_of_a_stopped_call);
   luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  luaL_buffload(&b, box);
+  return str_map(L, &b, b.used, (int)ctx);
+}
+
+static KNamer knamer_mapk("string.mapk", mapk);
+
+static int str_map(lua_State* L, luaL_Buffer* b, size_t i, int op)
+{
   const InternalString* s = luaL_checkistring(L, 1);
   size_t l = s->size();
-  size_t off = luaL_buffinitsize(L, &b, l);
-  byte_span p = luaL_buffaddr(&b);
-  for (i = 0; i < l; i++)
-    p[off + i] = (char)s->byteAt(l - i - 1);
-  luaL_pushresultsize(&b, l);
+  luaL_prepbuffsize(b, l - i);
+  while (i < l)
+  {
+    size_t e = i + std::min(l - i, LUAL_SLICE);
+    size_t k = e - i;
+    byte_span p = luaL_buffaddr(b);
+    switch (op)
+    {
+    case MAP_REVERSE:
+      for (; i < e; i++)
+        p[i] = (char)s->byteAt(l - i - 1);
+      break;
+    case MAP_LOWER:
+      for (; i < e; i++)
+        p[i] = (char)locale_tolower(s->byteAt(i));
+      break;
+    default:
+      for (; i < e; i++)
+        p[i] = (char)locale_toupper(s->byteAt(i));
+      break;
+    }
+    luaL_addsize(b, k);
+    if (l > LUAL_SLICE && luaL_slicespent(L, k) && i < l)
+      luaL_slicepoint(L, b, 2, (lua_KContext)op, mapk);
+  }
+  luaL_pushresult(b);
   return 1;
+}
+
+static int str_mapentry(lua_State* L, int op)
+{
+  luaL_checkistring(L, 1);
+  lua_settop(L, 1);
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  return str_map(L, &b, 0, op);
+}
+
+static int str_reverse(lua_State* L)
+{
+  return str_mapentry(L, MAP_REVERSE);
 }
 
 static int str_lower(lua_State* L)
 {
-  size_t i;
-  luaL_Buffer b;
-  const InternalString* s = luaL_checkistring(L, 1);
-  size_t l = s->size();
-  size_t off = luaL_buffinitsize(L, &b, l);
-  byte_span p = luaL_buffaddr(&b);
-  for (i = 0; i < l; i++)
-    p[off + i] = (char)locale_tolower(s->byteAt(i));
-  luaL_pushresultsize(&b, l);
-  return 1;
+  return str_mapentry(L, MAP_LOWER);
 }
 
 static int str_upper(lua_State* L)
 {
-  size_t i;
-  luaL_Buffer b;
-  const InternalString* s = luaL_checkistring(L, 1);
-  size_t l = s->size();
-  size_t off = luaL_buffinitsize(L, &b, l);
-  byte_span p = luaL_buffaddr(&b);
-  for (i = 0; i < l; i++)
-    p[off + i] = (char)locale_toupper(s->byteAt(i));
-  luaL_pushresultsize(&b, l);
-  return 1;
+  return str_mapentry(L, MAP_UPPER);
 }
 
 /*
@@ -1197,14 +1236,34 @@ static int str_findk(lua_State* L, int status, lua_KContext ctx);
 ** compares at is a step of the budget, and where the budget is spent a
 ** check point of 'find' (the place kept in a box at 5, made there then).
 */
+static luaL_Box* findpoint(lua_State* L, luaL_Box* box, size_t p, size_t l1)
+{
+  if (box == nullptr)
+  {
+    lua_settop(L, 4); /* (the arguments stay below it) */
+    box = luaL_newbox(L);
+  }
+  box->ints[0] = static_cast<lua_Integer>(p);
+  box->ints[1] = static_cast<lua_Integer>(l1);
+  lua_checkpointk(L, 2, str_findk);
+  return box;
+}
+
 static size_t lmemfind_from(lua_State* L, byte_view s1, size_t p, size_t l1,
                             byte_view s2, size_t l2, luaL_Box* box)
 {
   while (l1 > 0)
   {
-    size_t init = s1.find(s2[0], p);
-    if (init == byte_view::npos || init >= p + l1)
-      break;
+    size_t w = std::min(l1, LUAL_SLICE);
+    size_t init = s1.substr(0, p + w).find(s2[0], p);
+    if (init == byte_view::npos)
+    {
+      p += w;
+      l1 -= w;
+      if (l1 > 0 && luaL_slicespent(L, w))
+        box = findpoint(L, box, p, l1);
+      continue;
+    }
     init++; /* 1st char is already checked */
     if (s1.substr(init, l2).equals(s2.substr(1, l2)))
       return init - 1;
@@ -1214,16 +1273,7 @@ static size_t lmemfind_from(lua_State* L, byte_view s1, size_t p, size_t l1,
       p = init;
     }
     if (l_unlikely(luaE_spent(L, 1)))
-    {
-      if (box == nullptr)
-      {
-        lua_settop(L, 4); /* (the arguments stay below it) */
-        box = luaL_newbox(L);
-      }
-      box->ints[0] = static_cast<lua_Integer>(p);
-      box->ints[1] = static_cast<lua_Integer>(l1);
-      lua_checkpointk(L, 2, str_findk);
-    }
+      box = findpoint(L, box, p, l1);
   }
   return byte_view::npos; /* not found */
 }
@@ -1974,12 +2024,9 @@ constexpr int MAX_ITEM = 120;
 */
 constexpr int MAX_FORMAT = 32;
 
-static void addquoted(luaL_Buffer* b, const InternalString* s)
+static void addquotedpart(luaL_Buffer* b, const InternalString* s, size_t i, size_t e)
 {
-  size_t len = s->size();
-  size_t i = 0;
-  luaL_addchar(b, '"');
-  for (; i < len; i++)
+  for (; i < e; i++)
   {
     int c = s->byteAt(i);
     if (c == '"' || c == '\\' || c == '\n')
@@ -2002,6 +2049,12 @@ static void addquoted(luaL_Buffer* b, const InternalString* s)
     else
       luaL_addchar(b, (char)c);
   }
+}
+
+static void addquoted(luaL_Buffer* b, const InternalString* s)
+{
+  luaL_addchar(b, '"');
+  addquotedpart(b, s, 0, s->size());
   luaL_addchar(b, '"');
 }
 
@@ -2383,10 +2436,56 @@ static size_t formatfloat(lua_State* L, int arg, byte_view form, byte_span area,
 enum
 {
   FMT_ITEM, /* the item: where it starts (after its '%')... */
-  FMT_ARG   /* ...and its argument */
+  FMT_ARG,  /* ...and its argument */
+  FMT_OFF
 };
 
 static int formatk(lua_State* L, int status, lua_KContext ctx);
+static int formatslicek(lua_State* L, int status, lua_KContext ctx);
+
+static luaL_Box* formatbox(lua_State* L, [[maybe_unused]] int top)
+{
+  assert(lua_gettop(L) == top);
+  luaE_freezeonly(L);
+  return luaL_newbox(L);
+}
+
+static luaL_Box* formatpoint(lua_State* L, luaL_Buffer* b, luaL_Box* box, int top, size_t item, int arg,
+                             size_t off, lua_KContext ctx)
+{
+  if (box == nullptr)
+    box = formatbox(L, top);
+  box->ints[FMT_ITEM] = (lua_Integer)item;
+  box->ints[FMT_ARG] = arg;
+  box->ints[FMT_OFF] = (lua_Integer)off;
+  luaL_buffsave(b, box);
+  lua_checkpointk(L, ctx, formatslicek);
+  luaL_buffload(b, box);
+  return box;
+}
+
+static void addlong(lua_State* L, luaL_Buffer* b, luaL_Box* box, int top, size_t item, int arg, size_t off,
+                    bool quote)
+{
+  const InternalString* s = lua_toistring(L, top + 2);
+  size_t len = s->size();
+  luaL_prepbuffsize(b, len - off + 1);
+  while (off < len)
+  {
+    size_t e = off + std::min(len - off, LUAL_SLICE);
+    if (quote)
+      addquotedpart(b, s, off, e);
+    else
+      luaL_addlstring(b, s->view(), off, e - off);
+    size_t k = e - off;
+    off = e;
+    if (luaL_slicespent(L, k) && off < len)
+      formatpoint(L, b, box, top, item, arg, off, 1);
+  }
+  if (quote)
+    luaL_addchar(b, '"');
+  lua_pop(L, 1);
+}
 
 /*
 ** Whether the value at 'arg' has a '__tostring' to call for a format
@@ -2400,11 +2499,7 @@ static luaL_Box* formatsave(lua_State* L, luaL_Buffer* b, luaL_Box* box, [[maybe
     return nullptr;
   lua_pop(L, 1);
   if (box == nullptr)
-  {
-    assert(lua_gettop(L) == top);
-    box = luaL_newbox(L);
-    luaE_freezeonly(L);
-  }
+    box = formatbox(L, top);
   box->ints[FMT_ITEM] = (lua_Integer)item;
   box->ints[FMT_ARG] = arg;
   luaL_buffsave(b, box);
@@ -2412,13 +2507,25 @@ static luaL_Box* formatsave(lua_State* L, luaL_Buffer* b, luaL_Box* box, [[maybe
 }
 
 /* the string 's' of a '%s' item, on the top: add it as the format says */
+static void addwhole(lua_State* L, luaL_Buffer* b, luaL_Box* box, int top, size_t item, int arg)
+{
+  if (lua_rawlen(L, -1) > LUAL_SLICE)
+  {
+    assert(box != nullptr && lua_gettop(L) == top + 2);
+    addlong(L, b, box, top, item, arg, 0, false);
+  }
+  else
+    luaL_addvalue(b);
+}
+
 static size_t addstringitem(lua_State* L, luaL_Buffer* b, byte_view formv, size_t formlen,
-                            int arg, size_t boff, size_t maxitem, const InternalString* s)
+                            int arg, size_t boff, size_t maxitem, const InternalString* s,
+                            luaL_Box* box, int top, size_t item)
 {
   size_t nb = 0;
   byte_view sv = s->view();
   if (formlen == 2) /* no modifiers? */
-    luaL_addvalue(b); /* keep entire string */
+    addwhole(L, b, box, top, item, arg); /* keep entire string */
   else
   {
     luaL_argchecki(L, sv.find('\0') == byte_view::npos, arg, lt::string_contains_zeros);
@@ -2426,7 +2533,7 @@ static size_t addstringitem(lua_State* L, luaL_Buffer* b, byte_view formv, size_
     if (formv.find('.') == byte_view::npos && sv.size() >= 100)
     {
       /* no precision and string is too long to be formatted */
-      luaL_addvalue(b); /* keep entire string */
+      addwhole(L, b, box, top, item, arg); /* keep entire string */
     }
     else
     { /* format the string into 'buff' */
@@ -2450,8 +2557,18 @@ static int format_from(lua_State* L, const InternalString* sf, size_t i, int arg
                        luaL_Buffer& b, luaL_Box* box)
 {
   size_t sfl = sf->size();
+  size_t mark = luaL_bufflen(&b);
+  size_t imark = i;
   while (i < sfl)
   {
+    size_t work = (luaL_bufflen(&b) - mark) + (i - imark);
+    if (work >= LUAL_SLICE)
+    {
+      if (luaL_slicespent(L, work))
+        box = formatpoint(L, &b, box, top, i, arg, 0, 0);
+      mark = luaL_bufflen(&b);
+      imark = i;
+    }
     if (sf->byteAt(i) != L_ESC)
       luaL_addchar(&b, (char)sf->byteAt(i++));
     else if (sv_byteat(sf->view(), ++i) == L_ESC)
@@ -2560,6 +2677,16 @@ static int format_from(lua_State* L, const InternalString* sf, size_t i, int arg
           luaL_tostringresult(L);
           luaL_addvalue(&b);
         }
+        else if (t == LUA_TSTRING && lua_rawlen(L, arg) > LUAL_SLICE)
+        {
+          if (box == nullptr)
+            box = formatbox(L, top);
+          lua_pushvalue(L, arg);
+          luaL_addchar(&b, '"');
+          addlong(L, &b, box, top, item, arg, 0, true);
+          mark = luaL_bufflen(&b);
+          imark = i;
+        }
         else
           addliteral(L, &b, arg);
         break;
@@ -2577,10 +2704,18 @@ static int format_from(lua_State* L, const InternalString* sf, size_t i, int arg
         }
         else
         {
+          if (box == nullptr && lua_type(L, arg) == LUA_TSTRING && lua_rawlen(L, arg) > LUAL_SLICE)
+            box = formatbox(L, top);
           luaL_tostringdefault(L, arg);
           str = lua_toistring(L, -1);
         }
-        nb = addstringitem(L, &b, formv, fs.len, arg, boff, maxitem, str);
+        size_t before = luaL_bufflen(&b);
+        nb = addstringitem(L, &b, formv, fs.len, arg, boff, maxitem, str, box, top, item);
+        if (luaL_bufflen(&b) - before > LUAL_SLICE)
+        {
+          mark = luaL_bufflen(&b);
+          imark = i;
+        }
         break;
       }
       default:
@@ -2625,7 +2760,7 @@ static int formatk(lua_State* L, int status, lua_KContext ctx)
     size_t maxitem = MAX_ITEM;
     size_t boff = luaL_prepbuffsize(&b, maxitem);
     size_t nb = addstringitem(L, &b, form.view().substr(0, fs.len), fs.len, arg, boff, maxitem,
-                              luaL_tostringresult(L));
+                              luaL_tostringresult(L), box, top, (size_t)box->ints[FMT_ITEM]);
     assert(nb < maxitem);
     luaL_addsize(&b, nb);
   }
@@ -2633,6 +2768,41 @@ static int formatk(lua_State* L, int status, lua_KContext ctx)
 }
 
 static KNamer knamer_formatk("string.formatk", formatk);
+
+static int formatslicek(lua_State* L, int status, lua_KContext ctx)
+{
+  (void)status;
+  int top = lua_gettop(L) - ((ctx == 1) ? 2 : 1);
+  luaL_Box* box = (top >= 1) ? dynamic_cast<luaL_Box*>(lua_touserobject(L, top + 1)) : nullptr;
+  if (box == nullptr || (ctx != 0 && ctx != 1) || lua_type(L, 1) != LUA_TSTRING)
+    luaL_errori(L, lt::invalid_state_of_a_stopped_format);
+  const InternalString* sf = lua_toistring(L, 1);
+  lua_Integer item = box->ints[FMT_ITEM];
+  lua_Integer arg = box->ints[FMT_ARG];
+  lua_Integer off = box->ints[FMT_OFF];
+  luaL_Buffer b;
+  luaL_buffinit(L, &b);
+  if (ctx == 0)
+  {
+    if (item < 0 || item > static_cast<lua_Integer>(sf->size()) || arg < 1 || arg > top)
+      luaL_errori(L, lt::invalid_state_of_a_stopped_format);
+    luaL_buffload(&b, box);
+    return format_from(L, sf, (size_t)item, (int)arg, top, b, box);
+  }
+  if (item < 1 || item >= static_cast<lua_Integer>(sf->size()) || arg < 2 || arg > top ||
+      lua_type(L, top + 2) != LUA_TSTRING || off < 1 || off >= static_cast<lua_Integer>(lua_rawlen(L, top + 2)))
+    luaL_errori(L, lt::invalid_state_of_a_stopped_format);
+  byte_inline<MAX_FORMAT> form;
+  FormSpan fs = getformat(L, sf, (size_t)item, form);
+  int conv = sv_byteat(sf->view(), fs.end);
+  if (conv != 's' && conv != 'q')
+    luaL_errori(L, lt::invalid_state_of_a_stopped_format);
+  luaL_buffload(&b, box);
+  addlong(L, &b, box, top, (size_t)item, (int)arg, (size_t)off, conv == 'q');
+  return format_from(L, sf, fs.end + 1, (int)arg, top, b, box);
+}
+
+static KNamer knamer_formatslicek("string.formatslicek", formatslicek);
 
 static int str_format(lua_State* L)
 {
