@@ -28,7 +28,7 @@ public final class Lmathlib
 
   private static int math_abs(lua_State L)
   {
-    if (lua_isinteger(L, 1) != 0)
+    if (lua_isinteger(L, 1))
     {
       long n = lua_tointeger(L, 1);
       if (n < 0)
@@ -110,7 +110,7 @@ public final class Lmathlib
   private static void pushnumint(lua_State L, double d)
   {
     IntResult n = new IntResult();
-    if (lua_numbertointeger(d, n) != 0) /* does 'd' fit in an integer? */
+    if (lua_numbertointeger(d, n)) /* does 'd' fit in an integer? */
       lua_pushinteger(L, n.v);        /* result is integer */
     else
       lua_pushnumber(L, d); /* result is float */
@@ -118,7 +118,7 @@ public final class Lmathlib
 
   private static int math_floor(lua_State L)
   {
-    if (lua_isinteger(L, 1) != 0)
+    if (lua_isinteger(L, 1))
       lua_settop(L, 1); /* integer is its own floor */
     else
     {
@@ -132,7 +132,7 @@ public final class Lmathlib
 
   private static int math_ceil(lua_State L)
   {
-    if (lua_isinteger(L, 1) != 0)
+    if (lua_isinteger(L, 1))
       lua_settop(L, 1); /* integer is its own ceiling */
     else
     {
@@ -146,7 +146,7 @@ public final class Lmathlib
 
   private static int math_fmod(lua_State L)
   {
-    if (lua_isinteger(L, 1) != 0 && lua_isinteger(L, 2) != 0)
+    if (lua_isinteger(L, 1) && lua_isinteger(L, 2))
     {
       long d = lua_tointeger(L, 2);
       if (d == 0 || d == -1)
@@ -172,7 +172,7 @@ public final class Lmathlib
   */
   private static int math_modf(lua_State L)
   {
-    if (lua_isinteger(L, 1) != 0)
+    if (lua_isinteger(L, 1))
     {
       lua_settop(L, 1);     /* number is its own integer part */
       lua_pushnumber(L, 0); /* no fractional part */
@@ -203,7 +203,7 @@ public final class Lmathlib
   {
     long a = luaL_checkinteger(L, 1);
     long b = luaL_checkinteger(L, 2);
-    lua_pushboolean(L, l_ult(a, b) ? 1 : 0);
+    lua_pushboolean(L, l_ult(a, b));
     return 1;
   }
 
@@ -213,7 +213,7 @@ public final class Lmathlib
   {
     double x = luaL_checknumber(L, 1);
     double res;
-    if (lua_isnoneornil(L, 2) != 0)
+    if (lua_isnoneornil(L, 2))
       res = log(x);
     else
     {
@@ -297,7 +297,7 @@ public final class Lmathlib
         lua_comparek(L, ibest, i, LUA_OPLT, ctx, max_cont);
       else
         lua_comparek(L, i, ibest, LUA_OPLT, ctx, min_cont);
-      if (lua_toboolean(L, -1) != 0)
+      if (lua_toboolean(L, -1))
         ibest = i;
       lua_pop(L, 1);
     }
@@ -311,7 +311,7 @@ public final class Lmathlib
     int n = (int) (ctx & 0x1FFFFF);
     int i = (int) ((ctx >> 21) & 0x1FFFFF);
     int ibest = (int) ((ctx >> 42) & 0x1FFFFF);
-    if (lua_toboolean(L, -1) != 0)
+    if (lua_toboolean(L, -1))
       ibest = i;
     lua_pop(L, 1);
     return minmax_loop(L, ismax, n, i + 1, ibest);
@@ -359,7 +359,7 @@ public final class Lmathlib
   private static int math_type(lua_State L)
   {
     if (lua_type(L, 1) == LUA_TNUMBER)
-      lua_pushistringref(L, lua_isinteger(L, 1) != 0 ? Lt.integer_2 : Lt.float_kw);
+      lua_pushistringref(L, lua_isinteger(L, 1) ? Lt.integer_2 : Lt.float_kw);
     else
     {
       luaL_checkany(L, 1);
@@ -539,7 +539,7 @@ public final class Lmathlib
   {
     RanState state = (RanState) lua_touserobject(L, lua_upvalueindex(1));
     long n1, n2;
-    if (lua_isnone(L, 1) != 0)
+    if (lua_isnone(L, 1))
     {
       n1 = Integer.toUnsignedLong(luaL_makeseed(L));           /* "random" seed */
       n2 = I2UInt(nextrand(state.s)); /* in case seed is not that random... */

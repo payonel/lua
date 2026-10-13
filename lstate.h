@@ -245,24 +245,24 @@ static l_forceinline void setcistrecst(CallInfo* ci, int st)
 }
 
 /* active function is a Lua function */
-static l_forceinline int isLua(const CallInfo* ci)
+static l_forceinline bool isLua(const CallInfo* ci)
 {
   return !(ci->callstatus & CIST_C);
 }
 
 /* call is running Lua code (not a hook) */
-static l_forceinline int isLuacode(const CallInfo* ci)
+static l_forceinline bool isLuacode(const CallInfo* ci)
 {
   return !(ci->callstatus & (CIST_C | CIST_HOOKED));
 }
 
-static l_forceinline void setoah(CallInfo* ci, int v)
+static l_forceinline void setoah(CallInfo* ci, bool v)
 {
   ci->callstatus = v ? (ci->callstatus | CIST_OAH) : (ci->callstatus & ~CIST_OAH);
 }
-static l_forceinline lu_byte getoah(const CallInfo* ci)
+static l_forceinline bool getoah(const CallInfo* ci)
 {
-  return (ci->callstatus & CIST_OAH) ? 1 : 0;
+  return (ci->callstatus & CIST_OAH) != 0;
 }
 
 /*
@@ -273,7 +273,7 @@ struct global_State;
 
 struct lua_State : GCListed
 {
-  lu_byte allowhook = 1;
+  bool allowhook = true;
   TStatus status = LUA_OK;
   StkId top = 0; /* first free slot in the stack */
   global_State* l_G = nullptr;
@@ -306,7 +306,7 @@ struct lua_State : GCListed
   lua_State* frozenchild = nullptr; /* frozen while resuming this thread */
   lua_State* frozenparent = nullptr; /* the thread that resumed it, in a frozen chain */
   int nfz = 0;              /* number of calls in the stack that cannot freeze */
-  lu_byte resumedk = 0;     /* resumed by a call with a continuation */
+  bool resumedk = false;     /* resumed by a call with a continuation */
   BudgetGroup* bown = nullptr; /* the budget group it belongs to, if any */
   BudgetGroup* beff = nullptr; /* the budget group in effect while it runs */
   lu_byte frozen = 0;       /* frozen: how it was entered (FZ_*); 0: not */
@@ -555,7 +555,7 @@ static l_forceinline void setslotth(lua_State* L, StkId idx, lua_State* x)
 /* }================================================================== */
 
 /* true if this thread does not have non-yieldable calls in the stack */
-static l_forceinline int yieldable(const lua_State* L)
+static l_forceinline bool yieldable(const lua_State* L)
 {
   return (L->nCcalls & 0xffff0000) == 0;
 }
@@ -614,9 +614,9 @@ struct global_State
   lu_byte currentwhite = 0;
   lu_byte gcstate = 0;     /* state of garbage collector */
   lu_byte gckind = 0;      /* kind of GC running */
-  lu_byte gcstopem = 0;    /* stops emergency collections */
+  bool gcstopem = false;    /* stops emergency collections */
   lu_byte gcstp = 0;       /* control whether GC is running */
-  lu_byte gcemergency = 0; /* true if this is an emergency collection */
+  bool gcemergency = false; /* true if this is an emergency collection */
   GCObject allgc{};      /* list of all collectable objects */
   GCObject* sweepgc = nullptr;  /* current position of sweep in list */
   unsigned sweepq = 0;          /* the next group whose queue the sweep takes */
@@ -677,7 +677,7 @@ static l_forceinline lua_State* mainthread(global_State* g)
   return &g->mainth;
 }
 
-static l_forceinline int completestate(global_State* g)
+static l_forceinline bool completestate(global_State* g)
 {
   return ttype(&g->nilvalue) == LUA_TNIL;
 }

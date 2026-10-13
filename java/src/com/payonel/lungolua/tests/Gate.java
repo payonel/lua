@@ -373,7 +373,7 @@ public final class Gate
     int st = lua_pcall(L[0], argc - 3, 0, base);
     long thaws = 0;
     long next = every;
-    while (st == LUA_OK && lua_isfrozen(L[0]) != 0)
+    while (st == LUA_OK && lua_isfrozen(L[0]))
     {
       if (every > 0 && freezes >= next)
       {

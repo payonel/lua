@@ -24,7 +24,7 @@ public final class FuncState
   public int nups;         /* number of upvalues */
   public int freereg;      /* first free register */
   public int iwthabs;      /* instructions issued since last absolute line info */
-  public byte needclose;   /* function needs to close upvalues when returning */
+  public boolean needclose;   /* function needs to close upvalues when returning */
 
   public FuncState()
   {

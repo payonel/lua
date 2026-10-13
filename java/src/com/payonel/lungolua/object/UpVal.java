@@ -37,7 +37,7 @@ public final class UpVal extends GCObject
       prev.opennext = uv;
     else
       L.openupval = uv;
-    if (isintwups(L) == 0)
+    if (!isintwups(L))
     {                         /* thread not in list of threads with upvalues? */
       L.twups = L.l_G.twups; /* link it to the list */
       L.l_G.twups = L;
@@ -53,10 +53,10 @@ public final class UpVal extends GCObject
   {
     UpVal pp = null;
     UpVal p = L.openupval;
-    assert isintwups(L) != 0 || L.openupval == null;
+    assert isintwups(L) || L.openupval == null;
     while (p != null && uplevel(p) >= level)
     { /* search for it */
-      assert isdead(L.l_G, p) == 0;
+      assert !isdead(L.l_G, p);
       if (uplevel(p) == level) /* corresponding upvalue? */
         return p;              /* return it */
       pp = p;
@@ -68,7 +68,7 @@ public final class UpVal extends GCObject
 
   public void luaF_unlinkupval()
   {
-    assert upisopen(this) != 0;
+    assert upisopen(this);
     if (prevopen != null)
       prevopen.opennext = opennext;
     else

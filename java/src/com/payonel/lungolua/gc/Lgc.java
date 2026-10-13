@@ -71,9 +71,9 @@ public final class Lgc
   public static final int GCScallfin = 7;
   public static final int GCSpause = 8;
 
-  public static int issweepphase(global_State g)
+  public static boolean issweepphase(global_State g)
   {
-    return (GCSswpallgc <= g.gcstate && g.gcstate <= GCSswpend) ? 1 : 0;
+    return GCSswpallgc <= g.gcstate && g.gcstate <= GCSswpend;
   }
 
   /*
@@ -84,9 +84,9 @@ public final class Lgc
   ** are white again.
   */
 
-  public static int keepinvariant(global_State g)
+  public static boolean keepinvariant(global_State g)
   {
-    return (g.gcstate <= GCSatomic) ? 1 : 0;
+    return g.gcstate <= GCSatomic;
   }
 
   /*
@@ -116,25 +116,25 @@ public final class Lgc
 
   public static final int WHITEBITS = bit2mask(WHITE0BIT, WHITE1BIT);
 
-  public static int iswhite(GCObject x)
+  public static boolean iswhite(GCObject x)
   {
-    return x.marked & WHITEBITS;
+    return (x.marked & WHITEBITS) != 0;
   }
 
-  public static int isblack(GCObject x)
+  public static boolean isblack(GCObject x)
   {
-    return x.marked & bitmask(BLACKBIT);
+    return (x.marked & bitmask(BLACKBIT)) != 0;
   }
 
   /* neither white nor black */
-  public static int isgray(GCObject x)
+  public static boolean isgray(GCObject x)
   {
-    return ((x.marked & (WHITEBITS | bitmask(BLACKBIT))) == 0) ? 1 : 0;
+    return (x.marked & (WHITEBITS | bitmask(BLACKBIT))) == 0;
   }
 
-  public static int tofinalize(GCObject x)
+  public static boolean tofinalize(GCObject x)
   {
-    return x.marked & bitmask(FINALIZEDBIT);
+    return (x.marked & bitmask(FINALIZEDBIT)) != 0;
   }
 
   public static byte otherwhite(global_State g)
@@ -142,12 +142,12 @@ public final class Lgc
     return (byte) (g.currentwhite ^ WHITEBITS);
   }
 
-  public static int isdeadm(byte ow, byte m)
+  public static boolean isdeadm(byte ow, byte m)
   {
-    return (m & 0xFF) & (ow & 0xFF);
+    return ((m & 0xFF) & (ow & 0xFF)) != 0;
   }
 
-  public static int isdead(global_State g, GCObject v)
+  public static boolean isdead(global_State g, GCObject v)
   {
     return isdeadm(otherwhite(g), v.marked);
   }
@@ -159,7 +159,7 @@ public final class Lgc
 
   public static void nw2black(GCObject x)
   {
-    assert iswhite(x) == 0;
+    assert !iswhite(x);
     x.marked = (byte) (x.marked | bitmask(BLACKBIT));
   }
 
@@ -189,9 +189,9 @@ public final class Lgc
     o.marked = (byte) ((o.marked & ~AGEBITS) | a);
   }
 
-  public static int isold(GCObject o)
+  public static boolean isold(GCObject o)
   {
-    return (getage(o) > G_SURVIVAL) ? 1 : 0;
+    return getage(o) > G_SURVIVAL;
   }
 
   /*
@@ -279,9 +279,9 @@ public final class Lgc
   public static final int GCSTPGC = 2; /* bit true when GC stopped by itself */
   public static final int GCSTPCLS = 4; /* bit true when closing Lua state */
 
-  public static int gcrunning(global_State g)
+  public static boolean gcrunning(global_State g)
   {
-    return (g.gcstp == 0) ? 1 : 0;
+    return g.gcstp == 0;
   }
 
   public static void luaC_checkGC(lua_State L)
@@ -318,7 +318,7 @@ public final class Lgc
 
   public static void luaC_objbarrier(lua_State L, GCObject p, GCObject o)
   {
-    if (isblack(p) != 0 && iswhite(o) != 0)
+    if (isblack(p) && iswhite(o))
       luaC_barrier_(L, p, o);
   }
 
@@ -330,7 +330,7 @@ public final class Lgc
 
   public static void luaC_objbarrierback(lua_State L, GCObject p, GCObject o)
   {
-    if (isblack(p) != 0 && iswhite(o) != 0)
+    if (isblack(p) && iswhite(o))
       luaC_barrierback_(L, p);
   }
 
@@ -375,9 +375,9 @@ public final class Lgc
     x.marked = (byte) ((x.marked & ~WHITEBITS) | bitmask(BLACKBIT));
   }
 
-  private static int keyiswhite(Node n)
+  private static boolean keyiswhite(Node n)
   {
-    return (keyiscollectable(n) && iswhite(gckey(n)) != 0) ? 1 : 0;
+    return keyiscollectable(n) && iswhite(gckey(n));
   }
 
   private static GCObject gcvalueN(TValue o)
@@ -393,19 +393,19 @@ public final class Lgc
   private static void markvalue(global_State g, TValue o)
   {
     checkliveness(mainthread(g), o);
-    if (iscollectable(o) && iswhite(gcvalue(o)) != 0)
+    if (iscollectable(o) && iswhite(gcvalue(o)))
       reallymarkobject(g, gcvalue(o));
   }
 
   private static void markkey(global_State g, Node n)
   {
-    if (keyiswhite(n) != 0)
+    if (keyiswhite(n))
       reallymarkobject(g, gckey(n));
   }
 
   private static void markobject(global_State g, GCObject t)
   {
-    if (iswhite(t) != 0)
+    if (iswhite(t))
       reallymarkobject(g, t);
   }
 
@@ -503,7 +503,7 @@ public final class Lgc
 
   private static void linkgclist_(GCListed o, GCListed list)
   {
-    assert isgray(o) == 0; /* cannot be in a gray list */
+    assert !isgray(o); /* cannot be in a gray list */
     o.gclist = list.gclist;
     list.gclist = o;
     set2gray(o); /* now it is */
@@ -535,14 +535,14 @@ public final class Lgc
   ** other objects: if really collected, cannot keep them; for objects
   ** being finalized, keep them in keys, but not in values
   */
-  private static int iscleared(global_State g, GCObject o)
+  private static boolean iscleared(global_State g, GCObject o)
   {
     if (o == null)
-      return 0; /* non-collectable value */
+      return false; /* non-collectable value */
     else if (novariant(o.tt) == LUA_TSTRING)
     {
       markobject(g, o);
-      return 0;
+      return false;
     }
     else
       return iswhite(o);
@@ -564,19 +564,19 @@ public final class Lgc
   public static void luaC_barrier_(lua_State L, GCObject o, GCObject v)
   {
     global_State g = L.l_G;
-    assert isblack(o) != 0 && iswhite(v) != 0 && isdead(g, v) == 0 && isdead(g, o) == 0;
-    if (keepinvariant(g) != 0)
+    assert isblack(o) && iswhite(v) && !isdead(g, v) && !isdead(g, o);
+    if (keepinvariant(g))
     {                         /* must keep invariant? */
       reallymarkobject(g, v); /* restore invariant */
-      if (isold(o) != 0)
+      if (isold(o))
       {
-        assert isold(v) == 0; /* white object could not be old */
+        assert !isold(v); /* white object could not be old */
         setage(v, G_OLD0);     /* restore generational invariant */
       }
     }
     else
     { /* sweep phase */
-      assert issweepphase(g) != 0;
+      assert issweepphase(g);
       if (g.gckind != KGC_GENMINOR) /* incremental mode? */
         makewhite(g, o);             /* mark 'o' as white to avoid other barriers */
     }
@@ -589,13 +589,13 @@ public final class Lgc
   public static void luaC_barrierback_(lua_State L, GCObject o)
   {
     global_State g = L.l_G;
-    assert isblack(o) != 0 && isdead(g, o) == 0;
-    assert (g.gckind != KGC_GENMINOR) || (isold(o) != 0 && getage(o) != G_TOUCHED1);
+    assert isblack(o) && !isdead(g, o);
+    assert (g.gckind != KGC_GENMINOR) || (isold(o) && getage(o) != G_TOUCHED1);
     if (getage(o) == G_TOUCHED2) /* already in gray list? */
       set2gray(o);               /* make it gray to become touched1 */
     else                         /* link it in 'grayagain' and paint it gray */
       linkgclist_(getgclist(o), g.grayagain);
-    if (isold(o) != 0)       /* generational mode? */
+    if (isold(o))       /* generational mode? */
       setage(o, G_TOUCHED1); /* touched in current cycle */
   }
 
@@ -687,7 +687,7 @@ public final class Lgc
     case LUA_VUPVAL:
     {
       UpVal uv = (UpVal) o;
-      if (upisopen(uv) != 0)
+      if (upisopen(uv))
         set2gray(uv); /* open upvalues are kept gray */
       else
         set2black(uv);        /* closed upvalues are visited here */
@@ -758,12 +758,12 @@ public final class Lgc
     lua_State prev = null;
     while ((thread = (prev != null) ? prev.twups : g.twups) != null)
     {
-      if (iswhite(thread) == 0 && thread.openupval != null)
+      if (!iswhite(thread) && thread.openupval != null)
         prev = thread; /* keep marked thread with upvalues in the list */
       else
       { /* thread is not marked or without upvalues */
         UpVal uv;
-        assert isold(thread) == 0 || thread.openupval == null;
+        assert !isold(thread) || thread.openupval == null;
         if (prev != null)
           prev.twups = thread.twups; /* remove thread from the list */
         else
@@ -772,9 +772,9 @@ public final class Lgc
         for (uv = thread.openupval; uv != null; uv = uv.opennext)
         {
           assert getage(uv) <= getage(thread);
-          if (iswhite(uv) == 0)
+          if (!iswhite(uv))
           { /* upvalue already visited? */
-            assert upisopen(uv) != 0 && isgray(uv) != 0;
+            assert upisopen(uv) && isgray(uv);
             TValue uvv = upvalgetval(uv);
             markvalue(g, uvv); /* mark its value */
           }
@@ -829,7 +829,7 @@ public final class Lgc
   */
   private static void genlink(global_State g, GCObject o)
   {
-    assert isblack(o) != 0;
+    assert isblack(o);
     if (getage(o) == G_TOUCHED1)
     {                                 /* touched in this cycle? */
       linkgclist_(getgclist(o), g.grayagain); /* link it back in 'grayagain' */
@@ -850,7 +850,7 @@ public final class Lgc
     int i, nsize = sizenode(h);
     /* if there is array part, assume it may have white values (it is not
        worth traversing it now just to check) */
-    int hasclears = (h.array_prim.length > 0) ? 1 : 0;
+    boolean hasclears = h.array_prim.length > 0;
     for (i = 0; i < nsize; i++)
     {                       /* traverse hash part */
       Node n = gnode(h, i);
@@ -860,13 +860,13 @@ public final class Lgc
       {
         assert !keyisnil(n);
         markkey(g, n);
-        if (hasclears == 0 && iscleared(g, gcvalueN(n)) != 0) /* a white value? */
-          hasclears = 1;                                   /* table will have to be cleared */
+        if (!hasclears && iscleared(g, gcvalueN(n))) /* a white value? */
+          hasclears = true;                                   /* table will have to be cleared */
       }
     }
     if (g.gcstate == GCSpropagate)
       linkgclist_(h, g.grayagain); /* must retraverse it in atomic phase */
-    else if (hasclears != 0)
+    else if (hasclears)
       linkgclist_(h, g.weak); /* has to be cleared later */
     else
     {
@@ -878,17 +878,17 @@ public final class Lgc
   /*
   ** Traverse the array part of a table.
   */
-  private static int traversearray(global_State g, Table h)
+  private static boolean traversearray(global_State g, Table h)
   {
     int asize = h.asize();
-    int marked = 0; /* true if some object is marked in this traversal */
+    boolean marked = false; /* true if some object is marked in this traversal */
     int i;
     for (i = 0; i < asize; i++)
     {
       GCObject o = gcvalarr(h, i);
-      if (o != null && iswhite(o) != 0)
+      if (o != null && iswhite(o))
       {
-        marked = 1;
+        marked = true;
         reallymarkobject(g, o);
       }
     }
@@ -907,33 +907,33 @@ public final class Lgc
   ** must be kept in some gray list for post-processing; this is done
   ** by 'genlink'.
   */
-  private static int traverseephemeron(global_State g, Table h, int inv)
+  private static boolean traverseephemeron(global_State g, Table h, boolean inv)
   {
-    int hasclears = 0; /* true if table has white keys */
-    int hasww = 0;     /* true if table has entry "white-key -> white-value" */
+    boolean hasclears = false; /* true if table has white keys */
+    boolean hasww = false;     /* true if table has entry "white-key -> white-value" */
     int i;
     int nsize = sizenode(h);
-    int marked = traversearray(g, h); /* traverse array part */
+    boolean marked = traversearray(g, h); /* traverse array part */
     /* traverse hash part; if 'inv', traverse descending
        (see 'convergeephemerons') */
     for (i = 0; i < nsize; i++)
     {
-      Node n = inv != 0 ? gnode(h, nsize - 1 - i) : gnode(h, i);
+      Node n = inv ? gnode(h, nsize - 1 - i) : gnode(h, i);
       if (isempty(n)) /* entry is empty? */
         clearkey(n);        /* clear its key */
-      else if (iscleared(g, gckeyN(n)) != 0)
+      else if (iscleared(g, gckeyN(n)))
       {                          /* key is not marked (yet)? */
-        hasclears = 1;           /* table must be cleared */
-        if (iscollectable(n) && iswhite(gcvalue(n)) != 0)
+        hasclears = true;           /* table must be cleared */
+        if (iscollectable(n) && iswhite(gcvalue(n)))
         {           /* value not marked yet? */
-          hasww = 1; /* white-white entry */
+          hasww = true; /* white-white entry */
           if (g.ephidx != null)
             ephwait(g, gckeyN(n), gcvalue(n)); /* (converging: it waits for its key) */
         }
       }
-      else if (iscollectable(n) && iswhite(gcvalue(n)) != 0)
+      else if (iscollectable(n) && iswhite(gcvalue(n)))
       { /* value not marked yet? */
-        marked = 1;
+        marked = true;
         reallymarkobject(g, gcvalue(n)); /* mark it now */
       }
     }
@@ -942,9 +942,9 @@ public final class Lgc
       linkgclist_(h, g.ephemeron); /* (converging: sorted out at its end) */
     else if (g.gcstate == GCSpropagate)
       linkgclist_(h, g.grayagain); /* must retraverse it in atomic phase */
-    else if (hasww != 0)                /* table has white->white entries? */
+    else if (hasww)                /* table has white->white entries? */
       linkgclist_(h, g.ephemeron); /* have to propagate again */
-    else if (hasclears != 0)            /* table has white keys? */
+    else if (hasclears)            /* table has white keys? */
       linkgclist_(h, g.allweak);   /* may have to clean white keys */
     else
     {
@@ -1003,7 +1003,7 @@ public final class Lgc
       traverseweakvalue(g, h);
       break;
     case 2: /* weak keys */
-      traverseephemeron(g, h, 0);
+      traverseephemeron(g, h, false);
       break;
     case 3: /* all weak; nothing to traverse */
       if (g.gcstate == GCSpropagate)
@@ -1077,12 +1077,12 @@ public final class Lgc
   {
     UpVal uv;
     int o = 0;
-    if (isold(th) != 0 || g.gcstate == GCSpropagate)
+    if (isold(th) || g.gcstate == GCSpropagate)
       linkgclist_(th, g.grayagain); /* insert into 'grayagain' list */
     if (th.stack_prim.length == 0)
       return 0; /* stack not completely built yet */
     assert g.gcstate == GCSatomic ||
-               th.openupval == null || isintwups(th) != 0;
+               th.openupval == null || isintwups(th);
     for (; o < th.top; o++) /* mark live elements in the stack */
     {
       TValue v = getslot(th, o);
@@ -1100,12 +1100,12 @@ public final class Lgc
       markobject(g, th.beff);
     if (g.gcstate == GCSatomic)
     { /* final traversal? */
-      if (g.gcemergency == 0)
+      if (!g.gcemergency)
         luaD_shrinkstack(th); /* do not change stack in emergency cycle */
       for (o = th.top; o < th.stack_last + EXTRA_STACK; o++)
         setslottag(th, o, LUA_VNIL); /* clear dead stack slice */
       /* 'remarkupvals' may have removed thread from 'twups' list */
-      if (isintwups(th) == 0 && th.openupval != null)
+      if (!isintwups(th) && th.openupval != null)
       {
         th.twups = g.twups; /* link it back to the list */
         g.twups = th;
@@ -1258,7 +1258,7 @@ public final class Lgc
         GCObject k = x.ready[--x.nready];
         int mask = x.cap - 1;
         for (int i = k.hash & mask; x.keys[i] != null; i = (i + 1) & mask)
-          if (x.keys[i] == k && iswhite(x.values[i]) != 0)
+          if (x.keys[i] == k && iswhite(x.values[i]))
             reallymarkobject(g, x.values[i]);
       }
       else
@@ -1281,7 +1281,7 @@ public final class Lgc
       Table h = (Table) w;
       next = h.gclist;
       nw2black(h);
-      traverseephemeron(g, h, 0);
+      traverseephemeron(g, h, false);
     }
     ephdrain(g); /* (the tables it finds wait too) */
     g.ephidx = null;
@@ -1295,8 +1295,8 @@ public final class Lgc
       Table h = (Table) w;
       next = h.gclist;
       nw2black(h);
-      int marked = traverseephemeron(g, h, 0);
-      assert marked == 0;
+      boolean marked = traverseephemeron(g, h, false);
+      assert !marked;
     }
   }
 
@@ -1321,7 +1321,7 @@ public final class Lgc
       for (i = 0; i < nsize; i++)
       {
         Node n = gnode(h, i);
-        if (iscleared(g, gckeyN(n)) != 0) /* unmarked key? */
+        if (iscleared(g, gckeyN(n))) /* unmarked key? */
           setempty(n);         /* remove entry */
         if (isempty(n))        /* is entry empty? */
           clearkey(n);               /* clear its key */
@@ -1344,13 +1344,13 @@ public final class Lgc
       for (i = 0; i < asize; i++)
       {
         GCObject o = gcvalarr(h, i);
-        if (iscleared(g, o) != 0)             /* value was collected? */
+        if (iscleared(g, o))             /* value was collected? */
           setArrTag(h, i, LUA_VEMPTY); /* remove entry */
       }
       for (i = 0; i < nsize; i++)
       {
         Node n = gnode(h, i);
-        if (iscleared(g, gcvalueN(n)) != 0) /* unmarked value? */
+        if (iscleared(g, gcvalueN(n))) /* unmarked value? */
           setempty(n);                 /* remove entry */
         if (isempty(n))                /* is entry empty? */
           clearkey(n);                       /* clear its key */
@@ -1360,7 +1360,7 @@ public final class Lgc
 
   private static void freeupval(lua_State L, UpVal uv)
   {
-    if (upisopen(uv) != 0)
+    if (upisopen(uv))
       uv.luaF_unlinkupval();
     luaM_free_UpVal(L, uv);
   }
@@ -1445,7 +1445,7 @@ public final class Lgc
     {
       GCObject curr = p.next;
       byte marked = curr.marked;
-      if (isdeadm(ow, marked) != 0)
+      if (isdeadm(ow, marked))
       {                   /* is 'curr' dead? */
         p.next = curr.next;  /* remove 'curr' from list */
         freeobj(L, curr); /* erase 'curr' */
@@ -1494,12 +1494,12 @@ public final class Lgc
   private static GCObject udata2finalize(global_State g)
   {
     GCObject o = g.tobefnz.next; /* get first element */
-    assert tofinalize(o) != 0;
+    assert tofinalize(o);
     g.tobefnz.next = o.next; /* remove it from 'tobefnz' list */
     o.next = g.allgc.next;   /* return it to 'allgc' list */
     g.allgc.next = o;
     o.marked &= (byte) (~bitmask(FINALIZEDBIT)); /* object is "normal" again */
-    if (issweepphase(g) != 0)
+    if (issweepphase(g))
       makewhite(g, o); /* "sweep" object */
     else if (getage(o) == G_OLD1)
       g.firstold1 = o; /* it is the first OLD1 object in the list */
@@ -1532,17 +1532,17 @@ public final class Lgc
     global_State g = L.l_G;
     TValue tm;
     TValue v = new TValue();
-    assert g.gcemergency == 0;
+    assert !g.gcemergency;
     setgcovalue(L, v, udata2finalize(g));
     tm = luaT_gettmbyobj(L, v, TM_GC);
-    if (notm(tm) == 0)
+    if (!notm(tm))
     { /* is there a finalizer? */
       byte status;
-      byte oldah = L.allowhook;
+      boolean oldah = L.allowhook;
       byte oldgcstp = g.gcstp;
       BudgetGroup oldbeff = L.beff;
       g.gcstp |= GCSTPGC;           /* avoid GC steps */
-      L.allowhook = 0;              /* stop debug hooks during GC metamethod */
+      L.allowhook = false;              /* stop debug hooks during GC metamethod */
       if (oldbeff != null)
         luaE_setbeff(L, null);    /* the budget is lifted */
       setslot(L, L.top++, tm);   /* push finalizer... */
@@ -1589,7 +1589,7 @@ public final class Lgc
   private static int gcdrain_cont(lua_State L, int status, long ctx)
   {
     drainfinish(L, status);
-    return gcdrain_run(L, (byte) ctx);
+    return gcdrain_run(L, ctx != 0);
   }
 
   private static final lua_KFunction gcdrain_cont = Lgc::gcdrain_cont;
@@ -1599,9 +1599,9 @@ public final class Lgc
     lua_registerk("gc.gcdrain_cont", gcdrain_cont);
   }
 
-  private static int gcdrain_run(lua_State L, byte oldah)
+  private static int gcdrain_run(lua_State L, boolean oldah)
   {
-    L.allowhook = 0; /* stop debug hooks during GC metamethod (and no nested drain) */
+    L.allowhook = false; /* stop debug hooks during GC metamethod (and no nested drain) */
     lua_freezeonly(L); /* a '__gc' can freeze but not yield, as in stock Lua */
     for (;;)
     {
@@ -1611,12 +1611,12 @@ public final class Lgc
       TValue v = new TValue();
       setgcovalue(L, v, luaC_dequeue(L, bg));
       TValue tm = luaT_gettmbyobj(L, v, TM_GC);
-      if (notm(tm) != 0)
+      if (notm(tm))
         continue; /* (it lost its '__gc') */
       setslot(L, L.top++, tm);
       setslot(L, L.top++, v);
       L.ci.callstatus |= CIST_FIN; /* will run a finalizer */
-      drainfinish(L, lua_pcallk(L, 1, 0, 0, oldah, gcdrain_cont));
+      drainfinish(L, lua_pcallk(L, 1, 0, 0, oldah ? 1 : 0, gcdrain_cont));
     }
     L.ci.callstatus &= ~CIST_FIN;
     L.allowhook = oldah; /* (the drain can run where hooks are off: in a hook) */
@@ -1687,15 +1687,15 @@ public final class Lgc
   ** 'luaC_drain'). An object whose group is gone is just dead, without
   ** its '__gc': it goes back to the ordinary list, to be swept.
   */
-  private static void separatetobefnz(global_State g, int all)
+  private static void separatetobefnz(global_State g, boolean all)
   {
     GCObject curr;
     GCObject p = g.finobj;
     GCObject lastnext = findlast(g.tobefnz);
     while ((curr = p.next) != g.finobjold1)
     { /* traverse all finalizable objects */
-      assert tofinalize(curr) != 0;
-      if (!(iswhite(curr) != 0 || all != 0)) /* not being collected? */
+      assert tofinalize(curr);
+      if (!(iswhite(curr) || all)) /* not being collected? */
         p = curr;           /* don't bother with it */
       else
       {
@@ -1851,14 +1851,14 @@ public final class Lgc
   public static void luaC_checkfinalizer(lua_State L, GCObject o, Table mt)
   {
     global_State g = L.l_G;
-    if (tofinalize(o) != 0 ||                 /* obj. is already marked... */
+    if (tofinalize(o) ||                 /* obj. is already marked... */
         gfasttm(g, mt, TM_GC) == null || /* or has no finalizer... */
         (g.gcstp & GCSTPCLS) != 0)           /* or closing state? */
       return;                            /* nothing to be done */
     else
     { /* move 'o' to 'finobj' list */
       GCObject p;
-      if (issweepphase(g) != 0)
+      if (issweepphase(g))
       {
         makewhite(g, o);                           /* "sweep" object 'o' */
         if (g.sweepgc == o)                /* should not remove 'sweepgc' object */
@@ -1925,14 +1925,14 @@ public final class Lgc
   {
     global_State g = L.l_G;
     GCObject o = bg.fnz.next;
-    assert o != null && tofinalize(o) != 0;
+    assert o != null && tofinalize(o);
     bg.fnz.next = o.next;
     if (bg.fnz.next == null)
       bg.fnztail = null;
     o.next = g.allgc.next;
     g.allgc.next = o;
     o.marked &= (byte) (~bitmask(FINALIZEDBIT)); /* an ordinary object again */
-    if (issweepphase(g) != 0)
+    if (issweepphase(g))
       makewhite(g, o); /* "sweep" object (as 'udata2finalize') */
     return o;
   }
@@ -1961,7 +1961,7 @@ public final class Lgc
       again = false;
       for (BudgetGroup bg : g.groupbyid)
       {
-        if (bg == null || bg.qmarked || iswhite(bg) != 0)
+        if (bg == null || bg.qmarked || iswhite(bg))
           continue; /* (a group that is not alive does not keep its queue) */
         bg.qmarked = true;
         for (GCObject o = bg.fnz.next; o != null; o = o.next)
@@ -2067,9 +2067,9 @@ public final class Lgc
     global_State g = L.l_G;
     while ((curr = p.next) != null)
     {
-      if (iswhite(curr) != 0)
+      if (iswhite(curr))
       { /* is 'curr' dead? */
-        assert isdead(g, curr) != 0;
+        assert isdead(g, curr);
         p.next = curr.next;  /* remove 'curr' from list */
         freeobj(L, curr); /* erase 'curr' */
       }
@@ -2082,7 +2082,7 @@ public final class Lgc
           lua_State th = (lua_State) curr;
           linkgclist_(th, g.grayagain); /* insert into 'grayagain' list */
         }
-        else if (curr.tt == LUA_VUPVAL && upisopen((UpVal) curr) != 0)
+        else if (curr.tt == LUA_VUPVAL && upisopen((UpVal) curr))
           set2gray(curr); /* open upvalues are always gray */
         else              /* everything else is black */
           nw2black(curr);
@@ -2132,9 +2132,9 @@ public final class Lgc
     GCObject curr;
     while ((curr = p.next) != limit)
     {
-      if (iswhite(curr) != 0)
+      if (iswhite(curr))
       { /* is 'curr' dead? */
-        assert isold(curr) == 0 && isdead(g, curr) != 0;
+        assert !isold(curr) && isdead(g, curr);
         p.next = curr.next;  /* remove 'curr' from list */
         freeobj(L, curr); /* erase 'curr' */
       }
@@ -2180,23 +2180,23 @@ public final class Lgc
     while ((curr = p.gclist) != null)
     {
       GCListed next = getgclist(curr);
-      if (iswhite(curr) != 0)
+      if (iswhite(curr))
         p.gclist = next.gclist; /* remove all white objects */
       else if (getage(curr) == G_TOUCHED1)
       { /* touched in this cycle? */
-        assert isgray(curr) != 0;
+        assert isgray(curr);
         nw2black(curr); /* make it black, for next barrier */
         setage(curr, G_TOUCHED2);
         p = next; /* keep it in the list and go to next element */
       }
       else if (curr.tt == LUA_VTHREAD)
       {
-        assert isgray(curr) != 0;
+        assert isgray(curr);
         p = next; /* keep non-white threads on the list */
       }
       else
       {                                 /* everything else is removed */
-        assert isold(curr) != 0;        /* young objects should be white here */
+        assert isold(curr);        /* young objects should be white here */
         if (getage(curr) == G_TOUCHED2) /* advance from TOUCHED2... */
           setage(curr, G_OLD);          /* ... to OLD */
         nw2black(curr);                 /* make object black (to be removed) */
@@ -2235,9 +2235,9 @@ public final class Lgc
     {
       if (getage(p) == G_OLD1)
       {
-        assert iswhite(p) == 0;
+        assert !iswhite(p);
         setage(p, G_OLD); /* now they are old */
-        if (isblack(p) != 0)
+        if (isblack(p))
           reallymarkobject(g, p);
       }
     }
@@ -2251,7 +2251,7 @@ public final class Lgc
     correctgraylists(g);
     checkSizes(L, g);
     g.gcstate = GCSpropagate; /* skip restart */
-    if (g.tobefnz.next != null && g.gcemergency == 0 && luaD_checkminstack(L) != 0)
+    if (g.tobefnz.next != null && !g.gcemergency && luaD_checkminstack(L))
       callallpendingfinalizers(L);
   }
 
@@ -2277,12 +2277,12 @@ public final class Lgc
   ** 'minormajor'% of the number of lived bytes after the last major
   ** collection. (This number is kept in 'GCmajorminor'.)
   */
-  private static int checkminormajor(global_State g)
+  private static boolean checkminormajor(global_State g)
   {
     long limit = luaO_applyparam(g.gcparams[LUA_GCPMINORMAJOR], g.GCmajorminor);
     if (limit == 0)
-      return 0; /* special case: 'minormajor' 0 stops major collections */
-    return (g.GCmarked >= limit) ? 1 : 0;
+      return false; /* special case: 'minormajor' 0 stops major collections */
+    return g.GCmarked >= limit;
   }
 
   /*
@@ -2333,7 +2333,7 @@ public final class Lgc
     g.GCmarked = marked + addedold1;
 
     /* decide whether to shift to major mode */
-    if (checkminormajor(g) != 0)
+    if (checkminormajor(g))
     {
       minor2inc(L, g, (byte) KGC_GENMAJOR); /* go to major mode */
       g.GCmarked = 0;               /* avoid pause in first major cycle (see 'setpause') */
@@ -2389,8 +2389,8 @@ public final class Lgc
   */
   private static void entergen(lua_State L, global_State g)
   {
-    luaC_runtilstate(L, GCSpause, 1);     /* prepare to start a new cycle */
-    luaC_runtilstate(L, GCSpropagate, 1); /* start new cycle */
+    luaC_runtilstate(L, GCSpause, true);     /* prepare to start a new cycle */
+    luaC_runtilstate(L, GCSpropagate, true); /* start new cycle */
     atomic(L);                            /* propagates all and then do the atomic stuff */
     atomic2gen(L, g);
     setminordebt(g); /* set debt assuming next cycle will be minor */
@@ -2432,7 +2432,7 @@ public final class Lgc
   ** is greater than 'majorminor'% of the number of bytes added
   ** since the last collection ('addedbytes').
   */
-  private static int checkmajorminor(lua_State L, global_State g)
+  private static boolean checkmajorminor(lua_State L, global_State g)
   {
     if (g.gckind == KGC_GENMAJOR)
     { /* generational mode? */
@@ -2445,11 +2445,11 @@ public final class Lgc
       {
         atomic2gen(L, g); /* return to generational mode */
         setminordebt(g);
-        return 1; /* exit incremental collection */
+        return true; /* exit incremental collection */
       }
     }
     g.GCmajorminor = g.GCmarked; /* prepare for next collection */
-    return 0;                      /* stay doing incremental collections */
+    return false;                      /* stay doing incremental collections */
   }
 
   /* }====================================================== */
@@ -2498,7 +2498,7 @@ public final class Lgc
     global_State g = L.l_G;
     g.gcstp = GCSTPCLS; /* no extra finalizers after here */
     luaC_changemode(L, KGC_INC);
-    separatetobefnz(g, 1); /* separate all objects with finalizers */
+    separatetobefnz(g, true); /* separate all objects with finalizers */
     assert g.finobj.next == null;
     callallpendingfinalizers(L);
     for (BudgetGroup bg : g.groupbyid)
@@ -2522,7 +2522,7 @@ public final class Lgc
     GCObject grayagain = g.grayagain.gclist; /* save original list */
     g.grayagain.gclist = null;
     assert g.ephemeron.gclist == null && g.weak.gclist == null;
-    assert iswhite(mainthread(g)) == 0;
+    assert !iswhite(mainthread(g));
     g.gcstate = GCSatomic;
     markobject(g, L); /* mark running thread */
     /* registry and global metatables may be changed by API */
@@ -2544,14 +2544,14 @@ public final class Lgc
     clearbyvalues(g, g.allweak.gclist, null);
     origweak = g.weak.gclist;
     origall = g.allweak.gclist;
-    separatetobefnz(g, 0); /* separate objects to be finalized */
+    separatetobefnz(g, false); /* separate objects to be finalized */
     markbeingfnz(g);       /* mark objects that will be finalized */
     propagateall(g);       /* remark, to propagate 'resurrection' */
     convergeephemerons(g);
     markgroupqueues(g);    /* the queues again, with those that died now */
     releasequeues(g);      /* and those of the groups that are not alive */
     for (BudgetGroup bg : g.groupbyid)
-      if (bg != null && bg.root != null && iswhite(bg.root) != 0)
+      if (bg != null && bg.root != null && iswhite(bg.root))
         bg.root = null; /* (the thread a group was set on is dead: a weak reference) */
     /* at this point, all resurrected objects are marked. */
     /* remove dead objects from weak tables */
@@ -2570,10 +2570,10 @@ public final class Lgc
   ** elements. The fast case sweeps the whole list.
   */
   private static void sweepstep(lua_State L, global_State g,
-                                byte nextstate, GCObject nextlist, int fast)
+                                byte nextstate, GCObject nextlist, boolean fast)
   {
     if (g.sweepgc != null)
-      g.sweepgc = sweeplist(L, g.sweepgc, fast != 0 ? MAX_LMEM : GCSWEEPMAX);
+      g.sweepgc = sweeplist(L, g.sweepgc, fast ? MAX_LMEM : GCSWEEPMAX);
     else
     { /* enter next state */
       g.gcstate = nextstate;
@@ -2598,12 +2598,12 @@ public final class Lgc
   private static final int atomicstep = -2; /* atomic step */
   private static final int step2minor = -1; /* moved to minor collections */
 
-  private static long singlestep(lua_State L, int fast)
+  private static long singlestep(lua_State L, boolean fast)
   {
     global_State g = L.l_G;
     long stepresult;
-    assert g.gcstopem == 0; /* collector is not reentrant */
-    g.gcstopem = 1;          /* no emergency collections while collecting */
+    assert !g.gcstopem; /* collector is not reentrant */
+    g.gcstopem = true;          /* no emergency collections while collecting */
     switch (g.gcstate)
     {
     case GCSpause:
@@ -2615,7 +2615,7 @@ public final class Lgc
     }
     case GCSpropagate:
     {
-      if (fast != 0 || g.gray.gclist == null)
+      if (fast || g.gray.gclist == null)
       {
         g.gcstate = GCSenteratomic; /* finish propagate phase */
         stepresult = 1;
@@ -2627,7 +2627,7 @@ public final class Lgc
     case GCSenteratomic:
     {
       atomic(L);
-      if (checkmajorminor(L, g) != 0)
+      if (checkmajorminor(L, g))
         stepresult = step2minor;
       else
       {
@@ -2663,9 +2663,9 @@ public final class Lgc
     }
     case GCScallfin:
     { /* call finalizers */
-      if (g.tobefnz.next != null && g.gcemergency == 0 && luaD_checkminstack(L) != 0)
+      if (g.tobefnz.next != null && !g.gcemergency && luaD_checkminstack(L))
       {
-        g.gcstopem = 0; /* ok collections during finalizers */
+        g.gcstopem = false; /* ok collections during finalizers */
         GCTM(L);         /* call one finalizer */
         stepresult = CWUFIN;
       }
@@ -2681,7 +2681,7 @@ public final class Lgc
       assert false;
       return 0;
     }
-    g.gcstopem = 0;
+    g.gcstopem = false;
     return stepresult;
   }
 
@@ -2690,7 +2690,7 @@ public final class Lgc
   ** (The option 'fast' is only for testing; in normal code, 'fast'
   ** here is always true.)
   */
-  public static void luaC_runtilstate(lua_State L, int state, int fast)
+  public static void luaC_runtilstate(lua_State L, int state, boolean fast)
   {
     global_State g = L.l_G;
     assert g.gckind == KGC_INC;
@@ -2710,17 +2710,17 @@ public final class Lgc
     long stepsize = luaO_applyparam(g.gcparams[LUA_GCPSTEPSIZE], 100);
     long work2do = luaO_applyparam(g.gcparams[LUA_GCPSTEPMUL], stepsize / Cost.Ref);
     long stres;
-    int fast = (work2do == 0) ? 1 : 0; /* special case: do a full collection */
+    boolean fast = work2do == 0; /* special case: do a full collection */
     do
     {                              /* repeat until enough work */
       stres = singlestep(L, fast); /* perform one single step */
       if (stres == step2minor)     /* returned to minor collections? */
         return;                    /* nothing else to be done here */
-      else if (stres == step2pause || (stres == atomicstep && fast == 0))
+      else if (stres == step2pause || (stres == atomicstep && !fast))
         break; /* end of cycle or atomic */
       else
         work2do -= stres;
-    } while (fast != 0 || work2do > 0);
+    } while (fast || work2do > 0);
     if (g.gcstate == GCSpause)
       setpause(g); /* pause until next cycle */
     else
@@ -2735,15 +2735,15 @@ public final class Lgc
   public static void luaC_step(lua_State L)
   {
     global_State g = L.l_G;
-    assert g.gcemergency == 0;
-    if (gcrunning(g) == 0)
+    assert !g.gcemergency;
+    if (!gcrunning(g))
     {                          /* not running? */
       if ((g.gcstp & GCSTPUSR) != 0) /* stopped by the user? */
         luaE_setdebt(g, 20000);
     }
     else
     {
-      luai_tracegc(L, 1); /* for internal debugging */
+      luai_tracegc(L, true); /* for internal debugging */
       switch (g.gckind)
       {
       case KGC_INC:
@@ -2755,7 +2755,7 @@ public final class Lgc
         setminordebt(g);
         break;
       }
-      luai_tracegc(L, 0); /* for internal debugging */
+      luai_tracegc(L, false); /* for internal debugging */
     }
   }
 
@@ -2768,12 +2768,12 @@ public final class Lgc
   */
   private static void fullinc(lua_State L, global_State g)
   {
-    if (keepinvariant(g) != 0) /* black objects? */
+    if (keepinvariant(g)) /* black objects? */
       entersweep(L);      /* sweep everything to turn them back to white */
     /* finish any pending sweep phase to start a new cycle */
-    luaC_runtilstate(L, GCSpause, 1);
-    luaC_runtilstate(L, GCScallfin, 1); /* run up to finalizers */
-    luaC_runtilstate(L, GCSpause, 1);   /* finish collection */
+    luaC_runtilstate(L, GCSpause, true);
+    luaC_runtilstate(L, GCScallfin, true); /* run up to finalizers */
+    luaC_runtilstate(L, GCSpause, true);   /* finish collection */
     setpause(g);
   }
 
@@ -2782,11 +2782,11 @@ public final class Lgc
   ** some operations which could change the interpreter state in some
   ** unexpected ways (running finalizers and shrinking some structures).
   */
-  public static void luaC_fullgc(lua_State L, int isemergency)
+  public static void luaC_fullgc(lua_State L, boolean isemergency)
   {
     global_State g = L.l_G;
-    assert g.gcemergency == 0;
-    g.gcemergency = (byte) isemergency; /* set flag */
+    assert !g.gcemergency;
+    g.gcemergency = isemergency; /* set flag */
     switch (g.gckind)
     {
     case KGC_GENMINOR:
@@ -2801,7 +2801,7 @@ public final class Lgc
       g.gckind = KGC_GENMAJOR;
       break;
     }
-    g.gcemergency = 0;
+    g.gcemergency = false;
   }
 
   /*
@@ -2816,17 +2816,17 @@ public final class Lgc
   public static void luaC_fullgcdue(lua_State L)
   {
     global_State g = L.l_G;
-    assert g.gcemergency == 0;
+    assert !g.gcemergency;
     boolean gen = (g.gckind != KGC_INC);
     if (g.gckind == KGC_GENMINOR)
       minor2inc(L, g, (byte) KGC_INC);
     g.gckind = KGC_INC; /* (the cycle runs whole: see 'checkmajorminor') */
-    g.gcemergency = 1;  /* (a cycle under way finishes calling none) */
-    if (keepinvariant(g) != 0)
+    g.gcemergency = true;  /* (a cycle under way finishes calling none) */
+    if (keepinvariant(g))
       entersweep(L);
-    luaC_runtilstate(L, GCSpause, 1);
-    g.gcemergency = 0;
-    luaC_runtilstate(L, GCScallfin, 1); /* (the '__gc' calls are next) */
+    luaC_runtilstate(L, GCSpause, true);
+    g.gcemergency = false;
+    luaC_runtilstate(L, GCScallfin, true); /* (the '__gc' calls are next) */
     if (gen)
       g.gckind = KGC_GENMAJOR;
     luaE_setdebt(g, 0);

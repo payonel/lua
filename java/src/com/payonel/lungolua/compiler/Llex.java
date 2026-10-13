@@ -128,7 +128,7 @@ public final class Llex
   private static final class NumeralFrame extends LoadFrame
   {
     int first = 0;
-    int hex = 0; /* exponent mark 'Pp' (else 'Ee') */
+    boolean hex = false; /* exponent mark 'Pp' (else 'Ee') */
 
     NumeralFrame()
     {
@@ -363,9 +363,9 @@ public final class Llex
   /* minimum size for string buffer */
   private static final int LUA_MINBUFFER = 32;
 
-  private static int currIsNewline(LexState ls)
+  private static boolean currIsNewline(LexState ls)
   {
-    return (ls.current == '\n' || ls.current == '\r') ? 1 : 0;
+    return ls.current == '\n' || ls.current == '\r';
   }
 
   /* ORDER RESERVED */
@@ -419,7 +419,7 @@ public final class Llex
   {
     if (token < FIRST_RESERVED)
     { /* single-byte symbols? */
-      if (lisprint(token) != 0)
+      if (lisprint(token))
         return luaO_pushfstring(ls.L, Lt.fmt_quoted_c, new FmtArgs().chr(token)).view();
       else /* control character */
         return luaO_pushfstring(ls.L, Lt.d, new FmtArgs().num(token)).view();
@@ -513,11 +513,11 @@ public final class Llex
       {
       case 0:
         l.old = ls.current;
-        assert currIsNewline(ls) != 0;
+        assert currIsNewline(ls);
         l.site = 1;
       case 1:
         next(ls); /* skip '\n' or '\r' */
-        if (!(currIsNewline(ls) != 0 && ls.current != l.old))
+        if (!(currIsNewline(ls) && ls.current != l.old))
           break;
         l.site = 2;
       case 2:
@@ -569,15 +569,15 @@ public final class Llex
   */
 
   /* (with no frame of its own: made again, it goes the same way, see lload.h) */
-  private static int check_next1(LexState ls, int c)
+  private static boolean check_next1(LexState ls, int c)
   {
     if (ls.current == c)
     {
       next(ls);
-      return 1;
+      return true;
     }
     else
-      return 0;
+      return false;
   }
 
   /* LUA_NUMBER */
@@ -606,7 +606,7 @@ public final class Llex
         {
         case 0:
           l.first = ls.current;
-          assert lisdigit(ls.current) != 0;
+          assert lisdigit(ls.current);
           save(ls, ls.current);
           l.site = 1;
         case 1:
@@ -621,22 +621,22 @@ public final class Llex
           continue;
         case 2:
           next(ls);
-          l.hex = 1;
+          l.hex = true;
           l.site = 3;
         case 3: /* the loop */
         {
-          ByteView expo = l.hex != 0 ? Lt.Pp_chars : Lt.Ee_chars;
+          ByteView expo = l.hex ? Lt.Pp_chars : Lt.Ee_chars;
           if (ls.current == expo.at(0) || ls.current == expo.at(1)) /* exponent mark? */
           {
             save(ls, ls.current);
             l.site = 4;
           }
-          else if (lisxdigit(ls.current) != 0 || ls.current == '.') /* '%x|%.' */
+          else if (lisxdigit(ls.current) || ls.current == '.') /* '%x|%.' */
           {
             save(ls, ls.current);
             l.site = 5;
           }
-          else if (lislalpha(ls.current) != 0) /* is numeral touching a letter? */
+          else if (lislalpha(ls.current)) /* is numeral touching a letter? */
           {
             save(ls, ls.current); /* force an error */
             l.site = 6;
@@ -757,7 +757,7 @@ public final class Llex
           l.site = 1;
         case 1:
           next(ls);                             /* skip 2nd '[' */
-          l.site = currIsNewline(ls) != 0 ? 2 : 3; /* string starts with a newline? */
+          l.site = currIsNewline(ls) ? 2 : 3; /* string starts with a newline? */
           continue;
         case 2:
           inclinenumber(ls); /* skip it */
@@ -823,7 +823,7 @@ public final class Llex
     }
   }
 
-  private static void esccheck(LexState ls, int c, ByteView msg)
+  private static void esccheck(LexState ls, boolean c, ByteView msg)
   {
     LoadFrame l = new LoadFrame();
     if (ls.z.resuming)
@@ -833,7 +833,7 @@ public final class Llex
       switch (l.site)
       {
       case 0:
-        if (c != 0)
+        if (c)
           return;
         if (ls.current == EOZ)
           break;
@@ -936,7 +936,7 @@ public final class Llex
           next(ls); /* skip 'u' */
           l.site = 2;
         case 2:
-          esccheck(ls, (ls.current == '{') ? 1 : 0, Lt.missing_1);
+          esccheck(ls, ls.current == '{', Lt.missing_1);
           l.site = 3;
         case 3:
           l.r = gethexa(ls); /* must have at least one digit */
@@ -946,7 +946,7 @@ public final class Llex
           l.site = 5;
         case 5:
           next(ls);
-          if (lisxdigit(ls.current) == 0)
+          if (!lisxdigit(ls.current))
           {
             l.site = 7;
             continue;
@@ -954,12 +954,12 @@ public final class Llex
           l.i++;
           l.site = 6;
         case 6:
-          esccheck(ls, (l.r <= (0x7FFFFFFF >> 4)) ? 1 : 0, Lt.UTF_8_value_too_large);
+          esccheck(ls, l.r <= (0x7FFFFFFF >> 4), Lt.UTF_8_value_too_large);
           l.r = (l.r << 4) + luaO_hexavalue(ls.current);
           l.site = 4;
           continue;
         case 7:
-          esccheck(ls, (ls.current == '}') ? 1 : 0, Lt.missing_2);
+          esccheck(ls, ls.current == '}', Lt.missing_2);
           l.site = 8;
         case 8:
           next(ls);            /* skip '}' */
@@ -1017,7 +1017,7 @@ public final class Llex
         switch (l.site)
         {
         case 0: /* the loop: read up to 3 digits */
-          if (l.i < 3 && lisdigit(ls.current) != 0)
+          if (l.i < 3 && lisdigit(ls.current))
           {
             l.r = 10 * l.r + ls.current - '0';
             save(ls, ls.current);
@@ -1032,7 +1032,7 @@ public final class Llex
           l.site = 0;
           continue;
         case 2:
-          esccheck(ls, (l.r <= 0xFF) ? 1 : 0, Lt.decimal_escape_too_large);
+          esccheck(ls, l.r <= 0xFF, Lt.decimal_escape_too_large);
           ls.buff.drop(l.i); /* remove read digits from buffer */
           return l.r;
         default:
@@ -1165,9 +1165,9 @@ public final class Llex
           next(ls); /* skip the 'z', or a space */
           l.site = 8;
         case 8: /* the span of spaces */
-          if (lisspace(ls.current) == 0)
+          if (!lisspace(ls.current))
             l.site = 2;
-          else if (currIsNewline(ls) != 0)
+          else if (currIsNewline(ls))
             l.site = 9;
           else
             l.site = 7;
@@ -1303,7 +1303,7 @@ public final class Llex
           case EOZ:
             return TK_EOS;
           default:
-            if (lislalpha(ls.current) != 0) /* identifier or reserved word? */
+            if (lislalpha(ls.current)) /* identifier or reserved word? */
               l.site = 33;
             else
             { /* single-char tokens ('+', '*', '%', '{', '}', ...) */
@@ -1349,7 +1349,7 @@ public final class Llex
           l.site = 3;
           continue;
         case 10: /* short comment */
-          if (currIsNewline(ls) != 0 || ls.current == EOZ)
+          if (currIsNewline(ls) || ls.current == EOZ)
           {
             l.site = 3;
             continue;
@@ -1375,7 +1375,7 @@ public final class Llex
           next(ls);
           l.site = 15;
         case 15:
-          if (check_next1(ls, '=') != 0)
+          if (check_next1(ls, '='))
             return TK_EQ; /* '==' */
           else
             return '=';
@@ -1383,11 +1383,11 @@ public final class Llex
           next(ls);
           l.site = 17;
         case 17:
-          if (check_next1(ls, '=') != 0)
+          if (check_next1(ls, '='))
             return TK_LE; /* '<=' */
           l.site = 18;
         case 18:
-          if (check_next1(ls, '<') != 0)
+          if (check_next1(ls, '<'))
             return TK_SHL; /* '<<' */
           else
             return '<';
@@ -1395,11 +1395,11 @@ public final class Llex
           next(ls);
           l.site = 20;
         case 20:
-          if (check_next1(ls, '=') != 0)
+          if (check_next1(ls, '='))
             return TK_GE; /* '>=' */
           l.site = 21;
         case 21:
-          if (check_next1(ls, '>') != 0)
+          if (check_next1(ls, '>'))
             return TK_SHR; /* '>>' */
           else
             return '>';
@@ -1407,7 +1407,7 @@ public final class Llex
           next(ls);
           l.site = 23;
         case 23:
-          if (check_next1(ls, '/') != 0)
+          if (check_next1(ls, '/'))
             return TK_IDIV; /* '//' */
           else
             return '/';
@@ -1415,7 +1415,7 @@ public final class Llex
           next(ls);
           l.site = 25;
         case 25:
-          if (check_next1(ls, '=') != 0)
+          if (check_next1(ls, '='))
             return TK_NE; /* '~=' */
           else
             return '~';
@@ -1423,7 +1423,7 @@ public final class Llex
           next(ls);
           l.site = 27;
         case 27:
-          if (check_next1(ls, ':') != 0)
+          if (check_next1(ls, ':'))
             return TK_DBCOLON; /* '::' */
           else
             return ':';
@@ -1434,17 +1434,17 @@ public final class Llex
           next(ls);
           l.site = 30;
         case 30:
-          if (check_next1(ls, '.') != 0)
+          if (check_next1(ls, '.'))
           {
             l.site = 31;
             continue;
           }
-          else if (lisdigit(ls.current) == 0)
+          else if (!lisdigit(ls.current))
             return '.';
           l.site = 32;
           continue;
         case 31:
-          if (check_next1(ls, '.') != 0)
+          if (check_next1(ls, '.'))
             return TK_DOTS; /* '...' */
           else
             return TK_CONCAT; /* '..' */
@@ -1456,14 +1456,14 @@ public final class Llex
         case 34:
         {
           next(ls);
-          if (lislalnum(ls.current) != 0)
+          if (lislalnum(ls.current))
           {
             l.site = 33;
             continue;
           }
           /* find or create string */
           TString ts = TString.luaS_createstr(ls.L, ls.buff.view());
-          if (isreserved(ts) != 0) /* reserved word? */
+          if (isreserved(ts)) /* reserved word? */
             return ts.extra - 1 + FIRST_RESERVED;
           else
           {

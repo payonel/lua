@@ -64,37 +64,37 @@ public final class Lctype
   /*
   ** add 1 to char to allow index -1 (EOZ)
   */
-  public static int testprop(int c, int p)
+  public static boolean testprop(int c, int p)
   {
-    return luai_ctype_[c + 1] & p;
+    return (luai_ctype_[c + 1] & p) != 0;
   }
 
-  public static int lislalpha(int c)
+  public static boolean lislalpha(int c)
   {
     return testprop(c, MASK(ALPHABIT));
   }
 
-  public static int lislalnum(int c)
+  public static boolean lislalnum(int c)
   {
     return testprop(c, MASK(ALPHABIT) | MASK(DIGITBIT));
   }
 
-  public static int lisdigit(int c)
+  public static boolean lisdigit(int c)
   {
     return testprop(c, MASK(DIGITBIT));
   }
 
-  public static int lisspace(int c)
+  public static boolean lisspace(int c)
   {
     return testprop(c, MASK(SPACEBIT));
   }
 
-  public static int lisprint(int c)
+  public static boolean lisprint(int c)
   {
     return testprop(c, MASK(PRINTBIT));
   }
 
-  public static int lisxdigit(int c)
+  public static boolean lisxdigit(int c)
   {
     return testprop(c, MASK(XDIGITBIT));
   }

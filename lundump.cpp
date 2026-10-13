@@ -553,7 +553,7 @@ static void loadUpvalues(LoadState* S, Proto* f)
         l.site = 2;
         [[fallthrough]];
       case 2:
-        f->upvalues[l.i].instack = loadByte(S);
+        f->upvalues[l.i].instack = loadByte(S) != 0;
         l.site = 3;
         [[fallthrough]];
       case 3:
@@ -809,7 +809,7 @@ static void checknumsize(LoadState* S, int size, byte_view tname)
     numerror(S, lt::size, tname);
 }
 
-static void checknumformat(LoadState* S, int eq, byte_view tname)
+static void checknumformat(LoadState* S, bool eq, byte_view tname)
 {
   if (!eq)
     numerror(S, lt::format, tname);
@@ -905,7 +905,7 @@ static void checkHeader(LoadState* S)
 /*
 ** Load precompiled chunk.
 */
-LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, MBuffer* buff, byte_view name, int fixed)
+LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, MBuffer* buff, byte_view name, bool fixed)
 {
   UndumpFrame l;
   int c0 = sv_byteat(name, 0);
@@ -932,7 +932,7 @@ LClosure* luaU_undump(lua_State* L, ZIO* Z, Table* anchor, MBuffer* buff, byte_v
     l.S.name = name;
     l.S.L = L;
     l.S.Z = Z;
-    l.S.fixed = fixed != 0;
+    l.S.fixed = fixed;
     l.S.buff = buff;
     l.S.offset = 1; /* fist byte was already read */
   }

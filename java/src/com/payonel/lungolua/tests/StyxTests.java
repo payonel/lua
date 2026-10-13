@@ -234,7 +234,7 @@ public final class StyxTests
     preload_styx(L);
     if (LUA_DEBUG)
     {
-      luaL_requiref(L, new HostString("T"), luaB_opentests, 1);
+      luaL_requiref(L, new HostString("T"), luaB_opentests, true);
       lua_pop(L, 1);
     }
     return L;
@@ -279,7 +279,7 @@ public final class StyxTests
                  call_styx(L, "unpersist", 1, 1) == LUA_OK &&
                  lua_type(L, -1) == lua_type(L, -2) &&
                  lua_isinteger(L, -1) == lua_isinteger(L, -2) &&
-                 lua_rawequal(L, -1, -2) != 0;
+                 lua_rawequal(L, -1, -2);
     lua_settop(L, base);
     return ok;
   }
@@ -329,9 +329,9 @@ public final class StyxTests
     lua_State L = new_state();
     lua_pushnil(L);
     CHECK(roundtrips(L));
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     CHECK(roundtrips(L));
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     CHECK(roundtrips(L));
     lua_pushinteger(L, 42);
     CHECK(roundtrips(L));
@@ -412,7 +412,7 @@ public final class StyxTests
       "co = require('styx').unpersist(perms, blob)\n" +
       "ok = coroutine.resume(co)\n" +
       "status = coroutine.status(co)");
-    CHECK(lua_getglobal(B, new HostString("ok")) == LUA_TBOOLEAN && lua_toboolean(B, -1) != 0);
+    CHECK(lua_getglobal(B, new HostString("ok")) == LUA_TBOOLEAN && lua_toboolean(B, -1));
     CHECK(lua_getglobal(B, new HostString("got")) == LUA_TSTRING && ByteView.of("hi,42").equals(lua_tolstring(B, -1)));
     CHECK(lua_getglobal(B, new HostString("status")) == LUA_TSTRING && ByteView.of("dead").equals(lua_tolstring(B, -1)));
     lua_close(B);
@@ -1957,7 +1957,7 @@ end
         lua_insert(th, 1);
         CHECK(lua_pcall(th, 1, 2, 1) == LUA_OK);
       }
-      CHECK(lua_isfrozen(th) != 0);
+      CHECK(lua_isfrozen(th));
       String blob = persist_state(A);
       CHECK(!blob.isEmpty());
       CountingAlloc a2 = new CountingAlloc();
@@ -1965,15 +1965,15 @@ end
       lua_getglobal(B, new HostString("co"));
       lua_State thb = lua_tothread(B, -1);
       lua_pop(B, 1);
-      CHECK(lua_isfrozen(thb) != 0);
+      CHECK(lua_isfrozen(thb));
       /* thaw both: the host's call returns with its results */
       for (lua_State X : new lua_State[] {th, thb})
       {
         lua_ResumeResult rr = lua_thaw(X, null);
-        while (rr.status == LUA_OK && lua_isfrozen(X) != 0)
+        while (rr.status == LUA_OK && lua_isfrozen(X))
           rr = lua_thaw(X, null);
         CHECK(rr.status == LUA_OK);
-        CHECK(lua_isfrozen(X) == 0);
+        CHECK(!lua_isfrozen(X));
         CHECK(lua_gettop(X) >= 2);
         CHECK(lua_tointeger(X, lua_gettop(X) - 1) == 20100);
         CHECK(to_string(X, lua_gettop(X)).equals("done"));
@@ -2238,7 +2238,7 @@ end
 
   private static int owner_note(lua_State L)
   {
-    owner_canfreeze = lua_toboolean(L, 1);
+    owner_canfreeze = lua_toboolean(L, 1) ? 1 : 0;
     testobj_gcs++;
     return 0;
   }
@@ -2312,7 +2312,7 @@ end
     main_calls = 0;
     lua_setbudget(A, 50, main_budget);
     CHECK(luaL_loadstring(A, new HostString(prog)) == LUA_OK);
-    CHECK(lua_pcall(A, 0, 2, 0) == LUA_OK && lua_isfrozen(A) != 0);
+    CHECK(lua_pcall(A, 0, 2, 0) == LUA_OK && lua_isfrozen(A));
     /* persisted with another thread; the frozen main thread itself refuses */
     StringWriter w = new StringWriter();
     HostStringOut msg = new HostStringOut();
@@ -2331,7 +2331,7 @@ end
     lua_pop(H, 1);
     String blob = w.out.toString();
     /* the original goes on */
-    while (lua_isfrozen(A) != 0)
+    while (lua_isfrozen(A))
       CHECK(lua_thaw(A, null).status == LUA_OK);
     CHECK(lua_gettop(A) == 2 && lua_tointeger(A, 1) == 45150 && to_string(A, 2).equals("end"));
     lua_settop(A, 0);
@@ -2348,10 +2348,10 @@ end
         if (Bh == null)
           printf("      restore error: %s\n", rmsg.to_os());
         lua_State B = Bh != null ? main_of(Bh) : null;
-        CHECK(B != null && B != Bh && lua_isfrozen(Bh) == 0 && lua_isfrozen(B) != 0);
+        CHECK(B != null && B != Bh && !lua_isfrozen(Bh) && lua_isfrozen(B));
         if (B != null)
         {
-          while (lua_isfrozen(B) != 0)
+          while (lua_isfrozen(B))
             CHECK(lua_thaw(B, null).status == LUA_OK);
           CHECK(lua_gettop(B) == 2 && lua_tointeger(B, 1) == 45150 && to_string(B, 2).equals("end"));
           lua_settop(B, 0);
@@ -2417,7 +2417,7 @@ end
     CHECK(luaL_loadstring(A, new HostString(prog)) == LUA_OK);
     CHECK(lua_pcall(A, 0, 2, 0) == LUA_OK);
     ctop[0] = false;
-    if (lua_isfrozen(A) != 0)
+    if (lua_isfrozen(A))
     {
       lua_Debug ar = lua_getstack(A, 0);
       lua_Debug in = ar != null ? lua_getinfo(A, new HostString("S"), ar) : null;
@@ -2446,7 +2446,7 @@ end
       {
         CountingAlloc probe = new CountingAlloc();
         A = frozen_main(probe, progs[which], at, other, ctop);
-        boolean want = lua_isfrozen(A) != 0 && (which == 0 ? rest_calls > 40 : ctop[0]);
+        boolean want = lua_isfrozen(A) && (which == 0 ? rest_calls > 40 : ctop[0]);
         lua_close(A);
         A = null;
         if (want)
@@ -2458,7 +2458,7 @@ end
       CHECK(rest_at < 400);
       CountingAlloc a1 = new CountingAlloc();
       A = frozen_main(a1, progs[which], rest_at, other, ctop);
-      CHECK(lua_isfrozen(A) != 0);
+      CHECK(lua_isfrozen(A));
       /* persisted from the host's other thread */
       StringWriter w = new StringWriter();
       HostStringOut msg = new HostStringOut();
@@ -2485,20 +2485,20 @@ end
           blob = w2.out.toString();
         }
         Bh = restored_state(a2[round], blob, s);
-        CHECK(Bh != main_of(Bh) && lua_isfrozen(Bh) == 0 && lua_isfrozen(main_of(Bh)) != 0);
+        CHECK(Bh != main_of(Bh) && !lua_isfrozen(Bh) && lua_isfrozen(main_of(Bh)));
         CHECK(rest_closes == 0); /* (the restore closed nothing) */
         lua_gc(Bh, LUA_GCCOLLECT, 0, 0, 0);
         lua_gc(Bh, LUA_GCCOLLECT, 0, 0, 0);
       }
       lua_State B = main_of(Bh);
       lua_ResumeResult r = new lua_ResumeResult(LUA_OK, 0);
-      while (r.status == LUA_OK && lua_isfrozen(B) != 0)
+      while (r.status == LUA_OK && lua_isfrozen(B))
         r = lua_thaw(B, null);
       CHECK(r.status == LUA_OK && lua_gettop(B) == 2);
       if (which == 0)
         CHECK(lua_tointeger(B, 1) == 45150 + 4501500 && to_string(B, 2).equals("end") && rest_closes == 1);
       else
-        CHECK(lua_tointeger(B, 1) == 20000 && lua_toboolean(B, 2) != 0);
+        CHECK(lua_tointeger(B, 1) == 20000 && lua_toboolean(B, 2));
       lua_close(B);
     }
   }
@@ -2522,7 +2522,7 @@ end
     main_calls = 0;
     lua_setbudget(A, 50, main_budget);
     CHECK(luaL_loadstring(A, new HostString(prog)) == LUA_OK);
-    CHECK(lua_pcall(A, 0, 0, 0) == LUA_OK && lua_isfrozen(A) != 0);
+    CHECK(lua_pcall(A, 0, 0, 0) == LUA_OK && lua_isfrozen(A));
     StringWriter w = new StringWriter();
     HostStringOut msg = new HostStringOut();
     lua_getglobal(H, new HostString("_PERMS"));
@@ -2530,16 +2530,16 @@ end
     lua_pop(H, 1);
     String blob = w.out.toString();
     lua_ResumeResult r = new lua_ResumeResult(LUA_OK, 0);
-    while (lua_isfrozen(A) != 0)
+    while (lua_isfrozen(A))
       r = lua_thaw(A, null);
     CHECK(r.status == LUA_ERRRUN && to_string(A, -1).equals("boom"));
     lua_settop(A, 0);
     CHECK(eval(A, "return closed").equals("boom 45150"));
     CountingAlloc a2 = new CountingAlloc();
     lua_State B = main_of(restored_state(a2, blob));
-    CHECK(lua_isfrozen(B) != 0);
+    CHECK(lua_isfrozen(B));
     r = new lua_ResumeResult(LUA_OK, 0);
-    while (lua_isfrozen(B) != 0)
+    while (lua_isfrozen(B))
       r = lua_thaw(B, null);
     CHECK(r.status == LUA_ERRRUN && to_string(B, -1).equals("boom"));
     lua_settop(B, 0);
@@ -3230,7 +3230,7 @@ debug.getregistry().kernel = kernel -- (the host's anchor)
     eval(L, "package.path = './support/?.lua;' .. package.path");
     lua_pushstring(L, new HostString(mode.name));
     lua_setglobal(L, new HostString("STYX_MODE"));
-    lua_pushboolean(L, verbose ? 1 : 0);
+    lua_pushboolean(L, verbose);
     lua_setglobal(L, new HostString("STYX_VERBOSE"));
     boolean ok = luaL_dostring(L, new HostString(mode.setup)) == LUA_OK && luaL_dofile(L, new HostString(path.toString())) == LUA_OK;
     if (!ok)

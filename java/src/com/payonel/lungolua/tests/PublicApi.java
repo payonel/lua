@@ -284,7 +284,7 @@ public final class PublicApi
 
   private static int cf_mm_true(lua_State L)
   {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 1;
   }
   private static final lua_CFunction cf_mm_true = PublicApi::cf_mm_true;
@@ -427,7 +427,7 @@ public final class PublicApi
 
   private static int cf_co(lua_State L)
   {
-    CHECK(lua_isyieldable(L) == 1);
+    CHECK(lua_isyieldable(L));
     lua_pushinteger(L, 100);
     return lua_yieldk(L, 1, 7, cont_yield);
   }
@@ -446,7 +446,7 @@ public final class PublicApi
     lua_toclose(L, -1);
     lua_closeslot(L, -1);
     CHECK(g_closed == before + 1);
-    CHECK(lua_isnil(L, -1) == 1);
+    CHECK(lua_isnil(L, -1));
     return 0;
   }
   private static final lua_CFunction cf_tbc_closeslot = PublicApi::cf_tbc_closeslot;
@@ -599,7 +599,7 @@ public final class PublicApi
     t = lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
     CHECK(t == LUA_TTABLE);
     lua_pushglobaltable(L);
-    CHECK(lua_rawequal(L, -1, -2) == 1);
+    CHECK(lua_rawequal(L, -1, -2));
     lua_pop(L, 3);
 
     lua_close(L);
@@ -656,8 +656,8 @@ public final class PublicApi
 
     lua_settop(L, 7);
     CHECK(lua_gettop(L) == 7);
-    CHECK(lua_isnil(L, 6) == 1);
-    CHECK(lua_isnil(L, 7) == 1);
+    CHECK(lua_isnil(L, 6));
+    CHECK(lua_isnil(L, 7));
     lua_settop(L, -3);
     CHECK(lua_gettop(L) == 5);
     lua_pop(L, 2);
@@ -665,15 +665,15 @@ public final class PublicApi
     lua_settop(L, 0);
     CHECK(lua_gettop(L) == 0);
 
-    CHECK(lua_checkstack(L, 30) != 0);
-    CHECK(lua_checkstack(L, 0) != 0);
-    CHECK(lua_checkstack(L, Integer.MAX_VALUE) == 0);
+    CHECK(lua_checkstack(L, 30));
+    CHECK(lua_checkstack(L, 0));
+    CHECK(!lua_checkstack(L, Integer.MAX_VALUE));
 
     lua_pushnil(L);
-    CHECK(lua_isnone(L, 5) == 1);
-    CHECK(lua_isnoneornil(L, 5) == 1);
-    CHECK(lua_isnoneornil(L, 1) == 1);
-    CHECK(lua_isnone(L, 1) == 0);
+    CHECK(lua_isnone(L, 5));
+    CHECK(lua_isnoneornil(L, 5));
+    CHECK(lua_isnoneornil(L, 1));
+    CHECK(!lua_isnone(L, 1));
     lua_pop(L, 1);
 
     lua_close(L);
@@ -686,7 +686,7 @@ public final class PublicApi
     lua_State L = new_state();
 
     lua_pushnil(L);
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     lua_pushinteger(L, 3);
     lua_pushnumber(L, 3.5);
     lua_pushliteral(L, hs("hello"));
@@ -722,26 +722,26 @@ public final class PublicApi
     CHECK(eq(lua_typename(L, LUA_TTHREAD), "thread"));
     CHECK(eq(lua_typename(L, LUA_TNONE), "no value"));
 
-    CHECK(lua_isnil(L, 1) == 1);
-    CHECK(lua_isboolean(L, 2) == 1);
-    CHECK(lua_isnumber(L, 3) == 1);
-    CHECK(lua_isnumber(L, 4) == 1);
-    CHECK(lua_isnumber(L, 11) == 1);
-    CHECK(lua_isnumber(L, 5) == 0);
-    CHECK(lua_isinteger(L, 3) == 1);
-    CHECK(lua_isinteger(L, 4) == 0);
-    CHECK(lua_isinteger(L, 11) == 0);
-    CHECK(lua_isstring(L, 5) == 1);
-    CHECK(lua_isstring(L, 3) == 1);
-    CHECK(lua_isstring(L, 6) == 0);
-    CHECK(lua_istable(L, 6) == 1);
-    CHECK(lua_isfunction(L, 7) == 1);
-    CHECK(lua_iscfunction(L, 7) == 1);
-    CHECK(lua_isuserdata(L, 8) == 1);
-    CHECK(lua_isuserdata(L, 9) == 1);
-    CHECK(lua_islightuserdata(L, 9) == 1);
-    CHECK(lua_islightuserdata(L, 8) == 0);
-    CHECK(lua_isthread(L, 10) == 1);
+    CHECK(lua_isnil(L, 1));
+    CHECK(lua_isboolean(L, 2));
+    CHECK(lua_isnumber(L, 3));
+    CHECK(lua_isnumber(L, 4));
+    CHECK(lua_isnumber(L, 11));
+    CHECK(!lua_isnumber(L, 5));
+    CHECK(lua_isinteger(L, 3));
+    CHECK(!lua_isinteger(L, 4));
+    CHECK(!lua_isinteger(L, 11));
+    CHECK(lua_isstring(L, 5));
+    CHECK(lua_isstring(L, 3));
+    CHECK(!lua_isstring(L, 6));
+    CHECK(lua_istable(L, 6));
+    CHECK(lua_isfunction(L, 7));
+    CHECK(lua_iscfunction(L, 7));
+    CHECK(lua_isuserdata(L, 8));
+    CHECK(lua_isuserdata(L, 9));
+    CHECK(lua_islightuserdata(L, 9));
+    CHECK(!lua_islightuserdata(L, 8));
+    CHECK(lua_isthread(L, 10));
 
     CHECK(eq(lua_tonumberx(L, 3), 3.0));
     CHECK(eq(lua_tonumberx(L, 4), 3.5));
@@ -756,13 +756,13 @@ public final class PublicApi
     CHECK(lua_tointeger(L, 3) == 3);
     CHECK(lua_tointeger(L, 1) == 0);
 
-    CHECK(lua_toboolean(L, 1) == 0);
-    CHECK(lua_toboolean(L, 2) == 1);
-    CHECK(lua_toboolean(L, 3) == 1);
-    lua_pushboolean(L, 0);
-    CHECK(lua_toboolean(L, -1) == 0);
+    CHECK(!lua_toboolean(L, 1));
+    CHECK(lua_toboolean(L, 2));
+    CHECK(lua_toboolean(L, 3));
+    lua_pushboolean(L, false);
+    CHECK(!lua_toboolean(L, -1));
     lua_pushinteger(L, 0);
-    CHECK(lua_toboolean(L, -1) == 1);
+    CHECK(lua_toboolean(L, -1));
     lua_pop(L, 2);
 
     {
@@ -795,7 +795,7 @@ public final class PublicApi
     CHECK(lua_tocfunction(L, 7) == cf_add);
     CHECK(lua_tocfunction(L, 6) == null);
     CHECK(load_string(L, bv("return 1")) == LUA_OK);
-    CHECK(lua_iscfunction(L, -1) == 0);
+    CHECK(!lua_iscfunction(L, -1));
     CHECK(lua_tocfunction(L, -1) == null); /* Lua function */
     lua_pop(L, 1);
 
@@ -853,7 +853,7 @@ public final class PublicApi
       lua_pushinteger(L, c.b);
       lua_arith(L, c.op);
       CHECK(lua_gettop(L) == 1);
-      CHECK(lua_isinteger(L, -1) == 1);
+      CHECK(lua_isinteger(L, -1));
       CHECK(lua_tointeger(L, -1) == c.expected);
       lua_pop(L, 1);
     }
@@ -861,14 +861,14 @@ public final class PublicApi
     lua_pushinteger(L, 7);
     lua_pushinteger(L, 2);
     lua_arith(L, LUA_OPDIV);
-    CHECK(lua_isinteger(L, -1) == 0);
+    CHECK(!lua_isinteger(L, -1));
     CHECK(lua_tonumber(L, -1) == 3.5);
     lua_pop(L, 1);
 
     lua_pushinteger(L, 2);
     lua_pushinteger(L, 10);
     lua_arith(L, LUA_OPPOW);
-    CHECK(lua_isinteger(L, -1) == 0);
+    CHECK(!lua_isinteger(L, -1));
     CHECK(lua_tonumber(L, -1) == 1024.0);
     lua_pop(L, 1);
 
@@ -913,39 +913,39 @@ public final class PublicApi
     lua_pushinteger(L, 1);
     lua_pushliteral(L, hs("1"));
 
-    CHECK(lua_rawequal(L, 1, 3) == 1);
-    CHECK(lua_rawequal(L, 1, 2) == 0);
-    CHECK(lua_rawequal(L, 1, 4) == 0);
-    CHECK(lua_rawequal(L, 1, 15) == 0);
-    CHECK(lua_rawequal(L, 15, 16) == 0);
+    CHECK(lua_rawequal(L, 1, 3));
+    CHECK(!lua_rawequal(L, 1, 2));
+    CHECK(!lua_rawequal(L, 1, 4));
+    CHECK(!lua_rawequal(L, 1, 15));
+    CHECK(!lua_rawequal(L, 15, 16));
 
-    CHECK(lua_compare(L, 1, 3, LUA_OPEQ) == 1);
-    CHECK(lua_compare(L, 1, 2, LUA_OPEQ) == 0);
-    CHECK(lua_compare(L, 1, 2, LUA_OPLT) == 1);
-    CHECK(lua_compare(L, 2, 1, LUA_OPLT) == 0);
-    CHECK(lua_compare(L, 1, 3, LUA_OPLE) == 1);
-    CHECK(lua_compare(L, 2, 1, LUA_OPLE) == 0);
-    CHECK(lua_compare(L, 1, 4, LUA_OPEQ) == 0);
-    CHECK(lua_compare(L, 1, 15, LUA_OPEQ) == 0);
+    CHECK(lua_compare(L, 1, 3, LUA_OPEQ));
+    CHECK(!lua_compare(L, 1, 2, LUA_OPEQ));
+    CHECK(lua_compare(L, 1, 2, LUA_OPLT));
+    CHECK(!lua_compare(L, 2, 1, LUA_OPLT));
+    CHECK(lua_compare(L, 1, 3, LUA_OPLE));
+    CHECK(!lua_compare(L, 2, 1, LUA_OPLE));
+    CHECK(!lua_compare(L, 1, 4, LUA_OPEQ));
+    CHECK(!lua_compare(L, 1, 15, LUA_OPEQ));
     lua_settop(L, 0);
 
     lua_pushinteger(L, 1);
     lua_pushnumber(L, 1.5);
-    CHECK(lua_compare(L, 1, 2, LUA_OPLT) == 1);
+    CHECK(lua_compare(L, 1, 2, LUA_OPLT));
     lua_settop(L, 0);
 
     lua_pushliteral(L, hs("abc"));
     lua_pushliteral(L, hs("abd"));
-    CHECK(lua_compare(L, 1, 2, LUA_OPLT) == 1);
+    CHECK(lua_compare(L, 1, 2, LUA_OPLT));
     lua_settop(L, 0);
 
     push_table_with_mm(L, hs("__eq"), cf_mm_true);
     push_table_with_mm(L, hs("__eq"), cf_mm_true);
-    CHECK(lua_rawequal(L, 1, 2) == 0);
-    CHECK(lua_compare(L, 1, 2, LUA_OPEQ) == 1);
+    CHECK(!lua_rawequal(L, 1, 2));
+    CHECK(lua_compare(L, 1, 2, LUA_OPEQ));
     push_table_with_mm(L, hs("__lt"), cf_mm_true);
     push_table_with_mm(L, hs("__lt"), cf_mm_true);
-    CHECK(lua_compare(L, 3, 4, LUA_OPLT) == 1);
+    CHECK(lua_compare(L, 3, 4, LUA_OPLT));
     lua_settop(L, 0);
 
     lua_close(L);
@@ -979,7 +979,7 @@ public final class PublicApi
     lua_pushstring(L, hs("abc"));
     CHECK(eq(lua_tolstring(L, -1), "abc"));
     lua_pushstring(L, null);
-    CHECK(lua_isnil(L, -1) == 1);
+    CHECK(lua_isnil(L, -1));
     lua_pop(L, 2);
 
     lua_pushliteral(L, hs("lit"));
@@ -1029,26 +1029,26 @@ public final class PublicApi
     lua_pushinteger(L, 12);
     lua_pushcclosure(L, cf_upvals, 2);
     CHECK(lua_gettop(L) == 1);
-    CHECK(lua_iscfunction(L, -1) == 1);
+    CHECK(lua_iscfunction(L, -1));
     lua_call(L, 0, 1);
     CHECK(lua_tointeger(L, -1) == 42);
     lua_pop(L, 1);
 
-    lua_pushboolean(L, 5);
-    CHECK(lua_toboolean(L, -1) == 1);
-    lua_pushboolean(L, 0);
-    CHECK(lua_toboolean(L, -1) == 0);
+    lua_pushboolean(L, true);
+    CHECK(lua_toboolean(L, -1));
+    lua_pushboolean(L, false);
+    CHECK(!lua_toboolean(L, -1));
     lua_pop(L, 2);
 
-    CHECK(lua_pushthread(L) == 1);
+    CHECK(lua_pushthread(L));
     CHECK(lua_tothread(L, -1) == L);
     lua_State L1 = lua_newthread(L);
-    CHECK(lua_pushthread(L1) == 0);
+    CHECK(!lua_pushthread(L1));
     CHECK(lua_tothread(L1, -1) == L1);
     lua_pop(L, 2);
 
     lua_pushglobaltable(L);
-    CHECK(lua_istable(L, -1) == 1);
+    CHECK(lua_istable(L, -1));
     lua_pop(L, 1);
 
     lua_close(L);
@@ -1126,13 +1126,13 @@ public final class PublicApi
     lua_pop(L, 1);
 
     lua_newtable(L);
-    CHECK(lua_getmetatable(L, -1) == 0);
+    CHECK(!lua_getmetatable(L, -1));
     lua_newtable(L);
     lua_pushvalue(L, -1);
     lua_insert(L, -3);
     CHECK(lua_setmetatable(L, -2) == 1);
-    CHECK(lua_getmetatable(L, -1) == 1);
-    CHECK(lua_rawequal(L, -1, -3) == 1);
+    CHECK(lua_getmetatable(L, -1));
+    CHECK(lua_rawequal(L, -1, -3));
     lua_pop(L, 3);
 
     push_table_with_mm(L, hs("__index"), cf_mm_index);
@@ -1160,9 +1160,9 @@ public final class PublicApi
     CHECK(lua_getiuservalue(L, uidx, 1) == LUA_TNIL);
     lua_pop(L, 1);
     lua_pushinteger(L, 21);
-    CHECK(lua_setiuservalue(L, uidx, 1) != 0);
+    CHECK(lua_setiuservalue(L, uidx, 1));
     lua_pushinteger(L, 22);
-    CHECK(lua_setiuservalue(L, uidx, 2) != 0);
+    CHECK(lua_setiuservalue(L, uidx, 2));
     CHECK(lua_getiuservalue(L, uidx, 1) == LUA_TNUMBER);
     CHECK(lua_tointeger(L, -1) == 21);
     lua_pop(L, 1);
@@ -1170,10 +1170,10 @@ public final class PublicApi
     CHECK(lua_tointeger(L, -1) == 22);
     lua_pop(L, 1);
     CHECK(lua_getiuservalue(L, uidx, 3) == LUA_TNONE);
-    CHECK(lua_isnil(L, -1) == 1);
+    CHECK(lua_isnil(L, -1));
     lua_pop(L, 1);
     lua_pushnil(L);
-    CHECK(lua_setiuservalue(L, uidx, 3) == 0);
+    CHECK(!lua_setiuservalue(L, uidx, 3));
     lua_pop(L, 1);
 
     lua_close(L);
@@ -1201,7 +1201,7 @@ public final class PublicApi
     CHECK(load_string(L, bv("return 1, 2")) == LUA_OK);
     lua_call(L, 0, 4);
     CHECK(lua_gettop(L) == 4);
-    CHECK(lua_isnil(L, 4) == 1);
+    CHECK(lua_isnil(L, 4));
     lua_settop(L, 0);
 
     int base = lua_gettop(L);
@@ -1371,7 +1371,7 @@ public final class PublicApi
       lua_ResumeResult rr = lua_resume(co, L, 0);
       CHECK(rr.status == LUA_ERRRUN);
       lua_getglobal(L, hs("closed"));
-      CHECK(lua_isnil(L, -1) != 0);
+      CHECK(lua_isnil(L, -1));
       lua_pop(L, 1);
       int cst = lua_closethread(co, L);
       CHECK(cst == LUA_ERRRUN);
@@ -1412,7 +1412,7 @@ public final class PublicApi
     {
       CHECK(load_string(L, bv("return 10 + 11")) == LUA_OK);
       DumpBuf d = new DumpBuf();
-      int st = lua_dump(L, d, 0);
+      int st = lua_dump(L, d, false);
       CHECK(st == 0);
       CHECK(!d.bytes.isEmpty());
       CHECK(d.empty_calls >= 1);
@@ -1435,7 +1435,7 @@ public final class PublicApi
 
       CHECK(load_string(L, bv("return 10 + 11")) == LUA_OK);
       DumpBuf ds = new DumpBuf();
-      CHECK(lua_dump(L, ds, 1) == 0);
+      CHECK(lua_dump(L, ds, true) == 0);
       lua_pop(L, 1);
       CHECK(!ds.bytes.isEmpty() && ds.bytes.length() <= d.bytes.length());
       StringReader r3 = new StringReader(ds.view(), false);
@@ -1448,7 +1448,7 @@ public final class PublicApi
     {
       CHECK(load_string(L, bv("return 1")) == LUA_OK);
       FailingWriter fw = new FailingWriter();
-      int st = lua_dump(L, fw, 0);
+      int st = lua_dump(L, fw, false);
       CHECK(st == 33);
       CHECK(fw.calls == 1);
       lua_pop(L, 1);
@@ -1465,7 +1465,7 @@ public final class PublicApi
     {
       lua_State L1 = lua_newthread(L);
       CHECK(lua_status(L1) == LUA_OK);
-      CHECK(lua_isyieldable(L) == 0);
+      CHECK(!lua_isyieldable(L));
 
       lua_pushcfunction(L1, cf_co);
       lua_pushinteger(L1, 1);
@@ -1777,7 +1777,7 @@ public final class PublicApi
 
     /* no hook: gethook fails before reaching unmakemask */
     CHECK(do_string(L, bv("return debug.gethook()")) == LUA_OK);
-    CHECK(lua_isnil(L, -1) != 0);
+    CHECK(lua_isnil(L, -1));
     lua_settop(L, 0);
 
     /* each mask character round-trips: sethook 'c'/'r'/'l' */
@@ -1989,7 +1989,7 @@ public final class PublicApi
     CHECK(lua_touserdata(L, -1) != null);
 
     lua_pushinteger(L, 7);
-    CHECK(lua_setiuservalue(L, -2, 1) == 1);
+    CHECK(lua_setiuservalue(L, -2, 1));
     CHECK(lua_getiuservalue(L, -1, 1) == LUA_TNUMBER);
     CHECK(lua_tointeger(L, -1) == 7);
     lua_pop(L, 1);
@@ -2001,7 +2001,7 @@ public final class PublicApi
     CHECK(lua_touserobject(L, -1) == null);
     lua_pop(L, 1);
 
-    CHECK(luaL_newmetatable(L, hs("test.userobject")) == 1);
+    CHECK(luaL_newmetatable(L, hs("test.userobject")));
     lua_pushcfunction(L, cf_userobject_gc);
     lua_setfield(L, -2, hs("__gc"));
     lua_setmetatable(L, -2);
@@ -2047,8 +2047,8 @@ public final class PublicApi
     CHECK(lua_rawlen(L, bi) == 0);
     CHECK(lua_topointer(L, ai) != null);
     CHECK(lua_topointer(L, ai) != lua_topointer(L, bi));
-    CHECK(lua_rawequal(L, ai, ai) == 1);
-    CHECK(lua_rawequal(L, ai, bi) == 0);
+    CHECK(lua_rawequal(L, ai, ai));
+    CHECK(!lua_rawequal(L, ai, bi));
 
     lua_newtable(L);
     int t = lua_gettop(L);
@@ -2085,9 +2085,9 @@ public final class PublicApi
     lua_newtable(L);
     lua_pushinteger(L, 7);
     lua_setfield(L, -2, hs("marker"));
-    CHECK(lua_setiuservalue(L, di, 1) != 0);
+    CHECK(lua_setiuservalue(L, di, 1));
     lua_pushinteger(L, 99);
-    CHECK(lua_setiuservalue(L, di, 2) != 0);
+    CHECK(lua_setiuservalue(L, di, 2));
     lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
     lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
     CHECK(lua_getiuservalue(L, di, 1) == LUA_TTABLE);
@@ -2333,7 +2333,7 @@ public final class PublicApi
     lua_setfield(L, tidx, hs("x"));
     int cnt = 0;
     lua_pushnil(L);
-    while (lua_next(L, tidx) != 0)
+    while (lua_next(L, tidx))
     {
       cnt++;
       CHECK(lua_gettop(L) == tidx + 2);
@@ -2343,7 +2343,7 @@ public final class PublicApi
     CHECK(lua_gettop(L) == tidx);
     lua_newtable(L);
     lua_pushnil(L);
-    CHECK(lua_next(L, -2) == 0);
+    CHECK(!lua_next(L, -2));
     lua_pop(L, 2);
 
     lua_settop(L, 0);
@@ -2388,13 +2388,13 @@ public final class PublicApi
     {
       int r = lua_stringtonumber(L, hs("42"));
       CHECK(r == 3);
-      CHECK(lua_isinteger(L, -1) == 1);
+      CHECK(lua_isinteger(L, -1));
       CHECK(lua_tointeger(L, -1) == 42);
       lua_pop(L, 1);
 
       r = lua_stringtonumber(L, hs("3.5"));
       CHECK(r == 4);
-      CHECK(lua_isinteger(L, -1) == 0);
+      CHECK(!lua_isinteger(L, -1));
       CHECK(lua_tonumber(L, -1) == 3.5);
       lua_pop(L, 1);
 
@@ -2487,13 +2487,13 @@ public final class PublicApi
       CHECK(eq(info.short_src, "tpa"));
       CHECK(info.linedefined == 1);
       CHECK(info.nparams == 2);
-      CHECK(info.isvararg != 0);
+      CHECK(info.isvararg);
       CHECK(info.nups == 0);
     }
     lua_pushvalue(L, -1);
     info = lua_getinfo(L, hs(">L"), query);
     CHECK(info != null);
-    CHECK(lua_istable(L, -1) == 1);
+    CHECK(lua_istable(L, -1));
     lua_pop(L, 2);
 
     lua_pushcfunction(L, cf_add);
@@ -2656,7 +2656,7 @@ public final class PublicApi
       lua_pushcfunction(L, luaopen_string);
       lua_pushliteral(L, hs("string"));
       lua_call(L, 1, 1);
-      CHECK(lua_istable(L, -1) == 1);
+      CHECK(lua_istable(L, -1));
       CHECK(lua_getfield(L, -1, hs("rep")) == LUA_TFUNCTION);
       lua_pop(L, 2);
       lua_close(L);
@@ -2817,7 +2817,7 @@ public final class PublicApi
       CHECK(top_msg_contains(L, bv("concatenate")));
 
       lua_pushcfunction(L, cf_neg_len);
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       CHECK(lua_pcall(L, 1, 1, 0) == LUA_ERRRUN);
       CHECK(top_msg_contains(L, bv("length")));
 
@@ -2848,7 +2848,7 @@ public final class PublicApi
       CHECK(lua_tonumberx(L, 15).isEmpty());
       CHECK(lua_tointegerx(L, 15).isEmpty());
       CHECK(lua_tostring(L, 15) == null);
-      CHECK(lua_toboolean(L, 15) == 0);
+      CHECK(!lua_toboolean(L, 15));
       CHECK(lua_tocfunction(L, 15) == null);
       CHECK(lua_touserdata(L, 15) == null);
       CHECK(lua_tothread(L, 15) == null);
@@ -3013,7 +3013,7 @@ public final class PublicApi
   {
     lua_State L = new_state();
 
-    CHECK(luaL_newmetatable(L, hs("TPA.Widget")) == 1);
+    CHECK(luaL_newmetatable(L, hs("TPA.Widget")));
     CHECK(lua_type(L, -1) == LUA_TTABLE);
     CHECK(lua_getfield(L, -1, hs("__name")) == LUA_TSTRING);
     {
@@ -3021,10 +3021,10 @@ public final class PublicApi
       CHECK(n != null && eq(n.to_utf8(), "TPA.Widget"));
     }
     lua_pop(L, 1);
-    CHECK(luaL_newmetatable(L, hs("TPA.Widget")) == 0);
+    CHECK(!luaL_newmetatable(L, hs("TPA.Widget")));
     CHECK(luaL_getmetatable(L, hs("TPA.Widget")) == LUA_TTABLE);
-    CHECK(lua_rawequal(L, -1, -2) == 1);
-    CHECK(lua_rawequal(L, -1, -3) == 1);
+    CHECK(lua_rawequal(L, -1, -2));
+    CHECK(lua_rawequal(L, -1, -3));
     lua_pop(L, 3);
 
     Object ud = lua_newuserdatauv(L, 8, 0);
@@ -3064,19 +3064,19 @@ public final class PublicApi
     CHECK(luaL_getmetafield(L, obj, hs("nope")) == LUA_TNIL);
     CHECK(lua_gettop(L) == before);
 
-    CHECK(luaL_callmeta(L, obj, hs("__tostring")) == 1);
+    CHECK(luaL_callmeta(L, obj, hs("__tostring")));
     {
       HostString s = lua_tostring(L, -1);
       CHECK(s != null && eq(s.to_utf8(), "custom!"));
     }
     lua_pop(L, 1);
-    CHECK(luaL_callmeta(L, obj, hs("__nope")) == 0);
+    CHECK(!luaL_callmeta(L, obj, hs("__nope")));
     CHECK(lua_gettop(L) == obj);
 
     lua_pushinteger(L, 12);
     CHECK(eq(luaL_tolstring(L, -1), "12"));
     lua_pop(L, 2);
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     CHECK(eq(luaL_tolstring(L, -1), "true"));
     lua_pop(L, 2);
     lua_pushnil(L);
@@ -3119,7 +3119,7 @@ public final class PublicApi
     lua_pop(L, 1);
     DumpBuf d = new DumpBuf();
     CHECK(luaL_loadstring(L, hs("return 99")) == LUA_OK);
-    CHECK(lua_dump(L, d, 0) == 0);
+    CHECK(lua_dump(L, d, false) == 0);
     lua_pop(L, 1);
     CHECK(d.bytes.length() > 0);
     CHECK(luaL_loadbufferx(L, d.view(), hs("=bin"), hs("b")) ==
@@ -3337,10 +3337,10 @@ public final class PublicApi
     }
     lua_pop(L, 1);
 
-    CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, hs("TPA.SUB")) == 0);
+    CHECK(!luaL_getsubtable(L, LUA_REGISTRYINDEX, hs("TPA.SUB")));
     CHECK(lua_type(L, -1) == LUA_TTABLE);
-    CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, hs("TPA.SUB")) == 1);
-    CHECK(lua_rawequal(L, -1, -2) == 1);
+    CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, hs("TPA.SUB")));
+    CHECK(lua_rawequal(L, -1, -2));
     lua_pop(L, 2);
 
     lua_createtable(L, 0, 1);
@@ -3357,14 +3357,14 @@ public final class PublicApi
     CHECK(lua_tointeger(L, -1) == 123);
     lua_pop(L, 1);
     CHECK(lua_getfield(L, -1, hs("holder")) == LUA_TBOOLEAN);
-    CHECK(lua_toboolean(L, -1) == 0);
+    CHECK(!lua_toboolean(L, -1));
     lua_pop(L, 2);
 
-    CHECK(luaL_fileresult(L, 1, null) == 1);
-    CHECK(lua_toboolean(L, -1) == 1);
+    CHECK(luaL_fileresult(L, true, null) == 1);
+    CHECK(lua_toboolean(L, -1));
     lua_pop(L, 1);
     errno = ENOENT;
-    CHECK(luaL_fileresult(L, 0, hs("nofile.txt")) == 3);
+    CHECK(luaL_fileresult(L, false, hs("nofile.txt")) == 3);
     CHECK(lua_type(L, -3) == LUA_TNIL); /* fail */
     {
       HostString m = lua_tostring(L, -2);
@@ -3376,7 +3376,7 @@ public final class PublicApi
 
     errno = 0;
     CHECK(luaL_execresult(L, 0) == 3);
-    CHECK(lua_toboolean(L, -3) == 1);
+    CHECK(lua_toboolean(L, -3));
     {
       HostString w = lua_tostring(L, -2);
       CHECK(w != null && eq(w.to_utf8(), "exit"));
@@ -3389,16 +3389,16 @@ public final class PublicApi
     {
       lua_State L2 = luaL_newstate();
       CHECK(L2 != null);
-      luaL_requiref(L2, hs("string"), luaopen_string, 1);
+      luaL_requiref(L2, hs("string"), luaopen_string, true);
       CHECK(lua_type(L2, -1) == LUA_TTABLE);
       CHECK(lua_getglobal(L2, hs("string")) == LUA_TTABLE);
-      CHECK(lua_rawequal(L2, -1, -2) == 1);
+      CHECK(lua_rawequal(L2, -1, -2));
       lua_pop(L2, 1);
-      CHECK(luaL_getsubtable(L2, LUA_REGISTRYINDEX, hs("_LOADED")) == 1);
+      CHECK(luaL_getsubtable(L2, LUA_REGISTRYINDEX, hs("_LOADED")));
       CHECK(lua_getfield(L2, -1, hs("string")) == LUA_TTABLE);
-      CHECK(lua_rawequal(L2, -1, -3) == 1);
+      CHECK(lua_rawequal(L2, -1, -3));
       lua_pop(L2, 3);
-      luaL_requiref(L2, hs("mathmod"), luaopen_math, 0);
+      luaL_requiref(L2, hs("mathmod"), luaopen_math, false);
       CHECK(lua_type(L2, -1) == LUA_TTABLE);
       CHECK(lua_getglobal(L2, hs("mathmod")) == LUA_TNIL);
       lua_pop(L2, 2);
@@ -3429,7 +3429,7 @@ public final class PublicApi
 
     DumpBuf d = new DumpBuf();
     lua_pushvalue(L, aidx);
-    CHECK(lua_dump(L, d, 0) == 0);
+    CHECK(lua_dump(L, d, false) == 0);
     lua_pop(L, 1);
     CHECK(luaL_loadbufferx(L, d.view(), hs("=re"), hs("b")) == LUA_OK);
     int lidx = lua_gettop(L);
@@ -3439,7 +3439,7 @@ public final class PublicApi
       CHECK(uname != null);
       CHECK(lua_type(L, -1) == LUA_TTABLE);
       lua_pushglobaltable(L);
-      CHECK(lua_rawequal(L, -1, -2) == 1);
+      CHECK(lua_rawequal(L, -1, -2));
       lua_pop(L, 2);
     }
     CHECK(lua_upvalueid(L, lidx, 1) != lua_upvalueid(L, aidx, 1));
@@ -3450,7 +3450,7 @@ public final class PublicApi
         bv("local u1, u2 = 10, 20\n" +
         "return function() return u1, u2 end")) == LUA_OK);
     DumpBuf d2 = new DumpBuf();
-    CHECK(lua_dump(L, d2, 0) == 0);
+    CHECK(lua_dump(L, d2, false) == 0);
     lua_pop(L, 1);
     CHECK(luaL_loadbufferx(L, d2.view(), hs("=re2"), hs("b")) == LUA_OK);
     lidx = lua_gettop(L);
@@ -3468,7 +3468,7 @@ public final class PublicApi
 
     CHECK(do_string(L, bv("return function() return 1 end")) == LUA_OK);
     DumpBuf d3 = new DumpBuf();
-    CHECK(lua_dump(L, d3, 1) == 0);
+    CHECK(lua_dump(L, d3, true) == 0);
     lua_pop(L, 1);
     CHECK(luaL_loadbufferx(L, d3.view(), hs("=s"), hs("b")) ==
           LUA_OK);
@@ -3502,7 +3502,7 @@ public final class PublicApi
     lua_pop(L, 2);
 
     lua_pushcclosure(L, cf_add, 0);
-    CHECK(lua_iscfunction(L, -1) == 1);
+    CHECK(lua_iscfunction(L, -1));
     CHECK(lua_tocfunction(L, -1) == cf_add);
     CHECK(lua_topointer(L, -1) == p0);
     CHECK(lua_getupvalue(L, -1, 1) == null);
@@ -3511,7 +3511,7 @@ public final class PublicApi
     lua_pushcclosure(L, cf_add, 1);
     lua_pushinteger(L, 1);
     lua_pushcclosure(L, cf_add, 1);
-    CHECK(lua_iscfunction(L, -1) == 1 && lua_iscfunction(L, -2) == 1);
+    CHECK(lua_iscfunction(L, -1) && lua_iscfunction(L, -2));
     CHECK(lua_tocfunction(L, -1) == cf_add);
     CHECK(lua_tocfunction(L, -1) == lua_tocfunction(L, -2));
     CHECK(lua_topointer(L, -1) != lua_topointer(L, -2));
@@ -3563,7 +3563,7 @@ public final class PublicApi
     CHECK(lua_tointeger(L, -1) == 1234);
     lua_pop(L, 1);
 
-    CHECK(lua_getmetatable(L, oidx) == 1);
+    CHECK(lua_getmetatable(L, oidx));
     CHECK(lua_getfield(L, -1, hs("__index")) == LUA_TFUNCTION);
     CHECK(lua_tocfunction(L, -1) == cf_add);
     CHECK(lua_topointer(L, -1) == p0);
@@ -3730,7 +3730,7 @@ public final class PublicApi
                              "coroutine.yield(y)\n" +
                              "y = y + 1\n" +
                              "return y")) == LUA_OK);
-    luaL_requiref(co, hs("coroutine"), luaopen_coroutine, 1);
+    luaL_requiref(co, hs("coroutine"), luaopen_coroutine, true);
     lua_pop(co, 1);
     lua_ResumeResult rr = lua_resume(co, L, 0);
     CHECK(rr.status == LUA_YIELD);
@@ -3762,10 +3762,10 @@ public final class PublicApi
                           "io.input() == io.input(), " +
                           "io.stdout == io.output(), io.stdin == io.input()")) ==
           LUA_OK);
-    CHECK(lua_toboolean(L, -4) == 1);
-    CHECK(lua_toboolean(L, -3) == 1);
-    CHECK(lua_toboolean(L, -2) == 1);
-    CHECK(lua_toboolean(L, -1) == 1);
+    CHECK(lua_toboolean(L, -4));
+    CHECK(lua_toboolean(L, -3));
+    CHECK(lua_toboolean(L, -2));
+    CHECK(lua_toboolean(L, -1));
     lua_pop(L, 4);
 
     CHECK(do_string(L, bv(
@@ -3782,7 +3782,7 @@ public final class PublicApi
             os_.to_utf8().find(bv("closed")) == ByteView.npos);
       HostString cs = lua_tostring(L, -3);
       CHECK(cs != null && eq(cs.to_utf8(), "file (closed)"));
-      CHECK(lua_toboolean(L, -2) == 0);
+      CHECK(!lua_toboolean(L, -2));
       HostString err = lua_tostring(L, -1);
       CHECK(err != null && err.to_utf8().find(
                 bv("attempt to use a closed file")) != ByteView.npos);
@@ -3800,7 +3800,7 @@ public final class PublicApi
       CHECK(err != null && err.to_utf8().find(
                 bv("cannot close standard file")) != ByteView.npos);
     }
-    CHECK(lua_toboolean(L, -1) == 1);
+    CHECK(lua_toboolean(L, -1));
     lua_pop(L, 3);
 
     CHECK(do_string(L, bv(
@@ -3815,7 +3815,7 @@ public final class PublicApi
       CHECK(what != null && eq(what.to_utf8(), "exit"));
     }
     CHECK(lua_tointeger(L, -4) == 3);
-    CHECK(lua_toboolean(L, -3) == 1);
+    CHECK(lua_toboolean(L, -3));
     {
       HostString what2 = lua_tostring(L, -2);
       CHECK(what2 != null && eq(what2.to_utf8(), "exit"));
@@ -3865,13 +3865,13 @@ public final class PublicApi
       CHECK(lua_type(L, -1) == LUA_TTABLE);
       CHECK(lua_rawlen(L, -1) == 0); /* pre-sized but empty */
       lua_pushnil(L);
-      CHECK(lua_next(L, -2) == 0); /* no entries registered */
+      CHECK(!lua_next(L, -2)); /* no entries registered */
       lua_pop(L, 1);
       luaL_newlib(L, mod);
       CHECK(lua_type(L, -1) == LUA_TTABLE);
       int count = 0;
       lua_pushnil(L);
-      while (lua_next(L, -2) != 0)
+      while (lua_next(L, -2))
       {
         CHECK(lua_type(L, -1) == LUA_TFUNCTION);
         count++;
@@ -3976,8 +3976,8 @@ public final class PublicApi
         "  if tonumber(s) ~= v then return false, 'roundtrip: ' .. s end\n" +
         "end\n" +
         "return true, 'ok'")) == LUA_OK);
-    CHECK(lua_toboolean(L, -2) == 1);
-    if (lua_toboolean(L, -2) != 1)
+    CHECK(lua_toboolean(L, -2));
+    if (!lua_toboolean(L, -2))
     {
       HostString why = lua_tostring(L, -1);
       if (why != null)
@@ -4032,7 +4032,7 @@ public final class PublicApi
         "local chunk = 'return ' .. string.format('%q', s)\n" +
         "local f = assert(load(chunk))\n" +
         "return f() == s")) == LUA_OK);
-    CHECK(lua_toboolean(L, -1) == 1);
+    CHECK(lua_toboolean(L, -1));
     lua_pop(L, 1);
 
     CHECK(do_string(L, bv(
@@ -4057,7 +4057,7 @@ public final class PublicApi
         "  if r ~= n or math.type(r) ~= 'integer' then return false end\n" +
         "end\n" +
         "return true")) == LUA_OK);
-    CHECK(lua_toboolean(L, -1) == 1);
+    CHECK(lua_toboolean(L, -1));
     lua_pop(L, 1);
     CHECK(do_string(L, bv(
         "return string.format('%d', 0), string.format('%d', -5),\n" +
@@ -4109,7 +4109,7 @@ public final class PublicApi
     CHECK(eq(lua_tolstring(L, -1), "already"));
     lua_pop(L, 1);
 
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     CHECK(lua_tolstring(L, -1) == null);
     CHECK(lua_type(L, -1) == LUA_TBOOLEAN);
     lua_pop(L, 1);
@@ -4141,7 +4141,7 @@ public final class PublicApi
     lua_pushnumber(L, 7.0);
     lua_pushnumber(L, 2.0);
     lua_arith(L, LUA_OPIDIV);
-    CHECK(lua_isinteger(L, -1) == 0);
+    CHECK(!lua_isinteger(L, -1));
     CHECK(lua_tonumber(L, -1) == 3.0);
     lua_pop(L, 1);
 
@@ -4160,7 +4160,7 @@ public final class PublicApi
     lua_pushinteger(L, 3);
     lua_pushnumber(L, 0.5);
     lua_arith(L, LUA_OPADD);
-    CHECK(lua_isinteger(L, -1) == 0);
+    CHECK(!lua_isinteger(L, -1));
     CHECK(lua_tonumber(L, -1) == 3.5);
     lua_pop(L, 1);
 
@@ -4187,7 +4187,7 @@ public final class PublicApi
     CHECK(load_string(L, bv("local acc = 0\n" +
                             "for i = 1, 5 do acc = acc + i end\n" +
                             "return acc * 2")) == LUA_OK);
-    CHECK(lua_dump(L, d, 0) == 0);
+    CHECK(lua_dump(L, d, false) == 0);
     lua_pop(L, 1);
     CHECK(!d.bytes.isEmpty());
 
@@ -4207,7 +4207,7 @@ public final class PublicApi
     {
       CHECK(load_string(L, bv("return 'fixed-stripped'")) == LUA_OK);
       DumpBuf ds = new DumpBuf();
-      CHECK(lua_dump(L, ds, 1) == 0);
+      CHECK(lua_dump(L, ds, true) == 0);
       lua_pop(L, 1);
       StringReader rs = new StringReader(ds.view(), false);
       CHECK(lua_load(L, rs, null, hs("B")) == LUA_OK);
@@ -4231,11 +4231,11 @@ public final class PublicApi
     lua_createtable(L, 0, 1);
     lua_pushinteger(L, 7);
     lua_setfield(L, -2, hs("x"));
-    CHECK(lua_setiuservalue(L, -2, 1) != 0);
+    CHECK(lua_setiuservalue(L, -2, 1));
     lua_pushliteral(L, hs("uv-two"));
-    CHECK(lua_setiuservalue(L, -2, 2) != 0);
+    CHECK(lua_setiuservalue(L, -2, 2));
     lua_pushinteger(L, 12345);
-    CHECK(lua_setiuservalue(L, -2, 3) != 0);
+    CHECK(lua_setiuservalue(L, -2, 3));
 
     lua_setfield(L, LUA_REGISTRYINDEX, hs("udgc_anchor"));
     lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
@@ -4444,7 +4444,7 @@ public final class PublicApi
     Object r1 = push_and_ptr(L, s41);
     Object r2 = push_and_ptr(L, s41);
     CHECK(r1 != r2);
-    CHECK(lua_rawequal(L, -1, -2) == 1);
+    CHECK(lua_rawequal(L, -1, -2));
     lua_pop(L, 4);
 
     lua_close(L);
@@ -4474,7 +4474,7 @@ public final class PublicApi
       lua_pushlstring(L, bv(buf), 0, len);
       lua_rawgeti(L, tab, i + 1);
       CHECK(lua_topointer(L, -1) == lua_topointer(L, -2));
-      CHECK(lua_rawequal(L, -1, -2) == 1);
+      CHECK(lua_rawequal(L, -1, -2));
       lua_pop(L, 2);
     }
 
@@ -4528,7 +4528,7 @@ public final class PublicApi
       Object pa = push_and_ptr(L, pr.a);
       Object pb = push_and_ptr(L, pr.b);
       CHECK(pa != pb);
-      CHECK(lua_rawequal(L, -1, -2) == 0);
+      CHECK(!lua_rawequal(L, -1, -2));
       CHECK(push_and_ptr(L, pr.a) == pa);
       CHECK(push_and_ptr(L, pr.b) == pb);
       lua_pop(L, 4);
@@ -4580,7 +4580,7 @@ public final class PublicApi
         lua_pushlstring(L, bv(buf), 0, len);
         if (i % 2 == 0)
         {
-          lua_pushboolean(L, 1);
+          lua_pushboolean(L, true);
           lua_settable(L, keep);
         }
         else
@@ -4597,7 +4597,7 @@ public final class PublicApi
         int len = buf.length();
         lua_pushlstring(L, bv(buf), 0, len);
         lua_gettable(L, keep);
-        CHECK(lua_toboolean(L, -1) == 1);
+        CHECK(lua_toboolean(L, -1));
         lua_pop(L, 1);
       }
     }
@@ -4717,7 +4717,7 @@ public final class PublicApi
 
   private static int cf_setup_mt_guarded(lua_State L)
   {
-    if (luaL_newmetatable(L, hs("OOM.Guarded")) != 0)
+    if (luaL_newmetatable(L, hs("OOM.Guarded")))
     {
       lua_pushcfunction(L, (lua_State Ls) -> {
         return 0;
@@ -5266,7 +5266,7 @@ public final class PublicApi
   {
     CHECK(status == LUA_YIELD);
     int n = lua_gettop(L);
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     lua_pushinteger(L, ctx);
     lua_rotate(L, 1, 2);
     return n + 2;
@@ -5277,7 +5277,7 @@ public final class PublicApi
   private static int apik_done(lua_State L)
   {
     int n = lua_gettop(L);
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     lua_pushinteger(L, 0);
     lua_rotate(L, 1, 2);
     return n + 2;
@@ -5601,7 +5601,7 @@ public final class PublicApi
   private static int cf_requirefk(lua_State L) /* (name) -> name, module */
   {
     lua_settop(L, 1);
-    luaL_requirefk(L, hs("modx"), openmod, 1, 39, apik_cont);
+    luaL_requirefk(L, hs("modx"), openmod, true, 39, apik_cont);
     return apik_done(L);
   }
   private static final lua_CFunction cf_requirefk = PublicApi::cf_requirefk;
@@ -5611,7 +5611,7 @@ public final class PublicApi
     CHECK(status != LUA_OK);
     lua_pushinteger(L, status == LUA_YIELD ? LUA_OK : status);
     int n = lua_gettop(L);
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     lua_pushinteger(L, ctx);
     lua_rotate(L, 1, 2);
     return n + 2;
@@ -5644,12 +5644,12 @@ public final class PublicApi
     if (rr.status == LUA_OK || rr.status == LUA_YIELD)
     {
       lua_xmove(co, L, rr.nres);
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       lua_insert(L, -(rr.nres + 1));
       return rr.nres + 1;
     }
     lua_xmove(co, L, 1);
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     lua_insert(L, -2);
     return 2;
   }
@@ -6046,7 +6046,7 @@ public final class PublicApi
   private static int fz_callk_cont(lua_State L, int status, long ctx)
   {
     CHECK(status == LUA_YIELD && ctx == 77);
-    lua_pushboolean(L, 1); /* (thawed through the continuation) */
+    lua_pushboolean(L, true); /* (thawed through the continuation) */
     return 2;
   }
   private static final lua_KFunction fz_callk_cont = PublicApi::fz_callk_cont;
@@ -6057,7 +6057,7 @@ public final class PublicApi
     lua_pushvalue(L, 1);
     lua_pushvalue(L, 2);
     lua_callk(L, 1, 1, 77, fz_callk_cont);
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     return 2;
   }
   private static final lua_CFunction fz_callk = PublicApi::fz_callk;
@@ -6086,7 +6086,7 @@ public final class PublicApi
   /* a C function calling its first argument protected, with a continuation */
   private static int fz_pcallk_cont(lua_State L, int status, long ctx)
   {
-    lua_pushboolean(L, (status == LUA_OK || status == LUA_YIELD) ? 1 : 0);
+    lua_pushboolean(L, status == LUA_OK || status == LUA_YIELD);
     lua_insert(L, -2);
     lua_pushinteger(L, status);
     return 3; /* success, its result or error, and the status */
@@ -6099,7 +6099,7 @@ public final class PublicApi
     lua_pushvalue(L, 1);
     lua_pushvalue(L, 2);
     int st = lua_pcallk(L, 1, 1, 0, 0, fz_pcallk_cont);
-    lua_pushboolean(L, (st == LUA_OK) ? 1 : 0);
+    lua_pushboolean(L, st == LUA_OK);
     lua_insert(L, -2);
     lua_pushinteger(L, -1);
     return 3;
@@ -6111,7 +6111,7 @@ public final class PublicApi
   private static int fz_getik_cont(lua_State L, int status, long ctx)
   {
     CHECK(status == LUA_YIELD && ctx == 55);
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 2;
   }
   private static final lua_KFunction fz_getik_cont = PublicApi::fz_getik_cont;
@@ -6119,7 +6119,7 @@ public final class PublicApi
   private static int fz_getik(lua_State L)
   {
     lua_getik(L, 1, lua_tointeger(L, 2), 55, fz_getik_cont);
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     return 2;
   }
   private static final lua_CFunction fz_getik = PublicApi::fz_getik;
@@ -6163,12 +6163,12 @@ public final class PublicApi
       lua_setbudget(L, 1, at > 0 ? mh_budget : null);
       lua_pushvalue(L, 2);
       int st = lua_pcall(L, 0, 5, 1);
-      while (st == LUA_OK && lua_isfrozen(L) != 0)
+      while (st == LUA_OK && lua_isfrozen(L))
         st = lua_thaw(L, null).status;
       lua_setbudget(L, 0, null);
       CHECK(st == LUA_OK && lua_gettop(L) == 7);
-      CHECK(lua_toboolean(L, 3) == 0 && lua_tointeger(L, 4) == 99);
-      CHECK(lua_toboolean(L, 5) == 0 && fz_str(L, 6).equals("attempt to index a nil value (local 'x')"));
+      CHECK(!lua_toboolean(L, 3) && lua_tointeger(L, 4) == 99);
+      CHECK(!lua_toboolean(L, 5) && fz_str(L, 6).equals("attempt to index a nil value (local 'x')"));
       CHECK(lua_tointeger(L, 7) == 110);
       lua_close(L);
     }
@@ -6232,9 +6232,9 @@ public final class PublicApi
           mh_at = at;
           lua_setbudget(L, 1, at > 0 ? mh_budget : null);
           int st = lua_pcall(L, 0, 1, 1);
-          boolean froze = lua_isfrozen(L) != 0;
+          boolean froze = lua_isfrozen(L);
           int guard = 0;
-          while (lua_isfrozen(L) != 0 && guard++ < 100)
+          while (lua_isfrozen(L) && guard++ < 100)
           {
             lua_ResumeResult r = lua_thaw(L, null);
             st = r.status;
@@ -6339,7 +6339,7 @@ public final class PublicApi
     b14_calls = 0;
     lua_setbudget(co, 50, b14_budget);
     lua_ResumeResult r = lua_resume(co, L, 2);
-    CHECK(lua_isfrozen(co) != 0);
+    CHECK(lua_isfrozen(co));
     for (int i = 0; i < 300; i++)
       CHECK(lua_closethread(co, L) == LUA_ERRRUN);
     for (int i = 0; i < 300; i++)
@@ -6347,7 +6347,7 @@ public final class PublicApi
       r = lua_resume(co, L, 0);
       CHECK(r.status == LUA_ERRRUN);
     }
-    while (lua_isfrozen(co) != 0)
+    while (lua_isfrozen(co))
       r = lua_thaw(co, L);
     CHECK(r.status == LUA_OK && r.nres == 2);
     CHECK(lua_gettop(co) == 2);
@@ -6387,8 +6387,8 @@ public final class PublicApi
     lua_setbudget(co, 20, b15_budget);
     lua_ResumeResult r = lua_resume(co, L, 0);
     CHECK(b15_can == 1);
-    CHECK(lua_isfrozen(co) != 0);
-    while (lua_isfrozen(co) != 0)
+    CHECK(lua_isfrozen(co));
+    while (lua_isfrozen(co))
       r = lua_thaw(co, L);
     CHECK(r.status == LUA_OK && lua_tointeger(co, -1) == 125250);
     lua_close(L);
@@ -6534,12 +6534,12 @@ public final class PublicApi
           CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
         else
           lua_call(L, 1, 1);
-        boolean frozen = lua_isfrozen(L) != 0;
+        boolean frozen = lua_isfrozen(L);
         if (frozen)
           frozeat++;
         int thaws = 0;
         lua_ResumeResult r = new lua_ResumeResult(LUA_OK, 1);
-        while (lua_isfrozen(L) != 0)
+        while (lua_isfrozen(L))
         {
           r = lua_thaw(L, null);
           thaws++;
@@ -6557,7 +6557,7 @@ public final class PublicApi
     lua_pushinteger(L, 50);
     CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
     int thaws = 0;
-    while (lua_isfrozen(L) != 0)
+    while (lua_isfrozen(L))
     {
       lua_thaw(L, null);
       thaws++;
@@ -6571,10 +6571,10 @@ public final class PublicApi
     lua_getglobal(L, hs("yieldable"));
     lua_pushinteger(L, 20);
     CHECK(lua_pcall(L, 1, 2, 0) == LUA_OK);
-    while (lua_isfrozen(L) != 0)
+    while (lua_isfrozen(L))
       lua_thaw(L, null);
-    CHECK(lua_gettop(L) == 2 && lua_toboolean(L, 2) == 0);
-    CHECK(lua_isyieldable(L) == 0);
+    CHECK(lua_gettop(L) == 2 && !lua_toboolean(L, 2));
+    CHECK(!lua_isyieldable(L));
     lua_settop(L, 0);
 
     /* through a C function with a continuation: its continuation goes on */
@@ -6589,8 +6589,8 @@ public final class PublicApi
     lua_getglobal(L, hs("viacallk"));
     lua_pushinteger(L, 30);
     CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
-    CHECK(lua_isfrozen(L) != 0);
-    while (lua_isfrozen(L) != 0)
+    CHECK(lua_isfrozen(L));
+    while (lua_isfrozen(L))
       lua_thaw(L, null);
     CHECK(lua_gettop(L) == 1 && lua_tointeger(L, 1) == viaplain + 1);
     CHECK(fz_cb_can == 1 && fz_cb_why == 0); /* (and that it can) */
@@ -6602,17 +6602,17 @@ public final class PublicApi
     fz_reset(L, 0, null, 0, false);
     CHECK(lua_nofreeze(L) == LUA_NOFREEZE_BUDGET);
     lua_getglobal(L, hs("canf"));
-    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
+    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && !lua_toboolean(L, -1));
     lua_settop(L, 0);
     fz_reset(L, HUGE, null, 0, false);
     lua_getglobal(L, hs("canf"));
-    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 1);
+    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1));
     lua_settop(L, 0);
     lua_getglobal(L, hs("can_viacallk"));
-    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 1);
+    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1));
     lua_settop(L, 0);
     lua_getglobal(L, hs("can_viacall"));
-    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
+    CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && !lua_toboolean(L, -1));
     lua_settop(L, 0);
     lua_getglobal(L, hs("can_viaresume"));
     CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
@@ -6631,11 +6631,11 @@ public final class PublicApi
     lua_getglobal(L, hs("viacall"));
     lua_pushinteger(L, 30);
     st = lua_pcall(L, 1, 1, 0);
-    while (st == LUA_OK && lua_isfrozen(L) != 0)
+    while (st == LUA_OK && lua_isfrozen(L))
       st = lua_thaw(L, null).status;
     CHECK(st == LUA_ERRRUN && fz_str(L, -1).equals("cannot freeze"));
     CHECK(fz_cb_can == 0 && fz_cb_why == LUA_NOFREEZE_CALL); /* (the callback was told that the freeze cannot happen) */
-    CHECK(lua_isfrozen(L) == 0 && lua_status(L) == LUA_ERRRUN);
+    CHECK(!lua_isfrozen(L) && lua_status(L) == LUA_ERRRUN);
     CHECK(lua_closethread(L, null) == LUA_ERRRUN);
     lua_settop(L, 0);
     CHECK(lua_status(L) == LUA_OK);
@@ -6653,8 +6653,8 @@ public final class PublicApi
     lua_getglobal(L, hs("viapcallk"));
     lua_pushinteger(L, 30);
     CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
-    CHECK(lua_isfrozen(L) != 0);
-    while (lua_isfrozen(L) != 0)
+    CHECK(lua_isfrozen(L));
+    while (lua_isfrozen(L))
       lua_thaw(L, null);
     CHECK(lua_gettop(L) == 1);
     String pthawed = fz_str(L, 1);
@@ -6671,18 +6671,18 @@ public final class PublicApi
     lua_pushinteger(L, 7);
     CHECK(lua_pcall(L, 1, 2, 0) == LUA_OK);
     long gplain = lua_tointeger(L, 1);
-    CHECK(gplain > 7000 && lua_toboolean(L, 2) == 0);
+    CHECK(gplain > 7000 && !lua_toboolean(L, 2));
     lua_settop(L, 0);
     fz_reset(L, 3, L, 1, true);
     lua_getglobal(L, hs("viagetik"));
     lua_pushinteger(L, 7);
     CHECK(lua_pcall(L, 1, 2, 0) == LUA_OK);
-    CHECK(lua_isfrozen(L) != 0);
-    while (lua_isfrozen(L) != 0)
+    CHECK(lua_isfrozen(L));
+    while (lua_isfrozen(L))
       lua_thaw(L, null);
-    CHECK(lua_gettop(L) == 2 && lua_tointeger(L, 1) == gplain && lua_toboolean(L, 2) == 1);
+    CHECK(lua_gettop(L) == 2 && lua_tointeger(L, 1) == gplain && lua_toboolean(L, 2));
     lua_getglobal(L, hs("inyield"));
-    CHECK(lua_isboolean(L, -1) != 0 && lua_toboolean(L, -1) == 0);
+    CHECK(lua_isboolean(L, -1) && !lua_toboolean(L, -1));
     lua_settop(L, 0);
 
     /* library functions that call back, in the main thread (it cannot
@@ -6706,9 +6706,9 @@ public final class PublicApi
       fz_reset(L, 1, L, at, false);
       lua_getglobal(L, hs("libwork"));
       CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
-      if (lua_isfrozen(L) != 0)
+      if (lua_isfrozen(L))
         lfroze++;
-      while (lua_isfrozen(L) != 0)
+      while (lua_isfrozen(L))
         lua_thaw(L, null);
       CHECK(lua_gettop(L) == 1 && fz_str(L, 1).equals(lplain));
       lua_settop(L, 0);
@@ -6717,7 +6717,7 @@ public final class PublicApi
     fz_reset(L, 1, L, 1, true);
     lua_getglobal(L, hs("libwork"));
     CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
-    while (lua_isfrozen(L) != 0)
+    while (lua_isfrozen(L))
       lua_thaw(L, null);
     CHECK(lua_gettop(L) == 1 && fz_str(L, 1).equals(lplain));
     CHECK(fz_freezes > 100);
@@ -6728,7 +6728,7 @@ public final class PublicApi
     lua_getglobal(L, hs("late"));
     lua_pushinteger(L, 30);
     CHECK(lua_pcall(L, 1, 1, 0) == LUA_OK);
-    CHECK(lua_isfrozen(L) != 0);
+    CHECK(lua_isfrozen(L));
     lua_ResumeResult er = lua_thaw(L, null);
     CHECK(er.status == LUA_ERRRUN && er.nres == 1);
     CHECK(lua_gettop(L) == 1 && fz_str(L, 1).lastIndexOf("late ", 0) == 0);
@@ -6738,7 +6738,7 @@ public final class PublicApi
     lua_pushinteger(L, 30);
     fz_reset(L, 3, L, 1, false);
     lua_call(L, 1, 1);
-    CHECK(lua_isfrozen(L) != 0);
+    CHECK(lua_isfrozen(L));
     er = lua_thaw(L, null);
     CHECK(er.status == LUA_ERRRUN && lua_gettop(L) == 1);
     lua_settop(L, 0);
@@ -6775,9 +6775,9 @@ public final class PublicApi
       int nargs = 1;
       for (;;)
       {
-        lua_ResumeResult rr = lua_isfrozen(co) != 0 ? lua_thaw(co, null) : lua_resume(co, null, nargs);
+        lua_ResumeResult rr = lua_isfrozen(co) ? lua_thaw(co, null) : lua_resume(co, null, nargs);
         nargs = 0;
-        if (lua_isfrozen(co) != 0)
+        if (lua_isfrozen(co))
         {
           CHECK(rr.status == LUA_OK && rr.nres == 0);
           continue;
@@ -6862,7 +6862,7 @@ public final class PublicApi
       lua_setglobal(S, hs("mark"));
       fz_reset(S, 50, S, 1, false);
       CHECK(luaL_loadstring(S, hs("local x <close> = setmetatable({}, {__close = mark}) while true do end")) == LUA_OK);
-      CHECK(lua_pcall(S, 0, 0, 0) == LUA_OK && lua_isfrozen(S) != 0);
+      CHECK(lua_pcall(S, 0, 0, 0) == LUA_OK && lua_isfrozen(S));
       lua_close(S);
       CHECK(!closed && cd.used == 0);
     }
@@ -6882,10 +6882,10 @@ public final class PublicApi
                                   + "error('boom', 0)")) == LUA_OK);
       fz_reset(S, 50, S, every != 0 ? 1 : 5, every != 0); /* (the 5th: in the close) */
       int pst = lua_pcall(S, 0, 0, 0);
-      CHECK(pst == LUA_OK && lua_isfrozen(S) != 0);
+      CHECK(pst == LUA_OK && lua_isfrozen(S));
       lua_ResumeResult r = new lua_ResumeResult(LUA_OK, 0);
       int nthaws = 0;
-      while (lua_isfrozen(S) != 0)
+      while (lua_isfrozen(S))
       {
         r = lua_thaw(S, null);
         nthaws++;
@@ -6910,7 +6910,7 @@ public final class PublicApi
       CHECK(luaL_loadstring(co, hs("local x <close> = setmetatable({}, {__close = function(_, e) "
                                    + "log[#log + 1] = 'start' for i = 1, 300 do end log[#log + 1] = 'end ' .. tostring(e) end}) "
                                    + "local fail = ... coroutine.yield() if fail then error('boom', 0) end")) == LUA_OK);
-      lua_pushboolean(co, failed);
+      lua_pushboolean(co, failed != 0);
       CHECK(lua_resume(co, S, 1).status == LUA_YIELD);
       lua_settop(co, 0);
       if (failed != 0)
@@ -6920,9 +6920,9 @@ public final class PublicApi
       fz_target = co;
       fz_at = 2;
       int cst = lua_closethread(co, null);
-      CHECK(cst == LUA_OK && lua_isfrozen(co) != 0);
+      CHECK(cst == LUA_OK && lua_isfrozen(co));
       lua_ResumeResult r = new lua_ResumeResult(LUA_OK, 0);
-      while (lua_isfrozen(co) != 0)
+      while (lua_isfrozen(co))
         r = lua_thaw(co, null);
       CHECK(r.status == (failed != 0 ? LUA_ERRRUN : LUA_OK));
       if (failed != 0)
@@ -6954,7 +6954,7 @@ public final class PublicApi
       fz_reset(S, 50, S, 1, true);
       int pst = lua_pcall(S, 2, 0, 0);
       int nthaws = 0;
-      while (pst == LUA_OK && lua_isfrozen(S) != 0)
+      while (pst == LUA_OK && lua_isfrozen(S))
       {
         pst = lua_thaw(S, null).status;
         nthaws++;
@@ -6962,7 +6962,7 @@ public final class PublicApi
       fz_reset(S, 0, null, 0, false);
       CHECK(pst == LUA_ERRRUN && fz_str(S, -1).equals("cannot freeze"));
       CHECK(mode == 0 ? nthaws == 0 : nthaws > 0);
-      CHECK(lua_isfrozen(S) == 0 && lua_status(S) == LUA_ERRRUN);
+      CHECK(!lua_isfrozen(S) && lua_status(S) == LUA_ERRRUN);
       CHECK(lua_closethread(S, null) == LUA_ERRRUN);
       lua_settop(S, 0);
       CHECK(lua_status(S) == LUA_OK);
@@ -6987,7 +6987,7 @@ public final class PublicApi
       fz_at = 1;
       fz_every = true;
       CHECK(lua_closethread(co, null) == LUA_ERRRUN && fz_str(co, -1).equals("cannot freeze"));
-      CHECK(lua_isfrozen(co) == 0 && lua_status(co) == LUA_ERRRUN);
+      CHECK(!lua_isfrozen(co) && lua_status(co) == LUA_ERRRUN);
       fz_reset(S, 0, null, 0, false);
       CHECK(luaL_dostring(S, hs("return table.concat(log, ',')")) == LUA_OK && fz_str(S, -1).equals("start"));
       lua_close(S);
@@ -7020,9 +7020,9 @@ public final class PublicApi
       CHECK(luaL_loadstring(co, hs("local ok = pcall(function() for i = 1, 100 do end end) caught = true")) == LUA_OK);
       lua_ResumeResult rr = lua_resume(co, L, 0);
       CHECK(rr.status == LUA_ERRRUN && fz_str(co, -1).equals("callback failed"));
-      CHECK(lua_status(co) == LUA_ERRRUN && lua_isfrozen(co) == 0);
+      CHECK(lua_status(co) == LUA_ERRRUN && !lua_isfrozen(co));
       lua_getglobal(L, hs("caught"));
-      CHECK(lua_isnil(L, -1) != 0);
+      CHECK(lua_isnil(L, -1));
       lua_pop(L, 2); /* the thread */
     }
 
@@ -7037,22 +7037,22 @@ public final class PublicApi
       fz_every = false;
       CHECK(luaL_loadstring(co, hs("for i = 1, 100 do end")) == LUA_OK);
       lua_ResumeResult rr = lua_resume(co, L, 0);
-      CHECK(rr.status == LUA_OK && lua_isfrozen(co) != 0);
+      CHECK(rr.status == LUA_OK && lua_isfrozen(co));
       lua_State budgeted = lua_newthread(L);
       lua_setbudget(budgeted, 100, fz_budget);
       CHECK(lua_thaw(co, budgeted).status == LUA_ERRRUN);
       CHECK(fz_str(co, -1).equals("cannot thaw from budgeted code"));
       lua_pop(co, 1);
-      CHECK(lua_isfrozen(co) != 0);
+      CHECK(lua_isfrozen(co));
       /* a frozen thread is read-only: closing it fails and changes nothing */
       CHECK(lua_closethread(co, L) == LUA_ERRRUN);
       CHECK(fz_str(co, -1).equals("cannot close a frozen coroutine"));
       lua_pop(co, 1);
-      CHECK(lua_isfrozen(co) != 0);
+      CHECK(lua_isfrozen(co));
 
       fz_target = null;
       rr = lua_thaw(co, L);
-      CHECK(rr.status == LUA_OK && lua_isfrozen(co) == 0);
+      CHECK(rr.status == LUA_OK && !lua_isfrozen(co));
       lua_pop(L, 2);
     }
 

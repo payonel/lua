@@ -214,14 +214,14 @@ struct NumResult
   lua_Number v;
 };
 
-static inline int lua_numbertointeger(lua_Number n, IntResult* p)
+static inline bool lua_numbertointeger(lua_Number n, IntResult* p)
 {
   if (n >= (lua_Number)LUA_MININTEGER && n < -(lua_Number)LUA_MININTEGER)
   {
     p->v = (lua_Integer)n;
-    return 1;
+    return true;
   }
-  return 0;
+  return false;
 }
 
 /* Give these macros simpler names for internal use */

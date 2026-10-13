@@ -21,9 +21,9 @@ public final class Lfunc
   }
 
   /* test whether thread is in 'twups' list */
-  public static int isintwups(lua_State L)
+  public static boolean isintwups(lua_State L)
   {
-    return (L.twups != L) ? 1 : 0;
+    return L.twups != L;
   }
 
   /*
@@ -32,25 +32,25 @@ public final class Lfunc
   */
   public static final int MAXUPVAL = 255;
 
-  public static int upisopen(UpVal up)
+  public static boolean upisopen(UpVal up)
   {
-    return (up.owner != null) ? 1 : 0;
+    return up.owner != null;
   }
 
   public static int uplevel(UpVal up)
   {
-    assert upisopen(up) != 0;
+    assert upisopen(up);
     return up.stkid;
   }
 
   public static TValue upvalgetval(UpVal uv)
   {
-    return upisopen(uv) != 0 ? getslot(uv.owner, uv.stkid) : getobj(uv.value);
+    return upisopen(uv) ? getslot(uv.owner, uv.stkid) : getobj(uv.value);
   }
 
   public static void upvalsetval(lua_State L, UpVal uv, TValue v)
   {
-    if (upisopen(uv) != 0)
+    if (upisopen(uv))
       setslot(uv.owner, uv.stkid, v);
     else
     {
@@ -125,23 +125,23 @@ public final class Lfunc
   {
     int uv = level; /* value being closed */
     TValue errobj = new TValue();
-    int haserr;
+    boolean haserr;
     switch (status)
     {
     case LUA_OK:
       L.top = level + 1; /* call will be at this level */
       /* FALLTHROUGH */
     case CLOSEKTOP:  /* don't need to change top */
-      haserr = 0; /* no error object */
+      haserr = false; /* no error object */
       break;
     default:                                  /* 'luaD_seterrorobj' will set top to level + 2 */
       luaD_seterrorobj(L, status, level + 1);
       errobj = getslot(L, level + 1);
-      haserr = 1;
+      haserr = true;
       break;
     }
     TValue uvv = getslot(L, uv);
-    callclosemethod(L, uvv, haserr != 0 ? errobj : null, yy);
+    callclosemethod(L, uvv, haserr ? errobj : null, yy);
   }
 
   /*
@@ -175,7 +175,7 @@ public final class Lfunc
       uv.prevopen = null;
       uv.opennext = null;
       uv.owner = null;
-      if (iswhite(uv) == 0)
+      if (!iswhite(uv))
       {               /* neither white nor dead? */
         nw2black(uv); /* closed upvalues cannot be gray */
         luaC_barrier(L, uv, slot);

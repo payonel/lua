@@ -51,7 +51,7 @@ public final class LuaAuxLib
 
   public static <R> R luaL_opt(lua_State L, BiFunction<lua_State, Integer, R> f, int n, R d)
   {
-    return lua_isnoneornil(L, n) != 0 ? d : f.apply(L, n);
+    return lua_isnoneornil(L, n) ? d : f.apply(L, n);
   }
 
   /*
@@ -121,44 +121,44 @@ public final class LuaAuxLib
   ** Search for 'objidx' in table at index -1. ('objidx' must be an
   ** absolute index.) Return 1 + string at top if it found a good name.
   */
-  private static int findfield(lua_State L, int objidx, int level)
+  private static boolean findfield(lua_State L, int objidx, int level)
   {
-    if (level == 0 || lua_istable(L, -1) == 0)
-      return 0;     /* not found */
+    if (level == 0 || !lua_istable(L, -1))
+      return false;     /* not found */
     lua_pushnil(L); /* start 'next' loop */
-    while (lua_next(L, -2) != 0)
+    while (lua_next(L, -2))
     { /* for each pair in table */
       if (lua_type(L, -2) == LUA_TSTRING)
       { /* ignore non-string keys */
-        if (lua_rawequal(L, objidx, -1) != 0)
+        if (lua_rawequal(L, objidx, -1))
         {                /* found object? */
           lua_pop(L, 1); /* remove value (but keep name) */
-          return 1;
+          return true;
         }
-        else if (findfield(L, objidx, level - 1) != 0)
+        else if (findfield(L, objidx, level - 1))
         { /* try recursively */
           /* stack: lib_name, lib_table, field_name (top) */
           lua_pushistringref(L, Lt.dot); /* place '.' between the two names */
           lua_replace(L, -3);      /* (in the slot occupied by table) */
           lua_concat(L, 3);        /* lib_name.field_name */
-          return 1;
+          return true;
         }
       }
       lua_pop(L, 1); /* remove value */
     }
-    return 0; /* not found */
+    return false; /* not found */
   }
 
   /*
   ** Search for a name for a function in all loaded modules
   */
-  private static int pushglobalfuncname(lua_State L, lua_State L1, InternalDebug ar)
+  private static boolean pushglobalfuncname(lua_State L, lua_State L1, InternalDebug ar)
   {
     int top = lua_gettop(L);
     lua_pushframefunction(L, L1, ar); /* (the frame is of 'L1': its stack has the function) */
     lua_getfieldi(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
     luaL_checkstacki(L, 6, Lt.not_enough_stack); /* slots for 'findfield' */
-    if (findfield(L, top + 1, 2) != 0)
+    if (findfield(L, top + 1, 2))
     {
       ByteView name = lua_tolstring(L, -1);
       if (name.starts_with(Lt._G_dot))
@@ -168,12 +168,12 @@ public final class LuaAuxLib
       }
       lua_copy(L, -1, top + 1); /* copy name to proper place */
       lua_settop(L, top + 1);   /* remove table "loaded" and name copy */
-      return 1;
+      return true;
     }
     else
     {
       lua_settop(L, top); /* remove function and global table */
-      return 0;
+      return false;
     }
   }
 
@@ -187,7 +187,7 @@ public final class LuaAuxLib
     }
     else if (ar.what.at(0) == 'm')                           /* main? */
       lua_pushistringref(L, Lt.main_chunk);
-    else if (pushglobalfuncname(L, L1, ar) != 0)
+    else if (pushglobalfuncname(L, L1, ar))
     {                       /* try a global name */
       lua_pushvalue(L, -1);
       lua_pushfstringi(L, Lt.function_s);
@@ -274,7 +274,7 @@ public final class LuaAuxLib
           luaL_addvalue(b);
           pushfuncname(L, L1, ar);
           luaL_addvalue(b);
-          if (ar.istailcall != 0)
+          if (ar.istailcall)
             luaL_addlstring(b, Lt.n_t_tail_calls, 0, Lt.n_t_tail_calls.size());
         }
       }
@@ -328,7 +328,7 @@ public final class LuaAuxLib
       }
     }
     if (ar.name == null)
-      ar.name = (pushglobalfuncname(L, L, ar) != 0) ? lua_tolstring(L, -1) : Lt.qmark;
+      ar.name = (pushglobalfuncname(L, L, ar)) ? lua_tolstring(L, -1) : Lt.qmark;
     lua_pushistringref(L, argword);
     lua_pushinteger(L, arg);
     lua_pushlstring(L, ar.name, 0, ar.name.size());
@@ -398,11 +398,11 @@ public final class LuaAuxLib
     return lua_error(L);
   }
 
-  public static int luaL_fileresulti(lua_State L, int stat, ByteView fname, int en)
+  public static int luaL_fileresulti(lua_State L, boolean stat, ByteView fname, int en)
   {
-    if (stat != 0)
+    if (stat)
     {
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       return 1;
     }
     else
@@ -422,7 +422,7 @@ public final class LuaAuxLib
     }
   }
 
-  public static int luaL_fileresult(lua_State L, int stat, HostString fname)
+  public static int luaL_fileresult(lua_State L, boolean stat, HostString fname)
   {
     return luaL_fileresulti(L, stat, (fname != null) ? fname.to_utf8() : null, errno);
   }
@@ -435,13 +435,13 @@ public final class LuaAuxLib
   public static int luaL_execresulti(lua_State L, int stat, int en)
   {
     if (stat != 0 && en != 0) /* error with an 'errno'? */
-      return luaL_fileresulti(L, 0, null, en);
+      return luaL_fileresulti(L, false, null, en);
     else
     {
       OsExecStatus es = os_decode_exec(stat);
       ByteView what = es.exited ? Lt.exit_kw : Lt.signal_kw;
       if (es.exited && es.code == 0) /* successful termination? */
-        lua_pushboolean(L, 1);
+        lua_pushboolean(L, true);
       else
         luaL_pushfail(L);
       lua_pushistringref(L, what);
@@ -458,22 +458,22 @@ public final class LuaAuxLib
   ** =======================================================
   */
 
-  public static int luaL_newmetatable(lua_State L, HostString tname)
+  public static boolean luaL_newmetatable(lua_State L, HostString tname)
   {
     return luaL_newmetatablei(L, tname.to_utf8());
   }
 
-  public static int luaL_newmetatablei(lua_State L, ByteView tname)
+  public static boolean luaL_newmetatablei(lua_State L, ByteView tname)
   {
     if (luaL_getmetatablei(L, tname) != LUA_TNIL) /* name already in use? */
-      return 0;                                  /* leave previous value on top, but return 0 */
+      return false;                                  /* leave previous value on top, but return 0 */
     lua_pop(L, 1);
     lua_createtable(L, 0, 2);
     lua_pushlstring(L, tname, 0, tname.size());
     lua_setfieldi(L, -2, Lt.mm_name); /* metatable.__name = tname */
     lua_pushvalue(L, -1);
     lua_setfieldi(L, LUA_REGISTRYINDEX, tname); /* registry.name = metatable */
-    return 1;
+    return true;
   }
 
   public static void luaL_setmetatable(lua_State L, HostString tname)
@@ -497,10 +497,10 @@ public final class LuaAuxLib
     Object p = lua_touserdata(L, ud);
     if (p != null)
     { /* value is a userdata? */
-      if (lua_getmetatable(L, ud) != 0)
+      if (lua_getmetatable(L, ud))
       {                               /* does it have a metatable? */
         luaL_getmetatablei(L, tname);  /* get correct metatable */
-        if (lua_rawequal(L, -1, -2) == 0) /* not the same? */
+        if (!lua_rawequal(L, -1, -2)) /* not the same? */
           p = null;                   /* value is a userdata with wrong metatable */
         lua_pop(L, 2);                /* remove both metatables */
         return p;
@@ -598,9 +598,9 @@ public final class LuaAuxLib
 
   public static void luaL_checkstacki(lua_State L, int space, ByteView msg)
   {
-    if (lua_checkstack(L, space) == 0)
+    if (!lua_checkstack(L, space))
     {
-      if (msg != null && lua_checkstack(L, 1) != 0)
+      if (msg != null && lua_checkstack(L, 1))
       {
         lua_pushlstring(L, msg, 0, msg.size());
         luaL_errori(L, Lt.stack_overflow_s);
@@ -633,7 +633,7 @@ public final class LuaAuxLib
   public static ByteView luaL_optlstring(
       lua_State L, int arg, ByteView def)
   {
-    if (lua_isnoneornil(L, arg) != 0)
+    if (lua_isnoneornil(L, arg))
       return def;
     else
       return luaL_checklstring(L, arg);
@@ -649,7 +649,7 @@ public final class LuaAuxLib
 
   public static InternalString luaL_optistring(lua_State L, int arg, InternalString def)
   {
-    if (lua_isnoneornil(L, arg) != 0)
+    if (lua_isnoneornil(L, arg))
       return def;
     else
       return luaL_checkistring(L, arg);
@@ -665,12 +665,12 @@ public final class LuaAuxLib
 
   public static double luaL_optnumber(lua_State L, int arg, double def)
   {
-    return (lua_isnoneornil(L, arg) != 0 ? def : luaL_checknumber(L, arg));
+    return (lua_isnoneornil(L, arg) ? def : luaL_checknumber(L, arg));
   }
 
   private static void interror(lua_State L, int arg)
   {
-    if (lua_isnumber(L, arg) != 0)
+    if (lua_isnumber(L, arg))
       luaL_argerrori(L, arg, Lt.number_has_no_integer_representation);
     else
       tag_error(L, arg, LUA_TNUMBER);
@@ -689,7 +689,7 @@ public final class LuaAuxLib
   public static long luaL_optinteger(lua_State L, int arg,
                                      long def)
   {
-    return (lua_isnoneornil(L, arg) != 0 ? def : luaL_checkinteger(L, arg));
+    return (lua_isnoneornil(L, arg) ? def : luaL_checkinteger(L, arg));
   }
 
   /* }====================================================== */
@@ -915,7 +915,7 @@ public final class LuaAuxLib
   public static int luaL_ref(lua_State L, int t)
   {
     int ref;
-    if (lua_isnil(L, -1) != 0)
+    if (lua_isnil(L, -1))
     {
       lua_pop(L, 1);     /* remove from stack */
       return LUA_REFNIL; /* 'nil' has a unique fixed reference */
@@ -925,7 +925,7 @@ public final class LuaAuxLib
       ref = (int) lua_tointeger(L, -1);      /* ref = t[1] */
     else
     {                                    /* first access */
-      assert lua_toboolean(L, -1) == 0; /* must be nil or false */
+      assert !lua_toboolean(L, -1); /* must be nil or false */
       ref = 0;                           /* list is empty */
       lua_pushinteger(L, 0);             /* initialize as an empty list */
       lua_rawseti(L, t, 1);              /* ref = t[1] = 0 */
@@ -948,7 +948,7 @@ public final class LuaAuxLib
     {
       t = lua_absindex(L, t);
       lua_rawgeti(L, t, 1);
-      assert lua_isinteger(L, -1) != 0;
+      assert lua_isinteger(L, -1);
       lua_rawseti(L, t, ref); /* t[ref] = t[1] */
       lua_pushinteger(L, ref);
       lua_rawseti(L, t, 1); /* t[1] = ref */
@@ -1043,10 +1043,10 @@ public final class LuaAuxLib
   */
   private static final class FirstChar
   {
-    int skipped;
+    boolean skipped;
     int c;
 
-    FirstChar(int skipped, int c)
+    FirstChar(boolean skipped, int c)
     {
       this.skipped = skipped;
       this.c = c;
@@ -1062,10 +1062,10 @@ public final class LuaAuxLib
       { /* skip first line */
         c = os_getbyte(f);
       } while (c != OS_EOF && c != '\n');
-      return new FirstChar(1, os_getbyte(f)); /* there was a comment */
+      return new FirstChar(true, os_getbyte(f)); /* there was a comment */
     }
     else
-      return new FirstChar(0, c); /* no comment */
+      return new FirstChar(false, c); /* no comment */
   }
 
   /*
@@ -1115,7 +1115,8 @@ public final class LuaAuxLib
                                     lua_KFunction k)
   {
     LoadF lf = new LoadF();
-    int status, readstatus;
+    int status;
+    boolean readstatus;
     int c;
     int fnameindex = lua_gettop(L) + 1; /* index of filename on the stack */
     final boolean bNullname = filename == null;
@@ -1136,7 +1137,7 @@ public final class LuaAuxLib
     lf.n = 0;
     FirstChar first = skipcomment(lf.f); /* read initial portion */
     c = first.c;
-    if (first.skipped != 0)
+    if (first.skipped)
       lf.buff.set(lf.n++, '\n');  /* add newline to correct line numbers */
     if (c == LUA_SIGNATURE.at(0))
     {           /* binary file? */
@@ -1155,7 +1156,7 @@ public final class LuaAuxLib
     {
       lua_pushnil(L); /* its box */
       lua_LoadSpec ls = filespec(L, mode, fnameindex, ctx, k);
-      int boxed;
+      boolean boxed;
       try
       {
         boxed = lua_loadkread(L, ls, lf);
@@ -1165,11 +1166,11 @@ public final class LuaAuxLib
         os_fclose(lf.f);
         throw e;
       }
-      if (boxed != 0)
+      if (boxed)
       {
-        readstatus = os_ferror(lf.f) ? 1 : 0;
+        readstatus = os_ferror(lf.f);
         os_fclose(lf.f);
-        if (readstatus != 0)
+        if (readstatus)
         {
           lua_settop(L, fnameindex);
           return errfile(L, Lt.read_kw, fnameindex, 0);
@@ -1179,10 +1180,10 @@ public final class LuaAuxLib
       lua_pop(L, 1); /* (no budget) */
     }
     status = lua_loadi(L, lf, lua_toistring(L, -1).view(), mode);
-    readstatus = os_ferror(lf.f) ? 1 : 0;
+    readstatus = os_ferror(lf.f);
     if (!bNullname)
       os_fclose(lf.f); /* close file (even in case of errors) */
-    if (readstatus != 0)
+    if (readstatus)
     {
       lua_settop(L, fnameindex); /* ignore results from 'lua_load' */
       return errfile(L, Lt.read_kw, fnameindex, 0);
@@ -1246,7 +1247,7 @@ public final class LuaAuxLib
 
   public static int luaL_getmetafieldi(lua_State L, int obj, ByteView event)
   {
-    if (lua_getmetatable(L, obj) == 0) /* no metatable? */
+    if (!lua_getmetatable(L, obj)) /* no metatable? */
       return LUA_TNIL;
     else
     {
@@ -1261,19 +1262,19 @@ public final class LuaAuxLib
     }
   }
 
-  public static int luaL_callmeta(lua_State L, int obj, HostString event)
+  public static boolean luaL_callmeta(lua_State L, int obj, HostString event)
   {
     return luaL_callmetai(L, obj, event.to_utf8());
   }
 
-  public static int luaL_callmetai(lua_State L, int obj, ByteView event)
+  public static boolean luaL_callmetai(lua_State L, int obj, ByteView event)
   {
     obj = lua_absindex(L, obj);
     if (luaL_getmetafieldi(L, obj, event) == LUA_TNIL) /* no metafield? */
-      return 0;
+      return false;
     lua_pushvalue(L, obj);
     lua_call(L, 1, 1);
-    return 1;
+    return true;
   }
 
   public static long luaL_len(lua_State L, int idx)
@@ -1305,17 +1306,17 @@ public final class LuaAuxLib
   ** 'luaL_tostringresult'), or the default form. Returns whether it called
   ** '__tostring'.
   */
-  public static int luaL_toistringk(lua_State L, int idx, long ctx, lua_KFunction k)
+  public static boolean luaL_toistringk(lua_State L, int idx, long ctx, lua_KFunction k)
   {
     idx = lua_absindex(L, idx);
     if (luaL_getmetafieldi(L, idx, Lt.mm_tostring) != LUA_TNIL)
     { /* metafield? */
       lua_pushvalue(L, idx);
       lua_callk(L, 1, 1, ctx, k);
-      return 1;
+      return true;
     }
     luaL_tostringdefault(L, idx);
-    return 0;
+    return false;
   }
 
   /* pushes the string form of the value at 'idx' that does not use '__tostring' */
@@ -1335,7 +1336,7 @@ public final class LuaAuxLib
       lua_pushvalue(L, idx);
       break;
     case LUA_TBOOLEAN:
-      lua_pushistringref(L, lua_toboolean(L, idx) != 0 ? Lt.true_kw : Lt.false_kw);
+      lua_pushistringref(L, lua_toboolean(L, idx) ? Lt.true_kw : Lt.false_kw);
       break;
     case LUA_TNIL:
       lua_pushistringref(L, Lt.nil);
@@ -1346,7 +1347,7 @@ public final class LuaAuxLib
       ByteView kind = (tt == LUA_TSTRING)
                           ? lua_tolstring(L, -1)
                           : lua_typenamei(L, lua_type(L, idx));
-      if (lua_islightcfunction(L, idx) != 0)
+      if (lua_islightcfunction(L, idx))
       {
         InternalString fa = lua_funcaddressi(L, idx);
         lua_pushlstring(L, kind, 0, kind.size());
@@ -1369,7 +1370,7 @@ public final class LuaAuxLib
   /* the string 'luaL_toistringk' pushed, which must be a string */
   public static InternalString luaL_tostringresult(lua_State L)
   {
-    if (lua_isstring(L, -1) == 0)
+    if (!lua_isstring(L, -1))
       luaL_errori(L, Lt.tostring_must_return_a_string);
     return lua_toistring(L, -1);
   }
@@ -1397,7 +1398,7 @@ public final class LuaAuxLib
     for (luaL_Regi reg : funcs)
     {
       if (reg.func == null) /* placeholder? */
-        lua_pushboolean(L, 0);
+        lua_pushboolean(L, false);
       else
       {
         for (int i = 0; i < nup; i++) /* copy upvalues to the top */
@@ -1421,7 +1422,7 @@ public final class LuaAuxLib
     for (luaL_RegCFI reg : funcs)
     {
       if (reg.cfi == null)
-        lua_pushboolean(L, 0);
+        lua_pushboolean(L, false);
       else
         lua_pushcfuncinfo(L, reg.cfi);
       lua_setfieldi(L, -2, reg.name);
@@ -1441,7 +1442,7 @@ public final class LuaAuxLib
     for (luaL_Reg reg : funcs)
     {
       if (reg.func == null) /* placeholder? */
-        lua_pushboolean(L, 0);
+        lua_pushboolean(L, false);
       else
       {
         for (int i = 0; i < nup; i++) /* copy upvalues to the top */
@@ -1470,15 +1471,15 @@ public final class LuaAuxLib
   ** into the stack
   */
 
-  public static int luaL_getsubtable(lua_State L, int idx, HostString fname)
+  public static boolean luaL_getsubtable(lua_State L, int idx, HostString fname)
   {
     return luaL_getsubtablei(L, idx, fname.to_utf8());
   }
 
-  public static int luaL_getsubtablei(lua_State L, int idx, ByteView fname)
+  public static boolean luaL_getsubtablei(lua_State L, int idx, ByteView fname)
   {
     if (lua_getfieldi(L, idx, fname) == LUA_TTABLE)
-      return 1; /* table already there */
+      return true; /* table already there */
     else
     {
       lua_pop(L, 1); /* remove previous result */
@@ -1486,7 +1487,7 @@ public final class LuaAuxLib
       lua_newtable(L);
       lua_pushvalue(L, -1);        /* copy to be left at top */
       lua_setfieldi(L, idx, fname); /* assign new table to field */
-      return 0;                    /* false, because did not find table there */
+      return false;                    /* false, because did not find table there */
     }
   }
 
@@ -1498,17 +1499,17 @@ public final class LuaAuxLib
   */
 
   public static void luaL_requiref(lua_State L, HostString modname,
-                                   lua_CFunction openf, int glb)
+                                   lua_CFunction openf, boolean glb)
   {
     luaL_requirefi(L, modname.to_utf8(), openf, glb);
   }
 
   public static void luaL_requirefi(lua_State L, ByteView modname,
-                                    lua_CFunction openf, int glb)
+                                    lua_CFunction openf, boolean glb)
   {
     luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
     lua_getfieldi(L, -1, modname); /* LOADED[modname] */
-    if (lua_toboolean(L, -1) == 0)
+    if (!lua_toboolean(L, -1))
     {                /* package not already loaded? */
       lua_pop(L, 1); /* remove field */
       lua_pushcfunction(L, openf);
@@ -1518,7 +1519,7 @@ public final class LuaAuxLib
       lua_setfieldi(L, -3, modname); /* LOADED[modname] = module */
     }
     lua_remove(L, -2); /* remove LOADED table */
-    if (glb != 0)
+    if (glb)
     {
       lua_pushvalue(L, -1);      /* copy of module */
       lua_setglobali(L, modname); /* _G[modname] = module */
@@ -1551,7 +1552,7 @@ public final class LuaAuxLib
         luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE); /* 4 */
         lua_getfieldik(L, 4, modname, 1, requireff); /* LOADED[modname] */
       case 1:
-        if (lua_toboolean(L, -1) != 0) /* package already loaded? */
+        if (lua_toboolean(L, -1)) /* package already loaded? */
         {
           at = 3;
           continue;
@@ -1565,7 +1566,7 @@ public final class LuaAuxLib
         lua_setfieldik(L, 4, modname, 3, requireff); /* LOADED[modname] = module */
       case 3:
         lua_remove(L, 4); /* remove LOADED table */
-        if (lua_toboolean(L, 3) != 0)
+        if (lua_toboolean(L, 3))
         {
           lua_pushvalue(L, -1); /* copy of module */
           lua_setglobalik(L, modname, 4, requireff); /* _G[modname] = module */
@@ -1582,7 +1583,7 @@ public final class LuaAuxLib
 
   private static final CFuncInfo cfi_requireff = new CFuncInfo(requireff_start, "auxlib.requireff");
 
-  public static void luaL_requirefk(lua_State L, HostString modname, lua_CFunction openf, int glb,
+  public static void luaL_requirefk(lua_State L, HostString modname, lua_CFunction openf, boolean glb,
                                     long ctx, lua_KFunction k)
   {
     lua_pushcfuncinfo(L, cfi_requireff);
@@ -1610,7 +1611,7 @@ public final class LuaAuxLib
     case 1:
       if (lua_type(L, -1) == LUA_TTABLE)
       { /* table already there */
-        lua_pushboolean(L, 1);
+        lua_pushboolean(L, true);
         return 2;
       }
       lua_pop(L, 1); /* remove previous result */
@@ -1618,7 +1619,7 @@ public final class LuaAuxLib
       lua_pushvalue(L, -1); /* copy to be left at top */
       lua_setfieldik(L, 1, fname, 2, getsubtableff); /* assign new table to field */
     default:
-      lua_pushboolean(L, 0); /* did not find table there */
+      lua_pushboolean(L, false); /* did not find table there */
       return 2;
     }
   }
@@ -1629,13 +1630,13 @@ public final class LuaAuxLib
 
   private static final CFuncInfo cfi_getsubtableff = new CFuncInfo(getsubtableff_start, "auxlib.getsubtableff");
 
-  public static int luaL_getsubtablek(lua_State L, int idx, HostString fname, long ctx, lua_KFunction k)
+  public static boolean luaL_getsubtablek(lua_State L, int idx, HostString fname, long ctx, lua_KFunction k)
   {
     lua_pushcfuncinfo(L, cfi_getsubtableff);
     lua_pushvalue(L, idx);
     lua_pushlstring(L, fname.to_utf8(), 0, fname.to_utf8().size());
     lua_callk(L, 2, 2, ctx, k);
-    int found = lua_toboolean(L, -1);
+    boolean found = lua_toboolean(L, -1);
     return found;
   }
 
@@ -1660,14 +1661,14 @@ public final class LuaAuxLib
   **    their pcall has the continuation, and 'k' gets the status as for
   **    lua_pcallk.
   */
-  public static int luaL_callmetak(lua_State L, int obj, HostString e, long ctx, lua_KFunction k)
+  public static boolean luaL_callmetak(lua_State L, int obj, HostString e, long ctx, lua_KFunction k)
   {
     obj = lua_absindex(L, obj);
     if (luaL_getmetafieldi(L, obj, e.to_utf8()) == LUA_TNIL) /* no metafield? */
-      return 0;
+      return false;
     lua_pushvalue(L, obj);
     lua_callk(L, 1, 1, ctx, k);
-    return 1;
+    return true;
   }
 
   public static ByteView luaL_tolstringk(lua_State L, int idx, long ctx, lua_KFunction k)
@@ -1780,11 +1781,11 @@ public final class LuaAuxLib
   ** Check whether message is a control message. If so, execute the
   ** control or ignore it if unknown.
   */
-  private static int checkcontrol(lua_State L, HostString message, int tocont)
+  private static boolean checkcontrol(lua_State L, HostString message, int tocont)
   {
     ByteView m = message.to_utf8();
     if (tocont != 0 || m.empty() || m.at(0) != '@') /* not a control message? */
-      return 0;
+      return false;
     else
     {
       ByteView tail = m.substr(1);
@@ -1792,7 +1793,7 @@ public final class LuaAuxLib
         lua_setwarnf(L, warnfoff); /* turn warnings off */
       else if (tail.equals(Lt.on_2))
         lua_setwarnf(L, warnfon); /* turn warnings on */
-      return 1;                      /* it was a control message */
+      return true;                      /* it was a control message */
     }
   }
 
@@ -1832,7 +1833,7 @@ public final class LuaAuxLib
     @Override
     public void warn(lua_State L, HostString message, int tocont)
     {
-      if (checkcontrol(L, message, tocont) != 0) /* control message? */
+      if (checkcontrol(L, message, tocont)) /* control message? */
         return;                                           /* nothing else to be done */
       os_print_stderr(Lt.Lua_warning); /* start a new warning */
       os_flush_stderr();
@@ -1940,7 +1941,7 @@ public final class LuaAuxLib
   public static HostString luaL_optstring(lua_State L, int arg,
                                           HostString d)
   {
-    if (lua_isnoneornil(L, arg) != 0)
+    if (lua_isnoneornil(L, arg))
       return d;
     return luaL_checkstring(L, arg);
   }

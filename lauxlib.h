@@ -45,7 +45,7 @@ void(luaL_checkversion_)(lua_State* L, lua_Number ver, size_t sz);
 void luaL_checkversion(lua_State* L);
 
 int(luaL_getmetafield)(lua_State* L, int obj, const HostString& e);
-int(luaL_callmeta)(lua_State* L, int obj, const HostString& e);
+bool(luaL_callmeta)(lua_State* L, int obj, const HostString& e);
 byte_view(luaL_tolstring) (lua_State* L, int idx);
 /*
 ** Freeze-ready forms of the helpers that can run user code. Like the
@@ -68,13 +68,13 @@ byte_view(luaL_tolstring) (lua_State* L, int idx);
 **    their pcall has the continuation, and 'k' gets the status as for
 **    lua_pcallk.
 */
-int(luaL_callmetak)(lua_State* L, int obj, const HostString& e, lua_KContext ctx, lua_KFunction k);
+bool(luaL_callmetak)(lua_State* L, int obj, const HostString& e, lua_KContext ctx, lua_KFunction k);
 byte_view(luaL_tolstringk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
 byte_view(luaL_tolstringresult)(lua_State* L);
 lua_Integer(luaL_lenk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
 lua_Integer(luaL_lenresult)(lua_State* L);
-int(luaL_getsubtablek)(lua_State* L, int idx, const HostString& fname, lua_KContext ctx, lua_KFunction k);
-void(luaL_requirefk)(lua_State* L, const HostString& modname, lua_CFunction openf, int glb, lua_KContext ctx, lua_KFunction k);
+bool(luaL_getsubtablek)(lua_State* L, int idx, const HostString& fname, lua_KContext ctx, lua_KFunction k);
+void(luaL_requirefk)(lua_State* L, const HostString& modname, lua_CFunction openf, bool glb, lua_KContext ctx, lua_KFunction k);
 int(luaL_dofilek)(lua_State* L, const std::optional<HostString>& filename, lua_KContext ctx, lua_KFunction k);
 int(luaL_dostringk)(lua_State* L, const HostString& str, lua_KContext ctx, lua_KFunction k);
 int(luaL_argerror)(lua_State* L, int arg, const HostString& extramsg);
@@ -88,7 +88,7 @@ lua_Integer(luaL_optinteger)(lua_State* L, int arg, lua_Integer def);
 void(luaL_checkstack)(lua_State* L, int sz, const std::optional<HostString>& msg);
 void(luaL_checktype)(lua_State* L, int arg, int t);
 void(luaL_checkany)(lua_State* L, int arg);
-int(luaL_newmetatable)(lua_State* L, const HostString& tname);
+bool(luaL_newmetatable)(lua_State* L, const HostString& tname);
 void(luaL_setmetatable)(lua_State* L, const HostString& tname);
 void*(luaL_testudata) (lua_State* L, int ud, const HostString& tname);
 void*(luaL_checkudata) (lua_State* L, int ud, const HostString& tname);
@@ -97,7 +97,7 @@ lua_UserObject*(luaL_checkuserobject) (lua_State* L, int ud, const HostString& t
 void(luaL_where)(lua_State* L, int lvl);
 int(luaL_error)(lua_State* L, const HostString& fmt);
 int(luaL_checkoption)(lua_State* L, int arg, const std::optional<HostString>& def, const std::span<const HostString>& lst);
-int(luaL_fileresult)(lua_State* L, int stat, const std::optional<HostString>& fname);
+int(luaL_fileresult)(lua_State* L, bool stat, const std::optional<HostString>& fname);
 int(luaL_execresult)(lua_State* L, int stat);
 
 /* predefined references */
@@ -124,9 +124,9 @@ auto luaL_opt(lua_State* L, F f, int n, D d)
   return lua_isnoneornil(L, n) ? static_cast<decltype(f(L, n))>(d) : f(L, n);
 }
 
-int(luaL_getsubtable)(lua_State* L, int idx, const HostString& fname);
+bool(luaL_getsubtable)(lua_State* L, int idx, const HostString& fname);
 void(luaL_traceback)(lua_State* L, lua_State* L1, const std::optional<HostString>& msg, int level);
-void(luaL_requiref)(lua_State* L, const HostString& modname, lua_CFunction openf, int glb);
+void(luaL_requiref)(lua_State* L, const HostString& modname, lua_CFunction openf, bool glb);
 
 /*
 ** ===============================================================

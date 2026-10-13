@@ -17,7 +17,7 @@ import com.payonel.lungolua.runtime.lua_State;
 public final class TString extends GCObject
 {
   public byte extra;
-  public byte hashed;
+  public boolean hashed;
   public int hash;
   public TString hnext = null;
   public InternalString data = new InternalString();
@@ -27,19 +27,19 @@ public final class TString extends GCObject
     TString ts = this;
     ByteView bytes = ts.data.view();
     ts.hash = InternalString.hashBytes(bytes.array(), bytes.offset(), bytes.size());
-    ts.hashed = 1;
+    ts.hashed = true;
   }
 
-  private static TString createstrobj(lua_State L, long l, int h, int hashed, int external)
+  private static TString createstrobj(lua_State L, long l, int h, boolean hashed, boolean external)
   {
     /* the string and its 'l' bytes are charged together, before either exists
        and before the string is known to the collector (a refusal may run an
        emergency collection); its maker gives it its bytes */
-    TString ts = luaM_malloc_TString(L, external != 0 ? 0 : l);
+    TString ts = luaM_malloc_TString(L, external ? 0 : l);
     luaC_link(L, ts, LUA_VSTRING);
     ts.hash = h;
-    ts.hashed = (byte) hashed;
-    ts.extra = external != 0 ? STREXTRA_EXTERNAL : 0;
+    ts.hashed = hashed;
+    ts.extra = external ? STREXTRA_EXTERNAL : 0;
     return ts;
   }
 
@@ -53,16 +53,16 @@ public final class TString extends GCObject
       TString ts = internfind(g, str, h);
       if (ts != null)
       {
-        if (isdead(g, ts) != 0)
+        if (isdead(g, ts))
           changewhite(ts); /* resurrect it */
         return ts;
       }
-      ts = TString.createstrobj(L, l, h, 1, 0);
+      ts = TString.createstrobj(L, l, h, true, false);
       ts.data = new InternalString(str);
       interninsert(g, ts);
       return ts;
     }
-    TString ts = TString.createstrobj(L, l, 0, 0, 0);
+    TString ts = TString.createstrobj(L, l, 0, false, false);
     ts.data = new InternalString(str);
     return ts;
   }
@@ -77,16 +77,16 @@ public final class TString extends GCObject
       TString ts = internfind(g, bytes, h);
       if (ts != null)
       {
-        if (isdead(g, ts) != 0)
+        if (isdead(g, ts))
           changewhite(ts); /* resurrect it */
         return ts;
       }
-      ts = TString.createstrobj(L, str.size(), h, 1, 0);
+      ts = TString.createstrobj(L, str.size(), h, true, false);
       ts.data = InternalString.move(str);
       interninsert(g, ts);
       return ts;
     }
-    TString ts = TString.createstrobj(L, str.size(), 0, 0, 0);
+    TString ts = TString.createstrobj(L, str.size(), 0, false, false);
     ts.data = InternalString.move(str);
     return ts;
   }
@@ -95,7 +95,7 @@ public final class TString extends GCObject
   {
     if (str.size() <= LUAI_MAXSHORTLEN)
       return TString.luaS_take(L, InternalString.move(str));
-    TString ts = TString.createstrobj(L, str.size(), 0, 0, 1);
+    TString ts = TString.createstrobj(L, str.size(), 0, false, true);
     ts.data = InternalString.move(str);
     return ts;
   }
@@ -107,7 +107,7 @@ public final class TString extends GCObject
   public static TString luaS_createlngstrobj(lua_State L, long l)
   {
     assert l > LUAI_MAXSHORTLEN;
-    TString ts = TString.createstrobj(L, l, 0, 0, 0);
+    TString ts = TString.createstrobj(L, l, 0, false, false);
     ts.data = new InternalString(new ByteOwner((int) l), (int) l);
     return ts;
   }
@@ -122,7 +122,7 @@ public final class TString extends GCObject
   {
     if (len <= LUAI_MAXSHORTLEN)
       return TString.luaS_createstr(L, new ByteView(block.array(), 0, len));
-    TString ts = TString.createstrobj(L, len, 0, 0, 0);
+    TString ts = TString.createstrobj(L, len, 0, false, false);
     if (block.size() - len > len / 2)
       ts.data = new InternalString(new ByteView(block.array(), 0, len));
     else

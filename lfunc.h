@@ -12,7 +12,7 @@ namespace lua::object
 {
 
 /* test whether thread is in 'twups' list */
-static l_forceinline int isintwups(lua_State* L)
+static l_forceinline bool isintwups(lua_State* L)
 {
   return L->twups != L;
 }
@@ -23,7 +23,7 @@ static l_forceinline int isintwups(lua_State* L)
 */
 constexpr int MAXUPVAL = 255;
 
-static l_forceinline int upisopen(const UpVal* up)
+static l_forceinline bool upisopen(const UpVal* up)
 {
   return up->owner != nullptr;
 }

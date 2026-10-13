@@ -37,10 +37,10 @@ public final class Ltablib
   private static final int TAB_RW = TAB_R | TAB_W; /* read/write */
 
 
-  private static int checkfield(lua_State L, ByteView key, int n)
+  private static boolean checkfield(lua_State L, ByteView key, int n)
   {
     lua_pushlstring(L, key, 0, key.size());
-    return (lua_rawget(L, -n) != LUA_TNIL) ? 1 : 0;
+    return lua_rawget(L, -n) != LUA_TNIL;
   }
 
   /*
@@ -53,11 +53,11 @@ public final class Ltablib
     if (tp != LUA_TTABLE)
     {                                 /* is it not a table? */
       int n = 1;                      /* number of elements to pop */
-      if (lua_getmetatable(L, arg) != 0 && /* must have metatable */
-          ((what & TAB_R) == 0 || checkfield(L, Lt.mm_index, ++n) != 0) &&
-          ((what & TAB_W) == 0 || checkfield(L, Lt.mm_newindex, ++n) != 0) &&
+      if (lua_getmetatable(L, arg) && /* must have metatable */
+          ((what & TAB_R) == 0 || checkfield(L, Lt.mm_index, ++n)) &&
+          ((what & TAB_W) == 0 || checkfield(L, Lt.mm_newindex, ++n)) &&
           ((what & TAB_L) == 0 || /* strings don't need '__len' to have a length */
-           tp == LUA_TSTRING || checkfield(L, Lt.mm_len, ++n) != 0))
+           tp == LUA_TSTRING || checkfield(L, Lt.mm_len, ++n)))
       {
         lua_pop(L, n); /* pop metatable and tested metamethods */
       }
@@ -72,7 +72,7 @@ public final class Ltablib
   */
   private static long aux_getnk(lua_State L, int n, int w, long ctx, lua_KFunction k)
   {
-    if (lua_isplaintable(L, n) != 0) /* (no '__len') */
+    if (lua_isplaintable(L, n)) /* (no '__len') */
       return (long) lua_rawlen(L, n);
     checktab(L, n, w | TAB_L);
     return luaL_lenk(L, n, ctx, k);
@@ -120,9 +120,9 @@ public final class Ltablib
           lua_setik(L, 1, pos, 0, tinsertk_done); /* t[pos] = v */
           return 0;
         }
-        if (lua_isplaintable(L, 1) != 0)
+        if (lua_isplaintable(L, 1))
         { /* (reads and writes call nothing) */
-          i -= lua_plainmove(L, 1, pos, 1, pos + 1, i - pos, 0);
+          i -= lua_plainmove(L, 1, pos, 1, pos + 1, i - pos, false);
           if (luaE_budgetout(L))
             lua_checkpointk(L, (long) i, tinsertk_loop);
           break;
@@ -240,9 +240,9 @@ public final class Ltablib
           lua_setik(L, 1, pos, 0, tremovek_done); /* remove entry t[pos] */
           return 1;
         }
-        if (lua_isplaintable(L, 1) != 0)
+        if (lua_isplaintable(L, 1))
         { /* (reads and writes call nothing) */
-          pos += lua_plainmove(L, 1, pos + 1, 1, pos, size - pos, 1);
+          pos += lua_plainmove(L, 1, pos + 1, 1, pos, size - pos, true);
           if (luaE_budgetout(L))
             lua_checkpointk(L, (long) pos, tremovek_loop);
           break;
@@ -396,7 +396,7 @@ public final class Ltablib
     long f = luaL_checkinteger(L, 2);
     long e = luaL_checkinteger(L, 3);
     long t = luaL_checkinteger(L, 4);
-    int tt = lua_isnil(L, 5) == 0 ? 5 : 1; /* destination table */
+    int tt = !lua_isnil(L, 5) ? 5 : 1; /* destination table */
     long n = e - f + 1;         /* number of elements to move */
     boolean up = (dir > 0);
     for (;;)
@@ -409,12 +409,12 @@ public final class Ltablib
           lua_pushvalue(L, tt); /* return destination table */
           return 1;
         }
-        if (lua_isplaintable(L, 1) != 0 && lua_isplaintable(L, tt) != 0)
+        if (lua_isplaintable(L, 1) && lua_isplaintable(L, tt))
         { /* (reads and writes call nothing) */
           if (up)
-            i += lua_plainmove(L, 1, f + i, tt, t + i, n - i, 1);
+            i += lua_plainmove(L, 1, f + i, tt, t + i, n - i, true);
           else
-            i -= lua_plainmove(L, 1, f, tt, t, i + 1, 0);
+            i -= lua_plainmove(L, 1, f, tt, t, i + 1, false);
           if (luaE_budgetout(L))
             lua_checkpointk(L, (long) i, up ? tmovek_uploop : tmovek_downloop);
           break;
@@ -432,17 +432,17 @@ public final class Ltablib
   }
 
   /* 'move' after comparing the tables: they are not the same, go up */
-  private static int tmove_dir(lua_State L, int up)
+  private static int tmove_dir(lua_State L, boolean up)
   {
     long n = luaL_checkinteger(L, 3) - luaL_checkinteger(L, 2) + 1;
-    return up != 0 ? tmove_loop(L, 0, 1, AT_LOOP) : tmove_loop(L, n - 1, -1, AT_LOOP);
+    return up ? tmove_loop(L, 0, 1, AT_LOOP) : tmove_loop(L, n - 1, -1, AT_LOOP);
   }
 
   private static int tmovek_eq(lua_State L, int status, long ctx)
   {
-    int eq = lua_toboolean(L, -1);
+    boolean eq = lua_toboolean(L, -1);
     lua_pop(L, 1);
-    return tmove_dir(L, (eq == 0) ? 1 : 0);
+    return tmove_dir(L, !eq);
   }
 
   private static final lua_KFunction tmovek_eq = Ltablib::tmovek_eq;
@@ -454,7 +454,7 @@ public final class Ltablib
     long f = luaL_checkinteger(L, 2);
     long e = luaL_checkinteger(L, 3);
     long t = luaL_checkinteger(L, 4);
-    int tt = lua_isnoneornil(L, 5) == 0 ? 5 : 1; /* destination table */
+    int tt = !lua_isnoneornil(L, 5) ? 5 : 1; /* destination table */
     checktab(L, 1, TAB_R);
     checktab(L, tt, TAB_W);
     lua_settop(L, 5);
@@ -465,12 +465,12 @@ public final class Ltablib
       long n = e - f + 1; /* number of elements to move */
       luaL_argchecki(L, t <= LUA_MAXINTEGER - n + 1, 4, Lt.destination_wrap_around);
       if (t > e || t <= f)
-        return tmove_dir(L, 1);
+        return tmove_dir(L, true);
       else if (tt == 1)
-        return tmove_dir(L, 0);
-      int eq = lua_comparek(L, 1, tt, LUA_OPEQ, 0, tmovek_eq);
+        return tmove_dir(L, false);
+      boolean eq = lua_comparek(L, 1, tt, LUA_OPEQ, 0, tmovek_eq);
       lua_pop(L, 1);
-      return tmove_dir(L, (eq == 0) ? 1 : 0);
+      return tmove_dir(L, !eq);
     }
     lua_pushvalue(L, tt); /* return destination table */
     return 1;
@@ -495,10 +495,10 @@ public final class Ltablib
     }
     for (;;)
     {
-      if (at == AT_LOOP && lua_isplaintable(L, 1) != 0)
+      if (at == AT_LOOP && lua_isplaintable(L, 1))
       { /* (reads call nothing): a chunk at a time */
         long left = last - i; /* elements after 'i' */
-        int chunk = lua_checkstack(L, CONCATCHUNK + LUA_MINSTACK) != 0 ? CONCATCHUNK : 1;
+        int chunk = lua_checkstack(L, CONCATCHUNK + LUA_MINSTACK) ? CONCATCHUNK : 1;
         int got = lua_plaingetrange(L, 1, i, (left < chunk) ? (int) left + 1 : chunk);
         int first = lua_gettop(L) - got + 1;
         for (int k = 0; k < got; k++, i++)
@@ -541,7 +541,7 @@ public final class Ltablib
         if (box != null)
           luaL_buffload(b, box);
       }
-      if (lua_isstring(L, -1) == 0)
+      if (!lua_isstring(L, -1))
       {
         lua_pushistringref(L, lua_typenamei(L, lua_type(L, -1)));
         lua_pushinteger(L, i);
@@ -609,7 +609,7 @@ public final class Ltablib
     luaL_optlstring(L, 2, Lt.empty_str);
     long i = luaL_optinteger(L, 3, 1);
     last = luaL_optinteger(L, 4, last);
-    if (lua_isnil(L, 2) != 0)
+    if (lua_isnil(L, 2))
     {
       lua_pushistringref(L, Lt.empty_str);
       lua_replace(L, 2);
@@ -617,7 +617,7 @@ public final class Ltablib
     lua_pushinteger(L, last);
     lua_replace(L, 4);
     luaL_Box box = null;
-    if (lua_type(L, 1) != LUA_TTABLE || lua_getmetatable(L, 1) != 0)
+    if (lua_type(L, 1) != LUA_TTABLE || lua_getmetatable(L, 1))
     { /* reading may call back */
       lua_settop(L, 4);
       box = luaL_newbox(L);
@@ -684,7 +684,7 @@ public final class Ltablib
     {
       if (at == AT_LOOP)
       {
-        if (lua_isplaintable(L, 1) != 0)
+        if (lua_isplaintable(L, 1))
         { /* (reads call nothing) */
           count += lua_plaingetrange(L, 1, i + count, n - count);
           if (count == n)
@@ -737,14 +737,14 @@ public final class Ltablib
   {
     long n;
     long i = luaL_optinteger(L, 2, 1);
-    long e = (lua_isnoneornil(L, 3) != 0 ? len : luaL_checkinteger(L, 3));
+    long e = (lua_isnoneornil(L, 3) ? len : luaL_checkinteger(L, 3));
     if (i > e)
       return 0;                      /* empty range */
     n = l_intsub(e, i); /* number of elements minus 1 */
     if (!l_ult(n, Integer.MAX_VALUE) ||
-        lua_checkstack(L, (int) (++n)) == 0)
+        !lua_checkstack(L, (int) (++n)))
       return luaL_errori(L, Lt.too_many_results_to_unpack);
-    if (lua_isplaintable(L, 1) == 0)
+    if (!lua_isplaintable(L, 1))
     { /* reads may call back: the last index, for after a freeze */
       lua_pushinteger(L, e);
       lua_replace(L, 3);
@@ -925,9 +925,9 @@ public final class Ltablib
   ** Whether the value at stack index 'a' is less than the value at index
   ** 'b' (according to the order of the sort), by the function or '__lt'.
   */
-  private static int sort_call(lua_State L, int fn, int a, int b)
+  private static int sort_call(lua_State L, boolean fn, int a, int b)
   {
-    if (fn == 0) /* no function? */
+    if (!fn) /* no function? */
       lua_comparek(L, a, b, LUA_OPLT, 0, sortk); /* a < b */
     else
     { /* function */
@@ -936,9 +936,9 @@ public final class Ltablib
       lua_pushvalue(L, b - 2); /* -2 to compensate function and 'a' */
       lua_callk(L, 2, 1, 0, sortk); /* call function */
     }
-    int res = lua_toboolean(L, -1); /* get result */
+    boolean res = lua_toboolean(L, -1); /* get result */
     lua_pop(L, 1);                  /* pop result */
-    return res;
+    return res ? 1 : 0;
   }
 
   /* the result of the comparison it goes on after */
@@ -946,9 +946,9 @@ public final class Ltablib
   {
     if (s[SO_R] >= 0)
       return (int) s[SO_R];
-    int res = lua_toboolean(L, -1);
+    boolean res = lua_toboolean(L, -1);
     lua_pop(L, 1);
-    return res;
+    return res ? 1 : 0;
   }
 
   /*
@@ -987,7 +987,7 @@ public final class Ltablib
   */
   private static int sort_run(lua_State L, long[] s)
   {
-    int fn = (int) s[SO_FN];
+    boolean fn = s[SO_FN] != 0;
     boolean plain = (s[SO_PLAIN] != 0);
     long lo = s[SO_LO], up = s[SO_UP], p = s[SO_P], i = s[SO_I], j = s[SO_J];
     long rnd = s[SO_RND];
@@ -1015,7 +1015,7 @@ public final class Ltablib
           s = sort_save(L, s, S_LO2, lo, up, rnd, p, i, j);
         lua_getik(L, 1, up, 0, sortk);
       case S_LO2:
-        if (fn != 0 || (res = lua_rawlessthan(L, -1, -2)) < 0) /* a[up] < a[lo]? */
+        if (fn || (res = lua_rawlessthan(L, -1, -2)) < 0) /* a[up] < a[lo]? */
         { /* it calls back */
           s = sort_save(L, s, S_LT1, lo, up, rnd, p, i, j);
           s[SO_R] = -1; /* (after a freeze, the result is on the stack) */
@@ -1060,7 +1060,7 @@ public final class Ltablib
           s = sort_save(L, s, S_P2, lo, up, rnd, p, i, j);
         lua_getik(L, 1, lo, 0, sortk);
       case S_P2:
-        if (fn != 0 || (res = lua_rawlessthan(L, -2, -1)) < 0) /* a[p] < a[lo]? */
+        if (fn || (res = lua_rawlessthan(L, -2, -1)) < 0) /* a[p] < a[lo]? */
         {
           s = sort_save(L, s, S_LT2, lo, up, rnd, p, i, j);
           s[SO_R] = -1;
@@ -1094,7 +1094,7 @@ public final class Ltablib
           s = sort_save(L, s, S_P5, lo, up, rnd, p, i, j);
         lua_getik(L, 1, up, 0, sortk);
       case S_P5:
-        if (fn != 0 || (res = lua_rawlessthan(L, -1, -2)) < 0) /* a[up] < a[p]? */
+        if (fn || (res = lua_rawlessthan(L, -1, -2)) < 0) /* a[up] < a[p]? */
         {
           s = sort_save(L, s, S_LT3, lo, up, rnd, p, i, j);
           s[SO_R] = -1;
@@ -1157,7 +1157,7 @@ public final class Ltablib
           s = sort_save(L, s, S_I1, lo, up, rnd, p, i, j);
         lua_getik(L, 1, i, 0, sortk);
       case S_I1:
-        if (fn != 0 || (res = lua_rawlessthan(L, -1, -2)) < 0)
+        if (fn || (res = lua_rawlessthan(L, -1, -2)) < 0)
         {
           s = sort_save(L, s, S_LT4, lo, up, rnd, p, i, j);
           s[SO_R] = -1;
@@ -1185,7 +1185,7 @@ public final class Ltablib
           s = sort_save(L, s, S_J1, lo, up, rnd, p, i, j);
         lua_getik(L, 1, j, 0, sortk);
       case S_J1:
-        if (fn != 0 || (res = lua_rawlessthan(L, -3, -1)) < 0)
+        if (fn || (res = lua_rawlessthan(L, -3, -1)) < 0)
         {
           s = sort_save(L, s, S_LT5, lo, up, rnd, p, i, j);
           s[SO_R] = -1;
@@ -1291,7 +1291,7 @@ public final class Ltablib
     if (n > 1)
     { /* non-trivial interval? */
       luaL_argchecki(L, n < Integer.MAX_VALUE, 1, Lt.array_too_big);
-      if (lua_isnoneornil(L, 2) == 0)            /* is there a 2nd argument? */
+      if (!lua_isnoneornil(L, 2))            /* is there a 2nd argument? */
         luaL_checktype(L, 2, LUA_TFUNCTION); /* must be a function */
       lua_settop(L, 3);                      /* make sure there are two arguments (and room for the state) */
       int depth = (64 - Long.numberOfLeadingZeros(n)) + 1;
@@ -1302,8 +1302,8 @@ public final class Ltablib
       s[SO_LO] = 1;
       s[SO_UP] = n;
       s[SO_RND] = 0;
-      s[SO_FN] = (lua_isnil(L, 2) == 0) ? 1 : 0;
-      s[SO_PLAIN] = lua_isplaintable(L, 1);
+      s[SO_FN] = (!lua_isnil(L, 2)) ? 1 : 0;
+      s[SO_PLAIN] = lua_isplaintable(L, 1) ? 1 : 0;
       s[SO_P] = s[SO_I] = s[SO_J] = 0;
       s[SO_R] = 0;
       s[SO_BOXED] = 0;

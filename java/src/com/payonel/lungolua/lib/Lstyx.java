@@ -310,10 +310,10 @@ public final class Lstyx
 
   private static boolean is_name(ByteView s)
   {
-    if (s.size() == 0 || lislalpha(s.at(0) & 0xFF) == 0)
+    if (s.size() == 0 || !lislalpha(s.at(0) & 0xFF))
       return false;
     for (int i = 1; i < s.size(); i++)
-      if (lislalnum(s.at(i) & 0xFF) == 0)
+      if (!lislalnum(s.at(i) & 0xFF))
         return false;
     return true;
   }
@@ -1018,7 +1018,7 @@ public final class Lstyx
     private void marks()
     {
       int n = marked_.size();
-      if (n == 1 && tofinalize(marked_.get(0).o) == 0) /* finalized meanwhile */
+      if (n == 1 && !tofinalize(marked_.get(0).o)) /* finalized meanwhile */
         n = 0;
       if (n <= 1)
       {
@@ -1652,7 +1652,7 @@ public final class Lstyx
       String kind = (u.obj != null) ? u.obj.persistkind() : null;
       if (kind == null)
         fail(Lt.persisting_a_userdata_value_is_not_supported_yet);
-      if (tofinalize(u) != 0)
+      if (tofinalize(u))
         marked_.push(new Marked(u, id)); /* (its mark and owner, in the trailer) */
       long[] ints = new long[8];
       int n = u.obj.persistints(ints);
@@ -1835,7 +1835,7 @@ public final class Lstyx
     {
       long id = refcount_; /* the table's, taken just before */
       special(h);
-      if (tofinalize(h) != 0)
+      if (tofinalize(h))
         marked_.push(new Marked(h, id));
       /* a hash part is written slot by slot (its layout): keys hash by the
          seed and their content, or by the hash of the object, which is
@@ -2048,7 +2048,7 @@ public final class Lstyx
         push_value(key, Step.PermKey);
         return;
       }
-      if (upisopen(uv) != 0 && !is_running(uv.owner))
+      if (upisopen(uv) && !is_running(uv.owner))
       {
         byte_kw(TAG_UPVAL_OPEN);
         push_op(Op.Var, uv.stkid);
@@ -2114,7 +2114,7 @@ public final class Lstyx
         push_name(f.upvalues[j].name);
         push_op(Op.Byte, f.upvalues[j].kind);
         push_op(Op.Var, f.upvalues[j].idx);
-        push_op(Op.Byte, f.upvalues[j].instack);
+        push_op(Op.Byte, f.upvalues[j].instack ? 1 : 0);
       }
       push_op(Op.Var, f.upvalues.length);
       for (int j = f.k.length; j-- > 0;)
@@ -2272,7 +2272,7 @@ public final class Lstyx
     /* the raw state of a frozen thread (written before the debug hook) */
     private void thread_extras(lua_State T)
     {
-      byte_kw(T.allowhook); /* (off while a drained '__gc' or a hook function runs) */
+      byte_kw(T.allowhook ? 1 : 0); /* (off while a drained '__gc' or a hook function runs) */
       var(T.transferinfo.ftransfer); /* (what a call or return hook that runs reads: 'debug.getinfo' "r") */
       var(T.transferinfo.ntransfer);
       byte_kw(T.frozen);
@@ -2308,7 +2308,7 @@ public final class Lstyx
       i64(T.basehookcount);
       i64(T.hookcount);
       i64(T.oldpc);
-      byte_kw(T.allowhook);
+      byte_kw(T.allowhook ? 1 : 0);
       TValue f = new TValue();
       setnilvalue(f);
       if (ttistable(L_.l_G.l_registry))
@@ -2739,7 +2739,7 @@ public final class Lstyx
         setsvalue(L_, gc, L_.l_G.tmname[TM_GC]);
         setslot(L_, L_.top, gc);
         L_.top++;
-        lua_pushboolean(L_, 1);
+        lua_pushboolean(L_, true);
         lua_rawset(L_, -3);
         WorkStack<Long> kinds = new WorkStack<>(L_, true, WS_WORD);
         try
@@ -2875,7 +2875,7 @@ public final class Lstyx
         /* a table rebuilt, here or for another seed, has no dead keys */
         if (same_seed() && !was_rebuilt)
         {
-          if (isdummy(h) != 0 || f.node >= sizenode(h) || !keyisdead(gnode(h, (int) f.node)))
+          if (isdummy(h) || f.node >= sizenode(h) || !keyisdead(gnode(h, (int) f.node)))
             r_.invalid();
           int j = (int) f.node;
           h.luaH_setnode(L_, j, k, true, null, gnode(h, j).next);
@@ -2979,7 +2979,7 @@ public final class Lstyx
       lua_Hook hook;
       int hookmask;
       int basehookcount, hookcount, oldpc;
-      byte allowhook;
+      boolean allowhook;
       int errfunc;
       int nCcalls, ccbase;
       byte status;
@@ -2990,7 +2990,7 @@ public final class Lstyx
       {
       }
 
-      MainSaved(lua_Hook hook, int hookmask, int basehookcount, int hookcount, int oldpc, byte allowhook,
+      MainSaved(lua_Hook hook, int hookmask, int basehookcount, int hookcount, int oldpc, boolean allowhook,
                 int errfunc, int nCcalls, int ccbase, byte status, BudgetGroup bown, BudgetGroup beff)
       {
         this.hook = hook;
@@ -3105,10 +3105,10 @@ public final class Lstyx
         lua_pushnil(L_);
         return Next.Ready;
       case TAG_FALSE:
-        lua_pushboolean(L_, 0);
+        lua_pushboolean(L_, false);
         return Next.Ready;
       case TAG_TRUE:
-        lua_pushboolean(L_, 1);
+        lua_pushboolean(L_, true);
         return Next.Ready;
       case TAG_INTEGER:
         lua_pushinteger(L_, r_.get_var());
@@ -3122,7 +3122,7 @@ public final class Lstyx
       {
         long id = r_.get_var();
         lua_rawgeti(L_, REFS, id);
-        if (lua_isnil(L_, -1) != 0)
+        if (lua_isnil(L_, -1))
           r_.invalid();
         return Next.Ready;
       }
@@ -3397,9 +3397,9 @@ public final class Lstyx
         /* set as lua_setmetatable sets it, but without marking the table for
            finalization: the trailer marks exactly the marked (ADR-28) */
         Table mt = null;
-        if (lua_isnil(L_, -1) == 0)
+        if (!lua_isnil(L_, -1))
         {
-          if (lua_istable(L_, -1) == 0)
+          if (!lua_istable(L_, -1))
             r_.invalid();
           TValue m = getslot(L_, L_.top - 1);
           mt = hvalue(m);
@@ -3413,7 +3413,7 @@ public final class Lstyx
         return Next.Read;
       }
       case Key:
-        if (lua_isnil(L_, -1) != 0)
+        if (lua_isnil(L_, -1))
         {
           lua_pop(L_, 1);
           if (f.type == 0)
@@ -3457,7 +3457,7 @@ public final class Lstyx
           h.luaH_setnode(L_, f.i, k, false, v, link);
           lua_pop(L_, 1);
         }
-        else if (lua_isnil(L_, -1) != 0)
+        else if (lua_isnil(L_, -1))
           lua_pop(L_, 1);
         else
         {
@@ -3495,7 +3495,7 @@ public final class Lstyx
     {
       lua_pushvalue(L_, -1);
       lua_rawget(L_, PERMS);
-      if (lua_isnil(L_, -1) != 0)
+      if (lua_isnil(L_, -1))
       {
         luaL_tolstring(L_, -2);
         luaL_errori(L_, Lt.bad_permanent_value_for_key_s);
@@ -3525,7 +3525,7 @@ public final class Lstyx
       if (tag == TAG_PROTO_REF)
       {
         lua_rawgeti(L_, REFS, r_.get_var());
-        if (lua_type(L_, -1) != LUA_TFUNCTION || lua_iscfunction(L_, -1) != 0)
+        if (lua_type(L_, -1) != LUA_TFUNCTION || lua_iscfunction(L_, -1))
           r_.invalid();
         return Next.Ready;
       }
@@ -3589,7 +3589,7 @@ public final class Lstyx
         ts = tsvalue(v);
         luaC_objbarrier(L_, owner, ts);
       }
-      else if (lua_isnil(L_, -1) == 0)
+      else if (!lua_isnil(L_, -1))
         r_.invalid();
       lua_pop(L_, 1);
       return ts;
@@ -3613,7 +3613,7 @@ public final class Lstyx
           for (Upvaldesc uv : p.upvalues)
           {
             uv.name = null;
-            uv.instack = 0;
+            uv.instack = false;
             uv.idx = 0;
             uv.kind = 0;
           }
@@ -3624,7 +3624,7 @@ public final class Lstyx
           if (f.i < f.n)
           {
             Upvaldesc uv = p.upvalues[f.i];
-            uv.instack = r_.get_byte();
+            uv.instack = r_.get_byte() != 0;
             uv.idx = r_.get_int();
             uv.kind = r_.get_byte();
             f.part = Part.UpName;
@@ -3806,7 +3806,7 @@ public final class Lstyx
         }
         lua_rawgeti(L_, UPS, uid);
         lua_rawgeti(L_, UPS, -uid);
-        if (lua_isfunction(L_, -2) == 0 || lua_isinteger(L_, -1) == 0)
+        if (!lua_isfunction(L_, -2) || !lua_isinteger(L_, -1))
           r_.invalid();
         push_closure(cl);
         lua_upvaluejoin(L_, -1, f.i, -3, (int) lua_tointeger(L_, -2));
@@ -3874,12 +3874,12 @@ public final class Lstyx
         */
         lua_pushvalue(L_, -1);
         lua_rawget(L_, PERMS);
-        if (lua_isnil(L_, -1) != 0)
+        if (lua_isnil(L_, -1))
         {
           luaL_tolstring(L_, -2);
           luaL_errori(L_, Lt.bad_permanent_value_for_key_s);
         }
-        if (lua_type(L_, -1) != LUA_TFUNCTION || lua_iscfunction(L_, -1) != 0 ||
+        if (lua_type(L_, -1) != LUA_TFUNCTION || lua_iscfunction(L_, -1) ||
             lua_getupvaluei(L_, -1, 1) == null)
         {
           lua_pushistringref(L_, Lt.a_function_capturing_the_variable);
@@ -4013,9 +4013,9 @@ public final class Lstyx
       ** in the registry's hook table, the debug library's C hook on the
       ** thread), then the count and last traced pc are put back.
       */
-      if (lua_isfunction(L_, -1) == 0 && lua_isnil(L_, -1) == 0)
+      if (!lua_isfunction(L_, -1) && !lua_isnil(L_, -1))
         r_.invalid();
-      if (luaL_getsubtablei(L_, LUA_REGISTRYINDEX, Lt._HOOKKEY) == 0)
+      if (!luaL_getsubtablei(L_, LUA_REGISTRYINDEX, Lt._HOOKKEY))
       { /* as debug.sethook creates it */
         lua_pushistringref(L_, Lt.k_char);
         lua_setfieldi(L_, -2, Lt.mm_mode);
@@ -4029,7 +4029,7 @@ public final class Lstyx
       lua_sethook(L1, luaL_debughook(), (int) f.a, (int) f.b);
       L1.hookcount = (int) f.c;
       L1.oldpc = (int) f.d;
-      L1.allowhook = (byte) f.e;
+      L1.allowhook = f.e != 0;
       L1.status = f.type;
       return thread_values(f);
     }
@@ -4040,7 +4040,7 @@ public final class Lstyx
       byte ah = r_.get_byte();
       if (ah != 0 && ah != 1)
         r_.invalid();
-      L1.allowhook = ah;
+      L1.allowhook = ah != 0;
       long ft = r_.get_var();
       long nt = r_.get_var();
       if (ft < 0 || ft > MAXSTACK || nt < 0 || nt > MAXSTACK)
@@ -4099,7 +4099,7 @@ public final class Lstyx
     private lua_State pop_thread()
     {
       lua_State th = null;
-      if (lua_isnil(L_, -1) == 0)
+      if (!lua_isnil(L_, -1))
       {
         th = lua_tothread(L_, -1);
         if (th == null)
@@ -4229,7 +4229,7 @@ public final class Lstyx
           setsvalue(L_, gc, L_.l_G.tmname[TM_GC]);
           setslot(L_, L_.top, gc);
           L_.top++;
-          lua_pushboolean(L_, 1);
+          lua_pushboolean(L_, true);
           lua_rawset(L_, -3);
           TValue mv = getslot(L_, L_.top - 1);
           u.metatable = hvalue(mv);
@@ -4436,13 +4436,13 @@ public final class Lstyx
       if (maxtop > MAXSTACK)
       {
         lua_lock(L1);
-        ok = stacksize(L1) == ERRORSTACKSIZE || luaD_reallocstack(L1, ERRORSTACKSIZE, 0) != 0;
+        ok = stacksize(L1) == ERRORSTACKSIZE || luaD_reallocstack(L1, ERRORSTACKSIZE, false);
         lua_unlock(L1);
       }
       else
       {
         long need = Math.min(maxtop + LUA_MINSTACK, MAXSTACK);
-        ok = lua_checkstack(L1, (int) need - L1.top) != 0;
+        ok = lua_checkstack(L1, (int) need - L1.top);
       }
       if (!ok)
         memory_error(L_);
@@ -4742,7 +4742,7 @@ public final class Lstyx
   private static int host_restore_body(lua_State L)
   {
     HostRestore hr = (HostRestore) lua_touserdata(L, 2);
-    if (lua_isnil(L, 1) != 0)
+    if (lua_isnil(L, 1))
     {
       lua_createtable(L, 0, 0);
       lua_replace(L, 1);
@@ -4786,24 +4786,24 @@ public final class Lstyx
     if ((int) R.seed_ != L.l_G.seed) /* (luaL_restorestate makes it with the seed) */
       luaL_errori(L, Lt.the_state_does_not_hash_as_the_persisted_one);
     R.value(); /* the registry, at 5 */
-    if (lua_istable(L, -1) == 0)
+    if (!lua_istable(L, -1))
       R.r_.invalid();
     for (int t = 0; t < LUA_NUMTYPES; t++) /* the type metatables, at 6... */
     {
       R.value();
-      if (lua_isnil(L, -1) == 0 && lua_istable(L, -1) == 0)
+      if (!lua_isnil(L, -1) && !lua_istable(L, -1))
         R.r_.invalid();
     }
     int nmarked = R.r_.get_count(); /* the objects marked for finalization */
     for (int i = 0; i < nmarked; i++)
     {
       R.value();
-      if (lua_istable(L, -1) == 0 && lua_type(L, -1) != LUA_TUSERDATA)
+      if (!lua_istable(L, -1) && lua_type(L, -1) != LUA_TUSERDATA)
         R.r_.invalid();
       lua_pop(L, 1);
     }
     R.value(); /* the thread it was persisted from, at 6 + LUA_NUMTYPES */
-    if (lua_isthread(L, -1) == 0)
+    if (!lua_isthread(L, -1))
       R.r_.invalid();
     byte kind = R.r_.get_byte(); /* the collector's settings */
     byte stopped = R.r_.get_byte();
@@ -4847,9 +4847,9 @@ public final class Lstyx
     int top = lua_gettop(L);
     if (perms < 0)
       perms = top + perms + 1;
-    if (perms != 0 && (perms > top || lua_istable(L, perms) == 0))
+    if (perms != 0 && (perms > top || !lua_istable(L, perms)))
       return new luaL_StyxResult(LUA_ERRRUN, HostString.from_bytes(Lt.the_permanents_must_be_a_table));
-    if (lua_checkstack(L, 3) == 0)
+    if (!lua_checkstack(L, 3))
       return new luaL_StyxResult(LUA_ERRMEM, HostString.from_bytes(Lt.not_enough_memory));
     HostRestore hr = new HostRestore(data, state);
     lua_pushcfuncinfo(L, cfi_host_restore);
@@ -4980,7 +4980,7 @@ public final class Lstyx
       rs.setup.setup(L);
     else
       lua_pushnil(L);
-    if (lua_gettop(L) != 1 || (lua_isnil(L, 1) == 0 && lua_istable(L, 1) == 0))
+    if (lua_gettop(L) != 1 || (!lua_isnil(L, 1) && !lua_istable(L, 1)))
       luaL_errori(L, Lt.the_setup_must_leave_the_permanents_table_or_nil);
     lua_newthread(L);
     lua_pushvalue(L, -1);
@@ -5015,7 +5015,7 @@ public final class Lstyx
          restored into the main thread, idle and with an empty stack) */
       lua_State T = lua_tothread(L, 2);
       lua_pop(L, 1);
-      boolean perms = lua_istable(L, 1) != 0;
+      boolean perms = lua_istable(L, 1);
       lua_xmove(L, T, 1);
       luaL_StyxResult res = host_restore(T, perms ? 1 : 0, data, true);
       msg = res.msg;

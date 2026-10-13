@@ -351,9 +351,9 @@ public final class Lobject
   public static final int PF_VATAB = 2; /* function has vararg table */
   public static final int PF_FIXED = 4; /* prototype has parts in fixed memory */
 
-  public static int isvararg(Proto p)
+  public static boolean isvararg(Proto p)
   {
-    return p.flag & (PF_VAHID | PF_VATAB);
+    return (p.flag & (PF_VAHID | PF_VATAB)) != 0;
   }
 
   public static void needvatab(Proto p)
@@ -614,7 +614,7 @@ public final class Lobject
 
   public static void checkliveness(Object L, TValue obj)
   {
-    assert luaO_checkliveness((lua_State) L, obj) != 0;
+    assert luaO_checkliveness((lua_State) L, obj);
   }
 
   public static void setobj(Object L, TValue obj1, TValue obj2)
@@ -732,14 +732,14 @@ public final class Lobject
   ** Computes ceil(log2(x)), which is the smallest integer n such that
   ** x <= (1 << n).
   */
-  public static int luaO_checkliveness(lua_State L, TValue obj)
+  public static boolean luaO_checkliveness(lua_State L, TValue obj)
   {
     if (iscollectable(obj))
     {
       assert ttypetag(obj) == gcvalue(obj).tt;
-      assert L == null || isdead(L.l_G, gcvalue(obj)) == 0;
+      assert L == null || !isdead(L.l_G, gcvalue(obj));
     }
-    return 1;
+    return true;
   }
 
   private static final byte[] log_2 = {/* log_2[i - 1] = ceil(log2(i)) */
@@ -894,7 +894,7 @@ public final class Lobject
     }
   }
 
-  public static int luaO_rawarith(lua_State L, int op, TValue p1, TValue p2,
+  public static boolean luaO_rawarith(lua_State L, int op, TValue p1, TValue p2,
                                   TValue res)
   {
     switch (op)
@@ -908,26 +908,26 @@ public final class Lobject
     { /* operate only on integers */
       IntResult i1 = new IntResult();
       IntResult i2 = new IntResult();
-      if (tointegerns(p1, i1) != 0 && tointegerns(p2, i2) != 0)
+      if (tointegerns(p1, i1) && tointegerns(p2, i2))
       {
         setivalue(res, intarith(L, op, i1.v, i2.v));
-        return 1;
+        return true;
       }
       else
-        return 0; /* fail */
+        return false; /* fail */
     }
     case LUA_OPDIV:
     case LUA_OPPOW:
     { /* operate only on floats */
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(p1, n1) != 0 && tonumberns(p2, n2) != 0)
+      if (tonumberns(p1, n1) && tonumberns(p2, n2))
       {
         setfltvalue(res, numarith(L, op, n1.v, n2.v));
-        return 1;
+        return true;
       }
       else
-        return 0; /* fail */
+        return false; /* fail */
     }
     default:
     { /* other operations */
@@ -936,15 +936,15 @@ public final class Lobject
       if (ttisinteger(p1) && ttisinteger(p2))
       {
         setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
-        return 1;
+        return true;
       }
-      else if (tonumberns(p1, n1) != 0 && tonumberns(p2, n2) != 0)
+      else if (tonumberns(p1, n1) && tonumberns(p2, n2))
       {
         setfltvalue(res, numarith(L, op, n1.v, n2.v));
-        return 1;
+        return true;
       }
       else
-        return 0; /* fail */
+        return false; /* fail */
     }
     }
   }
@@ -957,7 +957,7 @@ public final class Lobject
     TValue p1 = p1v;
     TValue p2 = p2v;
     TValue r = new TValue();
-    if (luaO_rawarith(L, op, p1, p2, r) == 0)
+    if (!luaO_rawarith(L, op, p1, p2, r))
     {
       /* could not perform raw operation; try metamethod */
       luaT_trybinTM(L, p1, p2, res, (op - LUA_OPADD) + TM_ADD, NOSLOT, NOSLOT);
@@ -968,8 +968,8 @@ public final class Lobject
 
   public static byte luaO_hexavalue(int c)
   {
-    assert lisxdigit(c) != 0;
-    if (lisdigit(c) != 0)
+    assert lisxdigit(c);
+    if (lisdigit(c))
       return (byte) (c - '0');
     else
       return (byte) ((ltolower(c) - 'a') + 10);
@@ -977,10 +977,10 @@ public final class Lobject
 
   private static final class Sign
   {
-    int neg;
+    boolean neg;
     int off;
 
-    Sign(int neg, int off)
+    Sign(boolean neg, int off)
     {
       this.neg = neg;
       this.off = off;
@@ -990,10 +990,10 @@ public final class Lobject
   private static Sign isneg(ByteView s, int off)
   {
     if (sv_byteat(s, off) == '-')
-      return new Sign(1, off + 1);
+      return new Sign(true, off + 1);
     else if (sv_byteat(s, off) == '+')
-      return new Sign(0, off + 1);
-    return new Sign(0, off);
+      return new Sign(false, off + 1);
+    return new Sign(false, off);
   }
 
   private static final class NumParse
@@ -1042,11 +1042,11 @@ public final class Lobject
     int sigdig = 0;               /* number of significant digits */
     int nosigdig = 0;             /* number of non-significant digits */
     int e = 0;                    /* exponent correction */
-    int neg;                      /* 1 if number is negative */
-    int hasdot = 0;               /* true after seen a dot */
+    boolean neg;                      /* 1 if number is negative */
+    boolean hasdot = false;               /* true after seen a dot */
     int p = off;
     int endpos = off;                /* nothing is valid yet */
-    while (lisspace(sv_byteat(s, p)) != 0)
+    while (lisspace(sv_byteat(s, p)))
       p++;                                                    /* skip initial spaces */
     Sign sign = isneg(s, p);                                       /* check sign */
     neg = sign.neg;
@@ -1057,12 +1057,12 @@ public final class Lobject
     { /* skip '0x' and read numeral */
       if (sv_byteat(s, p) == dot)
       {
-        if (hasdot != 0)
+        if (hasdot)
           break; /* second dot? stop loop */
         else
-          hasdot = 1;
+          hasdot = true;
       }
-      else if (lisxdigit(sv_byteat(s, p)) != 0)
+      else if (lisxdigit(sv_byteat(s, p)))
       {
         if (sigdig == 0 && s.at(p) == '0') /* non-significant digit (zero)? */
           nosigdig++;
@@ -1070,7 +1070,7 @@ public final class Lobject
           r = (r * 16.0) + luaO_hexavalue(s.at(p));
         else
           e++; /* too many digits; ignore, but still count for exponent */
-        if (hasdot != 0)
+        if (hasdot)
           e--; /* decimal digit? correct exponent */
       }
       else
@@ -1083,21 +1083,21 @@ public final class Lobject
     if (sv_byteat(s, p) == 'p' || sv_byteat(s, p) == 'P')
     {                     /* exponent part? */
       int exp1 = 0;       /* exponent value */
-      int neg1;           /* exponent sign */
+      boolean neg1;       /* exponent sign */
       p++;                /* skip 'p' */
       Sign sign1 = isneg(s, p); /* sign */
       neg1 = sign1.neg;
       p = sign1.off;
-      if (lisdigit(sv_byteat(s, p)) == 0)
+      if (!lisdigit(sv_byteat(s, p)))
         return new NumParse(endpos, 0.0);  /* invalid; must have at least one digit */
-      while (lisdigit(sv_byteat(s, p)) != 0) /* read exponent */
+      while (lisdigit(sv_byteat(s, p))) /* read exponent */
         exp1 = exp1 * 10 + s.at(p++) - '0';
-      if (neg1 != 0)
+      if (neg1)
         exp1 = -exp1;
       e += exp1;
       endpos = p; /* valid up to here */
     }
-    if (neg != 0)
+    if (neg)
       r = -r;
     return new NumParse(endpos, Math.scalb(r, e));
   }
@@ -1110,12 +1110,12 @@ public final class Lobject
   private static NumParse str2dec(ByteView s, int off)
   {
     int p = off;
-    while (lisspace(sv_byteat(s, p)) != 0)
+    while (lisspace(sv_byteat(s, p)))
       p++;
-    int neg = 0;
+    boolean neg = false;
     if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
     {
-      neg = (s.at(p) == '-') ? 1 : 0;
+      neg = s.at(p) == '-';
       p++;
     }
     if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
@@ -1126,41 +1126,41 @@ public final class Lobject
     if (res.ec == ToChars.Errc.result_out_of_range)
     {
       long e10 = 0;
-      int frac = 0;
-      int sig = 0;
+      boolean frac = false;
+      boolean sig = false;
       long intdigits = 0;
       long fraczeros = 0;
       int q;
       for (q = p; q < endp; q++)
       {
         if (s.at(q) == '.')
-          frac = 1;
+          frac = true;
         else if (s.at(q) == 'e' || s.at(q) == 'E')
         {
           int x = q + 1;
-          int eneg = 0;
+          boolean eneg = false;
           if (sv_byteat(s, x) == '+' || sv_byteat(s, x) == '-')
           {
-            eneg = (s.at(x) == '-') ? 1 : 0;
+            eneg = s.at(x) == '-';
             x++;
           }
           long acc = 0;
-          while (lisdigit(sv_byteat(s, x)) != 0)
+          while (lisdigit(sv_byteat(s, x)))
           {
             if (acc < 1000000000L)
               acc = acc * 10 + (s.at(x) - '0');
             x++;
           }
-          e10 = (eneg != 0) ? -acc : acc;
+          e10 = (eneg) ? -acc : acc;
           break;
         }
         else
         {
-          if (sig == 0 && s.at(q) != '0')
-            sig = 1;
-          if (sig != 0 && frac == 0)
+          if (!sig && s.at(q) != '0')
+            sig = true;
+          if (sig && !frac)
             intdigits++;
-          else if (sig == 0 && frac != 0)
+          else if (!sig && frac)
             fraczeros++;
         }
       }
@@ -1169,7 +1169,7 @@ public final class Lobject
     }
     else if (res.ec != ToChars.Errc.ok)
       return new NumParse(off, 0.0);
-    return new NumParse(endp, (neg != 0) ? -v : v);
+    return new NumParse(endp, (neg) ? -v : v);
   }
 
   private static NumParse l_str2dloc(ByteView s, int off, int mode)
@@ -1177,7 +1177,7 @@ public final class Lobject
     NumParse r = (mode == 'x') ? lua_strx2number(s, off) : str2dec(s, off);
     if (r.end == off)
       return new NumParse(ByteView.npos, r.value); /* nothing recognized? */
-    while (lisspace(sv_byteat(s, r.end)) != 0)
+    while (lisspace(sv_byteat(s, r.end)))
       r.end++; /* skip trailing spaces */
     return new NumParse((r.end == s.size()) ? r.end : ByteView.npos, r.value);
   }
@@ -1227,10 +1227,10 @@ public final class Lobject
   private static IntParse l_str2int(ByteView s, int off)
   {
     long a = 0;
-    int empty = 1;
-    int neg;
+    boolean empty = true;
+    boolean neg;
     int p = off;
-    while (lisspace(sv_byteat(s, p)) != 0)
+    while (lisspace(sv_byteat(s, p)))
       p++; /* skip initial spaces */
     Sign sign = isneg(s, p);
     neg = sign.neg;
@@ -1239,29 +1239,29 @@ public final class Lobject
         (sv_byteat(s, p + 1) == 'x' || sv_byteat(s, p + 1) == 'X'))
     {         /* hex? */
       p += 2; /* skip '0x' */
-      for (; lisxdigit(sv_byteat(s, p)) != 0; p++)
+      for (; lisxdigit(sv_byteat(s, p)); p++)
       {
         a = a * 16 + luaO_hexavalue(s.at(p));
-        empty = 0;
+        empty = false;
       }
     }
     else
     { /* decimal */
-      for (; lisdigit(sv_byteat(s, p)) != 0; p++)
+      for (; lisdigit(sv_byteat(s, p)); p++)
       {
         int d = s.at(p) - '0';
-        if (Long.compareUnsigned(a, MAXBY10) >= 0 && (Long.compareUnsigned(a, MAXBY10) > 0 || d > MAXLASTD + neg)) /* overflow? */
+        if (Long.compareUnsigned(a, MAXBY10) >= 0 && (Long.compareUnsigned(a, MAXBY10) > 0 || d > MAXLASTD + (neg ? 1 : 0))) /* overflow? */
           return new IntParse(ByteView.npos, 0);                                                                 /* do not accept it (as integer) */
         a = a * 10 + d;
-        empty = 0;
+        empty = false;
       }
     }
-    while (lisspace(sv_byteat(s, p)) != 0)
+    while (lisspace(sv_byteat(s, p)))
       p++; /* skip trailing spaces */
-    if (empty != 0 || p != s.size())
+    if (empty || p != s.size())
       return new IntParse(ByteView.npos, 0); /* something wrong in the numeral */
     else
-      return new IntParse(p, (neg != 0) ? 0 - a : a);
+      return new IntParse(p, (neg) ? 0 - a : a);
   }
 
   public static int luaO_str2num(ByteView s, TValue o)

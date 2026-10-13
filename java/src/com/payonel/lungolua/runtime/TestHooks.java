@@ -2,7 +2,7 @@ package com.payonel.lungolua.runtime;
 
 public interface TestHooks
 {
-  void luai_tracegctest(lua_State L, int first);
+  void luai_tracegctest(lua_State L, boolean first);
 
   lua_State luai_newstate();
 

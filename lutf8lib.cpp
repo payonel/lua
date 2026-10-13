@@ -28,7 +28,7 @@ constexpr int MAXUNICODE = 0x10FFFF;
 
 constexpr int MAXUTF = 0x7FFFFFFF;
 
-constexpr int iscont(int c)
+constexpr bool iscont(int c)
 {
   return (c & 0xC0) == 0x80;
 }
@@ -38,7 +38,7 @@ static inline int ubyte(const InternalString* s, size_t i)
   return (i < s->size()) ? s->byteAt(i) : 0;
 }
 
-static inline int iscontat(const InternalString* s, size_t i)
+static inline bool iscontat(const InternalString* s, size_t i)
 {
   return iscont(ubyte(s, i));
 }
@@ -61,7 +61,7 @@ struct Utf8Code
   int code;
 };
 
-static Utf8Code utf8_decode(const InternalString* s, size_t pos, int strict)
+static Utf8Code utf8_decode(const InternalString* s, size_t pos, bool strict)
 {
   static const int limits[] =
       {INT_MAX, 0x80, 0x800, 0x10000, 0x200000, 0x4000000};
@@ -108,7 +108,7 @@ static int utflen(lua_State* L)
   size_t len = s->size(); /* string length in bytes */
   lua_Integer posi = u_posrelat(luaL_optinteger(L, 2, 1), len);
   lua_Integer posj = u_posrelat(luaL_optinteger(L, 3, -1), len);
-  int lax = lua_toboolean(L, 4);
+  bool lax = lua_toboolean(L, 4);
   luaL_argchecki(L, 1 <= posi && --posi <= (lua_Integer) len, 2, lt::initial_position_out_of_bounds);
   luaL_argchecki(L, --posj < (lua_Integer) len, 3, lt::final_position_out_of_bounds);
   while (posi <= posj)
@@ -137,7 +137,7 @@ static int codepoint(lua_State* L)
   size_t len = s->size();
   lua_Integer posi = u_posrelat(luaL_optinteger(L, 2, 1), len);
   lua_Integer pose = u_posrelat(luaL_optinteger(L, 3, posi), len);
-  int lax = lua_toboolean(L, 4);
+  bool lax = lua_toboolean(L, 4);
   int n;
   size_t se;
   luaL_argchecki(L, posi >= 1, 2, lt::out_of_bounds);
@@ -257,7 +257,7 @@ static int byteoffset(lua_State* L)
   return 2;
 }
 
-static int iter_aux(lua_State* L, int strict)
+static int iter_aux(lua_State* L, bool strict)
 {
   const InternalString* s = luaL_checkistring(L, 1);
   size_t len = s->size();
@@ -282,12 +282,12 @@ static int iter_aux(lua_State* L, int strict)
 
 static int iter_auxstrict(lua_State* L)
 {
-  return iter_aux(L, 1);
+  return iter_aux(L, true);
 }
 
 static int iter_auxlax(lua_State* L)
 {
-  return iter_aux(L, 0);
+  return iter_aux(L, false);
 }
 
 static CFuncInfo cfi_iter_auxlax(iter_auxlax, "utf8.iter_auxlax");
@@ -295,7 +295,7 @@ static CFuncInfo cfi_iter_auxstrict(iter_auxstrict, "utf8.iter_auxstrict");
 
 static int iter_codes(lua_State* L)
 {
-  int lax = lua_toboolean(L, 2);
+  bool lax = lua_toboolean(L, 2);
   const InternalString* s = luaL_checkistring(L, 1);
   luaL_argchecki(L, !iscontat(s, 0), 1, lt::invalid_UTF_8_code);
   lua_pushcfuncinfo(L, lax ? &cfi_iter_auxlax : &cfi_iter_auxstrict);

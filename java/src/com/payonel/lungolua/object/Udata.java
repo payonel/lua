@@ -33,8 +33,8 @@ public final class Udata extends GCListed
     u = luaM_malloc_Udata(L);
     luaC_link(L, u, LUA_VUSERDATA);
     u.zb = s == 0;
-    byte oldgcstop = g.gcstopem;
-    g.gcstopem = 1;
+    boolean oldgcstop = g.gcstopem;
+    g.gcstopem = true;
     TValue[] uv = luaM_alloc_TValue_span(L.l_G, L, new TValue[0], nuvalue, false);
     if (uv != null || nuvalue == 0)
     {

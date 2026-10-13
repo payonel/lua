@@ -293,7 +293,7 @@ public final class Lstrlib
   */
   private static final class str_Writer implements lua_Writer
   {
-    int init; /* true iff buffer has been initialized */
+    boolean init; /* true iff buffer has been initialized */
     luaL_Buffer B = new luaL_Buffer();
 
     @Override
@@ -305,9 +305,9 @@ public final class Lstrlib
 
   private static int writer(lua_State L, ByteView b, str_Writer state)
   {
-    if (state.init == 0)
+    if (!state.init)
     {
-      state.init = 1;
+      state.init = true;
       luaL_buffinit(L, state.B);
     }
     if (b == null)
@@ -325,11 +325,11 @@ public final class Lstrlib
     str_Writer state = new str_Writer();
     try
     {
-      int strip = lua_toboolean(L, 2);
-      luaL_argchecki(L, lua_type(L, 1) == LUA_TFUNCTION && lua_iscfunction(L, 1) == 0, 1, Lt.Lua_function_expected);
+      boolean strip = lua_toboolean(L, 2);
+      luaL_argchecki(L, lua_type(L, 1) == LUA_TFUNCTION && !lua_iscfunction(L, 1), 1, Lt.Lua_function_expected);
       /* ensure function is on the top of the stack and vacate slot 1 */
       lua_pushvalue(L, 1);
-      state.init = 0;
+      state.init = false;
       lua_dump(L, state, strip);
       lua_settop(L, 1); /* leave final result on top */
       return 1;
@@ -348,17 +348,17 @@ public final class Lstrlib
   ** =======================================================
   */
 
-  private static int tonum(lua_State L, int arg)
+  private static boolean tonum(lua_State L, int arg)
   {
     if (lua_type(L, arg) == LUA_TNUMBER)
     { /* already a number? */
       lua_pushvalue(L, arg);
-      return 1;
+      return true;
     }
     else
     { /* check whether it is a numerical string */
       InternalString s = lua_toistring(L, arg);
-      return (s != null && lua_stringtonumber(L, new HostString(s.view())) == s.size() + 1) ? 1 : 0;
+      return s != null && lua_stringtonumber(L, new HostString(s.view())) == s.size() + 1;
     }
   }
 
@@ -399,7 +399,7 @@ public final class Lstrlib
 
   private static int arith(lua_State L, int op, ByteView mtname)
   {
-    if (tonum(L, 1) != 0 && tonum(L, 2) != 0)
+    if (tonum(L, 1) && tonum(L, 2))
       lua_arith(L, op); /* result will be on the top */
     else
     {
@@ -753,26 +753,26 @@ public final class Lstrlib
     }
   }
 
-  private static int match_class(int c, int cl)
+  private static boolean match_class(int c, int cl)
   {
-    int res;
+    boolean res;
     int lower = locale_tolower(cl);
     if (lower == 'z')
-      res = (c == 0) ? 1 : 0; /* deprecated option */
+      res = c == 0; /* deprecated option */
     else
       res = locale_matchclass(c, lower);
-    if (res == 0 && lower == cl)
-      return (cl == c) ? 1 : 0; /* not a known class and lowercase — literal match */
-    return (locale_islower(cl) != 0 ? res : (res == 0 ? 1 : 0));
+    if (!res && lower == cl)
+      return cl == c; /* not a known class and lowercase — literal match */
+    return (locale_islower(cl) ? res : !res);
   }
 
-  private static int matchbracketclass(MatchState ms, int c, int p,
+  private static boolean matchbracketclass(MatchState ms, int c, int p,
                                        int ec)
   {
-    int sig = 1;
+    boolean sig = true;
     if (patbyte(ms, p + 1) == '^')
     {
-      sig = 0;
+      sig = false;
       p++; /* skip the '^' */
     }
     while (++p < ec)
@@ -780,7 +780,7 @@ public final class Lstrlib
       if (patbyte(ms, p) == L_ESC)
       {
         p++;
-        if (match_class(c, patbyte(ms, p)) != 0)
+        if (match_class(c, patbyte(ms, p)))
           return sig;
       }
       else if ((patbyte(ms, p + 1) == '-') && (p + 2 < ec))
@@ -792,27 +792,27 @@ public final class Lstrlib
       else if (patbyte(ms, p) == c)
         return sig;
     }
-    return (sig == 0) ? 1 : 0;
+    return !sig;
   }
 
-  private static int singlematch(MatchState ms, int s, int p,
+  private static boolean singlematch(MatchState ms, int s, int p,
                                  int ep)
   {
     if (s >= ms.src_end)
-      return 0;
+      return false;
     else
     {
       int c = srcbyte(ms, s);
       switch (patbyte(ms, p))
       {
       case '.':
-        return 1; /* matches any char */
+        return true; /* matches any char */
       case L_ESC:
         return match_class(c, patbyte(ms, p + 1));
       case '[':
         return matchbracketclass(ms, c, p, ep - 1);
       default:
-        return (patbyte(ms, p) == c) ? 1 : 0;
+        return patbyte(ms, p) == c;
       }
     }
   }
@@ -869,7 +869,7 @@ public final class Lstrlib
                                 int p, int ep)
   {
     int i = 0; /* counts maximum expand for item */
-    while (singlematch(ms, s + i, p, ep) != 0)
+    while (singlematch(ms, s + i, p, ep))
       i++;
     /* keeps trying to match with the maximum repetitions */
     return max_expand_from(ms, s, ep, i);
@@ -892,7 +892,7 @@ public final class Lstrlib
       }
       if (res != NOMATCH)
         return res;
-      else if (singlematch(ms, s, p, ep) != 0)
+      else if (singlematch(ms, s, p, ep))
         s++; /* try with one more repetition */
       else
         return NOMATCH;
@@ -1005,8 +1005,8 @@ public final class Lstrlib
           luaL_errori(ms.L, Lt.missing_after_f_in_pattern);
         ep = classend(ms, p); /* points to what is next */
         previous = (s == 0) ? '\0' : srcbyte(ms, s - 1);
-        if (matchbracketclass(ms, previous, p, ep - 1) == 0 &&
-            matchbracketclass(ms, srcbyte(ms, s), p, ep - 1) != 0)
+        if (!matchbracketclass(ms, previous, p, ep - 1) &&
+            matchbracketclass(ms, srcbyte(ms, s), p, ep - 1))
         {
           p = ep;
           continue; /* return match(ms, s, ep); */
@@ -1027,7 +1027,7 @@ public final class Lstrlib
       {                                  /* pattern class plus optional suffix */
         int ep = classend(ms, p);        /* points to optional suffix */
         /* does not match at least once? */
-        if (singlematch(ms, s, p, ep) == 0)
+        if (!singlematch(ms, s, p, ep))
         {
           int sfx = patbyte(ms, ep);
           if (sfx == '*' || sfx == '?' || sfx == '-')
@@ -1149,7 +1149,7 @@ public final class Lstrlib
       break;
     default: /* MF_MIN */
       if (res == NOMATCH)
-        res = singlematch(ms, a, b, c) != 0 ? min_expand(ms, a + 1, b, c) : NOMATCH;
+        res = singlematch(ms, a, b, c) ? min_expand(ms, a + 1, b, c) : NOMATCH;
       break;
     }
     ms.matchdepth++;
@@ -1349,9 +1349,9 @@ public final class Lstrlib
   }
 
   /* check whether pattern has no special characters */
-  private static int nospecials(ByteView p)
+  private static boolean nospecials(ByteView p)
   {
-    return (p.find_first_of(Lt.pattern_specials) == ByteView.npos) ? 1 : 0;
+    return p.find_first_of(Lt.pattern_specials) == ByteView.npos;
   }
 
   private static void prepstate(MatchState ms, lua_State L,
@@ -1390,7 +1390,7 @@ public final class Lstrlib
     ms.goingon = false;
   }
 
-  private static int str_find_aux(lua_State L, int find)
+  private static int str_find_aux(lua_State L, boolean find)
   {
     InternalString s = luaL_checkistring(L, 1);
     InternalString p = luaL_checkistring(L, 2);
@@ -1403,7 +1403,7 @@ public final class Lstrlib
       return 1;
     }
     /* explicit request or no special characters? */
-    if (find != 0 && (lua_toboolean(L, 4) != 0 || nospecials(p.view()) != 0))
+    if (find && (lua_toboolean(L, 4) || nospecials(p.view())))
     {
       /* do a plain search */
       int pos = lmemfind(L, s.view(), (int) init, ls - (int) init, p.view(), lp);
@@ -1418,7 +1418,7 @@ public final class Lstrlib
     {
       MatchState ms = new MatchState();
       prepstate(ms, L, s, p);
-      prepcheck(ms, 5, str_findk, find); /* (a match box at 5, after the arguments) */
+      prepcheck(ms, 5, str_findk, find ? 1 : 0); /* (a match box at 5, after the arguments) */
       return find_loop(L, ms, find, (int) init, NOMATCH, false);
     }
     luaL_pushfail(L); /* not found */
@@ -1429,10 +1429,10 @@ public final class Lstrlib
   ** The matches of 'find' and 'match' from 's1' on ('first' when the match
   ** from 's1' is already 'res').
   */
-  private static int find_loop(lua_State L, MatchState ms, int find, int s1, int res, boolean first)
+  private static int find_loop(lua_State L, MatchState ms, boolean find, int s1, int res, boolean first)
   {
-    int anchor = (ms.p_end > 0 && ms.p.byteAt(0) == '^') ? 1 : 0;
-    int pinit = (anchor != 0) ? 1 : 0; /* skip anchor character */
+    boolean anchor = ms.p_end > 0 && ms.p.byteAt(0) == '^';
+    int pinit = anchor ? 1 : 0; /* skip anchor character */
     do
     {
       if (!first)
@@ -1444,7 +1444,7 @@ public final class Lstrlib
       first = false;
       if (res != NOMATCH)
       {
-        if (find != 0)
+        if (find)
         {
           lua_pushinteger(L, (long) s1 + 1); /* start */
           lua_pushinteger(L, res);           /* end */
@@ -1453,7 +1453,7 @@ public final class Lstrlib
         else
           return push_captures(ms, s1, res);
       }
-    } while (s1++ < ms.src_end && anchor == 0);
+    } while (s1++ < ms.src_end && !anchor);
     luaL_pushfail(L); /* not found */
     return 1;
   }
@@ -1490,7 +1490,7 @@ public final class Lstrlib
     prepstate(ms, L, luaL_checkistring(L, 1), luaL_checkistring(L, 2));
     prepcheck(ms, 5, str_findk, ctx);
     int res = match_resume(ms);
-    return find_loop(L, ms, (int) ctx, ms.origin, res, true);
+    return find_loop(L, ms, ctx != 0, ms.origin, res, true);
   }
 
   private static final lua_KFunction str_findk = Lstrlib::str_findk;
@@ -1499,14 +1499,14 @@ public final class Lstrlib
 
   private static int str_find(lua_State L)
   {
-    return str_find_aux(L, 1);
+    return str_find_aux(L, true);
   }
 
   private static final lua_CFunction str_find = Lstrlib::str_find;
 
   private static int str_match(lua_State L)
   {
-    return str_find_aux(L, 0);
+    return str_find_aux(L, false);
   }
 
   private static final lua_CFunction str_match = Lstrlib::str_match;
@@ -1685,7 +1685,7 @@ public final class Lstrlib
     InternalString pat;  /* pattern */
     int tr;              /* replacement type */
     long max_s;          /* max replacements */
-    int anchor;
+    boolean anchor;
     int pinit; /* where the pattern starts (after an anchor) */
   }
 
@@ -1696,8 +1696,8 @@ public final class Lstrlib
     a.pat = luaL_checkistring(L, 2);
     a.tr = lua_type(L, 3);
     a.max_s = luaL_optinteger(L, 4, (long) a.srcs.size() + 1);
-    a.anchor = (a.pat.size() > 0 && a.pat.byteAt(0) == '^') ? 1 : 0;
-    a.pinit = (a.anchor != 0) ? 1 : 0; /* skip anchor character */
+    a.anchor = (a.pat.size() > 0 && a.pat.byteAt(0) == '^');
+    a.pinit = a.anchor ? 1 : 0; /* skip anchor character */
     return a;
   }
 
@@ -1713,24 +1713,24 @@ public final class Lstrlib
   ** original string was changed. (Function calls and table indexing
   ** resulting in nil or false do not change the subject.)
   */
-  private static int add_result(lua_State L, luaL_Buffer b, InternalString src,
+  private static boolean add_result(lua_State L, luaL_Buffer b, InternalString src,
                                 int s, int e)
   {
-    if (lua_toboolean(L, -1) == 0)
+    if (!lua_toboolean(L, -1))
     {                /* nil or false? */
       lua_pop(L, 1); /* remove value */
       luaL_addlstring(b, src.view(), s, e - s); /* keep original text */
-      return 0;                                 /* no changes */
+      return false;                                 /* no changes */
     }
-    else if (lua_isstring(L, -1) == 0)
+    else if (!lua_isstring(L, -1))
     {
       lua_pushistringref(L, lua_typenamei(L, lua_type(L, -1)));
-      return luaL_errori(L, Lt.invalid_replacement_value_a_s);
+      return luaL_errori(L, Lt.invalid_replacement_value_a_s) != 0;
     }
     else
     {
       luaL_addvalue(b); /* add result to accumulator */
-      return 1;         /* something changed */
+      return true;         /* something changed */
     }
   }
 
@@ -1739,8 +1739,8 @@ public final class Lstrlib
   ** function or table is called with the state in 'box', for 'gsubk' to go
   ** on with after a freeze. Return true if the original string was changed.
   */
-  private static int add_value(MatchState ms, luaL_Buffer b, luaL_Box box, int s,
-                               int e, int tr, long n, int changed)
+  private static boolean add_value(MatchState ms, luaL_Buffer b, luaL_Box box, int s,
+                               int e, int tr, long n, boolean changed)
   {
     lua_State L = ms.L;
     switch (tr)
@@ -1752,7 +1752,7 @@ public final class Lstrlib
       box.ints[GS_S] = s;
       box.ints[GS_E] = e;
       box.ints[GS_N] = n;
-      box.ints[GS_CHANGED] = changed;
+      box.ints[GS_CHANGED] = changed ? 1 : 0;
       luaL_buffsave(b, box);
       lua_callk(L, nargs, 1, 0, gsubk); /* call it */
       luaL_buffload(b, box);
@@ -1768,7 +1768,7 @@ public final class Lstrlib
         box.ints[GS_S] = s;
         box.ints[GS_E] = e;
         box.ints[GS_N] = n;
-        box.ints[GS_CHANGED] = changed;
+        box.ints[GS_CHANGED] = changed ? 1 : 0;
         luaL_buffsave(b, box);
         lua_gettablek(L, 3, 0, gsubk);
         luaL_buffload(b, box);
@@ -1778,16 +1778,16 @@ public final class Lstrlib
     default:
     {                     /* LUA_TNUMBER or LUA_TSTRING */
       add_s(ms, b, s, e); /* add value to the buffer */
-      return 1;           /* something changed */
+      return true;           /* something changed */
     }
     }
     return add_result(L, b, ms.src, s, e);
   }
 
   private static int gsub_end(lua_State L, GsubArgs a, MatchState ms, luaL_Buffer b,
-                              int src, long n, int changed)
+                              int src, long n, boolean changed)
   {
-    if (changed == 0)      /* no changes? */
+    if (!changed)      /* no changes? */
       lua_pushvalue(L, 1); /* return original string */
     else
     { /* something changed */
@@ -1801,7 +1801,7 @@ public final class Lstrlib
   /* the matches of 'gsub' from 'src' on ('first': see 'find_loop') */
   private static int gsub_loop(lua_State L, GsubArgs a, MatchState ms, luaL_Buffer b,
                                luaL_Box box, int src, long lastmatch,
-                               long n, int changed, int e, boolean first)
+                               long n, boolean changed, int e, boolean first)
   {
     while (n < a.max_s)
     {
@@ -1811,14 +1811,14 @@ public final class Lstrlib
         ms.origin = src;
         ms.loop[0] = lastmatch;
         ms.loop[1] = n;
-        ms.loop[2] = changed;
+        ms.loop[2] = changed ? 1 : 0;
         e = match(ms, src, a.pinit);
       }
       first = false;
       if (e != NOMATCH && e != lastmatch)
       { /* match? */
         n++;
-        changed = (add_value(ms, b, box, src, e, a.tr, n, changed) != 0 || changed != 0) ? 1 : 0;
+        changed = add_value(ms, b, box, src, e, a.tr, n, changed) || changed;
         lastmatch = e;
         src = e;
       }
@@ -1826,7 +1826,7 @@ public final class Lstrlib
         luaL_addchar(b, (byte) a.srcs.byteAt(src++));
       else
         break; /* end of subject */
-      if (a.anchor != 0)
+      if (a.anchor)
         break;
     }
     return gsub_end(L, a, ms, b, src, n, changed);
@@ -1856,12 +1856,12 @@ public final class Lstrlib
       { /* (a check point of the match going on keeps these again) */
         long lastmatch = box.ints[GS_E];
         long n = box.ints[GS_N];
-        int changed = (box.ints[GS_CHANGED] != 0) ? 1 : 0;
+        boolean changed = box.ints[GS_CHANGED] != 0;
         ms.loop[0] = lastmatch;
         ms.loop[1] = n;
-        ms.loop[2] = changed;
+        ms.loop[2] = changed ? 1 : 0;
         int e = match_resume(ms);
-        boolean calls = (a.tr == LUA_TFUNCTION || (a.tr == LUA_TTABLE && lua_isplaintable(L, 3) == 0));
+        boolean calls = (a.tr == LUA_TFUNCTION || (a.tr == LUA_TTABLE && !lua_isplaintable(L, 3)));
         return gsub_loop(L, a, ms, b, calls ? box : null, ms.origin, lastmatch, n, changed, e, true);
       }
       long s = box.ints[GS_S];
@@ -1869,10 +1869,10 @@ public final class Lstrlib
       if (s < 0 || s > e || e > ms.src_end)
         luaL_errori(L, Lt.invalid_match_state);
       long n = box.ints[GS_N];
-      int changed = (add_result(L, b, a.srcs, (int) s, (int) e) != 0 || (int) box.ints[GS_CHANGED] != 0) ? 1 : 0;
+      boolean changed = add_result(L, b, a.srcs, (int) s, (int) e) || (int) box.ints[GS_CHANGED] != 0;
       if (lua_gettop(L) == 6)
         ms.box = (lua_touserobject(L, 6) instanceof MatchBox m) ? m : null; /* (made by a check point before) */
-      if (a.anchor != 0)
+      if (a.anchor)
         return gsub_end(L, a, ms, b, (int) e, n, changed);
       return gsub_loop(L, a, ms, b, box, (int) e, e, n, changed, NOMATCH, false);
     }
@@ -1892,7 +1892,7 @@ public final class Lstrlib
     int tr = a.tr;
     luaL_argexpectedi(L, tr == LUA_TNUMBER || tr == LUA_TSTRING || tr == LUA_TFUNCTION || tr == LUA_TTABLE, 3, Lt.string_function_table);
     luaL_Box box = null;
-    if (tr == LUA_TFUNCTION || (tr == LUA_TTABLE && lua_isplaintable(L, 3) == 0))
+    if (tr == LUA_TFUNCTION || (tr == LUA_TTABLE && !lua_isplaintable(L, 3)))
     { /* replacements call back: keep the state where a freeze finds it */
       lua_settop(L, 4);
       box = luaL_newbox(L);
@@ -1907,7 +1907,7 @@ public final class Lstrlib
       prepcheck(ms, 6, gsubk, 1); /* (boxes at 5 and 6, after the arguments) */
       ms.b = b;
       ms.bbox = box;
-      return gsub_loop(L, a, ms, b, box, 0, NOMATCH, 0, 0, NOMATCH, false);
+      return gsub_loop(L, a, ms, b, box, 0, NOMATCH, 0, false, NOMATCH, false);
     }
     finally
     {
@@ -2066,12 +2066,12 @@ public final class Lstrlib
         luaL_addchar(b, (byte) '\\');
         luaL_addchar(b, (byte) c);
       }
-      else if (locale_matchclass(c, 'c') != 0)
+      else if (locale_matchclass(c, 'c'))
       {
         ByteOwner dbuf = new ByteOwner(4);
         ByteView d = dbuf.view().substr(0, dbuf.write_number(c));
         luaL_addchar(b, (byte) '\\');
-        if (locale_isdigit(sv_byteat(s.view(), i + 1)) != 0)
+        if (locale_isdigit(sv_byteat(s.view(), i + 1)))
         {
           for (int j = d.size(); j < 3; j++)
             luaL_addchar(b, (byte) '0');
@@ -2136,7 +2136,7 @@ public final class Lstrlib
       int off = luaL_prepbuffsize(b, MAX_ITEM);
       ByteSpan area = luaL_buffaddr(b);
       int nb;
-      if (lua_isinteger(L, arg) == 0) /* float? */
+      if (!lua_isinteger(L, arg)) /* float? */
         nb = quotefloat(L, area, off, lua_tonumber(L, arg));
       else
       { /* integers */
@@ -2169,10 +2169,10 @@ public final class Lstrlib
 
   private static int get2digits(ByteView s, int p)
   {
-    if (locale_isdigit(sv_byteat(s, p)) != 0)
+    if (locale_isdigit(sv_byteat(s, p)))
     {
       p++;
-      if (locale_isdigit(sv_byteat(s, p)) != 0)
+      if (locale_isdigit(sv_byteat(s, p)))
         p++; /* (2 digits at most) */
     }
     return p;
@@ -2199,7 +2199,7 @@ public final class Lstrlib
         p = get2digits(form, p); /* skip precision */
       }
     }
-    if (!(p + 1 == form.size() && locale_isalpha(sv_byteat(form, p)) != 0))
+    if (!(p + 1 == form.size() && locale_isalpha(sv_byteat(form, p))))
     { /* did not go to the end? */
       lua_pushlstring(L, form, 0, form.size());
       luaL_errori(L, Lt.invalid_conversion_specification_s);
@@ -2278,13 +2278,13 @@ public final class Lstrlib
       }
       break;
     }
-    while (locale_isdigit(sv_byteat(form, p)) != 0)
+    while (locale_isdigit(sv_byteat(form, p)))
       spec.width = spec.width * 10 + (form.at(p++) - '0');
     if (sv_byteat(form, p) == '.')
     {
       p++;
       spec.precision = 0;
-      while (locale_isdigit(sv_byteat(form, p)) != 0)
+      while (locale_isdigit(sv_byteat(form, p)))
         spec.precision = spec.precision * 10 + (form.at(p++) - '0');
     }
     spec.conv = form.at(form.size() - 1);
@@ -2447,7 +2447,7 @@ public final class Lstrlib
           boolean seennonzero = false;
           for (int i = 0; i < epos; i++)
           {
-            if (locale_isdigit(body.get(i) & 0xFF) != 0)
+            if (locale_isdigit(body.get(i) & 0xFF))
             {
               if (body.get(i) != '0')
                 seennonzero = true;
@@ -2611,7 +2611,7 @@ public final class Lstrlib
           scanformat(formv, spec);
           ByteOwner body = new ByteOwner(MAX_ITEM);
           int blen;
-          if (lua_islightcfunction(L, arg) != 0)
+          if (lua_islightcfunction(L, arg))
           {
             InternalString fa = lua_funcaddressi(L, arg);
             blen = fa.size();
@@ -2792,7 +2792,7 @@ public final class Lstrlib
     lua_State L;
     InternalString fmt; /* format string */
     int pos;
-    int islittle;
+    boolean islittle;
     long maxalign;
   }
 
@@ -2823,14 +2823,14 @@ public final class Lstrlib
   ** Read an integer numeral from string 'fmt' or return 'df' if
   ** there is no numeral
   */
-  private static int digit(int c)
+  private static boolean digit(int c)
   {
-    return ('0' <= c && c <= '9') ? 1 : 0;
+    return '0' <= c && c <= '9';
   }
 
   private static long getnum(Header h, long df)
   {
-    if (digit(fmtbyte(h)) == 0) /* no number? */
+    if (!digit(fmtbyte(h))) /* no number? */
       return df;                /* return default value */
     else
     {
@@ -2839,7 +2839,7 @@ public final class Lstrlib
       {
         a = a * 10 + (fmtbyte(h) - '0');
         h.pos++;
-      } while (digit(fmtbyte(h)) != 0 && a <= (MAX_SIZE - 9) / 10);
+      } while (digit(fmtbyte(h)) && a <= (MAX_SIZE - 9) / 10);
       return a;
     }
   }
@@ -2868,7 +2868,7 @@ public final class Lstrlib
     h.L = L;
     h.fmt = fmt;
     h.pos = 0;
-    h.islittle = nativeendian_little ? 1 : 0;
+    h.islittle = nativeendian_little;
     h.maxalign = 1;
   }
 
@@ -2939,13 +2939,13 @@ public final class Lstrlib
     case ' ':
       break;
     case '<':
-      h.islittle = 1;
+      h.islittle = true;
       break;
     case '>':
-      h.islittle = 0;
+      h.islittle = false;
       break;
     case '=':
-      h.islittle = nativeendian_little ? 1 : 0;
+      h.islittle = nativeendian_little;
       break;
     case '!':
     {
@@ -3025,32 +3025,32 @@ public final class Lstrlib
   ** bytes if necessary (by default they would be zeros).
   */
   private static void packint(luaL_Buffer b, long n,
-                              int islittle, int size, int neg)
+                              boolean islittle, int size, boolean neg)
   {
     int off = luaL_prepbuffsize(b, size);
     ByteSpan buff = luaL_buffaddr(b);
     int i;
-    buff.set(off + (islittle != 0 ? 0 : size - 1), (byte) (n & MC)); /* first byte */
+    buff.set(off + (islittle ? 0 : size - 1), (byte) (n & MC)); /* first byte */
     for (i = 1; i < size; i++)
     {
       n >>>= NB;
-      buff.set(off + (islittle != 0 ? i : size - 1 - i), (byte) (n & MC));
+      buff.set(off + (islittle ? i : size - 1 - i), (byte) (n & MC));
     }
-    if (neg != 0 && size > SZINT)
+    if (neg && size > SZINT)
     {                                /* negative number need sign extension? */
       for (i = SZINT; i < size; i++) /* correct extra bytes */
-        buff.set(off + (islittle != 0 ? i : size - 1 - i), (byte) MC);
+        buff.set(off + (islittle ? i : size - 1 - i), (byte) MC);
     }
     luaL_addsize(b, size); /* add result to buffer */
   }
 
-  private static void packFloat(luaL_Buffer b, float f, int islittle)
+  private static void packFloat(luaL_Buffer b, float f, boolean islittle)
   {
     int pos = luaL_prepbuffsize(b, SZ_FLOAT);
     ByteSpan buff = luaL_buffaddr(b);
     luaL_addsize(b, SZ_FLOAT);
     buff.write_float(f, pos);
-    if (islittle == 0)
+    if (!islittle)
     {
       buff.reverse(pos, SZ_FLOAT);
     }
@@ -3125,7 +3125,7 @@ public final class Lstrlib
             long lim = 1L << ((size * NB) - 1);
             luaL_argchecki(L, -lim <= n && n < lim, arg, Lt.integer_overflow);
           }
-          packint(b, n, h.islittle, (int) size, (n < 0) ? 1 : 0);
+          packint(b, n, h.islittle, (int) size, n < 0);
           break;
         }
         case Kuint:
@@ -3133,7 +3133,7 @@ public final class Lstrlib
           long n = luaL_checkinteger(L, arg);
           if (size < SZINT) /* need overflow check? */
             luaL_argchecki(L, l_ult(n, 1L << (size * NB)), arg, Lt.unsigned_overflow);
-          packint(b, n, h.islittle, (int) size, 0);
+          packint(b, n, h.islittle, (int) size, false);
           break;
         }
         case Kfloat:
@@ -3145,13 +3145,13 @@ public final class Lstrlib
         case Knumber:
         {                                       /* Lua float */
           double f = luaL_checknumber(L, arg); /* get argument */
-          packDouble(b, f, h.islittle != 0);
+          packDouble(b, f, h.islittle);
           break;
         }
         case Kdouble:
         {                                       /* C double */
           double f = luaL_checknumber(L, arg); /* get argument */
-          packDouble(b, f, h.islittle != 0);
+          packDouble(b, f, h.islittle);
           break;
         }
         case Kchar:
@@ -3175,7 +3175,7 @@ public final class Lstrlib
           int len = s.size();
           luaL_argchecki(L, size >= SZ_INTEGER || len < (1L << (size * NB)), arg, Lt.string_length_does_not_fit_in_given_size);
           /* pack length */
-          packint(b, len, h.islittle, (int) size, 0);
+          packint(b, len, h.islittle, (int) size, false);
           luaL_addlstring(b, s, 0, len);
           totalsize += len;
           break;
@@ -3241,7 +3241,7 @@ public final class Lstrlib
   ** overflow.
   */
   private static long unpackint(lua_State L, ByteView data, int off,
-                                int islittle, int size, int issigned)
+                                boolean islittle, int size, boolean issigned)
   {
     long res = 0;
     int i;
@@ -3249,11 +3249,11 @@ public final class Lstrlib
     for (i = limit - 1; i >= 0; i--)
     {
       res <<= NB;
-      res |= (long) data.uat(off + (islittle != 0 ? i : size - 1 - i));
+      res |= (long) data.uat(off + (islittle ? i : size - 1 - i));
     }
     if (size < SZINT)
     { /* real size smaller than lua_Integer? */
-      if (issigned != 0)
+      if (issigned)
       { /* needs sign extension? */
         long mask = 1L << (size * NB - 1);
         res = (res ^ mask) - mask; /* do sign extension */
@@ -3261,10 +3261,10 @@ public final class Lstrlib
     }
     else if (size > SZINT)
     { /* must check unread bytes */
-      int mask = (issigned == 0 || res >= 0) ? 0 : MC;
+      int mask = (!issigned || res >= 0) ? 0 : MC;
       for (i = limit; i < size; i++)
       {
-        if (data.uat(off + (islittle != 0 ? i : size - 1 - i)) != mask)
+        if (data.uat(off + (islittle ? i : size - 1 - i)) != mask)
         {
           lua_pushinteger(L, size);
           luaL_errori(L, Lt.d_byte_integer_does_not_fit_into_Lua_Integer);
@@ -3301,25 +3301,25 @@ public final class Lstrlib
       case Kuint:
       {
         long res = unpackint(L, data, (int) pos, h.islittle,
-                             (int) size, (opt == Kint) ? 1 : 0);
+                             (int) size, opt == Kint);
         lua_pushinteger(L, res);
         break;
       }
       case Kfloat:
       {
-        float f = unpackFloat(data, (int) pos, h.islittle != 0);
+        float f = unpackFloat(data, (int) pos, h.islittle);
         lua_pushnumber(L, f);
         break;
       }
       case Knumber:
       {
-        double f = unpackDouble(data, (int) pos, h.islittle != 0);
+        double f = unpackDouble(data, (int) pos, h.islittle);
         lua_pushnumber(L, f);
         break;
       }
       case Kdouble:
       {
-        double f = unpackDouble(data, (int) pos, h.islittle != 0);
+        double f = unpackDouble(data, (int) pos, h.islittle);
         lua_pushnumber(L, f);
         break;
       }
@@ -3331,7 +3331,7 @@ public final class Lstrlib
       case Kstring:
       {
         long len = unpackint(L, data, (int) pos,
-                             h.islittle, (int) size, 0);
+                             h.islittle, (int) size, false);
         luaL_argchecki(L, Long.compareUnsigned(len, ld - pos - size) <= 0, 2, Lt.data_string_too_short);
         lua_pushlstring(L, data, (int) (pos + size), (int) len);
         pos += len; /* skip string */

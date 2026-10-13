@@ -54,7 +54,7 @@ public final class Linit
     {
       if ((load & mask) != 0)
       {                                            /* selected? */
-        luaL_requiref(L, new HostString(lib.name), lib.func, 1); /* require library */
+        luaL_requiref(L, new HostString(lib.name), lib.func, true); /* require library */
         lua_pop(L, 1);                             /* remove result from the stack */
       }
       else if ((preload & mask) != 0)

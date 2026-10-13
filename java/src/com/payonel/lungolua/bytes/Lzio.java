@@ -90,16 +90,16 @@ public final class Lzio
   ** (With no frame of its own, in a load that a freeze can stop: made
   ** again, it goes the same way, the buffer empty, see lload.h.)
   */
-  private static int checkbuffer(ZIO z)
+  private static boolean checkbuffer(ZIO z)
   {
     if (z.pos == z.chunk.size())
     {                          /* no bytes in buffer? */
       if (luaZ_fill(z) == EOZ) /* try to read more */
-        return 0;              /* no more input */
+        return false;              /* no more input */
       else
         z.pos--; /* luaZ_fill consumed first byte; put it back */
     }
-    return 1; /* now buffer has something */
+    return true; /* now buffer has something */
   }
 
   /* the frame of 'luaZ_read' (see lload.h) */
@@ -153,7 +153,7 @@ public final class Lzio
             l.site = 2;
           case 2:
           {
-            if (checkbuffer(z) == 0)
+            if (!checkbuffer(z))
               return l.n; /* no more input; return number of missing bytes */
             int avail = z.chunk.size() - z.pos;
             int m = (l.n <= avail) ? l.n : avail;
@@ -180,7 +180,7 @@ public final class Lzio
   public static ByteView luaZ_getaddr(ZIO z, int n)
   {
     ByteView res;
-    if (checkbuffer(z) == 0)
+    if (!checkbuffer(z))
       return null; /* no more input */
     if (z.chunk.size() - z.pos < n) /* not enough bytes? */
       return null; /* block not whole; cannot give an address */

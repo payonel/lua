@@ -18,19 +18,19 @@ public final class Lstring
   {
   }
 
-  public static int isreserved(TString s)
+  public static boolean isreserved(TString s)
   {
-    return ((s.extra & 0xFF) > 0) ? 1 : 0;
+    return (s.extra & 0xFF) > 0;
   }
 
-  public static int eqshrstr(TString a, TString b)
+  public static boolean eqshrstr(TString a, TString b)
   {
-    return (a == b) ? 1 : 0;
+    return a == b;
   }
 
   public static int luaS_gethash(TString ts)
   {
-    if (ts.hashed == 0)
+    if (!ts.hashed)
       ts.luaS_forcehash();
     return ts.hash;
   }
@@ -38,9 +38,9 @@ public final class Lstring
   /*
   ** generic equality for strings
   */
-  public static int luaS_eqstr(TString a, TString b)
+  public static boolean luaS_eqstr(TString a, TString b)
   {
-    return ((a == b) || (a.data.equals(b.data))) ? 1 : 0;
+    return (a == b) || (a.data.equals(b.data));
   }
 
   static int luaS_hash(ByteView str)

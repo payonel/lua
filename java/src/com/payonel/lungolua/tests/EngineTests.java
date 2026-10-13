@@ -94,7 +94,7 @@ public final class EngineTests
     lua_createtable(L, 0, 0);
     Table t = table_at(L, -1);
     t.luaH_resize(L, 0, allocsizenode(src));
-    if (isdummy(src) == 0)
+    if (!isdummy(src))
       for (int i = 0; i < sizenode(src); i++)
       {
         Node n = gnode(src, i);
@@ -119,7 +119,7 @@ public final class EngineTests
     lua_createtable(L, 0, 0);
     Table t = table_at(L, -1);
     t.luaH_resize(L, src.asize(), allocsizenode(src));
-    if (isdummy(src) == 0)
+    if (!isdummy(src))
       for (int i = 0; i < sizenode(src); i++)
       {
         Node n = gnode(src, i);
@@ -191,7 +191,7 @@ public final class EngineTests
   {
     Table t = table_at(L, 1);
     boolean ok = true;
-    if (isdummy(t) == 0)
+    if (!isdummy(t))
     {
       int size = sizenode(t);
       for (int i = 0; i < size && ok; i++)
@@ -214,7 +214,7 @@ public final class EngineTests
         }
       }
     }
-    lua_pushboolean(L, ok ? 1 : 0);
+    lua_pushboolean(L, ok);
     return 1;
   }
 
@@ -281,7 +281,7 @@ public final class EngineTests
     luaL_openlibs(L);
     if (LUA_DEBUG)
     {
-      luaL_requiref(L, new HostString("T"), Ltests.luaB_opentests, 1);
+      luaL_requiref(L, new HostString("T"), Ltests.luaB_opentests, true);
       lua_pop(L, 1);
     }
     lua_pushcfunction(L, l_copy);
@@ -722,7 +722,7 @@ public final class EngineTests
         CHECK(lua_rawlen(L, -1) == 0, "lua_rawlen(L, -1) == 0");
         lua_getglobal(L, new HostString("weak"));
         lua_pushnil(L);
-        CHECK(lua_next(L, -2) == 0, "lua_next(L, -2) == 0");
+        CHECK(!lua_next(L, -2), "!lua_next(L, -2)");
         lua_settop(L, 0);
         CHECK(run(L, "return table.concat(fins, ' ') .. ' ' .. collectgarbage('incremental')").equals(
                 "3 2 1 " + mode), "run(L, \"return table.concat(fins, ' ') .. ' ' .. collectgarbage('incremental')\") == std::string(\"3 2 1 \") + mode");
@@ -821,9 +821,9 @@ public final class EngineTests
     {
       lua_getglobal(L, new HostString(lib));
       lua_pushnil(L);
-      while (lua_next(L, -2) != 0)
+      while (lua_next(L, -2))
       {
-        if (lua_iscfunction(L, -1) != 0 && lua_islightcfunction(L, -1) != 0)
+        if (lua_iscfunction(L, -1) && lua_islightcfunction(L, -1))
         {
           CFuncInfo cfi = (CFuncInfo) lua_topointer(L, -1);
           if (lua_cfiname(cfi) == null)
@@ -937,16 +937,16 @@ public final class EngineTests
       lua_pop(L, 2);
     }
     lua_lock(L);
-    luaC_runtilstate(L, GCSenteratomic, 0); /* (all reachable is black) */
+    luaC_runtilstate(L, GCSenteratomic, false); /* (all reachable is black) */
     lua_unlock(L);
     for (GCObject o : objs)
-      CHECK(iswhite(o) == 0, "!lua::gc::iswhite(o)");
+      CHECK(!iswhite(o), "!lua::gc::iswhite(o)");
     CHECK(run(L, "keep = nil return 'ok'").equals("ok"), "run(L, \"keep = nil return 'ok'\") == \"ok\"");
     lua_lock(L);
     luaC_makedue(L, objs, 3);
     lua_unlock(L);
     for (GCObject o : objs)
-      CHECK(iswhite(o) != 0, "lua::gc::iswhite(o)");
+      CHECK(iswhite(o), "lua::gc::iswhite(o)");
     lua_lock(L);
     luaC_fullgcdue(L);
     lua_unlock(L);

@@ -39,20 +39,20 @@ public final class Lvm
   {
   }
 
-  public static int cvt2str(TValue o)
+  public static boolean cvt2str(TValue o)
   {
-    return (ttype(o) == LUA_TNUMBER) ? 1 : 0;
+    return ttype(o) == LUA_TNUMBER;
   }
 
-  public static int cvt2str(lua_State L, int idx)
+  public static boolean cvt2str(lua_State L, int idx)
   {
     TValue v = getslot(L, idx);
     return cvt2str(v);
   }
 
-  public static int cvt2num(TValue o)
+  public static boolean cvt2num(TValue o)
   {
-    return (ttype(o) == LUA_TSTRING) ? 1 : 0;
+    return ttype(o) == LUA_TSTRING;
   }
 
   /*
@@ -89,75 +89,75 @@ public final class Lvm
   ** Shift right is the same as shift left with a negative 'y'
   */
 
-  public static int tonumber(TValue o, NumResult nout)
+  public static boolean tonumber(TValue o, NumResult nout)
   {
     if (ttisfloat(o))
     {
       nout.v = fltvalue(o);
-      return 1;
+      return true;
     }
     return luaV_tonumber_(o, nout);
   }
 
-  public static int tonumberns(TValue o, NumResult nout)
+  public static boolean tonumberns(TValue o, NumResult nout)
   {
     if (ttisfloat(o))
     {
       nout.v = fltvalue(o);
-      return 1;
+      return true;
     }
     if (ttisinteger(o))
     {
       nout.v = (double) ivalue(o);
-      return 1;
+      return true;
     }
-    return 0;
+    return false;
   }
 
-  public static int tointeger(TValue o, IntResult iout)
+  public static boolean tointeger(TValue o, IntResult iout)
   {
     if (ttisinteger(o))
     {
       iout.v = ivalue(o);
-      return 1;
+      return true;
     }
     return luaV_tointeger(o, iout, LUA_FLOORN2I);
   }
 
-  public static int tointegerns(TValue o, IntResult iout)
+  public static boolean tointegerns(TValue o, IntResult iout)
   {
     if (ttisinteger(o))
     {
       iout.v = ivalue(o);
-      return 1;
+      return true;
     }
     return luaV_tointegerns(o, iout, LUA_FLOORN2I);
   }
 
-  public static int tonumber(lua_State L, int idx, NumResult nout)
+  public static boolean tonumber(lua_State L, int idx, NumResult nout)
   {
     TValue v = getslot(L, idx);
     return tonumber(v, nout);
   }
 
-  public static int tonumberns(lua_State L, int idx, NumResult nout)
+  public static boolean tonumberns(lua_State L, int idx, NumResult nout)
   {
     TValue v = getslot(L, idx);
     return tonumberns(v, nout);
   }
 
-  public static int tointegerns(lua_State L, int idx, IntResult iout)
+  public static boolean tointegerns(lua_State L, int idx, IntResult iout)
   {
     TValue v = getslot(L, idx);
     return tointegerns(v, iout);
   }
 
-  public static int luaV_rawequalobj(TValue t1, TValue t2)
+  public static boolean luaV_rawequalobj(TValue t1, TValue t2)
   {
     return luaV_equalobj(null, t1, t2);
   }
 
-  public static int luaV_rawequalobj(lua_State L, int t1, TValue t2)
+  public static boolean luaV_rawequalobj(lua_State L, int t1, TValue t2)
   {
     TValue v1 = getslot(L, t1);
     return luaV_equalobj(null, v1, t2);
@@ -196,9 +196,9 @@ public final class Lvm
   private static final long MAXINTFITSF = (long) 1 << NBM;
 
   /* check whether 'i' is in the interval [-MAXINTFITSF, MAXINTFITSF] */
-  private static int l_intfitsf(long i)
+  private static boolean l_intfitsf(long i)
   {
-    return (-(long) MAXINTFITSF <= i && i <= (long) MAXINTFITSF) ? 1 : 0;
+    return -(long) MAXINTFITSF <= i && i <= (long) MAXINTFITSF;
   }
 
   /*
@@ -208,16 +208,16 @@ public final class Lvm
   ** are disabled via macro 'cvt2num'), do not modify 'result'
   ** and return 0.
   */
-  private static int l_strton(TValue obj, TValue result)
+  private static boolean l_strton(TValue obj, TValue result)
   {
     assert obj != result;
-    if (cvt2num(obj) == 0) /* is object not a string? */
-      return 0;
+    if (!cvt2num(obj)) /* is object not a string? */
+      return false;
     else
     {
       assert ttisstring(obj);
       TString st = tsvalue(obj);
-      return (luaO_str2num(st.data.view(), result) == st.data.size() + 1) ? 1 : 0;
+      return luaO_str2num(st.data.view(), result) == st.data.size() + 1;
     }
   }
 
@@ -225,35 +225,35 @@ public final class Lvm
   ** Try to convert a value to a float. The float case is already handled
   ** by the macro 'tonumber'.
   */
-  public static int luaV_tonumber_(TValue obj, NumResult n)
+  public static boolean luaV_tonumber_(TValue obj, NumResult n)
   {
     TValue v = new TValue();
     if (ttisinteger(obj))
     {
       n.v = (double) ivalue(obj);
-      return 1;
+      return true;
     }
-    else if (l_strton(obj, v) != 0)
+    else if (l_strton(obj, v))
     {                  /* string coercible to number? */
       /* convert result of 'luaO_str2num' to a float */
       assert ttisnumber(v);
       n.v = ttisinteger(v) ? (double) ivalue(v) : fltvalue(v);
-      return 1;
+      return true;
     }
     else
-      return 0; /* conversion failed */
+      return false; /* conversion failed */
   }
 
   /*
   ** try to convert a float to an integer, rounding according to 'mode'.
   */
-  public static int luaV_flttointeger(double n, IntResult p, int mode)
+  public static boolean luaV_flttointeger(double n, IntResult p, int mode)
   {
     double f = floor(n);
     if (n != f)
     { /* not an integral value? */
       if (mode == F2Ieq)
-        return 0;               /* fails if mode demands integral value */
+        return false;               /* fails if mode demands integral value */
       else if (mode == F2Iceil) /* needs ceiling? */
         f += 1;                 /* convert floor to ceiling (remember: n != f) */
     }
@@ -265,26 +265,26 @@ public final class Lvm
   ** without string coercion.
   ** ("Fast track" handled by macro 'tointegerns'.)
   */
-  public static int luaV_tointegerns(TValue obj, IntResult p, int mode)
+  public static boolean luaV_tointegerns(TValue obj, IntResult p, int mode)
   {
     if (ttisfloat(obj))
       return luaV_flttointeger(fltvalue(obj), p, mode);
     else if (ttisinteger(obj))
     {
       p.v = ivalue(obj);
-      return 1;
+      return true;
     }
     else
-      return 0;
+      return false;
   }
 
   /*
   ** try to convert a value to an integer.
   */
-  public static int luaV_tointeger(TValue obj, IntResult p, int mode)
+  public static boolean luaV_tointeger(TValue obj, IntResult p, int mode)
   {
     TValue v = new TValue();
-    if (l_strton(obj, v) != 0) /* does 'obj' point to a numerical string? */
+    if (l_strton(obj, v)) /* does 'obj' point to a numerical string? */
       obj = v;                  /* change it to point to its corresponding number */
     return luaV_tointegerns(obj, p, mode);
   }
@@ -305,32 +305,32 @@ public final class Lvm
   ** correct; even a limit of LUA_MININTEGER would run the loop once for
   ** an initial value equal to LUA_MININTEGER.)
   */
-  private static int forlimit(lua_State L, long init, int limslot,
+  private static boolean forlimit(lua_State L, long init, int limslot,
                               IntResult p, long step)
   {
     TValue limv = getslot(L, limslot);
     TValue lim = limv;
-    if (luaV_tointeger(lim, p, (step < 0 ? F2Iceil : F2Ifloor)) == 0)
+    if (!luaV_tointeger(lim, p, (step < 0 ? F2Iceil : F2Ifloor)))
     {
       /* not coercible to in integer */
       NumResult flim = new NumResult();           /* try to convert to float */
-      if (tonumber(lim, flim) == 0) /* cannot convert to float? */
+      if (!tonumber(lim, flim)) /* cannot convert to float? */
         luaG_forerror(L, lim, Lt.limit);
       /* else 'flim' is a float out of integer bounds */
       if (0 < flim.v)
       { /* if it is positive, it is too large */
         if (step < 0)
-          return 1;          /* initial value must be less than it */
+          return true;          /* initial value must be less than it */
         p.v = LUA_MAXINTEGER; /* truncate */
       }
       else
       { /* it is less than min integer */
         if (step > 0)
-          return 1;          /* initial value must be greater than it */
+          return true;          /* initial value must be greater than it */
         p.v = LUA_MININTEGER; /* truncate */
       }
     }
-    return (step > 0 ? init > p.v : init < p.v) ? 1 : 0; /* not to run? */
+    return step > 0 ? init > p.v : init < p.v; /* not to run? */
   }
 
   /*
@@ -345,7 +345,7 @@ public final class Lvm
   **   ra + 1 : step
   **   ra + 2 : control variable
   */
-  private static int forprep(lua_State L, int ra)
+  private static boolean forprep(lua_State L, int ra)
   {
     int pinit = ra;
     int plimit = ra + 1;
@@ -357,8 +357,8 @@ public final class Lvm
       IntResult limit = new IntResult();
       if (step == 0)
         luaG_runerror(L, Lt.for_step_is_zero);
-      if (forlimit(L, init, plimit, limit, step) != 0)
-        return 1; /* skip the loop */
+      if (forlimit(L, init, plimit, limit, step))
+        return true; /* skip the loop */
       else
       { /* prepare loop counter */
         long count;
@@ -385,17 +385,17 @@ public final class Lvm
       NumResult init = new NumResult();
       NumResult limit = new NumResult();
       NumResult step = new NumResult();
-      if (tonumber(L, plimit, limit) == 0)
+      if (!tonumber(L, plimit, limit))
         luaG_forerror(L, plimit, Lt.limit);
-      if (tonumber(L, pstep, step) == 0)
+      if (!tonumber(L, pstep, step))
         luaG_forerror(L, pstep, Lt.step);
-      if (tonumber(L, pinit, init) == 0)
+      if (!tonumber(L, pinit, init))
         luaG_forerror(L, pinit, Lt.initial_value);
       if (step.v == 0)
         luaG_runerror(L, Lt.for_step_is_zero);
       if ((0 < step.v) ? (limit.v < init.v)
                               : (init.v < limit.v))
-        return 1; /* skip the loop */
+        return true; /* skip the loop */
       else
       {
         /* make sure all values are floats */
@@ -404,7 +404,7 @@ public final class Lvm
         setslotflt(L, ra + 2, init.v); /* control variable */
       }
     }
-    return 0;
+    return false;
   }
 
   /*
@@ -412,7 +412,7 @@ public final class Lvm
   ** true iff the loop must continue. (The integer case is
   ** written inline with opcode OP_FORLOOP, for performance.)
   */
-  private static int floatforloop(lua_State L, int ra)
+  private static boolean floatforloop(lua_State L, int ra)
   {
     double step = slotfltval(L, ra + 1);
     assert slottag(L, ra) == LUA_VNUMFLT;
@@ -424,10 +424,10 @@ public final class Lvm
                             : (limit <= idx))
     {
       chgslotflt(L, ra + 2, idx); /* update control variable */
-      return 1;                      /* jump back */
+      return true;                      /* jump back */
     }
     else
-      return 0; /* finish the loop */
+      return false; /* finish the loop */
   }
 
   /*
@@ -445,7 +445,7 @@ public final class Lvm
       { /* 't' is not a table? */
         assert !ttistable(t);
         tm = luaT_gettmbyobj(L, t, TM_INDEX);
-        if (notm(tm) != 0)
+        if (notm(tm))
           luaG_typeerror(L, t, Lt.index_kw, tsrc); /* no metamethod */
         /* else will try the metamethod */
       }
@@ -519,7 +519,7 @@ public final class Lvm
       else
       { /* not a table; check metamethod */
         tm = luaT_gettmbyobj(L, t, TM_NEWINDEX);
-        if (notm(tm) != 0)
+        if (notm(tm))
           luaG_typeerror(L, t, Lt.index_kw, tsrc);
       }
       /* try the metamethod */
@@ -581,17 +581,17 @@ public final class Lvm
   ** from float to int.)
   ** When 'f' is NaN, comparisons must result in false.
   */
-  private static int LTintfloat(long i, double f)
+  private static boolean LTintfloat(long i, double f)
   {
-    if (l_intfitsf(i) != 0)
-      return ((double) i < f) ? 1 : 0; /* compare them as floats */
+    if (l_intfitsf(i))
+      return (double) i < f; /* compare them as floats */
     else
     { /* i < f <=> i < ceil(f) */
       IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Iceil) != 0) /* fi = ceil(f) */
-        return (i < fi.v) ? 1 : 0;                /* compare them as integers */
+      if (luaV_flttointeger(f, fi, F2Iceil)) /* fi = ceil(f) */
+        return i < fi.v;                /* compare them as integers */
       else                                        /* 'f' is either greater or less than all integers */
-        return (f > 0) ? 1 : 0;                   /* greater? */
+        return f > 0;                   /* greater? */
     }
   }
 
@@ -599,17 +599,17 @@ public final class Lvm
   ** Check whether integer 'i' is less than or equal to float 'f'.
   ** See comments on previous function.
   */
-  private static int LEintfloat(long i, double f)
+  private static boolean LEintfloat(long i, double f)
   {
-    if (l_intfitsf(i) != 0)
-      return ((double) i <= f) ? 1 : 0; /* compare them as floats */
+    if (l_intfitsf(i))
+      return (double) i <= f; /* compare them as floats */
     else
     { /* i <= f <=> i <= floor(f) */
       IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Ifloor) != 0) /* fi = floor(f) */
-        return (i <= fi.v) ? 1 : 0;                /* compare them as integers */
+      if (luaV_flttointeger(f, fi, F2Ifloor)) /* fi = floor(f) */
+        return i <= fi.v;                /* compare them as integers */
       else                                         /* 'f' is either greater or less than all integers */
-        return (f > 0) ? 1 : 0;                    /* greater? */
+        return f > 0;                    /* greater? */
     }
   }
 
@@ -617,17 +617,17 @@ public final class Lvm
   ** Check whether float 'f' is less than integer 'i'.
   ** See comments on previous function.
   */
-  private static int LTfloatint(double f, long i)
+  private static boolean LTfloatint(double f, long i)
   {
-    if (l_intfitsf(i) != 0)
-      return (f < (double) i) ? 1 : 0; /* compare them as floats */
+    if (l_intfitsf(i))
+      return f < (double) i; /* compare them as floats */
     else
     { /* f < i <=> floor(f) < i */
       IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Ifloor) != 0) /* fi = floor(f) */
-        return (fi.v < i) ? 1 : 0;                 /* compare them as integers */
+      if (luaV_flttointeger(f, fi, F2Ifloor)) /* fi = floor(f) */
+        return fi.v < i;                 /* compare them as integers */
       else                                         /* 'f' is either greater or less than all integers */
-        return (f < 0) ? 1 : 0;                    /* less? */
+        return f < 0;                    /* less? */
     }
   }
 
@@ -635,31 +635,31 @@ public final class Lvm
   ** Check whether float 'f' is less than or equal to integer 'i'.
   ** See comments on previous function.
   */
-  private static int LEfloatint(double f, long i)
+  private static boolean LEfloatint(double f, long i)
   {
-    if (l_intfitsf(i) != 0)
-      return (f <= (double) i) ? 1 : 0; /* compare them as floats */
+    if (l_intfitsf(i))
+      return f <= (double) i; /* compare them as floats */
     else
     { /* f <= i <=> ceil(f) <= i */
       IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Iceil) != 0) /* fi = ceil(f) */
-        return (fi.v <= i) ? 1 : 0;               /* compare them as integers */
+      if (luaV_flttointeger(f, fi, F2Iceil)) /* fi = ceil(f) */
+        return fi.v <= i;               /* compare them as integers */
       else                                        /* 'f' is either greater or less than all integers */
-        return (f < 0) ? 1 : 0;                   /* less? */
+        return f < 0;                   /* less? */
     }
   }
 
   /*
   ** Return 'l < r', for numbers.
   */
-  private static int LTnum(TValue l, TValue r)
+  private static boolean LTnum(TValue l, TValue r)
   {
     assert ttisnumber(l) && ttisnumber(r);
     if (ttisinteger(l))
     {
       long li = ivalue(l);
       if (ttisinteger(r))
-        return (li < ivalue(r)) ? 1 : 0; /* both are integers */
+        return li < ivalue(r); /* both are integers */
       else
       { /* 'l' is int and 'r' is float */
         assert ttisfloat(r);
@@ -671,7 +671,7 @@ public final class Lvm
       assert ttisfloat(l);
       double lf = fltvalue(l); /* 'l' must be float */
       if (ttisfloat(r))
-        return (lf < fltvalue(r)) ? 1 : 0; /* both are float */
+        return lf < fltvalue(r); /* both are float */
       else
       { /* 'l' is float and 'r' is int */
         assert ttisinteger(r);
@@ -683,14 +683,14 @@ public final class Lvm
   /*
   ** Return 'l <= r', for numbers.
   */
-  private static int LEnum(TValue l, TValue r)
+  private static boolean LEnum(TValue l, TValue r)
   {
     assert ttisnumber(l) && ttisnumber(r);
     if (ttisinteger(l))
     {
       long li = ivalue(l);
       if (ttisinteger(r))
-        return (li <= ivalue(r)) ? 1 : 0; /* both are integers */
+        return li <= ivalue(r); /* both are integers */
       else
       { /* 'l' is int and 'r' is float */
         assert ttisfloat(r);
@@ -702,7 +702,7 @@ public final class Lvm
       assert ttisfloat(l);
       double lf = fltvalue(l); /* 'l' must be float */
       if (ttisfloat(r))
-        return (lf <= fltvalue(r)) ? 1 : 0; /* both are float */
+        return lf <= fltvalue(r); /* both are float */
       else
       { /* 'l' is float and 'r' is int */
         assert ttisinteger(r);
@@ -714,12 +714,12 @@ public final class Lvm
   /*
   ** return 'l < r' for non-numbers.
   */
-  private static int lessthanothers(lua_State L, TValue l, TValue r)
+  private static boolean lessthanothers(lua_State L, TValue l, TValue r)
   {
     assert !ttisnumber(l) || !ttisnumber(r);
     if (ttisstring(l) && ttisstring(r)) /* both are strings? */
     {
-      return (l_strcmp(tsvalue(l), tsvalue(r)) < 0) ? 1 : 0;
+      return l_strcmp(tsvalue(l), tsvalue(r)) < 0;
     }
     else
       return luaT_callorderTM(L, l, r, TM_LT);
@@ -728,7 +728,7 @@ public final class Lvm
   /*
   ** Main operation less than; return 'l < r'.
   */
-  public static int luaV_lessthan(lua_State L, TValue l, TValue r)
+  public static boolean luaV_lessthan(lua_State L, TValue l, TValue r)
   {
     if (ttisnumber(l) && ttisnumber(r)) /* both operands are numbers? */
       return LTnum(l, r);
@@ -739,39 +739,39 @@ public final class Lvm
   /*
   ** return 'l <= r' for non-numbers.
   */
-  private static int lessequalothers(lua_State L, TValue l, TValue r)
+  private static boolean lessequalothers(lua_State L, TValue l, TValue r)
   {
     assert !ttisnumber(l) || !ttisnumber(r);
     if (ttisstring(l) && ttisstring(r)) /* both are strings? */
     {
-      return (l_strcmp(tsvalue(l), tsvalue(r)) <= 0) ? 1 : 0;
+      return l_strcmp(tsvalue(l), tsvalue(r)) <= 0;
     }
     else
       return luaT_callorderTM(L, l, r, TM_LE);
   }
 
-  private static int LTnum(lua_State L, int l, int r)
+  private static boolean LTnum(lua_State L, int l, int r)
   {
     TValue lv = getslot(L, l);
     TValue rv = getslot(L, r);
     return LTnum(lv, rv);
   }
 
-  private static int LEnum(lua_State L, int l, int r)
+  private static boolean LEnum(lua_State L, int l, int r)
   {
     TValue lv = getslot(L, l);
     TValue rv = getslot(L, r);
     return LEnum(lv, rv);
   }
 
-  private static int lessthanothers(lua_State L, int l, int r)
+  private static boolean lessthanothers(lua_State L, int l, int r)
   {
     TValue lv = getslot(L, l);
     TValue rv = getslot(L, r);
     return lessthanothers(L, lv, rv);
   }
 
-  private static int lessequalothers(lua_State L, int l, int r)
+  private static boolean lessequalothers(lua_State L, int l, int r)
   {
     TValue lv = getslot(L, l);
     TValue rv = getslot(L, r);
@@ -781,7 +781,7 @@ public final class Lvm
   /*
   ** Main operation less than or equal to; return 'l <= r'.
   */
-  public static int luaV_lessequal(lua_State L, TValue l, TValue r)
+  public static boolean luaV_lessequal(lua_State L, TValue l, TValue r)
   {
     if (ttisnumber(l) && ttisnumber(r)) /* both operands are numbers? */
       return LEnum(l, r);
@@ -789,11 +789,11 @@ public final class Lvm
       return lessequalothers(L, l, r);
   }
 
-  public static int luaV_equalobj(lua_State L, TValue t1, TValue t2)
+  public static boolean luaV_equalobj(lua_State L, TValue t1, TValue t2)
   {
     TValue tm;
     if (ttype(t1) != ttype(t2)) /* not the same type? */
-      return 0;
+      return false;
     else if (ttypetag(t1) != ttypetag(t2))
     {
       switch (ttypetag(t1))
@@ -804,14 +804,14 @@ public final class Lvm
            value equal to the integer */
         IntResult i2 = new IntResult();
         assert ttisfloat(t2);
-        return (luaV_flttointeger(fltvalue(t2), i2, F2Ieq) != 0 && ivalue(t1) == i2.v) ? 1 : 0;
+        return luaV_flttointeger(fltvalue(t2), i2, F2Ieq) && ivalue(t1) == i2.v;
       }
       case LUA_VNUMFLT:
       {                 /* float == integer? */
         IntResult i1 = new IntResult(); /* see comment in previous case */
         assert ttisfloat(t1);
         assert ttisinteger(t2);
-        return (luaV_flttointeger(fltvalue(t1), i1, F2Ieq) != 0 && i1.v == ivalue(t2)) ? 1 : 0;
+        return luaV_flttointeger(fltvalue(t1), i1, F2Ieq) && i1.v == ivalue(t2);
       }
       case LUA_VSHRSTR:
       {
@@ -820,7 +820,7 @@ public final class Lvm
       default:
         /* only numbers (integer/float) and strings (long/short) can have
            equal values with different variants */
-        return 0;
+        return false;
       }
     }
     else
@@ -830,16 +830,16 @@ public final class Lvm
       case LUA_VNIL:
       case LUA_VFALSE:
       case LUA_VTRUE:
-        return 1;
+        return true;
       case LUA_VNUMINT:
         assert ttisinteger(t2);
-        return (ivalue(t1) == ivalue(t2)) ? 1 : 0;
+        return ivalue(t1) == ivalue(t2);
       case LUA_VNUMFLT:
         assert ttisfloat(t2);
-        return (fltvalue(t1) == fltvalue(t2)) ? 1 : 0;
+        return fltvalue(t1) == fltvalue(t2);
       case LUA_VLIGHTUSERDATA:
         assert ttislightuserdata(t2);
-        return (pvalue(t1) == pvalue(t2)) ? 1 : 0;
+        return pvalue(t1) == pvalue(t2);
       case LUA_VSHRSTR:
       {
         return luaS_eqstr(tsvalue(t1), tsvalue(t2));
@@ -849,9 +849,9 @@ public final class Lvm
         Udata u1 = uvalue(t1);
         Udata u2 = uvalue(t2);
         if (u1 == u2)
-          return 1;
+          return true;
         else if (L == null)
-          return 0;
+          return false;
         tm = gfasttm(L.l_G, u1.metatable, TM_EQ);
         if (tm == null)
           tm = gfasttm(L.l_G, u2.metatable, TM_EQ);
@@ -862,9 +862,9 @@ public final class Lvm
         Table h1 = hvalue(t1);
         Table h2 = hvalue(t2);
         if (h1 == h2)
-          return 1;
+          return true;
         else if (L == null)
-          return 0;
+          return false;
         tm = gfasttm(L.l_G, h1.metatable, TM_EQ);
         if (tm == null)
           tm = gfasttm(L.l_G, h2.metatable, TM_EQ);
@@ -873,19 +873,19 @@ public final class Lvm
       default: /* functions, threads, and light C functions */
         assert iscollectable(t1);
         assert iscollectable(t2);
-        return (gcvalue(t1) == gcvalue(t2)) ? 1 : 0;
+        return gcvalue(t1) == gcvalue(t2);
       }
       if (tm == null) /* no TM? */
-        return 0;     /* objects are different */
+        return false;     /* objects are different */
       else
       {
         int tag = luaT_callTMres(L, tm, t1, t2, L.top); /* call TM */
-        return !(tag == LUA_VFALSE || tagisempty(tag)) ? 1 : 0;
+        return !(tag == LUA_VFALSE || tagisempty(tag));
       }
     }
   }
 
-  public static int luaV_equalobj(lua_State L, int t1, int t2)
+  public static boolean luaV_equalobj(lua_State L, int t1, int t2)
   {
     TValue v1 = getslot(L, t1);
     TValue v2 = getslot(L, t2);
@@ -899,28 +899,28 @@ public final class Lvm
   ** (External strings can be empty too; they will be concatenated like
   ** non-empty ones.)
   */
-  private static int isemptystr(TValue o)
+  private static boolean isemptystr(TValue o)
   {
-    return (ttisstring(o) &&
-           tsslen(tsvalue(o)) == 0) ? 1 : 0;
+    return ttisstring(o) &&
+           tsslen(tsvalue(o)) == 0;
   }
 
-  private static int isemptystr(lua_State L, int idx)
+  private static boolean isemptystr(lua_State L, int idx)
   {
     TValue v = getslot(L, idx);
     return isemptystr(v);
   }
 
-  private static int tostring(lua_State L, int idx)
+  private static boolean tostring(lua_State L, int idx)
   {
     if (novariant(slottag(L, idx)) == LUA_TSTRING)
-      return 1;
+      return true;
     TValue v = getslot(L, idx);
-    if (cvt2str(v) == 0)
-      return 0;
+    if (!cvt2str(v))
+      return false;
     luaO_tostring(L, v);
     setslot(L, idx, v);
-    return 1;
+    return true;
   }
 
   /* copy strings in stack from top - n up to top - 1 to buffer */
@@ -948,11 +948,11 @@ public final class Lvm
       int n = 2; /* number of elements handled in this pass (at least 2) */
       int v1 = top - 2;
       int v2 = top - 1;
-      if (!((novariant(slottag(L, v1)) == LUA_TSTRING) || cvt2str(L, v1) != 0) || tostring(L, v2) == 0)
+      if (!((novariant(slottag(L, v1)) == LUA_TSTRING) || cvt2str(L, v1)) || !tostring(L, v2))
         luaT_tryconcatTM(L);                  /* may invalidate 'top' */
-      else if (isemptystr(L, v2) != 0)           /* second operand is empty? */
+      else if (isemptystr(L, v2))           /* second operand is empty? */
         tostring(L, v1);                      /* result is first operand */
-      else if (isemptystr(L, v1) != 0)
+      else if (isemptystr(L, v1))
       {                                 /* first operand is empty string? */
         copyslot(L, v1, v2); /* result is second op. */
       }
@@ -962,7 +962,7 @@ public final class Lvm
         long tl = tsslen(slottsval(L, v2)); /* total length */
         TString ts;
         /* collect total length and number of strings */
-        for (n = 1; n < total && tostring(L, top - n - 1) != 0; n++)
+        for (n = 1; n < total && tostring(L, top - n - 1); n++)
         {
           int o = top - n - 1;
           assert novariant(slottag(L, o)) == LUA_TSTRING;
@@ -1018,7 +1018,7 @@ public final class Lvm
     default:
     { /* try metamethod */
       tm = luaT_gettmbyobj(L, rb, TM_LEN);
-      if (notm(tm) != 0) /* no metamethod? */
+      if (notm(tm)) /* no metamethod? */
         luaG_typeerror(L, rb, Lt.get_length_of, src);
       break;
     }
@@ -1130,7 +1130,7 @@ public final class Lvm
     setslotclL(L, ra, ncl); /* anchor new closure in stack */
     for (i = 0; i < nup; i++)
     {                    /* fill in its upvalues */
-      if (uv[i].instack != 0) /* upvalue refers to local variable? */
+      if (uv[i].instack) /* upvalue refers to local variable? */
         ncl.upvals[i] = UpVal.luaF_findupval(L, base + uv[i].idx);
       else /* get upvalue from enclosing function */
         ncl.upvals[i] = encup[uv[i].idx];
@@ -1177,10 +1177,10 @@ public final class Lvm
     case OP_GEI:
     case OP_EQ:
     { /* note that 'OP_EQI'/'OP_EQK' cannot yield */
-      int res = !tagisfalse(slottag(L, L.top - 1)) ? 1 : 0;
+      boolean res = !tagisfalse(slottag(L, L.top - 1));
       L.top--;
       assert GET_OPCODE(code[ci.savedpc]) == OP_JMP;
-      if (res != GETARG_k(inst)) /* condition failed? */
+      if (res != TESTARG_k(inst)) /* condition failed? */
         ci.savedpc++;       /* skip jump instruction */
       break;
     }
@@ -1256,21 +1256,21 @@ public final class Lvm
     return l_intbxor(a, b);
   }
 
-  private static int l_lti(long a, long b)
+  private static boolean l_lti(long a, long b)
   {
-    return (a < b) ? 1 : 0;
+    return a < b;
   }
-  private static int l_lei(long a, long b)
+  private static boolean l_lei(long a, long b)
   {
-    return (a <= b) ? 1 : 0;
+    return a <= b;
   }
-  private static int l_gti(long a, long b)
+  private static boolean l_gti(long a, long b)
   {
-    return (a > b) ? 1 : 0;
+    return a > b;
   }
-  private static int l_gei(long a, long b)
+  private static boolean l_gei(long a, long b)
   {
-    return (a >= b) ? 1 : 0;
+    return a >= b;
   }
 
   /*
@@ -1607,7 +1607,7 @@ public final class Lvm
     int hres;
     TValue upval = upvalgetval(cl.upvals[GETARG_A(i)]);
     TValue rb = k[GETARG_B(i)];
-    TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
+    TValue rc = TESTARG_k(i) ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
     assert ttisstring(rb);
     TString key = tsvalue(rb); /* key must be a short string */
     if (!ttistable(upval))
@@ -1631,7 +1631,7 @@ public final class Lvm
     int ra = base + GETARG_A(i);
     int hres;
     int rb = base + GETARG_B(i); /* key (table is in 'ra') */
-    TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i)); /* value */
+    TValue rc = TESTARG_k(i) ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i)); /* value */
     if (slottag(L, rb) == LUA_VNUMINT)
     { /* fast track for integers? */
       int t = ra;
@@ -1644,7 +1644,7 @@ public final class Lvm
         if (l_ult(u, h.asize()))
         {
           byte tag = getArrTag(h, u);
-          if (checknoTM(h.metatable, TM_NEWINDEX) != 0 || !tagisempty(tag))
+          if (checknoTM(h.metatable, TM_NEWINDEX) || !tagisempty(tag))
           {
             fval2arr(h, u, rc);
             hres = HOK;
@@ -1684,7 +1684,7 @@ public final class Lvm
     int ra = base + GETARG_A(i);
     int hres;
     int b = GETARG_B(i);
-    TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
+    TValue rc = TESTARG_k(i) ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
     int t = ra;
     if (slottag(L, t) != ctb(LUA_VTABLE))
       hres = HNOTATABLE;
@@ -1695,7 +1695,7 @@ public final class Lvm
       if (l_ult(u, h.asize()))
       {
         byte tag = getArrTag(h, u);
-        if (checknoTM(h.metatable, TM_NEWINDEX) != 0 || !tagisempty(tag))
+        if (checknoTM(h.metatable, TM_NEWINDEX) || !tagisempty(tag))
         {
           fval2arr(h, u, rc);
           hres = HOK;
@@ -1724,7 +1724,7 @@ public final class Lvm
     int ra = base + GETARG_A(i);
     int hres;
     TValue rb = k[GETARG_B(i)];
-    TValue rc = TESTARG_k(i) != 0 ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
+    TValue rc = TESTARG_k(i) ? getobj(k[GETARG_C(i)]) : getslot(L, base + GETARG_C(i));
     assert ttisstring(rb);
     TString key = tsvalue(rb); /* key must be a short string */
     int t = ra;
@@ -1753,7 +1753,7 @@ public final class Lvm
     Table t;
     if (b > 0)
       b = 1 << (b - 1); /* hash size is 2^(b - 1) */
-    if (TESTARG_k(i) != 0)
+    if (TESTARG_k(i))
     { /* non-zero extra argument? */
       assert GETARG_Ax(code[pc]) != 0;
       /* add it to array size */
@@ -1840,7 +1840,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -1867,7 +1867,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -1894,7 +1894,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -1923,7 +1923,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -1940,7 +1940,7 @@ public final class Lvm
     assert ttisnumber(v2);
     NumResult n1 = new NumResult();
     NumResult n2 = new NumResult();
-    if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+    if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -1956,7 +1956,7 @@ public final class Lvm
     assert ttisnumber(v2);
     NumResult n1 = new NumResult();
     NumResult n2 = new NumResult();
-    if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+    if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -1984,7 +1984,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -2001,7 +2001,7 @@ public final class Lvm
     IntResult i1 = new IntResult();
     long i2 = ivalue(v2);
     assert ttisinteger(v2);
-    if (tointegerns(L, v1, i1) != 0)
+    if (tointegerns(L, v1, i1))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2017,7 +2017,7 @@ public final class Lvm
     IntResult i1 = new IntResult();
     long i2 = ivalue(v2);
     assert ttisinteger(v2);
-    if (tointegerns(L, v1, i1) != 0)
+    if (tointegerns(L, v1, i1))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2033,7 +2033,7 @@ public final class Lvm
     IntResult i1 = new IntResult();
     long i2 = ivalue(v2);
     assert ttisinteger(v2);
-    if (tointegerns(L, v1, i1) != 0)
+    if (tointegerns(L, v1, i1))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2048,7 +2048,7 @@ public final class Lvm
     int rb = base + GETARG_B(i);
     int ic = GETARG_sC(i);
     IntResult ib = new IntResult();
-    if (tointegerns(L, rb, ib) != 0)
+    if (tointegerns(L, rb, ib))
     {
       pc++;
       setsloti(L, ra, luaV_shiftl(ic, ib.v));
@@ -2062,7 +2062,7 @@ public final class Lvm
     int rb = base + GETARG_B(i);
     int ic = GETARG_sC(i);
     IntResult ib = new IntResult();
-    if (tointegerns(L, rb, ib) != 0)
+    if (tointegerns(L, rb, ib))
     {
       pc++;
       setsloti(L, ra, luaV_shiftl(ib.v, -ic));
@@ -2086,7 +2086,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -2112,7 +2112,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -2138,7 +2138,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -2166,7 +2166,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -2182,7 +2182,7 @@ public final class Lvm
     int v2 = base + GETARG_C(i);
     NumResult n1 = new NumResult();
     NumResult n2 = new NumResult();
-    if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+    if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2197,7 +2197,7 @@ public final class Lvm
     int v2 = base + GETARG_C(i);
     NumResult n1 = new NumResult();
     NumResult n2 = new NumResult();
-    if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+    if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2224,7 +2224,7 @@ public final class Lvm
     {
       NumResult n1 = new NumResult();
       NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) != 0 && tonumberns(L, v2, n2) != 0)
+      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
       {
         int ra = base + GETARG_A(i);
         pc++;
@@ -2240,7 +2240,7 @@ public final class Lvm
     int v2 = base + GETARG_C(i);
     IntResult i1 = new IntResult();
     IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2255,7 +2255,7 @@ public final class Lvm
     int v2 = base + GETARG_C(i);
     IntResult i1 = new IntResult();
     IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2270,7 +2270,7 @@ public final class Lvm
     int v2 = base + GETARG_C(i);
     IntResult i1 = new IntResult();
     IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2285,7 +2285,7 @@ public final class Lvm
     int v2 = base + GETARG_C(i);
     IntResult i1 = new IntResult();
     IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2300,7 +2300,7 @@ public final class Lvm
     int v2 = base + GETARG_C(i);
     IntResult i1 = new IntResult();
     IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) != 0 && tointegerns(L, v2, i2) != 0)
+    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
     {
       int ra = base + GETARG_A(i);
       pc++;
@@ -2328,7 +2328,7 @@ public final class Lvm
     int pi = code[pc - 2]; /* original arith. expression */
     int imm = GETARG_sB(i);
     int tm = GETARG_C(i);
-    int flip = GETARG_k(i);
+    boolean flip = TESTARG_k(i);
     int result = base + GETARG_A(pi);
     ci.savedpc = pc;
     L.top = ci.top;
@@ -2341,7 +2341,7 @@ public final class Lvm
     int pi = code[pc - 2]; /* original arith. expression */
     TValue imm = k[GETARG_B(i)];
     int tm = GETARG_C(i);
-    int flip = GETARG_k(i);
+    boolean flip = TESTARG_k(i);
     int result = base + GETARG_A(pi);
     ci.savedpc = pc;
     L.top = ci.top;
@@ -2358,7 +2358,7 @@ public final class Lvm
       long ib = slotival(L, rb);
       setsloti(L, ra, l_intunm(ib));
     }
-    else if (tonumberns(L, rb, nb) != 0)
+    else if (tonumberns(L, rb, nb))
     {
       setslotflt(L, ra, -nb.v);
     }
@@ -2375,7 +2375,7 @@ public final class Lvm
     int ra = base + GETARG_A(i);
     int rb = base + GETARG_B(i);
     IntResult ib = new IntResult();
-    if (tointegerns(L, rb, ib) != 0)
+    if (tointegerns(L, rb, ib))
     {
       setsloti(L, ra, l_intbnot(ib.v));
     }
@@ -2447,12 +2447,12 @@ public final class Lvm
   private static int op_eq(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
   {
     int ra = base + GETARG_A(i);
-    int cond;
+    boolean cond;
     int rb = base + GETARG_B(i);
     ci.savedpc = pc;
     L.top = ci.top;
     cond = luaV_equalobj(L, ra, rb);
-    if (cond != GETARG_k(i))
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2466,7 +2466,7 @@ public final class Lvm
   {
     int ra = base + GETARG_A(i);
     int rb = base + GETARG_B(i);
-    int cond;
+    boolean cond;
     if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
     {
       long ia = slotival(L, ra);
@@ -2481,7 +2481,7 @@ public final class Lvm
       L.top = ci.top;
       cond = lessthanothers(L, ra, rb);
     }
-    if (cond != GETARG_k(i))
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2495,7 +2495,7 @@ public final class Lvm
   {
     int ra = base + GETARG_A(i);
     int rb = base + GETARG_B(i);
-    int cond;
+    boolean cond;
     if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
     {
       long ia = slotival(L, ra);
@@ -2510,7 +2510,7 @@ public final class Lvm
       L.top = ci.top;
       cond = lessequalothers(L, ra, rb);
     }
-    if (cond != GETARG_k(i))
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2525,8 +2525,8 @@ public final class Lvm
     int ra = base + GETARG_A(i);
     TValue rb = k[GETARG_B(i)];
     /* basic types do not use '__eq'; we can use raw equality */
-    int cond = luaV_rawequalobj(L, ra, rb);
-    if (cond != GETARG_k(i))
+    boolean cond = luaV_rawequalobj(L, ra, rb);
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2539,15 +2539,15 @@ public final class Lvm
   private static int op_eqi(lua_State L, int[] code, int base, int i, int pc)
   {
     int ra = base + GETARG_A(i);
-    int cond;
+    boolean cond;
     int im = GETARG_sB(i);
     if (slottag(L, ra) == LUA_VNUMINT)
-      cond = (slotival(L, ra) == im) ? 1 : 0;
+      cond = (slotival(L, ra) == im);
     else if (slottag(L, ra) == LUA_VNUMFLT)
-      cond = (slotfltval(L, ra) == im) ? 1 : 0;
+      cond = (slotfltval(L, ra) == im);
     else
-      cond = 0; /* other types cannot be equal to a number */
-    if (cond != GETARG_k(i))
+      cond = false; /* other types cannot be equal to a number */
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2560,7 +2560,7 @@ public final class Lvm
   private static int op_lti(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
   {
     int ra = base + GETARG_A(i);
-    int cond;
+    boolean cond;
     int im = GETARG_sB(i);
     if (slottag(L, ra) == LUA_VNUMINT)
       cond = l_lti(slotival(L, ra), im);
@@ -2568,16 +2568,16 @@ public final class Lvm
     {
       double fa = slotfltval(L, ra);
       double fim = im;
-      cond = luai_numlt(fa, fim) ? 1 : 0;
+      cond = luai_numlt(fa, fim);
     }
     else
     {
-      int isf = GETARG_C(i);
+      boolean isf = GETARG_C(i) != 0;
       ci.savedpc = pc;
       L.top = ci.top;
-      cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LT);
+      cond = luaT_callorderiTM(L, ra, im, false, isf, TM_LT);
     }
-    if (cond != GETARG_k(i))
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2590,7 +2590,7 @@ public final class Lvm
   private static int op_lei(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
   {
     int ra = base + GETARG_A(i);
-    int cond;
+    boolean cond;
     int im = GETARG_sB(i);
     if (slottag(L, ra) == LUA_VNUMINT)
       cond = l_lei(slotival(L, ra), im);
@@ -2598,16 +2598,16 @@ public final class Lvm
     {
       double fa = slotfltval(L, ra);
       double fim = im;
-      cond = luai_numle(fa, fim) ? 1 : 0;
+      cond = luai_numle(fa, fim);
     }
     else
     {
-      int isf = GETARG_C(i);
+      boolean isf = GETARG_C(i) != 0;
       ci.savedpc = pc;
       L.top = ci.top;
-      cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LE);
+      cond = luaT_callorderiTM(L, ra, im, false, isf, TM_LE);
     }
-    if (cond != GETARG_k(i))
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2620,7 +2620,7 @@ public final class Lvm
   private static int op_gti(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
   {
     int ra = base + GETARG_A(i);
-    int cond;
+    boolean cond;
     int im = GETARG_sB(i);
     if (slottag(L, ra) == LUA_VNUMINT)
       cond = l_gti(slotival(L, ra), im);
@@ -2628,16 +2628,16 @@ public final class Lvm
     {
       double fa = slotfltval(L, ra);
       double fim = im;
-      cond = luai_numgt(fa, fim) ? 1 : 0;
+      cond = luai_numgt(fa, fim);
     }
     else
     {
-      int isf = GETARG_C(i);
+      boolean isf = GETARG_C(i) != 0;
       ci.savedpc = pc;
       L.top = ci.top;
-      cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LT);
+      cond = luaT_callorderiTM(L, ra, im, true, isf, TM_LT);
     }
-    if (cond != GETARG_k(i))
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2650,7 +2650,7 @@ public final class Lvm
   private static int op_gei(lua_State L, CallInfo ci, int[] code, int base, int i, int pc)
   {
     int ra = base + GETARG_A(i);
-    int cond;
+    boolean cond;
     int im = GETARG_sB(i);
     if (slottag(L, ra) == LUA_VNUMINT)
       cond = l_gei(slotival(L, ra), im);
@@ -2658,16 +2658,16 @@ public final class Lvm
     {
       double fa = slotfltval(L, ra);
       double fim = im;
-      cond = luai_numge(fa, fim) ? 1 : 0;
+      cond = luai_numge(fa, fim);
     }
     else
     {
-      int isf = GETARG_C(i);
+      boolean isf = GETARG_C(i) != 0;
       ci.savedpc = pc;
       L.top = ci.top;
-      cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LE);
+      cond = luaT_callorderiTM(L, ra, im, true, isf, TM_LE);
     }
-    if (cond != GETARG_k(i))
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2680,8 +2680,8 @@ public final class Lvm
   private static int op_test(lua_State L, int[] code, int base, int i, int pc)
   {
     int ra = base + GETARG_A(i);
-    int cond = !tagisfalse(slottag(L, ra)) ? 1 : 0;
-    if (cond != GETARG_k(i))
+    boolean cond = !tagisfalse(slottag(L, ra));
+    if (cond != TESTARG_k(i))
       pc++;
     else
     {
@@ -2695,7 +2695,7 @@ public final class Lvm
   {
     int ra = base + GETARG_A(i);
     int rb = base + GETARG_B(i);
-    if ((tagisfalse(slottag(L, rb)) ? 1 : 0) == GETARG_k(i))
+    if (tagisfalse(slottag(L, rb)) == TESTARG_k(i))
       pc++;
     else
     {
@@ -2725,7 +2725,7 @@ public final class Lvm
         pc -= GETARG_Bx(i);                       /* jump back */
       }
     }
-    else if (floatforloop(L, ra) != 0) /* float loop */
+    else if (floatforloop(L, ra)) /* float loop */
       pc -= GETARG_Bx(i);         /* jump back */
     return pc;
   }
@@ -2735,7 +2735,7 @@ public final class Lvm
     int ra = base + GETARG_A(i);
     ci.savedpc = pc; /* in case of errors */
     L.top = ci.top;
-    if (forprep(L, ra) != 0)
+    if (forprep(L, ra))
       pc += GETARG_Bx(i) + 1; /* skip the loop */
     return pc;
   }
@@ -2759,7 +2759,7 @@ public final class Lvm
     else
       L.top = ci.top; /* correct top in case of emergency GC */
     last += n;
-    if (TESTARG_k(i) != 0)
+    if (TESTARG_k(i))
     {
       last += GETARG_Ax(code[pc]) * (MAXARG_vC + 1);
       pc++;
@@ -2864,7 +2864,7 @@ public final class Lvm
       assert base == ci.func + 1;
       assert base <= L.top && L.top <= L.stack_last;
       /* for tests, invalidate top for instructions not expecting it */
-      assert luaP_isIT(i) != 0 || (L.top = base) == base;
+      assert luaP_isIT(i) || (L.top = base) == base;
       switch (GET_OPCODE(i))
       {
         case OP_MOVE:
@@ -3276,7 +3276,7 @@ public final class Lvm
           else /* previous instruction set top */
             b = (int) (L.top - ra);
           ci.savedpc = pc; /* several calls here can raise errors */
-          if (TESTARG_k(i) != 0)
+          if (TESTARG_k(i))
           {
             luaF_closeupval(L, base);        /* close upvalues from current call */
             assert L.tbclist < base; /* no pending tbc variables */
@@ -3319,7 +3319,7 @@ public final class Lvm
           if (n < 0)                     /* not fixed? */
             n = (int) (L.top - ra); /* get what is available */
           ci.savedpc = pc;
-          if (TESTARG_k(i) != 0)
+          if (TESTARG_k(i))
           {                  /* may there be open upvalues? */
             ci.nres = n; /* save number of returns */
             if (L.top < ci.top)

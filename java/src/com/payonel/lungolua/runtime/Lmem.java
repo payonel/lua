@@ -48,7 +48,7 @@ public final class Lmem
   */
   private static boolean cantryagain(global_State g)
   {
-    return completestate(g) != 0 && g.gcstopem == 0;
+    return completestate(g) && !g.gcstopem;
   }
 
   private static boolean luaM_permit_(global_State g, lua_State L, long osize, long nsize, int tag)
@@ -61,7 +61,7 @@ public final class Lmem
         return false;
       if (!cantryagain(g))
         return false;
-      luaC_fullgc(L, 1); /* try to free some memory... */
+      luaC_fullgc(L, true); /* try to free some memory... */
       if (!g.frealloc.permit(osize, nsize, tag))
         return false;
     }

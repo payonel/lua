@@ -41,10 +41,10 @@ constexpr int LEVELS2 = 11; /* size of the second part of the stack */
 ** Search for 'objidx' in table at index -1. ('objidx' must be an
 ** absolute index.) Return 1 + string at top if it found a good name.
 */
-static int findfield(lua_State* L, int objidx, int level)
+static bool findfield(lua_State* L, int objidx, int level)
 {
   if (level == 0 || !lua_istable(L, -1))
-    return 0;     /* not found */
+    return false;     /* not found */
   lua_pushnil(L); /* start 'next' loop */
   while (lua_next(L, -2))
   { /* for each pair in table */
@@ -53,7 +53,7 @@ static int findfield(lua_State* L, int objidx, int level)
       if (lua_rawequal(L, objidx, -1))
       {                /* found object? */
         lua_pop(L, 1); /* remove value (but keep name) */
-        return 1;
+        return true;
       }
       else if (findfield(L, objidx, level - 1))
       { /* try recursively */
@@ -61,18 +61,18 @@ static int findfield(lua_State* L, int objidx, int level)
         lua_pushistringref(L, lt::dot); /* place '.' between the two names */
         lua_replace(L, -3);      /* (in the slot occupied by table) */
         lua_concat(L, 3);        /* lib_name.field_name */
-        return 1;
+        return true;
       }
     }
     lua_pop(L, 1); /* remove value */
   }
-  return 0; /* not found */
+  return false; /* not found */
 }
 
 /*
 ** Search for a name for a function in all loaded modules
 */
-static int pushglobalfuncname(lua_State* L, lua_State* L1, InternalDebug* ar)
+static bool pushglobalfuncname(lua_State* L, lua_State* L1, InternalDebug* ar)
 {
   int top = lua_gettop(L);
   lua_pushframefunction(L, L1, *ar); /* (the frame is of 'L1': its stack has the function) */
@@ -88,12 +88,12 @@ static int pushglobalfuncname(lua_State* L, lua_State* L1, InternalDebug* ar)
     }
     lua_copy(L, -1, top + 1); /* copy name to proper place */
     lua_settop(L, top + 1);   /* remove table "loaded" and name copy */
-    return 1;
+    return true;
   }
   else
   {
     lua_settop(L, top); /* remove function and global table */
-    return 0;
+    return false;
   }
 }
 
@@ -311,11 +311,11 @@ int luaL_errori(lua_State* L, byte_view fmt)
   return lua_error(L);
 }
 
-int luaL_fileresulti(lua_State* L, int stat, std::optional<byte_view> fname, int en)
+int luaL_fileresulti(lua_State* L, bool stat, std::optional<byte_view> fname, int en)
 {
   if (stat)
   {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 1;
   }
   else
@@ -335,7 +335,7 @@ int luaL_fileresulti(lua_State* L, int stat, std::optional<byte_view> fname, int
   }
 }
 
-int luaL_fileresult(lua_State* L, int stat, const std::optional<HostString>& fname)
+int luaL_fileresult(lua_State* L, bool stat, const std::optional<HostString>& fname)
 {
   return luaL_fileresulti(L, stat, fname ? std::optional<byte_view>(fname->to_utf8()) : std::nullopt, errno);
 }
@@ -348,13 +348,13 @@ int luaL_execresult(lua_State* L, int stat)
 int luaL_execresulti(lua_State* L, int stat, int en)
 {
   if (stat != 0 && en != 0) /* error with an 'errno'? */
-    return luaL_fileresulti(L, 0, {}, en);
+    return luaL_fileresulti(L, false, {}, en);
   else
   {
     OsExecStatus es = os_decode_exec(stat);
     byte_view what = es.exited ? lt::exit_kw : lt::signal_kw;
     if (es.exited && es.code == 0) /* successful termination? */
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
     else
       luaL_pushfail(L);
     lua_pushistringref(L, what);
@@ -371,22 +371,22 @@ int luaL_execresulti(lua_State* L, int stat, int en)
 ** =======================================================
 */
 
-int luaL_newmetatable(lua_State* L, const HostString& tname)
+bool luaL_newmetatable(lua_State* L, const HostString& tname)
 {
   return luaL_newmetatablei(L, tname.to_utf8());
 }
 
-int luaL_newmetatablei(lua_State* L, byte_view tname)
+bool luaL_newmetatablei(lua_State* L, byte_view tname)
 {
   if (luaL_getmetatablei(L, tname) != LUA_TNIL) /* name already in use? */
-    return 0;                                  /* leave previous value on top, but return 0 */
+    return false;                                  /* leave previous value on top, but return 0 */
   lua_pop(L, 1);
   lua_createtable(L, 0, 2);
   lua_pushlstring(L, tname, 0, tname.size());
   lua_setfieldi(L, -2, lt::mm_name); /* metatable.__name = tname */
   lua_pushvalue(L, -1);
   lua_setfieldi(L, LUA_REGISTRYINDEX, tname); /* registry.name = metatable */
-  return 1;
+  return true;
 }
 
 void luaL_setmetatable(lua_State* L, const HostString& tname)
@@ -975,7 +975,7 @@ static int skipBOM(OsFile* f)
 */
 struct FirstChar
 {
-  int skipped;
+  bool skipped;
   int c;
 };
 
@@ -988,10 +988,10 @@ static FirstChar skipcomment(OsFile* f)
     { /* skip first line */
       c = os_getbyte(f);
     } while (c != OS_EOF && c != '\n');
-    return {1, os_getbyte(f)}; /* there was a comment */
+    return {true, os_getbyte(f)}; /* there was a comment */
   }
   else
-    return {0, c}; /* no comment */
+    return {false, c}; /* no comment */
 }
 
 /*
@@ -1040,7 +1040,8 @@ int luaL_loadfileik(lua_State* L, std::optional<byte_view> filename, std::option
                     lua_KFunction k)
 {
   LoadF lf;
-  int status, readstatus;
+  int status;
+  bool readstatus;
   int c;
   int fnameindex = lua_gettop(L) + 1; /* index of filename on the stack */
   const bool bNullname = !filename.has_value();
@@ -1080,7 +1081,7 @@ int luaL_loadfileik(lua_State* L, std::optional<byte_view> filename, std::option
   {
     lua_pushnil(L); /* its box */
     lua_LoadSpec ls = filespec(L, mode, fnameindex, ctx, k);
-    int boxed;
+    bool boxed;
     try
     {
       boxed = lua_loadkread(L, ls, &lf);
@@ -1092,7 +1093,7 @@ int luaL_loadfileik(lua_State* L, std::optional<byte_view> filename, std::option
     }
     if (boxed)
     {
-      readstatus = os_ferror(lf.f) ? 1 : 0;
+      readstatus = os_ferror(lf.f);
       os_fclose(lf.f);
       if (readstatus)
       {
@@ -1104,7 +1105,7 @@ int luaL_loadfileik(lua_State* L, std::optional<byte_view> filename, std::option
     lua_pop(L, 1); /* (no budget) */
   }
   status = lua_loadi(L, &lf, lua_toistring(L, -1)->view(), mode);
-  readstatus = os_ferror(lf.f) ? 1 : 0;
+  readstatus = os_ferror(lf.f);
   if (!bNullname)
     os_fclose(lf.f); /* close file (even in case of errors) */
   if (readstatus)
@@ -1186,19 +1187,19 @@ int luaL_getmetafieldi(lua_State* L, int obj, byte_view event)
   }
 }
 
-int luaL_callmeta(lua_State* L, int obj, const HostString& event)
+bool luaL_callmeta(lua_State* L, int obj, const HostString& event)
 {
   return luaL_callmetai(L, obj, event.to_utf8());
 }
 
-int luaL_callmetai(lua_State* L, int obj, byte_view event)
+bool luaL_callmetai(lua_State* L, int obj, byte_view event)
 {
   obj = lua_absindex(L, obj);
   if (luaL_getmetafieldi(L, obj, event) == LUA_TNIL) /* no metafield? */
-    return 0;
+    return false;
   lua_pushvalue(L, obj);
   lua_call(L, 1, 1);
-  return 1;
+  return true;
 }
 
 lua_Integer luaL_len(lua_State* L, int idx)
@@ -1230,17 +1231,17 @@ lua_Integer luaL_lenresult(lua_State* L)
 ** 'luaL_tostringresult'), or the default form. Returns whether it called
 ** '__tostring'.
 */
-int luaL_toistringk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
+bool luaL_toistringk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
 {
   idx = lua_absindex(L, idx);
   if (luaL_getmetafieldi(L, idx, lt::mm_tostring) != LUA_TNIL)
   { /* metafield? */
     lua_pushvalue(L, idx);
     lua_callk(L, 1, 1, ctx, k);
-    return 1;
+    return true;
   }
   luaL_tostringdefault(L, idx);
-  return 0;
+  return false;
 }
 
 /* pushes the string form of the value at 'idx' that does not use '__tostring' */
@@ -1322,7 +1323,7 @@ void luaL_setfuncsi(lua_State* L, std::span<const luaL_Regi> funcs, int nup)
   for (const auto& reg : funcs)
   {
     if (reg.func == nullptr) /* placeholder? */
-      lua_pushboolean(L, 0);
+      lua_pushboolean(L, false);
     else
     {
       for (int i = 0; i < nup; i++) /* copy upvalues to the top */
@@ -1346,7 +1347,7 @@ void luaL_setfuncscfi(lua_State* L, std::span<const luaL_RegCFI> funcs)
   for (const auto& reg : funcs)
   {
     if (reg.cfi == nullptr)
-      lua_pushboolean(L, 0);
+      lua_pushboolean(L, false);
     else
       lua_pushcfuncinfo(L, reg.cfi);
     lua_setfieldi(L, -2, reg.name);
@@ -1366,7 +1367,7 @@ void luaL_setfuncs(lua_State* L, const std::span<const luaL_Reg>& funcs, int nup
   for (const auto& reg : funcs)
   {
     if (reg.func == nullptr) /* placeholder? */
-      lua_pushboolean(L, 0);
+      lua_pushboolean(L, false);
     else
     {
       for (int i = 0; i < nup; i++) /* copy upvalues to the top */
@@ -1395,15 +1396,15 @@ void luaL_newlib(lua_State* L, const std::span<const luaL_Reg>& funcs)
 ** into the stack
 */
 
-int luaL_getsubtable(lua_State* L, int idx, const HostString& fname)
+bool luaL_getsubtable(lua_State* L, int idx, const HostString& fname)
 {
   return luaL_getsubtablei(L, idx, fname.to_utf8());
 }
 
-int luaL_getsubtablei(lua_State* L, int idx, byte_view fname)
+bool luaL_getsubtablei(lua_State* L, int idx, byte_view fname)
 {
   if (lua_getfieldi(L, idx, fname) == LUA_TTABLE)
-    return 1; /* table already there */
+    return true; /* table already there */
   else
   {
     lua_pop(L, 1); /* remove previous result */
@@ -1411,7 +1412,7 @@ int luaL_getsubtablei(lua_State* L, int idx, byte_view fname)
     lua_newtable(L);
     lua_pushvalue(L, -1);        /* copy to be left at top */
     lua_setfieldi(L, idx, fname); /* assign new table to field */
-    return 0;                    /* false, because did not find table there */
+    return false;                    /* false, because did not find table there */
   }
 }
 
@@ -1423,13 +1424,13 @@ int luaL_getsubtablei(lua_State* L, int idx, byte_view fname)
 */
 
 void luaL_requiref(lua_State* L, const HostString& modname,
-                              lua_CFunction openf, int glb)
+                              lua_CFunction openf, bool glb)
 {
   luaL_requirefi(L, modname.to_utf8(), openf, glb);
 }
 
 void luaL_requirefi(lua_State* L, byte_view modname,
-                    lua_CFunction openf, int glb)
+                    lua_CFunction openf, bool glb)
 {
   luaL_getsubtablei(L, LUA_REGISTRYINDEX, LUA_LOADED_TABLE);
   lua_getfieldi(L, -1, modname); /* LOADED[modname] */
@@ -1510,7 +1511,7 @@ static KNamer knamer_requireff("auxlib.requireff", requireff);
 
 static CFuncInfo cfi_requireff(requireff_start, "auxlib.requireff");
 
-void luaL_requirefk(lua_State* L, const HostString& modname, lua_CFunction openf, int glb,
+void luaL_requirefk(lua_State* L, const HostString& modname, lua_CFunction openf, bool glb,
                     lua_KContext ctx, lua_KFunction k)
 {
   lua_pushcfuncinfo(L, &cfi_requireff);
@@ -1540,7 +1541,7 @@ static int getsubtableff(lua_State* L, int status, lua_KContext ctx)
   case 1:
     if (lua_type(L, -1) == LUA_TTABLE)
     { /* table already there */
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       return 2;
     }
     lua_pop(L, 1); /* remove previous result */
@@ -1549,7 +1550,7 @@ static int getsubtableff(lua_State* L, int status, lua_KContext ctx)
     lua_setfieldik(L, 1, fname, 2, getsubtableff); /* assign new table to field */
     [[fallthrough]];
   default:
-    lua_pushboolean(L, 0); /* did not find table there */
+    lua_pushboolean(L, false); /* did not find table there */
     return 2;
   }
 }
@@ -1558,24 +1559,24 @@ static KNamer knamer_getsubtableff("auxlib.getsubtableff", getsubtableff);
 
 static CFuncInfo cfi_getsubtableff(getsubtableff_start, "auxlib.getsubtableff");
 
-int luaL_getsubtablek(lua_State* L, int idx, const HostString& fname, lua_KContext ctx, lua_KFunction k)
+bool luaL_getsubtablek(lua_State* L, int idx, const HostString& fname, lua_KContext ctx, lua_KFunction k)
 {
   lua_pushcfuncinfo(L, &cfi_getsubtableff);
   lua_pushvalue(L, idx);
   lua_pushlstring(L, fname.to_utf8(), 0, fname.to_utf8().size());
   lua_callk(L, 2, 2, ctx, k);
-  int found = lua_toboolean(L, -1);
+  bool found = lua_toboolean(L, -1);
   return found;
 }
 
-int luaL_callmetak(lua_State* L, int obj, const HostString& e, lua_KContext ctx, lua_KFunction k)
+bool luaL_callmetak(lua_State* L, int obj, const HostString& e, lua_KContext ctx, lua_KFunction k)
 {
   obj = lua_absindex(L, obj);
   if (luaL_getmetafieldi(L, obj, e.to_utf8()) == LUA_TNIL) /* no metafield? */
-    return 0;
+    return false;
   lua_pushvalue(L, obj);
   lua_callk(L, 1, 1, ctx, k);
-  return 1;
+  return true;
 }
 
 byte_view luaL_tolstringk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k)
@@ -1685,11 +1686,11 @@ static struct WarnCont : lua_WarnFunction
 ** Check whether message is a control message. If so, execute the
 ** control or ignore it if unknown.
 */
-static int checkcontrol(lua_State* L, const HostString& message, int tocont)
+static bool checkcontrol(lua_State* L, const HostString& message, int tocont)
 {
   byte_view m = message.to_utf8();
   if (tocont || m.empty() || m[0] != '@') /* not a control message? */
-    return 0;
+    return false;
   else
   {
     byte_view tail = byte_view(m).substr(1);
@@ -1697,7 +1698,7 @@ static int checkcontrol(lua_State* L, const HostString& message, int tocont)
       lua_setwarnf(L, &warnfoff); /* turn warnings off */
     else if (tail == lt::on_2)
       lua_setwarnf(L, &warnfon); /* turn warnings on */
-    return 1;                      /* it was a control message */
+    return true;                      /* it was a control message */
   }
 }
 

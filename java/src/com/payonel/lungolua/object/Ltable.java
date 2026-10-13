@@ -40,9 +40,9 @@ public final class Ltable
   public static final int BITDUMMY = 1 << 6;
   public static final byte NOTBITDUMMY = (byte) ~BITDUMMY;
 
-  public static int isdummy(Table t)
+  public static boolean isdummy(Table t)
   {
-    return t.flags & BITDUMMY;
+    return (t.flags & BITDUMMY) != 0;
   }
 
   public static void setnodummy(Table t)
@@ -58,7 +58,7 @@ public final class Ltable
   /* allocated size for hash nodes */
   public static int allocsizenode(Table t)
   {
-    return isdummy(t) != 0 ? 0 : sizenode(t);
+    return isdummy(t) ? 0 : sizenode(t);
   }
 
   /* results from pset */
@@ -239,7 +239,7 @@ public final class Ltable
     Frexp i = new Frexp();
     IntResult ni = new IntResult();
     n = frexp(n, i) * -(double) Integer.MIN_VALUE;
-    if (lua_numbertointeger(n, ni) == 0)
+    if (!lua_numbertointeger(n, ni))
     { /* is 'n' inf/-inf/NaN? */
       assert (!(n == n)) || fabs(n) == Double.POSITIVE_INFINITY;
       return 0;
@@ -270,7 +270,7 @@ public final class Ltable
   ** anything.  (In particular, 'next' will return some other valid item
   ** on the table or nil.)
   */
-  static int equalkey(TValue k1, Node n2, int deadok)
+  static boolean equalkey(TValue k1, Node n2, boolean deadok)
   {
     if (k1.tt_ != n2.key_tt)
     { /* not the same variants? */
@@ -280,14 +280,14 @@ public final class Ltable
         return luaS_eqstr(tsvalue(k1),
                           keystrval(n2));
       }
-      else if (deadok != 0 && keyisdead(n2) && iscollectable(k1))
+      else if (deadok && keyisdead(n2) && iscollectable(k1))
       {
         /* a collectable value can be equal to a dead key */
         assert iscollectable(k1);
-        return (gcvalue(k1) == gckey(n2)) ? 1 : 0;
+        return gcvalue(k1) == gckey(n2);
       }
       else
-        return 0; /* otherwise, different variants cannot be equal */
+        return false; /* otherwise, different variants cannot be equal */
     }
     else
     { /* equal variants */
@@ -296,16 +296,16 @@ public final class Ltable
       case LUA_VNIL:
       case LUA_VFALSE:
       case LUA_VTRUE:
-        return 1;
+        return true;
       case LUA_VNUMINT:
         assert ttisinteger(k1);
-        return (ivalue(k1) == keyival(n2)) ? 1 : 0;
+        return ivalue(k1) == keyival(n2);
       case LUA_VNUMFLT:
         assert ttisfloat(k1);
-        return (fltvalue(k1) == keyfltval(n2)) ? 1 : 0;
+        return fltvalue(k1) == keyfltval(n2);
       case LUA_VLIGHTUSERDATA:
         assert ttislightuserdata(k1);
-        return (pvalue(k1) == keypval(n2)) ? 1 : 0;
+        return pvalue(k1) == keypval(n2);
       case LUA_VLNGSTR | BIT_ISCOLLECTABLE:
       {
         return luaS_eqstr(tsvalue(k1),
@@ -313,7 +313,7 @@ public final class Ltable
       }
       default:
         assert iscollectable(k1);
-        return (gcvalue(k1) == gckey(n2)) ? 1 : 0;
+        return gcvalue(k1) == gckey(n2);
       }
     }
   }
@@ -355,7 +355,7 @@ public final class Ltable
   {
     int total;
     int na;
-    int deleted;
+    boolean deleted;
     int[] nums = new int[MAXABITS + 1];
   }
 
@@ -365,9 +365,9 @@ public final class Ltable
   ** entry: Two values plus 'next' versus one value.) Evaluate with size_t
   ** to avoid overflows.
   */
-  private static int arrayXhash(long na, long nh)
+  private static boolean arrayXhash(long na, long nh)
   {
-    return (Long.compareUnsigned(na, nh * 3) <= 0) ? 1 : 0;
+    return Long.compareUnsigned(na, nh * 3) <= 0;
   }
 
   /*
@@ -389,13 +389,13 @@ public final class Ltable
     /* traverse slices while 'twotoi' does not overflow and total of array
        indices still can satisfy 'arrayXhash' against the array size */
     for (i = 0, twotoi = 1;
-         i <= MAXABITS && arrayXhash(twotoi, ct.na) != 0;
+         i <= MAXABITS && arrayXhash(twotoi, ct.na);
          i++, twotoi = (i <= MAXABITS) ? twotoi * 2 : twotoi)
     {
       int nums = ct.nums[i];
       a += nums;
       if (nums > 0 && /* grows array only if it gets more elements... */
-          arrayXhash(twotoi, a) != 0)
+          arrayXhash(twotoi, a))
       {                   /* ...while using "less memory" */
         optimal = twotoi; /* optimal size (till now) */
         na = a;           /* all elements up to 'optimal' will go to array part */

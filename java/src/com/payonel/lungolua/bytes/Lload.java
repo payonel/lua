@@ -407,7 +407,7 @@ public final class Lload
   private static ByteView readerresult(lua_State L, LoadResume rz)
   {
     LoadBox box = rz.box;
-    if (lua_isnil(L, -1) != 0)
+    if (lua_isnil(L, -1))
     {
       lua_pop(L, 1); /* pop result */
       if (box == null)
@@ -416,7 +416,7 @@ public final class Lload
         box.ends++;
       return null;
     }
-    else if (lua_isstring(L, -1) == 0)
+    else if (!lua_isstring(L, -1))
       luaL_errori(L, Lt.reader_function_must_return_a_string);
     lua_replace(L, rz.pieceidx); /* save string in its slot */
     ByteView piece = lua_tolstring(L, rz.pieceidx);

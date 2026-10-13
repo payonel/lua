@@ -58,7 +58,7 @@ constexpr int LUA_TMPNAMBUFSIZE = 32;
 
 static int os_execute(lua_State* L)
 {
-  int nocmd = lua_isnoneornil(L, 1);
+  bool nocmd = lua_isnoneornil(L, 1);
   if (!nocmd)
   {
     const InternalString* cmd = luaL_checkistring(L, 1);
@@ -401,7 +401,7 @@ static int os_setlocale(lua_State* L)
   static const byte_view catnames[] = {
       lt::all, lt::collate, lt::ctype,
       lt::monetary, lt::numeric, lt::time_kw};
-  int nol = lua_isnoneornil(L, 1);
+  bool nol = lua_isnoneornil(L, 1);
   const InternalString* l = nol ? nullptr : luaL_checkistring(L, 1);
   int op = luaL_checkoptioni(L, 2, lt::all, catnames);
   std::optional<byte_view> res;

@@ -218,25 +218,25 @@ public final class Lstate
   }
 
   /* active function is a Lua function */
-  public static int isLua(CallInfo ci)
+  public static boolean isLua(CallInfo ci)
   {
-    return ((ci.callstatus & CIST_C) == 0) ? 1 : 0;
+    return (ci.callstatus & CIST_C) == 0;
   }
 
   /* call is running Lua code (not a hook) */
-  public static int isLuacode(CallInfo ci)
+  public static boolean isLuacode(CallInfo ci)
   {
-    return ((ci.callstatus & (CIST_C | CIST_HOOKED)) == 0) ? 1 : 0;
+    return (ci.callstatus & (CIST_C | CIST_HOOKED)) == 0;
   }
 
-  public static void setoah(CallInfo ci, int v)
+  public static void setoah(CallInfo ci, boolean v)
   {
-    ci.callstatus = (v != 0) ? (ci.callstatus | CIST_OAH) : (ci.callstatus & ~CIST_OAH);
+    ci.callstatus = v ? (ci.callstatus | CIST_OAH) : (ci.callstatus & ~CIST_OAH);
   }
 
-  public static byte getoah(CallInfo ci)
+  public static boolean getoah(CallInfo ci)
   {
-    return (byte) (((ci.callstatus & CIST_OAH) != 0) ? 1 : 0);
+    return (ci.callstatus & CIST_OAH) != 0;
   }
 
   /* 'L' is frozen, entered as 'kind' (FZ_*): its stack is as it is now */
@@ -500,9 +500,9 @@ public final class Lstate
   /* }================================================================== */
 
   /* true if this thread does not have non-yieldable calls in the stack */
-  public static int yieldable(lua_State L)
+  public static boolean yieldable(lua_State L)
   {
-    return ((L.nCcalls & 0xffff0000) == 0) ? 1 : 0;
+    return (L.nCcalls & 0xffff0000) == 0;
   }
 
   /* real number of C calls */
@@ -544,9 +544,9 @@ public final class Lstate
     return g.mainth;
   }
 
-  public static int completestate(global_State g)
+  public static boolean completestate(global_State g)
   {
-    return (ttype(g.nilvalue) == LUA_TNIL) ? 1 : 0;
+    return ttype(g.nilvalue) == LUA_TNIL;
   }
 
   /*
@@ -604,7 +604,7 @@ public final class Lstate
 
   public static TValue gfasttm(global_State g, Table mt, int e)
   {
-    return (checknoTM(mt, e) != 0) ? null : luaT_gettm(mt, e, g.tmname[e]);
+    return (checknoTM(mt, e)) ? null : luaT_gettm(mt, e, g.tmname[e]);
   }
 
   /*
@@ -822,7 +822,7 @@ public final class Lstate
     global_State g = L.l_G;
     if (L.beff != null)
       luaE_setbeff(L, null); /* closing: no budget points */
-    if (completestate(g) == 0)    /* closing a partially built state? */
+    if (!completestate(g))    /* closing a partially built state? */
       luaC_freeallobjects(L); /* just collect its objects */
     else
     { /* closing a fully built state */
@@ -879,7 +879,7 @@ public final class Lstate
     {
       th.hookmask |= LUA_MASKBUDGET;
       for (CallInfo ci = th.ci; ci != null; ci = ci.previous)
-        if (isLua(ci) != 0)
+        if (isLua(ci))
           ci.trap = 1; /* to count inside 'luaV_execute' */
     }
     else
@@ -917,7 +917,7 @@ public final class Lstate
     else
       L.top = 1;
     if (L != L.l_G.budgetth) /* (the thread of callbacks keeps its room) */
-      luaD_reallocstack(L, (int) L.ci.top, 0);
+      luaD_reallocstack(L, (int) L.ci.top, false);
   }
 
   public static byte luaE_resetthread(lua_State L, byte status)
@@ -976,7 +976,7 @@ public final class Lstate
       if (plain_on)
       {
         L.resumer = from;
-        L.resumedk = 0;
+        L.resumedk = false;
         L.nfz++;
         luaE_enterbudget(L, from);
       }

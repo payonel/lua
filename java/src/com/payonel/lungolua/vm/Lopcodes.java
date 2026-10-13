@@ -278,9 +278,9 @@ public final class Lopcodes
     return sC2int(GETARG_C(i));
   }
 
-  public static int TESTARG_k(int i)
+  public static boolean TESTARG_k(int i)
   {
-    return i & (1 << POS_k);
+    return (i & (1 << POS_k)) != 0;
   }
 
   public static int GETARG_k(int i)
@@ -337,9 +337,9 @@ public final class Lopcodes
     return setarg(i, v, POS_C, SIZE_C);
   }
 
-  public static int SETARG_k(int i, int v)
+  public static int SETARG_k(int i, boolean v)
   {
-    return setarg(i, v, POS_k, 1);
+    return setarg(i, v ? 1 : 0, POS_k, 1);
   }
 
   public static int SETARG_Bx(int i, int v)
@@ -352,14 +352,14 @@ public final class Lopcodes
     return setarg(i, j + OFFSET_sJ, POS_sJ, SIZE_sJ);
   }
 
-  public static int CREATE_ABCk(int o, int a, int b, int c, int k)
+  public static int CREATE_ABCk(int o, int a, int b, int c, boolean k)
   {
-    return (o << POS_OP) | (a << POS_A) | (b << POS_B) | (c << POS_C) | (k << POS_k);
+    return (o << POS_OP) | (a << POS_A) | (b << POS_B) | (c << POS_C) | ((k ? 1 : 0) << POS_k);
   }
 
-  public static int CREATE_vABCk(int o, int a, int b, int c, int k)
+  public static int CREATE_vABCk(int o, int a, int b, int c, boolean k)
   {
-    return (o << POS_OP) | (a << POS_A) | (b << POS_vB) | (c << POS_vC) | (k << POS_k);
+    return (o << POS_OP) | (a << POS_A) | (b << POS_vB) | (c << POS_vC) | ((k ? 1 : 0) << POS_k);
   }
 
   public static int CREATE_ABx(int o, int a, int bc)
@@ -372,9 +372,9 @@ public final class Lopcodes
     return (o << POS_OP) | (a << POS_Ax);
   }
 
-  public static int CREATE_sJ(int o, int j, int k)
+  public static int CREATE_sJ(int o, int j, boolean k)
   {
-    return (o << POS_OP) | (j << POS_sJ) | (k << POS_k);
+    return (o << POS_OP) | (j << POS_sJ) | ((k ? 1 : 0) << POS_k);
   }
 
   /*
@@ -387,27 +387,27 @@ public final class Lopcodes
   ** bit 7: instruction is an MM instruction (call a metamethod)
   */
 
-  public static int testAMode(int m)
+  public static boolean testAMode(int m)
   {
-    return luaP_opmodes[m] & (1 << 3);
+    return (luaP_opmodes[m] & (1 << 3)) != 0;
   }
 
-  public static int testTMode(int m)
+  public static boolean testTMode(int m)
   {
-    return luaP_opmodes[m] & (1 << 4);
+    return (luaP_opmodes[m] & (1 << 4)) != 0;
   }
 
-  public static int testMMMode(int m)
+  public static boolean testMMMode(int m)
   {
-    return luaP_opmodes[m] & (1 << 7);
+    return (luaP_opmodes[m] & (1 << 7)) != 0;
   }
 
   /* Check whether instruction sets top for next instruction, that is,
   ** it results in multiple values. Used only for tests.
   */
-  public static int luaP_isOT(int i)
+  public static boolean luaP_isOT(int i)
   {
-    return (GET_OPCODE(i) == OP_TAILCALL || ((luaP_opmodes[GET_OPCODE(i)] & (1 << 6)) != 0 && GETARG_C(i) == 0)) ? 1 : 0;
+    return GET_OPCODE(i) == OP_TAILCALL || ((luaP_opmodes[GET_OPCODE(i)] & (1 << 6)) != 0 && GETARG_C(i) == 0);
   }
 
   private static int opmode(int mm, int ot, int it, int t, int a, int m)
@@ -505,9 +505,9 @@ public final class Lopcodes
       opmode(0, 0, 0, 0, 0, iAx), /* OP_EXTRAARG */
   };
 
-  private static int testITMode(int m)
+  private static boolean testITMode(int m)
   {
-    return luaP_opmodes[m] & (1 << 5);
+    return (luaP_opmodes[m] & (1 << 5)) != 0;
   }
 
   /*
@@ -515,17 +515,17 @@ public final class Lopcodes
   ** and for instructions that use multiple values set by the previous
   ** instruction.
   */
-  public static int luaP_isIT(int i)
+  public static boolean luaP_isIT(int i)
   {
     int op = GET_OPCODE(i);
     switch (op)
     {
     case OP_SETLIST:
-      return GETARG_vB(i) == 0 ? 1 : 0;
+      return GETARG_vB(i) == 0;
     case OP_VARARGPREP:
-      return 1;
+      return true;
     default:
-      return (testITMode(GET_OPCODE(i)) != 0 && GETARG_B(i) == 0) ? 1 : 0;
+      return testITMode(GET_OPCODE(i)) && GETARG_B(i) == 0;
     }
   }
 

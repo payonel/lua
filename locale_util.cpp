@@ -6,7 +6,7 @@
 namespace lua::platform
 {
 
-int locale_matchclass(int c, int cls)
+bool locale_matchclass(int c, int cls)
 {
   switch (cls)
   {
@@ -21,7 +21,7 @@ int locale_matchclass(int c, int cls)
   case 'w': return isalnum(c);
   case 'x': return isxdigit(c);
   case 'z': return (c == 0);
-  default: return 0;
+  default: return false;
   }
 }
 
@@ -35,32 +35,32 @@ int locale_toupper(int c)
   return toupper(c);
 }
 
-int locale_islower(int c)
+bool locale_islower(int c)
 {
   return islower(c);
 }
 
-int locale_isalpha(int c)
+bool locale_isalpha(int c)
 {
   return isalpha(c);
 }
 
-int locale_isdigit(int c)
+bool locale_isdigit(int c)
 {
   return isdigit(c);
 }
 
-int locale_isalnum(int c)
+bool locale_isalnum(int c)
 {
   return isalnum(c);
 }
 
-int locale_isxdigit(int c)
+bool locale_isxdigit(int c)
 {
   return isxdigit(c);
 }
 
-int locale_isspace(int c)
+bool locale_isspace(int c)
 {
   return isspace(c);
 }

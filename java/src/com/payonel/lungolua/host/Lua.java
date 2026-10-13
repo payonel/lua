@@ -132,7 +132,7 @@ public final class Lua
   {
     if (status != LUA_OK)
     {
-      ByteView msg = (lua_isstring(L, -1) != 0) ? lua_toistring(L, -1).view() : Lt.error_message_not_a_string;
+      ByteView msg = (lua_isstring(L, -1)) ? lua_toistring(L, -1).view() : Lt.error_message_not_a_string;
       l_message(progname, msg);
       lua_pop(L, 1); /* remove message */
     }
@@ -145,11 +145,11 @@ public final class Lua
   private static int msghandler(lua_State L)
   {
     ByteView msg;
-    if (lua_isstring(L, 1) != 0)
+    if (lua_isstring(L, 1))
       msg = lua_toistring(L, 1).view();
     else
     {
-      if (luaL_callmetai(L, 1, Lt.mm_tostring) != 0 && /* does it have a metamethod */
+      if (luaL_callmetai(L, 1, Lt.mm_tostring) && /* does it have a metamethod */
           lua_type(L, -1) == LUA_TSTRING)            /* that produces a string? */
         return 1;                                    /* that is the message */
       else
@@ -382,7 +382,7 @@ public final class Lua
   ** 'W', which also affects the state.
   ** Returns 0 if some code raises an error.
   */
-  private static int runargs(lua_State L, byte[][] argv, int n)
+  private static boolean runargs(lua_State L, byte[][] argv, int n)
   {
     int i;
     lua_warningi(L, Lt.off_1, 0); /* by default, Lua stand-alone has warnings off */
@@ -407,7 +407,7 @@ public final class Lua
         }
         status = (option == 'e') ? dostring(L, extra, Lt.command_line) : dolibrary(L, extra);
         if (status != LUA_OK)
-          return 0;
+          return false;
         break;
       }
       case 'W':
@@ -415,7 +415,7 @@ public final class Lua
         break;
       }
     }
-    return 1;
+    return true;
   }
 
   private static boolean l_noenv = false;
@@ -461,9 +461,9 @@ public final class Lua
   ** lua_stdin_is_tty detects whether the standard input is a 'tty' (that
   ** is, whether we're running lua interactively).
   */
-  private static int lua_stdin_is_tty()
+  private static boolean lua_stdin_is_tty()
   {
-    return isatty(0) ? 1 : 0;
+    return isatty(0);
   }
 
   /*
@@ -547,12 +547,12 @@ public final class Lua
   ** the string (or nil, if using the default value) on the stack, to keep
   ** it anchored.
   */
-  private static InternalString get_prompt(lua_State L, int firstline)
+  private static InternalString get_prompt(lua_State L, boolean firstline)
   {
     InternalString prompt;
-    if (lua_getglobali(L, ((firstline != 0) ? Lt._PROMPT : Lt._PROMPT2)) == LUA_TNIL)
+    if (lua_getglobali(L, ((firstline) ? Lt._PROMPT : Lt._PROMPT2)) == LUA_TNIL)
     {
-      prompt = new InternalString((firstline != 0) ? Lt.LUA_PROMPT : Lt.LUA_PROMPT2); /* use the default */
+      prompt = new InternalString((firstline) ? Lt.LUA_PROMPT : Lt.LUA_PROMPT2); /* use the default */
     }
     else
     { /* apply 'tostring' over the value */
@@ -570,31 +570,31 @@ public final class Lua
   ** message at the top of the stack ends with the above mark for
   ** incomplete statements.
   */
-  private static int incomplete(lua_State L, int status)
+  private static boolean incomplete(lua_State L, int status)
   {
     if (status == LUA_ERRSYNTAX)
     {
       ByteView msgv = lua_tolstring(L, -1);
       if (msgv.ends_with(EOFMARK))
-        return 1;
+        return true;
     }
-    return 0; /* else... */
+    return false; /* else... */
   }
 
   /*
   ** Prompt the user, read a line, and push it into the Lua stack.
   */
-  private static int pushline(lua_State L, int firstline)
+  private static boolean pushline(lua_State L, boolean firstline)
   {
     InternalString prmt = get_prompt(L, firstline);
     boolean ready = lua_readline(L, prmt.view());
     if (!ready)
     {
       lua_pop(L, 1); /* remove prompt */
-      return 0;      /* no input */
+      return false;      /* no input */
     }
     lua_remove(L, -2); /* remove prompt */
-    return 1;
+    return true;
   }
 
   /*
@@ -643,7 +643,7 @@ public final class Lua
     for (;;)
     {                                                  /* repeat until gets a complete statement */
       int status = luaL_loadbufferi(L, line, Lt.stdin_1, Lt.t_char); /* try it */
-      if (incomplete(L, status) == 0 || pushline(L, 0) == 0)
+      if (!incomplete(L, status) || !pushline(L, false))
         return status;                  /* should not or cannot try to add continuation line */
       lua_remove(L, -2);                /* remove error message (from incomplete line) */
       lua_pushistringref(L, Lt.n_3);    /* add newline... */
@@ -663,7 +663,7 @@ public final class Lua
   {
     int status;
     lua_settop(L, 0);
-    if (pushline(L, 1) == 0)
+    if (!pushline(L, true))
       return -1;                           /* no input */
     if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
       status = multiline(L);               /* try as command, maybe with continuation lines */
@@ -745,7 +745,7 @@ public final class Lua
     if ((args & has_E) != 0)
     {                        /* option '-E'? */
       l_noenv = true; /* program will ignore environment variables */
-      lua_pushboolean(L, 1); /* signal for libraries to ignore env. vars. */
+      lua_pushboolean(L, true); /* signal for libraries to ignore env. vars. */
       lua_setfieldi(L, LUA_REGISTRYINDEX, Lt.LUA_NOENV);
     }
     luai_openlibs(L);                         /* open standard libraries */
@@ -754,7 +754,7 @@ public final class Lua
     lua_gc(L, LUA_GCGEN, 0, 0, 0);                  /* ...in generational mode */
     if (handle_luainit(L) != LUA_OK)       /* run LUA_INIT */
       return 0;                            /* error running LUA_INIT */
-    if (runargs(L, argv, optlim) == 0)     /* execute arguments -e, -l, and -W */
+    if (!runargs(L, argv, optlim))     /* execute arguments -e, -l, and -W */
       return 0;                            /* something failed */
     if (script[0] > 0)
     { /* execute main script (if there is one) */
@@ -765,7 +765,7 @@ public final class Lua
       doREPL(L);      /* do read-eval-print loop */
     else if (script[0] < 1 && (args & (has_e | has_v)) == 0)
     { /* no active option? */
-      if (lua_stdin_is_tty() != 0)
+      if (lua_stdin_is_tty())
       { /* running in interactive mode? */
         print_version();
         doREPL(L); /* do read-eval-print loop */
@@ -773,7 +773,7 @@ public final class Lua
       else
         dofile(L, null); /* executes stdin as a file */
     }
-    lua_pushboolean(L, 1); /* signal no errors */
+    lua_pushboolean(L, true); /* signal no errors */
     return 1;
   }
 
@@ -781,7 +781,8 @@ public final class Lua
 
   public static int main(int argc, byte[][] argv)
   {
-    int status, result;
+    int status;
+    boolean result;
     lua_State L = luaL_newstate(); /* create state */
     if (L == null)
     {
@@ -797,7 +798,7 @@ public final class Lua
     result = lua_toboolean(L, -1);  /* get result */
     report(L, status);
     lua_close(L);
-    return (result != 0 && status == LUA_OK) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return (result && status == LUA_OK) ? EXIT_SUCCESS : EXIT_FAILURE;
   }
 
   private static byte[][] cmdline()

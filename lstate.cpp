@@ -340,7 +340,7 @@ void luaE_endclose(lua_State* L, TStatus status)
   else
     L->top = 1;
   if (L != L->l_G->budgetth) /* (the thread of callbacks keeps its room) */
-    luaD_reallocstack(L, (int)L->ci->top, 0);
+    luaD_reallocstack(L, (int)L->ci->top, false);
 }
 
 TStatus luaE_resetthread(lua_State* L, TStatus status)
@@ -415,7 +415,7 @@ int luaE_closethreadplain(lua_State* L, lua_State* from)
   if (plain.on)
   {
     L->resumer = from;
-    L->resumedk = 0;
+    L->resumedk = false;
     L->nfz++;
     luaE_enterbudget(L, from);
   }

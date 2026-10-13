@@ -9,7 +9,7 @@ public final class Labeldesc
   public int pc;       /* position in code */
   public int line;     /* line where it appeared */
   public short nactvar; /* number of active variables in that position */
-  public byte close;   /* true for goto that escapes upvalues */
+  public boolean close;   /* true for goto that escapes upvalues */
 
   public Labeldesc()
   {

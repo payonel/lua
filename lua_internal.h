@@ -13,7 +13,7 @@ namespace lua::bytes
 class InternalString;
 }
 
-int lua_islightcfunction(lua_State* L, int idx);
+bool lua_islightcfunction(lua_State* L, int idx);
 
 /*
 ** Names of the functions the engine keeps in its state, stable from one
@@ -124,7 +124,7 @@ constexpr int LUA_LOADBOXED = -1;
    by the host) and the load reads it from there ('ls.readeridx' is
    LUA_LOADBOXED); returns 0 with no budget (the load reads 'source' as it
    goes, in one step, as stock) */
-int lua_loadkread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source);
+bool lua_loadkread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source);
 /* a protected call that keeps the message handler in effect (see lapi.cpp) */
 int lua_pcallkeep(lua_State* L, int nargs, int nresults, lua_KContext ctx, lua_KFunction k);
 
@@ -143,7 +143,7 @@ int lua_resetthread(lua_State* L);
 const InternalString* luaL_checkistring(lua_State* L, int arg);
 const InternalString* luaL_optistring(lua_State* L, int arg, const InternalString* def);
 const InternalString* luaL_toistring(lua_State* L, int idx);
-int luaL_toistringk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
+bool luaL_toistringk(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
 const InternalString* luaL_tostringresult(lua_State* L);
 void luaL_tostringdefault(lua_State* L, int idx);
 
@@ -195,21 +195,21 @@ lua_State* lua_frozenchild(lua_State* L);
 void lua_freezeonly(lua_State* L);
 lua_State* lua_budgetroot(lua_State* co);
 void lua_setbudgetvalue(lua_State* L, lua_State* co);
-void lua_pushbudgetvalue(lua_State* L, lua_State* co, int effective);
+void lua_pushbudgetvalue(lua_State* L, lua_State* co, bool effective);
 lua_State* lua_budgetthread(lua_State* L);
 void lua_setbudgetthread(lua_State* L, lua_State* B);
-int lua_budgeted(lua_State* L);
+bool lua_budgeted(lua_State* L);
 [[noreturn]] void lua_closeself(lua_State* L);
 void lua_callhook(lua_State* L, int nargs);
-int lua_hasdrain(lua_State* L);
+bool lua_hasdrain(lua_State* L);
 void lua_pushdrain(lua_State* L);
 void lua_pushthreadi(lua_State* L, lua_State* th);
 int lua_rawlessthan(lua_State* L, int index1, int index2);
-int lua_isplaintable(lua_State* L, int idx);
+bool lua_isplaintable(lua_State* L, int idx);
 int lua_plaingetrange(lua_State* L, int idx, lua_Integer i, int n);
 lua_Integer lua_plainmove(lua_State* L, int idx1, lua_Integer s, int idx2, lua_Integer d,
-                          lua_Integer n, int up);
-int lua_spend(lua_State* L, int n);
+                          lua_Integer n, bool up);
+bool lua_spend(lua_State* L, int n);
 void lua_checkpointk(lua_State* L, lua_KContext ctx, lua_KFunction k);
 void lua_setfieldi(lua_State* L, int idx, byte_view k);
 
@@ -251,9 +251,9 @@ void luaL_argexpectedi(lua_State* L, bool cond, int arg, byte_view tname);
 void luaL_checkstacki(lua_State* L, int space, std::optional<byte_view> msg);
 
 int luaL_getmetafieldi(lua_State* L, int obj, byte_view event);
-int luaL_callmetai(lua_State* L, int obj, byte_view event);
+bool luaL_callmetai(lua_State* L, int obj, byte_view event);
 
-int luaL_newmetatablei(lua_State* L, byte_view tname);
+bool luaL_newmetatablei(lua_State* L, byte_view tname);
 void luaL_setmetatablei(lua_State* L, byte_view tname);
 void* luaL_testudatai(lua_State* L, int ud, byte_view tname);
 void* luaL_checkudatai(lua_State* L, int ud, byte_view tname);
@@ -261,8 +261,8 @@ lua_UserObject* luaL_testuserobjecti(lua_State* L, int ud, byte_view tname);
 lua_UserObject* luaL_checkuserobjecti(lua_State* L, int ud, byte_view tname);
 int luaL_getmetatablei(lua_State* L, byte_view tname);
 
-int luaL_getsubtablei(lua_State* L, int idx, byte_view fname);
-void luaL_requirefi(lua_State* L, byte_view modname, lua_CFunction openf, int glb);
+bool luaL_getsubtablei(lua_State* L, int idx, byte_view fname);
+void luaL_requirefi(lua_State* L, byte_view modname, lua_CFunction openf, bool glb);
 void luaL_tracebacki(lua_State* L, lua_State* L1, std::optional<byte_view> msg, int level);
 
 InternalString lua_funcaddressi(lua_State* L, int idx);
@@ -271,7 +271,7 @@ byte_view lua_typenamei(lua_State* L, int tp);
 
 std::optional<byte_view> lua_numbertocstringi(lua_State* L, int idx, byte_span buff);
 
-int luaL_fileresulti(lua_State* L, int stat, std::optional<byte_view> fname, int en);
+int luaL_fileresulti(lua_State* L, bool stat, std::optional<byte_view> fname, int en);
 int luaL_execresulti(lua_State* L, int stat, int en);
 
 struct luaL_Buffer;
@@ -290,9 +290,9 @@ struct InternalDebug
   int lastlinedefined = 0;
   int nups = 0;
   int nparams = 0;
-  char isvararg = 0;
+  bool isvararg = false;
   int extraargs = 0;
-  char istailcall = 0;
+  bool istailcall = false;
   int ftransfer = 0;
   int ntransfer = 0;
   byte_inline<LUA_IDSIZE> short_src_out; /* (S) */

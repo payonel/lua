@@ -146,7 +146,9 @@ Methods of the type classes are called on the object
   where it can pass 127; tags never do); `size_t`, `l_mem`, `lu_mem` →
   `long` where the value is a memory count, else `int` (lengths, indices,
   sizes of arrays); `StkId` → `int`; `TStatus` → `byte`; `bool` →
-  `boolean` (C `int` used as a boolean stays `int`).
+  `boolean` (the C++ keeps every true/false in a `bool`; where one is
+  stored as a number, in a stream byte or a box's slot, the Java writes
+  the conversion out: `? 1 : 0`, `!= 0`).
 - Unsigned operations: `(lua_Unsigned)a < (lua_Unsigned)b` →
   `Long.compareUnsigned(a, b) < 0`; unsigned `/`, `%` →
   `Long.divideUnsigned`, `Long.remainderUnsigned`; logical right shift →

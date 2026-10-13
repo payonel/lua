@@ -73,13 +73,13 @@ static int coresume_end(lua_State* L, int r)
 {
   if (l_unlikely(r < 0))
   {
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     lua_insert(L, -2);
     return 2; /* return false + error message */
   }
   else
   {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     lua_insert(L, -(r + 1));
     return r + 1; /* return true + 'resume' returns */
   }
@@ -234,7 +234,7 @@ static int luaB_yieldable(lua_State* L)
 
 static int luaB_corunning(lua_State* L)
 {
-  int ismain = lua_pushthread(L);
+  bool ismain = lua_pushthread(L);
   lua_pushboolean(L, ismain);
   return 2;
 }
@@ -243,12 +243,12 @@ static int close_end(lua_State* L, lua_State* co, int status)
 {
   if (status == LUA_OK)
   {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 1;
   }
   else
   {
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     lua_xmove(co, L, 1); /* move error message */
     return 2;
   }

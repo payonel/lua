@@ -786,7 +786,7 @@ public final class Lundump
             return;
           l.site = 2;
         case 2:
-          f.upvalues[l.i].instack = loadByte(S);
+          f.upvalues[l.i].instack = loadByte(S) != 0;
           l.site = 3;
         case 3:
           f.upvalues[l.i].idx = loadByte(S) & 0xFF;
@@ -1024,9 +1024,9 @@ public final class Lundump
       numerror(S, Lt.size, tname);
   }
 
-  private static void checknumformat(LoadState S, int eq, ByteView tname)
+  private static void checknumformat(LoadState S, boolean eq, ByteView tname)
   {
-    if (eq == 0)
+    if (!eq)
       numerror(S, Lt.format, tname);
   }
 
@@ -1056,7 +1056,7 @@ public final class Lundump
       throw e;
     }
     int i = l.raw.view().toInt32(0);
-    checknumformat(S, (i == v) ? 1 : 0, tname);
+    checknumformat(S, i == v, tname);
   }
 
   private static void checknum(LoadState S, long v, ByteView tname)
@@ -1084,7 +1084,7 @@ public final class Lundump
       throw e;
     }
     long i = l.raw.view().toInt64(0);
-    checknumformat(S, (i == v) ? 1 : 0, tname);
+    checknumformat(S, i == v, tname);
   }
 
   private static void checknum(LoadState S, double v, ByteView tname)
@@ -1112,7 +1112,7 @@ public final class Lundump
       throw e;
     }
     double i = l.raw.view().toDouble(0);
-    checknumformat(S, (i == v) ? 1 : 0, tname);
+    checknumformat(S, i == v, tname);
   }
 
   private static void checkHeader(LoadState S)
@@ -1166,7 +1166,7 @@ public final class Lundump
   /*
   ** Load precompiled chunk.
   */
-  public static LClosure luaU_undump(lua_State L, ZIO Z, Table anchor, MBuffer buff, ByteView name, int fixed)
+  public static LClosure luaU_undump(lua_State L, ZIO Z, Table anchor, MBuffer buff, ByteView name, boolean fixed)
   {
     UndumpFrame l = new UndumpFrame();
     int c0 = sv_byteat(name, 0);
@@ -1192,7 +1192,7 @@ public final class Lundump
       l.S.name = name;
       l.S.L = L;
       l.S.Z = Z;
-      l.S.fixed = fixed != 0;
+      l.S.fixed = fixed;
       l.S.buff = buff;
       l.S.offset = 1; /* fist byte was already read */
     }

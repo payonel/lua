@@ -44,9 +44,9 @@ public final class Table extends GCListed
     }
   }
 
-  private int haslastfree()
+  private boolean haslastfree()
   {
-    return (sizenode(this) >= twoto(LIMFORLAST)) ? 1 : 0;
+    return sizenode(this) >= twoto(LIMFORLAST);
   }
 
   public int asize()
@@ -166,14 +166,14 @@ public final class Table extends GCListed
     return mainpositionTV(key);
   }
 
-  private int nodegeneric(TValue key, int deadok)
+  private int nodegeneric(TValue key, boolean deadok)
   {
     Table t = this;
     int i = t.mainpositionTV(key);
     for (;;)
     { /* check whether 'key' is somewhere in the chain */
       Node n = gnode(t, i);
-      if (equalkey(key, n, deadok) != 0)
+      if (equalkey(key, n, deadok))
         return i; /* that's it */
       else
       {
@@ -185,7 +185,7 @@ public final class Table extends GCListed
     }
   }
 
-  private TValue getgeneric(TValue key, int deadok)
+  private TValue getgeneric(TValue key, boolean deadok)
   {
     Table t = this;
     int idx = t.nodegeneric(key, deadok);
@@ -226,7 +226,7 @@ public final class Table extends GCListed
       return i; /* yes; that's the index */
     else
     {
-      int idx = t.nodegeneric(key, 1);
+      int idx = t.nodegeneric(key, true);
       if (idx < 0)
         luaG_runerror(L, Lt.invalid_key_to_next); /* key not found */
       i = idx; /* key index in hash table */
@@ -235,7 +235,7 @@ public final class Table extends GCListed
     }
   }
 
-  public int luaH_next(lua_State L, int key)
+  public boolean luaH_next(lua_State L, int key)
   {
     Table t = this;
     int asize = t.asize();
@@ -250,7 +250,7 @@ public final class Table extends GCListed
         TValue res = new TValue();
         farr2val(t, i, tag, res);
         setslot(L, key + 1, res);
-        return 1;
+        return true;
       }
     }
     for (i -= asize; i < sizenode(t); i++)
@@ -262,10 +262,10 @@ public final class Table extends GCListed
         getnodekey(L, nk, n);
         setslot(L, key, nk);
         setslot(L, key + 1, n);
-        return 1;
+        return true;
       }
     }
-    return 0; /* no more elements */
+    return false; /* no more elements */
   }
 
   /* 'node' size in bytes */
@@ -279,7 +279,7 @@ public final class Table extends GCListed
   private void freehash(lua_State L)
   {
     Table t = this;
-    if (isdummy(t) == 0)
+    if (!isdummy(t))
     {
       luaM_alloc_Node_span(L.l_G, L, t.node, 0, false);
     }
@@ -291,10 +291,10 @@ public final class Table extends GCListed
   ** ==============================================================
   */
 
-  private int arraykeyisempty(int key)
+  private boolean arraykeyisempty(int key)
   {
     int tag = getArrTag(this, key - 1);
-    return tagisempty(tag) ? 1 : 0;
+    return tagisempty(tag);
   }
 
   /*
@@ -322,7 +322,7 @@ public final class Table extends GCListed
       /* count elements in range (2^(lg - 1), 2^lg] */
       for (; i <= lim; i++)
       {
-        if (t.arraykeyisempty(i) == 0)
+        if (!t.arraykeyisempty(i))
           lc++;
       }
       ct.nums[lg] += lc;
@@ -348,7 +348,7 @@ public final class Table extends GCListed
       if (isempty(n))
       {
         assert !keyisnil(n); /* entry was deleted; key cannot be nil */
-        ct.deleted = 1;
+        ct.deleted = true;
       }
       else
       {
@@ -567,7 +567,7 @@ public final class Table extends GCListed
     for (i = 0; i <= MAXABITS; i++)
       ct.nums[i] = 0;
     ct.na = 0;
-    ct.deleted = 0;
+    ct.deleted = false;
     ct.total = 1; /* count extra key */
     if (ttisinteger(ek))
       countint(ivalue(ek), ct); /* extra key may go to array */
@@ -584,7 +584,7 @@ public final class Table extends GCListed
     }
     /* all keys not in the array part go to the hash part */
     nsize = ct.total - ct.na;
-    if (ct.deleted != 0)
+    if (ct.deleted)
     { /* table has deleted entries? */
       /* insertion-deletion-insertion: give hash some extra size to
          avoid repeated resizings */
@@ -612,7 +612,7 @@ public final class Table extends GCListed
     Table t = this;
     long sz = Cost.Table
               + (long) t.array_prim.length * (Cost.Value + Cost.Byte);
-    if (isdummy(t) == 0)
+    if (!isdummy(t))
       sz += t.sizehash();
     return sz;
   }
@@ -644,7 +644,7 @@ public final class Table extends GCListed
                            TValue val, int link)
   {
     Table t = this;
-    assert isdummy(t) == 0 && 0 <= i && i < sizenode(t);
+    assert !isdummy(t) && 0 <= i && i < sizenode(t);
     assert 0 <= i + link && i + link < sizenode(t);
     Node n = gnode(t, i);
     n.next = link;
@@ -692,7 +692,7 @@ public final class Table extends GCListed
       obj2arr(t, i, v);
       luaC_barrierback(L, t, v);
     }
-    if (isdummy(src) == 0)
+    if (!isdummy(src))
     {
       for (int i = 0; i < sizenode(src); i++)
       {
@@ -715,7 +715,7 @@ public final class Table extends GCListed
   private int getfreepos()
   {
     Table t = this;
-    if (t.haslastfree() != 0)
+    if (t.haslastfree())
     { /* does it have 'lastfree' information? */
       /* look for a spot before 'lastfree', updating 'lastfree' */
       while (t.lastfree > 0)
@@ -745,18 +745,18 @@ public final class Table extends GCListed
   ** its main position), new key goes to an empty position. Return 0 if
   ** could not insert key (could not find a free space).
   */
-  private int insertkey(TValue key, TValue value)
+  private boolean insertkey(TValue key, TValue value)
   {
     Table t = this;
     int mp = t.mainpositionTV(key);
     /* table cannot already contain the key */
-    assert t.nodegeneric(key, 0) < 0;
-    if (!isempty(gnode(t, mp)) || isdummy(t) != 0)
+    assert t.nodegeneric(key, false) < 0;
+    if (!isempty(gnode(t, mp)) || isdummy(t))
     { /* main position is taken? */
       int f = t.getfreepos(); /* get a free place */
       if (f < 0)             /* cannot find a free place? */
-        return 0;
-      assert isdummy(t) == 0;
+        return false;
+      assert !isdummy(t);
       int othern = t.mainpositionfromnode(mp);
       if (othern != mp)
       { /* is colliding node out of its main position? */
@@ -786,7 +786,7 @@ public final class Table extends GCListed
     setnodekey(gnode(t, mp), key);
     assert isempty(gnode(t, mp));
     setobj(null, gnode(t, mp), value);
-    return 1;
+    return true;
   }
 
   /*
@@ -801,8 +801,8 @@ public final class Table extends GCListed
       obj2arr(t, i - 1, value); /* set value in the array */
     else
     {
-      int done = t.insertkey(key, value); /* insert key in the hash part */
-      assert done != 0;                    /* it cannot fail */
+      boolean done = t.insertkey(key, value); /* insert key in the hash part */
+      assert done;                         /* it cannot fail */
     }
   }
 
@@ -812,8 +812,8 @@ public final class Table extends GCListed
     Table t = this;
     if (!isempty(value))
     { /* do not insert nil values */
-      int done = t.insertkey(key, value);
-      if (done == 0)
+      boolean done = t.insertkey(key, value);
+      if (!done)
       {                               /* could not find a free place? */
         t.rehash(L, key);            /* grow table */
         t.newcheckedkey(key, value); /* insert key in grown table */
@@ -851,11 +851,11 @@ public final class Table extends GCListed
     return (idx < 0) ? absentkey : gnode(t, idx);
   }
 
-  private int hashkeyisempty(long key)
+  private boolean hashkeyisempty(long key)
   {
     Table t = this;
     TValue val = t.getintfromhash(key);
-    return isempty(val) ? 1 : 0;
+    return isempty(val);
   }
 
   public byte luaH_getint(long key, TValue res)
@@ -882,7 +882,7 @@ public final class Table extends GCListed
       Node n = gnode(t, i);
       if (keyisshrstr(n))
       {
-        if (luaS_eqstr(keystrval(n), key) != 0)
+        if (luaS_eqstr(keystrval(n), key))
           return i; /* that's it */
       }
       int nx = n.next;
@@ -937,12 +937,12 @@ public final class Table extends GCListed
     case LUA_VNUMFLT:
     {
       IntResult k = new IntResult();
-      if (luaV_flttointeger(fltvalue(key), k, F2Ieq) != 0) /* integral index? */
+      if (luaV_flttointeger(fltvalue(key), k, F2Ieq)) /* integral index? */
         return t.luaH_getint(k.v, res);                 /* use specialized version */
       /* else... */
     } /* FALLTHROUGH */
     default:
-      slot = t.getgeneric(key, 0);
+      slot = t.getgeneric(key, false);
       break;
     }
     return finishnodeget(slot, res);
@@ -960,15 +960,15 @@ public final class Table extends GCListed
       return retpsetcode(idx);
   }
 
-  private int rawfinishnodeset(int idx, TValue val)
+  private boolean rawfinishnodeset(int idx, TValue val)
   {
     if (idx < 0)
-      return 0; /* no slot with that key */
+      return false; /* no slot with that key */
     else
     {
       Table t = this;
       setobj(null, gnode(t, idx), val);
-      return 1; /* success */
+      return true; /* success */
     }
   }
 
@@ -987,7 +987,7 @@ public final class Table extends GCListed
     if (l_ult(u, t.asize()))
     {
       byte tag = getArrTag(t, u);
-      if (checknoTM(t.metatable, TM_NEWINDEX) != 0 || !tagisempty(tag))
+      if (checknoTM(t.metatable, TM_NEWINDEX) || !tagisempty(tag))
       {
         fval2arr(t, u, val);
         hres = HOK;
@@ -1017,16 +1017,16 @@ public final class Table extends GCListed
       setobj(null, gnode(t, idx), val); /* update it */
       return HOK;                                            /* done */
     }
-    else if (checknoTM(t.metatable, TM_NEWINDEX) != 0)
+    else if (checknoTM(t.metatable, TM_NEWINDEX))
     {                        /* no metamethod? */
       if (isempty(val))      /* new value is nil? */
         return HOK;          /* done (value is already nil/absent) */
       if (idx < 0 && /* key is absent? */
-          !(isblack(t) != 0 && iswhite(key) != 0))
+          !(isblack(t) && iswhite(key)))
       {            /* and don't need barrier? */
         TValue tk = new TValue(); /* key as a TValue */
         setsvalue(null, tk, key);
-        if (t.insertkey(tk, val) != 0)
+        if (t.insertkey(tk, val))
         { /* insert key, if there is space */
           invalidateTMcache(t);
           return HOK;
@@ -1059,12 +1059,12 @@ public final class Table extends GCListed
     case LUA_VNUMFLT:
     {
       IntResult k = new IntResult();
-      if (luaV_flttointeger(fltvalue(key), k, F2Ieq) != 0) /* integral index? */
+      if (luaV_flttointeger(fltvalue(key), k, F2Ieq)) /* integral index? */
         return t.psetint(k.v, val);                     /* use specialized version */
       /* else... */
     } /* FALLTHROUGH */
     default:
-      return t.finishnodeset(t.nodegeneric(key, 0), val);
+      return t.finishnodeset(t.nodegeneric(key, false), val);
     }
   }
 
@@ -1089,7 +1089,7 @@ public final class Table extends GCListed
       {
         double f = fltvalue(key);
         IntResult k = new IntResult();
-        if (luaV_flttointeger(f, k, F2Ieq) != 0)
+        if (luaV_flttointeger(f, k, F2Ieq))
         { /* is key equal to an integer? */
           setivalue(aux, k.v);
           actk = aux; /* use the integer as the key */
@@ -1134,8 +1134,8 @@ public final class Table extends GCListed
       obj2arr(t, ik - 1, value);
     else
     {
-      int ok = t.rawfinishnodeset(t.nodeintfromhash(key), value);
-      if (ok == 0)
+      boolean ok = t.rawfinishnodeset(t.nodeintfromhash(key), value);
+      if (!ok)
       {
         TValue k = new TValue();
         setivalue(k, key);
@@ -1172,7 +1172,7 @@ public final class Table extends GCListed
     long incr = (Integer.toUnsignedLong(rnd) & mask) + 1;               /* first increment (at least 1) */
     long j = (incr <= LUA_MAXINTEGER - i) ? i + incr : i + 1;
     rnd >>>= n; /* used 'n' bits from 'rnd' */
-    while (t.hashkeyisempty(j) == 0)
+    while (!t.hashkeyisempty(j))
     {        /* repeat until an absent t[j] */
       i = j; /* 'i' is a present index */
       if (j <= LUA_MAXINTEGER / 2 - 1)
@@ -1183,7 +1183,7 @@ public final class Table extends GCListed
       else
       {
         j = LUA_MAXINTEGER;
-        if (t.hashkeyisempty(j) != 0) /* t[j] not present? */
+        if (t.hashkeyisempty(j)) /* t[j] not present? */
           break;                  /* 'j' now is an absent index */
         else                      /* weird case */
           return j;               /* well, max integer is a boundary... */
@@ -1193,7 +1193,7 @@ public final class Table extends GCListed
     while (j - i > 1)
     { /* do a binary search between them */
       long m = i + (j - i) / 2;
-      if (t.hashkeyisempty(m) != 0)
+      if (t.hashkeyisempty(m))
         j = m;
       else
         i = m;
@@ -1208,7 +1208,7 @@ public final class Table extends GCListed
     while (j - i > 1)
     { /* binary search */
       int m = i + (j - i) / 2;
-      if (t.arraykeyisempty(m) != 0)
+      if (t.arraykeyisempty(m))
         j = m;
       else
         i = m;
@@ -1246,7 +1246,7 @@ public final class Table extends GCListed
       int limit = t.lenhint; /* start with the hint */
       if (limit == 0)
         limit = 1; /* make limit a valid index in the array */
-      if (t.arraykeyisempty(limit) != 0)
+      if (t.arraykeyisempty(limit))
       { /* t[limit] empty? */
         /* there must be a border before 'limit' */
         int i;
@@ -1254,7 +1254,7 @@ public final class Table extends GCListed
         for (i = 0; i < maxvicinity && limit > 1; i++)
         {
           limit--;
-          if (t.arraykeyisempty(limit) == 0)
+          if (!t.arraykeyisempty(limit))
             return t.newhint(limit); /* 'limit' is a border */
         }
         /* t[limit] still empty; search for a border in [0, limit) */
@@ -1267,10 +1267,10 @@ public final class Table extends GCListed
         for (i = 0; i < maxvicinity && limit < asize; i++)
         {
           limit++;
-          if (t.arraykeyisempty(limit) != 0)
+          if (t.arraykeyisempty(limit))
             return t.newhint(limit - 1); /* 'limit - 1' is a border */
         }
-        if (t.arraykeyisempty(asize) != 0)
+        if (t.arraykeyisempty(asize))
         { /* last element empty? */
           /* t[limit] not empty; search for a border in [limit, asize) */
           return t.newhint(t.binsearch(limit, asize));
@@ -1281,8 +1281,8 @@ public final class Table extends GCListed
       t.lenhint = asize;
     }
     /* no array part or t[asize] is not empty; check the hash part */
-    assert asize == 0 || t.arraykeyisempty(asize) == 0;
-    if (isdummy(t) != 0 || t.hashkeyisempty((long) asize + 1) != 0)
+    assert asize == 0 || !t.arraykeyisempty(asize);
+    if (isdummy(t) || t.hashkeyisempty((long) asize + 1))
       return asize; /* 'asize + 1' is empty */
     else            /* 'asize + 1' is also non empty */
       return t.hash_search(L, asize);

@@ -67,16 +67,16 @@ void luaZ_init(lua_State* L, ZIO* z, lua_Reader* reader)
 ** (With no frame of its own, in a load that a freeze can stop: made
 ** again, it goes the same way, the buffer empty, see lload.h.)
 */
-static int checkbuffer(ZIO* z)
+static bool checkbuffer(ZIO* z)
 {
   if (z->pos == z->chunk.size())
   {                        /* no bytes in buffer? */
     if (luaZ_fill(z) == EOZ) /* try to read more */
-      return 0;            /* no more input */
+      return false;            /* no more input */
     else
       z->pos--; /* luaZ_fill consumed first byte; put it back */
   }
-  return 1; /* now buffer has something */
+  return true; /* now buffer has something */
 }
 
 /* the frame of 'luaZ_read' (see lload.h) */

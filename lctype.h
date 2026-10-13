@@ -40,37 +40,37 @@ extern const lu_byte luai_ctype_[UCHAR_MAX + 2];
 /*
 ** add 1 to char to allow index -1 (EOZ)
 */
-static l_forceinline int testprop(int c, int p)
+static l_forceinline bool testprop(int c, int p)
 {
-  return luai_ctype_[c + 1] & p;
+  return (luai_ctype_[c + 1] & p) != 0;
 }
 
-static l_forceinline int lislalpha(int c)
+static l_forceinline bool lislalpha(int c)
 {
   return testprop(c, MASK(ALPHABIT));
 }
 
-static l_forceinline int lislalnum(int c)
+static l_forceinline bool lislalnum(int c)
 {
   return testprop(c, MASK(ALPHABIT) | MASK(DIGITBIT));
 }
 
-static l_forceinline int lisdigit(int c)
+static l_forceinline bool lisdigit(int c)
 {
   return testprop(c, MASK(DIGITBIT));
 }
 
-static l_forceinline int lisspace(int c)
+static l_forceinline bool lisspace(int c)
 {
   return testprop(c, MASK(SPACEBIT));
 }
 
-static l_forceinline int lisprint(int c)
+static l_forceinline bool lisprint(int c)
 {
   return testprop(c, MASK(PRINTBIT));
 }
 
-static l_forceinline int lisxdigit(int c)
+static l_forceinline bool lisxdigit(int c)
 {
   return testprop(c, MASK(XDIGITBIT));
 }

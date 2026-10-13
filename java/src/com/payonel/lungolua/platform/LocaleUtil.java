@@ -25,27 +25,27 @@ public final class LocaleUtil
 
   private static final ByteView C_LOCALE = ByteView.of("C");
 
-  private static int isupper(int c)
+  private static boolean isupper(int c)
   {
-    return (c >= 'A' && c <= 'Z') ? 1 : 0;
+    return c >= 'A' && c <= 'Z';
   }
 
-  private static int iscntrl(int c)
+  private static boolean iscntrl(int c)
   {
-    return ((c >= 0 && c < 32) || c == 127) ? 1 : 0;
+    return (c >= 0 && c < 32) || c == 127;
   }
 
-  private static int isgraph(int c)
+  private static boolean isgraph(int c)
   {
-    return (c > 32 && c < 127) ? 1 : 0;
+    return c > 32 && c < 127;
   }
 
-  private static int ispunct(int c)
+  private static boolean ispunct(int c)
   {
-    return (isgraph(c) != 0 && locale_isalnum(c) == 0) ? 1 : 0;
+    return isgraph(c) && !locale_isalnum(c);
   }
 
-  public static int locale_matchclass(int c, int cls)
+  public static boolean locale_matchclass(int c, int cls)
   {
     switch (cls)
     {
@@ -59,49 +59,49 @@ public final class LocaleUtil
     case 'u': return isupper(c);
     case 'w': return locale_isalnum(c);
     case 'x': return locale_isxdigit(c);
-    case 'z': return (c == 0) ? 1 : 0;
-    default: return 0;
+    case 'z': return c == 0;
+    default: return false;
     }
   }
 
   public static int locale_tolower(int c)
   {
-    return (isupper(c) != 0) ? c + ('a' - 'A') : c;
+    return isupper(c) ? c + ('a' - 'A') : c;
   }
 
   public static int locale_toupper(int c)
   {
-    return (locale_islower(c) != 0) ? c - ('a' - 'A') : c;
+    return (locale_islower(c)) ? c - ('a' - 'A') : c;
   }
 
-  public static int locale_islower(int c)
+  public static boolean locale_islower(int c)
   {
-    return (c >= 'a' && c <= 'z') ? 1 : 0;
+    return c >= 'a' && c <= 'z';
   }
 
-  public static int locale_isalpha(int c)
+  public static boolean locale_isalpha(int c)
   {
-    return (isupper(c) != 0 || locale_islower(c) != 0) ? 1 : 0;
+    return isupper(c) || locale_islower(c);
   }
 
-  public static int locale_isdigit(int c)
+  public static boolean locale_isdigit(int c)
   {
-    return (c >= '0' && c <= '9') ? 1 : 0;
+    return c >= '0' && c <= '9';
   }
 
-  public static int locale_isalnum(int c)
+  public static boolean locale_isalnum(int c)
   {
-    return (locale_isalpha(c) != 0 || locale_isdigit(c) != 0) ? 1 : 0;
+    return locale_isalpha(c) || locale_isdigit(c);
   }
 
-  public static int locale_isxdigit(int c)
+  public static boolean locale_isxdigit(int c)
   {
-    return (locale_isdigit(c) != 0 || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) ? 1 : 0;
+    return locale_isdigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
   }
 
-  public static int locale_isspace(int c)
+  public static boolean locale_isspace(int c)
   {
-    return (c == ' ' || (c >= '\t' && c <= '\r')) ? 1 : 0;
+    return c == ' ' || (c >= '\t' && c <= '\r');
   }
 
   public static byte locale_radixpoint()

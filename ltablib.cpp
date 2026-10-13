@@ -36,7 +36,7 @@ constexpr int TAB_L = 4; /* length */
 constexpr int TAB_RW = TAB_R | TAB_W; /* read/write */
 
 
-static int checkfield(lua_State* L, byte_view key, int n)
+static bool checkfield(lua_State* L, byte_view key, int n)
 {
   lua_pushlstring(L, key, 0, key.size());
   return (lua_rawget(L, -n) != LUA_TNIL);
@@ -126,7 +126,7 @@ static int tinsert_move(lua_State* L, lua_Integer i, lua_Integer pos, int at)
       }
       if (lua_isplaintable(L, 1))
       { /* (reads and writes call nothing) */
-        i -= lua_plainmove(L, 1, pos, 1, pos + 1, i - pos, 0);
+        i -= lua_plainmove(L, 1, pos, 1, pos + 1, i - pos, false);
         if (luaE_budgetout(L))
           lua_checkpointk(L, (lua_KContext)i, tinsertk_loop);
         break;
@@ -248,7 +248,7 @@ static int tremove_move(lua_State* L, lua_Integer pos, int at)
       }
       if (lua_isplaintable(L, 1))
       { /* (reads and writes call nothing) */
-        pos += lua_plainmove(L, 1, pos + 1, 1, pos, size - pos, 1);
+        pos += lua_plainmove(L, 1, pos + 1, 1, pos, size - pos, true);
         if (luaE_budgetout(L))
           lua_checkpointk(L, (lua_KContext)pos, tremovek_loop);
         break;
@@ -410,9 +410,9 @@ static int tmove_loop(lua_State* L, lua_Integer i, int dir, int at)
       if (lua_isplaintable(L, 1) && lua_isplaintable(L, tt))
       { /* (reads and writes call nothing) */
         if (up)
-          i += lua_plainmove(L, 1, f + i, tt, t + i, n - i, 1);
+          i += lua_plainmove(L, 1, f + i, tt, t + i, n - i, true);
         else
-          i -= lua_plainmove(L, 1, f, tt, t, i + 1, 0);
+          i -= lua_plainmove(L, 1, f, tt, t, i + 1, false);
         if (luaE_budgetout(L))
           lua_checkpointk(L, (lua_KContext)i, up ? tmovek_uploop : tmovek_downloop);
         break;
@@ -432,7 +432,7 @@ static int tmove_loop(lua_State* L, lua_Integer i, int dir, int at)
 }
 
 /* 'move' after comparing the tables: they are not the same, go up */
-static int tmove_dir(lua_State* L, int up)
+static int tmove_dir(lua_State* L, bool up)
 {
   lua_Integer n = luaL_checkinteger(L, 3) - luaL_checkinteger(L, 2) + 1;
   return up ? tmove_loop(L, 0, 1, AT_LOOP) : tmove_loop(L, n - 1, -1, AT_LOOP);
@@ -442,7 +442,7 @@ static int tmovek_eq(lua_State* L, int status, lua_KContext ctx)
 {
   (void)status;
   (void)ctx;
-  int eq = lua_toboolean(L, -1);
+  bool eq = lua_toboolean(L, -1);
   lua_pop(L, 1);
   return tmove_dir(L, !eq);
 }
@@ -465,10 +465,10 @@ static int tmove(lua_State* L)
     lua_Integer n = e - f + 1; /* number of elements to move */
     luaL_argchecki(L, t <= LUA_MAXINTEGER - n + 1, 4, lt::destination_wrap_around);
     if (t > e || t <= f)
-      return tmove_dir(L, 1);
+      return tmove_dir(L, true);
     else if (tt == 1)
-      return tmove_dir(L, 0);
-    int eq = lua_comparek(L, 1, tt, LUA_OPEQ, 0, tmovek_eq);
+      return tmove_dir(L, false);
+    bool eq = lua_comparek(L, 1, tt, LUA_OPEQ, 0, tmovek_eq);
     lua_pop(L, 1);
     return tmove_dir(L, !eq);
   }
@@ -898,7 +898,7 @@ static lua_Integer* sort_box(lua_State* L, lua_Integer* s)
 ** Whether the value at stack index 'a' is less than the value at index
 ** 'b' (according to the order of the sort), by the function or '__lt'.
 */
-static int sort_call(lua_State* L, int fn, int a, int b)
+static int sort_call(lua_State* L, bool fn, int a, int b)
 {
   if (!fn) /* no function? */
     lua_comparek(L, a, b, LUA_OPLT, 0, sortk); /* a < b */
@@ -909,7 +909,7 @@ static int sort_call(lua_State* L, int fn, int a, int b)
     lua_pushvalue(L, b - 2); /* -2 to compensate function and 'a' */
     lua_callk(L, 2, 1, 0, sortk); /* call function */
   }
-  int res = lua_toboolean(L, -1); /* get result */
+  bool res = lua_toboolean(L, -1); /* get result */
   lua_pop(L, 1);                  /* pop result */
   return res;
 }
@@ -919,7 +919,7 @@ static int sort_result(lua_State* L, lua_Integer* s)
 {
   if (s[SO_R] >= 0)
     return (int)s[SO_R];
-  int res = lua_toboolean(L, -1);
+  bool res = lua_toboolean(L, -1);
   lua_pop(L, 1);
   return res;
 }
@@ -960,7 +960,7 @@ static l_forceinline lua_Integer* sort_save(lua_State* L, lua_Integer* s, int pc
 */
 static int sort_run(lua_State* L, lua_Integer* s)
 {
-  int fn = (int)s[SO_FN];
+  bool fn = s[SO_FN] != 0;
   bool plain = (s[SO_PLAIN] != 0);
   lua_Integer lo = s[SO_LO], up = s[SO_UP], p = s[SO_P], i = s[SO_I], j = s[SO_J];
   lua_Integer rnd = s[SO_RND];

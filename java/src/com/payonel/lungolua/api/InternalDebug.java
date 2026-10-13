@@ -18,9 +18,9 @@ public final class InternalDebug
   public int lastlinedefined = 0;
   public int nups = 0;
   public int nparams = 0;
-  public byte isvararg = 0;
+  public boolean isvararg = false;
   public int extraargs = 0;
-  public byte istailcall = 0;
+  public boolean istailcall = false;
   public int ftransfer = 0;
   public int ntransfer = 0;
   public ByteOwner short_src_out = new ByteOwner(LUA_IDSIZE); /* (S) */

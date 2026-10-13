@@ -91,14 +91,14 @@ public final class Lparser
   public static final int VCALL = 21;     /* expression is a function call; info = instruction pc */
   public static final int VVARARG = 22;   /* vararg expression; info = instruction pc */
 
-  public static int vkisvar(int k)
+  public static boolean vkisvar(int k)
   {
-    return (VLOCAL <= k && k <= VINDEXSTR) ? 1 : 0;
+    return VLOCAL <= k && k <= VINDEXSTR;
   }
 
-  public static int vkisindexed(int k)
+  public static boolean vkisindexed(int k)
   {
-    return (VINDEXED <= k && k <= VINDEXSTR) ? 1 : 0;
+    return VINDEXED <= k && k <= VINDEXSTR;
   }
 
   /* kinds of variables */
@@ -111,15 +111,15 @@ public final class Lparser
   public static final int GDKCONST = 6;   /* global constant */
 
   /* variables that live in registers */
-  public static int varinreg(Vardesc v)
+  public static boolean varinreg(Vardesc v)
   {
-    return (v.kind <= RDKTOCLOSE) ? 1 : 0;
+    return v.kind <= RDKTOCLOSE;
   }
 
   /* test for global variables */
-  public static int varglobal(Vardesc v)
+  public static boolean varglobal(Vardesc v)
   {
-    return (v.kind >= GDKREG) ? 1 : 0;
+    return v.kind >= GDKREG;
   }
 
   /*
@@ -137,16 +137,16 @@ public final class Lparser
      smaller than 250, due to the bytecode format) */
   private static final int MAXVARS = 200;
 
-  private static int hasmultret(int k)
+  private static boolean hasmultret(int k)
   {
-    return (k == VCALL || k == VVARARG) ? 1 : 0;
+    return k == VCALL || k == VVARARG;
   }
 
   /* because all strings are unified by the scanner, the parser
      can use pointer equality for string equality */
-  private static int eqstr(TString a, TString b)
+  private static boolean eqstr(TString a, TString b)
   {
-    return (a == b) ? 1 : 0;
+    return a == b;
   }
 
   private static RuntimeException error_expected(LexState ls, int token)
@@ -180,15 +180,15 @@ public final class Lparser
   ** before the call that can stop but read what a stop leaves as it was:
   ** made again, they go the same way.)
   */
-  private static int testnext(LexState ls, int c)
+  private static boolean testnext(LexState ls, int c)
   {
     if (ls.t.token == c)
     {
       luaX_next(ls);
-      return 1;
+      return true;
     }
     else
-      return 0;
+      return false;
   }
 
   /*
@@ -209,9 +209,9 @@ public final class Lparser
     luaX_next(ls);
   }
 
-  private static void check_condition(LexState ls, int c, ByteView msg)
+  private static void check_condition(LexState ls, boolean c, ByteView msg)
   {
-    if (c == 0)
+    if (!c)
       luaX_syntaxerror(ls, msg);
   }
 
@@ -222,7 +222,7 @@ public final class Lparser
   */
   private static void check_match(LexState ls, int what, int who, int where)
   {
-    if (testnext(ls, what) == 0)
+    if (!testnext(ls, what))
     {
       if (where == ls.linenumber) /* all in the same line? */
         error_expected(ls, what);  /* do not need a complex message */
@@ -333,7 +333,7 @@ public final class Lparser
     while (nvar-- > 0)
     {
       Vardesc vd = getlocalvardesc(fs, nvar); /* get previous variable */
-      if (varinreg(vd) != 0)                  /* is in a register? */
+      if (varinreg(vd))                  /* is in a register? */
         return vd.ridx + 1;
     }
     return 0; /* no variables in registers */
@@ -354,7 +354,7 @@ public final class Lparser
   private static LocVar localdebuginfo(FuncState fs, int vidx)
   {
     Vardesc vd = getlocalvardesc(fs, vidx);
-    if (varinreg(vd) == 0)
+    if (!varinreg(vd))
       return null; /* no debug info. for constants */
     else
     {
@@ -415,7 +415,7 @@ public final class Lparser
     case VINDEXSTR:
     case VINDEXED:
     {                  /* global variable */
-      if (e.ind.ro != 0) /* read-only? */
+      if (e.ind.ro) /* read-only? */
       {
         TValue kv = fs.f.k[e.ind.keystr];
         assert ttisstring(kv);
@@ -475,7 +475,7 @@ public final class Lparser
     Upvaldesc[] up = fs.f.upvalues;
     for (i = 0; i < fs.nups; i++)
     {
-      if (eqstr(up[i].name, name) != 0)
+      if (eqstr(up[i].name, name))
         return i;
     }
     return -1; /* not found */
@@ -498,17 +498,17 @@ public final class Lparser
     FuncState prev = fs.prev;
     if (v.k == VLOCAL)
     {
-      up.instack = 1;
+      up.instack = true;
       up.idx = v.var.ridx;
       up.kind = getlocalvardesc(prev, v.var.vidx).kind;
-      assert eqstr(name, getlocalvardesc(prev, v.var.vidx).name) != 0;
+      assert eqstr(name, getlocalvardesc(prev, v.var.vidx).name);
     }
     else
     {
-      up.instack = 0;
+      up.instack = false;
       up.idx = v.info;
       up.kind = prev.f.upvalues[v.info].kind;
-      assert eqstr(name, prev.f.upvalues[v.info].name) != 0;
+      assert eqstr(name, prev.f.upvalues[v.info].name);
     }
     up.name = name;
     luaC_objbarrier(fs.ls.L, fs.f, name);
@@ -521,7 +521,7 @@ public final class Lparser
     for (i = (int) fs.nactvar - 1; i >= 0; i--)
     {
       Vardesc vd = getlocalvardesc(fs, i);
-      if (varglobal(vd) != 0)
+      if (varglobal(vd))
       { /* global declaration? */
         if (vd.name == null)
         {                                    /* collective declaration? */
@@ -530,7 +530,7 @@ public final class Lparser
         }
         else
         { /* global name */
-          if (eqstr(n, vd.name) != 0)
+          if (eqstr(n, vd.name))
           { /* found? */
             init_exp(var, VGLOBAL, fs.firstlocal + i);
             return VGLOBAL;
@@ -539,7 +539,7 @@ public final class Lparser
             var.info = -2;         /* invalidate preambular declaration */
         }
       }
-      else if (eqstr(n, vd.name) != 0)
+      else if (eqstr(n, vd.name))
       {                           /* found? */
         if (vd.kind == RDKCTC) /* compile-time constant? */
           init_exp(var, VCONST, fs.firstlocal + i);
@@ -564,8 +564,8 @@ public final class Lparser
     BlockCnt bl = fs.bl;
     while (bl.nactvar > level)
       bl = bl.previous;
-    bl.upval = 1;
-    fs.needclose = 1;
+    bl.upval = true;
+    fs.needclose = true;
   }
 
   /*
@@ -574,9 +574,9 @@ public final class Lparser
   private static void marktobeclosed(FuncState fs)
   {
     BlockCnt bl = fs.bl;
-    bl.upval = 1;
-    bl.insidetbc = 1;
-    fs.needclose = 1;
+    bl.upval = true;
+    bl.insidetbc = true;
+    fs.needclose = true;
   }
 
   /*
@@ -646,7 +646,7 @@ public final class Lparser
                       new FmtArgs().str(varname.data.view()));
       buildglobal(ls, varname, var);
       if (info != -1 && ls.dyd.actvar.arr[info].kind == GDKCONST)
-        var.ind.ro = 1; /* mark variable as read-only */
+        var.ind.ro = true; /* mark variable as read-only */
       else              /* anyway must be a global */
         assert info == -1 || ls.dyd.actvar.arr[info].kind == GDKREG;
     }
@@ -666,7 +666,7 @@ public final class Lparser
     FuncState fs = ls.fs;
     int needed = nvars - nexps; /* extra values needed */
     luaK_checkstack(fs, needed);
-    if (hasmultret(e.k) != 0)
+    if (hasmultret(e.k))
     {                         /* last expression has multiple returns? */
       int extra = needed + 1; /* discount last expression itself */
       if (extra < 0)
@@ -715,23 +715,23 @@ public final class Lparser
   ** or out of the scope of some variable and the block has upvalues
   ** (signaled by parameter 'bup').
   */
-  private static void closegoto(LexState ls, int g, Labeldesc label, int bup)
+  private static void closegoto(LexState ls, int g, Labeldesc label, boolean bup)
   {
     int i;
     FuncState fs = ls.fs;
     Labellist gl = ls.dyd.gt;   /* list of gotos */
     Labeldesc gt = gl.arr[g];   /* goto to be resolved */
-    assert eqstr(gt.name, label.name) != 0;
+    assert eqstr(gt.name, label.name);
     if (gt.nactvar < label.nactvar) /* enter some scope? */
       jumpscopeerror(ls, gt);
-    if (gt.close != 0 ||
-        (label.nactvar < gt.nactvar && bup != 0))
+    if (gt.close ||
+        (label.nactvar < gt.nactvar && bup))
     { /* needs close? */
       int stklevel = reglevel(fs, label.nactvar);
       /* move jump to CLOSE position */
       fs.f.code[gt.pc + 1] = fs.f.code[gt.pc];
       /* put CLOSE instruction at original position */
-      fs.f.code[gt.pc] = CREATE_ABCk(OP_CLOSE, stklevel, 0, 0, 0);
+      fs.f.code[gt.pc] = CREATE_ABCk(OP_CLOSE, stklevel, 0, 0, false);
       gt.pc++; /* must point to jump instruction */
     }
     luaK_patchlist(ls.fs, gt.pc, label.pc); /* goto jumps to label */
@@ -751,7 +751,7 @@ public final class Lparser
     for (; ilb < dyd.label.n; ilb++)
     {
       Labeldesc lb = dyd.label.arr[ilb];
-      if (eqstr(lb.name, name) != 0) /* correct label? */
+      if (eqstr(lb.name, name)) /* correct label? */
         return lb;
     }
     return null; /* label not found */
@@ -772,7 +772,7 @@ public final class Lparser
     l.arr[n].name = name;
     l.arr[n].line = line;
     l.arr[n].nactvar = ls.fs.nactvar;
-    l.arr[n].close = 0;
+    l.arr[n].close = false;
     l.arr[n].pc = pc;
     l.n = n + 1;
     return n;
@@ -801,12 +801,12 @@ public final class Lparser
   ** a close instruction if necessary.
   ** Returns true iff it added a close instruction.
   */
-  private static void createlabel(LexState ls, TString name, int line, int last)
+  private static void createlabel(LexState ls, TString name, int line, boolean last)
   {
     FuncState fs = ls.fs;
     Labellist ll = ls.dyd.label;
     int l = newlabelentry(ls, ll, name, line, luaK_getlabel(fs));
-    if (last != 0)
+    if (last)
     { /* label is last no-op statement in the block? */
       /* assume that locals are already out of scope */
       ll.arr[l].nactvar = fs.bl.nactvar;
@@ -837,8 +837,8 @@ public final class Lparser
       { /* adjust 'goto' for outer block */
         /* block has variables to be closed and goto escapes the scope of
            some variable? */
-        if (bl.upval != 0 && reglevel(fs, gt.nactvar) > outlevel)
-          gt.close = 1;          /* jump may need a close */
+        if (bl.upval && reglevel(fs, gt.nactvar) > outlevel)
+          gt.close = true;          /* jump may need a close */
         gt.nactvar = bl.nactvar; /* correct level for outer block */
         igt++;                   /* go to next goto */
       }
@@ -852,9 +852,9 @@ public final class Lparser
     bl.nactvar = fs.nactvar;
     bl.firstlabel = fs.ls.dyd.label.n;
     bl.firstgoto = fs.ls.dyd.gt.n;
-    bl.upval = 0;
+    bl.upval = false;
     /* inherit 'insidetbc' from enclosing block */
-    bl.insidetbc = (byte) ((fs.bl != null && fs.bl.insidetbc != 0) ? 1 : 0);
+    bl.insidetbc = fs.bl != null && fs.bl.insidetbc;
     bl.previous = fs.bl; /* link block in function's block list */
     fs.bl = bl;
     assert fs.freereg == luaY_nvarstack(fs);
@@ -866,7 +866,7 @@ public final class Lparser
   private static RuntimeException undefgoto(LexState ls, Labeldesc gt)
   {
     /* breaks are checked when created, cannot be undefined */
-    assert eqstr(gt.name, ls.brkn) == 0;
+    assert !eqstr(gt.name, ls.brkn);
     throw luaK_semerror(ls, Lt.no_visible_label_s_for_goto_at_line_d,
                         new FmtArgs().str(gt.name.data.view()).num(gt.line));
   }
@@ -876,13 +876,13 @@ public final class Lparser
     BlockCnt bl = fs.bl;
     LexState ls = fs.ls;
     int stklevel = reglevel(fs, bl.nactvar); /* level outside block */
-    if (bl.previous != null && bl.upval != 0) /* need a 'close'? */
+    if (bl.previous != null && bl.upval) /* need a 'close'? */
       luaK_codeABC(fs, OP_CLOSE, stklevel, 0, 0);
     fs.freereg = stklevel;              /* free registers */
     removevars(fs, bl.nactvar);         /* remove block locals */
     assert bl.nactvar == fs.nactvar;    /* back to level on entry */
     if (bl.isloop == 2)                 /* has to fix pending breaks? */
-      createlabel(ls, ls.brkn, 0, 0);
+      createlabel(ls, ls.brkn, 0, false);
     solvegotos(fs, bl);
     if (bl.previous == null)
     {                                                 /* was it the last block? */
@@ -945,7 +945,7 @@ public final class Lparser
     fs.nups = 0;
     fs.ndebugvars = 0;
     fs.nactvar = 0;
-    fs.needclose = 0;
+    fs.needclose = false;
     fs.firstlocal = ls.dyd.actvar.n;
     fs.firstlabel = ls.dyd.label.n;
     fs.bl = null;
@@ -994,7 +994,7 @@ public final class Lparser
   ** 'until' closes syntactical blocks, but do not close scope,
   ** so it is handled in separate.
   */
-  private static int block_follow(LexState ls, int withuntil)
+  private static boolean block_follow(LexState ls, boolean withuntil)
   {
     switch (ls.t.token)
     {
@@ -1002,11 +1002,11 @@ public final class Lparser
     case TK_ELSEIF:
     case TK_END:
     case TK_EOS:
-      return 1;
+      return true;
     case TK_UNTIL:
       return withuntil;
     default:
-      return 0;
+      return false;
     }
   }
 
@@ -1023,7 +1023,7 @@ public final class Lparser
         switch (l.site)
         {
         case 0: /* the loop */
-          if (block_follow(ls, 1) != 0)
+          if (block_follow(ls, true))
             return;
           l.site = (ls.t.token == TK_RETURN) ? 1 : 2;
           continue;
@@ -1226,7 +1226,7 @@ public final class Lparser
   {
     if (cc.tostore == 0)
       return;
-    if (hasmultret(cc.v.k) != 0)
+    if (hasmultret(cc.v.k))
     {
       luaK_setmultret(fs, cc.v);
       luaK_setlist(fs, cc.t.info, cc.na, LUA_MULTRET);
@@ -1362,7 +1362,7 @@ public final class Lparser
         {
         case 0:
           l.line = ls.linenumber;
-          l.pc = luaK_codevABCk(fs, OP_NEWTABLE, 0, 0, 0, 0);
+          l.pc = luaK_codevABCk(fs, OP_NEWTABLE, 0, 0, 0, false);
           luaK_code(fs, 0); /* space for extra arg. */
           l.cc.na = l.cc.nh = l.cc.tostore = 0;
           l.cc.t = t;
@@ -1388,14 +1388,14 @@ public final class Lparser
           luaY_checklimit(fs, l.cc.tostore + l.cc.na + l.cc.nh, MAX_CNST, Lt.items_in_a_constructor);
           l.site = 4;
         case 4:
-          if (testnext(ls, ',') != 0)
+          if (testnext(ls, ','))
           {
             l.site = 2;
             continue;
           }
           l.site = 5;
         case 5:
-          if (testnext(ls, ';') != 0)
+          if (testnext(ls, ';'))
           {
             l.site = 2;
             continue;
@@ -1430,7 +1430,7 @@ public final class Lparser
   private static final class ParlistFrame extends LoadFrame
   {
     int nparams = 0;
-    int varargk = 0;
+    boolean varargk = false;
 
     ParlistFrame()
     {
@@ -1472,7 +1472,7 @@ public final class Lparser
         {
         case 0:
           l.nparams = 0;
-          l.varargk = 0;
+          l.varargk = false;
           if (ls.t.token == ')') /* is 'parlist' empty? */
             break;
           l.site = 1;
@@ -1483,7 +1483,7 @@ public final class Lparser
             l.site = 2;
             break;
           case TK_DOTS:
-            l.varargk = 1;
+            l.varargk = true;
             l.site = 3;
             break;
           default:
@@ -1514,7 +1514,7 @@ public final class Lparser
           break;
         }
         case 5:
-          if (testnext(ls, ',') != 0)
+          if (testnext(ls, ','))
           {
             l.site = 1;
             continue;
@@ -1533,7 +1533,7 @@ public final class Lparser
     }
     adjustlocalvars(ls, l.nparams);
     f.numparams = fs.nactvar;
-    if (l.varargk != 0)
+    if (l.varargk)
     {
       setvararg(fs);          /* declared vararg */
       adjustlocalvars(ls, 1); /* vararg parameter */
@@ -1572,7 +1572,7 @@ public final class Lparser
     }
   }
 
-  private static void body(LexState ls, expdesc e, int ismethod, int line)
+  private static void body(LexState ls, expdesc e, boolean ismethod, int line)
   {
     /* body ->  '(' parlist ')' block END */
     BodyFrame l = new BodyFrame();
@@ -1596,7 +1596,7 @@ public final class Lparser
         l.site = 1;
       case 1:
         checknext(ls, '(');
-        if (ismethod != 0)
+        if (ismethod)
         {
           ByteView self = Lt.self;
           new_localvar(ls, luaX_newstring(ls, self, 0, self.size())); /* create 'self' parameter */
@@ -1676,7 +1676,7 @@ public final class Lparser
           expr(ls, v);
           l.site = 2;
         case 2: /* the loop */
-          if (testnext(ls, ',') == 0)
+          if (!testnext(ls, ','))
             return l.n;
           luaK_exp2nextreg(ls.fs, v);
           l.site = 3;
@@ -1769,7 +1769,7 @@ public final class Lparser
           l.site = 2;
         case 2:
           explist(ls, l.args);
-          if (hasmultret(l.args.k) != 0)
+          if (hasmultret(l.args.k))
             luaK_setmultret(fs, l.args);
           l.site = 3;
         case 3:
@@ -1794,7 +1794,7 @@ public final class Lparser
     }
     assert f.k == VNONRELOC;
     base = f.info; /* base register for call */
-    if (hasmultret(l.args.k) != 0)
+    if (hasmultret(l.args.k))
       nparams = LUA_MULTRET; /* open call */
     else
     {
@@ -2071,7 +2071,7 @@ public final class Lparser
           l.line = ls.linenumber;
           l.site = 4;
         case 4:
-          body(ls, v, 0, l.line);
+          body(ls, v, false, l.line);
           return;
         case 5:
           suffixedexp(ls, v);
@@ -2390,16 +2390,16 @@ public final class Lparser
   {
     FuncState fs = ls.fs;
     int extra = fs.freereg; /* eventual position to save local variable */
-    int conflict = 0;
+    boolean conflict = false;
     for (; lh != null; lh = lh.prev)
     { /* check all previous assignments */
-      if (vkisindexed(lh.v.k) != 0)
+      if (vkisindexed(lh.v.k))
       { /* assignment to table field? */
         if (lh.v.k == VINDEXUP)
         { /* is table an upvalue? */
           if (v.k == VUPVAL && lh.v.ind.t == v.info)
           {
-            conflict = 1; /* table is the upvalue being assigned now */
+            conflict = true; /* table is the upvalue being assigned now */
             lh.v.k = VINDEXSTR;
             lh.v.ind.t = extra; /* assignment will use safe copy */
           }
@@ -2408,20 +2408,20 @@ public final class Lparser
         { /* table is a register */
           if (v.k == VLOCAL && lh.v.ind.t == v.var.ridx)
           {
-            conflict = 1;       /* table is the local being assigned now */
+            conflict = true;       /* table is the local being assigned now */
             lh.v.ind.t = extra; /* assignment will use safe copy */
           }
           /* is index the local being assigned? */
           if (lh.v.k == VINDEXED && v.k == VLOCAL &&
               lh.v.ind.idx == v.var.ridx)
           {
-            conflict = 1;
+            conflict = true;
             lh.v.ind.idx = extra; /* previous assignment will use safe copy */
           }
         }
       }
     }
-    if (conflict != 0)
+    if (conflict)
     {
       /* copy upvalue/local value to a temporary (in position 'extra') */
       if (v.k == VLOCAL)
@@ -2496,7 +2496,7 @@ public final class Lparser
           check_readonly(ls, lh.v);
           l.site = 1;
         case 1:
-          if (testnext(ls, ',') == 0)
+          if (!testnext(ls, ','))
           { /* restassign -> '=' explist */
             l.site = 4;
             continue;
@@ -2506,7 +2506,7 @@ public final class Lparser
           l.site = 2;
         case 2:
           suffixedexp(ls, l.nv.v);
-          if (vkisindexed(l.nv.v.k) == 0)
+          if (!vkisindexed(l.nv.v.k))
             check_conflict(ls, lh, l.nv.v);
           l.site = 3;
         case 3:
@@ -2693,7 +2693,7 @@ public final class Lparser
       throw ex;
     }
     checkrepeated(ls, name); /* check for repeated labels */
-    createlabel(ls, name, line, block_follow(ls, 0));
+    createlabel(ls, name, line, block_follow(ls, false));
   }
 
   /* the frame of 'whilestat' (see lload.h) */
@@ -2852,7 +2852,7 @@ public final class Lparser
       luaZ_record(ls.z.rz, LF_REPEATSTAT, l);
       throw ex;
     }
-    if (l.bl2.upval != 0)
+    if (l.bl2.upval)
     {                                   /* upvalues? */
       int exit = luaK_jump(fs);         /* normal exit must jump over fix */
       luaK_patchtohere(fs, l.condexit); /* repetition must close upvalues */
@@ -2900,11 +2900,11 @@ public final class Lparser
   ** (Jump addresses are relative in Lua). 'back' true means
   ** a back jump.
   */
-  private static void fixforjump(FuncState fs, int pc, int dest, int back)
+  private static void fixforjump(FuncState fs, int pc, int dest, boolean back)
   {
     int[] code = fs.f.code;
     int offset = dest - (pc + 1);
-    if (back != 0)
+    if (back)
       offset = -offset;
     if (offset > MAXARG_Bx)
       luaX_syntaxerror(fs.ls, Lt.control_structure_too_long);
@@ -2986,14 +2986,14 @@ public final class Lparser
       throw ex;
     }
     leaveblock(fs); /* end of scope for declared variables */
-    fixforjump(fs, l.prep, luaK_getlabel(fs), 0);
+    fixforjump(fs, l.prep, luaK_getlabel(fs), false);
     if (isgen != 0)
     { /* generic for? */
       luaK_codeABC(fs, OP_TFORCALL, base, 0, nvars);
       luaK_fixline(fs, line);
     }
     int endfor = luaK_codeABx(fs, forloop[isgen], base, 0);
-    fixforjump(fs, endfor, l.prep + 1, 1);
+    fixforjump(fs, endfor, l.prep + 1, true);
     luaK_fixline(fs, line);
   }
 
@@ -3057,7 +3057,7 @@ public final class Lparser
           exp1(ls); /* limit */
           l.site = 5;
         case 5:
-          if (testnext(ls, ',') == 0)
+          if (!testnext(ls, ','))
           { /* default step = 1 */
             luaK_int(fs, fs.freereg, 1);
             luaK_reserveregs(fs, 1);
@@ -3143,7 +3143,7 @@ public final class Lparser
           new_varkind(ls, indexname, (byte) RDKCONST);
           l.site = 1;
         case 1: /* the loop: other declared variables */
-          if (testnext(ls, ',') == 0)
+          if (!testnext(ls, ','))
           {
             l.site = 3;
             continue;
@@ -3399,7 +3399,7 @@ public final class Lparser
           }
           l.site = 3;
         case 3:
-          if (testnext(ls, TK_ELSE) == 0)
+          if (!testnext(ls, TK_ELSE))
           {
             l.site = 5;
             continue;
@@ -3476,7 +3476,7 @@ public final class Lparser
         l.site = 1;
       }
       case 1:
-        body(ls, l.b, 0, l.line); /* function created in next register */
+        body(ls, l.b, false, l.line); /* function created in next register */
         break;
       default:
         luaZ_badstate(ls.z.rz);
@@ -3530,7 +3530,7 @@ public final class Lparser
       switch (l.site)
       {
       case 0:
-        if (testnext(ls, '<') == 0)
+        if (!testnext(ls, '<'))
           return df; /* return default value */
         l.site = 1;
       case 1:
@@ -3646,14 +3646,14 @@ public final class Lparser
           l.site = 4;
         }
         case 4:
-          if (testnext(ls, ',') != 0)
+          if (testnext(ls, ','))
           {
             l.site = 2;
             continue;
           }
           l.site = 5;
         case 5:
-          if (testnext(ls, '=') == 0)
+          if (!testnext(ls, '='))
           {
             l.e.k = VVOID;
             l.nexps = 0;
@@ -3677,7 +3677,7 @@ public final class Lparser
     var = getlocalvardesc(fs, l.vidx); /* retrieve last variable */
     if (l.nvars == l.nexps &&          /* no adjustments? */
         var.kind == RDKCONST &&        /* last variable is const? */
-        luaK_exp2const(fs, l.e, var.k) != 0)
+        luaK_exp2const(fs, l.e, var.k))
     {                                   /* compile-time constant? */
       var.kind = RDKCTC;                /* variable is a compile-time constant */
       adjustlocalvars(ls, l.nvars - 1); /* exclude last variable */
@@ -3864,14 +3864,14 @@ public final class Lparser
           l.site = 3;
         }
         case 3:
-          if (testnext(ls, ',') != 0)
+          if (testnext(ls, ','))
           {
             l.site = 1;
             continue;
           }
           l.site = 4;
         case 4:
-          if (testnext(ls, '=') == 0)
+          if (!testnext(ls, '='))
             break;
           /* initialization */
           l.line = ls.linenumber;
@@ -3938,7 +3938,7 @@ public final class Lparser
         l.defkind = getglobalattribute(ls, (byte) GDKREG);
         l.site = 1;
       case 1:
-        if (testnext(ls, '*') != 0)
+        if (testnext(ls, '*'))
         {
           new_varkind(ls, null, l.defkind);
           fs.nactvar++; /* activate declaration */
@@ -4011,7 +4011,7 @@ public final class Lparser
         l.bline = ls.linenumber;
         l.site = 1;
       case 1:
-        body(ls, l.b, 0, l.bline); /* compile and return closure in 'b' */
+        body(ls, l.b, false, l.bline); /* compile and return closure in 'b' */
         break;
       default:
         luaZ_badstate(ls.z.rz);
@@ -4043,7 +4043,7 @@ public final class Lparser
           luaX_next(ls); /* skip 'global' */
           l.site = 1;
         case 1:
-          l.site = (testnext(ls, TK_FUNCTION) != 0) ? 2 : 3;
+          l.site = (testnext(ls, TK_FUNCTION)) ? 2 : 3;
           continue;
         case 2:
           globalfunc(ls, line);
@@ -4066,7 +4066,7 @@ public final class Lparser
   /* the frame of 'funcname' (see lload.h) */
   private static final class FuncnameFrame extends LoadFrame
   {
-    int ismethod = 0;
+    boolean ismethod = false;
 
     FuncnameFrame()
     {
@@ -4091,7 +4091,7 @@ public final class Lparser
     }
   }
 
-  private static int funcname(LexState ls, expdesc v)
+  private static boolean funcname(LexState ls, expdesc v)
   {
     /* funcname -> NAME {fieldsel} [':' NAME] */
     FuncnameFrame l = new FuncnameFrame();
@@ -4104,7 +4104,7 @@ public final class Lparser
         switch (l.site)
         {
         case 0:
-          l.ismethod = 0;
+          l.ismethod = false;
           singlevar(ls, v);
           l.site = 1;
         case 1: /* the loop */
@@ -4112,7 +4112,7 @@ public final class Lparser
             l.site = 2;
           else if (ls.t.token == ':')
           {
-            l.ismethod = 1;
+            l.ismethod = true;
             l.site = 3;
           }
           else
@@ -4140,7 +4140,7 @@ public final class Lparser
   /* the frame of 'funcstat' (see lload.h) */
   private static final class FuncstatFrame extends LoadFrame
   {
-    int ismethod = 0;
+    boolean ismethod = false;
     expdesc v = new expdesc(), b = new expdesc();
 
     FuncstatFrame()
@@ -4245,7 +4245,7 @@ public final class Lparser
         if (ls.t.token != '=' && ls.t.token != ',')
         { /* stat -> func */
           int[] code = fs.f.code;
-          check_condition(ls, (l.v.v.k == VCALL) ? 1 : 0, Lt.syntax_error);
+          check_condition(ls, l.v.v.k == VCALL, Lt.syntax_error);
           int pc = l.v.v.info;
           code[pc] = SETARG_C(code[pc], 1); /* call statement uses no results */
           break;
@@ -4314,7 +4314,7 @@ public final class Lparser
         {
         case 0:
           l.first = luaY_nvarstack(fs);
-          if (block_follow(ls, 1) != 0 || ls.t.token == ';')
+          if (block_follow(ls, true) || ls.t.token == ';')
           {
             l.nret = 0; /* return no values */
             l.site = 2;
@@ -4323,10 +4323,10 @@ public final class Lparser
           l.site = 1;
         case 1:
           l.nret = explist(ls, l.e); /* optional return values */
-          if (hasmultret(l.e.k) != 0)
+          if (hasmultret(l.e.k))
           {
             luaK_setmultret(fs, l.e);
-            if (l.e.k == VCALL && l.nret == 1 && fs.bl.insidetbc == 0)
+            if (l.e.k == VCALL && l.nret == 1 && !fs.bl.insidetbc)
             { /* tail call? */
               fs.f.code[l.e.info] = SET_OPCODE(fs.f.code[l.e.info], OP_TAILCALL);
               assert GETARG_A(fs.f.code[l.e.info]) == luaY_nvarstack(fs);
@@ -4491,7 +4491,7 @@ public final class Lparser
           luaX_next(ls); /* skip LOCAL */
           l.site = 11;
         case 11:
-          l.site = (testnext(ls, TK_FUNCTION) != 0) ? 12 : 13; /* local function? */
+          l.site = (testnext(ls, TK_FUNCTION)) ? 12 : 13; /* local function? */
           continue;
         case 12:
           localfunc(ls);
@@ -4586,7 +4586,7 @@ public final class Lparser
         open_func(ls, fs, l.bl);
         setvararg(fs);                    /* main function is always vararg */
         Upvaldesc env = allocupvalue(fs); /* ...set environment upvalue */
-        env.instack = 1;
+        env.instack = true;
         env.idx = 0;
         env.kind = VDKREG;
         env.name = ls.envn;

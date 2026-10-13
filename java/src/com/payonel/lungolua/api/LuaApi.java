@@ -164,15 +164,15 @@ public final class LuaApi
   public static final ByteView lua_ident = Lt.lua_ident_str;
 
   /* test for pseudo index */
-  private static int ispseudo(int i)
+  private static boolean ispseudo(int i)
   {
-    return (i <= LUA_REGISTRYINDEX) ? 1 : 0;
+    return i <= LUA_REGISTRYINDEX;
   }
 
   /* test for upvalue */
-  private static int isupvalue(int i)
+  private static boolean isupvalue(int i)
   {
-    return (i < LUA_REGISTRYINDEX) ? 1 : 0;
+    return i < LUA_REGISTRYINDEX;
   }
 
   private static final class IndexAddr
@@ -199,7 +199,7 @@ public final class LuaApi
       else
         return new IndexAddr(o, null);
     }
-    else if (ispseudo(idx) == 0)
+    else if (!ispseudo(idx))
     { /* negative index */
       assert idx != 0 && -idx <= L.top - (ci.func + 1) : "invalid index";
       return new IndexAddr(L.top + idx, null);
@@ -230,10 +230,10 @@ public final class LuaApi
     return (a.row != null) ? getobj(a.row) : getslot(L, a.slot);
   }
 
-  private static int isvalidindex(lua_State L, int idx)
+  private static boolean isvalidindex(lua_State L, int idx)
   {
     IndexAddr a = resolveindex(L, idx);
-    return (a.row != L.l_G.nilvalue) ? 1 : 0;
+    return a.row != L.l_G.nilvalue;
   }
 
   private static void setindexval(lua_State L, int idx, TValue v)
@@ -263,23 +263,23 @@ public final class LuaApi
     else
     { /* non-positive index */
       assert idx != 0 && -idx <= L.top - (ci.func + 1) : "invalid index";
-      assert ispseudo(idx) == 0 : "invalid index";
+      assert !ispseudo(idx) : "invalid index";
       return L.top + idx;
     }
   }
 
-  public static int lua_checkstack(lua_State L, int n)
+  public static boolean lua_checkstack(lua_State L, int n)
   {
-    int res;
+    boolean res;
     CallInfo ci;
     lua_lock(L);
     ci = L.ci;
     assert n >= 0 : "negative 'n'";
     if (L.stack_last - L.top > n) /* stack large enough? */
-      res = 1;                          /* yes; check is OK */
+      res = true;                          /* yes; check is OK */
     else                                /* need to grow stack */
-      res = luaD_growstack(L, n, 0);
-    if (res != 0 && ci.top < L.top + n)
+      res = luaD_growstack(L, n, false);
+    if (res && ci.top < L.top + n)
       ci.top = L.top + n; /* adjust frame top */
     lua_unlock(L);
     return res;
@@ -328,7 +328,7 @@ public final class LuaApi
 
   public static int lua_absindex(lua_State L, int idx)
   {
-    return (idx > 0 || ispseudo(idx) != 0)
+    return (idx > 0 || ispseudo(idx))
                ? idx
                : (int) (L.top - L.ci.func) + idx;
   }
@@ -452,9 +452,9 @@ public final class LuaApi
   {
     lua_lock(L);
     TValue fr = index2val(L, fromidx);
-    assert isvalidindex(L, toidx) != 0 : "invalid index";
+    assert isvalidindex(L, toidx) : "invalid index";
     setindexval(L, toidx, fr);
-    if (isupvalue(toidx) != 0) /* function upvalue? */
+    if (isupvalue(toidx)) /* function upvalue? */
     {
       int fv = L.ci.func;
       luaC_barrier(L, slotclCval(L, fv), fr);
@@ -479,7 +479,7 @@ public final class LuaApi
 
   public static int lua_type(lua_State L, int idx)
   {
-    return ((isvalidindex(L, idx) != 0) ? novariant(index2val(L, idx).tt_)
+    return ((isvalidindex(L, idx)) ? novariant(index2val(L, idx).tt_)
                                          : LUA_TNONE);
   }
 
@@ -490,50 +490,50 @@ public final class LuaApi
     return new HostString(n);
   }
 
-  public static int lua_iscfunction(lua_State L, int idx)
+  public static boolean lua_iscfunction(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return (ttislcf(o) || ttisCclosure(o)) ? 1 : 0;
+    return ttislcf(o) || ttisCclosure(o);
   }
 
-  public static int lua_islightcfunction(lua_State L, int idx)
+  public static boolean lua_islightcfunction(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return ttislcf(o) ? 1 : 0;
+    return ttislcf(o);
   }
 
-  public static int lua_isinteger(lua_State L, int idx)
+  public static boolean lua_isinteger(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return ttisinteger(o) ? 1 : 0;
+    return ttisinteger(o);
   }
 
-  public static int lua_isnumber(lua_State L, int idx)
+  public static boolean lua_isnumber(lua_State L, int idx)
   {
     NumResult n = new NumResult();
     TValue o = index2val(L, idx);
     return tonumber(o, n);
   }
 
-  public static int lua_isstring(lua_State L, int idx)
+  public static boolean lua_isstring(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return (ttisstring(o) || cvt2str(o) != 0) ? 1 : 0;
+    return ttisstring(o) || cvt2str(o);
   }
 
-  public static int lua_isuserdata(lua_State L, int idx)
+  public static boolean lua_isuserdata(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return (ttisfulluserdata(o) || ttislightuserdata(o)) ? 1 : 0;
+    return ttisfulluserdata(o) || ttislightuserdata(o);
   }
 
-  public static int lua_rawequal(lua_State L, int index1, int index2)
+  public static boolean lua_rawequal(lua_State L, int index1, int index2)
   {
     TValue o1 = index2val(L, index1);
     TValue o2 = index2val(L, index2);
-    return (isvalidindex(L, index1) != 0 && isvalidindex(L, index2) != 0)
+    return (isvalidindex(L, index1) && isvalidindex(L, index2))
                ? luaV_rawequalobj(o1, o2)
-               : 0;
+               : false;
   }
 
   public static void lua_arith(lua_State L, int op)
@@ -553,13 +553,13 @@ public final class LuaApi
     lua_unlock(L);
   }
 
-  public static int lua_compare(lua_State L, int index1, int index2, int op)
+  public static boolean lua_compare(lua_State L, int index1, int index2, int op)
   {
-    int i = 0;
+    boolean i = false;
     lua_lock(L); /* may call tag method */
     TValue o1 = index2val(L, index1);
     TValue o2 = index2val(L, index2);
-    if (isvalidindex(L, index1) != 0 && isvalidindex(L, index2) != 0)
+    if (isvalidindex(L, index1) && isvalidindex(L, index2))
     {
       switch (op)
       {
@@ -589,7 +589,7 @@ public final class LuaApi
     TValue o1 = index2val(L, index1);
     TValue o2 = index2val(L, index2);
     if ((ttisnumber(o1) && ttisnumber(o2)) || (ttisstring(o1) && ttisstring(o2)))
-      return luaV_lessthan(L, o1, o2);
+      return luaV_lessthan(L, o1, o2) ? 1 : 0;
     return -1;
   }
 
@@ -630,7 +630,7 @@ public final class LuaApi
   {
     NumResult n = new NumResult();
     TValue o = index2val(L, idx);
-    if (tonumber(o, n) == 0)
+    if (!tonumber(o, n))
       return OptionalDouble.empty();
     return OptionalDouble.of(n.v);
   }
@@ -639,15 +639,15 @@ public final class LuaApi
   {
     IntResult res = new IntResult();
     TValue o = index2val(L, idx);
-    if (tointeger(o, res) == 0)
+    if (!tointeger(o, res))
       return OptionalLong.empty();
     return OptionalLong.of(res.v);
   }
 
-  public static int lua_toboolean(lua_State L, int idx)
+  public static boolean lua_toboolean(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return !(ttisfalse(o) || ttisnil(o)) ? 1 : 0;
+    return !(ttisfalse(o) || ttisnil(o));
   }
 
   public static ByteView lua_tolstring(lua_State L, int idx)
@@ -656,7 +656,7 @@ public final class LuaApi
     TValue o = index2val(L, idx);
     if (!ttisstring(o))
     {
-      if (cvt2str(o) == 0)
+      if (!cvt2str(o))
       {
         lua_unlock(L);
         return null;
@@ -677,7 +677,7 @@ public final class LuaApi
     TValue o = index2val(L, idx);
     if (!ttisstring(o))
     {
-      if (cvt2str(o) == 0)
+      if (!cvt2str(o))
       { /* not convertible? */
         lua_unlock(L);
         return null;
@@ -1010,7 +1010,7 @@ public final class LuaApi
       {
         slot2obj(L, cl.upvalue[i], L.top - n + i);
         /* does not need barrier because closure is white */
-        assert iswhite(cl) != 0;
+        assert iswhite(cl);
       }
       L.top -= n;
       setslotclC(L, L.top, cl);
@@ -1020,10 +1020,10 @@ public final class LuaApi
     lua_unlock(L);
   }
 
-  public static void lua_pushboolean(lua_State L, int b)
+  public static void lua_pushboolean(lua_State L, boolean b)
   {
     lua_lock(L);
-    if (b != 0)
+    if (b)
       setslottag(L, L.top, LUA_VTRUE);
     else
       setslottag(L, L.top, LUA_VFALSE);
@@ -1048,13 +1048,13 @@ public final class LuaApi
     lua_unlock(L);
   }
 
-  public static int lua_pushthread(lua_State L)
+  public static boolean lua_pushthread(lua_State L)
   {
     lua_lock(L);
     setslotth(L, L.top, L);
     api_incr_top(L);
     lua_unlock(L);
-    return (mainthread(L.l_G) == L) ? 1 : 0;
+    return mainthread(L.l_G) == L;
   }
 
   /*
@@ -1063,7 +1063,7 @@ public final class LuaApi
   */
   private static boolean yieldablek(lua_State L, CallInfo ci)
   {
-    return yieldable(L) != 0 && (ci.callstatus & CIST_FZONLY) == 0;
+    return yieldable(L) && (ci.callstatus & CIST_FZONLY) == 0;
   }
 
   /*
@@ -1076,7 +1076,7 @@ public final class LuaApi
   private static boolean armk(lua_State L, long ctx, lua_KFunction k, byte op)
   {
     CallInfo ci = L.ci;
-    assert k == null || isLua(ci) == 0 : "cannot use continuations inside hooks";
+    assert k == null || !isLua(ci) : "cannot use continuations inside hooks";
     if (k == null)
       return false;
     ci.k = k;
@@ -1339,10 +1339,10 @@ public final class LuaApi
     lua_unlock(L);
   }
 
-  public static int lua_getmetatable(lua_State L, int objindex)
+  public static boolean lua_getmetatable(lua_State L, int objindex)
   {
     Table mt;
-    int res = 0;
+    boolean res = false;
     lua_lock(L);
     TValue obj = index2val(L, objindex);
     switch (ttype(obj))
@@ -1361,7 +1361,7 @@ public final class LuaApi
     {
       setsloth(L, L.top, mt);
       api_incr_top(L);
-      res = 1;
+      res = true;
     }
     lua_unlock(L);
     return res;
@@ -1528,7 +1528,7 @@ public final class LuaApi
       if (l_ult(u, h.asize()))
       {
         byte tag = getArrTag(h, u);
-        if (checknoTM(h.metatable, TM_NEWINDEX) != 0 || !tagisempty(tag))
+        if (checknoTM(h.metatable, TM_NEWINDEX) || !tagisempty(tag))
         {
           fval2arr(h, u, val);
           hres = HOK;
@@ -1569,10 +1569,10 @@ public final class LuaApi
   */
 
   /* is the value at 'idx' a table with no metatable? */
-  public static int lua_isplaintable(lua_State L, int idx)
+  public static boolean lua_isplaintable(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
-    return (ttistable(o) && hvalue(o).metatable == null) ? 1 : 0;
+    return ttistable(o) && hvalue(o).metatable == null;
   }
 
   /* t[n], as 'lua_geti' reads a table with no metatable */
@@ -1642,7 +1642,7 @@ public final class LuaApi
   ** 'n' - 1 down to 0; returns how many it moved.
   */
   public static long lua_plainmove(lua_State L, int idx1, long s, int idx2, long d,
-                                   long n, int up)
+                                   long n, boolean up)
   {
     lua_lock(L);
     TValue t1 = index2val(L, idx1);
@@ -1652,7 +1652,7 @@ public final class LuaApi
     long k = 0;
     while (k < n)
     {
-      long off = (up != 0) ? k : n - 1 - k;
+      long off = (up) ? k : n - 1 - k;
       TValue v = new TValue();
       plaingeti(hvalue(t1), s + off, v);
       plainseti(L, t2, d + off, v);
@@ -1756,23 +1756,23 @@ public final class LuaApi
     return 1;
   }
 
-  public static int lua_setiuservalue(lua_State L, int idx, int n)
+  public static boolean lua_setiuservalue(lua_State L, int idx, int n)
   {
-    int res;
+    boolean res;
     lua_lock(L);
     api_checkpop(L, 1);
     TValue o = index2val(L, idx);
     assert ttisfulluserdata(o) : "full userdata expected";
     Udata u = uvalue(o);
     if (!(n >= 1 && n <= u.uv.length))
-      res = 0;
+      res = false;
     else
     {
       TValue v = getslot(L, L.top - 1);
       setobj(L, u.uv[n - 1], v);
       assert iscollectable(o);
       luaC_barrierback(L, gcvalue(o), v);
-      res = 1;
+      res = true;
     }
     L.top--;
     lua_unlock(L);
@@ -1831,7 +1831,7 @@ public final class LuaApi
   */
   public static void lua_freezeonly(lua_State L)
   {
-    assert isLua(L.ci) == 0 && L.ci != L.base_ci;
+    assert !isLua(L.ci) && L.ci != L.base_ci;
     luaE_freezeonly(L);
   }
 
@@ -1840,9 +1840,9 @@ public final class LuaApi
   ** the running C function then calls 'lua_checkpointk' where it can go on
   ** after a freeze (or leaves the callback to the next budget point).
   */
-  public static int lua_spend(lua_State L, int n)
+  public static boolean lua_spend(lua_State L, int n)
   {
-    return luaE_spent(L, n) ? 1 : 0;
+    return luaE_spent(L, n);
   }
 
   /*
@@ -1861,7 +1861,7 @@ public final class LuaApi
       return;
     }
     CallInfo ci = L.ci;
-    assert isLua(ci) == 0 && ci != L.base_ci && k != null;
+    assert !isLua(ci) && ci != L.base_ci && k != null;
     ci.k = k;
     ci.ctx = ctx;
     lua_State co = luaD_budget(L);
@@ -1881,7 +1881,7 @@ public final class LuaApi
   {
     int func;
     lua_lock(L);
-    assert k == null || isLua(L.ci) == 0 : "cannot use continuations inside hooks";
+    assert k == null || !isLua(L.ci) : "cannot use continuations inside hooks";
     api_checkpop(L, nargs + 1);
     assert L.status == LUA_OK : "cannot do calls on non-normal thread";
     checkresults(L, nargs, nresults);
@@ -1981,7 +1981,7 @@ public final class LuaApi
     auxseti(L, idx, n, ctx, k);
   }
 
-  public static int lua_comparek(lua_State L, int idx1, int idx2, int op, long ctx, lua_KFunction k)
+  public static boolean lua_comparek(lua_State L, int idx1, int idx2, int op, long ctx, lua_KFunction k)
   {
     idx1 = lua_absindex(L, idx1);
     idx2 = lua_absindex(L, idx2);
@@ -1993,7 +1993,7 @@ public final class LuaApi
     else
       mayrun = !((ttisnumber(o1) && ttisnumber(o2)) || (ttisstring(o1) && ttisstring(o2)));
     boolean armed = mayrun && armk(L, ctx, k, APIK_BOOL);
-    int r = lua_compare(L, idx1, idx2, op);
+    boolean r = lua_compare(L, idx1, idx2, op);
     disarmk(L, armed);
     lua_pushboolean(L, r);
     return r;
@@ -2042,7 +2042,7 @@ public final class LuaApi
     ci.ctx = ctx; /* save context */
     c.nresults = nresults;
     int olderrfunc = L.errfunc;
-    byte oldah = L.allowhook;
+    boolean oldah = L.allowhook;
     status = luaD_pcall(L, c, c.func, func, false);
     if (status == LUA_FREEZE)
     {
@@ -2079,7 +2079,7 @@ public final class LuaApi
     byte status;
     int func;
     lua_lock(L);
-    assert k == null || isLua(L.ci) == 0 : "cannot use continuations inside hooks";
+    assert k == null || !isLua(L.ci) : "cannot use continuations inside hooks";
     api_checkpop(L, nargs + 1);
     assert L.status == LUA_OK : "cannot do calls on non-normal thread";
     checkresults(L, nargs, nresults);
@@ -2176,7 +2176,7 @@ public final class LuaApi
     lua_lock(L);
     api_checkpop(L, nargs + 1);
     checkresults(L, nargs, nresults);
-    assert k != null && L.ci != L.base_ci && isLua(L.ci) == 0 && !yieldablek(L, L.ci);
+    assert k != null && L.ci != L.base_ci && !isLua(L.ci) && !yieldablek(L, L.ci);
     c.func = L.top - (nargs + 1);
     luaE_spend(L, 1); /* a hand-off */
     byte status = pcallnoyield(L, c, L.errfunc, nresults, ctx, k);
@@ -2230,12 +2230,12 @@ public final class LuaApi
     return status;
   }
 
-  public static int lua_loadkread(lua_State L, lua_LoadSpec ls, lua_Reader source)
+  public static boolean lua_loadkread(lua_State L, lua_LoadSpec ls, lua_Reader source)
   {
     if ((L.hookmask & LUA_MASKBUDGET) == 0)
-      return 0;
+      return false;
     luaZ_loadread(L, ls, source);
-    return 1;
+    return true;
   }
 
   public static int lua_loadkresume(lua_State L, int status, lua_LoadSpec ls)
@@ -2266,7 +2266,7 @@ public final class LuaApi
   ** the stack returns with its original size.
   */
 
-  public static int lua_dump(lua_State L, lua_Writer writer, int strip)
+  public static int lua_dump(lua_State L, lua_Writer writer, boolean strip)
   {
     int status;
     int otop = L.top; /* original top */
@@ -2318,7 +2318,7 @@ public final class LuaApi
     }
     case LUA_GCCOLLECT:
     {
-      luaC_fullgc(L, 0);
+      luaC_fullgc(L, false);
       break;
     }
     case LUA_GCCOUNT:
@@ -2337,7 +2337,7 @@ public final class LuaApi
       byte oldstp = g.gcstp;
       long n = stepsize;
       long newdebt;
-      int work = 0; /* true if GC did some work */
+      boolean work = false; /* true if GC did some work */
       g.gcstp = 0;  /* allow GC to run (other bits must be zero here) */
       if (n <= 0)
         newdebt = 0;                      /* force to run one basic step */
@@ -2350,17 +2350,17 @@ public final class LuaApi
         if (L.l_G.GCdebt <= 0)
         {
           luaC_step(L);
-          work = 1;
+          work = true;
         }
       }
-      if (work != 0 && g.gcstate == GCSpause) /* end of cycle? */
+      if (work && g.gcstate == GCSpause) /* end of cycle? */
         res = 1;                               /* signal it */
       g.gcstp = oldstp;                        /* restore previous state */
       break;
     }
     case LUA_GCISRUNNING:
     {
-      res = gcrunning(g);
+      res = gcrunning(g) ? 1 : 0;
       break;
     }
     case LUA_GCGEN:
@@ -2401,7 +2401,7 @@ public final class LuaApi
     api_checkpop(L, 1);
     /* error object is the memory error message? */
     if (ttisstring(errobj) &&
-        eqshrstr(tsvalue(errobj), L.l_G.memerrmsg) != 0)
+        eqshrstr(tsvalue(errobj), L.l_G.memerrmsg))
       luaD_throw(L, (byte) LUA_ERRMEM); /* raise a memory error */
     else
       luaG_errormsg(L); /* raise a regular error */
@@ -2409,15 +2409,15 @@ public final class LuaApi
     return 0; /* to avoid warnings */
   }
 
-  public static int lua_next(lua_State L, int idx)
+  public static boolean lua_next(lua_State L, int idx)
   {
     Table t;
-    int more;
+    boolean more;
     lua_lock(L);
     api_checkpop(L, 1);
     t = gettable(L, idx);
     more = t.luaH_next(L, L.top - 1);
-    if (more != 0)
+    if (more)
       api_incr_top(L);
     else      /* no more elements */
       L.top--; /* pop key */
@@ -2769,44 +2769,44 @@ public final class LuaApi
     lua_setglobal(L, name);
   }
 
-  public static int lua_isfunction(lua_State L, int idx)
+  public static boolean lua_isfunction(lua_State L, int idx)
   {
-    return (lua_type(L, idx) == LUA_TFUNCTION) ? 1 : 0;
+    return lua_type(L, idx) == LUA_TFUNCTION;
   }
 
-  public static int lua_istable(lua_State L, int idx)
+  public static boolean lua_istable(lua_State L, int idx)
   {
-    return (lua_type(L, idx) == LUA_TTABLE) ? 1 : 0;
+    return lua_type(L, idx) == LUA_TTABLE;
   }
 
-  public static int lua_islightuserdata(lua_State L, int idx)
+  public static boolean lua_islightuserdata(lua_State L, int idx)
   {
-    return (lua_type(L, idx) == LUA_TLIGHTUSERDATA) ? 1 : 0;
+    return lua_type(L, idx) == LUA_TLIGHTUSERDATA;
   }
 
-  public static int lua_isnil(lua_State L, int idx)
+  public static boolean lua_isnil(lua_State L, int idx)
   {
-    return (lua_type(L, idx) == LUA_TNIL) ? 1 : 0;
+    return lua_type(L, idx) == LUA_TNIL;
   }
 
-  public static int lua_isboolean(lua_State L, int idx)
+  public static boolean lua_isboolean(lua_State L, int idx)
   {
-    return (lua_type(L, idx) == LUA_TBOOLEAN) ? 1 : 0;
+    return lua_type(L, idx) == LUA_TBOOLEAN;
   }
 
-  public static int lua_isthread(lua_State L, int idx)
+  public static boolean lua_isthread(lua_State L, int idx)
   {
-    return (lua_type(L, idx) == LUA_TTHREAD) ? 1 : 0;
+    return lua_type(L, idx) == LUA_TTHREAD;
   }
 
-  public static int lua_isnone(lua_State L, int idx)
+  public static boolean lua_isnone(lua_State L, int idx)
   {
-    return (lua_type(L, idx) == LUA_TNONE) ? 1 : 0;
+    return lua_type(L, idx) == LUA_TNONE;
   }
 
-  public static int lua_isnoneornil(lua_State L, int idx)
+  public static boolean lua_isnoneornil(lua_State L, int idx)
   {
-    return (lua_type(L, idx) <= 0) ? 1 : 0;
+    return lua_type(L, idx) <= 0;
   }
 
   public static void lua_pushliteral(lua_State L, HostString s)

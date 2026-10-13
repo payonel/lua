@@ -39,9 +39,9 @@ public final class global_State
   public byte currentwhite = 0;
   public byte gcstate = 0;     /* state of garbage collector */
   public byte gckind = 0;      /* kind of GC running */
-  public byte gcstopem = 0;    /* stops emergency collections */
+  public boolean gcstopem = false;    /* stops emergency collections */
   public byte gcstp = 0;       /* control whether GC is running */
-  public byte gcemergency = 0; /* true if this is an emergency collection */
+  public boolean gcemergency = false; /* true if this is an emergency collection */
   public final GCObject allgc = new GCObject(); /* list of all collectable objects */
   public GCObject sweepgc = null; /* current position of sweep in list */
   public int sweepq = 0;          /* the next group whose queue the sweep takes */

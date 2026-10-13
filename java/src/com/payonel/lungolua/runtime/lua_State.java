@@ -10,7 +10,7 @@ import com.payonel.lungolua.object.UpVal;
 */
 public final class lua_State extends GCListed
 {
-  public byte allowhook = 1;
+  public boolean allowhook = true;
   public byte status = 0; /* LUA_OK */
   public int top = 0; /* first free slot in the stack */
   public global_State l_G = null;
@@ -49,7 +49,7 @@ public final class lua_State extends GCListed
   public lua_State frozenchild = null;  /* frozen while resuming this thread */
   public lua_State frozenparent = null; /* the thread that resumed it, in a frozen chain */
   public int nfz = 0;                   /* number of calls in the stack that cannot freeze */
-  public byte resumedk = 0;             /* resumed by a call with a continuation */
+  public boolean resumedk = false;             /* resumed by a call with a continuation */
   public BudgetGroup bown = null;       /* the budget group it belongs to, if any */
   public BudgetGroup beff = null;       /* the budget group in effect while it runs */
   public byte frozen = 0;               /* frozen: how it was entered (FZ_*); 0: not */

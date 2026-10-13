@@ -171,7 +171,7 @@ public final class Ltests
     { /* message finished? */
       luaL_checkstack(L, 1, new HostString(Lt.warn_stack_space));
       lua_getglobal(L, new HostString(Lt._WARN));
-      if (lua_toboolean(L, -1) == 0)
+      if (!lua_toboolean(L, -1))
         lua_pop(L, 1); /* ok, no previous unexpected warning */
       else
       {
@@ -308,22 +308,22 @@ public final class Ltests
   ** continue to be visited in all collections, and therefore can point to
   ** new objects. They, and only they, are old but gray.)
   */
-  private static int testobjref1(global_State g, GCObject f, GCObject t)
+  private static boolean testobjref1(global_State g, GCObject f, GCObject t)
   {
-    if (isdead(g, t) != 0)
-      return 0;
-    if (issweepphase(g) != 0)
-      return 1; /* no invariants */
+    if (isdead(g, t))
+      return false;
+    if (issweepphase(g))
+      return true; /* no invariants */
     else if (g.gckind != KGC_GENMINOR)
-      return !(isblack(f) != 0 && iswhite(t) != 0) ? 1 : 0; /* basic incremental invariant */
+      return !(isblack(f) && iswhite(t)); /* basic incremental invariant */
     else
     { /* generational mode */
-      if ((getage(f) == G_OLD && isblack(f) != 0) && isold(t) == 0)
-        return 0;
+      if ((getage(f) == G_OLD && isblack(f)) && !isold(t))
+        return false;
       if ((getage(f) == G_OLD1 || getage(f) == G_TOUCHED2) &&
           getage(t) == G_NEW)
-        return 0;
-      return 1;
+        return false;
+      return true;
     }
   }
 
@@ -332,8 +332,8 @@ public final class Ltests
     String tn = to_string(ttypename(o.tt & NOVARIANT_MASK));
     os_print_stdout(to_view(String.format("||%s(%s)-%c%c(%02X)||",
                                           tn, to_string(func_to_string(o).view()),
-                                          isdead(g, o) != 0 ? 'd' : isblack(o) != 0 ? 'b'
-                                                              : iswhite(o) != 0   ? 'w'
+                                          isdead(g, o) ? 'd' : isblack(o) ? 'b'
+                                                              : iswhite(o)   ? 'w'
                                                                                   : 'g',
                                           "ns01oTt".charAt(getage(o)), o.marked & 0xFF)));
     if (o.tt == LUA_VSTRING)
@@ -396,10 +396,10 @@ public final class Ltests
     }
   }
 
-  private static int testobjref(global_State g, GCObject f, GCObject t)
+  private static boolean testobjref(global_State g, GCObject f, GCObject t)
   {
-    int r1 = testobjref1(g, f, t);
-    if (r1 == 0)
+    boolean r1 = testobjref1(g, f, t);
+    if (!r1)
     {
       os_print_stdout(to_view(String.format("%d(%02X) - ", g.gcstate, g.currentwhite & 0xFF)));
       printobj(g, f);
@@ -412,7 +412,7 @@ public final class Ltests
 
   private static void checkobjref(global_State g, GCObject f, GCObject t)
   {
-    assert testobjref(g, f, t) != 0;
+    assert testobjref(g, f, t);
   }
 
   private static void checkobjrefN(global_State g, GCObject f, GCObject t)
@@ -423,7 +423,7 @@ public final class Ltests
 
   private static void checkvalref(global_State g, GCObject f, TValue t)
   {
-    assert ((t).tt_ & BIT_ISCOLLECTABLE) == 0 || ((((t).tt_ & WITHVARIANT_MASK) == gcvalue(t).tt) && testobjref(g, f, gcvalue(t)) != 0);
+    assert ((t).tt_ & BIT_ISCOLLECTABLE) == 0 || ((((t).tt_ & WITHVARIANT_MASK) == gcvalue(t).tt) && testobjref(g, f, gcvalue(t)));
   }
 
   private static void checktable(global_State g, Table h)
@@ -503,7 +503,7 @@ public final class Ltests
       if (uv != null)
       {
         checkobjrefN(g, clgc, uv);
-        if (upisopen(uv) == 0)
+        if (!upisopen(uv))
         {
           assert (uv.tt & NOVARIANT_MASK) >= LUA_TSTRING;
           TValue uvv = upvalgetval(uv);
@@ -513,16 +513,16 @@ public final class Ltests
     }
   }
 
-  private static int lua_checkpc(lua_State L, CallInfo ci)
+  private static boolean lua_checkpc(lua_State L, CallInfo ci)
   {
-    if (isLua(ci) == 0)
-      return 1;
+    if (!isLua(ci))
+      return true;
     else
     {
       int f = ci.func;
       Proto p = slotclLval(L, f).p;
-      return (0 <= ci.savedpc &&
-              ci.savedpc <= p.code.length) ? 1 : 0;
+      return 0 <= ci.savedpc &&
+              ci.savedpc <= p.code.length;
     }
   }
 
@@ -531,20 +531,20 @@ public final class Ltests
     int o;
     CallInfo ci;
     UpVal uv;
-    assert isdead(g, L1) == 0;
+    assert !isdead(g, L1);
     if (L1.stack_prim.length == 0)
     { /* incomplete thread? */
       assert L1.openupval == null && L1.ci == null;
       return;
     }
     for (uv = L1.openupval; uv != null; uv = uv.opennext)
-      assert upisopen(uv) != 0; /* must be open */
+      assert upisopen(uv); /* must be open */
     assert L1.top <= L1.stack_last;
     assert L1.tbclist <= L1.top;
     for (ci = L1.ci; ci != null; ci = ci.previous)
     {
       assert ci.top <= L1.stack_last;
-      assert lua_checkpc(L1, ci) != 0;
+      assert lua_checkpc(L1, ci);
     }
     for (o = 0; o < L1.stack_last; o++)
     { /* entire stack must have valid values */
@@ -600,12 +600,12 @@ public final class Ltests
     }
     case LUA_VSHRSTR:
     {
-      assert isgray(o) == 0; /* strings are never gray */
+      assert !isgray(o); /* strings are never gray */
       break;
     }
     case LUA_VLCF:
     {
-      assert isgray(o) == 0; /* CFuncInfo has no refs, never gray */
+      assert !isgray(o); /* CFuncInfo has no refs, never gray */
       break;
     }
     default:
@@ -625,27 +625,27 @@ public final class Ltests
   **     threads, and open upvalues.
   **   * 'touched1' objects must be gray.
   */
-  private static void checkobject(global_State g, GCObject o, int maybedead,
+  private static void checkobject(global_State g, GCObject o, boolean maybedead,
                                   int listage)
   {
-    if (isdead(g, o) != 0)
-      assert maybedead != 0;
+    if (isdead(g, o))
+      assert maybedead;
     else
     {
-      assert g.gcstate != GCSpause || iswhite(o) != 0;
+      assert g.gcstate != GCSpause || iswhite(o);
       if (g.gckind == KGC_GENMINOR)
       { /* generational mode? */
         assert getage(o) >= listage;
-        if (isold(o) != 0)
+        if (isold(o))
         {
-          assert iswhite(o) == 0;
-          assert isblack(o) != 0 ||
+          assert !iswhite(o);
+          assert isblack(o) ||
                  getage(o) == G_TOUCHED1 ||
                  getage(o) == G_OLD0 ||
                  o.tt == LUA_VTHREAD ||
-                 (o.tt == LUA_VUPVAL && upisopen((UpVal) o) != 0);
+                 (o.tt == LUA_VUPVAL && upisopen((UpVal) o));
         }
-        assert getage(o) != G_TOUCHED1 || isgray(o) != 0;
+        assert getage(o) != G_TOUCHED1 || isgray(o);
       }
       checkrefs(g, o);
     }
@@ -657,9 +657,9 @@ public final class Ltests
     /* better to keep it if we need to print an object */
     while (o != null)
     {
-      assert (isgray(o) != 0) ^ (getage(o) == G_TOUCHED2);
+      assert (isgray(o)) ^ (getage(o) == G_TOUCHED2);
       assert ((o.marked) & bitmask(TESTBIT)) == 0;
-      if (keepinvariant(g) != 0)
+      if (keepinvariant(g))
         o.marked = (byte) (o.marked | bitmask(TESTBIT)); /* mark that object is in a gray list */
       total++;
       switch (o.tt)
@@ -697,7 +697,7 @@ public final class Ltests
   private static long checkgrays(global_State g)
   {
     long total = 0; /* count number of elements in all lists */
-    if (keepinvariant(g) == 0)
+    if (!keepinvariant(g))
       return total;
     total += checkgraylist(g, g.gray.gclist);
     total += checkgraylist(g, g.grayagain.gclist);
@@ -714,16 +714,16 @@ public final class Ltests
   */
   private static void incifingray(global_State g, GCObject o, IntResult count)
   {
-    if (keepinvariant(g) == 0)
+    if (!keepinvariant(g))
       return; /* gray lists not being kept in these phases */
     if (o.tt == LUA_VUPVAL)
     {
       /* only open upvalues can be gray */
-      assert isgray(o) == 0 || upisopen((UpVal) o) != 0;
+      assert !isgray(o) || upisopen((UpVal) o);
       return; /* upvalues are never in gray lists */
     }
     /* these are the ones that must be in gray lists */
-    if (isgray(o) != 0 || getage(o) == G_TOUCHED2)
+    if (isgray(o) || getage(o) == G_TOUCHED2)
     {
       count.v++;
       assert ((o.marked) & bitmask(TESTBIT)) != 0;
@@ -731,7 +731,7 @@ public final class Ltests
     }
   }
 
-  private static long checklist(global_State g, int maybedead, int tof,
+  private static long checklist(global_State g, boolean maybedead, boolean tof,
                                 GCObject newl, GCObject survival, GCObject old, GCObject reallyold)
   {
     GCObject o;
@@ -740,25 +740,25 @@ public final class Ltests
     {
       checkobject(g, o, maybedead, G_NEW);
       incifingray(g, o, total);
-      assert (tof == 0) == (tofinalize(o) == 0);
+      assert (!tof) == (!tofinalize(o));
     }
     for (o = survival; o != old; o = o.next)
     {
-      checkobject(g, o, 0, G_SURVIVAL);
+      checkobject(g, o, false, G_SURVIVAL);
       incifingray(g, o, total);
-      assert (tof == 0) == (tofinalize(o) == 0);
+      assert (!tof) == (!tofinalize(o));
     }
     for (o = old; o != reallyold; o = o.next)
     {
-      checkobject(g, o, 0, G_OLD1);
+      checkobject(g, o, false, G_OLD1);
       incifingray(g, o, total);
-      assert (tof == 0) == (tofinalize(o) == 0);
+      assert (!tof) == (!tofinalize(o));
     }
     for (o = reallyold; o != null; o = o.next)
     {
-      checkobject(g, o, 0, G_OLD);
+      checkobject(g, o, false, G_OLD);
       incifingray(g, o, total);
-      assert (tof == 0) == (tofinalize(o) == 0);
+      assert (!tof) == (!tofinalize(o));
     }
     return total.v;
   }
@@ -767,41 +767,41 @@ public final class Ltests
   {
     global_State g = L.l_G;
     GCObject o;
-    int maybedead;
+    boolean maybedead;
     long totalin;                              /* total of objects that are in gray lists */
     IntResult totalshould = new IntResult(); /* total of objects that should be in gray lists */
-    if (keepinvariant(g) != 0)
+    if (keepinvariant(g))
     {
-      assert iswhite(mainthread(g)) == 0;
+      assert !iswhite(mainthread(g));
       assert (g.l_registry.tt_ & BIT_ISCOLLECTABLE) != 0;
-      assert iswhite(gcvalue(g.l_registry)) == 0;
+      assert !iswhite(gcvalue(g.l_registry));
     }
     assert (g.l_registry.tt_ & BIT_ISCOLLECTABLE) != 0;
-    assert isdead(g, gcvalue(g.l_registry)) == 0;
-    assert g.sweepgc == null || issweepphase(g) != 0;
+    assert !isdead(g, gcvalue(g.l_registry));
+    assert g.sweepgc == null || issweepphase(g);
     totalin = checkgrays(g);
 
     /* check 'fixedgc' list */
     for (o = g.fixedgc; o != null; o = o.next)
     {
-      assert o.tt == LUA_VSHRSTR && isgray(o) != 0 && getage(o) == G_OLD;
+      assert o.tt == LUA_VSHRSTR && isgray(o) && getage(o) == G_OLD;
     }
 
     /* check 'allgc' list */
-    maybedead = (GCSatomic < g.gcstate && g.gcstate <= GCSswpallgc) ? 1 : 0;
-    totalshould.v = checklist(g, maybedead, 0, g.allgc.next,
+    maybedead = GCSatomic < g.gcstate && g.gcstate <= GCSswpallgc;
+    totalshould.v = checklist(g, maybedead, false, g.allgc.next,
                               g.survival, g.old1, g.reallyold);
 
     /* check 'finobj' list */
-    totalshould.v += checklist(g, 0, 1, g.finobj.next,
+    totalshould.v += checklist(g, false, true, g.finobj.next,
                                g.finobjsur, g.finobjold1, g.finobjrold);
 
     /* check 'tobefnz' list */
     for (o = g.tobefnz.next; o != null; o = o.next)
     {
-      checkobject(g, o, 0, G_NEW);
+      checkobject(g, o, false, G_NEW);
       incifingray(g, o, totalshould);
-      assert tofinalize(o) != 0;
+      assert tofinalize(o);
       assert o.tt == LUA_VUSERDATA || o.tt == LUA_VTABLE;
     }
 
@@ -812,13 +812,13 @@ public final class Ltests
         continue;
       for (o = bg.fnz.next; o != null; o = o.next)
       {
-        checkobject(g, o, 0, G_NEW);
+        checkobject(g, o, false, G_NEW);
         incifingray(g, o, totalshould);
-        assert tofinalize(o) != 0;
+        assert tofinalize(o);
         assert o.tt == LUA_VUSERDATA || o.tt == LUA_VTABLE;
       }
     }
-    if (keepinvariant(g) != 0)
+    if (keepinvariant(g))
       assert totalin == totalshould.v;
     return 0;
   }
@@ -880,7 +880,7 @@ public final class Ltests
   {
     int pc;
     Proto p;
-    luaL_argcheck(L, lua_isfunction(L, 1) != 0 && lua_iscfunction(L, 1) == 0,
+    luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                   1, new HostString(Lt.Lua_function_expected));
     TValue o = obj_at(L, 1);
     p = getproto(o);
@@ -904,7 +904,7 @@ public final class Ltests
   {
     int pc;
     Proto p;
-    luaL_argcheck(L, lua_isfunction(L, 1) != 0 && lua_iscfunction(L, 1) == 0,
+    luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                   1, new HostString(Lt.Lua_function_expected));
     TValue o = obj_at(L, 1);
     p = getproto(o);
@@ -923,7 +923,7 @@ public final class Ltests
   {
     Proto p;
     int i;
-    luaL_argcheck(L, lua_isfunction(L, 1) != 0 && lua_iscfunction(L, 1) == 0,
+    luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                   1, new HostString(Lt.Lua_function_expected));
     TValue o = obj_at(L, 1);
     p = getproto(o);
@@ -942,7 +942,7 @@ public final class Ltests
   {
     Proto p;
     int i;
-    luaL_argcheck(L, lua_isfunction(L, 1) != 0 && lua_iscfunction(L, 1) == 0,
+    luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                   1, new HostString(Lt.Lua_function_expected));
     TValue o = obj_at(L, 1);
     p = getproto(o);
@@ -966,7 +966,7 @@ public final class Ltests
     int pc = ((int) (luaL_checkinteger(L, 2))) - 1;
     int i = 0;
     InternalString name;
-    luaL_argcheck(L, lua_isfunction(L, 1) != 0 && lua_iscfunction(L, 1) == 0,
+    luaL_argcheck(L, lua_isfunction(L, 1) && !lua_iscfunction(L, 1),
                   1, new HostString(Lt.Lua_function_expected));
     TValue o = obj_at(L, 1);
     p = getproto(o);
@@ -1049,14 +1049,14 @@ public final class Ltests
 
   private static int mem_query(lua_State L)
   {
-    if (lua_isnone(L, 1) != 0)
+    if (lua_isnone(L, 1))
     {
       lua_pushinteger(L, ((long) (l_memcontrol.total)));
       lua_pushinteger(L, ((long) (l_memcontrol.numblocks)));
       lua_pushinteger(L, ((long) (l_memcontrol.maxmem)));
       return 3;
     }
-    else if (lua_isnumber(L, 1) != 0)
+    else if (lua_isnumber(L, 1))
     {
       long limit = ((long) (luaL_checkinteger(L, 1)));
       l_memcontrol.memlimit = (limit == 0) ? ~0L : limit;
@@ -1083,7 +1083,7 @@ public final class Ltests
 
   private static int alloc_count(lua_State L)
   {
-    if (lua_isnone(L, 1) != 0)
+    if (lua_isnone(L, 1))
       l_memcontrol.countlimit = ((long) (~0L));
     else
       l_memcontrol.countlimit = ((long) (luaL_checkinteger(L, 1)));
@@ -1125,7 +1125,7 @@ public final class Ltests
     {
       assert (o.tt_ & BIT_ISCOLLECTABLE) != 0;
       GCObject obj = gcvalue(o);
-      ByteView color = isdead(L.l_G, obj) != 0 ? Lt.dead : iswhite(obj) != 0 ? Lt.white : isblack(obj) != 0 ? Lt.black : Lt.gray;
+      ByteView color = isdead(L.l_G, obj) ? Lt.dead : iswhite(obj) ? Lt.white : isblack(obj) ? Lt.black : Lt.gray;
       lua_pushstring(L, new HostString(color));
     }
     return 1;
@@ -1196,9 +1196,9 @@ public final class Ltests
       lua_lock(L);
       if (option < g.gcstate)
       {                                   /* must cross 'pause'? */
-        luaC_runtilstate(L, GCSpause, 1); /* run until pause */
+        luaC_runtilstate(L, GCSpause, true); /* run until pause */
       }
-      luaC_runtilstate(L, option, 0); /* do not skip propagation state */
+      luaC_runtilstate(L, option, false); /* do not skip propagation state */
       assert g.gcstate == option;
       lua_unlock(L);
       return 0;
@@ -1209,7 +1209,7 @@ public final class Ltests
 
   private static int tracinggc = 0;
 
-  public static void luai_tracegctest(lua_State L, int first)
+  public static void luai_tracegctest(lua_State L, boolean first)
   {
     if (tracinggc == 0)
       return;
@@ -1229,7 +1229,7 @@ public final class Ltests
 
   private static int tracegc(lua_State L)
   {
-    if (lua_isnil(L, 1) != 0)
+    if (lua_isnil(L, 1))
       tracinggc = 0;
     else
     {
@@ -1243,7 +1243,7 @@ public final class Ltests
 
   private static int hash_query(lua_State L)
   {
-    if (lua_isnone(L, 2) != 0)
+    if (lua_isnone(L, 2))
     {
       TString ts;
       luaL_argcheck(L, lua_type(L, 1) == LUA_TSTRING, 1, new HostString(Lt.string_expected));
@@ -1297,7 +1297,7 @@ public final class Ltests
   {
     int n = ((int) (luaL_checkinteger(L, 1)));
     lua_lock(L);
-    luaD_reallocstack(L, ((int) (L.top)) + n, 1);
+    luaD_reallocstack(L, ((int) (L.top)) + n, true);
     lua_unlock(L);
     return 0;
   }
@@ -1420,7 +1420,7 @@ public final class Ltests
 
   private static int getreftable(lua_State L)
   {
-    if (lua_istable(L, 2) != 0) /* is there a table as second argument? */
+    if (lua_istable(L, 2)) /* is there a table as second argument? */
       return 2;                 /* use it as the table */
     else
       return LUA_REGISTRYINDEX; /* default is to use the register */
@@ -1468,7 +1468,7 @@ public final class Ltests
   {
     int n = ((int) (luaL_checkinteger(L, 2)));
     luaL_checktype(L, 1, LUA_TFUNCTION);
-    if (lua_isnone(L, 3) != 0)
+    if (lua_isnone(L, 3))
     {
       HostString name = lua_getupvalue(L, 1, n);
       if (name == null)
@@ -1595,12 +1595,12 @@ public final class Ltests
     int load = ((int) (luaL_checkinteger(L, 2)));
     int preload = ((int) (luaL_checkinteger(L, 3)));
     luaL_openselectedlibs(L1, load, preload);
-    luaL_requiref(L1, new HostString(Lt.T_char), luaB_opentests, 0);
+    luaL_requiref(L1, new HostString(Lt.T_char), luaB_opentests, false);
     assert lua_type(L1, -1) == LUA_TTABLE;
     /* 'requiref' should not reload module already loaded... */
-    luaL_requiref(L1, new HostString(Lt.T_char), null, 1); /* seg. fault if it reloads */
+    luaL_requiref(L1, new HostString(Lt.T_char), null, true); /* seg. fault if it reloads */
     /* ...but should return the same module */
-    assert lua_compare(L1, -1, -2, LUA_OPEQ) != 0;
+    assert lua_compare(L1, -1, -2, LUA_OPEQ);
     return 0;
   }
 
@@ -1634,7 +1634,7 @@ public final class Ltests
     else
     {
       int i = 0;
-      while (lua_isnone(L1, ++i) == 0)
+      while (!lua_isnone(L1, ++i))
         lua_pushstring(L, lua_tostring(L1, i));
       lua_pop(L1, i - 1);
       return i - 1;
@@ -1827,12 +1827,12 @@ public final class Ltests
       sig = -1;
       sc.pos++;
     }
-    if (lisdigit(curbyte(sc)) == 0)
+    if (!lisdigit(curbyte(sc)))
     {
       lua_pushstring(L, new HostString(sc.code.substr(sc.pos)));
       luaL_error(L, new HostString(Lt.number_expected_s));
     }
-    while (lisdigit(curbyte(sc)) != 0)
+    while (lisdigit(curbyte(sc)))
     {
       res = res * 10 + (curbyte(sc) - '0');
       sc.pos++;
@@ -1904,7 +1904,7 @@ public final class Ltests
     int i;
     for (i = 0; i < statcodes.length; i++)
     {
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       lua_setfield(L, LUA_REGISTRYINDEX, new HostString(statcodes[i]));
     }
   }
@@ -2009,7 +2009,7 @@ public final class Ltests
       }
       else if (inst.equals(Lt.getmetatable))
       {
-        if (lua_getmetatable(L1, getindex_aux(L, L1, sc)) == 0)
+        if (!lua_getmetatable(L1, getindex_aux(L, L1, sc)))
           lua_pushnil(L1);
       }
       else if (inst.equals(Lt.gettable))
@@ -2162,7 +2162,7 @@ public final class Ltests
       }
       else if (inst.equals(Lt.pushbool))
       {
-        lua_pushboolean(L1, getnum_aux(L, L1, sc));
+        lua_pushboolean(L1, getnum_aux(L, L1, sc) != 0);
       }
       else if (inst.equals(Lt.pushcclosure))
       {
@@ -2215,7 +2215,7 @@ public final class Ltests
         HostString fmt = lua_tostring(L, -2);
         if (luaO_fmtargcount(fmt.to_utf8()) > 0)
         {
-          if (lua_islightcfunction(L, -1) != 0)
+          if (lua_islightcfunction(L, -1))
           {
             InternalString fa = lua_funcaddressi(L, -1);
             lua_pushistring(L1, fa);
@@ -2348,7 +2348,7 @@ public final class Ltests
       else if (inst.equals(Lt.testudata))
       {
         int i = getindex_aux(L, L1, sc);
-        lua_pushboolean(L1, (luaL_testudata(L1, i, to_hstring(getstring_aux(L, sc))) != null) ? 1 : 0);
+        lua_pushboolean(L1, luaL_testudata(L1, i, to_hstring(getstring_aux(L, sc))) != null);
       }
       else if (inst.equals(Lt.error_kw))
       {
@@ -2382,7 +2382,7 @@ public final class Ltests
       else if (inst.equals(Lt.topointer))
       {
         int idx = getindex_aux(L, L1, sc);
-        if (lua_islightcfunction(L1, idx) != 0)
+        if (lua_islightcfunction(L1, idx))
         {
           InternalString fa = lua_funcaddressi(L1, idx);
           lua_pushistring(L1, fa);
@@ -2467,12 +2467,12 @@ public final class Ltests
   {
     lua_State L1;
     ByteView pc;
-    if (lua_isuserdata(L, 1) != 0)
+    if (lua_isuserdata(L, 1))
     {
       L1 = getstate(L);
       pc = luaL_checklstring(L, 2);
     }
-    else if (lua_isthread(L, 1) != 0)
+    else if (lua_isthread(L, 1))
     {
       L1 = lua_tothread(L, 1);
       pc = luaL_checklstring(L, 2);
@@ -2554,7 +2554,7 @@ public final class Ltests
       return;
     }
     lua_getfield(L, LUA_REGISTRYINDEX, new HostString(Lt.C_HOOK)); /* get C_HOOK table */
-    if (lua_istable(L, -1) == 0)
+    if (!lua_istable(L, -1))
     {                  /* no hook table? */
       lua_pop(L, 1);   /* remove previous value */
       lua_newtable(L); /* create new C_HOOK table */
@@ -2569,7 +2569,7 @@ public final class Ltests
 
   private static int sethook(lua_State L)
   {
-    if (lua_isnoneornil(L, 1) != 0)
+    if (lua_isnoneornil(L, 1))
       lua_sethook(L, null, 0, 0); /* turn off hooks */
     else
     {
@@ -2600,13 +2600,13 @@ public final class Ltests
     int status = rr.status;
     if (status != LUA_OK && status != LUA_YIELD)
     {
-      lua_pushboolean(L, 0);
+      lua_pushboolean(L, false);
       lua_insert(L, -2);
       return 2; /* return false + error message */
     }
     else
     {
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       return 1;
     }
   }
@@ -2693,7 +2693,7 @@ public final class Ltests
     lua_Alloc f = lua_getallocf(L);
     lua_atpanic(L, tpanic);
     lua_setwarnf(L, test_warnf);
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     lua_setglobal(L, new HostString(Lt._WARN)); /* _WARN = false */
     regcodes(L);
     Runtime.getRuntime().addShutdownHook(new Thread(Ltests::checkfinalmem));
@@ -2713,13 +2713,13 @@ public final class Ltests
   public static void luai_openlibstest(lua_State L)
   {
     luaL_openlibs(L);
-    luaL_requiref(L, new HostString(Lt.T_char), luaB_opentests, 1);
+    luaL_requiref(L, new HostString(Lt.T_char), luaB_opentests, true);
     lua_pop(L, 1);
   }
 
   public static final TestHooks hooks = new TestHooks()
   {
-    public void luai_tracegctest(lua_State L, int first)
+    public void luai_tracegctest(lua_State L, boolean first)
     {
       Ltests.luai_tracegctest(L, first);
     }

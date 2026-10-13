@@ -55,7 +55,7 @@ typedef enum BinOpr
 } BinOpr;
 
 /* true if operation is foldable (that is, it is arithmetic or bitwise) */
-constexpr int foldbinop(BinOpr op)
+constexpr bool foldbinop(BinOpr op)
 {
   return op <= OPR_SHR;
 }
@@ -74,10 +74,10 @@ typedef enum UnOpr
 int luaK_code(FuncState* fs, Instruction i);
 int luaK_codeABx(FuncState* fs, OpCode o, int A, int Bx);
 int luaK_codeABCk(FuncState* fs, OpCode o, int A, int B, int C,
-                            int k);
+                            bool k);
 int luaK_codevABCk(FuncState* fs, OpCode o, int A, int B, int C,
-                             int k);
-int luaK_exp2const(FuncState* fs, const expdesc* e, TValue* v);
+                             bool k);
+bool luaK_exp2const(FuncState* fs, const expdesc* e, TValue* v);
 void luaK_fixline(FuncState* fs, int line);
 void luaK_nil(FuncState* fs, int from, int n);
 void luaK_codecheckglobal(FuncState* fs, expdesc* var, int k,
@@ -115,7 +115,7 @@ void luaK_finish(FuncState* fs);
 
 static inline int luaK_codeABC(FuncState* fs, OpCode o, int a, int b, int c)
 {
-  return luaK_codeABCk(fs, o, a, b, c, 0);
+  return luaK_codeABCk(fs, o, a, b, c, false);
 }
 
 static inline void luaK_setmultret(FuncState* fs, expdesc* e)

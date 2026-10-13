@@ -22,9 +22,9 @@ public final class Lutf8lib
 
   private static final int MAXUTF = 0x7FFFFFFF;
 
-  private static int iscont(int c)
+  private static boolean iscont(int c)
   {
-    return ((c & 0xC0) == 0x80) ? 1 : 0;
+    return (c & 0xC0) == 0x80;
   }
 
   private static int ubyte(InternalString s, int i)
@@ -32,7 +32,7 @@ public final class Lutf8lib
     return (i < s.size()) ? s.byteAt(i) : 0;
   }
 
-  private static int iscontat(InternalString s, int i)
+  private static boolean iscontat(InternalString s, int i)
   {
     return iscont(ubyte(s, i));
   }
@@ -64,7 +64,7 @@ public final class Lutf8lib
   private static final int[] limits =
       {Integer.MAX_VALUE, 0x80, 0x800, 0x10000, 0x200000, 0x4000000};
 
-  private static Utf8Code utf8_decode(InternalString s, int pos, int strict)
+  private static Utf8Code utf8_decode(InternalString s, int pos, boolean strict)
   {
     int c = ubyte(s, pos);
     int res = 0; /* final result */
@@ -78,7 +78,7 @@ public final class Lutf8lib
       for (; (c & 0x40) != 0; c <<= 1)
       {                                                            /* while it needs continuation bytes... */
         int cc = ubyte(s, pos + ++count); /* read next byte */
-        if (iscont(cc) == 0)                                     /* not a continuation byte? */
+        if (!iscont(cc))                                     /* not a continuation byte? */
           return new Utf8Code(0, 0);                                                /* invalid byte sequence */
         res = (res << 6) | (cc & 0x3F);                            /* add lower 6 bits from cont. byte */
       }
@@ -88,7 +88,7 @@ public final class Lutf8lib
         return new Utf8Code(0, 0);             /* invalid byte sequence */
       pos += count;  /* skip continuation bytes read */
     }
-    if (strict != 0)
+    if (strict)
     {
       /* check for invalid code points; too large or surrogates */
       if (res > MAXUNICODE || (0xD800 <= res && res <= 0xDFFF))
@@ -109,12 +109,12 @@ public final class Lutf8lib
     int len = s.size(); /* string length in bytes */
     long posi = u_posrelat(luaL_optinteger(L, 2, 1), len);
     long posj = u_posrelat(luaL_optinteger(L, 3, -1), len);
-    int lax = lua_toboolean(L, 4);
+    boolean lax = lua_toboolean(L, 4);
     luaL_argchecki(L, 1 <= posi && --posi <= (long) len, 2, Lt.initial_position_out_of_bounds);
     luaL_argchecki(L, --posj < (long) len, 3, Lt.final_position_out_of_bounds);
     while (posi <= posj)
     {
-      int s1 = utf8_decode(s, (int) posi, (lax == 0) ? 1 : 0).next;
+      int s1 = utf8_decode(s, (int) posi, !lax).next;
       if (s1 == 0)
       {                               /* conversion error? */
         luaL_pushfail(L);             /* return fail ... */
@@ -140,7 +140,7 @@ public final class Lutf8lib
     int len = s.size();
     long posi = u_posrelat(luaL_optinteger(L, 2, 1), len);
     long pose = u_posrelat(luaL_optinteger(L, 3, posi), len);
-    int lax = lua_toboolean(L, 4);
+    boolean lax = lua_toboolean(L, 4);
     int n;
     int se;
     luaL_argchecki(L, posi >= 1, 2, Lt.out_of_bounds);
@@ -155,7 +155,7 @@ public final class Lutf8lib
     se = (int) pose; /* string end */
     for (int pos = (int) posi - 1; pos < se;)
     {
-      Utf8Code dec = utf8_decode(s, pos, (lax == 0) ? 1 : 0);
+      Utf8Code dec = utf8_decode(s, pos, !lax);
       pos = dec.next;
       if (pos == 0)
         return luaL_errori(L, Lt.invalid_UTF_8_code);
@@ -222,12 +222,12 @@ public final class Lutf8lib
     if (n == 0)
     {
       /* find beginning of current byte sequence */
-      while (posi > 0 && iscontat(s, (int) posi) != 0)
+      while (posi > 0 && iscontat(s, (int) posi))
         posi--;
     }
     else
     {
-      if (iscontat(s, (int) posi) != 0)
+      if (iscontat(s, (int) posi))
         return luaL_errori(L, Lt.initial_position_is_a_continuation_byte);
       if (n < 0)
       {
@@ -236,7 +236,7 @@ public final class Lutf8lib
           do
           { /* find beginning of previous character */
             posi--;
-          } while (posi > 0 && iscontat(s, (int) posi) != 0);
+          } while (posi > 0 && iscontat(s, (int) posi));
           n++;
         }
       }
@@ -248,7 +248,7 @@ public final class Lutf8lib
           do
           { /* find beginning of next character */
             posi++;
-          } while (iscontat(s, (int) posi) != 0);
+          } while (iscontat(s, (int) posi));
           n--;
         }
       }
@@ -261,9 +261,9 @@ public final class Lutf8lib
     lua_pushinteger(L, posi + 1); /* initial position */
     if ((ubyte(s, (int) posi) & 0x80) != 0)
     { /* multi-byte character? */
-      if (iscont(ubyte(s, (int) posi)) != 0)
+      if (iscont(ubyte(s, (int) posi)))
         return luaL_errori(L, Lt.initial_position_is_a_continuation_byte);
-      while (iscontat(s, (int) posi + 1) != 0)
+      while (iscontat(s, (int) posi + 1))
         posi++; /* skip to last continuation byte */
     }
     /* else one-byte character: final position is the initial one */
@@ -273,14 +273,14 @@ public final class Lutf8lib
 
   private static final lua_CFunction byteoffset = Lutf8lib::byteoffset;
 
-  private static int iter_aux(lua_State L, int strict)
+  private static int iter_aux(lua_State L, boolean strict)
   {
     InternalString s = luaL_checkistring(L, 1);
     int len = s.size();
     long n = lua_tointeger(L, 2);
     if (Long.compareUnsigned(n, len) < 0)
     {
-      while (iscontat(s, (int) n) != 0)
+      while (iscontat(s, (int) n))
         n++; /* go to next character */
     }
     if (Long.compareUnsigned(n, len) >= 0) /* (also handles original 'n' being negative) */
@@ -288,7 +288,7 @@ public final class Lutf8lib
     else
     {
       Utf8Code dec = utf8_decode(s, (int) n, strict);
-      if (dec.next == 0 || iscontat(s, dec.next) != 0)
+      if (dec.next == 0 || iscontat(s, dec.next))
         return luaL_errori(L, Lt.invalid_UTF_8_code);
       lua_pushinteger(L, n + 1);
       lua_pushinteger(L, dec.code);
@@ -298,14 +298,14 @@ public final class Lutf8lib
 
   private static int iter_auxstrict(lua_State L)
   {
-    return iter_aux(L, 1);
+    return iter_aux(L, true);
   }
 
   private static final lua_CFunction iter_auxstrict = Lutf8lib::iter_auxstrict;
 
   private static int iter_auxlax(lua_State L)
   {
-    return iter_aux(L, 0);
+    return iter_aux(L, false);
   }
 
   private static final lua_CFunction iter_auxlax = Lutf8lib::iter_auxlax;
@@ -315,10 +315,10 @@ public final class Lutf8lib
 
   private static int iter_codes(lua_State L)
   {
-    int lax = lua_toboolean(L, 2);
+    boolean lax = lua_toboolean(L, 2);
     InternalString s = luaL_checkistring(L, 1);
-    luaL_argchecki(L, iscontat(s, 0) == 0, 1, Lt.invalid_UTF_8_code);
-    lua_pushcfuncinfo(L, lax != 0 ? cfi_iter_auxlax : cfi_iter_auxstrict);
+    luaL_argchecki(L, !iscontat(s, 0), 1, Lt.invalid_UTF_8_code);
+    lua_pushcfuncinfo(L, lax ? cfi_iter_auxlax : cfi_iter_auxstrict);
     lua_pushvalue(L, 1);
     lua_pushinteger(L, 0);
     return 3;

@@ -40,7 +40,7 @@ public final class Lcorolib
     if (rr.status == LUA_OK || rr.status == LUA_YIELD)
     {
       int nres = rr.nres;
-      if (lua_checkstack(L, nres + 1) == 0)
+      if (!lua_checkstack(L, nres + 1))
       {
         lua_pop(co, nres); /* remove results anyway */
         lua_pushistringref(L, Lt.too_many_results_to_resume);
@@ -63,7 +63,7 @@ public final class Lcorolib
   */
   private static int auxresume(lua_State L, lua_State co, int narg, lua_KFunction k)
   {
-    if (lua_checkstack(co, narg) == 0)
+    if (!lua_checkstack(co, narg))
     {
       lua_pushistringref(L, Lt.too_many_arguments_to_resume);
       return -1; /* error flag */
@@ -76,13 +76,13 @@ public final class Lcorolib
   {
     if (r < 0)
     {
-      lua_pushboolean(L, 0);
+      lua_pushboolean(L, false);
       lua_insert(L, -2);
       return 2; /* return false + error message */
     }
     else
     {
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       lua_insert(L, -(r + 1));
       return r + 1; /* return true + 'resume' returns */
     }
@@ -140,7 +140,7 @@ public final class Lcorolib
       if (stat != LUA_OK && stat != LUA_YIELD)
       { /* error in the coroutine? close its tbc variables (a '__close' can freeze) */
         stat = lua_closethreadk(co, L, 0, auxwrap_closed).status;
-        if (stat == LUA_OK && lua_isfrozen(co) != 0)
+        if (stat == LUA_OK && lua_isfrozen(co))
           return 0; /* the close froze here, as a resume can: no values */
         assert stat != LUA_OK;
         lua_xmove(co, L, 1); /* move error message to the caller */
@@ -209,7 +209,7 @@ public final class Lcorolib
   {
     if (L == co)
       return COS_RUN;
-    else if (lua_isfrozen(co) != 0) /* as when it froze */
+    else if (lua_isfrozen(co)) /* as when it froze */
       return (lua_frozenchild(co) != null) ? COS_NORM : COS_RUN;
     else
     {
@@ -243,7 +243,7 @@ public final class Lcorolib
 
   private static lua_State getoptco(lua_State L)
   {
-    return ((lua_isnone(L, 1) != 0) ? L : getco(L));
+    return ((lua_isnone(L, 1)) ? L : getco(L));
   }
 
   private static int luaB_yieldable(lua_State L)
@@ -257,7 +257,7 @@ public final class Lcorolib
 
   private static int luaB_corunning(lua_State L)
   {
-    int ismain = lua_pushthread(L);
+    boolean ismain = lua_pushthread(L);
     lua_pushboolean(L, ismain);
     return 2;
   }
@@ -268,12 +268,12 @@ public final class Lcorolib
   {
     if (status == LUA_OK)
     {
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       return 1;
     }
     else
     {
-      lua_pushboolean(L, 0);
+      lua_pushboolean(L, false);
       lua_xmove(co, L, 1); /* move error message */
       return 2;
     }

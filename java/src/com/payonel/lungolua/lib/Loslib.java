@@ -70,8 +70,8 @@ public final class Loslib
 
   private static int os_execute(lua_State L)
   {
-    int nocmd = lua_isnoneornil(L, 1);
-    if (nocmd == 0)
+    boolean nocmd = lua_isnoneornil(L, 1);
+    if (!nocmd)
     {
       InternalString cmd = luaL_checkistring(L, 1);
       OsSystemResult r = os_system(cmd.view());
@@ -79,7 +79,7 @@ public final class Loslib
     }
     else
     {
-      lua_pushboolean(L, os_shell_available() ? 1 : 0); /* true if there is a shell */
+      lua_pushboolean(L, os_shell_available()); /* true if there is a shell */
       return 1;
     }
   }
@@ -90,7 +90,7 @@ public final class Loslib
   {
     InternalString filename = luaL_checkistring(L, 1);
     OsResult r = OsApi.os_remove(filename.view());
-    return luaL_fileresulti(L, r.ok ? 1 : 0, filename.view(), r.err);
+    return luaL_fileresulti(L, r.ok, filename.view(), r.err);
   }
 
   private static final lua_CFunction os_remove = Loslib::os_remove;
@@ -100,7 +100,7 @@ public final class Loslib
     InternalString fromname = luaL_checkistring(L, 1);
     InternalString toname = luaL_checkistring(L, 2);
     OsResult r = OsApi.os_rename(fromname.view(), toname.view());
-    return luaL_fileresulti(L, r.ok ? 1 : 0, null, r.err);
+    return luaL_fileresulti(L, r.ok, null, r.err);
   }
 
   private static final lua_CFunction os_rename = Loslib::os_rename;
@@ -154,7 +154,7 @@ public final class Loslib
   {
     if (value < 0) /* undefined? */
       return;      /* does not set field */
-    lua_pushboolean(L, value);
+    lua_pushboolean(L, value != 0);
     lua_setfieldi(L, -2, key);
   }
 
@@ -246,7 +246,7 @@ public final class Loslib
   {
     ByteView sfmt = luaL_optlstring(L, 1, Lt.fmt_c);
     int sp = 0;
-    long t = (lua_isnoneornil(L, 2) != 0 ? os_now() : l_checktime(L, 2));
+    long t = (lua_isnoneornil(L, 2) ? os_now() : l_checktime(L, 2));
     OsDate stm;
     if (sv_byteat(sfmt, sp) == '!')
     { /* UTC? */
@@ -335,7 +335,7 @@ public final class Loslib
       checkfield(L, timeread[step].key, timeread[step].d, timeread[step].delta);
     else
     { /* 'isdst' */
-      int res = lua_isnil(L, -1) != 0 ? -1 : lua_toboolean(L, -1);
+      int res = lua_isnil(L, -1) ? -1 : (lua_toboolean(L, -1) ? 1 : 0);
       lua_pop(L, 1);
       lua_pushinteger(L, res);
     }
@@ -383,13 +383,13 @@ public final class Loslib
         int isdst = (int) lua_tointeger(L, 2 + w);
         if (isdst < 0) /* undefined? */
           break;       /* does not set field */
-        lua_pushboolean(L, isdst);
+        lua_pushboolean(L, isdst != 0);
       }
       else
         lua_pushvalue(L, 2 + w);
       lua_setfieldik(L, 1, timewrite[w], TIME_NREAD + w + 1, os_timek);
     }
-    if (lua_isnil(L, 11) != 0)
+    if (lua_isnil(L, 11))
       return luaL_errori(L, Lt.time_result_cannot_be_represented_in_this_installation);
     lua_pushvalue(L, 11);
     return 1;
@@ -410,7 +410,7 @@ public final class Loslib
 
   private static int os_time(lua_State L)
   {
-    if (lua_isnoneornil(L, 1) != 0)
+    if (lua_isnoneornil(L, 1))
     { /* called without args? */
       lua_pushinteger(L, os_now()); /* get current time */
       return 1;
@@ -444,15 +444,15 @@ public final class Loslib
     ByteView[] catnames = {
         Lt.all, Lt.collate, Lt.ctype,
         Lt.monetary, Lt.numeric, Lt.time_kw};
-    int nol = lua_isnoneornil(L, 1);
-    InternalString l = (nol != 0) ? null : luaL_checkistring(L, 1);
+    boolean nol = lua_isnoneornil(L, 1);
+    InternalString l = (nol) ? null : luaL_checkistring(L, 1);
     int op = luaL_checkoptioni(L, 2, Lt.all, catnames);
     ByteView res = null;
-    if (nol != 0 || l.view().size() <= LOCALE_NAME_MAXLEN)
-      res = locale_setlocale(cat[op], (nol != 0) ? null : l.view());
+    if (nol || l.view().size() <= LOCALE_NAME_MAXLEN)
+      res = locale_setlocale(cat[op], (nol) ? null : l.view());
     if (res != null)
     {
-      if (nol == 0)
+      if (!nol)
         L.l_G.locale_name = new InternalString(res);
       lua_pushlstring(L, res, 0, res.size());
     }
@@ -466,11 +466,11 @@ public final class Loslib
   private static int os_exit(lua_State L)
   {
     int status;
-    if (lua_isboolean(L, 1) != 0)
-      status = (lua_toboolean(L, 1) != 0 ? EXIT_SUCCESS : EXIT_FAILURE);
+    if (lua_isboolean(L, 1))
+      status = (lua_toboolean(L, 1) ? EXIT_SUCCESS : EXIT_FAILURE);
     else
       status = (int) luaL_optinteger(L, 1, EXIT_SUCCESS);
-    if (lua_toboolean(L, 2) != 0)
+    if (lua_toboolean(L, 2))
       lua_close(L);
     if (L != null)
       exit(status); /* 'if' to avoid warnings for unreachable 'return' */

@@ -57,12 +57,12 @@ constexpr lu_byte maskflags = ~(~0u << (TM_EQ + 1));
 ** Test whether there is no tagmethod.
 ** (Because tagmethods use raw accesses, the result may be an "empty" nil.)
 */
-static l_forceinline int notm(const TValue* tm)
+static l_forceinline bool notm(const TValue* tm)
 {
   return ttype(tm) == LUA_TNIL;
 }
 
-static l_forceinline int checknoTM(const Table* mt, TMS e)
+static l_forceinline bool checknoTM(const Table* mt, TMS e)
 {
   return mt == nullptr || (mt->flags & (1u << e));
 }
@@ -94,21 +94,21 @@ void luaT_trybinTM(lua_State* L, StkId p1, StkId p2,
                              StkId res, TMS event);
 void luaT_tryconcatTM(lua_State* L);
 void luaT_trybinassocTM(lua_State* L, const TValue* p1,
-                                  const TValue* p2, int inv, StkId res, TMS event,
+                                  const TValue* p2, bool inv, StkId res, TMS event,
                                   StkId src1);
 void luaT_trybinassocTM(lua_State* L, StkId p1,
-                                  const TValue* p2, int inv, StkId res, TMS event);
+                                  const TValue* p2, bool inv, StkId res, TMS event);
 void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
-                              int inv, StkId res, TMS event,
+                              bool inv, StkId res, TMS event,
                               StkId src1);
 void luaT_trybiniTM(lua_State* L, StkId p1, lua_Integer i2,
-                              int inv, StkId res, TMS event);
-int luaT_callorderTM(lua_State* L, const TValue* p1,
+                              bool inv, StkId res, TMS event);
+bool luaT_callorderTM(lua_State* L, const TValue* p1,
                                const TValue* p2, TMS event);
-int luaT_callorderiTM(lua_State* L, StkId p1, int v2,
-                                int inv, int isfloat, TMS event);
-int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
-                                int inv, int isfloat, TMS event);
+bool luaT_callorderiTM(lua_State* L, StkId p1, int v2,
+                                bool inv, bool isfloat, TMS event);
+bool luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
+                                bool inv, bool isfloat, TMS event);
 
 void luaT_adjustvarargs(lua_State* L, struct CallInfo* ci,
                                   const Proto* p);

@@ -35,8 +35,8 @@ CClosure* CClosure::luaF_newCclosure(lua_State* L, int nupvals)
   global_State* g = L->l_G;
   CClosure* c = luaM_malloc_CClosure(L);
   luaC_link(L, c, LUA_VCCL);
-  lu_byte oldgcstop = g->gcstopem;
-  g->gcstopem = 1;
+  bool oldgcstop = g->gcstopem;
+  g->gcstopem = true;
   std::span<TValue> upvalue = luaM_alloc_TValue_span(L->l_G, L, {}, nupvals, false);
   g->gcstopem = oldgcstop;
   if (upvalue.data() == nullptr && nupvals > 0)
@@ -50,8 +50,8 @@ LClosure* LClosure::luaF_newLclosure(lua_State* L, int nupvals)
   global_State* g = L->l_G;
   LClosure* c = luaM_malloc_LClosure(L);
   luaC_link(L, c, LUA_VLCL);
-  lu_byte oldgcstop = g->gcstopem;
-  g->gcstopem = 1;
+  bool oldgcstop = g->gcstopem;
+  g->gcstopem = true;
   std::span<UpVal*> upvals = luaM_alloc_UpVal_ptr_span(L->l_G, L, {}, nupvals, false);
   g->gcstopem = oldgcstop;
   if (upvals.data() == nullptr && nupvals > 0)
@@ -182,19 +182,19 @@ static void prepcallclosemth(lua_State* L, StkId level, TStatus status,
 {
   StkId uv = level; /* value being closed */
   TValue errobj;
-  int haserr;
+  bool haserr;
   switch (status)
   {
   case LUA_OK:
     L->top = level + 1; /* call will be at this level */
     /* FALLTHROUGH */
   case CLOSEKTOP:  /* don't need to change top */
-    haserr = 0; /* no error object */
+    haserr = false; /* no error object */
     break;
   default:                                  /* 'luaD_seterrorobj' will set top to level + 2 */
     luaD_seterrorobj(L, status, level + 1);
     errobj = getslot(L, level + 1);
-    haserr = 1;
+    haserr = true;
     break;
   }
   TValue uvv = getslot(L, uv);

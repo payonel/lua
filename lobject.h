@@ -369,7 +369,7 @@ static l_forceinline bool ttisshrstring(const TValue* o)
 struct TString : GCObject
 {
   lu_byte extra;
-  lu_byte hashed;
+  bool hashed;
   unsigned int hash;
   TString* hnext = nullptr;
   InternalString data;
@@ -384,12 +384,12 @@ struct TString : GCObject
   void luaS_forcehash();
 
 private:
-  static TString* createstrobj(lua_State* L, size_t l, size_t h, int hashed, int external);
+  static TString* createstrobj(lua_State* L, size_t l, size_t h, bool hashed, bool external);
 };
 
 constexpr lu_byte STREXTRA_EXTERNAL = 0xFF;
 
-static l_forceinline int strisexternal(const TString* ts)
+static l_forceinline bool strisexternal(const TString* ts)
 {
   return ts->extra == STREXTRA_EXTERNAL;
 }
@@ -462,7 +462,7 @@ typedef l_uint32 Instruction;
 struct Upvaldesc
 {
   TString* name;   /* upvalue name (for debug information) */
-  lu_byte instack; /* whether it is in stack (register) */
+  bool instack; /* whether it is in stack (register) */
   int idx;     /* index of upvalue (in stack or in outer function's list) */
   lu_byte kind;    /* kind of corresponding variable */
 };
@@ -534,9 +534,9 @@ struct Proto : GCListed
   const InternalString* luaF_getlocalname(int local_number, int pc) const;
 };
 
-static l_forceinline int isvararg(const Proto* p)
+static l_forceinline bool isvararg(const Proto* p)
 {
-  return p->flag & (PF_VAHID | PF_VATAB);
+  return (p->flag & (PF_VAHID | PF_VATAB)) != 0;
 }
 
 static l_forceinline void needvatab(Proto* p)
@@ -738,7 +738,7 @@ struct Table : GCListed
   void luaH_copyfrom(lua_State* L, Table* src);
   l_mem luaH_size();
   void luaH_free(lua_State* L);
-  int luaH_next(lua_State* L, StkId key);
+  bool luaH_next(lua_State* L, StkId key);
   lua_Integer luaH_getn(lua_State* L);
   int asize() const;
 
@@ -747,7 +747,7 @@ struct Table : GCListed
   friend void reinserthash(lua_State* L, Table* ot, Table* t);
 
 private:
-  int haslastfree() const;
+  bool haslastfree() const;
   int hashpow2(lua_Unsigned n) const;
   int hashmod(lua_Unsigned n) const;
   int hashstr(TString* str) const;
@@ -757,14 +757,14 @@ private:
   int hashint(lua_Integer i) const;
   int mainpositionTV(const TValue* key) const;
   int mainpositionfromnode(int nd) const;
-  int nodegeneric(const TValue* key, int deadok);
-  const TValue* getgeneric(const TValue* key, int deadok);
+  int nodegeneric(const TValue* key, bool deadok);
+  const TValue* getgeneric(const TValue* key, bool deadok);
   int ikeyinarray(lua_Integer k) const;
   int keyinarray(const TValue* key);
   lua_Integer findindex(lua_State* L, TValue* key, int asize);
   l_mem sizehash();
   void freehash(lua_State* L);
-  int insertkey(const TValue* key, TValue* value);
+  bool insertkey(const TValue* key, TValue* value);
   void newcheckedkey(const TValue* key, TValue* value);
   void reinsertOldSlice(int oldasize, int newasize);
   void clearNewSlice(int oldasize, int newasize);
@@ -773,16 +773,16 @@ private:
   void luaH_newkey(lua_State* L, const TValue* key, TValue* value);
   int nodeintfromhash(lua_Integer key);
   const TValue* getintfromhash(lua_Integer key);
-  int hashkeyisempty(lua_Integer key);
+  bool hashkeyisempty(lua_Integer key);
   int nodeshortstr(TString* key);
   const TValue* Hgetstr(TString* key);
   int finishnodeset(int idx, TValue* val);
-  int rawfinishnodeset(int idx, TValue* val);
+  bool rawfinishnodeset(int idx, TValue* val);
   int psetint(lua_Integer key, TValue* val);
   lua_Integer hash_search(lua_State* L, int asize);
   int binsearch(int i, int j);
   lua_Integer newhint(int hint);
-  int arraykeyisempty(int key) const;
+  bool arraykeyisempty(int key) const;
   void numusearray(Counters* ct) const;
   void numusehash(Counters* ct) const;
   std::span<Value> resizearray(lua_State* L, int oldasize, int newasize, std::span<lu_byte>* newtags);
@@ -994,7 +994,7 @@ static l_forceinline CFuncInfo* keycfuncinfo(const Node* n)
 
 /* }================================================================== */
 
-int luaO_checkliveness(struct lua_State* L, const TValue* obj);
+bool luaO_checkliveness(struct lua_State* L, const TValue* obj);
 
 static l_forceinline void checkliveness([[maybe_unused]] struct lua_State* L, [[maybe_unused]] const TValue* obj)
 {
@@ -1149,7 +1149,7 @@ int luaO_ceillog2(int x);
 int luaO_codeparam(lua_Integer p);
 l_mem luaO_applyparam(int p, l_mem x);
 
-int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2, TValue* res);
+bool luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2, TValue* res);
 void luaO_arith(lua_State* L, int op, StkId p1, StkId p2, StkId res);
 size_t luaO_str2num(byte_view s, TValue* o);
 size_t luaO_tostringbuff(const TValue* obj, byte_span buff);

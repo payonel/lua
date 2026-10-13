@@ -14,17 +14,17 @@
 namespace lua::object
 {
 
-static l_forceinline int isreserved(const TString* s)
+static l_forceinline bool isreserved(const TString* s)
 {
   return s->extra > 0;
 }
 
-static l_forceinline int eqshrstr(const TString* a, const TString* b)
+static l_forceinline bool eqshrstr(const TString* a, const TString* b)
 {
   return a == b;
 }
 
-int luaS_eqstr(TString* a, TString* b);
+bool luaS_eqstr(TString* a, TString* b);
 void luaS_init(lua_State* L);
 
 static l_forceinline unsigned int luaS_gethash(TString* ts)

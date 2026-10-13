@@ -64,7 +64,7 @@ public final class Lhack
       assert --(l.l_G.apilock) == 0;
   }
 
-  public static void luai_tracegc(lua_State l, int f)
+  public static void luai_tracegc(lua_State l, boolean f)
   {
     if (LUA_DEBUG)
       Tests.hooks.luai_tracegctest(l, f);

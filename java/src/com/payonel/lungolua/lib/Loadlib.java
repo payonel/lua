@@ -51,9 +51,9 @@ public final class Loadlib
   ** =========================================================================
   */
 
-  private static OsLib lsys_load(lua_State L, ByteView path, int seeglb)
+  private static OsLib lsys_load(lua_State L, ByteView path, boolean seeglb)
   {
-    OsLib lib = os_dlopen(path, seeglb != 0);
+    OsLib lib = os_dlopen(path, seeglb);
     if (lib == null)
       lua_pushistring(L, os_dlerror());
     return lib;
@@ -86,9 +86,9 @@ public final class Loadlib
   /*
   ** return registry.LUA_NOENV as a boolean
   */
-  private static int noenv(lua_State L)
+  private static boolean noenv(lua_State L)
   {
-    int b;
+    boolean b;
     lua_getfieldi(L, LUA_REGISTRYINDEX, Lt.LUA_NOENV);
     b = lua_toboolean(L, -1);
     lua_pop(L, 1); /* remove value */
@@ -107,7 +107,7 @@ public final class Loadlib
     ByteView epath = os_getenv(lua_toistring(L, -1).view()); /* try versioned name */
     if (epath == null)                                    /* no versioned environment variable? */
       epath = os_getenv(envname);            /* try unversioned name */
-    if (epath == null || noenv(L) != 0) /* no environment variable? */
+    if (epath == null || noenv(L)) /* no environment variable? */
       lua_pushlstring(L, dft, 0, dft.size()); /* use default */
     else
     {
@@ -233,7 +233,7 @@ public final class Loadlib
   */
   private static int lookforfunc(lua_State L, ByteView path, ByteView sym)
   {
-    int loadlibonly = (!sym.empty() && sym.at(0) == '*') ? 1 : 0;
+    boolean loadlibonly = !sym.empty() && sym.at(0) == '*';
     OsLib reg = checkclib(L, path); /* check loaded C libraries */
     if (reg == null)
     {                                          /* must load library? */
@@ -242,9 +242,9 @@ public final class Loadlib
         return ERRLIB; /* unable to load library */
       addtoclib(L, path, reg);
     }
-    if (loadlibonly != 0)
+    if (loadlibonly)
     {                        /* loading only library (no function)? */
-      lua_pushboolean(L, 1); /* return 'true' */
+      lua_pushboolean(L, true); /* return 'true' */
       return 0;              /* no errors */
     }
     else
@@ -281,13 +281,13 @@ public final class Loadlib
   ** =======================================================
   */
 
-  private static int readable(ByteView filename)
+  private static boolean readable(ByteView filename)
   {
     OsOpenResult o = os_fopen(filename, Lt.r_mode);
     if (o.f == null)
-      return 0;
+      return false;
     os_fclose(o.f);
-    return 1;
+    return true;
   }
 
   /*
@@ -339,7 +339,7 @@ public final class Loadlib
           if (sepmark == ByteView.npos)          /* separator not found? */
             sepmark = list.size();                        /* name goes until the end */
           ByteView filename = list.substr(pos, sepmark - pos);
-          if (readable(filename) != 0)
+          if (readable(filename))
           {                                    /* does file exist and is readable? */
             lua_pushistringref(L, filename);  /* save and return name */
             return 1;
@@ -382,7 +382,7 @@ public final class Loadlib
   */
   private static int findfile(lua_State L, ByteView name, ByteView pname, ByteView dirsep)
   {
-    if (lua_isstring(L, -1) == 0)
+    if (!lua_isstring(L, -1))
     {
       lua_pushlstring(L, pname, 0, pname.size());
       luaL_errori(L, Lt.package_s_must_be_a_string);
@@ -391,9 +391,9 @@ public final class Loadlib
     return searchpath(L, name, path, Lt.dot, dirsep);
   }
 
-  private static int checkload(lua_State L, int stat, ByteView filename)
+  private static int checkload(lua_State L, boolean stat, ByteView filename)
   {
-    if (stat != 0)
+    if (stat)
     {                                                /* module loaded successfully? */
       lua_pushlstring(L, filename, 0, filename.size()); /* will be 2nd argument to module */
       return 2;                    /* return open function and file name */
@@ -418,14 +418,14 @@ public final class Loadlib
     {
       int base = (int) ctx;
       ByteView filename = lua_toistring(L, base - 1).view();
-      return checkload(L, (luaL_loadfileikresume(L, status, null, base, ctx, searcher_Luak) == LUA_OK) ? 1 : 0, filename);
+      return checkload(L, luaL_loadfileikresume(L, status, null, base, ctx, searcher_Luak) == LUA_OK, filename);
     }
     ByteView name = luaL_checklstring(L, 1);
     if (findfile(L, name, Lt.path, Lt.LUA_DIRSEP) == 0)
       return 1;
     ByteView filename = lua_toistring(L, -1).view();
     int base = lua_gettop(L) + 1;
-    return checkload(L, (luaL_loadfileik(L, filename, null, base, searcher_Luak) == LUA_OK) ? 1 : 0, filename);
+    return checkload(L, luaL_loadfileik(L, filename, null, base, searcher_Luak) == LUA_OK, filename);
   }
 
   private static final lua_KFunction searcher_Luak = Loadlib::searcher_Luak;
@@ -478,7 +478,7 @@ public final class Loadlib
     if (findfile(L, name, Lt.cpath, Lt.LUA_DIRSEP) == 0)
       return 1;
     InternalString filename = lua_toistring(L, -1);
-    return checkload(L, (loadfunc(L, filename.view(), name) == 0) ? 1 : 0, filename.view());
+    return checkload(L, loadfunc(L, filename.view(), name) == 0, filename.view());
   }
 
   private static final lua_KFunction searcher_Ck = Loadlib::searcher_Ck;
@@ -507,7 +507,7 @@ public final class Loadlib
     if ((stat = loadfunc(L, filename.view(), name)) != 0)
     {
       if (stat != ERRFUNC)
-        return checkload(L, 0, filename.view()); /* real error */
+        return checkload(L, false, filename.view()); /* real error */
       else
       { /* open function not found */
         lua_pushlstring(L, name, 0, name.size());
@@ -542,7 +542,7 @@ public final class Loadlib
     ByteView name = luaL_checklstring(L, 1);
     if (ctx == 1)
       lua_getfieldik(L, -1, name, 2, searcher_preloadk);
-    if (lua_isnil(L, -1) != 0)
+    if (lua_isnil(L, -1))
     { /* not found? */
       lua_pushlstring(L, name, 0, name.size());
       lua_pushfstringi(L, Lt.no_field_package_preload_s);
@@ -606,7 +606,7 @@ public final class Loadlib
         case REQ_LOADED:
           lua_getfieldik(L, 2, name, reqctx(REQ_GOT, 0), ll_requirek); /* LOADED[name] */
         case REQ_GOT:
-          if (lua_toboolean(L, -1) != 0) /* is it there? */
+          if (lua_toboolean(L, -1)) /* is it there? */
             return 1;               /* package is already loaded */
           /* else must load package */
           lua_pop(L, 1); /* remove 'getfield' result */
@@ -623,7 +623,7 @@ public final class Loadlib
         }
         case REQ_SEARCHED:
           luaL_buffload(msg, luaL_tobox(L, 4));
-          if (lua_isfunction(L, -2) != 0) /* did it find a loader? */
+          if (lua_isfunction(L, -2)) /* did it find a loader? */
           {                          /* module loader found */
             lua_remove(L, 4);        /* (the box) */
             lua_rotate(L, -2, 1); /* function <-> loader data */
@@ -634,7 +634,7 @@ public final class Loadlib
             step = REQ_LOADER;
             continue;
           }
-          else if (lua_isstring(L, -2) != 0)
+          else if (lua_isstring(L, -2))
           {                               /* searcher returned error message? */
             lua_pop(L, 1);                /* remove extra return */
             luaL_addvalue(msg);          /* concatenate error message */
@@ -646,16 +646,16 @@ public final class Loadlib
           break;
         case REQ_LOADER:
           /* stack: ...; loader data; result from loader */
-          if (lua_isnil(L, -1) == 0) /* non-nil return? */
+          if (!lua_isnil(L, -1)) /* non-nil return? */
             lua_setfieldik(L, 2, name, reqctx(REQ_SET, 0), ll_requirek); /* LOADED[name] = returned value */
           else
             lua_pop(L, 1); /* pop nil */
         case REQ_SET:
           lua_getfieldik(L, 2, name, reqctx(REQ_RESULT, 0), ll_requirek);
         case REQ_RESULT:
-          if (lua_isnil(L, -1) != 0)
+          if (lua_isnil(L, -1))
           {                        /* module set no value? */
-            lua_pushboolean(L, 1); /* use true as result */
+            lua_pushboolean(L, true); /* use true as result */
             lua_copy(L, -1, -2);   /* replace loader result */
             lua_setfieldik(L, 2, name, reqctx(REQ_DONE, 0), ll_requirek); /* LOADED[name] = true */
           }

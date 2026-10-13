@@ -229,7 +229,7 @@ static lua_State* new_state()
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
 #ifdef LUA_DEBUG
-  luaL_requiref(L, "T", luaB_opentests, 1);
+  luaL_requiref(L, "T", luaB_opentests, true);
   lua_pop(L, 1);
 #endif
   lua_pushcfunction(L, l_copy);
@@ -661,7 +661,7 @@ static void test_fullgc_due()
       CHECK(lua_rawlen(L, -1) == 0);
       lua_getglobal(L, "weak");
       lua_pushnil(L);
-      CHECK(lua_next(L, -2) == 0);
+      CHECK(!lua_next(L, -2));
       lua_settop(L, 0);
       CHECK(run(L, "return table.concat(fins, ' ') .. ' ' .. collectgarbage('incremental')") ==
             std::string("3 2 1 ") + mode);
@@ -869,7 +869,7 @@ static void test_make_due_queued_white()
     lua_pop(L, 2);
   }
   lua_lock(L);
-  lua::gc::luaC_runtilstate(L, lua::gc::GCSenteratomic, 0); /* (all reachable is black) */
+  lua::gc::luaC_runtilstate(L, lua::gc::GCSenteratomic, false); /* (all reachable is black) */
   lua_unlock(L);
   for (GCObject* o : objs)
     CHECK(!lua::gc::iswhite(o));

@@ -231,7 +231,7 @@ static int str_char(lua_State* L)
 */
 struct str_Writer : lua_Writer
 {
-  int init; /* true iff buffer has been initialized */
+  bool init; /* true iff buffer has been initialized */
   luaL_Buffer B;
   int write(lua_State* L, std::optional<byte_view> b) override;
 };
@@ -240,7 +240,7 @@ static int writer(lua_State* L, std::optional<byte_view> b, str_Writer* state)
 {
   if (!state->init)
   {
-    state->init = 1;
+    state->init = true;
     luaL_buffinit(L, &state->B);
   }
   if (!b.has_value())
@@ -261,11 +261,11 @@ int str_Writer::write(lua_State* L, std::optional<byte_view> b)
 static int str_dump(lua_State* L)
 {
   struct str_Writer state;
-  int strip = lua_toboolean(L, 2);
+  bool strip = lua_toboolean(L, 2);
   luaL_argchecki(L, lua_type(L, 1) == LUA_TFUNCTION && !lua_iscfunction(L, 1), 1, lt::Lua_function_expected);
   /* ensure function is on the top of the stack and vacate slot 1 */
   lua_pushvalue(L, 1);
-  state.init = 0;
+  state.init = false;
   lua_dump(L, &state, strip);
   lua_settop(L, 1); /* leave final result on top */
   return 1;
@@ -277,12 +277,12 @@ static int str_dump(lua_State* L)
 ** =======================================================
 */
 
-static int tonum(lua_State* L, int arg)
+static bool tonum(lua_State* L, int arg)
 {
   if (lua_type(L, arg) == LUA_TNUMBER)
   { /* already a number? */
     lua_pushvalue(L, arg);
-    return 1;
+    return true;
   }
   else
   { /* check whether it is a numerical string */
@@ -651,26 +651,26 @@ static ptrdiff_t classend(MatchState* ms, ptrdiff_t p)
   }
 }
 
-static int match_class(int c, int cl)
+static bool match_class(int c, int cl)
 {
-  int res;
+  bool res;
   int lower = locale_tolower(cl);
   if (lower == 'z')
     res = (c == 0); /* deprecated option */
   else
     res = locale_matchclass(c, lower);
-  if (res == 0 && lower == cl)
+  if (!res && lower == cl)
     return (cl == c); /* not a known class and lowercase — literal match */
   return (locale_islower(cl) ? res : !res);
 }
 
-static int matchbracketclass(MatchState* ms, int c, ptrdiff_t p,
+static bool matchbracketclass(MatchState* ms, int c, ptrdiff_t p,
                              ptrdiff_t ec)
 {
-  int sig = 1;
+  bool sig = true;
   if (patbyte(ms, p + 1) == '^')
   {
-    sig = 0;
+    sig = false;
     p++; /* skip the '^' */
   }
   while (++p < ec)
@@ -693,18 +693,18 @@ static int matchbracketclass(MatchState* ms, int c, ptrdiff_t p,
   return !sig;
 }
 
-static int singlematch(MatchState* ms, ptrdiff_t s, ptrdiff_t p,
+static bool singlematch(MatchState* ms, ptrdiff_t s, ptrdiff_t p,
                        ptrdiff_t ep)
 {
   if (s >= ms->src_end)
-    return 0;
+    return false;
   else
   {
     int c = srcbyte(ms, s);
     switch (patbyte(ms, p))
     {
     case '.':
-      return 1; /* matches any char */
+      return true; /* matches any char */
     case L_ESC:
       return match_class(c, patbyte(ms, p + 1));
     case '[':
@@ -1243,7 +1243,7 @@ static int push_captures(MatchState* ms, ptrdiff_t s, ptrdiff_t e)
 }
 
 /* check whether pattern has no special characters */
-static int nospecials(byte_view p)
+static bool nospecials(byte_view p)
 {
   return p.find_first_of(lt::pattern_specials) == byte_view::npos;
 }
@@ -1284,9 +1284,9 @@ static void reprepstate(MatchState* ms)
   ms->goingon = false;
 }
 
-static int find_loop(lua_State* L, MatchState* ms, int find, ptrdiff_t s1, ptrdiff_t res, bool first);
+static int find_loop(lua_State* L, MatchState* ms, bool find, ptrdiff_t s1, ptrdiff_t res, bool first);
 
-static int str_find_aux(lua_State* L, int find)
+static int str_find_aux(lua_State* L, bool find)
 {
   const InternalString* s = luaL_checkistring(L, 1);
   const InternalString* p = luaL_checkistring(L, 2);
@@ -1325,9 +1325,9 @@ static int str_find_aux(lua_State* L, int find)
 ** The matches of 'find' and 'match' from 's1' on ('first' when the match
 ** from 's1' is already 'res').
 */
-static int find_loop(lua_State* L, MatchState* ms, int find, ptrdiff_t s1, ptrdiff_t res, bool first)
+static int find_loop(lua_State* L, MatchState* ms, bool find, ptrdiff_t s1, ptrdiff_t res, bool first)
 {
-  int anchor = (ms->p_end > 0 && ms->p->byteAt(0) == '^');
+  bool anchor = (ms->p_end > 0 && ms->p->byteAt(0) == '^');
   ptrdiff_t pinit = anchor ? 1 : 0; /* skip anchor character */
   do
   {
@@ -1387,19 +1387,19 @@ static int str_findk(lua_State* L, int status, lua_KContext ctx)
   prepstate(&ms, L, luaL_checkistring(L, 1), luaL_checkistring(L, 2));
   prepcheck(&ms, 5, str_findk, ctx);
   ptrdiff_t res = match_resume(&ms);
-  return find_loop(L, &ms, (int)ctx, ms.origin, res, true);
+  return find_loop(L, &ms, ctx != 0, ms.origin, res, true);
 }
 
 static KNamer knamer_str_findk("string.str_findk", str_findk);
 
 static int str_find(lua_State* L)
 {
-  return str_find_aux(L, 1);
+  return str_find_aux(L, true);
 }
 
 static int str_match(lua_State* L)
 {
-  return str_find_aux(L, 0);
+  return str_find_aux(L, false);
 }
 
 /* state for 'gmatch' */
@@ -1569,7 +1569,7 @@ struct GsubArgs
   const InternalString* pat;  /* pattern */
   int tr;                     /* replacement type */
   lua_Integer max_s;          /* max replacements */
-  int anchor;
+  bool anchor;
   ptrdiff_t pinit; /* where the pattern starts (after an anchor) */
 };
 
@@ -1602,14 +1602,14 @@ static int gsubk(lua_State* L, int status, lua_KContext ctx);
 ** original string was changed. (Function calls and table indexing
 ** resulting in nil or false do not change the subject.)
 */
-static int add_result(lua_State* L, luaL_Buffer* b, const InternalString* src,
+static bool add_result(lua_State* L, luaL_Buffer* b, const InternalString* src,
                       ptrdiff_t s, ptrdiff_t e)
 {
   if (!lua_toboolean(L, -1))
   {                /* nil or false? */
     lua_pop(L, 1); /* remove value */
     luaL_addlstring(b, src->view(), s, e - s); /* keep original text */
-    return 0;                                  /* no changes */
+    return false;                                  /* no changes */
   }
   else if (l_unlikely(!lua_isstring(L, -1)))
   {
@@ -1619,7 +1619,7 @@ static int add_result(lua_State* L, luaL_Buffer* b, const InternalString* src,
   else
   {
     luaL_addvalue(b); /* add result to accumulator */
-    return 1;         /* something changed */
+    return true;         /* something changed */
   }
 }
 
@@ -1628,8 +1628,8 @@ static int add_result(lua_State* L, luaL_Buffer* b, const InternalString* src,
 ** function or table is called with the state in 'box', for 'gsubk' to go
 ** on with after a freeze. Return true if the original string was changed.
 */
-static int add_value(MatchState* ms, luaL_Buffer* b, luaL_Box* box, ptrdiff_t s,
-                     ptrdiff_t e, int tr, lua_Integer n, int changed)
+static bool add_value(MatchState* ms, luaL_Buffer* b, luaL_Box* box, ptrdiff_t s,
+                     ptrdiff_t e, int tr, lua_Integer n, bool changed)
 {
   lua_State* L = ms->L;
   switch (tr)
@@ -1667,14 +1667,14 @@ static int add_value(MatchState* ms, luaL_Buffer* b, luaL_Box* box, ptrdiff_t s,
   default:
   {                     /* LUA_TNUMBER or LUA_TSTRING */
     add_s(ms, b, s, e); /* add value to the buffer */
-    return 1;           /* something changed */
+    return true;           /* something changed */
   }
   }
   return add_result(L, b, ms->src, s, e);
 }
 
 static int gsub_end(lua_State* L, const GsubArgs& a, MatchState* ms, luaL_Buffer* b,
-                    ptrdiff_t src, lua_Integer n, int changed)
+                    ptrdiff_t src, lua_Integer n, bool changed)
 {
   if (!changed)          /* no changes? */
     lua_pushvalue(L, 1); /* return original string */
@@ -1690,7 +1690,7 @@ static int gsub_end(lua_State* L, const GsubArgs& a, MatchState* ms, luaL_Buffer
 /* the matches of 'gsub' from 'src' on ('first': see 'find_loop') */
 static int gsub_loop(lua_State* L, const GsubArgs& a, MatchState* ms, luaL_Buffer* b,
                      luaL_Box* box, ptrdiff_t src, ptrdiff_t lastmatch,
-                     lua_Integer n, int changed, ptrdiff_t e, bool first)
+                     lua_Integer n, bool changed, ptrdiff_t e, bool first)
 {
   while (n < a.max_s)
   {
@@ -1743,7 +1743,7 @@ static int gsubk(lua_State* L, int status, lua_KContext ctx)
   { /* (a check point of the match going on keeps these again) */
     ptrdiff_t lastmatch = (ptrdiff_t)box->ints[GS_E];
     lua_Integer n = box->ints[GS_N];
-    int changed = (box->ints[GS_CHANGED] != 0);
+    bool changed = (box->ints[GS_CHANGED] != 0);
     ms.loop[0] = lastmatch;
     ms.loop[1] = n;
     ms.loop[2] = changed;
@@ -1756,7 +1756,7 @@ static int gsubk(lua_State* L, int status, lua_KContext ctx)
   if (s < 0 || s > e || e > ms.src_end)
     luaL_errori(L, lt::invalid_match_state);
   lua_Integer n = box->ints[GS_N];
-  int changed = add_result(L, &b, a.srcs, s, e) || (int)box->ints[GS_CHANGED];
+  bool changed = add_result(L, &b, a.srcs, s, e) || (int)box->ints[GS_CHANGED];
   if (lua_gettop(L) == 6)
     ms.box = dynamic_cast<MatchBox*>(lua_touserobject(L, 6)); /* (made by a check point before) */
   if (a.anchor)
@@ -1785,7 +1785,7 @@ static int str_gsub(lua_State* L)
   prepcheck(&ms, 6, gsubk, 1); /* (boxes at 5 and 6, after the arguments) */
   ms.b = &b;
   ms.bbox = box;
-  return gsub_loop(L, a, &ms, &b, box, 0, NOMATCH, 0, 0, NOMATCH, false);
+  return gsub_loop(L, a, &ms, &b, box, 0, NOMATCH, 0, false, NOMATCH, false);
 }
 
 /* }====================================================== */
@@ -2638,7 +2638,7 @@ struct Header
   lua_State* L;
   const InternalString* fmt; /* format string */
   size_t pos;
-  int islittle;
+  bool islittle;
   size_t maxalign;
 };
 
@@ -2669,7 +2669,7 @@ typedef enum KOption
 ** Read an integer numeral from string 'fmt' or return 'df' if
 ** there is no numeral
 */
-static int digit(int c)
+static bool digit(int c)
 {
   return '0' <= c && c <= '9';
 }
@@ -2779,10 +2779,10 @@ static PackOption getoption(Header* h)
   case ' ':
     break;
   case '<':
-    h->islittle = 1;
+    h->islittle = true;
     break;
   case '>':
-    h->islittle = 0;
+    h->islittle = false;
     break;
   case '=':
     h->islittle = nativeendian_little;
@@ -2858,7 +2858,7 @@ static PackDetails getdetails(Header* h, size_t totalsize)
 ** bytes if necessary (by default they would be zeros).
 */
 static void packint(luaL_Buffer* b, lua_Unsigned n,
-                    int islittle, size_t size, int neg)
+                    bool islittle, size_t size, bool neg)
 {
   size_t off = luaL_prepbuffsize(b, size);
   byte_span buff = luaL_buffaddr(b);
@@ -2877,7 +2877,7 @@ static void packint(luaL_Buffer* b, lua_Unsigned n,
   luaL_addsize(b, size); /* add result to buffer */
 }
 
-static void packFloat(luaL_Buffer* b, float f, int islittle)
+static void packFloat(luaL_Buffer* b, float f, bool islittle)
 {
   size_t pos = luaL_prepbuffsize(b, SZ_FLOAT);
   byte_span buff = luaL_buffaddr(b);
@@ -2952,7 +2952,7 @@ static int str_pack(lua_State* L)
       lua_Integer n = luaL_checkinteger(L, arg);
       if (size < SZINT) /* need overflow check? */
         luaL_argchecki(L, l_ult(n, lua_Integer{1} << (size * NB)), arg, lt::unsigned_overflow);
-      packint(&b, n, h.islittle, size, 0);
+      packint(&b, n, h.islittle, size, false);
       break;
     }
     case Kfloat:
@@ -2994,7 +2994,7 @@ static int str_pack(lua_State* L)
       size_t len = s.size();
       luaL_argchecki(L, size >= SZ_INTEGER || len < ((lua_Unsigned) 1 << (size * NB)), arg, lt::string_length_does_not_fit_in_given_size);
       /* pack length */
-      packint(&b, len, h.islittle, size, 0);
+      packint(&b, len, h.islittle, size, false);
       luaL_addlstring(&b, s, 0, len);
       totalsize += len;
       break;
@@ -3051,7 +3051,7 @@ static int str_packsize(lua_State* L)
 ** overflow.
 */
 static lua_Integer unpackint(lua_State* L, byte_view data, size_t off,
-                             int islittle, int size, int issigned)
+                             bool islittle, int size, bool issigned)
 {
   lua_Unsigned res = 0;
   int i;
@@ -3141,7 +3141,7 @@ static int str_unpack(lua_State* L)
     case Kstring:
     {
       lua_Unsigned len = unpackint(L, data, pos,
-                                                  h.islittle, (int)size, 0);
+                                                  h.islittle, (int)size, false);
       luaL_argchecki(L, len <= ld - pos - size, 2, lt::data_string_too_short);
       lua_pushlstring(L, data, pos + size, len);
       pos += (size_t)len; /* skip string */

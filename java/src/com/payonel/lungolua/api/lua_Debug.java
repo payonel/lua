@@ -15,9 +15,9 @@ public final class lua_Debug
   public int lastlinedefined;  /* (S) */
   public int nups;             /* (u) number of upvalues */
   public int nparams;          /* (u) number of parameters */
-  public byte isvararg;        /* (u) */
+  public boolean isvararg;     /* (u) */
   public int extraargs;        /* (t) number of extra arguments */
-  public byte istailcall;      /* (t) */
+  public boolean istailcall;   /* (t) */
   public int ftransfer;        /* (r) index of first value transferred */
   public int ntransfer;        /* (r) number of transferred values */
   public HostString short_src = new HostString(); /* (S) */

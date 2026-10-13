@@ -50,7 +50,7 @@ public final class Ldo
   public static void luaD_checkstack(lua_State L, int n)
   {
     if (L.stack_last - L.top <= n)
-      luaD_growstack(L, n, 1);
+      luaD_growstack(L, n, true);
   }
 
   public static void checkstackp(lua_State L, int n, int p)
@@ -82,9 +82,9 @@ public final class Ldo
      stack to the callback's caller, and only that catches it */
   public static final byte LUA_CBEXIT = 101;
 
-  private static int errorstatus(byte s)
+  private static boolean errorstatus(byte s)
   {
-    return (s > LUA_YIELD && s != LUA_FREEZE && s != LUA_CBEXIT) ? 1 : 0;
+    return s > LUA_YIELD && s != LUA_FREEZE && s != LUA_CBEXIT;
   }
 
   /*
@@ -132,7 +132,7 @@ public final class Ldo
     }
     else
     {
-      assert errorstatus(errcode) != 0;        /* must be a real error */
+      assert errorstatus(errcode);        /* must be a real error */
       assert !tagisempty(slottag(L, L.top - 1)); /* with a non-nil object */
       copyslot(L, oldtop, L.top - 1);      /* move it to 'oldtop' */
     }
@@ -228,48 +228,48 @@ public final class Ldo
   ** as a finalizer): At least BASIC_STACK_SIZE in the Lua stack, two
   ** available CallInfos, and two "slots" in the C stack.
   */
-  public static int luaD_checkminstack(lua_State L)
+  public static boolean luaD_checkminstack(lua_State L)
   {
     if (getCcalls(L) >= LUAI_MAXCCALLS - 2)
-      return 0; /* not enough C-stack slots */
+      return false; /* not enough C-stack slots */
     if (L.ci.next == null && luaE_extendCI(L, 0) == null)
-      return 0; /* unable to allocate first ci */
+      return false; /* unable to allocate first ci */
     if (L.ci.next.next == null && luaE_extendCI(L, 0) == null)
-      return 0; /* unable to allocate second ci */
+      return false; /* unable to allocate second ci */
     if (L.top + BASIC_STACK_SIZE <= L.stack_last)
-      return 1; /* enough (BASIC_STACK_SIZE) free slots in the Lua stack */
+      return true; /* enough (BASIC_STACK_SIZE) free slots in the Lua stack */
     else        /* try to grow stack to a size with enough free slots */
-      return luaD_growstack(L, BASIC_STACK_SIZE, 0);
+      return luaD_growstack(L, BASIC_STACK_SIZE, false);
   }
 
   private static void correctstack(lua_State L)
   {
     for (CallInfo ci = L.ci; ci != null; ci = ci.previous)
     {
-      if (isLua(ci) != 0)
+      if (isLua(ci))
         ci.trap = 1; /* signal to update 'trap' in 'luaV_execute' */
     }
   }
 
-  public static int luaD_reallocstack(lua_State L, int newsize, int raiseerror)
+  public static boolean luaD_reallocstack(lua_State L, int newsize, boolean raiseerror)
   {
     int oldsize = stacksize(L);
     int i;
     int oldn = oldsize + EXTRA_STACK;
     int newn = newsize + EXTRA_STACK;
     int keep = (oldn < newn) ? oldn : newn;
-    byte oldgcstop = L.l_G.gcstopem;
+    boolean oldgcstop = L.l_G.gcstopem;
     assert newsize <= MAXSTACK || newsize == ERRORSTACKSIZE;
-    L.l_G.gcstopem = 1; /* stop emergency collection */
+    L.l_G.gcstopem = true; /* stop emergency collection */
     long[] newstk = luaM_alloc_TValue_span(L.l_G, L, new long[0], newn, false);
     L.l_G.gcstopem = oldgcstop; /* restore emergency collection */
     if (newstk == null)
     {
       correctstack(L);
-      if (raiseerror != 0)
+      if (raiseerror)
         luaD_throw(L, (byte) LUA_ERRMEM);
       else
-        return 0; /* do not raise an error */
+        return false; /* do not raise an error */
     }
     Object[] newstk_ref = luaM_alloc_TValue_span(new Object[0], newn);
     byte[] newstk_tt = luaM_alloc_TValue_span(new byte[0], newn);
@@ -287,14 +287,14 @@ public final class Ldo
     L.stack_last = newsize;
     for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
       setslottag(L, i, LUA_VNIL); /* erase new segment */
-    return 1;
+    return true;
   }
 
   /*
   ** Try to grow the stack by at least 'n' elements. When 'raiseerror'
   ** is true, raises any error; otherwise, return 0 in case of errors.
   */
-  public static int luaD_growstack(lua_State L, int n, int raiseerror)
+  public static boolean luaD_growstack(lua_State L, int n, boolean raiseerror)
   {
     int size = stacksize(L);
     if (size > MAXSTACK)
@@ -303,9 +303,9 @@ public final class Ldo
          extra space reserved for errors, that is, thread is handling
          a stack error; cannot grow further than that. */
       assert stacksize(L) == ERRORSTACKSIZE;
-      if (raiseerror != 0)
+      if (raiseerror)
         luaD_errerr(L); /* stack error inside message handler */
-      return 0;         /* if not 'raiseerror', just signal it */
+      return false;         /* if not 'raiseerror', just signal it */
     }
     else if (n < MAXSTACK)
     {                                   /* avoids arithmetic overflows */
@@ -321,9 +321,9 @@ public final class Ldo
     /* else stack overflow */
     /* add extra size to be able to handle the error message */
     luaD_reallocstack(L, ERRORSTACKSIZE, raiseerror);
-    if (raiseerror != 0)
+    if (raiseerror)
       luaG_runerror(L, Lt.stack_overflow);
-    return 0;
+    return false;
   }
 
   /*
@@ -367,7 +367,7 @@ public final class Ldo
     if (inuse <= MAXSTACK && stacksize(L) > max)
     {
       int nsize = (inuse > MAXSTACK / 2) ? MAXSTACK : inuse * 2;
-      luaD_reallocstack(L, nsize, 0); /* ok if that fails */
+      luaD_reallocstack(L, nsize, false); /* ok if that fails */
     }
     luaE_shrinkCI(L); /* shrink CI list */
   }
@@ -383,7 +383,7 @@ public final class Ldo
                                int ftransfer, int ntransfer)
   {
     lua_Hook hook = L.hook;
-    if (hook != null && L.allowhook != 0 && L.l_G.budgetL == null)
+    if (hook != null && L.allowhook && L.l_G.budgetL == null)
     { /* make sure there is a hook (and no budget callback is running) */
       CallInfo ci = L.ci;
       int top = L.top;     /* preserve original 'top' */
@@ -394,12 +394,12 @@ public final class Ldo
       ar.i_ci = ci;
       L.transferinfo.ftransfer = ftransfer;
       L.transferinfo.ntransfer = ntransfer;
-      if (isLua(ci) != 0 && L.top < ci.top)
+      if (isLua(ci) && L.top < ci.top)
         L.top = ci.top;           /* protect entire activation register */
       luaD_checkstack(L, LUA_MINSTACK); /* ensure minimum stack size */
       if (ci.top < L.top + LUA_MINSTACK)
         ci.top = L.top + LUA_MINSTACK;
-      L.allowhook = 0; /* cannot call hooks inside a hook */
+      L.allowhook = false; /* cannot call hooks inside a hook */
       ci.callstatus |= CIST_HOOKED;
       ci.hooktop = top;     /* (a hook function that calls with 'lua_callhook' */
       ci.hookcitop = ci_top; /* can freeze: when it ends after a thaw, this is */
@@ -416,8 +416,8 @@ public final class Ldo
   */
   public static void luaD_finishhook(lua_State L, CallInfo ci)
   {
-    assert L.allowhook == 0;
-    L.allowhook = 1;
+    assert !L.allowhook;
+    L.allowhook = true;
     ci.top = ci.hookcitop;
     L.top = ci.hooktop;
     ci.callstatus &= ~CIST_HOOKED;
@@ -474,7 +474,7 @@ public final class Ldo
       lua_State R = T.resumer;
       if (R == null || R.beff == null)
         return new ChainTop(T, why);
-      if (T.resumedk == 0 && why == 0)
+      if (!T.resumedk && why == 0)
         why = LUA_NOFREEZE_RESUME;
       T = R;
       nfz = T.nfz;
@@ -519,7 +519,7 @@ public final class Ldo
       lua_State R = T.resumer;
       if (R == null || R.beff == null)
         return 0;
-      if (T.resumedk == 0)
+      if (!T.resumedk)
         return LUA_NOFREEZE_RESUME;
       T = R;
     }
@@ -555,7 +555,7 @@ public final class Ldo
     CallInfo ci = L.ci;
     int top = L.top;     /* preserve original 'top' */
     int ci_top = ci.top; /* idem for 'ci->top' */
-    byte allowhook = L.allowhook;
+    boolean allowhook = L.allowhook;
     int oldpc = L.oldpc;       /* hooks do not see the callback: their */
     int hookcount = L.hookcount; /* state stays as it is */
     int errfunc = L.errfunc;
@@ -565,12 +565,12 @@ public final class Ldo
     /* the budget goes on also if the callback raises an error */
     try
     {
-      if (isLua(ci) != 0 && L.top < ci.top)
+      if (isLua(ci) && L.top < ci.top)
         L.top = ci.top; /* protect entire activation register */
       /* (no room is made in the stack of 'L': the callback leaves it, and its
          C calls, as they are, so that where a stack overflow happens does not
          depend on where the budget runs out; see 'lua_budgetthread') */
-      L.allowhook = 0; /* no hooks inside */
+      L.allowhook = false; /* no hooks inside */
       L.errfunc = 0;   /* and no message handler: its errors are not for user code */
       g.budgetL = L;
       g.budgetg = bg; /* (kept by the collector while the callback runs) */
@@ -739,12 +739,12 @@ public final class Ldo
   private static void rethook(lua_State L, CallInfo ci, int nres, byte ev)
   {
     if ((L.hookmask & LUA_MASKRET) != 0 &&
-        !(isLua(ci) == 0 && withvariant(slottag(L, ci.func)) == LUA_VLCF && slotfval(L, ci.func) == luaC_drainfunction()))
+        !(!isLua(ci) && withvariant(slottag(L, ci.func)) == LUA_VLCF && slotfval(L, ci.func) == luaC_drainfunction()))
     {                                   /* is return hook on (and not for the call of the waiting '__gc')? */
       int firstres = L.top - nres; /* index of first result */
       int delta = 0;                    /* correction for vararg functions */
       int ftransfer;
-      if (isLua(ci) != 0)
+      if (isLua(ci))
       {
         Proto p = ci_func(L, ci).p;
         if ((p.flag & PF_VAHID) != 0)
@@ -758,7 +758,7 @@ public final class Ldo
       luaD_hook(L, LUA_HOOKRET, -1, ftransfer, nres); /* call it */
       ci.func -= delta;
     }
-    if (isLua(ci = ci.previous) != 0)
+    if (isLua(ci = ci.previous))
       L.oldpc = ci.savedpc - 1; /* set 'oldpc' */
   }
 
@@ -1131,7 +1131,7 @@ public final class Ldo
     case APIK_SETTOP:
     case APIK_CLOSESLOT:
     { /* the '__close' that was interrupted has returned: close what is left */
-      boolean nny = yieldable(L) == 0 || (ci.callstatus & CIST_FZONLY) != 0;
+      boolean nny = !yieldable(L) || (ci.callstatus & CIST_FZONLY) != 0;
       if (nny)
         ci.callstatus |= CIST_NYCALL; /* (its next '__close', as in 'armk') */
       int level = luaF_close(L, ci.apifirst, (byte) CLOSEKTOP, nny ? 2 : 1); /* may yield again */
@@ -1148,7 +1148,7 @@ public final class Ldo
       int top = L.top - 1;        /* top when the metamethod was called */
       copyslot(L, top - 2, top);     /* its result, over its first operand */
       L.top = top - 1;
-      if (yieldable(L) == 0 || (ci.callstatus & CIST_FZONLY) != 0)
+      if (!yieldable(L) || (ci.callstatus & CIST_FZONLY) != 0)
         ci.callstatus |= CIST_NYCALL; /* (its next metamethods, as in 'armk') */
       luaV_concat(L, (int) (L.top - ci.apifirst)); /* may yield again */
       ci.callstatus &= ~CIST_NYCALL;
@@ -1269,7 +1269,7 @@ public final class Ldo
     { /* the hook was before the results move */
       int nres = ci.nres;
       ci.func -= ci.hookdelta; /* (back from the virtual 'func' of a vararg function) */
-      if (isLua(ci.previous) != 0)
+      if (isLua(ci.previous))
         L.oldpc = ci.previous.savedpc - 1;
       int fwanted = ci.callstatus & (CIST_TBC | CIST_NRESULTS);
       if (ev == HE_RET)
@@ -1310,7 +1310,7 @@ public final class Ldo
         ci.callstatus &= ~CIST_ERRH;
         luaG_throwerror(L);
       }
-      if (isLua(ci) == 0)       /* C function? */
+      if (!isLua(ci))       /* C function? */
         finishCcall(L, ci); /* complete its execution */
       else
       {                      /* Lua function */
@@ -1380,7 +1380,7 @@ public final class Ldo
     { /* resuming from previous yield */
       assert L.status == LUA_YIELD;
       L.status = LUA_OK; /* mark that it is running (again) */
-      if (isLua(ci) != 0)
+      if (isLua(ci))
       { /* yielded inside a hook? */
         /* undo increment made by 'luaG_traceexec': instruction was not
            executed yet */
@@ -1435,7 +1435,7 @@ public final class Ldo
   private static byte precover(lua_State L, byte status)
   {
     CallInfo ci;
-    while (errorstatus(status) != 0 && (ci = findpcall(L)) != null)
+    while (errorstatus(status) && (ci = findpcall(L)) != null)
     {
       L.ci = ci;               /* go down to recovery functions */
       if ((ci.callstatus & CIST_NYCALL) != 0) /* a protected call that cannot yield? */
@@ -1484,7 +1484,7 @@ public final class Ldo
       from.frozencc = from.nCcalls; /* (see 'forgetcalls') */
       luaD_throw(from, LUA_FREEZE); /* go on freezing 'from' (still locked, as for any throw) */
     }
-    if (errorstatus(status) == 0)
+    if (!errorstatus(status))
       assert status == L.status; /* normal end or yield */
     else
     {                                        /* unrecoverable error */
@@ -1561,7 +1561,7 @@ public final class Ldo
       if (st != LUA_OK && st != LUA_FREEZE)
       { /* it failed: the close goes on with that error */
         L.ci = L.base_ci;
-        L.allowhook = 1;
+        L.allowhook = true;
         cr.status = st;
         st = LUA_OK;
       }
@@ -1619,7 +1619,7 @@ public final class Ldo
     if (status != LUA_OK)
     { /* the handler failed: the close goes on with its error */
       L.ci = L.base_ci;
-      L.allowhook = 1;
+      L.allowhook = true;
     }
     CloseRun cr = new CloseRun();
     cr.status = cs;
@@ -1678,7 +1678,7 @@ public final class Ldo
     if (st != LUA_OK && st != LUA_FREEZE)
     { /* it failed: the close goes on with that error */
       L.ci = L.base_ci;
-      L.allowhook = 1;
+      L.allowhook = true;
       status = st;
       st = LUA_OK;
     }
@@ -1711,7 +1711,7 @@ public final class Ldo
     }
     luaE_leavebudget(L);
     L.ci = L.base_ci;
-    L.allowhook = 1;
+    L.allowhook = true;
     luaD_seterrorobj(L, status, L.frozenfunc);
     luaD_shrinkstack(L);
     lua_unlock(L);
@@ -1757,13 +1757,13 @@ public final class Ldo
       luaD_throw(from, LUA_FREEZE);
     }
     int nres;
-    if (errorstatus(status) == 0)
+    if (!errorstatus(status))
       nres = (int) (L.top - L.frozenfunc); /* the results */
     else
     { /* an error that nothing inside recovered: the call's variables close
          (a '__close' can freeze, and lands here) */
       L.ci = L.base_ci;
-      L.allowhook = 1;
+      L.allowhook = true;
       if (kind == FZ_PCALL)
       {
         luaE_enterbudget(L, null); /* (as the host call runs) */
@@ -1817,7 +1817,7 @@ public final class Ldo
     L.nCcalls = (from != null) ? getCcalls(from) : 0;
     L.nfz = 0;
     L.resumer = from;
-    L.resumedk = (byte) ((from != null) ? 1 : 0);
+    L.resumedk = from != null;
     if (from != null)
     { /* where a freeze passing through goes on (the host's close, with no
          'from', is where a freeze of 'L' lands) */
@@ -1885,7 +1885,7 @@ public final class Ldo
       forgetcalls(L, L.ci); /* (its frames run with no C calls under them) */
     L.nfz = 0;
     L.resumer = from;
-    L.resumedk = (byte) ((k != null) ? 1 : 0);
+    L.resumedk = k != null;
     if (k != null)
     { /* where a freeze passing through goes on */
       from.ci.k = k;
@@ -1918,7 +1918,7 @@ public final class Ldo
     L.nCcalls = L.frozencc; /* its calls, as when it froze */
     L.nfz = 0;
     L.resumer = from;
-    L.resumedk = (byte) ((k != null) ? 1 : 0);
+    L.resumedk = k != null;
     if (k != null)
     { /* where a freeze passing through goes on */
       from.ci.k = k;
@@ -2001,9 +2001,9 @@ public final class Ldo
     return L.frozenchild;
   }
 
-  public static int lua_isfrozen(lua_State L)
+  public static boolean lua_isfrozen(lua_State L)
   {
-    return (L.frozen != 0) ? 1 : 0;
+    return L.frozen != 0;
   }
 
   /*
@@ -2050,7 +2050,7 @@ public final class Ldo
     lua_unlock(L);
   }
 
-  public static int lua_isyieldable(lua_State L)
+  public static boolean lua_isyieldable(lua_State L)
   {
     return yieldable(L);
   }
@@ -2063,7 +2063,7 @@ public final class Ldo
     lua_lock(L);
     ci = L.ci;
     api_checkpop(L, nresults);
-    if (yieldable(L) == 0)
+    if (!yieldable(L))
     {
       if (L != mainthread(L.l_G))
         luaG_runerror(L, Lt.attempt_to_yield_across_a_C_call_boundary);
@@ -2072,9 +2072,9 @@ public final class Ldo
     }
     L.status = LUA_YIELD;
     ci.nyield = nresults; /* save number of results */
-    if (isLua(ci) != 0)
+    if (isLua(ci))
     { /* inside a hook? */
-      assert isLuacode(ci) == 0;
+      assert !isLuacode(ci);
       assert nresults == 0 : "hooks cannot yield values";
       assert k == null : "hooks cannot continue after yielding";
     }
@@ -2122,7 +2122,7 @@ public final class Ldo
   public static byte luaD_closeprotected(lua_State L, int level, byte status, int yy)
   {
     CallInfo old_ci = L.ci;
-    byte old_allowhooks = L.allowhook;
+    boolean old_allowhooks = L.allowhook;
     for (;;)
     { /* keep closing upvalues until no more errors */
       CloseP pcl = new CloseP();
@@ -2180,7 +2180,7 @@ public final class Ldo
   {
     byte status;
     CallInfo old_ci = L.ci;
-    byte old_allowhooks = L.allowhook;
+    boolean old_allowhooks = L.allowhook;
     int old_errfunc = L.errfunc;
     L.errfunc = ef;
     status = luaD_rawrunprotected(L, func);
@@ -2239,7 +2239,7 @@ public final class Ldo
     int otop = 0; /* original top */
     Table anchor = null;
     int c = 0;
-    int fixed = 0;
+    boolean fixed = false;
 
     FParserFrame()
     {
@@ -2302,9 +2302,9 @@ public final class Ldo
                     : luaZ_fill(p.z); /* read first character */
           if (l.c == LUA_SIGNATURE.at(0))
           {
-            l.fixed = 0;
+            l.fixed = false;
             if (mode.find('B') != ByteView.npos)
-              l.fixed = 1;
+              l.fixed = true;
             else
               checkmode(L, mode, Lt.binary);
             l.site = 2;

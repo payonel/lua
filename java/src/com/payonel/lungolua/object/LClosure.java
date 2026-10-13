@@ -19,8 +19,8 @@ public final class LClosure extends Closure
     global_State g = L.l_G;
     LClosure c = luaM_malloc_LClosure(L);
     luaC_link(L, c, LUA_VLCL);
-    byte oldgcstop = g.gcstopem;
-    g.gcstopem = 1;
+    boolean oldgcstop = g.gcstopem;
+    g.gcstopem = true;
     UpVal[] upvals = luaM_alloc_UpVal_ptr_span(L.l_G, L, new UpVal[0], nupvals, false);
     g.gcstopem = oldgcstop;
     if (upvals == null && nupvals > 0)

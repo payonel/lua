@@ -9,9 +9,9 @@ final class BlockCnt
   int firstlabel;    /* index of first label in this block */
   int firstgoto;     /* index of first pending goto in this block */
   short nactvar;     /* number of active declarations at block entry */
-  byte upval;        /* true if some variable in the block is an upvalue */
+  boolean upval;        /* true if some variable in the block is an upvalue */
   byte isloop;       /* 1 if 'block' is a loop; 2 if it has pending breaks */
-  byte insidetbc;    /* true if inside the scope of a to-be-closed var. */
+  boolean insidetbc;    /* true if inside the scope of a to-be-closed var. */
 
   BlockCnt()
   {

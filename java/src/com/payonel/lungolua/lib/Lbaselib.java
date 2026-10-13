@@ -106,37 +106,37 @@ public final class Lbaselib
   {
     final ByteView spacechars = Lt.whitespace_chars;
     long n = 0;
-    int neg = 0;
+    boolean neg = false;
     int p = 0;
     while (p < s.size() && spacechars.find(s.at(p)) != ByteView.npos)
       p++; /* skip initial spaces */
     if (sv_byteat(s, p) == '-')
     {
       p++;
-      neg = 1;
+      neg = true;
     } /* handle sign */
     else if (sv_byteat(s, p) == '+')
       p++;
-    if (locale_isalnum(sv_byteat(s, p)) == 0) /* no digit? */
+    if (!locale_isalnum(sv_byteat(s, p))) /* no digit? */
       return new IntParse(ByteView.npos, 0);
     do
     {
-      int digit = ((locale_isdigit(sv_byteat(s, p)) != 0)
+      int digit = ((locale_isdigit(sv_byteat(s, p)))
                                      ? s.at(p) - '0'
                                      : (locale_toupper(sv_byteat(s, p)) - 'A') + 10);
       if (digit >= base)
         return new IntParse(ByteView.npos, 0); /* invalid numeral */
       n = n * base + digit;
       p++;
-    } while (locale_isalnum(sv_byteat(s, p)) != 0);
+    } while (locale_isalnum(sv_byteat(s, p)));
     while (p < s.size() && spacechars.find(s.at(p)) != ByteView.npos)
       p++; /* skip trailing spaces */
-    return new IntParse(p, (neg != 0) ? (0L - n) : n);
+    return new IntParse(p, (neg) ? (0L - n) : n);
   }
 
   private static int luaB_tonumber(lua_State L)
   {
-    if (lua_isnoneornil(L, 2) != 0)
+    if (lua_isnoneornil(L, 2))
     { /* standard conversion? */
       if (lua_type(L, 1) == LUA_TNUMBER)
       {                   /* already a number? */
@@ -189,7 +189,7 @@ public final class Lbaselib
   private static int luaB_getmetatable(lua_State L)
   {
     luaL_checkany(L, 1);
-    if (lua_getmetatable(L, 1) == 0)
+    if (!lua_getmetatable(L, 1))
     {
       lua_pushnil(L);
       return 1; /* no metatable */
@@ -287,7 +287,7 @@ public final class Lbaselib
 
   private static int drainafter(lua_State L)
   {
-    if (lua_hasdrain(L) != 0)
+    if (lua_hasdrain(L))
     {
       lua_pushdrain(L);
       lua_callk(L, 0, 0, 0, drain_cont);
@@ -327,14 +327,14 @@ public final class Lbaselib
       long n = luaL_optinteger(L, 2, 0);
       int res = lua_gc(L, o, n, 0, 0);
       { if (res == -1) break; };
-      lua_pushboolean(L, res);
+      lua_pushboolean(L, res != 0);
       return drainafter(L);
     }
     case LUA_GCISRUNNING:
     {
       int res = lua_gc(L, o, 0, 0, 0);
       { if (res == -1) break; };
-      lua_pushboolean(L, res);
+      lua_pushboolean(L, res != 0);
       return 1;
     }
     case LUA_GCGEN:
@@ -380,7 +380,7 @@ public final class Lbaselib
   {
     luaL_checktype(L, 1, LUA_TTABLE);
     lua_settop(L, 2); /* create a 2nd argument if there isn't one */
-    if (lua_next(L, 1) != 0)
+    if (lua_next(L, 1))
       return 2;
     else
     {
@@ -427,7 +427,7 @@ public final class Lbaselib
   */
   private static int ipairsauxk(lua_State L, int status, long ctx)
   {
-    return (lua_isnil(L, -1) != 0) ? 1 : 2;
+    return (lua_isnil(L, -1)) ? 1 : 2;
   }
 
   private static final lua_KFunction ipairsauxk = Lbaselib::ipairsauxk;
@@ -511,9 +511,9 @@ public final class Lbaselib
 
   private static int luaB_loadfile(lua_State L)
   {
-    ByteView fname = (lua_isnoneornil(L, 1) != 0) ? null : luaL_checkistring(L, 1).view();
+    ByteView fname = (lua_isnoneornil(L, 1)) ? null : luaL_checkistring(L, 1).view();
     ByteView mode = filemode(L);
-    int env = ((lua_isnone(L, 3) == 0) ? 3 : 0); /* 'env' index or 0 if no 'env' */
+    int env = ((!lua_isnone(L, 3)) ? 3 : 0); /* 'env' index or 0 if no 'env' */
     lua_settop(L, 3);
     int status = luaL_loadfileik(L, fname, mode, env, loadfile_cont);
     return load_aux(L, status, env);
@@ -573,7 +573,7 @@ public final class Lbaselib
   {
     ByteView s = lua_tolstring(L, 1);
     getMode(L, 3);
-    int env = ((lua_isnone(L, 4) == 0) ? 4 : 0); /* 'env' index or 0 if no 'env' */
+    int env = ((!lua_isnone(L, 4)) ? 4 : 0); /* 'env' index or 0 if no 'env' */
     if (s != null)
       luaL_optistring(L, 2, lua_toistring(L, 1));
     else
@@ -622,7 +622,7 @@ public final class Lbaselib
 
   private static int luaB_dofile(lua_State L)
   {
-    ByteView fname = (lua_isnoneornil(L, 1) != 0) ? null : luaL_checkistring(L, 1).view();
+    ByteView fname = (lua_isnoneornil(L, 1)) ? null : luaL_checkistring(L, 1).view();
     lua_settop(L, 1);
     return dofile_call(L, luaL_loadfileik(L, fname, null, 0, dofile_loadcont));
   }
@@ -631,7 +631,7 @@ public final class Lbaselib
 
   private static int luaB_assert(lua_State L)
   {
-    if (lua_toboolean(L, 1) != 0) /* condition is true? */
+    if (lua_toboolean(L, 1)) /* condition is true? */
       return lua_gettop(L);            /* return all arguments */
     else
     {                                          /* error */
@@ -678,7 +678,7 @@ public final class Lbaselib
   {
     if (status != LUA_OK && status != LUA_YIELD)
     {                        /* error? */
-      lua_pushboolean(L, 0); /* first result (false) */
+      lua_pushboolean(L, false); /* first result (false) */
       lua_pushvalue(L, -2);  /* error message */
       return 2;              /* return false, msg */
     }
@@ -694,7 +694,7 @@ public final class Lbaselib
   {
     int status;
     luaL_checkany(L, 1);
-    lua_pushboolean(L, 1); /* first result if no errors */
+    lua_pushboolean(L, true); /* first result if no errors */
     lua_insert(L, 1);      /* put it in place */
     status = lua_pcallk(L, lua_gettop(L) - 2, LUA_MULTRET, 0, 0, finishpcall);
     return finishpcall(L, status, 0);
@@ -712,7 +712,7 @@ public final class Lbaselib
     int status;
     int n = lua_gettop(L);
     luaL_checktype(L, 2, LUA_TFUNCTION); /* check error function */
-    lua_pushboolean(L, 1);               /* first result */
+    lua_pushboolean(L, true);               /* first result */
     lua_pushvalue(L, 1);                 /* function */
     lua_rotate(L, 3, 2);                 /* move them below function's arguments */
     status = lua_pcallk(L, n - 2, LUA_MULTRET, 2, 2, finishpcall);
@@ -735,7 +735,7 @@ public final class Lbaselib
   {
     luaL_checkany(L, 1);
     luaE_freezeonly(L);
-    if (luaL_toistringk(L, 1, 0, tostringk) != 0)
+    if (luaL_toistringk(L, 1, 0, tostringk))
       luaL_tostringresult(L);
     return 1;
   }

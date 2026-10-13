@@ -157,13 +157,13 @@ public final class Llimits
     public double v;
   }
 
-  public static int lua_numbertointeger(double n, IntResult p)
+  public static boolean lua_numbertointeger(double n, IntResult p)
   {
     if (n >= (double) LuaConf.LUA_MININTEGER && n < -(double) LuaConf.LUA_MININTEGER)
     {
       p.v = (long) n;
-      return 1;
+      return true;
     }
-    return 0;
+    return false;
   }
 }

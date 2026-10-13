@@ -35,7 +35,7 @@
 namespace lua::runtime
 {
 
-constexpr int errorstatus(TStatus s)
+constexpr bool errorstatus(TStatus s)
 {
   return s > LUA_YIELD && s != LUA_FREEZE && s != LUA_CBEXIT;
 }
@@ -182,18 +182,18 @@ TStatus luaD_rawrunprotected(lua_State* L, ProtectedCall* f, bool exitpoint)
 ** as a finalizer): At least BASIC_STACK_SIZE in the Lua stack, two
 ** available CallInfos, and two "slots" in the C stack.
 */
-int luaD_checkminstack(lua_State* L)
+bool luaD_checkminstack(lua_State* L)
 {
   if (getCcalls(L) >= LUAI_MAXCCALLS - 2)
-    return 0; /* not enough C-stack slots */
+    return false; /* not enough C-stack slots */
   if (L->ci->next == nullptr && luaE_extendCI(L, 0) == nullptr)
-    return 0; /* unable to allocate first ci */
+    return false; /* unable to allocate first ci */
   if (L->ci->next->next == nullptr && luaE_extendCI(L, 0) == nullptr)
-    return 0; /* unable to allocate second ci */
+    return false; /* unable to allocate second ci */
   if (L->top + BASIC_STACK_SIZE <= L->stack_last)
-    return 1; /* enough (BASIC_STACK_SIZE) free slots in the Lua stack */
+    return true; /* enough (BASIC_STACK_SIZE) free slots in the Lua stack */
   else        /* try to grow stack to a size with enough free slots */
-    return luaD_growstack(L, BASIC_STACK_SIZE, 0);
+    return luaD_growstack(L, BASIC_STACK_SIZE, false);
 }
 
 static void correctstack(lua_State* L)
@@ -205,16 +205,16 @@ static void correctstack(lua_State* L)
   }
 }
 
-int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
+bool luaD_reallocstack(lua_State* L, int newsize, bool raiseerror)
 {
   int oldsize = stacksize(L);
   int i;
   size_t oldn = oldsize + EXTRA_STACK;
   size_t newn = newsize + EXTRA_STACK;
   size_t keep = (oldn < newn) ? oldn : newn;
-  lu_byte oldgcstop = L->l_G->gcstopem;
+  bool oldgcstop = L->l_G->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
-  L->l_G->gcstopem = 1; /* stop emergency collection */
+  L->l_G->gcstopem = true; /* stop emergency collection */
   std::span<TValue> newstk = luaM_alloc_TValue_span(L->l_G, L, {}, newn, false);
   L->l_G->gcstopem = oldgcstop; /* restore emergency collection */
   if (l_unlikely(newstk.data() == nullptr))
@@ -223,7 +223,7 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
     if (raiseerror)
       luaD_throw(L, LUA_ERRMEM);
     else
-      return 0; /* do not raise an error */
+      return false; /* do not raise an error */
   }
   for (size_t si = 0; si < keep; si++)
     copyobj(&newstk[si], &L->stack[si]);
@@ -233,14 +233,14 @@ int luaD_reallocstack(lua_State* L, int newsize, int raiseerror)
   L->stack_last = newsize;
   for (i = oldsize + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
     setslottag(L, i, LUA_VNIL); /* erase new segment */
-  return 1;
+  return true;
 }
 
 /*
 ** Try to grow the stack by at least 'n' elements. When 'raiseerror'
 ** is true, raises any error; otherwise, return 0 in case of errors.
 */
-int luaD_growstack(lua_State* L, int n, int raiseerror)
+bool luaD_growstack(lua_State* L, int n, bool raiseerror)
 {
   int size = stacksize(L);
   if (l_unlikely(size > MAXSTACK))
@@ -251,7 +251,7 @@ int luaD_growstack(lua_State* L, int n, int raiseerror)
     assert(stacksize(L) == ERRORSTACKSIZE);
     if (raiseerror)
       luaD_errerr(L); /* stack error inside message handler */
-    return 0;         /* if not 'raiseerror', just signal it */
+    return false;         /* if not 'raiseerror', just signal it */
   }
   else if (n < MAXSTACK)
   {                                   /* avoids arithmetic overflows */
@@ -269,7 +269,7 @@ int luaD_growstack(lua_State* L, int n, int raiseerror)
   luaD_reallocstack(L, ERRORSTACKSIZE, raiseerror);
   if (raiseerror)
     luaG_runerror(L, lt::stack_overflow);
-  return 0;
+  return false;
 }
 
 /*
@@ -313,7 +313,7 @@ void luaD_shrinkstack(lua_State* L)
   if (inuse <= MAXSTACK && stacksize(L) > max)
   {
     int nsize = (inuse > MAXSTACK / 2) ? MAXSTACK : inuse * 2;
-    luaD_reallocstack(L, nsize, 0); /* ok if that fails */
+    luaD_reallocstack(L, nsize, false); /* ok if that fails */
   }
   luaE_shrinkCI(L); /* shrink CI list */
 }
@@ -345,7 +345,7 @@ void luaD_hook(lua_State* L, int event, int line,
     luaD_checkstack(L, LUA_MINSTACK); /* ensure minimum stack size */
     if (ci->top < L->top + LUA_MINSTACK)
       ci->top = L->top + LUA_MINSTACK;
-    L->allowhook = 0; /* cannot call hooks inside a hook */
+    L->allowhook = false; /* cannot call hooks inside a hook */
     ci->callstatus |= CIST_HOOKED;
     ci->hooktop = top;     /* (a hook function that calls with 'lua_callhook' */
     ci->hookcitop = ci_top; /* can freeze: when it ends after a thaw, this is */
@@ -363,7 +363,7 @@ void luaD_hook(lua_State* L, int event, int line,
 void luaD_finishhook(lua_State* L, CallInfo* ci)
 {
   assert(!L->allowhook);
-  L->allowhook = 1;
+  L->allowhook = true;
   ci->top = ci->hookcitop;
   L->top = ci->hooktop;
   ci->callstatus &= ~CIST_HOOKED;
@@ -493,7 +493,7 @@ lua_State* luaD_budget(lua_State* L)
   CallInfo* ci = L->ci;
   StkId top = L->top;     /* preserve original 'top' */
   StkId ci_top = ci->top; /* idem for 'ci->top' */
-  lu_byte allowhook = L->allowhook;
+  bool allowhook = L->allowhook;
   int oldpc = L->oldpc;       /* hooks do not see the callback: their */
   int hookcount = L->hookcount; /* state stays as it is */
   StkId errfunc = L->errfunc;
@@ -517,7 +517,7 @@ lua_State* luaD_budget(lua_State* L)
   /* (no room is made in the stack of 'L': the callback leaves it, and its
      C calls, as they are, so that where a stack overflow happens does not
      depend on where the budget runs out; see 'lua_budgetthread') */
-  L->allowhook = 0; /* no hooks inside */
+  L->allowhook = false; /* no hooks inside */
   L->errfunc = 0;   /* and no message handler: its errors are not for user code */
   g->budgetL = L;
   g->budgetg = bg; /* (kept by the collector while the callback runs) */
@@ -1490,7 +1490,7 @@ static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, 
     if (st != LUA_OK && st != LUA_FREEZE)
     { /* it failed: the close goes on with that error */
       L->ci = &L->base_ci;
-      L->allowhook = 1;
+      L->allowhook = true;
       cr.status = st;
       st = LUA_OK;
     }
@@ -1548,7 +1548,7 @@ static TStatus selfcloseend(lua_State* L, TStatus status)
   if (status != LUA_OK)
   { /* the handler failed: the close goes on with its error */
     L->ci = &L->base_ci;
-    L->allowhook = 1;
+    L->allowhook = true;
   }
   CloseRun cr;
   cr.status = cs;
@@ -1602,7 +1602,7 @@ static lua_ResumeResult hostcloserun(lua_State* L, lua_State* from, StkId hoster
   if (st != LUA_OK && st != LUA_FREEZE)
   { /* it failed: the close goes on with that error */
     L->ci = &L->base_ci;
-    L->allowhook = 1;
+    L->allowhook = true;
     status = st;
     st = LUA_OK;
   }
@@ -1635,7 +1635,7 @@ static lua_ResumeResult hostcloserun(lua_State* L, lua_State* from, StkId hoster
   }
   luaE_leavebudget(L);
   L->ci = &L->base_ci;
-  L->allowhook = 1;
+  L->allowhook = true;
   luaD_seterrorobj(L, status, L->frozenfunc);
   luaD_shrinkstack(L);
   lua_unlock(L);
@@ -1688,7 +1688,7 @@ static lua_ResumeResult endhostcall(lua_State* L, lua_State* from, TStatus statu
   { /* an error that nothing inside recovered: the call's variables close
        (a '__close' can freeze, and lands here) */
     L->ci = &L->base_ci;
-    L->allowhook = 1;
+    L->allowhook = true;
     if (kind == FZ_PCALL)
     {
       luaE_enterbudget(L, nullptr); /* (as the host call runs) */
@@ -1934,7 +1934,7 @@ lua_State* lua_frozenchild(lua_State* L)
   return L->frozenchild;
 }
 
-int lua_isfrozen(lua_State* L)
+bool lua_isfrozen(lua_State* L)
 {
   return L->frozen != 0;
 }
@@ -1983,7 +1983,7 @@ void lua_callhook(lua_State* L, int nargs)
   lua_unlock(L);
 }
 
-int lua_isyieldable(lua_State* L)
+bool lua_isyieldable(lua_State* L)
 {
   return yieldable(L);
 }
@@ -2058,7 +2058,7 @@ void CloseP::run(lua_State* L)
 TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status, int yy)
 {
   CallInfo* old_ci = L->ci;
-  lu_byte old_allowhooks = L->allowhook;
+  bool old_allowhooks = L->allowhook;
   for (;;)
   { /* keep closing upvalues until no more errors */
     struct CloseP pcl;
@@ -2111,7 +2111,7 @@ TStatus luaD_pcall(lua_State* L, ProtectedCall* func, StkId old_top,
 {
   TStatus status;
   CallInfo* old_ci = L->ci;
-  lu_byte old_allowhooks = L->allowhook;
+  bool old_allowhooks = L->allowhook;
   StkId old_errfunc = L->errfunc;
   L->errfunc = ef;
   status = luaD_rawrunprotected(L, func);
@@ -2160,7 +2160,7 @@ struct FParserFrame : LoadFrame
   StkId otop = 0; /* original top */
   Table* anchor = nullptr;
   int c = 0;
-  int fixed = 0;
+  bool fixed = false;
   LoadFrame* copy() const override { return new (std::nothrow) FParserFrame(*this); }
   size_t size() const override { return sizeof(*this); }
 };
@@ -2201,9 +2201,9 @@ static void f_parser(lua_State* L, SParser* p)
                   : luaZ_fill(p->z); /* read first character */
         if (l.c == LUA_SIGNATURE[0])
         {
-          l.fixed = 0;
+          l.fixed = false;
           if (mode.find('B') != byte_view::npos)
-            l.fixed = 1;
+            l.fixed = true;
           else
             checkmode(L, mode, lt::binary);
           l.site = 2;

@@ -42,7 +42,7 @@ static bool luaM_permit_(global_State* g, lua_State* L, size_t osize, size_t nsi
       return false;
     if (!cantryagain(g))
       return false;
-    luaC_fullgc(L, 1); /* try to free some memory... */
+    luaC_fullgc(L, true); /* try to free some memory... */
     if (!g->frealloc->permit(osize, nsize, tag))
       return false;
   }

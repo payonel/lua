@@ -98,9 +98,9 @@ public final class Ldebug
     throw luaG_concaterror(L, v1, v2, p1, p2);
   }
 
-  private static int LuaClosure(Closure f)
+  private static boolean LuaClosure(Closure f)
   {
-    return (f != null && f.tt == LUA_VLCL) ? 1 : 0;
+    return f != null && f.tt == LUA_VLCL;
   }
 
   private static final InternalString[] tmplainname = {
@@ -131,7 +131,7 @@ public final class Ldebug
 
   private static int currentpc(lua_State L, CallInfo ci)
   {
-    assert isLua(ci) != 0;
+    assert isLua(ci);
     return ci.savedpc - 1;
   }
 
@@ -220,7 +220,7 @@ public final class Ldebug
   private static void settraps(CallInfo ci)
   {
     for (; ci != null; ci = ci.previous)
-      if (isLua(ci) != 0)
+      if (isLua(ci))
         ci.trap = 1;
   }
 
@@ -342,10 +342,10 @@ public final class Ldebug
     lua_unlock(L);
   }
 
-  public static void lua_pushbudgetvalue(lua_State L, lua_State co, int effective)
+  public static void lua_pushbudgetvalue(lua_State L, lua_State co, boolean effective)
   {
     lua_lock(L);
-    BudgetGroup bg = (effective != 0) ? co.beff : co.bown;
+    BudgetGroup bg = (effective) ? co.beff : co.bown;
     if (bg != null)
       setslot(L, L.top, bg.cb);
     else
@@ -374,7 +374,7 @@ public final class Ldebug
 
   public static void lua_setbudgetthread(lua_State L, lua_State B)
   {
-    boolean ok = luaD_growstack(B, BUDGET_STACK, 0) != 0;
+    boolean ok = luaD_growstack(B, BUDGET_STACK, false);
     while (ok && B.nci < BUDGET_FRAMES)
       ok = luaE_extendCI(B, 0) != null;
     if (!ok)
@@ -396,14 +396,14 @@ public final class Ldebug
   }
 
   /* do '__gc' of the budget group of 'L' wait to be called? */
-  public static int lua_hasdrain(lua_State L)
+  public static boolean lua_hasdrain(lua_State L)
   { /* (and can they be called here: where the chain can freeze, outside hooks
        and the '__gc' being called (hooks off), outside the budget callback,
        with room for the call; the same as at an instruction boundary, see
        'luaG_traceexec' and 'drainpoint') */
     lua_lock(L);
-    int has = (luaC_hasdrain(L) && L.allowhook != 0 && L.l_G.budgetL == null && luaD_nofreeze(L) == 0 &&
-               luaD_checkminstack(L) != 0) ? 1 : 0;
+    boolean has = luaC_hasdrain(L) && L.allowhook && L.l_G.budgetL == null && luaD_nofreeze(L) == 0 &&
+                  luaD_checkminstack(L);
     lua_unlock(L);
     return has;
   }
@@ -417,9 +417,9 @@ public final class Ldebug
   }
 
   /* is 'L' running budgeted code, or the budget callback? */
-  public static int lua_budgeted(lua_State L)
+  public static boolean lua_budgeted(lua_State L)
   {
-    return (L.beff != null || L.l_G.budgetL != null) ? 1 : 0;
+    return L.beff != null || L.l_G.budgetL != null;
   }
 
   public static long lua_getbudget(lua_State co)
@@ -511,7 +511,7 @@ public final class Ldebug
   {
     int base = ci.func + 1;
     InternalString name = null;
-    if (isLua(ci) != 0)
+    if (isLua(ci))
     {
       if (n < 0) /* access to vararg values? */
         return findvararg(L, ci, n);
@@ -524,7 +524,7 @@ public final class Ldebug
       if (limit - base >= n && n > 0)
       { /* is 'n' inside 'ci' stack? */
         /* generic name for any valid slot */
-        name = (isLua(ci) != 0) ? Lt.temporary_i : Lt.C_temporary_i;
+        name = (isLua(ci)) ? Lt.temporary_i : Lt.C_temporary_i;
       }
       else
         return new LocalSlot(null, 0); /* no name */
@@ -599,7 +599,7 @@ public final class Ldebug
 
   private static void funcinfo(InternalDebug ar, Closure cl)
   {
-    if (LuaClosure(cl) == 0)
+    if (!LuaClosure(cl))
     {
       ar.source = Lt.C;
       ar.linedefined = -1;
@@ -630,7 +630,7 @@ public final class Ldebug
 
   private static void collectvalidlines(lua_State L, Closure f)
   {
-    if (LuaClosure(f) == 0)
+    if (!LuaClosure(f))
     {
       setslottag(L, L.top, LUA_VNIL);
       api_incr_top(L);
@@ -647,7 +647,7 @@ public final class Ldebug
         int i;
         TValue v = new TValue();
         v.tt_ = LUA_VTRUE;     /* boolean 'true' to be the value of all indices */
-        if (isvararg(p) == 0) /* regular function? */
+        if (!isvararg(p)) /* regular function? */
           i = 0;            /* consider all instructions */
         else
         { /* vararg function */
@@ -688,20 +688,20 @@ public final class Ldebug
       }
       case 'l':
       {
-        ar.currentline = (ci != null && isLua(ci) != 0) ? getcurrentline(L, ci) : -1;
+        ar.currentline = (ci != null && isLua(ci)) ? getcurrentline(L, ci) : -1;
         break;
       }
       case 'u':
       {
-        ar.nups = (int) ((f == null) ? 0 : ((LuaClosure(f) != 0) ? ((LClosure) f).upvals.length : ((CClosure) f).upvalue.length));
-        if (LuaClosure(f) == 0)
+        ar.nups = (int) ((f == null) ? 0 : ((LuaClosure(f)) ? ((LClosure) f).upvals.length : ((CClosure) f).upvalue.length));
+        if (!LuaClosure(f))
         {
-          ar.isvararg = 1;
+          ar.isvararg = true;
           ar.nparams = 0;
         }
         else
         {
-          ar.isvararg = (byte) ((isvararg(((LClosure) f).p) != 0) ? 1 : 0);
+          ar.isvararg = isvararg(((LClosure) f).p);
           ar.nparams = ((LClosure) f).p.numparams;
         }
         break;
@@ -710,12 +710,12 @@ public final class Ldebug
       {
         if (ci != null)
         {
-          ar.istailcall = (byte) (((ci.callstatus & CIST_TAIL) != 0) ? 1 : 0);
+          ar.istailcall = (ci.callstatus & CIST_TAIL) != 0;
           ar.extraargs = (ci.callstatus & MAX_CCMT) >>> CIST_CCMT;
         }
         else
         {
-          ar.istailcall = 0;
+          ar.istailcall = false;
           ar.extraargs = 0;
         }
         break;
@@ -859,31 +859,31 @@ public final class Ldebug
     int pc;
     int setreg = -1;   /* keep last instruction that changed 'reg' */
     int jmptarget = 0; /* any code before this address is conditional */
-    if (testMMMode(GET_OPCODE(p.code[lastpc])) != 0)
+    if (testMMMode(GET_OPCODE(p.code[lastpc])))
       lastpc--; /* previous instruction was not actually executed */
     for (pc = 0; pc < lastpc; pc++)
     {
       int i = p.code[pc];
       int op = GET_OPCODE(i);
       int a = GETARG_A(i);
-      int change; /* true if current instruction changed 'reg' */
+      boolean change; /* true if current instruction changed 'reg' */
       switch (op)
       {
       case OP_LOADNIL:
       { /* set registers from 'a' to 'a+b' */
         int b = GETARG_B(i);
-        change = (a <= reg && reg <= a + b) ? 1 : 0;
+        change = a <= reg && reg <= a + b;
         break;
       }
       case OP_TFORCALL:
       { /* affect all regs above its base */
-        change = (reg >= a + 2) ? 1 : 0;
+        change = reg >= a + 2;
         break;
       }
       case OP_CALL:
       case OP_TAILCALL:
       { /* affect all registers above base */
-        change = (reg >= a) ? 1 : 0;
+        change = reg >= a;
         break;
       }
       case OP_JMP:
@@ -893,14 +893,14 @@ public final class Ldebug
         /* jump does not skip 'lastpc' and is larger than current one? */
         if (dest <= lastpc && dest > jmptarget)
           jmptarget = dest; /* update 'jmptarget' */
-        change = 0;
+        change = false;
         break;
       }
       default: /* any instruction that sets A */
-        change = (testAMode(op) != 0 && reg == a) ? 1 : 0;
+        change = testAMode(op) && reg == a;
         break;
       }
-      if (change != 0)
+      if (change)
         setreg = filterpc(pc, jmptarget);
     }
     return setreg;
@@ -980,11 +980,11 @@ public final class Ldebug
   ** Check whether table being indexed by instruction 'i' is the
   ** environment '_ENV'
   */
-  private static ByteView isEnv(Proto p, int pc, int i, int isup)
+  private static ByteView isEnv(Proto p, int pc, int i, boolean isup)
   {
     int t = GETARG_B(i);       /* table index */
     InternalString name = null; /* name of indexed variable */
-    if (isup != 0)                  /* is 't' an upvalue? */
+    if (isup)                  /* is 't' an upvalue? */
       name = upvalname(p, t);
     else
     { /* 't' is a register */
@@ -1016,13 +1016,13 @@ public final class Ldebug
       case OP_GETTABUP:
       {
         int k = GETARG_C(i); /* key index */
-        return new VarName(isEnv(p, lastpc, i, 1), kname(p, k).name);
+        return new VarName(isEnv(p, lastpc, i, true), kname(p, k).name);
       }
       case OP_GETTABLE:
       case OP_GETVARG:
       {
         int k = GETARG_C(i); /* key index */
-        return new VarName(isEnv(p, lastpc, i, 0), rname(p, lastpc, k));
+        return new VarName(isEnv(p, lastpc, i, false), rname(p, lastpc, k));
       }
       case OP_GETI:
       {
@@ -1031,7 +1031,7 @@ public final class Ldebug
       case OP_GETFIELD:
       {
         int k = GETARG_C(i); /* key index */
-        return new VarName(isEnv(p, lastpc, i, 0), kname(p, k).name);
+        return new VarName(isEnv(p, lastpc, i, false), kname(p, k).name);
       }
       case OP_SELF:
       {
@@ -1134,7 +1134,7 @@ public final class Ldebug
     { /* was it called as a finalizer? */
       return new VarName(Lt.metamethod, Lt.mm_gc_i); /* report it as such */
     }
-    else if (isLua(ci) != 0)
+    else if (isLua(ci))
       return funcnamefromcode(ci_func(L, ci).p, currentpc(L, ci));
     else
       return new VarName(null, null);
@@ -1155,7 +1155,7 @@ public final class Ldebug
     CallInfo ci = L.ci;
     InternalString name = null; /* to avoid warnings */
     ByteView kind = null;
-    if (isLua(ci) != 0)
+    if (isLua(ci))
     {
       if (src <= UPVALORIGIN)
       {
@@ -1215,7 +1215,7 @@ public final class Ldebug
 
   public static RuntimeException luaG_concaterror(lua_State L, TValue p1, TValue p2, int src1, int src2)
   {
-    if (ttisstring(p1) || cvt2str(p1) != 0)
+    if (ttisstring(p1) || cvt2str(p1))
     {
       p1 = p2;
       src1 = src2;
@@ -1239,7 +1239,7 @@ public final class Ldebug
   public static RuntimeException luaG_tointerror(lua_State L, TValue p1, TValue p2, int src1, int src2)
   {
     IntResult temp = new IntResult();
-    if (luaV_tointegerns(p1, temp, LUA_FLOORN2I) == 0)
+    if (!luaV_tointegerns(p1, temp, LUA_FLOORN2I))
       src2 = src1;
     throw luaG_runerror(L, Lt.number_s_has_no_integer_representation, new FmtArgs().str(varinfo(L, src2)));
   }
@@ -1309,7 +1309,7 @@ public final class Ldebug
     msg = luaO_pushvfstring(L, fmt, args);
     if (msg == null)
       luaD_throw(L, (byte) LUA_ERRMEM);
-    if (isLua(ci) != 0)
+    if (isLua(ci))
     { /* Lua function? */
       /* add source:line information */
       luaG_addinfo(L, msg.view(), ci_func(L, ci).p.source, getcurrentline(L, ci));
@@ -1332,10 +1332,10 @@ public final class Ldebug
   ** too far apart, there is a good chance of a ABSLINEINFO in the way,
   ** so it goes directly to 'luaG_getfuncline'.
   */
-  private static int changedline(Proto p, int oldpc, int newpc)
+  private static boolean changedline(Proto p, int oldpc, int newpc)
   {
     if (p.lineinfo.length == 0) /* no debug information? */
-      return 0;
+      return false;
     if (newpc - oldpc < MAXIWTHABS / 2)
     {                /* not too far apart? */
       int delta = 0; /* line difference */
@@ -1347,12 +1347,12 @@ public final class Ldebug
           break; /* cannot compute delta; fall through */
         delta += lineinfo;
         if (pc == newpc)
-          return (delta != 0) ? 1 : 0; /* delta computed successfully */
+          return delta != 0; /* delta computed successfully */
       }
     }
     /* either instructions are too far apart or there is an absolute line
        info in the way; compute line difference explicitly */
-    return (luaG_getfuncline(p, oldpc) != luaG_getfuncline(p, newpc)) ? 1 : 0;
+    return luaG_getfuncline(p, oldpc) != luaG_getfuncline(p, newpc);
   }
 
   /*
@@ -1370,7 +1370,7 @@ public final class Ldebug
     ci.trap = 1; /* ensure hooks will be checked */
     if (ci.savedpc == 0)
     { /* first instruction (not resuming)? */
-      if (isvararg(p) != 0)
+      if (isvararg(p))
       {
         luaE_spend(L, 1); /* (VARARGPREP runs untraced) */
         return 0;         /* hooks will start at VARARGPREP instruction */
@@ -1388,7 +1388,7 @@ public final class Ldebug
   */
   private static void budgetpoint(lua_State L, CallInfo ci, Proto p)
   {
-    if (luaP_isIT(p.code[ci.savedpc - 1]) == 0) /* top not being used? */
+    if (!luaP_isIT(p.code[ci.savedpc - 1])) /* top not being used? */
       L.top = ci.top;                 /* correct top */
     lua_State co = luaD_budget(L);
     if (co != null)
@@ -1405,7 +1405,7 @@ public final class Ldebug
   */
   private static void drainpoint(lua_State L, CallInfo ci, Proto p)
   {
-    if (luaP_isIT(p.code[ci.savedpc - 1]) == 0) /* top not being used? */
+    if (!luaP_isIT(p.code[ci.savedpc - 1])) /* top not being used? */
       L.top = ci.top;                 /* correct top */
     int top = L.top;
     int ci_top = ci.top;
@@ -1414,7 +1414,7 @@ public final class Ldebug
        of the function that calls them and of a '__gc', the stack, C calls; if
        it cannot be had here without an error, they wait for another point;
        the program sees no error) */
-    if (luaD_checkminstack(L) == 0)
+    if (!luaD_checkminstack(L))
       return;
     if (ci.top < L.top + LUA_MINSTACK + 1)
       ci.top = L.top + LUA_MINSTACK + 1;
@@ -1431,7 +1431,7 @@ public final class Ldebug
     CallInfo ci = L.ci;
     byte mask = (byte) L.hookmask;
     Proto p = ci_func(L, ci).p;
-    int counthook;
+    boolean counthook;
     if ((mask & (LUA_MASKLINE | LUA_MASKCOUNT | LUA_MASKBUDGET)) == 0)
     {                   /* no hooks? */
       ci.trap = 0; /* don't need to stop again */
@@ -1447,7 +1447,7 @@ public final class Ldebug
          since, the VM passed no other point; else that one was the first) */
       boolean first = bg.nodrain && bg.left == bg.budget;
       bg.nodrain = false;
-      if (!first && bg.fnz.next != null && L.allowhook != 0 && g.budgetL == null && luaD_nofreeze(L) == 0)
+      if (!first && bg.fnz.next != null && L.allowhook && g.budgetL == null && luaD_nofreeze(L) == 0)
         drainpoint(L, ci, p);
       if (L.beff != null && L.beff.left <= 0 && g.budgetL == null)
         budgetpoint(L, ci, p);
@@ -1463,13 +1463,13 @@ public final class Ldebug
     boolean refrozen = (ci.hookdone != 0); /* (not a hook that yielded: that is CIST_HOOKYIELD alone) */
     if (refrozen)
       ci.callstatus &= ~CIST_HOOKYIELD; /* (it kept the budget from counting the instruction again) */
-    counthook = 0;
+    counthook = false;
     if ((mask & LUA_MASKCOUNT) != 0 && (ci.hookdone & HD_COUNT) == 0)
     {
-      counthook = (--L.hookcount == 0) ? 1 : 0;
+      counthook = --L.hookcount == 0;
       ci.hookdone |= HD_COUNT;
     }
-    if (counthook != 0)
+    if (counthook)
       resethookcount(L); /* reset count */
     else if ((mask & LUA_MASKLINE) == 0)
     { /* no line hook and count != 0; nothing to be done now */
@@ -1483,10 +1483,10 @@ public final class Ldebug
       return 1;                          /* do not call hook again (VM yielded, so it did not move) */
     }
     ci.callstatus &= ~CIST_HOOKYIELD;
-    if (luaP_isIT(p.code[ci.savedpc - 1]) == 0) /* top not being used? */
+    if (!luaP_isIT(p.code[ci.savedpc - 1])) /* top not being used? */
       L.top = ci.top;                 /* correct top */
     ci.hookev = HE_INSTR;
-    if (counthook != 0)
+    if (counthook)
     {
       ci.callstatus |= CIST_FROZE | CIST_HOOKYIELD; /* (if the hook function freezes) */
       luaD_hook(L, LUA_HOOKCOUNT, -1, 0, 0); /* call count hook */
@@ -1499,7 +1499,7 @@ public final class Ldebug
       int npci = pc - 1;
       if ((ci.hookdone & HD_LINE) == 0 &&
           (npci <= oldpc || /* call hook when jump back (loop), */
-           changedline(p, oldpc, npci) != 0))
+           changedline(p, oldpc, npci)))
       { /* or when enter new line */
         int newline = luaG_getfuncline(p, npci);
         ci.hookdone |= HD_LINE;
@@ -1512,7 +1512,7 @@ public final class Ldebug
     ci.hookdone = 0;
     if (L.status == LUA_YIELD)
     { /* did hook yield? */
-      if (counthook != 0)
+      if (counthook)
         L.hookcount = 1;               /* undo decrement to zero */
       ci.callstatus |= CIST_HOOKYIELD; /* mark that it yielded */
       luaD_throw(L, (byte) LUA_YIELD);

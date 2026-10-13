@@ -68,7 +68,7 @@ static int db_getuservalue(lua_State* L)
     luaL_pushfail(L);
   else if (lua_getiuservalue(L, 1, n) != LUA_TNONE)
   {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 2;
   }
   return 1;
@@ -126,7 +126,7 @@ static void settabsi(lua_State* L, byte_view k, int v)
   lua_setfieldi(L, -2, k);
 }
 
-static void settabsb(lua_State* L, byte_view k, int v)
+static void settabsb(lua_State* L, byte_view k, bool v)
 {
   lua_pushboolean(L, v);
   lua_setfieldi(L, -2, k);
@@ -598,7 +598,7 @@ static lua_State* callbackthread(lua_State* L)
 static void budgetf(lua_State* user_co, lua_State* L)
 {
   lua_State* B = lua_budgetthread(L); /* (made when a budget is set or comes in: no room is made in 'L') */
-  lua_pushbudgetvalue(B, L, 1); /* the function of the group in effect */
+  lua_pushbudgetvalue(B, L, true); /* the function of the group in effect */
   lua_pushthreadi(B, user_co);
   lua_pushthreadi(B, L);
   if (lua_pcall(B, 2, 0, 0) != LUA_OK)
@@ -653,7 +653,7 @@ static int db_getbudget(lua_State* L)
     return 1;
   }
   lua_pushinteger(L, n);
-  lua_pushbudgetvalue(L, co, 0);
+  lua_pushbudgetvalue(L, co, false);
   lua_pushinteger(L, lua_budgetleft(co));
   lua_State* root = lua_budgetroot(co);
   if (root != nullptr)
@@ -681,10 +681,10 @@ static int db_canfreeze(lua_State* L)
   int why = lua_nofreeze(L);
   if (why == 0)
   {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 1;
   }
-  lua_pushboolean(L, 0);
+  lua_pushboolean(L, false);
   lua_pushistringref(L, why == LUA_NOFREEZE_BUDGET ? lt::no_budget_in_effect
                          : why == LUA_NOFREEZE_CALL ? lt::a_call_that_cannot_freeze_is_in_the_way
                                                     : lt::a_resume_that_cannot_freeze_is_in_the_way);
@@ -710,10 +710,10 @@ static int db_persistable(lua_State* L)
   luaL_StyxResult res = lua_styxcheck(L, 1, perms);
   if (res.status == LUA_OK)
   {
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     return 1;
   }
-  lua_pushboolean(L, 0);
+  lua_pushboolean(L, false);
   byte_view m = res.msg.to_utf8();
   lua_pushlstring(L, m, 0, m.size());
   return 2;
@@ -737,13 +737,13 @@ static int thaw_end(lua_State* L, lua_State* co, lua_ResumeResult rr)
       lua_pushistringref(L, lt::too_many_results_to_resume);
       return 2;
     }
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     lua_xmove(co, L, rr.nres);
     return rr.nres + 1;
   }
   else
   {
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     if (co == L)
       lua_insert(L, -2); /* (a thread thawing itself: its message is on its top) */
     else

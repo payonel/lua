@@ -65,14 +65,14 @@ public final class Ltm
   ** Test whether there is no tagmethod.
   ** (Because tagmethods use raw accesses, the result may be an "empty" nil.)
   */
-  public static int notm(TValue tm)
+  public static boolean notm(TValue tm)
   {
-    return (ttype(tm) == LUA_TNIL) ? 1 : 0;
+    return ttype(tm) == LUA_TNIL;
   }
 
-  public static int checknoTM(Table mt, int e)
+  public static boolean checknoTM(Table mt, int e)
   {
-    return (mt == null || (mt.flags & (1 << e)) != 0) ? 1 : 0;
+    return mt == null || (mt.flags & (1 << e)) != 0;
   }
 
   public static ByteView ttypename(int x)
@@ -116,7 +116,7 @@ public final class Ltm
   {
     TValue tm = events.luaH_Hgetshortstr(ename);
     assert event <= TM_EQ;
-    if (notm(tm) != 0)
+    if (notm(tm))
     {                                      /* no tag method? */
       events.flags |= (byte) (1 << event); /* cache this fact */
       return null;
@@ -180,7 +180,7 @@ public final class Ltm
        call with a continuation that can yield; it may freeze also from one
        that cannot (CIST_NYCALL counts it) */
     int st = L.ci.callstatus & (CIST_APIK | CIST_NYCALL);
-    if (isLuacode(L.ci) != 0 || st == CIST_APIK)
+    if (isLuacode(L.ci) || st == CIST_APIK)
       luaD_call(L, func, 0);
     else if (st != 0)
       luaD_callnoyield(L, func, 0);
@@ -205,7 +205,7 @@ public final class Ltm
        call with a continuation that can yield; it may freeze also from one
        that cannot (CIST_NYCALL counts it) */
     int st = L.ci.callstatus & (CIST_APIK | CIST_NYCALL);
-    if (isLuacode(L.ci) != 0 || st == CIST_APIK)
+    if (isLuacode(L.ci) || st == CIST_APIK)
       luaD_call(L, func, 1);
     else if (st != 0)
       luaD_callnoyield(L, func, 1);
@@ -224,9 +224,9 @@ public final class Ltm
                                int res, int event)
   {
     TValue tm = luaT_gettmbyobj(L, p1, event); /* try first operand */
-    if (notm(tm) != 0)
+    if (notm(tm))
       tm = luaT_gettmbyobj(L, p2, event); /* try second operand */
-    if (notm(tm) != 0)
+    if (notm(tm))
       return -1; /* tag method not found */
     else         /* call tag method and return the tag of the result */
       return luaT_callTMres(L, tm, p1, p2, res);
@@ -272,16 +272,16 @@ public final class Ltm
   }
 
   public static void luaT_trybinassocTM(lua_State L, TValue p1, TValue p2,
-                                        int flip, int res, int event, int src1)
+                                        boolean flip, int res, int event, int src1)
   {
-    if (flip != 0)
+    if (flip)
       luaT_trybinTM(L, p2, p1, res, event, NOSLOT, src1);
     else
       luaT_trybinTM(L, p1, p2, res, event, src1, NOSLOT);
   }
 
   public static void luaT_trybiniTM(lua_State L, TValue p1, long i2,
-                                    int flip, int res, int event, int src1)
+                                    boolean flip, int res, int event, int src1)
   {
     TValue aux = new TValue();
     setivalue(aux, i2);
@@ -296,14 +296,14 @@ public final class Ltm
   }
 
   public static void luaT_trybinassocTM(lua_State L, int p1, TValue p2,
-                                        int flip, int res, int event)
+                                        boolean flip, int res, int event)
   {
     TValue v1 = getslot(L, p1);
     luaT_trybinassocTM(L, v1, p2, flip, res, event, p1);
   }
 
   public static void luaT_trybiniTM(lua_State L, int p1, long i2,
-                                    int flip, int res, int event)
+                                    boolean flip, int res, int event)
   {
     TValue v1 = getslot(L, p1);
     luaT_trybiniTM(L, v1, i2, flip, res, event, p1);
@@ -312,28 +312,28 @@ public final class Ltm
   /*
   ** Calls an order tag method.
   */
-  public static int luaT_callorderTM(lua_State L, TValue p1, TValue p2,
+  public static boolean luaT_callorderTM(lua_State L, TValue p1, TValue p2,
                                      int event)
   {
     int tag = callbinTM(L, p1, p2, L.top, event); /* try original event */
     if (tag >= 0)                                  /* found tag method? */
-      return (!(tag == LUA_VFALSE || tagisempty(tag))) ? 1 : 0;
+      return !(tag == LUA_VFALSE || tagisempty(tag));
     luaG_ordererror(L, p1, p2); /* no metamethod found */
-    return 0;                   /* to avoid warnings */
+    return false;                   /* to avoid warnings */
   }
 
-  public static int luaT_callorderiTM(lua_State L, TValue p1, int v2,
-                                      int flip, int isfloat, int event)
+  public static boolean luaT_callorderiTM(lua_State L, TValue p1, int v2,
+                                      boolean flip, boolean isfloat, int event)
   {
     TValue aux = new TValue();
     TValue p2;
-    if (isfloat != 0)
+    if (isfloat)
     {
       setfltvalue(aux, v2);
     }
     else
       setivalue(aux, v2);
-    if (flip != 0)
+    if (flip)
     { /* arguments were exchanged? */
       p2 = p1;
       p1 = aux; /* correct them */
@@ -343,8 +343,8 @@ public final class Ltm
     return luaT_callorderTM(L, p1, p2, event);
   }
 
-  public static int luaT_callorderiTM(lua_State L, int p1, int v2,
-                                      int flip, int isfloat, int event)
+  public static boolean luaT_callorderiTM(lua_State L, int p1, int v2,
+                                      boolean flip, boolean isfloat, int event)
   {
     TValue v1 = getslot(L, p1);
     return luaT_callorderiTM(L, v1, v2, flip, isfloat, event);
@@ -426,7 +426,7 @@ public final class Ltm
   {
     int nextra = ci.nextraargs;
     IntResult n = new IntResult();
-    if (tointegerns(rc, n) != 0)
+    if (tointegerns(rc, n))
     { /* integral value? */
       if (n.v >= 1 && n.v <= nextra)
       {

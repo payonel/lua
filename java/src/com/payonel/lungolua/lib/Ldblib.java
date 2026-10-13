@@ -45,7 +45,7 @@ public final class Ldblib
   */
   private static void checkstack(lua_State L, lua_State L1, int n)
   {
-    if (L != L1 && lua_checkstack(L1, n) == 0)
+    if (L != L1 && !lua_checkstack(L1, n))
       luaL_errori(L, Lt.stack_overflow);
   }
 
@@ -60,7 +60,7 @@ public final class Ldblib
   private static int db_getmetatable(lua_State L)
   {
     luaL_checkany(L, 1);
-    if (lua_getmetatable(L, 1) == 0)
+    if (!lua_getmetatable(L, 1))
     {
       lua_pushnil(L); /* no metatable */
     }
@@ -87,7 +87,7 @@ public final class Ldblib
       luaL_pushfail(L);
     else if (lua_getiuservalue(L, 1, n) != LUA_TNONE)
     {
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       return 2;
     }
     return 1;
@@ -101,7 +101,7 @@ public final class Ldblib
     luaL_checktype(L, 1, LUA_TUSERDATA);
     luaL_checkany(L, 2);
     lua_settop(L, 2);
-    if (lua_setiuservalue(L, 1, n) == 0)
+    if (!lua_setiuservalue(L, 1, n))
       luaL_pushfail(L);
     return 1;
   }
@@ -128,7 +128,7 @@ public final class Ldblib
 
   private static ThreadArg getthread(lua_State L)
   {
-    if (lua_isthread(L, 1) != 0)
+    if (lua_isthread(L, 1))
     {
       return new ThreadArg(lua_tothread(L, 1), 1);
     }
@@ -155,7 +155,7 @@ public final class Ldblib
     lua_setfieldi(L, -2, k);
   }
 
-  private static void settabsb(lua_State L, ByteView k, int v)
+  private static void settabsb(lua_State L, ByteView k, boolean v)
   {
     lua_pushboolean(L, v);
     lua_setfieldi(L, -2, k);
@@ -192,7 +192,7 @@ public final class Ldblib
     ByteView options = luaL_optlstring(L, arg + 2, Lt.flnSrtu);
     checkstack(L, L1, 3);
     luaL_argchecki(L, sv_byteat(options, 0) != '>', arg + 2, Lt.invalid_option_2);
-    if (lua_isfunction(L, arg + 1) != 0)
+    if (lua_isfunction(L, arg + 1))
     { /* info about a function? */
       luaL_Buffer b = new luaL_Buffer();
       try
@@ -273,7 +273,7 @@ public final class Ldblib
     lua_State L1 = ta.L1;
     int arg = ta.arg;
     int nvar = (int) luaL_checkinteger(L, arg + 2); /* local-variable index */
-    if (lua_isfunction(L, arg + 1) != 0)
+    if (lua_isfunction(L, arg + 1))
     {                                                 /* function argument? */
       lua_pushvalue(L, arg + 1); /* push function */
       InternalString name = lua_getlocali(L, null, nvar);
@@ -407,8 +407,8 @@ public final class Ldblib
   {
     int n1 = checkupvalvalid(L, 1, 2).nup;
     int n2 = checkupvalvalid(L, 3, 4).nup;
-    luaL_argchecki(L, lua_iscfunction(L, 1) == 0, 1, Lt.Lua_function_expected);
-    luaL_argchecki(L, lua_iscfunction(L, 3) == 0, 3, Lt.Lua_function_expected);
+    luaL_argchecki(L, !lua_iscfunction(L, 1), 1, Lt.Lua_function_expected);
+    luaL_argchecki(L, !lua_iscfunction(L, 3), 3, Lt.Lua_function_expected);
     lua_upvaluejoin(L, 1, n1, 3, n2);
     return 0;
   }
@@ -477,7 +477,7 @@ public final class Ldblib
     ThreadArg ta = getthread(L);
     lua_State L1 = ta.L1;
     int arg = ta.arg;
-    if (lua_isnoneornil(L, arg + 1) != 0)
+    if (lua_isnoneornil(L, arg + 1))
     { /* no hook? */
       lua_settop(L, arg + 1);
       func = null;
@@ -492,7 +492,7 @@ public final class Ldblib
       func = hookf;
       mask = makemask(smask, count);
     }
-    if (luaL_getsubtablei(L, LUA_REGISTRYINDEX, Lt._HOOKKEY) == 0)
+    if (!luaL_getsubtablei(L, LUA_REGISTRYINDEX, Lt._HOOKKEY))
     {
       /* table just created; initialize it */
       lua_pushistringref(L, Lt.k_char);
@@ -650,7 +650,7 @@ public final class Ldblib
   private static void budgetf(lua_State user_co, lua_State L)
   {
     lua_State B = lua_budgetthread(L); /* (made when a budget is set or comes in: no room is made in 'L') */
-    lua_pushbudgetvalue(B, L, 1); /* the function of the group in effect */
+    lua_pushbudgetvalue(B, L, true); /* the function of the group in effect */
     lua_pushthreadi(B, user_co);
     lua_pushthreadi(B, L);
     if (lua_pcall(B, 2, 0, 0) != LUA_OK)
@@ -679,7 +679,7 @@ public final class Ldblib
     final int arg = 1;
     long n = luaL_checkinteger(L, arg + 1);
     luaL_argchecki(L, n >= 0, arg + 1, Lt.out_of_range);
-    if (n == 0 || lua_isnoneornil(L, arg + 2) != 0)
+    if (n == 0 || lua_isnoneornil(L, arg + 2))
     { /* no budget */
       lua_setbudget(co, 0, null);
       return 0;
@@ -711,7 +711,7 @@ public final class Ldblib
       return 1;
     }
     lua_pushinteger(L, n);
-    lua_pushbudgetvalue(L, co, 0);
+    lua_pushbudgetvalue(L, co, false);
     lua_pushinteger(L, lua_budgetleft(co));
     lua_State root = lua_budgetroot(co);
     if (root != null)
@@ -743,10 +743,10 @@ public final class Ldblib
     int why = lua_nofreeze(L);
     if (why == 0)
     {
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       return 1;
     }
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     lua_pushistringref(L, why == LUA_NOFREEZE_BUDGET ? Lt.no_budget_in_effect
                            : why == LUA_NOFREEZE_CALL ? Lt.a_call_that_cannot_freeze_is_in_the_way
                                                       : Lt.a_resume_that_cannot_freeze_is_in_the_way);
@@ -766,7 +766,7 @@ public final class Ldblib
   {
     luaL_checkany(L, 1);
     int perms = 0;
-    if (lua_isnoneornil(L, 2) == 0)
+    if (!lua_isnoneornil(L, 2))
     {
       luaL_checktype(L, 2, LUA_TTABLE);
       perms = 2;
@@ -774,10 +774,10 @@ public final class Ldblib
     luaL_StyxResult res = lua_styxcheck(L, 1, perms);
     if (res.status == LUA_OK)
     {
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       return 1;
     }
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, false);
     ByteView m = res.msg.to_utf8();
     lua_pushlstring(L, m, 0, m.size());
     return 2;
@@ -798,20 +798,20 @@ public final class Ldblib
   {
     if (rr.status == LUA_OK || rr.status == LUA_YIELD)
     {
-      if (lua_checkstack(L, rr.nres + 1) == 0)
+      if (!lua_checkstack(L, rr.nres + 1))
       {
         lua_pop(co, rr.nres); /* remove results anyway */
         luaL_pushfail(L);
         lua_pushistringref(L, Lt.too_many_results_to_resume);
         return 2;
       }
-      lua_pushboolean(L, 1);
+      lua_pushboolean(L, true);
       lua_xmove(co, L, rr.nres);
       return rr.nres + 1;
     }
     else
     {
-      lua_pushboolean(L, 0);
+      lua_pushboolean(L, false);
       if (co == L)
         lua_insert(L, -2); /* (a thread thawing itself: its message is on its top) */
       else
@@ -833,7 +833,7 @@ public final class Ldblib
   private static int db_thaw(lua_State L)
   {
     lua_State co = checkco(L, 1);
-    if (lua_budgeted(L) != 0)
+    if (lua_budgeted(L))
       return luaL_error(L, new HostString(Lt.cannot_thaw_from_budgeted_code));
     lua_settop(L, 1);
     return thaw_end(L, co, lua_thawk(co, L, 0, thaw_cont));
@@ -848,12 +848,12 @@ public final class Ldblib
     ThreadArg ta = getthread(L);
     lua_State L1 = ta.L1;
     int arg = ta.arg;
-    if (lua_isstring(L, arg + 1) == 0 && lua_isnoneornil(L, arg + 1) == 0) /* non-string 'msg'? */
+    if (!lua_isstring(L, arg + 1) && !lua_isnoneornil(L, arg + 1)) /* non-string 'msg'? */
       lua_pushvalue(L, arg + 1); /* return it untouched */
     else
     {
       int level = (int) luaL_optinteger(L, arg + 2, (L == L1) ? 1 : 0);
-      if (lua_isnoneornil(L, arg + 1) != 0)
+      if (lua_isnoneornil(L, arg + 1))
         luaL_traceback(L, L1, null, level);
       else
       {

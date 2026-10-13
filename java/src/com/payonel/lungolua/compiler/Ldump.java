@@ -31,7 +31,7 @@ public final class Ldump
     lua_State L;
     lua_Writer writer;
     long offset; /* current position relative to beginning of dump */
-    int strip;
+    boolean strip;
     int status;
     Table h;   /* table to track saved strings */
     long nstr; /* counter for counting saved strings */
@@ -263,7 +263,7 @@ public final class Ldump
     dumpInt(D, n);
     for (i = 0; i < n; i++)
     {
-      dumpByte(D, f.upvalues[i].instack);
+      dumpByte(D, f.upvalues[i].instack ? 1 : 0);
       dumpByte(D, f.upvalues[i].idx);
       dumpByte(D, f.upvalues[i].kind);
     }
@@ -272,11 +272,11 @@ public final class Ldump
   private static void dumpDebug(DumpState D, Proto f)
   {
     int i, n;
-    n = (D.strip != 0) ? 0 : f.lineinfo.length;
+    n = D.strip ? 0 : f.lineinfo.length;
     dumpInt(D, n);
     if (f.lineinfo.length != 0)
       dumpVector(D, new ByteView(f.lineinfo, 0, n));
-    n = (D.strip != 0) ? 0 : f.abslineinfo.length;
+    n = D.strip ? 0 : f.abslineinfo.length;
     dumpInt(D, n);
     if (n > 0)
     {
@@ -284,7 +284,7 @@ public final class Ldump
       dumpAlign(D, Integer.BYTES);
       dumpVector(D, Arrays.copyOf(f.abslineinfo, n));
     }
-    n = (D.strip != 0) ? 0 : f.locvars.length;
+    n = D.strip ? 0 : f.locvars.length;
     dumpInt(D, n);
     for (i = 0; i < n; i++)
     {
@@ -292,7 +292,7 @@ public final class Ldump
       dumpInt(D, f.locvars[i].startpc);
       dumpInt(D, f.locvars[i].endpc);
     }
-    n = (D.strip != 0) ? 0 : f.upvalues.length;
+    n = D.strip ? 0 : f.upvalues.length;
     dumpInt(D, n);
     for (i = 0; i < n; i++)
       dumpString(D, f.upvalues[i].name);
@@ -309,7 +309,7 @@ public final class Ldump
     dumpConstants(D, f);
     dumpUpvalues(D, f);
     dumpProtos(D, f);
-    dumpString(D, (D.strip != 0) ? null : f.source);
+    dumpString(D, D.strip ? null : f.source);
     dumpDebug(D, f);
   }
 
@@ -347,7 +347,7 @@ public final class Ldump
   ** dump Lua function as precompiled chunk
   */
   public static int luaU_dump(lua_State L, Proto f, lua_Writer w,
-                              int strip)
+                              boolean strip)
   {
     DumpState D = new DumpState();
     D.h = Table.luaH_new(L); /* aux. table to keep strings already dumped */
