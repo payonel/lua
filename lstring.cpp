@@ -23,7 +23,7 @@ namespace lua::object
 /*
 ** generic equality for strings
 */
-int luaS_eqstr(TString* a, TString* b)
+bool luaS_eqstr(TString* a, TString* b)
 {
   return (a == b) || (a->data == b->data);
 }
@@ -38,10 +38,10 @@ void TString::luaS_forcehash()
   TString* ts = this;
   byte_view bytes = ts->data.view();
   ts->hash = (unsigned int)InternalString::hashBytes(bytes.data(), bytes.size());
-  ts->hashed = 1;
+  ts->hashed = true;
 }
 
-TString* TString::createstrobj(lua_State* L, size_t l, size_t h, int hashed, int external)
+TString* TString::createstrobj(lua_State* L, size_t l, size_t h, bool hashed, bool external)
 {
   /* the string and its 'l' bytes are charged together, before either exists
      and before the string is known to the collector (a refusal may run an
@@ -49,7 +49,7 @@ TString* TString::createstrobj(lua_State* L, size_t l, size_t h, int hashed, int
   TString* ts = luaM_malloc_TString(L, external ? 0 : l);
   luaC_link(L, ts, LUA_VSTRING);
   ts->hash = (unsigned int)h;
-  ts->hashed = (lu_byte)hashed;
+  ts->hashed = hashed;
   ts->extra = external ? STREXTRA_EXTERNAL : 0;
   return ts;
 }
@@ -142,12 +142,12 @@ TString* TString::luaS_createstr(lua_State* L, byte_view str)
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    ts = TString::createstrobj(L, l, h, 1, 0);
+    ts = TString::createstrobj(L, l, h, true, false);
     ts->data = InternalString(str);
     interninsert(g, ts);
     return ts;
   }
-  TString* ts = TString::createstrobj(L, l, 0, 0, 0);
+  TString* ts = TString::createstrobj(L, l, 0, false, false);
   ts->data = InternalString(str);
   return ts;
 }
@@ -166,12 +166,12 @@ TString* TString::luaS_take(lua_State* L, InternalString&& str)
         changewhite(ts); /* resurrect it */
       return ts;
     }
-    ts = TString::createstrobj(L, str.size(), h, 1, 0);
+    ts = TString::createstrobj(L, str.size(), h, true, false);
     ts->data = std::move(str);
     interninsert(g, ts);
     return ts;
   }
-  TString* ts = TString::createstrobj(L, str.size(), 0, 0, 0);
+  TString* ts = TString::createstrobj(L, str.size(), 0, false, false);
   ts->data = std::move(str);
   return ts;
 }
@@ -180,7 +180,7 @@ TString* TString::luaS_takeexternal(lua_State* L, InternalString&& str)
 {
   if (str.size() <= LUAI_MAXSHORTLEN)
     return TString::luaS_take(L, std::move(str));
-  TString* ts = TString::createstrobj(L, str.size(), 0, 0, 1);
+  TString* ts = TString::createstrobj(L, str.size(), 0, false, true);
   ts->data = std::move(str);
   return ts;
 }
@@ -192,7 +192,7 @@ TString* TString::luaS_takeexternal(lua_State* L, InternalString&& str)
 TString* TString::luaS_createlngstrobj(lua_State* L, size_t l)
 {
   assert(l > LUAI_MAXSHORTLEN);
-  TString* ts = TString::createstrobj(L, l, 0, 0, 0);
+  TString* ts = TString::createstrobj(L, l, 0, false, false);
   ts->data = InternalString(byte_owner(l), l);
   return ts;
 }
@@ -207,7 +207,7 @@ TString* TString::luaS_takeblock(lua_State* L, byte_owner&& block, size_t len)
 {
   if (len <= LUAI_MAXSHORTLEN)
     return TString::luaS_createstr(L, byte_view(block.data(), len));
-  TString* ts = TString::createstrobj(L, len, 0, 0, 0);
+  TString* ts = TString::createstrobj(L, len, 0, false, false);
   if (block.size() - len > len / 2)
     ts->data = InternalString(byte_view(block.data(), len));
   else
@@ -252,8 +252,8 @@ Udata* Udata::luaS_newudata(lua_State* L, size_t s, int nuvalue)
   u = luaM_malloc_Udata(L);
   luaC_link(L, u, LUA_VUSERDATA);
   u->zb = s == 0;
-  lu_byte oldgcstop = g->gcstopem;
-  g->gcstopem = 1;
+  bool oldgcstop = g->gcstopem;
+  g->gcstopem = true;
   std::span<TValue> uv = luaM_alloc_TValue_span(L->l_G, L, {}, nuvalue, false);
   if (uv.data() != nullptr || nuvalue == 0)
   {

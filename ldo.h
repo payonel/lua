@@ -38,13 +38,13 @@ TStatus luaD_closeprotected(lua_State* L, StkId level, TStatus status, int yy = 
 TStatus luaD_pcall(lua_State* L, ProtectedCall* func, StkId oldtop, StkId ef, bool close = true);
 TStatus luaD_hostclose(lua_State* L, StkId level, TStatus status);
 void luaD_poscall(lua_State* L, CallInfo* ci, int nres);
-int luaD_reallocstack(lua_State* L, int newsize, int raiseerror);
-int luaD_growstack(lua_State* L, int n, int raiseerror);
+bool luaD_reallocstack(lua_State* L, int newsize, bool raiseerror);
+bool luaD_growstack(lua_State* L, int n, bool raiseerror);
 
 static l_forceinline void luaD_checkstack(lua_State* L, int n)
 {
   if (l_unlikely(L->stack_last - L->top <= n))
-    luaD_growstack(L, n, 1);
+    luaD_growstack(L, n, true);
 }
 
 static l_forceinline void checkstackp(lua_State* L, int n, StkId p)
@@ -86,7 +86,7 @@ int luaD_nofreeze(lua_State* L);
 void luaD_callerrh(lua_State* L);
 void luaD_finishhook(lua_State* L, CallInfo* ci);
 [[noreturn]] void luaD_freeze(lua_State* L, lua_State* co);
-int luaD_checkminstack(lua_State* L);
+bool luaD_checkminstack(lua_State* L);
 
 [[noreturn]] void luaD_throw(lua_State* L, TStatus errcode);
 [[noreturn]] void luaD_throwbaselevel(lua_State* L, TStatus errcode);

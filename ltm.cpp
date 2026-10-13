@@ -214,7 +214,7 @@ void luaT_tryconcatTM(lua_State* L)
 }
 
 void luaT_trybinassocTM(lua_State* L, const TValue* p1, const TValue* p2,
-                        int flip, StkId res, TMS event, StkId src1)
+                        bool flip, StkId res, TMS event, StkId src1)
 {
   if (flip)
     luaT_trybinTM(L, p2, p1, res, event, NOSLOT, src1);
@@ -223,7 +223,7 @@ void luaT_trybinassocTM(lua_State* L, const TValue* p1, const TValue* p2,
 }
 
 void luaT_trybiniTM(lua_State* L, const TValue* p1, lua_Integer i2,
-                    int flip, StkId res, TMS event, StkId src1)
+                    bool flip, StkId res, TMS event, StkId src1)
 {
   TValue aux;
   setivalue(&aux, i2);
@@ -238,14 +238,14 @@ void luaT_trybinTM(lua_State* L, StkId p1, StkId p2, StkId res, TMS event)
 }
 
 void luaT_trybinassocTM(lua_State* L, StkId p1, const TValue* p2,
-                        int flip, StkId res, TMS event)
+                        bool flip, StkId res, TMS event)
 {
   TValue v1 = getslot(L, p1);
   luaT_trybinassocTM(L, &v1, p2, flip, res, event, p1);
 }
 
 void luaT_trybiniTM(lua_State* L, StkId p1, lua_Integer i2,
-                    int flip, StkId res, TMS event)
+                    bool flip, StkId res, TMS event)
 {
   TValue v1 = getslot(L, p1);
   luaT_trybiniTM(L, &v1, i2, flip, res, event, p1);
@@ -254,18 +254,18 @@ void luaT_trybiniTM(lua_State* L, StkId p1, lua_Integer i2,
 /*
 ** Calls an order tag method.
 */
-int luaT_callorderTM(lua_State* L, const TValue* p1, const TValue* p2,
+bool luaT_callorderTM(lua_State* L, const TValue* p1, const TValue* p2,
                      TMS event)
 {
   int tag = callbinTM(L, p1, p2, L->top, event); /* try original event */
   if (tag >= 0)                                    /* found tag method? */
     return !(tag == LUA_VFALSE || tagisempty(tag));
   luaG_ordererror(L, p1, p2); /* no metamethod found */
-  return 0;                   /* to avoid warnings */
+  return false;                   /* to avoid warnings */
 }
 
-int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
-                      int flip, int isfloat, TMS event)
+bool luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
+                      bool flip, bool isfloat, TMS event)
 {
   TValue aux;
   const TValue* p2;
@@ -285,8 +285,8 @@ int luaT_callorderiTM(lua_State* L, const TValue* p1, int v2,
   return luaT_callorderTM(L, p1, p2, event);
 }
 
-int luaT_callorderiTM(lua_State* L, StkId p1, int v2,
-                      int flip, int isfloat, TMS event)
+bool luaT_callorderiTM(lua_State* L, StkId p1, int v2,
+                      bool flip, bool isfloat, TMS event)
 {
   TValue v1 = getslot(L, p1);
   return luaT_callorderiTM(L, &v1, v2, flip, isfloat, event);

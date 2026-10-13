@@ -51,7 +51,7 @@ struct InclineFrame : LoadFrame
 struct NumeralFrame : LoadFrame
 {
   int first = 0;
-  int hex = 0; /* exponent mark 'Pp' (else 'Ee') */
+  bool hex = false; /* exponent mark 'Pp' (else 'Ee') */
   LoadFrame* copy() const override { return new (std::nothrow) NumeralFrame(*this); }
   size_t size() const override { return sizeof(*this); }
 };
@@ -120,7 +120,7 @@ static l_forceinline void next(LexState* ls)
 /* minimum size for string buffer */
 constexpr int LUA_MINBUFFER = 32;
 
-static inline int currIsNewline(const LexState* ls)
+static inline bool currIsNewline(const LexState* ls)
 {
   return ls->current == '\n' || ls->current == '\r';
 }
@@ -330,15 +330,15 @@ void luaX_setinput(lua_State* L, LexState* ls, ZIO* z, TString* source, int firs
 */
 
 /* (with no frame of its own: made again, it goes the same way, see lload.h) */
-static int check_next1(LexState* ls, int c)
+static bool check_next1(LexState* ls, int c)
 {
   if (ls->current == c)
   {
     next(ls);
-    return 1;
+    return true;
   }
   else
-    return 0;
+    return false;
 }
 
 
@@ -384,7 +384,7 @@ static int read_numeral(LexState* ls, Token* seminfo)
         continue;
       case 2:
         next(ls);
-        l.hex = 1;
+        l.hex = true;
         l.site = 3;
         [[fallthrough]];
       case 3: /* the loop */
@@ -594,7 +594,7 @@ static void read_long_string(LexState* ls, Token* seminfo, size_t sep)
   }
 }
 
-static void esccheck(LexState* ls, int c, byte_view msg)
+static void esccheck(LexState* ls, bool c, byte_view msg)
 {
   LoadFrame l;
   if (l_unlikely(ls->z->resuming))

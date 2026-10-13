@@ -48,7 +48,7 @@ void luaL_openselectedlibs(lua_State* L, int load, int preload)
   {
     if (load & mask)
     {                                            /* selected? */
-      luaL_requiref(L, HostString{lib.name}, lib.func, 1); /* require library */
+      luaL_requiref(L, HostString{lib.name}, lib.func, true); /* require library */
       lua_pop(L, 1);                             /* remove result from the stack */
     }
     else if (preload & mask)

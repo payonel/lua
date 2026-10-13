@@ -41,7 +41,7 @@ constexpr int GCSswpend = 6;
 constexpr int GCScallfin = 7;
 constexpr int GCSpause = 8;
 
-static l_forceinline int issweepphase(global_State* g)
+static l_forceinline bool issweepphase(global_State* g)
 {
   return GCSswpallgc <= g->gcstate && g->gcstate <= GCSswpend;
 }
@@ -54,7 +54,7 @@ static l_forceinline int issweepphase(global_State* g)
 ** are white again.
 */
 
-static l_forceinline int keepinvariant(global_State* g)
+static l_forceinline bool keepinvariant(global_State* g)
 {
   return g->gcstate <= GCSatomic;
 }
@@ -86,34 +86,34 @@ constexpr int TESTBIT = 7;
 
 constexpr int WHITEBITS = bit2mask(WHITE0BIT, WHITE1BIT);
 
-static l_forceinline int iswhite(const GCObject* x)
+static l_forceinline bool iswhite(const GCObject* x)
 {
-  return x->marked & WHITEBITS;
+  return (x->marked & WHITEBITS) != 0;
 }
-static l_forceinline int isblack(const GCObject* x)
+static l_forceinline bool isblack(const GCObject* x)
 {
-  return x->marked & bitmask(BLACKBIT);
+  return (x->marked & bitmask(BLACKBIT)) != 0;
 }
 /* neither white nor black */
-static l_forceinline int isgray(const GCObject* x)
+static l_forceinline bool isgray(const GCObject* x)
 {
   return !(x->marked & (WHITEBITS | bitmask(BLACKBIT)));
 }
 
-static l_forceinline int tofinalize(const GCObject* x)
+static l_forceinline bool tofinalize(const GCObject* x)
 {
-  return x->marked & bitmask(FINALIZEDBIT);
+  return (x->marked & bitmask(FINALIZEDBIT)) != 0;
 }
 
 static l_forceinline lu_byte otherwhite(global_State* g)
 {
   return g->currentwhite ^ WHITEBITS;
 }
-constexpr int isdeadm(lu_byte ow, lu_byte m)
+constexpr bool isdeadm(lu_byte ow, lu_byte m)
 {
-  return m & ow;
+  return (m & ow) != 0;
 }
-static l_forceinline int isdead(global_State* g, const GCObject* v)
+static l_forceinline bool isdead(global_State* g, const GCObject* v)
 {
   return isdeadm(otherwhite(g), v->marked);
 }
@@ -152,7 +152,7 @@ static l_forceinline void setage(GCObject* o, int a)
 {
   o->marked = (o->marked & ~AGEBITS) | a;
 }
-static l_forceinline int isold(const GCObject* o)
+static l_forceinline bool isold(const GCObject* o)
 {
   return getage(o) > G_SURVIVAL;
 }
@@ -241,7 +241,7 @@ constexpr int LUAI_GCSTEPSIZE = 200 * cost::Table;
 constexpr int GCSTPUSR = 1; /* bit true when GC stopped by user */
 constexpr int GCSTPGC = 2; /* bit true when GC stopped by itself */
 constexpr int GCSTPCLS = 4; /* bit true when closing Lua state */
-static l_forceinline int gcrunning(global_State* g)
+static l_forceinline bool gcrunning(global_State* g)
 {
   return g->gcstp == 0;
 }
@@ -255,8 +255,8 @@ static l_forceinline void luaC_checkGC(lua_State* L)
   if (L->l_G->GCdebt <= 0)
     luaC_step(L);
 }
-void luaC_runtilstate(lua_State* L, int state, int fast);
-void luaC_fullgc(lua_State* L, int isemergency);
+void luaC_runtilstate(lua_State* L, int state, bool fast);
+void luaC_fullgc(lua_State* L, bool isemergency);
 void luaC_fullgcdue(lua_State* L);
 GCObject* luaC_link(lua_State* L, GCObject* o, lu_byte tt);
 

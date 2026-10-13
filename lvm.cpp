@@ -50,7 +50,7 @@ constexpr int NBM = DBL_MANT_DIG;
 constexpr lua_Unsigned MAXINTFITSF = (lua_Unsigned) 1 << NBM;
 
 /* check whether 'i' is in the interval [-MAXINTFITSF, MAXINTFITSF] */
-static inline int l_intfitsf(lua_Integer i)
+static inline bool l_intfitsf(lua_Integer i)
 {
   return -(lua_Integer)MAXINTFITSF <= i && i <= (lua_Integer)MAXINTFITSF;
 }
@@ -62,11 +62,11 @@ static inline int l_intfitsf(lua_Integer i)
 ** are disabled via macro 'cvt2num'), do not modify 'result'
 ** and return 0.
 */
-static int l_strton(const TValue* obj, TValue* result)
+static bool l_strton(const TValue* obj, TValue* result)
 {
   assert(obj != result);
   if (!cvt2num(obj)) /* is object not a string? */
-    return 0;
+    return false;
   else
   {
     assert(ttisstring(obj));
@@ -79,35 +79,35 @@ static int l_strton(const TValue* obj, TValue* result)
 ** Try to convert a value to a float. The float case is already handled
 ** by the macro 'tonumber'.
 */
-int luaV_tonumber_(const TValue* obj, NumResult* n)
+bool luaV_tonumber_(const TValue* obj, NumResult* n)
 {
   TValue v;
   if (ttisinteger(obj))
   {
     n->v = (lua_Number)ivalue(obj);
-    return 1;
+    return true;
   }
   else if (l_strton(obj, &v))
   {                  /* string coercible to number? */
     /* convert result of 'luaO_str2num' to a float */
     assert(ttisnumber(&v));
     n->v = ttisinteger(&v) ? (lua_Number)ivalue(&v) : fltvalue(&v);
-    return 1;
+    return true;
   }
   else
-    return 0; /* conversion failed */
+    return false; /* conversion failed */
 }
 
 /*
 ** try to convert a float to an integer, rounding according to 'mode'.
 */
-int luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode)
+bool luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode)
 {
   lua_Number f = floor(n);
   if (n != f)
   { /* not an integral value? */
     if (mode == F2Ieq)
-      return 0;               /* fails if mode demands integral value */
+      return false;               /* fails if mode demands integral value */
     else if (mode == F2Iceil) /* needs ceiling? */
       f += 1;                 /* convert floor to ceiling (remember: n != f) */
   }
@@ -119,23 +119,23 @@ int luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode)
 ** without string coercion.
 ** ("Fast track" handled by macro 'tointegerns'.)
 */
-int luaV_tointegerns(const TValue* obj, IntResult* p, F2Imod mode)
+bool luaV_tointegerns(const TValue* obj, IntResult* p, F2Imod mode)
 {
   if (ttisfloat(obj))
     return luaV_flttointeger(fltvalue(obj), p, mode);
   else if (ttisinteger(obj))
   {
     p->v = ivalue(obj);
-    return 1;
+    return true;
   }
   else
-    return 0;
+    return false;
 }
 
 /*
 ** try to convert a value to an integer.
 */
-int luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode)
+bool luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode)
 {
   TValue v;
   if (l_strton(obj, &v)) /* does 'obj' point to a numerical string? */
@@ -159,7 +159,7 @@ int luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode)
 ** correct; even a limit of LUA_MININTEGER would run the loop once for
 ** an initial value equal to LUA_MININTEGER.)
 */
-static int forlimit(lua_State* L, lua_Integer init, StkId limslot,
+static bool forlimit(lua_State* L, lua_Integer init, StkId limslot,
                     IntResult* p, lua_Integer step)
 {
   TValue limv = getslot(L, limslot);
@@ -174,13 +174,13 @@ static int forlimit(lua_State* L, lua_Integer init, StkId limslot,
     if (0 < flim.v)
     { /* if it is positive, it is too large */
       if (step < 0)
-        return 1;          /* initial value must be less than it */
+        return true;          /* initial value must be less than it */
       p->v = LUA_MAXINTEGER; /* truncate */
     }
     else
     { /* it is less than min integer */
       if (step > 0)
-        return 1;          /* initial value must be greater than it */
+        return true;          /* initial value must be greater than it */
       p->v = LUA_MININTEGER; /* truncate */
     }
   }
@@ -199,7 +199,7 @@ static int forlimit(lua_State* L, lua_Integer init, StkId limslot,
 **   ra + 1 : step
 **   ra + 2 : control variable
 */
-static int forprep(lua_State* L, StkId ra)
+static bool forprep(lua_State* L, StkId ra)
 {
   StkId pinit = ra;
   StkId plimit = ra + 1;
@@ -212,7 +212,7 @@ static int forprep(lua_State* L, StkId ra)
     if (step == 0)
       luaG_runerror(L, lt::for_step_is_zero);
     if (forlimit(L, init, plimit, &limit, step))
-      return 1; /* skip the loop */
+      return true; /* skip the loop */
     else
     { /* prepare loop counter */
       lua_Unsigned count;
@@ -249,7 +249,7 @@ static int forprep(lua_State* L, StkId ra)
       luaG_runerror(L, lt::for_step_is_zero);
     if ((0 < step.v) ? (limit.v < init.v)
                             : (init.v < limit.v))
-      return 1; /* skip the loop */
+      return true; /* skip the loop */
     else
     {
       /* make sure all values are floats */
@@ -258,7 +258,7 @@ static int forprep(lua_State* L, StkId ra)
       setslotflt(L, ra + 2, init.v); /* control variable */
     }
   }
-  return 0;
+  return false;
 }
 
 /*
@@ -266,7 +266,7 @@ static int forprep(lua_State* L, StkId ra)
 ** true iff the loop must continue. (The integer case is
 ** written inline with opcode OP_FORLOOP, for performance.)
 */
-static int floatforloop(lua_State* L, StkId ra)
+static bool floatforloop(lua_State* L, StkId ra)
 {
   lua_Number step = slotfltval(L, ra + 1);
   assert(slottag(L, ra) == LUA_VNUMFLT);
@@ -278,10 +278,10 @@ static int floatforloop(lua_State* L, StkId ra)
                           : (limit <= idx))
   {
     chgslotflt(L, ra + 2, idx); /* update control variable */
-    return 1;                      /* jump back */
+    return true;                      /* jump back */
   }
   else
-    return 0; /* finish the loop */
+    return false; /* finish the loop */
 }
 
 /*
@@ -435,7 +435,7 @@ static int l_strcmp(const TString* ts1, const TString* ts2)
 ** from float to int.)
 ** When 'f' is NaN, comparisons must result in false.
 */
-static inline int LTintfloat(lua_Integer i, lua_Number f)
+static inline bool LTintfloat(lua_Integer i, lua_Number f)
 {
   if (l_intfitsf(i))
     return ((lua_Number)i < f); /* compare them as floats */
@@ -453,7 +453,7 @@ static inline int LTintfloat(lua_Integer i, lua_Number f)
 ** Check whether integer 'i' is less than or equal to float 'f'.
 ** See comments on previous function.
 */
-static inline int LEintfloat(lua_Integer i, lua_Number f)
+static inline bool LEintfloat(lua_Integer i, lua_Number f)
 {
   if (l_intfitsf(i))
     return ((lua_Number)i <= f); /* compare them as floats */
@@ -471,7 +471,7 @@ static inline int LEintfloat(lua_Integer i, lua_Number f)
 ** Check whether float 'f' is less than integer 'i'.
 ** See comments on previous function.
 */
-static inline int LTfloatint(lua_Number f, lua_Integer i)
+static inline bool LTfloatint(lua_Number f, lua_Integer i)
 {
   if (l_intfitsf(i))
     return (f < (lua_Number)i); /* compare them as floats */
@@ -489,7 +489,7 @@ static inline int LTfloatint(lua_Number f, lua_Integer i)
 ** Check whether float 'f' is less than or equal to integer 'i'.
 ** See comments on previous function.
 */
-static inline int LEfloatint(lua_Number f, lua_Integer i)
+static inline bool LEfloatint(lua_Number f, lua_Integer i)
 {
   if (l_intfitsf(i))
     return (f <= (lua_Number)i); /* compare them as floats */
@@ -506,7 +506,7 @@ static inline int LEfloatint(lua_Number f, lua_Integer i)
 /*
 ** Return 'l < r', for numbers.
 */
-static inline int LTnum(const TValue* l, const TValue* r)
+static inline bool LTnum(const TValue* l, const TValue* r)
 {
   assert(ttisnumber(l) && ttisnumber(r));
   if (ttisinteger(l))
@@ -537,7 +537,7 @@ static inline int LTnum(const TValue* l, const TValue* r)
 /*
 ** Return 'l <= r', for numbers.
 */
-static inline int LEnum(const TValue* l, const TValue* r)
+static inline bool LEnum(const TValue* l, const TValue* r)
 {
   assert(ttisnumber(l) && ttisnumber(r));
   if (ttisinteger(l))
@@ -568,7 +568,7 @@ static inline int LEnum(const TValue* l, const TValue* r)
 /*
 ** return 'l < r' for non-numbers.
 */
-static int lessthanothers(lua_State* L, const TValue* l, const TValue* r)
+static bool lessthanothers(lua_State* L, const TValue* l, const TValue* r)
 {
   assert(!ttisnumber(l) || !ttisnumber(r));
   if (ttisstring(l) && ttisstring(r)) /* both are strings? */
@@ -582,7 +582,7 @@ static int lessthanothers(lua_State* L, const TValue* l, const TValue* r)
 /*
 ** Main operation less than; return 'l < r'.
 */
-int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r)
+bool luaV_lessthan(lua_State* L, const TValue* l, const TValue* r)
 {
   if (ttisnumber(l) && ttisnumber(r)) /* both operands are numbers? */
     return LTnum(l, r);
@@ -593,7 +593,7 @@ int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r)
 /*
 ** return 'l <= r' for non-numbers.
 */
-static int lessequalothers(lua_State* L, const TValue* l, const TValue* r)
+static bool lessequalothers(lua_State* L, const TValue* l, const TValue* r)
 {
   assert(!ttisnumber(l) || !ttisnumber(r));
   if (ttisstring(l) && ttisstring(r)) /* both are strings? */
@@ -604,28 +604,28 @@ static int lessequalothers(lua_State* L, const TValue* l, const TValue* r)
     return luaT_callorderTM(L, l, r, TM_LE);
 }
 
-static inline int LTnum(lua_State* L, StkId l, StkId r)
+static inline bool LTnum(lua_State* L, StkId l, StkId r)
 {
   TValue lv = getslot(L, l);
   TValue rv = getslot(L, r);
   return LTnum(&lv, &rv);
 }
 
-static inline int LEnum(lua_State* L, StkId l, StkId r)
+static inline bool LEnum(lua_State* L, StkId l, StkId r)
 {
   TValue lv = getslot(L, l);
   TValue rv = getslot(L, r);
   return LEnum(&lv, &rv);
 }
 
-static int lessthanothers(lua_State* L, StkId l, StkId r)
+static bool lessthanothers(lua_State* L, StkId l, StkId r)
 {
   TValue lv = getslot(L, l);
   TValue rv = getslot(L, r);
   return lessthanothers(L, &lv, &rv);
 }
 
-static int lessequalothers(lua_State* L, StkId l, StkId r)
+static bool lessequalothers(lua_State* L, StkId l, StkId r)
 {
   TValue lv = getslot(L, l);
   TValue rv = getslot(L, r);
@@ -635,7 +635,7 @@ static int lessequalothers(lua_State* L, StkId l, StkId r)
 /*
 ** Main operation less than or equal to; return 'l <= r'.
 */
-int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r)
+bool luaV_lessequal(lua_State* L, const TValue* l, const TValue* r)
 {
   if (ttisnumber(l) && ttisnumber(r)) /* both operands are numbers? */
     return LEnum(l, r);
@@ -643,11 +643,11 @@ int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r)
     return lessequalothers(L, l, r);
 }
 
-int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
+bool luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
 {
   const TValue* tm;
   if (ttype(t1) != ttype(t2)) /* not the same type? */
-    return 0;
+    return false;
   else if (ttypetag(t1) != ttypetag(t2))
   {
     switch (ttypetag(t1))
@@ -674,7 +674,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
     default:
       /* only numbers (integer/float) and strings (long/short) can have
          equal values with different variants */
-      return 0;
+      return false;
     }
   }
   else
@@ -684,7 +684,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
     case LUA_VNIL:
     case LUA_VFALSE:
     case LUA_VTRUE:
-      return 1;
+      return true;
     case LUA_VNUMINT:
       assert(ttisinteger(t2));
       return (ivalue(t1) == ivalue(t2));
@@ -703,9 +703,9 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       Udata* u1 = uvalue(t1);
       Udata* u2 = uvalue(t2);
       if (u1 == u2)
-        return 1;
+        return true;
       else if (L == nullptr)
-        return 0;
+        return false;
       tm = gfasttm(L->l_G, u1->metatable, TM_EQ);
       if (tm == nullptr)
         tm = gfasttm(L->l_G, u2->metatable, TM_EQ);
@@ -716,9 +716,9 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       Table* h1 = hvalue(t1);
       Table* h2 = hvalue(t2);
       if (h1 == h2)
-        return 1;
+        return true;
       else if (L == nullptr)
-        return 0;
+        return false;
       tm = gfasttm(L->l_G, h1->metatable, TM_EQ);
       if (tm == nullptr)
         tm = gfasttm(L->l_G, h2->metatable, TM_EQ);
@@ -730,7 +730,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
       return (gcvalue(t1) == gcvalue(t2));
     }
     if (tm == nullptr) /* no TM? */
-      return 0;     /* objects are different */
+      return false;     /* objects are different */
     else
     {
       int tag = luaT_callTMres(L, tm, t1, t2, L->top); /* call TM */
@@ -739,7 +739,7 @@ int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2)
   }
 }
 
-int luaV_equalobj(lua_State* L, StkId t1, StkId t2)
+bool luaV_equalobj(lua_State* L, StkId t1, StkId t2)
 {
   TValue v1 = getslot(L, t1);
   TValue v2 = getslot(L, t2);
@@ -753,28 +753,28 @@ int luaV_equalobj(lua_State* L, StkId t1, StkId t2)
 ** (External strings can be empty too; they will be concatenated like
 ** non-empty ones.)
 */
-static int isemptystr(const TValue* o)
+static bool isemptystr(const TValue* o)
 {
   return ttisstring(o) &&
          tsslen(tsvalue(o)) == 0;
 }
 
-static int isemptystr(lua_State* L, StkId idx)
+static bool isemptystr(lua_State* L, StkId idx)
 {
   TValue v = getslot(L, idx);
   return isemptystr(&v);
 }
 
-static int tostring(lua_State* L, StkId idx)
+static bool tostring(lua_State* L, StkId idx)
 {
   if (novariant(slottag(L, idx)) == LUA_TSTRING)
-    return 1;
+    return true;
   TValue v = getslot(L, idx);
   if (!cvt2str(&v))
-    return 0;
+    return false;
   luaO_tostring(L, &v);
   setslot(L, idx, &v);
-  return 1;
+  return true;
 }
 
 /* copy strings in stack from top - n up to top - 1 to buffer */
@@ -1028,10 +1028,10 @@ void luaV_finishOp(lua_State* L)
   case OP_GEI:
   case OP_EQ:
   { /* note that 'OP_EQI'/'OP_EQK' cannot yield */
-    int res = !tagisfalse(slottag(L, L->top - 1));
+    bool res = !tagisfalse(slottag(L, L->top - 1));
     L->top--;
     assert(GET_OPCODE(code[ci->savedpc]) == OP_JMP);
-    if (res != GETARG_k(inst)) /* condition failed? */
+    if (res != TESTARG_k(inst)) /* condition failed? */
       ci->savedpc++;       /* skip jump instruction */
     break;
   }
@@ -1110,19 +1110,19 @@ static l_forceinline lua_Integer l_bxor(lua_Integer a, lua_Integer b)
   return l_intbxor(a, b);
 }
 
-static l_forceinline int l_lti(lua_Integer a, lua_Integer b)
+static l_forceinline bool l_lti(lua_Integer a, lua_Integer b)
 {
   return a < b;
 }
-static l_forceinline int l_lei(lua_Integer a, lua_Integer b)
+static l_forceinline bool l_lei(lua_Integer a, lua_Integer b)
 {
   return a <= b;
 }
-static l_forceinline int l_gti(lua_Integer a, lua_Integer b)
+static l_forceinline bool l_gti(lua_Integer a, lua_Integer b)
 {
   return a > b;
 }
-static l_forceinline int l_gei(lua_Integer a, lua_Integer b)
+static l_forceinline bool l_gei(lua_Integer a, lua_Integer b)
 {
   return a >= b;
 }
@@ -2183,7 +2183,7 @@ static l_forceinline void op_mmbini(lua_State* L, CallInfo* ci, const Instructio
   Instruction pi = code[pc - 2]; /* original arith. expression */
   int imm = GETARG_sB(i);
   TMS tm = (TMS) GETARG_C(i);
-  int flip = GETARG_k(i);
+  bool flip = TESTARG_k(i);
   StkId result = base + GETARG_A(pi);
   ci->savedpc = pc;
   L->top = ci->top;
@@ -2196,7 +2196,7 @@ static l_forceinline void op_mmbink(lua_State* L, CallInfo* ci, TValue* k, const
   Instruction pi = code[pc - 2]; /* original arith. expression */
   TValue* imm = k + GETARG_B(i);
   TMS tm = (TMS) GETARG_C(i);
-  int flip = GETARG_k(i);
+  bool flip = TESTARG_k(i);
   StkId result = base + GETARG_A(pi);
   ci->savedpc = pc;
   L->top = ci->top;
@@ -2302,12 +2302,12 @@ static l_forceinline int op_jmp(Instruction i, int pc)
 static l_forceinline int op_eq(lua_State* L, CallInfo* ci, const Instruction* code, StkId base, Instruction i, int pc)
 {
   StkId ra = base + GETARG_A(i);
-  int cond;
+  bool cond;
   StkId rb = base + GETARG_B(i);
   ci->savedpc = pc;
   L->top = ci->top;
   cond = luaV_equalobj(L, ra, rb);
-  if (cond != GETARG_k(i))
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2321,7 +2321,7 @@ static l_forceinline int op_lt(lua_State* L, CallInfo* ci, const Instruction* co
 {
   StkId ra = base + GETARG_A(i);
   StkId rb = base + GETARG_B(i);
-  int cond;
+  bool cond;
   if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
   {
     lua_Integer ia = slotival(L, ra);
@@ -2336,7 +2336,7 @@ static l_forceinline int op_lt(lua_State* L, CallInfo* ci, const Instruction* co
     L->top = ci->top;
     cond = lessthanothers(L, ra, rb);
   }
-  if (cond != GETARG_k(i))
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2350,7 +2350,7 @@ static l_forceinline int op_le(lua_State* L, CallInfo* ci, const Instruction* co
 {
   StkId ra = base + GETARG_A(i);
   StkId rb = base + GETARG_B(i);
-  int cond;
+  bool cond;
   if (slottag(L, ra) == LUA_VNUMINT && slottag(L, rb) == LUA_VNUMINT)
   {
     lua_Integer ia = slotival(L, ra);
@@ -2365,7 +2365,7 @@ static l_forceinline int op_le(lua_State* L, CallInfo* ci, const Instruction* co
     L->top = ci->top;
     cond = lessequalothers(L, ra, rb);
   }
-  if (cond != GETARG_k(i))
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2380,8 +2380,8 @@ static l_forceinline int op_eqk(lua_State* L, TValue* k, const Instruction* code
   StkId ra = base + GETARG_A(i);
   TValue* rb = k + GETARG_B(i);
   /* basic types do not use '__eq'; we can use raw equality */
-  int cond = luaV_rawequalobj(L, ra, rb);
-  if (cond != GETARG_k(i))
+  bool cond = luaV_rawequalobj(L, ra, rb);
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2394,15 +2394,15 @@ static l_forceinline int op_eqk(lua_State* L, TValue* k, const Instruction* code
 static l_forceinline int op_eqi(lua_State* L, const Instruction* code, StkId base, Instruction i, int pc)
 {
   StkId ra = base + GETARG_A(i);
-  int cond;
+  bool cond;
   int im = GETARG_sB(i);
   if (slottag(L, ra) == LUA_VNUMINT)
     cond = (slotival(L, ra) == im);
   else if (slottag(L, ra) == LUA_VNUMFLT)
     cond = (slotfltval(L, ra) == im);
   else
-    cond = 0; /* other types cannot be equal to a number */
-  if (cond != GETARG_k(i))
+    cond = false; /* other types cannot be equal to a number */
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2415,7 +2415,7 @@ static l_forceinline int op_eqi(lua_State* L, const Instruction* code, StkId bas
 static l_forceinline int op_lti(lua_State* L, CallInfo* ci, const Instruction* code, StkId base, Instruction i, int pc)
 {
   StkId ra = base + GETARG_A(i);
-  int cond;
+  bool cond;
   int im = GETARG_sB(i);
   if (slottag(L, ra) == LUA_VNUMINT)
     cond = l_lti(slotival(L, ra), im);
@@ -2427,12 +2427,12 @@ static l_forceinline int op_lti(lua_State* L, CallInfo* ci, const Instruction* c
   }
   else
   {
-    int isf = GETARG_C(i);
+    bool isf = GETARG_C(i) != 0;
     ci->savedpc = pc;
     L->top = ci->top;
-    cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LT);
+    cond = luaT_callorderiTM(L, ra, im, false, isf, TM_LT);
   }
-  if (cond != GETARG_k(i))
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2445,7 +2445,7 @@ static l_forceinline int op_lti(lua_State* L, CallInfo* ci, const Instruction* c
 static l_forceinline int op_lei(lua_State* L, CallInfo* ci, const Instruction* code, StkId base, Instruction i, int pc)
 {
   StkId ra = base + GETARG_A(i);
-  int cond;
+  bool cond;
   int im = GETARG_sB(i);
   if (slottag(L, ra) == LUA_VNUMINT)
     cond = l_lei(slotival(L, ra), im);
@@ -2457,12 +2457,12 @@ static l_forceinline int op_lei(lua_State* L, CallInfo* ci, const Instruction* c
   }
   else
   {
-    int isf = GETARG_C(i);
+    bool isf = GETARG_C(i) != 0;
     ci->savedpc = pc;
     L->top = ci->top;
-    cond = luaT_callorderiTM(L, ra, im, 0, isf, TM_LE);
+    cond = luaT_callorderiTM(L, ra, im, false, isf, TM_LE);
   }
-  if (cond != GETARG_k(i))
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2475,7 +2475,7 @@ static l_forceinline int op_lei(lua_State* L, CallInfo* ci, const Instruction* c
 static l_forceinline int op_gti(lua_State* L, CallInfo* ci, const Instruction* code, StkId base, Instruction i, int pc)
 {
   StkId ra = base + GETARG_A(i);
-  int cond;
+  bool cond;
   int im = GETARG_sB(i);
   if (slottag(L, ra) == LUA_VNUMINT)
     cond = l_gti(slotival(L, ra), im);
@@ -2487,12 +2487,12 @@ static l_forceinline int op_gti(lua_State* L, CallInfo* ci, const Instruction* c
   }
   else
   {
-    int isf = GETARG_C(i);
+    bool isf = GETARG_C(i) != 0;
     ci->savedpc = pc;
     L->top = ci->top;
-    cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LT);
+    cond = luaT_callorderiTM(L, ra, im, true, isf, TM_LT);
   }
-  if (cond != GETARG_k(i))
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2505,7 +2505,7 @@ static l_forceinline int op_gti(lua_State* L, CallInfo* ci, const Instruction* c
 static l_forceinline int op_gei(lua_State* L, CallInfo* ci, const Instruction* code, StkId base, Instruction i, int pc)
 {
   StkId ra = base + GETARG_A(i);
-  int cond;
+  bool cond;
   int im = GETARG_sB(i);
   if (slottag(L, ra) == LUA_VNUMINT)
     cond = l_gei(slotival(L, ra), im);
@@ -2517,12 +2517,12 @@ static l_forceinline int op_gei(lua_State* L, CallInfo* ci, const Instruction* c
   }
   else
   {
-    int isf = GETARG_C(i);
+    bool isf = GETARG_C(i) != 0;
     ci->savedpc = pc;
     L->top = ci->top;
-    cond = luaT_callorderiTM(L, ra, im, 1, isf, TM_LE);
+    cond = luaT_callorderiTM(L, ra, im, true, isf, TM_LE);
   }
-  if (cond != GETARG_k(i))
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2535,8 +2535,8 @@ static l_forceinline int op_gei(lua_State* L, CallInfo* ci, const Instruction* c
 static l_forceinline int op_test(lua_State* L, const Instruction* code, StkId base, Instruction i, int pc)
 {
   StkId ra = base + GETARG_A(i);
-  int cond = !tagisfalse(slottag(L, ra));
-  if (cond != GETARG_k(i))
+  bool cond = !tagisfalse(slottag(L, ra));
+  if (cond != TESTARG_k(i))
     pc++;
   else
   {
@@ -2550,7 +2550,7 @@ static l_forceinline int op_testset(lua_State* L, const Instruction* code, StkId
 {
   StkId ra = base + GETARG_A(i);
   StkId rb = base + GETARG_B(i);
-  if (tagisfalse(slottag(L, rb)) == GETARG_k(i))
+  if (tagisfalse(slottag(L, rb)) == TESTARG_k(i))
     pc++;
   else
   {

@@ -190,9 +190,9 @@ const lu_byte luaP_opmodes[NUM_OPCODES] = {
     opmode(0, 0, 0, 0, 0, iAx) /* OP_EXTRAARG */
 };
 
-static l_forceinline int testITMode(int m)
+static l_forceinline bool testITMode(int m)
 {
-  return luaP_opmodes[m] & (1 << 5);
+  return (luaP_opmodes[m] & (1 << 5)) != 0;
 }
 
 /*
@@ -200,7 +200,7 @@ static l_forceinline int testITMode(int m)
 ** and for instructions that use multiple values set by the previous
 ** instruction.
 */
-int luaP_isIT(Instruction i)
+bool luaP_isIT(Instruction i)
 {
   OpCode op = GET_OPCODE(i);
   switch (op)
@@ -208,7 +208,7 @@ int luaP_isIT(Instruction i)
   case OP_SETLIST:
     return GETARG_vB(i) == 0;
   case OP_VARARGPREP:
-    return 1;
+    return true;
   default:
     return testITMode(GET_OPCODE(i)) && GETARG_B(i) == 0;
   }

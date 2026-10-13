@@ -13,18 +13,18 @@
 namespace lua::vm
 {
 
-static inline int cvt2str(const TValue* o)
+static inline bool cvt2str(const TValue* o)
 {
   return ttype(o) == LUA_TNUMBER;
 }
 
-static inline int cvt2str(lua_State* L, StkId idx)
+static inline bool cvt2str(lua_State* L, StkId idx)
 {
   TValue v = getslot(L, idx);
   return cvt2str(&v);
 }
 
-static inline int cvt2num(const TValue* o)
+static inline bool cvt2num(const TValue* o)
 {
   return ttype(o) == LUA_TSTRING;
 }
@@ -66,15 +66,15 @@ constexpr F2Imod LUA_FLOORN2I = F2Ieq;
 ** Shift right is the same as shift left with a negative 'y'
 */
 
-int luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2);
-int luaV_equalobj(lua_State* L, StkId t1, StkId t2);
-int luaV_lessthan(lua_State* L, const TValue* l, const TValue* r);
-int luaV_lessequal(lua_State* L, const TValue* l, const TValue* r);
-int luaV_tonumber_(const TValue* obj, NumResult* n);
-int luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode);
-int luaV_tointegerns(const TValue* obj, IntResult* p,
+bool luaV_equalobj(lua_State* L, const TValue* t1, const TValue* t2);
+bool luaV_equalobj(lua_State* L, StkId t1, StkId t2);
+bool luaV_lessthan(lua_State* L, const TValue* l, const TValue* r);
+bool luaV_lessequal(lua_State* L, const TValue* l, const TValue* r);
+bool luaV_tonumber_(const TValue* obj, NumResult* n);
+bool luaV_tointeger(const TValue* obj, IntResult* p, F2Imod mode);
+bool luaV_tointegerns(const TValue* obj, IntResult* p,
                                F2Imod mode);
-int luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode);
+bool luaV_flttointeger(lua_Number n, IntResult* p, F2Imod mode);
 lu_byte luaV_finishget(lua_State* L, const TValue* t, TValue* key,
                                  StkId val, lu_byte tag, StkId tsrc);
 void luaV_finishset(lua_State* L, const TValue* t, TValue* key,
@@ -89,75 +89,75 @@ lua_Integer luaV_shiftl(lua_Integer x, lua_Integer y);
 void luaV_objlen(lua_State* L, StkId ra, const TValue* rb, StkId src);
 void luaV_objlen(lua_State* L, StkId ra, StkId rb);
 
-static l_forceinline int tonumber(const TValue* o, NumResult* nout)
+static l_forceinline bool tonumber(const TValue* o, NumResult* nout)
 {
   if (ttisfloat(o))
   {
     nout->v = fltvalue(o);
-    return 1;
+    return true;
   }
   return luaV_tonumber_(o, nout);
 }
 
-static l_forceinline int tonumberns(const TValue* o, NumResult* nout)
+static l_forceinline bool tonumberns(const TValue* o, NumResult* nout)
 {
   if (ttisfloat(o))
   {
     nout->v = fltvalue(o);
-    return 1;
+    return true;
   }
   if (ttisinteger(o))
   {
     nout->v = (lua_Number)ivalue(o);
-    return 1;
+    return true;
   }
-  return 0;
+  return false;
 }
 
-static l_forceinline int tointeger(const TValue* o, IntResult* iout)
+static l_forceinline bool tointeger(const TValue* o, IntResult* iout)
 {
   if (l_likely(ttisinteger(o)))
   {
     iout->v = ivalue(o);
-    return 1;
+    return true;
   }
   return luaV_tointeger(o, iout, LUA_FLOORN2I);
 }
 
-static l_forceinline int tointegerns(const TValue* o, IntResult* iout)
+static l_forceinline bool tointegerns(const TValue* o, IntResult* iout)
 {
   if (l_likely(ttisinteger(o)))
   {
     iout->v = ivalue(o);
-    return 1;
+    return true;
   }
   return luaV_tointegerns(o, iout, LUA_FLOORN2I);
 }
 
-static l_forceinline int tonumber(lua_State* L, StkId idx, NumResult* nout)
+static l_forceinline bool tonumber(lua_State* L, StkId idx, NumResult* nout)
 {
   TValue v = getslot(L, idx);
   return tonumber(&v, nout);
 }
 
-static l_forceinline int tonumberns(lua_State* L, StkId idx, NumResult* nout)
+static l_forceinline bool tonumberns(lua_State* L, StkId idx, NumResult* nout)
 {
   TValue v = getslot(L, idx);
   return tonumberns(&v, nout);
 }
 
-static l_forceinline int tointegerns(lua_State* L, StkId idx, IntResult* iout)
+static l_forceinline bool tointegerns(lua_State* L, StkId idx, IntResult* iout)
 {
   TValue v = getslot(L, idx);
   return tointegerns(&v, iout);
 }
 
-static inline int luaV_rawequalobj(const TValue* t1, const TValue* t2)
+static inline bool luaV_rawequalobj(const TValue* t1, const TValue* t2)
 {
   return luaV_equalobj(nullptr, t1, t2);
 }
 
-static inline int luaV_rawequalobj(lua_State* L, StkId t1, const TValue* t2)
+static inline bool luaV_rawequalobj(lua_State* L, StkId t1, const TValue* t2)
 {
   TValue v1 = getslot(L, t1);
   return luaV_equalobj(nullptr, &v1, t2);

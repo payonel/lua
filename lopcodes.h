@@ -280,7 +280,7 @@ static l_forceinline enum OpMode getOpMode(int m)
   return (enum OpMode)(luaP_opmodes[m] & 7);
 }
 
-static l_forceinline int checkopm(Instruction i, enum OpMode m)
+static l_forceinline bool checkopm(Instruction i, enum OpMode m)
 {
   return getOpMode(GET_OPCODE(i)) == m;
 }
@@ -325,9 +325,9 @@ static l_forceinline int GETARG_sC(Instruction i)
   return sC2int(GETARG_C(i));
 }
 
-constexpr int TESTARG_k(Instruction i)
+constexpr bool TESTARG_k(Instruction i)
 {
-  return i & (1u << POS_k);
+  return (i & (1u << POS_k)) != 0;
 }
 constexpr int GETARG_k(Instruction i)
 {
@@ -383,7 +383,7 @@ constexpr Instruction SETARG_C(Instruction i, int v)
   return setarg(i, v, POS_C, SIZE_C);
 }
 
-constexpr Instruction SETARG_k(Instruction i, int v)
+constexpr Instruction SETARG_k(Instruction i, bool v)
 {
   return setarg(i, v, POS_k, 1);
 }
@@ -398,12 +398,12 @@ constexpr Instruction SETARG_sJ(Instruction i, int j)
   return setarg(i, j + OFFSET_sJ, POS_sJ, SIZE_sJ);
 }
 
-constexpr Instruction CREATE_ABCk(int o, int a, int b, int c, int k)
+constexpr Instruction CREATE_ABCk(int o, int a, int b, int c, bool k)
 {
   return ((Instruction)o << POS_OP) | ((Instruction)a << POS_A) | ((Instruction)b << POS_B) | ((Instruction)c << POS_C) | ((Instruction)k << POS_k);
 }
 
-constexpr Instruction CREATE_vABCk(int o, int a, int b, int c, int k)
+constexpr Instruction CREATE_vABCk(int o, int a, int b, int c, bool k)
 {
   return ((Instruction)o << POS_OP) | ((Instruction)a << POS_A) | ((Instruction)b << POS_vB) | ((Instruction)c << POS_vC) | ((Instruction)k << POS_k);
 }
@@ -418,7 +418,7 @@ constexpr Instruction CREATE_Ax(int o, unsigned int a)
   return ((Instruction)o << POS_OP) | ((Instruction)a << POS_Ax);
 }
 
-constexpr Instruction CREATE_sJ(int o, unsigned int j, int k)
+constexpr Instruction CREATE_sJ(int o, unsigned int j, bool k)
 {
   return ((Instruction)o << POS_OP) | ((Instruction)j << POS_sJ) | ((Instruction)k << POS_k);
 }
@@ -483,27 +483,27 @@ constexpr Instruction CREATE_sJ(int o, unsigned int j, int k)
 ===========================================================================*/
 
 
-static l_forceinline int testAMode(int m)
+static l_forceinline bool testAMode(int m)
 {
-  return luaP_opmodes[m] & (1 << 3);
+  return (luaP_opmodes[m] & (1 << 3)) != 0;
 }
-static l_forceinline int testTMode(int m)
+static l_forceinline bool testTMode(int m)
 {
-  return luaP_opmodes[m] & (1 << 4);
+  return (luaP_opmodes[m] & (1 << 4)) != 0;
 }
-static l_forceinline int testMMMode(int m)
+static l_forceinline bool testMMMode(int m)
 {
-  return luaP_opmodes[m] & (1 << 7);
+  return (luaP_opmodes[m] & (1 << 7)) != 0;
 }
 
 /* Check whether instruction sets top for next instruction, that is,
 ** it results in multiple values. Used only for tests.
 */
-static l_forceinline int luaP_isOT(Instruction i)
+static l_forceinline bool luaP_isOT(Instruction i)
 {
   return GET_OPCODE(i) == OP_TAILCALL || ((luaP_opmodes[GET_OPCODE(i)] & (1 << 6)) && GETARG_C(i) == 0);
 }
 
-int luaP_isIT(Instruction i);
+bool luaP_isIT(Instruction i);
 
 }

@@ -204,7 +204,7 @@ void(lua_settopk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
 void(lua_pushvalue)(lua_State* L, int idx);
 void(lua_rotate)(lua_State* L, int idx, int n);
 void(lua_copy)(lua_State* L, int fromidx, int toidx);
-int(lua_checkstack)(lua_State* L, int n);
+bool(lua_checkstack)(lua_State* L, int n);
 
 void(lua_xmove)(lua_State* from, lua_State* to, int n);
 
@@ -212,17 +212,17 @@ void(lua_xmove)(lua_State* from, lua_State* to, int n);
 ** access functions (stack -> C)
 */
 
-int(lua_isnumber)(lua_State* L, int idx);
-int(lua_isstring)(lua_State* L, int idx);
-int(lua_iscfunction)(lua_State* L, int idx);
-int(lua_isinteger)(lua_State* L, int idx);
-int(lua_isuserdata)(lua_State* L, int idx);
+bool(lua_isnumber)(lua_State* L, int idx);
+bool(lua_isstring)(lua_State* L, int idx);
+bool(lua_iscfunction)(lua_State* L, int idx);
+bool(lua_isinteger)(lua_State* L, int idx);
+bool(lua_isuserdata)(lua_State* L, int idx);
 int(lua_type)(lua_State* L, int idx);
 HostString(lua_typename) (lua_State* L, int tp);
 
 std::optional<lua_Number>(lua_tonumberx)(lua_State* L, int idx);
 std::optional<lua_Integer>(lua_tointegerx)(lua_State* L, int idx);
-int(lua_toboolean)(lua_State* L, int idx);
+bool(lua_toboolean)(lua_State* L, int idx);
 
 std::optional<byte_view>(lua_tolstring) (lua_State* L, int idx);
 
@@ -257,8 +257,8 @@ constexpr int LUA_OPEQ = 0;
 constexpr int LUA_OPLT = 1;
 constexpr int LUA_OPLE = 2;
 
-int(lua_rawequal)(lua_State* L, int idx1, int idx2);
-int(lua_compare)(lua_State* L, int idx1, int idx2, int op);
+bool(lua_rawequal)(lua_State* L, int idx1, int idx2);
+bool(lua_compare)(lua_State* L, int idx1, int idx2, int op);
 
 /*
 ** push functions (C -> stack)
@@ -272,9 +272,9 @@ HostString(lua_pushfstring) (lua_State* L, const HostString& fmt);
 void(lua_pushcclosure)(lua_State* L, lua_CFunction fn, int n);
 CFuncInfo*(lua_createcfuncinfo)(lua_State* L, lua_CFunction fn);
 void(lua_pushcfuncinfo)(lua_State* L, CFuncInfo* cfi);
-void(lua_pushboolean)(lua_State* L, int b);
+void(lua_pushboolean)(lua_State* L, bool b);
 void(lua_pushlightuserdata)(lua_State* L, void* p);
-int(lua_pushthread)(lua_State* L);
+bool(lua_pushthread)(lua_State* L);
 
 /*
 ** get functions (Lua -> stack)
@@ -292,7 +292,7 @@ void(lua_createtable)(lua_State* L, int narr, int nrec);
 void*(lua_newuserdatauv) (lua_State* L, size_t sz, int nuvalue);
 void(lua_newuserobject)(lua_State* L, std::unique_ptr<lua_UserObject> obj, size_t sz, int nuvalue);
 lua_UserObject*(lua_touserobject)(lua_State* L, int idx);
-int(lua_getmetatable)(lua_State* L, int objindex);
+bool(lua_getmetatable)(lua_State* L, int objindex);
 int(lua_getiuservalue)(lua_State* L, int idx, int n);
 
 /*
@@ -307,7 +307,7 @@ void(lua_rawset)(lua_State* L, int idx);
 void(lua_rawseti)(lua_State* L, int idx, lua_Integer n);
 void(lua_rawsetp)(lua_State* L, int idx, const void* p);
 int(lua_setmetatable)(lua_State* L, int objindex);
-int(lua_setiuservalue)(lua_State* L, int idx, int n);
+bool(lua_setiuservalue)(lua_State* L, int idx, int n);
 
 /*
 ** 'load' and 'call' functions (load and run Lua code)
@@ -333,7 +333,7 @@ int(lua_getik)(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunc
 void(lua_settablek)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
 void(lua_setfieldk)(lua_State* L, int idx, const HostString& key, lua_KContext ctx, lua_KFunction k);
 void(lua_setik)(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunction k);
-int(lua_comparek)(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua_KFunction k);
+bool(lua_comparek)(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua_KFunction k);
 void(lua_lenk)(lua_State* L, int idx, lua_KContext ctx, lua_KFunction k);
 void(lua_arithk)(lua_State* L, int op, lua_KContext ctx, lua_KFunction k);
 void(lua_concatk)(lua_State* L, int n, lua_KContext ctx, lua_KFunction k);
@@ -342,7 +342,7 @@ int(lua_load)(lua_State* L, lua_Reader* reader,
                       const std::optional<HostString>& chunkname,
                       const std::optional<HostString>& mode);
 
-int(lua_dump)(lua_State* L, lua_Writer* writer, int strip);
+int(lua_dump)(lua_State* L, lua_Writer* writer, bool strip);
 
 /*
 ** coroutine functions
@@ -413,7 +413,7 @@ int(lua_setbudget)(lua_State* co, lua_Integer n, lua_Budget f);
 lua_Integer(lua_getbudget)(lua_State* co);
 lua_Integer(lua_budgetleft)(lua_State* co);
 [[noreturn]] void(lua_freeze)(lua_State* L);
-int(lua_isfrozen)(lua_State* co);
+bool(lua_isfrozen)(lua_State* co);
 /*
 ** What keeps a freeze at this point from freezing the chain (see
 ** 'debug.canfreeze'): 0 if nothing does, else no budget is in effect, a
@@ -425,7 +425,7 @@ constexpr int LUA_NOFREEZE_CALL = 2;
 constexpr int LUA_NOFREEZE_RESUME = 3;
 int(lua_nofreeze)(lua_State* L);
 lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from);
-int(lua_isyieldable)(lua_State* L);
+bool(lua_isyieldable)(lua_State* L);
 
 int lua_yield(lua_State* L, int nresults);
 
@@ -475,7 +475,7 @@ int(lua_gc)(lua_State* L, int what, size_t stepsize,
 
 int(lua_error)(lua_State* L);
 
-int(lua_next)(lua_State* L, int idx);
+bool(lua_next)(lua_State* L, int idx);
 
 void(lua_concat)(lua_State* L, int n);
 void(lua_len)(lua_State* L, int idx);
@@ -511,14 +511,14 @@ void lua_register(lua_State* L, const HostString& name, lua_CFunction f);
 
 void lua_pushcfunction(lua_State* L, lua_CFunction f);
 
-int lua_isfunction(lua_State* L, int idx);
-int lua_istable(lua_State* L, int idx);
-int lua_islightuserdata(lua_State* L, int idx);
-int lua_isnil(lua_State* L, int idx);
-int lua_isboolean(lua_State* L, int idx);
-int lua_isthread(lua_State* L, int idx);
-int lua_isnone(lua_State* L, int idx);
-int lua_isnoneornil(lua_State* L, int idx);
+bool lua_isfunction(lua_State* L, int idx);
+bool lua_istable(lua_State* L, int idx);
+bool lua_islightuserdata(lua_State* L, int idx);
+bool lua_isnil(lua_State* L, int idx);
+bool lua_isboolean(lua_State* L, int idx);
+bool lua_isthread(lua_State* L, int idx);
+bool lua_isnone(lua_State* L, int idx);
+bool lua_isnoneornil(lua_State* L, int idx);
 
 void lua_pushliteral(lua_State* L, const HostString& s);
 
@@ -573,9 +573,9 @@ struct lua_Debug
   int lastlinedefined;        /* (S) */
   int nups;         /* (u) number of upvalues */
   int nparams;      /* (u) number of parameters */
-  char isvararg;              /* (u) */
+  bool isvararg;              /* (u) */
   int extraargs;    /* (t) number of extra arguments */
-  char istailcall;            /* (t) */
+  bool istailcall;            /* (t) */
   int ftransfer;              /* (r) index of first value transferred */
   int ntransfer;              /* (r) number of transferred values */
   HostString short_src;       /* (S) */

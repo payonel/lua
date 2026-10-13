@@ -27,7 +27,7 @@ struct DumpState
   lua_State* L;
   lua_Writer* writer;
   size_t offset; /* current position relative to beginning of dump */
-  int strip;
+  bool strip;
   int status;
   Table* h;          /* table to track saved strings */
   lua_Unsigned nstr; /* counter for counting saved strings */
@@ -294,7 +294,7 @@ static void dumpHeader(DumpState* D)
 ** dump Lua function as precompiled chunk
 */
 int luaU_dump(lua_State* L, const Proto* f, lua_Writer* w,
-              int strip)
+              bool strip)
 {
   DumpState D;
   D.h = Table::luaH_new(L);             /* aux. table to keep strings already dumped */

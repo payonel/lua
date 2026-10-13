@@ -33,7 +33,7 @@ namespace lua::lib
 ** system-dependent functions
 */
 
-static OsLib* lsys_load(lua_State* L, byte_view path, int seeglb);
+static OsLib* lsys_load(lua_State* L, byte_view path, bool seeglb);
 
 static lua_CFunction lsys_sym(lua_State* L, OsLib* lib, byte_view sym);
 
@@ -44,9 +44,9 @@ static lua_CFunction lsys_sym(lua_State* L, OsLib* lib, byte_view sym);
 ** =========================================================================
 */
 
-static OsLib* lsys_load(lua_State* L, byte_view path, int seeglb)
+static OsLib* lsys_load(lua_State* L, byte_view path, bool seeglb)
 {
-  OsLib* lib = os_dlopen(path, seeglb != 0);
+  OsLib* lib = os_dlopen(path, seeglb);
   if (l_unlikely(lib == nullptr))
     lua_pushistring(L, os_dlerror());
   return lib;
@@ -79,9 +79,9 @@ constexpr char LUA_CPATH_VAR[] = "LUA_CPATH";
 /*
 ** return registry.LUA_NOENV as a boolean
 */
-static int noenv(lua_State* L)
+static bool noenv(lua_State* L)
 {
-  int b;
+  bool b;
   lua_getfieldi(L, LUA_REGISTRYINDEX, lt::LUA_NOENV);
   b = lua_toboolean(L, -1);
   lua_pop(L, 1); /* remove value */
@@ -217,7 +217,7 @@ constexpr int ERRFUNC = 2;
 */
 static int lookforfunc(lua_State* L, byte_view path, byte_view sym)
 {
-  int loadlibonly = (!sym.empty() && sym[0] == '*');
+  bool loadlibonly = (!sym.empty() && sym[0] == '*');
   OsLib* reg = checkclib(L, path); /* check loaded C libraries */
   if (reg == nullptr)
   {                                          /* must load library? */
@@ -228,7 +228,7 @@ static int lookforfunc(lua_State* L, byte_view path, byte_view sym)
   }
   if (loadlibonly)
   {                        /* loading only library (no function)? */
-    lua_pushboolean(L, 1); /* return 'true' */
+    lua_pushboolean(L, true); /* return 'true' */
     return 0;              /* no errors */
   }
   else
@@ -263,13 +263,13 @@ static int ll_loadlib(lua_State* L)
 ** =======================================================
 */
 
-static int readable(byte_view filename)
+static bool readable(byte_view filename)
 {
   OsOpenResult o = os_fopen(filename, lt::r_mode);
   if (o.f == nullptr)
-    return 0;
+    return false;
   os_fclose(o.f);
-  return 1;
+  return true;
 }
 
 /*
@@ -357,7 +357,7 @@ static int findfile(lua_State* L, byte_view name, byte_view pname, byte_view dir
   return searchpath(L, name, path, lt::dot, dirsep);
 }
 
-static int checkload(lua_State* L, int stat, byte_view filename)
+static int checkload(lua_State* L, bool stat, byte_view filename)
 {
   if (l_likely(stat))
   {                                                /* module loaded successfully? */
@@ -469,7 +469,7 @@ static int searcher_Crootk(lua_State* L, int status, lua_KContext ctx)
   if ((stat = loadfunc(L, filename->view(), name)) != 0)
   {
     if (stat != ERRFUNC)
-      return checkload(L, 0, filename->view()); /* real error */
+      return checkload(L, false, filename->view()); /* real error */
     else
     { /* open function not found */
       lua_pushlstring(L, name, 0, name.size());
@@ -617,7 +617,7 @@ static int require_from(lua_State* L, int step, lua_Integer i)
     case REQ_RESULT:
       if (lua_isnil(L, -1))
       {                        /* module set no value? */
-        lua_pushboolean(L, 1); /* use true as result */
+        lua_pushboolean(L, true); /* use true as result */
         lua_copy(L, -1, -2);   /* replace loader result */
         lua_setfieldik(L, 2, name, reqctx(REQ_DONE, 0), ll_requirek); /* LOADED[name] = true */
       }

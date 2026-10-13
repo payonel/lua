@@ -72,11 +72,11 @@ typedef enum
   VVARARG    /* vararg expression; info = instruction pc */
 } expkind;
 
-constexpr int vkisvar(expkind k)
+constexpr bool vkisvar(expkind k)
 {
   return VLOCAL <= k && k <= VINDEXSTR;
 }
-constexpr int vkisindexed(expkind k)
+constexpr bool vkisindexed(expkind k)
 {
   return VINDEXED <= k && k <= VINDEXSTR;
 }
@@ -92,7 +92,7 @@ struct expdesc
   {             /* for indexed variables */
     int idx;  /* index (R or "long" K) */
     int t;  /* table (register or upvalue) */
-    lu_byte ro; /* true if variable is read-only */
+    bool ro; /* true if variable is read-only */
     int keystr; /* index in 'k' of string key, or -1 if not a string */
   } ind;
   struct
@@ -124,13 +124,13 @@ struct Vardesc
 };
 
 /* variables that live in registers */
-static inline int varinreg(const Vardesc* v)
+static inline bool varinreg(const Vardesc* v)
 {
   return v->kind <= RDKTOCLOSE;
 }
 
 /* test for global variables */
-static inline int varglobal(const Vardesc* v)
+static inline bool varglobal(const Vardesc* v)
 {
   return v->kind >= GDKREG;
 }
@@ -142,7 +142,7 @@ struct Labeldesc
   int pc;        /* position in code */
   int line;      /* line where it appeared */
   short nactvar; /* number of active variables in that position */
-  lu_byte close; /* true for goto that escapes upvalues */
+  bool close; /* true for goto that escapes upvalues */
 };
 
 /* list of labels or gotos */
@@ -190,7 +190,7 @@ struct FuncState
   int nups;           /* number of upvalues */
   int freereg;        /* first free register */
   int iwthabs;        /* instructions issued since last absolute line info */
-  lu_byte needclose;      /* function needs to close upvalues when returning */
+  bool needclose;      /* function needs to close upvalues when returning */
 };
 
 int luaY_nvarstack(FuncState* fs);

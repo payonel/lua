@@ -33,13 +33,13 @@
 const byte_view lua_ident = lt::lua_ident_str;
 
 /* test for pseudo index */
-constexpr int ispseudo(int i)
+constexpr bool ispseudo(int i)
 {
   return i <= LUA_REGISTRYINDEX;
 }
 
 /* test for upvalue */
-constexpr int isupvalue(int i)
+constexpr bool isupvalue(int i)
 {
   return i < LUA_REGISTRYINDEX;
 }
@@ -93,7 +93,7 @@ static TValue index2val(lua_State* L, int idx)
   return (a.row != nullptr) ? getobj(a.row) : getslot(L, a.slot);
 }
 
-static int isvalidindex(lua_State* L, int idx)
+static bool isvalidindex(lua_State* L, int idx)
 {
   IndexAddr a = resolveindex(L, idx);
   return a.row != &L->l_G->nilvalue;
@@ -131,17 +131,17 @@ static StkId index2stack(lua_State* L, int idx)
   }
 }
 
-int lua_checkstack(lua_State* L, int n)
+bool lua_checkstack(lua_State* L, int n)
 {
-  int res;
+  bool res;
   CallInfo* ci;
   lua_lock(L);
   ci = L->ci;
   assert(n >= 0 && "negative 'n'");
   if (L->stack_last - L->top > n) /* stack large enough? */
-    res = 1;                          /* yes; check is OK */
+    res = true;                          /* yes; check is OK */
   else                                /* need to grow stack */
-    res = luaD_growstack(L, n, 0);
+    res = luaD_growstack(L, n, false);
   if (res && ci->top < L->top + n)
     ci->top = L->top + n; /* adjust frame top */
   lua_unlock(L);
@@ -358,50 +358,50 @@ HostString lua_typename(lua_State* L, int t)
   return HostString(n);
 }
 
-int lua_iscfunction(lua_State* L, int idx)
+bool lua_iscfunction(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
   return (ttislcf(&o) || ttisCclosure(&o));
 }
 
-int lua_islightcfunction(lua_State* L, int idx)
+bool lua_islightcfunction(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
   return ttislcf(&o);
 }
 
-int lua_isinteger(lua_State* L, int idx)
+bool lua_isinteger(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
   return ttisinteger(&o);
 }
 
-int lua_isnumber(lua_State* L, int idx)
+bool lua_isnumber(lua_State* L, int idx)
 {
   NumResult n;
   TValue o = index2val(L, idx);
   return tonumber(&o, &n);
 }
 
-int lua_isstring(lua_State* L, int idx)
+bool lua_isstring(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
   return (ttisstring(&o) || cvt2str(&o));
 }
 
-int lua_isuserdata(lua_State* L, int idx)
+bool lua_isuserdata(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
   return (ttisfulluserdata(&o) || ttislightuserdata(&o));
 }
 
-int lua_rawequal(lua_State* L, int index1, int index2)
+bool lua_rawequal(lua_State* L, int index1, int index2)
 {
   TValue o1 = index2val(L, index1);
   TValue o2 = index2val(L, index2);
   return (isvalidindex(L, index1) && isvalidindex(L, index2))
              ? luaV_rawequalobj(&o1, &o2)
-             : 0;
+             : false;
 }
 
 void lua_arith(lua_State* L, int op)
@@ -421,9 +421,9 @@ void lua_arith(lua_State* L, int op)
   lua_unlock(L);
 }
 
-int lua_compare(lua_State* L, int index1, int index2, int op)
+bool lua_compare(lua_State* L, int index1, int index2, int op)
 {
-  int i = 0;
+  bool i = false;
   lua_lock(L); /* may call tag method */
   TValue o1 = index2val(L, index1);
   TValue o2 = index2val(L, index2);
@@ -512,7 +512,7 @@ std::optional<lua_Integer> lua_tointegerx(lua_State* L, int idx)
   return res.v;
 }
 
-int lua_toboolean(lua_State* L, int idx)
+bool lua_toboolean(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
   return !(ttisfalse(&o) || ttisnil(&o));
@@ -888,7 +888,7 @@ void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n)
   lua_unlock(L);
 }
 
-void lua_pushboolean(lua_State* L, int b)
+void lua_pushboolean(lua_State* L, bool b)
 {
   lua_lock(L);
   if (b)
@@ -916,7 +916,7 @@ void lua_pushthreadi(lua_State* L, lua_State* th)
   lua_unlock(L);
 }
 
-int lua_pushthread(lua_State* L)
+bool lua_pushthread(lua_State* L)
 {
   lua_lock(L);
   setslotth(L, L->top, L);
@@ -1203,10 +1203,10 @@ void lua_createtable(lua_State* L, int narray, int nrec)
   lua_unlock(L);
 }
 
-int lua_getmetatable(lua_State* L, int objindex)
+bool lua_getmetatable(lua_State* L, int objindex)
 {
   Table* mt;
-  int res = 0;
+  bool res = false;
   lua_lock(L);
   TValue obj = index2val(L, objindex);
   switch (ttype(&obj))
@@ -1225,7 +1225,7 @@ int lua_getmetatable(lua_State* L, int objindex)
   {
     setsloth(L, L->top, mt);
     api_incr_top(L);
-    res = 1;
+    res = true;
   }
   lua_unlock(L);
   return res;
@@ -1428,7 +1428,7 @@ void lua_seti(lua_State* L, int idx, lua_Integer n)
 */
 
 /* is the value at 'idx' a table with no metatable? */
-int lua_isplaintable(lua_State* L, int idx)
+bool lua_isplaintable(lua_State* L, int idx)
 {
   TValue o = index2val(L, idx);
   return ttistable(&o) && hvalue(&o)->metatable == nullptr;
@@ -1501,7 +1501,7 @@ int lua_plaingetrange(lua_State* L, int idx, lua_Integer i, int n)
 ** 'n' - 1 down to 0; returns how many it moved.
 */
 lua_Integer lua_plainmove(lua_State* L, int idx1, lua_Integer s, int idx2, lua_Integer d,
-                          lua_Integer n, int up)
+                          lua_Integer n, bool up)
 {
   lua_lock(L);
   TValue t1 = index2val(L, idx1);
@@ -1615,23 +1615,23 @@ int lua_setmetatable(lua_State* L, int objindex)
   return 1;
 }
 
-int lua_setiuservalue(lua_State* L, int idx, int n)
+bool lua_setiuservalue(lua_State* L, int idx, int n)
 {
-  int res;
+  bool res;
   lua_lock(L);
   api_checkpop(L, 1);
   TValue o = index2val(L, idx);
   assert(ttisfulluserdata(&o) && "full userdata expected");
   Udata* u = uvalue(&o);
   if (!(n >= 1 && (size_t)n <= u->uv.size()))
-    res = 0;
+    res = false;
   else
   {
     TValue v = getslot(L, L->top - 1);
     setobj(L, &u->uv[n - 1], &v);
     assert(iscollectable(&o));
     luaC_barrierback(L, gcvalue(&o), &v);
-    res = 1;
+    res = true;
   }
   L->top--;
   lua_unlock(L);
@@ -1702,7 +1702,7 @@ void lua_freezeonly(lua_State* L)
 ** the running C function then calls 'lua_checkpointk' where it can go on
 ** after a freeze (or leaves the callback to the next budget point).
 */
-int lua_spend(lua_State* L, int n)
+bool lua_spend(lua_State* L, int n)
 {
   return luaE_spent(L, n);
 }
@@ -1843,7 +1843,7 @@ void lua_setik(lua_State* L, int idx, lua_Integer n, lua_KContext ctx, lua_KFunc
   auxseti(L, idx, n, ctx, k);
 }
 
-int lua_comparek(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua_KFunction k)
+bool lua_comparek(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua_KFunction k)
 {
   idx1 = lua_absindex(L, idx1);
   idx2 = lua_absindex(L, idx2);
@@ -1855,7 +1855,7 @@ int lua_comparek(lua_State* L, int idx1, int idx2, int op, lua_KContext ctx, lua
   else
     mayrun = !((ttisnumber(&o1) && ttisnumber(&o2)) || (ttisstring(&o1) && ttisstring(&o2)));
   bool armed = mayrun && armk(L, ctx, k, APIK_BOOL);
-  int r = lua_compare(L, idx1, idx2, op);
+  bool r = lua_compare(L, idx1, idx2, op);
   disarmk(L, armed);
   lua_pushboolean(L, r);
   return r;
@@ -1904,7 +1904,7 @@ static TStatus pcallnoyield(lua_State* L, CallS* cp, StkId func, int nresults,
   ci->ctx = ctx; /* save context */
   c.nresults = nresults;
   StkId olderrfunc = L->errfunc;
-  lu_byte oldah = L->allowhook;
+  bool oldah = L->allowhook;
   status = luaD_pcall(L, &c, c.func, func, false);
   if (l_unlikely(status == LUA_FREEZE))
   {
@@ -2092,12 +2092,12 @@ int lua_loadk(lua_State* L, const lua_LoadSpec& ls)
   return status;
 }
 
-int lua_loadkread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source)
+bool lua_loadkread(lua_State* L, const lua_LoadSpec& ls, lua_Reader* source)
 {
   if (!(L->hookmask & LUA_MASKBUDGET))
-    return 0;
+    return false;
   luaZ_loadread(L, ls, source);
-  return 1;
+  return true;
 }
 
 int lua_loadkresume(lua_State* L, int status, const lua_LoadSpec& ls)
@@ -2128,7 +2128,7 @@ int lua_load(lua_State* L, lua_Reader* reader,
 ** the stack returns with its original size.
 */
 
-int lua_dump(lua_State* L, lua_Writer* writer, int strip)
+int lua_dump(lua_State* L, lua_Writer* writer, bool strip)
 {
   int status;
   StkId otop = L->top; /* original top */
@@ -2180,7 +2180,7 @@ int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
   }
   case LUA_GCCOLLECT:
   {
-    luaC_fullgc(L, 0);
+    luaC_fullgc(L, false);
     break;
   }
   case LUA_GCCOUNT:
@@ -2199,7 +2199,7 @@ int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
     lu_byte oldstp = g->gcstp;
     l_mem n = stepsize;
     l_mem newdebt;
-    int work = 0; /* true if GC did some work */
+    bool work = false; /* true if GC did some work */
     g->gcstp = 0; /* allow GC to run (other bits must be zero here) */
     if (n <= 0)
       newdebt = 0;                      /* force to run one basic step */
@@ -2212,7 +2212,7 @@ int lua_gc(lua_State* L, int what, size_t stepsize, int param, int value)
       if (L->l_G->GCdebt <= 0)
       {
         luaC_step(L);
-        work = 1;
+        work = true;
       }
     }
     if (work && g->gcstate == GCSpause) /* end of cycle? */
@@ -2271,10 +2271,10 @@ int lua_error(lua_State* L)
   return 0; /* to avoid warnings */
 }
 
-int lua_next(lua_State* L, int idx)
+bool lua_next(lua_State* L, int idx)
 {
   Table* t;
-  int more;
+  bool more;
   lua_lock(L);
   api_checkpop(L, 1);
   t = gettable(L, idx);
@@ -2619,42 +2619,42 @@ void lua_register(lua_State* L, const HostString& name, lua_CFunction f)
   lua_setglobal(L, name);
 }
 
-int lua_isfunction(lua_State* L, int idx)
+bool lua_isfunction(lua_State* L, int idx)
 {
   return lua_type(L, idx) == LUA_TFUNCTION;
 }
 
-int lua_istable(lua_State* L, int idx)
+bool lua_istable(lua_State* L, int idx)
 {
   return lua_type(L, idx) == LUA_TTABLE;
 }
 
-int lua_islightuserdata(lua_State* L, int idx)
+bool lua_islightuserdata(lua_State* L, int idx)
 {
   return lua_type(L, idx) == LUA_TLIGHTUSERDATA;
 }
 
-int lua_isnil(lua_State* L, int idx)
+bool lua_isnil(lua_State* L, int idx)
 {
   return lua_type(L, idx) == LUA_TNIL;
 }
 
-int lua_isboolean(lua_State* L, int idx)
+bool lua_isboolean(lua_State* L, int idx)
 {
   return lua_type(L, idx) == LUA_TBOOLEAN;
 }
 
-int lua_isthread(lua_State* L, int idx)
+bool lua_isthread(lua_State* L, int idx)
 {
   return lua_type(L, idx) == LUA_TTHREAD;
 }
 
-int lua_isnone(lua_State* L, int idx)
+bool lua_isnone(lua_State* L, int idx)
 {
   return lua_type(L, idx) == LUA_TNONE;
 }
 
-int lua_isnoneornil(lua_State* L, int idx)
+bool lua_isnoneornil(lua_State* L, int idx)
 {
   return lua_type(L, idx) <= 0;
 }

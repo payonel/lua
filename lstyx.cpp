@@ -2243,7 +2243,7 @@ public:
       setsvalue(L_, &gc, L_->l_G->tmname[TM_GC]);
       setslot(L_, L_->top, &gc);
       L_->top++;
-      lua_pushboolean(L_, 1);
+      lua_pushboolean(L_, true);
       lua_rawset(L_, -3);
       WorkStack<lua_Integer> kinds(L_, true, WS_WORD);
       kinds.reserve(static_cast<size_t>(n));
@@ -2441,7 +2441,7 @@ private:
     lua_Hook hook;
     l_signalT hookmask;
     int basehookcount, hookcount, oldpc;
-    lu_byte allowhook;
+    bool allowhook;
     StkId errfunc;
     l_uint32 nCcalls, ccbase;
     TStatus status;
@@ -2530,10 +2530,10 @@ private:
       lua_pushnil(L_);
       return Next::Ready;
     case TAG_FALSE:
-      lua_pushboolean(L_, 0);
+      lua_pushboolean(L_, false);
       return Next::Ready;
     case TAG_TRUE:
-      lua_pushboolean(L_, 1);
+      lua_pushboolean(L_, true);
       return Next::Ready;
     case TAG_INTEGER:
       lua_pushinteger(L_, r_.get_var());
@@ -3043,7 +3043,7 @@ private:
         if (f.i < f.n)
         {
           Upvaldesc& uv = p->upvalues[static_cast<size_t>(f.i)];
-          uv.instack = static_cast<lu_byte>(r_.get_byte());
+          uv.instack = r_.get_byte() != 0;
           uv.idx = r_.get_int();
           uv.kind = static_cast<lu_byte>(r_.get_byte());
           f.part = Part::UpName;
@@ -3439,7 +3439,7 @@ private:
     lua_sethook(L1, luaL_debughook(), static_cast<int>(f.a), static_cast<int>(f.b));
     L1->hookcount = static_cast<int>(f.c);
     L1->oldpc = static_cast<int>(f.d);
-    L1->allowhook = static_cast<lu_byte>(f.e);
+    L1->allowhook = f.e != 0;
     L1->status = static_cast<TStatus>(f.type);
     return thread_values(f);
   }
@@ -3450,7 +3450,7 @@ private:
     char ah = r_.get_byte();
     if (ah != 0 && ah != 1)
       r_.invalid();
-    L1->allowhook = static_cast<lu_byte>(ah);
+    L1->allowhook = ah != 0;
     lua_Integer ft = r_.get_var();
     lua_Integer nt = r_.get_var();
     if (ft < 0 || ft > MAXSTACK || nt < 0 || nt > MAXSTACK)
@@ -3636,7 +3636,7 @@ private:
         setsvalue(L_, &gc, L_->l_G->tmname[TM_GC]);
         setslot(L_, L_->top, &gc);
         L_->top++;
-        lua_pushboolean(L_, 1);
+        lua_pushboolean(L_, true);
         lua_rawset(L_, -3);
         TValue mv = getslot(L_, L_->top - 1);
         u->metatable = hvalue(&mv);
@@ -3843,7 +3843,7 @@ private:
     if (maxtop > MAXSTACK)
     {
       lua_lock(L1);
-      ok = stacksize(L1) == ERRORSTACKSIZE || luaD_reallocstack(L1, ERRORSTACKSIZE, 0);
+      ok = stacksize(L1) == ERRORSTACKSIZE || luaD_reallocstack(L1, ERRORSTACKSIZE, false);
       lua_unlock(L1);
     }
     else

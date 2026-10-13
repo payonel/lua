@@ -33,9 +33,9 @@ static l_forceinline void invalidateTMcache(Table* t)
 
 constexpr int BITDUMMY = 1 << 6;
 constexpr lu_byte NOTBITDUMMY = ~BITDUMMY;
-static l_forceinline int isdummy(const Table* t)
+static l_forceinline bool isdummy(const Table* t)
 {
-  return t->flags & BITDUMMY;
+  return (t->flags & BITDUMMY) != 0;
 }
 
 static l_forceinline void setnodummy(Table* t)

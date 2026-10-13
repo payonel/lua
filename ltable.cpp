@@ -48,7 +48,7 @@ namespace lua::object
 */
 constexpr int LIMFORLAST = 3; /* log2 of real limit (8) */
 
-inline int Table::haslastfree() const
+inline bool Table::haslastfree() const
 {
   return sizenode(this) >= twoto(LIMFORLAST);
 }
@@ -260,7 +260,7 @@ inline int Table::mainpositionfromnode(int nd) const
 ** anything.  (In particular, 'next' will return some other valid item
 ** on the table or nil.)
 */
-static int equalkey(const TValue* k1, const Node* n2, int deadok)
+static bool equalkey(const TValue* k1, const Node* n2, bool deadok)
 {
   if (k1->tt_ != n2->key_tt)
   { /* not the same variants? */
@@ -277,7 +277,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
       return gcvalue(k1) == gckey(n2);
     }
     else
-      return 0; /* otherwise, different variants cannot be equal */
+      return false; /* otherwise, different variants cannot be equal */
   }
   else
   { /* equal variants */
@@ -286,7 +286,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
     case LUA_VNIL:
     case LUA_VFALSE:
     case LUA_VTRUE:
-      return 1;
+      return true;
     case LUA_VNUMINT:
       assert(ttisinteger(k1));
       return (ivalue(k1) == keyival(n2));
@@ -308,7 +308,7 @@ static int equalkey(const TValue* k1, const Node* n2, int deadok)
   }
 }
 
-int Table::nodegeneric(const TValue* key, int deadok)
+int Table::nodegeneric(const TValue* key, bool deadok)
 {
   Table* t = this;
   int i = t->mainpositionTV(key);
@@ -327,7 +327,7 @@ int Table::nodegeneric(const TValue* key, int deadok)
   }
 }
 
-const TValue* Table::getgeneric(const TValue* key, int deadok)
+const TValue* Table::getgeneric(const TValue* key, bool deadok)
 {
   Table* t = this;
   int idx = t->nodegeneric(key, deadok);
@@ -386,7 +386,7 @@ lua_Integer Table::findindex(lua_State* L, TValue* key, int asize)
     return i; /* yes; that's the index */
   else
   {
-    int idx = t->nodegeneric(key, 1);
+    int idx = t->nodegeneric(key, true);
     if (l_unlikely(idx < 0))
       luaG_runerror(L, lt::invalid_key_to_next); /* key not found */
     i = idx; /* key index in hash table */
@@ -395,7 +395,7 @@ lua_Integer Table::findindex(lua_State* L, TValue* key, int asize)
   }
 }
 
-int Table::luaH_next(lua_State* L, StkId key)
+bool Table::luaH_next(lua_State* L, StkId key)
 {
   Table* t = this;
   int asize = t->asize();
@@ -410,7 +410,7 @@ int Table::luaH_next(lua_State* L, StkId key)
       TValue res;
       farr2val(t, i, tag, &res);
       setslot(L, key + 1, &res);
-      return 1;
+      return true;
     }
   }
   for (i -= asize; i < sizenode(t); i++)
@@ -422,10 +422,10 @@ int Table::luaH_next(lua_State* L, StkId key)
       getnodekey(L, &nk, n);
       setslot(L, key, &nk);
       setslot(L, key + 1, &n->val);
-      return 1;
+      return true;
     }
   }
-  return 0; /* no more elements */
+  return false; /* no more elements */
 }
 
 /* 'node' size in bytes */
@@ -464,7 +464,7 @@ struct Counters
 {
   int total;
   int na;
-  int deleted;
+  bool deleted;
   int nums[MAXABITS + 1];
 };
 
@@ -474,7 +474,7 @@ struct Counters
 ** entry: Two values plus 'next' versus one value.) Evaluate with size_t
 ** to avoid overflows.
 */
-static inline int arrayXhash(size_t na, size_t nh)
+static inline bool arrayXhash(size_t na, size_t nh)
 {
   return na <= nh * 3;
 }
@@ -524,7 +524,7 @@ static void countint(lua_Integer key, Counters* ct)
   }
 }
 
-inline int Table::arraykeyisempty(int key) const
+inline bool Table::arraykeyisempty(int key) const
 {
   int tag = getArrTag(this, key - 1);
   return tagisempty(tag);
@@ -581,7 +581,7 @@ void Table::numusehash(Counters* ct) const
     if (isempty(&n->val))
     {
       assert(!keyisnil(n)); /* entry was deleted; key cannot be nil */
-      ct->deleted = 1;
+      ct->deleted = true;
     }
     else
     {
@@ -841,7 +841,7 @@ void Table::rehash(lua_State* L, const TValue* ek)
   for (i = 0; i <= MAXABITS; i++)
     ct.nums[i] = 0;
   ct.na = 0;
-  ct.deleted = 0;
+  ct.deleted = false;
   ct.total = 1; /* count extra key */
   if (ttisinteger(ek))
     countint(ivalue(ek), &ct); /* extra key may go to array */
@@ -1019,17 +1019,17 @@ int Table::getfreepos()
 ** its main position), new key goes to an empty position. Return 0 if
 ** could not insert key (could not find a free space).
 */
-int Table::insertkey(const TValue* key, TValue* value)
+bool Table::insertkey(const TValue* key, TValue* value)
 {
   Table* t = this;
   int mp = t->mainpositionTV(key);
   /* table cannot already contain the key */
-  assert(t->nodegeneric(key, 0) < 0);
+  assert(t->nodegeneric(key, false) < 0);
   if (!isempty(&gnode(t, mp)->val) || isdummy(t))
   { /* main position is taken? */
     int f = t->getfreepos(); /* get a free place */
     if (f < 0)             /* cannot find a free place? */
-      return 0;
+      return false;
     assert(!isdummy(t));
     int othern = t->mainpositionfromnode(mp);
     if (othern != mp)
@@ -1060,7 +1060,7 @@ int Table::insertkey(const TValue* key, TValue* value)
   setnodekey(gnode(t, mp), key);
   assert(isempty(&gnode(t, mp)->val));
   setobj(nullptr, &gnode(t, mp)->val, value);
-  return 1;
+  return true;
 }
 
 /*
@@ -1075,7 +1075,7 @@ void Table::newcheckedkey(const TValue* key, TValue* value)
     obj2arr(t, i - 1, value); /* set value in the array */
   else
   {
-    int done = t->insertkey(key, value); /* insert key in the hash part */
+    bool done = t->insertkey(key, value); /* insert key in the hash part */
     assert(done);                    /* it cannot fail */
     (void)done;                    /* to avoid warnings */
   }
@@ -1087,7 +1087,7 @@ void Table::luaH_newkey(lua_State* L, const TValue* key,
   Table* t = this;
   if (!isempty(value))
   { /* do not insert nil values */
-    int done = t->insertkey(key, value);
+    bool done = t->insertkey(key, value);
     if (!done)
     {                               /* could not find a free place? */
       t->rehash(L, key);            /* grow table */
@@ -1126,7 +1126,7 @@ const TValue* Table::getintfromhash(lua_Integer key)
   return (idx < 0) ? &absentkey : &gnode(t, idx)->val;
 }
 
-int Table::hashkeyisempty(lua_Integer key)
+bool Table::hashkeyisempty(lua_Integer key)
 {
   Table* t = this;
   const TValue* val = t->getintfromhash(key);
@@ -1226,7 +1226,7 @@ lu_byte Table::luaH_get(const TValue* key, TValue* res)
     /* else... */
   } /* FALLTHROUGH */
   default:
-    slot = t->getgeneric(key, 0);
+    slot = t->getgeneric(key, false);
     break;
   }
   return finishnodeget(slot, res);
@@ -1256,15 +1256,15 @@ int Table::finishnodeset(int idx, TValue* val)
     return retpsetcode(idx);
 }
 
-int Table::rawfinishnodeset(int idx, TValue* val)
+bool Table::rawfinishnodeset(int idx, TValue* val)
 {
   if (idx < 0)
-    return 0; /* no slot with that key */
+    return false; /* no slot with that key */
   else
   {
     Table* t = this;
     setobj(nullptr, &gnode(t, idx)->val, val);
-    return 1; /* success */
+    return true; /* success */
   }
 }
 
@@ -1360,7 +1360,7 @@ int Table::luaH_pset(const TValue* key, TValue* val)
     /* else... */
   } /* FALLTHROUGH */
   default:
-    return t->finishnodeset(t->nodegeneric(key, 0), val);
+    return t->finishnodeset(t->nodegeneric(key, false), val);
   }
 }
 
@@ -1430,7 +1430,7 @@ void Table::luaH_setint(lua_State* L, lua_Integer key, TValue* value)
     obj2arr(t, ik - 1, value);
   else
   {
-    int ok = t->rawfinishnodeset(t->nodeintfromhash(key), value);
+    bool ok = t->rawfinishnodeset(t->nodeintfromhash(key), value);
     if (!ok)
     {
       TValue k;

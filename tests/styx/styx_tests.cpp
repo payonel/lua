@@ -84,7 +84,7 @@ static lua_State* new_state()
   luaL_openlibs(L);
   preload_styx(L);
 #ifdef LUA_DEBUG
-  luaL_requiref(L, "T", luaB_opentests, 1);
+  luaL_requiref(L, "T", luaB_opentests, true);
   lua_pop(L, 1);
 #endif
   return L;
@@ -179,9 +179,9 @@ static void test_primitives_roundtrip()
   lua_State* L = new_state();
   lua_pushnil(L);
   CHECK(roundtrips(L));
-  lua_pushboolean(L, 1);
+  lua_pushboolean(L, true);
   CHECK(roundtrips(L));
-  lua_pushboolean(L, 0);
+  lua_pushboolean(L, false);
   CHECK(roundtrips(L));
   lua_pushinteger(L, 42);
   CHECK(roundtrips(L));

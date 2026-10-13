@@ -37,7 +37,7 @@ namespace lua::object
 ** Computes ceil(log2(x)), which is the smallest integer n such that
 ** x <= (1 << n).
 */
-int luaO_checkliveness(lua_State* L, const TValue* obj)
+bool luaO_checkliveness(lua_State* L, const TValue* obj)
 {
   (void) L;
   if (iscollectable(obj))
@@ -45,7 +45,7 @@ int luaO_checkliveness(lua_State* L, const TValue* obj)
     assert(ttypetag(obj) == gcvalue(obj)->tt);
     assert(L == nullptr || !isdead(L->l_G, gcvalue(obj)));
   }
-  return 1;
+  return true;
 }
 
 int luaO_ceillog2(int x)
@@ -199,7 +199,7 @@ static lua_Number numarith(lua_State* L, int op, lua_Number v1,
   }
 }
 
-int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
+bool luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
                   TValue* res)
 {
   switch (op)
@@ -216,10 +216,10 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
     if (tointegerns(p1, &i1) && tointegerns(p2, &i2))
     {
       setivalue(res, intarith(L, op, i1.v, i2.v));
-      return 1;
+      return true;
     }
     else
-      return 0; /* fail */
+      return false; /* fail */
   }
   case LUA_OPDIV:
   case LUA_OPPOW:
@@ -229,10 +229,10 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
     if (tonumberns(p1, &n1) && tonumberns(p2, &n2))
     {
       setfltvalue(res, numarith(L, op, n1.v, n2.v));
-      return 1;
+      return true;
     }
     else
-      return 0; /* fail */
+      return false; /* fail */
   }
   default:
   { /* other operations */
@@ -241,15 +241,15 @@ int luaO_rawarith(lua_State* L, int op, const TValue* p1, const TValue* p2,
     if (ttisinteger(p1) && ttisinteger(p2))
     {
       setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
-      return 1;
+      return true;
     }
     else if (tonumberns(p1, &n1) && tonumberns(p2, &n2))
     {
       setfltvalue(res, numarith(L, op, n1.v, n2.v));
-      return 1;
+      return true;
     }
     else
-      return 0; /* fail */
+      return false; /* fail */
   }
   }
 }
@@ -282,17 +282,17 @@ lu_byte luaO_hexavalue(int c)
 
 struct Sign
 {
-  int neg;
+  bool neg;
   size_t off;
 };
 
 static Sign isneg(byte_view s, size_t off)
 {
   if (sv_byteat(s, off) == '-')
-    return {1, off + 1};
+    return {true, off + 1};
   else if (sv_byteat(s, off) == '+')
-    return {0, off + 1};
-  return {0, off};
+    return {false, off + 1};
+  return {false, off};
 }
 
 struct NumParse
@@ -329,8 +329,8 @@ static NumParse lua_strx2number(byte_view s, size_t off)
   int sigdig = 0;               /* number of significant digits */
   int nosigdig = 0;             /* number of non-significant digits */
   int e = 0;                    /* exponent correction */
-  int neg;                      /* 1 if number is negative */
-  int hasdot = 0;               /* true after seen a dot */
+  bool neg;                      /* 1 if number is negative */
+  bool hasdot = false;               /* true after seen a dot */
   size_t p = off;
   size_t endpos = off;                /* nothing is valid yet */
   while (lisspace(sv_byteat(s, p)))
@@ -347,7 +347,7 @@ static NumParse lua_strx2number(byte_view s, size_t off)
       if (hasdot)
         break; /* second dot? stop loop */
       else
-        hasdot = 1;
+        hasdot = true;
     }
     else if (lisxdigit(sv_byteat(s, p)))
     {
@@ -370,7 +370,7 @@ static NumParse lua_strx2number(byte_view s, size_t off)
   if (sv_byteat(s, p) == 'p' || sv_byteat(s, p) == 'P')
   {                     /* exponent part? */
     int exp1 = 0;       /* exponent value */
-    int neg1;           /* exponent sign */
+    bool neg1;          /* exponent sign */
     p++;                /* skip 'p' */
     Sign sign1 = isneg(s, p); /* sign */
     neg1 = sign1.neg;
@@ -399,7 +399,7 @@ static NumParse str2dec(byte_view s, size_t off)
   size_t p = off;
   while (lisspace(sv_byteat(s, p)))
     p++;
-  int neg = 0;
+  bool neg = false;
   if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
   {
     neg = (s[p] == '-');
@@ -413,19 +413,19 @@ static NumParse str2dec(byte_view s, size_t off)
   if (res.ec == std::errc::result_out_of_range)
   {
     long e10 = 0;
-    int frac = 0;
-    int sig = 0;
+    bool frac = false;
+    bool sig = false;
     long intdigits = 0;
     long fraczeros = 0;
     size_t q;
     for (q = p; q < endp; q++)
     {
       if (s[q] == '.')
-        frac = 1;
+        frac = true;
       else if (s[q] == 'e' || s[q] == 'E')
       {
         size_t x = q + 1;
-        int eneg = 0;
+        bool eneg = false;
         if (sv_byteat(s, x) == '+' || sv_byteat(s, x) == '-')
         {
           eneg = (s[x] == '-');
@@ -444,7 +444,7 @@ static NumParse str2dec(byte_view s, size_t off)
       else
       {
         if (!sig && s[q] != '0')
-          sig = 1;
+          sig = true;
         if (sig && !frac)
           intdigits++;
         else if (!sig && frac)
@@ -514,8 +514,8 @@ constexpr int MAXLASTD = LUA_MAXINTEGER % 10;
 static IntParse l_str2int(byte_view s, size_t off)
 {
   lua_Unsigned a = 0;
-  int empty = 1;
-  int neg;
+  bool empty = true;
+  bool neg;
   size_t p = off;
   while (lisspace(sv_byteat(s, p)))
     p++; /* skip initial spaces */
@@ -529,7 +529,7 @@ static IntParse l_str2int(byte_view s, size_t off)
     for (; lisxdigit(sv_byteat(s, p)); p++)
     {
       a = a * 16 + luaO_hexavalue(s[p]);
-      empty = 0;
+      empty = false;
     }
   }
   else
@@ -540,7 +540,7 @@ static IntParse l_str2int(byte_view s, size_t off)
       if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + neg)) /* overflow? */
         return {byte_view::npos, 0};                            /* do not accept it (as integer) */
       a = a * 10 + d;
-      empty = 0;
+      empty = false;
     }
   }
   while (lisspace(sv_byteat(s, p)))

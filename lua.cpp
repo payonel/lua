@@ -353,7 +353,7 @@ static int collectargs(char** argv, int* first)
 ** 'W', which also affects the state.
 ** Returns 0 if some code raises an error.
 */
-static int runargs(lua_State* L, char** argv, int n)
+static bool runargs(lua_State* L, char** argv, int n)
 {
   int i;
   lua_warningi(L, lt::off_1, 0); /* by default, Lua stand-alone has warnings off */
@@ -378,7 +378,7 @@ static int runargs(lua_State* L, char** argv, int n)
       }
       status = (option == 'e') ? dostring(L, extra, lt::command_line) : dolibrary(L, extra);
       if (status != LUA_OK)
-        return 0;
+        return false;
       break;
     }
     case 'W':
@@ -386,7 +386,7 @@ static int runargs(lua_State* L, char** argv, int n)
       break;
     }
   }
-  return 1;
+  return true;
 }
 
 static bool l_noenv = false;
@@ -432,7 +432,7 @@ static int handle_luainit(lua_State* L)
 ** lua_stdin_is_tty detects whether the standard input is a 'tty' (that
 ** is, whether we're running lua interactively).
 */
-static inline int lua_stdin_is_tty(void)
+static inline bool lua_stdin_is_tty(void)
 {
   return isatty(0);
 }
@@ -521,7 +521,7 @@ static void lua_initreadline(lua_State* L)
 ** the string (or nil, if using the default value) on the stack, to keep
 ** it anchored.
 */
-static InternalString get_prompt(lua_State* L, int firstline)
+static InternalString get_prompt(lua_State* L, bool firstline)
 {
   InternalString prompt;
   if (lua_getglobali(L, (firstline ? lt::_PROMPT : lt::_PROMPT2)) == LUA_TNIL)
@@ -544,31 +544,31 @@ const byte_view EOFMARK = lt::eof;
 ** message at the top of the stack ends with the above mark for
 ** incomplete statements.
 */
-static int incomplete(lua_State* L, int status)
+static bool incomplete(lua_State* L, int status)
 {
   if (status == LUA_ERRSYNTAX)
   {
     byte_view msgv = *lua_tolstring(L, -1);
     if (msgv.ends_with(EOFMARK))
-      return 1;
+      return true;
   }
-  return 0; /* else... */
+  return false; /* else... */
 }
 
 /*
 ** Prompt the user, read a line, and push it into the Lua stack.
 */
-static int pushline(lua_State* L, int firstline)
+static bool pushline(lua_State* L, bool firstline)
 {
   InternalString prmt = get_prompt(L, firstline);
   bool ready = lua_readline(L, prmt.view());
   if (!ready)
   {
     lua_pop(L, 1); /* remove prompt */
-    return 0;      /* no input */
+    return false;      /* no input */
   }
   lua_remove(L, -2); /* remove prompt */
-  return 1;
+  return true;
 }
 
 /*
@@ -616,7 +616,7 @@ static int multiline(lua_State* L)
   for (;;)
   {                                                  /* repeat until gets a complete statement */
     int status = luaL_loadbufferi(L, line, lt::stdin_1, lt::t_char); /* try it */
-    if (!incomplete(L, status) || !pushline(L, 0))
+    if (!incomplete(L, status) || !pushline(L, false))
       return status;                  /* should not or cannot try to add continuation line */
     lua_remove(L, -2);                /* remove error message (from incomplete line) */
     lua_pushistringref(L, lt::n_3);         /* add newline... */
@@ -636,7 +636,7 @@ static int loadline(lua_State* L)
 {
   int status;
   lua_settop(L, 0);
-  if (!pushline(L, 1))
+  if (!pushline(L, true))
     return -1;                           /* no input */
   if ((status = addreturn(L)) != LUA_OK) /* 'return ...' did not work? */
     status = multiline(L);               /* try as command, maybe with continuation lines */
@@ -718,7 +718,7 @@ static int pmain(lua_State* L)
   if (args & has_E)
   {                        /* option '-E'? */
     l_noenv = true; /* program will ignore environment variables */
-    lua_pushboolean(L, 1); /* signal for libraries to ignore env. vars. */
+    lua_pushboolean(L, true); /* signal for libraries to ignore env. vars. */
     lua_setfieldi(L, LUA_REGISTRYINDEX, lt::LUA_NOENV);
   }
   luai_openlibs(L);                      /* open standard libraries */
@@ -746,7 +746,7 @@ static int pmain(lua_State* L)
     else
       dofile(L, std::nullopt); /* executes stdin as a file */
   }
-  lua_pushboolean(L, 1); /* signal no errors */
+  lua_pushboolean(L, true); /* signal no errors */
   return 1;
 }
 
@@ -754,7 +754,8 @@ static int pmain(lua_State* L)
 
 int main(int argc, char** argv)
 {
-  int status, result;
+  int status;
+  bool result;
   lua_State* L = luaL_newstate(); /* create state */
   if (L == nullptr)
   {

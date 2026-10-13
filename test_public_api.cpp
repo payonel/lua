@@ -160,7 +160,7 @@ static int cf_mm_add(lua_State* L)
 
 static int cf_mm_true(lua_State* L)
 {
-  lua_pushboolean(L, 1);
+  lua_pushboolean(L, true);
   return 1;
 }
 
@@ -290,7 +290,7 @@ static int cont_yield(lua_State* L, int status, lua_KContext ctx)
 
 static int cf_co(lua_State* L)
 {
-  CHECK(lua_isyieldable(L) == 1);
+  CHECK(lua_isyieldable(L));
   lua_pushinteger(L, 100);
   return lua_yieldk(L, 1, 7, cont_yield);
 }
@@ -307,7 +307,7 @@ static int cf_tbc_closeslot(lua_State* L)
   lua_toclose(L, -1);
   lua_closeslot(L, -1);
   CHECK(g_closed == before + 1);
-  CHECK(lua_isnil(L, -1) == 1);
+  CHECK(lua_isnil(L, -1));
   return 0;
 }
 
@@ -455,7 +455,7 @@ static void test_state()
   t = lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
   CHECK(t == LUA_TTABLE);
   lua_pushglobaltable(L);
-  CHECK(lua_rawequal(L, -1, -2) == 1);
+  CHECK(lua_rawequal(L, -1, -2));
   lua_pop(L, 3);
 
   lua_close(L);
@@ -512,8 +512,8 @@ static void test_stack_manipulation()
 
   lua_settop(L, 7);
   CHECK(lua_gettop(L) == 7);
-  CHECK(lua_isnil(L, 6) == 1);
-  CHECK(lua_isnil(L, 7) == 1);
+  CHECK(lua_isnil(L, 6));
+  CHECK(lua_isnil(L, 7));
   lua_settop(L, -3);
   CHECK(lua_gettop(L) == 5);
   lua_pop(L, 2);
@@ -521,15 +521,15 @@ static void test_stack_manipulation()
   lua_settop(L, 0);
   CHECK(lua_gettop(L) == 0);
 
-  CHECK(lua_checkstack(L, 30) != 0);
-  CHECK(lua_checkstack(L, 0) != 0);
-  CHECK(lua_checkstack(L, INT_MAX) == 0);
+  CHECK(lua_checkstack(L, 30));
+  CHECK(lua_checkstack(L, 0));
+  CHECK(!lua_checkstack(L, INT_MAX));
 
   lua_pushnil(L);
-  CHECK(lua_isnone(L, 5) == 1);
-  CHECK(lua_isnoneornil(L, 5) == 1);
-  CHECK(lua_isnoneornil(L, 1) == 1);
-  CHECK(lua_isnone(L, 1) == 0);
+  CHECK(lua_isnone(L, 5));
+  CHECK(lua_isnoneornil(L, 5));
+  CHECK(lua_isnoneornil(L, 1));
+  CHECK(!lua_isnone(L, 1));
   lua_pop(L, 1);
 
   lua_close(L);
@@ -541,7 +541,7 @@ static void test_access()
   static int s_light;
 
   lua_pushnil(L);
-  lua_pushboolean(L, 1);
+  lua_pushboolean(L, true);
   lua_pushinteger(L, 3);
   lua_pushnumber(L, 3.5);
   lua_pushliteral(L, "hello");
@@ -577,26 +577,26 @@ static void test_access()
   CHECK(lua_typename(L, LUA_TTHREAD) == "thread");
   CHECK(lua_typename(L, LUA_TNONE) == "no value");
 
-  CHECK(lua_isnil(L, 1) == 1);
-  CHECK(lua_isboolean(L, 2) == 1);
-  CHECK(lua_isnumber(L, 3) == 1);
-  CHECK(lua_isnumber(L, 4) == 1);
-  CHECK(lua_isnumber(L, 11) == 1);
-  CHECK(lua_isnumber(L, 5) == 0);
-  CHECK(lua_isinteger(L, 3) == 1);
-  CHECK(lua_isinteger(L, 4) == 0);
-  CHECK(lua_isinteger(L, 11) == 0);
-  CHECK(lua_isstring(L, 5) == 1);
-  CHECK(lua_isstring(L, 3) == 1);
-  CHECK(lua_isstring(L, 6) == 0);
-  CHECK(lua_istable(L, 6) == 1);
-  CHECK(lua_isfunction(L, 7) == 1);
-  CHECK(lua_iscfunction(L, 7) == 1);
-  CHECK(lua_isuserdata(L, 8) == 1);
-  CHECK(lua_isuserdata(L, 9) == 1);
-  CHECK(lua_islightuserdata(L, 9) == 1);
-  CHECK(lua_islightuserdata(L, 8) == 0);
-  CHECK(lua_isthread(L, 10) == 1);
+  CHECK(lua_isnil(L, 1));
+  CHECK(lua_isboolean(L, 2));
+  CHECK(lua_isnumber(L, 3));
+  CHECK(lua_isnumber(L, 4));
+  CHECK(lua_isnumber(L, 11));
+  CHECK(!lua_isnumber(L, 5));
+  CHECK(lua_isinteger(L, 3));
+  CHECK(!lua_isinteger(L, 4));
+  CHECK(!lua_isinteger(L, 11));
+  CHECK(lua_isstring(L, 5));
+  CHECK(lua_isstring(L, 3));
+  CHECK(!lua_isstring(L, 6));
+  CHECK(lua_istable(L, 6));
+  CHECK(lua_isfunction(L, 7));
+  CHECK(lua_iscfunction(L, 7));
+  CHECK(lua_isuserdata(L, 8));
+  CHECK(lua_isuserdata(L, 9));
+  CHECK(lua_islightuserdata(L, 9));
+  CHECK(!lua_islightuserdata(L, 8));
+  CHECK(lua_isthread(L, 10));
 
   CHECK(lua_tonumberx(L, 3) == std::optional<lua_Number>(3.0));
   CHECK(lua_tonumberx(L, 4) == std::optional<lua_Number>(3.5));
@@ -611,13 +611,13 @@ static void test_access()
   CHECK(lua_tointeger(L, 3) == 3);
   CHECK(lua_tointeger(L, 1) == 0);
 
-  CHECK(lua_toboolean(L, 1) == 0);
-  CHECK(lua_toboolean(L, 2) == 1);
-  CHECK(lua_toboolean(L, 3) == 1);
-  lua_pushboolean(L, 0);
-  CHECK(lua_toboolean(L, -1) == 0);
+  CHECK(!lua_toboolean(L, 1));
+  CHECK(lua_toboolean(L, 2));
+  CHECK(lua_toboolean(L, 3));
+  lua_pushboolean(L, false);
+  CHECK(!lua_toboolean(L, -1));
   lua_pushinteger(L, 0);
-  CHECK(lua_toboolean(L, -1) == 1);
+  CHECK(lua_toboolean(L, -1));
   lua_pop(L, 2);
 
   {
@@ -650,7 +650,7 @@ static void test_access()
   CHECK(lua_tocfunction(L, 7) == cf_add);
   CHECK(lua_tocfunction(L, 6) == nullptr);
   CHECK(load_string(L, "return 1") == LUA_OK);
-  CHECK(lua_iscfunction(L, -1) == 0);
+  CHECK(!lua_iscfunction(L, -1));
   CHECK(lua_tocfunction(L, -1) == nullptr); /* Lua function */
   lua_pop(L, 1);
 
@@ -700,7 +700,7 @@ static void test_arith()
     lua_pushinteger(L, c.b);
     lua_arith(L, c.op);
     CHECK(lua_gettop(L) == 1);
-    CHECK(lua_isinteger(L, -1) == 1);
+    CHECK(lua_isinteger(L, -1));
     CHECK(lua_tointeger(L, -1) == c.expected);
     lua_pop(L, 1);
   }
@@ -708,14 +708,14 @@ static void test_arith()
   lua_pushinteger(L, 7);
   lua_pushinteger(L, 2);
   lua_arith(L, LUA_OPDIV);
-  CHECK(lua_isinteger(L, -1) == 0);
+  CHECK(!lua_isinteger(L, -1));
   CHECK(lua_tonumber(L, -1) == 3.5);
   lua_pop(L, 1);
 
   lua_pushinteger(L, 2);
   lua_pushinteger(L, 10);
   lua_arith(L, LUA_OPPOW);
-  CHECK(lua_isinteger(L, -1) == 0);
+  CHECK(!lua_isinteger(L, -1));
   CHECK(lua_tonumber(L, -1) == 1024.0);
   lua_pop(L, 1);
 
@@ -760,39 +760,39 @@ static void test_compare()
   lua_pushinteger(L, 1);
   lua_pushliteral(L, "1");
 
-  CHECK(lua_rawequal(L, 1, 3) == 1);
-  CHECK(lua_rawequal(L, 1, 2) == 0);
-  CHECK(lua_rawequal(L, 1, 4) == 0);
-  CHECK(lua_rawequal(L, 1, 15) == 0);
-  CHECK(lua_rawequal(L, 15, 16) == 0);
+  CHECK(lua_rawequal(L, 1, 3));
+  CHECK(!lua_rawequal(L, 1, 2));
+  CHECK(!lua_rawequal(L, 1, 4));
+  CHECK(!lua_rawequal(L, 1, 15));
+  CHECK(!lua_rawequal(L, 15, 16));
 
-  CHECK(lua_compare(L, 1, 3, LUA_OPEQ) == 1);
-  CHECK(lua_compare(L, 1, 2, LUA_OPEQ) == 0);
-  CHECK(lua_compare(L, 1, 2, LUA_OPLT) == 1);
-  CHECK(lua_compare(L, 2, 1, LUA_OPLT) == 0);
-  CHECK(lua_compare(L, 1, 3, LUA_OPLE) == 1);
-  CHECK(lua_compare(L, 2, 1, LUA_OPLE) == 0);
-  CHECK(lua_compare(L, 1, 4, LUA_OPEQ) == 0);
-  CHECK(lua_compare(L, 1, 15, LUA_OPEQ) == 0);
+  CHECK(lua_compare(L, 1, 3, LUA_OPEQ));
+  CHECK(!lua_compare(L, 1, 2, LUA_OPEQ));
+  CHECK(lua_compare(L, 1, 2, LUA_OPLT));
+  CHECK(!lua_compare(L, 2, 1, LUA_OPLT));
+  CHECK(lua_compare(L, 1, 3, LUA_OPLE));
+  CHECK(!lua_compare(L, 2, 1, LUA_OPLE));
+  CHECK(!lua_compare(L, 1, 4, LUA_OPEQ));
+  CHECK(!lua_compare(L, 1, 15, LUA_OPEQ));
   lua_settop(L, 0);
 
   lua_pushinteger(L, 1);
   lua_pushnumber(L, 1.5);
-  CHECK(lua_compare(L, 1, 2, LUA_OPLT) == 1);
+  CHECK(lua_compare(L, 1, 2, LUA_OPLT));
   lua_settop(L, 0);
 
   lua_pushliteral(L, "abc");
   lua_pushliteral(L, "abd");
-  CHECK(lua_compare(L, 1, 2, LUA_OPLT) == 1);
+  CHECK(lua_compare(L, 1, 2, LUA_OPLT));
   lua_settop(L, 0);
 
   push_table_with_mm(L, "__eq", cf_mm_true);
   push_table_with_mm(L, "__eq", cf_mm_true);
-  CHECK(lua_rawequal(L, 1, 2) == 0);
-  CHECK(lua_compare(L, 1, 2, LUA_OPEQ) == 1);
+  CHECK(!lua_rawequal(L, 1, 2));
+  CHECK(lua_compare(L, 1, 2, LUA_OPEQ));
   push_table_with_mm(L, "__lt", cf_mm_true);
   push_table_with_mm(L, "__lt", cf_mm_true);
-  CHECK(lua_compare(L, 3, 4, LUA_OPLT) == 1);
+  CHECK(lua_compare(L, 3, 4, LUA_OPLT));
   lua_settop(L, 0);
 
   lua_close(L);
@@ -826,7 +826,7 @@ static void test_push()
   lua_pushstring(L, "abc"_hs);
   CHECK(lua_tolstring(L, -1) == "abc");
   lua_pushstring(L, std::nullopt);
-  CHECK(lua_isnil(L, -1) == 1);
+  CHECK(lua_isnil(L, -1));
   lua_pop(L, 2);
 
   lua_pushliteral(L, "lit");
@@ -876,26 +876,26 @@ static void test_push()
   lua_pushinteger(L, 12);
   lua_pushcclosure(L, cf_upvals, 2);
   CHECK(lua_gettop(L) == 1);
-  CHECK(lua_iscfunction(L, -1) == 1);
+  CHECK(lua_iscfunction(L, -1));
   lua_call(L, 0, 1);
   CHECK(lua_tointeger(L, -1) == 42);
   lua_pop(L, 1);
 
-  lua_pushboolean(L, 5);
-  CHECK(lua_toboolean(L, -1) == 1);
-  lua_pushboolean(L, 0);
-  CHECK(lua_toboolean(L, -1) == 0);
+  lua_pushboolean(L, true);
+  CHECK(lua_toboolean(L, -1));
+  lua_pushboolean(L, false);
+  CHECK(!lua_toboolean(L, -1));
   lua_pop(L, 2);
 
-  CHECK(lua_pushthread(L) == 1);
+  CHECK(lua_pushthread(L));
   CHECK(lua_tothread(L, -1) == L);
   lua_State* L1 = lua_newthread(L);
-  CHECK(lua_pushthread(L1) == 0);
+  CHECK(!lua_pushthread(L1));
   CHECK(lua_tothread(L1, -1) == L1);
   lua_pop(L, 2);
 
   lua_pushglobaltable(L);
-  CHECK(lua_istable(L, -1) == 1);
+  CHECK(lua_istable(L, -1));
   lua_pop(L, 1);
 
   lua_close(L);
@@ -972,13 +972,13 @@ static void test_get_set()
   lua_pop(L, 1);
 
   lua_newtable(L);
-  CHECK(lua_getmetatable(L, -1) == 0);
+  CHECK(!lua_getmetatable(L, -1));
   lua_newtable(L);
   lua_pushvalue(L, -1);
   lua_insert(L, -3);
   CHECK(lua_setmetatable(L, -2) == 1);
-  CHECK(lua_getmetatable(L, -1) == 1);
-  CHECK(lua_rawequal(L, -1, -3) == 1);
+  CHECK(lua_getmetatable(L, -1));
+  CHECK(lua_rawequal(L, -1, -3));
   lua_pop(L, 3);
 
   push_table_with_mm(L, "__index", cf_mm_index);
@@ -1006,9 +1006,9 @@ static void test_get_set()
   CHECK(lua_getiuservalue(L, uidx, 1) == LUA_TNIL);
   lua_pop(L, 1);
   lua_pushinteger(L, 21);
-  CHECK(lua_setiuservalue(L, uidx, 1) != 0);
+  CHECK(lua_setiuservalue(L, uidx, 1));
   lua_pushinteger(L, 22);
-  CHECK(lua_setiuservalue(L, uidx, 2) != 0);
+  CHECK(lua_setiuservalue(L, uidx, 2));
   CHECK(lua_getiuservalue(L, uidx, 1) == LUA_TNUMBER);
   CHECK(lua_tointeger(L, -1) == 21);
   lua_pop(L, 1);
@@ -1016,10 +1016,10 @@ static void test_get_set()
   CHECK(lua_tointeger(L, -1) == 22);
   lua_pop(L, 1);
   CHECK(lua_getiuservalue(L, uidx, 3) == LUA_TNONE);
-  CHECK(lua_isnil(L, -1) == 1);
+  CHECK(lua_isnil(L, -1));
   lua_pop(L, 1);
   lua_pushnil(L);
-  CHECK(lua_setiuservalue(L, uidx, 3) == 0);
+  CHECK(!lua_setiuservalue(L, uidx, 3));
   lua_pop(L, 1);
 
   lua_close(L);
@@ -1047,7 +1047,7 @@ static void test_call()
   CHECK(load_string(L, "return 1, 2") == LUA_OK);
   lua_call(L, 0, 4);
   CHECK(lua_gettop(L) == 4);
-  CHECK(lua_isnil(L, 4) == 1);
+  CHECK(lua_isnil(L, 4));
   lua_settop(L, 0);
 
   int base = lua_gettop(L);
@@ -1255,7 +1255,7 @@ static void test_load_dump()
   {
     CHECK(load_string(L, "return 10 + 11") == LUA_OK);
     DumpBuf d;
-    int st = lua_dump(L, &d, 0);
+    int st = lua_dump(L, &d, false);
     CHECK(st == 0);
     CHECK(!d.bytes.empty());
     CHECK(d.empty_calls >= 1);
@@ -1278,7 +1278,7 @@ static void test_load_dump()
 
     CHECK(load_string(L, "return 10 + 11") == LUA_OK);
     DumpBuf ds;
-    CHECK(lua_dump(L, &ds, 1) == 0);
+    CHECK(lua_dump(L, &ds, true) == 0);
     lua_pop(L, 1);
     CHECK(!ds.bytes.empty() && ds.bytes.size() <= d.bytes.size());
     StringReader r3{byte_view(ds.view()), false};
@@ -1291,7 +1291,7 @@ static void test_load_dump()
   {
     CHECK(load_string(L, "return 1") == LUA_OK);
     FailingWriter fw;
-    int st = lua_dump(L, &fw, 0);
+    int st = lua_dump(L, &fw, false);
     CHECK(st == 33);
     CHECK(fw.calls == 1);
     lua_pop(L, 1);
@@ -1308,7 +1308,7 @@ static void test_coroutines()
   {
     lua_State* L1 = lua_newthread(L);
     CHECK(lua_status(L1) == LUA_OK);
-    CHECK(lua_isyieldable(L) == 0);
+    CHECK(!lua_isyieldable(L));
 
     lua_pushcfunction(L1, cf_co);
     lua_pushinteger(L1, 1);
@@ -1781,7 +1781,7 @@ static void test_userobject()
   CHECK(lua_touserdata(L, -1) != nullptr);
 
   lua_pushinteger(L, 7);
-  CHECK(lua_setiuservalue(L, -2, 1) == 1);
+  CHECK(lua_setiuservalue(L, -2, 1));
   CHECK(lua_getiuservalue(L, -1, 1) == LUA_TNUMBER);
   CHECK(lua_tointeger(L, -1) == 7);
   lua_pop(L, 1);
@@ -1793,7 +1793,7 @@ static void test_userobject()
   CHECK(lua_touserobject(L, -1) == nullptr);
   lua_pop(L, 1);
 
-  CHECK(luaL_newmetatable(L, "test.userobject"_hs) == 1);
+  CHECK(luaL_newmetatable(L, "test.userobject"_hs));
   lua_pushcfunction(L, cf_userobject_gc);
   lua_setfield(L, -2, "__gc");
   lua_setmetatable(L, -2);
@@ -1838,8 +1838,8 @@ static void test_zero_size_userdata()
   CHECK(lua_rawlen(L, bi) == 0);
   CHECK(lua_topointer(L, ai) != nullptr);
   CHECK(lua_topointer(L, ai) != lua_topointer(L, bi));
-  CHECK(lua_rawequal(L, ai, ai) == 1);
-  CHECK(lua_rawequal(L, ai, bi) == 0);
+  CHECK(lua_rawequal(L, ai, ai));
+  CHECK(!lua_rawequal(L, ai, bi));
 
   lua_newtable(L);
   int t = lua_gettop(L);
@@ -1876,9 +1876,9 @@ static void test_zero_size_userdata()
   lua_newtable(L);
   lua_pushinteger(L, 7);
   lua_setfield(L, -2, "marker");
-  CHECK(lua_setiuservalue(L, di, 1) != 0);
+  CHECK(lua_setiuservalue(L, di, 1));
   lua_pushinteger(L, 99);
-  CHECK(lua_setiuservalue(L, di, 2) != 0);
+  CHECK(lua_setiuservalue(L, di, 2));
   lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
   lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
   CHECK(lua_getiuservalue(L, di, 1) == LUA_TTABLE);
@@ -2115,7 +2115,7 @@ static void test_misc()
   lua_setfield(L, tidx, "x");
   int cnt = 0;
   lua_pushnil(L);
-  while (lua_next(L, tidx) != 0)
+  while (lua_next(L, tidx))
   {
     cnt++;
     CHECK(lua_gettop(L) == tidx + 2);
@@ -2125,7 +2125,7 @@ static void test_misc()
   CHECK(lua_gettop(L) == tidx);
   lua_newtable(L);
   lua_pushnil(L);
-  CHECK(lua_next(L, -2) == 0);
+  CHECK(!lua_next(L, -2));
   lua_pop(L, 2);
 
   lua_settop(L, 0);
@@ -2170,13 +2170,13 @@ static void test_misc()
   {
     size_t r = lua_stringtonumber(L, "42");
     CHECK(r == 3u);
-    CHECK(lua_isinteger(L, -1) == 1);
+    CHECK(lua_isinteger(L, -1));
     CHECK(lua_tointeger(L, -1) == 42);
     lua_pop(L, 1);
 
     r = lua_stringtonumber(L, "3.5");
     CHECK(r == 4u);
-    CHECK(lua_isinteger(L, -1) == 0);
+    CHECK(!lua_isinteger(L, -1));
     CHECK(lua_tonumber(L, -1) == 3.5);
     lua_pop(L, 1);
 
@@ -2275,7 +2275,7 @@ static void test_debug_api()
   lua_pushvalue(L, -1);
   info = lua_getinfo(L, ">L", query);
   CHECK(info.has_value());
-  CHECK(lua_istable(L, -1) == 1);
+  CHECK(lua_istable(L, -1));
   lua_pop(L, 2);
 
   lua_pushcfunction(L, cf_add);
@@ -2438,7 +2438,7 @@ static void test_libraries()
     lua_pushcfunction(L, luaopen_string);
     lua_pushliteral(L, "string");
     lua_call(L, 1, 1);
-    CHECK(lua_istable(L, -1) == 1);
+    CHECK(lua_istable(L, -1));
     CHECK(lua_getfield(L, -1, "rep") == LUA_TFUNCTION);
     lua_pop(L, 2);
     lua_close(L);
@@ -2590,7 +2590,7 @@ static void test_negative()
     CHECK(top_msg_contains(L, "concatenate"));
 
     lua_pushcfunction(L, cf_neg_len);
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     CHECK(lua_pcall(L, 1, 1, 0) == LUA_ERRRUN);
     CHECK(top_msg_contains(L, "length"));
 
@@ -2621,7 +2621,7 @@ static void test_negative()
     CHECK(!lua_tonumberx(L, 15).has_value());
     CHECK(!lua_tointegerx(L, 15).has_value());
     CHECK(!lua_tostring(L, 15).has_value());
-    CHECK(lua_toboolean(L, 15) == 0);
+    CHECK(!lua_toboolean(L, 15));
     CHECK(lua_tocfunction(L, 15) == nullptr);
     CHECK(lua_touserdata(L, 15) == nullptr);
     CHECK(lua_tothread(L, 15) == nullptr);
@@ -2784,7 +2784,7 @@ static void test_auxlib_meta()
 {
   lua_State* L = new_state();
 
-  CHECK(luaL_newmetatable(L, "TPA.Widget"_hs) == 1);
+  CHECK(luaL_newmetatable(L, "TPA.Widget"_hs));
   CHECK(lua_type(L, -1) == LUA_TTABLE);
   CHECK(lua_getfield(L, -1, "__name"_hs) == LUA_TSTRING);
   {
@@ -2792,10 +2792,10 @@ static void test_auxlib_meta()
     CHECK(n.has_value() && n->to_utf8() == "TPA.Widget");
   }
   lua_pop(L, 1);
-  CHECK(luaL_newmetatable(L, "TPA.Widget"_hs) == 0);
+  CHECK(!luaL_newmetatable(L, "TPA.Widget"_hs));
   CHECK(luaL_getmetatable(L, "TPA.Widget"_hs) == LUA_TTABLE);
-  CHECK(lua_rawequal(L, -1, -2) == 1);
-  CHECK(lua_rawequal(L, -1, -3) == 1);
+  CHECK(lua_rawequal(L, -1, -2));
+  CHECK(lua_rawequal(L, -1, -3));
   lua_pop(L, 3);
 
   void* ud = lua_newuserdatauv(L, 8, 0);
@@ -2835,19 +2835,19 @@ static void test_auxlib_meta()
   CHECK(luaL_getmetafield(L, obj, "nope"_hs) == LUA_TNIL);
   CHECK(lua_gettop(L) == before);
 
-  CHECK(luaL_callmeta(L, obj, "__tostring"_hs) == 1);
+  CHECK(luaL_callmeta(L, obj, "__tostring"_hs));
   {
     std::optional<HostString> s = lua_tostring(L, -1);
     CHECK(s.has_value() && s->to_utf8() == "custom!");
   }
   lua_pop(L, 1);
-  CHECK(luaL_callmeta(L, obj, "__nope"_hs) == 0);
+  CHECK(!luaL_callmeta(L, obj, "__nope"_hs));
   CHECK(lua_gettop(L) == obj);
 
   lua_pushinteger(L, 12);
   CHECK(luaL_tolstring(L, -1) == "12");
   lua_pop(L, 2);
-  lua_pushboolean(L, 1);
+  lua_pushboolean(L, true);
   CHECK(luaL_tolstring(L, -1) == "true");
   lua_pop(L, 2);
   lua_pushnil(L);
@@ -2890,7 +2890,7 @@ static void test_auxlib_load()
   lua_pop(L, 1);
   DumpBuf d;
   CHECK(luaL_loadstring(L, "return 99"_hs) == LUA_OK);
-  CHECK(lua_dump(L, &d, 0) == 0);
+  CHECK(lua_dump(L, &d, false) == 0);
   lua_pop(L, 1);
   CHECK(d.bytes.size() > 0);
   CHECK(luaL_loadbufferx(L, d.view(), "=bin"_hs, "b"_hs) ==
@@ -3106,10 +3106,10 @@ static void test_auxlib_misc()
   }
   lua_pop(L, 1);
 
-  CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, "TPA.SUB"_hs) == 0);
+  CHECK(!luaL_getsubtable(L, LUA_REGISTRYINDEX, "TPA.SUB"_hs));
   CHECK(lua_type(L, -1) == LUA_TTABLE);
-  CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, "TPA.SUB"_hs) == 1);
-  CHECK(lua_rawequal(L, -1, -2) == 1);
+  CHECK(luaL_getsubtable(L, LUA_REGISTRYINDEX, "TPA.SUB"_hs));
+  CHECK(lua_rawequal(L, -1, -2));
   lua_pop(L, 2);
 
   lua_createtable(L, 0, 1);
@@ -3126,14 +3126,14 @@ static void test_auxlib_misc()
   CHECK(lua_tointeger(L, -1) == 123);
   lua_pop(L, 1);
   CHECK(lua_getfield(L, -1, "holder"_hs) == LUA_TBOOLEAN);
-  CHECK(lua_toboolean(L, -1) == 0);
+  CHECK(!lua_toboolean(L, -1));
   lua_pop(L, 2);
 
-  CHECK(luaL_fileresult(L, 1, std::nullopt) == 1);
-  CHECK(lua_toboolean(L, -1) == 1);
+  CHECK(luaL_fileresult(L, true, std::nullopt) == 1);
+  CHECK(lua_toboolean(L, -1));
   lua_pop(L, 1);
   errno = ENOENT;
-  CHECK(luaL_fileresult(L, 0, "nofile.txt"_hs) == 3);
+  CHECK(luaL_fileresult(L, false, "nofile.txt"_hs) == 3);
   CHECK(lua_type(L, -3) == LUA_TNIL); /* fail */
   {
     std::optional<HostString> m = lua_tostring(L, -2);
@@ -3145,7 +3145,7 @@ static void test_auxlib_misc()
 
   errno = 0;
   CHECK(luaL_execresult(L, 0) == 3);
-  CHECK(lua_toboolean(L, -3) == 1);
+  CHECK(lua_toboolean(L, -3));
   {
     std::optional<HostString> w = lua_tostring(L, -2);
     CHECK(w.has_value() && w->to_utf8() == "exit");
@@ -3158,16 +3158,16 @@ static void test_auxlib_misc()
   {
     lua_State* L2 = luaL_newstate();
     CHECK(L2 != nullptr);
-    luaL_requiref(L2, "string"_hs, luaopen_string, 1);
+    luaL_requiref(L2, "string"_hs, luaopen_string, true);
     CHECK(lua_type(L2, -1) == LUA_TTABLE);
     CHECK(lua_getglobal(L2, "string"_hs) == LUA_TTABLE);
-    CHECK(lua_rawequal(L2, -1, -2) == 1);
+    CHECK(lua_rawequal(L2, -1, -2));
     lua_pop(L2, 1);
-    CHECK(luaL_getsubtable(L2, LUA_REGISTRYINDEX, "_LOADED"_hs) == 1);
+    CHECK(luaL_getsubtable(L2, LUA_REGISTRYINDEX, "_LOADED"_hs));
     CHECK(lua_getfield(L2, -1, "string"_hs) == LUA_TTABLE);
-    CHECK(lua_rawequal(L2, -1, -3) == 1);
+    CHECK(lua_rawequal(L2, -1, -3));
     lua_pop(L2, 3);
-    luaL_requiref(L2, "mathmod"_hs, luaopen_math, 0);
+    luaL_requiref(L2, "mathmod"_hs, luaopen_math, false);
     CHECK(lua_type(L2, -1) == LUA_TTABLE);
     CHECK(lua_getglobal(L2, "mathmod"_hs) == LUA_TNIL);
     lua_pop(L2, 2);
@@ -3198,7 +3198,7 @@ static void test_dump_limits()
 
   DumpBuf d;
   lua_pushvalue(L, aidx);
-  CHECK(lua_dump(L, &d, 0) == 0);
+  CHECK(lua_dump(L, &d, false) == 0);
   lua_pop(L, 1);
   CHECK(luaL_loadbufferx(L, d.view(), "=re"_hs, "b"_hs) == LUA_OK);
   int lidx = lua_gettop(L);
@@ -3208,7 +3208,7 @@ static void test_dump_limits()
     CHECK(uname.has_value());
     CHECK(lua_type(L, -1) == LUA_TTABLE);
     lua_pushglobaltable(L);
-    CHECK(lua_rawequal(L, -1, -2) == 1);
+    CHECK(lua_rawequal(L, -1, -2));
     lua_pop(L, 2);
   }
   CHECK(lua_upvalueid(L, lidx, 1) != lua_upvalueid(L, aidx, 1));
@@ -3219,7 +3219,7 @@ static void test_dump_limits()
       "local u1, u2 = 10, 20\n"
       "return function() return u1, u2 end") == LUA_OK);
   DumpBuf d2;
-  CHECK(lua_dump(L, &d2, 0) == 0);
+  CHECK(lua_dump(L, &d2, false) == 0);
   lua_pop(L, 1);
   CHECK(luaL_loadbufferx(L, d2.view(), "=re2"_hs, "b"_hs) == LUA_OK);
   lidx = lua_gettop(L);
@@ -3237,7 +3237,7 @@ static void test_dump_limits()
 
   CHECK(do_string(L, "return function() return 1 end") == LUA_OK);
   DumpBuf d3;
-  CHECK(lua_dump(L, &d3, 1) == 0);
+  CHECK(lua_dump(L, &d3, true) == 0);
   lua_pop(L, 1);
   CHECK(luaL_loadbufferx(L, d3.view(), "=s"_hs, "b"_hs) ==
         LUA_OK);
@@ -3270,7 +3270,7 @@ static void test_dump_limits()
   lua_pop(L, 2);
 
   lua_pushcclosure(L, cf_add, 0);
-  CHECK(lua_iscfunction(L, -1) == 1);
+  CHECK(lua_iscfunction(L, -1));
   CHECK(lua_tocfunction(L, -1) == cf_add);
   CHECK(lua_topointer(L, -1) == p0);
   CHECK(!lua_getupvalue(L, -1, 1).has_value());
@@ -3279,7 +3279,7 @@ static void test_dump_limits()
   lua_pushcclosure(L, cf_add, 1);
   lua_pushinteger(L, 1);
   lua_pushcclosure(L, cf_add, 1);
-  CHECK(lua_iscfunction(L, -1) == 1 && lua_iscfunction(L, -2) == 1);
+  CHECK(lua_iscfunction(L, -1) && lua_iscfunction(L, -2));
   CHECK(lua_tocfunction(L, -1) == cf_add);
   CHECK(lua_tocfunction(L, -1) == lua_tocfunction(L, -2));
   CHECK(lua_topointer(L, -1) != lua_topointer(L, -2));
@@ -3331,7 +3331,7 @@ static void test_dump_limits()
   CHECK(lua_tointeger(L, -1) == 1234);
   lua_pop(L, 1);
 
-  CHECK(lua_getmetatable(L, oidx) == 1);
+  CHECK(lua_getmetatable(L, oidx));
   CHECK(lua_getfield(L, -1, "__index"_hs) == LUA_TFUNCTION);
   CHECK(lua_tocfunction(L, -1) == cf_add);
   CHECK(lua_topointer(L, -1) == p0);
@@ -3493,7 +3493,7 @@ static void test_thread_hooks()
                         "coroutine.yield(y)\n"
                         "y = y + 1\n"
                         "return y") == LUA_OK);
-  luaL_requiref(co, "coroutine"_hs, luaopen_coroutine, 1);
+  luaL_requiref(co, "coroutine"_hs, luaopen_coroutine, true);
   lua_pop(co, 1);
   lua_ResumeResult rr = lua_resume(co, L, 0);
   CHECK(rr.status == LUA_YIELD);
@@ -3525,10 +3525,10 @@ static void test_io_handles()
                      "io.input() == io.input(), "
                      "io.stdout == io.output(), io.stdin == io.input()") ==
         LUA_OK);
-  CHECK(lua_toboolean(L, -4) == 1);
-  CHECK(lua_toboolean(L, -3) == 1);
-  CHECK(lua_toboolean(L, -2) == 1);
-  CHECK(lua_toboolean(L, -1) == 1);
+  CHECK(lua_toboolean(L, -4));
+  CHECK(lua_toboolean(L, -3));
+  CHECK(lua_toboolean(L, -2));
+  CHECK(lua_toboolean(L, -1));
   lua_pop(L, 4);
 
   CHECK(do_string(L,
@@ -3545,7 +3545,7 @@ static void test_io_handles()
           os_->to_utf8().find("closed") == byte_view::npos);
     std::optional<HostString> cs = lua_tostring(L, -3);
     CHECK(cs.has_value() && cs->to_utf8() == "file (closed)");
-    CHECK(lua_toboolean(L, -2) == 0);
+    CHECK(!lua_toboolean(L, -2));
     std::optional<HostString> err = lua_tostring(L, -1);
     CHECK(err.has_value() && err->to_utf8().find(
               "attempt to use a closed file") != byte_view::npos);
@@ -3563,7 +3563,7 @@ static void test_io_handles()
     CHECK(err.has_value() && err->to_utf8().find(
               "cannot close standard file") != byte_view::npos);
   }
-  CHECK(lua_toboolean(L, -1) == 1);
+  CHECK(lua_toboolean(L, -1));
   lua_pop(L, 3);
 
   CHECK(do_string(L,
@@ -3578,7 +3578,7 @@ static void test_io_handles()
     CHECK(what.has_value() && what->to_utf8() == "exit");
   }
   CHECK(lua_tointeger(L, -4) == 3);
-  CHECK(lua_toboolean(L, -3) == 1);
+  CHECK(lua_toboolean(L, -3));
   {
     std::optional<HostString> what2 = lua_tostring(L, -2);
     CHECK(what2.has_value() && what2->to_utf8() == "exit");
@@ -3621,13 +3621,13 @@ static void test_auxlib_restored()
     CHECK(lua_type(L, -1) == LUA_TTABLE);
     CHECK(lua_rawlen(L, -1) == 0); /* pre-sized but empty */
     lua_pushnil(L);
-    CHECK(lua_next(L, -2) == 0); /* no entries registered */
+    CHECK(!lua_next(L, -2)); /* no entries registered */
     lua_pop(L, 1);
     luaL_newlib(L, mod);
     CHECK(lua_type(L, -1) == LUA_TTABLE);
     int count = 0;
     lua_pushnil(L);
-    while (lua_next(L, -2) != 0)
+    while (lua_next(L, -2))
     {
       CHECK(lua_type(L, -1) == LUA_TFUNCTION);
       count++;
@@ -3732,8 +3732,8 @@ static void test_num2str()
       "  if tonumber(s) ~= v then return false, 'roundtrip: ' .. s end\n"
       "end\n"
       "return true, 'ok'") == LUA_OK);
-  CHECK(lua_toboolean(L, -2) == 1);
-  if (lua_toboolean(L, -2) != 1)
+  CHECK(lua_toboolean(L, -2));
+  if (!lua_toboolean(L, -2))
   {
     std::optional<HostString> why = lua_tostring(L, -1);
     if (why.has_value())
@@ -3788,7 +3788,7 @@ static void test_num2str()
       "local chunk = 'return ' .. string.format('%q', s)\n"
       "local f = assert(load(chunk))\n"
       "return f() == s") == LUA_OK);
-  CHECK(lua_toboolean(L, -1) == 1);
+  CHECK(lua_toboolean(L, -1));
   lua_pop(L, 1);
 
   CHECK(do_string(L,
@@ -3813,7 +3813,7 @@ static void test_num2str()
       "  if r ~= n or math.type(r) ~= 'integer' then return false end\n"
       "end\n"
       "return true") == LUA_OK);
-  CHECK(lua_toboolean(L, -1) == 1);
+  CHECK(lua_toboolean(L, -1));
   lua_pop(L, 1);
   CHECK(do_string(L,
       "return string.format('%d', 0), string.format('%d', -5),\n"
@@ -3859,7 +3859,7 @@ static void test_string_coercion()
   CHECK(lua_tolstring(L, -1) == "already");
   lua_pop(L, 1);
 
-  lua_pushboolean(L, 1);
+  lua_pushboolean(L, true);
   CHECK(!lua_tolstring(L, -1).has_value());
   CHECK(lua_type(L, -1) == LUA_TBOOLEAN);
   lua_pop(L, 1);
@@ -3891,7 +3891,7 @@ static void test_arith_floats()
   lua_pushnumber(L, 7.0);
   lua_pushnumber(L, 2.0);
   lua_arith(L, LUA_OPIDIV);
-  CHECK(lua_isinteger(L, -1) == 0);
+  CHECK(!lua_isinteger(L, -1));
   CHECK(lua_tonumber(L, -1) == 3.0);
   lua_pop(L, 1);
 
@@ -3910,7 +3910,7 @@ static void test_arith_floats()
   lua_pushinteger(L, 3);
   lua_pushnumber(L, 0.5);
   lua_arith(L, LUA_OPADD);
-  CHECK(lua_isinteger(L, -1) == 0);
+  CHECK(!lua_isinteger(L, -1));
   CHECK(lua_tonumber(L, -1) == 3.5);
   lua_pop(L, 1);
 
@@ -3937,7 +3937,7 @@ static void test_fixed_chunks()
   CHECK(load_string(L, "local acc = 0\n"
                        "for i = 1, 5 do acc = acc + i end\n"
                        "return acc * 2") == LUA_OK);
-  CHECK(lua_dump(L, &d, 0) == 0);
+  CHECK(lua_dump(L, &d, false) == 0);
   lua_pop(L, 1);
   CHECK(!d.bytes.empty());
 
@@ -3957,7 +3957,7 @@ static void test_fixed_chunks()
   {
     CHECK(load_string(L, "return 'fixed-stripped'") == LUA_OK);
     DumpBuf ds;
-    CHECK(lua_dump(L, &ds, 1) == 0);
+    CHECK(lua_dump(L, &ds, true) == 0);
     lua_pop(L, 1);
     StringReader rs{ds.view(), false};
     CHECK(lua_load(L, &rs, std::nullopt, "B"_hs) == LUA_OK);
@@ -3981,11 +3981,11 @@ static void test_userdata_uservalues_gc()
   lua_createtable(L, 0, 1);
   lua_pushinteger(L, 7);
   lua_setfield(L, -2, "x"_hs);
-  CHECK(lua_setiuservalue(L, -2, 1) != 0);
+  CHECK(lua_setiuservalue(L, -2, 1));
   lua_pushliteral(L, "uv-two");
-  CHECK(lua_setiuservalue(L, -2, 2) != 0);
+  CHECK(lua_setiuservalue(L, -2, 2));
   lua_pushinteger(L, 12345);
-  CHECK(lua_setiuservalue(L, -2, 3) != 0);
+  CHECK(lua_setiuservalue(L, -2, 3));
 
   lua_setfield(L, LUA_REGISTRYINDEX, "udgc_anchor"_hs);
   lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
@@ -4192,7 +4192,7 @@ static void test_intern_identity()
   const void* r1 = push_and_ptr(L, s41);
   const void* r2 = push_and_ptr(L, s41);
   CHECK(r1 != r2);
-  CHECK(lua_rawequal(L, -1, -2) == 1);
+  CHECK(lua_rawequal(L, -1, -2));
   lua_pop(L, 4);
 
   lua_close(L);
@@ -4220,7 +4220,7 @@ static void test_intern_resize_stress()
     lua_pushlstring(L, byte_view(buf, ((size_t)(len))), 0, ((size_t)(len)));
     lua_rawgeti(L, tab, i + 1);
     CHECK(lua_topointer(L, -1) == lua_topointer(L, -2));
-    CHECK(lua_rawequal(L, -1, -2) == 1);
+    CHECK(lua_rawequal(L, -1, -2));
     lua_pop(L, 2);
   }
 
@@ -4264,7 +4264,7 @@ static void test_intern_collisions()
     const void* pa = push_and_ptr(L, pr.a);
     const void* pb = push_and_ptr(L, pr.b);
     CHECK(pa != pb);
-    CHECK(lua_rawequal(L, -1, -2) == 0);
+    CHECK(!lua_rawequal(L, -1, -2));
     CHECK(push_and_ptr(L, pr.a) == pa);
     CHECK(push_and_ptr(L, pr.b) == pb);
     lua_pop(L, 4);
@@ -4315,7 +4315,7 @@ static void test_intern_gc_churn()
       lua_pushlstring(L, byte_view(buf, ((size_t)(len))), 0, ((size_t)(len)));
       if (i % 2 == 0)
       {
-        lua_pushboolean(L, 1);
+        lua_pushboolean(L, true);
         lua_settable(L, keep);
       }
       else
@@ -4331,7 +4331,7 @@ static void test_intern_gc_churn()
       int len = std::snprintf(buf, sizeof buf, "w%d_%d", w, i);
       lua_pushlstring(L, byte_view(buf, ((size_t)(len))), 0, ((size_t)(len)));
       lua_gettable(L, keep);
-      CHECK(lua_toboolean(L, -1) == 1);
+      CHECK(lua_toboolean(L, -1));
       lua_pop(L, 1);
     }
   }
@@ -4938,7 +4938,7 @@ static int apik_cont(lua_State* L, int status, lua_KContext ctx)
 {
   CHECK(status == LUA_YIELD);
   int n = lua_gettop(L);
-  lua_pushboolean(L, 1);
+  lua_pushboolean(L, true);
   lua_pushinteger(L, static_cast<lua_Integer>(ctx));
   lua_rotate(L, 1, 2);
   return n + 2;
@@ -4948,7 +4948,7 @@ static int apik_cont(lua_State* L, int status, lua_KContext ctx)
 static int apik_done(lua_State* L)
 {
   int n = lua_gettop(L);
-  lua_pushboolean(L, 0);
+  lua_pushboolean(L, false);
   lua_pushinteger(L, 0);
   lua_rotate(L, 1, 2);
   return n + 2;
@@ -5247,7 +5247,7 @@ static int openmod(lua_State* L) /* (name) -> openmod(name) */
 static int cf_requirefk(lua_State* L) /* (name) -> name, module */
 {
   lua_settop(L, 1);
-  luaL_requirefk(L, "modx", openmod, 1, 39, apik_cont);
+  luaL_requirefk(L, "modx", openmod, true, 39, apik_cont);
   return apik_done(L);
 }
 
@@ -5256,7 +5256,7 @@ static int dostring_cont(lua_State* L, int status, lua_KContext ctx)
   CHECK(status != LUA_OK);
   lua_pushinteger(L, status == LUA_YIELD ? LUA_OK : status);
   int n = lua_gettop(L);
-  lua_pushboolean(L, 1);
+  lua_pushboolean(L, true);
   lua_pushinteger(L, static_cast<lua_Integer>(ctx));
   lua_rotate(L, 1, 2);
   return n + 2;
@@ -5286,12 +5286,12 @@ static int resumek_end(lua_State* L, lua_State* co, lua_ResumeResult rr)
   if (rr.status == LUA_OK || rr.status == LUA_YIELD)
   {
     lua_xmove(co, L, rr.nres);
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, true);
     lua_insert(L, -(rr.nres + 1));
     return rr.nres + 1;
   }
   lua_xmove(co, L, 1);
-  lua_pushboolean(L, 0);
+  lua_pushboolean(L, false);
   lua_insert(L, -2);
   return 2;
 }
@@ -5671,7 +5671,7 @@ static int fz_instructions(lua_State* L, const char* name, lua_Integer arg)
 static int fz_callk_cont(lua_State* L, int status, lua_KContext ctx)
 {
   CHECK(status == LUA_YIELD && ctx == 77);
-  lua_pushboolean(L, 1); /* (thawed through the continuation) */
+  lua_pushboolean(L, true); /* (thawed through the continuation) */
   return 2;
 }
 
@@ -5681,7 +5681,7 @@ static int fz_callk(lua_State* L)
   lua_pushvalue(L, 1);
   lua_pushvalue(L, 2);
   lua_callk(L, 1, 1, 77, fz_callk_cont);
-  lua_pushboolean(L, 0);
+  lua_pushboolean(L, false);
   return 2;
 }
 
@@ -5730,14 +5730,14 @@ static int fz_pcallk(lua_State* L)
 static int fz_getik_cont(lua_State* L, int status, lua_KContext ctx)
 {
   CHECK(status == LUA_YIELD && ctx == 55);
-  lua_pushboolean(L, 1);
+  lua_pushboolean(L, true);
   return 2;
 }
 
 static int fz_getik(lua_State* L)
 {
   lua_getik(L, 1, lua_tointeger(L, 2), 55, fz_getik_cont);
-  lua_pushboolean(L, 0);
+  lua_pushboolean(L, false);
   return 2;
 }
 
@@ -5782,8 +5782,8 @@ static void test_handler_in_effect_after_thaw()
       st = lua_thaw(L, nullptr).status;
     lua_setbudget(L, 0, nullptr);
     CHECK(st == LUA_OK && lua_gettop(L) == 7);
-    CHECK(lua_toboolean(L, 3) == 0 && lua_tointeger(L, 4) == 99);
-    CHECK(lua_toboolean(L, 5) == 0 && fz_str(L, 6) == "attempt to index a nil value (local 'x')");
+    CHECK(!lua_toboolean(L, 3) && lua_tointeger(L, 4) == 99);
+    CHECK(!lua_toboolean(L, 5) && fz_str(L, 6) == "attempt to index a nil value (local 'x')");
     CHECK(lua_tointeger(L, 7) == 110);
     lua_close(L);
   }
@@ -6171,8 +6171,8 @@ static void test_freeze()
   CHECK(lua_pcall(L, 1, 2, 0) == LUA_OK);
   while (lua_isfrozen(L))
     lua_thaw(L, nullptr);
-  CHECK(lua_gettop(L) == 2 && lua_toboolean(L, 2) == 0);
-  CHECK(lua_isyieldable(L) == 0);
+  CHECK(lua_gettop(L) == 2 && !lua_toboolean(L, 2));
+  CHECK(!lua_isyieldable(L));
   lua_settop(L, 0);
 
   /* through a C function with a continuation: its continuation goes on */
@@ -6200,17 +6200,17 @@ static void test_freeze()
   fz_reset(L, 0, nullptr, 0, false);
   CHECK(lua_nofreeze(L) == LUA_NOFREEZE_BUDGET);
   lua_getglobal(L, "canf");
-  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && !lua_toboolean(L, -1));
   lua_settop(L, 0);
   fz_reset(L, HUGE, nullptr, 0, false);
   lua_getglobal(L, "canf");
-  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 1);
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1));
   lua_settop(L, 0);
   lua_getglobal(L, "can_viacallk");
-  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 1);
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1));
   lua_settop(L, 0);
   lua_getglobal(L, "can_viacall");
-  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && lua_toboolean(L, -1) == 0);
+  CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK && !lua_toboolean(L, -1));
   lua_settop(L, 0);
   lua_getglobal(L, "can_viaresume");
   CHECK(lua_pcall(L, 0, 1, 0) == LUA_OK);
@@ -6268,7 +6268,7 @@ static void test_freeze()
   lua_pushinteger(L, 7);
   CHECK(lua_pcall(L, 1, 2, 0) == LUA_OK);
   lua_Integer gplain = lua_tointeger(L, 1);
-  CHECK(gplain > 7000 && lua_toboolean(L, 2) == 0);
+  CHECK(gplain > 7000 && !lua_toboolean(L, 2));
   lua_settop(L, 0);
   fz_reset(L, 3, L, 1, true);
   lua_getglobal(L, "viagetik");
@@ -6277,9 +6277,9 @@ static void test_freeze()
   CHECK(lua_isfrozen(L));
   while (lua_isfrozen(L))
     lua_thaw(L, nullptr);
-  CHECK(lua_gettop(L) == 2 && lua_tointeger(L, 1) == gplain && lua_toboolean(L, 2) == 1);
+  CHECK(lua_gettop(L) == 2 && lua_tointeger(L, 1) == gplain && lua_toboolean(L, 2));
   lua_getglobal(L, "inyield");
-  CHECK(lua_isboolean(L, -1) && lua_toboolean(L, -1) == 0);
+  CHECK(lua_isboolean(L, -1) && !lua_toboolean(L, -1));
   lua_settop(L, 0);
 
   /* library functions that call back, in the main thread (it cannot

@@ -29,7 +29,7 @@
 namespace lua::vm
 {
 
-static inline int LuaClosure(const Closure* f)
+static inline bool LuaClosure(const Closure* f)
 {
   return f != nullptr && f->tt == LUA_VLCL;
 }
@@ -260,7 +260,7 @@ void lua_setbudgetvalue(lua_State* L, lua_State* co)
   lua_unlock(L);
 }
 
-void lua_pushbudgetvalue(lua_State* L, lua_State* co, int effective)
+void lua_pushbudgetvalue(lua_State* L, lua_State* co, bool effective)
 {
   lua_lock(L);
   BudgetGroup* bg = effective ? co->beff : co->bown;
@@ -292,7 +292,7 @@ constexpr int BUDGET_FRAMES = 40;
 
 void lua_setbudgetthread(lua_State* L, lua_State* B)
 {
-  bool ok = luaD_growstack(B, BUDGET_STACK, 0);
+  bool ok = luaD_growstack(B, BUDGET_STACK, false);
   while (ok && B->nci < BUDGET_FRAMES)
     ok = luaE_extendCI(B, 0) != nullptr;
   if (!ok)
@@ -314,14 +314,14 @@ void lua_pushframefunction(lua_State* L, lua_State* L1, const InternalDebug& ar)
 }
 
 /* do '__gc' of the budget group of 'L' wait to be called? */
-int lua_hasdrain(lua_State* L)
+bool lua_hasdrain(lua_State* L)
 { /* (and can they be called here: where the chain can freeze, outside hooks
      and the '__gc' being called (hooks off), outside the budget callback,
      with room for the call; the same as at an instruction boundary, see
      'luaG_traceexec' and 'drainpoint') */
   lua_lock(L);
-  int has = luaC_hasdrain(L) && L->allowhook && L->l_G->budgetL == nullptr && luaD_nofreeze(L) == 0 &&
-            luaD_checkminstack(L);
+  bool has = luaC_hasdrain(L) && L->allowhook && L->l_G->budgetL == nullptr && luaD_nofreeze(L) == 0 &&
+             luaD_checkminstack(L);
   lua_unlock(L);
   return has;
 }
@@ -335,7 +335,7 @@ void lua_pushdrain(lua_State* L)
 }
 
 /* is 'L' running budgeted code, or the budget callback? */
-int lua_budgeted(lua_State* L)
+bool lua_budgeted(lua_State* L)
 {
   return L->beff != nullptr || L->l_G->budgetL != nullptr;
 }
@@ -630,12 +630,12 @@ static int auxgetinfo(lua_State* L, byte_view what, size_t wpos,
       ar->nups = (int)((f == nullptr) ? 0 : (LuaClosure(f) ? static_cast<LClosure*>(f)->upvals.size() : static_cast<CClosure*>(f)->upvalue.size()));
       if (!LuaClosure(f))
       {
-        ar->isvararg = 1;
+        ar->isvararg = true;
         ar->nparams = 0;
       }
       else
       {
-        ar->isvararg = isvararg(static_cast<LClosure*>(f)->p) ? 1 : 0;
+        ar->isvararg = isvararg(static_cast<LClosure*>(f)->p);
         ar->nparams = static_cast<LClosure*>(f)->p->numparams;
       }
       break;
@@ -644,12 +644,12 @@ static int auxgetinfo(lua_State* L, byte_view what, size_t wpos,
     {
       if (ci != nullptr)
       {
-        ar->istailcall = !!(ci->callstatus & CIST_TAIL);
+        ar->istailcall = (ci->callstatus & CIST_TAIL) != 0;
         ar->extraargs = (ci->callstatus & MAX_CCMT) >> CIST_CCMT;
       }
       else
       {
-        ar->istailcall = 0;
+        ar->istailcall = false;
         ar->extraargs = 0;
       }
       break;
@@ -806,7 +806,7 @@ static int findsetreg(const Proto* p, int lastpc, int reg)
     Instruction i = p->code[pc];
     OpCode op = GET_OPCODE(i);
     int a = GETARG_A(i);
-    int change; /* true if current instruction changed 'reg' */
+    bool change; /* true if current instruction changed 'reg' */
     switch (op)
     {
     case OP_LOADNIL:
@@ -833,7 +833,7 @@ static int findsetreg(const Proto* p, int lastpc, int reg)
       /* jump does not skip 'lastpc' and is larger than current one? */
       if (dest <= lastpc && dest > jmptarget)
         jmptarget = dest; /* update 'jmptarget' */
-      change = 0;
+      change = false;
       break;
     }
     default: /* any instruction that sets A */
@@ -914,7 +914,7 @@ static const InternalString* rname(const Proto* p, int pc, int c)
 ** Check whether table being indexed by instruction 'i' is the
 ** environment '_ENV'
 */
-static byte_view isEnv(const Proto* p, int pc, Instruction i, int isup)
+static byte_view isEnv(const Proto* p, int pc, Instruction i, bool isup)
 {
   int t = GETARG_B(i);       /* table index */
   const InternalString* name = nullptr; /* name of indexed variable */
@@ -950,13 +950,13 @@ static VarName getobjname(const Proto* p, int lastpc, int reg)
     case OP_GETTABUP:
     {
       int k = GETARG_C(i); /* key index */
-      return {isEnv(p, lastpc, i, 1), kname(p, k).name};
+      return {isEnv(p, lastpc, i, true), kname(p, k).name};
     }
     case OP_GETTABLE:
     case OP_GETVARG:
     {
       int k = GETARG_C(i); /* key index */
-      return {isEnv(p, lastpc, i, 0), rname(p, lastpc, k)};
+      return {isEnv(p, lastpc, i, false), rname(p, lastpc, k)};
     }
     case OP_GETI:
     {
@@ -965,7 +965,7 @@ static VarName getobjname(const Proto* p, int lastpc, int reg)
     case OP_GETFIELD:
     {
       int k = GETARG_C(i); /* key index */
-      return {isEnv(p, lastpc, i, 0), kname(p, k).name};
+      return {isEnv(p, lastpc, i, false), kname(p, k).name};
     }
     case OP_SELF:
     {
@@ -1267,10 +1267,10 @@ byte_view luaG_addinfo(lua_State* L, byte_view msg, TString* src, int line)
 ** too far apart, there is a good chance of a ABSLINEINFO in the way,
 ** so it goes directly to 'luaG_getfuncline'.
 */
-static int changedline(const Proto* p, int oldpc, int newpc)
+static bool changedline(const Proto* p, int oldpc, int newpc)
 {
   if (p->lineinfo.data() == nullptr) /* no debug information? */
-    return 0;
+    return false;
   if (newpc - oldpc < MAXIWTHABS / 2)
   {                /* not too far apart? */
     int delta = 0; /* line difference */
@@ -1366,7 +1366,7 @@ int luaG_traceexec(lua_State* L, int pc)
   CallInfo* ci = L->ci;
   lu_byte mask = (lu_byte)L->hookmask;
   const Proto* p = ci_func(L, ci)->p;
-  int counthook;
+  bool counthook;
   if (!(mask & (LUA_MASKLINE | LUA_MASKCOUNT | LUA_MASKBUDGET)))
   {                   /* no hooks? */
     ci->trap = 0; /* don't need to stop again */
@@ -1398,7 +1398,7 @@ int luaG_traceexec(lua_State* L, int pc)
   bool refrozen = (ci->hookdone != 0); /* (not a hook that yielded: that is CIST_HOOKYIELD alone) */
   if (refrozen)
     ci->callstatus &= ~CIST_HOOKYIELD; /* (it kept the budget from counting the instruction again) */
-  counthook = 0;
+  counthook = false;
   if ((mask & LUA_MASKCOUNT) && !(ci->hookdone & HD_COUNT))
   {
     counthook = (--L->hookcount == 0);
