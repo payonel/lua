@@ -326,6 +326,17 @@ jars, the JLine jars, the training or the JDK's `release` file is newer;
 else remove it. `java -jar java/build/lungolua.jar` runs the release
 interpreter without the tests and the cache.
 
+Each push to `lua-java` on payonel/lua that changes `java/` (or a manual
+run from the Actions tab) runs `.github/workflows/lungolua.yml`: it builds
+`build/lungolua.jar` and `build/lungolua-sources.jar` (`make -C java
+build/lungolua-sources.jar`: the engine's sources, without the tests) with
+Temurin 25, runs the jar once, and publishes both to GitHub Packages as
+`com.payonel:lungolua:0.1.0-<the commit's first 8 hex digits>`, with the
+workflow's own token. GitHub Packages asks for a login even to read: a
+build that takes the jar from `https://maven.pkg.github.com/payonel/lua`
+needs a classic personal access token with `read:packages`, kept outside
+the build (`~/.gradle/gradle.properties`: `gpr.user`, `gpr.key`).
+
 The readline's line editor is JLine 3.30.17 from Maven Central
 (`org.jline:jline-reader`, `jline-terminal` and `jline-terminal-ffm`,
 BSD-3), whose jars are in `java/lib` with its license (`LICENSE-jline.txt`)

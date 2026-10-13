@@ -1,0 +1,42 @@
+name: lungolua
+
+on:
+  push:
+    branches: [lua-java]
+    paths:
+      - 'java/**'
+      - '.github/workflows/lungolua.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          server-id: github
+
+      - name: Build the engine jar and its sources
+        run: make -C java build/lungolua.jar build/lungolua-sources.jar JDK="$JAVA_HOME"
+
+      - name: Check that it runs
+        run: java -jar java/build/lungolua.jar -e "assert(string.format('%d', 1 + 1) == '2') print(_VERSION)"
+
+      - name: Publish to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="0.1.0-${GITHUB_SHA::8}"
+          mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file \
+            -DgroupId=com.payonel -DartifactId=lungolua -Dversion="$version" -Dpackaging=jar \
+            -Dfile=java/build/lungolua.jar -Dsources=java/build/lungolua-sources.jar \
+            -DrepositoryId=github -Durl=https://maven.pkg.github.com/payonel/lua
+          echo "Published com.payonel:lungolua:$version" >> "$GITHUB_STEP_SUMMARY"

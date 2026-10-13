@@ -36,6 +36,10 @@ build/lungolua.jar: $(SRC) $(JLINE)
 	$(JAR) --create --file $@ --main-class com.payonel.lungolua.host.Lua --manifest $(MANIFEST) -C $(CLASSES) .
 	echo "$(abspath $(JDK))" > build/jdk
 
+build/lungolua-sources.jar: $(SRC)
+	mkdir -p build
+	$(JAR) --create --file $@ $(foreach f,$(patsubst src/%,%,$(SRC)),-C src $(f))
+
 build/lungolua-tests.jar: build/lungolua.jar $(TESTS_SRC)
 	rm -rf $(TEST_CLASSES)
 	mkdir -p $(TEST_CLASSES)
