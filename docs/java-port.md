@@ -266,10 +266,43 @@ Each step is a commit; the tree compiles at every commit.
 ## Build
 
 `make -C java` compiles the sources with the JDK named by `JDK` (default:
-the Temurin 25 under `~/.gradle/jdks`) into `java/build/lua.jar`.
-`luaV_execute` is larger than the 8000 bytes of bytecode HotSpot compiles
-by default: the interpreter runs with `-XX:-DontCompileHugeMethods`.
-The debug build is the same jar run with `-ea -Dlua.debug=true`.
+the Temurin 25 under `~/.gradle/jdks`) into `java/build/lua.jar`, then
+makes the jar's AOT cache, `java/build/lua.aot`. The debug build is the
+same jar run with `-ea -Dlua.debug=true`.
+
+The launchers (`java/lua`, `java/lua-debug`, `java/test_*`) and the test
+target's own JVM (`JFLAGS`) run with two JIT options, both for
+`luaV_execute`, whose 10.9 KB of bytecode are past two of HotSpot's
+8000-byte limits:
+- `-XX:-DontCompileHugeMethods`: else C2 does not compile it at all
+  (`HugeMethodLimit`);
+- `-XX:-ClipInlining`: else C2 inlines nothing into it, since it stops
+  inlining into a method once the method and its inlined callees pass
+  `DesiredMethodLimit`; every slot accessor and table lookup of the loop
+  would stay a call. Loops run 2 to 2.5 times as fast without the clip.
+
+The AOT cache (JDK 25: JEPs 483 and 514) holds the engine's classes loaded
+and linked, as a training run (`java/aot-training.lua`: a little of every
+library and of the compiler) left them: the JVM starts in about 45 ms
+instead of 165, and `tests/all.lua`, which starts it some 80 times, runs
+in 14 s instead of 23. `make` records the training (`-XX:AOTMode=record`)
+and makes the cache from it (`-XX:AOTMode=create`) with the launchers'
+options, and without the training's profiles (`-XX:-AOTRecordTraining`, a
+diagnostic option; JEP 515): with them, C2 compiles `luaV_execute` for the
+training's mix of instructions, and loops ran up to twice as slow. A cache
+is valid only for the JVM build that made it, the jars of the class path
+as they were (`lua.jar` and the JLine jars its manifest names, by size and
+time), the same module options (`--enable-native-access`) and the same
+compressed-pointer settings. The launchers pass it (`-XX:AOTCache`) only
+when it is newer than `lua.jar` and `JDK` is the build's (`build/jdk`; a
+JDK before 24 refuses the option), with the JVM's messages about it off
+(`-Xlog:aot*=off`), since the tests compare outputs. A cache that does not
+match all the same (the tree copied without its times, a JDK updated in
+place) is dropped silently, but the JVM then starts without the JDK's own
+class data too, in about 215 ms: `make -C java` remakes the cache when the
+jar, the JLine jars, the training or the JDK's `release` file is newer;
+else remove it. `java -jar java/build/lua.jar` runs without the cache and
+the JIT options.
 
 The readline's line editor is JLine 3.30.17 from Maven Central
 (`org.jline:jline-reader`, `jline-terminal` and `jline-terminal-ffm`,

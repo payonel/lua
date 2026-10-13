@@ -1,5 +1,7 @@
 package lua.bytes;
 
+import java.util.Arrays;
+
 public final class InternalString
 {
   private ByteOwner bytes_ = new ByteOwner();
@@ -67,7 +69,9 @@ public final class InternalString
 
   public boolean equals(InternalString o)
   {
-    return view().equals(o.view());
+    if (len_ != o.len_)
+      return false;
+    return len_ == 0 || Arrays.equals(bytes_.array(), 0, len_, o.bytes_.array(), 0, len_);
   }
 
   @Override
