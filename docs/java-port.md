@@ -271,15 +271,19 @@ makes the jar's AOT cache, `java/build/lua.aot`. The debug build is the
 same jar run with `-ea -Dlua.debug=true`.
 
 The launchers (`java/lua`, `java/lua-debug`, `java/test_*`) and the test
-target's own JVM (`JFLAGS`) run with two JIT options, both for
-`luaV_execute`, whose 10.9 KB of bytecode are past two of HotSpot's
-8000-byte limits:
-- `-XX:-DontCompileHugeMethods`: else C2 does not compile it at all
-  (`HugeMethodLimit`);
-- `-XX:-ClipInlining`: else C2 inlines nothing into it, since it stops
-  inlining into a method once the method and its inlined callees pass
-  `DesiredMethodLimit`; every slot accessor and table lookup of the loop
-  would stay a call. Loops run 2 to 2.5 times as fast without the clip.
+target's own JVM (`JFLAGS`) run with the JVM's own JIT options.
+`luaV_execute` calls a function for each opcode that stays in its frame
+(as the C++ does, for this: `op_move`, …), so its 3.5 KB of bytecode are
+under HotSpot's two 8000-byte limits: C2 compiles it (`HugeMethodLimit`)
+and inlines into it (`DesiredMethodLimit`, which counts the inlined
+callees too). With every opcode written out in it, it had 10.9 KB: C2
+compiled it only with `-XX:-DontCompileHugeMethods`, inlined nothing into
+it without `-XX:-ClipInlining`, and compiled it worse as long runs went
+on. Now `tests/bench/opcodes.lua` (10 rounds of a mix of every opcode)
+runs 1.7 times as fast once warm (6.0 → 3.5 s a round), and
+`-XX:-ClipInlining` would make it 18% slower again (short runs: the same
+either way). No other method is over the limits but `Lt`'s static
+initializer, which runs once.
 
 The AOT cache (JDK 25: JEPs 483 and 514) holds the engine's classes loaded
 and linked, as a training run (`java/aot-training.lua`: a little of every

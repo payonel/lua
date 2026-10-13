@@ -21,6 +21,6 @@ if [ "$(locale charmap 2>&1)" != UTF-8 ]; then
   export LC_ALL
 fi
 if env --default-signal=INT true 2>/dev/null; then
-  exec env --default-signal=INT "$JDK/bin/java" -XX:-DontCompileHugeMethods -XX:-ClipInlining --enable-native-access=ALL-UNNAMED -Dlua.progname="$0" "$@"
+  exec env --default-signal=INT "$JDK/bin/java" --enable-native-access=ALL-UNNAMED -Dlua.progname="$0" "$@"
 fi
-exec "$JDK/bin/java" -XX:-DontCompileHugeMethods -XX:-ClipInlining --enable-native-access=ALL-UNNAMED -Dlua.progname="$0" "$@"
+exec "$JDK/bin/java" --enable-native-access=ALL-UNNAMED -Dlua.progname="$0" "$@"

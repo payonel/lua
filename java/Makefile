@@ -32,12 +32,8 @@ build/lua.jar: $(SRC) $(JLINE)
 	$(JAR) --create --file $@ --main-class lua.host.Lua --manifest $(MANIFEST) -C $(CLASSES) .
 	echo "$(abspath $(JDK))" > build/jdk
 
-# the JVM's options (the launchers' too): luaV_execute has more than 8000
-# bytes of bytecode, which C2 compiles only with -XX:-DontCompileHugeMethods,
-# and inlines nothing into unless -XX:-ClipInlining (C2 stops inlining into a
-# method once the method and its inlined callees pass DesiredMethodLimit,
-# 8000 bytes)
-JOPTS = -XX:-DontCompileHugeMethods -XX:-ClipInlining --enable-native-access=ALL-UNNAMED
+# the JVM's options (the launchers' too)
+JOPTS = --enable-native-access=ALL-UNNAMED
 
 # the AOT cache of the jar (JDK 25): the classes loaded and linked as a
 # training run with the launchers' options left them, without the run's

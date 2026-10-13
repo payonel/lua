@@ -25,6 +25,6 @@ if [ "$(locale charmap 2>&1)" != UTF-8 ]; then
   export LC_ALL
 fi
 if env --default-signal=INT true 2>/dev/null; then
-  exec env --default-signal=INT "$JDK/bin/java" -XX:-DontCompileHugeMethods -XX:-ClipInlining --enable-native-access=ALL-UNNAMED $debug -Dstyx.self="$0" -Dstyx.source="$dir/src/lua/tests/StyxTests.java" "$@"
+  exec env --default-signal=INT "$JDK/bin/java" --enable-native-access=ALL-UNNAMED $debug -Dstyx.self="$0" -Dstyx.source="$dir/src/lua/tests/StyxTests.java" "$@"
 fi
-exec "$JDK/bin/java" -XX:-DontCompileHugeMethods -XX:-ClipInlining --enable-native-access=ALL-UNNAMED $debug -Dstyx.self="$0" -Dstyx.source="$dir/src/lua/tests/StyxTests.java" "$@"
+exec "$JDK/bin/java" --enable-native-access=ALL-UNNAMED $debug -Dstyx.self="$0" -Dstyx.source="$dir/src/lua/tests/StyxTests.java" "$@"
