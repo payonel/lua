@@ -2047,6 +2047,18 @@ static void test_buffer_collects_at_cap()
   CHECK(cd.used == 0);
 }
 
+static void test_stack_grows_by_its_growth()
+{
+  CapDeny cd;
+  lua_State* L = lua_newstate(&cd, 0);
+  lua_State* co = lua_newthread(L);
+  cd.cap = cd.used + 600;
+  CHECK(lua_checkstack(co, 45));
+  cd.cap = 0;
+  lua_close(L);
+  CHECK(cd.used == 0);
+}
+
 /*
 ** A long concatenation whose result cannot be created leaves nothing
 ** counted: after repeated failures a collection brings the count back to
@@ -6737,6 +6749,7 @@ int main(int argc, char** argv)
       {"long_strings_made_in_place", test_long_strings_made_in_place},
       {"string_emergency_collection", test_string_emergency_collection},
       {"buffer_collects_at_cap", test_buffer_collects_at_cap},
+      {"stack_grows_by_its_growth", test_stack_grows_by_its_growth},
       {"misc", test_misc},
       {"debug_api", test_debug_api},
       {"libraries", test_libraries},

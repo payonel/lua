@@ -209,13 +209,11 @@ bool luaD_reallocstack(lua_State* L, int newsize, bool raiseerror)
 {
   int oldsize = stacksize(L);
   int i;
-  size_t oldn = oldsize + EXTRA_STACK;
   size_t newn = newsize + EXTRA_STACK;
-  size_t keep = (oldn < newn) ? oldn : newn;
   bool oldgcstop = L->l_G->gcstopem;
   assert(newsize <= MAXSTACK || newsize == ERRORSTACKSIZE);
   L->l_G->gcstopem = true; /* stop emergency collection */
-  std::span<TValue> newstk = luaM_alloc_TValue_span(L->l_G, L, {}, newn, false);
+  std::span<TValue> newstk = luaM_alloc_TValue_span(L->l_G, L, L->stack, newn, false);
   L->l_G->gcstopem = oldgcstop; /* restore emergency collection */
   if (l_unlikely(newstk.data() == nullptr))
   {
@@ -225,9 +223,6 @@ bool luaD_reallocstack(lua_State* L, int newsize, bool raiseerror)
     else
       return false; /* do not raise an error */
   }
-  for (size_t si = 0; si < keep; si++)
-    copyobj(&newstk[si], &L->stack[si]);
-  luaM_alloc_TValue_span(L->l_G, L, L->stack, 0, false);
   L->stack = newstk;
   correctstack(L);
   L->stack_last = newsize;
