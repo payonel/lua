@@ -261,7 +261,7 @@ public final class Ldo
     boolean oldgcstop = L.l_G.gcstopem;
     assert newsize <= MAXSTACK || newsize == ERRORSTACKSIZE;
     L.l_G.gcstopem = true; /* stop emergency collection */
-    long[] newstk = luaM_alloc_TValue_span(L.l_G, L, new long[0], newn, false);
+    long[] newstk = luaM_alloc_TValue_span(L.l_G, L, L.stack_prim, newn, false);
     L.l_G.gcstopem = oldgcstop; /* restore emergency collection */
     if (newstk == null)
     {
@@ -275,11 +275,9 @@ public final class Ldo
     byte[] newstk_tt = luaM_alloc_TValue_span(new byte[0], newn);
     for (int si = 0; si < keep; si++)
     {
-      newstk[si] = L.stack_prim[si];
       newstk_ref[si] = L.stack_ref[si];
       newstk_tt[si] = L.stack_tt[si];
     }
-    luaM_alloc_TValue_span(L.l_G, L, L.stack_prim, 0, false);
     L.stack_prim = newstk;
     L.stack_ref = newstk_ref;
     L.stack_tt = newstk_tt;

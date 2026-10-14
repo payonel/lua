@@ -2264,6 +2264,18 @@ public final class PublicApi
     CHECK(cd.used == 0);
   }
 
+  private static void test_stack_grows_by_its_growth()
+  {
+    CapDeny cd = new CapDeny();
+    lua_State L = lua_newstate(cd, 0);
+    lua_State co = lua_newthread(L);
+    cd.cap = cd.used + 600;
+    CHECK(lua_checkstack(co, 45));
+    cd.cap = 0;
+    lua_close(L);
+    CHECK(cd.used == 0);
+  }
+
   /*
   ** A long concatenation whose result cannot be created leaves nothing
   ** counted: after repeated failures a collection brings the count back to
@@ -7129,6 +7141,7 @@ public final class PublicApi
         new TestEntry("long_strings_made_in_place", PublicApi::test_long_strings_made_in_place),
         new TestEntry("string_emergency_collection", PublicApi::test_string_emergency_collection),
         new TestEntry("buffer_collects_at_cap", PublicApi::test_buffer_collects_at_cap),
+        new TestEntry("stack_grows_by_its_growth", PublicApi::test_stack_grows_by_its_growth),
         new TestEntry("misc", PublicApi::test_misc),
         new TestEntry("debug_api", PublicApi::test_debug_api),
         new TestEntry("libraries", PublicApi::test_libraries),
