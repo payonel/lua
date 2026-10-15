@@ -747,12 +747,26 @@ static bool match_class(int c, int cl)
 {
   bool res;
   int lower = locale_tolower(cl);
-  if (lower == 'z')
-    res = (c == 0); /* deprecated option */
-  else
+  switch (lower)
+  {
+  case 'a':
+  case 'c':
+  case 'd':
+  case 'g':
+  case 'l':
+  case 'p':
+  case 's':
+  case 'u':
+  case 'w':
+  case 'x':
     res = locale_matchclass(c, lower);
-  if (!res && lower == cl)
-    return (cl == c); /* not a known class and lowercase — literal match */
+    break;
+  case 'z':
+    res = (c == 0); /* deprecated option */
+    break;
+  default:
+    return (cl == c);
+  }
   return (locale_islower(cl) ? res : !res);
 }
 

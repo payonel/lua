@@ -38,3 +38,36 @@ do
   local a, b = string.match("abc", "()b()")
   assert(a == 2 and b == 3)
 end
+
+-- A class escape matches only its class: a lowercase class letter is not a
+-- literal for itself ("%s" does not match "s"), and an uppercase letter that
+-- names no class is a literal ("%Q" matches "Q" only, not everything).
+do
+  for _, cl in ipairs{"a", "c", "d", "g", "l", "p", "s", "u", "w", "x", "z"} do
+    local up = cl:upper()
+    for c = 0, 255 do
+      local ch = string.char(c)
+      local inclass = string.find(ch, "%" .. cl) ~= nil
+      assert(inclass == (string.find(ch, "[%" .. cl .. "]") ~= nil))
+      assert(inclass == (string.find(ch, "[^%" .. up .. "]") ~= nil))
+      assert(inclass ~= (string.find(ch, "%" .. up) ~= nil))
+    end
+  end
+  for _, cl in ipairs{"c", "d", "p", "s", "u", "x", "z"} do
+    assert(string.find(cl, "%" .. cl) == nil)
+    assert(string.find(cl, "[%" .. cl .. "]") == nil)
+  end
+  assert(string.find("s", "%s") == nil)
+  assert(string.match("s", "^%s$") == nil)
+  local out, n = string.gsub("ls -s", "%s", "_")
+  assert(out == "ls_-s" and n == 1)
+  for _, cl in ipairs{"B", "E", "F", "H", "Q", "Y"} do
+    for c = 0, 255 do
+      local ch = string.char(c)
+      assert((string.find(ch, "%" .. cl) ~= nil) == (ch == cl))
+      assert((string.find(ch, "[%" .. cl .. "]") ~= nil) == (ch == cl))
+    end
+  end
+  assert(string.find("x", "%Q") == nil and string.find("Q", "%Q") == 1)
+  assert(string.find(".", "%.") == 1 and string.find("x", "%.") == nil)
+end
