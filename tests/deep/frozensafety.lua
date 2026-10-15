@@ -1,7 +1,7 @@
 -- tests/deep/frozensafety.lua
--- Whatever the kernel does with a frozen thread, a thread handle or a user
+-- Whatever the firmware does with a frozen thread, a thread handle or a user
 -- function, the VM never crashes, corrupts memory or hangs (spec 2.10). The
--- kernel here is this file: it freezes user programs of many shapes at many
+-- firmware here is this file: it freezes user programs of many shapes at many
 -- points, then does things to them in a pseudo-random order, each in a
 -- protected call: what the operations answer does not matter, only that
 -- the VM goes on (these tests are for a debug build, and for valgrind).
@@ -15,7 +15,7 @@ local random = math.random
 local function nop() end
 
 -- the user programs: each gets a table where it leaves handles (inner
--- coroutines, functions) for the kernel to abuse
+-- coroutines, functions) for the firmware to abuse
 local programs = {}
 local function program(name, f) programs[#programs + 1] = {name = name, f = f} end
 
@@ -97,7 +97,7 @@ program("waiting finalizers", function(h)
   return 1
 end)
 
--- the kernel's things to do with a frozen program and its handles
+-- the firmware's things to do with a frozen program and its handles
 local function handles(co, h)
   local list = {co}
   for _, v in pairs(h) do

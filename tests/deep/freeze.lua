@@ -7,8 +7,8 @@
 -- at once there); with no budget set everything behaves as stock, which
 -- the upstream suite and the other deep files check.
 --
--- The main thread plays the kernel here (it has no budget); the user
--- programs are coroutines that the kernel gives a budget.
+-- The main thread plays the firmware here (it has no budget); the user
+-- programs are coroutines that the firmware gives a budget.
 
 local debug = require "debug"
 if not debug.setbudget then return end
@@ -31,8 +31,8 @@ end
 
 local HUGE = 1 << 50
 
--- resume, thawing the coroutine when it freezes (a kernel would do this)
-local function kresume(co, ...)
+-- resume, thawing the coroutine when it freezes (the firmware would do this)
+local function fwresume(co, ...)
   local r = table.pack(coroutine.resume(co, ...))
   while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
   return table.unpack(r, 1, r.n)
@@ -551,8 +551,8 @@ local function workload()
     local deeper = coroutine.wrap(function(x) for i = 1, 5 do x = x + i end return x end)
     return b * 2, deeper(b)
   end)
-  add(kresume(inner, 10))
-  add(kresume(inner, 4))
+  add(fwresume(inner, 10))
+  add(fwresume(inner, 4))
   add(coroutine.status(inner))
   -- library functions with callbacks into Lua
   local t = {5, 3, 9, 1}
@@ -582,8 +582,8 @@ do
   local outer, middle, inner
   local seen
   inner = coroutine.create(function() for i = 1, 100 do end return "in" end)
-  middle = coroutine.create(function() return kresume(inner) end)
-  outer = coroutine.create(function() return select(2, kresume(middle)) end)
+  middle = coroutine.create(function() return fwresume(inner) end)
+  outer = coroutine.create(function() return select(2, fwresume(middle)) end)
   debug.setbudget(outer, 10, function(user_co, spender)
     if spender == inner and not seen then
       assert(user_co == outer)
@@ -613,13 +613,13 @@ do
 end
 
 -- a freeze goes to the program's top coroutine and no further: its
--- unbudgeted resumer (the kernel) goes on, and thaws it
+-- unbudgeted resumer (the firmware) goes on, and thaws it
 do
-  local kernel, user, inner
+  local firmware, user, inner
   local froze
   inner = coroutine.create(function() for i = 1, 100 do end return "in" end)
   user = coroutine.create(function() local _, v = coroutine.resume(inner) return v end)
-  kernel = coroutine.create(function()
+  firmware = coroutine.create(function()
     local r = table.pack(coroutine.resume(user))
     local frozen = debug.isfrozen(user)
     while debug.isfrozen(user) do r = table.pack(debug.thaw(user)) end
@@ -628,12 +628,12 @@ do
   debug.setbudget(user, 10, function(user_co, spender)
     if spender == inner and not froze then froze = true debug.freeze() end
   end)
-  local ok, frozen, v = coroutine.resume(kernel)
+  local ok, frozen, v = coroutine.resume(firmware)
   assert(ok and froze and frozen == true and v == "in")
 end
 
--- the kernel closes a program's coroutine: its '__close' runs under the
--- program's budget, and a freeze there lands in the kernel's close as in a
+-- the firmware closes a program's coroutine: its '__close' runs under the
+-- program's budget, and a freeze there lands in the firmware's close as in a
 -- resume (the close gives true; isfrozen tells); a thaw finishes the close
 do
   local closed, inclose = 0, false
@@ -675,7 +675,7 @@ do
 end
 
 -- a freeze that cannot happen destroys the chain: where a call that cannot
--- freeze is in the way, the coroutines of the chain are dead, the kernel
+-- freeze is in the way, the coroutines of the chain are dead, the firmware
 -- gets "cannot freeze" from its resume, and nothing in the chain catches it
 do
   local function impossible(name, f)
@@ -687,26 +687,26 @@ do
     local inside = 0
     local function busy() inside = inside + 1 for i = 1, 20 do end end
     debug.setbudget(co, 1, function() debug.freeze() end)
-    local ok, err = kresume(co, busy)
+    local ok, err = fwresume(co, busy)
     assert(ok == false and err == "cannot freeze", name .. ": " .. tostring(ok) .. " " .. tostring(err))
     assert(not caught and coroutine.status(co) == "dead" and not debug.isfrozen(co), name)
   end
   -- a nested chain: every budgeted coroutine from the one that spent the
-  -- budget to the program's top is dead; the kernel's coroutine is not
+  -- budget to the program's top is dead; the firmware's coroutine is not
   local inner = coroutine.create(function() for i = 1, 50 do end end)
   local top = coroutine.create(function() return coroutine.resume(inner) end)
-  local kernel = coroutine.create(function() return coroutine.resume(top) end)
+  local firmware = coroutine.create(function() return coroutine.resume(top) end)
   debug.setbudget(top, 5, function(user_co, spender) if spender == inner then error("boom", 0) end end)
-  local r = table.pack(coroutine.resume(kernel))
+  local r = table.pack(coroutine.resume(firmware))
   assert(r[1] == true and r[2] == false and r[3] == "boom", show(r))
   assert(coroutine.status(inner) == "dead" and coroutine.status(top) == "dead")
-  assert(coroutine.status(kernel) == "dead") -- (it returned)
+  assert(coroutine.status(firmware) == "dead") -- (it returned)
 end
 
 -- 'canfreeze': whether a freeze here would happen (a budget in effect and
 -- no call that cannot freeze in the way)
 do
-  local can, why = debug.canfreeze() -- the kernel runs with no budget
+  local can, why = debug.canfreeze() -- the firmware runs with no budget
   assert(can == false and why == "no budget in effect")
   assert(select("#", debug.canfreeze()) == 2)
   local r = {}
@@ -734,7 +734,7 @@ do
   local told = {}
   local co3 = coroutine.create(function() for i = 1, 20 do end end)
   debug.setbudget(co3, 5, function() told[#told + 1] = debug.canfreeze() debug.freeze() end)
-  kresume(co3)
+  fwresume(co3)
   assert(#told > 0)
   for _, v in ipairs(told) do assert(v == true) end
 end
@@ -1058,17 +1058,17 @@ do
   end)
   local freezes = 0
   debug.setbudget(co, 3, function() freezes = freezes + 1 debug.freeze() end)
-  local r = table.pack(kresume(co))
+  local r = table.pack(fwresume(co))
   assert(r[1] and r[2] == "after", show(r))
   assert(coroutine.status(co) == "suspended")
-  r = table.pack(kresume(co, "y"))
+  r = table.pack(fwresume(co, "y"))
   assert(r[1] and r[2] == "n=3" and r[3] == "y", show(r))
   assert(freezes > 10)
   local cannot = "attempt to yield across a C-call boundary"
   assert(deepeq(log, {false, cannot, false, cannot, false, cannot, false, true}), show(log))
 end
 
--- a kernel '__gc' runs on the thread that collects, as in stock Lua
+-- a firmware '__gc' runs on the thread that collects, as in stock Lua
 do
   local err
   setmetatable({}, {__gc = function() err = select(2, pcall(coroutine.yield)) end})
@@ -1263,9 +1263,9 @@ do
   end)
   local freezes = 0
   debug.setbudget(co, 2, function() freezes = freezes + 1 debug.freeze() end)
-  local r = table.pack(kresume(co))
+  local r = table.pack(fwresume(co))
   assert(r[1] and r[2] == "in pcall")
-  r = table.pack(kresume(co, "thaw"))
+  r = table.pack(fwresume(co, "thaw"))
   assert(r[1] and r[2] == false and r[3] == "after thaw", show(r))
   assert(freezes > 20)
 end
@@ -1297,7 +1297,7 @@ do
   assert(ok and v == "x")
 end
 
--- a thaw that stops ('debug.thaw(co, stop)'): the kernel thaws a frozen
+-- a thaw that stops ('debug.thaw(co, stop)'): the firmware thaws a frozen
 -- program but stops above one of its coroutines ('stop', or the first key
 -- of a table of them that the thaw meets, from the top of the chain down):
 -- the call that resumed it returns as if it had just frozen there (true and
@@ -1306,7 +1306,7 @@ end
 
 -- a program whose 'init' runs children in turns, thawing those it finds
 -- frozen, gets the same results and the same yields from each child whether
--- or not the kernel's thaws stop above them. (A child runs on what 'init'
+-- or not the firmware's thaws stop above them. (A child runs on what 'init'
 -- leaves of the slice: with stops at nearly every slice and slices too
 -- short for the work of 'init' between them, no child would go on.)
 do
@@ -1392,7 +1392,7 @@ end
 -- gets the stop as well, and the coroutine is found frozen later: a resume
 -- of it fails, a thaw goes on with it
 do
-  -- run 'body' as the program, frozen every few steps; the kernel's thaws
+  -- run 'body' as the program, frozen every few steps; the firmware's thaws
   -- stop above the coroutine 'body' registers
   local function stopcase(body)
     local stop
@@ -1506,7 +1506,7 @@ end
 do
   local function busy() local s = 0 for i = 1, 300 do s = s + i end return s end
   -- user_co resumes 'a', 'a' resumes 'b', and the budget runs out in 'b'
-  -- ('a' and 'b' are the kernel's: no budget group of their own)
+  -- ('a' and 'b' are the firmware's: no budget group of their own)
   local function make()
     local b = coroutine.create(busy)
     local a = coroutine.create(function()
@@ -1572,7 +1572,7 @@ do
     return select(2, pcall(nested, k - 1, f))
   end
   -- the program resumes 'c', which goes 'cnest' calls deep, asks the
-  -- kernel to stop above it, works, then measures; the program thaws 'c'
+  -- firmware to stop above it, works, then measures; the program thaws 'c'
   -- first from 'nest' calls deep, then from where it resumed it: how deep
   -- 'c' measured, whether it was stopped above, and how the first thaw
   -- failed
@@ -1625,7 +1625,7 @@ do
   end)
   local freezes = 0
   debug.setbudget(co, 1, function() freezes = freezes + 1 debug.freeze() end)
-  local r = table.pack(kresume(co))
+  local r = table.pack(fwresume(co))
   assert(r[1] and r[2] == 2001000 and freezes > 4000, show(r) .. " " .. freezes)
 end
 
@@ -1706,7 +1706,7 @@ return f(a)
         local co = coroutine.create(function() return result(loadwith(chunk, how[1], how[2])) end)
         local freezes = 0
         debug.setbudget(co, n, function() freezes = freezes + 1 debug.freeze() end)
-        local r = table.pack(kresume(co))
+        local r = table.pack(fwresume(co))
         assert(r[1], r[2])
         assert(freezes > 0 and deepeq(r[2], plain), "chunk " .. ci .. ", budget " .. n .. ": " .. show(r[2]) .. " vs " .. show(plain))
       end
@@ -1746,7 +1746,7 @@ do
     local co = coroutine.create(run)
     local freezes = 0
     debug.setbudget(co, 1, function() freezes = freezes + 1 debug.freeze() end)
-    local r = table.pack(kresume(co))
+    local r = table.pack(fwresume(co))
     assert(r[1] and r[2] == plain and freezes > 80, src:sub(1, 30))
   end
 end
@@ -1763,7 +1763,7 @@ do
   local co = coroutine.create(run)
   local freezes = 0
   debug.setbudget(co, 3, function() freezes = freezes + 1 debug.freeze() end)
-  local r = table.pack(kresume(co))
+  local r = table.pack(fwresume(co))
   assert(r[1] and freezes > 5 and deepeq(r[2], plain), show(r[2]) .. " vs " .. show(plain))
   assert(deepeq(plain, {true, nil, "H:boom"}), show(plain))
 end
@@ -1807,7 +1807,7 @@ do
       if debug.getinfo(spender, 0, "f").func == freeze.fn then inside = inside + 1 end
       if freeze.on then debug.freeze() end
     end)
-    local r = table.pack(kresume(co))
+    local r = table.pack(fwresume(co))
     assert(r[1], r[2])
     return r[2], inside
   end

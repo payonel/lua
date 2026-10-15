@@ -1,7 +1,7 @@
 -- tests/deep/budgetgc.lua
 -- '__gc' with budget groups: the owner of an object, the queues of the
 -- groups, and who calls what. A '__gc' of an object that unbudgeted code
--- registered (a kernel or host object) is called by the collector at once,
+-- registered (a firmware or host object) is called by the collector at once,
 -- with the budget lifted. A '__gc' of an object that budgeted code
 -- registered (a user object) waits in the queue of its group, and a thread
 -- of the group calls it, as ordinary user code, at the next point where it
@@ -18,8 +18,8 @@ local function deepeq(a, b)
   return true
 end
 
--- resume, thawing the coroutine when it freezes (a kernel would do this)
-local function kresume(co, ...)
+-- resume, thawing the coroutine when it freezes (the firmware would do this)
+local function fwresume(co, ...)
   local r = table.pack(coroutine.resume(co, ...))
   while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
   return table.unpack(r, 1, r.n)
@@ -27,7 +27,7 @@ end
 
 local function nop() end
 
--- a kernel object's '__gc' is called at once, by the collector, on the
+-- a firmware object's '__gc' is called at once, by the collector, on the
 -- thread that collects, with no budget points inside it
 do
   local calls, seen = 0, {}
@@ -35,7 +35,7 @@ do
     collectgarbage()
     return "done"
   end)
-  setmetatable({}, {__gc = function() -- (made here: by the kernel)
+  setmetatable({}, {__gc = function() -- (made here: by the firmware)
     seen.th = coroutine.running()
     local c0 = calls
     for i = 1, 200 do end
@@ -73,7 +73,7 @@ do
   assert(steps > 30)
 end
 
--- collected by the kernel, a user object waits for its group: its '__gc'
+-- collected by the firmware, a user object waits for its group: its '__gc'
 -- runs when a thread of the group is resumed, before it goes on
 do
   local log = {}
@@ -86,7 +86,7 @@ do
   end)
   debug.setbudget(co, 1000, nop)
   assert(select(2, coroutine.resume(co)) == "made")
-  collectgarbage() -- (the kernel collects: the object is dead, queued)
+  collectgarbage() -- (the firmware collects: the object is dead, queued)
   collectgarbage()
   assert(#log == 0)
   assert(select(2, coroutine.resume(co)) == "end")
@@ -139,7 +139,7 @@ do
     end)
     local freezes = 0
     if n then debug.setbudget(co, n, function() freezes = freezes + 1 debug.freeze() end) end
-    local ok, r = kresume(co)
+    local ok, r = fwresume(co)
     assert(ok, r)
     return r, freezes
   end
@@ -174,7 +174,7 @@ do
     debug.setbudget(co, 2, function()
       if freeze then freezes = freezes + 1 debug.freeze() end
     end)
-    local ok, ran, kb = kresume(co)
+    local ok, ran, kb = fwresume(co)
     assert(ok, ran)
     assert(ran == 6000, ran)
     return kb, freezes
@@ -208,7 +208,7 @@ do
 end
 
 -- ... also when a waiting object refers to a thread of the program: the
--- program's memory is released; while the kernel still holds the program,
+-- program's memory is released; while the firmware still holds the program,
 -- its waiting objects stay, and their '__gc' are not called
 do
   local function program(called)
@@ -327,7 +327,7 @@ do
     assert(coroutine.resume(co))
   end
   collectgarbage()
-  assert(holder ~= nil and not called) -- (alive: the kernel holds it)
+  assert(holder ~= nil and not called) -- (alive: the firmware holds it)
   local groups = 0
   for i = 1, 70000 do
     local co = coroutine.create(nop)
@@ -369,21 +369,21 @@ do
 end
 
 -- at most 65534 groups at once, with a clear error, raised on the caller
--- (a kernel coroutine here), not on the thread given the budget, which is
+-- (a firmware coroutine here), not on the thread given the budget, which is
 -- as it was; room again when they go
 do
   local live = {}
   local ok, err, target
-  local kernel = coroutine.wrap(function()
+  local firmware = coroutine.wrap(function()
     for i = 1, 65540 do
       local co = coroutine.create(nop)
       ok, err = pcall(debug.setbudget, co, 100, nop)
       if not ok then target = co break end
       live[i] = co
     end
-    return "the kernel goes on"
+    return "the firmware goes on"
   end)
-  assert(kernel() == "the kernel goes on")
+  assert(firmware() == "the firmware goes on")
   assert(not ok and tostring(err):find("too many budget groups"), tostring(err))
   assert(#live >= 65000 and #live <= 65534, #live)
   assert(coroutine.status(target) == "suspended" and debug.getbudget(target) == nil)
@@ -424,7 +424,7 @@ if io.popen and arg and arg[-1] then
       setmetatable({}, {__gc = function() io.stderr:write("user gc\n") end})
       coroutine.yield()
     end)
-    setmetatable({}, {__gc = function() io.stderr:write("kernel gc\n") end})
+    setmetatable({}, {__gc = function() io.stderr:write("firmware gc\n") end})
     debug.setbudget(co, 1000, function() end)
     coroutine.resume(co)
     collectgarbage()
@@ -433,7 +433,7 @@ if io.popen and arg and arg[-1] then
   local p = io.popen(string.format("%q -e %q 2>&1", arg[-1], script))
   local out = p:read("a")
   p:close()
-  assert(out == "kernel gc\nend\n" or out == "end\nkernel gc\n", out)
+  assert(out == "firmware gc\nend\n" or out == "end\nfirmware gc\n", out)
 end
 
 -- the first budget point after a thaw calls no waiting '__gc'; when the VM

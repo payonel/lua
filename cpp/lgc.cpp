@@ -1239,11 +1239,11 @@ struct DoTheCall : ProtectedCall
 };
 
 /*
-** The collector calls the '__gc' of a kernel or host object (one with no
+** The collector calls the '__gc' of a firmware or host object (one with no
 ** owner) at once, here, as stock Lua does, with the budget of the running
 ** thread lifted: no budget point inside it, so nothing can freeze there
 ** and the C frames under it need no continuation. What it registers in the
-** meantime is for the kernel too.
+** meantime is for the firmware too.
 */
 static void GCTM(lua_State* L)
 {
@@ -1392,7 +1392,7 @@ static BudgetGroup* ownergroup(global_State* g, unsigned id)
 }
 
 /*
-** Separate the dead objects with a '__gc' from the 'finobj' list. A kernel
+** Separate the dead objects with a '__gc' from the 'finobj' list. A firmware
 ** or host object (no owner) goes to the end of 'tobefnz', and the
 ** collector calls its '__gc'. A user object goes to the end of the queue
 ** of its group, and a thread of the group calls its '__gc' (see
@@ -1442,7 +1442,7 @@ static void separatetobefnz(global_State* g, bool all)
 
 /*
 ** Make the objects 'objs' (n of them, marked for finalization) due now, as
-** if the collector had found them dead, to run in this order: a kernel or
+** if the collector had found them dead, to run in this order: a firmware or
 ** host object goes to the end of 'tobefnz', a user object to the end of the
 ** queue of its group, and one whose group is gone is an ordinary object
 ** again (see 'separatetobefnz').

@@ -619,7 +619,7 @@ static BudgetNamer bnamer_budgetf("debug.budgetf", budgetf, budgetprepare);
 
 static int db_setbudget(lua_State* L)
 {
-  lua_State* co = checkco(L, 1); /* (the thread is required: the kernel sets it on another) */
+  lua_State* co = checkco(L, 1); /* (the thread is required: the firmware sets it on another) */
   const int arg = 1;
   lua_Integer n = luaL_checkinteger(L, arg + 1);
   luaL_argchecki(L, n >= 0, arg + 1, lt::out_of_range);

@@ -54,7 +54,7 @@ No budget group exists in the code yet: the only "budget" state is global (lstat
 
 ## 2. Design A: one finobj list set per owner
 
-Each owner (kernel plus each group) gets `finobj`, `finobjsur`, `finobjold1`, `finobjrold`, and its own deferred list.
+Each owner (firmware plus each group) gets `finobj`, `finobjsur`, `finobjold1`, `finobjrold`, and its own deferred list.
 
 Code sites that change:
 1. **State**: a group struct/object with four finobj words and a queue head/tail, plus a registry `g->groups` to iterate (new field, lstate.h). About 25 lines.
@@ -84,7 +84,7 @@ Bits of `marked`: 0-2 age (`AGEBITS = 7`, lgc.h:145), 3 WHITE0, 4 WHITE1, 5 BLAC
 
 `TESTBIT` (lgc.h:85) is used only in ltests.cpp:601-670 (gray-list consistency check). `ltests.o` is in `OBJ_NAMES` (makefile:18), so I could not confirm whether it is conditional on the `TESTS` variable. Taking bit 7 would make the test checker unable to run. Not recommended; use the padding.
 
-So: add a `uint16_t owner` between `marked` and `hash` (0 = kernel). Cost: one store in `luaC_link` (zero) and one in `luaC_checkfinalizer` (store the current group id). The object does not grow. Only tables and userdata can be finalizable (ltests.cpp:743), so the field is meaningful only for those, but there is no free space in `Table`/`Udata` that I checked (Table: `lu_byte flags` then spans; layout not verified), and the common header is the simpler place.
+So: add a `uint16_t owner` between `marked` and `hash` (0 = firmware). Cost: one store in `luaC_link` (zero) and one in `luaC_checkfinalizer` (store the current group id). The object does not grow. Only tables and userdata can be finalizable (ltests.cpp:743), so the field is meaningful only for those, but there is no free space in `Table`/`Udata` that I checked (Table: `lu_byte flags` then spans; layout not verified), and the common header is the simpler place.
 
 Limits: 16 bits means at most 65534 concurrent groups, plus one value for "orphan". That is a new hard limit (the port-prep principle says no new Lua limits); it could be made 32-bit only by growing every object by 8 bytes (16 -> 24), which I do not recommend.
 
@@ -95,7 +95,7 @@ Limits: 16 bits means at most 65534 concurrent groups, plus one value for "orpha
 
 ### `separatetobefnz` under B
 The loop is the same. For a white object it reads `owner`:
-- 0 (kernel): append to `tobefnz` as now.
+- 0 (firmware): append to `tobefnz` as now.
 - live group: append to that group's queue (tail pointer in the group, to avoid `findlast`), and mark the object.
 - orphan (group already freed): do nothing, `p = curr`. It stays white in `finobj` and the existing finobj sweep frees it if nothing resurrects it (sweeplist frees white objects in any list). If something resurrects it, it stays harmlessly in `finobj` with an orphan tag.
 
@@ -110,7 +110,7 @@ Yes. An object in a queue is out of `finobj`, so `next` is free. Appending to a 
 Objects in a queue must be marked every cycle, exactly like `tobefnz`. The restartable point later calls `udata2finalize`-like code that pops from the group queue and relinks to allgc.
 
 - Marking by the group's own traversal ("strong refs from the group") has two problems: (1) in the atomic phase the group may already be black when `separatetobefnz` appends, so the new items must be marked explicitly; (2) in generational mode an old black group pointing to a young queue item without a barrier breaks the invariant, so the group would need to be made touched (`luaC_barrierback_`). I could not test this.
-- **Recommended**: walk all registered groups' queues and mark every item unconditionally, in `restartcollection` and in `atomic` after `separatetobefnz`, regardless of whether the group is itself alive. It costs O(queued) per cycle, the same as `tobefnz`. It avoids deciding group death before resurrection is complete (a group object could be resurrected after `separatetobefnz` by a kernel finalizer, so "dead group" cannot be decided at that point).
+- **Recommended**: walk all registered groups' queues and mark every item unconditionally, in `restartcollection` and in `atomic` after `separatetobefnz`, regardless of whether the group is itself alive. It costs O(queued) per cycle, the same as `tobefnz`. It avoids deciding group death before resurrection is complete (a group object could be resurrected after `separatetobefnz` by a firmware finalizer, so "dead group" cannot be decided at that point).
 
 ### Sweeping and generational aging
 Queued objects are marked (black or aged), so they MUST be visited by the same passes as `tobefnz`: the incremental sweep (otherwise they stay black into the next cycle and their white referents are freed: use-after-free), `markold`, `sweepgen`, `sweep2old`, and the ltests checks. With one list per group this means an iterator over the registry in each of those 5 places, or one extra global list. About 40-60 lines.
@@ -122,8 +122,8 @@ Queued objects are marked (black or aged), so they MUST be visited by the same p
 - `iscleared` (228-239) is unchanged.
 
 ### GC states and the finalizer thread
-- `GCScallfin` (1840-1855) must only run kernel `tobefnz` items. User queues are never touched there: the collector only moves objects.
-- The pending test `g->tobefnz.next` in `callallpendingfinalizers`, `finishgencycle` and `GCScallfin` stays kernel-only; no change if user items live in separate queues.
+- `GCScallfin` (1840-1855) must only run firmware `tobefnz` items. User queues are never touched there: the collector only moves objects.
+- The pending test `g->tobefnz.next` in `callallpendingfinalizers`, `finishgencycle` and `GCScallfin` stays firmware-only; no change if user items live in separate queues.
 - `g->finth` is one thread with one frozen flag (`finthready`, lgc.cpp:1079). A user finalizer run at a restartable point should run on a thread of the group (its own finalizer thread, budgeted and freezable), not on `g->finth`. `GCTM`'s body can be factored to take the queue, the thread and `L`. `GCTM` also sets `GCSTPGC` and asserts `!gcemergency` (1098-1108): a restartable-point call is outside the collector and should not need `GCSTPGC`; decide this when writing it.
 - The existing `GCTM`/`udata2finalize` only ever run in `GCScallfin`, `finishgencycle` and `luaC_freeallobjects`, i.e. at the end of a cycle. A pop from a restartable point can occur in ANY collector state (propagate, atomic is excluded, sweep) and in any mode. `udata2finalize` handles sweep (`makewhite`) and OLD1, but this was never exercised mid-mark. It must be tested in every `gcstate` in both modes, with the ltests invariant checker on. Not verified.
 - `luaC_freeallobjects`: at close, `separatetobefnz(all=1)` would put user objects in group queues. Policy needed: drop without `__gc` (consistent with rule (b)) or run them on a group thread. The `assert(g->finobj.next == nullptr)` stays true.
@@ -139,7 +139,7 @@ With the recommended unconditional marking, at the cycle in which a group is fou
 Objects registered but not dead (still in `finobj`):
 - Under B they carry the group id. At group free, **walk `finobj` once and set `owner = ORPHAN`** (O(finobj), once per group death). This also makes id reuse safe. Without the walk, a reused id would hand the old group's objects to a new group (silent wrong behavior).
 - An orphan white object is skipped by `separatetobefnz` and freed by the finobj sweep; an orphan live object stays in `finobj` with FINALIZEDBIT set and is never finalized (`luaC_checkfinalizer` returns early since `tofinalize`).
-- Under A the same objects must be physically spliced from the group's finobj list into allgc or kernel finobj with age handling (the main cost of A).
+- Under A the same objects must be physically spliced from the group's finobj list into allgc or firmware finobj with age handling (the main cost of A).
 
 Freeing a thread of a group: the group registry only holds queues and counts, so threads need no special handling; only the "effective group" of the running thread must not dangle (not designed here).
 

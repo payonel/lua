@@ -1568,7 +1568,7 @@ static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, 
     luaE_setfrozen(L, FZ_CLOSE);
     if (g->freezetarget == L)
     { /* the freeze of 'L' ends here: the close is where it lands, as a
-         resume is ('from' has no budget: the kernel closed 'L') */
+         resume is ('from' has no budget: the firmware closed 'L') */
       g->freezetarget = nullptr;
       L->resumer = nullptr;
       lua_unlock(L);

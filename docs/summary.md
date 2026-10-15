@@ -61,10 +61,21 @@ four.
 - **Consumer code** — code compiled against the SDK that drives the engine as
   a library, e.g. `test_public_api.cpp`. Post-port this is Java application
   code.
-- **User code** — Lua script code run by the engine, e.g. the
-  `tests/deep/*.lua` suite.
-- **Boundary** — the separation between consumer/user code and the internal
+- **Script code** — Lua code run by the engine, e.g. the `tests/deep/*.lua`
+  suite.
+- **Boundary** — the separation between consumer/script code and the internal
   engine.
+- **Host** — the platform outside the VM that runs the engine: a C++
+  application (lungoluacpp) or a JVM application (lungolua). It drives the
+  engine through the C++ or Java API.
+- **Firmware** — layer 0: script code that runs with no budget in effect
+  (thread zero and the threads it runs unbudgeted). It sets the budgets of
+  the user threads, freezes, thaws and persists them, and sandboxes them; it
+  sits between the host and the user threads.
+- **User thread** — layer 1 and above: a thread that runs under a budget.
+  `user_co` is the root user thread, the one its budget was set on. What
+  runs in user threads (an embedder's operating system and programs) is the
+  embedder's business: the engine only tells firmware from user threads.
 
 Post-port, the engine keeps its C byte-level behavior end to end: all parsing
 and all strings stay `byte[]` (UTF-8), null-terminated, enforced by

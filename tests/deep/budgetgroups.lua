@@ -2,7 +2,7 @@
 -- The budget belongs to a thread (a budget group), not to the VM
 -- ('debug.setbudget([co,] n, f)'): threads created by a budgeted thread
 -- belong to its group; a resume puts the resumer's group in effect for the
--- run and the thread goes back to its own afterwards; kernel threads have
+-- run and the thread goes back to its own afterwards; firmware threads have
 -- none. Stock Lua 5.5 has none of this (the file returns at once there).
 
 local debug = require "debug"
@@ -26,7 +26,7 @@ do
   assert(debug.getbudget(main) == nil)
 end
 
--- 'debug.setbudget' and 'debug.getbudget' need a thread: the kernel sets
+-- 'debug.setbudget' and 'debug.getbudget' need a thread: the firmware sets
 -- the budget of another thread
 do
   assert(not pcall(debug.setbudget, 2, function() end))
@@ -50,7 +50,7 @@ do
   assert(left0 - left1 > 1000) -- the child's steps are in the same count
 end
 
--- a thread of the kernel (no budget) resumed by a budgeted thread runs
+-- a thread of the firmware (no budget) resumed by a budgeted thread runs
 -- under that thread's group for the run, and with none afterwards
 do
   local T = coroutine.create(function()
@@ -65,11 +65,11 @@ do
   local during = seen[T]
   assert(during and during > 0) -- it was counted while U resumed it
   assert(debug.getbudget(T) == nil) -- but it never owned a budget
-  assert(coroutine.resume(T)) -- the kernel resumes it: no budget now
+  assert(coroutine.resume(T)) -- the firmware resumes it: no budget now
   assert(seen[T] == during)
 end
 
--- a thread made by a budgeted thread and resumed by the kernel directly
+-- a thread made by a budgeted thread and resumed by the firmware directly
 -- (a task) is budgeted by its own group
 do
   local seen, task = {}, nil
@@ -190,7 +190,7 @@ end
 
 -- setbudget is immediate: no thread runs without its budget once it is set
 do
-  -- on a thread that is running, resumed by the kernel
+  -- on a thread that is running, resumed by the firmware
   local n = 0
   local T = coroutine.create(function()
     debug.setbudget(coroutine.running(), 1, function() n = n + 1 end)

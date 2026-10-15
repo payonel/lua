@@ -5835,7 +5835,7 @@ static void test_handler_in_effect_after_thaw()
 }
 
 /* closing a state whose thread has a budget that freezes at every point:
-   the '__gc' of kernel objects all run (a freeze used to stop them and
+   the '__gc' of firmware objects all run (a freeze used to stop them and
    abort the close) */
 static int cl_calls = 0;
 static int cl_gc(lua_State*)
@@ -5916,9 +5916,9 @@ static void test_message_handler_freeze()
 }
 
 /* '__gc' of user objects wait for their group, and a closing state does
-   not call them; those of kernel objects are called, as in stock */
+   not call them; those of firmware objects are called, as in stock */
 static int gc_user_calls = 0;
-static int gc_kernel_calls = 0;
+static int gc_firmware_calls = 0;
 
 static int gc_user(lua_State*)
 {
@@ -5926,9 +5926,9 @@ static int gc_user(lua_State*)
   return 0;
 }
 
-static int gc_kernel(lua_State*)
+static int gc_firmware(lua_State*)
 {
-  gc_kernel_calls++;
+  gc_firmware_calls++;
   return 0;
 }
 
@@ -5940,13 +5940,13 @@ static void test_group_gc()
   luaL_openlibs(L);
   lua_pushcfunction(L, gc_user);
   lua_setglobal(L, "gcuser");
-  lua_pushcfunction(L, gc_kernel);
-  lua_setglobal(L, "gckernel");
+  lua_pushcfunction(L, gc_firmware);
+  lua_setglobal(L, "gcfirmware");
   int st = luaL_dostring(L, R"(
     local function make(f) setmetatable({}, {__gc = f}) end
     function makeuser() make(gcuser) end
-    makekernel = function() make(gckernel) end
-    makekernel()
+    makefirmware = function() make(gcfirmware) end
+    makefirmware()
     function waiting() return coroutine.yield("made") end
   )");
   CHECK(st == LUA_OK);
@@ -5956,15 +5956,15 @@ static void test_group_gc()
   CHECK(lua_resume(co, L, 0).status == LUA_OK);
   CHECK(gc_user_calls == 0);
   lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
-  CHECK(gc_kernel_calls == 1); /* the collector calls a kernel object's at once */
+  CHECK(gc_firmware_calls == 1); /* the collector calls a firmware object's at once */
   CHECK(gc_user_calls == 0);   /* a user object's waits for its group */
   lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
   CHECK(gc_user_calls == 0);
   /* and when the state closes with it waiting, it is not called */
-  lua_getglobal(L, "makekernel");
+  lua_getglobal(L, "makefirmware");
   CHECK(lua_pcall(L, 0, 0, 0) == LUA_OK);
   lua_close(L);
-  CHECK(gc_user_calls == 0 && gc_kernel_calls == 2);
+  CHECK(gc_user_calls == 0 && gc_firmware_calls == 2);
 }
 
 /*
