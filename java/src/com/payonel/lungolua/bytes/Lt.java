@@ -115,7 +115,7 @@ public final class Lt
   public static final ByteView too_many_budget_groups = ByteView.of("too many budget groups (at most 65534 at once)");
   public static final ByteView cannot_thaw_a_coroutine_that_is_not_the_freeze_target = ByteView.of("cannot thaw a coroutine that is not the freeze target");
   public static final ByteView cannot_close_a_frozen_coroutine = ByteView.of("cannot close a frozen coroutine");
-  public static final ByteView cannot_thaw_from_budgeted_code = ByteView.of("cannot thaw from budgeted code");
+  public static final ByteView cannot_thaw_in_the_budget_callback = ByteView.of("cannot thaw in the budget callback");
   public static final ByteView freeze_outside_the_budget_callback = ByteView.of("freeze outside the budget callback");
   public static final ByteView cannot_use_outside_a_vararg_function = ByteView.of("cannot use '...' outside a vararg function");
   public static final ByteView ceil_kw = ByteView.of("ceil");

@@ -123,6 +123,8 @@ public final class Lcorolib
   private static int auxwrap_closed(lua_State L, int status, long ctx)
   {
     lua_State co = lua_tothread(L, lua_upvalueindex(1));
+    if (status == LUA_OK && lua_isfrozen(co))
+      return 0; /* a thaw stopped above it ('lua_thaw'): as a freeze, no values */
     assert status != LUA_OK;
     lua_xmove(co, L, 1); /* move error message to the caller */
     return auxwrap_fail(L, status);

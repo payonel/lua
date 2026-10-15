@@ -5987,6 +5987,24 @@ public final class PublicApi
     end)
     t = res(coroutine.resume(c5))
     assert(t[1] == true and t[2] == true and t[3] == "y" and t[4] == 1)
+    -- a thaw that stops above the resumed coroutine goes on in the
+    -- continuation as a freeze there would: true and no results, the
+    -- coroutine still frozen; the program thaws it itself
+    resumek_ran = nil
+    local stopped
+    local c6 = coroutine.create(function(inner)
+      local t = res(resumek(inner))
+      stopped = debug.isfrozen(inner)
+      assert(t[1] == true and t.n == 1 and resumek_ran == 1)
+      local r = table.pack(debug.thaw(inner))
+      while debug.isfrozen(inner) do r = table.pack(debug.thaw(inner)) end
+      return table.unpack(r, 1, r.n)
+    end)
+    local inner6 = coroutine.create(function() local x = 0 for i = 1, 20 do x = x + i end return "done", x end)
+    debug.setbudget(c6, 1, function() debug.freeze() end)
+    r = table.pack(coroutine.resume(c6, inner6))
+    while debug.isfrozen(c6) do r = table.pack(debug.thaw(c6, not stopped and inner6 or nil)) end
+    assert(stopped and r[1] == true and r[2] == true and r[3] == "done" and r[4] == 210 and r.n == 4)
     return "ok"
 """));
     if (st != LUA_OK)
@@ -7044,7 +7062,8 @@ public final class PublicApi
       lua_pop(L, 2); /* the thread */
     }
 
-    /* only unbudgeted code can thaw */
+    /* budgeted code thaws as it resumes: a step, and the thawed coroutine runs
+       on what is left of that budget (no new slice) */
     {
       lua_State co = lua_newthread(L);
       lua_setbudget(co, 5, fz_budget);
@@ -7057,11 +7076,23 @@ public final class PublicApi
       lua_ResumeResult rr = lua_resume(co, L, 0);
       CHECK(rr.status == LUA_OK && lua_isfrozen(co));
       lua_State budgeted = lua_newthread(L);
-      lua_setbudget(budgeted, 100, fz_budget);
-      CHECK(lua_thaw(co, budgeted).status == LUA_ERRRUN);
-      CHECK(fz_str(co, -1).equals("cannot thaw from budgeted code"));
-      lua_pop(co, 1);
-      CHECK(lua_isfrozen(co));
+      lua_setbudget(budgeted, 1000000, fz_budget);
+      CHECK(luaL_dostring(budgeted, hs("for i = 1, 1000 do end")) == LUA_OK);
+      long spentfrom = lua_budgetleft(budgeted);
+      CHECK(spentfrom < 1000000 - 1000);
+      lua_State co2 = lua_newthread(L);
+      lua_setbudget(co2, 5, fz_budget);
+      CHECK(luaL_loadstring(co2, hs("for i = 1, 100 do end return 'two'")) == LUA_OK);
+      fz_target = co2;
+      fz_at = fz_calls + 1;
+      rr = lua_resume(co2, L, 0);
+      CHECK(rr.status == LUA_OK && lua_isfrozen(co2));
+      fz_target = null;
+      rr = lua_thaw(co2, budgeted);
+      CHECK(rr.status == LUA_OK && rr.nres == 1 && fz_str(co2, -1).equals("two") && !lua_isfrozen(co2));
+      lua_pop(co2, 1);
+      CHECK(lua_budgetleft(budgeted) < spentfrom - 100); /* (a new slice would have given it 1000000) */
+      lua_pop(L, 2); /* co2, budgeted */
       /* a frozen thread is read-only: closing it fails and changes nothing */
       CHECK(lua_closethread(co, L) == LUA_ERRRUN);
       CHECK(fz_str(co, -1).equals("cannot close a frozen coroutine"));
@@ -7071,7 +7102,37 @@ public final class PublicApi
       fz_target = null;
       rr = lua_thaw(co, L);
       CHECK(rr.status == LUA_OK && !lua_isfrozen(co));
-      lua_pop(L, 2);
+      lua_pop(L, 1);
+    }
+
+    /* a thaw with stops stops above the first of them in the frozen chain:
+       the resume of it returns as if it had frozen there, and it stays
+       frozen, the top of a chain of its own; stops not in the chain change
+       nothing */
+    {
+      lua_State co = lua_newthread(L);
+      CHECK(luaL_loadstring(co, hs("local c = ... local ok = coroutine.resume(c) return ok, debug.isfrozen(c)")) == LUA_OK);
+      lua_State c = lua_newthread(L);
+      CHECK(luaL_loadstring(c, hs("local s = 0 for i = 1, 300 do s = s + i end return s")) == LUA_OK);
+      lua_pushthread(c);
+      lua_xmove(c, co, 1);
+      fz_reset(L, 0, null, 0, false);
+      lua_setbudget(co, 20, fz_budget);
+      fz_target = co;
+      fz_at = 1;
+      fz_every = true;
+      lua_ResumeResult rr = lua_resume(co, L, 1);
+      CHECK(rr.status == LUA_OK && lua_isfrozen(co) && lua_isfrozen(c));
+      lua_State other = lua_newthread(L);
+      lua_State[] stops = {other, L, co, c};
+      fz_target = null;
+      rr = lua_thaw(co, L, stops);
+      CHECK(rr.status == LUA_OK && rr.nres == 2 && lua_toboolean(co, -2) && lua_toboolean(co, -1));
+      lua_pop(co, 2);
+      CHECK(!lua_isfrozen(co) && lua_isfrozen(c) && lua_getbudget(c) == 20);
+      rr = lua_thaw(c, L, stops);
+      CHECK(rr.status == LUA_OK && rr.nres == 1 && lua_tointeger(c, -1) == 45150 && !lua_isfrozen(c));
+      lua_pop(L, 3); /* co, c, other */
     }
 
     /* 'lua_thaw' of a thread that is not frozen */

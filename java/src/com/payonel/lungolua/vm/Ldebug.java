@@ -416,10 +416,10 @@ public final class Ldebug
     lua_unlock(L);
   }
 
-  /* is 'L' running budgeted code, or the budget callback? */
-  public static boolean lua_budgeted(lua_State L)
+  /* is the budget callback running? */
+  public static boolean lua_incallback(lua_State L)
   {
-    return L.beff != null || L.l_G.budgetL != null;
+    return L.l_G.budgetL != null;
   }
 
   public static long lua_getbudget(lua_State co)

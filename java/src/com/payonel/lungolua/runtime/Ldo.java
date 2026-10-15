@@ -1497,11 +1497,53 @@ public final class Ldo
   }
 
   /*
+  ** The C calls of the frozen chain of 'co' (its threads, their frames)
+  ** count from 'to' instead of 'from': each count 'from + n' becomes 'to + n'
+  ** (see 'lua_thawatk' and 'splitchain').
+  */
+  private static void movecalls(lua_State co, int from, int to)
+  {
+    for (lua_State T = co; T != null; T = T.frozenchild)
+    {
+      assert (T.frozencc & 0xffff) >= from && (T.ccbase & 0xffff) >= from;
+      T.frozencc = T.frozencc - from + to;
+      T.ccbase = T.ccbase - from + to;
+      for (CallInfo ci = T.ci; ci != T.base_ci; ci = ci.previous)
+      {
+        if ((ci.callstatus & CIST_CCOUNT) != 0)
+        {
+          assert (ci.nccalls & 0xffff) >= from;
+          ci.nccalls = ci.nccalls - from + to;
+        }
+      }
+    }
+  }
+
+  /*
+  ** A thaw of 'L' stops above coroutine 'co', which 'L' resumed (or closed,
+  ** or thawed) and which froze there ('lua_thaw'): 'co' stays frozen, the
+  ** top of a frozen chain of its own. As a frozen top, it has a budget group
+  ** of its own (the one it ran with, when it had none), and the C calls of
+  ** its chain count from none, as when the host resumes a coroutine (a thaw
+  ** by budgeted code counts them on top of its own).
+  */
+  private static void splitchain(lua_State L, lua_State co)
+  {
+    co.resumer = null;
+    if (co.bown == null)
+      co.bown = co.beff;
+    movecalls(co, L.frozencc & 0xffff, 0);
+  }
+
+  /*
   ** Go on with frozen thread 'L' (in protected mode). If it was frozen while
   ** resuming coroutine 'co', resume 'co' first, then the C function that
   ** resumed it goes on through its continuation, with the result of 'co'.
+  ** A thaw that stops above 'co' ('stop') gives that function no results,
+  ** with 'co' still frozen, as when a freeze lands in it. 'slice': the thaw
+  ** starts a new slice of the budget (see 'lua_thawatk').
   */
-  private static void thaw(lua_State L)
+  private static void thaw(lua_State L, lua_State stop, boolean slice)
   {
     if (L.frozenchild != null)
     {
@@ -1509,8 +1551,17 @@ public final class Ldo
       CallInfo ci = L.ci; /* the C function resuming 'co' */
       L.frozenchild = null;
       co.frozenparent = null;
-      lua_unlock(L);
-      lua_ResumeResult rr = thawcore(co, L, ci.ctx, ci.k);
+      lua_ResumeResult rr = new lua_ResumeResult(LUA_OK, 0);
+      if (co == stop)
+      {
+        splitchain(L, co);
+        lua_unlock(L);
+      }
+      else
+      {
+        lua_unlock(L);
+        rr = thawcore(co, L, ci.ctx, ci.k, stop, slice);
+      }
       int n = ci.k.call(L, rr.status, ci.ctx);
       lua_lock(L);
       api_checknelems(L, n);
@@ -1521,10 +1572,13 @@ public final class Ldo
 
   private static final class Thaw implements ProtectedCall
   {
+    lua_State stop;
+    boolean slice;
+
     @Override
     public void run(lua_State L)
     {
-      thaw(L);
+      thaw(L, stop, slice);
     }
   }
 
@@ -1546,7 +1600,8 @@ public final class Ldo
     }
   }
 
-  private static lua_ResumeResult closerun(lua_State L, lua_State from, byte status, boolean first)
+  private static lua_ResumeResult closerun(lua_State L, lua_State from, byte status, boolean first,
+                                          lua_State stop, boolean slice)
   {
     global_State g = L.l_G;
     CloseRun cr = new CloseRun();
@@ -1555,6 +1610,8 @@ public final class Ldo
     if (!first)
     { /* the '__close' that froze goes on */
       Thaw t = new Thaw();
+      t.stop = stop;
+      t.slice = slice;
       st = luaD_rawrunprotected(L, t);
       if (st != LUA_OK && st != LUA_FREEZE)
       { /* it failed: the close goes on with that error */
@@ -1667,10 +1724,12 @@ public final class Ldo
   ** freezes again.
   */
   private static lua_ResumeResult hostcloserun(lua_State L, lua_State from, int hosterrfunc,
-                                               int hostnCcalls)
+                                               int hostnCcalls, lua_State stop, boolean slice)
   {
     global_State g = L.l_G;
     Thaw t = new Thaw();
+    t.stop = stop;
+    t.slice = slice;
     byte st = luaD_rawrunprotected(L, t);
     byte status = (byte) L.closestatus;
     if (st != LUA_OK && st != LUA_FREEZE)
@@ -1813,6 +1872,7 @@ public final class Ldo
     }
     lua_lock(L);
     L.nCcalls = (from != null) ? getCcalls(from) : 0;
+    L.ccbase = L.nCcalls;
     L.nfz = 0;
     L.resumer = from;
     L.resumedk = (from != null);
@@ -1824,7 +1884,7 @@ public final class Ldo
     }
     luaE_enterbudget(L, from);
     byte status = luaE_beginclose(L);
-    return closerun(L, from, status, true);
+    return closerun(L, from, status, true, null, false);
   }
 
   /*
@@ -1900,7 +1960,8 @@ public final class Ldo
     return endresume(L, from, status, k);
   }
 
-  private static lua_ResumeResult thawcore(lua_State L, lua_State from, long ctx, lua_KFunction k)
+  private static lua_ResumeResult thawcore(lua_State L, lua_State from, long ctx, lua_KFunction k,
+                                          lua_State stop, boolean slice)
   {
     byte status;
     lua_lock(L);
@@ -1912,7 +1973,6 @@ public final class Ldo
       return new lua_ResumeResult(resume_error(L, Lt.C_stack_overflow, 0), 1);
     L.frozen = 0;
     L.top = L.frozentop; /* (what a refused resume or close left on it is not its) */
-    global_State g = L.l_G;
     L.nCcalls = L.frozencc; /* its calls, as when it froze */
     L.nfz = 0;
     L.resumer = from;
@@ -1925,32 +1985,34 @@ public final class Ldo
     luaE_enterbudget(L, from);
     if (kind == FZ_CLOSE)
     {
-      if (g.budgetL == null && L.beff != null)
+      if (slice && L.beff != null)
       { /* (a thaw starts with a whole budget, and no '__gc' at its first point) */
         L.beff.left = L.beff.budget;
         L.beff.nodrain = true;
       }
-      return closerun(L, from, L.closestatus, false);
+      return closerun(L, from, L.closestatus, false, stop, slice);
     }
     int hosterrfunc = L.errfunc;
     if (kind == FZ_HOSTCLOSE)
     {
       L.errfunc = L.frozenerrfunc;
-      if (g.budgetL == null && L.beff != null)
+      if (slice && L.beff != null)
       { /* (a thaw starts with a whole budget, and no '__gc' at its first point) */
         L.beff.left = L.beff.budget;
         L.beff.nodrain = true;
       }
-      return hostcloserun(L, from, hosterrfunc, hostnCcalls);
+      return hostcloserun(L, from, hosterrfunc, hostnCcalls, stop, slice);
     }
     if (kind == FZ_PCALL)
       L.errfunc = L.frozenerrfunc;
-    if (g.budgetL == null && L.beff != null) /* a thaw starts with a whole budget, so that */
-    {                                                /* it makes progress before it can freeze, */
+    if (slice && L.beff != null) /* a thaw starts with a whole budget, so that */
+    {                            /* it makes progress before it can freeze, */
       L.beff.left = L.beff.budget;
-      L.beff.nodrain = true;                       /* and it starts no '__gc' */
+      L.beff.nodrain = true;     /* and it starts no '__gc' */
     }
     Thaw t = new Thaw();
+    t.stop = stop;
+    t.slice = slice;
     status = luaD_rawrunprotected(L, t);
     status = precover(L, status);
     if (L.closeself)
@@ -1961,26 +2023,67 @@ public final class Ldo
   }
 
   /*
-  ** Go on with frozen coroutine 'L' (see 'lua_resumek' for 'k'). Only
-  ** unbudgeted code can thaw: not the budget callback, nor a thread with a
-  ** budget.
+  ** Go on with frozen coroutine 'L' (see 'lua_resumek' for 'k'), stopping
+  ** above coroutine 'stop' if the thaw meets it in the frozen chain of 'L'
+  ** (see 'thaw'; anywhere else, it does not matter: see 'lua_thaw'). The
+  ** budget callback cannot thaw. A thaw by unbudgeted code starts a new
+  ** slice of the budget; a thaw by budgeted code is a resume: it spends a
+  ** step, the chain runs on what is left of the budget of 'from', and its C
+  ** calls count on top of those of 'from' (if they would pass the limit, the
+  ** thaw fails).
   */
-  public static lua_ResumeResult lua_thawk(lua_State L, lua_State from, long ctx, lua_KFunction k)
+  public static lua_ResumeResult lua_thawatk(lua_State L, lua_State from, lua_State stop, long ctx,
+                                             lua_KFunction k)
   {
     lua_lock(L);
     if (from == null)
       k = null; /* (as in 'lua_resumek') */
-    if (L.l_G.budgetL != null || (from != null && from.beff != null))
-      return new lua_ResumeResult(resume_error(L, Lt.cannot_thaw_from_budgeted_code, 0), 1);
+    if (L.l_G.budgetL != null)
+      return new lua_ResumeResult(resume_error(L, Lt.cannot_thaw_in_the_budget_callback, 0), 1);
     if (L.frozenparent != null) /* only the freeze target thaws its chain */
       return new lua_ResumeResult(resume_error(L, Lt.cannot_thaw_a_coroutine_that_is_not_the_freeze_target, 0), 1);
+    boolean slice = (from == null || from.beff == null);
+    if (!slice && L.frozen != 0)
+    {
+      int calls = 0;
+      for (lua_State T = L; T != null; T = T.frozenchild)
+        calls = Math.max(calls, T.frozencc & 0xffff);
+      if (getCcalls(from) + calls >= LUAI_MAXCCALLS)
+        return new lua_ResumeResult(resume_error(L, Lt.C_stack_overflow, 0), 1);
+      movecalls(L, 0, getCcalls(from));
+      luaE_spend(from, 1); /* a hand-off */
+    }
     lua_unlock(L);
-    return thawcore(L, from, ctx, k);
+    return thawcore(L, from, ctx, k, stop, slice);
+  }
+
+  public static lua_ResumeResult lua_thawk(lua_State L, lua_State from, long ctx, lua_KFunction k)
+  {
+    return lua_thawatk(L, from, null, ctx, k);
+  }
+
+  /* the first of 'stops' in the frozen chain below 'L' (from its top down) */
+  private static lua_State firststop(lua_State L, lua_State[] stops)
+  {
+    for (lua_State T = L.frozenchild; T != null; T = T.frozenchild)
+    {
+      for (lua_State s : stops)
+      {
+        if (s == T)
+          return T;
+      }
+    }
+    return null;
   }
 
   public static lua_ResumeResult lua_thaw(lua_State L, lua_State from)
   {
-    return lua_thawk(L, from, 0, null);
+    return lua_thawatk(L, from, null, 0, null);
+  }
+
+  public static lua_ResumeResult lua_thaw(lua_State L, lua_State from, lua_State[] stops)
+  {
+    return lua_thawatk(L, from, firststop(L, stops), 0, null);
   }
 
   /* number of results of coroutine 'L' after a resume or thaw ended with 'status' */
