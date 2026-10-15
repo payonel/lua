@@ -415,7 +415,9 @@ do
   assert(r[1] and r[2] == "end", show(r))
 end
 
--- only unbudgeted code thaws, not the callback and not a budgeted thread
+-- the callback cannot thaw; budgeted code can, and its thaw is a resume:
+-- a step, and the thawed coroutine runs on what is left of that budget
+-- (an unbudgeted thaw starts a new slice)
 do
   local co = coroutine.create(function() for i = 1, 100 do end return "x" end)
   local inside
@@ -427,22 +429,27 @@ do
   end)
   coroutine.resume(co)
   assert(debug.isfrozen(co))
-  assert(inside[1] == false and inside[2]:find("cannot thaw from budgeted code"), show(inside))
+  assert(inside[1] == false and inside[2]:find("cannot thaw in the budget callback"), show(inside))
   local r = table.pack(coroutine.resume(coroutine.create(function() return pcall(debug.thaw, co) end)))
   assert(r[2] == true and r[3] == true and r[4] == "x", show(r)) -- (an unbudgeted coroutine can)
   assert(not debug.isfrozen(co))
-  -- a budgeted one cannot
+  -- a budgeted one too
   local co2 = coroutine.create(function() for i = 1, 100 do end return "y" end)
   local once = false
   debug.setbudget(co2, 10, function() if not once then once = true debug.freeze() end end)
   coroutine.resume(co2)
   assert(debug.isfrozen(co2))
-  local b = coroutine.create(function() return pcall(debug.thaw, co2) end)
+  local b = coroutine.create(function()
+    for i = 1, 100 do end
+    local before = select(3, debug.getbudget(coroutine.running()))
+    local ok, v = debug.thaw(co2)
+    local after = select(3, debug.getbudget(coroutine.running()))
+    return ok, v, before - after
+  end)
   debug.setbudget(b, HUGE, function() end)
   r = table.pack(coroutine.resume(b))
-  assert(r[1] and r[2] == false and tostring(r[3]):find("cannot thaw from budgeted code"), show(r))
-  assert(debug.isfrozen(co2))
-  assert(select(2, debug.thaw(co2)) == "y")
+  assert(r[1] and r[2] == true and r[3] == "y" and r[4] > 100, show(r))
+  assert(not debug.isfrozen(co2) and coroutine.status(co2) == "dead")
 end
 
 -- runs 'f' in a coroutine to its end, answering its yields with their
@@ -1288,6 +1295,324 @@ do
   local other = coroutine.wrap(function() return debug.thaw(co) end)
   local ok, v = other()
   assert(ok and v == "x")
+end
+
+-- a thaw that stops ('debug.thaw(co, stop)'): the kernel thaws a frozen
+-- program but stops above one of its coroutines ('stop', or the first key
+-- of a table of them that the thaw meets, from the top of the chain down):
+-- the call that resumed it returns as if it had just frozen there (true and
+-- no values), and it stays frozen, the top of a chain of its own, held by
+-- its resumer, which thaws it when it wants
+
+-- a program whose 'init' runs children in turns, thawing those it finds
+-- frozen, gets the same results and the same yields from each child whether
+-- or not the kernel's thaws stop above them. (A child runs on what 'init'
+-- leaves of the slice: with stops at nearly every slice and slices too
+-- short for the work of 'init' between them, no child would go on.)
+do
+  local function program(log)
+    return function(stops)
+      local init = coroutine.create(function()
+        local kids = {}
+        for k = 1, 3 do
+          kids[k] = {arg = k, co = coroutine.create(function(a)
+            local s = a
+            for part = 1, 4 do
+              for i = 1, 40 * k do s = s + i % 7 end
+              s = s + coroutine.yield(s)
+            end
+            return s
+          end)}
+          stops[kids[k].co] = true
+        end
+        local results, live = {}, #kids
+        while live > 0 do
+          for k, kid in ipairs(kids) do
+            if not results[k] then
+              local r
+              if debug.isfrozen(kid.co) then
+                r = table.pack(debug.thaw(kid.co))
+              else
+                r = table.pack(coroutine.resume(kid.co, kid.arg))
+              end
+              assert(r[1], r[2])
+              if debug.isfrozen(kid.co) then
+                assert(r.n == 1)
+                log.stops = log.stops + 1
+              elseif coroutine.status(kid.co) == "dead" then
+                results[k] = r[2]
+                live = live - 1
+              else
+                kid.arg = r[2] % 5
+                table.insert(log[k], r[2])
+              end
+            end
+          end
+        end
+        return table.unpack(results)
+      end)
+      local r = table.pack(coroutine.resume(init))
+      assert(r[1], r[2])
+      return table.unpack(r, 2, r.n)
+    end
+  end
+  local function run(n, stopat)
+    local log = {stops = 0, {}, {}, {}}
+    local stops = setmetatable({}, {__mode = "k"})
+    local co = coroutine.create(program(log))
+    if n then debug.setbudget(co, n, function() debug.freeze() end) end
+    local r = table.pack(coroutine.resume(co, stops))
+    local k = 0
+    while debug.isfrozen(co) do
+      k = k + 1
+      r = table.pack(debug.thaw(co, stopat(k) and stops or nil))
+    end
+    assert(r[1], r[2])
+    return r, log
+  end
+  local plain, plog = run(nil, function() return false end)
+  assert(plain.n == 4 and plog.stops == 0)
+  for _, case in ipairs{{7, 5}, {20, 1}, {20, 2}, {20, 3}, {101, 1}, {101, 2}, {101, 5}} do
+    local n, every = case[1], case[2]
+    do
+      local r, log = run(n, function(k) return k % every == 0 end)
+      local where = "budget " .. n .. ", every " .. every
+      assert(deepeq(r, plain), where .. ": " .. show(r) .. " vs " .. show(plain))
+      for k = 1, 3 do assert(deepeq(log[k], plog[k]), where .. ": " .. k) end
+      assert(log.stops > 0, where)
+    end
+  end
+end
+
+-- what the call that resumed, closed or thawed the coroutine the thaw stops
+-- above gets: true and no values ('coroutine.resume', 'coroutine.close',
+-- 'debug.thaw'), no values (the function of 'coroutine.wrap'); a thaw of
+-- the coroutine goes on with what that call was doing and gives what it
+-- would have given. Code that resumes a coroutine for another (a callback)
+-- gets the stop as well, and the coroutine is found frozen later: a resume
+-- of it fails, a thaw goes on with it
+do
+  -- run 'body' as the program, frozen every few steps; the kernel's thaws
+  -- stop above the coroutine 'body' registers
+  local function stopcase(body)
+    local stop
+    local report
+    local co = coroutine.create(function()
+      report = body(function(c) stop = c end)
+      return "end"
+    end)
+    debug.setbudget(co, 7, function() debug.freeze() end)
+    local r = table.pack(coroutine.resume(co))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co, stop)) end
+    assert(r[1] and r[2] == "end", show(r))
+    return report
+  end
+  local function busy() local s = 0 for i = 1, 200 do s = s + i end return s end
+  -- (thaw 'c' until it is not frozen: the last results, and the results of
+  -- every thaw that stopped)
+  local function finish(c, r)
+    local stopped = {}
+    while debug.isfrozen(c) do
+      r = table.pack(debug.thaw(c))
+      if debug.isfrozen(c) then stopped[#stopped + 1] = r end
+    end
+    return r, stopped
+  end
+  local function nones(list)
+    for _, r in ipairs(list) do if not (r.n == 1 and r[1] == true) then return false end end
+    return true
+  end
+
+  -- 'coroutine.resume' (and 'debug.thaw' after it)
+  local rep = stopcase(function(register)
+    local c = coroutine.create(busy)
+    register(c)
+    local first = table.pack(coroutine.resume(c))
+    local stopped = debug.isfrozen(c)
+    local last, again = finish(c, first)
+    return {first = first, stopped = stopped, last = last, again = again}
+  end)
+  assert(rep.stopped and rep.first.n == 1 and rep.first[1] == true, show(rep.first))
+  assert(rep.last[1] == true and rep.last[2] == 20100 and rep.last.n == 2, show(rep.last))
+  assert(#rep.again > 0 and nones(rep.again))
+
+  -- 'coroutine.close', frozen in a '__close'
+  for _, fails in ipairs{false, true} do
+    local closed
+    rep = stopcase(function(register)
+      local c = coroutine.create(function()
+        local x <close> = setmetatable({}, {__close = function()
+          closed = busy()
+          if fails then error("in close", 0) end
+        end})
+        coroutine.yield()
+      end)
+      coroutine.resume(c)
+      register(c)
+      local first = table.pack(coroutine.close(c))
+      local stopped = debug.isfrozen(c)
+      local last = finish(c, first)
+      return {first = first, stopped = stopped, last = last, status = coroutine.status(c)}
+    end)
+    assert(rep.stopped and rep.first.n == 1 and rep.first[1] == true, show(rep.first))
+    if fails then
+      assert(rep.last.n == 2 and rep.last[1] == false and rep.last[2] == "in close", show(rep.last))
+    else
+      assert(rep.last.n == 1 and rep.last[1] == true, show(rep.last))
+    end
+    assert(closed == 20100 and rep.status == "dead")
+  end
+
+  -- the function of 'coroutine.wrap' (the coroutine registers itself)
+  rep = stopcase(function(register)
+    local me
+    local gen = coroutine.wrap(function()
+      me = coroutine.running()
+      register(me)
+      return busy()
+    end)
+    local first = table.pack(gen())
+    local stopped = debug.isfrozen(me)
+    local last = finish(me, first)
+    return {first = first, stopped = stopped, last = last}
+  end)
+  assert(rep.stopped and rep.first.n == 0, show(rep.first))
+  assert(rep.last[1] == true and rep.last[2] == 20100, show(rep.last))
+
+  -- a callback of the coroutine resumes it: the stop is the callback's
+  rep = stopcase(function(register)
+    local c = coroutine.create(function()
+      local me = coroutine.running()
+      coroutine.yield(function() coroutine.resume(me) end)
+      return busy()
+    end)
+    local _, wake = coroutine.resume(c)
+    register(c)
+    wake()
+    local stopped = debug.isfrozen(c)
+    local refused = table.pack(coroutine.resume(c))
+    local last = finish(c, refused)
+    return {stopped = stopped, refused = refused, last = last}
+  end)
+  assert(rep.stopped and rep.refused[1] == false, show(rep.refused))
+  assert(rep.refused[2] == "cannot resume non-suspended coroutine", show(rep.refused))
+  assert(rep.last[1] == true and rep.last[2] == 20100, show(rep.last))
+end
+
+-- a stop that is not in the frozen chain changes nothing (the thaw goes to
+-- the bottom); the first stop the thaw meets, from the top down, is the
+-- one; a coroutine with no budget group of its own that a thaw stops above
+-- gets the group it ran with
+do
+  local function busy() local s = 0 for i = 1, 300 do s = s + i end return s end
+  -- user_co resumes 'a', 'a' resumes 'b', and the budget runs out in 'b'
+  -- ('a' and 'b' are the kernel's: no budget group of their own)
+  local function make()
+    local b = coroutine.create(busy)
+    local a = coroutine.create(function()
+      local ok, v = coroutine.resume(b)
+      return v
+    end)
+    local user_co = coroutine.create(function()
+      local ok, v = coroutine.resume(a)
+      return v, debug.isfrozen(a)
+    end)
+    debug.setbudget(user_co, 50, function() debug.freeze() end)
+    assert(coroutine.resume(user_co) and debug.isfrozen(user_co) and debug.isfrozen(b))
+    return user_co, a, b
+  end
+  local function finish(co, stop)
+    local r = table.pack(debug.thaw(co, stop))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co)) end
+    return r
+  end
+  local dead = coroutine.create(function() end)
+  coroutine.resume(dead)
+  local other = make()
+  for _, stop in ipairs{"target", "main", "dead", "false", "other", 42} do
+    local user_co, a, b = make()
+    local s = stop
+    if stop == "target" then s = user_co
+    elseif stop == "main" then s = coroutine.running()
+    elseif stop == "dead" then s = dead
+    elseif stop == "false" then s = {[a] = false, [b] = false}
+    elseif stop == "other" then s = select(3, make())
+    end
+    local r = finish(user_co, s)
+    assert(r[1] == true and r[2] == 45150 and r[3] == false, tostring(stop) .. ": " .. show(r))
+  end
+  -- 'a' first, from the top: user_co's resume of 'a' gives true and nothing
+  local user_co, a, b = make()
+  assert(debug.getbudget(a) == nil)
+  local r = finish(user_co, {[b] = true, [a] = true})
+  assert(r.n == 3 and r[1] == true and r[2] == nil and r[3] == true, show(r))
+  assert(coroutine.status(user_co) == "dead" and debug.isfrozen(a) and debug.isfrozen(b))
+  assert(debug.getbudget(a) == 50 and debug.getbudget(b) == nil)
+  r = finish(a)
+  assert(r[1] == true and r[2] == 45150 and not debug.isfrozen(b), show(r))
+  assert(finish(other)[2] == 45150)
+end
+
+-- once budgeted code thaws a coroutine that a thaw stopped above, its C
+-- calls count on top of those of the thawing coroutine, as for a resume:
+-- thawed where it was resumed, it goes as deep as a run with no freeze;
+-- thawed from deeper, less deep; a thaw that would pass the limit fails and
+-- leaves it frozen, and a thaw from where it was resumed still goes on
+do
+  local function busy() local s = 0 for i = 1, 300 do s = s + i end return s end
+  local function cdepth()
+    local depth = 0
+    local function rec() depth = depth + 1 pcall(rec) end
+    pcall(rec)
+    return depth
+  end
+  -- 'f' under 'k' protected calls
+  local function nested(k, f)
+    if k == 0 then return f() end
+    return select(2, pcall(nested, k - 1, f))
+  end
+  -- the program resumes 'c', which goes 'cnest' calls deep, asks the
+  -- kernel to stop above it, works, then measures; the program thaws 'c'
+  -- first from 'nest' calls deep, then from where it resumed it: how deep
+  -- 'c' measured, whether it was stopped above, and how the first thaw
+  -- failed
+  local function run(budget, nest, cnest)
+    local stopped, failed
+    local co = coroutine.create(function(stops)
+      local c = coroutine.create(function()
+        return nested(cnest, function() stops[coroutine.running()] = true busy() return cdepth() end)
+      end)
+      local r = table.pack(coroutine.resume(c))
+      stopped = debug.isfrozen(c)
+      stops[c] = nil
+      if debug.isfrozen(c) then
+        r = nested(nest, function() return table.pack(debug.thaw(c)) end)
+        if not r[1] then failed = r[2] end
+      end
+      while debug.isfrozen(c) do r = table.pack(debug.thaw(c)) end
+      assert(r[1], r[2])
+      return r[2]
+    end)
+    local stops = {}
+    if budget then debug.setbudget(co, budget, function() debug.freeze() end) end
+    local r = table.pack(coroutine.resume(co, stops))
+    while debug.isfrozen(co) do r = table.pack(debug.thaw(co, stops)) end
+    assert(r[1], r[2])
+    return r[2], stopped, failed
+  end
+  local plain, stopped = run(nil, 0, 0)
+  assert(plain > 150 and not stopped, plain)
+  local d, failed
+  d, stopped, failed = run(50, 0, 0)
+  assert(d == plain and stopped and failed == nil, d)
+  d, stopped, failed = run(50, 10, 0)
+  assert(d == plain - 10 and stopped and failed == nil, d)
+  local deep = run(nil, 0, 150)
+  assert(deep > 0 and deep == plain - 150, deep)
+  d, stopped, failed = run(50, 0, 150)
+  assert(d == deep and stopped and failed == nil, d)
+  d, stopped, failed = run(50, 60, 150)
+  assert(d == deep and stopped and failed == "C stack overflow", tostring(failed))
 end
 
 -- a callback that fires again and again (a tiny budget), freezing every

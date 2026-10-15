@@ -334,10 +334,10 @@ void lua_pushdrain(lua_State* L)
   lua_unlock(L);
 }
 
-/* is 'L' running budgeted code, or the budget callback? */
-bool lua_budgeted(lua_State* L)
+/* is the budget callback running? */
+bool lua_incallback(lua_State* L)
 {
-  return L->beff != nullptr || L->l_G->budgetL != nullptr;
+  return L->l_G->budgetL != nullptr;
 }
 
 lua_Integer lua_getbudget(lua_State* co)

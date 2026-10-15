@@ -732,13 +732,33 @@ static int thaw_cont(lua_State* L, int status, lua_KContext)
 
 static KNamer knamer_thaw_cont("debug.thaw_cont", thaw_cont);
 
+/*
+** debug.thaw(co [, stop]): a thaw of 'co' that stops above 'stop', a
+** coroutine, or the first coroutine of the frozen chain below 'co' that is
+** a key of table 'stop' (raw, with a true value) (see 'lua_thaw'); any
+** other 'stop' is none
+*/
 static int db_thaw(lua_State* L)
 {
   lua_State* co = checkco(L, 1);
-  if (lua_budgeted(L))
-    return luaL_error(L, lt::cannot_thaw_from_budgeted_code);
+  if (lua_incallback(L))
+    return luaL_error(L, lt::cannot_thaw_in_the_budget_callback);
+  lua_State* stop = nullptr;
+  int t = lua_type(L, 2);
+  if (t == LUA_TTHREAD)
+    stop = lua_tothread(L, 2);
+  else if (t == LUA_TTABLE)
+  {
+    for (lua_State* T = lua_frozenchild(co); T != nullptr && stop == nullptr; T = lua_frozenchild(T))
+    {
+      lua_pushthreadi(L, T);
+      if (lua_rawget(L, 2) != LUA_TNIL && lua_toboolean(L, -1))
+        stop = T;
+      lua_pop(L, 1);
+    }
+  }
   lua_settop(L, 1);
-  return thaw_end(L, co, lua_thawk(co, L, 0, thaw_cont));
+  return thaw_end(L, co, lua_thawatk(co, L, stop, 0, thaw_cont));
 }
 
 /* }====================================================== */

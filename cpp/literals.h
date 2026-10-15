@@ -123,7 +123,7 @@ namespace lt
   constexpr byte_view too_many_budget_groups("too many budget groups (at most 65534 at once)");
   constexpr byte_view cannot_thaw_a_coroutine_that_is_not_the_freeze_target("cannot thaw a coroutine that is not the freeze target");
   constexpr byte_view cannot_close_a_frozen_coroutine("cannot close a frozen coroutine");
-  constexpr byte_view cannot_thaw_from_budgeted_code("cannot thaw from budgeted code");
+  constexpr byte_view cannot_thaw_in_the_budget_callback("cannot thaw in the budget callback");
   constexpr byte_view freeze_outside_the_budget_callback("freeze outside the budget callback");
   constexpr byte_view cannot_use_outside_a_vararg_function("cannot use '...' outside a vararg function");
   constexpr byte_view ceil_kw("ceil");

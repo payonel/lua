@@ -391,7 +391,14 @@ int(lua_status)(lua_State* L);
 ** in the way, or the callback raises an error, the chain is destroyed
 ** instead: its threads are dead, and the call returns the error.
 ** 'lua_thaw' goes on with a frozen coroutine and returns like
-** 'lua_resume'; it is an error in the callback or from budgeted code.
+** 'lua_resume'; it is an error in the callback. A thaw by unbudgeted code
+** starts a new slice of the budget; by budgeted code, it is a resume (the
+** chain runs on the rest of that budget). A thaw with 'stops' stops above
+** the first of them it meets in the frozen chain (from its top down): the
+** call that resumed (or closed, or thawed) that coroutine returns as if it
+** had just frozen there (LUA_OK, no results), and it stays frozen, the top
+** of a chain of its own (it keeps the budget group it ran with); stops
+** that are not in the chain change nothing.
 ** A '__close' can freeze too: when a call of the host fails, its variables
 ** close and a freeze there lands at the call, which also returns LUA_OK
 ** ('lua_thaw' finishes the close and returns the error); the host's
@@ -424,7 +431,7 @@ constexpr int LUA_NOFREEZE_BUDGET = 1;
 constexpr int LUA_NOFREEZE_CALL = 2;
 constexpr int LUA_NOFREEZE_RESUME = 3;
 int(lua_nofreeze)(lua_State* L);
-lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from);
+lua_ResumeResult(lua_thaw)(lua_State* co, lua_State* from, std::span<lua_State* const> stops = {});
 bool(lua_isyieldable)(lua_State* L);
 
 int lua_yield(lua_State* L, int nresults);

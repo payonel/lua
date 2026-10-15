@@ -1430,13 +1430,56 @@ static lua_ResumeResult endresume(lua_State* L, lua_State* from, TStatus status,
 }
 
 /*
+** The C calls of the frozen chain of 'co' (its threads, their frames)
+** count from 'to' instead of 'from': each count 'from + n' becomes 'to + n'
+** (see 'lua_thawatk' and 'splitchain').
+*/
+static void movecalls(lua_State* co, l_uint32 from, l_uint32 to)
+{
+  for (lua_State* T = co; T != nullptr; T = T->frozenchild)
+  {
+    assert((T->frozencc & 0xffff) >= from && (T->ccbase & 0xffff) >= from);
+    T->frozencc = T->frozencc - from + to;
+    T->ccbase = T->ccbase - from + to;
+    for (CallInfo* ci = T->ci; ci != &T->base_ci; ci = ci->previous)
+    {
+      if (ci->callstatus & CIST_CCOUNT)
+      {
+        assert((ci->nccalls & 0xffff) >= from);
+        ci->nccalls = ci->nccalls - from + to;
+      }
+    }
+  }
+}
+
+/*
+** A thaw of 'L' stops above coroutine 'co', which 'L' resumed (or closed,
+** or thawed) and which froze there ('lua_thaw'): 'co' stays frozen, the
+** top of a frozen chain of its own. As a frozen top, it has a budget group
+** of its own (the one it ran with, when it had none), and the C calls of
+** its chain count from none, as when the host resumes a coroutine (a thaw
+** by budgeted code counts them on top of its own).
+*/
+static void splitchain(lua_State* L, lua_State* co)
+{
+  co->resumer = nullptr;
+  if (co->bown == nullptr)
+    co->bown = co->beff;
+  movecalls(co, L->frozencc & 0xffff, 0);
+}
+
+/*
 ** Go on with frozen thread 'L' (in protected mode). If it was frozen while
 ** resuming coroutine 'co', resume 'co' first, then the C function that
 ** resumed it goes on through its continuation, with the result of 'co'.
+** A thaw that stops above 'co' ('stop') gives that function no results,
+** with 'co' still frozen, as when a freeze lands in it. 'slice': the thaw
+** starts a new slice of the budget (see 'lua_thawatk').
 */
-static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k);
+static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k,
+                                 lua_State* stop, bool slice);
 
-static void thaw(lua_State* L)
+static void thaw(lua_State* L, lua_State* stop, bool slice)
 {
   if (L->frozenchild != nullptr)
   {
@@ -1444,8 +1487,17 @@ static void thaw(lua_State* L)
     CallInfo* ci = L->ci; /* the C function resuming 'co' */
     L->frozenchild = nullptr;
     co->frozenparent = nullptr;
-    lua_unlock(L);
-    lua_ResumeResult rr = thawcore(co, L, ci->ctx, ci->k);
+    lua_ResumeResult rr = {LUA_OK, 0};
+    if (co == stop)
+    {
+      splitchain(L, co);
+      lua_unlock(L);
+    }
+    else
+    {
+      lua_unlock(L);
+      rr = thawcore(co, L, ci->ctx, ci->k, stop, slice);
+    }
     int n = (*ci->k)(L, rr.status, ci->ctx);
     lua_lock(L);
     api_checknelems(L, n);
@@ -1456,7 +1508,9 @@ static void thaw(lua_State* L)
 
 struct Thaw : ProtectedCall
 {
-  void run(lua_State* L) override { thaw(L); }
+  lua_State* stop;
+  bool slice;
+  void run(lua_State* L) override { thaw(L, stop, slice); }
 };
 
 /*
@@ -1472,7 +1526,8 @@ struct CloseRun : ProtectedCall
   void run(lua_State* L) override { status = luaD_closeprotected(L, 1, status, 2); }
 };
 
-static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, bool first)
+static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, bool first,
+                                 lua_State* stop, bool slice)
 {
   global_State* g = L->l_G;
   CloseRun cr;
@@ -1481,6 +1536,8 @@ static lua_ResumeResult closerun(lua_State* L, lua_State* from, TStatus status, 
   if (!first)
   { /* the '__close' that froze goes on */
     Thaw t;
+    t.stop = stop;
+    t.slice = slice;
     st = luaD_rawrunprotected(L, &t);
     if (st != LUA_OK && st != LUA_FREEZE)
     { /* it failed: the close goes on with that error */
@@ -1588,10 +1645,12 @@ TStatus luaD_hostclose(lua_State* L, StkId level, TStatus status)
 ** freezes again.
 */
 static lua_ResumeResult hostcloserun(lua_State* L, lua_State* from, StkId hosterrfunc,
-                                     l_uint32 hostnCcalls)
+                                     l_uint32 hostnCcalls, lua_State* stop, bool slice)
 {
   global_State* g = L->l_G;
   Thaw t;
+  t.stop = stop;
+  t.slice = slice;
   TStatus st = luaD_rawrunprotected(L, &t);
   TStatus status = (TStatus)L->closestatus;
   if (st != LUA_OK && st != LUA_FREEZE)
@@ -1737,6 +1796,7 @@ lua_ResumeResult lua_closethreadk(lua_State* L, lua_State* from, lua_KContext ct
   }
   lua_lock(L);
   L->nCcalls = (from != nullptr) ? getCcalls(from) : 0;
+  L->ccbase = L->nCcalls;
   L->nfz = 0;
   L->resumer = from;
   L->resumedk = (from != nullptr);
@@ -1748,7 +1808,7 @@ lua_ResumeResult lua_closethreadk(lua_State* L, lua_State* from, lua_KContext ct
   }
   luaE_enterbudget(L, from);
   TStatus status = luaE_beginclose(L);
-  return closerun(L, from, status, true);
+  return closerun(L, from, status, true, nullptr, false);
 }
 
 /*
@@ -1828,7 +1888,8 @@ lua_ResumeResult lua_resumek(lua_State* L, lua_State* from, int nargs, lua_KCont
 namespace lua::runtime
 {
 
-static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
+static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k,
+                                 lua_State* stop, bool slice)
 {
   TStatus status;
   lua_lock(L);
@@ -1840,7 +1901,6 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
     return {resume_error(L, lt::C_stack_overflow, 0), 1};
   L->frozen = 0;
   L->top = L->frozentop; /* (what a refused resume or close left on it is not its) */
-  global_State* g = L->l_G;
   L->nCcalls = L->frozencc; /* its calls, as when it froze */
   L->nfz = 0;
   L->resumer = from;
@@ -1853,32 +1913,34 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
   luaE_enterbudget(L, from);
   if (kind == FZ_CLOSE)
   {
-    if (g->budgetL == nullptr && L->beff != nullptr)
+    if (slice && L->beff != nullptr)
     { /* (a thaw starts with a whole budget, and no '__gc' at its first point) */
       L->beff->left = L->beff->budget;
       L->beff->nodrain = true;
     }
-    return closerun(L, from, L->closestatus, false);
+    return closerun(L, from, L->closestatus, false, stop, slice);
   }
   StkId hosterrfunc = L->errfunc;
   if (kind == FZ_HOSTCLOSE)
   {
     L->errfunc = L->frozenerrfunc;
-    if (g->budgetL == nullptr && L->beff != nullptr)
+    if (slice && L->beff != nullptr)
     { /* (a thaw starts with a whole budget, and no '__gc' at its first point) */
       L->beff->left = L->beff->budget;
       L->beff->nodrain = true;
     }
-    return hostcloserun(L, from, hosterrfunc, hostnCcalls);
+    return hostcloserun(L, from, hosterrfunc, hostnCcalls, stop, slice);
   }
   if (kind == FZ_PCALL)
     L->errfunc = L->frozenerrfunc;
-  if (g->budgetL == nullptr && L->beff != nullptr) /* a thaw starts with a whole budget, so that */
-  {                                                /* it makes progress before it can freeze, */
+  if (slice && L->beff != nullptr) /* a thaw starts with a whole budget, so that */
+  {                                /* it makes progress before it can freeze, */
     L->beff->left = L->beff->budget;
-    L->beff->nodrain = true;                       /* and it starts no '__gc' */
+    L->beff->nodrain = true;       /* and it starts no '__gc' */
   }
   Thaw t;
+  t.stop = stop;
+  t.slice = slice;
   status = luaD_rawrunprotected(L, &t);
   status = precover(L, status);
   if (L->closeself)
@@ -1891,26 +1953,62 @@ static lua_ResumeResult thawcore(lua_State* L, lua_State* from, lua_KContext ctx
 }
 
 /*
-** Go on with frozen coroutine 'L' (see 'lua_resumek' for 'k'). Only
-** unbudgeted code can thaw: not the budget callback, nor a thread with a
-** budget.
+** Go on with frozen coroutine 'L' (see 'lua_resumek' for 'k'), stopping
+** above coroutine 'stop' if the thaw meets it in the frozen chain of 'L'
+** (see 'thaw'; anywhere else, it does not matter: see 'lua_thaw'). The
+** budget callback cannot thaw. A thaw by unbudgeted code starts a new
+** slice of the budget; a thaw by budgeted code is a resume: it spends a
+** step, the chain runs on what is left of the budget of 'from', and its C
+** calls count on top of those of 'from' (if they would pass the limit, the
+** thaw fails).
 */
-lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
+lua_ResumeResult lua_thawatk(lua_State* L, lua_State* from, lua_State* stop, lua_KContext ctx,
+                             lua_KFunction k)
 {
   lua_lock(L);
   if (from == nullptr)
     k = nullptr; /* (as in 'lua_resumek') */
-  if (L->l_G->budgetL != nullptr || (from != nullptr && from->beff != nullptr))
-    return {resume_error(L, lt::cannot_thaw_from_budgeted_code, 0), 1};
+  if (L->l_G->budgetL != nullptr)
+    return {resume_error(L, lt::cannot_thaw_in_the_budget_callback, 0), 1};
   if (L->frozenparent != nullptr) /* only the freeze target thaws its chain */
     return {resume_error(L, lt::cannot_thaw_a_coroutine_that_is_not_the_freeze_target, 0), 1};
+  bool slice = (from == nullptr || from->beff == nullptr);
+  if (!slice && L->frozen != 0)
+  {
+    l_uint32 calls = 0;
+    for (lua_State* T = L; T != nullptr; T = T->frozenchild)
+      calls = std::max(calls, T->frozencc & 0xffff);
+    if ((l_uint32)getCcalls(from) + calls >= LUAI_MAXCCALLS)
+      return {resume_error(L, lt::C_stack_overflow, 0), 1};
+    movecalls(L, 0, (l_uint32)getCcalls(from));
+    luaE_spend(from, 1); /* a hand-off */
+  }
   lua_unlock(L);
-  return thawcore(L, from, ctx, k);
+  return thawcore(L, from, ctx, k, stop, slice);
 }
 
-lua_ResumeResult lua_thaw(lua_State* L, lua_State* from)
+lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k)
 {
-  return lua_thawk(L, from, 0, nullptr);
+  return lua_thawatk(L, from, nullptr, ctx, k);
+}
+
+/* the first of 'stops' in the frozen chain below 'L' (from its top down) */
+static lua_State* firststop(lua_State* L, std::span<lua_State* const> stops)
+{
+  for (lua_State* T = L->frozenchild; T != nullptr; T = T->frozenchild)
+  {
+    for (lua_State* s : stops)
+    {
+      if (s == T)
+        return T;
+    }
+  }
+  return nullptr;
+}
+
+lua_ResumeResult lua_thaw(lua_State* L, lua_State* from, std::span<lua_State* const> stops)
+{
+  return lua_thawatk(L, from, firststop(L, stops), 0, nullptr);
 }
 
 /* number of results of coroutine 'L' after a resume or thaw ended with 'status' */

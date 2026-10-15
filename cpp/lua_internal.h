@@ -184,6 +184,7 @@ void lua_setfieldik(lua_State* L, int idx, byte_view key, lua_KContext ctx, lua_
    a freeze passing through goes on with (getting the status of 'L'); the
    number of results of 'L' then; the coroutine a frozen 'L' resumed */
 lua_ResumeResult lua_thawk(lua_State* L, lua_State* from, lua_KContext ctx, lua_KFunction k);
+lua_ResumeResult lua_thawatk(lua_State* L, lua_State* from, lua_State* stop, lua_KContext ctx, lua_KFunction k);
 lua_State* lua_frozenchild(lua_State* L);
 /* the calls with continuations of the running C function freeze but do
    not yield; C work of 'n' steps (true when the budget is spent); a check
@@ -194,7 +195,7 @@ void lua_setbudgetvalue(lua_State* L, lua_State* co);
 void lua_pushbudgetvalue(lua_State* L, lua_State* co, bool effective);
 lua_State* lua_budgetthread(lua_State* L);
 void lua_setbudgetthread(lua_State* L, lua_State* B);
-bool lua_budgeted(lua_State* L);
+bool lua_incallback(lua_State* L);
 [[noreturn]] void lua_closeself(lua_State* L);
 void lua_callhook(lua_State* L, int nargs);
 bool lua_hasdrain(lua_State* L);
