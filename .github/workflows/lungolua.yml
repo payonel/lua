@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: The version (the branch's commits, then the commit)
-        run: echo "VERSION=1.0.$(git rev-list --count HEAD)-${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+        run: echo "VERSION=1.1.$(git rev-list --count HEAD)-${GITHUB_SHA::8}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v4
         with:

@@ -35,7 +35,7 @@ upstream's) holds both ports:
   they can run at once.
 
 Each push to `lungolua` (but one that changes only `docs/`) publishes to the
-repository's GitHub Packages, as `1.0.<the number of commits on the
+repository's GitHub Packages, as `1.1.<the number of commits on the
 branch>-<the commit's first 8 hex digits>` (so a later commit's version is
 higher, as Gradle and Maven order versions):
 `com.payonel:lungoluacpp` and `lungoluacpp-tests`
