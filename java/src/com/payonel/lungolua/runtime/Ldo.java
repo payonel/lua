@@ -1642,7 +1642,7 @@ public final class Ldo
       luaE_setfrozen(L, FZ_CLOSE);
       if (g.freezetarget == L)
       { /* the freeze of 'L' ends here: the close is where it lands, as a
-           resume is ('from' has no budget: the kernel closed 'L') */
+           resume is ('from' has no budget: the firmware closed 'L') */
         g.freezetarget = null;
         L.resumer = null;
         lua_unlock(L);

@@ -674,7 +674,7 @@ public final class Ldblib
 
   private static int db_setbudget(lua_State L)
   {
-    lua_State co = checkco(L, 1); /* (the thread is required: the kernel sets it on another) */
+    lua_State co = checkco(L, 1); /* (the thread is required: the firmware sets it on another) */
     final int arg = 1;
     long n = luaL_checkinteger(L, arg + 1);
     luaL_argchecki(L, n >= 0, arg + 1, Lt.out_of_range);

@@ -6211,7 +6211,7 @@ public final class PublicApi
   }
 
   /* closing a state whose thread has a budget that freezes at every point:
-     the '__gc' of kernel objects all run (a freeze used to stop them and
+     the '__gc' of firmware objects all run (a freeze used to stop them and
      abort the close) */
   private static int cl_calls = 0;
   private static int cl_gc(lua_State L)
@@ -6294,9 +6294,9 @@ public final class PublicApi
   }
 
   /* '__gc' of user objects wait for their group, and a closing state does
-     not call them; those of kernel objects are called, as in stock */
+     not call them; those of firmware objects are called, as in stock */
   private static int gc_user_calls = 0;
-  private static int gc_kernel_calls = 0;
+  private static int gc_firmware_calls = 0;
 
   private static int gc_user(lua_State L)
   {
@@ -6305,12 +6305,12 @@ public final class PublicApi
   }
   private static final lua_CFunction gc_user = PublicApi::gc_user;
 
-  private static int gc_kernel(lua_State L)
+  private static int gc_firmware(lua_State L)
   {
-    gc_kernel_calls++;
+    gc_firmware_calls++;
     return 0;
   }
-  private static final lua_CFunction gc_kernel = PublicApi::gc_kernel;
+  private static final lua_CFunction gc_firmware = PublicApi::gc_firmware;
 
   private static void gc_nobudgetf(lua_State user_co, lua_State spender) {}
   private static final lua_Budget gc_nobudgetf = PublicApi::gc_nobudgetf;
@@ -6321,14 +6321,14 @@ public final class PublicApi
     luaL_openlibs(L);
     lua_pushcfunction(L, gc_user);
     lua_setglobal(L, hs("gcuser"));
-    lua_pushcfunction(L, gc_kernel);
-    lua_setglobal(L, hs("gckernel"));
+    lua_pushcfunction(L, gc_firmware);
+    lua_setglobal(L, hs("gcfirmware"));
     int st = luaL_dostring(L, hs("""
 
     local function make(f) setmetatable({}, {__gc = f}) end
     function makeuser() make(gcuser) end
-    makekernel = function() make(gckernel) end
-    makekernel()
+    makefirmware = function() make(gcfirmware) end
+    makefirmware()
     function waiting() return coroutine.yield("made") end
 """));
     CHECK(st == LUA_OK);
@@ -6338,15 +6338,15 @@ public final class PublicApi
     CHECK(lua_resume(co, L, 0).status == LUA_OK);
     CHECK(gc_user_calls == 0);
     lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
-    CHECK(gc_kernel_calls == 1); /* the collector calls a kernel object's at once */
+    CHECK(gc_firmware_calls == 1); /* the collector calls a firmware object's at once */
     CHECK(gc_user_calls == 0);   /* a user object's waits for its group */
     lua_gc(L, LUA_GCCOLLECT, 0, 0, 0);
     CHECK(gc_user_calls == 0);
     /* and when the state closes with it waiting, it is not called */
-    lua_getglobal(L, hs("makekernel"));
+    lua_getglobal(L, hs("makefirmware"));
     CHECK(lua_pcall(L, 0, 0, 0) == LUA_OK);
     lua_close(L);
-    CHECK(gc_user_calls == 0 && gc_kernel_calls == 2);
+    CHECK(gc_user_calls == 0 && gc_firmware_calls == 2);
   }
 
   /*
