@@ -3,6 +3,7 @@
 /java/run*/
 /csharp/build/
 /csharp/run*/
+/csharp/lungoluacsharp*.tar.gz
 
 /cpp/lua
 

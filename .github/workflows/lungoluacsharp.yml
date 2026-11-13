@@ -1,0 +1,81 @@
+name: lungoluacsharp
+
+on:
+  push:
+    branches: [lungolua]
+    paths-ignore:
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # the C# tests, as make -C csharp test runs them: the API tests, the engine
+  # tests, the inbox tests, the upstream suite, the deep tests and the gate;
+  # the release build and the debug build at once
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [release, debug]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install the tools the tests use
+        run: sudo apt-get update && sudo apt-get install -y time
+
+      - name: Build and test the ${{ matrix.build }} build
+        run: make -C csharp test DOTNET="$(command -v dotnet)" DEBUG=${{ matrix.build == 'debug' && '1' || '' }}
+
+  publish:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The version (the branch's commits, then the commit)
+        run: |
+          echo "VERSION=1.1.$(git rev-list --count HEAD)-${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+          echo "NUGET_VERSION=1.1.$(git rev-list --count HEAD)-g${GITHUB_SHA::8}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          server-id: github
+
+      - name: Make the packages
+        run: |
+          make -C csharp package DOTNET="$(command -v dotnet)" PKG_VERSION="$VERSION"
+          make -C csharp nupkg DOTNET="$(command -v dotnet)" NUGET_VERSION="$NUGET_VERSION"
+
+      - name: Check that it runs
+        run: dotnet csharp/build/lungolua.dll -e "assert(string.format('%d', 1 + 1) == '2') print(_VERSION)"
+
+      - name: Publish to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for artifact in lungoluacsharp lungoluacsharp-tests; do
+            mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file \
+              -DgroupId=com.payonel -DartifactId="$artifact" -Dversion="$VERSION" -Dpackaging=tar.gz \
+              -Dfile="csharp/$artifact-$VERSION.tar.gz" \
+              -DrepositoryId=github -Durl=https://maven.pkg.github.com/payonel/lua
+            echo "Published com.payonel:$artifact:$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          done
+          dotnet nuget push "csharp/build/nupkg/*.nupkg" \
+            --source https://nuget.pkg.github.com/payonel/index.json --api-key "$GITHUB_TOKEN"
+          echo "Published NuGet Payonel.LungoLua and Payonel.LungoLua.Tests $NUGET_VERSION" >> "$GITHUB_STEP_SUMMARY"

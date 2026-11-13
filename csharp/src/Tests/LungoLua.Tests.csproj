@@ -4,8 +4,15 @@
     <AssemblyName>lungolua-tests</AssemblyName>
     <RootNamespace>Payonel.LungoLua.Tests</RootNamespace>
     <StartupObject>Payonel.LungoLua.Tests.Program</StartupObject>
+    <PackageId>Payonel.LungoLua.Tests</PackageId>
+    <Authors>payonel</Authors>
+    <Description>LungoLua's test library (the debug build's T library, the test C modules as C# classes) and test programs, with the Lua test scripts.</Description>
+    <RepositoryUrl>https://github.com/payonel/lua</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../LungoLua.csproj" />
+    <None Include="../../../tests/**" Pack="true" PackagePath="tests/" Visible="false" />
   </ItemGroup>
 </Project>

@@ -92,6 +92,24 @@ loop always runs the JIT's optimized code (precompiled code is replaced
 only after many calls, and `luaV_execute` is called seldom and loops
 long).
 
+Each push to `lungolua` (but one that changes only `docs/`), or a manual
+run, runs `.github/workflows/lungoluacsharp.yml`: `make -C csharp test` in
+the release and the debug build at once (every C# test, as below), then, if
+both pass, publishes to GitHub Packages, with the workflow's own token:
+- `com.payonel:lungoluacsharp` and `com.payonel:lungoluacsharp-tests` of the
+  same version as the Java and C++ packages (`1.1.<commits>-<sha8>`), as
+  `.tar.gz` files on `https://maven.pkg.github.com/payonel/lua` beside them
+  (`make -C csharp package PKG_VERSION=…`): the engine (`lungolua.dll` with
+  its runtimeconfig and deps), and the tests (`lungolua-tests.dll` beside it
+  and the test scripts);
+- the NuGet packages `Payonel.LungoLua` and `Payonel.LungoLua.Tests` on
+  `https://nuget.pkg.github.com/payonel/index.json` (`make -C csharp
+  nupkg`), versioned `1.1.<commits>-g<sha8>`: NuGet takes SemVer 2, where a
+  prerelease part of digits only cannot start with a 0.
+
+Both registries ask for a login even to read (a classic personal access
+token with `read:packages`). The packages are MIT, as the project.
+
 ## Where the C# goes beyond the Java
 
 What the JVM made the Java allocate, and C# need not:
@@ -198,7 +216,7 @@ The port was done without the owner at hand; these are the choices it made where
 - **D9 (system properties).** The Java's system properties (lua.debug, lua.progname, lua.env*, publicapi.lua) are leading `-Dname=value` arguments of the C# programs, parsed before any engine type initializes (SysProps); the launchers pass them as the Java launchers pass theirs.
 - **D10 (math).** Java's StrictMath (fdlibm, the same results on every JVM) has no .NET counterpart: Libm's functions use System.Math, which is the C library's (glibc on Linux, the same as the C++ build's; another libm on Windows/macOS could differ in the last bit). Porting fdlibm would make results platform-independent as the Java's; not done (open item).
 - **D11 (tooling).** The mechanical Java->C# translator and its error-driven fixers live in the session scratchpad, not in the repository (as the Java port's split.py did): the C# sources are the maintained form from the first commit on.
-- **D12 (publishing).** No GitHub workflow or packages for C# (the user: build locally, do not push).
+- **D12 (publishing).** First none (the user: build locally, do not push); then, at the user's request, `lungoluacsharp.yml` tests both builds on each push and publishes `.tar.gz` packages to the Maven registry beside the C++ ones (so that ModularComputers' Gradle build can fetch them with the credentials it has) and NuGet packages (for .NET hosts); NuGet versions carry `g` before the commit (SemVer 2).
 - **D13 (threads).** The interpreter and the test programs run Lua on a thread with a large stack (the C++ build's C stack: the CLR cannot catch a stack overflow, where the JVM can).
 - **D14 (value types).** The user asked (mid-port) to use C#'s value types and avoid Java-forced allocations: done as a review pass after the transcription passes all tests, so each change is checked against a green baseline.
 - **D15 (readline).** JLine has no .NET counterpart and no package is allowed: Readline's line editor is new code (not a transcription), a small Console.ReadKey editor: Left/Right/Home/End, Backspace/Delete, Up/Down through add_history's list, and Ctrl-A/E/B/F/P/N/K/U as emacs mode; Ctrl-D ends input on an empty line. Ctrl-C is the tty's own SIGINT (as GNU readline), not a key read and re-raised with `kill -INT` as the Java did. Console.InputEncoding is forced to UTF-8 (as the Java forced JLine's). Every character counts one column (wide characters are drawn misplaced).

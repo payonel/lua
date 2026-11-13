@@ -4,6 +4,12 @@
     <AssemblyName>lungolua</AssemblyName>
     <RootNamespace>Payonel.LungoLua</RootNamespace>
     <StartupObject>Payonel.LungoLua.Host.Program</StartupObject>
+    <PackageId>Payonel.LungoLua</PackageId>
+    <Authors>payonel</Authors>
+    <Description>LungoLua: the Lua 5.5 engine with budgets, freeze and thaw, in managed C# (the C# port of payonel/lua's C++ and Java engines).</Description>
+    <RepositoryUrl>https://github.com/payonel/lua</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Tests/**" />
