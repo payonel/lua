@@ -2915,6 +2915,7 @@ public sealed class Lvm
 
   /* 'c' is the limit of live values in the stack */
 
+  [MethodImpl(MethodImplOptions.AggressiveOptimization)]
   public static void luaV_execute(lua_State L, CallInfo ci)
   {
     LClosure cl;

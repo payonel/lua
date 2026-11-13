@@ -11,13 +11,21 @@ TESTS_SRC := $(shell find $(TESTS_DIR) -name '*.cs' -not -path '*/obj/*') $(TEST
 all: build/lungolua.dll build/lungolua-tests.dll
 
 # the engine (and the standalone interpreter, its entry point); the tests
-# assembly beside it, built against it
+# assembly beside it, built against it. Both hold ReadyToRun code for this
+# machine's platform (RID) besides their IL: the runtime starts with it
+# (0.02 s instead of 0.07 for 'lua -e ""'), and on another platform runs the
+# IL as any assembly; luaV_execute is always the JIT's optimized code
+# (AggressiveOptimization: precompiled code is replaced only after enough
+# calls, and luaV_execute is called seldom and loops long)
+RID := $(shell $(DOTNET) msbuild -getProperty:NETCoreSdkRuntimeIdentifier src/LungoLua.csproj 2>/dev/null)
+PUBLISH = $(DOTNET) publish -c Release -r $(RID) --self-contained false -p:PublishReadyToRun=true --nologo -v:q -clp:NoSummary
+
 build/lungolua.dll: $(SRC)
-	$(DOTNET) build -c Release --nologo -v:q -clp:NoSummary src/LungoLua.csproj -o build
+	$(PUBLISH) src/LungoLua.csproj -o build
 	echo "$(abspath $(DOTNET))" > build/dotnet
 
 build/lungolua-tests.dll: build/lungolua.dll $(TESTS_SRC)
-	$(DOTNET) build -c Release --nologo -v:q -clp:NoSummary $(TESTS_DIR)/LungoLua.Tests.csproj -o build
+	$(PUBLISH) $(TESTS_DIR)/LungoLua.Tests.csproj -o build
 	touch $@
 
 # the tests run in RUN_DIR, a copy of ../tests with the test C modules
