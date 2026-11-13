@@ -3,7 +3,7 @@ using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Api;
 
-public sealed class lua_ResumeResult
+public struct lua_ResumeResult
 {
   public int status;
   public int nres;

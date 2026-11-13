@@ -429,15 +429,21 @@ public sealed class Lua
     return os_getenv(name);
   }
 
+  /* the variable's value as a string, or null (no such variable) */
+  private static InternalString optstring(ByteView v)
+  {
+    return v != null ? new InternalString(v) : null;
+  }
+
   private static int handle_luainit(lua_State L)
   {
     InternalString name = new InternalString(Lt.LUA_INIT).concat(LUA_VERSUFFIX);
     ByteView namev = name.view();
-    InternalString einit = (l_getenv(namev) is ByteView v1) ? new InternalString(v1) : null;
+    InternalString einit = optstring(l_getenv(namev));
     if (einit == null)
     {
       namev = Lt.LUA_INIT;
-      einit = (l_getenv(namev) is ByteView v2) ? new InternalString(v2) : null; /* try alternative name */
+      einit = optstring(l_getenv(namev)); /* try alternative name */
     }
     if (einit == null)
       return LUA_OK;
@@ -524,7 +530,7 @@ public sealed class Lua
 
   private static void lua_initreadline(lua_State L)
   {
-    InternalString erllib = (l_getenv(Lt.LUA_RLLIB_VAR) is ByteView v3) ? new InternalString(v3) : null; /* name of readline library */
+    InternalString erllib = optstring(l_getenv(Lt.LUA_RLLIB_VAR)); /* name of readline library */
     ByteView rllib = (erllib != null) ? erllib.view() : Lt.LUA_READLINELIB;
     OsLib lib = os_dlopen(rllib, false);
     if (lib != null)

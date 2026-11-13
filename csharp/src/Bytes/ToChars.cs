@@ -21,7 +21,7 @@ public sealed class ToChars
   }
 
   /* byte_view::parse_result */
-  public sealed class ParseResult
+  public readonly struct ParseResult
   {
     public readonly int next;
     public readonly Errc ec;

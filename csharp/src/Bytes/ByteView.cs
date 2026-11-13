@@ -4,8 +4,31 @@ using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
 
-public sealed class ByteView
+public readonly struct ByteView
 {
+  /* a value, as the C++'s byte_view: 'null' is no view (the C++'s std::nullopt), the default value */
+  public sealed class None
+  {
+    private None()
+    {
+    }
+  }
+
+  public static implicit operator ByteView(None n)
+  {
+    return default;
+  }
+
+  public static bool operator ==(ByteView x, ByteView y)
+  {
+    return ReferenceEquals(x.a, y.a) && x.off == y.off && x.len == y.len;
+  }
+
+  public static bool operator !=(ByteView x, ByteView y)
+  {
+    return !(x == y);
+  }
+
   public const int npos = -1;
   public static readonly ByteView EMPTY = new ByteView(new sbyte[0], 0, 0);
 

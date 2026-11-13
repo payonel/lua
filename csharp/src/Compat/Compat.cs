@@ -763,7 +763,7 @@ public sealed class BitSet
   public int nextClearBit(int i) { for (; i < bits.Length; i++) if (!bits[i]) return i; return i; }
 }
 
-public sealed class OptionalLong
+public readonly struct OptionalLong
 {
   private static readonly OptionalLong EMPTY = new(false, 0);
   private readonly bool present; private readonly long v;
@@ -776,7 +776,7 @@ public sealed class OptionalLong
   public long orElse(long o) { return present ? v : o; }
 }
 
-public sealed class OptionalDouble
+public readonly struct OptionalDouble
 {
   private static readonly OptionalDouble EMPTY = new(false, 0);
   private readonly bool present; private readonly double v;
@@ -789,7 +789,7 @@ public sealed class OptionalDouble
   public double orElse(double o) { return present ? v : o; }
 }
 
-public sealed class OptionalInt
+public readonly struct OptionalInt
 {
   private static readonly OptionalInt EMPTY = new(false, 0);
   private readonly bool present; private readonly int v;

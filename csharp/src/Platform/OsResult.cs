@@ -3,7 +3,7 @@ using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Platform;
 
-public sealed class OsResult
+public struct OsResult
 {
   public bool ok;
   public int err;
