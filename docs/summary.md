@@ -25,14 +25,17 @@ The remaining work is tracked in [tasks.md](tasks.md).
 ## Layout and packages
 
 Branch `lungolua` of payonel/lua (a fork of lua/lua, whose `master` stays
-upstream's) holds both ports:
+upstream's) holds the ports:
 
 - `cpp/`: the C++ engine and its test programs (`make -C cpp`, `make -C cpp
   full`).
 - `java/`: LungoLua, its transcription to Java ([java-port.md](java-port.md)).
-- `tests/`: the test scripts both run. Each build tests in its own copy
-  (`cpp/run`, `java/run`, `java/run-debug`; `RUN_DIR` names another), so
-  they can run at once.
+- `csharp/`: the Java's transcription to C# (.NET 10, managed code only;
+  [csharp-port.md](csharp-port.md); `make -C csharp`, `make -C csharp test`;
+  built locally, not published).
+- `tests/`: the test scripts all of them run. Each build tests in its own
+  copy (`cpp/run`, `java/run`, `java/run-debug`, `csharp/run`,
+  `csharp/run-debug`; `RUN_DIR` names another), so they can run at once.
 
 Each push to `lungolua` (but one that changes only `docs/`) publishes to the
 repository's GitHub Packages, as `1.1.<the number of commits on the

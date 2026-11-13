@@ -59,6 +59,7 @@ test: all run-dir
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd $(RUN_DIR); \
 		cat /dev/null | $(DOTNET) $(CURDIR)/build/lungolua-tests.dll $(DFLAGS) -Dpublicapi.lua=$(CURDIR)/$(LUA) PublicApi )
 	LUA_CS_DEBUG=$(DEBUG) ./test_engine
+	$(DOTNET) build/lungolua-tests.dll $(DFLAGS) Inbox
 	mkdir -p $(RUN_DIR)/libs/_$(TEST_TEMP_DIR)/P1
 	( trap "rm -rf libs/_$(TEST_TEMP_DIR)" EXIT; ulimit -S -s 8192; cd $(RUN_DIR); \
 		cat /dev/null | /usr/bin/time -v $(CURDIR)/$(LUA) -e "_TMP='_$(TEST_TEMP_DIR)'" -W all.lua )
@@ -73,7 +74,15 @@ gate-run: run-dir
 	    cat /dev/null | LUA_CS_DEBUG=$(DEBUG) $(CURDIR)/test_gate $$n all.lua ) || exit 1; \
 	done
 
+# both builds' tests, as the C++'s 'make full' (one after the other; the
+# two can also run at once: they test in run and run-debug)
+full: all
+	$(MAKE) test > /tmp/lua-csharp-test-release.log
+	$(MAKE) test DEBUG=1 > /tmp/lua-csharp-test-debug.log
+	@echo ""; grep -h 'checks,\|final OK\|gate: ok' /tmp/lua-csharp-test-release.log | sed 's/^/  release: /'; \
+	grep -h 'checks,\|final OK\|gate: ok' /tmp/lua-csharp-test-debug.log | sed 's/^/  debug:   /'
+
 clean:
 	rm -rf build
 
-.PHONY: all clean test gate-run run-dir
+.PHONY: all clean full test gate-run run-dir

@@ -180,10 +180,10 @@ public sealed class LuaApi
     return i < LUA_REGISTRYINDEX;
   }
 
-  private sealed class IndexAddr
+  private readonly struct IndexAddr
   {
-    internal int slot;
-    internal TValue row;
+    internal readonly int slot;
+    internal readonly TValue row;
 
     internal IndexAddr(int slot, TValue row)
     {

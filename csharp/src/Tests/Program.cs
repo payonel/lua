@@ -12,7 +12,7 @@ public static class Program
     string[] rest = SysProps.parse(args);
     if (rest.Length == 0)
     {
-      Console.Error.WriteLine("usage: lungolua-tests [-Dname=value...] PublicApi|EngineTests|Gate [args]");
+      Console.Error.WriteLine("usage: lungolua-tests [-Dname=value...] PublicApi|EngineTests|Gate|Inbox [args]");
       return 2;
     }
     string[] pargs = new string[rest.Length - 1];
@@ -22,6 +22,7 @@ public static class Program
       "PublicApi" => PublicApi.main,
       "EngineTests" => EngineTests.main,
       "Gate" => Gate.main,
+      "Inbox" => Inbox.main,
       _ => null,
     };
     if (run == null)
