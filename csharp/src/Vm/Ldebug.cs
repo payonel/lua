@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using HostString = Payonel.LungoLua.Api.HostString;
 using InternalDebug = Payonel.LungoLua.Api.InternalDebug;
@@ -45,11 +46,13 @@ public sealed class Ldebug
   }
 
   /* Active Lua function (given call info) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static LClosure ci_func(lua_State L, CallInfo ci)
   {
     return slotclLval(L, ci.func);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void resethookcount(lua_State L)
   {
     L.hookcount = L.basehookcount;
@@ -75,23 +78,27 @@ public sealed class Ldebug
 
   public const int UPVALORIGIN = NOSLOT - 1;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int upvalorigin(int uvidx)
   {
     return UPVALORIGIN - uvidx;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaG_forerror(lua_State L, int idx, ByteView what)
   {
     TValue v = getslot(L, idx);
     throw luaG_forerror(L, v, what);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaG_callerror(lua_State L, int idx)
   {
     TValue v = getslot(L, idx);
     throw luaG_callerror(L, v, idx);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaG_concaterror(lua_State L, int p1, int p2)
   {
     TValue v1 = getslot(L, p1);
@@ -99,6 +106,7 @@ public sealed class Ldebug
     throw luaG_concaterror(L, v1, v2, p1, p2);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool LuaClosure(Closure f)
   {
     return f != null && f.tt == LUA_VLCL;
@@ -114,6 +122,7 @@ public sealed class Ldebug
       new InternalString(Lt.concat), new InternalString(Lt.call), new InternalString(Lt.close_kw)};
 
   private static readonly bool static_init_1 = static_init_1_run();
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool static_init_1_run()
   {
     { if (JAssert.on && !( tmplainname.Length == TM_N )) throw new AssertionError(JString.valueOf( "tmplainname must cover every metamethod (ORDER TM)")); }
@@ -131,6 +140,7 @@ public sealed class Ldebug
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int currentpc(lua_State L, CallInfo ci)
   {
     { if (JAssert.on && !( isLua(ci))) throw new AssertionError(); }
@@ -203,6 +213,7 @@ public sealed class Ldebug
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int getcurrentline(lua_State L, CallInfo ci)
   {
     return luaG_getfuncline(ci_func(L, ci).p, currentpc(L, ci));
@@ -219,6 +230,7 @@ public sealed class Ldebug
   ** temporarily broken while inserting a new element. We simply assume it
   ** has no good reasons to do that.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void settraps(CallInfo ci)
   {
     for (; ci != null; ci = ci.previous)
@@ -323,6 +335,7 @@ public sealed class Ldebug
   }
 
   /* the thread the budget group of 'co' was set on (nothing once freed) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_State lua_budgetroot(lua_State co)
   {
     return (co.bown != null) ? co.bown.root : null;
@@ -360,6 +373,7 @@ public sealed class Ldebug
   ** such as the debug library: anchored there), so that the thread that
   ** spent the budget keeps its stack and C calls as they are.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_State lua_budgetthread(lua_State L)
   {
     return L.l_G.budgetth;
@@ -410,6 +424,7 @@ public sealed class Ldebug
   }
 
   /* push the function that calls them (see 'luaC_pushdrain') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_pushdrain(lua_State L)
   {
     lua_lock(L);
@@ -418,11 +433,13 @@ public sealed class Ldebug
   }
 
   /* is the budget callback running? */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_incallback(lua_State L)
   {
     return L.l_G.budgetL != null;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long lua_getbudget(lua_State co)
   {
     BudgetGroup bg = co.bown;
@@ -439,16 +456,19 @@ public sealed class Ldebug
     return (g.budgetL != null && g.budgetg == bg) ? bg.budget : bg.left;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_Hook lua_gethook(lua_State L)
   {
     return L.hook;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_gethookmask(lua_State L)
   {
     return L.hookmask & ~LUA_MASKBUDGET;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_gethookcount(lua_State L)
   {
     return L.basehookcount;
@@ -1181,6 +1201,7 @@ public sealed class Ldebug
   /*
   ** Raise a type error
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static RuntimeException typeerror(lua_State L, TValue o, ByteView op, ByteView extra)
   {
     ByteView t = luaT_objtypename(L, o);
@@ -1191,6 +1212,7 @@ public sealed class Ldebug
   ** Raise a type error with "standard" information about the faulty
   ** object 'o' (using 'varinfo').
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaG_typeerror(lua_State L, TValue o, ByteView op, int src)
   {
     throw typeerror(L, o, op, varinfo(L, src));
@@ -1201,6 +1223,7 @@ public sealed class Ldebug
   ** for the object based on how it was called ('funcnamefromcall'); if it
   ** cannot get a name there, try 'varinfo'.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaG_callerror(lua_State L, TValue o, int src)
   {
     CallInfo ci = L.ci;
@@ -1209,11 +1232,13 @@ public sealed class Ldebug
     throw typeerror(L, o, Lt.call, extra);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaG_forerror(lua_State L, TValue o, ByteView what)
   {
     throw luaG_runerror(L, Lt.bad_for_s_number_expected_got_s, new FmtArgs().str(what).str(luaT_objtypename(L, o)));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaG_concaterror(lua_State L, TValue p1, TValue p2, int src1, int src2)
   {
     if (ttisstring(p1) || cvt2str(p1))
@@ -1239,8 +1264,8 @@ public sealed class Ldebug
   */
   public static RuntimeException luaG_tointerror(lua_State L, TValue p1, TValue p2, int src1, int src2)
   {
-    IntResult temp = new IntResult();
-    if (!luaV_tointegerns(p1, temp, LUA_FLOORN2I))
+    IntResult temp = default;
+    if (!luaV_tointegerns(p1, ref temp, LUA_FLOORN2I))
       src2 = src1;
     throw luaG_runerror(L, Lt.number_s_has_no_integer_representation, new FmtArgs().str(varinfo(L, src2)));
   }
@@ -1320,6 +1345,7 @@ public sealed class Ldebug
     throw luaG_errormsg(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaG_runerror(lua_State L, ByteView fmt)
   {
     throw luaG_runerror(L, fmt, new FmtArgs());

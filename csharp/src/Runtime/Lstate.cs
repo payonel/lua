@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using HostString = Payonel.LungoLua.Api.HostString;
 using lua_Alloc = Payonel.LungoLua.Api.lua_Alloc;
@@ -196,6 +197,7 @@ public sealed class Lstate
   public const sbyte APIK_SETTOP = 8;  /* closing down to 'apifirst'; then it is the top */
   public const sbyte APIK_CLOSESLOT = 9; /* closing 'apifirst'; then its slot is nil */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int get_nresults(int cs)
   {
     return (cs & CIST_NRESULTS) - 1;
@@ -207,11 +209,13 @@ public sealed class Lstate
   ** Lua can correctly resume after an yield from a __close method called
   ** because of an error.  (Three bits are enough for error status.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte getcistrecst(CallInfo ci)
   {
     return (sbyte) ((ci.callstatus >>> CIST_RECST) & 7);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setcistrecst(CallInfo ci, int st)
   {
     { if (JAssert.on && !( (st & 7) == st)) throw new AssertionError(); } /* status must fit in three bits */
@@ -219,34 +223,40 @@ public sealed class Lstate
   }
 
   /* active function is a Lua function */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isLua(CallInfo ci)
   {
     return (ci.callstatus & CIST_C) == 0;
   }
 
   /* call is running Lua code (not a hook) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isLuacode(CallInfo ci)
   {
     return (ci.callstatus & (CIST_C | CIST_HOOKED)) == 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setoah(CallInfo ci, bool v)
   {
     ci.callstatus = v ? (ci.callstatus | CIST_OAH) : (ci.callstatus & ~CIST_OAH);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool getoah(CallInfo ci)
   {
     return (ci.callstatus & CIST_OAH) != 0;
   }
 
   /* 'L' is frozen, entered as 'kind' (FZ_*): its stack is as it is now */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaE_setfrozen(lua_State L, sbyte kind)
   {
     L.frozen = kind;
     L.frozentop = L.top;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setthvalue(lua_State L, TValue obj, lua_State x)
   {
     { if (JAssert.on && !( x.tt == LUA_VTHREAD)) throw new AssertionError(); }
@@ -255,6 +265,7 @@ public sealed class Lstate
     checkliveness(L, obj);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_State thvalue(TValue o)
   {
     { if (JAssert.on && !( ttisthread(o))) throw new AssertionError(); }
@@ -262,21 +273,25 @@ public sealed class Lstate
     return (lua_State) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte slottag(lua_State L, int idx)
   {
     return L.stack_tt[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslottag(lua_State L, int idx, sbyte tt)
   {
     L.stack_tt[idx] = tt;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TValue getslot(lua_State L, int idx)
   {
     return new TValue(L.stack_prim[idx], L.stack_ref[idx], L.stack_tt[idx]);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslot(lua_State L, int idx, TValue v)
   {
     L.stack_prim[idx] = v.prim;
@@ -285,6 +300,7 @@ public sealed class Lstate
     checkliveness(L, v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void copyslot(lua_State L, int dst, int src)
   {
     L.stack_prim[dst] = L.stack_prim[src];
@@ -292,6 +308,7 @@ public sealed class Lstate
     L.stack_tt[dst] = L.stack_tt[src];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void copyslot(lua_State to, int dst, lua_State from, int src)
   {
     to.stack_prim[dst] = from.stack_prim[src];
@@ -299,6 +316,7 @@ public sealed class Lstate
     to.stack_tt[dst] = from.stack_tt[src];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void slot2obj(lua_State L, TValue dst, int src)
   {
     dst.prim = L.stack_prim[src];
@@ -307,18 +325,21 @@ public sealed class Lstate
     checkliveness(L, dst);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long slotival(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == LUA_VNUMINT)) throw new AssertionError(); }
     return L.stack_prim[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double slotfltval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == LUA_VNUMFLT)) throw new AssertionError(); }
     return JDouble.longBitsToDouble(L.stack_prim[idx]);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double slotnval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == LUA_VNUMINT || L.stack_tt[idx] == LUA_VNUMFLT)) throw new AssertionError(); }
@@ -326,24 +347,28 @@ public sealed class Lstate
                                              : JDouble.longBitsToDouble(L.stack_prim[idx]);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object slotpval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == LUA_VLIGHTUSERDATA)) throw new AssertionError(); }
     return L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_CFunction slotfval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == ctb(LUA_VLCF))) throw new AssertionError(); }
     return ((CFuncInfo) L.stack_ref[idx]).fptr;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static GCObject slotgcval(lua_State L, int idx)
   {
     { if (JAssert.on && !( (L.stack_tt[idx] & BIT_ISCOLLECTABLE) != 0)) throw new AssertionError(); }
     return (GCObject) L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TString slottsval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == ctb(LUA_VSHRSTR))) throw new AssertionError(); }
@@ -351,6 +376,7 @@ public sealed class Lstate
     return (TString) L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Table slothval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == ctb(LUA_VTABLE))) throw new AssertionError(); }
@@ -358,6 +384,7 @@ public sealed class Lstate
     return (Table) L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Udata slotuval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == ctb(LUA_VUSERDATA))) throw new AssertionError(); }
@@ -365,6 +392,7 @@ public sealed class Lstate
     return (Udata) L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_State slotthval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == ctb(LUA_VTHREAD))) throw new AssertionError(); }
@@ -372,6 +400,7 @@ public sealed class Lstate
     return (lua_State) L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Closure slotclval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == ctb(LUA_VLCL) || L.stack_tt[idx] == ctb(LUA_VCCL))) throw new AssertionError(); }
@@ -379,6 +408,7 @@ public sealed class Lstate
     return (Closure) L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static LClosure slotclLval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == ctb(LUA_VLCL))) throw new AssertionError(); }
@@ -386,6 +416,7 @@ public sealed class Lstate
     return (LClosure) L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CClosure slotclCval(lua_State L, int idx)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == ctb(LUA_VCCL))) throw new AssertionError(); }
@@ -393,62 +424,73 @@ public sealed class Lstate
     return (CClosure) L.stack_ref[idx];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotnil(lua_State L, int idx)
   {
     L.stack_tt[idx] = LUA_VNIL;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotempty(lua_State L, int idx)
   {
     L.stack_tt[idx] = LUA_VEMPTY;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotbt(lua_State L, int idx)
   {
     L.stack_tt[idx] = LUA_VTRUE;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotbf(lua_State L, int idx)
   {
     L.stack_tt[idx] = LUA_VFALSE;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setsloti(lua_State L, int idx, long x)
   {
     L.stack_prim[idx] = x;
     L.stack_tt[idx] = LUA_VNUMINT;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotflt(lua_State L, int idx, double x)
   {
     L.stack_prim[idx] = JDouble.doubleToRawLongBits(x);
     L.stack_tt[idx] = LUA_VNUMFLT;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void chgsloti(lua_State L, int idx, long x)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == LUA_VNUMINT)) throw new AssertionError(); }
     L.stack_prim[idx] = x;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void chgslotflt(lua_State L, int idx, double x)
   {
     { if (JAssert.on && !( L.stack_tt[idx] == LUA_VNUMFLT)) throw new AssertionError(); }
     L.stack_prim[idx] = JDouble.doubleToRawLongBits(x);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotp(lua_State L, int idx, object x)
   {
     L.stack_ref[idx] = x;
     L.stack_tt[idx] = LUA_VLIGHTUSERDATA;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotf(lua_State L, int idx, CFuncInfo cfi)
   {
     L.stack_ref[idx] = cfi;
     L.stack_tt[idx] = ctb(LUA_VLCF);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslots(lua_State L, int idx, TString x)
   {
     { if (JAssert.on && !( novariant(x.tt) == LUA_TSTRING)) throw new AssertionError(); }
@@ -457,6 +499,7 @@ public sealed class Lstate
     checkliveness(L, getslot(L, idx));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setsloth(lua_State L, int idx, Table x)
   {
     { if (JAssert.on && !( x.tt == LUA_VTABLE)) throw new AssertionError(); }
@@ -465,6 +508,7 @@ public sealed class Lstate
     checkliveness(L, getslot(L, idx));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotu(lua_State L, int idx, Udata x)
   {
     { if (JAssert.on && !( x.tt == LUA_VUSERDATA)) throw new AssertionError(); }
@@ -473,6 +517,7 @@ public sealed class Lstate
     checkliveness(L, getslot(L, idx));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotclL(lua_State L, int idx, LClosure x)
   {
     { if (JAssert.on && !( x.tt == LUA_VLCL)) throw new AssertionError(); }
@@ -481,6 +526,7 @@ public sealed class Lstate
     checkliveness(L, getslot(L, idx));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotclC(lua_State L, int idx, CClosure x)
   {
     { if (JAssert.on && !( x.tt == LUA_VCCL)) throw new AssertionError(); }
@@ -489,6 +535,7 @@ public sealed class Lstate
     checkliveness(L, getslot(L, idx));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setslotth(lua_State L, int idx, lua_State x)
   {
     { if (JAssert.on && !( x.tt == LUA_VTHREAD)) throw new AssertionError(); }
@@ -501,33 +548,39 @@ public sealed class Lstate
   /* }================================================================== */
 
   /* true if this thread does not have non-yieldable calls in the stack */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool yieldable(lua_State L)
   {
     return (L.nCcalls & unchecked((int)0xFFFF0000U)) == 0;
   }
 
   /* real number of C calls */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int getCcalls(lua_State L)
   {
     return L.nCcalls & 0xffff;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void incnny(lua_State L)
   {
     L.nCcalls += 0x10000;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void decnny(lua_State L)
   {
     L.nCcalls -= 0x10000;
   }
 
   /* number of non-yieldable calls */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int getnny(lua_State L)
   {
     return L.nCcalls >>> 16;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int stacksize(lua_State th)
   {
     return th.stack_last;
@@ -540,11 +593,13 @@ public sealed class Lstate
 
   /* actual number of total memory allocated */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_State mainthread(global_State g)
   {
     return g.mainth;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool completestate(global_State g)
   {
     return ttype(g.nilvalue) == LUA_TNIL;
@@ -554,6 +609,7 @@ public sealed class Lstate
   ** At a resume of 'L' by 'from' (maybe none): the resumer's budget group is
   ** in effect if it has one, otherwise the thread's own.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaE_enterbudget(lua_State L, lua_State from)
   {
     BudgetGroup bg = (from != null && from.beff != null) ? from.beff : L.bown;
@@ -562,6 +618,7 @@ public sealed class Lstate
   }
 
   /* when the resume ends (not in a freeze): back to the thread's own */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaE_leavebudget(lua_State L)
   {
     if (L.beff != L.bown)
@@ -569,6 +626,7 @@ public sealed class Lstate
   }
 
   /* spend 'n' steps of the budget, if there is one */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaE_spend(lua_State L, long n)
   {
     if ((L.hookmask & LUA_MASKBUDGET) != 0)
@@ -576,6 +634,7 @@ public sealed class Lstate
   }
 
   /* C work of 'n' steps: true when the budget is spent (see 'lua_spend') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaE_spent(lua_State L, long n)
   {
     if ((L.hookmask & LUA_MASKBUDGET) == 0)
@@ -586,23 +645,27 @@ public sealed class Lstate
   }
 
   /* is the budget spent? */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaE_budgetout(lua_State L)
   {
     return (L.hookmask & LUA_MASKBUDGET) != 0 && L.beff.left <= 0;
   }
 
   /* see 'lua_freezeonly' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaE_freezeonly(lua_State L)
   {
     L.ci.callstatus |= CIST_FZONLY;
   }
 
   /* actual number of total memory allocated */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long gettotalbytes(global_State g)
   {
     return g.GCtotalbytes - g.GCdebt;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TValue gfasttm(global_State g, Table mt, int e)
   {
     return (checknoTM(mt, e)) ? null : luaT_gettm(mt, e, g.tmname[e]);
@@ -699,6 +762,7 @@ public sealed class Lstate
       luaD_errerr(L); /* error while handling stack error */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaE_incCstack(lua_State L)
   {
     L.nCcalls++;
@@ -794,6 +858,7 @@ public sealed class Lstate
   private sealed class LuaOpen : ProtectedCall
   {
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       f_luaopen(L);
@@ -804,6 +869,7 @@ public sealed class Lstate
   ** preinitialize a thread with consistent values without allocating
   ** any memory (to avoid errors)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void preinit_thread(lua_State L, global_State g)
   {
     L.l_G = g;
@@ -903,6 +969,7 @@ public sealed class Lstate
   ** base, with no status, so that a '__close' can run. Returns the status
   ** to close with.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte luaE_beginclose(lua_State L)
   {
     sbyte status = L.status;
@@ -1003,6 +1070,7 @@ public sealed class Lstate
   ** tells; 'lua_thaw' finishes the close). From a C function, with no
   ** continuation, they run as a plain call.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_closethread(lua_State L, lua_State from)
   {
     if (from == null && L.frozen == 0)
@@ -1051,6 +1119,7 @@ public sealed class Lstate
     return L;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_close(lua_State L)
   {
     lua_lock(L);

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using ByteSpan = Payonel.LungoLua.Bytes.ByteSpan;
@@ -132,12 +133,14 @@ public sealed class LuaApi
   public const int LUA_MASKLINE = 1 << LUA_HOOKLINE;
   public const int LUA_MASKCOUNT = 1 << LUA_HOOKCOUNT;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void api_incr_top(lua_State L)
   {
     L.top++;
     { if (JAssert.on && !( L.top <= L.ci.top )) throw new AssertionError(JString.valueOf( "stack overflow")); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void adjustresults(lua_State L, int nres)
   {
     if (nres <= LUA_MULTRET && L.ci.top < L.top)
@@ -145,6 +148,7 @@ public sealed class LuaApi
   }
 
   /* Ensure the stack has at least 'n' elements */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void api_checknelems(lua_State L, int n)
   {
     { if (JAssert.on && !( n < (L.top - L.ci.func) )) throw new AssertionError(JString.valueOf( "not enough elements in the stack")); }
@@ -154,6 +158,7 @@ public sealed class LuaApi
   ** functions only update a slot after checking it for popping, but that
   ** is only an optimization for a pop followed by a push.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void api_checkpop(lua_State L, int n)
   {
     { if (JAssert.on && !( n < L.top - L.ci.func && L.tbclist < L.top - n )) throw new AssertionError(JString.valueOf( "not enough free elements in the stack")); }
@@ -162,12 +167,14 @@ public sealed class LuaApi
   public static readonly ByteView lua_ident = Lt.lua_ident_str;
 
   /* test for pseudo index */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool ispseudo(int i)
   {
     return i <= LUA_REGISTRYINDEX;
   }
 
   /* test for upvalue */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isupvalue(int i)
   {
     return i < LUA_REGISTRYINDEX;
@@ -222,12 +229,14 @@ public sealed class LuaApi
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static TValue index2val(lua_State L, int idx)
   {
     IndexAddr a = resolveindex(L, idx);
     return (a.row != null) ? getobj(a.row) : getslot(L, a.slot);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isvalidindex(lua_State L, int idx)
   {
     IndexAddr a = resolveindex(L, idx);
@@ -311,6 +320,7 @@ public sealed class LuaApi
     return old;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double lua_version(lua_State L)
   {
     return LUA_VERSION_NUM;
@@ -324,6 +334,7 @@ public sealed class LuaApi
   ** convert an acceptable stack index into an absolute index
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_absindex(lua_State L, int idx)
   {
     return (idx > 0 || ispseudo(idx))
@@ -331,6 +342,7 @@ public sealed class LuaApi
                : (int) (L.top - L.ci.func) + idx;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_gettop(lua_State L)
   {
     return (int) (L.top - (L.ci.func + 1));
@@ -375,11 +387,13 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_settop(lua_State L, int idx)
   {
     settopaux(L, idx, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_settopk(lua_State L, int idx, long ctx, lua_KFunction k)
   {
     settopaux(L, idx, ctx, k);
@@ -400,11 +414,13 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_closeslot(lua_State L, int idx)
   {
     closeslotaux(L, idx, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_closeslotk(lua_State L, int idx, long ctx, lua_KFunction k)
   {
     closeslotaux(L, idx, ctx, k);
@@ -475,12 +491,14 @@ public sealed class LuaApi
   ** access functions (stack -> C)
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_type(lua_State L, int idx)
   {
     return ((isvalidindex(L, idx)) ? novariant(index2val(L, idx).tt_)
                                          : LUA_TNONE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static HostString lua_typename(lua_State L, int t)
   {
     { if (JAssert.on && !( LUA_TNONE <= t && t < LUA_NUMTYPES )) throw new AssertionError(JString.valueOf( "invalid type")); }
@@ -488,37 +506,43 @@ public sealed class LuaApi
     return new HostString(n);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_iscfunction(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
     return (ttislcf(o) || ttisCclosure(o));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_islightcfunction(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
     return ttislcf(o);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isinteger(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
     return ttisinteger(o);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isnumber(lua_State L, int idx)
   {
-    NumResult n = new NumResult();
+    NumResult n = default;
     TValue o = index2val(L, idx);
-    return tonumber(o, n);
+    return tonumber(o, ref n);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isstring(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
     return ttisstring(o) || cvt2str(o);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isuserdata(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
@@ -626,22 +650,23 @@ public sealed class LuaApi
 
   public static OptionalDouble lua_tonumberx(lua_State L, int idx)
   {
-    NumResult n = new NumResult();
+    NumResult n = default;
     TValue o = index2val(L, idx);
-    if (!tonumber(o, n))
+    if (!tonumber(o, ref n))
       return OptionalDouble.empty();
     return OptionalDouble.of(n.v);
   }
 
   public static OptionalLong lua_tointegerx(lua_State L, int idx)
   {
-    IntResult res = new IntResult();
+    IntResult res = default;
     TValue o = index2val(L, idx);
-    if (!tointeger(o, res))
+    if (!tointeger(o, ref res))
       return OptionalLong.empty();
     return OptionalLong.of(res.v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_toboolean(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
@@ -727,6 +752,7 @@ public sealed class LuaApi
       return null; /* not a C function */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static object touserdata(TValue o)
   {
     switch (ttype(o))
@@ -741,6 +767,7 @@ public sealed class LuaApi
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object lua_touserdata(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
@@ -783,6 +810,7 @@ public sealed class LuaApi
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static InternalString lua_funcaddressi(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
@@ -790,6 +818,7 @@ public sealed class LuaApi
     return func_to_string(fvalue(o));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static ByteView lua_typenamei(lua_State L, int t)
   {
     { if (JAssert.on && !( LUA_TNONE <= t && t < LUA_NUMTYPES )) throw new AssertionError(JString.valueOf( "invalid type")); }
@@ -898,6 +927,7 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static HostString lua_pushfstring(lua_State L, HostString fmt)
   {
     return new HostString(lua_pushfstringi(L, fmt.to_utf8()).view());
@@ -1059,6 +1089,7 @@ public sealed class LuaApi
   ** Whether a call with a continuation from 'ci' may yield: the thread can
   ** yield and the function does not keep calls from yielding (CIST_FZONLY).
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool yieldablek(lua_State L, CallInfo ci)
   {
     return yieldable(L) && (ci.callstatus & CIST_FZONLY) == 0;
@@ -1084,6 +1115,7 @@ public sealed class LuaApi
     return true;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void disarmk(lua_State L, bool armed)
   {
     if (armed)
@@ -1091,6 +1123,7 @@ public sealed class LuaApi
   }
 
   /* how an API call armed by 'armk' calls '__close' (see 'luaF_close') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int closeyy(lua_State L)
   {
     return ((L.ci.callstatus & CIST_NYCALL) != 0) ? 2 : 1;
@@ -1130,6 +1163,7 @@ public sealed class LuaApi
     return novariant(tag);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int auxgetstr(lua_State L, TValue t, ByteView k)
   {
     return auxgetstr(L, t, k, 0, null);
@@ -1140,6 +1174,7 @@ public sealed class LuaApi
   ** table; so, an emergency collection while using the global table
   ** cannot collect it.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void getGlobalTable(lua_State L, TValue gt)
   {
     Table registry = hvalue(L.l_G.l_registry);
@@ -1147,6 +1182,7 @@ public sealed class LuaApi
     { if (JAssert.on && !( novariant(tag) == LUA_TTABLE )) throw new AssertionError(JString.valueOf( "global table must exist")); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_getglobal(lua_State L, HostString name)
   {
     return lua_getglobali(L, name.to_utf8());
@@ -1168,6 +1204,7 @@ public sealed class LuaApi
     return auxgetstr(L, gt, name, ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_getglobalk(lua_State L, HostString name, long ctx, lua_KFunction k)
   {
     return lua_getglobalik(L, name.to_utf8(), ctx, k);
@@ -1200,11 +1237,13 @@ public sealed class LuaApi
     return novariant(tag);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_gettable(lua_State L, int idx)
   {
     return auxgettable(L, idx, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_getfield(lua_State L, int idx, HostString k)
   {
     lua_lock(L);
@@ -1248,6 +1287,7 @@ public sealed class LuaApi
     return novariant(tag);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_geti(lua_State L, int idx, long n)
   {
     return auxgeti(L, idx, n, 0, null);
@@ -1262,6 +1302,7 @@ public sealed class LuaApi
     return novariant(tag);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static Table gettable(lua_State L, int idx)
   {
     TValue t = index2val(L, idx);
@@ -1427,11 +1468,13 @@ public sealed class LuaApi
     lua_unlock(L); /* lock done by caller */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void auxsetstr(lua_State L, TValue t, ByteView k)
   {
     auxsetstr(L, t, k, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setglobal(lua_State L, HostString name)
   {
     lua_setglobali(L, name.to_utf8());
@@ -1453,6 +1496,7 @@ public sealed class LuaApi
     auxsetstr(L, gt, name, ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setglobalk(lua_State L, HostString name, long ctx, lua_KFunction k)
   {
     lua_setglobalik(L, name.to_utf8(), ctx, k);
@@ -1484,11 +1528,13 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_settable(lua_State L, int idx)
   {
     auxsettable(L, idx, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setfield(lua_State L, int idx, HostString k)
   {
     lua_lock(L); /* unlock done in 'auxsetstr' */
@@ -1496,6 +1542,7 @@ public sealed class LuaApi
     auxsetstr(L, t, k.to_utf8());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_getfieldi(lua_State L, int idx, ByteView k)
   {
     lua_lock(L);
@@ -1503,6 +1550,7 @@ public sealed class LuaApi
     return auxgetstr(L, t, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setfieldi(lua_State L, int idx, ByteView k)
   {
     lua_lock(L); /* unlock done in 'auxsetstr' */
@@ -1551,6 +1599,7 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_seti(lua_State L, int idx, long n)
   {
     auxseti(L, idx, n, 0, null);
@@ -1567,6 +1616,7 @@ public sealed class LuaApi
   */
 
   /* is the value at 'idx' a table with no metatable? */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isplaintable(lua_State L, int idx)
   {
     TValue o = index2val(L, idx);
@@ -1679,12 +1729,14 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_rawset(lua_State L, int idx)
   {
     TValue key = getslot(L, L.top - 2);
     aux_rawset(L, idx, key, 2);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_rawsetp(lua_State L, int idx, object p)
   {
     TValue k = new TValue();
@@ -1781,6 +1833,7 @@ public sealed class LuaApi
   ** 'load' and 'call' functions (run Lua code)
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void checkresults(lua_State L, int na, int nr)
   {
     { if (JAssert.on && !( (nr == LUA_MULTRET || (nr <= na || L.ci.top >= L.top + (nr - na))) )) throw new AssertionError(JString.valueOf( "results from function overflow current stack size")); }
@@ -1792,12 +1845,14 @@ public sealed class LuaApi
     internal int func;
     internal int nresults;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       f_call(L, this);
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void f_call(lua_State L, CallS c)
   {
     luaD_callnoyield(L, c.func, c.nresults);
@@ -1826,6 +1881,7 @@ public sealed class LuaApi
   ** continuations, while a freeze passes through and the continuation goes
   ** on after the thaw.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_freezeonly(lua_State L)
   {
     { if (JAssert.on && !( !isLua(L.ci) && L.ci != L.base_ci)) throw new AssertionError(); }
@@ -1837,6 +1893,7 @@ public sealed class LuaApi
   ** the running C function then calls 'lua_checkpointk' where it can go on
   ** after a freeze (or leaves the callback to the next budget point).
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_spend(lua_State L, int n)
   {
     return luaE_spent(L, n);
@@ -1930,11 +1987,13 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_gettablek(lua_State L, int idx, long ctx, lua_KFunction k)
   {
     return auxgettable(L, idx, ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_getfieldik(lua_State L, int idx, ByteView key, long ctx, lua_KFunction k)
   {
     lua_lock(L);
@@ -1942,6 +2001,7 @@ public sealed class LuaApi
     return auxgetstr(L, t, key, ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setfieldik(lua_State L, int idx, ByteView key, long ctx, lua_KFunction k)
   {
     lua_lock(L); /* unlock done in 'auxsetstr' */
@@ -1949,6 +2009,7 @@ public sealed class LuaApi
     auxsetstr(L, t, key, ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_getfieldk(lua_State L, int idx, HostString key, long ctx, lua_KFunction k)
   {
     lua_lock(L);
@@ -1956,16 +2017,19 @@ public sealed class LuaApi
     return auxgetstr(L, t, key.to_utf8(), ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_getik(lua_State L, int idx, long n, long ctx, lua_KFunction k)
   {
     return auxgeti(L, idx, n, ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_settablek(lua_State L, int idx, long ctx, lua_KFunction k)
   {
     auxsettable(L, idx, ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setfieldk(lua_State L, int idx, HostString key, long ctx, lua_KFunction k)
   {
     lua_lock(L); /* unlock done in 'auxsetstr' */
@@ -1973,6 +2037,7 @@ public sealed class LuaApi
     auxsetstr(L, t, key.to_utf8(), ctx, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setik(lua_State L, int idx, long n, long ctx, lua_KFunction k)
   {
     auxseti(L, idx, n, ctx, k);
@@ -2005,6 +2070,7 @@ public sealed class LuaApi
     disarmk(L, armed);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_arithk(lua_State L, int op, long ctx, lua_KFunction k)
   {
     bool armed = armk(L, ctx, k, APIK_ARITH);
@@ -2277,6 +2343,7 @@ public sealed class LuaApi
     return status;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_status(lua_State L)
   {
     return L.status;
@@ -2467,6 +2534,7 @@ public sealed class LuaApi
     return a;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setallocf(lua_State L, lua_Alloc f)
   {
     lua_lock(L);
@@ -2474,6 +2542,7 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setwarnf(lua_State L, lua_WarnFunction f)
   {
     lua_lock(L);
@@ -2481,11 +2550,13 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_warning(lua_State L, HostString msg, int tocont)
   {
     lua_warningi(L, msg.to_utf8(), tocont);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_warningi(lua_State L, ByteView msg, int tocont)
   {
     lua_lock(L);
@@ -2548,6 +2619,7 @@ public sealed class LuaApi
       assign(row, uv, owner);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void assign(TValue row, UpVal uv, GCObject owner)
     {
       this.row = row;
@@ -2692,61 +2764,73 @@ public sealed class LuaApi
     luaC_objbarrier(L, f1, uv2);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_upvalueindex(int i)
   {
     return LUA_REGISTRYINDEX - i;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_call(lua_State L, int nargs, int nresults)
   {
     lua_callk(L, nargs, nresults, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_pcall(lua_State L, int nargs, int nresults, int errfunc)
   {
     return lua_pcallk(L, nargs, nresults, errfunc, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_yield(lua_State L, int nresults)
   {
     return lua_yieldk(L, nresults, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object lua_getextra(lua_State L)
   {
     return L.extra;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_setextra(lua_State L, object p)
   {
     L.extra = p;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double lua_tonumber(lua_State L, int idx)
   {
     return lua_tonumberx(L, idx).orElse(0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long lua_tointeger(lua_State L, int idx)
   {
     return lua_tointegerx(L, idx).orElse(0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_pop(lua_State L, int n)
   {
     lua_settop(L, -n - 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_newtable(lua_State L)
   {
     lua_createtable(L, 0, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_pushcfunction(lua_State L, lua_CFunction f)
   {
     lua_pushcclosure(L, f, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CFuncInfo lua_createcfuncinfo(lua_State L, lua_CFunction fn)
   {
     return CFuncInfo.luaF_newCFuncInfo(L, fn);
@@ -2760,57 +2844,68 @@ public sealed class LuaApi
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_register(lua_State L, HostString name, lua_CFunction f)
   {
     lua_pushcfunction(L, f);
     lua_setglobal(L, name);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isfunction(lua_State L, int idx)
   {
     return lua_type(L, idx) == LUA_TFUNCTION;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_istable(lua_State L, int idx)
   {
     return lua_type(L, idx) == LUA_TTABLE;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_islightuserdata(lua_State L, int idx)
   {
     return lua_type(L, idx) == LUA_TLIGHTUSERDATA;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isnil(lua_State L, int idx)
   {
     return lua_type(L, idx) == LUA_TNIL;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isboolean(lua_State L, int idx)
   {
     return lua_type(L, idx) == LUA_TBOOLEAN;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isthread(lua_State L, int idx)
   {
     return lua_type(L, idx) == LUA_TTHREAD;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isnone(lua_State L, int idx)
   {
     return lua_type(L, idx) == LUA_TNONE;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isnoneornil(lua_State L, int idx)
   {
     return lua_type(L, idx) <= 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_pushliteral(lua_State L, HostString s)
   {
     lua_pushstring(L, s);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_pushglobaltable(lua_State L)
   {
     lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
@@ -2824,28 +2919,33 @@ public sealed class LuaApi
     return new HostString(s);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_insert(lua_State L, int idx)
   {
     lua_rotate(L, idx, 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_remove(lua_State L, int idx)
   {
     lua_rotate(L, idx, -1);
     lua_pop(L, 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_replace(lua_State L, int idx)
   {
     lua_copy(L, -1, idx);
     lua_pop(L, 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object lua_newuserdata(lua_State L, long sz)
   {
     return lua_newuserdatauv(L, sz, 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lua_resetthread(lua_State L)
   {
     return lua_closethread(L, null);

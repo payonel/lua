@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -19,6 +20,7 @@ public abstract class ByteWrites
     return pos + from.len;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int apply(ByteView from)
   {
     return apply(from, 0);
@@ -46,16 +48,19 @@ public abstract class ByteWrites
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void write_double(double v, int pos)
   {
     write_int64(JDouble.doubleToRawLongBits(v), pos);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void write_float(float v, int pos)
   {
     write_int32(JFloat.floatToRawIntBits(v), pos);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void copy_from(ByteView src, int pos)
   {
     { if (JAssert.on && !( pos + src.len <= size())) throw new AssertionError(); }
@@ -63,6 +68,7 @@ public abstract class ByteWrites
       JSystem.arraycopy(src.a, src.off, array(), offset() + pos, src.len);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void copy_from(ByteView src)
   {
     copy_from(src, 0);
@@ -76,11 +82,13 @@ public abstract class ByteWrites
     JArrays.fill(array(), offset() + pos, offset() + pos + len, v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void fill(sbyte v)
   {
     fill(v, 0, ByteView.npos);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void move_from(ByteView src, int pos)
   {
     { if (JAssert.on && !( pos + src.len <= size())) throw new AssertionError(); }
@@ -104,6 +112,7 @@ public abstract class ByteWrites
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void reverse()
   {
     reverse(0, ByteView.npos);
@@ -132,22 +141,26 @@ public abstract class ByteWrites
     return (start + n) - pos;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int write_number(long value, int @base, int pos)
   {
     return write_integer(value, false, @base, pos, false);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int write_number(long value, int @base)
   {
     return write_number(value, @base, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int write_number(long value)
   {
     return write_number(value, 10, 0);
   }
 
   /* an unsigned value ('unsigned long' in the C++) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int write_unsigned(long value, int @base, int pos, bool prefix)
   {
     return write_integer(value, true, @base, pos, prefix);
@@ -164,16 +177,19 @@ public abstract class ByteWrites
     return r.Length;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int write_number(double value, CharsFormat fmt, int precision)
   {
     return write_number(value, fmt, precision, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteView view()
   {
     return new ByteView(array(), offset(), size());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteView str_view()
   {
     ByteView sv = view();
@@ -181,18 +197,21 @@ public abstract class ByteWrites
     return sv.substr(0, n == ByteView.npos ? sv.size() : n);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public sbyte get(int i)
   {
     { if (JAssert.on && !( i < size())) throw new AssertionError(); }
     return array()[offset() + i];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void set(int i, int b)
   {
     { if (JAssert.on && !( i < size())) throw new AssertionError(); }
     array()[offset() + i] = (sbyte) b;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool empty()
   {
     return size() == 0;

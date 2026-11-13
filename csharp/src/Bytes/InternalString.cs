@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -42,32 +43,38 @@ public sealed class InternalString
     return s;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int size()
   {
     return len_;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool empty()
   {
     return len_ == 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int byteAt(int i)
   {
     return bytes_.array()[i] & 0xFF;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteView view()
   {
     return (bytes_.array() == null) ? ByteView.EMPTY : new ByteView(bytes_.array(), 0, len_);
   }
 
   /* its bytes, for its maker to write before the string is shared */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteSpan area()
   {
     return bytes_.span().subspan(0, len_);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool equals(InternalString o)
   {
     if (len_ != o.len_)
@@ -85,6 +92,7 @@ public sealed class InternalString
     return hash();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int compare(InternalString o)
   {
     return view().compare(o.view());
@@ -98,17 +106,20 @@ public sealed class InternalString
     return h;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int hash()
   {
     return (bytes_.array() == null) ? hashBytes(new sbyte[0], 0, 0) : hashBytes(bytes_.array(), 0, len_);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public InternalString substr(int off, int len)
   {
     { if (JAssert.on && !( off <= len_)) throw new AssertionError(); }
     return new InternalString(view(), off, len);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public InternalString substr(int off)
   {
     return substr(off, len_ - off);
@@ -122,6 +133,7 @@ public sealed class InternalString
     return new InternalString(b, len_ + o.size());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int sv_byteat(ByteView s, int i)
   {
     return (i < s.size()) ? s.uat(i) : -1;

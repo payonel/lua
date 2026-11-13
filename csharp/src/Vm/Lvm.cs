@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using ByteSpan = Payonel.LungoLua.Bytes.ByteSpan;
@@ -40,17 +41,20 @@ public sealed class Lvm
   {
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool cvt2str(TValue o)
   {
     return ttype(o) == LUA_TNUMBER;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool cvt2str(lua_State L, int idx)
   {
     TValue v = getslot(L, idx);
     return cvt2str(v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool cvt2num(TValue o)
   {
     return ttype(o) == LUA_TSTRING;
@@ -90,17 +94,19 @@ public sealed class Lvm
   ** Shift right is the same as shift left with a negative 'y'
   */
 
-  public static bool tonumber(TValue o, NumResult nout)
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool tonumber(TValue o, ref NumResult nout)
   {
     if (ttisfloat(o))
     {
       nout.v = fltvalue(o);
       return true;
     }
-    return luaV_tonumber_(o, nout);
+    return luaV_tonumber_(o, ref nout);
   }
 
-  public static bool tonumberns(TValue o, NumResult nout)
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool tonumberns(TValue o, ref NumResult nout)
   {
     if (ttisfloat(o))
     {
@@ -115,67 +121,77 @@ public sealed class Lvm
     return false;
   }
 
-  public static bool tointeger(TValue o, IntResult iout)
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool tointeger(TValue o, ref IntResult iout)
   {
     if (ttisinteger(o))
     {
       iout.v = ivalue(o);
       return true;
     }
-    return luaV_tointeger(o, iout, LUA_FLOORN2I);
+    return luaV_tointeger(o, ref iout, LUA_FLOORN2I);
   }
 
-  public static bool tointegerns(TValue o, IntResult iout)
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool tointegerns(TValue o, ref IntResult iout)
   {
     if (ttisinteger(o))
     {
       iout.v = ivalue(o);
       return true;
     }
-    return luaV_tointegerns(o, iout, LUA_FLOORN2I);
+    return luaV_tointegerns(o, ref iout, LUA_FLOORN2I);
   }
 
-  public static bool tonumber(lua_State L, int idx, NumResult nout)
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool tonumber(lua_State L, int idx, ref NumResult nout)
   {
     TValue v = getslot(L, idx);
-    return tonumber(v, nout);
+    return tonumber(v, ref nout);
   }
 
-  public static bool tonumberns(lua_State L, int idx, NumResult nout)
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool tonumberns(lua_State L, int idx, ref NumResult nout)
   {
     TValue v = getslot(L, idx);
-    return tonumberns(v, nout);
+    return tonumberns(v, ref nout);
   }
 
-  public static bool tointegerns(lua_State L, int idx, IntResult iout)
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
+  public static bool tointegerns(lua_State L, int idx, ref IntResult iout)
   {
     TValue v = getslot(L, idx);
-    return tointegerns(v, iout);
+    return tointegerns(v, ref iout);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaV_rawequalobj(TValue t1, TValue t2)
   {
     return luaV_equalobj(null, t1, t2);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaV_rawequalobj(lua_State L, int t1, TValue t2)
   {
     TValue v1 = getslot(L, t1);
     return luaV_equalobj(null, v1, t2);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaV_finishfastset(lua_State L, TValue t, TValue v)
   {
     { if (JAssert.on && !( iscollectable(t))) throw new AssertionError(); }
     luaC_barrierback(L, gcvalue(t), v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaV_finishfastset(lua_State L, int t, TValue v)
   {
     TValue tv = getslot(L, t);
     luaV_finishfastset(L, tv, v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long luaV_shiftr(long x, long y)
   {
     return luaV_shiftl(x, l_intunm(y));
@@ -196,6 +212,7 @@ public sealed class Lvm
   private const long MAXINTFITSF = (long) 1 << NBM;
 
   /* check whether 'i' is in the interval [-MAXINTFITSF, MAXINTFITSF] */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool l_intfitsf(long i)
   {
     return -(long) MAXINTFITSF <= i && i <= (long) MAXINTFITSF;
@@ -225,7 +242,7 @@ public sealed class Lvm
   ** Try to convert a value to a float. The float case is already handled
   ** by the macro 'tonumber'.
   */
-  public static bool luaV_tonumber_(TValue obj, NumResult n)
+  public static bool luaV_tonumber_(TValue obj, ref NumResult n)
   {
     TValue v = new TValue();
     if (ttisinteger(obj))
@@ -247,7 +264,7 @@ public sealed class Lvm
   /*
   ** try to convert a float to an integer, rounding according to 'mode'.
   */
-  public static bool luaV_flttointeger(double n, IntResult p, int mode)
+  public static bool luaV_flttointeger(double n, ref IntResult p, int mode)
   {
     double f = floor(n);
     if (n != f)
@@ -257,7 +274,7 @@ public sealed class Lvm
       else if (mode == F2Iceil) /* needs ceiling? */
         f += 1;                 /* convert floor to ceiling (remember: n != f) */
     }
-    return lua_numbertointeger(f, p);
+    return lua_numbertointeger(f, ref p);
   }
 
   /*
@@ -265,10 +282,10 @@ public sealed class Lvm
   ** without string coercion.
   ** ("Fast track" handled by macro 'tointegerns'.)
   */
-  public static bool luaV_tointegerns(TValue obj, IntResult p, int mode)
+  public static bool luaV_tointegerns(TValue obj, ref IntResult p, int mode)
   {
     if (ttisfloat(obj))
-      return luaV_flttointeger(fltvalue(obj), p, mode);
+      return luaV_flttointeger(fltvalue(obj), ref p, mode);
     else if (ttisinteger(obj))
     {
       p.v = ivalue(obj);
@@ -281,12 +298,12 @@ public sealed class Lvm
   /*
   ** try to convert a value to an integer.
   */
-  public static bool luaV_tointeger(TValue obj, IntResult p, int mode)
+  public static bool luaV_tointeger(TValue obj, ref IntResult p, int mode)
   {
     TValue v = new TValue();
     if (l_strton(obj, v)) /* does 'obj' point to a numerical string? */
       obj = v;                  /* change it to point to its corresponding number */
-    return luaV_tointegerns(obj, p, mode);
+    return luaV_tointegerns(obj, ref p, mode);
   }
 
   /*
@@ -306,15 +323,15 @@ public sealed class Lvm
   ** an initial value equal to LUA_MININTEGER.)
   */
   private static bool forlimit(lua_State L, long init, int limslot,
-                                  IntResult p, long step)
+                                  ref IntResult p, long step)
   {
     TValue limv = getslot(L, limslot);
     TValue lim = limv;
-    if (!luaV_tointeger(lim, p, (step < 0 ? F2Iceil : F2Ifloor)))
+    if (!luaV_tointeger(lim, ref p, (step < 0 ? F2Iceil : F2Ifloor)))
     {
       /* not coercible to in integer */
-      NumResult flim = new NumResult();           /* try to convert to float */
-      if (!tonumber(lim, flim)) /* cannot convert to float? */
+      NumResult flim = default;           /* try to convert to float */
+      if (!tonumber(lim, ref flim)) /* cannot convert to float? */
         luaG_forerror(L, lim, Lt.limit);
       /* else 'flim' is a float out of integer bounds */
       if (0 < flim.v)
@@ -354,10 +371,10 @@ public sealed class Lvm
     { /* integer loop? */
       long init = slotival(L, pinit);
       long step = slotival(L, pstep);
-      IntResult limit = new IntResult();
+      IntResult limit = default;
       if (step == 0)
         luaG_runerror(L, Lt.for_step_is_zero);
-      if (forlimit(L, init, plimit, limit, step))
+      if (forlimit(L, init, plimit, ref limit, step))
         return true; /* skip the loop */
       else
       { /* prepare loop counter */
@@ -382,14 +399,14 @@ public sealed class Lvm
     }
     else
     { /* try making all values floats */
-      NumResult init = new NumResult();
-      NumResult limit = new NumResult();
-      NumResult step = new NumResult();
-      if (!tonumber(L, plimit, limit))
+      NumResult init = default;
+      NumResult limit = default;
+      NumResult step = default;
+      if (!tonumber(L, plimit, ref limit))
         luaG_forerror(L, plimit, Lt.limit);
-      if (!tonumber(L, pstep, step))
+      if (!tonumber(L, pstep, ref step))
         luaG_forerror(L, pstep, Lt.step);
-      if (!tonumber(L, pinit, init))
+      if (!tonumber(L, pinit, ref init))
         luaG_forerror(L, pinit, Lt.initial_value);
       if (step.v == 0)
         luaG_runerror(L, Lt.for_step_is_zero);
@@ -581,14 +598,15 @@ public sealed class Lvm
   ** from float to int.)
   ** When 'f' is NaN, comparisons must result in false.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool LTintfloat(long i, double f)
   {
     if (l_intfitsf(i))
       return (double) i < f; /* compare them as floats */
     else
     { /* i < f <=> i < ceil(f) */
-      IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Iceil))      /* fi = ceil(f) */
+      IntResult fi = default;
+      if (luaV_flttointeger(f, ref fi, F2Iceil))      /* fi = ceil(f) */
         return i < fi.v;                          /* compare them as integers */
       else                                        /* 'f' is either greater or less than all integers */
         return f > 0;                             /* greater? */
@@ -599,14 +617,15 @@ public sealed class Lvm
   ** Check whether integer 'i' is less than or equal to float 'f'.
   ** See comments on previous function.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool LEintfloat(long i, double f)
   {
     if (l_intfitsf(i))
       return (double) i <= f; /* compare them as floats */
     else
     { /* i <= f <=> i <= floor(f) */
-      IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Ifloor))      /* fi = floor(f) */
+      IntResult fi = default;
+      if (luaV_flttointeger(f, ref fi, F2Ifloor))      /* fi = floor(f) */
         return i <= fi.v;                          /* compare them as integers */
       else                                         /* 'f' is either greater or less than all integers */
         return f > 0;                              /* greater? */
@@ -617,14 +636,15 @@ public sealed class Lvm
   ** Check whether float 'f' is less than integer 'i'.
   ** See comments on previous function.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool LTfloatint(double f, long i)
   {
     if (l_intfitsf(i))
       return f < (double) i; /* compare them as floats */
     else
     { /* f < i <=> floor(f) < i */
-      IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Ifloor))      /* fi = floor(f) */
+      IntResult fi = default;
+      if (luaV_flttointeger(f, ref fi, F2Ifloor))      /* fi = floor(f) */
         return fi.v < i;                           /* compare them as integers */
       else                                         /* 'f' is either greater or less than all integers */
         return f < 0;                              /* less? */
@@ -635,14 +655,15 @@ public sealed class Lvm
   ** Check whether float 'f' is less than or equal to integer 'i'.
   ** See comments on previous function.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool LEfloatint(double f, long i)
   {
     if (l_intfitsf(i))
       return f <= (double) i; /* compare them as floats */
     else
     { /* f <= i <=> ceil(f) <= i */
-      IntResult fi = new IntResult();
-      if (luaV_flttointeger(f, fi, F2Iceil))      /* fi = ceil(f) */
+      IntResult fi = default;
+      if (luaV_flttointeger(f, ref fi, F2Iceil))      /* fi = ceil(f) */
         return fi.v <= i;                         /* compare them as integers */
       else                                        /* 'f' is either greater or less than all integers */
         return f < 0;                             /* less? */
@@ -750,6 +771,7 @@ public sealed class Lvm
       return luaT_callorderTM(L, l, r, TM_LE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool LTnum(lua_State L, int l, int r)
   {
     TValue lv = getslot(L, l);
@@ -757,6 +779,7 @@ public sealed class Lvm
     return LTnum(lv, rv);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool LEnum(lua_State L, int l, int r)
   {
     TValue lv = getslot(L, l);
@@ -764,6 +787,7 @@ public sealed class Lvm
     return LEnum(lv, rv);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool lessthanothers(lua_State L, int l, int r)
   {
     TValue lv = getslot(L, l);
@@ -771,6 +795,7 @@ public sealed class Lvm
     return lessthanothers(L, lv, rv);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool lessequalothers(lua_State L, int l, int r)
   {
     TValue lv = getslot(L, l);
@@ -802,16 +827,16 @@ public sealed class Lvm
       { /* integer == float? */
         /* integer and float can only be equal if float has an integer
            value equal to the integer */
-        IntResult i2 = new IntResult();
+        IntResult i2 = default;
         { if (JAssert.on && !( ttisfloat(t2))) throw new AssertionError(); }
-        return luaV_flttointeger(fltvalue(t2), i2, F2Ieq) && ivalue(t1) == i2.v;
+        return luaV_flttointeger(fltvalue(t2), ref i2, F2Ieq) && ivalue(t1) == i2.v;
       }
       case LUA_VNUMFLT:
       {                 /* float == integer? */
-        IntResult i1 = new IntResult(); /* see comment in previous case */
+        IntResult i1 = default; /* see comment in previous case */
         { if (JAssert.on && !( ttisfloat(t1))) throw new AssertionError(); }
         { if (JAssert.on && !( ttisinteger(t2))) throw new AssertionError(); }
-        return luaV_flttointeger(fltvalue(t1), i1, F2Ieq) && i1.v == ivalue(t2);
+        return luaV_flttointeger(fltvalue(t1), ref i1, F2Ieq) && i1.v == ivalue(t2);
       }
       case LUA_VSHRSTR:
       {
@@ -885,6 +910,7 @@ public sealed class Lvm
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaV_equalobj(lua_State L, int t1, int t2)
   {
     TValue v1 = getslot(L, t1);
@@ -899,12 +925,14 @@ public sealed class Lvm
   ** (External strings can be empty too; they will be concatenated like
   ** non-empty ones.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isemptystr(TValue o)
   {
     return ttisstring(o) &&
            tsslen(tsvalue(o)) == 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isemptystr(lua_State L, int idx)
   {
     TValue v = getslot(L, idx);
@@ -1026,6 +1054,7 @@ public sealed class Lvm
     luaT_callTMres(L, tm, rb, rb, ra);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaV_objlen(lua_State L, int ra, int rb)
   {
     TValue v = getslot(L, rb);
@@ -1080,6 +1109,7 @@ public sealed class Lvm
   /*
   ** Float modulus
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double luaV_modf(lua_State L, double m, double n)
   {
     double r;
@@ -1090,6 +1120,7 @@ public sealed class Lvm
   /* number of bits in an integer */
   private const int NBITS = 64;
   private static readonly bool static_init_1 = static_init_1_run();
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool static_init_1_run()
   {
     { if (JAssert.on && !( NBITS == JLong.SIZE)) throw new AssertionError(); }
@@ -1232,43 +1263,53 @@ public sealed class Lvm
   ** ===================================================================
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long l_addi(lua_State L, long a, long b)
   {
     return l_intadd(a, b);
   }
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long l_subi(lua_State L, long a, long b)
   {
     return l_intsub(a, b);
   }
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long l_muli(lua_State L, long a, long b)
   {
     return l_intmul(a, b);
   }
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long l_band(long a, long b)
   {
     return l_intband(a, b);
   }
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long l_bor(long a, long b)
   {
     return l_intbor(a, b);
   }
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long l_bxor(long a, long b)
   {
     return l_intbxor(a, b);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool l_lti(long a, long b)
   {
     return a < b;
   }
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool l_lei(long a, long b)
   {
     return a <= b;
   }
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool l_gti(long a, long b)
   {
     return a > b;
   }
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool l_gei(long a, long b)
   {
     return a >= b;
@@ -1373,6 +1414,7 @@ public sealed class Lvm
   ** Trace a function as it starts or goes on. With only the budget, there
   ** is nothing to trace: just keep the trap on, to count steps.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tracecall(lua_State L, CallInfo ci)
   {
     if (L.hookmask == LUA_MASKBUDGET)
@@ -1383,18 +1425,21 @@ public sealed class Lvm
     return luaG_tracecall(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void luai_threadyield(lua_State L)
   {
     lua_unlock(L);
     lua_lock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_move(lua_State L, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
     copyslot(L, ra, @base + GETARG_B(i));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_loadi(lua_State L, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
@@ -1402,6 +1447,7 @@ public sealed class Lvm
     setsloti(L, ra, b);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_loadf(lua_State L, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
@@ -1409,6 +1455,7 @@ public sealed class Lvm
     setslotflt(L, ra, b);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_loadk(lua_State L, TValue[] k, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
@@ -1416,6 +1463,7 @@ public sealed class Lvm
     setslot(L, ra, rb);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_loadkx(lua_State L, TValue[] k, int[] code, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -1426,12 +1474,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_loadfalse(lua_State L, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
     setslottag(L, ra, LUA_VFALSE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_lfalseskip(lua_State L, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -1440,12 +1490,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_loadtrue(lua_State L, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
     setslottag(L, ra, LUA_VTRUE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_loadnil(lua_State L, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
@@ -1456,6 +1508,7 @@ public sealed class Lvm
     } while (b-- != 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_getupval(lua_State L, LClosure cl, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
@@ -1464,6 +1517,7 @@ public sealed class Lvm
     setslot(L, ra, v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_setupval(lua_State L, LClosure cl, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
@@ -1839,9 +1893,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -1866,9 +1920,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -1893,9 +1947,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -1922,9 +1976,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -1934,14 +1988,15 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_powk(lua_State L, TValue[] k, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     TValue v2 = k[GETARG_C(i)];
     { if (JAssert.on && !( ttisnumber(v2))) throw new AssertionError(); }
-    NumResult n1 = new NumResult();
-    NumResult n2 = new NumResult();
-    if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
+    NumResult n1 = default;
+    NumResult n2 = default;
+    if (tonumberns(L, v1, ref n1) && tonumberns(v2, ref n2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -1950,14 +2005,15 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_divk(lua_State L, TValue[] k, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     TValue v2 = k[GETARG_C(i)];
     { if (JAssert.on && !( ttisnumber(v2))) throw new AssertionError(); }
-    NumResult n1 = new NumResult();
-    NumResult n2 = new NumResult();
-    if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
+    NumResult n1 = default;
+    NumResult n2 = default;
+    if (tonumberns(L, v1, ref n1) && tonumberns(v2, ref n2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -1983,9 +2039,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -1995,14 +2051,15 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_bandk(lua_State L, TValue[] k, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     TValue v2 = k[GETARG_C(i)];
-    IntResult i1 = new IntResult();
+    IntResult i1 = default;
     long i2 = ivalue(v2);
     { if (JAssert.on && !( ttisinteger(v2))) throw new AssertionError(); }
-    if (tointegerns(L, v1, i1))
+    if (tointegerns(L, v1, ref i1))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2011,14 +2068,15 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_bork(lua_State L, TValue[] k, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     TValue v2 = k[GETARG_C(i)];
-    IntResult i1 = new IntResult();
+    IntResult i1 = default;
     long i2 = ivalue(v2);
     { if (JAssert.on && !( ttisinteger(v2))) throw new AssertionError(); }
-    if (tointegerns(L, v1, i1))
+    if (tointegerns(L, v1, ref i1))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2027,14 +2085,15 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_bxork(lua_State L, TValue[] k, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     TValue v2 = k[GETARG_C(i)];
-    IntResult i1 = new IntResult();
+    IntResult i1 = default;
     long i2 = ivalue(v2);
     { if (JAssert.on && !( ttisinteger(v2))) throw new AssertionError(); }
-    if (tointegerns(L, v1, i1))
+    if (tointegerns(L, v1, ref i1))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2043,13 +2102,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_shli(lua_State L, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
     int rb = @base + GETARG_B(i);
     int ic = GETARG_sC(i);
-    IntResult ib = new IntResult();
-    if (tointegerns(L, rb, ib))
+    IntResult ib = default;
+    if (tointegerns(L, rb, ref ib))
     {
       pc++;
       setsloti(L, ra, luaV_shiftl(ic, ib.v));
@@ -2057,13 +2117,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_shri(lua_State L, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
     int rb = @base + GETARG_B(i);
     int ic = GETARG_sC(i);
-    IntResult ib = new IntResult();
-    if (tointegerns(L, rb, ib))
+    IntResult ib = default;
+    if (tointegerns(L, rb, ref ib))
     {
       pc++;
       setsloti(L, ra, luaV_shiftl(ib.v, -ic));
@@ -2085,9 +2146,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(L, v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -2111,9 +2172,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(L, v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -2137,9 +2198,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(L, v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -2165,9 +2226,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(L, v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -2177,13 +2238,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_pow(lua_State L, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     int v2 = @base + GETARG_C(i);
-    NumResult n1 = new NumResult();
-    NumResult n2 = new NumResult();
-    if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
+    NumResult n1 = default;
+    NumResult n2 = default;
+    if (tonumberns(L, v1, ref n1) && tonumberns(L, v2, ref n2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2196,9 +2258,9 @@ public sealed class Lvm
   { /* float division (always with floats) */
     int v1 = @base + GETARG_B(i);
     int v2 = @base + GETARG_C(i);
-    NumResult n1 = new NumResult();
-    NumResult n2 = new NumResult();
-    if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
+    NumResult n1 = default;
+    NumResult n2 = default;
+    if (tonumberns(L, v1, ref n1) && tonumberns(L, v2, ref n2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2223,9 +2285,9 @@ public sealed class Lvm
     }
     else
     {
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(L, v1, n1) && tonumberns(L, v2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(L, v1, ref n1) && tonumberns(L, v2, ref n2))
       {
         int ra = @base + GETARG_A(i);
         pc++;
@@ -2235,13 +2297,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_band(lua_State L, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     int v2 = @base + GETARG_C(i);
-    IntResult i1 = new IntResult();
-    IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
+    IntResult i1 = default;
+    IntResult i2 = default;
+    if (tointegerns(L, v1, ref i1) && tointegerns(L, v2, ref i2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2250,13 +2313,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_bor(lua_State L, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     int v2 = @base + GETARG_C(i);
-    IntResult i1 = new IntResult();
-    IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
+    IntResult i1 = default;
+    IntResult i2 = default;
+    if (tointegerns(L, v1, ref i1) && tointegerns(L, v2, ref i2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2265,13 +2329,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_bxor(lua_State L, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     int v2 = @base + GETARG_C(i);
-    IntResult i1 = new IntResult();
-    IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
+    IntResult i1 = default;
+    IntResult i2 = default;
+    if (tointegerns(L, v1, ref i1) && tointegerns(L, v2, ref i2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2280,13 +2345,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_shl(lua_State L, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     int v2 = @base + GETARG_C(i);
-    IntResult i1 = new IntResult();
-    IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
+    IntResult i1 = default;
+    IntResult i2 = default;
+    if (tointegerns(L, v1, ref i1) && tointegerns(L, v2, ref i2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2295,13 +2361,14 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_shr(lua_State L, int @base, int i, int pc)
   {
     int v1 = @base + GETARG_B(i);
     int v2 = @base + GETARG_C(i);
-    IntResult i1 = new IntResult();
-    IntResult i2 = new IntResult();
-    if (tointegerns(L, v1, i1) && tointegerns(L, v2, i2))
+    IntResult i1 = default;
+    IntResult i2 = default;
+    if (tointegerns(L, v1, ref i1) && tointegerns(L, v2, ref i2))
     {
       int ra = @base + GETARG_A(i);
       pc++;
@@ -2310,6 +2377,7 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_mmbin(lua_State L, CallInfo ci, int[] code, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2323,6 +2391,7 @@ public sealed class Lvm
     luaT_trybinTM(L, ra, rb, result, tm);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_mmbini(lua_State L, CallInfo ci, int[] code, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2336,6 +2405,7 @@ public sealed class Lvm
     luaT_trybiniTM(L, ra, imm, flip, result, tm);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_mmbink(lua_State L, CallInfo ci, TValue[] k, int[] code, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2353,13 +2423,13 @@ public sealed class Lvm
   {
     int ra = @base + GETARG_A(i);
     int rb = @base + GETARG_B(i);
-    NumResult nb = new NumResult();
+    NumResult nb = default;
     if (slottag(L, rb) == LUA_VNUMINT)
     {
       long ib = slotival(L, rb);
       setsloti(L, ra, l_intunm(ib));
     }
-    else if (tonumberns(L, rb, nb))
+    else if (tonumberns(L, rb, ref nb))
     {
       setslotflt(L, ra, -nb.v);
     }
@@ -2375,8 +2445,8 @@ public sealed class Lvm
   {
     int ra = @base + GETARG_A(i);
     int rb = @base + GETARG_B(i);
-    IntResult ib = new IntResult();
-    if (tointegerns(L, rb, ib))
+    IntResult ib = default;
+    if (tointegerns(L, rb, ref ib))
     {
       setsloti(L, ra, l_intbnot(ib.v));
     }
@@ -2388,6 +2458,7 @@ public sealed class Lvm
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_not(lua_State L, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
@@ -2398,6 +2469,7 @@ public sealed class Lvm
       setslottag(L, ra, LUA_VFALSE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_len(lua_State L, CallInfo ci, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2406,6 +2478,7 @@ public sealed class Lvm
     luaV_objlen(L, ra, @base + GETARG_B(i));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_concat(lua_State L, CallInfo ci, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2421,6 +2494,7 @@ public sealed class Lvm
     luai_threadyield(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_close(lua_State L, CallInfo ci, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2430,6 +2504,7 @@ public sealed class Lvm
     luaF_close(L, ra, (sbyte) LUA_OK, 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_tbc(lua_State L, CallInfo ci, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2439,6 +2514,7 @@ public sealed class Lvm
     luaF_newtbcupval(L, ra);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_jmp(int i, int pc)
   {
     pc += GETARG_sJ(i);
@@ -2521,6 +2597,7 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_eqk(lua_State L, TValue[] k, int[] code, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2678,6 +2755,7 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_test(lua_State L, int[] code, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2692,6 +2770,7 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_testset(lua_State L, int[] code, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2731,6 +2810,7 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_forprep(lua_State L, CallInfo ci, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2741,6 +2821,7 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int op_tforloop(lua_State L, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2784,6 +2865,7 @@ public sealed class Lvm
     return pc;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_closure(lua_State L, CallInfo ci, LClosure cl, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2800,6 +2882,7 @@ public sealed class Lvm
     luai_threadyield(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_vararg(lua_State L, CallInfo ci, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);
@@ -2810,6 +2893,7 @@ public sealed class Lvm
     luaT_getvarargs(L, ci, ra, n, vatab);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_getvarg(lua_State L, CallInfo ci, int @base, int i)
   {
     int ra = @base + GETARG_A(i);
@@ -2817,6 +2901,7 @@ public sealed class Lvm
     luaT_getvararg(L, ci, ra, rc);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void op_errnnil(lua_State L, CallInfo ci, LClosure cl, int @base, int i, int pc)
   {
     int ra = @base + GETARG_A(i);

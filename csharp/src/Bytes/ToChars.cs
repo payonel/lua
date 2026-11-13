@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Globalization;
 using System.Numerics;
 using Payonel.LungoLua.Compat;
@@ -66,11 +67,13 @@ public sealed class ToChars
       return new Dec(new BigInteger(m) * BigInteger.Pow(5, -e), -e);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int signum()
     {
       return unscaled.Sign;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int precision()
     {
       if (unscaled.IsZero)
@@ -90,6 +93,7 @@ public sealed class ToChars
       return q;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Dec setScale(int p)
     {
       if (p >= scale)
@@ -232,6 +236,7 @@ public sealed class ToChars
     return true;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isdigit(ByteView s, int i)
   {
     return i < s.size() && s.uat(i) >= '0' && s.uat(i) <= '9';

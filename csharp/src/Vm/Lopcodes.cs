@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
 using Lt = Payonel.LungoLua.Bytes.Lt;
@@ -90,23 +91,27 @@ public sealed class Lopcodes
   public const int MAXARG_vC = (1 << SIZE_vC) - 1;
   public const int OFFSET_sC = MAXARG_C >> 1;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int int2sC(int i)
   {
     return i + OFFSET_sC;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int sC2int(int i)
   {
     return i - OFFSET_sC;
   }
 
   /* creates a mask with 'n' 1 bits at position 'p' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int MASK1(int n, int p)
   {
     return (~((~0) << n)) << p;
   }
 
   /* creates a mask with 'n' 0 bits at position 'p' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int MASK0(int n, int p)
   {
     return ~MASK1(n, p);
@@ -221,159 +226,189 @@ public sealed class Lopcodes
 
   public const int NUM_OPCODES = OP_EXTRAARG + 1;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GET_OPCODE(int i)
   {
     return (i >>> POS_OP) & MASK1(SIZE_OP, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int getOpMode(int m)
   {
     return luaP_opmodes[m] & 7;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool checkopm(int i, int m)
   {
     return getOpMode(GET_OPCODE(i)) == m;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int getarg(int i, int pos, int size)
   {
     return (i >>> pos) & MASK1(size, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_A(int i)
   {
     return getarg(i, POS_A, SIZE_A);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_B(int i)
   {
     { if (JAssert.on && !( checkopm(i, iABC))) throw new AssertionError(); }
     return getarg(i, POS_B, SIZE_B);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_vB(int i)
   {
     { if (JAssert.on && !( checkopm(i, ivABC))) throw new AssertionError(); }
     return getarg(i, POS_vB, SIZE_vB);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_sB(int i)
   {
     return sC2int(GETARG_B(i));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_C(int i)
   {
     { if (JAssert.on && !( checkopm(i, iABC))) throw new AssertionError(); }
     return getarg(i, POS_C, SIZE_C);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_vC(int i)
   {
     { if (JAssert.on && !( checkopm(i, ivABC))) throw new AssertionError(); }
     return getarg(i, POS_vC, SIZE_vC);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_sC(int i)
   {
     return sC2int(GETARG_C(i));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool TESTARG_k(int i)
   {
     return (i & (1 << POS_k)) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_k(int i)
   {
     return getarg(i, POS_k, 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_Bx(int i)
   {
     { if (JAssert.on && !( checkopm(i, iABx))) throw new AssertionError(); }
     return getarg(i, POS_Bx, SIZE_Bx);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_Ax(int i)
   {
     { if (JAssert.on && !( checkopm(i, iAx))) throw new AssertionError(); }
     return getarg(i, POS_Ax, SIZE_Ax);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_sBx(int i)
   {
     { if (JAssert.on && !( checkopm(i, iAsBx))) throw new AssertionError(); }
     return getarg(i, POS_Bx, SIZE_Bx) - OFFSET_sBx;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int GETARG_sJ(int i)
   {
     { if (JAssert.on && !( checkopm(i, isJ))) throw new AssertionError(); }
     return getarg(i, POS_sJ, SIZE_sJ) - OFFSET_sJ;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int SET_OPCODE(int i, int o)
   {
     return (i & MASK0(SIZE_OP, POS_OP)) | ((o << POS_OP) & MASK1(SIZE_OP, POS_OP));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int setarg(int i, int v, int pos, int size)
   {
     return (i & MASK0(size, pos)) | ((v << pos) & MASK1(size, pos));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int SETARG_A(int i, int v)
   {
     return setarg(i, v, POS_A, SIZE_A);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int SETARG_B(int i, int v)
   {
     return setarg(i, v, POS_B, SIZE_B);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int SETARG_C(int i, int v)
   {
     return setarg(i, v, POS_C, SIZE_C);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int SETARG_k(int i, bool v)
   {
     return setarg(i, v ? 1 : 0, POS_k, 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int SETARG_Bx(int i, int v)
   {
     return setarg(i, v, POS_Bx, SIZE_Bx);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int SETARG_sJ(int i, int j)
   {
     return setarg(i, j + OFFSET_sJ, POS_sJ, SIZE_sJ);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int CREATE_ABCk(int o, int a, int b, int c, bool k)
   {
     return (o << POS_OP) | (a << POS_A) | (b << POS_B) | (c << POS_C) | ((k ? 1 : 0) << POS_k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int CREATE_vABCk(int o, int a, int b, int c, bool k)
   {
     return (o << POS_OP) | (a << POS_A) | (b << POS_vB) | (c << POS_vC) | ((k ? 1 : 0) << POS_k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int CREATE_ABx(int o, int a, int bc)
   {
     return (o << POS_OP) | (a << POS_A) | (bc << POS_Bx);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int CREATE_Ax(int o, int a)
   {
     return (o << POS_OP) | (a << POS_Ax);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int CREATE_sJ(int o, int j, bool k)
   {
     return (o << POS_OP) | (j << POS_sJ) | ((k ? 1 : 0) << POS_k);
@@ -389,16 +424,19 @@ public sealed class Lopcodes
   ** bit 7: instruction is an MM instruction (call a metamethod)
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool testAMode(int m)
   {
     return (luaP_opmodes[m] & (1 << 3)) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool testTMode(int m)
   {
     return (luaP_opmodes[m] & (1 << 4)) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool testMMMode(int m)
   {
     return (luaP_opmodes[m] & (1 << 7)) != 0;
@@ -407,11 +445,13 @@ public sealed class Lopcodes
   /* Check whether instruction sets top for next instruction, that is,
   ** it results in multiple values. Used only for tests.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaP_isOT(int i)
   {
     return GET_OPCODE(i) == OP_TAILCALL || ((luaP_opmodes[GET_OPCODE(i)] & (1 << 6)) != 0 && GETARG_C(i) == 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int opmode(int mm, int ot, int it, int t, int a, int m)
   {
     return (mm << 7) | (ot << 6) | (it << 5) | (t << 4) | (a << 3) | m;
@@ -507,6 +547,7 @@ public sealed class Lopcodes
       opmode(0, 0, 0, 0, 0, iAx), /* OP_EXTRAARG */
   };
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool testITMode(int m)
   {
     return (luaP_opmodes[m] & (1 << 5)) != 0;

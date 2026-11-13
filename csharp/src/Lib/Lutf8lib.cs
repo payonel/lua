@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using KNamer = Payonel.LungoLua.Api.KNamer;
 using luaL_Box = Payonel.LungoLua.Api.luaL_Box;
@@ -27,16 +28,19 @@ public sealed class Lutf8lib
 
   private const int MAXUTF = 0x7FFFFFFF;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool iscont(int c)
   {
     return (c & 0xC0) == 0x80;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int ubyte(InternalString s, int i)
   {
     return (i < s.size()) ? s.byteAt(i) : 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool iscontat(InternalString s, int i)
   {
     return iscont(ubyte(s, i));
@@ -400,6 +404,7 @@ public sealed class Lutf8lib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int iter_auxstrict(lua_State L)
   {
     return iter_aux(L, true);
@@ -407,6 +412,7 @@ public sealed class Lutf8lib
 
   private static readonly lua_CFunction iter_auxstrict_fn = Lutf8lib.iter_auxstrict;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int iter_auxlax(lua_State L)
   {
     return iter_aux(L, false);

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using LuaAuxLib = Payonel.LungoLua.Api.LuaAuxLib;
 using lua_Budget = Payonel.LungoLua.Api.lua_Budget;
@@ -54,11 +55,13 @@ public sealed class Lnames
 
   private static readonly Names n = new Names(); /* (made on first use: registrations run at static initialization) */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static Names names()
   {
     return n;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static string view(ByteView v)
   {
     return JString.of(v.array(), v.offset(), v.size(), JCharsets.ISO_8859_1);
@@ -88,6 +91,7 @@ public sealed class Lnames
   ** engine's own functions are named already; a name is stable from one run
   ** to the next, and not the same as another's.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_registerk(string name, lua_KFunction k)
   {
     names().kbyname.put(name, k);
@@ -100,17 +104,20 @@ public sealed class Lnames
   ** the engine's light C functions, and budget callbacks. The lookups answer
   ** nullptr for what has no name.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static string lua_kname(lua_KFunction k)
   {
     return names().knames.get(k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_KFunction lua_kbyname(ByteView name)
   {
     registerall();
     return names().kbyname.get(view(name));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_registerbudget(string name, lua_Budget f)
   {
     lua_registerbudget(name, f, null);
@@ -125,6 +132,7 @@ public sealed class Lnames
   }
 
   /* what a budget with callback 'f' needs of a state it comes into (such as the thread its callback runs on) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_preparebudget(lua_State L, lua_Budget f)
   {
     Consumer<lua_State> it = names().budgetprepare_fn.get(f);
@@ -132,28 +140,33 @@ public sealed class Lnames
       it.accept(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static string lua_budgetname(lua_Budget f)
   {
     return names().budgetnames.get(f);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_Budget lua_budgetbyname(ByteView name)
   {
     registerall();
     return names().budgetbyname.get(view(name));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_registerobjectkind(string name, lua_ObjectFactory f)
   {
     names().objectkinds.put(name, f);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_ObjectFactory lua_objectkind(ByteView name)
   {
     registerall();
     return names().objectkinds.get(view(name));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_registercclosure(lua_CClosureKind kind)
   {
     lua_CClosureKind slot = names().cclosures.computeIfAbsent(kind.f, f => new lua_CClosureKind());
@@ -161,28 +174,33 @@ public sealed class Lnames
     names().cclosurebyname.put(kind.name, slot);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_CClosureKind lua_cclosurekind(lua_CFunction f)
   {
     return names().cclosures.get(f);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_CClosureKind lua_cclosurekindbyname(ByteView name)
   {
     registerall();
     return names().cclosurebyname.get(view(name));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void registercfi(CFuncInfo cfi, string name)
   {
     names().cfibyname.put(name, cfi);
     names().cfinames.put(cfi, name);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static string lua_cfiname(CFuncInfo cfi)
   {
     return names().cfinames.get(cfi);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CFuncInfo lua_cfibyname(ByteView name)
   {
     registerall();

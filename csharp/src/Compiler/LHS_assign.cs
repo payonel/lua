@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Compiler;
@@ -21,6 +22,7 @@ public sealed class LHS_assign
     copyfrom(o);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   internal void copyfrom(LHS_assign o)
   {
     prev = o.prev;

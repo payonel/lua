@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -17,6 +18,7 @@ public sealed class FmtScan
     this.fmt = fmt;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool next()
   {
     litStart = pos;

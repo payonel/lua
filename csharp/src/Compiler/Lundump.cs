@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using ByteSpan = Payonel.LungoLua.Bytes.ByteSpan;
@@ -282,6 +283,7 @@ public sealed class Lundump
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static RuntimeException error(LoadState S, ByteView why)
   {
     luaO_pushfstring(S.L, Lt.s_bad_binary_format_s, new FmtArgs().str(S.name).str(why));
@@ -294,6 +296,7 @@ public sealed class Lundump
   */
 
   /* (with no frame of its own: made again, it reads the rest of 'b') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void loadBlock(LoadState S, ByteSpan b)
   {
     if (luaZ_read(S.Z, b) != 0)
@@ -301,6 +304,7 @@ public sealed class Lundump
     S.offset += b.size();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void loadVector(LoadState S, ByteSpan v)
   {
     loadBlock(S, v);
@@ -323,6 +327,7 @@ public sealed class Lundump
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void loadVector(LoadState S, sbyte[] v)
   {
     loadBlock(S, ByteOwner.adopt(v).span());
@@ -351,6 +356,7 @@ public sealed class Lundump
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void loadVar(LoadState S, ByteOwner x)
   {
     loadVector(S, x.span());
@@ -444,11 +450,13 @@ public sealed class Lundump
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int loadSize(LoadState S)
   {
     return (int) loadVarint(S, MAX_SIZE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int loadInt(LoadState S)
   {
     return (int) loadVarint(S, JInteger.MAX_VALUE);
@@ -996,6 +1004,7 @@ public sealed class Lundump
       error(S, msg);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static RuntimeException numerror(LoadState S, ByteView what, ByteView tname)
   {
     ByteView msg = luaO_pushfstring(S.L, Lt.s_s_mismatch, new FmtArgs().str(tname).str(what)).view();
@@ -1003,12 +1012,14 @@ public sealed class Lundump
   }
 
   /* (with no frame of its own: made again, it goes the same way) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void checknumsize(LoadState S, int size, ByteView tname)
   {
     if (size != loadByte(S))
       numerror(S, Lt.size, tname);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void checknumformat(LoadState S, bool eq, ByteView tname)
   {
     if (!eq)

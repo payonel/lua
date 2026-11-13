@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
 using InternalString = Payonel.LungoLua.Bytes.InternalString;
@@ -22,6 +23,7 @@ public sealed class Lfunc
   }
 
   /* test whether thread is in 'twups' list */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isintwups(lua_State L)
   {
     return L.twups != L;
@@ -33,22 +35,26 @@ public sealed class Lfunc
   */
   public const int MAXUPVAL = 255;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool upisopen(UpVal up)
   {
     return up.owner != null;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int uplevel(UpVal up)
   {
     { if (JAssert.on && !( upisopen(up))) throw new AssertionError(); }
     return up.stkid;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TValue upvalgetval(UpVal uv)
   {
     return upisopen(uv) ? getslot(uv.owner, uv.stkid) : getobj(uv.value);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void upvalsetval(lua_State L, UpVal uv, TValue v)
   {
     if (upisopen(uv))
@@ -184,6 +190,7 @@ public sealed class Lfunc
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void poptbclist(lua_State L)
   {
     { if (JAssert.on && !( L.ntbc > 0 && L.tbc[L.ntbc - 1] == L.tbclist)) throw new AssertionError(); }

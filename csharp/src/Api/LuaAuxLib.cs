@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using ByteSpan = Payonel.LungoLua.Bytes.ByteSpan;
@@ -68,6 +69,7 @@ public sealed class LuaAuxLib
   ** =======================================================
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_addchar(luaL_Buffer B, sbyte c)
   {
     if (B.used >= B.bytes.size())
@@ -291,6 +293,7 @@ public sealed class LuaAuxLib
   ** =======================================================
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_argerror(lua_State L, int arg, HostString extramsg)
   {
     return luaL_argerrori(L, arg, extramsg.to_utf8());
@@ -333,6 +336,7 @@ public sealed class LuaAuxLib
     return luaL_errori(L, Lt.bad_s_d_to_s_s);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_typeerror(lua_State L, int arg, HostString tname)
   {
     return luaL_typeerrori(L, arg, tname.to_utf8());
@@ -353,6 +357,7 @@ public sealed class LuaAuxLib
     return luaL_argerrori(L, arg, msg.view());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void tag_error(lua_State L, int arg, int tag)
   {
     luaL_typeerrori(L, arg, lua_typenamei(L, tag));
@@ -381,6 +386,7 @@ public sealed class LuaAuxLib
     lua_pushfstringi(L, Lt.empty_str); /* else, no information available... */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_error(lua_State L, HostString fmt)
   {
     return luaL_errori(L, fmt.to_utf8());
@@ -419,11 +425,13 @@ public sealed class LuaAuxLib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_fileresult(lua_State L, bool stat, HostString fname)
   {
     return luaL_fileresulti(L, stat, (fname != null) ? fname.to_utf8() : null, errno);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_execresult(lua_State L, int stat)
   {
     return luaL_execresulti(L, stat, errno);
@@ -455,6 +463,7 @@ public sealed class LuaAuxLib
   ** =======================================================
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaL_newmetatable(lua_State L, HostString tname)
   {
     return luaL_newmetatablei(L, tname.to_utf8());
@@ -473,17 +482,20 @@ public sealed class LuaAuxLib
     return true;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_setmetatable(lua_State L, HostString tname)
   {
     luaL_setmetatablei(L, tname.to_utf8());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_setmetatablei(lua_State L, ByteView tname)
   {
     luaL_getmetatablei(L, tname);
     lua_setmetatable(L, -2);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object luaL_testudata(lua_State L, int ud, HostString tname)
   {
     return luaL_testudatai(L, ud, tname.to_utf8());
@@ -506,11 +518,13 @@ public sealed class LuaAuxLib
     return null; /* value is not a userdata with a metatable */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object luaL_checkudata(lua_State L, int ud, HostString tname)
   {
     return luaL_checkudatai(L, ud, tname.to_utf8());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object luaL_checkudatai(lua_State L, int ud, ByteView tname)
   {
     object p = luaL_testudatai(L, ud, tname);
@@ -518,11 +532,13 @@ public sealed class LuaAuxLib
     return p;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_UserObject luaL_testuserobject(lua_State L, int ud, HostString tname)
   {
     return luaL_testuserobjecti(L, ud, tname.to_utf8());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_UserObject luaL_testuserobjecti(lua_State L, int ud, ByteView tname)
   {
     if (luaL_testudatai(L, ud, tname) == null)
@@ -530,11 +546,13 @@ public sealed class LuaAuxLib
     return lua_touserobject(L, ud);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_UserObject luaL_checkuserobject(lua_State L, int ud, HostString tname)
   {
     return luaL_checkuserobjecti(L, ud, tname.to_utf8());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_UserObject luaL_checkuserobjecti(lua_State L, int ud, ByteView tname)
   {
     lua_UserObject p = luaL_testuserobjecti(L, ud, tname);
@@ -588,6 +606,7 @@ public sealed class LuaAuxLib
   ** but without 'msg'.)
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_checkstack(lua_State L, int space, HostString msg)
   {
     luaL_checkstacki(L, space, (msg != null) ? msg.to_utf8() : null);
@@ -607,12 +626,14 @@ public sealed class LuaAuxLib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_checktype(lua_State L, int arg, int t)
   {
     if (lua_type(L, arg) != t)
       tag_error(L, arg, t);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_checkany(lua_State L, int arg)
   {
     if (lua_type(L, arg) == LUA_TNONE)
@@ -660,6 +681,7 @@ public sealed class LuaAuxLib
     return d.getAsDouble();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double luaL_optnumber(lua_State L, int arg, double def)
   {
     return (lua_isnoneornil(L, arg) ? def : luaL_checknumber(L, arg));
@@ -759,6 +781,7 @@ public sealed class LuaAuxLib
     return B.used;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_prepbuffsize(luaL_Buffer B, long sz)
   {
     return prepbuff(B, sz);
@@ -773,6 +796,7 @@ public sealed class LuaAuxLib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_addstring(luaL_Buffer B, HostString s)
   {
     ByteView sv = s.to_utf8();
@@ -792,6 +816,7 @@ public sealed class LuaAuxLib
     lua_pushiblock(L, ByteOwner.move(block), len);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_pushresultsize(luaL_Buffer B, int sz)
   {
     luaL_addsize(B, sz);
@@ -881,6 +906,7 @@ public sealed class LuaAuxLib
     box.used = 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaL_slicespent(lua_State L, long bytes)
   {
     return lua_spend(L, (int) (bytes / LUAL_SLICESTEP));
@@ -899,6 +925,7 @@ public sealed class LuaAuxLib
     luaL_buffload(B, bx);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_buffinit(lua_State L, luaL_Buffer B)
   {
     { if (JAssert.on && !( B.bytes.empty() || L == B.L)) throw new AssertionError(); }
@@ -906,6 +933,7 @@ public sealed class LuaAuxLib
     B.used = 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_buffinitsize(lua_State L, luaL_Buffer B, long sz)
   {
     luaL_buffinit(L, B);
@@ -983,6 +1011,7 @@ public sealed class LuaAuxLib
     internal OsFile f;         /* file being read */
     internal ByteOwner buff = new ByteOwner(BUFSIZ); /* area for reading file */
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ByteView read(lua_State L)
     {
       return getF(L, this);
@@ -1105,6 +1134,7 @@ public sealed class LuaAuxLib
     return ls;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int loadfileend(lua_State L, int status, int @base)
   {
     lua_replace(L, @base); /* the function or the message */
@@ -1118,6 +1148,7 @@ public sealed class LuaAuxLib
     return loadfileend(L, lua_loadkresume(L, status, filespec(L, mode, @base, ctx, k)), @base);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_loadfilei(lua_State L, ByteView filename, ByteView mode)
   {
     return luaL_loadfileik(L, filename, mode, 0, null);
@@ -1205,6 +1236,7 @@ public sealed class LuaAuxLib
     return status;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_loadfilex(lua_State L, HostString filename, HostString mode)
   {
     ByteView fn = (filename != null) ? filename.to_utf8() : null;
@@ -1216,6 +1248,7 @@ public sealed class LuaAuxLib
   {
     internal ByteView chunk = Lt.empty_str;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ByteView read(lua_State L)
     {
       return getS(L, this);
@@ -1231,6 +1264,7 @@ public sealed class LuaAuxLib
     return chunk;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_loadbufferi(lua_State L, ByteView buff, ByteView name, ByteView mode)
   {
     LoadS ls = new LoadS();
@@ -1238,6 +1272,7 @@ public sealed class LuaAuxLib
     return lua_loadi(L, ls, name, mode);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_loadbufferx(lua_State L, ByteView buff, HostString name, HostString mode)
   {
     return luaL_loadbufferi(L, buff,
@@ -1245,6 +1280,7 @@ public sealed class LuaAuxLib
                             (mode != null) ? mode.to_utf8() : null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_loadstring(lua_State L, HostString s)
   {
     return luaL_loadbufferi(L, s.to_utf8(), s.to_utf8(), Lt.t_char);
@@ -1252,6 +1288,7 @@ public sealed class LuaAuxLib
 
   /* }====================================================== */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_getmetafield(lua_State L, int obj, HostString @event)
   {
     return luaL_getmetafieldi(L, obj, @event.to_utf8());
@@ -1274,6 +1311,7 @@ public sealed class LuaAuxLib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaL_callmeta(lua_State L, int obj, HostString @event)
   {
     return luaL_callmetai(L, obj, @event.to_utf8());
@@ -1289,6 +1327,7 @@ public sealed class LuaAuxLib
     return true;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long luaL_len(lua_State L, int idx)
   {
     lua_len(L, idx);
@@ -1296,6 +1335,7 @@ public sealed class LuaAuxLib
   }
 
   /* 'luaL_len' with '__len' called with continuation 'k' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long luaL_lenk(lua_State L, int idx, long ctx, lua_KFunction k)
   {
     lua_lenk(L, idx, ctx, k);
@@ -1380,6 +1420,7 @@ public sealed class LuaAuxLib
   }
 
   /* the string 'luaL_toistringk' pushed, which must be a string */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static InternalString luaL_tostringresult(lua_State L)
   {
     if (!lua_isstring(L, -1))
@@ -1387,12 +1428,14 @@ public sealed class LuaAuxLib
     return lua_toistring(L, -1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static InternalString luaL_toistring(lua_State L, int idx)
   {
     luaL_toistringk(L, idx, 0, null);
     return luaL_tostringresult(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static ByteView luaL_tolstring(lua_State L, int idx)
   {
     return luaL_toistring(L, idx).view();
@@ -1422,6 +1465,7 @@ public sealed class LuaAuxLib
     lua_pop(L, nup); /* remove upvalues */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_newlibi(lua_State L, luaL_Regi[] funcs)
   {
     luaL_checkversion(L);
@@ -1441,6 +1485,7 @@ public sealed class LuaAuxLib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_newlibcfi(lua_State L, luaL_RegCFI[] funcs)
   {
     luaL_checkversion(L);
@@ -1466,11 +1511,13 @@ public sealed class LuaAuxLib
     lua_pop(L, nup); /* remove upvalues */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_newlibtable(lua_State L, luaL_Reg[] funcs)
   {
     lua_createtable(L, 0, funcs.Length);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_newlib(lua_State L, luaL_Reg[] funcs)
   {
     luaL_checkversion(L);
@@ -1483,6 +1530,7 @@ public sealed class LuaAuxLib
   ** into the stack
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaL_getsubtable(lua_State L, int idx, HostString fname)
   {
     return luaL_getsubtablei(L, idx, fname.to_utf8());
@@ -1545,6 +1593,7 @@ public sealed class LuaAuxLib
   ** its own continuation, and the user's 'k' goes on with the results.
   ** Stack of 'requireff': modname, openf, glb, then LOADED and the module.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int requireff_start(lua_State L)
   {
     return requireff(L, LUA_OK, 0);
@@ -1606,6 +1655,7 @@ public sealed class LuaAuxLib
   }
 
   /* stack of 'getsubtableff': the table, the field name */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int getsubtableff_start(lua_State L)
   {
     return getsubtableff(L, LUA_OK, 0);
@@ -1683,12 +1733,14 @@ public sealed class LuaAuxLib
     return true;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static ByteView luaL_tolstringk(lua_State L, int idx, long ctx, lua_KFunction k)
   {
     luaL_toistringk(L, idx, ctx, k);
     return luaL_tolstringresult(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static ByteView luaL_tolstringresult(lua_State L)
   {
     return luaL_tostringresult(L).view();
@@ -1724,6 +1776,7 @@ public sealed class LuaAuxLib
     luaL_addlstring(b, s, pos, s.size() - pos); /* push last suffix */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_addgsub(luaL_Buffer b, HostString s, HostString p, HostString r)
   {
     luaL_addgsubi(b, s.to_utf8(), p.to_utf8(), r.to_utf8());
@@ -1745,6 +1798,7 @@ public sealed class LuaAuxLib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static HostString luaL_gsub(lua_State L, HostString s, HostString p, HostString r)
   {
     return new HostString(luaL_gsubi(L, s.to_utf8(), p.to_utf8(), r.to_utf8()));
@@ -1753,6 +1807,7 @@ public sealed class LuaAuxLib
   private sealed class AuxAlloc : lua_Alloc
   {
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool permit(long osize, long nsize, int tag)
     {
       return true;
@@ -1812,6 +1867,7 @@ public sealed class LuaAuxLib
   private sealed class WarnOff : lua_WarnFunction
   {
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void warn(lua_State L, HostString message, int tocont)
     {
       checkcontrol(L, message, tocont);
@@ -1873,6 +1929,7 @@ public sealed class LuaAuxLib
     return res;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_makeseed(lua_State L)
   {
     return luai_makeseed();
@@ -1907,6 +1964,7 @@ public sealed class LuaAuxLib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_checkversion(lua_State L)
   {
     luaL_checkversion_(L, LUA_VERSION_NUM, LUAL_NUMSIZES);
@@ -1921,30 +1979,35 @@ public sealed class LuaAuxLib
     return luaL_loadfilei(L, sv, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_argcheck(lua_State L, bool cond, int arg, HostString extramsg)
   {
     if (!cond)
       luaL_argerrori(L, arg, extramsg.to_utf8());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_argchecki(lua_State L, bool cond, int arg, ByteView extramsg)
   {
     if (!cond)
       luaL_argerrori(L, arg, extramsg);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_argexpected(lua_State L, bool cond, int arg, HostString tname)
   {
     if (!cond)
       luaL_typeerrori(L, arg, tname.to_utf8());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_argexpectedi(lua_State L, bool cond, int arg, ByteView tname)
   {
     if (!cond)
       luaL_typeerrori(L, arg, tname);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static HostString luaL_checkstring(lua_State L, int arg)
   {
     return new HostString(luaL_checklstring(L, arg));
@@ -1958,6 +2021,7 @@ public sealed class LuaAuxLib
     return luaL_checkstring(L, arg);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static HostString luaL_typename(lua_State L, int idx)
   {
     return lua_typename(L, lua_type(L, idx));
@@ -1979,16 +2043,19 @@ public sealed class LuaAuxLib
     return status;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_getmetatable(lua_State L, HostString tname)
   {
     return luaL_getmetatablei(L, tname.to_utf8());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_getmetatablei(lua_State L, ByteView tname)
   {
     return lua_getfieldi(L, LUA_REGISTRYINDEX, tname);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_loadbuffer(lua_State L, ByteView buff, HostString name)
   {
     return luaL_loadbufferi(L, buff,
@@ -1997,31 +2064,37 @@ public sealed class LuaAuxLib
   }
 
   /* push the value used to represent failure/error */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_pushfail(lua_State L)
   {
     lua_pushnil(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_bufflen(luaL_Buffer bf)
   {
     return bf.used;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static ByteSpan luaL_buffaddr(luaL_Buffer bf)
   {
     return bf.bytes.span();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_addsize(luaL_Buffer B, int s)
   {
     B.used += s;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_buffsub(luaL_Buffer B, int s)
   {
     B.used -= s;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaL_prepbuffer(luaL_Buffer B)
   {
     return luaL_prepbuffsize(B, LUAL_BUFFERSIZE);

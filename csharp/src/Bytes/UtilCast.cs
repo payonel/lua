@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -10,6 +11,7 @@ public sealed class UtilCast
   {
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int pointertext(ByteWrites @out, int pos, object p)
   {
     if (p is long v && isuserdata(p))
@@ -17,6 +19,7 @@ public sealed class UtilCast
     return @out.write_unsigned(JInteger.toUnsignedLong(JSystem.identityHashCode(p)), 16, pos, true);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static InternalString func_to_string(object pf)
   {
     ByteOwner buf = new ByteOwner(20);
@@ -28,6 +31,7 @@ public sealed class UtilCast
 
   /* the same integer gives the same light userdata */
   /* (the box is the identity: one box per integer, as Java's Long objects) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isuserdata(object p)
   {
     return p is long v && ReferenceEquals(userdatas.get(v), p);
@@ -42,6 +46,7 @@ public sealed class UtilCast
     return JInteger.toUnsignedLong(JSystem.identityHashCode(p));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object as_userdata(long val)
   {
     if (val == 0)

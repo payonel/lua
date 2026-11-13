@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using BudgetNamer = Payonel.LungoLua.Api.BudgetNamer;
 using HostString = Payonel.LungoLua.Api.HostString;
@@ -41,12 +42,14 @@ public sealed class Ldblib
   ** guarantees about its stack space; any push in L1 must be
   ** checked.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void checkstack(lua_State L, lua_State L1, int n)
   {
     if (L != L1 && !lua_checkstack(L1, n))
       luaL_errori(L, Lt.stack_overflow);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int db_getregistry(lua_State L)
   {
     lua_pushvalue(L, LUA_REGISTRYINDEX);
@@ -141,18 +144,21 @@ public sealed class Ldblib
   ** from 'lua_getinfo' into result table. Key is always a string;
   ** value can be a string, an int, or a boolean.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void settabss(lua_State L, ByteView k, ByteView v)
   {
     lua_pushlstring(L, v, 0, v.size());
     lua_setfieldi(L, -2, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void settabsi(lua_State L, ByteView k, int v)
   {
     lua_pushinteger(L, v);
     lua_setfieldi(L, -2, k);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void settabsb(lua_State L, ByteView k, bool v)
   {
     lua_pushboolean(L, v);
@@ -348,6 +354,7 @@ public sealed class Ldblib
     return get + 1;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int db_getupvalue(lua_State L)
   {
     return auxupvalue(L, 1);
@@ -355,6 +362,7 @@ public sealed class Ldblib
 
   private static readonly lua_CFunction db_getupvalue_fn = Ldblib.db_getupvalue;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int db_setupvalue(lua_State L)
   {
     luaL_checkany(L, 3);
@@ -382,6 +390,7 @@ public sealed class Ldblib
     return r;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static UpvalRef checkupvalvalid(lua_State L, int argf, int argnup)
   {
     UpvalRef r = checkupval(L, argf, argnup);
@@ -596,6 +605,7 @@ public sealed class Ldblib
 
   private static readonly KNamer knamer_db_debugk = new KNamer("debug.db_debugk", db_debugk_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int db_debug(lua_State L)
   {
     return db_debug_from(L, DD_READ);
@@ -662,6 +672,7 @@ public sealed class Ldblib
   private static readonly lua_Budget budgetf_fn = Ldblib.budgetf;
 
   /* a budget of this callback comes into a state (see 'lua_preparebudget') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void budgetprepare(lua_State L)
   {
     callbackthread(L);
@@ -721,6 +732,7 @@ public sealed class Ldblib
 
   private static readonly lua_CFunction db_getbudget_fn = Ldblib.db_getbudget;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static lua_State checkco(lua_State L, int arg)
   {
     lua_State co = lua_tothread(L, arg);
@@ -728,6 +740,7 @@ public sealed class Ldblib
     return co;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int db_freeze(lua_State L)
   {
     throw lua_freeze(L);
@@ -753,6 +766,7 @@ public sealed class Ldblib
 
   private static readonly lua_CFunction db_canfreeze_fn = Ldblib.db_canfreeze;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int db_isfrozen(lua_State L)
   {
     lua_pushboolean(L, lua_isfrozen(checkco(L, 1)));
@@ -788,6 +802,7 @@ public sealed class Ldblib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int thaw_cont(lua_State L, int status, long ctx)
   {
     lua_State co = lua_tothread(L, 1);
@@ -901,6 +916,7 @@ public sealed class Ldblib
     new luaL_RegCFI(Lt.thaw, cfi_db_thaw),
   };
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaopen_debug(lua_State L)
   {
     luaL_newlibcfi(L, dblib);
@@ -909,6 +925,7 @@ public sealed class Ldblib
 
   public static readonly lua_CFunction luaopen_debug_fn = Ldblib.luaopen_debug;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_Hook luaL_debughook()
   {
     return hookf_fn;

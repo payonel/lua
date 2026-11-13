@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -9,6 +10,7 @@ public sealed class Bytes
   {
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void copy_bytes(ByteSpan dst, ByteView src)
   {
     { if (JAssert.on && !( src.size() <= dst.size())) throw new AssertionError(); }

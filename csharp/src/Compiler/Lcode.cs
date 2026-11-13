@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
 using InternalString = Payonel.LungoLua.Bytes.InternalString;
@@ -68,6 +69,7 @@ public sealed class Lcode
   public const int OPR_NOBINOPR = 21;
 
   /* true if operation is foldable (that is, it is arithmetic or bitwise) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool foldbinop(int op)
   {
     return op <= OPR_SHR;
@@ -81,22 +83,26 @@ public sealed class Lcode
 
   /* get (pointer to) instruction of given 'expdesc' */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaK_codeABC(FuncState fs, int o, int a, int b, int c)
   {
     return luaK_codeABCk(fs, o, a, b, c, false);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaK_setmultret(FuncState fs, expdesc e)
   {
     luaK_setreturns(fs, e, LUA_MULTRET);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaK_jumpto(FuncState fs, int t)
   {
     luaK_patchlist(fs, luaK_jump(fs), t);
   }
 
   /* (note that expressions VJMP also have jumps.) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool hasjumps(expdesc e)
   {
     return e.t != e.f;
@@ -134,6 +140,7 @@ public sealed class Lcode
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isnumeral(expdesc e)
   {
     TValue junk = new TValue();
@@ -143,6 +150,7 @@ public sealed class Lcode
   /*
   ** Get the constant value from a constant expression
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static TValue const2val(FuncState fs, expdesc e)
   {
     { if (JAssert.on && !( e.k == VCONST)) throw new AssertionError(); }
@@ -278,6 +286,7 @@ public sealed class Lcode
   ** Create a jump instruction and return its position, so its destination
   ** can be fixed later (with 'fixjump').
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaK_jump(FuncState fs)
   {
     return codesJ(fs, OP_JMP, NO_JUMP, false);
@@ -309,6 +318,7 @@ public sealed class Lcode
   ** Code a "conditional jump", that is, a test or comparison opcode
   ** followed by a jump. Return jump position.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int condjump(FuncState fs, int op, int A, int B, int C, bool k)
   {
     luaK_codeABCk(fs, op, A, B, C, k);
@@ -319,6 +329,7 @@ public sealed class Lcode
   ** returns current 'pc' and marks it as a jump target (to avoid wrong
   ** optimizations with consecutive instructions not in the same basic block).
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaK_getlabel(FuncState fs)
   {
     fs.lasttarget = fs.pc;
@@ -364,6 +375,7 @@ public sealed class Lcode
   /*
   ** Traverse a list of tests ensuring no one produces a value
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void removevalues(FuncState fs, int list)
   {
     for (; list != NO_JUMP; list = getjump(fs, list))
@@ -394,12 +406,14 @@ public sealed class Lcode
   ** (The assert means that we cannot fix a jump to a forward address
   ** because we only know addresses once code is generated.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaK_patchlist(FuncState fs, int list, int target)
   {
     { if (JAssert.on && !( target <= fs.pc)) throw new AssertionError(); }
     patchlistaux(fs, list, target, NO_REG, target);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaK_patchtohere(FuncState fs, int list)
   {
     int hr = luaK_getlabel(fs); /* mark "here" as a jump target */
@@ -460,6 +474,7 @@ public sealed class Lcode
   ** Remove the last instruction created, correcting line information
   ** accordingly.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void removelastinstruction(FuncState fs)
   {
     removelastlineinfo(fs);
@@ -503,6 +518,7 @@ public sealed class Lcode
   /*
   ** Format and emit an 'iABx' instruction.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaK_codeABx(FuncState fs, int o, int A, int Bc)
   {
     { if (JAssert.on && !( getOpMode(o) == iABx)) throw new AssertionError(); }
@@ -535,6 +551,7 @@ public sealed class Lcode
   /*
   ** Emit an "extra argument" instruction (format 'iAx')
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int codeextraarg(FuncState fs, int A)
   {
     { if (JAssert.on && !( A <= MAXARG_Ax)) throw new AssertionError(); }
@@ -575,6 +592,7 @@ public sealed class Lcode
   /*
   ** Reserve 'n' registers in register stack
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaK_reserveregs(FuncState fs, int n)
   {
     luaK_checkstack(fs, n);
@@ -615,6 +633,7 @@ public sealed class Lcode
   /*
   ** Free register used by expression 'e' (if any)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void freeexp(FuncState fs, expdesc e)
   {
     if (e.k == VNONRELOC)
@@ -625,6 +644,7 @@ public sealed class Lcode
   ** Free registers used by expressions 'e1' and 'e2' (if any) in proper
   ** order.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void freeexps(FuncState fs, expdesc e1, expdesc e2)
   {
     int r1 = (e1.k == VNONRELOC) ? e1.info : -1;
@@ -681,6 +701,7 @@ public sealed class Lcode
   /*
   ** Add a string to list of constants and return its index.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int stringK(FuncState fs, TString s)
   {
     TValue o = new TValue();
@@ -691,6 +712,7 @@ public sealed class Lcode
   /*
   ** Add an integer to list of constants and return its index.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaK_intK(FuncState fs, long n)
   {
     TValue o = new TValue();
@@ -724,9 +746,9 @@ public sealed class Lcode
        int nbm = JDouble.PRECISION;
        double q = JMath.scalb(1.0, -nbm + 1);
        double k = r * (1 + q); /* key */
-      IntResult ik = new IntResult();
+      IntResult ik = default;
       setfltvalue(kv, k); /* key as a TValue */
-      if (!luaV_flttointeger(k, ik, F2Ieq))
+      if (!luaV_flttointeger(k, ref ik, F2Ieq))
       {                                         /* not an integer value? */
         int n = k2proto(fs, kv, o);           /* use key */
         if (luaV_rawequalobj(fs.f.k[n], o)) /* correct value? */
@@ -741,6 +763,7 @@ public sealed class Lcode
   /*
   ** Add a false to list of constants and return its index.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int boolF(FuncState fs)
   {
     TValue o = new TValue();
@@ -751,6 +774,7 @@ public sealed class Lcode
   /*
   ** Add a true to list of constants and return its index.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int boolT(FuncState fs)
   {
     TValue o = new TValue();
@@ -772,9 +796,10 @@ public sealed class Lcode
 
   /*
   ** Check whether 'i' can be stored in an 'sC' operand. Equivalent to
-  ** (0 <= int2sC(i) && int2sC(i) <= MAXARG_C) but without risk of
+  ** (0 <= int2sC(ref i) && int2sC(ref i) <= MAXARG_C) but without risk of
   ** overflows in the hidden addition inside 'int2sC'.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool fitsC(long i)
   {
     return (-OFFSET_sC <= i && i <= MAXARG_C - OFFSET_sC);
@@ -783,6 +808,7 @@ public sealed class Lcode
   /*
   ** Check whether 'i' can be stored in an 'sBx' operand.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool fitsBx(long i)
   {
     return (-OFFSET_sBx <= i && i <= MAXARG_Bx - OFFSET_sBx);
@@ -798,8 +824,8 @@ public sealed class Lcode
 
   private static void luaK_float(FuncState fs, int reg, double f)
   {
-    IntResult fi = new IntResult();
-    if (luaV_flttointeger(f, fi, F2Ieq) && fitsBx(fi.v))
+    IntResult fi = default;
+    if (luaV_flttointeger(f, ref fi, F2Ieq) && fitsBx(fi.v))
       codeAsBx(fs, OP_LOADF, reg, (int) fi.v);
     else
       luaK_codek(fs, reg, luaK_numberK(fs, f));
@@ -916,6 +942,7 @@ public sealed class Lcode
   /*
   ** Change a vararg parameter into a regular local variable
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaK_vapar2local(FuncState fs, expdesc var)
   {
     needvatab(fs.f); /* function will need a vararg table */
@@ -1078,6 +1105,7 @@ public sealed class Lcode
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int code_loadbool(FuncState fs, int A, int op)
   {
     luaK_getlabel(fs); /* those instructions may be jump targets */
@@ -1172,6 +1200,7 @@ public sealed class Lcode
   ** Ensures final expression result is either in a register,
   ** in an upvalue, or it is the vararg parameter.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaK_exp2anyregup(FuncState fs, expdesc e)
   {
     if ((e.k != VUPVAL && e.k != VVARGVAR) || hasjumps(e))
@@ -1462,6 +1491,7 @@ public sealed class Lcode
   /*
   ** Check whether expression 'e' is a short literal string
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isKstr(FuncState fs, expdesc e)
   {
     return (e.k == VK && !hasjumps(e) && e.info <= MAXINDEXRK &&
@@ -1471,6 +1501,7 @@ public sealed class Lcode
   /*
   ** Check whether expression 'e' is a literal integer.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isKint(expdesc e)
   {
     return e.k == VKINT && !hasjumps(e);
@@ -1480,6 +1511,7 @@ public sealed class Lcode
   ** Check whether expression 'e' is a literal integer in
   ** proper range to fit in register C
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isCint(expdesc e)
   {
     return isKint(e) && (0 <= e.ival && e.ival <= MAXARG_C);
@@ -1489,6 +1521,7 @@ public sealed class Lcode
   ** Check whether expression 'e' is a literal integer in
   ** proper range to fit in register sC
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isSCint(expdesc e)
   {
     return isKint(e) && fitsC(e.ival);
@@ -1512,10 +1545,10 @@ public sealed class Lcode
 
   private static bool isSCnumber(expdesc e, SCImm sc)
   {
-    IntResult i = new IntResult();
+    IntResult i = default;
     if (e.k == VKINT)
       i.v = e.ival;
-    else if (e.k == VKFLT && luaV_flttointeger(e.nval, i, F2Ieq))
+    else if (e.k == VKFLT && luaV_flttointeger(e.nval, ref i, F2Ieq))
       sc.isfloat = 1;
     else
       return false; /* not a number */
@@ -1557,6 +1590,7 @@ public sealed class Lcode
   }
 
   /* auxiliary function to define indexing expressions */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void fillidxk(expdesc t, int idx, int k)
   {
     t.ind.idx = idx;
@@ -1626,9 +1660,9 @@ public sealed class Lcode
     case LUA_OPSHR:
     case LUA_OPBNOT:
     { /* conversion errors */
-      IntResult i = new IntResult();
-      return (luaV_tointegerns(v1, i, LUA_FLOORN2I) &&
-              luaV_tointegerns(v2, i, LUA_FLOORN2I));
+      IntResult i = default;
+      return (luaV_tointegerns(v1, ref i, LUA_FLOORN2I) &&
+              luaV_tointegerns(v2, ref i, LUA_FLOORN2I));
     }
     case LUA_OPDIV:
     case LUA_OPIDIV:
@@ -1675,6 +1709,7 @@ public sealed class Lcode
   /*
   ** Convert a BinOpr to an OpCode  (ORDER OPR - ORDER OP)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int binopr2op(int opr, int baser, int @base)
   {
     { if (JAssert.on && !( baser <= opr &&
@@ -1686,6 +1721,7 @@ public sealed class Lcode
   /*
   ** Convert a UnOpr to an OpCode  (ORDER OPR - ORDER OP)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int unopr2op(int opr)
   {
     return ((opr - OPR_MINUS) +
@@ -1695,6 +1731,7 @@ public sealed class Lcode
   /*
   ** Convert a BinOpr to a tag method  (ORDER OPR - ORDER TM)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int binopr2TM(int opr)
   {
     { if (JAssert.on && !( OPR_ADD <= opr && opr <= OPR_SHR)) throw new AssertionError(); }
@@ -1799,6 +1836,7 @@ public sealed class Lcode
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void swapexps(expdesc e1, expdesc e2)
   {
     expdesc temp = new expdesc(e1);
@@ -2182,6 +2220,7 @@ public sealed class Lcode
   ** Change line information associated with current position, by removing
   ** previous info and adding it again with new line.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaK_fixline(FuncState fs, int line)
   {
     removelastlineinfo(fs);

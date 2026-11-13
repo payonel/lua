@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using HostString = Payonel.LungoLua.Api.HostString;
 using KNamer = Payonel.LungoLua.Api.KNamer;
@@ -336,6 +337,7 @@ public sealed class Lbaselib
   ** top; the calls can freeze, and then the function goes on in its
   ** continuation).
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int drain_cont(lua_State L, int status, long ctx)
   {
     return 1;
@@ -451,6 +453,7 @@ public sealed class Lbaselib
 
   private static readonly lua_CFunction luaB_next_fn = Lbaselib.luaB_next;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int pairscont(lua_State L, int status, long ctx)
   {
     return 4; /* __pairs did all the work, just return its results */
@@ -485,6 +488,7 @@ public sealed class Lbaselib
   /*
   ** Traversal function for 'ipairs'
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int ipairsauxk(lua_State L, int status, long ctx)
   {
     return (lua_isnil(L, -1)) ? 1 : 2;
@@ -553,6 +557,7 @@ public sealed class Lbaselib
     return mode;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static ByteView filemode(lua_State L)
   {
     InternalString modestr = getMode(L, 2);
@@ -560,6 +565,7 @@ public sealed class Lbaselib
   }
 
   /* (a load stopped by a freeze goes on: the chunk name at 4, see 'luaL_loadfileik') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int loadfile_cont(lua_State L, int status, long ctx)
   {
     return load_aux(L, luaL_loadfileikresume(L, status, filemode(L), 4, ctx, loadfile_cont_fn), (int) ctx);
@@ -620,6 +626,7 @@ public sealed class Lbaselib
     return ls;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int load_cont(lua_State L, int status, long ctx)
   {
     return load_aux(L, lua_loadkresume(L, status, loadspec(L, (int) ctx)), (int) ctx);
@@ -652,6 +659,7 @@ public sealed class Lbaselib
 
   /* }====================================================== */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int dofilecont(lua_State L, int d1, long d2)
   {
     /* only to match 'lua_Kfunction' prototype */
@@ -671,6 +679,7 @@ public sealed class Lbaselib
   }
 
   /* (a load stopped by a freeze goes on: the chunk name at 2, see 'luaL_loadfileik') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int dofile_loadcont(lua_State L, int status, long ctx)
   {
     return dofile_call(L, luaL_loadfileikresume(L, status, null, 2, ctx, dofile_loadcont_fn));
@@ -680,6 +689,7 @@ public sealed class Lbaselib
 
   private static readonly KNamer knamer_dofile_loadcont = new KNamer("base.dofile_loadcont", dofile_loadcont_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaB_dofile(lua_State L)
   {
     ByteView fname = (lua_isnoneornil(L, 1)) ? null : luaL_checkistring(L, 1).view();
@@ -781,6 +791,7 @@ public sealed class Lbaselib
 
   private static readonly lua_CFunction luaB_xpcall_fn = Lbaselib.luaB_xpcall;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tostringk(lua_State L, int status, long ctx)
   {
     luaL_tostringresult(L);

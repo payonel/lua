@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_Writer = Payonel.LungoLua.Api.lua_Writer;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
@@ -55,6 +56,7 @@ public sealed class Ldump
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpVector(DumpState D, ByteView v)
   {
     dumpBlock(D, v);
@@ -79,6 +81,7 @@ public sealed class Ldump
     dumpBlock(D, b.view());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpVar(DumpState D, sbyte x)
   {
     ByteOwner b = new ByteOwner(1);
@@ -86,6 +89,7 @@ public sealed class Ldump
     dumpVector(D, b.view());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpVar(DumpState D, int x)
   {
     ByteOwner b = new ByteOwner(JInteger.BYTES);
@@ -93,6 +97,7 @@ public sealed class Ldump
     dumpVector(D, b.view());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpVar(DumpState D, long x)
   {
     ByteOwner b = new ByteOwner(JLong.BYTES);
@@ -100,6 +105,7 @@ public sealed class Ldump
     dumpVector(D, b.view());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpVar(DumpState D, double x)
   {
     ByteOwner b = new ByteOwner(JDouble.BYTES);
@@ -124,6 +130,7 @@ public sealed class Ldump
     { if (JAssert.on && !( D.offset % align == 0)) throw new AssertionError(); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpByte(DumpState D, int y)
   {
     sbyte x = (sbyte) y;
@@ -149,17 +156,20 @@ public sealed class Ldump
     dumpVector(D, new ByteView(buff).substr(DIBS - n));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpSize(DumpState D, int sz)
   {
     dumpVarint(D, sz);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpInt(DumpState D, int x)
   {
     { if (JAssert.on && !( x >= 0)) throw new AssertionError(); }
     dumpVarint(D, x);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpNumber(DumpState D, double x)
   {
     dumpVar(D, x);
@@ -171,6 +181,7 @@ public sealed class Ldump
   ** A non-negative x is coded as 2x; a negative x is coded as -2x - 1.
   ** (0 => 0; -1 => 1; 1 => 2; -2 => 3; 2 => 4; ...)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpInteger(DumpState D, long x)
   {
     long cx = (x >= 0) ? 2L * x
@@ -312,18 +323,21 @@ public sealed class Ldump
     dumpDebug(D, f);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpNumInfo(DumpState D, int v)
   {
     dumpByte(D, JInteger.BYTES);
     dumpVar(D, v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpNumInfo(DumpState D, long v)
   {
     dumpByte(D, JLong.BYTES);
     dumpVar(D, v);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dumpNumInfo(DumpState D, double v)
   {
     dumpByte(D, JDouble.BYTES);

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using InternalString = Payonel.LungoLua.Bytes.InternalString;
 using Cost = Payonel.LungoLua.Runtime.Cost;
@@ -28,6 +29,7 @@ public sealed class Proto : GCListed
   public LocVar[] locvars = new LocVar[0];        /* information about local variables (debug information) */
   public TString source = null;                   /* used for debug information */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Proto luaF_newproto(lua_State L)
   {
     Proto f = luaM_malloc_Proto(L);

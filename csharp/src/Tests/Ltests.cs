@@ -717,7 +717,7 @@ public sealed class Ltests
   ** 'count' and check its TESTBIT. (It must have been previously set by
   ** 'checkgraylist'.)
   */
-  private static void incifingray(global_State g, GCObject o, IntResult count)
+  private static void incifingray(global_State g, GCObject o, ref IntResult count)
   {
     if (!keepinvariant(g))
       return; /* gray lists not being kept in these phases */
@@ -740,29 +740,29 @@ public sealed class Ltests
                                 GCObject newl, GCObject survival, GCObject old, GCObject reallyold)
   {
     GCObject o;
-    IntResult total = new IntResult(); /* number of object that should be in  gray lists */
+    IntResult total = default; /* number of object that should be in  gray lists */
     for (o = newl; o != survival; o = o.next)
     {
       checkobject(g, o, maybedead, G_NEW);
-      incifingray(g, o, total);
+      incifingray(g, o, ref total);
       { if (JAssert.on && !( (!tof) == (!tofinalize(o)))) throw new AssertionError(); }
     }
     for (o = survival; o != old; o = o.next)
     {
       checkobject(g, o, false, G_SURVIVAL);
-      incifingray(g, o, total);
+      incifingray(g, o, ref total);
       { if (JAssert.on && !( (!tof) == (!tofinalize(o)))) throw new AssertionError(); }
     }
     for (o = old; o != reallyold; o = o.next)
     {
       checkobject(g, o, false, G_OLD1);
-      incifingray(g, o, total);
+      incifingray(g, o, ref total);
       { if (JAssert.on && !( (!tof) == (!tofinalize(o)))) throw new AssertionError(); }
     }
     for (o = reallyold; o != null; o = o.next)
     {
       checkobject(g, o, false, G_OLD);
-      incifingray(g, o, total);
+      incifingray(g, o, ref total);
       { if (JAssert.on && !( (!tof) == (!tofinalize(o)))) throw new AssertionError(); }
     }
     return total.v;
@@ -774,7 +774,7 @@ public sealed class Ltests
     GCObject o;
     bool maybedead;
     long totalin;                              /* total of objects that are in gray lists */
-    IntResult totalshould = new IntResult(); /* total of objects that should be in gray lists */
+    IntResult totalshould = default; /* total of objects that should be in gray lists */
     if (keepinvariant(g))
     {
       { if (JAssert.on && !( !iswhite(mainthread(g)))) throw new AssertionError(); }
@@ -805,7 +805,7 @@ public sealed class Ltests
     for (o = g.tobefnz.next; o != null; o = o.next)
     {
       checkobject(g, o, false, G_NEW);
-      incifingray(g, o, totalshould);
+      incifingray(g, o, ref totalshould);
       { if (JAssert.on && !( tofinalize(o))) throw new AssertionError(); }
       { if (JAssert.on && !( o.tt == LUA_VUSERDATA || o.tt == LUA_VTABLE)) throw new AssertionError(); }
     }
@@ -818,7 +818,7 @@ public sealed class Ltests
       for (o = bg.fnz.next; o != null; o = o.next)
       {
         checkobject(g, o, false, G_NEW);
-        incifingray(g, o, totalshould);
+        incifingray(g, o, ref totalshould);
         { if (JAssert.on && !( tofinalize(o))) throw new AssertionError(); }
         { if (JAssert.on && !( o.tt == LUA_VUSERDATA || o.tt == LUA_VTABLE)) throw new AssertionError(); }
       }

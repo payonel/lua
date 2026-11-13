@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_Alloc = Payonel.LungoLua.Api.lua_Alloc;
 
@@ -33,48 +34,56 @@ public sealed class Lhack
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luai_userstateopen(lua_State l)
   {
     if (LUA_DEBUG)
       l.l_G.apilock = 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luai_userstateclose(lua_State l)
   {
     if (LUA_DEBUG)
       { if (JAssert.on && !( l.l_G.apilock == 1 && l == l.l_G.mainth)) throw new AssertionError(); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luai_userstatethread(lua_State l, lua_State l1)
   {
     if (LUA_DEBUG)
       { if (JAssert.on && !( l1.l_G == l.l_G)) throw new AssertionError(); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luai_userstatefree(lua_State l, lua_State l1)
   {
     if (LUA_DEBUG)
       { if (JAssert.on && !( l.l_G == l1.l_G)) throw new AssertionError(); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_lock(lua_State l)
   {
     if (LUA_DEBUG)
       { if (JAssert.on && !( (l.l_G.apilock++) == 0)) throw new AssertionError(); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void lua_unlock(lua_State l)
   {
     if (LUA_DEBUG)
       { if (JAssert.on && !( --(l.l_G.apilock) == 0)) throw new AssertionError(); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luai_tracegc(lua_State l, bool f)
   {
     if (LUA_DEBUG)
       Tests.hooks.luai_tracegctest(l, f);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_State _lua_newstate(lua_Alloc f, int seed)
   {
     if (LUA_DEBUG)

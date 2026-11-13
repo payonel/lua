@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -27,6 +28,7 @@ public sealed class ByteView
   }
 
   /* an ASCII text as bytes (the engine's literals) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static ByteView of(string ascii)
   {
     return new ByteView(ascii.getBytes(JCharsets.ISO_8859_1));
@@ -41,53 +43,63 @@ public sealed class ByteView
     return new ByteView(a, off, e - off);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int size()
   {
     return len;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public sbyte[] array()
   {
     return a;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int offset()
   {
     return off;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool empty()
   {
     return len == 0;
   }
 
   /* operator[]: the byte, as C's 'char' (signed) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public sbyte at(int i)
   {
     return a[off + i];
   }
 
   /* the byte as an unsigned value */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int uat(int i)
   {
     return a[off + i] & 0xFF;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool ends_with(int c)
   {
     return len > 0 && a[off + len - 1] == (sbyte) c;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool ends_with(ByteView s)
   {
     return s.len <= len && regionEquals(len - s.len, s);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool starts_with(ByteView s)
   {
     return s.len <= len && regionEquals(0, s);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool starts_with(int c)
   {
     return len > 0 && a[off] == (sbyte) c;
@@ -109,6 +121,7 @@ public sealed class ByteView
     return npos;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int find_first_not_of(ByteView chars)
   {
     return find_first_not_of(chars, 0);
@@ -122,6 +135,7 @@ public sealed class ByteView
     return npos;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int find_first_of(ByteView chars)
   {
     return find_first_of(chars, 0);
@@ -136,6 +150,7 @@ public sealed class ByteView
     return npos;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int find(int c)
   {
     return find(c, 0);
@@ -153,18 +168,21 @@ public sealed class ByteView
     return npos;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int find(ByteView s)
   {
     return find(s, 0);
   }
 
   /* std::string_view::compare(pos, count, s): <0, 0, >0, bytes unsigned */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int compare(int pos, int count, ByteView s)
   {
     int n = JMath.min(count, len - pos);
     return compareBytes(a, off + pos, n, s.a, s.off, s.len);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int compare(ByteView s)
   {
     return compareBytes(a, off, len, s.a, s.off, s.len);
@@ -182,6 +200,7 @@ public sealed class ByteView
     return JInteger.compare(xn, yn);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool equals(ByteView other)
   {
     return other != null && len == other.len && regionEquals(0, other);
@@ -208,11 +227,13 @@ public sealed class ByteView
     return new ByteView(a, off + pos, n);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteView substr(int pos)
   {
     return substr(pos, npos);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ToChars.ParseResult parse_number(int pos, CharsFormat fmt)
   {
     { if (JAssert.on && !( fmt == CharsFormat.general)) throw new AssertionError(); }
@@ -235,17 +256,20 @@ public sealed class ByteView
     return bits;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public double toDouble(int pos)
   {
     return JDouble.longBitsToDouble(toInt64(pos));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public float toFloat(int pos)
   {
     return JFloat.intBitsToFloat(toInt32(pos));
   }
 
   /* a copy of the bytes */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public sbyte[] toArray()
   {
     sbyte[] r = new sbyte[len];

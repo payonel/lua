@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using KNamer = Payonel.LungoLua.Api.KNamer;
 using luaL_RegCFI = Payonel.LungoLua.Api.luaL_RegCFI;
@@ -41,6 +42,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_abs_fn = Lmathlib.math_abs;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_sin(lua_State L)
   {
     lua_pushnumber(L, sin(luaL_checknumber(L, 1)));
@@ -49,6 +51,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_sin_fn = Lmathlib.math_sin;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_cos(lua_State L)
   {
     lua_pushnumber(L, cos(luaL_checknumber(L, 1)));
@@ -57,6 +60,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_cos_fn = Lmathlib.math_cos;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_tan(lua_State L)
   {
     lua_pushnumber(L, tan(luaL_checknumber(L, 1)));
@@ -65,6 +69,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_tan_fn = Lmathlib.math_tan;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_asin(lua_State L)
   {
     lua_pushnumber(L, asin(luaL_checknumber(L, 1)));
@@ -73,6 +78,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_asin_fn = Lmathlib.math_asin;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_acos(lua_State L)
   {
     lua_pushnumber(L, acos(luaL_checknumber(L, 1)));
@@ -108,8 +114,8 @@ public sealed class Lmathlib
 
   private static void pushnumint(lua_State L, double d)
   {
-    IntResult n = new IntResult();
-    if (lua_numbertointeger(d, n)) /* does 'd' fit in an integer? */
+    IntResult n = default;
+    if (lua_numbertointeger(d, ref n)) /* does 'd' fit in an integer? */
       lua_pushinteger(L, n.v);        /* result is integer */
     else
       lua_pushnumber(L, d); /* result is float */
@@ -190,6 +196,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_modf_fn = Lmathlib.math_modf;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_sqrt(lua_State L)
   {
     lua_pushnumber(L, sqrt(luaL_checknumber(L, 1)));
@@ -230,6 +237,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_log_fn = Lmathlib.math_log;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_exp(lua_State L)
   {
     lua_pushnumber(L, exp(luaL_checknumber(L, 1)));
@@ -238,6 +246,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_exp_fn = Lmathlib.math_exp;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_deg(lua_State L)
   {
     lua_pushnumber(L, luaL_checknumber(L, 1) * (180.0 / PI));
@@ -246,6 +255,7 @@ public sealed class Lmathlib
 
   private static readonly lua_CFunction math_deg_fn = Lmathlib.math_deg;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int math_rad(lua_State L)
   {
     lua_pushnumber(L, luaL_checknumber(L, 1) * (PI / 180.0));
@@ -281,6 +291,7 @@ public sealed class Lmathlib
   ** arguments, the one being compared, the index of the best so far) is in the
   ** continuation's context, 21 bits each.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long minmax_pack(int n, int i, int ibest)
   {
     return (long) n | ((long) i << 21) | ((long) ibest << 42);
@@ -316,6 +327,7 @@ public sealed class Lmathlib
     return minmax_loop(L, ismax, n, i + 1, ibest);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int min_cont(lua_State L, int status, long ctx)
   {
     return minmax_cont(L, false, ctx);
@@ -325,6 +337,7 @@ public sealed class Lmathlib
 
   private static readonly KNamer knamer_min_cont = new KNamer("math.min_cont", min_cont_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int max_cont(lua_State L, int status, long ctx)
   {
     return minmax_cont(L, true, ctx);
@@ -377,6 +390,7 @@ public sealed class Lmathlib
   private const int FIGS = JDouble.PRECISION;
 
   private static readonly bool static_init_1 = static_init_1_run();
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool static_init_1_run()
   {
     { if (JAssert.on && !( FIGS <= 64 )) throw new AssertionError(JString.valueOf( "there are only 64 random bits")); }
@@ -385,12 +399,14 @@ public sealed class Lmathlib
   /* try to find an integer type with at least 64 bits */
 
   /* avoid using extra bits when needed */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long trim64(long x)
   {
     return x & unchecked((long)0xFFFFFFFFFFFFFFFFUL);
   }
 
   /* rotate left 'x' by 'n' bits */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long rotl(long x, int n)
   {
     return (x << n) | (trim64(x) >>> (64 - n));
@@ -437,11 +453,13 @@ public sealed class Lmathlib
     return res;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long I2UInt(long x)
   {
     return trim64(x);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long Int2I(long x)
   {
     return x;

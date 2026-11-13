@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_CFunction = Payonel.LungoLua.Api.lua_CFunction;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
@@ -49,16 +50,19 @@ public sealed class Lobject
   public const int LUA_TOTALTYPES = LUA_TBUDGET + 2;
 
   /* add variant bits to a type */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte makevariant(int t, int v)
   {
     return (sbyte) (t | (v << 4));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TValue getobj(TValue o)
   {
     return new TValue(o.prim, o.@ref, o.tt_);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void copyobj(TValue dst, TValue src)
   {
     /* field by field, like upstream's setobj */
@@ -72,34 +76,40 @@ public sealed class Lobject
   public const int WITHVARIANT_MASK = 0x3F;
 
   /* tag with no variants (bits 0-3) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte novariant(int t)
   {
     return (sbyte) (t & NOVARIANT_MASK);
   }
 
   /* type tag of a TValue (bits 0-3 for tags + variant bits 4-5) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte withvariant(int t)
   {
     return (sbyte) (t & WITHVARIANT_MASK);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte ttypetag(TValue o)
   {
     return withvariant(o.tt_);
   }
 
   /* type of a TValue */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte ttype(TValue o)
   {
     return novariant(o.tt_);
   }
 
   /* Macros to test type */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool checktag(TValue o, int t)
   {
     return o.tt_ == t;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool checktype(TValue o, int t)
   {
     return ttype(o) == t;
@@ -126,6 +136,7 @@ public sealed class Lobject
   public const sbyte LUA_VNOTABLE = (sbyte) (LUA_TNIL | (3 << 4));
 
   /* macro to test for (any kind of) nil */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisnil(TValue v)
   {
     return checktype(v, LUA_TNIL);
@@ -137,22 +148,26 @@ public sealed class Lobject
   ** other tags. As currently nil is equivalent to LUA_VEMPTY, it is
   ** simpler to just test whether the value is nil.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool tagisempty(int tag)
   {
     return novariant(tag) == LUA_TNIL;
   }
 
   /* macro to test for a standard nil */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisstrictnil(TValue o)
   {
     return checktag(o, LUA_VNIL);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setnilvalue(TValue obj)
   {
     obj.tt_ = LUA_VNIL;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isabstkey(TValue v)
   {
     return checktag(v, LUA_VABSTKEY);
@@ -161,6 +176,7 @@ public sealed class Lobject
   /*
   ** macro to detect non-standard nils (used only in assertions)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isnonstrictnil(TValue v)
   {
     return ttisnil(v) && !ttisstrictnil(v);
@@ -171,12 +187,14 @@ public sealed class Lobject
   ** (In any definition, values associated with absent keys must also
   ** be accepted as empty.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isempty(TValue v)
   {
     return ttisnil(v);
   }
 
   /* mark an entry as empty */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setempty(TValue v)
   {
     v.tt_ = LUA_VEMPTY;
@@ -191,26 +209,31 @@ public sealed class Lobject
   public const sbyte LUA_VFALSE = (sbyte) (LUA_TBOOLEAN | (0 << 4));
   public const sbyte LUA_VTRUE = (sbyte) (LUA_TBOOLEAN | (1 << 4));
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisboolean(TValue o)
   {
     return checktype(o, LUA_TBOOLEAN);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisfalse(TValue o)
   {
     return checktag(o, LUA_VFALSE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttistrue(TValue o)
   {
     return checktag(o, LUA_VTRUE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool l_isfalse(TValue o)
   {
     return ttisfalse(o) || ttisnil(o);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool tagisfalse(int t)
   {
     return t == LUA_VFALSE || novariant(t) == LUA_TNIL;
@@ -233,16 +256,19 @@ public sealed class Lobject
   /* Bit mark for collectable types */
   public const int BIT_ISCOLLECTABLE = 1 << 6;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte ctb(int t)
   {
     return (sbyte) (t | BIT_ISCOLLECTABLE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool iscollectable(TValue o)
   {
     return (o.tt_ & BIT_ISCOLLECTABLE) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisthread(TValue o)
   {
     return checktag(o, ctb(LUA_VTHREAD));
@@ -258,16 +284,19 @@ public sealed class Lobject
   public const sbyte LUA_VNUMINT = (sbyte) (LUA_TNUMBER | (0 << 4)); /* integer numbers */
   public const sbyte LUA_VNUMFLT = (sbyte) (LUA_TNUMBER | (1 << 4)); /* float numbers */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisnumber(TValue o)
   {
     return checktype(o, LUA_TNUMBER);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisfloat(TValue o)
   {
     return checktag(o, LUA_VNUMFLT);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisinteger(TValue o)
   {
     return checktag(o, LUA_VNUMINT);
@@ -285,11 +314,13 @@ public sealed class Lobject
   public const sbyte LUA_VLNGSTR = LUA_VSTRING;
 
   /* test for a string */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisstring(TValue o)
   {
     return checktype(o, LUA_TSTRING);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisshrstring(TValue o)
   {
     return checktag(o, ctb(LUA_VSHRSTR));
@@ -297,11 +328,13 @@ public sealed class Lobject
 
   public const sbyte STREXTRA_EXTERNAL = unchecked((sbyte)0xFF);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool strisexternal(TString ts)
   {
     return ts.extra == STREXTRA_EXTERNAL;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int tsslen(TString ts)
   {
     return ts.data.size();
@@ -321,17 +354,20 @@ public sealed class Lobject
 
   public const sbyte LUA_VUSERDATA = (sbyte) (LUA_TUSERDATA | (0 << 4));
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttislightuserdata(TValue o)
   {
     return checktag(o, LUA_VLIGHTUSERDATA);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisfulluserdata(TValue o)
   {
     return checktag(o, ctb(LUA_VUSERDATA));
   }
 
   /* get the address of the memory block inside 'Udata' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte[] getudatamem(Udata u)
   {
     return u.data.array();
@@ -352,11 +388,13 @@ public sealed class Lobject
   public const int PF_VATAB = 2; /* function has vararg table */
   public const int PF_FIXED = 4; /* prototype has parts in fixed memory */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isvararg(Proto p)
   {
     return (p.flag & (PF_VAHID | PF_VATAB)) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void needvatab(Proto p)
   {
     p.flag = (sbyte) (p.flag | PF_VATAB);
@@ -377,31 +415,37 @@ public sealed class Lobject
   public const sbyte LUA_VLCF = (sbyte) (LUA_TFUNCTION | (1 << 4)); /* light C function */
   public const sbyte LUA_VCCL = (sbyte) (LUA_TFUNCTION | (2 << 4)); /* C closure */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisfunction(TValue o)
   {
     return checktype(o, LUA_TFUNCTION);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisLclosure(TValue o)
   {
     return checktag(o, ctb(LUA_VLCL));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttislcf(TValue o)
   {
     return checktag(o, ctb(LUA_VLCF));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttisCclosure(TValue o)
   {
     return checktag(o, ctb(LUA_VCCL));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int sizeCclosure(int n)
   {
     return Payonel.LungoLua.Runtime.Cost.CClosure + Payonel.LungoLua.Runtime.Cost.TValue * n;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int sizeLclosure(int n)
   {
     return Payonel.LungoLua.Runtime.Cost.LClosure + Payonel.LungoLua.Runtime.Cost.Ref * n;
@@ -415,11 +459,13 @@ public sealed class Lobject
 
   public const sbyte LUA_VTABLE = (sbyte) (LUA_TTABLE | (0 << 4));
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool ttistable(TValue o)
   {
     return checktag(o, ctb(LUA_VTABLE));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void copynode(Node dst, Node src)
   {
     copyobj(dst, src);
@@ -432,192 +478,226 @@ public sealed class Lobject
   /*
   ** 'module' operation for hashing (size is always a power of 2)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int lmod(long s, int size)
   {
     { if (JAssert.on && !( Llimits.ispow2(size))) throw new AssertionError(); }
     return (int) (s & (long) (size - 1));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int twoto(int x)
   {
     return 1 << x;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int sizenode(Table t)
   {
     return t.node.Length;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long ivalue(TValue o)
   {
     { if (JAssert.on && !( ttisinteger(o))) throw new AssertionError(); }
     return o.prim;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double fltvalue(TValue o)
   {
     { if (JAssert.on && !( ttisfloat(o))) throw new AssertionError(); }
     return JDouble.longBitsToDouble(o.prim);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double nvalue(TValue o)
   {
     { if (JAssert.on && !( ttisinteger(o) || ttisfloat(o))) throw new AssertionError(); }
     return ttisinteger(o) ? (double) o.prim : JDouble.longBitsToDouble(o.prim);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object pvalue(TValue o)
   {
     { if (JAssert.on && !( ttislightuserdata(o))) throw new AssertionError(); }
     return o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_CFunction fvalue(TValue o)
   {
     { if (JAssert.on && !( ttislcf(o))) throw new AssertionError(); }
     return ((CFuncInfo) o.@ref).fptr;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CFuncInfo fcfuncinfo(TValue o)
   {
     { if (JAssert.on && !( ttislcf(o))) throw new AssertionError(); }
     return (CFuncInfo) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static GCObject gcvalue(TValue o)
   {
     { if (JAssert.on && !( iscollectable(o))) throw new AssertionError(); }
     return (GCObject) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TString tsvalue(TValue o)
   {
     { if (JAssert.on && !( ttisshrstring(o))) throw new AssertionError(); }
     return (TString) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Table hvalue(TValue o)
   {
     { if (JAssert.on && !( ttistable(o))) throw new AssertionError(); }
     return (Table) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Udata uvalue(TValue o)
   {
     { if (JAssert.on && !( ttisfulluserdata(o))) throw new AssertionError(); }
     return (Udata) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Closure clvalue(TValue o)
   {
     { if (JAssert.on && !( ttisLclosure(o) || ttisCclosure(o))) throw new AssertionError(); }
     return (Closure) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static LClosure clLvalue(TValue o)
   {
     { if (JAssert.on && !( ttisLclosure(o))) throw new AssertionError(); }
     return (LClosure) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CClosure clCvalue(TValue o)
   {
     { if (JAssert.on && !( ttisCclosure(o))) throw new AssertionError(); }
     return (CClosure) o.@ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Proto getproto(TValue o)
   {
     return clLvalue(o).p;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool keyisnil(Node node)
   {
     return node.key_tt == LUA_TNIL;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool keyisinteger(Node node)
   {
     return node.key_tt == LUA_VNUMINT;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool keyisshrstr(Node node)
   {
     return node.key_tt == ctb(LUA_VSHRSTR);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setnilkey(Node node)
   {
     node.key_tt = LUA_TNIL;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool keyiscollectable(Node n)
   {
     return (n.key_tt & BIT_ISCOLLECTABLE) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setdeadkey(Node node)
   {
     node.key_tt = LUA_TDEADKEY;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool keyisdead(Node node)
   {
     return node.key_tt == LUA_TDEADKEY;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static GCObject gckey(Node n)
   {
     { if (JAssert.on && !( keyiscollectable(n) || keyisdead(n))) throw new AssertionError(); }
     return (GCObject) n.key_ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static GCObject gckeyN(Node n)
   {
     return keyiscollectable(n) ? gckey(n) : null;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TString keystrval(Node n)
   {
     { if (JAssert.on && !( keyisshrstr(n))) throw new AssertionError(); }
     return (TString) n.key_ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static long keyival(Node n)
   {
     { if (JAssert.on && !( keyisinteger(n))) throw new AssertionError(); }
     return n.key_prim;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static double keyfltval(Node n)
   {
     { if (JAssert.on && !( n.key_tt == LUA_VNUMFLT)) throw new AssertionError(); }
     return JDouble.longBitsToDouble(n.key_prim);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static object keypval(Node n)
   {
     { if (JAssert.on && !( n.key_tt == LUA_VLIGHTUSERDATA)) throw new AssertionError(); }
     return n.key_ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_CFunction keyfval(Node n)
   {
     { if (JAssert.on && !( n.key_tt == ctb(LUA_VLCF))) throw new AssertionError(); }
     return ((CFuncInfo) n.key_ref).fptr;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CFuncInfo keycfuncinfo(Node n)
   {
     { if (JAssert.on && !( n.key_tt == ctb(LUA_VLCF))) throw new AssertionError(); }
     return (CFuncInfo) n.key_ref;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void checkliveness(object L, TValue obj)
   {
     { if (JAssert.on && !( luaO_checkliveness((lua_State) L, obj))) throw new AssertionError(); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setobj(object L, TValue obj1, TValue obj2)
   {
     obj1.prim = obj2.prim;
@@ -627,48 +707,56 @@ public sealed class Lobject
     { if (JAssert.on && !( !isnonstrictnil(obj1))) throw new AssertionError(); }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setfltvalue(TValue obj, double x)
   {
     obj.prim = JDouble.doubleToRawLongBits(x);
     obj.tt_ = LUA_VNUMFLT;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void chgfltvalue(TValue obj, double x)
   {
     { if (JAssert.on && !( ttisfloat(obj))) throw new AssertionError(); }
     obj.prim = JDouble.doubleToRawLongBits(x);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setivalue(TValue obj, long x)
   {
     obj.prim = x;
     obj.tt_ = LUA_VNUMINT;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void chgivalue(TValue obj, long x)
   {
     { if (JAssert.on && !( ttisinteger(obj))) throw new AssertionError(); }
     obj.prim = x;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setpvalue(TValue obj, object x)
   {
     obj.@ref = x;
     obj.tt_ = LUA_VLIGHTUSERDATA;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setfvalue(TValue obj, CFuncInfo cfi)
   {
     obj.@ref = cfi;
     obj.tt_ = ctb(LUA_VLCF);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setgcovalue(object L, TValue obj, GCObject x)
   {
     obj.@ref = x;
     obj.tt_ = ctb(x.tt);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setsvalue(object L, TValue obj, TString x)
   {
     { if (JAssert.on && !( novariant(x.tt) == LUA_TSTRING)) throw new AssertionError(); }
@@ -677,6 +765,7 @@ public sealed class Lobject
     checkliveness(L, obj);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setuvalue(object L, TValue obj, Udata x)
   {
     { if (JAssert.on && !( x.tt == LUA_VUSERDATA)) throw new AssertionError(); }
@@ -685,6 +774,7 @@ public sealed class Lobject
     checkliveness(L, obj);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void sethvalue(object L, TValue obj, Table x)
   {
     { if (JAssert.on && !( x.tt == LUA_VTABLE)) throw new AssertionError(); }
@@ -693,6 +783,7 @@ public sealed class Lobject
     checkliveness(L, obj);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setclLvalue(object L, TValue obj, LClosure x)
   {
     { if (JAssert.on && !( x.tt == LUA_VLCL)) throw new AssertionError(); }
@@ -701,6 +792,7 @@ public sealed class Lobject
     checkliveness(L, obj);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setclCvalue(object L, TValue obj, CClosure x)
   {
     { if (JAssert.on && !( x.tt == LUA_VCCL)) throw new AssertionError(); }
@@ -709,6 +801,7 @@ public sealed class Lobject
     checkliveness(L, obj);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setnodekey(Node node, TValue obj)
   {
     node.key_prim = obj.prim;
@@ -716,6 +809,7 @@ public sealed class Lobject
     node.key_tt = obj.tt_;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void getnodekey(object L, TValue obj, Node node)
   {
     obj.prim = node.key_prim;
@@ -907,9 +1001,9 @@ public sealed class Lobject
     case LUA_OPSHR:
     case LUA_OPBNOT:
     { /* operate only on integers */
-      IntResult i1 = new IntResult();
-      IntResult i2 = new IntResult();
-      if (tointegerns(p1, i1) && tointegerns(p2, i2))
+      IntResult i1 = default;
+      IntResult i2 = default;
+      if (tointegerns(p1, ref i1) && tointegerns(p2, ref i2))
       {
         setivalue(res, intarith(L, op, i1.v, i2.v));
         return true;
@@ -920,9 +1014,9 @@ public sealed class Lobject
     case LUA_OPDIV:
     case LUA_OPPOW:
     { /* operate only on floats */
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
-      if (tonumberns(p1, n1) && tonumberns(p2, n2))
+      NumResult n1 = default;
+      NumResult n2 = default;
+      if (tonumberns(p1, ref n1) && tonumberns(p2, ref n2))
       {
         setfltvalue(res, numarith(L, op, n1.v, n2.v));
         return true;
@@ -932,14 +1026,14 @@ public sealed class Lobject
     }
     default:
     { /* other operations */
-      NumResult n1 = new NumResult();
-      NumResult n2 = new NumResult();
+      NumResult n1 = default;
+      NumResult n2 = default;
       if (ttisinteger(p1) && ttisinteger(p2))
       {
         setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
         return true;
       }
-      else if (tonumberns(p1, n1) && tonumberns(p2, n2))
+      else if (tonumberns(p1, ref n1) && tonumberns(p2, ref n2))
       {
         setfltvalue(res, numarith(L, op, n1.v, n2.v));
         return true;
@@ -1432,6 +1526,7 @@ public sealed class Lobject
   {
     internal BuffFS buff;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       pushbuff(L, buff);
@@ -1485,6 +1580,7 @@ public sealed class Lobject
   /*
   ** Add a numeral to the buffer.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void addnum2buff(BuffFS buff, TValue num)
   {
     ByteOwner numbuff = new ByteOwner(LUA_N2SBUFFSZ);

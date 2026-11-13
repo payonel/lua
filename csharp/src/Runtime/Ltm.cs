@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
 using Lt = Payonel.LungoLua.Bytes.Lt;
@@ -66,16 +67,19 @@ public sealed class Ltm
   ** Test whether there is no tagmethod.
   ** (Because tagmethods use raw accesses, the result may be an "empty" nil.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool notm(TValue tm)
   {
     return ttype(tm) == LUA_TNIL;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool checknoTM(Table mt, int e)
   {
     return mt == null || (mt.flags & (1 << e)) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static ByteView ttypename(int x)
   {
     return luaT_typenames_[x + 1];
@@ -143,6 +147,7 @@ public sealed class Ltm
     return (mt != null ? mt.luaH_Hgetshortstr(L.l_G.tmname[@event]) : L.l_G.nilvalue);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TValue luaT_gettmbyobj(lua_State L, int o, int @event)
   {
     TValue v = getslot(L, o);
@@ -289,6 +294,7 @@ public sealed class Ltm
     luaT_trybinassocTM(L, p1, aux, flip, res, @event, src1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaT_trybinTM(lua_State L, int p1, int p2, int res, int @event)
   {
     TValue v1 = getslot(L, p1);
@@ -426,8 +432,8 @@ public sealed class Ltm
   public static void luaT_getvararg(lua_State L, CallInfo ci, int ra, TValue rc)
   {
     int nextra = ci.nextraargs;
-    IntResult n = new IntResult();
-    if (tointegerns(rc, n))
+    IntResult n = default;
+    if (tointegerns(rc, ref n))
     { /* integral value? */
       if (n.v >= 1 && n.v <= nextra)
       {
@@ -448,6 +454,7 @@ public sealed class Ltm
     setslottag(L, ra, LUA_VNIL); /* else produce nil */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaT_getvararg(lua_State L, CallInfo ci, int ra, int rc)
   {
     TValue v = getslot(L, rc);

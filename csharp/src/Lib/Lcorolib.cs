@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using CClosureNamer = Payonel.LungoLua.Api.CClosureNamer;
 using KNamer = Payonel.LungoLua.Api.KNamer;
@@ -25,6 +26,7 @@ public sealed class Lcorolib
   {
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static lua_State getco(lua_State L)
   {
     lua_State co = lua_tothread(L, 1);
@@ -89,6 +91,7 @@ public sealed class Lcorolib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int coresume_cont(lua_State L, int status, long ctx)
   {
     lua_State co = lua_tothread(L, 1);
@@ -99,6 +102,7 @@ public sealed class Lcorolib
 
   private static readonly KNamer knamer_coresume_cont = new KNamer("coroutine.coresume_cont", coresume_cont_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaB_coresume(lua_State L)
   {
     lua_State co = getco(L);
@@ -153,6 +157,7 @@ public sealed class Lcorolib
     return r;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int auxwrap_cont(lua_State L, int status, long ctx)
   {
     lua_State co = lua_tothread(L, lua_upvalueindex(1));
@@ -163,6 +168,7 @@ public sealed class Lcorolib
 
   private static readonly KNamer knamer_auxwrap_cont = new KNamer("coroutine.auxwrap_cont", auxwrap_cont_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaB_auxwrap(lua_State L)
   {
     lua_State co = lua_tothread(L, lua_upvalueindex(1));
@@ -185,6 +191,7 @@ public sealed class Lcorolib
 
   private static readonly lua_CFunction luaB_cocreate_fn = Lcorolib.luaB_cocreate;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaB_cowrap(lua_State L)
   {
     luaB_cocreate(L);
@@ -194,6 +201,7 @@ public sealed class Lcorolib
 
   private static readonly lua_CFunction luaB_cowrap_fn = Lcorolib.luaB_cowrap;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaB_yield(lua_State L)
   {
     return lua_yield(L, lua_gettop(L));
@@ -235,6 +243,7 @@ public sealed class Lcorolib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaB_costatus(lua_State L)
   {
     lua_State co = getco(L);
@@ -244,11 +253,13 @@ public sealed class Lcorolib
 
   private static readonly lua_CFunction luaB_costatus_fn = Lcorolib.luaB_costatus;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static lua_State getoptco(lua_State L)
   {
     return ((lua_isnone(L, 1)) ? L : getco(L));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaB_yieldable(lua_State L)
   {
     lua_State co = getoptco(L);
@@ -258,6 +269,7 @@ public sealed class Lcorolib
 
   private static readonly lua_CFunction luaB_yieldable_fn = Lcorolib.luaB_yieldable;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int luaB_corunning(lua_State L)
   {
     bool ismain = lua_pushthread(L);
@@ -283,6 +295,7 @@ public sealed class Lcorolib
   }
 
   /* after a thaw (a '__close' froze) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int close_cont(lua_State L, int status, long ctx)
   {
     return close_end(L, getoptco(L), status);
@@ -343,6 +356,7 @@ public sealed class Lcorolib
     new luaL_RegCFI(Lt.close_kw, cfi_luaB_close),
   };
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaopen_coroutine(lua_State L)
   {
     luaL_newlibcfi(L, co_funcs);

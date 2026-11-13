@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
@@ -18,6 +19,7 @@ public sealed class luaL_Box : lua_UserObject
   public ByteOwner bytes = new ByteOwner(); /* a buffer saved by 'luaL_buffsave' */
   public int used = 0;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void freed(lua_State L)
   {
     if (!bytes.empty())
@@ -25,6 +27,7 @@ public sealed class luaL_Box : lua_UserObject
     bytes = new ByteOwner();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public string persistkind()
   {
     return "box";
@@ -40,6 +43,7 @@ public sealed class luaL_Box : lua_UserObject
     return 5;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteView persistbytes()
   {
     return bytes.view().substr(0, used);

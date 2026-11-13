@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using KNamer = Payonel.LungoLua.Api.KNamer;
 using luaL_Buffer = Payonel.LungoLua.Api.luaL_Buffer;
@@ -83,6 +84,7 @@ public sealed class Loslib
 
   private static readonly lua_CFunction os_execute_fn = Loslib.os_execute;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int os_remove(lua_State L)
   {
     InternalString filename = luaL_checkistring(L, 1);
@@ -125,6 +127,7 @@ public sealed class Loslib
 
   private static readonly lua_CFunction os_getenv_fn = Loslib.os_getenv;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int os_clock(lua_State L)
   {
     lua_pushnumber(L, os_cpuclock());
@@ -141,6 +144,7 @@ public sealed class Loslib
   ** =======================================================
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void setfield(lua_State L, ByteView key, int value, int delta)
   {
     lua_pushinteger(L, (long) value + delta);
@@ -231,6 +235,7 @@ public sealed class Loslib
     return pos; /* to avoid warnings */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long l_checktime(lua_State L, int arg)
   {
     return luaL_checkinteger(L, arg);
@@ -504,6 +509,7 @@ public sealed class Loslib
 
   /* }====================================================== */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaopen_os(lua_State L)
   {
     luaL_newlibcfi(L, syslib);

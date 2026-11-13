@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Compiler;
@@ -19,6 +20,7 @@ public sealed class Labellist
     copyfrom(o);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void copyfrom(Labellist o)
   {
     arr = o.arr;

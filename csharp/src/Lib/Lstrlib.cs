@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using CClosureNamer = Payonel.LungoLua.Api.CClosureNamer;
 using HostString = Payonel.LungoLua.Api.HostString;
@@ -55,6 +56,7 @@ public sealed class Lstrlib
   */
   private const int LUA_MAXCAPTURES = 32;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int str_len(lua_State L)
   {
     InternalString s = luaL_checkistring(L, 1);
@@ -194,6 +196,7 @@ public sealed class Lstrlib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int str_reverse(lua_State L)
   {
     return str_mapentry(L, MAP_REVERSE);
@@ -201,6 +204,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction str_reverse_fn = Lstrlib.str_reverse;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int str_lower(lua_State L)
   {
     return str_mapentry(L, MAP_LOWER);
@@ -208,6 +212,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction str_lower_fn = Lstrlib.str_lower;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int str_upper(lua_State L)
   {
     return str_mapentry(L, MAP_UPPER);
@@ -219,6 +224,7 @@ public sealed class Lstrlib
   ** MAX_SIZE is limited both by size_t and lua_Integer.
   ** When x <= MAX_SIZE, x can be safely cast to size_t or lua_Integer.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool rep_toolarge(long ls, long lsep, long n)
   {
     return ls > MAX_SIZE - lsep || (ls + lsep) > MAX_SIZE / n;
@@ -382,6 +388,7 @@ public sealed class Lstrlib
     internal bool init; /* true iff buffer has been initialized */
     internal luaL_Buffer B = new luaL_Buffer();
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int write(lua_State L, ByteView b)
     {
       return writer(L, b, this);
@@ -455,6 +462,7 @@ public sealed class Lstrlib
   ** operand to have a different metamethod.
   */
   /* (the other operand's metamethod returned) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arithk(lua_State L, int status, long ctx)
   {
     return 1;
@@ -494,6 +502,7 @@ public sealed class Lstrlib
     return 1;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arith_add(lua_State L)
   {
     return arith(L, LUA_OPADD, Lt.mm_add);
@@ -501,6 +510,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction arith_add_fn = Lstrlib.arith_add;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arith_sub(lua_State L)
   {
     return arith(L, LUA_OPSUB, Lt.mm_sub);
@@ -508,6 +518,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction arith_sub_fn = Lstrlib.arith_sub;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arith_mul(lua_State L)
   {
     return arith(L, LUA_OPMUL, Lt.mm_mul);
@@ -515,6 +526,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction arith_mul_fn = Lstrlib.arith_mul;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arith_mod(lua_State L)
   {
     return arith(L, LUA_OPMOD, Lt.mm_mod);
@@ -522,6 +534,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction arith_mod_fn = Lstrlib.arith_mod;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arith_pow(lua_State L)
   {
     return arith(L, LUA_OPPOW, Lt.mm_pow);
@@ -529,6 +542,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction arith_pow_fn = Lstrlib.arith_pow;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arith_div(lua_State L)
   {
     return arith(L, LUA_OPDIV, Lt.mm_div);
@@ -536,6 +550,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction arith_div_fn = Lstrlib.arith_div;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arith_idiv(lua_State L)
   {
     return arith(L, LUA_OPIDIV, Lt.mm_idiv);
@@ -543,6 +558,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction arith_idiv_fn = Lstrlib.arith_idiv;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arith_unm(lua_State L)
   {
     return arith(L, LUA_OPUNM, Lt.mm_unm);
@@ -622,11 +638,13 @@ public sealed class Lstrlib
 
   /* recursive function */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int srcbyte(MatchState ms, int i)
   {
     return (i < ms.src_end) ? ms.src.byteAt(i) : 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int patbyte(MatchState ms, int i)
   {
     return (i < ms.p_end) ? ms.p.byteAt(i) : 0;
@@ -667,16 +685,19 @@ public sealed class Lstrlib
     internal readonly long[] ints = new long[MB_NINTS];
     internal readonly ByteOwner data = new ByteOwner(MB_BYTES); /* the captures, then the frames */
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal int used()
     {
       return (int) ints[MB_LEVEL] * MB_CAPSIZE + (int) ints[MB_NFRAMES] * MF_SIZE;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string persistkind()
     {
       return "string.match";
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int persistints(long[] @out)
     {
       for (int i = 0; i < MB_NINTS; i++)
@@ -684,6 +705,7 @@ public sealed class Lstrlib
       return MB_NINTS;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ByteView persistbytes()
     {
       return data.view().substr(0, used());
@@ -1456,6 +1478,7 @@ public sealed class Lstrlib
   }
 
   /* check whether pattern has no special characters */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool nospecials(ByteView p)
   {
     return p.find_first_of(Lt.pattern_specials) == ByteView.npos;
@@ -1476,6 +1499,7 @@ public sealed class Lstrlib
   }
 
   /* where the check points of a match keep it, and how its caller goes on */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void prepcheck(MatchState ms, int boxidx, lua_KFunction k, long ctx)
   {
     ms.boxidx = boxidx;
@@ -1604,6 +1628,7 @@ public sealed class Lstrlib
 
   private static readonly KNamer knamer_str_findk = new KNamer("string.str_findk", str_findk_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int str_find(lua_State L)
   {
     return str_find_aux(L, true);
@@ -1611,6 +1636,7 @@ public sealed class Lstrlib
 
   private static readonly lua_CFunction str_find_fn = Lstrlib.str_find;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int str_match(lua_State L)
   {
     return str_find_aux(L, false);
@@ -2183,6 +2209,7 @@ public sealed class Lstrlib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void addquoted(luaL_Buffer b, InternalString s)
   {
     luaL_addchar(b, (sbyte) '"');
@@ -2586,6 +2613,7 @@ public sealed class Lstrlib
   private const int FMT_ARG = 1;  /* ...and its argument */
   private const int FMT_OFF = 2;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static luaL_Box formatbox(lua_State L, int top)
   {
     { if (JAssert.on && !( lua_gettop(L) == top)) throw new AssertionError(); }
@@ -3026,6 +3054,7 @@ public sealed class Lstrlib
     internal long maxalign;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int fmtbyte(Header h)
   {
     return sv_byteat(h.fmt.view(), h.pos);
@@ -3053,6 +3082,7 @@ public sealed class Lstrlib
   ** Read an integer numeral from string 'fmt' or return 'df' if
   ** there is no numeral
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool digit(int c)
   {
     return '0' <= c && c <= '9';
@@ -3647,6 +3677,7 @@ public sealed class Lstrlib
   /*
   ** Open string library
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaopen_string(lua_State L)
   {
     luaL_newlibcfi(L, strlib);

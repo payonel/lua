@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -20,6 +21,7 @@ public sealed class Lctype
   public const int SPACEBIT = 3;
   public const int XDIGITBIT = 4;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int MASK(int B)
   {
     return 1 << B;
@@ -67,41 +69,49 @@ public sealed class Lctype
   /*
   ** add 1 to char to allow index -1 (EOZ)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool testprop(int c, int p)
   {
     return (luai_ctype_[c + 1] & p) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lislalpha(int c)
   {
     return testprop(c, MASK(ALPHABIT));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lislalnum(int c)
   {
     return testprop(c, MASK(ALPHABIT) | MASK(DIGITBIT));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lisdigit(int c)
   {
     return testprop(c, MASK(DIGITBIT));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lisspace(int c)
   {
     return testprop(c, MASK(SPACEBIT));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lisprint(int c)
   {
     return testprop(c, MASK(PRINTBIT));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lisxdigit(int c)
   {
     return testprop(c, MASK(XDIGITBIT));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int ltolower(int c)
   {
     { if (JAssert.on && !( ('A' <= c && c <= 'Z') || c == (c | ('A' ^ 'a')))) throw new AssertionError(); }

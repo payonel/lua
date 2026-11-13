@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using lua_State = Payonel.LungoLua.Runtime.lua_State;
@@ -16,6 +17,7 @@ public sealed class luaL_Buffer
   {
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void release()
   {
     bb_dealloc(this);

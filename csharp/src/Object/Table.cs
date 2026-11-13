@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_CFunction = Payonel.LungoLua.Api.lua_CFunction;
 using Lt = Payonel.LungoLua.Bytes.Lt;
@@ -45,11 +46,13 @@ public sealed class Table : GCListed
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private bool haslastfree()
   {
     return sizenode(this) >= twoto(LIMFORLAST);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int asize()
   {
     return array_prim.Length;
@@ -59,6 +62,7 @@ public sealed class Table : GCListed
   ** When the original hash value is good, hashing by a power of 2
   ** avoids the cost of '%'.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int hashpow2(long n)
   {
     return lmod(n, sizenode(this));
@@ -68,26 +72,31 @@ public sealed class Table : GCListed
   ** for other types, it is better to avoid modulo by power of 2, as
   ** they can have many 2 factors.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int hashmod(long n)
   {
     return (int) l_umod(n, (sizenode(this) - 1) | 1);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int hashstr(TString str)
   {
     return hashpow2(JInteger.toUnsignedLong(luaS_gethash(str)));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int hashboolean(int p)
   {
     return hashpow2(p);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int hashpointer(object p)
   {
     return hashmod(JInteger.toUnsignedLong(point2uint(p)));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int hashpointer(lua_CFunction p)
   {
     return hashmod(JInteger.toUnsignedLong(point2uint(p)));
@@ -160,6 +169,7 @@ public sealed class Table : GCListed
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int mainpositionfromnode(int nd)
   {
     TValue key = new TValue();
@@ -186,6 +196,7 @@ public sealed class Table : GCListed
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private TValue getgeneric(TValue key, bool deadok)
   {
     Table t = this;
@@ -197,6 +208,7 @@ public sealed class Table : GCListed
   ** Check whether an integer key is in the array part of a table and
   ** return its index there, or zero.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int ikeyinarray(long k)
   {
     return checkrange(k, asize());
@@ -206,6 +218,7 @@ public sealed class Table : GCListed
   ** Check whether a key is in the array part of a table and return its
   ** index there, or zero.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private int keyinarray(TValue key)
   {
     return ttisinteger(key) ? ikeyinarray(ivalue(key)) : 0;
@@ -270,6 +283,7 @@ public sealed class Table : GCListed
   }
 
   /* 'node' size in bytes */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private long sizehash()
   {
     { if (JAssert.on && !( JLong.MAX_VALUE / Cost.Node >= MAXHSIZE)) throw new AssertionError(); }
@@ -292,6 +306,7 @@ public sealed class Table : GCListed
   ** ==============================================================
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private bool arraykeyisempty(int key)
   {
     int tag = getArrTag(this, key - 1);
@@ -483,6 +498,7 @@ public sealed class Table : GCListed
   /*
   ** Clear new slice of the array.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private void clearNewSlice(int oldasize, int newasize)
   {
     Table t = this;
@@ -545,6 +561,7 @@ public sealed class Table : GCListed
     newt.freehash(L);        /* free old hash part */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void luaH_resizearray(lua_State L, int nasize)
   {
     Table t = this;
@@ -845,6 +862,7 @@ public sealed class Table : GCListed
     return -1;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private TValue getintfromhash(long key)
   {
     Table t = this;
@@ -852,6 +870,7 @@ public sealed class Table : GCListed
     return (idx < 0) ? absentkey : gnode(t, idx);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private bool hashkeyisempty(long key)
   {
     Table t = this;
@@ -893,6 +912,7 @@ public sealed class Table : GCListed
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public TValue luaH_Hgetshortstr(TString key)
   {
     Table t = this;
@@ -900,18 +920,21 @@ public sealed class Table : GCListed
     return (idx < 0) ? absentkey : gnode(t, idx);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public sbyte luaH_getshortstr(TString key, TValue res)
   {
     Table t = this;
     return finishnodeget(t.luaH_Hgetshortstr(key), res);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private TValue Hgetstr(TString key)
   {
     Table t = this;
     return t.luaH_Hgetshortstr(key);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public sbyte luaH_getstr(TString key, TValue res)
   {
     Table t = this;
@@ -937,8 +960,8 @@ public sealed class Table : GCListed
       break;
     case LUA_VNUMFLT:
     {
-      IntResult k = new IntResult();
-      if (luaV_flttointeger(fltvalue(key), k, F2Ieq)) /* integral index? */
+      IntResult k = default;
+      if (luaV_flttointeger(fltvalue(key), ref k, F2Ieq)) /* integral index? */
         return t.luaH_getint(k.v, res);                 /* use specialized version */
       /* else... */
     } /* FALLTHROUGH */
@@ -973,6 +996,7 @@ public sealed class Table : GCListed
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int luaH_psetint(long key, TValue val)
   {
     Table t = this;
@@ -1040,6 +1064,7 @@ public sealed class Table : GCListed
     return retpsetcode(idx);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int luaH_psetstr(TString key, TValue val)
   {
     Table t = this;
@@ -1059,8 +1084,8 @@ public sealed class Table : GCListed
       return HNOTFOUND;
     case LUA_VNUMFLT:
     {
-      IntResult k = new IntResult();
-      if (luaV_flttointeger(fltvalue(key), k, F2Ieq)) /* integral index? */
+      IntResult k = default;
+      if (luaV_flttointeger(fltvalue(key), ref k, F2Ieq)) /* integral index? */
         return t.psetint(k.v, val);                     /* use specialized version */
       /* else... */
     } /* FALLTHROUGH */
@@ -1089,8 +1114,8 @@ public sealed class Table : GCListed
       else if (ttisfloat(key))
       {
         double f = fltvalue(key);
-        IntResult k = new IntResult();
-        if (luaV_flttointeger(f, k, F2Ieq))
+        IntResult k = default;
+        if (luaV_flttointeger(f, ref k, F2Ieq))
         { /* is key equal to an integer? */
           setivalue(aux, k.v);
           actk = aux; /* use the integer as the key */
@@ -1294,6 +1319,7 @@ public sealed class Table : GCListed
   ** key of the hash part is in the chain that starts there (the test library
   ** and checks of a table's layout use it).
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int luaH_mainposition(TValue key)
   {
     Table t = this;

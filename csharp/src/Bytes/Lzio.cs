@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_Reader = Payonel.LungoLua.Api.lua_Reader;
 using AbsLineInfo = Payonel.LungoLua.Object.AbsLineInfo;
@@ -26,6 +27,7 @@ public sealed class Lzio
     return r;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte[] luaZ_overlay_ls_byte(ByteView block)
   {
     return block.toArray();

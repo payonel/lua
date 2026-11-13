@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
@@ -336,6 +337,7 @@ public sealed class Llex
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void next(LexState ls)
   {
     ls.current = (ls.z.pos < ls.z.chunk.size())
@@ -346,6 +348,7 @@ public sealed class Llex
   /* minimum size for string buffer */
   private const int LUA_MINBUFFER = 32;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool currIsNewline(LexState ls)
   {
     return ls.current == '\n' || ls.current == '\r';
@@ -376,6 +379,7 @@ public sealed class Llex
     b.append((sbyte) c);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void save_and_next(LexState ls)
   {
     save(ls, ls.current);
@@ -439,6 +443,7 @@ public sealed class Llex
     throw luaD_throw(ls.L, (sbyte) LUA_ERRSYNTAX);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaX_syntaxerror(LexState ls, ByteView msg)
   {
     throw lexerror(ls, msg, ls.t.token);
@@ -476,6 +481,7 @@ public sealed class Llex
   /*
   ** Creates a new string and anchors it in scanner's table.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TString luaX_newstring(LexState ls, ByteView str, int off, int len)
   {
     return anchorstr(ls, TString.luaS_createstr(ls.L, str.substr(off, len)));
@@ -1501,6 +1507,7 @@ public sealed class Llex
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaX_lookahead(LexState ls)
   {
     { if (JAssert.on && !( ls.lookahead.token == TK_EOS)) throw new AssertionError(); }

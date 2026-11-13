@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -36,12 +37,14 @@ public sealed class ByteSpan : ByteWrites
     return o;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteSpan subspan(int pos, int len)
   {
     { if (JAssert.on && !( pos <= n)) throw new AssertionError(); }
     return new ByteSpan(p, o + pos, (len == ByteView.npos) ? n - pos : JMath.min(len, n - pos));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteSpan subspan(int pos)
   {
     return subspan(pos, ByteView.npos);

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using Frexp = Payonel.LungoLua.Platform.Libm.Frexp;
 using Cost = Payonel.LungoLua.Runtime.Cost;
@@ -18,6 +19,7 @@ public sealed class Ltable
   {
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Node gnode(Table t, int i)
   {
     return t.node[i];
@@ -28,6 +30,7 @@ public sealed class Ltable
   ** may have any of these metamethods. (First access that fails after the
   ** clearing will set the bit again.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void invalidateTMcache(Table t)
   {
     t.flags = (sbyte) (t.flags & ~maskflags);
@@ -41,22 +44,26 @@ public sealed class Ltable
   public const int BITDUMMY = 1 << 6;
   public const sbyte NOTBITDUMMY = (sbyte) ~BITDUMMY;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isdummy(Table t)
   {
     return (t.flags & BITDUMMY) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setnodummy(Table t)
   {
     t.flags = (sbyte) (t.flags & NOTBITDUMMY);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setdummy(Table t)
   {
     t.flags = (sbyte) (t.flags | BITDUMMY);
   }
 
   /* allocated size for hash nodes */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int allocsizenode(Table t)
   {
     return isdummy(t) ? 0 : sizenode(t);
@@ -98,17 +105,20 @@ public sealed class Ltable
   */
 
   /* Computes the address of the tag for the abstract C-index 'k' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte getArrTag(Table t, long k)
   {
     return t.tags[(int) k];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setArrTag(Table t, long k, sbyte tag)
   {
     t.tags[(int) k] = tag;
   }
 
   /* Computes the address of the value for the abstract C-index 'k' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static TValue getArrVal(Table t, long k)
   {
     return new TValue(t.array_prim[(int) k], t.array_ref[(int) k], (sbyte) 0);
@@ -117,6 +127,7 @@ public sealed class Ltable
   /*
   ** Move TValues to/from arrays, using C indices
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void arr2obj(Table h, long k, TValue val)
   {
     val.tt_ = h.tags[(int) k];
@@ -124,6 +135,7 @@ public sealed class Ltable
     val.@ref = h.array_ref[(int) k];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void obj2arr(Table h, long k, TValue val)
   {
     h.tags[(int) k] = val.tt_;
@@ -136,6 +148,7 @@ public sealed class Ltable
   ** following macros also move TValues to/from arrays, but receive the
   ** precomputed tag value or address as an extra argument.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void farr2val(Table h, long k, sbyte tag, TValue res)
   {
     res.tt_ = tag;
@@ -143,6 +156,7 @@ public sealed class Ltable
     res.@ref = h.array_ref[(int) k];
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void fval2arr(Table h, long k, TValue val)
   {
     h.tags[(int) k] = val.tt_;
@@ -190,6 +204,7 @@ public sealed class Ltable
   internal const int MAXASIZE = 1 << MAXABITS;
 
   private static readonly bool static_init_1 = static_init_1_run();
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool static_init_1_run()
   {
     { if (JAssert.on && !( JLong.compareUnsigned(MAXASIZE, MAXASIZEB) <= 0)) throw new AssertionError(); }
@@ -240,9 +255,9 @@ public sealed class Ltable
   internal static int l_hashfloat(double n)
   {
     Frexp i = new Frexp();
-    IntResult ni = new IntResult();
+    IntResult ni = default;
     n = frexp(n, i) * -(double) JInteger.MIN_VALUE;
-    if (!lua_numbertointeger(n, ni))
+    if (!lua_numbertointeger(n, ref ni))
     { /* is 'n' inf/-inf/NaN? */
       { if (JAssert.on && !( (!(n == n)) || fabs(n) == JDouble.POSITIVE_INFINITY)) throw new AssertionError(); }
       return 0;
@@ -325,6 +340,7 @@ public sealed class Ltable
   ** Return the index 'k' (converted to an unsigned) if it is inside
   ** the range [1, limit].
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   internal static int checkrange(long k, int limit)
   {
     return (k >= 1 && k <= limit) ? (int) k : 0;
@@ -334,6 +350,7 @@ public sealed class Ltable
   ** Return the index 'k' if 'k' is an appropriate key to live in the
   ** array part of a table, 0 otherwise.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int arrayindex(long k)
   {
     return checkrange(k, MAXASIZE);
@@ -368,6 +385,7 @@ public sealed class Ltable
   ** entry: Two values plus 'next' versus one value.) Evaluate with size_t
   ** to avoid overflows.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool arrayXhash(long na, long nh)
   {
     return JLong.compareUnsigned(na, nh * 3) <= 0;

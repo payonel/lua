@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
 using InternalString = Payonel.LungoLua.Bytes.InternalString;
@@ -19,16 +20,19 @@ public sealed class Lstring
   {
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isreserved(TString s)
   {
     return (s.extra & 0xFF) > 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool eqshrstr(TString a, TString b)
   {
     return a == b;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaS_gethash(TString ts)
   {
     if (!ts.hashed)
@@ -39,11 +43,13 @@ public sealed class Lstring
   /*
   ** generic equality for strings
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaS_eqstr(TString a, TString b)
   {
     return (a == b) || (a.data.equals(b.data));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   internal static int luaS_hash(ByteView str)
   {
     return InternalString.hashBytes(str.array(), str.offset(), str.size());

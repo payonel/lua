@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
 
@@ -22,16 +23,19 @@ public sealed class HostString
     this.str = from_bytes(bytes).str;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteView to_utf8()
   {
     return new ByteView(str, 0, str.Length);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public string to_os()
   {
     return JString.of(str, JCharsets.UTF_8);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static HostString from_bytes(ByteView bytes)
   {
     HostString s = new HostString();
@@ -39,6 +43,7 @@ public sealed class HostString
     return s;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool equals(string s)
   {
     return JArrays.equals(str, s.getBytes(JCharsets.UTF_8));

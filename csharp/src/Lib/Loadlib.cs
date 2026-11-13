@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using CClosureNamer = Payonel.LungoLua.Api.CClosureNamer;
 using KNamer = Payonel.LungoLua.Api.KNamer;
@@ -587,6 +588,7 @@ public sealed class Loadlib
   private const int REQ_DONE = 7;      /* LOADED[name] set to true */
 
   /* (the continuation context: the step, and the searcher) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long reqctx(int step, long i)
   {
     return i * 8 + step;
@@ -685,6 +687,7 @@ public sealed class Loadlib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int ll_requirek(lua_State L, int status, long ctx)
   {
     return require_from(L, (int) (ctx % 8), ctx / 8);

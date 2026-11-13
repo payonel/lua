@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_LoadSpec = Payonel.LungoLua.Api.lua_LoadSpec;
 using lua_ObjectFactory = Payonel.LungoLua.Api.lua_ObjectFactory;
@@ -126,6 +127,7 @@ public sealed class Lload
   public const sbyte LF_CHECKHEADER = 72;
 
   /* a stop point of a load that a freeze can stop: is a check point due there? */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaZ_checkdue(LoadResume rz, lua_State L)
   {
     rz.points++;
@@ -138,6 +140,7 @@ public sealed class Lload
   }
 
   /* is 'rz' a stopped load whose frames are being made again (outermost first)? */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaZ_resuming(LoadResume rz)
   {
     return rz != null && rz.z.resuming;
@@ -221,6 +224,7 @@ public sealed class Lload
     b[3] = (long) buff.capacity() * Cost.Byte;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long heldsize(Dyndata dyd, MBuffer buff)
   {
     long[] b = new long[NHELD];
@@ -269,6 +273,7 @@ public sealed class Lload
   private static readonly lua_ObjectFactory makeloadbox_fn = Lload.makeloadbox;
 
   private static readonly bool static_init_1 = static_init_1_run();
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool static_init_1_run()
   {
     lua_registerobjectkind("load", makeloadbox_fn);
@@ -276,6 +281,7 @@ public sealed class Lload
 
   /* a frame not as expected: an error */
   /* (in the parse, which runs locked) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaZ_badstate(LoadResume rz)
   {
     rz.z.resuming = false;
@@ -300,6 +306,7 @@ public sealed class Lload
 
   /* the frame 'l' of function 'fn', as a freeze leaves it (a copy, kept by the box) */
   /* (as a freeze passes: no error can be raised, it would take its place) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaZ_record(LoadResume rz, int fn, LoadFrame l)
   {
     if (rz == null || !rz.recording || rz.box == null)
@@ -318,6 +325,7 @@ public sealed class Lload
   }
 
   /* the last frame made again: the load goes on from its stop */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaZ_resumed(LoadResume rz)
   {
     if (rz.rframe != null)
@@ -326,6 +334,7 @@ public sealed class Lload
   }
 
   /* did the frames of a freeze record themselves? */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaZ_recorded(LoadResume rz)
   {
     return rz.box.frames != null || rz.box.lost;
@@ -336,6 +345,7 @@ public sealed class Lload
   ** A stop point passed again by a load restored from outside the process
   ** (see 'luaZ_loadk'): the one it stopped at is behind it.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaZ_replaypoint(LoadResume rz)
   {
     if (rz.points == rz.box.points && rz.box.stop == LS_CHECK)
@@ -435,6 +445,7 @@ public sealed class Lload
   }
 
   /* the piece the reader function gave to the read a freeze stopped (see 'luaZ_fill') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static ByteView luaZ_resumeread(LoadResume rz)
   {
     return readerresult(rz.L, rz);

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using KNamer = Payonel.LungoLua.Api.KNamer;
 using luaL_Box = Payonel.LungoLua.Api.luaL_Box;
@@ -38,6 +39,7 @@ public sealed class Ltablib
   private const int TAB_L = 4; /* length */
   private const int TAB_RW = TAB_R | TAB_W; /* read/write */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool checkfield(lua_State L, ByteView key, int n)
   {
     lua_pushlstring(L, key, 0, key.size());
@@ -71,6 +73,7 @@ public sealed class Ltablib
   ** The length of the object at 'n', its '__len' called with continuation
   ** 'k' (which gets the length with 'luaL_lenresult').
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long aux_getnk(lua_State L, int n, int w, long ctx, lua_KFunction k)
   {
     if (lua_isplaintable(L, n)) /* (no '__len') */
@@ -140,6 +143,7 @@ public sealed class Ltablib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tinsertk_get(lua_State L, int status, long ctx)
   {
     return tinsert_move(L, (long) ctx, luaL_checkinteger(L, 2), AT_SET);
@@ -149,6 +153,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tinsertk_get = new KNamer("table.tinsertk_get", tinsertk_get_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tinsertk_set(lua_State L, int status, long ctx)
   {
     return tinsert_move(L, (long) ctx, luaL_checkinteger(L, 2), AT_NEXT);
@@ -158,6 +163,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tinsertk_set = new KNamer("table.tinsertk_set", tinsertk_set_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tinsertk_loop(lua_State L, int status, long ctx)
   {
     return tinsert_move(L, (long) ctx, luaL_checkinteger(L, 2), AT_LOOP);
@@ -167,6 +173,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tinsertk_loop = new KNamer("table.tinsertk_loop", tinsertk_loop_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tinsertk_done(lua_State L, int status, long ctx)
   {
     return 0;
@@ -204,6 +211,7 @@ public sealed class Ltablib
     return 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tinsertk_len(lua_State L, int status, long ctx)
   {
     return tinsert_len(L, luaL_lenresult(L));
@@ -213,6 +221,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tinsertk_len = new KNamer("table.tinsertk_len", tinsertk_len_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tinsert(lua_State L)
   {
     luaE_freezeonly(L);
@@ -260,6 +269,7 @@ public sealed class Ltablib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tremovek_get(lua_State L, int status, long ctx)
   {
     return tremove_move(L, (long) ctx, AT_SET);
@@ -269,6 +279,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tremovek_get = new KNamer("table.tremovek_get", tremovek_get_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tremovek_set(lua_State L, int status, long ctx)
   {
     return tremove_move(L, (long) ctx, AT_NEXT);
@@ -278,6 +289,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tremovek_set = new KNamer("table.tremovek_set", tremovek_set_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tremovek_loop(lua_State L, int status, long ctx)
   {
     return tremove_move(L, (long) ctx, AT_LOOP);
@@ -287,6 +299,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tremovek_loop = new KNamer("table.tremovek_loop", tremovek_loop_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tremovek_first(lua_State L, int status, long ctx)
   {
     return tremove_move(L, (long) ctx, AT_LOOP);
@@ -296,6 +309,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tremovek_first = new KNamer("table.tremovek_first", tremovek_first_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tremovek_done(lua_State L, int status, long ctx)
   {
     return 1;
@@ -317,6 +331,7 @@ public sealed class Ltablib
     return tremove_move(L, pos, AT_LOOP);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tremovek_len(lua_State L, int status, long ctx)
   {
     return tremove_len(L, luaL_lenresult(L));
@@ -326,6 +341,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tremovek_len = new KNamer("table.tremovek_len", tremovek_len_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tremove(lua_State L)
   {
     lua_settop(L, 2);
@@ -343,6 +359,7 @@ public sealed class Ltablib
   ** counts from 0 up, or from 'n' - 1 down: 'dir'.)
   */
   /* (continuations: going up or down, at a place in the element 'ctx') */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tmovek_upset(lua_State L, int status, long ctx)
   {
     return tmove_loop(L, (long) ctx, 1, AT_SET);
@@ -350,6 +367,7 @@ public sealed class Ltablib
 
   private static readonly lua_KFunction tmovek_upset_fn = Ltablib.tmovek_upset;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tmovek_upnext(lua_State L, int status, long ctx)
   {
     return tmove_loop(L, (long) ctx, 1, AT_NEXT);
@@ -357,6 +375,7 @@ public sealed class Ltablib
 
   private static readonly lua_KFunction tmovek_upnext_fn = Ltablib.tmovek_upnext;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tmovek_uploop(lua_State L, int status, long ctx)
   {
     return tmove_loop(L, (long) ctx, 1, AT_LOOP);
@@ -364,6 +383,7 @@ public sealed class Ltablib
 
   private static readonly lua_KFunction tmovek_uploop_fn = Ltablib.tmovek_uploop;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tmovek_downset(lua_State L, int status, long ctx)
   {
     return tmove_loop(L, (long) ctx, -1, AT_SET);
@@ -371,6 +391,7 @@ public sealed class Ltablib
 
   private static readonly lua_KFunction tmovek_downset_fn = Ltablib.tmovek_downset;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tmovek_downnext(lua_State L, int status, long ctx)
   {
     return tmove_loop(L, (long) ctx, -1, AT_NEXT);
@@ -378,6 +399,7 @@ public sealed class Ltablib
 
   private static readonly lua_KFunction tmovek_downnext_fn = Ltablib.tmovek_downnext;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tmovek_downloop(lua_State L, int status, long ctx)
   {
     return tmove_loop(L, (long) ctx, -1, AT_LOOP);
@@ -433,12 +455,14 @@ public sealed class Ltablib
   }
 
   /* 'move' after comparing the tables: they are not the same, go up */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tmove_dir(lua_State L, bool up)
   {
     long n = luaL_checkinteger(L, 3) - luaL_checkinteger(L, 2) + 1;
     return up ? tmove_loop(L, 0, 1, AT_LOOP) : tmove_loop(L, n - 1, -1, AT_LOOP);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tmovek_eq(lua_State L, int status, long ctx)
   {
     bool eq = lua_toboolean(L, -1);
@@ -666,6 +690,7 @@ public sealed class Ltablib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tconcatk_get(lua_State L, int status, long ctx)
   {
     return tconcat_resume(L, (long) ctx, AT_SET);
@@ -675,6 +700,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tconcatk_get = new KNamer("table.tconcatk_get", tconcatk_get_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tconcatk_loop(lua_State L, int status, long ctx)
   {
     return tconcat_resume(L, (long) ctx, AT_LOOP);
@@ -754,6 +780,7 @@ public sealed class Ltablib
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tconcatk_len(lua_State L, int status, long ctx)
   {
     return tconcat_len(L, luaL_lenresult(L));
@@ -763,6 +790,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tconcatk_len = new KNamer("table.tconcatk_len", tconcatk_len_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tconcat(lua_State L)
   {
     lua_settop(L, 4);
@@ -827,6 +855,7 @@ public sealed class Ltablib
 
   /* (after a freeze: the first index at 2, the last at 3, the elements
      pushed from 4 on) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tunpack_resume(lua_State L, int at)
   {
     long i = luaL_optinteger(L, 2, 1);
@@ -834,6 +863,7 @@ public sealed class Ltablib
     return tunpack_loop(L, i, n, lua_gettop(L) - 3, at);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tunpackk_got(lua_State L, int status, long ctx)
   {
     return tunpack_resume(L, AT_NEXT);
@@ -843,6 +873,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tunpackk_got = new KNamer("table.tunpackk_got", tunpackk_got_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tunpackk_loop(lua_State L, int status, long ctx)
   {
     return tunpack_resume(L, AT_LOOP);
@@ -872,6 +903,7 @@ public sealed class Ltablib
     return tunpack_loop(L, i, (int) n, 0, AT_LOOP);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tunpackk_len(lua_State L, int status, long ctx)
   {
     return tunpack_len(L, luaL_lenresult(L));
@@ -881,6 +913,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_tunpackk_len = new KNamer("table.tunpackk_len", tunpackk_len_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int tunpack(lua_State L)
   {
     lua_settop(L, 3);
@@ -979,6 +1012,7 @@ public sealed class Ltablib
     internal long[] s = new long[SORT_NINTS];
     internal ByteOwner image = new ByteOwner(8 * SORT_NINTS);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string persistkind()
     {
       return "table.sort";
@@ -1434,6 +1468,7 @@ public sealed class Ltablib
     return 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int sortk_len(lua_State L, int status, long ctx)
   {
     return sort_len(L, luaL_lenresult(L));
@@ -1443,6 +1478,7 @@ public sealed class Ltablib
 
   private static readonly KNamer knamer_sortk_len = new KNamer("table.sortk_len", sortk_len_fn);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int sort(lua_State L)
   {
     luaE_freezeonly(L);
@@ -1473,6 +1509,7 @@ public sealed class Ltablib
     new luaL_RegCFI(Lt.sort_fn, cfi_sort),
   };
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaopen_table(lua_State L)
   {
     luaL_newlibcfi(L, tab_funcs);

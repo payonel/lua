@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 
 namespace Payonel.LungoLua.Bytes;
@@ -63,11 +64,13 @@ public sealed class ByteOwner : ByteWrites
   }
 
   /* data() != nullptr */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool held()
   {
     return p != null;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteSpan span()
   {
     return new ByteSpan(p == null ? new sbyte[0] : p, 0, n);

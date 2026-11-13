@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_UserObject = Payonel.LungoLua.Api.lua_UserObject;
 using Dyndata = Payonel.LungoLua.Compiler.Dyndata;
@@ -59,12 +60,14 @@ public sealed class LoadBox : lua_UserObject
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void freed(lua_State L)
   {
     luaM_shrinkhost(L.l_G, hosted, 0);
     hosted = 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public string persistkind()
   {
     return "load";
@@ -82,11 +85,13 @@ public sealed class LoadBox : lua_UserObject
     return LB_NINTS;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteView persistbytes()
   {
     return new ByteView(input, 0, inputlen);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public bool persistuservalues()
   {
     return false;

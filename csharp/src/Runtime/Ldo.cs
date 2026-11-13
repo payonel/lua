@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_Budget = Payonel.LungoLua.Api.lua_Budget;
 using lua_CFunction = Payonel.LungoLua.Api.lua_CFunction;
@@ -48,12 +49,14 @@ public sealed class Ldo
   {
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaD_checkstack(lua_State L, int n)
   {
     if (L.stack_last - L.top <= n)
       luaD_growstack(L, n, true);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void checkstackp(lua_State L, int n, int p)
   {
     luaD_checkstack(L, n);
@@ -83,6 +86,7 @@ public sealed class Ldo
      stack to the callback's caller, and only that catches it */
   public const sbyte LUA_CBEXIT = 101;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool errorstatus(sbyte s)
   {
     return s > LUA_YIELD && s != LUA_FREEZE && s != LUA_CBEXIT;
@@ -199,6 +203,7 @@ public sealed class Ldo
     return lj.status;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte luaD_rawrunprotected(lua_State L, ProtectedCall f)
   {
     return luaD_rawrunprotected(L, f, false);
@@ -433,6 +438,7 @@ public sealed class Ldo
     internal lua_Budget f;
     internal lua_State user;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       lua_unlock(L);
@@ -868,6 +874,7 @@ public sealed class Ldo
     L.ci = ci.previous; /* back to caller (after closing variables) */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static CallInfo next_ci(lua_State L)
   {
     return L.ci.next != null ? L.ci.next : luaE_extendCI(L, 1);
@@ -1013,6 +1020,7 @@ public sealed class Ldo
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CallInfo luaD_precall(lua_State L, int func, int nresults)
   {
     return precall(L, func, nresults, 0);
@@ -1046,6 +1054,7 @@ public sealed class Ldo
   /*
   ** External interface for 'ccall'
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaD_call(lua_State L, int func, int nResults)
   {
     ccall(L, func, nResults, 1);
@@ -1054,6 +1063,7 @@ public sealed class Ldo
   /*
   ** Similar to 'luaD_call', but does not allow yields during the call.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaD_callnoyield(lua_State L, int func, int nResults)
   {
     ccall(L, func, nResults, nyci);
@@ -1166,6 +1176,7 @@ public sealed class Ldo
   ** that the resume recovers), the frames left take the reset count too:
   ** they now run with no C calls under them.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void forgetcalls(lua_State L, CallInfo ci)
   {
     for (; ci != L.base_ci; ci = ci.previous)
@@ -1404,6 +1415,7 @@ public sealed class Ldo
   private sealed class Unroll : ProtectedCall
   {
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       unroll(L);
@@ -1414,6 +1426,7 @@ public sealed class Ldo
   {
     internal int nargs;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       resume(L, nargs);
@@ -1573,6 +1586,7 @@ public sealed class Ldo
     internal lua_State stop;
     internal bool slice;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       thaw(L, stop, slice);
@@ -1590,6 +1604,7 @@ public sealed class Ldo
   {
     internal sbyte status;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       status = luaD_closeprotected(L, 1, status, 2);
@@ -1694,6 +1709,7 @@ public sealed class Ldo
     internal int level;
     internal sbyte status;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       status = luaD_closeprotected(L, level, status, 2);
@@ -1904,6 +1920,7 @@ public sealed class Ldo
     throw luaD_throwbaselevel(L, cr.status);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_ResumeResult lua_resume(lua_State L, lua_State from, int nargs)
   {
     return lua_resumek(L, from, nargs, 0, null);
@@ -2052,6 +2069,7 @@ public sealed class Ldo
     return thawcore(L, from, ctx, k, stop, slice);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_ResumeResult lua_thawk(lua_State L, lua_State from, long ctx, lua_KFunction k)
   {
     return lua_thawatk(L, from, null, ctx, k);
@@ -2071,11 +2089,13 @@ public sealed class Ldo
     return null;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_ResumeResult lua_thaw(lua_State L, lua_State from)
   {
     return lua_thawatk(L, from, null, 0, null);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_ResumeResult lua_thaw(lua_State L, lua_State from, lua_State[] stops)
   {
     return lua_thawatk(L, from, firststop(L, stops), 0, null);
@@ -2092,11 +2112,13 @@ public sealed class Ldo
       return (int) (L.top - (L.ci.func + 1));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_State lua_frozenchild(lua_State L)
   {
     return L.frozenchild;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isfrozen(lua_State L)
   {
     return L.frozen != 0;
@@ -2105,6 +2127,7 @@ public sealed class Ldo
   /*
   ** Freeze, from the budget callback: leave it (see 'luaD_budget').
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException lua_freeze(lua_State L)
   {
     lua_lock(L); /* (as for any throw: it is caught with the lock held) */
@@ -2146,6 +2169,7 @@ public sealed class Ldo
     lua_unlock(L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool lua_isyieldable(lua_State L)
   {
     return yieldable(L);
@@ -2193,6 +2217,7 @@ public sealed class Ldo
     internal sbyte status;
     internal int yy; /* can a '__close' freeze? */
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       closepaux(L, this);
@@ -2202,6 +2227,7 @@ public sealed class Ldo
   /*
   ** Auxiliary function to call 'luaF_close' in protected mode.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void closepaux(lua_State L, CloseP pcl)
   {
     luaF_close(L, pcl.level, pcl.status, pcl.yy);
@@ -2259,6 +2285,7 @@ public sealed class Ldo
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte luaD_closeprotected(lua_State L, int level, sbyte status)
   {
     return luaD_closeprotected(L, level, status, 0);
@@ -2294,6 +2321,7 @@ public sealed class Ldo
     return status;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte luaD_pcall(lua_State L, ProtectedCall func, int old_top, int ef)
   {
     return luaD_pcall(L, func, old_top, ef, true);
@@ -2310,6 +2338,7 @@ public sealed class Ldo
     internal ByteView mode;
     internal ByteView name;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       f_parser(L, this);
@@ -2502,6 +2531,7 @@ public sealed class Ldo
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte luaD_protectedparser(lua_State L, ZIO z, ByteView name, ByteView mode)
   {
     return luaD_protectedparser(L, z, name, mode, null);

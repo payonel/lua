@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_State = Payonel.LungoLua.Runtime.lua_State;
 using static Payonel.LungoLua.Runtime.Lmem;
@@ -20,12 +21,14 @@ public sealed class MBuffer
     L_ = L;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void destroy()
   {
     if (bytes_.held())
       luaM_alloc_char_span(L_.l_G, L_, bytes_, 0, false);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void attach(lua_State L)
   {
     { if (JAssert.on && !( bytes_.empty() || L == L_)) throw new AssertionError(); }
@@ -40,6 +43,7 @@ public sealed class MBuffer
     bytes_ = luaM_alloc_char_span(L_.l_G, L_, bytes_, cap, true);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void append(sbyte c)
   {
     if (len_ + 1 > bytes_.size())
@@ -47,31 +51,37 @@ public sealed class MBuffer
     bytes_.set(len_++, c);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void reset()
   {
     len_ = 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void drop(int k)
   {
     len_ -= k;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int size()
   {
     return len_;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public int capacity()
   {
     return bytes_.size();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteView view()
   {
     return new ByteView(bytes_.array(), 0, len_);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public ByteSpan area()
   {
     return bytes_.span();
@@ -98,6 +108,7 @@ public sealed class MBuffer
   }
 
   /* takes bytes given by 'release' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public void adopt(ByteOwner b, int len)
   {
     { if (JAssert.on && !( bytes_.empty())) throw new AssertionError(); }

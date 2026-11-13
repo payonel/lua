@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
@@ -52,6 +53,7 @@ public sealed class InternalDebug
     i_ci = o.i_ci;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public InternalDebug copy()
   {
     return new InternalDebug(this);

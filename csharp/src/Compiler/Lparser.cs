@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
 using InternalString = Payonel.LungoLua.Bytes.InternalString;
@@ -92,11 +93,13 @@ public sealed class Lparser
   public const int VCALL = 21;     /* expression is a function call; info = instruction pc */
   public const int VVARARG = 22;   /* vararg expression; info = instruction pc */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool vkisvar(int k)
   {
     return VLOCAL <= k && k <= VINDEXSTR;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool vkisindexed(int k)
   {
     return VINDEXED <= k && k <= VINDEXSTR;
@@ -112,12 +115,14 @@ public sealed class Lparser
   public const int GDKCONST = 6;   /* global constant */
 
   /* variables that live in registers */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool varinreg(Vardesc v)
   {
     return v.kind <= RDKTOCLOSE;
   }
 
   /* test for global variables */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool varglobal(Vardesc v)
   {
     return v.kind >= GDKREG;
@@ -138,6 +143,7 @@ public sealed class Lparser
      smaller than 250, due to the bytecode format) */
   private const int MAXVARS = 200;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool hasmultret(int k)
   {
     return k == VCALL || k == VVARARG;
@@ -145,11 +151,13 @@ public sealed class Lparser
 
   /* because all strings are unified by the scanner, the parser
      can use pointer equality for string equality */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool eqstr(TString a, TString b)
   {
     return a == b;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static RuntimeException error_expected(LexState ls, int token)
   {
     throw luaX_syntaxerror(ls, luaO_pushfstring(ls.L, Lt.s_expected, new FmtArgs().str(luaX_token2str(ls, token))).view());
@@ -167,6 +175,7 @@ public sealed class Lparser
     throw luaX_syntaxerror(fs.ls, msg.view());
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaY_checklimit(FuncState fs, int v, int l, ByteView what)
   {
     if (v > l)
@@ -195,6 +204,7 @@ public sealed class Lparser
   /*
   ** Check that next token is 'c'.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void check(LexState ls, int c)
   {
     if (ls.t.token != c)
@@ -204,12 +214,14 @@ public sealed class Lparser
   /*
   ** Check that next token is 'c' and skip it.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void checknext(LexState ls, int c)
   {
     check(ls, c);
     luaX_next(ls);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void check_condition(LexState ls, bool c, ByteView msg)
   {
     if (!c)
@@ -248,6 +260,7 @@ public sealed class Lparser
     return ts;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void init_exp(expdesc e, int k, int i)
   {
     e.f = e.t = NO_JUMP;
@@ -255,6 +268,7 @@ public sealed class Lparser
     e.info = i;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void codestring(expdesc e, TString s)
   {
     e.f = e.t = NO_JUMP;
@@ -262,6 +276,7 @@ public sealed class Lparser
     e.strval = s;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void codename(LexState ls, expdesc e)
   {
     codestring(e, str_checkname(ls));
@@ -309,6 +324,7 @@ public sealed class Lparser
   /*
   ** Create a new local variable with the given 'name' and regular kind.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int new_localvar(LexState ls, TString name)
   {
     return new_varkind(ls, name, (sbyte) VDKREG);
@@ -319,6 +335,7 @@ public sealed class Lparser
   ** (Unless noted otherwise, all variables are referred to by their
   ** compiler indices.)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static Vardesc getlocalvardesc(FuncState fs, int vidx)
   {
     return fs.ls.dyd.actvar.arr[fs.firstlocal + vidx];
@@ -344,6 +361,7 @@ public sealed class Lparser
   ** Return the number of variables in the register stack for the given
   ** function.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaY_nvarstack(FuncState fs)
   {
     return reglevel(fs, fs.nactvar);
@@ -653,6 +671,7 @@ public sealed class Lparser
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void singlevar(LexState ls, expdesc var)
   {
     buildvar(ls, str_checkname(ls), var);
@@ -687,11 +706,13 @@ public sealed class Lparser
       fs.freereg = fs.freereg + needed; /* remove extra values */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void enterlevel(LexState ls)
   {
     luaE_incCstack(ls.L);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void leavelevel(LexState ls)
   {
     ls.L.nCcalls--;
@@ -701,6 +722,7 @@ public sealed class Lparser
   ** Generates an error that a goto jumps into the scope of some
   ** variable declaration.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static RuntimeException jumpscopeerror(LexState ls, Labeldesc gt)
   {
     TString tsname = getlocalvardesc(ls.fs, gt.nactvar).name;
@@ -864,6 +886,7 @@ public sealed class Lparser
   /*
   ** generates an error for an undefined 'goto'.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static RuntimeException undefgoto(LexState ls, Labeldesc gt)
   {
     /* breaks are checked when created, cannot be undefined */
@@ -921,6 +944,7 @@ public sealed class Lparser
   ** are in use at that time.
 
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void codeclosure(LexState ls, expdesc v)
   {
     FuncState fs = ls.fs.prev;
@@ -1240,6 +1264,7 @@ public sealed class Lparser
     cc.na += cc.tostore;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void listfield(LexState ls, ConsControl cc)
   {
     /* listfield -> exp */
@@ -1417,6 +1442,7 @@ public sealed class Lparser
 
   /* }====================================================================== */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void setvararg(FuncState fs)
   {
     fs.f.flag |= PF_VAHID; /* by default, use hidden vararg arguments */
@@ -2289,6 +2315,7 @@ public sealed class Lparser
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void expr(LexState ls, expdesc v)
   {
     subexpr(ls, v, 0); /* (no frame of its own: see 'testnext') */
@@ -2414,6 +2441,7 @@ public sealed class Lparser
   }
 
   /* Create code to store the "top" register in 'var' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void storevartop(FuncState fs, expdesc var)
   {
     expdesc e = new expdesc();
@@ -2577,6 +2605,7 @@ public sealed class Lparser
     return l.v.f;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void gotostat(LexState ls, int line)
   {
     TString name = str_checkname(ls); /* label's name */

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using HostString = Payonel.LungoLua.Api.HostString;
 using luaL_Buffer = Payonel.LungoLua.Api.luaL_Buffer;
@@ -46,6 +47,7 @@ public sealed class Liolib
   }
 
   /* By default, Lua accepts only "r" or "w" as valid modes */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool l_checkmodep(ByteView m)
   {
     return m.size() == 1 && (m.at(0) == 'r' || m.at(0) == 'w');
@@ -55,11 +57,13 @@ public sealed class Liolib
 
   /* }====================================================== */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static luaL_Stream tolstream(lua_State L)
   {
     return (luaL_Stream) luaL_checkuserobjecti(L, 1, LUA_FILEHANDLE);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool isclosed(luaL_Stream p)
   {
     return p.closef == null;
@@ -135,6 +139,7 @@ public sealed class Liolib
     return cf.call(L);  /* close it */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int f_close(lua_State L)
   {
     tofile(L); /* make sure argument is an open stream */
@@ -143,6 +148,7 @@ public sealed class Liolib
 
   private static readonly lua_CFunction f_close_fn = Liolib.f_close;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int io_close(lua_State L)
   {
     if (lua_isnone(L, 1))                                 /* no argument? */
@@ -229,6 +235,7 @@ public sealed class Liolib
   /*
   ** function to close 'popen' files
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int io_pclose(lua_State L)
   {
     luaL_Stream p = tolstream(L);
@@ -298,6 +305,7 @@ public sealed class Liolib
     return 1;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int io_input(lua_State L)
   {
     return g_iofile(L, Lt._IO_input, Lt.r_mode);
@@ -305,6 +313,7 @@ public sealed class Liolib
 
   private static readonly lua_CFunction io_input_fn = Liolib.io_input;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int io_output(lua_State L)
   {
     return g_iofile(L, Lt._IO_output, Lt.w_mode);
@@ -338,6 +347,7 @@ public sealed class Liolib
     lua_pushcclosure(L, io_readline_fn, 3 + n);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int f_lines(lua_State L)
   {
     tofile(L); /* check that it's a valid file handle */
@@ -633,6 +643,7 @@ public sealed class Liolib
     return n - first;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int io_read(lua_State L)
   {
     return g_read(L, getiofile(L, Lt._IO_input), 1);
@@ -640,6 +651,7 @@ public sealed class Liolib
 
   private static readonly lua_CFunction io_read_fn = Liolib.io_read;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int f_read(lua_State L)
   {
     return g_read(L, tofile(L), 2);
@@ -712,6 +724,7 @@ public sealed class Liolib
     return 1; /* no errors; file handle already on stack top */
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int io_write(lua_State L)
   {
     return g_write(L, getiofile(L, Lt._IO_output), 1);
@@ -719,6 +732,7 @@ public sealed class Liolib
 
   private static readonly lua_CFunction io_write_fn = Liolib.io_write;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int f_write(lua_State L)
   {
     OsFile f = tofile(L);
@@ -760,6 +774,7 @@ public sealed class Liolib
 
   private static readonly lua_CFunction f_setvbuf_fn = Liolib.f_setvbuf;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int aux_flush(lua_State L, OsFile f)
   {
     errno = 0;
@@ -767,6 +782,7 @@ public sealed class Liolib
     return luaL_fileresulti(L, err == 0, null, err);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int f_flush(lua_State L)
   {
     return aux_flush(L, tofile(L));
@@ -774,6 +790,7 @@ public sealed class Liolib
 
   private static readonly lua_CFunction f_flush_fn = Liolib.f_flush;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int io_flush(lua_State L)
   {
     return aux_flush(L, getiofile(L, Lt._IO_output));

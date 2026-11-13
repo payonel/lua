@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using lua_CFunction = Payonel.LungoLua.Api.lua_CFunction;
 using lua_KFunction = Payonel.LungoLua.Api.lua_KFunction;
@@ -69,6 +70,7 @@ public sealed class Lgc
   public const int GCScallfin = 7;
   public const int GCSpause = 8;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool issweepphase(global_State g)
   {
     return GCSswpallgc <= g.gcstate && g.gcstate <= GCSswpend;
@@ -82,6 +84,7 @@ public sealed class Lgc
   ** are white again.
   */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool keepinvariant(global_State g)
   {
     return g.gcstate <= GCSatomic;
@@ -90,11 +93,13 @@ public sealed class Lgc
   /*
   ** some useful bit tricks
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int bitmask(int b)
   {
     return 1 << b;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int bit2mask(int b1, int b2)
   {
     return bitmask(b1) | bitmask(b2);
@@ -114,53 +119,63 @@ public sealed class Lgc
 
   public static readonly int WHITEBITS = bit2mask(WHITE0BIT, WHITE1BIT);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool iswhite(GCObject x)
   {
     return (x.marked & WHITEBITS) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isblack(GCObject x)
   {
     return (x.marked & bitmask(BLACKBIT)) != 0;
   }
 
   /* neither white nor black */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isgray(GCObject x)
   {
     return (x.marked & (WHITEBITS | bitmask(BLACKBIT))) == 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool tofinalize(GCObject x)
   {
     return (x.marked & bitmask(FINALIZEDBIT)) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte otherwhite(global_State g)
   {
     return (sbyte) (g.currentwhite ^ WHITEBITS);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isdeadm(sbyte ow, sbyte m)
   {
     return ((m & 0xFF) & (ow & 0xFF)) != 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isdead(global_State g, GCObject v)
   {
     return isdeadm(otherwhite(g), v.marked);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void changewhite(GCObject x)
   {
     x.marked = (sbyte) (x.marked ^ WHITEBITS);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void nw2black(GCObject x)
   {
     { if (JAssert.on && !( !iswhite(x))) throw new AssertionError(); }
     x.marked = (sbyte) (x.marked | bitmask(BLACKBIT));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static sbyte luaC_white(global_State g)
   {
     return (sbyte) (g.currentwhite & WHITEBITS);
@@ -177,16 +192,19 @@ public sealed class Lgc
 
   public const int AGEBITS = 7; /* all age bits (111) */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int getage(GCObject o)
   {
     return o.marked & AGEBITS;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void setage(GCObject o, int a)
   {
     o.marked = (sbyte) ((o.marked & ~AGEBITS) | a);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool isold(GCObject o)
   {
     return getage(o) > G_SURVIVAL;
@@ -277,11 +295,13 @@ public sealed class Lgc
   public const int GCSTPGC = 2; /* bit true when GC stopped by itself */
   public const int GCSTPCLS = 4; /* bit true when closing Lua state */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool gcrunning(global_State g)
   {
     return g.gcstp == 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaC_checkGC(lua_State L)
   {
     if (L.l_G.GCdebt <= 0)
@@ -295,6 +315,7 @@ public sealed class Lgc
   */
   public const int HASHSTEP = unchecked((int)0x9E3779B9U);
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static int luaC_newhash(global_State g)
   {
     int h = g.nexthash;
@@ -307,6 +328,7 @@ public sealed class Lgc
   ** parser's own) gives its hash back: the sequence depends only on what the
   ** program makes.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaC_givebackhash(global_State g, GCObject o)
   {
     { if (JAssert.on && !( o.hash + HASHSTEP == g.nexthash)) throw new AssertionError(); }
@@ -314,24 +336,28 @@ public sealed class Lgc
     o.hash = 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaC_objbarrier(lua_State L, GCObject p, GCObject o)
   {
     if (isblack(p) && iswhite(o))
       luaC_barrier_(L, p, o);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaC_barrier(lua_State L, GCObject p, TValue v)
   {
     if (iscollectable(v))
       luaC_objbarrier(L, p, gcvalue(v));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaC_objbarrierback(lua_State L, GCObject p, GCObject o)
   {
     if (isblack(p) && iswhite(o))
       luaC_barrierback_(L, p);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaC_barrierback(lua_State L, GCObject p, TValue v)
   {
     if (iscollectable(v))
@@ -356,38 +382,45 @@ public sealed class Lgc
   /* mask with all GC bits */
   private static readonly int maskgcbits = maskcolors | AGEBITS;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void makewhite(global_State g, GCObject x)
   {
     x.marked = (sbyte) ((x.marked & ~maskcolors) | luaC_white(g));
   }
 
   /* make an object gray (neither white nor black) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void set2gray(GCObject x)
   {
     x.marked = (sbyte) (x.marked & ~maskcolors);
   }
 
   /* make an object black (coming from any color) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void set2black(GCObject x)
   {
     x.marked = (sbyte) ((x.marked & ~WHITEBITS) | bitmask(BLACKBIT));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool keyiswhite(Node n)
   {
     return keyiscollectable(n) && iswhite(gckey(n));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static GCObject gcvalueN(TValue o)
   {
     return iscollectable(o) ? gcvalue(o) : null;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static GCObject gcvalarr(Table t, int i)
   {
     return ((getArrTag(t, i) & BIT_ISCOLLECTABLE) != 0) ? (GCObject) getArrVal(t, i).@ref : null;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void markvalue(global_State g, TValue o)
   {
     checkliveness(mainthread(g), o);
@@ -395,18 +428,21 @@ public sealed class Lgc
       reallymarkobject(g, gcvalue(o));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void markkey(global_State g, Node n)
   {
     if (keyiswhite(n))
       reallymarkobject(g, gckey(n));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void markobject(global_State g, GCObject t)
   {
     if (iswhite(t))
       reallymarkobject(g, t);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void markobjectN(global_State g, GCObject t)
   {
     if (t != null)
@@ -519,6 +555,7 @@ public sealed class Lgc
   ** its associated empty value is enough to signal that the entry is
   ** logically empty.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void clearkey(Node n)
   {
     { if (JAssert.on && !( isempty(n))) throw new AssertionError(); }
@@ -722,6 +759,7 @@ public sealed class Lgc
   /*
   ** mark metamethods for basic types
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void markmt(global_State g)
   {
     int i;
@@ -732,6 +770,7 @@ public sealed class Lgc
   /*
   ** mark all objects in list of being-finalized
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void markbeingfnz(global_State g)
   {
     GCObject o;
@@ -781,6 +820,7 @@ public sealed class Lgc
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void cleargraylists(global_State g)
   {
     g.gray.gclist = g.grayagain.gclist = null;
@@ -1141,6 +1181,7 @@ public sealed class Lgc
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void propagateall(global_State g)
   {
     while (g.gray.gclist != null)
@@ -1163,6 +1204,7 @@ public sealed class Lgc
   private const int EPH_SLOT = 16; /* (what a slot counts: a key and a value) */
   private const int EPH_READY = 8;
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static long ephroom(int cap)
   {
     return (long) cap * EPH_SLOT + (long) (cap / 2) * EPH_READY;
@@ -1356,6 +1398,7 @@ public sealed class Lgc
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void freeupval(lua_State L, UpVal uv)
   {
     if (upisopen(uv))
@@ -1481,6 +1524,7 @@ public sealed class Lgc
   /*
   ** If possible, shrink string table.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void checkSizes(lua_State L, global_State g)
   {
   }
@@ -1504,6 +1548,7 @@ public sealed class Lgc
     return o;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void dothecall(lua_State L)
   {
     luaD_callnoyield(L, L.top - 2, 0);
@@ -1512,6 +1557,7 @@ public sealed class Lgc
   private sealed class DoTheCall : ProtectedCall
   {
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void run(lua_State L)
     {
       dothecall(L);
@@ -1584,6 +1630,7 @@ public sealed class Lgc
   }
 
   /* after a thaw: 'oldah' is the 'allowhook' of the thread before the calls */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int gcdrain_cont(lua_State L, int status, long ctx)
   {
     drainfinish(L, status);
@@ -1593,6 +1640,7 @@ public sealed class Lgc
   private static readonly lua_KFunction gcdrain_cont_fn = Lgc.gcdrain_cont;
 
   private static readonly bool static_init_1 = static_init_1_run();
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool static_init_1_run()
   {
     lua_registerk("gc.gcdrain_cont", gcdrain_cont_fn);
@@ -1622,6 +1670,7 @@ public sealed class Lgc
     return 0;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static int gcdrain(lua_State L)
   {
     return gcdrain_run(L, L.allowhook);
@@ -1632,12 +1681,14 @@ public sealed class Lgc
   private static readonly CFuncInfo cfi_gcdrain = new CFuncInfo(gcdrain_fn, "gc.gcdrain");
 
   /* the function that calls the waiting '__gc' (hooks do not see it) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_CFunction luaC_drainfunction()
   {
     return gcdrain_fn;
   }
 
   /* push the function that calls the '__gc' waiting in the group of 'L' */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaC_pushdrain(lua_State L)
   {
     setslotf(L, L.top, cfi_gcdrain);
@@ -1645,6 +1696,7 @@ public sealed class Lgc
   }
 
   /* do the '__gc' of the group in effect wait? */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static bool luaC_hasdrain(lua_State L)
   {
     return L.beff != null && L.beff.fnz.next != null;
@@ -1653,6 +1705,7 @@ public sealed class Lgc
   /*
   ** call all pending finalizers
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void callallpendingfinalizers(lua_State L)
   {
     global_State g = L.l_G;
@@ -1663,6 +1716,7 @@ public sealed class Lgc
   /*
   ** find last 'next' field in list 'p' list (to add elements in its end)
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static GCObject findlast(GCObject p)
   {
     while (p.next != null)
@@ -1673,6 +1727,7 @@ public sealed class Lgc
   /*
   ** The group that owns an object (nullptr: none, or it is gone).
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static BudgetGroup ownergroup(global_State g, int id)
   {
     return (id < g.groupbyid.Length) ? g.groupbyid[id] : null;
@@ -1826,6 +1881,7 @@ public sealed class Lgc
   /*
   ** If pointer 'p' points to 'o', move it to the next element.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static GCObject checkpointer(GCObject p, GCObject o)
   {
     return (o == p) ? o.next : p;
@@ -2375,6 +2431,7 @@ public sealed class Lgc
   ** the base, GCmajorminor, which is the number of bytes being used
   ** after the last major collection.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void setminordebt(global_State g)
   {
     luaE_setdebt(g, luaO_applyparam(g.gcparams[LUA_GCPMINORMUL], g.GCmajorminor));
@@ -2418,6 +2475,7 @@ public sealed class Lgc
   /*
   ** Does a full collection in generational mode.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void fullgen(lua_State L, global_State g)
   {
     minor2inc(L, g, (sbyte) KGC_INC);

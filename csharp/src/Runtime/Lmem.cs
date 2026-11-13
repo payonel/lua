@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
 using ByteView = Payonel.LungoLua.Bytes.ByteView;
@@ -47,6 +48,7 @@ public sealed class Lmem
   ** 'gcstopem' is true, because then the interpreter is in the middle of
   ** a collection step.
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static bool cantryagain(global_State g)
   {
     return completestate(g) && !g.gcstopem;
@@ -152,6 +154,7 @@ public sealed class Lmem
     }
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void free_debt(lua_State L, long size, int tag)
   {
     global_State g = L.l_G;
@@ -159,6 +162,7 @@ public sealed class Lmem
     g.GCdebt += size;
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   private static void take_debt(lua_State L, long size, int tag)
   {
     global_State g = L.l_G;
@@ -202,16 +206,19 @@ public sealed class Lmem
 
   /* }================================================================== */
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static RuntimeException luaM_toobig(lua_State L)
   {
     throw luaG_runerror(L, Lt.memory_allocation_error_block_too_big);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_takeobj(lua_State L, long size)
   {
     take_debt(L, size, novariant(LUA_VUSERDATA));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_freeobj(lua_State L, long size)
   {
     free_debt(L, size, novariant(LUA_VUSERDATA));
@@ -222,6 +229,7 @@ public sealed class Lmem
   ** which a program does not see): one block, which grows from 'osize' to
   ** 'nsize' (a memory error if the host does not allow it) ...
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_growhost(lua_State L, long osize, long nsize)
   {
     { if (JAssert.on && !( osize <= nsize)) throw new AssertionError(); }
@@ -248,12 +256,14 @@ public sealed class Lmem
   ** be counted on its own, or no longer: its memory goes from or to memory
   ** counted another way (see 'luaM_growhost').
   */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_takeblock(lua_State L, long size)
   {
     if (size != 0)
       take_debt(L, size, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_freeblock(lua_State L, long size)
   {
     if (size != 0)
@@ -261,6 +271,7 @@ public sealed class Lmem
   }
 
   /* a counted block that is not the state's memory resized, as one block (a memory error if it cannot grow) */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_resizeblock(lua_State L, long osize, long nsize)
   {
     _alloc_span_request(L.l_G, L, osize, nsize, 1, true);
@@ -806,110 +817,130 @@ public sealed class Lmem
     return new TString();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Udata luaM_malloc_Udata(lua_State L)
   {
     take_debt(L, Cost.Udata, novariant(LUA_VUSERDATA));
     return new Udata();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Table luaM_malloc_Table(lua_State L)
   {
     take_debt(L, Cost.Table, novariant(LUA_VTABLE));
     return new Table();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CClosure luaM_malloc_CClosure(lua_State L)
   {
     take_debt(L, Cost.CClosure, novariant(LUA_VCCL));
     return new CClosure();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static LClosure luaM_malloc_LClosure(lua_State L)
   {
     take_debt(L, Cost.LClosure, novariant(LUA_VLCL));
     return new LClosure();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static CFuncInfo luaM_malloc_CFuncInfo(lua_State L)
   {
     take_debt(L, Cost.CFuncInfo, novariant(LUA_VLCF));
     return new CFuncInfo();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static UpVal luaM_malloc_UpVal(lua_State L)
   {
     take_debt(L, Cost.UpVal, novariant(LUA_VUPVAL));
     return new UpVal();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static BudgetGroup luaM_malloc_BudgetGroup(lua_State L)
   {
     take_debt(L, Cost.BudgetGroup, novariant(LUA_VBUDGET));
     return new BudgetGroup();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static Proto luaM_malloc_Proto(lua_State L)
   {
     take_debt(L, Cost.Proto, novariant(LUA_VPROTO));
     return new Proto();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static lua_State luaM_malloc_lua_State(lua_State L)
   {
     take_debt(L, Cost.Thread, novariant(LUA_TTHREAD));
     return new lua_State();
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_UpVal(lua_State L, UpVal p)
   {
     if (p != null) free_debt(L, Cost.UpVal, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_BudgetGroup(lua_State L, BudgetGroup p)
   {
     if (p != null) free_debt(L, Cost.BudgetGroup, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_LClosure(lua_State L, LClosure p)
   {
     if (p != null) free_debt(L, Cost.LClosure, novariant(LUA_VLCL));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_CClosure(lua_State L, CClosure p)
   {
     if (p != null) free_debt(L, Cost.CClosure, novariant(LUA_VCCL));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_Udata(lua_State L, Udata p)
   {
     if (p != null) free_debt(L, Cost.Udata, novariant(LUA_VUSERDATA));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_TString(lua_State L, TString p, long bytes)
   {
     if (p != null) free_debt(L, Cost.TString + bytes, novariant(LUA_VSTRING));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_CFuncInfo(lua_State L, CFuncInfo p)
   {
     if (p != null) free_debt(L, Cost.CFuncInfo, novariant(LUA_VLCF));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_Proto(lua_State L, Proto p)
   {
     if (p != null) free_debt(L, Cost.Proto, 0);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_Table(lua_State L, Table p)
   {
     if (p != null) free_debt(L, Cost.Table, novariant(LUA_VTABLE));
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_lua_State(lua_State L, lua_State p)
   {
     if (p != null) free_debt(L, Cost.Thread, LUA_TTHREAD);
   }
 
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaM_free_CallInfo(lua_State L, CallInfo p)
   {
     if (p != null) free_debt(L, Cost.CallInfo, 0);

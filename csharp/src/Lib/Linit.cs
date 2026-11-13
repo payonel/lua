@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Payonel.LungoLua.Compat;
 using HostString = Payonel.LungoLua.Api.HostString;
 using luaL_Regi = Payonel.LungoLua.Api.luaL_Regi;
@@ -70,6 +71,7 @@ public sealed class Linit
   }
 
   /* open all libraries */
+  [MethodImpl(MethodImplOptions.AggressiveInlining)]
   public static void luaL_openlibs(lua_State L)
   {
     luaL_openselectedlibs(L, ~0, 0);
