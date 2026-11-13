@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)build/artifacts</ArtifactsPath>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!-- a method that hides an inherited one would change behavior silently (Java overrides) -->
+    <WarningsAsErrors>CS0108;CS0114</WarningsAsErrors>
+    <NoWarn>CS0162;CS0164;CS0168;CS0219;CS0649;CS0169;CS0414;CS8321;CS1717;CS0659;CS0661;CS0660</NoWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+</Project>

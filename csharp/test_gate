@@ -1,0 +1,15 @@
+#!/bin/sh
+dir=$(dirname "$0")
+DOTNET=${DOTNET:-$(cat "$dir/build/dotnet")}
+debug=
+lua=$dir/lua
+if [ "$LUA_CS_DEBUG" = 1 ]; then
+  debug=-Dlua.debug=true
+  lua=$dir/lua-debug
+fi
+GATE_LUA=${GATE_LUA:-$lua}
+export GATE_LUA
+if env --default-signal=INT true 2>/dev/null; then
+  exec env --default-signal=INT "$DOTNET" "$dir/build/lungolua-tests.dll" $debug -Dlua.progname="$0" Gate "$@"
+fi
+exec "$DOTNET" "$dir/build/lungolua-tests.dll" $debug -Dlua.progname="$0" Gate "$@"

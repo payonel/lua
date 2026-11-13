@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>lungolua-tests</AssemblyName>
+    <RootNamespace>Payonel.LungoLua.Tests</RootNamespace>
+    <StartupObject>Payonel.LungoLua.Tests.Program</StartupObject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../LungoLua.csproj" />
+  </ItemGroup>
+</Project>

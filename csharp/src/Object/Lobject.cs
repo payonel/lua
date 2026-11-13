@@ -1,0 +1,1680 @@
+using System;
+using Payonel.LungoLua.Compat;
+using lua_CFunction = Payonel.LungoLua.Api.lua_CFunction;
+using ByteOwner = Payonel.LungoLua.Bytes.ByteOwner;
+using ByteSpan = Payonel.LungoLua.Bytes.ByteSpan;
+using ByteView = Payonel.LungoLua.Bytes.ByteView;
+using CharsFormat = Payonel.LungoLua.Bytes.CharsFormat;
+using FmtScan = Payonel.LungoLua.Bytes.FmtScan;
+using InternalString = Payonel.LungoLua.Bytes.InternalString;
+using Lt = Payonel.LungoLua.Bytes.Lt;
+using ToChars = Payonel.LungoLua.Bytes.ToChars;
+using ProtectedCall = Payonel.LungoLua.Runtime.ProtectedCall;
+using global_State = Payonel.LungoLua.Runtime.global_State;
+using lua_State = Payonel.LungoLua.Runtime.lua_State;
+using static Payonel.LungoLua.Api.LuaApi;
+using static Payonel.LungoLua.Api.LuaConf;
+using static Payonel.LungoLua.Bytes.InternalString;
+using static Payonel.LungoLua.Bytes.Lctype;
+using static Payonel.LungoLua.Bytes.UtilCast;
+using static Payonel.LungoLua.Gc.Lgc;
+using static Payonel.LungoLua.Object.Llimits;
+using static Payonel.LungoLua.Platform.Libm;
+using static Payonel.LungoLua.Platform.LocaleUtil;
+using static Payonel.LungoLua.Runtime.Ldo;
+using static Payonel.LungoLua.Runtime.Lmem;
+using static Payonel.LungoLua.Runtime.Lstate;
+using static Payonel.LungoLua.Runtime.Ltm;
+using static Payonel.LungoLua.Vm.Lvm;
+
+namespace Payonel.LungoLua.Object;
+
+public sealed class Lobject
+{
+  private Lobject()
+  {
+  }
+
+  /*
+  ** Extra types for collectable non-values
+  */
+  public const int LUA_TUPVAL = LUA_NUMTYPES;      /* upvalues */
+  public const int LUA_TPROTO = LUA_NUMTYPES + 1;  /* function prototypes */
+  public const int LUA_TBUDGET = LUA_NUMTYPES + 2; /* budget groups */
+  public const int LUA_TDEADKEY = LUA_NUMTYPES + 3; /* removed keys in tables */
+
+  /*
+  ** number of all possible types (including LUA_TNONE but excluding DEADKEY)
+  */
+  public const int LUA_TOTALTYPES = LUA_TBUDGET + 2;
+
+  /* add variant bits to a type */
+  public static sbyte makevariant(int t, int v)
+  {
+    return (sbyte) (t | (v << 4));
+  }
+
+  public static TValue getobj(TValue o)
+  {
+    return new TValue(o.prim, o.@ref, o.tt_);
+  }
+
+  public static void copyobj(TValue dst, TValue src)
+  {
+    /* field by field, like upstream's setobj */
+    dst.prim = src.prim;
+    dst.@ref = src.@ref;
+    dst.tt_ = src.tt_;
+  }
+
+  public const int NOVARIANT_MASK = 0x0F;
+
+  public const int WITHVARIANT_MASK = 0x3F;
+
+  /* tag with no variants (bits 0-3) */
+  public static sbyte novariant(int t)
+  {
+    return (sbyte) (t & NOVARIANT_MASK);
+  }
+
+  /* type tag of a TValue (bits 0-3 for tags + variant bits 4-5) */
+  public static sbyte withvariant(int t)
+  {
+    return (sbyte) (t & WITHVARIANT_MASK);
+  }
+
+  public static sbyte ttypetag(TValue o)
+  {
+    return withvariant(o.tt_);
+  }
+
+  /* type of a TValue */
+  public static sbyte ttype(TValue o)
+  {
+    return novariant(o.tt_);
+  }
+
+  /* Macros to test type */
+  public static bool checktag(TValue o, int t)
+  {
+    return o.tt_ == t;
+  }
+
+  public static bool checktype(TValue o, int t)
+  {
+    return ttype(o) == t;
+  }
+
+  public const int NOSLOT = -1;
+
+  /*
+  ** {==================================================================
+  ** Nil
+  ** ===================================================================
+  */
+
+  /* Standard nil */
+  public const sbyte LUA_VNIL = (sbyte) (LUA_TNIL | (0 << 4));
+
+  /* Empty slot (which might be different from a slot containing nil) */
+  public const sbyte LUA_VEMPTY = (sbyte) (LUA_TNIL | (1 << 4));
+
+  /* Value returned for a key not found in a table (absent key) */
+  public const sbyte LUA_VABSTKEY = (sbyte) (LUA_TNIL | (2 << 4));
+
+  /* Special variant to signal that a fast get is accessing a non-table */
+  public const sbyte LUA_VNOTABLE = (sbyte) (LUA_TNIL | (3 << 4));
+
+  /* macro to test for (any kind of) nil */
+  public static bool ttisnil(TValue v)
+  {
+    return checktype(v, LUA_TNIL);
+  }
+
+  /*
+  ** Macro to test the result of a table access. Formally, it should
+  ** distinguish between LUA_VEMPTY/LUA_VABSTKEY/LUA_VNOTABLE and
+  ** other tags. As currently nil is equivalent to LUA_VEMPTY, it is
+  ** simpler to just test whether the value is nil.
+  */
+  public static bool tagisempty(int tag)
+  {
+    return novariant(tag) == LUA_TNIL;
+  }
+
+  /* macro to test for a standard nil */
+  public static bool ttisstrictnil(TValue o)
+  {
+    return checktag(o, LUA_VNIL);
+  }
+
+  public static void setnilvalue(TValue obj)
+  {
+    obj.tt_ = LUA_VNIL;
+  }
+
+  public static bool isabstkey(TValue v)
+  {
+    return checktag(v, LUA_VABSTKEY);
+  }
+
+  /*
+  ** macro to detect non-standard nils (used only in assertions)
+  */
+  public static bool isnonstrictnil(TValue v)
+  {
+    return ttisnil(v) && !ttisstrictnil(v);
+  }
+
+  /*
+  ** By default, entries with any kind of nil are considered empty.
+  ** (In any definition, values associated with absent keys must also
+  ** be accepted as empty.)
+  */
+  public static bool isempty(TValue v)
+  {
+    return ttisnil(v);
+  }
+
+  /* mark an entry as empty */
+  public static void setempty(TValue v)
+  {
+    v.tt_ = LUA_VEMPTY;
+  }
+
+  /*
+  ** {==================================================================
+  ** Booleans
+  ** ===================================================================
+  */
+
+  public const sbyte LUA_VFALSE = (sbyte) (LUA_TBOOLEAN | (0 << 4));
+  public const sbyte LUA_VTRUE = (sbyte) (LUA_TBOOLEAN | (1 << 4));
+
+  public static bool ttisboolean(TValue o)
+  {
+    return checktype(o, LUA_TBOOLEAN);
+  }
+
+  public static bool ttisfalse(TValue o)
+  {
+    return checktag(o, LUA_VFALSE);
+  }
+
+  public static bool ttistrue(TValue o)
+  {
+    return checktag(o, LUA_VTRUE);
+  }
+
+  public static bool l_isfalse(TValue o)
+  {
+    return ttisfalse(o) || ttisnil(o);
+  }
+
+  public static bool tagisfalse(int t)
+  {
+    return t == LUA_VFALSE || novariant(t) == LUA_TNIL;
+  }
+
+  /*
+  ** {==================================================================
+  ** Threads
+  ** ===================================================================
+  */
+
+  public const sbyte LUA_VTHREAD = (sbyte) (LUA_TTHREAD | (0 << 4));
+
+  /*
+  ** {==================================================================
+  ** Collectable Objects
+  ** ===================================================================
+  */
+
+  /* Bit mark for collectable types */
+  public const int BIT_ISCOLLECTABLE = 1 << 6;
+
+  public static sbyte ctb(int t)
+  {
+    return (sbyte) (t | BIT_ISCOLLECTABLE);
+  }
+
+  public static bool iscollectable(TValue o)
+  {
+    return (o.tt_ & BIT_ISCOLLECTABLE) != 0;
+  }
+
+  public static bool ttisthread(TValue o)
+  {
+    return checktag(o, ctb(LUA_VTHREAD));
+  }
+
+  /*
+  ** {==================================================================
+  ** Numbers
+  ** ===================================================================
+  */
+
+  /* Variant tags for numbers */
+  public const sbyte LUA_VNUMINT = (sbyte) (LUA_TNUMBER | (0 << 4)); /* integer numbers */
+  public const sbyte LUA_VNUMFLT = (sbyte) (LUA_TNUMBER | (1 << 4)); /* float numbers */
+
+  public static bool ttisnumber(TValue o)
+  {
+    return checktype(o, LUA_TNUMBER);
+  }
+
+  public static bool ttisfloat(TValue o)
+  {
+    return checktag(o, LUA_VNUMFLT);
+  }
+
+  public static bool ttisinteger(TValue o)
+  {
+    return checktag(o, LUA_VNUMINT);
+  }
+
+  /*
+  ** {==================================================================
+  ** Strings
+  ** ===================================================================
+  */
+
+  /* Variant tags for strings */
+  public const sbyte LUA_VSTRING = (sbyte) (LUA_TSTRING | (0 << 4));
+  public const sbyte LUA_VSHRSTR = LUA_VSTRING;
+  public const sbyte LUA_VLNGSTR = LUA_VSTRING;
+
+  /* test for a string */
+  public static bool ttisstring(TValue o)
+  {
+    return checktype(o, LUA_TSTRING);
+  }
+
+  public static bool ttisshrstring(TValue o)
+  {
+    return checktag(o, ctb(LUA_VSHRSTR));
+  }
+
+  public const sbyte STREXTRA_EXTERNAL = unchecked((sbyte)0xFF);
+
+  public static bool strisexternal(TString ts)
+  {
+    return ts.extra == STREXTRA_EXTERNAL;
+  }
+
+  public static int tsslen(TString ts)
+  {
+    return ts.data.size();
+  }
+
+  /*
+  ** {==================================================================
+  ** Userdata
+  ** ===================================================================
+  */
+
+  /*
+  ** Light userdata should be a variant of userdata, but for compatibility
+  ** reasons they are also different types.
+  */
+  public const sbyte LUA_VLIGHTUSERDATA = (sbyte) (LUA_TLIGHTUSERDATA | (0 << 4));
+
+  public const sbyte LUA_VUSERDATA = (sbyte) (LUA_TUSERDATA | (0 << 4));
+
+  public static bool ttislightuserdata(TValue o)
+  {
+    return checktag(o, LUA_VLIGHTUSERDATA);
+  }
+
+  public static bool ttisfulluserdata(TValue o)
+  {
+    return checktag(o, ctb(LUA_VUSERDATA));
+  }
+
+  /* get the address of the memory block inside 'Udata' */
+  public static sbyte[] getudatamem(Udata u)
+  {
+    return u.data.array();
+  }
+
+  /*
+  ** {==================================================================
+  ** Prototypes
+  ** ===================================================================
+  */
+
+  public const sbyte LUA_VPROTO = (sbyte) (LUA_TPROTO | (0 << 4));
+
+  /*
+  ** Flags in Prototypes
+  */
+  public const int PF_VAHID = 1; /* function has hidden vararg arguments */
+  public const int PF_VATAB = 2; /* function has vararg table */
+  public const int PF_FIXED = 4; /* prototype has parts in fixed memory */
+
+  public static bool isvararg(Proto p)
+  {
+    return (p.flag & (PF_VAHID | PF_VATAB)) != 0;
+  }
+
+  public static void needvatab(Proto p)
+  {
+    p.flag = (sbyte) (p.flag | PF_VATAB);
+  }
+
+  /*
+  ** {==================================================================
+  ** Functions
+  ** ===================================================================
+  */
+
+  public const sbyte LUA_VUPVAL = (sbyte) (LUA_TUPVAL | (0 << 4));
+
+  public const sbyte LUA_VBUDGET = (sbyte) (LUA_TBUDGET | (0 << 4));
+
+  /* Variant tags for functions */
+  public const sbyte LUA_VLCL = (sbyte) (LUA_TFUNCTION | (0 << 4)); /* Lua closure */
+  public const sbyte LUA_VLCF = (sbyte) (LUA_TFUNCTION | (1 << 4)); /* light C function */
+  public const sbyte LUA_VCCL = (sbyte) (LUA_TFUNCTION | (2 << 4)); /* C closure */
+
+  public static bool ttisfunction(TValue o)
+  {
+    return checktype(o, LUA_TFUNCTION);
+  }
+
+  public static bool ttisLclosure(TValue o)
+  {
+    return checktag(o, ctb(LUA_VLCL));
+  }
+
+  public static bool ttislcf(TValue o)
+  {
+    return checktag(o, ctb(LUA_VLCF));
+  }
+
+  public static bool ttisCclosure(TValue o)
+  {
+    return checktag(o, ctb(LUA_VCCL));
+  }
+
+  public static int sizeCclosure(int n)
+  {
+    return Payonel.LungoLua.Runtime.Cost.CClosure + Payonel.LungoLua.Runtime.Cost.TValue * n;
+  }
+
+  public static int sizeLclosure(int n)
+  {
+    return Payonel.LungoLua.Runtime.Cost.LClosure + Payonel.LungoLua.Runtime.Cost.Ref * n;
+  }
+
+  /*
+  ** {==================================================================
+  ** Tables
+  ** ===================================================================
+  */
+
+  public const sbyte LUA_VTABLE = (sbyte) (LUA_TTABLE | (0 << 4));
+
+  public static bool ttistable(TValue o)
+  {
+    return checktag(o, ctb(LUA_VTABLE));
+  }
+
+  public static void copynode(Node dst, Node src)
+  {
+    copyobj(dst, src);
+    dst.key_tt = src.key_tt;
+    dst.next = src.next;
+    dst.key_prim = src.key_prim;
+    dst.key_ref = src.key_ref;
+  }
+
+  /*
+  ** 'module' operation for hashing (size is always a power of 2)
+  */
+  public static int lmod(long s, int size)
+  {
+    { if (JAssert.on && !( Llimits.ispow2(size))) throw new AssertionError(); }
+    return (int) (s & (long) (size - 1));
+  }
+
+  public static int twoto(int x)
+  {
+    return 1 << x;
+  }
+
+  public static int sizenode(Table t)
+  {
+    return t.node.Length;
+  }
+
+  public static long ivalue(TValue o)
+  {
+    { if (JAssert.on && !( ttisinteger(o))) throw new AssertionError(); }
+    return o.prim;
+  }
+
+  public static double fltvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttisfloat(o))) throw new AssertionError(); }
+    return JDouble.longBitsToDouble(o.prim);
+  }
+
+  public static double nvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttisinteger(o) || ttisfloat(o))) throw new AssertionError(); }
+    return ttisinteger(o) ? (double) o.prim : JDouble.longBitsToDouble(o.prim);
+  }
+
+  public static object pvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttislightuserdata(o))) throw new AssertionError(); }
+    return o.@ref;
+  }
+
+  public static lua_CFunction fvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttislcf(o))) throw new AssertionError(); }
+    return ((CFuncInfo) o.@ref).fptr;
+  }
+
+  public static CFuncInfo fcfuncinfo(TValue o)
+  {
+    { if (JAssert.on && !( ttislcf(o))) throw new AssertionError(); }
+    return (CFuncInfo) o.@ref;
+  }
+
+  public static GCObject gcvalue(TValue o)
+  {
+    { if (JAssert.on && !( iscollectable(o))) throw new AssertionError(); }
+    return (GCObject) o.@ref;
+  }
+
+  public static TString tsvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttisshrstring(o))) throw new AssertionError(); }
+    return (TString) o.@ref;
+  }
+
+  public static Table hvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttistable(o))) throw new AssertionError(); }
+    return (Table) o.@ref;
+  }
+
+  public static Udata uvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttisfulluserdata(o))) throw new AssertionError(); }
+    return (Udata) o.@ref;
+  }
+
+  public static Closure clvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttisLclosure(o) || ttisCclosure(o))) throw new AssertionError(); }
+    return (Closure) o.@ref;
+  }
+
+  public static LClosure clLvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttisLclosure(o))) throw new AssertionError(); }
+    return (LClosure) o.@ref;
+  }
+
+  public static CClosure clCvalue(TValue o)
+  {
+    { if (JAssert.on && !( ttisCclosure(o))) throw new AssertionError(); }
+    return (CClosure) o.@ref;
+  }
+
+  public static Proto getproto(TValue o)
+  {
+    return clLvalue(o).p;
+  }
+
+  public static bool keyisnil(Node node)
+  {
+    return node.key_tt == LUA_TNIL;
+  }
+
+  public static bool keyisinteger(Node node)
+  {
+    return node.key_tt == LUA_VNUMINT;
+  }
+
+  public static bool keyisshrstr(Node node)
+  {
+    return node.key_tt == ctb(LUA_VSHRSTR);
+  }
+
+  public static void setnilkey(Node node)
+  {
+    node.key_tt = LUA_TNIL;
+  }
+
+  public static bool keyiscollectable(Node n)
+  {
+    return (n.key_tt & BIT_ISCOLLECTABLE) != 0;
+  }
+
+  public static void setdeadkey(Node node)
+  {
+    node.key_tt = LUA_TDEADKEY;
+  }
+
+  public static bool keyisdead(Node node)
+  {
+    return node.key_tt == LUA_TDEADKEY;
+  }
+
+  public static GCObject gckey(Node n)
+  {
+    { if (JAssert.on && !( keyiscollectable(n) || keyisdead(n))) throw new AssertionError(); }
+    return (GCObject) n.key_ref;
+  }
+
+  public static GCObject gckeyN(Node n)
+  {
+    return keyiscollectable(n) ? gckey(n) : null;
+  }
+
+  public static TString keystrval(Node n)
+  {
+    { if (JAssert.on && !( keyisshrstr(n))) throw new AssertionError(); }
+    return (TString) n.key_ref;
+  }
+
+  public static long keyival(Node n)
+  {
+    { if (JAssert.on && !( keyisinteger(n))) throw new AssertionError(); }
+    return n.key_prim;
+  }
+
+  public static double keyfltval(Node n)
+  {
+    { if (JAssert.on && !( n.key_tt == LUA_VNUMFLT)) throw new AssertionError(); }
+    return JDouble.longBitsToDouble(n.key_prim);
+  }
+
+  public static object keypval(Node n)
+  {
+    { if (JAssert.on && !( n.key_tt == LUA_VLIGHTUSERDATA)) throw new AssertionError(); }
+    return n.key_ref;
+  }
+
+  public static lua_CFunction keyfval(Node n)
+  {
+    { if (JAssert.on && !( n.key_tt == ctb(LUA_VLCF))) throw new AssertionError(); }
+    return ((CFuncInfo) n.key_ref).fptr;
+  }
+
+  public static CFuncInfo keycfuncinfo(Node n)
+  {
+    { if (JAssert.on && !( n.key_tt == ctb(LUA_VLCF))) throw new AssertionError(); }
+    return (CFuncInfo) n.key_ref;
+  }
+
+  public static void checkliveness(object L, TValue obj)
+  {
+    { if (JAssert.on && !( luaO_checkliveness((lua_State) L, obj))) throw new AssertionError(); }
+  }
+
+  public static void setobj(object L, TValue obj1, TValue obj2)
+  {
+    obj1.prim = obj2.prim;
+    obj1.@ref = obj2.@ref;
+    obj1.tt_ = obj2.tt_;
+    checkliveness(L, obj1);
+    { if (JAssert.on && !( !isnonstrictnil(obj1))) throw new AssertionError(); }
+  }
+
+  public static void setfltvalue(TValue obj, double x)
+  {
+    obj.prim = JDouble.doubleToRawLongBits(x);
+    obj.tt_ = LUA_VNUMFLT;
+  }
+
+  public static void chgfltvalue(TValue obj, double x)
+  {
+    { if (JAssert.on && !( ttisfloat(obj))) throw new AssertionError(); }
+    obj.prim = JDouble.doubleToRawLongBits(x);
+  }
+
+  public static void setivalue(TValue obj, long x)
+  {
+    obj.prim = x;
+    obj.tt_ = LUA_VNUMINT;
+  }
+
+  public static void chgivalue(TValue obj, long x)
+  {
+    { if (JAssert.on && !( ttisinteger(obj))) throw new AssertionError(); }
+    obj.prim = x;
+  }
+
+  public static void setpvalue(TValue obj, object x)
+  {
+    obj.@ref = x;
+    obj.tt_ = LUA_VLIGHTUSERDATA;
+  }
+
+  public static void setfvalue(TValue obj, CFuncInfo cfi)
+  {
+    obj.@ref = cfi;
+    obj.tt_ = ctb(LUA_VLCF);
+  }
+
+  public static void setgcovalue(object L, TValue obj, GCObject x)
+  {
+    obj.@ref = x;
+    obj.tt_ = ctb(x.tt);
+  }
+
+  public static void setsvalue(object L, TValue obj, TString x)
+  {
+    { if (JAssert.on && !( novariant(x.tt) == LUA_TSTRING)) throw new AssertionError(); }
+    obj.@ref = x;
+    obj.tt_ = ctb(x.tt);
+    checkliveness(L, obj);
+  }
+
+  public static void setuvalue(object L, TValue obj, Udata x)
+  {
+    { if (JAssert.on && !( x.tt == LUA_VUSERDATA)) throw new AssertionError(); }
+    obj.@ref = x;
+    obj.tt_ = ctb(LUA_VUSERDATA);
+    checkliveness(L, obj);
+  }
+
+  public static void sethvalue(object L, TValue obj, Table x)
+  {
+    { if (JAssert.on && !( x.tt == LUA_VTABLE)) throw new AssertionError(); }
+    obj.@ref = x;
+    obj.tt_ = ctb(LUA_VTABLE);
+    checkliveness(L, obj);
+  }
+
+  public static void setclLvalue(object L, TValue obj, LClosure x)
+  {
+    { if (JAssert.on && !( x.tt == LUA_VLCL)) throw new AssertionError(); }
+    obj.@ref = x;
+    obj.tt_ = ctb(LUA_VLCL);
+    checkliveness(L, obj);
+  }
+
+  public static void setclCvalue(object L, TValue obj, CClosure x)
+  {
+    { if (JAssert.on && !( x.tt == LUA_VCCL)) throw new AssertionError(); }
+    obj.@ref = x;
+    obj.tt_ = ctb(LUA_VCCL);
+    checkliveness(L, obj);
+  }
+
+  public static void setnodekey(Node node, TValue obj)
+  {
+    node.key_prim = obj.prim;
+    node.key_ref = obj.@ref;
+    node.key_tt = obj.tt_;
+  }
+
+  public static void getnodekey(object L, TValue obj, Node node)
+  {
+    obj.prim = node.key_prim;
+    obj.@ref = node.key_ref;
+    obj.tt_ = node.key_tt;
+    checkliveness(L, obj);
+  }
+
+  /* size of buffer for 'luaO_utf8esc' function */
+  public const int UTF8BUFFSZ = 8;
+
+  public const int MAXFMTARGS = 8;
+
+  /*
+  ** Computes ceil(log2(x)), which is the smallest integer n such that
+  ** x <= (1 << n).
+  */
+  public static bool luaO_checkliveness(lua_State L, TValue obj)
+  {
+    if (iscollectable(obj))
+    {
+      { if (JAssert.on && !( ttypetag(obj) == gcvalue(obj).tt)) throw new AssertionError(); }
+      { if (JAssert.on && !( L == null || !isdead(L.l_G, gcvalue(obj)))) throw new AssertionError(); }
+    }
+    return true;
+  }
+
+  private static readonly sbyte[] log_2 = {/* log_2[i - 1] = ceil(log2(i)) */
+                                       0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+                                       6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6,
+                                       7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+                                       7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+                                       8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+                                       8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
+
+  public static int luaO_ceillog2(int x)
+  {
+    int l = 0;
+    x--;
+    while (x >= 256)
+    {
+      l += 8;
+      x >>= 8;
+    }
+    return l + log_2[x];
+  }
+
+  /*
+  ** Encodes 'p'% as a floating-point byte, represented as (eeeexxxx).
+  ** The exponent is represented using excess-7. Mimicking IEEE 754, the
+  ** representation normalizes the number when possible, assuming an extra
+  ** 1 before the mantissa (xxxx) and adding one to the exponent (eeee)
+  ** to signal that. So, the real value is (1xxxx) * 2^(eeee - 7 - 1) if
+  ** eeee != 0, and (xxxx) * 2^-7 otherwise (subnormal numbers).
+  */
+  public static int luaO_codeparam(long p)
+  {
+    if (p < 0 || p >= ((long) 0x1F << (0xF - 7 - 1)) * 100) /* overflow? */
+      return 0xFF;                                          /* return maximum value */
+    else
+    {
+      int q = (int) ((p * 128 + 99) / 100); /* round up the division */
+      if (q < 0x10)
+      { /* subnormal number? */
+        /* exponent bits are already zero; nothing else to do */
+        return q;
+      }
+      else
+      { /* p >= 0x10 implies ceil(log2(p + 1)) >= 5 */
+        /* preserve 5 bits in 'p' */
+        int log = luaO_ceillog2(q + 1) - 5;
+        return ((q >> log) - 0x10) | ((log + 1) << 4);
+      }
+    }
+  }
+
+  /*
+  ** Computes 'p' times 'x', where 'p' is a floating-point byte. Roughly,
+  ** we have to multiply 'x' by the mantissa and then shift accordingly to
+  ** the exponent.  If the exponent is positive, both the multiplication
+  ** and the shift increase 'x', so we have to care only about overflows.
+  ** For negative exponents, however, multiplying before the shift keeps
+  ** more significant bits, as long as the multiplication does not
+  ** overflow, so we check which order is best.
+  */
+  public static long luaO_applyparam(int p, long x)
+  {
+    int m = p & 0xF;  /* mantissa */
+    int e = p >> 4; /* exponent */
+    { if (JAssert.on && !( x >= 0)) throw new AssertionError(); }
+    if (e > 0)
+    {            /* normalized? */
+      e--;       /* correct exponent */
+      m += 0x10; /* correct mantissa; maximum value is 0x1F */
+    }
+    e -= 7; /* correct excess-7 */
+    if (e >= 0)
+    {
+      if (x < (MAX_LMEM / 0x1F) >> e) /* no overflow? */
+        return (x * m) << e;          /* order doesn't matter here */
+      else                            /* real overflow */
+        return MAX_LMEM;
+    }
+    else
+    { /* negative exponent */
+      e = -e;
+      if (x < MAX_LMEM / 0x1F)             /* multiplication cannot overflow? */
+        return (x * m) >> e;               /* multiplying first gives more precision */
+      else if ((x >> e) < MAX_LMEM / 0x1F) /* cannot overflow after shift? */
+        return (x >> e) * m;
+      else /* real overflow */
+        return MAX_LMEM;
+    }
+  }
+
+  private static long intarith(lua_State L, int op, long v1,
+                               long v2)
+  {
+    switch (op)
+    {
+    case LUA_OPADD:
+      return l_intadd(v1, v2);
+    case LUA_OPSUB:
+      return l_intsub(v1, v2);
+    case LUA_OPMUL:
+      return l_intmul(v1, v2);
+    case LUA_OPMOD:
+      return luaV_mod(L, v1, v2);
+    case LUA_OPIDIV:
+      return luaV_idiv(L, v1, v2);
+    case LUA_OPBAND:
+      return l_intband(v1, v2);
+    case LUA_OPBOR:
+      return l_intbor(v1, v2);
+    case LUA_OPBXOR:
+      return l_intbxor(v1, v2);
+    case LUA_OPSHL:
+      return luaV_shiftl(v1, v2);
+    case LUA_OPSHR:
+      return luaV_shiftr(v1, v2);
+    case LUA_OPUNM:
+      return l_intunm(v1);
+    case LUA_OPBNOT:
+      return l_intbnot(v1);
+    default:
+      { if (JAssert.on && !( false)) throw new AssertionError(); }
+      return 0;
+    }
+  }
+
+  private static double numarith(lua_State L, int op, double v1,
+                                 double v2)
+  {
+    switch (op)
+    {
+    case LUA_OPADD:
+      return (v1) + v2;
+    case LUA_OPSUB:
+      return (v1) - v2;
+    case LUA_OPMUL:
+      return (v1) * v2;
+    case LUA_OPDIV:
+      return v1 / v2;
+    case LUA_OPPOW:
+      return (v2 == 2) ? v1 * v1 : pow(v1, v2);
+    case LUA_OPIDIV:
+      return JMath.floor(v1 / v2);
+    case LUA_OPUNM:
+      return -v1;
+    case LUA_OPMOD:
+      return luaV_modf(L, v1, v2);
+    default:
+      { if (JAssert.on && !( false)) throw new AssertionError(); }
+      return 0;
+    }
+  }
+
+  public static bool luaO_rawarith(lua_State L, int op, TValue p1, TValue p2,
+                                      TValue res)
+  {
+    switch (op)
+    {
+    case LUA_OPBAND:
+    case LUA_OPBOR:
+    case LUA_OPBXOR:
+    case LUA_OPSHL:
+    case LUA_OPSHR:
+    case LUA_OPBNOT:
+    { /* operate only on integers */
+      IntResult i1 = new IntResult();
+      IntResult i2 = new IntResult();
+      if (tointegerns(p1, i1) && tointegerns(p2, i2))
+      {
+        setivalue(res, intarith(L, op, i1.v, i2.v));
+        return true;
+      }
+      else
+        return false; /* fail */
+    }
+    case LUA_OPDIV:
+    case LUA_OPPOW:
+    { /* operate only on floats */
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (tonumberns(p1, n1) && tonumberns(p2, n2))
+      {
+        setfltvalue(res, numarith(L, op, n1.v, n2.v));
+        return true;
+      }
+      else
+        return false; /* fail */
+    }
+    default:
+    { /* other operations */
+      NumResult n1 = new NumResult();
+      NumResult n2 = new NumResult();
+      if (ttisinteger(p1) && ttisinteger(p2))
+      {
+        setivalue(res, intarith(L, op, ivalue(p1), ivalue(p2)));
+        return true;
+      }
+      else if (tonumberns(p1, n1) && tonumberns(p2, n2))
+      {
+        setfltvalue(res, numarith(L, op, n1.v, n2.v));
+        return true;
+      }
+      else
+        return false; /* fail */
+    }
+    }
+  }
+
+  public static void luaO_arith(lua_State L, int op, int p1slot, int p2slot,
+                                int res)
+  {
+    TValue p1v = getslot(L, p1slot);
+    TValue p2v = getslot(L, p2slot);
+    TValue p1 = p1v;
+    TValue p2 = p2v;
+    TValue r = new TValue();
+    if (!luaO_rawarith(L, op, p1, p2, r))
+    {
+      /* could not perform raw operation; try metamethod */
+      luaT_trybinTM(L, p1, p2, res, (op - LUA_OPADD) + TM_ADD, NOSLOT, NOSLOT);
+    }
+    else
+      setslot(L, res, r);
+  }
+
+  public static sbyte luaO_hexavalue(int c)
+  {
+    { if (JAssert.on && !( lisxdigit(c))) throw new AssertionError(); }
+    if (lisdigit(c))
+      return (sbyte) (c - '0');
+    else
+      return (sbyte) ((ltolower(c) - 'a') + 10);
+  }
+
+  private sealed class Sign
+  {
+    internal bool neg;
+    internal int off;
+
+    internal Sign(bool neg, int off)
+    {
+      this.neg = neg;
+      this.off = off;
+    }
+  }
+
+  private static Sign isneg(ByteView s, int off)
+  {
+    if (sv_byteat(s, off) == '-')
+      return new Sign(true, off + 1);
+    else if (sv_byteat(s, off) == '+')
+      return new Sign(false, off + 1);
+    return new Sign(false, off);
+  }
+
+  private sealed class NumParse
+  {
+    internal int end;
+    internal double value;
+
+    internal NumParse(int end, double value)
+    {
+      this.end = end;
+      this.value = value;
+    }
+  }
+
+  private sealed class IntParse
+  {
+    internal int end;
+    internal long value;
+
+    internal IntParse(int end, long value)
+    {
+      this.end = end;
+      this.value = value;
+    }
+  }
+
+  /*
+  ** {==================================================================
+  ** Lua's implementation for 'lua_strx2number'
+  ** ===================================================================
+  */
+
+  /* maximum number of significant digits to read (to avoid overflows
+     even with single floats) */
+  private const int MAXSIGDIG = 30;
+
+  /*
+  ** convert a hexadecimal numeric string to a number, following
+  ** C99 specification for 'strtod'
+  */
+  private static NumParse lua_strx2number(ByteView s, int off)
+  {
+    int dot = '.';
+    double r = 0.0; /* result (accumulator) */
+    int sigdig = 0;               /* number of significant digits */
+    int nosigdig = 0;             /* number of non-significant digits */
+    int e = 0;                    /* exponent correction */
+    bool neg;                  /* 1 if number is negative */
+    bool hasdot = false;       /* true after seen a dot */
+    int p = off;
+    int endpos = off;                /* nothing is valid yet */
+    while (lisspace(sv_byteat(s, p)))
+      p++;                                                    /* skip initial spaces */
+    Sign sign = isneg(s, p);                                       /* check sign */
+    neg = sign.neg;
+    p = sign.off;
+    if (!(sv_byteat(s, p) == '0' && (sv_byteat(s, p + 1) == 'x' || sv_byteat(s, p + 1) == 'X'))) /* check '0x' */
+      return new NumParse(endpos, 0.0);                       /* invalid format (no '0x') */
+    for (p += 2;; p++)
+    { /* skip '0x' and read numeral */
+      if (sv_byteat(s, p) == dot)
+      {
+        if (hasdot)
+          break; /* second dot? stop loop */
+        else
+          hasdot = true;
+      }
+      else if (lisxdigit(sv_byteat(s, p)))
+      {
+        if (sigdig == 0 && s.at(p) == '0') /* non-significant digit (zero)? */
+          nosigdig++;
+        else if (++sigdig <= MAXSIGDIG) /* can read it without overflow? */
+          r = (r * 16.0) + luaO_hexavalue(s.at(p));
+        else
+          e++; /* too many digits; ignore, but still count for exponent */
+        if (hasdot)
+          e--; /* decimal digit? correct exponent */
+      }
+      else
+        break; /* neither a dot nor a digit */
+    }
+    if (nosigdig + sigdig == 0) /* no digits? */
+      return new NumParse(endpos, 0.0); /* invalid format */
+    endpos = p;                /* valid up to here */
+    e *= 4;                     /* each digit multiplies/divides value by 2^4 */
+    if (sv_byteat(s, p) == 'p' || sv_byteat(s, p) == 'P')
+    {                     /* exponent part? */
+      int exp1 = 0;       /* exponent value */
+      bool neg1;       /* exponent sign */
+      p++;                /* skip 'p' */
+      Sign sign1 = isneg(s, p); /* sign */
+      neg1 = sign1.neg;
+      p = sign1.off;
+      if (!lisdigit(sv_byteat(s, p)))
+        return new NumParse(endpos, 0.0);  /* invalid; must have at least one digit */
+      while (lisdigit(sv_byteat(s, p))) /* read exponent */
+        exp1 = exp1 * 10 + s.at(p++) - '0';
+      if (neg1)
+        exp1 = -exp1;
+      e += exp1;
+      endpos = p; /* valid up to here */
+    }
+    if (neg)
+      r = -r;
+    return new NumParse(endpos, JMath.scalb(r, e));
+  }
+
+  /* }====================================================== */
+
+  /* maximum length of a numeral to be converted to a number */
+  private const int L_MAXLENNUM = 200;
+
+  private static NumParse str2dec(ByteView s, int off)
+  {
+    int p = off;
+    while (lisspace(sv_byteat(s, p)))
+      p++;
+    bool neg = false;
+    if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
+    {
+      neg = s.at(p) == '-';
+      p++;
+    }
+    if (sv_byteat(s, p) == '+' || sv_byteat(s, p) == '-')
+      return new NumParse(off, 0.0);
+    ToChars.ParseResult res = s.parse_number(p, CharsFormat.general);
+    double v = res.result;
+    int endp = res.next;
+    if (res.ec == ToChars.Errc.result_out_of_range)
+    {
+      long e10 = 0;
+      bool frac = false;
+      bool sig = false;
+      long intdigits = 0;
+      long fraczeros = 0;
+      int q;
+      for (q = p; q < endp; q++)
+      {
+        if (s.at(q) == '.')
+          frac = true;
+        else if (s.at(q) == 'e' || s.at(q) == 'E')
+        {
+          int x = q + 1;
+          bool eneg = false;
+          if (sv_byteat(s, x) == '+' || sv_byteat(s, x) == '-')
+          {
+            eneg = s.at(x) == '-';
+            x++;
+          }
+          long acc = 0;
+          while (lisdigit(sv_byteat(s, x)))
+          {
+            if (acc < 1000000000L)
+              acc = acc * 10 + (s.at(x) - '0');
+            x++;
+          }
+          e10 = (eneg) ? -acc : acc;
+          break;
+        }
+        else
+        {
+          if (!sig && s.at(q) != '0')
+            sig = true;
+          if (sig && !frac)
+            intdigits++;
+          else if (!sig && frac)
+            fraczeros++;
+        }
+      }
+      long magnitude = e10 + ((intdigits > 0) ? intdigits : -fraczeros);
+      v = (magnitude > 0) ? JDouble.POSITIVE_INFINITY : 0.0;
+    }
+    else if (res.ec != ToChars.Errc.ok)
+      return new NumParse(off, 0.0);
+    return new NumParse(endp, (neg) ? -v : v);
+  }
+
+  private static NumParse l_str2dloc(ByteView s, int off, int mode)
+  {
+    NumParse r = (mode == 'x') ? lua_strx2number(s, off) : str2dec(s, off);
+    if (r.end == off)
+      return new NumParse(ByteView.npos, r.value); /* nothing recognized? */
+    while (lisspace(sv_byteat(s, r.end)))
+      r.end++; /* skip trailing spaces */
+    return new NumParse((r.end == s.size()) ? r.end : ByteView.npos, r.value);
+  }
+
+  /*
+  ** Convert string 's' to a Lua number (put in 'result') handling the
+  ** current locale.
+  ** This function accepts both the current locale or a dot as the radix
+  ** mark. If the conversion fails, it may mean number has a dot but
+  ** locale accepts something else. In that case, the code copies 's'
+  ** to a buffer (because 's' is read-only), changes the dot to the
+  ** current locale radix mark, and tries to convert again.
+  ** The variable 'mode' checks for special characters in the string:
+  ** - 'n' means 'inf' or 'nan' (which should be rejected)
+  ** - 'x' means a hexadecimal numeral
+  ** - '.' just optimizes the search for the common case (no special chars)
+  */
+  private static NumParse l_str2d(ByteView s, int off)
+  {
+    int pmode = s.find_first_of(Lt.xXnN_chars, off); /* look for special chars */
+    int mode = (pmode != ByteView.npos)
+                   ? ltolower(s.at(pmode) & 0xFF)
+                   : 0;
+    if (mode == 'n') /* reject 'inf' and 'nan' */
+      return new NumParse(ByteView.npos, 0.0);
+    NumParse r = l_str2dloc(s, off, mode); /* try to convert */
+    if (r.end == ByteView.npos)
+    {
+      ByteOwner buff = new ByteOwner(L_MAXLENNUM + 1);
+      sbyte point = locale_radixpoint();
+      int ppoint = (point != '.') ? s.find(point, off) : ByteView.npos;
+      int len = s.size() - off;
+      if (ppoint == ByteView.npos || len > L_MAXLENNUM)
+        return new NumParse(ByteView.npos, r.value);
+      buff.apply(s.substr(off, len));
+      buff.set(ppoint - off, '.');
+      r = l_str2dloc(buff.view().substr(0, len), 0, mode); /* try again */
+      if (r.end != ByteView.npos)
+        r.end = off + r.end; /* make relative to 's' */
+    }
+    return r;
+  }
+
+  private const long MAXBY10 = LUA_MAXINTEGER / 10;
+  private const int MAXLASTD = (int) (LUA_MAXINTEGER % 10);
+
+  private static IntParse l_str2int(ByteView s, int off)
+  {
+    long a = 0;
+    bool empty = true;
+    bool neg;
+    int p = off;
+    while (lisspace(sv_byteat(s, p)))
+      p++; /* skip initial spaces */
+    Sign sign = isneg(s, p);
+    neg = sign.neg;
+    p = sign.off;
+    if (sv_byteat(s, p) == '0' &&
+        (sv_byteat(s, p + 1) == 'x' || sv_byteat(s, p + 1) == 'X'))
+    {         /* hex? */
+      p += 2; /* skip '0x' */
+      for (; lisxdigit(sv_byteat(s, p)); p++)
+      {
+        a = a * 16 + luaO_hexavalue(s.at(p));
+        empty = false;
+      }
+    }
+    else
+    { /* decimal */
+      for (; lisdigit(sv_byteat(s, p)); p++)
+      {
+        int d = s.at(p) - '0';
+        if (JLong.compareUnsigned(a, MAXBY10) >= 0 && (JLong.compareUnsigned(a, MAXBY10) > 0 || d > MAXLASTD + (neg ? 1 : 0))) /* overflow? */
+          return new IntParse(ByteView.npos, 0);                                                                 /* do not accept it (as integer) */
+        a = a * 10 + d;
+        empty = false;
+      }
+    }
+    while (lisspace(sv_byteat(s, p)))
+      p++; /* skip trailing spaces */
+    if (empty || p != s.size())
+      return new IntParse(ByteView.npos, 0); /* something wrong in the numeral */
+    else
+      return new IntParse(p, (neg) ? 0 - a : a);
+  }
+
+  public static int luaO_str2num(ByteView s, TValue o)
+  {
+    IntParse i = l_str2int(s, 0);
+    int e = i.end;
+    if (e != ByteView.npos)
+    { /* try as an integer */
+      setivalue(o, i.value);
+    }
+    else
+    { /* else try as a float */
+      NumParse n = l_str2d(s, 0);
+      e = n.end;
+      if (e == ByteView.npos)
+        return 0; /* conversion failed */
+      setfltvalue(o, n.value);
+    }
+    { if (JAssert.on && !( e == s.size())) throw new AssertionError(); }
+    return e + 1;
+  }
+
+  public static int luaO_utf8esc(ByteSpan buff, long x)
+  {
+    int n = 1; /* number of bytes put in buffer (backwards) */
+    { if (JAssert.on && !( 0 <= x && x <= 0x7FFFFFFF)) throw new AssertionError(); }
+    if (x < 0x80) /* ASCII? */
+      buff.set(UTF8BUFFSZ - 1, (sbyte) x);
+    else
+    {                          /* need continuation bytes */
+      int mfb = 0x3f; /* maximum that fits in first byte */
+      do
+      { /* add continuation bytes */
+        buff.set(UTF8BUFFSZ - (n++), (sbyte) (0x80 | (x & 0x3f)));
+        x >>= 6;   /* remove added bits */
+        mfb >>= 1; /* now there is one less bit available in first byte */
+      } while (x > mfb); /* still needs continuation byte? */
+      buff.set(UTF8BUFFSZ - n, (sbyte) ((~mfb << 1) | x)); /* add first byte */
+    }
+    return n;
+  }
+
+  /*
+  ** Convert a float to a string, adding it to a buffer. First try with
+  ** a not too large number of digits, to avoid noise (for instance,
+  ** 1.1 going to "1.1000000000000001"). If that lose precision, so
+  ** that reading the result back gives a different number, then do the
+  ** conversion again with extra precision. Moreover, if the numeral looks
+  ** like an integer (without a decimal point or an exponent), add ".0" to
+  ** its end.
+  */
+  private static int tostringbuffFloat(double n, ByteSpan buff)
+  {
+    int len = buff.write_number(n, CharsFormat.general, 15);
+    ByteView view = buff.view().substr(0, len);
+    bool bneg = buff.view().starts_with('-');
+    ToChars.ParseResult ret = view.parse_number(bneg ? 1 : 0, CharsFormat.general);
+    double check = ret.result;
+    if (bneg)
+    {
+      check = -check;
+    }
+    if (check != n)
+    {
+      len = buff.write_number(n, CharsFormat.general, 17);
+      view = buff.view().substr(0, len); /* refresh: len just changed */
+    }
+    if (view.find_first_not_of(Lt.digits_and_dash) == ByteView.npos)
+    {
+      buff.set(len++, '.');
+      buff.set(len++, '0'); /* adds '.0' to result */
+    }
+    sbyte point = locale_radixpoint();
+    if (point != '.')
+    {
+      view = buff.view().substr(0, len); // update as len could move
+      int dotpos = view.find('.');
+      if (dotpos != ByteView.npos)
+        buff.set(dotpos, point);
+    }
+    return len;
+  }
+
+  /*
+  ** Convert a number object to a string, adding it to a buffer.
+  */
+  public static int luaO_tostringbuff(TValue obj, ByteSpan buff)
+  {
+    int len;
+    { if (JAssert.on && !( ttisnumber(obj))) throw new AssertionError(); }
+    { if (JAssert.on && !( buff.size() >= LUA_N2SBUFFSZ)) throw new AssertionError(); }
+    if (ttisinteger(obj))
+    {
+      ByteSpan bs = buff;
+      len = bs.write_number(ivalue(obj));
+    }
+    else
+    {
+      { if (JAssert.on && !( ttisfloat(obj))) throw new AssertionError(); }
+      len = tostringbuffFloat(fltvalue(obj), buff);
+    }
+    { if (JAssert.on && !( len < LUA_N2SBUFFSZ)) throw new AssertionError(); }
+    return len;
+  }
+
+  /*
+  ** Convert a number object to a Lua string, replacing the value at 'obj'
+  */
+  public static void luaO_tostring(lua_State L, TValue obj)
+  {
+    ByteOwner buff = new ByteOwner(LUA_N2SBUFFSZ);
+    int len = luaO_tostringbuff(obj, buff.span());
+    ByteView bytes = buff.view().substr(0, len);
+    setsvalue(L, obj, TString.luaS_createstr(L, bytes));
+  }
+
+  /*
+  ** {==================================================================
+  ** 'luaO_pushvfstring'
+  ** ===================================================================
+  */
+
+  private sealed class BuffFS
+  {
+    internal lua_State L;
+    internal ByteOwner b;
+    internal int blen;
+    internal int err;
+  }
+
+  private static void initbuff(lua_State L, BuffFS buff)
+  {
+    buff.L = L;
+    buff.b = new ByteOwner();
+    buff.blen = 0;
+    buff.err = 0;
+  }
+
+  private static void freebuff(BuffFS buff)
+  {
+    global_State g = buff.L.l_G;
+    if (buff.b.held())
+    {
+      luaM_alloc_char_span(g, buff.L, buff.b.span(), 0, false);
+      buff.b = new ByteOwner();
+    }
+  }
+
+  private static void pushbuff(lua_State L, BuffFS buff)
+  {
+    if (buff.err == 1)
+      luaD_throw(L, (sbyte) LUA_ERRMEM);
+    ByteView res = new ByteView(buff.b.array(), 0, buff.blen);
+    TString ts;
+    if (buff.err == 2)
+    { /* (too long to be short) */
+      ts = TString.luaS_createlngstrobj(L, res.size() + Lt.ellipsis.size());
+      ts.data.area().copy_from(res, 0);
+      ts.data.area().copy_from(Lt.ellipsis, res.size());
+    }
+    else
+      ts = TString.luaS_createstr(L, res);
+    setslots(L, L.top, ts);
+    L.top++;
+  }
+
+  private sealed class PushBuff : ProtectedCall
+  {
+    internal BuffFS buff;
+
+    public void run(lua_State L)
+    {
+      pushbuff(L, buff);
+    }
+  }
+
+  private static InternalString clearbuff(BuffFS buff)
+  {
+    lua_State L = buff.L;
+    InternalString res;
+    PushBuff pb = new PushBuff();
+    pb.buff = buff;
+    if (luaD_rawrunprotected(L, pb) != LUA_OK) /* errors? */
+      res = null;                              /* error message is on the top of the stack */
+    else
+    {
+      int s = L.top - 1;
+      { if (JAssert.on && !( novariant(slottag(L, s)) == LUA_TSTRING)) throw new AssertionError(); }
+      res = slottsval(L, s).data;
+    }
+    freebuff(buff);
+    return res;
+  }
+
+  private static void addstr2buff(BuffFS buff, ByteView bv)
+  {
+    if (buff.err != 0) /* do nothing else after an error */
+      return;
+    int slen = bv.size();
+    if (slen > (MAX_SIZE / 2) - buff.blen)
+    {                /* overflow? */
+      buff.err = 2;
+      return;
+    }
+    if (buff.blen + slen > buff.b.size())
+    {
+      global_State g = buff.L.l_G;
+      long newsize = JMath.max((long) buff.blen + slen, 256);
+      ByteOwner nb = luaM_alloc_char_span(g, buff.L, buff.b.span(), newsize, false);
+      if (!nb.held())
+      {
+        buff.err = 1; /* memory error */
+        return;
+      }
+      buff.b = nb;
+    }
+    buff.b.span().copy_from(bv, buff.blen);
+    buff.blen += slen;
+  }
+
+  /*
+  ** Add a numeral to the buffer.
+  */
+  private static void addnum2buff(BuffFS buff, TValue num)
+  {
+    ByteOwner numbuff = new ByteOwner(LUA_N2SBUFFSZ);
+    int len = luaO_tostringbuff(num, numbuff.span());
+    addstr2buff(buff, numbuff.view().substr(0, len));
+  }
+
+  public static InternalString luaO_pushvfstring(lua_State L,
+                                                 ByteView fmt,
+                                                 FmtArgs args)
+  {
+    BuffFS buff = new BuffFS(); /* holds last part of the result */
+    ByteView f = fmt;
+    int argn = 0;
+    initbuff(L, buff);
+    FmtScan sc = new FmtScan(f);
+    while (sc.next())
+    {
+      addstr2buff(buff, f.substr(sc.litStart, sc.litEnd - sc.litStart));
+      switch (sc.spec)
+      { /* conversion specifier */
+      case 's':
+      {
+        { if (JAssert.on && !( argn < args.n && args.arg[argn].tag == 'S')) throw new AssertionError(); }
+        addstr2buff(buff, args.arg[argn++].s);
+        break;
+      }
+      case 'c':
+      { /* an 'int' as a character */
+        { if (JAssert.on && !( argn < args.n && args.arg[argn].tag == 'c')) throw new AssertionError(); }
+        sbyte[] c = {(sbyte) args.arg[argn++].i};
+        addstr2buff(buff, new ByteView(c, 0, c.Length));
+        break;
+      }
+      case 'd':
+      { /* an 'int' */
+        { if (JAssert.on && !( argn < args.n && args.arg[argn].tag == 'd')) throw new AssertionError(); }
+        TValue num = new TValue();
+        setivalue(num, args.arg[argn++].i);
+        addnum2buff(buff, num);
+        break;
+      }
+      case 'I':
+      { /* a 'lua_Integer' */
+        { if (JAssert.on && !( argn < args.n && args.arg[argn].tag == 'I')) throw new AssertionError(); }
+        TValue num = new TValue();
+        setivalue(num, args.arg[argn++].i);
+        addnum2buff(buff, num);
+        break;
+      }
+      case 'f':
+      { /* a 'lua_Number' */
+        { if (JAssert.on && !( argn < args.n && args.arg[argn].tag == 'f')) throw new AssertionError(); }
+        TValue num = new TValue();
+        setfltvalue(num, args.arg[argn++].n);
+        addnum2buff(buff, num);
+        break;
+      }
+      case 'p':
+      {
+        ByteOwner bf = new ByteOwner(LUA_N2SBUFFSZ);
+        { if (JAssert.on && !( argn < args.n && args.arg[argn].tag == 'p')) throw new AssertionError(); }
+        object p = args.arg[argn++].p;
+        int bfn = pointertext(bf.span(), 0, p);
+        addstr2buff(buff, bf.view().substr(0, bfn));
+        break;
+      }
+      case 'U':
+      {
+        { if (JAssert.on && !( argn < args.n && args.arg[argn].tag == 'U')) throw new AssertionError(); }
+        ByteOwner bf = new ByteOwner(UTF8BUFFSZ);
+        int len = luaO_utf8esc(bf.span(), args.arg[argn++].i);
+        addstr2buff(buff, bf.view().substr(UTF8BUFFSZ - len));
+        break;
+      }
+      case -1:
+      case '%':
+      {
+        addstr2buff(buff, Lt.percent_ch);
+        break;
+      }
+      default:
+      {
+        addstr2buff(buff, f.substr(sc.escPos, 2)); /* keep unknown format in the result */
+        break;
+      }
+      }
+    }
+    addstr2buff(buff, f.substr(sc.litStart, sc.litEnd - sc.litStart)); /* rest of 'fmt' */
+    { if (JAssert.on && !( argn == args.n)) throw new AssertionError(); }
+    return clearbuff(buff); /* empty buffer into a new string */
+  }
+
+  public static int luaO_fmtargcount(ByteView fmt)
+  {
+    int n = 0;
+    FmtScan sc = new FmtScan(fmt);
+    while (sc.next())
+    {
+      switch (sc.spec)
+      {
+      case 's':
+      case 'c':
+      case 'd':
+      case 'I':
+      case 'f':
+      case 'p':
+      case 'U':
+        n++;
+        break;
+      default:
+        break;
+      }
+    }
+    return n;
+  }
+
+  public static InternalString luaO_pushfstring(lua_State L, ByteView fmt, FmtArgs args)
+  {
+    InternalString msg = luaO_pushvfstring(L, fmt, args);
+    if (msg == null) /* error? */
+      luaD_throw(L, (sbyte) LUA_ERRMEM);
+    return msg;
+  }
+
+  /* }================================================================== */
+
+  public static void luaO_chunkid(ByteSpan @out, ByteView source)
+  {
+    { if (JAssert.on && !( @out.size() >= LUA_IDSIZE)) throw new AssertionError(); }
+    int srclen = source.size();
+    int bufflen = LUA_IDSIZE; /* free space in buffer */
+    int pos = 0;
+    if (sv_byteat(source, 0) == '=')
+    {                        /* 'literal' source */
+      if (srclen <= bufflen) /* small enough? */
+      {
+        @out.copy_from(source.substr(1, srclen - 1));
+        @out.set(srclen - 1, '\u0000');
+      }
+      else
+      { /* truncate it */
+        @out.copy_from(source.substr(1, bufflen - 1));
+        @out.set(bufflen - 1, '\u0000');
+      }
+    }
+    else if (sv_byteat(source, 0) == '@')
+    {                        /* file name */
+      if (srclen <= bufflen) /* small enough? */
+      {
+        @out.copy_from(source.substr(1, srclen - 1));
+        @out.set(srclen - 1, '\u0000');
+      }
+      else
+      { /* add '...' before rest of name */
+        ByteView bytes = Lt.ellipsis;
+        @out.copy_from(bytes);
+        pos += Lt.ellipsis.size();
+        bufflen -= Lt.ellipsis.size();
+        @out.copy_from(source.substr(1 + srclen - bufflen, bufflen - 1), pos);
+        @out.set(pos + bufflen - 1, '\u0000');
+      }
+    }
+    else
+    {                                                 /* string; format as [string "source"] */
+      int nl = source.find('\n');
+      ByteView bytes = Lt.string_2;
+      @out.copy_from(bytes); /* add prefix */
+      pos += Lt.string_2.size();
+      bufflen -= Lt.string_2.size() + Lt.ellipsis.size() + Lt.backquote.size() + 1; /* save space for prefix+suffix+'\0' */
+      if (srclen < bufflen && nl == ByteView.npos)
+      {
+        @out.copy_from(source.substr(0, srclen), pos);
+        pos += srclen;
+      }
+      else
+      {
+        if (nl != ByteView.npos)
+          srclen = nl; /* stop at first newline */
+        if (srclen > bufflen)
+          srclen = bufflen;
+        @out.copy_from(source.substr(0, srclen), pos);
+        pos += srclen;
+        bytes = Lt.ellipsis;
+        @out.copy_from(bytes, pos);
+        pos += Lt.ellipsis.size();
+      }
+      bytes = Lt.backquote;
+      @out.copy_from(bytes, pos);
+      @out.set(pos + Lt.backquote.size(), '\u0000');
+    }
+  }
+}

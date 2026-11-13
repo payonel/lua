@@ -1,0 +1,7 @@
+#!/bin/sh
+dir=$(dirname "$0")
+DOTNET=${DOTNET:-$(cat "$dir/build/dotnet")}
+if env --default-signal=INT true 2>/dev/null; then
+  exec env --default-signal=INT "$DOTNET" "$dir/build/lungolua.dll" -Dlua.debug=true -Dlua.progname="$0" "$@"
+fi
+exec "$DOTNET" "$dir/build/lungolua.dll" -Dlua.debug=true -Dlua.progname="$0" "$@"

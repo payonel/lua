@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>lungolua</AssemblyName>
+    <RootNamespace>Payonel.LungoLua</RootNamespace>
+    <StartupObject>Payonel.LungoLua.Host.Program</StartupObject>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Tests/**" />
+    <InternalsVisibleTo Include="lungolua-tests" />
+    <!-- no advisory lock on every file opened (C's fopen takes none) -->
+    <RuntimeHostConfigurationOption Include="System.IO.DisableFileLocking" Value="true" />
+  </ItemGroup>
+</Project>

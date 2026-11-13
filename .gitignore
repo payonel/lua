@@ -1,6 +1,8 @@
 /cpp/obj/
 /cpp/run*/
 /java/run*/
+/csharp/build/
+/csharp/run*/
 
 /cpp/lua
 
