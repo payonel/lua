@@ -51,7 +51,7 @@ jobs:
         run: |
           version="$VERSION"
           for artifact in lungoluacpp lungoluacpp-tests; do
-            sh .github/pom.sh "$artifact" "$version" tar.gz > "pom-$artifact.xml"
+            sh ../.github/pom.sh "$artifact" "$version" tar.gz > "pom-$artifact.xml"
             mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file -DpomFile="pom-$artifact.xml" \
               -DgroupId=com.payonel -DartifactId="$artifact" -Dversion="$version" -Dpackaging=tar.gz \
               -Dfile="$artifact-$version.tar.gz" \
