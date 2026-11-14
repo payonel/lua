@@ -70,7 +70,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           for artifact in lungoluacsharp lungoluacsharp-tests; do
-            mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file \
+            sh .github/pom.sh "$artifact" "$VERSION" tar.gz > "pom-$artifact.xml"
+            mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file -DpomFile="pom-$artifact.xml" \
               -DgroupId=com.payonel -DartifactId="$artifact" -Dversion="$VERSION" -Dpackaging=tar.gz \
               -Dfile="csharp/$artifact-$VERSION.tar.gz" \
               -DrepositoryId=github -Durl=https://maven.pkg.github.com/payonel/lua

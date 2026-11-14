@@ -39,11 +39,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version="$VERSION"
-          mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file \
+          sh .github/pom.sh lungolua "$version" jar > "pom-lungolua.xml"
+          mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file -DpomFile="pom-lungolua.xml" \
             -DgroupId=com.payonel -DartifactId=lungolua -Dversion="$version" -Dpackaging=jar \
             -Dfile=java/build/lungolua.jar -Dsources=java/build/lungolua-sources.jar \
             -DrepositoryId=github -Durl=https://maven.pkg.github.com/payonel/lua
-          mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file \
+          sh .github/pom.sh lungolua-tests "$version" jar > "pom-lungolua-tests.xml"
+          mvn --batch-mode org.apache.maven.plugins:maven-deploy-plugin:3.1.2:deploy-file -DpomFile="pom-lungolua-tests.xml" \
             -DgroupId=com.payonel -DartifactId=lungolua-tests -Dversion="$version" -Dpackaging=jar \
             -Dfile=java/build/lungolua-tests.jar \
             -DrepositoryId=github -Durl=https://maven.pkg.github.com/payonel/lua
